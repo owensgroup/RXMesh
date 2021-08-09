@@ -24,7 +24,7 @@ jobs:
           make Geodesic -j 99
           make MCF -j 99
           make VertexNormal -j 99
-          make Filtering -j 99
+      #   make Filtering -j 99
       #- name: Run Test
       #  working-directory: ${{github.workspace}}/build
       #  run: ctest --no-compress-output -T Test -C Release --output-on-failure
