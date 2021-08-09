@@ -1,0 +1,43 @@
+add_executable(Geodesic)
+
+target_include_directories(Geodesic
+    PRIVATE ${openmesh_SOURCE_DIR}
+)
+
+set(SOURCE_LIST    
+    geodesic.cu
+	geodesic_kernel.cuh
+	geodesic_ptp_openmesh.h	
+	geodesic_ptp_rxmesh.h	
+)
+
+set(COMMON_LIST    
+    ../common/openmesh_trimesh.h
+	../common/openmesh_report.h
+)
+
+target_sources(Geodesic
+    PRIVATE
+	${SOURCE_LIST} ${COMMON_LIST}
+)
+
+if (WIN32)
+    target_compile_definitions(Geodesic
+      PRIVATE _USE_MATH_DEFINES 
+      PRIVATE NOMINMAX
+      PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
+set_target_properties( Geodesic PROPERTIES FOLDER "apps")
+
+source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "Geodesic" FILES ${SOURCE_LIST})
+
+target_link_libraries( Geodesic
+    PRIVATE RXMesh_header_lib 
+    PRIVATE RXMesh_lib    
+	PRIVATE gtest_main
+	PRIVATE OpenMeshCore
+    PRIVATE OpenMeshTools
+)
+
+#gtest_discover_tests(Geodesic)

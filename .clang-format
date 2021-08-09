@@ -1,0 +1,40 @@
+---
+Language:        Cpp
+BasedOnStyle:  Chromium
+TabWidth: 4
+UseTab: Never
+
+AllowShortFunctionsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakTemplateDeclarations: true
+AlignTrailingComments: true
+BinPackParameters: false
+BreakBeforeTernaryOperators: false
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+Cpp11BracedListStyle: true
+IndentCaseLabels: true
+IndentWidth:     4
+IndentWrappedFunctionNames: false
+KeepEmptyLinesAtTheStartOfBlocks: true
+MacroBlockBegin: ''
+MacroBlockEnd:   ''
+MaxEmptyLinesToKeep: 2
+NamespaceIndentation: None 
+ObjCBlockIndentWidth: 2
+ColumnLimit:     80
+AlignConsecutiveDeclarations: true
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterControlStatement: false
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: false
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: false
+  BeforeElse: false
+...
