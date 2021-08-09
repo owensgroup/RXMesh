@@ -1,0 +1,30 @@
+name: Ubuntu
+on: [push, pull_request]
+jobs:
+  UbuntuRun:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Jimver/cuda-toolkit@v0.2.4
+        id: cuda-toolkit
+        with:
+          cuda: '11.2.2'
+          linux-local-args: '["--toolkit"]'      
+      - run: nvcc -V      
+      - name: Checkout
+        uses: actions/checkout@v2            
+      - name: Create build directory
+        run: mkdir ${{github.workspace}}/build      
+      - name: Configure CMake
+        working-directory: ${{github.workspace}}/build
+        run: cmake ../
+      - name: Run make
+        working-directory: ${{github.workspace}}/build
+        run: | 
+          make RXMesh_test -j 99
+          make Geodesic -j 99
+          make MCF -j 99
+          make VertexNormal -j 99
+          make Filtering -j 99
+      #- name: Run Test
+      #  working-directory: ${{github.workspace}}/build
+      #  run: ctest --no-compress-output -T Test -C Release --output-on-failure
