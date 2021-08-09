@@ -7,9 +7,9 @@
 ## **About**
 RXMesh is a surface triangle mesh data structure and programming model for processing static meshes on the GPU. RXMesh aims at provides a high-performance, generic, and compact data structure that can handle meshes regardless of their quality (e.g., non-manifold). The programming model helps to hide the complexity of the data structure and provides an intuitive access model for different use cases. For more details, please check out our paper:
 
-[RXMesh: A GPU Mesh Data Structure](https://escholarship.org/uc/item/8r5848vp)<br>
-[Ahmed H. Mahmoud](https://www.ece.ucdavis.edu/~ahdhn/), [Serban D. Porumbescu](https://web.cs.ucdavis.edu/~porumbes/), and [John D. Owens](https://www.ece.ucdavis.edu/~jowens/)<br>
-[ACM Transaction on Graphics](https://dl.acm.org/doi/abs/10.1145/3450626.3459748) (Proceedings of SIGGRAPH 2021)
+*[RXMesh: A GPU Mesh Data Structure](https://escholarship.org/uc/item/8r5848vp)*<br>
+*[Ahmed H. Mahmoud](https://www.ece.ucdavis.edu/~ahdhn/), [Serban D. Porumbescu](https://web.cs.ucdavis.edu/~porumbes/), and [John D. Owens](https://www.ece.ucdavis.edu/~jowens/)*<br>
+*[ACM Transaction on Graphics](https://dl.acm.org/doi/abs/10.1145/3450626.3459748) (Proceedings of SIGGRAPH 2021)*
 
 This repository provides 1) source code to reproduce the results presented in the paper (git tag `v0.1.0`) and 2) ongoing development of RXMesh. For 1), all input models used in the paper can be found under [TODO]().
 
