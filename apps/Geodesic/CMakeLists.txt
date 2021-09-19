@@ -1,9 +1,5 @@
 add_executable(Geodesic)
 
-target_include_directories(Geodesic
-    PRIVATE ${openmesh_SOURCE_DIR}
-)
-
 set(SOURCE_LIST    
     geodesic.cu
 	geodesic_kernel.cuh

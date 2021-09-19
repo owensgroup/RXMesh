@@ -1,9 +1,5 @@
 add_executable(MCF)
 
-target_include_directories(MCF
-    PRIVATE ${openmesh_SOURCE_DIR}
-)
-
 set(SOURCE_LIST    
     mcf.cu
 	mcf_rxmesh_kernel.cuh
