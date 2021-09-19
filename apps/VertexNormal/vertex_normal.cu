@@ -137,9 +137,7 @@ TEST(Apps, VertexNormal)
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
-    if (!import_obj(Arg.obj_file_name, Verts, Faces)) {
-        exit(EXIT_FAILURE);
-    }
+    ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
     if (Arg.shuffle) {
         shuffle_obj(Faces, Verts);
@@ -147,7 +145,7 @@ TEST(Apps, VertexNormal)
 
     // Create RXMeshStatic instance. If Arg.sort is true, Faces and Verts will
     // be sorted based on the patching happening inside RXMesh
-    RXMeshStatic rxmesh_static(Faces, Verts, Arg.sort, false);
+    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, Verts, Arg.sort, false);
 
     //*** Serial reference
     std::vector<dataT> vertex_normal_gold(3 * Verts.size());

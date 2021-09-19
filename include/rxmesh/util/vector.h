@@ -290,9 +290,14 @@ struct Vector
     __host__ __device__ __forceinline__ void normalize()
     {
         T r = norm();
-        assert(r != T(0.0));
-        r = 1. / r;
-        (*this) *= r;
+        if(r == T(0.0)){
+            for (uint32_t i = 0; i < N; ++i) {
+                m_v[i] = 0;
+            }
+        }else{
+            r = 1. / r;
+            (*this) *= r;
+        }
     }
 
     __host__ __device__ __forceinline__ T sum()

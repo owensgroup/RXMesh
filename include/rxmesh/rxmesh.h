@@ -372,13 +372,6 @@ class RXMesh
                        // this counts the size of edges and faces arrays
                        // rounded up to multiple of 32
 
-    // TODO for now we store the ribbon flags separately. we can bake them in
-    // the local face id. We have three flag bits; one for the edge direction
-    // and two for the face classification. 00 is for 'deep' internal faces
-    // 01 for ribbon internal faces and 10 for ribbon external face
-    // for now we store these flags separately in m_h_patches_face_ribbon_flag
-    std::vector<std::vector<flag_t>> m_h_patches_face_ribbon_flag;
-
     //** mappings
     // local to global map for (v)ertices (e)dges and (f)aces
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_v;
@@ -431,7 +424,8 @@ class RXMesh
     //.z vertex
     uint4* m_d_owned_size;
 
-    flag_t* m_d_patches_face_ribbon_flag;
+    // neighbour patches
+    uint32_t *m_d_neighbour_patches, *m_d_neighbour_patches_offset;
 
     double m_total_gpu_storage_mb;
 };

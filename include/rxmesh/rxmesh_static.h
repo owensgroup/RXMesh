@@ -40,6 +40,7 @@ class RXMeshStatic : public RXMesh<patchSize>
     template <uint32_t blockThreads>
     void prepare_launch_box(const Op                 op,
                             LaunchBox<blockThreads>& launch_box,
+                            const bool               is_higher_query = false,
                             const bool               oriented = false) const
     {
         static_assert(
@@ -53,14 +54,15 @@ class RXMeshStatic : public RXMesh<patchSize>
         const uint32_t output_fixed_offset =
             (op == Op::EV) ? 2 : ((op == Op::FV || op == Op::FE) ? 3 : 0);
 
-        this->template calc_shared_memory<blockThreads>(op, launch_box,
-                                                        oriented);
+        this->template calc_shared_memory<blockThreads>(
+            op, launch_box, is_higher_query, oriented);
     }
 
    protected:
     template <uint32_t blockThreads>
     void calc_shared_memory(const Op                 op,
                             LaunchBox<blockThreads>& launch_box,
+                            const bool               is_higher_query,
                             const bool               oriented = false) const
     {
         // Operations that uses matrix transpose needs a template parameter
@@ -184,8 +186,8 @@ class RXMeshStatic : public RXMesh<patchSize>
         }
 
 
-        launch_box.smem_bytes_static =
-            check_shared_memory<blockThreads>(op, launch_box.smem_bytes_dyn);
+        launch_box.smem_bytes_static = check_shared_memory<blockThreads>(
+            op, launch_box.smem_bytes_dyn, is_higher_query);
 
 
         if (!this->m_quite) {
@@ -198,60 +200,103 @@ class RXMeshStatic : public RXMesh<patchSize>
 
     template <uint32_t threads>
     uint32_t check_shared_memory(const Op       op,
-                                 const uint32_t smem_bytes_dyn) const
+                                 const uint32_t smem_bytes_dyn,
+                                 bool           is_higher_query) const
     {
         // check if total shared memory (static + dynamic) consumed by
         // k_base_query are less than the max shared per block
         cudaFuncAttributes func_attr;
         switch (op) {
             case Op::VV: {
-                CUDA_ERROR(cudaFuncGetAttributes(
-                    &func_attr, detail::query_prototype<Op::VV, threads>));
+                if (is_higher_query) {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr,
+                        detail::higher_query_prototype<Op::VV, threads>));
+                } else {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr, detail::query_prototype<Op::VV, threads>));
+                }
 
                 break;
             }
             case Op::VE: {
-                CUDA_ERROR(cudaFuncGetAttributes(
-                    &func_attr, detail::query_prototype<Op::VE, threads>));
-
+                if (is_higher_query) {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr,
+                        detail::higher_query_prototype<Op::VE, threads>));
+                } else {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr, detail::query_prototype<Op::VE, threads>));
+                }
                 break;
             }
             case Op::VF: {
-                CUDA_ERROR(cudaFuncGetAttributes(
-                    &func_attr, detail::query_prototype<Op::VF, threads>));
-
+                if (is_higher_query) {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr,
+                        detail::higher_query_prototype<Op::VF, threads>));
+                } else {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr, detail::query_prototype<Op::VF, threads>));
+                }
                 break;
             }
             case Op::EV: {
-                CUDA_ERROR(cudaFuncGetAttributes(
-                    &func_attr, detail::query_prototype<Op::EV, threads>));
-
+                if (is_higher_query) {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr,
+                        detail::higher_query_prototype<Op::EV, threads>));
+                } else {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr, detail::query_prototype<Op::EV, threads>));
+                }
                 break;
             }
             case Op::EE: {
                 break;
             }
             case Op::EF: {
-                CUDA_ERROR(cudaFuncGetAttributes(
-                    &func_attr, detail::query_prototype<Op::EF, threads>));
-
+                if (is_higher_query) {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr,
+                        detail::higher_query_prototype<Op::EF, threads>));
+                } else {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr, detail::query_prototype<Op::EF, threads>));
+                }
                 break;
             }
             case Op::FV: {
-                CUDA_ERROR(cudaFuncGetAttributes(
-                    &func_attr, detail::query_prototype<Op::FV, threads>));
-
+                if (is_higher_query) {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr,
+                        detail::higher_query_prototype<Op::FV, threads>));
+                } else {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr, detail::query_prototype<Op::FV, threads>));
+                }
                 break;
             }
             case Op::FE: {
-                CUDA_ERROR(cudaFuncGetAttributes(
-                    &func_attr, detail::query_prototype<Op::FE, threads>));
+                if (is_higher_query) {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr,
+                        detail::higher_query_prototype<Op::FE, threads>));
+                } else {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr, detail::query_prototype<Op::FE, threads>));
+                }
                 break;
             }
             case Op::FF: {
-                CUDA_ERROR(cudaFuncGetAttributes(
-                    &func_attr, detail::query_prototype<Op::FF, threads>));
-
+                if (is_higher_query) {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr,
+                        detail::higher_query_prototype<Op::FF, threads>));
+                } else {
+                    CUDA_ERROR(cudaFuncGetAttributes(
+                        &func_attr, detail::query_prototype<Op::FF, threads>));
+                }
                 break;
             }
         }

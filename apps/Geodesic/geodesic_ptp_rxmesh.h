@@ -50,7 +50,7 @@ inline bool geodesic_rxmesh(RXMESH::RXMeshStatic<patchSize>&    rxmesh_static,
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh_static.prepare_launch_box(RXMESH::Op::VV, launch_box, true);
+    rxmesh_static.prepare_launch_box(RXMESH::Op::VV, launch_box, false, true);
 
 
     // Geodesic distance attribute for all vertices (seeds set to zero

@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include <assert.h>
 #include <stdint.h>
+#include <cub/block/block_discontinuity.cuh>
 
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/rxmesh_iterator.cuh"
@@ -227,7 +228,8 @@ __device__ __inline__ void query_block_dispatcher(
                                                   0);
             RXMeshIterator iter(local_id, s_output_all_patches,
                                 s_offset_all_patches, s_output_mapping,
-                                fixed_offset, int(op == Op::FE));
+                                fixed_offset, num_src_in_patch,
+                                int(op == Op::FE));
 
             compute_op(global_id, iter);
         }
@@ -272,5 +274,131 @@ __device__ __inline__ void query_block_dispatcher(
         context, blockIdx.x, compute_op, [](uint32_t) { return true; },
         oriented, output_needs_mapping);
 }
-//**************************************************************************
+
+
+/**
+ * query_block_dispatcher()
+ */
+template <Op op, uint32_t blockThreads, typename computeT>
+__device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
+                                                  const uint32_t element_id,
+                                                  computeT       compute_op,
+                                                  const bool oriented = false)
+{
+    // The whole block should be calling this function. If one thread is not
+    // participating, its element_id should be INVALID32
+
+    auto compute_active_set = [](uint32_t) { return true; };
+
+    uint32_t element_patch = INVALID32;
+    if (element_id != INVALID32) {
+        switch (op) {
+            case RXMESH::Op::VV:
+            case RXMESH::Op::VE:
+            case RXMESH::Op::VF:
+                element_patch = context.get_vertex_patch()[element_id];
+                break;
+            case RXMESH::Op::FV:
+            case RXMESH::Op::FE:
+            case RXMESH::Op::FF:
+                element_patch = context.get_face_patch()[element_id];
+                break;
+            case RXMESH::Op::EV:
+            case RXMESH::Op::EE:
+            case RXMESH::Op::EF:
+                element_patch = context.get_edge_patch()[element_id];
+                break;
+        }
+    }
+
+    // Here, we want to identify the set of unique patches for this thread
+    // block. We do this by first sorting the patches, compute discontinuity
+    // head flag, then threads with head flag =1 can add their patches to the
+    // shared memory buffer that will contain the unique patches
+
+    __shared__ uint32_t s_block_patches[blockThreads];
+    __shared__ uint32_t s_num_patches;
+    if (threadIdx.x == 0) {
+        s_num_patches = 0;
+    }
+    typedef cub::BlockRadixSort<uint32_t, blockThreads, 1>  BlockRadixSort;
+    typedef cub::BlockDiscontinuity<uint32_t, blockThreads> BlockDiscontinuity;
+    union TempStorage
+    {
+        typename BlockRadixSort::TempStorage     sort_storage;
+        typename BlockDiscontinuity::TempStorage discont_storage;
+    };
+    __shared__ TempStorage all_temp_storage;
+    uint32_t               thread_data[1], thread_head_flags[1];
+    thread_data[0] = element_patch;
+    thread_head_flags[0] = 0;
+    BlockRadixSort(all_temp_storage.sort_storage).Sort(thread_data);
+    BlockDiscontinuity(all_temp_storage.discont_storage)
+        .FlagHeads(thread_head_flags, thread_data, cub::Inequality());
+
+    if (thread_head_flags[0] == 1 && thread_data[0] != INVALID32) {
+        uint32_t id = ::atomicAdd(&s_num_patches, uint32_t(1));
+        s_block_patches[id] = thread_data[0];
+    }
+
+    // We could eliminate the discontinuity operation and atomicAdd and instead
+    // use thrust::unique. However, this method causes illegal memory access
+    // and it looks like a bug in thrust
+    /*__syncthreads();
+    // uniquify
+    uint32_t* new_end = thrust::unique(thrust::device, s_block_patches,
+                                       s_block_patches + blockThreads);
+    __syncthreads();
+
+    if (threadIdx.x == 0) {
+        s_num_patches = new_end - s_block_patches - 1;
+    }*/
+    __syncthreads();
+
+
+    for (uint32_t p = 0; p < s_num_patches; ++p) {
+
+        uint32_t patch_id = s_block_patches[p];
+
+        assert(patch_id < context.get_num_patches());
+
+        uint32_t  num_src_in_patch = 0;
+        uint32_t *input_mapping(nullptr), *s_output_mapping(nullptr);
+        uint16_t *s_offset_all_patches(nullptr), *s_output_all_patches(nullptr);
+
+        detail::template query_block_dispatcher<op, blockThreads>(
+            context, patch_id, compute_active_set, oriented, true,
+            num_src_in_patch, input_mapping, s_output_mapping,
+            s_offset_all_patches, s_output_all_patches);
+
+        assert(input_mapping);
+        assert(s_output_all_patches);
+
+
+        if (element_patch == patch_id) {
+
+            uint16_t local_id = INVALID16;
+
+            for (uint16_t j = 0; j < num_src_in_patch; ++j) {
+                if (element_id == s_output_mapping[j]) {
+                    local_id = j;
+                    break;
+                }
+            }
+
+            constexpr uint32_t fixed_offset =
+                ((op == Op::EV)                 ? 2 :
+                 (op == Op::FV || op == Op::FE) ? 3 :
+                                                  0);
+
+            RXMeshIterator iter(local_id, s_output_all_patches,
+                                s_offset_all_patches, s_output_mapping,
+                                fixed_offset, num_src_in_patch,
+                                int(op == Op::FE));
+
+            compute_op(element_id, iter);
+        }
+    }
+}
+
 }  // namespace RXMESH

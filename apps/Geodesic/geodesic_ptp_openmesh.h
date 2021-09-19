@@ -68,6 +68,7 @@ inline float compute_toplesets(TriMesh&                           mesh,
             "compute_toplesets() could not compute toplesets for all "
             "vertices maybe because the input is not manifold or contain "
             "duplicate vertices!");
+        exit(0);
     }
     timer.stop();
     return timer.elapsed_millis();

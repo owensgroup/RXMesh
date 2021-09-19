@@ -78,6 +78,16 @@ class Patcher
         return m_patches_offset.data();
     }
 
+    uint32_t* get_neighbour_patches()
+    {
+        return m_neighbour_patches.data();
+    }
+
+    uint32_t* get_neighbour_patches_offset()
+    {
+        return m_neighbour_patches_offset.data();
+    }
+
     std::vector<uint32_t>& get_external_ribbon_val()
     {
         return m_ribbon_ext_val;
@@ -162,7 +172,7 @@ class Patcher
     void generate_random_seed_from_component(std::vector<uint32_t>& component,
                                              uint32_t               num_seeds);
 
-    void extract_ribbons();
+    void postprocess();
     void get_adjacent_faces(uint32_t face_id, std::vector<uint32_t>& ff) const;
     void get_incident_vertices(uint32_t face_id, std::vector<uint32_t>& fv);
 
@@ -196,24 +206,14 @@ class Patcher
 
     uint32_t m_num_components;
 
-    // Store the patches in compressed format
+    // Stores the patches in compressed format
     std::vector<uint32_t> m_patches_val, m_patches_offset;
 
-    // Store the ribbon. For a patch, a ribbon is classified as
-    // 1) Internal ribbon: these are the faces in the patch that are in the
-    // ribbon.
-    // This includes any face that has a vertex on the patch boundary
-    // 2) External ribbon: these are the faces that are not in the patch but
-    // has a vertex on the patch ribbon boundary
+    //Stores ribbon in compressed format 
+    std::vector<uint32_t> m_ribbon_ext_val, m_ribbon_ext_offset;
 
-    // We recognize the internal ribbon by a flag setting in m_ribbon_int_flag
-    // that tells if a face in a patch is in the ribbon or not.
-    // m_ribbon_int_flag is indexed by the face offset in its patch i.e.,
-    // m_ribbon_int_flag is mirroring m_patches_val. We store the external
-    // ribbon in a separate compressed format in m_ribbon_ext_val and
-    // m_ribbon_ext_offset
-    std::vector<uint32_t> m_ribbon_ext_val, m_ribbon_ext_offset;    
-    std::vector<bool>     m_ribbon_int_flag;
+    //Stores neighbour patches in compressed format 
+    std::vector<uint32_t> m_neighbour_patches, m_neighbour_patches_offset;
 
     // caching the time taken to construct the patches
     float m_patching_time_ms;

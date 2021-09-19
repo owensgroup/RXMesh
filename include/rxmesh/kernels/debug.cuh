@@ -51,16 +51,6 @@ __global__ void print_arr_host(uint32_t size, dataT* arr)
 }
 
 /**
- * dynamic_smem_size()
- */
-__device__ __forceinline__ unsigned dynamic_smem_size()
-{
-    unsigned ret;
-    asm volatile("mov.u32 %0, %dynamic_smem_size;" : "=r"(ret));
-    return ret;
-}
-
-/**
  * total_smem_size()
  */
 __device__ __forceinline__ unsigned total_smem_size()

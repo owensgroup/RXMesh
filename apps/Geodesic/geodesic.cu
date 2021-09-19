@@ -51,9 +51,7 @@ TEST(App, GEODESIC)
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
-    if (!import_obj(Arg.obj_file_name, Verts, Faces)) {
-        exit(EXIT_FAILURE);
-    }
+    ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
     if (Arg.shuffle) {
         shuffle_obj(Faces, Verts);
@@ -61,13 +59,10 @@ TEST(App, GEODESIC)
 
     // Create RXMeshStatic instance. If Arg.sort is true, Faces and Verts will
     // be sorted based on the patching happening inside RXMesh
-    RXMeshStatic rxmesh_static(Faces, Verts, Arg.sort, false);
-    if (!rxmesh_static.is_closed() || !rxmesh_static.is_edge_manifold()) {
-        RXMESH_ERROR(
-            "Geodesic only works on watertight/closed manifold mesh without "
-            "boundaries");
-    }
-
+    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, Verts, Arg.sort, false);
+    ASSERT_TRUE(rxmesh_static.is_closed()) << "Geodesic only works on watertight/closed manifold mesh without boundaries";
+    ASSERT_TRUE(rxmesh_static.is_edge_manifold())<< "Geodesic only works on watertight/closed manifold mesh without boundaries";
+    
     // Since OpenMesh only accepts input as obj files, if the input mesh is
     // shuffled or sorted, we have to write it to a temp file so that OpenMesh
     // can pick it up

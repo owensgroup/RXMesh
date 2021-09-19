@@ -99,7 +99,7 @@ set(cuda_flags
 	--expt-extended-lambda	
 	-use_fast_math	
     $<$<CXX_COMPILER_ID:GNU>:-O3>
-	--expt-relaxed-constexpr
+	--expt-relaxed-constexpr	
     #-Xptxas -warn-spills -res-usage    
     #-G    
 )

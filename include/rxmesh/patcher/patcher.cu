@@ -16,9 +16,9 @@
 #include "rxmesh/util/util.h"
 
 
+extern std::vector<std::vector<float>> Verts;  // TODO remove this
 namespace RXMESH {
 
-// extern std::vector<std::vector<float>> Verts;  // TODO remove this
 
 namespace PATCHER {
 
@@ -69,13 +69,6 @@ void Patcher::mem_alloc()
     m_tf.resize(3);
     m_seeds.reserve(m_num_seeds);
 
-    // the internal ribbon flag
-    m_ribbon_int_flag.resize(m_num_faces);
-    for (uint32_t i = 0; i < m_num_faces; ++i) {
-        m_ribbon_int_flag[i] = false;
-    }
-
-
     // external ribbon. it assumes first that all faces will be in there and
     // then shrink to fit after the construction is done
     m_ribbon_ext_offset.resize(m_max_num_patches, 0);
@@ -110,19 +103,19 @@ void Patcher::print_statistics()
         "Patcher: max_patch_size= {}, min_patch_size= {}, avg_patch_size= {}",
         max_patch_size, min_patch_size, avg_patch_size);
 
-    // ribbon size
-    // internal
-    uint32_t num_int_ribbon = 0;
-    for (uint32_t i = 0; i < m_num_faces; ++i) {
-        if (m_ribbon_int_flag[i]) {
-            num_int_ribbon++;
-        }
-    }
-
-    // external
-    RXMESH_TRACE("Patcher: number internal ribbon faces = {}", num_int_ribbon);
     RXMESH_TRACE("Patcher: number external ribbon faces = {} ({:02.2f}%)",
                  get_num_ext_ribbon_faces(), get_ribbon_overhead());
+
+    /*std::string filename = "patch_dist.txt";
+    filename = STRINGIFY(OUTPUT_DIR) + filename;
+    std::fstream file(filename.c_str(), std::ios::out);
+    file.precision(15);
+    for (uint32_t p = 0; p < m_num_patches; p++) {
+        uint32_t p_size =
+            m_patches_offset[p] - ((p == 0) ? 0 : m_patches_offset[p - 1]);
+        file << p_size << "\n";
+    }
+    file.close();*/
 }
 
 template <class T_d>
@@ -140,25 +133,6 @@ void Patcher::export_patches(const std::vector<std::vector<T_d>>& Verts)
 {
     export_attribute_VTK("patches.vtk", m_fvn, Verts, 1, m_face_patch.data(),
                          m_vertex_patch.data(), false);
-
-    /*std::vector<uint32_t> faces_ribbons_int(m_num_faces, m_num_patches);
-
-    // internal ribbon face list
-    for (uint32_t p = 0; p < m_num_patches; ++p) {
-        uint32_t p_start = (p == 0) ? 0 : m_patches_offset[p - 1];
-        uint32_t p_end = m_patches_offset[p];
-
-        for (uint32_t p_id = p_start; p_id < p_end; ++p_id) {
-            if (m_ribbon_int_flag[p_id]) {
-                uint32_t p_face = m_patches_val[p_id];
-                faces_ribbons_int[p_face] = p;
-            }
-        }
-    }
-    export_attribute_VTK("ribbon_int.vtk", m_fvn, Verts, 1,
-                         faces_ribbons_int.data(), m_vertex_patch.data(),
-                         m_num_patches + 1, false, rand_color);*/
-
 
     /*if (!m_vertex_patch.empty()) {
         export_as_cubes_VTK(
@@ -280,7 +254,8 @@ void Patcher::execute(std::function<uint32_t(uint32_t, uint32_t)> get_edge_id,
         for (uint32_t i = 0; i < m_num_faces; ++i) {
             m_face_patch[i] = 0;
             m_patches_val[i] = i;
-        }
+        }        
+        m_neighbour_patches_offset.resize(1, 0);
         assign_patch(get_edge_id);
         if (!m_quite) {
             print_statistics();
@@ -290,8 +265,7 @@ void Patcher::execute(std::function<uint32_t(uint32_t, uint32_t)> get_edge_id,
 
     parallel_execute(ef);
 
-    // Extract ribbons
-    extract_ribbons();
+    postprocess();
 
     // export_patches(Verts);
     // for (uint32_t i = 0; i < m_num_patches;++i){
@@ -505,17 +479,11 @@ void Patcher::get_multi_components(
     }
 }
 
-void Patcher::extract_ribbons()
+void Patcher::postprocess()
 {
-
-    // Here we extract the ribbon. Ribbon is classified into internal and
-    // external Internal is stored by just a flag associated to the face offset
-    // in the patch to indicate if it is a internal ribbon or not. External
-    // ribbon is stored per patch in compressed format. This works only because
-    // we process the patches sequentially ascending order so we can increment
-    // the offset of patch P before we process patch P+1
-
-    // We extract both the internal and external ribbon faces simultaneously.
+    // Post process the patches by extracting the ribbons and populate the
+    // neighbour patches storage
+    //
     // For patch P, we start first by identifying boundary faces; faces that has
     // an edge on P's boundary. These faces are captured by querying the
     // adjacent faces for each face in P. If any of these adjacent faces are not
@@ -524,14 +492,12 @@ void Patcher::extract_ribbons()
     // neighbor to P. Then we can use the boundary vertices to find the faces
     // that are incident to these vertices on the neighbor patches
 
-    // TODO we can construct the vertex_incident_faces by transposing the
-    // faces_indident_vertices matrix (get rid to vector of vectors and can
-    // be done in parallel)
-
-    std::vector<uint32_t> neighbour_patches;
     std::vector<uint32_t> bd_vertices;
     bd_vertices.reserve(m_patch_size);
     std::vector<uint32_t> vf1(3), vf2(3);
+
+    m_neighbour_patches_offset.resize(m_num_patches);
+    m_neighbour_patches.reserve(m_num_patches * 3);
 
     // build vertex incident faces
     std::vector<std::vector<uint32_t>> vertex_incident_faces(
@@ -551,10 +517,12 @@ void Patcher::extract_ribbons()
         uint32_t p_start = (cur_p == 0) ? 0 : m_patches_offset[cur_p - 1];
         uint32_t p_end = m_patches_offset[cur_p];
 
+        m_neighbour_patches_offset[cur_p] =
+            (cur_p == 0) ? 0 : m_neighbour_patches_offset[cur_p - 1];
+        uint32_t neighbour_patch_start = m_neighbour_patches_offset[cur_p];
 
         bd_vertices.clear();
         m_frontier.clear();
-        neighbour_patches.clear();
 
 
         //***** Pass One
@@ -568,23 +536,27 @@ void Patcher::extract_ribbons()
             bool added = false;
             for (uint32_t g = 0; g < m_tf.size(); ++g) {
                 uint32_t n = m_tf[g];
-                // uint32_t n_patch = m_face_patch[n];
+                uint32_t n_patch = get_face_patch_id(n);
 
-                // if any of the face neighbors is closer to another seed,
-                // then face is boundary face
-                if (m_face_patch[n] != cur_p) {
+                // n is boundary face if its patch is not the current patch we
+                // are processing
+                if (n_patch != cur_p) {
                     if (!added) {
                         m_frontier.push_back(face);
-                        m_ribbon_int_flag[fb] = true;  // flag
                         added = true;
                     }
 
-                    /*auto itt = std::find(neighbour_patches.begin(),
-                        neighbour_patches.end(), n_patch);
+                    // add n_patch as a neighbour patch to the current patch
+                    auto itt = std::find(
+                        m_neighbour_patches.begin() + neighbour_patch_start,
+                        m_neighbour_patches.end(), n_patch);
 
-                    if (itt == neighbour_patches.end()){
-                        neighbour_patches.push_back(n_patch);
-                    }*/
+                    if (itt == m_neighbour_patches.end()) {
+                        m_neighbour_patches.push_back(n_patch);
+                        ++m_neighbour_patches_offset[cur_p];
+                        assert(m_neighbour_patches_offset[cur_p] ==
+                               m_neighbour_patches.size());
+                    }
 
                     // find/add the boundary vertices; these are the vertices
                     // that are shared between face and n
@@ -620,29 +592,7 @@ void Patcher::extract_ribbons()
         //    [&bd_vertices](uint32_t i) {return Verts[bd_vertices[i]][2]; });
 
 
-        //***** PassTwo
-
-        // 2) For every face in the patch that is incident to one or more
-        // boundary vertex, we mark/flag it as internal ribbon face
-        for (uint32_t fb = p_start; fb < p_end; ++fb) {
-            uint32_t face = m_patches_val[fb];
-
-            if (m_ribbon_int_flag[fb]) {
-                continue;
-            }
-
-            get_incident_vertices(face, vf1);
-            for (uint32_t i = 0; i < vf1.size(); ++i) {
-                if (std::binary_search(bd_vertices.begin(), bd_vertices.end(),
-                                       vf1[i])) {
-                    m_ribbon_int_flag[fb] = true;
-                    break;
-                }
-            }
-        }
-
-
-        //***** PassThree
+        //***** Pass Two
 
         // 3) for every vertex on the patch boundary, we add all the faces
         // that are incident to it and not in the current patch
@@ -656,7 +606,7 @@ void Patcher::extract_ribbons()
 
             for (uint32_t f = 0; f < vertex_incident_faces[vert].size(); ++f) {
                 uint32_t face = vertex_incident_faces[vert][f];
-                if (m_face_patch[face] != cur_p) {
+                if (get_face_patch_id(face) != cur_p) {
                     // make sure we have not added face before
                     bool     added = false;
                     uint32_t r_end = m_ribbon_ext_offset[cur_p];
@@ -685,71 +635,6 @@ void Patcher::extract_ribbons()
                 }
             }
         }
-
-
-        /*
-        //PassThree
-
-        //3)For every other patch neighbour to cur_p, we loop over the neighbour
-        //patch faces. If a face is incident to a boundary vertex, we add to the
-        //external ribbon
-
-        m_ribbon_ext_offset[cur_p] = (cur_p == 0) ? 0 :
-            m_ribbon_ext_offset[cur_p - 1];
-
-        for (uint32_t n_p = 0; n_p < neighbour_patches.size(); ++n_p){
-            uint32_t n_patch = neighbour_patches[n_p];
-            assert(n_patch != cur_p);
-
-
-            uint32_t n_p_start = (n_patch == 0) ? 0 : m_patches_offset[n_patch -
-        1]; uint32_t n_p_end = m_patches_offset[n_patch];
-
-            for (uint32_t n_fb = n_p_start; n_fb < n_p_end; ++n_fb){
-                //face in the neighbour patch
-                uint32_t n_face = m_patches_val[n_fb];
-
-                //loop over its vertices and check if any is a boundary vertex
-                //in the current patch
-
-                get_incident_vertices(n_face, vf1);
-                for (uint32_t s = 0; s < vf1.size(); ++s){
-                    uint32_t v_n_face = vf1[s];
-                    if (std::binary_search(bd_vertices.begin(),
-                        bd_vertices.end(), v_n_face)){
-
-
-                        m_ribbon_ext_val[m_ribbon_ext_offset[cur_p]] = n_face;
-                        m_ribbon_ext_offset[cur_p]++;
-                        if (m_ribbon_ext_offset[cur_p] == m_num_faces){
-                            //need to expand m_ribbon_ext_val. This occurs
-                            //mostly for small meshes with small patch size such
-                            //that the amount overlap between exterior ribbon
-                            //of different patches is larger than m_num_faces
-                            m_ribbon_ext_val_size *= 2;
-                            uint32_t* new_ptr =
-        (uint32_t*)realloc(m_ribbon_ext_val, m_ribbon_ext_val_size*
-        sizeof(uint32_t)); if (!new_ptr){
-                                RXMESH_ERROR("Patcher::extract_ribbons()"
-                                    " unable to expand m_ribbon_ext_val!");
-                            }
-                            else{
-                                m_ribbon_ext_val = new_ptr;
-                            }
-
-                        }
-                        assert(m_ribbon_ext_offset[cur_p] <=
-        m_ribbon_ext_val_size); break;
-
-
-                    }
-                }
-            }
-        }*/
-
-        // if (cur_p == 22) {
-        //    export_ext_ribbon(Verts, cur_p);
-        //}
     }
 }
 
@@ -951,7 +836,7 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
     CUDA_ERROR(cudaMemcpy(d_new_num_patches, &m_num_patches, sizeof(uint32_t),
                           cudaMemcpyHostToDevice));
 
-    /*const char separator = ' ';
+    /* const char separator = ' ';
     const int  numWidth = 15;
     if (!m_quite) {
         std::cout << std::endl;
@@ -964,7 +849,9 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
         std::cout << std::left << std::setw(numWidth) << std::setfill(separator)
                   << "stddev";
         std::cout << std::left << std::setw(numWidth) << std::setfill(separator)
-                  << "max" << std::endl
+                  << "max";
+        std::cout << std::left << std::setw(numWidth) << std::setfill(separator)
+                  << "min" << std::endl
                   << std::endl;
     }*/
 
@@ -995,11 +882,34 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
 
         // add more seeds if needed
         if (m_num_lloyd_run % 5 == 0 && m_num_lloyd_run > 0) {
+            uint32_t threshold = m_patch_size;
+
+            /*{
+            //add new seeds only to the top 10% large patches
+                CUDA_ERROR(cudaMemcpy(m_patches_offset.data(), d_patches_offset,
+                                      m_num_patches * sizeof(uint32_t),
+                                      cudaMemcpyDeviceToHost));
+                std::vector<uint32_t> sorted_patches(m_num_patches);
+                for (uint32_t p = 0; p < m_num_patches; ++p) {
+                    sorted_patches[p] = (p == 0) ? 0 : m_patches_offset[p - 1];
+                    sorted_patches[p] = m_patches_offset[p] - sorted_patches[p];
+                }
+                std::sort(sorted_patches.begin(), sorted_patches.end());
+                auto     dd = std::upper_bound(sorted_patches.begin(),
+                                           sorted_patches.end(), m_patch_size);
+                uint32_t large_patches_start = dd - sorted_patches.begin();
+                uint32_t large_patches_num =
+                    sorted_patches.size() - large_patches_start;
+                threshold = sorted_patches[sorted_patches.size() -
+                                           0.1 * large_patches_num] -
+                            1;
+            }*/
+
             CUDA_ERROR(cudaMemcpy(d_new_num_patches, &m_num_patches,
                                   sizeof(uint32_t), cudaMemcpyHostToDevice));
             add_more_seeds<<<m_num_patches, 1>>>(
                 m_num_patches, d_new_num_patches, d_seeds, d_patches_offset,
-                d_patches_val, m_patch_size);
+                d_patches_val, threshold);
 
             CUDA_ERROR(cudaMemcpy(&m_num_patches, d_new_num_patches,
                                   sizeof(uint32_t), cudaMemcpyDeviceToHost));
@@ -1093,18 +1003,18 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
             CUDA_ERROR(cudaDeviceSynchronize());
         }*/
 
-        /*if (!m_quite) {
+        /* if (!m_quite) {
             CUDA_ERROR(cudaDeviceSynchronize());
             double   my_avg(0), my_stddev(0);
-            uint32_t my_max(0);
+            uint32_t my_max(0), my_min(0);
             CUDA_ERROR(cudaMemcpy(m_patches_offset.data(), d_patches_offset,
                                   m_num_patches * sizeof(uint32_t),
                                   cudaMemcpyDeviceToHost));
-            compute_avg_stddev_max_rs(m_patches_offset.data(), m_num_patches,
-                                      my_avg, my_stddev, my_max);
-
+            compute_avg_stddev_max_min_rs(m_patches_offset.data(),
+                                          m_num_patches, my_avg, my_stddev,
+                                          my_max, my_min);
             std::cout << std::left << std::setw(numWidth)
-                      << std::setfill(separator) << iter;
+                      << std::setfill(separator) << m_num_lloyd_run;
             std::cout << std::left << std::setw(numWidth)
                       << std::setfill(separator) << m_num_patches;
             std::cout << std::left << std::setw(numWidth)
@@ -1112,7 +1022,9 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
             std::cout << std::left << std::setw(numWidth)
                       << std::setfill(separator) << my_stddev;
             std::cout << std::left << std::setw(numWidth)
-                      << std::setfill(separator) << my_max << std::endl;
+                      << std::setfill(separator) << my_max;
+            std::cout << std::left << std::setw(numWidth)
+                      << std::setfill(separator) << my_min << std::endl;
         }*/
 
         if (max_patch_size < m_patch_size) {

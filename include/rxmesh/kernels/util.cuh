@@ -139,4 +139,16 @@ __device__ __forceinline__ unsigned short int atomicCAS(
 
 #endif
 }
+
+/**
+ * dynamic_smem_size()
+ */
+__device__ __forceinline__ unsigned dynamic_smem_size()
+{
+    unsigned ret;
+    asm volatile("mov.u32 %0, %dynamic_smem_size;" : "=r"(ret));
+    return ret;
+}
+
+
 }  // namespace RXMESH

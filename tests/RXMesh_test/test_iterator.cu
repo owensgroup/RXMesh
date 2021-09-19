@@ -10,7 +10,7 @@ __global__ static void test_iterator(uint32_t* suceess,
     using namespace RXMESH;
     uint32_t       local_id = threadIdx.x;
     RXMeshIterator iter(local_id, patch_output, patch_output, ltog_map,
-                        fixedOffset);
+                        fixedOffset, 0);
 
     if (iter.local_id() != local_id) {
         atomicAdd(suceess, 1u);

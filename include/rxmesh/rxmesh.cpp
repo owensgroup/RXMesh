@@ -19,7 +19,7 @@ RXMesh<patchSize>::RXMesh(std::vector<std::vector<uint32_t>>& fv,
                           const bool                          sort /*= false*/,
                           const bool                          quite /*= true*/)
     : m_num_edges(0), m_num_faces(0), m_num_vertices(0), m_max_ele_count(0),
-      m_max_valence(0), m_max_valence_vertex_id(INVALID32), 
+      m_max_valence(0), m_max_valence_vertex_id(INVALID32),
       m_max_edge_incident_faces(0), m_max_face_adjacent_faces(0),
       m_face_degree(3), m_num_patches(0), m_is_input_edge_manifold(true),
       m_is_input_closed(true), m_is_sort(sort), m_quite(quite),
@@ -30,7 +30,8 @@ RXMesh<patchSize>::RXMesh(std::vector<std::vector<uint32_t>>& fv,
       m_d_ad_size_ltog_f(nullptr), m_d_patches_edges(nullptr),
       m_d_patches_faces(nullptr), m_d_patch_distribution_v(nullptr),
       m_d_patch_distribution_e(nullptr), m_d_patch_distribution_f(nullptr),
-      m_d_ad_size(nullptr), m_d_patches_face_ribbon_flag(nullptr)
+      m_d_ad_size(nullptr), m_d_neighbour_patches(nullptr),
+      m_d_neighbour_patches_offset(nullptr)
 {
     // Build everything from scratch including patches
     build_local(fv, coordinates);
@@ -45,7 +46,6 @@ RXMesh<patchSize>::~RXMesh()
     GPU_FREE(m_d_patches_ltog_f);
     GPU_FREE(m_d_patches_edges);
     GPU_FREE(m_d_patches_faces);
-    GPU_FREE(m_d_patches_face_ribbon_flag);
     GPU_FREE(m_d_ad_size_ltog_v);
     GPU_FREE(m_d_ad_size_ltog_e);
     GPU_FREE(m_d_ad_size_ltog_f);
@@ -56,6 +56,8 @@ RXMesh<patchSize>::~RXMesh()
     GPU_FREE(m_d_vertex_patch);
     GPU_FREE(m_d_edge_patch);
     GPU_FREE(m_d_face_patch);
+    GPU_FREE(m_d_neighbour_patches);
+    GPU_FREE(m_d_neighbour_patches_offset);
 };
 //**************************************************************************
 
@@ -212,20 +214,6 @@ void RXMesh<patchSize>::build_local(
         vv[0] = 0;
     };
 
-#ifdef NDEBUG
-    {
-        uint32_t edges(0), faces(0), vertices(0);
-        for (uint32_t p = 0; p < m_num_patches; ++p) {
-            edges += m_h_patch_distribution_e[p];
-            faces += m_h_patch_distribution_f[p];
-            vertices += m_h_patch_distribution_v[p];
-        }
-
-        assert(edges == m_num_edges);
-        assert(faces == m_num_faces);
-        assert(vertices == m_num_vertices);
-    }
-#endif  // NDEBUG
     ex_scan(m_h_patch_distribution_v);
     ex_scan(m_h_patch_distribution_e);
     ex_scan(m_h_patch_distribution_f);
@@ -286,7 +274,7 @@ void RXMesh<patchSize>::build_patch_locally(const uint32_t patch_id)
     //** faces
     // container for this patch local faces i.e., face incident edges
     std::vector<uint16_t> fp(m_face_degree * total_patch_num_faces);
-    // std::vector<flag_t>   fr_flag(total_patch_num_faces, 0);
+
     // the mapping from this patch local space (uint16_t) to global one
     std::vector<uint32_t> f_ltog(total_patch_num_faces);
 
@@ -368,7 +356,6 @@ void RXMesh<patchSize>::build_patch_locally(const uint32_t patch_id)
                               vertices_owned_count, vertices_not_owned_count,
                               num_edges_owned, num_vertices_owned, f_ltog,
                               e_ltog, v_ltog, fp, ep);
-        // fr_flag[local_f] = (p_flag[s]) ? 1 : 0;
     }
 
 
@@ -380,7 +367,6 @@ void RXMesh<patchSize>::build_patch_locally(const uint32_t patch_id)
                               vertices_owned_count, vertices_not_owned_count,
                               num_edges_owned, num_vertices_owned, f_ltog,
                               e_ltog, v_ltog, fp, ep);
-        // fr_flag[local_f] = 2;
     }
 
     if (vertices_owned_count != num_vertices_owned ||
@@ -400,7 +386,7 @@ void RXMesh<patchSize>::build_patch_locally(const uint32_t patch_id)
     // faces
     m_h_patches_faces.push_back(fp);
     m_h_patches_ltog_f.push_back(f_ltog);
-    // m_h_patches_face_ribbon_flag.push_back(fr_flag);
+
 
     // edges
     m_h_patches_edges.push_back(ep);
@@ -1006,17 +992,6 @@ void RXMesh<patchSize>::device_alloc_local()
     padding_to_multiple(m_h_patches_ltog_f, WARPSIZE,
                         static_cast<uint32_t>(INVALID32));
 
-    // uint32_t invalid_flag = 0;
-    // if (sizeof(flag_t) == 1) {
-    //     invalid_flag = INVALID8;
-    // } else if (sizeof(flag_t) == 2) {
-    //     invalid_flag = INVALID16;
-    // } else if (sizeof(flag_t) == 4) {
-    //     invalid_flag = INVALID32;
-    // }
-    // padding_to_multiple(m_h_patches_face_ribbon_flag, WARPSIZE,
-    //                    static_cast<flag_t>(invalid_flag));
-
     // get the starting id of each patch
     std::vector<uint1> h_edges_ad(m_num_patches + 1),
         h_faces_ad(m_num_patches + 1);
@@ -1058,10 +1033,6 @@ void RXMesh<patchSize>::device_alloc_local()
             double(1024 * 1024);
         RXMESH_TRACE("Total storage = {0:f} Mb", m_total_gpu_storage_mb);
     }
-
-    // alloc flags
-    CUDA_ERROR(cudaMalloc((void**)&m_d_patches_face_ribbon_flag,
-                          sizeof(flag_t) * h_faces_ad.back().x));
 
     // alloc ad_size_ltog and edges_/faces_ad
     CUDA_ERROR(cudaMalloc((void**)&m_d_ad_size_ltog_v,
@@ -1115,11 +1086,6 @@ void RXMesh<patchSize>::device_alloc_local()
             m_d_patches_faces + start_faces, m_h_patches_faces[p].data(),
             m_h_ad_size_ltog_f[p].y * m_face_degree * sizeof(uint16_t),
             cudaMemcpyHostToDevice));
-
-        // flags
-        /*CUDA_ERROR(cudaMemcpy(m_d_patches_face_ribbon_flag + start_faces,
-            m_h_patches_face_ribbon_flag[p].data(), m_h_ad_size_ltog_f[p].y *
-            m_face_degree *	sizeof(flag_t), cudaMemcpyHostToDevice));*/
     }
 
 
@@ -1175,6 +1141,26 @@ void RXMesh<patchSize>::device_alloc_local()
         m_d_patch_distribution_f, m_h_patch_distribution_f.data(),
         (m_num_patches + 1) * sizeof(uint32_t), cudaMemcpyHostToDevice));
 
+
+    uint32_t* n_patches = m_patcher->get_neighbour_patches();
+    uint32_t* n_patches_offset = m_patcher->get_neighbour_patches_offset();
+
+    CUDA_ERROR(cudaMalloc((void**)&m_d_neighbour_patches_offset,
+                          m_num_patches * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemcpy(m_d_neighbour_patches_offset, n_patches_offset,
+                          m_num_patches * sizeof(uint32_t),
+                          cudaMemcpyHostToDevice));
+    if (n_patches) {
+        CUDA_ERROR(
+            cudaMalloc((void**)&m_d_neighbour_patches,
+                       n_patches_offset[m_num_patches - 1] * sizeof(uint32_t)));
+        CUDA_ERROR(
+            cudaMemcpy(m_d_neighbour_patches, n_patches,
+                       n_patches_offset[m_num_patches - 1] * sizeof(uint32_t),
+                       cudaMemcpyHostToDevice));
+    }
+
+
     // Allocate and copy the context to the gpu
     m_rxmesh_context.init(
         m_num_edges, m_num_faces, m_num_vertices, m_face_degree, m_max_valence,
@@ -1183,8 +1169,9 @@ void RXMesh<patchSize>::device_alloc_local()
         m_d_patches_ltog_e, m_d_patches_ltog_f, m_d_ad_size_ltog_v,
         m_d_ad_size_ltog_e, m_d_ad_size_ltog_f, m_d_patches_edges,
         m_d_patches_faces, m_d_ad_size, m_d_owned_size, m_max_size,
-        m_d_patches_face_ribbon_flag, m_d_patch_distribution_v,
-        m_d_patch_distribution_e, m_d_patch_distribution_f);
+        m_d_patch_distribution_v, m_d_patch_distribution_e,
+        m_d_patch_distribution_f, m_d_neighbour_patches,
+        m_d_neighbour_patches_offset);
 }
 
 

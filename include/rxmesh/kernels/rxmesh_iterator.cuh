@@ -9,9 +9,11 @@ struct RXMeshIterator
                               const uint16_t* patch_offset,
                               const uint32_t* output_ltog_map,
                               const uint32_t  offset_size,
+                              const uint32_t  num_src_in_patch,
                               int             shift = 0)
         : m_patch_output(patch_output), m_patch_offset(patch_offset),
-          m_output_ltog_map(output_ltog_map), m_shift(shift)
+          m_output_ltog_map(output_ltog_map),
+          m_num_src_in_patch(num_src_in_patch), m_shift(shift)
     {
         set(local_id, offset_size);
     }
@@ -28,6 +30,10 @@ struct RXMeshIterator
         return m_end - m_begin;
     }
 
+    __device__ uint16_t neighbour_local_id(uint32_t i) const
+    {
+        return m_patch_output[m_begin + i];
+    }
 
     __device__ uint32_t operator[](const uint32_t i) const
     {
@@ -94,7 +100,7 @@ struct RXMeshIterator
     }
 
 
-   private:
+    // private:
     const uint16_t* m_patch_output;
     const uint16_t* m_patch_offset;
     const uint32_t* m_output_ltog_map;
@@ -103,6 +109,7 @@ struct RXMeshIterator
     uint16_t        m_end;
     uint16_t        m_current;
     int             m_shift;
+    uint32_t        m_num_src_in_patch;
 
     __device__ void set(const uint16_t local_id, const uint32_t offset_size)
     {

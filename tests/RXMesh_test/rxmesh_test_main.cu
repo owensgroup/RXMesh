@@ -20,8 +20,8 @@ struct RXMeshTestArg
     char**      argv = argv;
 } rxmesh_args;
 
+#include "test_higher_queries.h"
 #include "test_queries.h"
-//#include "test_higher_queries.h"
 
 
 int main(int argc, char** argv)

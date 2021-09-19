@@ -8,9 +8,9 @@ set( SOURCE_LIST
     test_util.cu        
 	test_iterator.cu
     test_queries.h
-	#test_higher_queries.h
+	test_higher_queries.h
 	query.cuh	
-	#higher_query.cuh
+	higher_query.cuh
 )
 
 target_sources( RXMesh_test 
@@ -19,6 +19,8 @@ target_sources( RXMesh_test
 )
 
 set_target_properties( RXMesh_test PROPERTIES FOLDER "tests")
+
+#set_property(TARGET RXMesh_test PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "RXMesh_test" FILES ${SOURCE_LIST})
 

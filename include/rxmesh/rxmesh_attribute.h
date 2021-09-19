@@ -1,11 +1,10 @@
 #pragma once
 
 #include <assert.h>
-#include <vector>
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/rxmesh_attribute.cuh"
-#include "rxmesh/util/util.h"
 #include "rxmesh/kernels/util.cuh"
+#include "rxmesh/util/util.h"
 #include "rxmesh/util/vector.h"
 
 namespace RXMESH {
@@ -75,7 +74,9 @@ class RXMeshAttribute
           m_h_attr(nullptr), m_d_attr(nullptr), m_layout(AoS),
           d_axpy_alpha(nullptr), d_axpy_beta(nullptr),
           m_is_axpy_allocated(false), m_is_reduce_allocated(false),
-          m_reduce_temp_storage_bytes(0)
+          m_reduce_temp_storage_bytes(0), m_d_reduce_temp_storage(nullptr),
+          m_d_reduce_output(nullptr), m_reduce_streams(nullptr),
+          m_norm2_temp_buffer(nullptr)
     {
 
         this->m_name = (char*)malloc(sizeof(char) * 1);
@@ -103,9 +104,6 @@ class RXMeshAttribute
         m_pitch.y = 0;
     }
 
-    ~RXMeshAttribute()
-    {
-    }
     //*********************************************************************
 
 
@@ -155,7 +153,7 @@ class RXMeshAttribute
         return nullptr;
     }
 
-    void reset(const T value, locationT target)
+    void reset(const T value, locationT target, cudaStream_t stream = NULL)
     {
 
         if ((target & DEVICE) == DEVICE) {
@@ -165,8 +163,8 @@ class RXMeshAttribute
             const int      threads = 256;
             const uint32_t total =
                 m_num_attribute_per_element * m_num_mesh_elements;
-            memset<T><<<(total + threads - 1) / threads, threads>>>(m_d_attr,
-                                                                 value, total);
+            memset<T><<<(total + threads - 1) / threads, threads, 0, stream>>>(
+                m_d_attr, value, total);
             CUDA_ERROR(cudaDeviceSynchronize());
             CUDA_ERROR(cudaGetLastError());
         }
@@ -222,19 +220,43 @@ class RXMeshAttribute
 
             // NORM2 temp buffer (to store the per-block output)
             uint32_t num_blocks = DIVIDE_UP(m_num_mesh_elements, m_block_size);
-            m_norm2_temp_buffer.resize(m_num_attribute_per_element, NULL);
+            m_norm2_temp_buffer =
+                (T**)malloc(sizeof(T*) * m_num_attribute_per_element);
+            if (!m_norm2_temp_buffer) {
+                RXMESH_ERROR(
+                    "RXMeshAttribute::init() could not allocate "
+                    "m_norm2_temp_buffer.");
+            }
             for (uint32_t i = 0; i < m_num_attribute_per_element; ++i) {
                 CUDA_ERROR(cudaMalloc(&m_norm2_temp_buffer[i],
                                       sizeof(T) * num_blocks));
             }
 
-            m_d_reduce_output.resize(m_num_attribute_per_element, NULL);
-            m_d_reduce_temp_storage.resize(m_num_attribute_per_element, NULL);
-            m_reduce_streams.resize(m_num_attribute_per_element);
-
+            m_d_reduce_output =
+                (T**)malloc(sizeof(T*) * m_num_attribute_per_element);
+            if (!m_d_reduce_output) {
+                RXMESH_ERROR(
+                    "RXMeshAttribute::init() could not allocate "
+                    "m_d_reduce_output.");
+            }
+            m_d_reduce_temp_storage =
+                (void**)malloc(sizeof(void*) * m_num_attribute_per_element);
+            if (!m_d_reduce_temp_storage) {
+                RXMESH_ERROR(
+                    "RXMeshAttribute::init() could not allocate "
+                    "m_d_reduce_temp_storage.");
+            }
+            m_reduce_streams = (cudaStream_t*)malloc(
+                sizeof(cudaStream_t) * m_num_attribute_per_element);
+            if (!m_d_reduce_output) {
+                RXMESH_ERROR(
+                    "RXMeshAttribute::init() could not allocate "
+                    "m_reduce_streams.");
+            }
             {  // get the num bytes for cub device-wide reduce
                 size_t norm2_temp_bytes(0), other_reduce_temp_bytes(0);
                 T*     d_out(NULL);
+                m_d_reduce_temp_storage[0] = NULL;
                 cub::DeviceReduce::Sum(m_d_reduce_temp_storage[0],
                                        norm2_temp_bytes, m_d_attr, d_out,
                                        num_blocks);
@@ -356,6 +378,10 @@ class RXMeshAttribute
                     CUDA_ERROR(cudaStreamDestroy(m_reduce_streams[i]));
                 }
                 m_is_reduce_allocated = false;
+                free(m_reduce_streams);
+                free(m_d_reduce_output);
+                free(m_norm2_temp_buffer);
+                free(m_d_reduce_temp_storage);
             }
         }
     }
@@ -719,32 +745,6 @@ class RXMeshAttribute
 
 
     //********************** Operators
-    RXMeshAttribute& operator=(const RXMeshAttribute& rhs)
-    {
-        m_num_mesh_elements = rhs.m_num_mesh_elements;
-        m_allocated = rhs.m_allocated;
-        m_h_attr = rhs.m_h_attr;
-        m_d_attr = rhs.m_d_attr;
-        m_layout = rhs.m_layout;
-        m_pitch.x = rhs.m_pitch.x;
-        m_pitch.y = rhs.m_pitch.y;
-        d_axpy_alpha = rhs.d_axpy_alpha;
-        d_axpy_beta = rhs.d_axpy_beta;
-        m_is_axpy_allocated = rhs.m_is_axpy_allocated;
-        m_is_reduce_allocated = rhs.m_is_reduce_allocated;
-        m_reduce_temp_storage_bytes = rhs.m_reduce_temp_storage_bytes;
-        std::memcpy(m_d_reduce_temp_storage.data(),
-                    rhs.m_d_reduce_temp_storage.data(),
-                    m_d_reduce_temp_storage.size() * sizeof(void*));
-        std::memcpy(m_d_reduce_output.data(), rhs.m_d_reduce_output.data(),
-                    m_d_reduce_output.size() * sizeof(T*));
-        std::memcpy(m_reduce_streams.data(), rhs.m_reduce_streams.data(),
-                    m_reduce_streams.size() * sizeof(cudaStream_t));
-        std::memcpy(m_norm2_temp_buffer.data(), rhs.m_norm2_temp_buffer.data(),
-                    m_norm2_temp_buffer.size() * sizeof(T*));
-        return *this;
-    }
-
     __host__ __device__ __forceinline__ T& operator()(uint32_t idx,
                                                       uint32_t attr)
     {
@@ -855,12 +855,12 @@ class RXMeshAttribute
     bool m_is_axpy_allocated;
 
     // temp array for reduce operations
-    bool                      m_is_reduce_allocated;
-    size_t                    m_reduce_temp_storage_bytes;
-    std::vector<void*>        m_d_reduce_temp_storage;
-    std::vector<T*>           m_d_reduce_output;
-    std::vector<cudaStream_t> m_reduce_streams;
-    std::vector<T*>           m_norm2_temp_buffer;
+    bool          m_is_reduce_allocated;
+    size_t        m_reduce_temp_storage_bytes;
+    void**        m_d_reduce_temp_storage;
+    T**           m_d_reduce_output;
+    cudaStream_t* m_reduce_streams;
+    T**           m_norm2_temp_buffer;
     //*********************************************************************
 };
 }  // namespace RXMESH

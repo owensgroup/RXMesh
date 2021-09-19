@@ -166,7 +166,7 @@ class RXMeshTest
         }
 
         // use VV to construct VVV
-        std::vector<std::vector<uint32_t>> v_v_v(v_v);
+        std::vector<std::vector<uint32_t>> v_v_v = v_v;
         for (uint32_t v = 0; v < v_v_v.size(); ++v) {
 
             // loop over the v_v list of the vertex v
@@ -445,7 +445,7 @@ class RXMeshTest
 
             const uint32_t src_ele = input_container(v);
 
-            if (element_patch[src_ele] == INVALID32) {
+            if (src_ele == INVALID32) {
                 // means it is isolated element so don't bother
                 continue;
             }
@@ -468,7 +468,7 @@ class RXMeshTest
             }
 
             // check for completeness (e.g, that all edges incident to the
-            // vertex v are actually returned in h_output)
+            // vertex v are actually returned in output_container)
             for (uint32_t i = 0; i < mesh_ele[src_ele].size(); i++) {
                 uint32_t e = mesh_ele[src_ele][i];
                 bool     found = false;

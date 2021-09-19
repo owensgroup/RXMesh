@@ -119,12 +119,10 @@ TEST(RXMesh, Oriented_VV)
 
     std::vector<std::vector<uint32_t>> Faces;
 
-    if (!import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces, true)) {
-        exit(EXIT_FAILURE);
-    }
+    ASSERT_TRUE(import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces, true));
 
     // Instantiate RXMesh Static
-    RXMeshStatic rxmesh_static(Faces, Verts, false, rxmesh_args.quite);
+    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, Verts, false, rxmesh_args.quite);
 
     EXPECT_TRUE(rxmesh_static.is_closed())
         << " Can't generate oriented VV for input with boundaries";
@@ -141,7 +139,7 @@ TEST(RXMesh, Oriented_VV)
 
     // launch box
     LaunchBox<256> launch_box;
-    rxmesh_static.prepare_launch_box(Op::VV, launch_box, true);
+    rxmesh_static.prepare_launch_box(Op::VV, launch_box, false, true);
 
     // launch query
     float tt = launcher(rxmesh_static.get_context(), Op::VV, input_container,
@@ -211,17 +209,15 @@ TEST(RXMesh, Queries)
 
     std::vector<std::vector<uint32_t>> Faces;
 
-    if (!import_obj(rxmesh_args.obj_file_name, Verts, Faces,
-                    rxmesh_args.quite)) {
-        exit(EXIT_FAILURE);
-    }
+    ASSERT_TRUE(import_obj(rxmesh_args.obj_file_name, Verts, Faces,
+                    rxmesh_args.quite));
 
     if (rxmesh_args.shuffle) {
         shuffle_obj(Faces, Verts);
     }
 
     // RXMesh
-    RXMeshStatic rxmesh_static(Faces, Verts, rxmesh_args.sort,
+    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, Verts, rxmesh_args.sort,
                                rxmesh_args.quite);
 
 
@@ -283,7 +279,7 @@ TEST(RXMesh, Queries)
 
         // launch box
         LaunchBox<256> launch_box;
-        rxmesh_static.prepare_launch_box(ops_it, launch_box, oriented);
+        rxmesh_static.prepare_launch_box(ops_it, launch_box, false, oriented);
 
         // test data
         TestData td;

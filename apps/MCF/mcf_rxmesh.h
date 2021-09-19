@@ -85,7 +85,7 @@ void mcf_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh_static.prepare_launch_box(RXMESH::Op::VV, launch_box, true);
+    rxmesh_static.prepare_launch_box(RXMESH::Op::VV, launch_box, false, true);
 
 
     // init kernel to initialize RHS (B)
