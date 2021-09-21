@@ -138,7 +138,7 @@ class RXMeshTest
                     (j != 2) ? rxmesh.m_fvn[i][j + 1] : rxmesh.m_fvn[i][0];
                 std::pair<uint32_t, uint32_t> my_edge = rxmesh.edge_key(v0, v1);
                 uint32_t edge_id = rxmesh.get_edge_id(my_edge);
-                ff[j] = edge_id;
+                ff[j]            = edge_id;
             }
             m_h_FE.push_back(ff);
         }
@@ -155,7 +155,7 @@ class RXMeshTest
         std::vector<std::vector<uint32_t>> v_v(rxmesh.m_num_vertices,
                                                std::vector<uint32_t>(0));
 
-        auto e_it = rxmesh.m_edges_map.begin();
+        auto e_it  = rxmesh.m_edges_map.begin();
         auto e_end = rxmesh.m_edges_map.end();
 
         for (; e_it != e_end; e_it++) {
@@ -195,8 +195,10 @@ class RXMeshTest
 
 
         // two-way verification
-        return verifier(rxmesh.get_patcher()->get_vertex_patch().data(), v_v_v,
-                        input_container, output_container);
+        return verifier(rxmesh.get_patcher()->get_vertex_patch().data(),
+                        v_v_v,
+                        input_container,
+                        output_container);
     }
 
     template <uint32_t patchSize>
@@ -210,7 +212,7 @@ class RXMeshTest
         std::vector<std::vector<uint32_t>> v_v(rxmesh.m_num_vertices,
                                                std::vector<uint32_t>(0));
 
-        auto e_it = rxmesh.m_edges_map.begin();
+        auto e_it  = rxmesh.m_edges_map.begin();
         auto e_end = rxmesh.m_edges_map.end();
 
         for (; e_it != e_end; e_it++) {
@@ -221,8 +223,10 @@ class RXMeshTest
         }
 
         // two-way verification
-        return verifier(rxmesh.get_patcher()->get_vertex_patch().data(), v_v,
-                        input_container, output_container);
+        return verifier(rxmesh.get_patcher()->get_vertex_patch().data(),
+                        v_v,
+                        input_container,
+                        output_container);
     }
 
     template <uint32_t patchSize>
@@ -236,19 +240,21 @@ class RXMeshTest
         std::vector<std::vector<uint32_t>> v_e(rxmesh.m_num_vertices,
                                                std::vector<uint32_t>(0));
 
-        auto e_it = rxmesh.m_edges_map.begin();
+        auto e_it  = rxmesh.m_edges_map.begin();
         auto e_end = rxmesh.m_edges_map.end();
 
         for (; e_it != e_end; e_it++) {
             std::pair<uint32_t, uint32_t> vertices = e_it->first;
-            uint32_t                      edge = e_it->second;
+            uint32_t                      edge     = e_it->second;
             v_e[vertices.first].push_back(edge);
             v_e[vertices.second].push_back(edge);
         }
 
         // two-way verification
-        return verifier(rxmesh.get_patcher()->get_vertex_patch().data(), v_e,
-                        input_container, output_container);
+        return verifier(rxmesh.get_patcher()->get_vertex_patch().data(),
+                        v_e,
+                        input_container,
+                        output_container);
     }
 
     template <uint32_t patchSize>
@@ -274,8 +280,10 @@ class RXMeshTest
         }
 
         // two-way verification
-        return verifier(rxmesh.get_patcher()->get_vertex_patch().data(), v_f,
-                        input_container, output_container);
+        return verifier(rxmesh.get_patcher()->get_vertex_patch().data(),
+                        v_f,
+                        input_container,
+                        output_container);
     }
 
     template <uint32_t patchSize>
@@ -293,13 +301,16 @@ class RXMeshTest
 
         for (uint32_t f = 0; f < rxmesh.m_num_faces; f++) {
 
-            std::memcpy(f_v[f].data(), rxmesh.m_fvn[f].data(),
+            std::memcpy(f_v[f].data(),
+                        rxmesh.m_fvn[f].data(),
                         f_deg * sizeof(uint32_t));
         }
 
         // two-way verification
-        return verifier(rxmesh.get_patcher()->get_face_patch().data(), f_v,
-                        input_container, output_container);
+        return verifier(rxmesh.get_patcher()->get_face_patch().data(),
+                        f_v,
+                        input_container,
+                        output_container);
     }
 
     template <uint32_t patchSize>
@@ -331,8 +342,10 @@ class RXMeshTest
 
 
         // two-way verification
-        return verifier(rxmesh.get_patcher()->get_face_patch().data(), f_e,
-                        input_container, output_container);
+        return verifier(rxmesh.get_patcher()->get_face_patch().data(),
+                        f_e,
+                        input_container,
+                        output_container);
     }
 
     template <uint32_t patchSize>
@@ -377,8 +390,10 @@ class RXMeshTest
         }
 
         // two-way verification
-        return verifier(rxmesh.get_patcher()->get_face_patch().data(), f_f,
-                        input_container, output_container);
+        return verifier(rxmesh.get_patcher()->get_face_patch().data(),
+                        f_f,
+                        input_container,
+                        output_container);
     }
 
     template <uint32_t patchSize>
@@ -401,8 +416,10 @@ class RXMeshTest
 
 
         // two-way verification
-        return verifier(rxmesh.get_patcher()->get_edge_patch().data(), e_v,
-                        input_container, output_container);
+        return verifier(rxmesh.get_patcher()->get_edge_patch().data(),
+                        e_v,
+                        input_container,
+                        output_container);
     }
 
     template <uint32_t patchSize>
@@ -425,8 +442,10 @@ class RXMeshTest
         }
 
         // two-way verification
-        return verifier(rxmesh.get_patcher()->get_edge_patch().data(), e_f,
-                        input_container, output_container);
+        return verifier(rxmesh.get_patcher()->get_edge_patch().data(),
+                        e_f,
+                        input_container,
+                        output_container);
     }
 
     bool verifier(const uint32_t*                           element_patch,
@@ -461,7 +480,8 @@ class RXMeshTest
                         RXMESH_ERROR(
                             "RXMeshTest::verifier() element {} is not incident "
                             "to {}",
-                            output_container(v, i), src_ele);
+                            output_container(v, i),
+                            src_ele);
                     }
                     results = false;
                 }
@@ -470,7 +490,7 @@ class RXMeshTest
             // check for completeness (e.g, that all edges incident to the
             // vertex v are actually returned in output_container)
             for (uint32_t i = 0; i < mesh_ele[src_ele].size(); i++) {
-                uint32_t e = mesh_ele[src_ele][i];
+                uint32_t e     = mesh_ele[src_ele][i];
                 bool     found = false;
                 for (uint32_t j = 1; j <= output_container(v, 0); j++) {
                     if (output_container(v, j) == e) {
@@ -484,7 +504,8 @@ class RXMeshTest
                         RXMESH_ERROR(
                             "RXMeshTest::verifier() element {} is not incident "
                             "to {}",
-                            e, src_ele);
+                            e,
+                            src_ele);
                     }
                     results = false;
                 }
@@ -570,7 +591,11 @@ class RXMeshTest
                         "find the corresponding edge between global vertices "
                         "{} and {} with local id {} and in patch {} of "
                         "converted to global vertices",
-                        v0_ltog, v1_ltog, v0_l, v1_l, patch_id);
+                        v0_ltog,
+                        v1_ltog,
+                        v0_l,
+                        v1_l,
+                        patch_id);
                 }
                 return false;
             }
@@ -588,7 +613,13 @@ class RXMeshTest
                         "{}, local edge id = {}, mapped to = {}, local "
                         "vertices id = ({}, {}) mapped to= ({}, {}), global "
                         "edge connecting the mapped global vertices = {}",
-                        patch_id, e_l, e_ltog, v0_l, v1_l, v0_ltog, v1_ltog,
+                        patch_id,
+                        e_l,
+                        e_ltog,
+                        v0_l,
+                        v1_l,
+                        v0_ltog,
+                        v1_ltog,
                         e_g);
                 }
                 return false;
@@ -664,9 +695,18 @@ class RXMeshTest
                             "edges id = ({}, {}, {}), mapped to = ({}, {}, "
                             "{}), global edges obtained from the mapped global "
                             "face= ({}, {}, {})",
-                            patch_id, f_l, f_ltog, e_l[0], e_l[1], e_l[2],
-                            e_ltog[0], e_ltog[1], e_ltog[2], e_ltog[0],
-                            e_ltog[1], e_ltog[2]);
+                            patch_id,
+                            f_l,
+                            f_ltog,
+                            e_l[0],
+                            e_l[1],
+                            e_l[2],
+                            e_ltog[0],
+                            e_ltog[1],
+                            e_ltog[2],
+                            e_ltog[0],
+                            e_ltog[1],
+                            e_ltog[2]);
                     }
                     return false;
                 }

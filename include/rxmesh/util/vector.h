@@ -290,11 +290,11 @@ struct Vector
     __host__ __device__ __forceinline__ void normalize()
     {
         T r = norm();
-        if(r == T(0.0)){
+        if (r == T(0.0)) {
             for (uint32_t i = 0; i < N; ++i) {
                 m_v[i] = 0;
             }
-        }else{
+        } else {
             r = 1. / r;
             (*this) *= r;
         }
@@ -440,40 +440,40 @@ inline std::istream& operator>>(std::istream& input, const Vector<N, T>& v)
 }
 
 // Alias
-using Vector2d = Vector<2, double>;
-using Vector2f = Vector<2, float>;
-using Vector2i = Vector<2, int32_t>;
+using Vector2d  = Vector<2, double>;
+using Vector2f  = Vector<2, float>;
+using Vector2i  = Vector<2, int32_t>;
 using Vector2ui = Vector<2, uint32_t>;
-using Vector2s = Vector<2, int16_t>;
+using Vector2s  = Vector<2, int16_t>;
 using Vector2us = Vector<2, uint16_t>;
-using Vector2c = Vector<2, int8_t>;
+using Vector2c  = Vector<2, int8_t>;
 using Vector2uc = Vector<2, uint8_t>;
 
-using Vector3d = Vector<3, double>;
-using Vector3f = Vector<3, float>;
-using Vector3i = Vector<3, int32_t>;
+using Vector3d  = Vector<3, double>;
+using Vector3f  = Vector<3, float>;
+using Vector3i  = Vector<3, int32_t>;
 using Vector3ui = Vector<3, uint32_t>;
-using Vector3s = Vector<3, int16_t>;
+using Vector3s  = Vector<3, int16_t>;
 using Vector3us = Vector<3, uint16_t>;
-using Vector3c = Vector<3, int8_t>;
+using Vector3c  = Vector<3, int8_t>;
 using Vector3uc = Vector<3, uint8_t>;
 
-using Vector4d = Vector<4, double>;
-using Vector4f = Vector<4, float>;
-using Vector4i = Vector<4, int32_t>;
+using Vector4d  = Vector<4, double>;
+using Vector4f  = Vector<4, float>;
+using Vector4i  = Vector<4, int32_t>;
 using Vector4ui = Vector<4, uint32_t>;
-using Vector4s = Vector<4, int16_t>;
+using Vector4s  = Vector<4, int16_t>;
 using Vector4us = Vector<4, uint16_t>;
-using Vector4c = Vector<4, int8_t>;
+using Vector4c  = Vector<4, int8_t>;
 using Vector4uc = Vector<4, uint8_t>;
 
-using Vector6d = Vector<6, double>;
-using Vector6f = Vector<6, float>;
-using Vector6i = Vector<6, int32_t>;
+using Vector6d  = Vector<6, double>;
+using Vector6f  = Vector<6, float>;
+using Vector6i  = Vector<6, int32_t>;
 using Vector6ui = Vector<6, uint32_t>;
-using Vector6s = Vector<6, int16_t>;
+using Vector6s  = Vector<6, int16_t>;
 using Vector6us = Vector<6, uint16_t>;
-using Vector6c = Vector<6, int8_t>;
+using Vector6c  = Vector<6, int8_t>;
 using Vector6uc = Vector<6, uint8_t>;
 }  // namespace RXMESH
 

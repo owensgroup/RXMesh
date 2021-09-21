@@ -55,8 +55,8 @@ __launch_bounds__(blockThreads) __global__
         }
     };
 
-    query_block_dispatcher<op, blockThreads>(context, thread_element, n_ring,
-                                             oriented);
+    query_block_dispatcher<op, blockThreads>(
+        context, thread_element, n_ring, oriented);
 }
 
 }  // namespace detail

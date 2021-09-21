@@ -9,15 +9,15 @@ std::vector<std::vector<dataT>> Verts;
 
 struct RXMeshTestArg
 {
-    uint32_t    num_run = 1;
-    uint32_t    device_id = 0;
+    uint32_t    num_run       = 1;
+    uint32_t    device_id     = 0;
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    bool        quite = false;
-    bool        shuffle = false;
-    bool        sort = false;
-    int         argc = argc;
-    char**      argv = argv;
+    bool        quite         = false;
+    bool        shuffle       = false;
+    bool        sort          = false;
+    int         argc          = argc;
+    char**      argv          = argv;
 } rxmesh_args;
 
 #include "test_higher_queries.h"

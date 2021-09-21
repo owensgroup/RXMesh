@@ -29,8 +29,15 @@ vertex_normal_hardwired_kernel(const uint32_t  num_faces,
 
         T nx, ny, nz;
 
-        RXMESH::cross_product(v1x - v0x, v1y - v0y, v1z - v0z, v2x - v0x,
-                              v2y - v0y, v2z - v0z, nx, ny, nz);
+        RXMESH::cross_product(v1x - v0x,
+                              v1y - v0y,
+                              v1z - v0z,
+                              v2x - v0x,
+                              v2y - v0y,
+                              v2z - v0z,
+                              nx,
+                              ny,
+                              nz);
         T l0 = RXMESH::l2_norm_sq(v0x, v0y, v0z, v1x, v1y, v1z);  // v0-v1
         T l1 = RXMESH::l2_norm_sq(v1x, v1y, v1z, v2x, v2y, v2z);  // v1-v2
         T l2 = RXMESH::l2_norm_sq(v2x, v2y, v2z, v0x, v0y, v0z);  // v2-v0
@@ -57,7 +64,7 @@ inline void vertex_normal_hardwired(
 {
     using namespace RXMESH;
     uint32_t num_vertices = Verts.size();
-    uint32_t num_faces = Faces.size();
+    uint32_t num_faces    = Faces.size();
 
     CustomReport report("VertexNormal_Hardwired");
     report.command_line(Arg.argc, Arg.argv);
@@ -94,17 +101,20 @@ inline void vertex_normal_hardwired(
     CUDA_ERROR(cudaMalloc((void**)&d_face, 3 * num_faces * sizeof(uint32_t)));
     CUDA_ERROR(cudaMalloc((void**)&d_verts, 3 * num_vertices * sizeof(T)));
     CUDA_ERROR(cudaMalloc((void**)&d_normals, 3 * num_vertices * sizeof(T)));
-    CUDA_ERROR(cudaMemcpy(d_face, h_face.data(),
+    CUDA_ERROR(cudaMemcpy(d_face,
+                          h_face.data(),
                           h_face.size() * sizeof(uint32_t),
                           cudaMemcpyHostToDevice));
-    CUDA_ERROR(cudaMemcpy(d_verts, h_verts.data(), h_verts.size() * sizeof(T),
+    CUDA_ERROR(cudaMemcpy(d_verts,
+                          h_verts.data(),
+                          h_verts.size() * sizeof(T),
                           cudaMemcpyHostToDevice));
 
     const uint32_t threads = 256;
-    const uint32_t blocks = DIVIDE_UP(num_faces, threads);
+    const uint32_t blocks  = DIVIDE_UP(num_faces, threads);
 
     TestData td;
-    td.test_name = "VertexNormal";
+    td.test_name  = "VertexNormal";
     float vn_time = 0;
     for (uint32_t itr = 0; itr < Arg.num_run; ++itr) {
         CUDA_ERROR(cudaMemset(d_normals, 0, 3 * num_vertices * sizeof(T)));
@@ -126,7 +136,8 @@ inline void vertex_normal_hardwired(
 
     T* verts_normal_hardwired;
     verts_normal_hardwired = (T*)malloc(num_vertices * 3 * sizeof(T));
-    CUDA_ERROR(cudaMemcpy(verts_normal_hardwired, d_normals,
+    CUDA_ERROR(cudaMemcpy(verts_normal_hardwired,
+                          d_normals,
                           3 * num_vertices * sizeof(T),
                           cudaMemcpyDeviceToHost));
 
@@ -138,8 +149,10 @@ inline void vertex_normal_hardwired(
     RXMESH_TRACE("vertex_normal_hardwired() vertex normal kernel took {} (ms)",
                  vn_time);
 
-    bool passed = compare(vertex_normal_gold.data(), verts_normal_hardwired,
-                          Verts.size() * 3, false);
+    bool passed = compare(vertex_normal_gold.data(),
+                          verts_normal_hardwired,
+                          Verts.size() * 3,
+                          false);
     td.passed.push_back(passed);
     EXPECT_TRUE(passed) << " Hardwired Validation failed \n";
 

@@ -38,7 +38,7 @@ __launch_bounds__(blockThreads) __global__
         assert(iter.size() < output_container.get_num_attribute_per_element());
 
         uint32_t id_offset = block_offset + iter.local_id();
-        d_src(id_offset) = id;
+        d_src(id_offset)   = id;
 
         output_container(id_offset, 0) = iter.size();
 

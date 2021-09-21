@@ -83,7 +83,7 @@ inline bool geodesic_rxmesh(RXMESH::RXMeshStatic<patchSize>&    rxmesh_static,
     // actual computation
     uint32_t d = 0;
     uint32_t i(1), j(2);
-    uint32_t iter = 0;
+    uint32_t iter     = 0;
     uint32_t max_iter = 2 * h_limits.size();
     while (i < j && iter < max_iter) {
         iter++;
@@ -94,12 +94,19 @@ inline bool geodesic_rxmesh(RXMESH::RXMeshStatic<patchSize>&    rxmesh_static,
         // compute new geodesic
         relax_ptp_rxmesh<T, blockThreads>
             <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-                rxmesh_static.get_context(), input_coord, *double_buffer[!d],
-                *double_buffer[d], toplesets, i, j, d_error,
-                std::numeric_limits<T>::infinity(), T(1e-3));
+                rxmesh_static.get_context(),
+                input_coord,
+                *double_buffer[!d],
+                *double_buffer[d],
+                toplesets,
+                i,
+                j,
+                d_error,
+                std::numeric_limits<T>::infinity(),
+                T(1e-3));
 
-        CUDA_ERROR(cudaMemcpy(&h_error, d_error, sizeof(uint32_t),
-                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(
+            &h_error, d_error, sizeof(uint32_t), cudaMemcpyDeviceToHost));
         CUDA_ERROR(cudaMemset(d_error, 0, sizeof(uint32_t)));
 
 
@@ -132,7 +139,9 @@ inline bool geodesic_rxmesh(RXMESH::RXMeshStatic<patchSize>&    rxmesh_static,
     bool is_passed = (err < 10E-2);
 
     RXMESH_TRACE("Geodesic_RXMesh took {} (ms) -- err= {} -- #iter= {}",
-                 timer.elapsed_millis(), err, iter);
+                 timer.elapsed_millis(),
+                 err,
+                 iter);
 
     // export_attribute_VTK("geo_rxmesh.vtk", Faces, Verts, false,
     //                     rxmesh_geo.operator->(), rxmesh_geo.operator->());

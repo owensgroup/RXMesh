@@ -69,14 +69,15 @@ __device__ __inline__ void compute_new_coordinates(
     T sigma_s_sq =
         compute_sigma_s_sq(v_id, vv, num_vv, v_id, v, n, input_coords);
 
-    T sum = 0;
+    T sum        = 0;
     T normalizer = 0;
     for (uint8_t i = 0; i < num_vv; ++i) {
-        RXMESH::Vector<3, T> q(input_coords(vv[i], 0), input_coords(vv[i], 1),
+        RXMESH::Vector<3, T> q(input_coords(vv[i], 0),
+                               input_coords(vv[i], 1),
                                input_coords(vv[i], 2));
         q -= v;
-        T t = q.norm();
-        T h = dot(q, n);
+        T t  = q.norm();
+        T h  = dot(q, n);
         T wc = exp(-0.5 * t * t / sigma_c_sq);
         T ws = exp(-0.5 * h * h / sigma_s_sq);
 
@@ -106,9 +107,9 @@ __launch_bounds__(blockThreads) __global__
     uint32_t vv_patch[maxVVSize];
     uint16_t vv_local[maxVVSize];
 
-    uint8_t      num_vv = 0;
+    uint8_t      num_vv     = 0;
     T            sigma_c_sq = 0;
-    T            radius = 0;
+    T            radius     = 0;
     Vector<3, T> vertex, normal;
     uint32_t     v_id = INVALID32;
 
@@ -119,7 +120,7 @@ __launch_bounds__(blockThreads) __global__
 
     if (threadIdx.x == 0) {
         s_current_num_patches = 0;
-        s_num_patches = 0;
+        s_num_patches         = 0;
     }
 
     uint32_t patch_id = blockIdx.x;
@@ -129,7 +130,7 @@ __launch_bounds__(blockThreads) __global__
     // k-ring is not in the patch, it will be added to s_block_patches so the
     // whole block would process this patch later.
     auto compute_vv_1st_level = [&](uint32_t p_id, RXMeshIterator& iter) {
-        v_id = p_id;
+        v_id      = p_id;
         vertex[0] = input_coords(v_id, 0);
         vertex[1] = input_coords(v_id, 1);
         vertex[2] = input_coords(v_id, 2);
@@ -140,7 +141,7 @@ __launch_bounds__(blockThreads) __global__
 
         normal.normalize();
 
-        vv[0] = v_id;
+        vv[0]       = v_id;
         vv_patch[0] = INVALID32;
         ++num_vv;
 
@@ -148,7 +149,8 @@ __launch_bounds__(blockThreads) __global__
 
         for (uint32_t v = 0; v < iter.size(); ++v) {
             const uint32_t     vv_id = iter[v];
-            const Vector<3, T> q(input_coords(vv_id, 0), input_coords(vv_id, 1),
+            const Vector<3, T> q(input_coords(vv_id, 0),
+                                 input_coords(vv_id, 1),
                                  input_coords(vv_id, 2));
 
             T len = dist2(vertex, q);
@@ -173,7 +175,7 @@ __launch_bounds__(blockThreads) __global__
             if (dist <= radius) {
                 uint8_t id = num_vv++;
                 assert(id < maxVVSize);
-                vv[id] = vv_id;
+                vv[id]       = vv_id;
                 vv_local[id] = iter.neighbour_local_id(v);
                 vv_patch[id] = SPECIAL;
             }
@@ -183,7 +185,7 @@ __launch_bounds__(blockThreads) __global__
         // process the 1-ring vertices that this in this patch and within
         // the radius
         uint8_t num_vv_start = 1;
-        uint8_t num_vv_end = num_vv;
+        uint8_t num_vv_end   = num_vv;
 
         while (true) {
 
@@ -204,7 +206,7 @@ __launch_bounds__(blockThreads) __global__
                     vv_iter.set(vv_local[v], 0);
 
                     for (uint32_t i = 0; i < vv_iter.size(); ++i) {
-                        uint32_t vvv_id = vv_iter[i];
+                        uint32_t vvv_id       = vv_iter[i];
                         uint16_t vvv_local_id = vv_iter.neighbour_local_id(i);
 
                         // make sure that it is not a duplicate
@@ -219,7 +221,7 @@ __launch_bounds__(blockThreads) __global__
                                 uint8_t id = num_vv++;
 
                                 assert(id < maxVVSize);
-                                vv[id] = vvv_id;
+                                vv[id]       = vvv_id;
                                 vv_local[id] = vvv_local_id;
                                 vv_patch[id] = SPECIAL;
                             }
@@ -253,7 +255,7 @@ __launch_bounds__(blockThreads) __global__
             // otherwise, it means we have added new vertices that might
             // fall in this patch, so we better process them now.
             num_vv_start = num_vv_end;
-            num_vv_end = num_vv;
+            num_vv_end   = num_vv;
         }
     };
 
@@ -282,13 +284,14 @@ __launch_bounds__(blockThreads) __global__
         // uniquify
         uint32_t  num_current_patches = s_num_patches - s_current_num_patches;
         uint32_t* new_end =
-            thrust::unique(thrust::device, s_block_patches,
+            thrust::unique(thrust::device,
+                           s_block_patches,
                            s_block_patches + num_current_patches);
         __syncthreads();
 
         if (threadIdx.x == 0) {
             s_current_num_patches = new_end - s_block_patches;
-            s_num_patches = s_current_num_patches;
+            s_num_patches         = s_current_num_patches;
         }
         __syncthreads();
 
@@ -301,9 +304,16 @@ __launch_bounds__(blockThreads) __global__
             uint16_t *offset_all_patches, *output_all_patches;
 
             detail::template query_block_dispatcher<Op::VV, blockThreads>(
-                context, patch_id, [](uint32_t) { return true; }, false, true,
-                num_src_in_patch, input_mapping, output_mapping,
-                offset_all_patches, output_all_patches);
+                context,
+                patch_id,
+                [](uint32_t) { return true; },
+                false,
+                true,
+                num_src_in_patch,
+                input_mapping,
+                output_mapping,
+                offset_all_patches,
+                output_all_patches);
 
 
             // mean that this thread has be assigned a vertex in
@@ -334,9 +344,12 @@ __launch_bounds__(blockThreads) __global__
                         // so that we don't process it again
                         vv_patch[v] = INVALID32;
 
-                        RXMeshIterator vv_iter(
-                            vv_local_id, output_all_patches, offset_all_patches,
-                            output_mapping, 0, num_src_in_patch);
+                        RXMeshIterator vv_iter(vv_local_id,
+                                               output_all_patches,
+                                               offset_all_patches,
+                                               output_mapping,
+                                               0,
+                                               num_src_in_patch);
 
                         for (uint32_t i = 0; i < vv_iter.size(); ++i) {
                             uint32_t vvv_id = vv_iter[i];
@@ -370,8 +383,8 @@ __launch_bounds__(blockThreads) __global__
                                     // patch before so we reduce the
                                     // duplicates
                                     if (pp != patch_id) {
-                                        if (!linear_search(vv_patch, pp,
-                                                           num_vv)) {
+                                        if (!linear_search(
+                                                vv_patch, pp, num_vv)) {
                                             uint32_t d =
                                                 atomicAdd(&s_num_patches, 1u);
                                             assert(d < blockThreads);
@@ -403,8 +416,14 @@ __launch_bounds__(blockThreads) __global__
 
     if (v_id != INVALID32) {
 
-        compute_new_coordinates(v_id, vv, num_vv, vertex, normal, sigma_c_sq,
-                                input_coords, filtered_coords);
+        compute_new_coordinates(v_id,
+                                vv,
+                                num_vv,
+                                vertex,
+                                normal,
+                                sigma_c_sq,
+                                input_coords,
+                                filtered_coords);
     }
 }
 
@@ -422,14 +441,14 @@ __launch_bounds__(blockThreads) __global__
     using namespace RXMESH;
     uint32_t vv[maxVVSize];
 
-    uint8_t      num_vv = 0;
+    uint8_t      num_vv     = 0;
     T            sigma_c_sq = 0;
-    T            radius = 0;
+    T            radius     = 0;
     Vector<3, T> vertex, normal;
     uint32_t     v_id = INVALID32;
 
     auto first_ring = [&](uint32_t p_id, RXMeshIterator& iter) {
-        v_id = p_id;
+        v_id      = p_id;
         vertex[0] = input_coords(v_id, 0);
         vertex[1] = input_coords(v_id, 1);
         vertex[2] = input_coords(v_id, 2);
@@ -447,7 +466,8 @@ __launch_bounds__(blockThreads) __global__
 
         for (uint32_t v = 0; v < iter.size(); ++v) {
             const uint32_t     vv_id = iter[v];
-            const Vector<3, T> q(input_coords(vv_id, 0), input_coords(vv_id, 1),
+            const Vector<3, T> q(input_coords(vv_id, 0),
+                                 input_coords(vv_id, 1),
                                  input_coords(vv_id, 2));
 
             T len = dist2(vertex, q);
@@ -513,8 +533,8 @@ __launch_bounds__(blockThreads) __global__
         };
 
 
-        query_block_dispatcher<Op::VV, blockThreads>(context, next_vertex,
-                                                     n_rings);
+        query_block_dispatcher<Op::VV, blockThreads>(
+            context, next_vertex, n_rings);
 
         bool is_done = (next_id > num_vv - 1) || (v_id == INVALID32);
         if (__syncthreads_and(is_done)) {
@@ -524,7 +544,13 @@ __launch_bounds__(blockThreads) __global__
     }
 
     if (v_id != INVALID32) {
-        compute_new_coordinates(v_id, vv, num_vv, vertex, normal, sigma_c_sq,
-                                input_coords, filtered_coords);
+        compute_new_coordinates(v_id,
+                                vv,
+                                num_vv,
+                                vertex,
+                                normal,
+                                sigma_c_sq,
+                                input_coords,
+                                filtered_coords);
     }
 }

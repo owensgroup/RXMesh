@@ -13,14 +13,14 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
-    std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    device_id = 0;
+    std::string obj_file_name   = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    std::string output_folder   = STRINGIFY(OUTPUT_DIR);
+    uint32_t    device_id       = 0;
     uint32_t    num_filter_iter = 5;
     char**      argv;
     int         argc;
     bool        shuffle = false;
-    bool        sort = false;
+    bool        sort    = false;
 
 } Arg;
 
@@ -72,9 +72,10 @@ TEST(App, Filtering)
 
     //*** OpenMesh Impl
     RXMESH::RXMeshAttribute<dataT> ground_truth;
-    size_t max_neighbour_size = 0;
-    filtering_openmesh(omp_get_max_threads(), input_mesh, ground_truth, max_neighbour_size);
-    
+    size_t                         max_neighbour_size = 0;
+    filtering_openmesh(
+        omp_get_max_threads(), input_mesh, ground_truth, max_neighbour_size);
+
 
     //*** RXMesh Impl
     filtering_rxmesh(rxmesh_static, Verts, ground_truth, max_neighbour_size);

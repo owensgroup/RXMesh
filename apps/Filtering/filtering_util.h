@@ -39,22 +39,23 @@ __device__ __inline__ T compute_sigma_s_sq(
     const RXMESH::RXMeshAttribute<T>& input_coords)
 {
 
-    T sum = 0;
+    T sum     = 0;
     T sum_sqs = 0;
 
     for (uint32_t i = 0; i < num_vv; ++i) {
-        RXMESH::Vector<3, T> q(input_coords(vv[i], 0), input_coords(vv[i], 1),
+        RXMESH::Vector<3, T> q(input_coords(vv[i], 0),
+                               input_coords(vv[i], 1),
                                input_coords(vv[i], 2));
 
         q -= v;
         T t = dot(q, n);
-        t = sqrt(t * t);
+        t   = sqrt(t * t);
         sum += t;
         sum_sqs += t * t;
     }
-    T c = static_cast<T>(num_vv);
+    T c       = static_cast<T>(num_vv);
     T sigma_s = (sum_sqs / c) - ((sum * sum) / (c * c));
-    sigma_s = (sigma_s < 1.0e-20) ? (sigma_s + 1.0e-20) : sigma_s;
+    sigma_s   = (sigma_s < 1.0e-20) ? (sigma_s + 1.0e-20) : sigma_s;
     return sigma_s;
 }
 

@@ -29,10 +29,17 @@ Patcher::Patcher(uint32_t                                  patch_size,
                  const uint32_t                            num_edges,
                  const bool is_multi_component /* = true*/,
                  const bool quite /*=true*/)
-    : m_patch_size(patch_size), m_fvn(fvn), m_num_vertices(num_vertices),
-      m_num_edges(num_edges), m_num_faces(fvn.size()), m_num_seeds(0),
-      m_max_num_patches(0), m_is_multi_component(is_multi_component),
-      m_quite(quite), m_num_components(0), m_patching_time_ms(0)
+    : m_patch_size(patch_size),
+      m_fvn(fvn),
+      m_num_vertices(num_vertices),
+      m_num_edges(num_edges),
+      m_num_faces(fvn.size()),
+      m_num_seeds(0),
+      m_max_num_patches(0),
+      m_is_multi_component(is_multi_component),
+      m_quite(quite),
+      m_num_components(0),
+      m_patching_time_ms(0)
 {
 
     m_num_patches =
@@ -94,17 +101,21 @@ void Patcher::print_statistics()
     RXMESH_TRACE(
         "Patcher: Parallel patches construction time = {} (ms) and {} "
         "(ms/lloyd_run)",
-        m_patching_time_ms, m_patching_time_ms / float(m_num_lloyd_run));
+        m_patching_time_ms,
+        m_patching_time_ms / float(m_num_lloyd_run));
 
     // max-min patch size
     uint32_t max_patch_size(0), min_patch_size(m_num_faces), avg_patch_size(0);
     get_max_min_avg_patch_size(min_patch_size, max_patch_size, avg_patch_size);
     RXMESH_TRACE(
         "Patcher: max_patch_size= {}, min_patch_size= {}, avg_patch_size= {}",
-        max_patch_size, min_patch_size, avg_patch_size);
+        max_patch_size,
+        min_patch_size,
+        avg_patch_size);
 
     RXMESH_TRACE("Patcher: number external ribbon faces = {} ({:02.2f}%)",
-                 get_num_ext_ribbon_faces(), get_ribbon_overhead());
+                 get_num_ext_ribbon_faces(),
+                 get_ribbon_overhead());
 
     /*std::string filename = "patch_dist.txt";
     filename = STRINGIFY(OUTPUT_DIR) + filename;
@@ -123,16 +134,23 @@ void Patcher::export_ext_ribbon(const std::vector<std::vector<T_d>>& Verts,
                                 int                                  patch_id)
 {
     uint32_t start = ((patch_id == 0) ? 0 : m_ribbon_ext_offset[patch_id - 1]);
-    export_face_list("ribbon_ext" + std::to_string(patch_id) + ".obj", m_fvn,
-                     Verts, m_ribbon_ext_offset[patch_id] - start,
+    export_face_list("ribbon_ext" + std::to_string(patch_id) + ".obj",
+                     m_fvn,
+                     Verts,
+                     m_ribbon_ext_offset[patch_id] - start,
                      m_ribbon_ext_val.data() + start);
 }
 
 template <class T_d>
 void Patcher::export_patches(const std::vector<std::vector<T_d>>& Verts)
 {
-    export_attribute_VTK("patches.vtk", m_fvn, Verts, 1, m_face_patch.data(),
-                         m_vertex_patch.data(), false);
+    export_attribute_VTK("patches.vtk",
+                         m_fvn,
+                         Verts,
+                         1,
+                         m_face_patch.data(),
+                         m_vertex_patch.data(),
+                         false);
 
     /*if (!m_vertex_patch.empty()) {
         export_as_cubes_VTK(
@@ -165,9 +183,15 @@ void Patcher::export_components(
         }
         ++comp_id;
     }
-    export_attribute_VTK("components.vtk", m_fvn, Verts, 1,
-                         face_component.data(), face_component.data(),
-                         num_components, false, rand_color.data());
+    export_attribute_VTK("components.vtk",
+                         m_fvn,
+                         Verts,
+                         1,
+                         face_component.data(),
+                         face_component.data(),
+                         num_components,
+                         false,
+                         rand_color.data());
 }
 
 
@@ -189,7 +213,7 @@ void Patcher::export_single_patch(const std::vector<std::vector<T_d>>& Verts,
     }
 
     uint32_t p_start = (patch_id == 0) ? 0 : m_patches_offset[patch_id - 1];
-    uint32_t p_end = m_patches_offset[patch_id];
+    uint32_t p_end   = m_patches_offset[patch_id];
 
     for (uint32_t fb = p_start; fb < p_end; ++fb) {
         uint32_t face = m_patches_val[fb];
@@ -252,9 +276,9 @@ void Patcher::execute(std::function<uint32_t(uint32_t, uint32_t)> get_edge_id,
         m_patches_offset[0] = m_num_faces;
 
         for (uint32_t i = 0; i < m_num_faces; ++i) {
-            m_face_patch[i] = 0;
+            m_face_patch[i]  = 0;
             m_patches_val[i] = i;
-        }        
+        }
         m_neighbour_patches_offset.resize(1, 0);
         assign_patch(get_edge_id);
         if (!m_quite) {
@@ -368,7 +392,8 @@ void Patcher::initialize_random_seeds()
                 std::vector<size_t> component_order(components.size());
                 fill_with_sequential_numbers(component_order.data(),
                                              component_order.size());
-                std::sort(component_order.begin(), component_order.end(),
+                std::sort(component_order.begin(),
+                          component_order.end(),
                           [&components](const size_t& a, const size_t& b) {
                               return components[a].size() >
                                      components[b].size();
@@ -422,8 +447,8 @@ void Patcher::initialize_random_seeds_single_component()
     fill_with_sequential_numbers(rand_num.data(), rand_num.size());
     random_shuffle(rand_num.data(), rand_num.size());
     m_seeds.resize(m_num_seeds);
-    std::memcpy(m_seeds.data(), rand_num.data(),
-                m_num_seeds * sizeof(uint32_t));
+    std::memcpy(
+        m_seeds.data(), rand_num.data(), m_num_seeds * sizeof(uint32_t));
 }
 
 void Patcher::generate_random_seed_from_component(
@@ -441,7 +466,8 @@ void Patcher::generate_random_seed_from_component(
 
     random_shuffle(component.data(), component.size());
     m_seeds.resize(num_seeds_before + num_seeds);
-    std::memcpy(m_seeds.data() + num_seeds_before, component.data(),
+    std::memcpy(m_seeds.data() + num_seeds_before,
+                component.data(),
                 num_seeds * sizeof(uint32_t));
 }
 
@@ -515,7 +541,7 @@ void Patcher::postprocess()
     for (uint32_t cur_p = 0; cur_p < m_num_patches; ++cur_p) {
 
         uint32_t p_start = (cur_p == 0) ? 0 : m_patches_offset[cur_p - 1];
-        uint32_t p_end = m_patches_offset[cur_p];
+        uint32_t p_end   = m_patches_offset[cur_p];
 
         m_neighbour_patches_offset[cur_p] =
             (cur_p == 0) ? 0 : m_neighbour_patches_offset[cur_p - 1];
@@ -535,7 +561,7 @@ void Patcher::postprocess()
 
             bool added = false;
             for (uint32_t g = 0; g < m_tf.size(); ++g) {
-                uint32_t n = m_tf[g];
+                uint32_t n       = m_tf[g];
                 uint32_t n_patch = get_face_patch_id(n);
 
                 // n is boundary face if its patch is not the current patch we
@@ -549,7 +575,8 @@ void Patcher::postprocess()
                     // add n_patch as a neighbour patch to the current patch
                     auto itt = std::find(
                         m_neighbour_patches.begin() + neighbour_patch_start,
-                        m_neighbour_patches.end(), n_patch);
+                        m_neighbour_patches.end(),
+                        n_patch);
 
                     if (itt == m_neighbour_patches.end()) {
                         m_neighbour_patches.push_back(n_patch);
@@ -646,8 +673,8 @@ void Patcher::get_adjacent_faces(uint32_t               face_id,
         // adjacent to just three faces
         uint32_t size = m_fvn[face_id].size() - 3;
         ff.resize(size);
-        std::memcpy(ff.data(), m_fvn[face_id].data() + 3,
-                    size * sizeof(uint32_t));
+        std::memcpy(
+            ff.data(), m_fvn[face_id].data() + 3, size * sizeof(uint32_t));
     } else {
         RXMESH_ERROR(
             "Patcher::get_adjacent_faces() can not get adjacent faces!!");
@@ -678,7 +705,7 @@ void Patcher::assign_patch(
     for (uint32_t cur_p = 0; cur_p < m_num_patches; ++cur_p) {
 
         uint32_t p_start = (cur_p == 0) ? 0 : m_patches_offset[cur_p - 1];
-        uint32_t p_end = m_patches_offset[cur_p];
+        uint32_t p_end   = m_patches_offset[cur_p];
 
         for (uint32_t f = p_start; f < p_end; ++f) {
 
@@ -767,10 +794,12 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
         CUDA_ERROR(cudaMalloc((void**)&d_ff_offset,
                               h_ff_offset.size() * sizeof(uint32_t)));
 
-        CUDA_ERROR(cudaMemcpy(d_ff_values, h_ff_values.data(),
+        CUDA_ERROR(cudaMemcpy(d_ff_values,
+                              h_ff_values.data(),
                               h_ff_values.size() * sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
-        CUDA_ERROR(cudaMemcpy(d_ff_offset, h_ff_offset.data(),
+        CUDA_ERROR(cudaMemcpy(d_ff_offset,
+                              h_ff_offset.data(),
                               h_ff_offset.size() * sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
     }
@@ -787,7 +816,8 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
     assert(m_num_patches == m_seeds.size());
     CUDA_ERROR(
         cudaMalloc((void**)&d_seeds, m_max_num_patches * sizeof(uint32_t)));
-    CUDA_ERROR(cudaMemcpy(d_seeds, m_seeds.data(),
+    CUDA_ERROR(cudaMemcpy(d_seeds,
+                          m_seeds.data(),
                           m_num_patches * sizeof(uint32_t),
                           cudaMemcpyHostToDevice));
 
@@ -803,7 +833,9 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
     std::vector<uint32_t> h_queue_ptr{0, m_num_patches, m_num_patches};
     uint32_t*             d_queue_ptr;
     CUDA_ERROR(cudaMalloc((void**)&d_queue_ptr, 3 * sizeof(uint32_t)));
-    CUDA_ERROR(cudaMemcpy(d_queue_ptr, h_queue_ptr.data(), 3 * sizeof(uint32_t),
+    CUDA_ERROR(cudaMemcpy(d_queue_ptr,
+                          h_queue_ptr.data(),
+                          3 * sizeof(uint32_t),
                           cudaMemcpyHostToDevice));
 
     // patches offset, values, and size
@@ -818,12 +850,16 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
     CUDA_ERROR(cudaMalloc((void**)&d_max_patch_size, sizeof(uint32_t)));
     void * d_cub_temp_storage_scan(nullptr), *d_cub_temp_storage_max(nullptr);
     size_t cub_temp_storage_bytes_scan = 0;
-    size_t cub_temp_storage_bytes_max = 0;
+    size_t cub_temp_storage_bytes_max  = 0;
     ::cub::DeviceScan::InclusiveSum(d_cub_temp_storage_scan,
-                                    cub_temp_storage_bytes_scan, d_patches_size,
-                                    d_patches_offset, m_max_num_patches);
-    ::cub::DeviceReduce::Max(d_cub_temp_storage_max, cub_temp_storage_bytes_max,
-                             d_patches_size, d_max_patch_size,
+                                    cub_temp_storage_bytes_scan,
+                                    d_patches_size,
+                                    d_patches_offset,
+                                    m_max_num_patches);
+    ::cub::DeviceReduce::Max(d_cub_temp_storage_max,
+                             cub_temp_storage_bytes_max,
+                             d_patches_size,
+                             d_max_patch_size,
                              m_max_num_patches);
     CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage_scan,
                           cub_temp_storage_bytes_scan));
@@ -833,7 +869,9 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
     // Lloyd iterations loop
     uint32_t* d_new_num_patches = nullptr;
     CUDA_ERROR(cudaMalloc((void**)&d_new_num_patches, sizeof(uint32_t)));
-    CUDA_ERROR(cudaMemcpy(d_new_num_patches, &m_num_patches, sizeof(uint32_t),
+    CUDA_ERROR(cudaMemcpy(d_new_num_patches,
+                          &m_num_patches,
+                          sizeof(uint32_t),
                           cudaMemcpyHostToDevice));
 
     /* const char separator = ' ';
@@ -876,9 +914,9 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
         ++m_num_lloyd_run;
 
         const uint32_t threads_s = 256;
-        const uint32_t blocks_s = DIVIDE_UP(m_num_patches, threads_s);
+        const uint32_t blocks_s  = DIVIDE_UP(m_num_patches, threads_s);
         const uint32_t threads_f = 256;
-        const uint32_t blocks_f = DIVIDE_UP(m_num_faces, threads_f);
+        const uint32_t blocks_f  = DIVIDE_UP(m_num_faces, threads_f);
 
         // add more seeds if needed
         if (m_num_lloyd_run % 5 == 0 && m_num_lloyd_run > 0) {
@@ -905,14 +943,21 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
                             1;
             }*/
 
-            CUDA_ERROR(cudaMemcpy(d_new_num_patches, &m_num_patches,
-                                  sizeof(uint32_t), cudaMemcpyHostToDevice));
-            add_more_seeds<<<m_num_patches, 1>>>(
-                m_num_patches, d_new_num_patches, d_seeds, d_patches_offset,
-                d_patches_val, threshold);
+            CUDA_ERROR(cudaMemcpy(d_new_num_patches,
+                                  &m_num_patches,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyHostToDevice));
+            add_more_seeds<<<m_num_patches, 1>>>(m_num_patches,
+                                                 d_new_num_patches,
+                                                 d_seeds,
+                                                 d_patches_offset,
+                                                 d_patches_val,
+                                                 threshold);
 
-            CUDA_ERROR(cudaMemcpy(&m_num_patches, d_new_num_patches,
-                                  sizeof(uint32_t), cudaMemcpyDeviceToHost));
+            CUDA_ERROR(cudaMemcpy(&m_num_patches,
+                                  d_new_num_patches,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
 
             if (m_num_patches >= m_max_num_patches) {
                 RXMESH_ERROR(
@@ -923,17 +968,19 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
         h_queue_ptr[0] = 0;
         h_queue_ptr[1] = m_num_patches;
         h_queue_ptr[2] = m_num_patches;
-        CUDA_ERROR(cudaMemcpy(d_queue_ptr, h_queue_ptr.data(),
-                              3 * sizeof(uint32_t), cudaMemcpyHostToDevice));
+        CUDA_ERROR(cudaMemcpy(d_queue_ptr,
+                              h_queue_ptr.data(),
+                              3 * sizeof(uint32_t),
+                              cudaMemcpyHostToDevice));
 
-        RXMESH::memset<<<blocks_f, threads_f>>>(d_face_patch, INVALID32,
-                                                m_num_faces);
+        RXMESH::memset<<<blocks_f, threads_f>>>(
+            d_face_patch, INVALID32, m_num_faces);
 
-        RXMESH::memcpy<<<blocks_s, threads_s>>>(d_queue, d_seeds,
-                                                m_num_patches);
+        RXMESH::memcpy<<<blocks_s, threads_s>>>(
+            d_queue, d_seeds, m_num_patches);
 
-        RXMESH::memset<<<blocks_s, threads_s>>>(d_patches_size, 0u,
-                                                m_num_patches);
+        RXMESH::memset<<<blocks_s, threads_s>>>(
+            d_patches_size, 0u, m_num_patches);
 
         write_initial_face_patch<<<blocks_s, threads_s>>>(
             m_num_patches, d_face_patch, d_seeds, d_patches_size);
@@ -942,14 +989,21 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
         while (true) {
             // Launch enough threads to cover all the faces. However, only
             // subset will do actual work depending on the queue size
-            cluster_seed_propagation<<<blocks_f, threads_f>>>(
-                m_num_faces, m_num_patches, d_queue_ptr, d_queue, d_face_patch,
-                d_patches_size, d_ff_offset, d_ff_values);
+            cluster_seed_propagation<<<blocks_f, threads_f>>>(m_num_faces,
+                                                              m_num_patches,
+                                                              d_queue_ptr,
+                                                              d_queue,
+                                                              d_face_patch,
+                                                              d_patches_size,
+                                                              d_ff_offset,
+                                                              d_ff_values);
 
             reset_queue_ptr<<<1, 1>>>(d_queue_ptr);
 
-            CUDA_ERROR(cudaMemcpy(h_queue_ptr.data(), d_queue_ptr,
-                                  sizeof(uint32_t), cudaMemcpyDeviceToHost));
+            CUDA_ERROR(cudaMemcpy(h_queue_ptr.data(),
+                                  d_queue_ptr,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
 
             if (h_queue_ptr[0] >= m_num_faces) {
                 break;
@@ -957,11 +1011,16 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
         }
 
 
-        uint32_t max_patch_size = construct_patches_compressed_parallel(
-            d_cub_temp_storage_max, cub_temp_storage_bytes_max, d_patches_size,
-            d_max_patch_size, d_cub_temp_storage_scan,
-            cub_temp_storage_bytes_scan, d_patches_offset, d_face_patch,
-            d_patches_val);
+        uint32_t max_patch_size =
+            construct_patches_compressed_parallel(d_cub_temp_storage_max,
+                                                  cub_temp_storage_bytes_max,
+                                                  d_patches_size,
+                                                  d_max_patch_size,
+                                                  d_cub_temp_storage_scan,
+                                                  cub_temp_storage_bytes_scan,
+                                                  d_patches_offset,
+                                                  d_face_patch,
+                                                  d_patches_val);
 
         // draw();
 
@@ -975,13 +1034,19 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
         }*/
 
         // Interior
-        uint32_t threads_i = 512;
+        uint32_t threads_i   = 512;
         uint32_t shmem_bytes = max_patch_size * (sizeof(uint32_t));
-        RXMESH::memset<<<blocks_f, threads_f>>>(d_queue, INVALID32,
-                                                m_num_faces);
+        RXMESH::memset<<<blocks_f, threads_f>>>(
+            d_queue, INVALID32, m_num_faces);
         interior<<<m_num_patches, threads_i, shmem_bytes>>>(
-            m_num_patches, d_patches_offset, d_patches_val, d_face_patch,
-            d_seeds, d_ff_offset, d_ff_values, d_queue /*, d_second_queue*/);
+            m_num_patches,
+            d_patches_offset,
+            d_patches_val,
+            d_face_patch,
+            d_seeds,
+            d_ff_offset,
+            d_ff_values,
+            d_queue /*, d_second_queue*/);
 
         /*{
             std::vector<uint32_t> second_queue(m_num_faces);
@@ -1043,17 +1108,21 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
     // move data to host
     m_num_seeds = m_num_patches;
     m_seeds.resize(m_num_seeds);
-    CUDA_ERROR(cudaMemcpy(m_seeds.data(), d_seeds,
+    CUDA_ERROR(cudaMemcpy(m_seeds.data(),
+                          d_seeds,
                           m_num_seeds * sizeof(uint32_t),
                           cudaMemcpyDeviceToHost));
-    CUDA_ERROR(cudaMemcpy(m_face_patch.data(), d_face_patch,
+    CUDA_ERROR(cudaMemcpy(m_face_patch.data(),
+                          d_face_patch,
                           sizeof(uint32_t) * m_num_faces,
                           cudaMemcpyDeviceToHost));
     m_patches_offset.resize(m_num_patches);
-    CUDA_ERROR(cudaMemcpy(m_patches_offset.data(), d_patches_offset,
+    CUDA_ERROR(cudaMemcpy(m_patches_offset.data(),
+                          d_patches_offset,
                           sizeof(uint32_t) * m_num_patches,
                           cudaMemcpyDeviceToHost));
-    CUDA_ERROR(cudaMemcpy(m_patches_val.data(), d_patches_val,
+    CUDA_ERROR(cudaMemcpy(m_patches_val.data(),
+                          d_patches_val,
                           sizeof(uint32_t) * m_num_faces,
                           cudaMemcpyDeviceToHost));
 
@@ -1061,7 +1130,7 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
     // draw();
 
     for (uint32_t i = 0; i < m_num_faces; ++i) {
-        m_face_patch[i] = m_face_patch[i] >> 1;
+        m_face_patch[i]  = m_face_patch[i] >> 1;
         m_patches_val[i] = m_patches_val[i] >> 1;
     }
 
@@ -1093,27 +1162,37 @@ uint32_t Patcher::construct_patches_compressed_parallel(
     uint32_t* d_patches_val)
 {
     uint32_t       max_patch_size = 0;
-    const uint32_t threads_s = 256;
-    const uint32_t blocks_s = DIVIDE_UP(m_num_patches, threads_s);
-    const uint32_t threads_f = 256;
-    const uint32_t blocks_f = DIVIDE_UP(m_num_faces, threads_f);
+    const uint32_t threads_s      = 256;
+    const uint32_t blocks_s       = DIVIDE_UP(m_num_patches, threads_s);
+    const uint32_t threads_f      = 256;
+    const uint32_t blocks_f       = DIVIDE_UP(m_num_faces, threads_f);
 
     // Compute max patch size
     max_patch_size = 0;
-    ::cub::DeviceReduce::Max(d_cub_temp_storage_max, cub_temp_storage_bytes_max,
-                             d_patches_size, d_max_patch_size, m_num_patches);
-    CUDA_ERROR(cudaMemcpy(&max_patch_size, d_max_patch_size, sizeof(uint32_t),
+    ::cub::DeviceReduce::Max(d_cub_temp_storage_max,
+                             cub_temp_storage_bytes_max,
+                             d_patches_size,
+                             d_max_patch_size,
+                             m_num_patches);
+    CUDA_ERROR(cudaMemcpy(&max_patch_size,
+                          d_max_patch_size,
+                          sizeof(uint32_t),
                           cudaMemcpyDeviceToHost));
 
     // Construct compressed patches
     ::cub::DeviceScan::InclusiveSum(d_cub_temp_storage_scan,
-                                    cub_temp_storage_bytes_scan, d_patches_size,
-                                    d_patches_offset, m_num_patches);
+                                    cub_temp_storage_bytes_scan,
+                                    d_patches_size,
+                                    d_patches_offset,
+                                    m_num_patches);
     RXMESH::memset<<<blocks_s, threads_s>>>(d_patches_size, 0u, m_num_patches);
 
-    construct_patches_compressed<<<blocks_f, threads_f>>>(
-        m_num_faces, d_face_patch, m_num_patches, d_patches_offset,
-        d_patches_size, d_patches_val);
+    construct_patches_compressed<<<blocks_f, threads_f>>>(m_num_faces,
+                                                          d_face_patch,
+                                                          m_num_patches,
+                                                          d_patches_offset,
+                                                          d_patches_size,
+                                                          d_patches_val);
 
     return max_patch_size;
 }

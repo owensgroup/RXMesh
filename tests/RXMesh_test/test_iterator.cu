@@ -9,8 +9,8 @@ __global__ static void test_iterator(uint32_t* suceess,
 {
     using namespace RXMESH;
     uint32_t       local_id = threadIdx.x;
-    RXMeshIterator iter(local_id, patch_output, patch_output, ltog_map,
-                        fixedOffset, 0);
+    RXMeshIterator iter(
+        local_id, patch_output, patch_output, ltog_map, fixedOffset, 0);
 
     if (iter.local_id() != local_id) {
         atomicAdd(suceess, 1u);
@@ -52,7 +52,7 @@ TEST(RXMesh, Iterator)
 
     using namespace RXMESH;
     constexpr uint32_t fixedOffset = 3;
-    const uint32_t     N = 32;
+    const uint32_t     N           = 32;
 
     std::vector<uint16_t> h_patch_output(fixedOffset * N);
     for (uint32_t i = 0; i < h_patch_output.size(); ++i) {
@@ -72,10 +72,12 @@ TEST(RXMesh, Iterator)
         cudaMalloc((void**)&d_ltog_map, h_ltog_map.size() * sizeof(uint32_t)));
     CUDA_ERROR(cudaMalloc((void**)&d_patch_output,
                           h_patch_output.size() * sizeof(uint32_t)));
-    CUDA_ERROR(cudaMemcpy(d_ltog_map, h_ltog_map.data(),
+    CUDA_ERROR(cudaMemcpy(d_ltog_map,
+                          h_ltog_map.data(),
                           h_ltog_map.size() * sizeof(uint32_t),
                           cudaMemcpyHostToDevice));
-    CUDA_ERROR(cudaMemcpy(d_patch_output, h_patch_output.data(),
+    CUDA_ERROR(cudaMemcpy(d_patch_output,
+                          h_patch_output.data(),
                           h_patch_output.size() * sizeof(uint16_t),
                           cudaMemcpyHostToDevice));
     CUDA_ERROR(cudaMalloc((void**)&d_suceess, sizeof(uint32_t)));
@@ -86,8 +88,8 @@ TEST(RXMesh, Iterator)
     CUDA_ERROR(cudaDeviceSynchronize());
 
     uint32_t h_success = 0;
-    CUDA_ERROR(cudaMemcpy(&h_success, d_suceess, sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
+    CUDA_ERROR(cudaMemcpy(
+        &h_success, d_suceess, sizeof(uint32_t), cudaMemcpyDeviceToHost));
 
     EXPECT_EQ(h_success, 0);
 

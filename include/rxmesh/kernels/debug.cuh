@@ -11,7 +11,7 @@ template <typename T>
 __device__ void print_arr_uint(char     msg[],
                                uint32_t size,
                                T*       arr,
-                               uint32_t block_id = 0,
+                               uint32_t block_id  = 0,
                                uint32_t thread_id = 0)
 {
     if (blockIdx.x == block_id && threadIdx.x == thread_id) {

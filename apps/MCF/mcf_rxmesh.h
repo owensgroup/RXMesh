@@ -79,7 +79,9 @@ void mcf_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
     // X in CG
     RXMeshAttribute<T> X;
     X.set_name("X");
-    X.init(rxmesh_static.get_num_vertices(), 3u, RXMESH::LOCATION_ALL,
+    X.init(rxmesh_static.get_num_vertices(),
+           3u,
+           RXMESH::LOCATION_ALL,
            RXMESH::SoA);
     X.copy(input_coord, RXMESH::HOST, RXMESH::DEVICE);
 
@@ -103,15 +105,19 @@ void mcf_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
     // s = Ax
     mcf_matvec<T, blockThreads>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh_static.get_context(), input_coord, X, S,
-            Arg.use_uniform_laplace, Arg.time_step);
+            rxmesh_static.get_context(),
+            input_coord,
+            X,
+            S,
+            Arg.use_uniform_laplace,
+            Arg.time_step);
 
     // r = b - s = b - Ax
     // p=r
     const uint32_t num_blocks =
         DIVIDE_UP(rxmesh_static.get_num_vertices(), blockThreads);
-    init_PR<T><<<num_blocks, blockThreads>>>(rxmesh_static.get_num_vertices(),
-                                             B, S, R, P);
+    init_PR<T><<<num_blocks, blockThreads>>>(
+        rxmesh_static.get_num_vertices(), B, S, R, P);
 
     // delta_new = <r,r>
     R.reduce(delta_new, RXMESH::NORM2);
@@ -125,8 +131,12 @@ void mcf_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
 
         mcf_matvec<T, blockThreads>
             <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-                rxmesh_static.get_context(), input_coord, P, S,
-                Arg.use_uniform_laplace, Arg.time_step);
+                rxmesh_static.get_context(),
+                input_coord,
+                P,
+                S,
+                Arg.use_uniform_laplace,
+                Arg.time_step);
 
         // alpha = delta_new / <s,p>
         S.reduce(alpha, RXMESH::DOT, &P);
@@ -177,7 +187,8 @@ void mcf_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
 
     RXMESH_TRACE(
         "mcf_rxmesh() took {} (ms) and {} iterations (i.e., {} ms/iter) ",
-        timer.elapsed_millis(), num_cg_iter_taken,
+        timer.elapsed_millis(),
+        num_cg_iter_taken,
         timer.elapsed_millis() / float(num_cg_iter_taken));
 
     // move output to host
@@ -189,7 +200,7 @@ void mcf_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
 
     // Verify
     bool    passed = true;
-    const T tol = 0.001;
+    const T tol    = 0.001;
     for (uint32_t v = 0; v < X.get_num_mesh_elements(); ++v) {
         if (std::fabs(X(v, 0) - ground_truth(v, 0)) >
                 tol * std::fabs(ground_truth(v, 0)) ||

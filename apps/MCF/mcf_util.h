@@ -10,7 +10,7 @@ __host__ __device__ __forceinline__ void clamp_cot(T& v)
     // clamp cotangent values as if angles are in[1, 179]
 
     const T bound = 19.1;  // 3 degrees
-    v = (v < -bound) ? -bound : ((v > bound) ? bound : v);
+    v             = (v < -bound) ? -bound : ((v > bound) ? bound : v);
 }
 
 /**

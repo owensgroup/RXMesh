@@ -13,26 +13,29 @@ TEST(RXMesh, HigherQueries)
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
     std::vector<std::vector<uint32_t>> Faces;
-    if (!import_obj(rxmesh_args.obj_file_name, Verts, Faces,
-                    rxmesh_args.quite)) {
+    if (!import_obj(
+            rxmesh_args.obj_file_name, Verts, Faces, rxmesh_args.quite)) {
         exit(EXIT_FAILURE);
     }
 
     // RXMesh
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, Verts, false,
-                                           rxmesh_args.quite);
+    RXMeshStatic<PATCH_SIZE> rxmesh_static(
+        Faces, Verts, false, rxmesh_args.quite);
 
     uint32_t input_size = rxmesh_static.get_num_vertices();
 
     // input/output container
     RXMeshAttribute<uint32_t> input_container;
-    input_container.init(input_size, 1u, RXMESH::DEVICE, RXMESH::AoS, false,
-                         false);
+    input_container.init(
+        input_size, 1u, RXMESH::DEVICE, RXMESH::AoS, false, false);
 
     RXMeshAttribute<uint32_t> output_container;
     output_container.init(input_size,
                           input_size,  // that is a bit excessive
-                          RXMESH::DEVICE, RXMESH::SoA, false, false);
+                          RXMESH::DEVICE,
+                          RXMESH::SoA,
+                          false,
+                          false);
 
     // launch box
     constexpr uint32_t      blockThreads = 512;
@@ -54,8 +57,8 @@ TEST(RXMesh, HigherQueries)
     input_container.move(RXMESH::DEVICE, RXMESH::HOST);
 
     // verify
-    EXPECT_TRUE(tester.run_higher_query_verifier(rxmesh_static, input_container,
-                                                 output_container));
+    EXPECT_TRUE(tester.run_higher_query_verifier(
+        rxmesh_static, input_container, output_container));
 
 
     input_container.release();

@@ -27,28 +27,28 @@ float launcher(const RXMeshContext&       context,
 
     switch (op) {
         case Op::VV:
-            query<Op::VV, blockThreads>
-                <<<launch_box.blocks, blockThreads,
-                   launch_box.smem_bytes_dyn>>>(context, input_container,
-                                                output_container, oriented);
+            query<Op::VV, blockThreads><<<launch_box.blocks,
+                                          blockThreads,
+                                          launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container, oriented);
             break;
         case Op::VE:
-            query<Op::VE, blockThreads>
-                <<<launch_box.blocks, blockThreads,
-                   launch_box.smem_bytes_dyn>>>(context, input_container,
-                                                output_container);
+            query<Op::VE, blockThreads><<<launch_box.blocks,
+                                          blockThreads,
+                                          launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
             break;
         case Op::VF:
-            query<Op::VF, blockThreads>
-                <<<launch_box.blocks, blockThreads,
-                   launch_box.smem_bytes_dyn>>>(context, input_container,
-                                                output_container);
+            query<Op::VF, blockThreads><<<launch_box.blocks,
+                                          blockThreads,
+                                          launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
             break;
         case Op::EV:
-            query<Op::EV, blockThreads>
-                <<<launch_box.blocks, blockThreads,
-                   launch_box.smem_bytes_dyn>>>(context, input_container,
-                                                output_container);
+            query<Op::EV, blockThreads><<<launch_box.blocks,
+                                          blockThreads,
+                                          launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
             break;
         case Op::EE:
             RXMESH_ERROR(
@@ -56,28 +56,28 @@ float launcher(const RXMeshContext&       context,
                 "supported!!");
             break;
         case Op::EF:
-            query<Op::EF, blockThreads>
-                <<<launch_box.blocks, blockThreads,
-                   launch_box.smem_bytes_dyn>>>(context, input_container,
-                                                output_container);
+            query<Op::EF, blockThreads><<<launch_box.blocks,
+                                          blockThreads,
+                                          launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
             break;
         case Op::FV:
-            query<Op::FV, blockThreads>
-                <<<launch_box.blocks, blockThreads,
-                   launch_box.smem_bytes_dyn>>>(context, input_container,
-                                                output_container);
+            query<Op::FV, blockThreads><<<launch_box.blocks,
+                                          blockThreads,
+                                          launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
             break;
         case Op::FE:
-            query<Op::FE, blockThreads>
-                <<<launch_box.blocks, blockThreads,
-                   launch_box.smem_bytes_dyn>>>(context, input_container,
-                                                output_container);
+            query<Op::FE, blockThreads><<<launch_box.blocks,
+                                          blockThreads,
+                                          launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
             break;
         case Op::FF:
-            query<Op::FF, blockThreads>
-                <<<launch_box.blocks, blockThreads,
-                   launch_box.smem_bytes_dyn>>>(context, input_container,
-                                                output_container);
+            query<Op::FF, blockThreads><<<launch_box.blocks,
+                                          blockThreads,
+                                          launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
             break;
     }
 
@@ -108,7 +108,7 @@ inline uint32_t max_output_per_element(const RXMeshStatic<patchSize>& rxmesh,
     } else {
         RXMESH_ERROR("calc_fixed_offset() Invalid op " + op_to_string(op));
         return -1u;
-    }    
+    }
 }
 
 TEST(RXMesh, Oriented_VV)
@@ -119,31 +119,44 @@ TEST(RXMesh, Oriented_VV)
 
     std::vector<std::vector<uint32_t>> Faces;
 
-    ASSERT_TRUE(import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces, true));
+    ASSERT_TRUE(
+        import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces, true));
 
     // Instantiate RXMesh Static
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, Verts, false, rxmesh_args.quite);
+    RXMeshStatic<PATCH_SIZE> rxmesh_static(
+        Faces, Verts, false, rxmesh_args.quite);
 
     EXPECT_TRUE(rxmesh_static.is_closed())
         << " Can't generate oriented VV for input with boundaries";
 
     // input/output container
     RXMeshAttribute<uint32_t> input_container;
-    input_container.init(rxmesh_static.get_num_vertices(), 1u, RXMESH::DEVICE,
-                         RXMESH::AoS, false, false);
+    input_container.init(rxmesh_static.get_num_vertices(),
+                         1u,
+                         RXMESH::DEVICE,
+                         RXMESH::AoS,
+                         false,
+                         false);
 
     RXMeshAttribute<uint32_t> output_container;
     output_container.init(rxmesh_static.get_num_vertices(),
                           max_output_per_element(rxmesh_static, Op::VV) + 1,
-                          RXMESH::DEVICE, RXMESH::SoA, false, false);
+                          RXMESH::DEVICE,
+                          RXMESH::SoA,
+                          false,
+                          false);
 
     // launch box
     LaunchBox<256> launch_box;
     rxmesh_static.prepare_launch_box(Op::VV, launch_box, false, true);
 
     // launch query
-    float tt = launcher(rxmesh_static.get_context(), Op::VV, input_container,
-                        output_container, launch_box, true);
+    float tt = launcher(rxmesh_static.get_context(),
+                        Op::VV,
+                        input_container,
+                        output_container,
+                        launch_box,
+                        true);
 
 
     // move containers to the CPU for testing
@@ -151,8 +164,8 @@ TEST(RXMesh, Oriented_VV)
     input_container.move(RXMESH::DEVICE, RXMESH::HOST);
 
     RXMeshTest tester(true);
-    EXPECT_TRUE(tester.run_query_verifier(rxmesh_static, Op::VV,
-                                          input_container, output_container));
+    EXPECT_TRUE(tester.run_query_verifier(
+        rxmesh_static, Op::VV, input_container, output_container));
 
     // Make sure orientation is accurate
     // for the cube, all angle are either 45 or 90
@@ -209,16 +222,16 @@ TEST(RXMesh, Queries)
 
     std::vector<std::vector<uint32_t>> Faces;
 
-    ASSERT_TRUE(import_obj(rxmesh_args.obj_file_name, Verts, Faces,
-                    rxmesh_args.quite));
+    ASSERT_TRUE(
+        import_obj(rxmesh_args.obj_file_name, Verts, Faces, rxmesh_args.quite));
 
     if (rxmesh_args.shuffle) {
         shuffle_obj(Faces, Verts);
     }
 
     // RXMesh
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, Verts, rxmesh_args.sort,
-                               rxmesh_args.quite);
+    RXMeshStatic<PATCH_SIZE> rxmesh_static(
+        Faces, Verts, rxmesh_args.sort, rxmesh_args.quite);
 
 
     // Report
@@ -244,9 +257,14 @@ TEST(RXMesh, Queries)
         << "Local-to-global mapping test failed";
 
     // adding query that we want to test
-    std::vector<Op> ops = {Op::VV, Op::VE, Op::VF,  //
-                           Op::FV, Op::FE, Op::FF,  //
-                           Op::EV, Op::EF};
+    std::vector<Op> ops = {Op::VV,
+                           Op::VE,
+                           Op::VF,  //
+                           Op::FV,
+                           Op::FE,
+                           Op::FF,  //
+                           Op::EV,
+                           Op::EF};
 
 
     for (auto& ops_it : ops) {
@@ -264,8 +282,8 @@ TEST(RXMesh, Queries)
 
         // input/output container
         RXMeshAttribute<uint32_t> input_container;
-        input_container.init(input_size, 1u, RXMESH::DEVICE, RXMESH::AoS, false,
-                             false);
+        input_container.init(
+            input_size, 1u, RXMESH::DEVICE, RXMESH::AoS, false, false);
 
         // allocate output container
         // for each mesh element, we reserve the maximum possible output based
@@ -275,7 +293,10 @@ TEST(RXMesh, Queries)
         RXMeshAttribute<uint32_t> output_container;
         output_container.init(input_size,
                               max_output_per_element(rxmesh_static, ops_it) + 1,
-                              RXMESH::DEVICE, RXMESH::SoA, false, false);
+                              RXMESH::DEVICE,
+                              RXMESH::SoA,
+                              false,
+                              false);
 
         // launch box
         LaunchBox<256> launch_box;
@@ -283,10 +304,10 @@ TEST(RXMesh, Queries)
 
         // test data
         TestData td;
-        td.test_name = op_to_string(ops_it);
+        td.test_name   = op_to_string(ops_it);
         td.num_threads = launch_box.num_threads;
-        td.num_blocks = launch_box.blocks;
-        td.dyn_smem = launch_box.smem_bytes_dyn;
+        td.num_blocks  = launch_box.blocks;
+        td.dyn_smem    = launch_box.smem_bytes_dyn;
         td.static_smem = launch_box.smem_bytes_static;
 
 
@@ -297,9 +318,12 @@ TEST(RXMesh, Queries)
             input_container.reset(INVALID32, RXMESH::DEVICE);
 
             // launch query
-            float tt =
-                launcher(rxmesh_static.get_context(), ops_it, input_container,
-                         output_container, launch_box, oriented);
+            float tt = launcher(rxmesh_static.get_context(),
+                                ops_it,
+                                input_container,
+                                output_container,
+                                launch_box,
+                                oriented);
             total_time += tt;
             td.time_ms.push_back(tt);
         }
@@ -318,7 +342,8 @@ TEST(RXMesh, Queries)
 
         report.add_test(td);
         if (!rxmesh_args.quite) {
-            RXMESH_TRACE(" {} {} time = {} (ms)", td.test_name.c_str(),
+            RXMESH_TRACE(" {} {} time = {} (ms)",
+                         td.test_name.c_str(),
                          (passed ? " passed " : " failed "),
                          total_time / float(rxmesh_args.num_run));
         }

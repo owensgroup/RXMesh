@@ -44,7 +44,7 @@ __launch_bounds__(blockThreads) __global__
         assert(iter.size() < output_container.get_num_attribute_per_element());
 
         num_vv_1st_ring = iter.size();
-        num_vv = num_vv_1st_ring;
+        num_vv          = num_vv_1st_ring;
 
         // record the mesh element that this thread is assigned to
         thread_element = id;
@@ -59,8 +59,8 @@ __launch_bounds__(blockThreads) __global__
     };
 
 
-    query_block_dispatcher<op, blockThreads>(context, first_level_lambda,
-                                             oriented);
+    query_block_dispatcher<op, blockThreads>(
+        context, first_level_lambda, oriented);
 
     uint32_t next_id = 1;
     while (true) {
@@ -92,8 +92,8 @@ __launch_bounds__(blockThreads) __global__
             }
         };
 
-        query_block_dispatcher<op, blockThreads>(context, next_vertex,
-                                                 second_level_lambda);
+        query_block_dispatcher<op, blockThreads>(
+            context, next_vertex, second_level_lambda);
 
         bool is_done =
             (next_id > num_vv_1st_ring) || (thread_element == INVALID32);

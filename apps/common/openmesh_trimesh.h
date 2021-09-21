@@ -5,7 +5,7 @@
 #include <OpenMesh/Core/Mesh/TriMesh_ArrayKernelT.hh>
 
 struct MyTraits : public OpenMesh::DefaultTraits
-    //DefaultTraitsDouble
+// DefaultTraitsDouble
 {
     VertexAttributes(OpenMesh::Attributes::Normal);
 

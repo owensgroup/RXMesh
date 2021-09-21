@@ -44,14 +44,14 @@ __device__ __inline__ T update_step(
     Q[1][1] = q[0][0] / det;
 
     T delta = t[0] * (Q[0][0] + Q[1][0]) + t[1] * (Q[0][1] + Q[1][1]);
-    T dis = delta * delta -
+    T dis   = delta * delta -
             (Q[0][0] + Q[0][1] + Q[1][0] + Q[1][1]) *
                 (t[0] * t[0] * Q[0][0] + t[0] * t[1] * (Q[1][0] + Q[0][1]) +
                  t[1] * t[1] * Q[1][1] - 1);
     T p = (delta + std::sqrt(dis)) / (Q[0][0] + Q[0][1] + Q[1][0] + Q[1][1]);
     T tp[2];
-    tp[0] = t[0] - p;
-    tp[1] = t[1] - p;
+    tp[0]                = t[0] - p;
+    tp[1]                = t[1] - p;
     const Vector<3, T> n = (x0 * Q[0][0] + x1 * Q[1][0]) * tp[0] +
                            (x0 * Q[0][1] + x1 * Q[1][1]) * tp[1];
     T cond[2];
@@ -67,7 +67,7 @@ __device__ __inline__ T update_step(
         T dp[2];
         dp[0] = geo_distance(v1_id) + x0.norm();
         dp[1] = geo_distance(v2_id) + x1.norm();
-        p = dp[dp[1] < dp[0]];
+        p     = dp[dp[1] < dp[0]];
     }
     return p;
 }
@@ -102,13 +102,13 @@ __launch_bounds__(blockThreads) __global__ static void relax_ptp_rxmesh(
 
         // one-ring enumeration
         T current_dist = old_geo_dist(p_id);
-        T new_dist = current_dist;
+        T new_dist     = current_dist;
         for (uint32_t v = 0; v < iter.size(); ++v) {
             // the current one ring vertex
             uint32_t r_id = iter[v];
 
-            T dist = update_step(p_id, q_id, r_id, old_geo_dist, coords,
-                                 infinity_val);
+            T dist = update_step(
+                p_id, q_id, r_id, old_geo_dist, coords, infinity_val);
             if (dist < new_dist) {
                 new_dist = dist;
             }
@@ -126,6 +126,6 @@ __launch_bounds__(blockThreads) __global__ static void relax_ptp_rxmesh(
     };
 
 
-    query_block_dispatcher<Op::VV, blockThreads>(context, geo_lambda,
-                                                 in_active_set, true);
+    query_block_dispatcher<Op::VV, blockThreads>(
+        context, geo_lambda, in_active_set, true);
 }

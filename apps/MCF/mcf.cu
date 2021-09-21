@@ -15,17 +15,17 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
-    std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    device_id = 0;
-    float       time_step = 0.001;
-    float       cg_tolerance = 1e-6;
-    uint32_t    max_num_cg_iter = 1000;
+    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    std::string output_folder       = STRINGIFY(OUTPUT_DIR);
+    uint32_t    device_id           = 0;
+    float       time_step           = 0.001;
+    float       cg_tolerance        = 1e-6;
+    uint32_t    max_num_cg_iter     = 1000;
     bool        use_uniform_laplace = false;
     char**      argv;
     int         argc;
     bool        shuffle = false;
-    bool        sort = false;
+    bool        sort    = false;
 
 } Arg;
 

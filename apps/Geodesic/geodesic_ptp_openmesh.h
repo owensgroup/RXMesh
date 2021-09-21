@@ -31,7 +31,7 @@ inline float compute_toplesets(TriMesh&                           mesh,
 
     toplesets.reset(INVALID32, RXMESH::HOST);
     uint32_t level = 0;
-    uint32_t p = 0;
+    uint32_t p     = 0;
     for (const uint32_t& s : h_seeds) {
         sorted_index[p] = s;
         p++;
@@ -50,10 +50,11 @@ inline float compute_toplesets(TriMesh&                           mesh,
 
         TriMesh::VertexIter v_iter = mesh.vertices_begin() + v;
         for (TriMesh::VertexVertexIter vv_iter = mesh.vv_iter(*v_iter);
-             vv_iter.is_valid(); ++vv_iter) {
+             vv_iter.is_valid();
+             ++vv_iter) {
             int vv = (*vv_iter).idx();
             if (toplesets(vv) == INVALID32) {
-                toplesets(vv) = toplesets(v) + 1;
+                toplesets(vv)   = toplesets(v) + 1;
                 sorted_index[p] = vv;
                 p++;
             }
@@ -108,7 +109,7 @@ inline T update_step(TriMesh&                    mesh,
     Q[1][1] = q[0][0] / det;
 
     T delta = t[0] * (Q[0][0] + Q[1][0]) + t[1] * (Q[0][1] + Q[1][1]);
-    T dis = delta * delta -
+    T dis   = delta * delta -
             (Q[0][0] + Q[0][1] + Q[1][0] + Q[1][1]) *
                 (t[0] * t[0] * Q[0][0] + t[0] * t[1] * (Q[1][0] + Q[0][1]) +
                  t[1] * t[1] * Q[1][1] - 1);
@@ -169,13 +170,13 @@ inline float toplesets_propagation(TriMesh&                     mesh,
 
     // source distance
     for (auto v : h_seeds) {
-        geo_distance(v) = 0;
+        geo_distance(v)   = 0;
         geo_distance_2(v) = 0;
     }
 
     uint32_t d = 0;
     uint32_t i(1), j(2);
-    iter = 0;
+    iter              = 0;
     uint32_t max_iter = 2 * limits.size();
 
     while (i < j && iter < max_iter) {
@@ -184,12 +185,12 @@ inline float toplesets_propagation(TriMesh&                     mesh,
             i = j / 2;
         }
 
-        const uint32_t start = limits[i];
-        const uint32_t end = limits[j];
+        const uint32_t start  = limits[i];
+        const uint32_t end    = limits[j];
         const uint32_t n_cond = limits[i + 1] - start;
 
         for (uint32_t vi = start; vi < end; vi++) {
-            const uint32_t      v = sorted_index[vi];
+            const uint32_t      v      = sorted_index[vi];
             TriMesh::VertexIter v_iter = mesh.vertices_begin() + v;
 
             double_buffer[!d]->operator()(v) = double_buffer[d]->operator()(v);
@@ -202,7 +203,8 @@ inline float toplesets_propagation(TriMesh&                     mesh,
 
             // iterate over one-ring
             for (TriMesh::VertexVertexIter vv_iter = mesh.vv_iter(*v_iter);
-                 vv_iter.is_valid(); ++vv_iter) {
+                 vv_iter.is_valid();
+                 ++vv_iter) {
 
                 // current vv
                 uint32_t vv_id = (*vv_iter).idx();
@@ -225,7 +227,7 @@ inline float toplesets_propagation(TriMesh&                     mesh,
         // calc error
         for (uint32_t vi = start; vi < start + n_cond; vi++) {
             const uint32_t v = sorted_index[vi];
-            error[vi] = std::abs(double_buffer[!d]->operator()(v) -
+            error[vi]        = std::abs(double_buffer[!d]->operator()(v) -
                                  double_buffer[d]-> operator()(v)) /
                         double_buffer[d]->operator()(v);
         }
@@ -300,7 +302,7 @@ void geodesic_ptp_openmesh(TriMesh&                           input_mesh,
     report.add_member("compute_toplesets_time", compute_toplesets_time);
 
     // compute geodesic distance
-    uint32_t iter = 0;
+    uint32_t iter            = 0;
     float    processing_time = toplesets_propagation(
         input_mesh, h_seeds, limits, sorted_index, geo_distance, iter);
     RXMESH_TRACE("geodesic_ptp_openmesh() took {} (ms)", processing_time);
@@ -309,7 +311,7 @@ void geodesic_ptp_openmesh(TriMesh&                           input_mesh,
     // Finalize report
     report.add_member("num_iter_taken", iter);
     RXMESH::TestData td;
-    td.test_name = "Geodesic";
+    td.test_name   = "Geodesic";
     td.num_threads = 1;
     td.time_ms.push_back(processing_time);
     td.passed.push_back(true);

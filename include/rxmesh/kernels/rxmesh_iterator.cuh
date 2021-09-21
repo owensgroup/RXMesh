@@ -11,9 +11,11 @@ struct RXMeshIterator
                               const uint32_t  offset_size,
                               const uint32_t  num_src_in_patch,
                               int             shift = 0)
-        : m_patch_output(patch_output), m_patch_offset(patch_offset),
+        : m_patch_output(patch_output),
+          m_patch_offset(patch_offset),
           m_output_ltog_map(output_ltog_map),
-          m_num_src_in_patch(num_src_in_patch), m_shift(shift)
+          m_num_src_in_patch(num_src_in_patch),
+          m_shift(shift)
     {
         set(local_id, offset_size);
     }
@@ -113,14 +115,14 @@ struct RXMeshIterator
 
     __device__ void set(const uint16_t local_id, const uint32_t offset_size)
     {
-        m_current = 0;
+        m_current  = 0;
         m_local_id = local_id;
         if (offset_size == 0) {
             m_begin = m_patch_offset[m_local_id];
-            m_end = m_patch_offset[m_local_id + 1];
+            m_end   = m_patch_offset[m_local_id + 1];
         } else {
             m_begin = m_local_id * offset_size;
-            m_end = (m_local_id + 1) * offset_size;
+            m_end   = (m_local_id + 1) * offset_size;
         }
         assert(m_end > m_begin);
     }

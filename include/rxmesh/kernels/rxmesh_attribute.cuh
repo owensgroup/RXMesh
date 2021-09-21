@@ -48,7 +48,7 @@ __global__ void rxmesh_attribute_norm2(const RXMeshAttribute<T> X,
                                        const uint32_t           attribute_id,
                                        T*                       d_block_output)
 {
-    uint32_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+    uint32_t idx       = threadIdx.x + blockIdx.x * blockDim.x;
     T        threa_val = 0;
     if (idx < X.get_num_mesh_elements()) {
         threa_val = X(idx, attribute_id);
@@ -71,7 +71,7 @@ __global__ void rxmesh_attribute_dot(const RXMeshAttribute<T> X,
                                      const uint32_t           attribute_id,
                                      T*                       d_block_output)
 {
-    uint32_t idx = threadIdx.x + blockIdx.x * blockDim.x;
+    uint32_t idx       = threadIdx.x + blockIdx.x * blockDim.x;
     T        threa_val = 0;
     if (idx < X.get_num_mesh_elements()) {
         threa_val = X(idx, attribute_id) * Y(idx, attribute_id);

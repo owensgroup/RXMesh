@@ -38,11 +38,11 @@ inline void print_device_memory_usage()
     // print how much memory is available, used and free on the current device
     size_t free_t, total_t;
     CUDA_ERROR(cudaMemGetInfo(&free_t, &total_t));
-    double free_m = (double)free_t / (double)1048576.0;
+    double free_m  = (double)free_t / (double)1048576.0;
     double total_m = (double)total_t / (double)1048576.0;
-    double used_m = total_m - free_m;
-    RXMESH_TRACE(" device memory mem total = {} (B) [{} (MB)]", total_t,
-                 total_m);
+    double used_m  = total_m - free_m;
+    RXMESH_TRACE(
+        " device memory mem total = {} (B) [{} (MB)]", total_t, total_m);
     RXMESH_TRACE(" device memory free: {} (B) [{} (MB)]", free_t, free_m);
     RXMESH_TRACE(" device memory mem used: {} (MB)", used_m);
 }
@@ -71,8 +71,8 @@ inline T find_index(const T* arr, const T arr_size, const T val)
 {
     // get index of entry in array
     const T* begin = arr;
-    const T* end = arr + arr_size;
-    const T* it = std::find(begin, end, val);
+    const T* end   = arr + arr_size;
+    const T* it    = std::find(begin, end, val);
     if (it == end) {
         return std::numeric_limits<T>::max();
     }
@@ -111,15 +111,17 @@ bool compare(const dataT* gold,
              const dataT* arr,
              const T      size,
              const bool   verbose = false,
-             const dataT  tol = 10E-5)
+             const dataT  tol     = 10E-5)
 {
 
     bool result = true;
     for (T i = 0; i < size; i++) {
         if (std::abs(double(gold[i]) - double(arr[i])) > tol) {
             if (verbose) {
-                RXMESH_WARN("compare() mismatch at {} gold = {} arr = {} ", i,
-                            gold[i], arr[i]);
+                RXMESH_WARN("compare() mismatch at {} gold = {} arr = {} ",
+                            i,
+                            gold[i],
+                            arr[i]);
                 result = false;
             } else {
                 // it is not verbose, don't bother running through all entires
@@ -149,7 +151,7 @@ inline void compute_avg_stddev(const T* arr,
                                double&  stddev)
 {
     if (size == 1) {
-        avg = arr[0];
+        avg    = arr[0];
         stddev = 0;
         return;
     }
@@ -183,15 +185,15 @@ inline void compute_avg_stddev_max_min_rs(const T* arr_rs,
                                           T&       min)
 {
     uint32_t* arr = (uint32_t*)malloc(size * sizeof(uint32_t));
-    max = std::numeric_limits<T>::min();
-    min = std::numeric_limits<T>::max();
+    max           = std::numeric_limits<T>::min();
+    min           = std::numeric_limits<T>::max();
     for (uint32_t i = 0; i < size; i++) {
         // arr[i] = arr_rs[i + 1] - arr_rs[i];
         uint32_t start = (i == 0) ? 0 : arr_rs[i - 1];
-        uint32_t end = arr_rs[i];
-        arr[i] = end - start;
-        max = std::max(max, arr[i]);
-        min = std::min(min, arr[i]);
+        uint32_t end   = arr_rs[i];
+        arr[i]         = end - start;
+        max            = std::max(max, arr[i]);
+        min            = std::min(min, arr[i]);
     }
 
     compute_avg_stddev(arr, size, avg, stddev);
@@ -249,12 +251,12 @@ inline void inplace_remove_duplicates_sorted(std::vector<T>& sort_vec)
 
     // leave the first value
     uint32_t next_unique_id = 1;
-    T        prev_value = sort_vec.front();
+    T        prev_value     = sort_vec.front();
     for (uint32_t i = 1; i < sort_vec.size(); ++i) {
         T curr_val = sort_vec[i];
         if (curr_val != prev_value) {
             sort_vec[next_unique_id++] = curr_val;
-            prev_value = curr_val;
+            prev_value                 = curr_val;
         }
     }
 
@@ -322,7 +324,7 @@ inline std::string remove_extension(const std::string& filename)
 inline std::string extract_file_name(const std::string& full_path)
 {
     // given full path, we extract the file name without extension
-    std::string filename = remove_extension(full_path);
+    std::string filename  = remove_extension(full_path);
     size_t      lastslash = filename.find_last_of("/\\");
 
     return filename.substr(lastslash + 1);
@@ -340,7 +342,7 @@ void in_place_matrix_transpose(RandomIterator first,
     // number for columns
     // https://stackoverflow.com/a/9320349/1608232
     const uint64_t mn1 = (last - first - 1);
-    const uint64_t n = (last - first) / m;
+    const uint64_t n   = (last - first) / m;
 
     std::vector<bool> visited(last - first, false);
 

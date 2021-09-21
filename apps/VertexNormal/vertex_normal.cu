@@ -16,12 +16,12 @@ struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    num_run = 1;
-    uint32_t    device_id = 0;
+    uint32_t    num_run       = 1;
+    uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
     bool        shuffle = false;
-    bool        sort = false;
+    bool        sort    = false;
 } Arg;
 
 #include "vertex_normal_hardwired.cuh"
@@ -66,8 +66,8 @@ void vertex_normal_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
     // normals
     RXMeshAttribute<T> rxmesh_normal;
     rxmesh_normal.set_name("normal");
-    rxmesh_normal.init(coords.get_num_mesh_elements(), 3u,
-                       RXMESH::LOCATION_ALL);
+    rxmesh_normal.init(
+        coords.get_num_mesh_elements(), 3u, RXMESH::LOCATION_ALL);
 
     // launch box
     LaunchBox<blockThreads> launch_box;
@@ -103,7 +103,8 @@ void vertex_normal_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
 
     bool passed = compare(vertex_normal_gold.data(),
                           rxmesh_normal.get_pointer(RXMESH::HOST),
-                          coords.get_num_mesh_elements() * 3, false);
+                          coords.get_num_mesh_elements() * 3,
+                          false);
     td.passed.push_back(passed);
     EXPECT_TRUE(passed) << " RXMesh Validation failed \n";
 

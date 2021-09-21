@@ -88,7 +88,7 @@ void export_as_cubes_VTK(std::string    filename,
                          CubeY          funY,
                          CubeZ          funZ,
                          const uint32_t num_att,
-                         bool           randomize = 1,
+                         bool           randomize  = 1,
                          float*         randomness = (float*)nullptr)
 {
 
@@ -281,7 +281,7 @@ void export_attribute_VTK(
         if (rand_map_it != rand_map.end()) {
             return rand_map[att[id]];
         } else {
-            double val = double(rand()) / double(RAND_MAX);
+            double val        = double(rand()) / double(RAND_MAX);
             rand_map[att[id]] = val;
             return val;
         }

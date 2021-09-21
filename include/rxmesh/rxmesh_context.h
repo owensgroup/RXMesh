@@ -14,72 +14,101 @@ class __align__(16) RXMeshContext
 
    public:
     RXMeshContext()
-        : m_num_edges(0), m_num_faces(0), m_num_vertices(0), m_face_degree(0),
-          m_max_valence(0), m_max_edge_incident_faces(0),
-          m_max_face_adjacent_faces(0), m_num_patches(0),
-          m_d_face_patch(nullptr), m_d_edge_patch(nullptr),
-          m_d_vertex_patch(nullptr), m_d_patches_ltog_v(nullptr),
-          m_d_patches_ltog_e(nullptr), m_d_patches_ltog_f(nullptr),
-          m_d_ad_size_ltog_v(nullptr), m_d_ad_size_ltog_e(nullptr),
-          m_d_ad_size_ltog_f(nullptr), m_d_patches_edges(nullptr),
-          m_d_patches_faces(nullptr), m_d_patch_distribution_v(nullptr),
-          m_d_patch_distribution_e(nullptr), m_d_patch_distribution_f(nullptr),
-          m_d_ad_size(nullptr), m_d_owned_size(nullptr),
-          m_d_neighbour_patches(nullptr), m_d_neighbour_patches_offset(nullptr)
+        : m_num_edges(0),
+          m_num_faces(0),
+          m_num_vertices(0),
+          m_face_degree(0),
+          m_max_valence(0),
+          m_max_edge_incident_faces(0),
+          m_max_face_adjacent_faces(0),
+          m_num_patches(0),
+          m_d_face_patch(nullptr),
+          m_d_edge_patch(nullptr),
+          m_d_vertex_patch(nullptr),
+          m_d_patches_ltog_v(nullptr),
+          m_d_patches_ltog_e(nullptr),
+          m_d_patches_ltog_f(nullptr),
+          m_d_ad_size_ltog_v(nullptr),
+          m_d_ad_size_ltog_e(nullptr),
+          m_d_ad_size_ltog_f(nullptr),
+          m_d_patches_edges(nullptr),
+          m_d_patches_faces(nullptr),
+          m_d_patch_distribution_v(nullptr),
+          m_d_patch_distribution_e(nullptr),
+          m_d_patch_distribution_f(nullptr),
+          m_d_ad_size(nullptr),
+          m_d_owned_size(nullptr),
+          m_d_neighbour_patches(nullptr),
+          m_d_neighbour_patches_offset(nullptr)
 
     {
         m_d_max_size.x = m_d_max_size.y = 0;
     }
 
-    void init(
-        const uint32_t num_edges, const uint32_t num_faces,
-        const uint32_t num_vertices, const uint32_t face_degree,
-        const uint32_t max_valence, const uint32_t max_edge_incident_faces,
-        const uint32_t max_face_adjacent_faces, const uint32_t num_patches,
-        uint32_t* d_face_patch, uint32_t* d_edge_patch,
-        uint32_t* d_vertex_patch, uint32_t* d_patches_ltog_v,
-        uint32_t* d_patches_ltog_e, uint32_t* d_patches_ltog_f,
-        uint2* d_ad_size_ltog_v, uint2* d_ad_size_ltog_e,
-        uint2* d_ad_size_ltog_f, uint16_t* d_patches_edges,
-        uint16_t* d_patches_faces, uint4* d_ad_size, uint4* d_owned_size,
-        uint2 max_size, uint32_t* d_patch_distribution_v,
-        uint32_t* d_patch_distribution_e, uint32_t* d_patch_distribution_f,
-        uint32_t* d_neighbour_patches, uint32_t* d_neighbour_patches_offset)
+    void init(const uint32_t num_edges,
+              const uint32_t num_faces,
+              const uint32_t num_vertices,
+              const uint32_t face_degree,
+              const uint32_t max_valence,
+              const uint32_t max_edge_incident_faces,
+              const uint32_t max_face_adjacent_faces,
+              const uint32_t num_patches,
+              uint32_t*      d_face_patch,
+              uint32_t*      d_edge_patch,
+              uint32_t*      d_vertex_patch,
+              uint32_t*      d_patches_ltog_v,
+              uint32_t*      d_patches_ltog_e,
+              uint32_t*      d_patches_ltog_f,
+              uint2*         d_ad_size_ltog_v,
+              uint2*         d_ad_size_ltog_e,
+              uint2*         d_ad_size_ltog_f,
+              uint16_t*      d_patches_edges,
+              uint16_t*      d_patches_faces,
+              uint4*         d_ad_size,
+              uint4*         d_owned_size,
+              uint2          max_size,
+              uint32_t*      d_patch_distribution_v,
+              uint32_t*      d_patch_distribution_e,
+              uint32_t*      d_patch_distribution_f,
+              uint32_t*      d_neighbour_patches,
+              uint32_t*      d_neighbour_patches_offset)
     {
 
-        m_num_edges = num_edges;
-        m_num_faces = num_faces;
-        m_num_vertices = num_vertices;
-        m_face_degree = face_degree;
-        m_max_valence = max_valence;
-        m_max_edge_incident_faces = max_edge_incident_faces;
-        m_max_face_adjacent_faces = max_face_adjacent_faces;
-        m_num_patches = num_patches;
-        m_d_face_patch = d_face_patch;
-        m_d_edge_patch = d_edge_patch;
-        m_d_vertex_patch = d_vertex_patch;
-        m_d_patches_ltog_v = d_patches_ltog_v;
-        m_d_patches_ltog_e = d_patches_ltog_e;
-        m_d_patches_ltog_f = d_patches_ltog_f;
-        m_d_ad_size_ltog_v = d_ad_size_ltog_v;
-        m_d_ad_size_ltog_e = d_ad_size_ltog_e;
-        m_d_ad_size_ltog_f = d_ad_size_ltog_f;
-        m_d_patches_edges = d_patches_edges;
-        m_d_patches_faces = d_patches_faces;
-        m_d_ad_size = d_ad_size;
-        m_d_owned_size = d_owned_size;
-        m_d_max_size = max_size;
-        m_d_patch_distribution_v = d_patch_distribution_v;
-        m_d_patch_distribution_e = d_patch_distribution_e;
-        m_d_patch_distribution_f = d_patch_distribution_f;
-        m_d_neighbour_patches = d_neighbour_patches;
+        m_num_edges                  = num_edges;
+        m_num_faces                  = num_faces;
+        m_num_vertices               = num_vertices;
+        m_face_degree                = face_degree;
+        m_max_valence                = max_valence;
+        m_max_edge_incident_faces    = max_edge_incident_faces;
+        m_max_face_adjacent_faces    = max_face_adjacent_faces;
+        m_num_patches                = num_patches;
+        m_d_face_patch               = d_face_patch;
+        m_d_edge_patch               = d_edge_patch;
+        m_d_vertex_patch             = d_vertex_patch;
+        m_d_patches_ltog_v           = d_patches_ltog_v;
+        m_d_patches_ltog_e           = d_patches_ltog_e;
+        m_d_patches_ltog_f           = d_patches_ltog_f;
+        m_d_ad_size_ltog_v           = d_ad_size_ltog_v;
+        m_d_ad_size_ltog_e           = d_ad_size_ltog_e;
+        m_d_ad_size_ltog_f           = d_ad_size_ltog_f;
+        m_d_patches_edges            = d_patches_edges;
+        m_d_patches_faces            = d_patches_faces;
+        m_d_ad_size                  = d_ad_size;
+        m_d_owned_size               = d_owned_size;
+        m_d_max_size                 = max_size;
+        m_d_patch_distribution_v     = d_patch_distribution_v;
+        m_d_patch_distribution_e     = d_patch_distribution_e;
+        m_d_patch_distribution_f     = d_patch_distribution_f;
+        m_d_neighbour_patches        = d_neighbour_patches;
         m_d_neighbour_patches_offset = d_neighbour_patches_offset;
     }
 
 
     template <typename dataT>
-    __device__ void print_data(const dataT* arr, const uint32_t start_id,
-                               const uint32_t len, int shift = 0) const
+    __device__ void print_data(const dataT*   arr,
+                               const uint32_t start_id,
+                               const uint32_t len,
+                               int            shift = 0) const
     {
         printf(" start_id = %u, len = %u\n", start_id, len);
 
@@ -105,32 +134,44 @@ class __align__(16) RXMeshContext
         printf(" global_num_patches=%u \n", m_num_patches);
 
         printf(" patch #vertices = %u, start_id= %u \n",
-               m_d_ad_size_ltog_v[p_id].y, m_d_ad_size_ltog_v[p_id].x);
-        printf(" patch #edges = %u, start_id= %u\n", m_d_ad_size_ltog_e[p_id].y,
+               m_d_ad_size_ltog_v[p_id].y,
+               m_d_ad_size_ltog_v[p_id].x);
+        printf(" patch #edges = %u, start_id= %u\n",
+               m_d_ad_size_ltog_e[p_id].y,
                m_d_ad_size_ltog_e[p_id].x);
-        printf(" patch #faces = %u, start_id= %u\n", m_d_ad_size_ltog_f[p_id].y,
+        printf(" patch #faces = %u, start_id= %u\n",
+               m_d_ad_size_ltog_f[p_id].y,
                m_d_ad_size_ltog_f[p_id].x);
 
         printf("\n ** d_ltog_v **\n");
-        print_data(m_d_patches_ltog_v, uint32_t(m_d_ad_size_ltog_v[p_id].x),
-                   uint32_t(m_d_ad_size_ltog_v[p_id].y), 1);
+        print_data(m_d_patches_ltog_v,
+                   uint32_t(m_d_ad_size_ltog_v[p_id].x),
+                   uint32_t(m_d_ad_size_ltog_v[p_id].y),
+                   1);
 
         printf("\n ** d_ltog_e **\n");
-        print_data(m_d_patches_ltog_e, uint32_t(m_d_ad_size_ltog_e[p_id].x),
-                   uint32_t(m_d_ad_size_ltog_e[p_id].y), 1);
+        print_data(m_d_patches_ltog_e,
+                   uint32_t(m_d_ad_size_ltog_e[p_id].x),
+                   uint32_t(m_d_ad_size_ltog_e[p_id].y),
+                   1);
 
         printf("\n ** d_ltog_f **\n");
-        print_data(m_d_patches_ltog_f, uint32_t(m_d_ad_size_ltog_f[p_id].x),
-                   uint32_t(m_d_ad_size_ltog_f[p_id].y), 1);
+        print_data(m_d_patches_ltog_f,
+                   uint32_t(m_d_ad_size_ltog_f[p_id].x),
+                   uint32_t(m_d_ad_size_ltog_f[p_id].y),
+                   1);
 
 
         printf("\n ** d_edges **\n");
-        print_data(m_d_patches_edges, uint32_t(m_d_ad_size[p_id].x),
+        print_data(m_d_patches_edges,
+                   uint32_t(m_d_ad_size[p_id].x),
                    uint32_t(m_d_ad_size[p_id].y));
 
         printf("\n ** d_faces **\n");
-        print_data(m_d_patches_faces, uint32_t(m_d_ad_size[p_id].z),
-                   uint32_t(m_d_ad_size[p_id].w), 1);
+        print_data(m_d_patches_faces,
+                   uint32_t(m_d_ad_size[p_id].z),
+                   uint32_t(m_d_ad_size[p_id].w),
+                   1);
         //}
     }
 
@@ -242,7 +283,7 @@ class __align__(16) RXMeshContext
     static __device__ __host__ __forceinline__ void unpack_edge_dir(
         const uint16_t edge_dir, uint16_t& edge, flag_t& dir)
     {
-        dir = (edge_dir & 1) != 0;
+        dir  = (edge_dir & 1) != 0;
         edge = edge_dir >> 1;
     }
 

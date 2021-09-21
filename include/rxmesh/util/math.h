@@ -178,7 +178,9 @@ template <typename T>
 void scale(std::vector<T>& v, const T factor)
 {
     std::transform(
-        v.begin(), v.end(), v.begin(),
+        v.begin(),
+        v.end(),
+        v.begin(),
         std::bind(std::multiplies<T>(), std::placeholders::_1, factor));
 }
 

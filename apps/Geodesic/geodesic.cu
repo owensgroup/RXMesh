@@ -18,11 +18,11 @@ struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    device_id = 0;
+    uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
-    bool        shuffle = false;
-    bool        sort = false;
+    bool        shuffle   = false;
+    bool        sort      = false;
     uint32_t    num_seeds = 1;
 
 } Arg;
@@ -60,9 +60,13 @@ TEST(App, GEODESIC)
     // Create RXMeshStatic instance. If Arg.sort is true, Faces and Verts will
     // be sorted based on the patching happening inside RXMesh
     RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, Verts, Arg.sort, false);
-    ASSERT_TRUE(rxmesh_static.is_closed()) << "Geodesic only works on watertight/closed manifold mesh without boundaries";
-    ASSERT_TRUE(rxmesh_static.is_edge_manifold())<< "Geodesic only works on watertight/closed manifold mesh without boundaries";
-    
+    ASSERT_TRUE(rxmesh_static.is_closed())
+        << "Geodesic only works on watertight/closed manifold mesh without "
+           "boundaries";
+    ASSERT_TRUE(rxmesh_static.is_edge_manifold())
+        << "Geodesic only works on watertight/closed manifold mesh without "
+           "boundaries";
+
     // Since OpenMesh only accepts input as obj files, if the input mesh is
     // shuffled or sorted, we have to write it to a temp file so that OpenMesh
     // can pick it up
@@ -95,14 +99,15 @@ TEST(App, GEODESIC)
     // used to quickly determine whether or not a vertex is within
     // the "update band".
     RXMeshAttribute<uint32_t> toplesets("toplesets");
-    toplesets.init(Verts.size(), 1u,
+    toplesets.init(Verts.size(),
+                   1u,
                    RXMESH::HOST);  // will move() to DEVICE later
 
 
     std::vector<uint32_t> sorted_index;
     std::vector<uint32_t> limits;
-    geodesic_ptp_openmesh(input_mesh, h_seeds, ground_truth, sorted_index,
-                          limits, toplesets);
+    geodesic_ptp_openmesh(
+        input_mesh, h_seeds, ground_truth, sorted_index, limits, toplesets);
 
     // export_attribute_VTK("geo_openmesh.vtk", Faces, Verts, false,
     //                     ground_truth.operator->(),
@@ -114,8 +119,14 @@ TEST(App, GEODESIC)
 
 
     //*** RXMesh Impl
-    EXPECT_TRUE(geodesic_rxmesh(rxmesh_static, Faces, Verts, h_seeds,
-                                ground_truth, sorted_index, limits, toplesets))
+    EXPECT_TRUE(geodesic_rxmesh(rxmesh_static,
+                                Faces,
+                                Verts,
+                                h_seeds,
+                                ground_truth,
+                                sorted_index,
+                                limits,
+                                toplesets))
         << "RXMesh failed!!";
 
 

@@ -170,8 +170,8 @@ bool import_obj(const std::string                  fileName,
 
             } else {
                 // others
-                RXMESH_ERROR("importOBJ() invalid Line[{}] File[{}]\n", lineNum,
-                             line);
+                RXMESH_ERROR(
+                    "importOBJ() invalid Line[{}] File[{}]\n", lineNum, line);
                 fclose(Objfile);
                 return false;
             }
@@ -207,6 +207,6 @@ bool import_obj(const std::string                  fileName,
     std::vector<std::vector<DATA_T>>  Normal;
     std::vector<std::vector<INDEX_T>> FacesNormal;
 
-    return import_obj(fileName, Verts, Faces, Tex, FacesTex, Normal,
-                      FacesNormal, quite);
+    return import_obj(
+        fileName, Verts, Faces, Tex, FacesTex, Normal, FacesNormal, quite);
 }

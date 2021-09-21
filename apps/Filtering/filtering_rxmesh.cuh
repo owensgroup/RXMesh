@@ -63,8 +63,8 @@ void filtering_rxmesh(RXMESH::RXMeshStatic<patchSize>&  rxmesh_static,
     // Filtered coordinates
     RXMeshAttribute<T> filtered_coord;
     filtered_coord.set_name("filtered_coord");
-    filtered_coord.init(rxmesh_static.get_num_vertices(), 3u,
-                        RXMESH::LOCATION_ALL);
+    filtered_coord.init(
+        rxmesh_static.get_num_vertices(), 3u, RXMESH::LOCATION_ALL);
     filtered_coord.reset(0.0, RXMESH::LOCATION_ALL);
     filtered_coord.move(RXMESH::HOST, RXMESH::DEVICE);
 
@@ -93,15 +93,20 @@ void filtering_rxmesh(RXMESH::RXMeshStatic<patchSize>&  rxmesh_static,
 
         // update vertex normal before filtering
         compute_vertex_normal<T, vn_block_threads>
-            <<<vn_launch_box.blocks, vn_block_threads,
-               vn_launch_box.smem_bytes_dyn, stream>>>(
+            <<<vn_launch_box.blocks,
+               vn_block_threads,
+               vn_launch_box.smem_bytes_dyn,
+               stream>>>(
                 rxmesh_static.get_context(), *double_buffer[d], vertex_normal);
 
         bilateral_filtering<T, filter_block_threads, maxVVSize>
-            <<<filter_launch_box.blocks, filter_block_threads,
-               filter_launch_box.smem_bytes_dyn, stream>>>(
-                rxmesh_static.get_context(), *double_buffer[d],
-                *double_buffer[!d], vertex_normal);
+            <<<filter_launch_box.blocks,
+               filter_block_threads,
+               filter_launch_box.smem_bytes_dyn,
+               stream>>>(rxmesh_static.get_context(),
+                         *double_buffer[d],
+                         *double_buffer[!d],
+                         vertex_normal);
 
         d = !d;
         CUDA_ERROR(cudaStreamSynchronize(stream));
@@ -127,10 +132,10 @@ void filtering_rxmesh(RXMESH::RXMeshStatic<patchSize>&  rxmesh_static,
 
     // Verify
     bool    passed = true;
-    const T tol = 0.01;
+    const T tol    = 0.01;
     for (uint32_t v = 0; v < coords.get_num_mesh_elements(); ++v) {
-        const Vector<3, T> gt(ground_truth(v, 0), ground_truth(v, 1),
-                              ground_truth(v, 2));
+        const Vector<3, T> gt(
+            ground_truth(v, 0), ground_truth(v, 1), ground_truth(v, 2));
         const Vector<3, T> co(coords(v, 0), coords(v, 1), coords(v, 2));
 
         if (std::fabs(co[0] - gt[0]) > tol || std::fabs(co[1] - gt[1]) > tol ||

@@ -77,12 +77,12 @@ T partial_voronoi_area(const int      p_id,  // center
     assert((*q_it).idx() == q_id);
     assert((*r_it).idx() == r_id);
 
-    const RXMESH::Vector<3, T> p(mesh.point(*p_it)[0], mesh.point(*p_it)[1],
-                                 mesh.point(*p_it)[2]);
-    const RXMESH::Vector<3, T> q(mesh.point(*q_it)[0], mesh.point(*q_it)[1],
-                                 mesh.point(*q_it)[2]);
-    const RXMESH::Vector<3, T> r(mesh.point(*r_it)[0], mesh.point(*r_it)[1],
-                                 mesh.point(*r_it)[2]);
+    const RXMESH::Vector<3, T> p(
+        mesh.point(*p_it)[0], mesh.point(*p_it)[1], mesh.point(*p_it)[2]);
+    const RXMESH::Vector<3, T> q(
+        mesh.point(*q_it)[0], mesh.point(*q_it)[1], mesh.point(*q_it)[2]);
+    const RXMESH::Vector<3, T> r(
+        mesh.point(*r_it)[0], mesh.point(*r_it)[1], mesh.point(*r_it)[2]);
 
     return partial_voronoi_area(p, q, r);
 }
@@ -106,14 +106,14 @@ T edge_cotan_weight(const int      p_id,
     TriMesh::VertexIter q_it = mesh.vertices_begin() + q_id;
     TriMesh::VertexIter s_it = mesh.vertices_begin() + s_id;
 
-    const RXMESH::Vector<3, T> p(mesh.point(*p_it)[0], mesh.point(*p_it)[1],
-                                 mesh.point(*p_it)[2]);
-    const RXMESH::Vector<3, T> r(mesh.point(*r_it)[0], mesh.point(*r_it)[1],
-                                 mesh.point(*r_it)[2]);
-    const RXMESH::Vector<3, T> q(mesh.point(*q_it)[0], mesh.point(*q_it)[1],
-                                 mesh.point(*q_it)[2]);
-    const RXMESH::Vector<3, T> s(mesh.point(*s_it)[0], mesh.point(*s_it)[1],
-                                 mesh.point(*s_it)[2]);
+    const RXMESH::Vector<3, T> p(
+        mesh.point(*p_it)[0], mesh.point(*p_it)[1], mesh.point(*p_it)[2]);
+    const RXMESH::Vector<3, T> r(
+        mesh.point(*r_it)[0], mesh.point(*r_it)[1], mesh.point(*r_it)[2]);
+    const RXMESH::Vector<3, T> q(
+        mesh.point(*q_it)[0], mesh.point(*q_it)[1], mesh.point(*q_it)[2]);
+    const RXMESH::Vector<3, T> s(
+        mesh.point(*s_it)[0], mesh.point(*s_it)[1], mesh.point(*s_it)[2]);
 
     return edge_cotan_weight(p, r, q, s);
 }
@@ -170,7 +170,8 @@ void mcf_matvec(TriMesh&                          mesh,
         assert(s_iter.is_valid());
 
         for (TriMesh::VertexVertexIter r_iter = mesh.vv_iter(*p_iter);
-             r_iter.is_valid(); ++r_iter) {
+             r_iter.is_valid();
+             ++r_iter) {
 
             int r_id = (*r_iter).idx();
 
@@ -180,8 +181,9 @@ void mcf_matvec(TriMesh&                          mesh,
                 e_weight = 1;
             } else {
                 e_weight = std::max(
-                    T(0.0), edge_cotan_weight<T>(p_id, r_id, (*q_iter).idx(),
-                                                 (*s_iter).idx(), mesh));
+                    T(0.0),
+                    edge_cotan_weight<T>(
+                        p_id, r_id, (*q_iter).idx(), (*s_iter).idx(), mesh));
                 ++s_iter;
             }
 
@@ -215,7 +217,7 @@ void mcf_matvec(TriMesh&                          mesh,
         assert(!std::isnan(v_weight));
         assert(!std::isinf(v_weight));
 
-        T diag = ((1.0 / v_weight) + sum_e_weight);
+        T diag       = ((1.0 / v_weight) + sum_e_weight);
         out(p_id, 0) = x[0] + diag * in(p_id, 0);
         out(p_id, 1) = x[1] + diag * in(p_id, 1);
         out(p_id, 2) = x[2] + diag * in(p_id, 2);
@@ -305,7 +307,7 @@ void cg(TriMesh&                    mesh,
         ++iter;
     }
     num_cg_iter_taken = iter;
-    stop_residual = delta_new;
+    stop_residual     = delta_new;
 }
 
 /**
@@ -322,7 +324,8 @@ void implicit_smoothing(TriMesh&                    mesh,
 {
 
     for (TriMesh::VertexIter v_it = mesh.vertices_begin();
-         v_it != mesh.vertices_end(); ++v_it) {
+         v_it != mesh.vertices_end();
+         ++v_it) {
         ASSERT_FALSE(mesh.is_boundary(*v_it))
             << "OpenMesh MCF only takes watertight/closed mesh without "
                "boundaries";
@@ -381,17 +384,18 @@ void implicit_smoothing(TriMesh&                    mesh,
             assert(q_iter.is_valid());
 
             for (TriMesh::VertexVertexIter vv_iter = mesh.vv_iter(*v_iter);
-                 vv_iter.is_valid(); ++vv_iter) {
+                 vv_iter.is_valid();
+                 ++vv_iter) {
 
-                T tri_area = partial_voronoi_area<T>(v_id, (*q_iter).idx(),
-                                                     (*vv_iter).idx(), mesh);
+                T tri_area = partial_voronoi_area<T>(
+                    v_id, (*q_iter).idx(), (*vv_iter).idx(), mesh);
 
                 v_weight += (tri_area > 0) ? tri_area : 0;
 
                 q_iter++;
                 assert(q_iter == vv_iter);
             }
-            v_weight = 0.5 / v_weight;
+            v_weight   = 0.5 / v_weight;
             B(v_id, 0) = X(v_id, 0) / v_weight;
             B(v_id, 1) = X(v_id, 1) / v_weight;
             B(v_id, 2) = X(v_id, 2) / v_weight;
@@ -404,7 +408,15 @@ void implicit_smoothing(TriMesh&                    mesh,
     RXMESH::CPUTimer timer;
     timer.start();
 
-    cg(mesh, X, B, R, P, S, num_cg_iter_taken, start_residual, stop_residual,
+    cg(mesh,
+       X,
+       B,
+       R,
+       P,
+       S,
+       num_cg_iter_taken,
+       start_residual,
+       stop_residual,
        num_omp_threads);
 
     timer.stop();
@@ -439,16 +451,23 @@ void mcf_openmesh(const int                   num_omp_threads,
 
     // implicit smoothing
     uint32_t             num_cg_iter_taken = 0;
-    float                time = 0;
+    float                time              = 0;
     RXMESH::Vector<3, T> start_residual;
     RXMESH::Vector<3, T> stop_residual;
 
-    implicit_smoothing(input_mesh, smoothed_coord, num_cg_iter_taken, time,
-                       start_residual, stop_residual, num_omp_threads);
+    implicit_smoothing(input_mesh,
+                       smoothed_coord,
+                       num_cg_iter_taken,
+                       time,
+                       start_residual,
+                       stop_residual,
+                       num_omp_threads);
 
     RXMESH_TRACE(
         "mcf_openmesh() took {} (ms) and {} iterations (i.e., {} ms/iter) ",
-        time, num_cg_iter_taken, time / float(num_cg_iter_taken));
+        time,
+        num_cg_iter_taken,
+        time / float(num_cg_iter_taken));
 
 
     // write output
@@ -470,7 +489,7 @@ void mcf_openmesh(const int                   num_omp_threads,
     report.add_member("num_cg_iter_taken", num_cg_iter_taken);
     report.add_member("total_time (ms)", time);
     RXMESH::TestData td;
-    td.test_name = "MCF";
+    td.test_name   = "MCF";
     td.num_threads = num_omp_threads;
     td.time_ms.push_back(time / float(num_cg_iter_taken));
     td.passed.push_back(true);

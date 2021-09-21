@@ -65,8 +65,8 @@ inline std::string op_to_string(const Op& op)
 enum class ELEMENT
 {
     VERTEX = 0,
-    EDGE = 1,
-    FACE = 2
+    EDGE   = 1,
+    FACE   = 2
 };
 
 template <uint32_t patchSize = PATCH_SIZE>
@@ -237,7 +237,7 @@ class RXMesh
     // build everything from scratch including patches (use this)
     RXMesh(std::vector<std::vector<uint32_t>>& fv,
            std::vector<std::vector<coordT>>&   coordinates,
-           const bool                          sort = false,
+           const bool                          sort  = false,
            const bool                          quite = true);
 
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
@@ -281,7 +281,8 @@ class RXMesh
             RXMESH_ERROR(
                 "RXMesh::host_malloc() malloc failed with count = {} and total "
                 "size = {}",
-                count, count * sizeof(pt_T));
+                count,
+                count * sizeof(pt_T));
         }
     }
 

@@ -16,8 +16,8 @@ class OpenMeshReport : public RXMESH::Report
         subdoc.SetObject();
 
         add_member("model_name", model_name, subdoc);
-        add_member("num_vertices", static_cast<uint32_t>(mesh.n_vertices()),
-                   subdoc);
+        add_member(
+            "num_vertices", static_cast<uint32_t>(mesh.n_vertices()), subdoc);
         add_member("num_edges", static_cast<uint32_t>(mesh.n_edges()), subdoc);
         add_member("num_faces", static_cast<uint32_t>(mesh.n_faces()), subdoc);
 

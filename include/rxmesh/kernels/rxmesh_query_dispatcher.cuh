@@ -71,13 +71,17 @@ __device__ __inline__ void query_block_dispatcher(
              ad_size_ltog_e :
              ((src_element == ELEMENT::FACE) ? ad_size_ltog_f :
                                                ad_size_ltog_v));
-    load_patch_ad_size(context, current_patch_id, ad_size, ad_size_ltog_v,
-                       ad_size_ltog_e, ad_size_ltog_f);
+    load_patch_ad_size(context,
+                       current_patch_id,
+                       ad_size,
+                       ad_size_ltog_v,
+                       ad_size_ltog_e,
+                       ad_size_ltog_f);
 
     // Check if any of the vertices are in the active set
     // input mapping does not need to be stored in shared memory since it will
     // be read coalesced, we can rely on L1 cache here
-    input_mapping = nullptr;
+    input_mapping    = nullptr;
     num_src_in_patch = 0;
     switch (src_element) {
         case RXMESH::ELEMENT::VERTEX: {
@@ -102,7 +106,7 @@ __device__ __inline__ void query_block_dispatcher(
 
 
     bool     is_active = false;
-    uint16_t local_id = threadIdx.x;
+    uint16_t local_id  = threadIdx.x;
     while (local_id < num_src_in_patch) {
         is_active =
             local_id || compute_active_set(input_mapping[local_id] >> 1);
@@ -119,22 +123,30 @@ __device__ __inline__ void query_block_dispatcher(
 
 
     // 2) Load the patch info
-    load_mesh(context, load_edges, load_faces, s_patch_edges, s_patch_faces,
-              ad_size);
+    load_mesh(
+        context, load_edges, load_faces, s_patch_edges, s_patch_faces, ad_size);
     __syncthreads();
 
     // 3)Perform the query operation
     if (oriented) {
         assert(op == Op::VV);
         if constexpr (op == Op::VV) {
-            v_v_oreinted<blockThreads>(
-                s_offset_all_patches, s_output_all_patches, s_patch_edges,
-                context, ad_size, ad_size_ltog_v.y, num_src_in_patch);
+            v_v_oreinted<blockThreads>(s_offset_all_patches,
+                                       s_output_all_patches,
+                                       s_patch_edges,
+                                       context,
+                                       ad_size,
+                                       ad_size_ltog_v.y,
+                                       num_src_in_patch);
         }
     } else {
-        query<blockThreads, op>(s_offset_all_patches, s_output_all_patches,
-                                s_patch_edges, s_patch_faces, ad_size_ltog_v.y,
-                                ad_size_ltog_e.y, ad_size_ltog_f.y);
+        query<blockThreads, op>(s_offset_all_patches,
+                                s_output_all_patches,
+                                s_patch_edges,
+                                s_patch_faces,
+                                ad_size_ltog_v.y,
+                                ad_size_ltog_e.y,
+                                ad_size_ltog_f.y);
     }
 
 
@@ -180,8 +192,11 @@ __device__ __inline__ void query_block_dispatcher(
             s_output_mapping = (uint32_t*)&shrd_mem[last_vv + last_vv % 2];
         }
 
-        load_mapping(context, output_element, output_ele_ad_size,
-                     s_output_mapping, false);
+        load_mapping(context,
+                     output_element,
+                     output_ele_ad_size,
+                     s_output_mapping,
+                     false);
     }
     __syncthreads();
 }
@@ -195,7 +210,7 @@ __device__ __inline__ void query_block_dispatcher(
     const uint32_t       current_patch_id,
     computeT             compute_op,
     activeSetT           compute_active_set,
-    const bool           oriented = false,
+    const bool           oriented             = false,
     const bool           output_needs_mapping = true)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
@@ -206,9 +221,16 @@ __device__ __inline__ void query_block_dispatcher(
     uint16_t *s_offset_all_patches(nullptr), *s_output_all_patches(nullptr);
 
     detail::template query_block_dispatcher<op, blockThreads>(
-        context, current_patch_id, compute_active_set, oriented,
-        output_needs_mapping, num_src_in_patch, input_mapping, s_output_mapping,
-        s_offset_all_patches, s_output_all_patches);
+        context,
+        current_patch_id,
+        compute_active_set,
+        oriented,
+        output_needs_mapping,
+        num_src_in_patch,
+        input_mapping,
+        s_output_mapping,
+        s_offset_all_patches,
+        s_output_all_patches);
 
     assert(input_mapping);
     assert(s_output_all_patches);
@@ -226,9 +248,12 @@ __device__ __inline__ void query_block_dispatcher(
                 ((op == Op::EV)                 ? 2 :
                  (op == Op::FV || op == Op::FE) ? 3 :
                                                   0);
-            RXMeshIterator iter(local_id, s_output_all_patches,
-                                s_offset_all_patches, s_output_mapping,
-                                fixed_offset, num_src_in_patch,
+            RXMeshIterator iter(local_id,
+                                s_output_all_patches,
+                                s_offset_all_patches,
+                                s_output_mapping,
+                                fixed_offset,
+                                num_src_in_patch,
                                 int(op == Op::FE));
 
             compute_op(global_id, iter);
@@ -246,14 +271,17 @@ __device__ __inline__ void query_block_dispatcher(
     const RXMeshContext& context,
     computeT             compute_op,
     activeSetT           compute_active_set,
-    const bool           oriented = false,
+    const bool           oriented             = false,
     const bool           output_needs_mapping = true)
 {
     if (blockIdx.x >= context.get_num_patches()) {
         return;
     }
-    query_block_dispatcher<op, blockThreads>(context, blockIdx.x, compute_op,
-                                             compute_active_set, oriented,
+    query_block_dispatcher<op, blockThreads>(context,
+                                             blockIdx.x,
+                                             compute_op,
+                                             compute_active_set,
+                                             oriented,
                                              output_needs_mapping);
 }
 
@@ -264,15 +292,19 @@ template <Op op, uint32_t blockThreads, typename computeT>
 __device__ __inline__ void query_block_dispatcher(
     const RXMeshContext& context,
     computeT             compute_op,
-    const bool           oriented = false,
+    const bool           oriented             = false,
     const bool           output_needs_mapping = true)
 {
     if (blockIdx.x >= context.get_num_patches()) {
         return;
     }
     query_block_dispatcher<op, blockThreads>(
-        context, blockIdx.x, compute_op, [](uint32_t) { return true; },
-        oriented, output_needs_mapping);
+        context,
+        blockIdx.x,
+        compute_op,
+        [](uint32_t) { return true; },
+        oriented,
+        output_needs_mapping);
 }
 
 
@@ -330,14 +362,14 @@ __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
     };
     __shared__ TempStorage all_temp_storage;
     uint32_t               thread_data[1], thread_head_flags[1];
-    thread_data[0] = element_patch;
+    thread_data[0]       = element_patch;
     thread_head_flags[0] = 0;
     BlockRadixSort(all_temp_storage.sort_storage).Sort(thread_data);
     BlockDiscontinuity(all_temp_storage.discont_storage)
         .FlagHeads(thread_head_flags, thread_data, cub::Inequality());
 
     if (thread_head_flags[0] == 1 && thread_data[0] != INVALID32) {
-        uint32_t id = ::atomicAdd(&s_num_patches, uint32_t(1));
+        uint32_t id         = ::atomicAdd(&s_num_patches, uint32_t(1));
         s_block_patches[id] = thread_data[0];
     }
 
@@ -367,9 +399,16 @@ __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
         uint16_t *s_offset_all_patches(nullptr), *s_output_all_patches(nullptr);
 
         detail::template query_block_dispatcher<op, blockThreads>(
-            context, patch_id, compute_active_set, oriented, true,
-            num_src_in_patch, input_mapping, s_output_mapping,
-            s_offset_all_patches, s_output_all_patches);
+            context,
+            patch_id,
+            compute_active_set,
+            oriented,
+            true,
+            num_src_in_patch,
+            input_mapping,
+            s_output_mapping,
+            s_offset_all_patches,
+            s_output_all_patches);
 
         assert(input_mapping);
         assert(s_output_all_patches);
@@ -391,9 +430,12 @@ __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
                  (op == Op::FV || op == Op::FE) ? 3 :
                                                   0);
 
-            RXMeshIterator iter(local_id, s_output_all_patches,
-                                s_offset_all_patches, s_output_mapping,
-                                fixed_offset, num_src_in_patch,
+            RXMeshIterator iter(local_id,
+                                s_output_all_patches,
+                                s_offset_all_patches,
+                                s_output_mapping,
+                                fixed_offset,
+                                num_src_in_patch,
                                 int(op == Op::FE));
 
             compute_op(element_id, iter);

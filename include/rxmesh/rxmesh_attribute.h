@@ -14,9 +14,9 @@ using locationT = uint32_t;
 enum : locationT
 {
     LOCATION_NONE = 0x00,
-    HOST = 0x01,
-    DEVICE = 0x02,
-    LOCATION_ALL = 0x0F,
+    HOST          = 0x01,
+    DEVICE        = 0x02,
+    LOCATION_ALL  = 0x0F,
 };
 
 // The memory layout
@@ -31,11 +31,11 @@ enum : layoutT
 using reduceOpT = uint32_t;
 enum : reduceOpT
 {
-    SUM = 0x00,
-    MAX = 0x01,
-    MIN = 0X02,
+    SUM   = 0x00,
+    MAX   = 0x01,
+    MIN   = 0X02,
     NORM2 = 0X04,  // L2 norm squared
-    DOT = 0x08,    // dot product
+    DOT   = 0x08,  // dot product
 
 };
 
@@ -69,17 +69,25 @@ class RXMeshAttribute
    public:
     //********************** Constructors/Destructor
     RXMeshAttribute()
-        : m_name(nullptr), m_num_mesh_elements(0),
-          m_num_attribute_per_element(0), m_allocated(LOCATION_NONE),
-          m_h_attr(nullptr), m_d_attr(nullptr), m_layout(AoS),
-          d_axpy_alpha(nullptr), d_axpy_beta(nullptr),
-          m_is_axpy_allocated(false), m_is_reduce_allocated(false),
-          m_reduce_temp_storage_bytes(0), m_d_reduce_temp_storage(nullptr),
-          m_d_reduce_output(nullptr), m_reduce_streams(nullptr),
+        : m_name(nullptr),
+          m_num_mesh_elements(0),
+          m_num_attribute_per_element(0),
+          m_allocated(LOCATION_NONE),
+          m_h_attr(nullptr),
+          m_d_attr(nullptr),
+          m_layout(AoS),
+          d_axpy_alpha(nullptr),
+          d_axpy_beta(nullptr),
+          m_is_axpy_allocated(false),
+          m_is_reduce_allocated(false),
+          m_reduce_temp_storage_bytes(0),
+          m_d_reduce_temp_storage(nullptr),
+          m_d_reduce_output(nullptr),
+          m_reduce_streams(nullptr),
           m_norm2_temp_buffer(nullptr)
     {
 
-        this->m_name = (char*)malloc(sizeof(char) * 1);
+        this->m_name    = (char*)malloc(sizeof(char) * 1);
         this->m_name[0] = '\0';
         allocate(0, LOCATION_NONE);
         m_pitch.x = 0;
@@ -87,11 +95,17 @@ class RXMeshAttribute
     }
 
     RXMeshAttribute(const char* const name)
-        : m_name(nullptr), m_num_mesh_elements(0),
-          m_num_attribute_per_element(0), m_allocated(LOCATION_NONE),
-          m_h_attr(nullptr), m_d_attr(nullptr), m_layout(AoS),
-          d_axpy_alpha(nullptr), d_axpy_beta(nullptr),
-          m_is_axpy_allocated(false), m_is_reduce_allocated(false),
+        : m_name(nullptr),
+          m_num_mesh_elements(0),
+          m_num_attribute_per_element(0),
+          m_allocated(LOCATION_NONE),
+          m_h_attr(nullptr),
+          m_d_attr(nullptr),
+          m_layout(AoS),
+          d_axpy_alpha(nullptr),
+          d_axpy_beta(nullptr),
+          m_is_axpy_allocated(false),
+          m_is_reduce_allocated(false),
           m_reduce_temp_storage_bytes(0)
     {
 
@@ -173,7 +187,8 @@ class RXMeshAttribute
         if ((target & HOST) == HOST) {
             assert((m_allocated & HOST) == HOST);
             for (uint32_t i = 0;
-                 i < m_num_mesh_elements * m_num_attribute_per_element; ++i) {
+                 i < m_num_mesh_elements * m_num_attribute_per_element;
+                 ++i) {
                 m_h_attr[i] = value;
             }
         }
@@ -184,14 +199,14 @@ class RXMeshAttribute
     //********************** Memory Manipulation
     void init(uint32_t   num_elements,
               uint32_t   num_attributes_per_elements,
-              locationT  target = DEVICE,
-              layoutT    layout = AoS,
-              const bool with_axpy_alloc = true,
+              locationT  target            = DEVICE,
+              layoutT    layout            = AoS,
+              const bool with_axpy_alloc   = true,
               const bool with_reduce_alloc = true)
     {
         release();
-        m_allocated = LOCATION_NONE;
-        this->m_num_mesh_elements = num_elements;
+        m_allocated                       = LOCATION_NONE;
+        this->m_num_mesh_elements         = num_elements;
         this->m_num_attribute_per_element = num_attributes_per_elements;
         if (num_elements == 0) {
             return;
@@ -258,10 +273,14 @@ class RXMeshAttribute
                 T*     d_out(NULL);
                 m_d_reduce_temp_storage[0] = NULL;
                 cub::DeviceReduce::Sum(m_d_reduce_temp_storage[0],
-                                       norm2_temp_bytes, m_d_attr, d_out,
+                                       norm2_temp_bytes,
+                                       m_d_attr,
+                                       d_out,
                                        num_blocks);
                 cub::DeviceReduce::Sum(m_d_reduce_temp_storage[0],
-                                       other_reduce_temp_bytes, m_d_attr, d_out,
+                                       other_reduce_temp_bytes,
+                                       m_d_attr,
+                                       d_out,
                                        m_num_mesh_elements);
                 m_reduce_temp_storage_bytes =
                     std::max(norm2_temp_bytes, other_reduce_temp_bytes);
@@ -290,7 +309,8 @@ class RXMeshAttribute
                         "with #mesh_elemnts = {} and #attributes per element = "
                         "{}" +
                             location_to_string(HOST),
-                        num_mesh_elements, m_num_attribute_per_element);
+                        num_mesh_elements,
+                        m_num_attribute_per_element);
                 }
             }
             m_allocated = m_allocated | HOST;
@@ -333,13 +353,15 @@ class RXMeshAttribute
 
         if (source == HOST && target == DEVICE) {
             CUDA_ERROR(cudaMemcpy(
-                m_d_attr, m_h_attr,
+                m_d_attr,
+                m_h_attr,
                 sizeof(T) * m_num_mesh_elements * m_num_attribute_per_element,
                 cudaMemcpyHostToDevice));
 
         } else if (source == DEVICE && target == HOST) {
             CUDA_ERROR(cudaMemcpy(
-                m_h_attr, m_d_attr,
+                m_h_attr,
+                m_d_attr,
                 sizeof(T) * m_num_mesh_elements * m_num_attribute_per_element,
                 cudaMemcpyDeviceToHost));
         }
@@ -350,7 +372,7 @@ class RXMeshAttribute
 
         if (((target & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
             free(m_h_attr);
-            m_h_attr = nullptr;
+            m_h_attr    = nullptr;
             m_allocated = m_allocated & (~HOST);
         }
 
@@ -362,8 +384,8 @@ class RXMeshAttribute
 
         if (target == LOCATION_ALL || m_allocated == 0) {
             m_num_mesh_elements = 0;
-            m_pitch.x = 0;
-            m_pitch.y = 0;
+            m_pitch.x           = 0;
+            m_pitch.y           = 0;
 
             if (m_is_axpy_allocated) {
                 GPU_FREE(d_axpy_alpha);
@@ -435,7 +457,8 @@ class RXMeshAttribute
             }
 
             std::memcpy(
-                (void*)m_h_attr, source.m_h_attr,
+                (void*)m_h_attr,
+                source.m_h_attr,
                 m_num_mesh_elements * m_num_attribute_per_element * sizeof(T));
         }
 
@@ -455,7 +478,8 @@ class RXMeshAttribute
             }
 
             CUDA_ERROR(cudaMemcpy(
-                m_d_attr, source.m_d_attr,
+                m_d_attr,
+                source.m_d_attr,
                 m_num_mesh_elements * m_num_attribute_per_element * sizeof(T),
                 cudaMemcpyDeviceToDevice));
         }
@@ -475,7 +499,8 @@ class RXMeshAttribute
             }
 
             CUDA_ERROR(cudaMemcpy(
-                m_h_attr, source.m_d_attr,
+                m_h_attr,
+                source.m_d_attr,
                 m_num_mesh_elements * m_num_attribute_per_element * sizeof(T),
                 cudaMemcpyDeviceToHost));
         }
@@ -495,7 +520,8 @@ class RXMeshAttribute
             }
 
             CUDA_ERROR(cudaMemcpy(
-                m_d_attr, source.m_h_attr,
+                m_d_attr,
+                source.m_h_attr,
                 m_num_mesh_elements * m_num_attribute_per_element * sizeof(T),
                 cudaMemcpyHostToDevice));
         }
@@ -534,8 +560,8 @@ class RXMeshAttribute
                 const uint32_t num_cols = (m_layout == AoS) ?
                                               m_num_attribute_per_element :
                                               m_num_mesh_elements;
-                in_place_matrix_transpose(m_h_attr, m_h_attr + size,
-                                          uint64_t(num_cols));
+                in_place_matrix_transpose(
+                    m_h_attr, m_h_attr + size, uint64_t(num_cols));
 
                 m_layout = (m_layout == SoA) ? AoS : SoA;
                 set_pitch();
@@ -549,9 +575,9 @@ class RXMeshAttribute
     void axpy(const RXMeshAttribute<T>& X,
               const Vector<N, T>        alpha,
               const Vector<N, T>        beta,
-              const locationT           location = DEVICE,
+              const locationT           location     = DEVICE,
               const uint32_t            attribute_id = INVALID32,
-              cudaStream_t              stream = NULL)
+              cudaStream_t              stream       = NULL)
     {
         // Implements
         // Y = alpha*X + beta*Y
@@ -575,12 +601,16 @@ class RXMeshAttribute
             const uint32_t blocks =
                 DIVIDE_UP(m_num_mesh_elements, m_block_size);
 
-            CUDA_ERROR(cudaMemcpyAsync(d_axpy_alpha, (void*)&alpha,
+            CUDA_ERROR(cudaMemcpyAsync(d_axpy_alpha,
+                                       (void*)&alpha,
                                        sizeof(Vector<N, T>),
-                                       cudaMemcpyHostToDevice, stream));
-            CUDA_ERROR(cudaMemcpyAsync(d_axpy_beta, (void*)&beta,
+                                       cudaMemcpyHostToDevice,
+                                       stream));
+            CUDA_ERROR(cudaMemcpyAsync(d_axpy_beta,
+                                       (void*)&beta,
                                        sizeof(Vector<N, T>),
-                                       cudaMemcpyHostToDevice, stream));
+                                       cudaMemcpyHostToDevice,
+                                       stream));
 
             rxmesh_attribute_axpy<T><<<blocks, m_block_size, 0, stream>>>(
                 X, d_axpy_alpha, *this, d_axpy_beta, attribute_id);
@@ -600,7 +630,7 @@ class RXMeshAttribute
     template <uint32_t N>
     void reduce(Vector<N, T>&             h_output,
                 const reduceOpT           op,
-                const RXMeshAttribute<T>* other = nullptr,
+                const RXMeshAttribute<T>* other    = nullptr,
                 const locationT           location = DEVICE)
     {
         if (N < m_num_attribute_per_element) {
@@ -608,7 +638,8 @@ class RXMeshAttribute
                 "RXMeshAttribute::reduce() the output Vector size should be "
                 ">= the number of attributes per mesh element. Output "
                 "Vector size = {}, number of attributes per mesh element = {}",
-                N, m_num_attribute_per_element);
+                N,
+                m_num_attribute_per_element);
         }
 
 
@@ -625,7 +656,8 @@ class RXMeshAttribute
                             m_d_reduce_temp_storage[i],
                             m_reduce_temp_storage_bytes,
                             m_d_attr + i * m_num_mesh_elements,
-                            m_d_reduce_output[i], m_num_mesh_elements,
+                            m_d_reduce_output[i],
+                            m_num_mesh_elements,
                             m_reduce_streams[i]);
                         break;
                     }
@@ -634,7 +666,8 @@ class RXMeshAttribute
                             m_d_reduce_temp_storage[i],
                             m_reduce_temp_storage_bytes,
                             m_d_attr + i * m_num_mesh_elements,
-                            m_d_reduce_output[i], m_num_mesh_elements,
+                            m_d_reduce_output[i],
+                            m_num_mesh_elements,
                             m_reduce_streams[i]);
                         break;
                     }
@@ -643,7 +676,8 @@ class RXMeshAttribute
                             m_d_reduce_temp_storage[i],
                             m_reduce_temp_storage_bytes,
                             m_d_attr + i * m_num_mesh_elements,
-                            m_d_reduce_output[i], m_num_mesh_elements,
+                            m_d_reduce_output[i],
+                            m_num_mesh_elements,
                             m_reduce_streams[i]);
                         break;
                     }
@@ -652,15 +686,18 @@ class RXMeshAttribute
                             DIVIDE_UP(m_num_mesh_elements, m_block_size);
                         // 1st pass
                         rxmesh_attribute_norm2<T, m_block_size>
-                            <<<num_blocks, m_block_size, 0,
-                               m_reduce_streams[i]>>>(*this, i,
-                                                      m_norm2_temp_buffer[i]);
+                            <<<num_blocks,
+                               m_block_size,
+                               0,
+                               m_reduce_streams[i]>>>(
+                                *this, i, m_norm2_temp_buffer[i]);
 
                         // 2nd pass
                         cub::DeviceReduce::Sum(m_d_reduce_temp_storage[i],
                                                m_reduce_temp_storage_bytes,
                                                m_norm2_temp_buffer[i],
-                                               m_d_reduce_output[i], num_blocks,
+                                               m_d_reduce_output[i],
+                                               num_blocks,
                                                m_reduce_streams[i]);
                         break;
                     }
@@ -674,15 +711,18 @@ class RXMeshAttribute
                             DIVIDE_UP(m_num_mesh_elements, m_block_size);
                         // 1st pass
                         rxmesh_attribute_dot<T, m_block_size>
-                            <<<num_blocks, m_block_size, 0,
-                               m_reduce_streams[i]>>>(*this, *other, i,
-                                                      m_norm2_temp_buffer[i]);
+                            <<<num_blocks,
+                               m_block_size,
+                               0,
+                               m_reduce_streams[i]>>>(
+                                *this, *other, i, m_norm2_temp_buffer[i]);
 
                         // 2nd pass
                         cub::DeviceReduce::Sum(m_d_reduce_temp_storage[i],
                                                m_reduce_temp_storage_bytes,
                                                m_norm2_temp_buffer[i],
-                                               m_d_reduce_output[i], num_blocks,
+                                               m_d_reduce_output[i],
+                                               num_blocks,
                                                m_reduce_streams[i]);
                         break;
                     }
@@ -694,8 +734,10 @@ class RXMeshAttribute
                     }
                 }
                 CUDA_ERROR(cudaStreamSynchronize(m_reduce_streams[i]));
-                CUDA_ERROR(cudaMemcpy(&h_output[i], m_d_reduce_output[i],
-                                      sizeof(T), cudaMemcpyDeviceToHost));
+                CUDA_ERROR(cudaMemcpy(&h_output[i],
+                                      m_d_reduce_output[i],
+                                      sizeof(T),
+                                      cudaMemcpyDeviceToHost));
             }
         }
 

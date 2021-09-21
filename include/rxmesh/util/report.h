@@ -14,8 +14,8 @@
 #include "rxmesh/util/util.h"
 #ifdef __NVCC__
 #include "cuda.h"
-#include "rxmesh/util/cuda_query.h"
 #include "rxmesh/kernels/get_arch.cuh"
+#include "rxmesh/util/cuda_query.h"
 #endif
 #include "rxmesh/util/git_sha1.h"
 
@@ -36,11 +36,11 @@ namespace RXMESH {
 struct TestData
 {
     std::vector<float> time_ms;
-    int32_t            num_blocks = -1;
+    int32_t            num_blocks  = -1;
     int32_t            num_threads = -1;
     std::vector<bool>  passed;
-    std::string        test_name = "";
-    float              dyn_smem = -1;
+    std::string        test_name   = "";
+    float              dyn_smem    = -1;
     float              static_smem = -1;
 };
 
@@ -60,12 +60,12 @@ struct Report
                         m_doc.GetAllocator());
         std::string str = g_GIT_SHA1;
         m_doc.AddMember("git_sha",
-                        rapidjson::Value().SetString(str.c_str(), str.length(),
-                                                     m_doc.GetAllocator()),
+                        rapidjson::Value().SetString(
+                            str.c_str(), str.length(), m_doc.GetAllocator()),
                         m_doc.GetAllocator());
 
         // Time
-        auto t = std::time(nullptr);
+        auto t  = std::time(nullptr);
         auto tm = *std::localtime(&t);
         {
             std::ostringstream oss;
@@ -80,8 +80,8 @@ struct Report
 
             m_doc.AddMember(
                 "date",
-                rapidjson::Value().SetString(str.c_str(), str.length(),
-                                             m_doc.GetAllocator()),
+                rapidjson::Value().SetString(
+                    str.c_str(), str.length(), m_doc.GetAllocator()),
                 m_doc.GetAllocator());
         }
     }
@@ -94,8 +94,8 @@ struct Report
             cmd = cmd + " " + std::string(argv[i]);
         }
         m_doc.AddMember("command_line",
-                        rapidjson::Value().SetString(cmd.c_str(), cmd.length(),
-                                                     m_doc.GetAllocator()),
+                        rapidjson::Value().SetString(
+                            cmd.c_str(), cmd.length(), m_doc.GetAllocator()),
                         m_doc.GetAllocator());
     }
 
@@ -145,22 +145,25 @@ struct Report
 
         // Memory
         add_member("Total amount of global memory (MB)",
-                   (float)devProp.totalGlobalMem / 1048576.0f, subdoc);
+                   (float)devProp.totalGlobalMem / 1048576.0f,
+                   subdoc);
         add_member("Total amount of shared memory per block (Kb)",
-                   (float)devProp.sharedMemPerBlock / 1024.0f, subdoc);
+                   (float)devProp.sharedMemPerBlock / 1024.0f,
+                   subdoc);
 
         // SM
         add_member("Multiprocessors", devProp.multiProcessorCount, subdoc);
 #ifdef __NVCC__
         add_member("CUDA Cores/MP",
-                   convert_SMV_to_cores(devProp.major, devProp.minor), subdoc);
+                   convert_SMV_to_cores(devProp.major, devProp.minor),
+                   subdoc);
 #endif
 
         // Clocks
-        add_member("GPU Max Clock rate (GHz)", devProp.clockRate * 1e-6f,
-                   subdoc);
-        add_member("Memory Clock rate (GHz)", devProp.memoryClockRate * 1e-6f,
-                   subdoc);
+        add_member(
+            "GPU Max Clock rate (GHz)", devProp.clockRate * 1e-6f, subdoc);
+        add_member(
+            "Memory Clock rate (GHz)", devProp.memoryClockRate * 1e-6f, subdoc);
         add_member("Memory Bus Width (bit)", devProp.memoryBusWidth, subdoc);
         add_member("Peak Memory Bandwidth (GB/s)",
                    2.0 * devProp.memoryClockRate *
@@ -194,8 +197,8 @@ struct Report
 
 
 #ifdef _MSC_VER
-        add_member("Microsoft Full Compiler Version", int32_t(_MSC_FULL_VER),
-                   subdoc);
+        add_member(
+            "Microsoft Full Compiler Version", int32_t(_MSC_FULL_VER), subdoc);
         add_member("Microsoft Compiler Version", int32_t(_MSC_VER), subdoc);
 #else
 
@@ -285,21 +288,21 @@ struct Report
         add_member("num_lloyd_run", rxmesh.get_num_lloyd_run(), subdoc);
         add_member("patching_time", rxmesh.get_patching_time(), subdoc);
         uint32_t min_patch_size(0), max_patch_size(0), avg_patch_size(0);
-        rxmesh.get_max_min_avg_patch_size(min_patch_size, max_patch_size,
-                                           avg_patch_size);
+        rxmesh.get_max_min_avg_patch_size(
+            min_patch_size, max_patch_size, avg_patch_size);
         add_member("min_patch_size", min_patch_size, subdoc);
         add_member("max_patch_size", max_patch_size, subdoc);
         add_member("avg_patch_size", avg_patch_size, subdoc);
         add_member("per_patch_max_vertices",
-                   rxmesh.get_per_patch_max_vertices(), subdoc);
-        add_member("per_patch_max_edges", rxmesh.get_per_patch_max_edges(),
+                   rxmesh.get_per_patch_max_vertices(),
                    subdoc);
-        add_member("per_patch_max_faces", rxmesh.get_per_patch_max_faces(),
-                   subdoc);
-        add_member("ribbon_overhead (%)", rxmesh.get_ribbon_overhead(),
-                   subdoc);
-        add_member("total_gpu_storage (mb)", rxmesh.get_gpu_storage_mb(),
-                   subdoc);
+        add_member(
+            "per_patch_max_edges", rxmesh.get_per_patch_max_edges(), subdoc);
+        add_member(
+            "per_patch_max_faces", rxmesh.get_per_patch_max_faces(), subdoc);
+        add_member("ribbon_overhead (%)", rxmesh.get_ribbon_overhead(), subdoc);
+        add_member(
+            "total_gpu_storage (mb)", rxmesh.get_gpu_storage_mb(), subdoc);
         m_doc.AddMember("Model", subdoc, m_doc.GetAllocator());
     }
 
@@ -322,8 +325,8 @@ struct Report
         }
 
         if (test_data.static_smem != -1) {
-            add_member("static_shared_memory (b)", test_data.static_smem,
-                       subdoc);
+            add_member(
+                "static_shared_memory (b)", test_data.static_smem, subdoc);
         }
 
         if (!test_data.passed.empty()) {
@@ -359,8 +362,8 @@ struct Report
     void add_member(std::string member_key, const int32_t member_val, docT& doc)
     {
         rapidjson::Value key(member_key.c_str(), doc.GetAllocator());
-        doc.AddMember(key, rapidjson::Value().SetInt(member_val),
-                      doc.GetAllocator());
+        doc.AddMember(
+            key, rapidjson::Value().SetInt(member_val), doc.GetAllocator());
     }
     template <typename docT>
     void add_member(std::string    member_key,
@@ -368,24 +371,24 @@ struct Report
                     docT&          doc)
     {
         rapidjson::Value key(member_key.c_str(), doc.GetAllocator());
-        doc.AddMember(key, rapidjson::Value().SetUint(member_val),
-                      doc.GetAllocator());
+        doc.AddMember(
+            key, rapidjson::Value().SetUint(member_val), doc.GetAllocator());
     }
 
     template <typename docT>
     void add_member(std::string member_key, const double member_val, docT& doc)
     {
         rapidjson::Value key(member_key.c_str(), doc.GetAllocator());
-        doc.AddMember(key, rapidjson::Value().SetDouble(member_val),
-                      doc.GetAllocator());
+        doc.AddMember(
+            key, rapidjson::Value().SetDouble(member_val), doc.GetAllocator());
     }
 
     template <typename docT>
     void add_member(std::string member_key, const bool member_val, docT& doc)
     {
         rapidjson::Value key(member_key.c_str(), doc.GetAllocator());
-        doc.AddMember(key, rapidjson::Value().SetBool(member_val),
-                      doc.GetAllocator());
+        doc.AddMember(
+            key, rapidjson::Value().SetBool(member_val), doc.GetAllocator());
     }
 
     template <typename docT>

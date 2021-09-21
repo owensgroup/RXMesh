@@ -90,9 +90,9 @@ __launch_bounds__(blockThreads) __global__
     auto init_lambda = [&](uint32_t p_id, RXMeshIterator& iter) {
         if (use_uniform_laplace) {
             const T valence = static_cast<T>(iter.size());
-            B(p_id, 0) = X(p_id, 0) * valence;
-            B(p_id, 1) = X(p_id, 1) * valence;
-            B(p_id, 2) = X(p_id, 2) * valence;
+            B(p_id, 0)      = X(p_id, 0) * valence;
+            B(p_id, 1)      = X(p_id, 1) * valence;
+            B(p_id, 2)      = X(p_id, 2) * valence;
         } else {
 
             // using Laplace weights
@@ -121,8 +121,8 @@ __launch_bounds__(blockThreads) __global__
 
     // With uniform Laplacian, we just need the valence, thus we
     // call query_block_dispatcher and set oriented to false
-    query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda,
-                                                 !use_uniform_laplace);
+    query_block_dispatcher<Op::VV, blockThreads>(
+        context, init_lambda, !use_uniform_laplace);
 }
 
 /**
@@ -208,7 +208,7 @@ __launch_bounds__(blockThreads) __global__
         assert(!isnan(v_weight));
         assert(!isinf(v_weight));
 
-        T diag = ((1.0 / v_weight) + sum_e_weight);
+        T diag       = ((1.0 / v_weight) + sum_e_weight);
         out(p_id, 0) = x[0] + diag * in(p_id, 0);
         out(p_id, 1) = x[1] + diag * in(p_id, 1);
         out(p_id, 2) = x[2] + diag * in(p_id, 2);
@@ -216,6 +216,6 @@ __launch_bounds__(blockThreads) __global__
 
     // With uniform Laplacian, we just need the valence, thus we
     // call query_block_dispatcher and set oriented to false
-    query_block_dispatcher<Op::VV, blockThreads>(context, matvec_lambda,
-                                                 !use_uniform_laplace);
+    query_block_dispatcher<Op::VV, blockThreads>(
+        context, matvec_lambda, !use_uniform_laplace);
 }

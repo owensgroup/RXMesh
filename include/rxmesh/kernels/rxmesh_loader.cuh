@@ -9,8 +9,8 @@
 namespace RXMESH {
 
 /**
-* load_patch_ad_size()
-*/
+ * load_patch_ad_size()
+ */
 __device__ __forceinline__ void load_patch_ad_size(const RXMeshContext& context,
                                                    const uint32_t       p_id,
                                                    uint4&               ad_size,
@@ -63,7 +63,7 @@ __device__ __forceinline__ void load_patch_edges(const RXMeshContext& context,
     uint32_t* patch_edges32 = (uint32_t*)(patch_edges);
 #pragma unroll 2
     for (uint32_t i = threadIdx.x; i < size32; i += blockDim.x) {
-        uint32_t a = edges_ptr32[i];
+        uint32_t a       = edges_ptr32[i];
         patch_edges32[i] = a;
     }
 }
@@ -81,14 +81,14 @@ __device__ __forceinline__ void load_patch_faces(const RXMeshContext& context,
     // load faces
     assert(ad_sz.w % 3 == 0);
 
-    uint32_t        size32 = ad_sz.w / 2;
+    uint32_t        size32   = ad_sz.w / 2;
     uint32_t        reminder = ad_sz.w % 2;
     const uint32_t* faces_ptr32 =
         (const uint32_t*)(context.get_patches_faces() + ad_sz.z);
     uint32_t* patch_faces32 = (uint32_t*)(patch_faces);
     //#pragma unroll 3
     for (uint32_t i = threadIdx.x; i < size32; i += blockDim.x) {
-        uint32_t a = faces_ptr32[i];
+        uint32_t a       = faces_ptr32[i];
         patch_faces32[i] = a;
     }
 
@@ -111,7 +111,8 @@ __device__ __forceinline__ void load_mapping(const RXMeshContext& context,
 {
     // whole block should be calling this
     for (uint32_t i = threadIdx.x, start = s_ad_size_ltog.x;
-         i < s_ad_size_ltog.y; i += blockDim.x) {
+         i < s_ad_size_ltog.y;
+         i += blockDim.x) {
 
         switch (ele) {
             case ELEMENT::VERTEX:

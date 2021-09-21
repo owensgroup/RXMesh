@@ -17,19 +17,19 @@ double computeSigma_s(
 {
 
 
-    float  offset = 0;
-    float  sum = 0;
+    float  offset  = 0;
+    float  sum     = 0;
     float  sum_sqs = 0;
-    size_t count = vertex_neighbour.size();
+    size_t count   = vertex_neighbour.size();
     for (size_t i = 0; i < count; ++i) {
         TriMesh::Point pj = mesh.point(vertex_neighbour[i]);
-        float          t = (pj - pi) | ni;
-        t = sqrt(t * t);
+        float          t  = (pj - pi) | ni;
+        t                 = sqrt(t * t);
         sum += t;
         sum_sqs += t * t;
     }
     float c = static_cast<float>(count);
-    offset = (sum_sqs / c) - ((sum * sum) / (c * c));
+    offset  = (sum_sqs / c) - ((sum * sum) / (c * c));
 
     float sigma_s =
         (sqrt(offset) < 1.0e-12) ? (sqrt(offset) + 1.0e-12) : sqrt(offset);
@@ -50,17 +50,18 @@ void getAdaptiveVertexNeighbor(
     mark[vh.idx()] = true;
     queue_vertex_handle.push(vh);
     float          radius = 2.0 * sigma_c;
-    TriMesh::Point ci = mesh.point(vh);
+    TriMesh::Point ci     = mesh.point(vh);
 
     while (!queue_vertex_handle.empty()) {
         TriMesh::VertexHandle vh = queue_vertex_handle.front();
         vertex_neighbor.push_back(vh);
         queue_vertex_handle.pop();
         for (TriMesh::VertexVertexIter vv_it = mesh.vv_iter(vh);
-             vv_it.is_valid(); ++vv_it) {
+             vv_it.is_valid();
+             ++vv_it) {
             TriMesh::VertexHandle vh_neighbor = *vv_it;
             if (mark[vh_neighbor.idx()] == false) {
-                TriMesh::Point cj = mesh.point(vh_neighbor);
+                TriMesh::Point cj     = mesh.point(vh_neighbor);
                 float          length = (cj - ci).length();
                 if (length <= radius)
                     queue_vertex_handle.push(vh_neighbor);
@@ -127,12 +128,13 @@ void filtering_openmesh(const int                   num_omp_threads,
             int tid = omp_get_thread_num();
 
             // calculate sigma_c
-            TriMesh::Point  pi = input_mesh.point(*v_it);
-            TriMesh::Normal ni = input_mesh.normal(*v_it);
+            TriMesh::Point  pi      = input_mesh.point(*v_it);
+            TriMesh::Normal ni      = input_mesh.normal(*v_it);
             float           sigma_c = 1e10;
             for (TriMesh::VertexVertexIter vv_it = input_mesh.vv_iter(*v_it);
-                 vv_it.is_valid(); vv_it++) {
-                TriMesh::Point pj = input_mesh.point(*vv_it);
+                 vv_it.is_valid();
+                 vv_it++) {
+                TriMesh::Point pj     = input_mesh.point(*vv_it);
                 float          length = (pi - pj).length();
                 if (length < sigma_c) {
                     sigma_c = length;
@@ -141,8 +143,8 @@ void filtering_openmesh(const int                   num_omp_threads,
 
             // get the neighbor vertices
             vertex_neighbour[tid].clear();
-            getAdaptiveVertexNeighbor(input_mesh, *v_it, sigma_c,
-                                      vertex_neighbour[tid]);
+            getAdaptiveVertexNeighbor(
+                input_mesh, *v_it, sigma_c, vertex_neighbour[tid]);
 
             max_neighbour_size =
                 max(max_neighbour_size, vertex_neighbour[tid].size());
@@ -150,21 +152,21 @@ void filtering_openmesh(const int                   num_omp_threads,
             float sigma_s =
                 computeSigma_s(vertex_neighbour[tid], input_mesh, pi, ni);
 
-            float sum = 0;
+            float sum        = 0;
             float normalizer = 0;
 
             // calculate new vertex position
             for (int iv = 0; iv < (int)vertex_neighbour[tid].size(); iv++) {
                 TriMesh::Point pj = input_mesh.point(vertex_neighbour[tid][iv]);
 
-                float t = (pi - pj).length();
-                float h = (pj - pi) | ni;
+                float t  = (pi - pj).length();
+                float h  = (pj - pi) | ni;
                 float wc = std::exp(-0.5 * t * t / (sigma_c * sigma_c));
                 float ws = std::exp(-0.5 * h * h / (sigma_s * sigma_s));
                 sum += wc * ws * h;
                 normalizer += wc * ws;
             }
-            auto updated_point = pi + ni * (sum / normalizer);
+            auto updated_point      = pi + ni * (sum / normalizer);
             filtered_coord(vert, 0) = updated_point[0];
             filtered_coord(vert, 1) = updated_point[1];
             filtered_coord(vert, 2) = updated_point[2];
@@ -203,7 +205,7 @@ void filtering_openmesh(const int                   num_omp_threads,
     // Finalize report
     report.add_member("total_time (ms)", timer.elapsed_millis());
     RXMESH::TestData td;
-    td.test_name = "MCF";
+    td.test_name   = "MCF";
     td.num_threads = num_omp_threads;
     td.time_ms.push_back(timer.elapsed_millis());
     td.passed.push_back(true);

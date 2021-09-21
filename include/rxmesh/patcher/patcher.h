@@ -209,10 +209,10 @@ class Patcher
     // Stores the patches in compressed format
     std::vector<uint32_t> m_patches_val, m_patches_offset;
 
-    //Stores ribbon in compressed format 
+    // Stores ribbon in compressed format
     std::vector<uint32_t> m_ribbon_ext_val, m_ribbon_ext_offset;
 
-    //Stores neighbour patches in compressed format 
+    // Stores neighbour patches in compressed format
     std::vector<uint32_t> m_neighbour_patches, m_neighbour_patches_offset;
 
     // caching the time taken to construct the patches

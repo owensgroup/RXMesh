@@ -81,8 +81,8 @@ bool test_host(uint32_t attributes_per_element)
     RXMESH::RXMeshAttribute<float> rxmesh_attr;
 
     rxmesh_attr.set_name("float_attr");
-    rxmesh_attr.init(num_mesh_elements, attributes_per_element, RXMESH::HOST,
-                     RXMESH::AoS);
+    rxmesh_attr.init(
+        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -112,8 +112,8 @@ bool test_host(uint32_t attributes_per_element)
 
     // host success variable
     uint32_t h_success(0);
-    CUDA_ERROR(cudaMemcpy(&h_success, d_success, sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
+    CUDA_ERROR(cudaMemcpy(
+        &h_success, d_success, sizeof(uint32_t), cudaMemcpyDeviceToHost));
 
     // free device
     GPU_FREE(d_success);
@@ -235,10 +235,10 @@ bool test_axpy(uint32_t attributes_per_element)
 
     X.set_name("X");
     Y.set_name("Y");
-    X.init(num_mesh_elements, attributes_per_element, RXMESH::HOST,
-           RXMESH::AoS);
-    Y.init(num_mesh_elements, attributes_per_element, RXMESH::HOST,
-           RXMESH::AoS);
+    X.init(
+        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
+    Y.init(
+        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -295,12 +295,12 @@ bool test_reduce()
 {
     using namespace RXMESH;
     constexpr uint32_t             attributes_per_element = 3;
-    uint32_t                       num_mesh_elements = 2048;
+    uint32_t                       num_mesh_elements      = 2048;
     RXMESH::RXMeshAttribute<float> X;
 
     X.set_name("X");
-    X.init(num_mesh_elements, attributes_per_element, RXMESH::HOST,
-           RXMESH::AoS);
+    X.init(
+        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -343,12 +343,12 @@ bool test_norm2()
 {
     using namespace RXMESH;
     constexpr uint32_t             attributes_per_element = 3;
-    uint32_t                       num_mesh_elements = 2048;
+    uint32_t                       num_mesh_elements      = 2048;
     RXMESH::RXMeshAttribute<float> X;
 
     X.set_name("X");
-    X.init(num_mesh_elements, attributes_per_element, RXMESH::HOST,
-           RXMESH::AoS);
+    X.init(
+        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -391,16 +391,16 @@ bool test_dot()
 {
     using namespace RXMESH;
     constexpr uint32_t             attributes_per_element = 3;
-    uint32_t                       num_mesh_elements = 2048;
+    uint32_t                       num_mesh_elements      = 2048;
     RXMESH::RXMeshAttribute<float> X;
     RXMESH::RXMeshAttribute<float> Y;
 
     X.set_name("X");
     Y.set_name("Y");
-    X.init(num_mesh_elements, attributes_per_element, RXMESH::HOST,
-           RXMESH::AoS);
-    Y.init(num_mesh_elements, attributes_per_element, RXMESH::HOST,
-           RXMESH::AoS);
+    X.init(
+        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
+    Y.init(
+        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {

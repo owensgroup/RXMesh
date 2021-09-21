@@ -22,7 +22,7 @@ class RXMeshStatic : public RXMesh<patchSize>
 
     RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
                  std::vector<std::vector<coordT>>&   coordinates,
-                 const bool                          sort = false,
+                 const bool                          sort  = false,
                  const bool                          quite = true)
         : RXMesh<patchSize>(fv, coordinates, sort, quite){};
 
@@ -75,7 +75,8 @@ class RXMeshStatic : public RXMesh<patchSize>
                     "RXMeshStatic::calc_shared_memory() "
                     "TRANSPOSE_ITEM_PER_THREAD = {} needs "
                     "to be increased for op = {}",
-                    TRANSPOSE_ITEM_PER_THREAD, op_to_string(op));
+                    TRANSPOSE_ITEM_PER_THREAD,
+                    op_to_string(op));
             }
         } else if (op == Op::VE || op == Op::EF || op == Op::FF) {
             if (3 * this->m_max_faces_per_patch >
@@ -84,7 +85,8 @@ class RXMeshStatic : public RXMesh<patchSize>
                     "RXMeshStatic::calc_shared_memory() "
                     "TRANSPOSE_ITEM_PER_THREAD = {} needs "
                     "to be increased for op = {}",
-                    TRANSPOSE_ITEM_PER_THREAD, op_to_string(op));
+                    TRANSPOSE_ITEM_PER_THREAD,
+                    op_to_string(op));
             }
         }
 
@@ -194,7 +196,8 @@ class RXMeshStatic : public RXMesh<patchSize>
             RXMESH_TRACE(
                 "RXMesh::calc_shared_memory() launching {} blocks with {} "
                 "threads on the device",
-                launch_box.blocks, blockThreads);
+                launch_box.blocks,
+                blockThreads);
         }
     }
 
@@ -302,7 +305,7 @@ class RXMeshStatic : public RXMesh<patchSize>
         }
 
         uint32_t smem_bytes_static = func_attr.sharedSizeBytes;
-        uint32_t num_regs = func_attr.numRegs;
+        uint32_t num_regs          = func_attr.numRegs;
         int      device_id;
         CUDA_ERROR(cudaGetDevice(&device_id));
         cudaDeviceProp devProp;
@@ -314,8 +317,11 @@ class RXMeshStatic : public RXMesh<patchSize>
                 "{} "
                 "required shared memory = {} (dynamic) +  {} (static) = {} "
                 "(bytes) and {} registers",
-                op_to_string(op), smem_bytes_dyn, smem_bytes_static,
-                smem_bytes_dyn + smem_bytes_static, num_regs);
+                op_to_string(op),
+                smem_bytes_dyn,
+                smem_bytes_static,
+                smem_bytes_dyn + smem_bytes_static,
+                num_regs);
 
             RXMESH_TRACE(
                 "RXMeshStatic::check_shared_memory() available total shared "
@@ -329,7 +335,8 @@ class RXMeshStatic : public RXMesh<patchSize>
                 " RXMeshStatic::check_shared_memory() shared memory needed for"
                 " query_prototype ({} bytes) exceeds the max shared memory "
                 "per block on the current device ({} bytes)",
-                smem_bytes_static + smem_bytes_dyn, devProp.sharedMemPerBlock);
+                smem_bytes_static + smem_bytes_dyn,
+                devProp.sharedMemPerBlock);
             exit(EXIT_FAILURE);
         }
         return static_cast<uint32_t>(smem_bytes_static);

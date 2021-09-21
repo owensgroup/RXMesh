@@ -29,7 +29,11 @@ inline int convert_SMV_to_cores(int major, int minor)
         {0x61, 128},  // Pascal Generation (SM 6.1) GP10x class
         {0x62, 128},  // Pascal Generation (SM 6.2) GP10x class
         {0x70, 64},   // Volta Generation (SM 7.0) GV100 class
-        {0x72, 64},  {0x75, 64}, {0x80, 64}, {0x86, 128}, {-1, -1}};
+        {0x72, 64},
+        {0x75, 64},
+        {0x80, 64},
+        {0x86, 128},
+        {-1, -1}};
 
     int index = 0;
 
@@ -44,7 +48,9 @@ inline int convert_SMV_to_cores(int major, int minor)
     // properly
     printf(
         "MapSMtoCores for SM %d.%d is undefined.  Default to use %d Cores/SM\n",
-        major, minor, nGpuArchCoresPerSM[index - 1].Cores);
+        major,
+        minor,
+        nGpuArchCoresPerSM[index - 1].Cores);
     return nGpuArchCoresPerSM[index - 1].Cores;
 }
 
@@ -71,7 +77,8 @@ cudaDeviceProp cuda_query(const int dev, bool quite = false)
         RXMESH_TRACE("Total number of device: {}", deviceCount);
         RXMESH_TRACE("Using device Number: {}", dev);
         RXMESH_TRACE("Device name: {}", devProp.name);
-        RXMESH_TRACE("Compute Capability: {}.{}", (int)devProp.major,
+        RXMESH_TRACE("Compute Capability: {}.{}",
+                     (int)devProp.major,
                      (int)devProp.minor);
         RXMESH_TRACE("Total amount of global memory (MB): {0:.1f}",
                      (float)devProp.totalGlobalMem / 1048576.0f);
@@ -81,7 +88,8 @@ cudaDeviceProp cuda_query(const int dev, bool quite = false)
                      convert_SMV_to_cores(devProp.major, devProp.minor) *
                          devProp.multiProcessorCount);
         RXMESH_TRACE("GPU Max Clock rate: {0:.1f} MHz ({1:.2f} GHz)",
-                     devProp.clockRate * 1e-3f, devProp.clockRate * 1e-6f);
+                     devProp.clockRate * 1e-3f,
+                     devProp.clockRate * 1e-6f);
         RXMESH_TRACE("Memory Clock rate: {0:.1f} Mhz",
                      devProp.memoryClockRate * 1e-3f);
         RXMESH_TRACE("Memory Bus Width:  {}-bit", devProp.memoryBusWidth);

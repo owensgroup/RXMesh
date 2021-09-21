@@ -65,11 +65,13 @@ class TestUtil
         using namespace RXMESH;
 
         constexpr uint32_t    blockThreads = 128;
-        uint32_t              size = 8144;
+        uint32_t              size         = 8144;
         std::vector<uint32_t> h_src(size, 1);
         uint32_t*             d_src = nullptr;
         CUDA_ERROR(cudaMalloc((void**)&d_src, size * sizeof(uint32_t)));
-        CUDA_ERROR(cudaMemcpy(d_src, h_src.data(), size * sizeof(uint32_t),
+        CUDA_ERROR(cudaMemcpy(d_src,
+                              h_src.data(),
+                              size * sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
 
         k_test_block_exclusive_sum<uint32_t, blockThreads>
@@ -78,7 +80,9 @@ class TestUtil
         CUDA_ERROR(cudaDeviceSynchronize());
         CUDA_ERROR(cudaGetLastError());
 
-        CUDA_ERROR(cudaMemcpy(h_src.data(), d_src, size * sizeof(uint32_t),
+        CUDA_ERROR(cudaMemcpy(h_src.data(),
+                              d_src,
+                              size * sizeof(uint32_t),
                               cudaMemcpyDeviceToHost));
         bool passed = true;
         for (uint32_t i = 0; i < h_src.size(); ++i) {
@@ -137,7 +141,8 @@ class TestUtil
 
         if (item_per_thread * threads > numRows * rowOffset) {
             for (uint32_t i = numRows * rowOffset;
-                 i < item_per_thread * threads; ++i) {
+                 i < item_per_thread * threads;
+                 ++i) {
                 h_src.push_back(INVALID16);
             }
         }
@@ -146,7 +151,8 @@ class TestUtil
         CUDA_ERROR(cudaMalloc((void**)&d_src, h_src.size() * sizeof(uint16_t)));
         CUDA_ERROR(
             cudaMalloc((void**)&d_offset, h_src.size() * sizeof(uint16_t)));
-        CUDA_ERROR(cudaMemcpy(d_src, h_src.data(),
+        CUDA_ERROR(cudaMemcpy(d_src,
+                              h_src.data(),
                               h_src.size() * sizeof(uint16_t),
                               cudaMemcpyHostToDevice));
 
@@ -161,11 +167,13 @@ class TestUtil
         std::vector<uint16_t> h_res(arr_size);
         std::vector<uint16_t> h_res_offset(numCols);
 
-        CUDA_ERROR(cudaMemcpy(h_res.data(), d_offset,
+        CUDA_ERROR(cudaMemcpy(h_res.data(),
+                              d_offset,
                               arr_size * sizeof(uint16_t),
                               cudaMemcpyDeviceToHost));
 
-        CUDA_ERROR(cudaMemcpy(h_res_offset.data(), d_src,
+        CUDA_ERROR(cudaMemcpy(h_res_offset.data(),
+                              d_src,
                               numCols * sizeof(uint16_t),
                               cudaMemcpyDeviceToHost));
 
@@ -178,20 +186,20 @@ class TestUtil
             gold_res_offset[h_src[i]]++;
         }
         // offset
-        uint32_t prv = gold_res_offset[0];
+        uint32_t prv       = gold_res_offset[0];
         gold_res_offset[0] = 0;
         for (uint32_t i = 1; i < numCols; ++i) {
-            uint16_t cur = gold_res_offset[i];
+            uint16_t cur       = gold_res_offset[i];
             gold_res_offset[i] = gold_res_offset[i - 1] + prv;
-            prv = cur;
+            prv                = cur;
         }
         // fill in
         for (uint32_t i = 0; i < arr_size; ++i) {
-            uint16_t col = h_src[i];
-            uint32_t row = i / rowOffset;
+            uint16_t col   = h_src[i];
+            uint32_t row   = i / rowOffset;
             uint16_t start = gold_res_offset[col];
-            uint16_t end = (col == numCols - 1) ? numRows * rowOffset :
-                                                  gold_res_offset[col + 1];
+            uint16_t end   = (col == numCols - 1) ? numRows * rowOffset :
+                                                    gold_res_offset[col + 1];
             for (uint32_t j = start; j < end; ++j) {
                 if (gold_res[j] == INVALID16) {
                     gold_res[j] = row;
@@ -211,8 +219,8 @@ class TestUtil
 
         // compare
         bool passed = true;
-        if (!compare<uint16_t, uint16_t>(h_res.data(), gold_res.data(),
-                                         arr_size, false) ||
+        if (!compare<uint16_t, uint16_t>(
+                h_res.data(), gold_res.data(), arr_size, false) ||
             !compare<uint16_t, uint16_t>(
                 h_res_offset.data(), gold_res_offset.data(), numCols, false)) {
             passed = false;
