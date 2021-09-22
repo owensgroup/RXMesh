@@ -12,14 +12,14 @@
 /**
  * query()
  */
-template <RXMESH::Op op, uint32_t blockThreads>
+template <rxmesh::Op op, uint32_t blockThreads>
 __launch_bounds__(blockThreads) __global__
-    static void query(const RXMESH::RXMeshContext       context,
-                      RXMESH::RXMeshAttribute<uint32_t> d_src,
-                      RXMESH::RXMeshAttribute<uint32_t> output_container,
+    static void query(const rxmesh::RXMeshContext       context,
+                      rxmesh::RXMeshAttribute<uint32_t> d_src,
+                      rxmesh::RXMeshAttribute<uint32_t> output_container,
                       const bool                        oriented = false)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
 
     static_assert(op != Op::EE, "Op::EE is not supported!");
 

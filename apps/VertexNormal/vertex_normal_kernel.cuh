@@ -10,11 +10,11 @@
  */
 template <typename T, uint32_t blockThreads>
 __launch_bounds__(blockThreads, 6) __global__
-    static void compute_vertex_normal(const RXMESH::RXMeshContext context,
-                                      RXMESH::RXMeshAttribute<T>  coords,
-                                      RXMESH::RXMeshAttribute<T>  normals)
+    static void compute_vertex_normal(const rxmesh::RXMeshContext context,
+                                      rxmesh::RXMeshAttribute<T>  coords,
+                                      rxmesh::RXMeshAttribute<T>  normals)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     auto vn_lambda = [&](uint32_t face_id, RXMeshIterator& fv) {
         // get the face's three vertices coordinates
         Vector<3, T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));

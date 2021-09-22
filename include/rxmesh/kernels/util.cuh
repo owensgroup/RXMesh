@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 #include <stdint.h>
 
-namespace RXMESH {
+namespace rxmesh {
 
 /**
  * memcpy()
@@ -151,4 +151,4 @@ __device__ __forceinline__ unsigned dynamic_smem_size()
 }
 
 
-}  // namespace RXMESH
+}  // namespace rxmesh

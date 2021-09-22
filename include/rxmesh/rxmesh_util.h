@@ -2,7 +2,7 @@
 
 #include "rxmesh/rxmesh.h"
 
-namespace RXMESH {
+namespace rxmesh {
 
 /**
  * io_elements()
@@ -26,4 +26,4 @@ void __device__ __host__ __inline__ io_elements(const Op& op,
         output_ele = ELEMENT::FACE;
     }
 }
-}  // namespace RXMESH
+}  // namespace rxmesh

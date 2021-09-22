@@ -8,7 +8,7 @@
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/timer.h"
 
-namespace RXMESH {
+namespace rxmesh {
 
 template <uint32_t patchSize = PATCH_SIZE>
 class RXMeshStatic : public RXMesh<patchSize>
@@ -194,7 +194,7 @@ class RXMeshStatic : public RXMesh<patchSize>
 
         if (!this->m_quite) {
             RXMESH_TRACE(
-                "RXMesh::calc_shared_memory() launching {} blocks with {} "
+                "rxmesh::calc_shared_memory() launching {} blocks with {} "
                 "threads on the device",
                 launch_box.blocks,
                 blockThreads);
@@ -342,4 +342,4 @@ class RXMeshStatic : public RXMesh<patchSize>
         return static_cast<uint32_t>(smem_bytes_static);
     }
 };
-}  // namespace RXMESH
+}  // namespace rxmesh

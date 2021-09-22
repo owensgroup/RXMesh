@@ -1,7 +1,7 @@
 #pragma once
 #include <cub/block/block_reduce.cuh>
 #include "rxmesh/util/macros.h"
-namespace RXMESH {
+namespace rxmesh {
 
 template <class T>
 class RXMeshAttribute;
@@ -84,4 +84,4 @@ __global__ void rxmesh_attribute_dot(const RXMeshAttribute<T> X,
         d_block_output[blockIdx.x] = block_sum;
     }
 }
-}  // namespace RXMESH
+}  // namespace rxmesh

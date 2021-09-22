@@ -35,7 +35,7 @@ struct arg
 
 TEST(App, MCF)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     using dataT = float;
 
     if (Arg.shuffle) {
@@ -77,7 +77,7 @@ TEST(App, MCF)
     }
 
     //*** OpenMesh Impl
-    RXMESH::RXMeshAttribute<dataT> ground_truth;
+    rxmesh::RXMeshAttribute<dataT> ground_truth;
     mcf_openmesh(omp_get_max_threads(), input_mesh, ground_truth);
 
     //*** RXMesh Impl
@@ -90,7 +90,7 @@ TEST(App, MCF)
 
 int main(int argc, char** argv)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     Log::init();
 
     ::testing::InitGoogleTest(&argc, argv);

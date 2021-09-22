@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-namespace RXMESH {
+namespace rxmesh {
 
 struct RXMeshIterator
 {
@@ -127,4 +127,4 @@ struct RXMeshIterator
         assert(m_end > m_begin);
     }
 };
-}  // namespace RXMESH
+}  // namespace rxmesh

@@ -3,7 +3,7 @@
 
 TEST(RXMESH, Vector)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
 
     // constrctors
     Vector3f v0(0.5f);

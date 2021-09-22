@@ -26,7 +26,7 @@ struct RXMeshTestArg
 
 int main(int argc, char** argv)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     Log::init();
 
     ::testing::InitGoogleTest(&argc, argv);

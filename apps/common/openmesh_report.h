@@ -1,12 +1,12 @@
 #include "rxmesh/util/report.h"
 
-class OpenMeshReport : public RXMESH::Report
+class OpenMeshReport : public rxmesh::Report
 {
    public:
-    OpenMeshReport() : RXMESH::Report()
+    OpenMeshReport() : rxmesh::Report()
     {
     }
-    OpenMeshReport(const std::string& record_name) : RXMESH::Report(record_name)
+    OpenMeshReport(const std::string& record_name) : rxmesh::Report(record_name)
     {
     }
 

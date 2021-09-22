@@ -12,10 +12,10 @@
  */
 template <typename T>
 __global__ static void init_PR(const uint32_t                   num_vertices,
-                               const RXMESH::RXMeshAttribute<T> B,
-                               const RXMESH::RXMeshAttribute<T> S,
-                               RXMESH::RXMeshAttribute<T>       R,
-                               RXMESH::RXMeshAttribute<T>       P)
+                               const rxmesh::RXMeshAttribute<T> B,
+                               const rxmesh::RXMeshAttribute<T> S,
+                               rxmesh::RXMeshAttribute<T>       R,
+                               rxmesh::RXMeshAttribute<T>       P)
 {
     // r = b-s = b - Ax
     // p= r
@@ -40,11 +40,11 @@ edge_cotan_weight(const uint32_t                    p_id,
                   const uint32_t                    r_id,
                   const uint32_t                    q_id,
                   const uint32_t                    s_id,
-                  const RXMESH::RXMeshAttribute<T>& X)
+                  const rxmesh::RXMeshAttribute<T>& X)
 {
     // Get the edge weight between the two vertices p-r where
     // q and s composes the diamond around p-r
-    using namespace RXMESH;
+    using namespace rxmesh;
 
     const Vector<3, T> p(X(p_id, 0), X(p_id, 1), X(p_id, 2));
     const Vector<3, T> r(X(r_id, 0), X(r_id, 1), X(r_id, 2));
@@ -62,11 +62,11 @@ __device__ __forceinline__ T
 partial_voronoi_area(const uint32_t                    p_id,  // center
                      const uint32_t                    q_id,  // before center
                      const uint32_t                    r_id,  // after center
-                     const RXMESH::RXMeshAttribute<T>& X)
+                     const rxmesh::RXMeshAttribute<T>& X)
 {
     // compute partial Voronoi area of the center vertex that is associated with
     // the triangle p->q->r (oriented ccw)
-    using namespace RXMESH;
+    using namespace rxmesh;
 
     const Vector<3, T> p(X(p_id, 0), X(p_id, 1), X(p_id, 2));
     const Vector<3, T> q(X(q_id, 0), X(q_id, 1), X(q_id, 2));
@@ -80,12 +80,12 @@ partial_voronoi_area(const uint32_t                    p_id,  // center
  */
 template <typename T, uint32_t blockThreads>
 __launch_bounds__(blockThreads) __global__
-    static void init_B(const RXMESH::RXMeshContext      context,
-                       const RXMESH::RXMeshAttribute<T> X,
-                       RXMESH::RXMeshAttribute<T>       B,
+    static void init_B(const rxmesh::RXMeshContext      context,
+                       const rxmesh::RXMeshAttribute<T> X,
+                       rxmesh::RXMeshAttribute<T>       B,
                        const bool                       use_uniform_laplace)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
 
     auto init_lambda = [&](uint32_t p_id, RXMeshIterator& iter) {
         if (use_uniform_laplace) {
@@ -130,10 +130,10 @@ __launch_bounds__(blockThreads) __global__
  */
 template <typename T, uint32_t blockThreads>
 __launch_bounds__(blockThreads) __global__
-    static void mcf_matvec(const RXMESH::RXMeshContext      context,
-                           const RXMESH::RXMeshAttribute<T> coords,
-                           const RXMESH::RXMeshAttribute<T> in,
-                           RXMESH::RXMeshAttribute<T>       out,
+    static void mcf_matvec(const rxmesh::RXMeshContext      context,
+                           const rxmesh::RXMeshAttribute<T> coords,
+                           const rxmesh::RXMeshAttribute<T> in,
+                           rxmesh::RXMeshAttribute<T>       out,
                            const bool                       use_uniform_laplace,
                            const T                          time_step)
 {
@@ -150,7 +150,7 @@ __launch_bounds__(blockThreads) __global__
            \ |  /
              p
     */
-    using namespace RXMESH;
+    using namespace rxmesh;
 
     auto matvec_lambda = [&](uint32_t p_id, RXMeshIterator& iter) {
         T sum_e_weight(0);

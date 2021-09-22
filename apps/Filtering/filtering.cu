@@ -29,7 +29,7 @@ struct arg
 
 TEST(App, Filtering)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     using dataT = float;
 
 
@@ -71,7 +71,7 @@ TEST(App, Filtering)
     }
 
     //*** OpenMesh Impl
-    RXMESH::RXMeshAttribute<dataT> ground_truth;
+    rxmesh::RXMeshAttribute<dataT> ground_truth;
     size_t                         max_neighbour_size = 0;
     filtering_openmesh(
         omp_get_max_threads(), input_mesh, ground_truth, max_neighbour_size);
@@ -86,7 +86,7 @@ TEST(App, Filtering)
 
 int main(int argc, char** argv)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     Log::init();
 
     ::testing::InitGoogleTest(&argc, argv);

@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include "cuda_runtime.h"
 
-namespace RXMESH {
+namespace rxmesh {
 
 /**
  * print_arr_uint()
@@ -59,4 +59,4 @@ __device__ __forceinline__ unsigned total_smem_size()
     asm volatile("mov.u32 %0, %total_smem_size;" : "=r"(ret));
     return ret;
 }
-}  // namespace RXMESH
+}  // namespace rxmesh

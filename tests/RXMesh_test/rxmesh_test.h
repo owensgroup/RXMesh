@@ -19,10 +19,10 @@ class RXMeshTest
      */
     template <uint32_t patchSize>
     bool run_query_verifier(
-        const RXMESH::RXMeshStatic<patchSize>&   rxmesh,
-        const RXMESH::Op                         op,
-        const RXMESH::RXMeshAttribute<uint32_t>& input_container,
-        const RXMESH::RXMeshAttribute<uint32_t>& output_container)
+        const rxmesh::RXMeshStatic<patchSize>&   rxmesh,
+        const rxmesh::Op                         op,
+        const rxmesh::RXMeshAttribute<uint32_t>& input_container,
+        const rxmesh::RXMeshAttribute<uint32_t>& output_container)
     {
 
         // run test on specific query operation on an instance of rxmesh. this
@@ -31,34 +31,34 @@ class RXMeshTest
 
         populate_FE(rxmesh);
         switch (op) {
-            case RXMESH::Op::VV:
+            case rxmesh::Op::VV:
                 return test_VV(rxmesh, input_container, output_container);
                 break;
 
-            case RXMESH::Op::VE:
+            case rxmesh::Op::VE:
                 return test_VE(rxmesh, input_container, output_container);
                 break;
 
-            case RXMESH::Op::VF:
+            case rxmesh::Op::VF:
                 return test_VF(rxmesh, input_container, output_container);
                 break;
 
-            case RXMESH::Op::FV:
+            case rxmesh::Op::FV:
                 return test_FV(rxmesh, input_container, output_container);
                 break;
 
-            case RXMESH::Op::FE:
+            case rxmesh::Op::FE:
                 return test_FE(rxmesh, input_container, output_container);
                 break;
 
-            case RXMESH::Op::FF:
+            case rxmesh::Op::FF:
                 return test_FF(rxmesh, input_container, output_container);
                 break;
 
-            case RXMESH::Op::EV:
+            case rxmesh::Op::EV:
                 return test_EV(rxmesh, input_container, output_container);
                 break;
-            case RXMESH::Op::EF:
+            case rxmesh::Op::EF:
                 return test_EF(rxmesh, input_container, output_container);
                 break;
 
@@ -74,9 +74,9 @@ class RXMeshTest
      */
     template <uint32_t patchSize>
     bool run_higher_query_verifier(
-        const RXMESH::RXMeshStatic<patchSize>&   rxmesh,
-        const RXMESH::RXMeshAttribute<uint32_t>& input_container,
-        const RXMESH::RXMeshAttribute<uint32_t>& output_container)
+        const rxmesh::RXMeshStatic<patchSize>&   rxmesh,
+        const rxmesh::RXMeshAttribute<uint32_t>& input_container,
+        const rxmesh::RXMeshAttribute<uint32_t>& output_container)
     {
         populate_FE(rxmesh);
         return test_VVV(rxmesh, input_container, output_container);
@@ -87,7 +87,7 @@ class RXMeshTest
      * run_ltog_mapping_test()
      */
     template <uint32_t patchSize>
-    bool run_ltog_mapping_test(const RXMESH::RXMesh<patchSize>& rxmesh)
+    bool run_ltog_mapping_test(const rxmesh::RXMesh<patchSize>& rxmesh)
     {
         // check if the mapping created for each patch is consistent
         // i.e., what you have in the local index space represents the global
@@ -108,7 +108,7 @@ class RXMeshTest
     std::vector<std::vector<uint32_t>> m_h_FE;
 
     template <uint32_t patchSize>
-    void populate_FE(const RXMESH::RXMesh<patchSize>& rxmesh)
+    void populate_FE(const rxmesh::RXMesh<patchSize>& rxmesh)
     {
 
         // populate m_h_FE (in global space) with global edge numbers
@@ -146,9 +146,9 @@ class RXMeshTest
 
    private:
     template <uint32_t patchSize>
-    bool test_VVV(const RXMESH::RXMeshStatic<patchSize>&   rxmesh,
-                  const RXMESH::RXMeshAttribute<uint32_t>& input_container,
-                  const RXMESH::RXMeshAttribute<uint32_t>& output_container)
+    bool test_VVV(const rxmesh::RXMeshStatic<patchSize>&   rxmesh,
+                  const rxmesh::RXMeshAttribute<uint32_t>& input_container,
+                  const rxmesh::RXMeshAttribute<uint32_t>& output_container)
     {
 
         // construct VV
@@ -184,7 +184,7 @@ class RXMeshTest
                     // but we need to check first if it is not duplicate and
                     // it is not v itself
                     if (candid != v &&
-                        RXMESH::find_index(candid, v_v_v[v]) ==
+                        rxmesh::find_index(candid, v_v_v[v]) ==
                             std::numeric_limits<uint32_t>::max()) {
 
                         v_v_v[v].push_back(candid);
@@ -202,9 +202,9 @@ class RXMeshTest
     }
 
     template <uint32_t patchSize>
-    bool test_VV(const RXMESH::RXMeshStatic<patchSize>&   rxmesh,
-                 const RXMESH::RXMeshAttribute<uint32_t>& input_container,
-                 const RXMESH::RXMeshAttribute<uint32_t>& output_container)
+    bool test_VV(const rxmesh::RXMeshStatic<patchSize>&   rxmesh,
+                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
+                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
     {
 
         // construct VV
@@ -230,9 +230,9 @@ class RXMeshTest
     }
 
     template <uint32_t patchSize>
-    bool test_VE(const RXMESH::RXMeshStatic<patchSize>&   rxmesh,
-                 const RXMESH::RXMeshAttribute<uint32_t>& input_container,
-                 const RXMESH::RXMeshAttribute<uint32_t>& output_container)
+    bool test_VE(const rxmesh::RXMeshStatic<patchSize>&   rxmesh,
+                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
+                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
     {
 
         // construct VE
@@ -258,9 +258,9 @@ class RXMeshTest
     }
 
     template <uint32_t patchSize>
-    bool test_VF(const RXMESH::RXMeshStatic<patchSize>&   rxmesh,
-                 const RXMESH::RXMeshAttribute<uint32_t>& input_container,
-                 const RXMESH::RXMeshAttribute<uint32_t>& output_container)
+    bool test_VF(const rxmesh::RXMeshStatic<patchSize>&   rxmesh,
+                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
+                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
     {
 
         // construct FV
@@ -287,9 +287,9 @@ class RXMeshTest
     }
 
     template <uint32_t patchSize>
-    bool test_FV(const RXMESH::RXMeshStatic<patchSize>&   rxmesh,
-                 const RXMESH::RXMeshAttribute<uint32_t>& input_container,
-                 const RXMESH::RXMeshAttribute<uint32_t>& output_container)
+    bool test_FV(const rxmesh::RXMeshStatic<patchSize>&   rxmesh,
+                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
+                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
     {
 
         // construct FV
@@ -314,9 +314,9 @@ class RXMeshTest
     }
 
     template <uint32_t patchSize>
-    bool test_FE(const RXMESH::RXMeshStatic<patchSize>&   rxmesh,
-                 const RXMESH::RXMeshAttribute<uint32_t>& input_container,
-                 const RXMESH::RXMeshAttribute<uint32_t>& output_container)
+    bool test_FE(const rxmesh::RXMeshStatic<patchSize>&   rxmesh,
+                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
+                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
     {
 
         // construct FE
@@ -349,9 +349,9 @@ class RXMeshTest
     }
 
     template <uint32_t patchSize>
-    bool test_FF(const RXMESH::RXMeshStatic<patchSize>&   rxmesh,
-                 const RXMESH::RXMeshAttribute<uint32_t>& input_container,
-                 const RXMESH::RXMeshAttribute<uint32_t>& output_container)
+    bool test_FF(const rxmesh::RXMeshStatic<patchSize>&   rxmesh,
+                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
+                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
     {
 
         // construct FF
@@ -397,9 +397,9 @@ class RXMeshTest
     }
 
     template <uint32_t patchSize>
-    bool test_EV(const RXMESH::RXMeshStatic<patchSize>&   rxmesh,
-                 const RXMESH::RXMeshAttribute<uint32_t>& input_container,
-                 const RXMESH::RXMeshAttribute<uint32_t>& output_container)
+    bool test_EV(const rxmesh::RXMeshStatic<patchSize>&   rxmesh,
+                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
+                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
     {
 
         // construct EV
@@ -423,9 +423,9 @@ class RXMeshTest
     }
 
     template <uint32_t patchSize>
-    bool test_EF(const RXMESH::RXMeshStatic<patchSize>&   rxmesh,
-                 const RXMESH::RXMeshAttribute<uint32_t>& input_container,
-                 const RXMESH::RXMeshAttribute<uint32_t>& output_container)
+    bool test_EF(const rxmesh::RXMeshStatic<patchSize>&   rxmesh,
+                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
+                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
     {
 
         // construct EF
@@ -450,8 +450,8 @@ class RXMeshTest
 
     bool verifier(const uint32_t*                           element_patch,
                   const std::vector<std::vector<uint32_t>>& mesh_ele,
-                  const RXMESH::RXMeshAttribute<uint32_t>&  input_container,
-                  const RXMESH::RXMeshAttribute<uint32_t>&  output_container)
+                  const rxmesh::RXMeshAttribute<uint32_t>&  input_container,
+                  const rxmesh::RXMeshAttribute<uint32_t>&  output_container)
     {
 
         bool results = true;
@@ -472,7 +472,7 @@ class RXMeshTest
             // edges incident to the vertex v)
             for (uint32_t i = 1; i <= output_container(v, 0); ++i) {
 
-                uint32_t id = RXMESH::find_index(output_container(v, i),
+                uint32_t id = rxmesh::find_index(output_container(v, i),
                                                  mesh_ele[src_ele]);
 
                 if (id == std::numeric_limits<uint32_t>::max()) {
@@ -516,7 +516,7 @@ class RXMeshTest
     }
 
     template <uint32_t patchSize>
-    void check_mapping(const RXMESH::RXMesh<patchSize>& rxmesh,
+    void check_mapping(const rxmesh::RXMesh<patchSize>& rxmesh,
                        const uint32_t                   patch_id,
                        bool&                            is_edges_ok,
                        bool&                            is_faces_ok)
@@ -538,7 +538,7 @@ class RXMeshTest
     }
 
     template <uint32_t patchSize>
-    bool check_mapping_edges(const RXMESH::RXMesh<patchSize>& rxmesh,
+    bool check_mapping_edges(const rxmesh::RXMesh<patchSize>& rxmesh,
                              const uint32_t                   patch_id,
                              const uint32_t                   num_p_edges)
     {
@@ -629,11 +629,11 @@ class RXMeshTest
     }
 
     template <uint32_t patchSize>
-    bool check_mapping_faces(const RXMESH::RXMesh<patchSize>& rxmesh,
+    bool check_mapping_faces(const rxmesh::RXMesh<patchSize>& rxmesh,
                              const uint32_t                   patch_id,
                              const uint32_t                   num_p_faces)
     {
-        using namespace RXMESH;
+        using namespace rxmesh;
         // 1) for each local face in the patch, get its global id using the
         // mapping (using m_h_patches_ltog_f)
 

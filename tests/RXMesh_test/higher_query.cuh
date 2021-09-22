@@ -12,14 +12,14 @@
 /**
  * higher_query()
  */
-template <RXMESH::Op op, uint32_t blockThreads>
+template <rxmesh::Op op, uint32_t blockThreads>
 __launch_bounds__(blockThreads) __global__
-    static void higher_query(const RXMESH::RXMeshContext       context,
-                             RXMESH::RXMeshAttribute<uint32_t> d_src,
-                             RXMESH::RXMeshAttribute<uint32_t> output_container,
+    static void higher_query(const rxmesh::RXMeshContext       context,
+                             rxmesh::RXMeshAttribute<uint32_t> d_src,
+                             rxmesh::RXMeshAttribute<uint32_t> output_container,
                              const bool                        oriented = false)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     uint32_t block_offset = 0;
     if constexpr (op == Op::EV || op == Op::EF) {
         block_offset = context.get_edge_distribution()[blockIdx.x];

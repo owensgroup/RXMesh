@@ -7,7 +7,7 @@
 #include "rxmesh/util/util.h"
 #include "rxmesh/util/vector.h"
 
-namespace RXMESH {
+namespace rxmesh {
 
 // Flags for where the attributes array resides
 using locationT = uint32_t;
@@ -905,4 +905,4 @@ class RXMeshAttribute
     T**           m_norm2_temp_buffer;
     //*********************************************************************
 };
-}  // namespace RXMESH
+}  // namespace rxmesh

@@ -4,7 +4,7 @@
 #include <cub/cub.cuh>
 #include "rxmesh/util/macros.h"
 
-namespace RXMESH {
+namespace rxmesh {
 /**
  * cub_block_exclusive_sum()
  */
@@ -94,4 +94,4 @@ __device__ __forceinline__ void cub_block_exclusive_sum(T*             data,
     }*/
 }
 
-}  // namespace RXMESH
+}  // namespace rxmesh

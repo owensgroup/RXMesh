@@ -7,16 +7,16 @@
 constexpr float EPS = 10e-6;
 
 template <typename T, uint32_t patchSize>
-inline bool geodesic_rxmesh(RXMESH::RXMeshStatic<patchSize>&    rxmesh_static,
+inline bool geodesic_rxmesh(rxmesh::RXMeshStatic<patchSize>&    rxmesh_static,
                             std::vector<std::vector<uint32_t>>& Faces,
                             std::vector<std::vector<T>>&        Verts,
                             const std::vector<uint32_t>&        h_seeds,
-                            const RXMESH::RXMeshAttribute<T>&   ground_truth,
+                            const rxmesh::RXMeshAttribute<T>&   ground_truth,
                             const std::vector<uint32_t>&        h_sorted_index,
                             const std::vector<uint32_t>&        h_limits,
-                            const RXMESH::RXMeshAttribute<uint32_t>& toplesets)
+                            const rxmesh::RXMeshAttribute<uint32_t>& toplesets)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
     // Report
@@ -37,36 +37,36 @@ inline bool geodesic_rxmesh(RXMESH::RXMeshStatic<patchSize>&    rxmesh_static,
 
 
     // input coords
-    RXMESH::RXMeshAttribute<T> input_coord;
+    rxmesh::RXMeshAttribute<T> input_coord;
     input_coord.set_name("coord");
-    input_coord.init(Verts.size(), 3u, RXMESH::LOCATION_ALL);
+    input_coord.init(Verts.size(), 3u, rxmesh::LOCATION_ALL);
     for (uint32_t i = 0; i < Verts.size(); ++i) {
         for (uint32_t j = 0; j < Verts[i].size(); ++j) {
             input_coord(i, j) = Verts[i][j];
         }
     }
-    input_coord.change_layout(RXMESH::HOST);
-    input_coord.move(RXMESH::HOST, RXMESH::DEVICE);
+    input_coord.change_layout(rxmesh::HOST);
+    input_coord.move(rxmesh::HOST, rxmesh::DEVICE);
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh_static.prepare_launch_box(RXMESH::Op::VV, launch_box, false, true);
+    rxmesh_static.prepare_launch_box(rxmesh::Op::VV, launch_box, false, true);
 
 
     // Geodesic distance attribute for all vertices (seeds set to zero
     // and infinity otherwise)
     RXMeshAttribute<T> rxmesh_geo;
-    rxmesh_geo.init(rxmesh_static.get_num_vertices(), 1u, RXMESH::LOCATION_ALL);
-    rxmesh_geo.reset(std::numeric_limits<T>::infinity(), RXMESH::HOST);
+    rxmesh_geo.init(rxmesh_static.get_num_vertices(), 1u, rxmesh::LOCATION_ALL);
+    rxmesh_geo.reset(std::numeric_limits<T>::infinity(), rxmesh::HOST);
     for (uint32_t v : h_seeds) {
         rxmesh_geo(v) = 0;
     }
-    rxmesh_geo.move(RXMESH::HOST, RXMESH::DEVICE);
+    rxmesh_geo.move(rxmesh::HOST, rxmesh::DEVICE);
 
     // second buffer for geodesic distance for double buffering
     RXMeshAttribute<T> rxmesh_geo_2;
-    rxmesh_geo_2.init(rxmesh_static.get_num_vertices(), 1u, RXMESH::DEVICE);
-    rxmesh_geo_2.copy(rxmesh_geo, RXMESH::DEVICE, RXMESH::DEVICE);
+    rxmesh_geo_2.init(rxmesh_static.get_num_vertices(), 1u, rxmesh::DEVICE);
+    rxmesh_geo_2.copy(rxmesh_geo, rxmesh::DEVICE, rxmesh::DEVICE);
 
 
     // Error
@@ -128,7 +128,7 @@ inline bool geodesic_rxmesh(RXMESH::RXMeshStatic<patchSize>&    rxmesh_static,
     CUDA_ERROR(cudaProfilerStop());
 
     // verify
-    rxmesh_geo.copy(*double_buffer[d], RXMESH::DEVICE, RXMESH::HOST);
+    rxmesh_geo.copy(*double_buffer[d], rxmesh::DEVICE, rxmesh::HOST);
     T err = 0;
     for (uint32_t i = 0; i < ground_truth.get_num_mesh_elements(); ++i) {
         if (ground_truth(i) > EPS) {

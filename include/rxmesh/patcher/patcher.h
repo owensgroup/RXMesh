@@ -2,9 +2,9 @@
 
 #include <stdint.h>
 #include <functional>
-namespace RXMESH {
+namespace rxmesh {
 
-namespace PATCHER {
+namespace patcher {
 
 class Patcher
 {
@@ -224,5 +224,5 @@ class Patcher
     //********
 };
 
-}  // namespace PATCHER
-}  // namespace RXMESH
+}  // namespace patcher
+}  // namespace rxmesh

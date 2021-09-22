@@ -4,7 +4,7 @@
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/macros.h"
 
-namespace RXMESH {
+namespace rxmesh {
 inline int convert_SMV_to_cores(int major, int minor)
 {
     // Taken from Nvidia helper_cuda.h to get the number of SM and cuda cores
@@ -102,4 +102,4 @@ cudaDeviceProp cuda_query(const int dev, bool quite = false)
 
     return devProp;
 }
-}  // namespace RXMESH
+}  // namespace rxmesh

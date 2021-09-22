@@ -7,14 +7,14 @@
  * test_vector()
  */
 __global__ static void test_vector(
-    RXMESH::RXMeshAttribute<RXMESH::Vector3f> mesh_attr,
+    rxmesh::RXMeshAttribute<rxmesh::Vector3f> mesh_attr,
     uint32_t*                                 suceess)
 {
 
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         *suceess = 1;
 
-        assert((mesh_attr.get_allocated() & RXMESH::DEVICE) == RXMESH::DEVICE);
+        assert((mesh_attr.get_allocated() & rxmesh::DEVICE) == rxmesh::DEVICE);
         uint32_t num_mesh_elements = mesh_attr.get_num_mesh_elements();
         for (uint32_t i = 0; i < num_mesh_elements; ++i) {
             const auto& vec = mesh_attr(i);
@@ -30,14 +30,14 @@ __global__ static void test_vector(
  * test_values()
  */
 template <class T>
-__global__ static void test_values(RXMESH::RXMeshAttribute<T> mesh_attr,
+__global__ static void test_values(rxmesh::RXMeshAttribute<T> mesh_attr,
                                    uint32_t*                  suceess)
 {
 
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         *suceess = 1;
 
-        assert((mesh_attr.get_allocated() & RXMESH::DEVICE) == RXMESH::DEVICE);
+        assert((mesh_attr.get_allocated() & rxmesh::DEVICE) == rxmesh::DEVICE);
         uint32_t num_mesh_elements = mesh_attr.get_num_mesh_elements();
         for (uint32_t i = 0; i < num_mesh_elements; ++i) {
             for (uint32_t j = 0; j < mesh_attr.get_num_attribute_per_element();
@@ -56,11 +56,11 @@ __global__ static void test_values(RXMESH::RXMeshAttribute<T> mesh_attr,
  * generate_values()
  */
 template <class T>
-__global__ static void generate_values(RXMESH::RXMeshAttribute<T> mesh_attr)
+__global__ static void generate_values(rxmesh::RXMeshAttribute<T> mesh_attr)
 {
 
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        assert((mesh_attr.get_allocated() & RXMESH::DEVICE) == RXMESH::DEVICE);
+        assert((mesh_attr.get_allocated() & rxmesh::DEVICE) == rxmesh::DEVICE);
 
         uint32_t num_mesh_elements = mesh_attr.get_num_mesh_elements();
         for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -75,14 +75,14 @@ __global__ static void generate_values(RXMESH::RXMeshAttribute<T> mesh_attr)
 
 bool test_host(uint32_t attributes_per_element)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     // mesh attr on host
     uint32_t                       num_mesh_elements = 2048;
-    RXMESH::RXMeshAttribute<float> rxmesh_attr;
+    rxmesh::RXMeshAttribute<float> rxmesh_attr;
 
     rxmesh_attr.set_name("float_attr");
     rxmesh_attr.init(
-        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
+        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -92,10 +92,10 @@ bool test_host(uint32_t attributes_per_element)
     }
 
     // change the layout to SoA (good for gpu)
-    rxmesh_attr.change_layout(RXMESH::HOST);
+    rxmesh_attr.change_layout(rxmesh::HOST);
 
     // move memory to device
-    rxmesh_attr.move(RXMESH::HOST, RXMESH::DEVICE);
+    rxmesh_attr.move(rxmesh::HOST, rxmesh::DEVICE);
 
 
     // device success variable
@@ -128,14 +128,14 @@ bool test_host(uint32_t attributes_per_element)
 
 bool test_device(uint32_t attributes_per_element)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     // Test generating values on device and processing it on host
 
     // mesh attr on host (but allocated on device)
     uint32_t                          num_mesh_elements = 2048;
-    RXMESH::RXMeshAttribute<uint32_t> rxmesh_attr;
+    rxmesh::RXMeshAttribute<uint32_t> rxmesh_attr;
     rxmesh_attr.set_name("int_attr");
-    rxmesh_attr.init(num_mesh_elements, attributes_per_element, RXMESH::DEVICE);
+    rxmesh_attr.init(num_mesh_elements, attributes_per_element, rxmesh::DEVICE);
 
 
     // generate some numbers on device
@@ -146,14 +146,14 @@ bool test_device(uint32_t attributes_per_element)
 
 
     // move the generate values to host
-    rxmesh_attr.move(RXMESH::DEVICE, RXMESH::HOST);
+    rxmesh_attr.move(rxmesh::DEVICE, rxmesh::HOST);
 
     // change the layout to SoA
-    rxmesh_attr.change_layout(RXMESH::HOST);
+    rxmesh_attr.change_layout(rxmesh::HOST);
 
     // testing
     bool suceess = true;
-    assert((rxmesh_attr.get_allocated() & RXMESH::HOST) == RXMESH::HOST);
+    assert((rxmesh_attr.get_allocated() & rxmesh::HOST) == rxmesh::HOST);
     num_mesh_elements = rxmesh_attr.get_num_mesh_elements();
 
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -176,13 +176,13 @@ bool test_device(uint32_t attributes_per_element)
 
 /*bool test_vector()
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     // mesh attr on host
     uint32_t                         num_mesh_elements = 2048;
-    RXMESH::RXMeshAttribute<Vector3f> rxmesh_attr;
+    rxmesh::RXMeshAttribute<Vector3f> rxmesh_attr;
 
     rxmesh_attr.set_name("vector3f_attr");
-    rxmesh_attr.init(num_mesh_elements, 1, RXMESH::HOST, RXMESH::AoS);
+    rxmesh_attr.init(num_mesh_elements, 1, rxmesh::HOST, rxmesh::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -193,7 +193,7 @@ bool test_device(uint32_t attributes_per_element)
     }
 
     // move memory to device
-    rxmesh_attr.move(RXMESH::HOST, RXMESH::DEVICE);
+    rxmesh_attr.move(rxmesh::HOST, rxmesh::DEVICE);
 
 
     // device success variable
@@ -225,20 +225,20 @@ bool test_device(uint32_t attributes_per_element)
 
 bool test_axpy(uint32_t attributes_per_element)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
 
     float x_val(1.0), y_val(3.0), alpha_val(5.0), beta_val(7.0);
 
     uint32_t                       num_mesh_elements = 2048;
-    RXMESH::RXMeshAttribute<float> X;
-    RXMESH::RXMeshAttribute<float> Y;
+    rxmesh::RXMeshAttribute<float> X;
+    rxmesh::RXMeshAttribute<float> Y;
 
     X.set_name("X");
     Y.set_name("Y");
     X.init(
-        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
+        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
     Y.init(
-        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
+        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -248,10 +248,10 @@ bool test_axpy(uint32_t attributes_per_element)
         }
     }
 
-    X.change_layout(RXMESH::HOST);
-    Y.change_layout(RXMESH::HOST);
-    X.move(RXMESH::HOST, RXMESH::DEVICE);
-    Y.move(RXMESH::HOST, RXMESH::DEVICE);
+    X.change_layout(rxmesh::HOST);
+    Y.change_layout(rxmesh::HOST);
+    X.move(rxmesh::HOST, rxmesh::DEVICE);
+    Y.move(rxmesh::HOST, rxmesh::DEVICE);
 
     // call axpy
     Vector<3, float> alpha(alpha_val);
@@ -265,7 +265,7 @@ bool test_axpy(uint32_t attributes_per_element)
 
 
     // move to host (don't need to move X
-    Y.move(RXMESH::DEVICE, RXMESH::HOST);
+    Y.move(rxmesh::DEVICE, rxmesh::HOST);
 
     // check results
     bool is_passed = true;
@@ -293,14 +293,14 @@ bool test_axpy(uint32_t attributes_per_element)
 
 bool test_reduce()
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     constexpr uint32_t             attributes_per_element = 3;
     uint32_t                       num_mesh_elements      = 2048;
-    RXMESH::RXMeshAttribute<float> X;
+    rxmesh::RXMeshAttribute<float> X;
 
     X.set_name("X");
     X.init(
-        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
+        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -309,12 +309,12 @@ bool test_reduce()
         }
     }
 
-    X.change_layout(RXMESH::HOST);
-    X.move(RXMESH::HOST, RXMESH::DEVICE);
+    X.change_layout(rxmesh::HOST);
+    X.move(rxmesh::HOST, rxmesh::DEVICE);
     Vector<attributes_per_element, float> output;
 
     // call reduce
-    X.reduce(output, RXMESH::SUM);
+    X.reduce(output, rxmesh::SUM);
 
 
     // sync
@@ -341,14 +341,14 @@ bool test_reduce()
 
 bool test_norm2()
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     constexpr uint32_t             attributes_per_element = 3;
     uint32_t                       num_mesh_elements      = 2048;
-    RXMESH::RXMeshAttribute<float> X;
+    rxmesh::RXMeshAttribute<float> X;
 
     X.set_name("X");
     X.init(
-        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
+        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -357,12 +357,12 @@ bool test_norm2()
         }
     }
 
-    X.change_layout(RXMESH::HOST);
-    X.move(RXMESH::HOST, RXMESH::DEVICE);
+    X.change_layout(rxmesh::HOST);
+    X.move(rxmesh::HOST, rxmesh::DEVICE);
     Vector<attributes_per_element, float> output;
 
     // call reduce
-    X.reduce(output, RXMESH::NORM2);
+    X.reduce(output, rxmesh::NORM2);
 
 
     // sync
@@ -389,18 +389,18 @@ bool test_norm2()
 
 bool test_dot()
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     constexpr uint32_t             attributes_per_element = 3;
     uint32_t                       num_mesh_elements      = 2048;
-    RXMESH::RXMeshAttribute<float> X;
-    RXMESH::RXMeshAttribute<float> Y;
+    rxmesh::RXMeshAttribute<float> X;
+    rxmesh::RXMeshAttribute<float> Y;
 
     X.set_name("X");
     Y.set_name("Y");
     X.init(
-        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
+        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
     Y.init(
-        num_mesh_elements, attributes_per_element, RXMESH::HOST, RXMESH::AoS);
+        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -410,14 +410,14 @@ bool test_dot()
         }
     }
 
-    X.change_layout(RXMESH::HOST);
-    X.move(RXMESH::HOST, RXMESH::DEVICE);
-    Y.change_layout(RXMESH::HOST);
-    Y.move(RXMESH::HOST, RXMESH::DEVICE);
+    X.change_layout(rxmesh::HOST);
+    X.move(rxmesh::HOST, rxmesh::DEVICE);
+    Y.change_layout(rxmesh::HOST);
+    Y.move(rxmesh::HOST, rxmesh::DEVICE);
     Vector<attributes_per_element, float> output;
 
     // call reduce
-    X.reduce(output, RXMESH::DOT, &Y);
+    X.reduce(output, rxmesh::DOT, &Y);
 
 
     // sync
@@ -445,7 +445,7 @@ bool test_dot()
 
 TEST(RXMesh, Attributes)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     EXPECT_TRUE(test_host(3u)) << " TestAttributes::tes_host failed";
     EXPECT_TRUE(test_device(3u)) << " TestAttributes::tes_device failed";
     // EXPECT_TRUE(test_vector()) << " TestAttributes::test_vector failed";

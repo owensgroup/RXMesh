@@ -12,7 +12,7 @@
 #include "rxmesh/rxmesh_util.h"
 
 
-namespace RXMESH {
+namespace rxmesh {
 
 namespace detail {
 
@@ -84,19 +84,19 @@ __device__ __inline__ void query_block_dispatcher(
     input_mapping    = nullptr;
     num_src_in_patch = 0;
     switch (src_element) {
-        case RXMESH::ELEMENT::VERTEX: {
+        case rxmesh::ELEMENT::VERTEX: {
             input_mapping =
                 context.get_patches_ltog_v() + src_element_ad_size.x;
             num_src_in_patch = context.get_size_owned()[current_patch_id].z;
             break;
         }
-        case RXMESH::ELEMENT::EDGE: {
+        case rxmesh::ELEMENT::EDGE: {
             input_mapping =
                 context.get_patches_ltog_e() + src_element_ad_size.x;
             num_src_in_patch = context.get_size_owned()[current_patch_id].y;
             break;
         }
-        case RXMESH::ELEMENT::FACE: {
+        case rxmesh::ELEMENT::FACE: {
             input_mapping =
                 context.get_patches_ltog_f() + src_element_ad_size.x;
             num_src_in_patch = context.get_size_owned()[current_patch_id].x;
@@ -325,19 +325,19 @@ __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
     uint32_t element_patch = INVALID32;
     if (element_id != INVALID32) {
         switch (op) {
-            case RXMESH::Op::VV:
-            case RXMESH::Op::VE:
-            case RXMESH::Op::VF:
+            case rxmesh::Op::VV:
+            case rxmesh::Op::VE:
+            case rxmesh::Op::VF:
                 element_patch = context.get_vertex_patch()[element_id];
                 break;
-            case RXMESH::Op::FV:
-            case RXMESH::Op::FE:
-            case RXMESH::Op::FF:
+            case rxmesh::Op::FV:
+            case rxmesh::Op::FE:
+            case rxmesh::Op::FF:
                 element_patch = context.get_face_patch()[element_id];
                 break;
-            case RXMESH::Op::EV:
-            case RXMESH::Op::EE:
-            case RXMESH::Op::EF:
+            case rxmesh::Op::EV:
+            case rxmesh::Op::EE:
+            case rxmesh::Op::EF:
                 element_patch = context.get_edge_patch()[element_id];
                 break;
         }
@@ -443,4 +443,4 @@ __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
     }
 }
 
-}  // namespace RXMESH
+}  // namespace rxmesh

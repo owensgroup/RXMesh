@@ -32,7 +32,7 @@ struct arg
 
 TEST(App, GEODESIC)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     using dataT = float;
 
     if (Arg.shuffle) {
@@ -101,7 +101,7 @@ TEST(App, GEODESIC)
     RXMeshAttribute<uint32_t> toplesets("toplesets");
     toplesets.init(Verts.size(),
                    1u,
-                   RXMESH::HOST);  // will move() to DEVICE later
+                   rxmesh::HOST);  // will move() to DEVICE later
 
 
     std::vector<uint32_t> sorted_index;
@@ -115,7 +115,7 @@ TEST(App, GEODESIC)
 
     // Now that OpenMesh has calculated the toplesets,
     // move to DEVICE -- it's needed by RXMesh version
-    toplesets.move(RXMESH::HOST, RXMESH::DEVICE);
+    toplesets.move(rxmesh::HOST, rxmesh::DEVICE);
 
 
     //*** RXMesh Impl
@@ -137,7 +137,7 @@ TEST(App, GEODESIC)
 
 int main(int argc, char** argv)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     Log::init();
 
     ::testing::InitGoogleTest(&argc, argv);

@@ -17,10 +17,10 @@
 
 
 extern std::vector<std::vector<float>> Verts;  // TODO remove this
-namespace RXMESH {
+namespace rxmesh {
 
 
-namespace PATCHER {
+namespace patcher {
 
 //********************** Constructors/Destructors
 Patcher::Patcher(uint32_t                                  patch_size,
@@ -973,13 +973,13 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
                               3 * sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
 
-        RXMESH::memset<<<blocks_f, threads_f>>>(
+        rxmesh::memset<<<blocks_f, threads_f>>>(
             d_face_patch, INVALID32, m_num_faces);
 
-        RXMESH::memcpy<<<blocks_s, threads_s>>>(
+        rxmesh::memcpy<<<blocks_s, threads_s>>>(
             d_queue, d_seeds, m_num_patches);
 
-        RXMESH::memset<<<blocks_s, threads_s>>>(
+        rxmesh::memset<<<blocks_s, threads_s>>>(
             d_patches_size, 0u, m_num_patches);
 
         write_initial_face_patch<<<blocks_s, threads_s>>>(
@@ -1036,7 +1036,7 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
         // Interior
         uint32_t threads_i   = 512;
         uint32_t shmem_bytes = max_patch_size * (sizeof(uint32_t));
-        RXMESH::memset<<<blocks_f, threads_f>>>(
+        rxmesh::memset<<<blocks_f, threads_f>>>(
             d_queue, INVALID32, m_num_faces);
         interior<<<m_num_patches, threads_i, shmem_bytes>>>(
             m_num_patches,
@@ -1064,7 +1064,7 @@ void Patcher::parallel_execute(const std::vector<std::vector<uint32_t>>& ef)
         }*/
         /*{
             printf("\n d_face_patch");
-            ::RXMESH::print_arr_host<<<1, 1>>>(m_num_faces, d_face_patch);
+            ::rxmesh::print_arr_host<<<1, 1>>>(m_num_faces, d_face_patch);
             CUDA_ERROR(cudaDeviceSynchronize());
         }*/
 
@@ -1185,7 +1185,7 @@ uint32_t Patcher::construct_patches_compressed_parallel(
                                     d_patches_size,
                                     d_patches_offset,
                                     m_num_patches);
-    RXMESH::memset<<<blocks_s, threads_s>>>(d_patches_size, 0u, m_num_patches);
+    rxmesh::memset<<<blocks_s, threads_s>>>(d_patches_size, 0u, m_num_patches);
 
     construct_patches_compressed<<<blocks_f, threads_f>>>(m_num_faces,
                                                           d_face_patch,
@@ -1216,5 +1216,5 @@ template void Patcher::export_ext_ribbon(
     const std::vector<std::vector<float>>& Verts,
     int                                    patch_id);
 
-}  // namespace PATCHER
-}  // namespace RXMESH
+}  // namespace patcher
+}  // namespace rxmesh

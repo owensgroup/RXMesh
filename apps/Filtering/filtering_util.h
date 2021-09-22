@@ -7,13 +7,13 @@ template <typename T>
 __device__ __inline__ T compute_sigma_c_sq(
     const uint32_t                    vv[],
     const uint8_t                     num_vv,
-    const RXMESH::Vector<3, T>&       v,
-    const RXMESH::RXMeshAttribute<T>& input_coords)
+    const rxmesh::Vector<3, T>&       v,
+    const rxmesh::RXMeshAttribute<T>& input_coords)
 {
 
     T sigma_c = 1e10;
     for (uint8_t i = 1; i < num_vv; ++i) {
-        const RXMESH::Vector<3, T> q(input_coords(vv[i], 0),
+        const rxmesh::Vector<3, T> q(input_coords(vv[i], 0),
                                      input_coords(vv[i], 1),
                                      input_coords(vv[i], 2));
 
@@ -34,16 +34,16 @@ __device__ __inline__ T compute_sigma_s_sq(
     const uint32_t                    vv[],
     const uint8_t                     num_vv,
     uint32_t                          thread_vertex,
-    const RXMESH::Vector<3, T>&       v,
-    const RXMESH::Vector<3, T>&       n,
-    const RXMESH::RXMeshAttribute<T>& input_coords)
+    const rxmesh::Vector<3, T>&       v,
+    const rxmesh::Vector<3, T>&       n,
+    const rxmesh::RXMeshAttribute<T>& input_coords)
 {
 
     T sum     = 0;
     T sum_sqs = 0;
 
     for (uint32_t i = 0; i < num_vv; ++i) {
-        RXMESH::Vector<3, T> q(input_coords(vv[i], 0),
+        rxmesh::Vector<3, T> q(input_coords(vv[i], 0),
                                input_coords(vv[i], 1),
                                input_coords(vv[i], 2));
 

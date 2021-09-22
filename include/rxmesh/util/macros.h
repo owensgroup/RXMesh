@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "rxmesh/util/log.h"
 
-namespace RXMESH {
+namespace rxmesh {
 
 typedef uint8_t    flag_t;
 constexpr uint32_t PATCH_SIZE = 512;
@@ -62,4 +62,4 @@ inline void HandleError(cudaError_t err, const char* file, int line)
     }
 
 
-}  // namespace RXMESH
+}  // namespace rxmesh

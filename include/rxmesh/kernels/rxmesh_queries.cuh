@@ -9,7 +9,7 @@
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/rxmesh_context.h"
 
-namespace RXMESH {
+namespace rxmesh {
 //********************** Tools
 template <uint32_t rowOffset,
           uint32_t blockThreads,
@@ -543,4 +543,4 @@ __device__ __forceinline__ void query(uint16_t*&     s_offset_all_patches,
 }
 
 //*************************************************************************
-}  // namespace RXMESH
+}  // namespace rxmesh

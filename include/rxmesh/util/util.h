@@ -5,7 +5,7 @@
 #include <random>
 #include "rxmesh/util/macros.h"
 
-namespace RXMESH {
+namespace rxmesh {
 
 /**
  * get_cmd_option()
@@ -359,4 +359,4 @@ void in_place_matrix_transpose(RandomIterator first,
         } while ((first + a) != cycle);
     }
 }
-}  // namespace RXMESH
+}  // namespace rxmesh

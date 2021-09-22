@@ -74,7 +74,7 @@ void getAdaptiveVertexNeighbor(
 template <typename T>
 void filtering_openmesh(const int                   num_omp_threads,
                         TriMesh&                    input_mesh,
-                        RXMESH::RXMeshAttribute<T>& filtered_coord,
+                        rxmesh::RXMeshAttribute<T>& filtered_coord,
                         size_t&                     max_neighbour_size)
 {
     // Report
@@ -95,8 +95,8 @@ void filtering_openmesh(const int                   num_omp_threads,
     report.add_member("num_filter_iter", Arg.num_filter_iter);
 
     // Allocate space for the filtered output coordinates
-    filtered_coord.init(input_mesh.n_vertices(), 3u, RXMESH::HOST);
-    filtered_coord.reset(0.0, RXMESH::HOST);
+    filtered_coord.init(input_mesh.n_vertices(), 3u, rxmesh::HOST);
+    filtered_coord.reset(0.0, rxmesh::HOST);
 
     // this where each thread will store its neighbour vertices
     // we allocate enough space such that each thread can store as much
@@ -110,7 +110,7 @@ void filtering_openmesh(const int                   num_omp_threads,
 
     max_neighbour_size = 0;
 
-    RXMESH::CPUTimer timer;
+    rxmesh::CPUTimer timer;
     timer.start();
 
     for (uint32_t itr = 0; itr < Arg.num_filter_iter; ++itr) {
@@ -204,7 +204,7 @@ void filtering_openmesh(const int                   num_omp_threads,
 
     // Finalize report
     report.add_member("total_time (ms)", timer.elapsed_millis());
-    RXMESH::TestData td;
+    rxmesh::TestData td;
     td.test_name   = "MCF";
     td.num_threads = num_omp_threads;
     td.time_ms.push_back(timer.elapsed_millis());
@@ -212,5 +212,5 @@ void filtering_openmesh(const int                   num_omp_threads,
     report.add_test(td);
     report.write(
         Arg.output_folder + "/openmesh",
-        "MCF_OpenMesh_" + RXMESH::extract_file_name(Arg.obj_file_name));
+        "MCF_OpenMesh_" + rxmesh::extract_file_name(Arg.obj_file_name));
 }

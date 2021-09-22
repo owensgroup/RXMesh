@@ -1,6 +1,6 @@
 #pragma once
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
-namespace RXMESH {
+namespace rxmesh {
 namespace detail {
 
 /**
@@ -60,4 +60,4 @@ __launch_bounds__(blockThreads) __global__
 }
 
 }  // namespace detail
-}  // namespace RXMESH
+}  // namespace rxmesh

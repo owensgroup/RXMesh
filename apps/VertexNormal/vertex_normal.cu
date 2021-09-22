@@ -27,11 +27,11 @@ struct arg
 #include "vertex_normal_hardwired.cuh"
 
 template <typename T, uint32_t patchSize>
-void vertex_normal_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
+void vertex_normal_rxmesh(rxmesh::RXMeshStatic<patchSize>&   rxmesh_static,
                           const std::vector<std::vector<T>>& Verts,
                           const std::vector<T>&              vertex_normal_gold)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
     // Report
@@ -52,7 +52,7 @@ void vertex_normal_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
 
     RXMeshAttribute<T> coords;
     coords.set_name("coord");
-    coords.init(Verts.size(), 3u, RXMESH::LOCATION_ALL);
+    coords.init(Verts.size(), 3u, rxmesh::LOCATION_ALL);
     // fill in the coordinates
     for (uint32_t i = 0; i < Verts.size(); ++i) {
         for (uint32_t j = 0; j < Verts[i].size(); ++j) {
@@ -60,18 +60,18 @@ void vertex_normal_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
         }
     }
     // move the coordinates to device
-    coords.move(RXMESH::HOST, RXMESH::DEVICE);
+    coords.move(rxmesh::HOST, rxmesh::DEVICE);
 
 
     // normals
     RXMeshAttribute<T> rxmesh_normal;
     rxmesh_normal.set_name("normal");
     rxmesh_normal.init(
-        coords.get_num_mesh_elements(), 3u, RXMESH::LOCATION_ALL);
+        coords.get_num_mesh_elements(), 3u, rxmesh::LOCATION_ALL);
 
     // launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh_static.prepare_launch_box(RXMESH::Op::FV, launch_box);
+    rxmesh_static.prepare_launch_box(rxmesh::Op::FV, launch_box);
 
 
     TestData td;
@@ -79,7 +79,7 @@ void vertex_normal_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
 
     float vn_time = 0;
     for (uint32_t itr = 0; itr < Arg.num_run; ++itr) {
-        rxmesh_normal.reset(0, RXMESH::DEVICE);
+        rxmesh_normal.reset(0, rxmesh::DEVICE);
         GPUTimer timer;
         timer.start();
 
@@ -99,10 +99,10 @@ void vertex_normal_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
                  vn_time / Arg.num_run);
 
     // Verify
-    rxmesh_normal.move(RXMESH::DEVICE, RXMESH::HOST);
+    rxmesh_normal.move(rxmesh::DEVICE, rxmesh::HOST);
 
     bool passed = compare(vertex_normal_gold.data(),
-                          rxmesh_normal.get_pointer(RXMESH::HOST),
+                          rxmesh_normal.get_pointer(rxmesh::HOST),
                           coords.get_num_mesh_elements() * 3,
                           false);
     td.passed.push_back(passed);
@@ -120,7 +120,7 @@ void vertex_normal_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
 
 TEST(Apps, VertexNormal)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     using dataT = float;
 
     if (Arg.shuffle) {
@@ -161,7 +161,7 @@ TEST(Apps, VertexNormal)
 
 int main(int argc, char** argv)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     Log::init();
 
     ::testing::InitGoogleTest(&argc, argv);

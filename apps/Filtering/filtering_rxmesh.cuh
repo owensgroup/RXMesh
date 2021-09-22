@@ -11,12 +11,12 @@
  * filtering_rxmesh()
  */
 template <typename T, uint32_t patchSize>
-void filtering_rxmesh(RXMESH::RXMeshStatic<patchSize>&  rxmesh_static,
+void filtering_rxmesh(rxmesh::RXMeshStatic<patchSize>&  rxmesh_static,
                       std::vector<std::vector<T>>&      Verts,
-                      const RXMESH::RXMeshAttribute<T>& ground_truth,
+                      const rxmesh::RXMeshAttribute<T>& ground_truth,
                       const size_t                      max_neighbour_size)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
 
     constexpr uint32_t maxVVSize = 20 * 4;
 
@@ -45,38 +45,38 @@ void filtering_rxmesh(RXMESH::RXMeshStatic<patchSize>&  rxmesh_static,
     // input coords
     RXMeshAttribute<T> coords;
     coords.set_name("coords");
-    coords.init(rxmesh_static.get_num_vertices(), 3u, RXMESH::LOCATION_ALL);
+    coords.init(rxmesh_static.get_num_vertices(), 3u, rxmesh::LOCATION_ALL);
     for (uint32_t i = 0; i < Verts.size(); ++i) {
         for (uint32_t j = 0; j < Verts[i].size(); ++j) {
             coords(i, j) = Verts[i][j];
         }
     }
-    coords.move(RXMESH::HOST, RXMESH::DEVICE);
+    coords.move(rxmesh::HOST, rxmesh::DEVICE);
 
     // Vertex normals (only on device)
     RXMeshAttribute<T> vertex_normal;
     vertex_normal.set_name("vertex_normal");
-    vertex_normal.init(rxmesh_static.get_num_vertices(), 3u, RXMESH::DEVICE);
-    vertex_normal.reset(0.0, RXMESH::DEVICE);
+    vertex_normal.init(rxmesh_static.get_num_vertices(), 3u, rxmesh::DEVICE);
+    vertex_normal.reset(0.0, rxmesh::DEVICE);
 
 
     // Filtered coordinates
     RXMeshAttribute<T> filtered_coord;
     filtered_coord.set_name("filtered_coord");
     filtered_coord.init(
-        rxmesh_static.get_num_vertices(), 3u, RXMESH::LOCATION_ALL);
-    filtered_coord.reset(0.0, RXMESH::LOCATION_ALL);
-    filtered_coord.move(RXMESH::HOST, RXMESH::DEVICE);
+        rxmesh_static.get_num_vertices(), 3u, rxmesh::LOCATION_ALL);
+    filtered_coord.reset(0.0, rxmesh::LOCATION_ALL);
+    filtered_coord.move(rxmesh::HOST, rxmesh::DEVICE);
 
     // vertex normal launch box
     constexpr uint32_t          vn_block_threads = 256;
     LaunchBox<vn_block_threads> vn_launch_box;
-    rxmesh_static.prepare_launch_box(RXMESH::Op::FV, vn_launch_box);
+    rxmesh_static.prepare_launch_box(rxmesh::Op::FV, vn_launch_box);
 
     // filter launch box
     constexpr uint32_t              filter_block_threads = 512;
     LaunchBox<filter_block_threads> filter_launch_box;
-    rxmesh_static.prepare_launch_box(RXMESH::Op::VV, filter_launch_box, true);
+    rxmesh_static.prepare_launch_box(rxmesh::Op::VV, filter_launch_box, true);
 
     // double buffer
     RXMeshAttribute<T>* double_buffer[2] = {&coords, &filtered_coord};
@@ -89,7 +89,7 @@ void filtering_rxmesh(RXMESH::RXMeshStatic<patchSize>&  rxmesh_static,
     uint32_t d = 0;
 
     for (uint32_t itr = 0; itr < Arg.num_filter_iter; ++itr) {
-        vertex_normal.reset(0, RXMESH::DEVICE, stream);
+        vertex_normal.reset(0, rxmesh::DEVICE, stream);
 
         // update vertex normal before filtering
         compute_vertex_normal<T, vn_block_threads>
@@ -122,7 +122,7 @@ void filtering_rxmesh(RXMESH::RXMeshStatic<patchSize>&  rxmesh_static,
                  timer.elapsed_millis() / float(Arg.num_filter_iter));
 
     // move output to host
-    coords.copy(*double_buffer[d], RXMESH::DEVICE, RXMESH::HOST);
+    coords.copy(*double_buffer[d], rxmesh::DEVICE, rxmesh::HOST);
 
     // output to obj
     // rxmesh_static.exportOBJ(

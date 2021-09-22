@@ -2,7 +2,7 @@
 #include <assert.h>
 #include <stdint.h>
 
-namespace RXMESH {
+namespace rxmesh {
 
 template <uint32_t N, typename T>
 struct Vector
@@ -475,15 +475,15 @@ using Vector6s  = Vector<6, int16_t>;
 using Vector6us = Vector<6, uint16_t>;
 using Vector6c  = Vector<6, int8_t>;
 using Vector6uc = Vector<6, uint8_t>;
-}  // namespace RXMESH
+}  // namespace rxmesh
 
 // Hash
 namespace std {
 
 template <uint32_t N, typename T>
-struct hash<RXMESH::Vector<N, T>>
+struct hash<rxmesh::Vector<N, T>>
 {
-    std::size_t operator()(const RXMESH::Vector<N, T>& v) const
+    std::size_t operator()(const rxmesh::Vector<N, T>& v) const
     {
         std::size_t h = 0;
         for (int i = 0; i < N; i++) {

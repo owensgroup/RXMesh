@@ -84,7 +84,7 @@ inline void vertex_normal_hardwired(
     const std::vector<std::vector<T>>&        Verts,
     const std::vector<T>&                     vertex_normal_gold)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     uint32_t num_vertices = Verts.size();
     uint32_t num_faces    = Faces.size();
 

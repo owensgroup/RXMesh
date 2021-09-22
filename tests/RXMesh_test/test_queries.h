@@ -9,7 +9,7 @@
 #include "rxmesh/util/math.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh_test.h"
-using namespace RXMESH;
+using namespace rxmesh;
 
 /**
  * launcher()
@@ -134,16 +134,16 @@ TEST(RXMesh, Oriented_VV)
     RXMeshAttribute<uint32_t> input_container;
     input_container.init(rxmesh_static.get_num_vertices(),
                          1u,
-                         RXMESH::DEVICE,
-                         RXMESH::AoS,
+                         rxmesh::DEVICE,
+                         rxmesh::AoS,
                          false,
                          false);
 
     RXMeshAttribute<uint32_t> output_container;
     output_container.init(rxmesh_static.get_num_vertices(),
                           max_output_per_element(rxmesh_static, Op::VV) + 1,
-                          RXMESH::DEVICE,
-                          RXMESH::SoA,
+                          rxmesh::DEVICE,
+                          rxmesh::SoA,
                           false,
                           false);
 
@@ -161,8 +161,8 @@ TEST(RXMesh, Oriented_VV)
 
 
     // move containers to the CPU for testing
-    output_container.move(RXMESH::DEVICE, RXMESH::HOST);
-    input_container.move(RXMESH::DEVICE, RXMESH::HOST);
+    output_container.move(rxmesh::DEVICE, rxmesh::HOST);
+    input_container.move(rxmesh::DEVICE, rxmesh::HOST);
 
     RXMeshTest tester(true);
     EXPECT_TRUE(tester.run_query_verifier(
@@ -293,7 +293,7 @@ TEST(RXMesh, Queries)
         // input/output container
         RXMeshAttribute<uint32_t> input_container;
         input_container.init(
-            input_size, 1u, RXMESH::DEVICE, RXMESH::AoS, false, false);
+            input_size, 1u, rxmesh::DEVICE, rxmesh::AoS, false, false);
 
         // allocate output container
         // for each mesh element, we reserve the maximum possible output based
@@ -303,8 +303,8 @@ TEST(RXMesh, Queries)
         RXMeshAttribute<uint32_t> output_container;
         output_container.init(input_size,
                               max_output_per_element(rxmesh_static, ops_it) + 1,
-                              RXMESH::DEVICE,
-                              RXMESH::SoA,
+                              rxmesh::DEVICE,
+                              rxmesh::SoA,
                               false,
                               false);
 
@@ -324,8 +324,8 @@ TEST(RXMesh, Queries)
         float total_time = 0;
         for (uint32_t itr = 0; itr < rxmesh_args.num_run; itr++) {
 
-            output_container.reset(INVALID32, RXMESH::DEVICE);
-            input_container.reset(INVALID32, RXMESH::DEVICE);
+            output_container.reset(INVALID32, rxmesh::DEVICE);
+            input_container.reset(INVALID32, rxmesh::DEVICE);
 
             // launch query
             float tt = launcher(rxmesh_static.get_context(),
@@ -339,8 +339,8 @@ TEST(RXMesh, Queries)
         }
 
         // move containers to the CPU for testing
-        output_container.move(RXMESH::DEVICE, RXMESH::HOST);
-        input_container.move(RXMESH::DEVICE, RXMESH::HOST);
+        output_container.move(rxmesh::DEVICE, rxmesh::HOST);
+        input_container.move(rxmesh::DEVICE, rxmesh::HOST);
 
 
         // verify

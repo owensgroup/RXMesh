@@ -5,7 +5,7 @@
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh_test.h"
 
-using namespace RXMESH;
+using namespace rxmesh;
 
 TEST(RXMesh, HigherQueries)
 {
@@ -27,13 +27,13 @@ TEST(RXMesh, HigherQueries)
     // input/output container
     RXMeshAttribute<uint32_t> input_container;
     input_container.init(
-        input_size, 1u, RXMESH::DEVICE, RXMESH::AoS, false, false);
+        input_size, 1u, rxmesh::DEVICE, rxmesh::AoS, false, false);
 
     RXMeshAttribute<uint32_t> output_container;
     output_container.init(input_size,
                           input_size,  // that is a bit excessive
-                          RXMESH::DEVICE,
-                          RXMESH::SoA,
+                          rxmesh::DEVICE,
+                          rxmesh::SoA,
                           false,
                           false);
 
@@ -42,8 +42,8 @@ TEST(RXMesh, HigherQueries)
     LaunchBox<blockThreads> launch_box;
     rxmesh_static.prepare_launch_box(Op::VV, launch_box, true, false);
 
-    output_container.reset(INVALID32, RXMESH::DEVICE);
-    input_container.reset(INVALID32, RXMESH::DEVICE);
+    output_container.reset(INVALID32, rxmesh::DEVICE);
+    input_container.reset(INVALID32, rxmesh::DEVICE);
 
     ::RXMeshTest tester(true);
 
@@ -53,8 +53,8 @@ TEST(RXMesh, HigherQueries)
             rxmesh_static.get_context(), input_container, output_container);
 
     // move containers to the CPU for testing
-    output_container.move(RXMESH::DEVICE, RXMESH::HOST);
-    input_container.move(RXMESH::DEVICE, RXMESH::HOST);
+    output_container.move(rxmesh::DEVICE, rxmesh::HOST);
+    input_container.move(rxmesh::DEVICE, rxmesh::HOST);
 
     // verify
     EXPECT_TRUE(tester.run_higher_query_verifier(

@@ -1,9 +1,9 @@
 #pragma once
 
 #include "rxmesh/kernels/collective.cuh"
-namespace RXMESH {
+namespace rxmesh {
 
-namespace PATCHER {
+namespace patcher {
 
 
 __device__ __forceinline__ const uint32_t* get_face_faces(
@@ -275,5 +275,5 @@ __global__ static void add_more_seeds(const uint32_t  num_patches,
         }
     }
 }
-}  // namespace PATCHER
-}  // namespace RXMESH
+}  // namespace patcher
+}  // namespace rxmesh

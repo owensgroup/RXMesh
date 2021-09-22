@@ -26,7 +26,7 @@
 #include <unistd.h>
 #endif
 
-namespace RXMESH {
+namespace rxmesh {
 
 // Most values are signed and initialized to -1
 // if any value is not modified, it won't be written
@@ -270,7 +270,7 @@ struct Report
     // get model data from RXMesh
     template <uint32_t p>
     void model_data(const std::string&       model_name,
-                    const RXMESH::RXMesh<p>& rxmesh)
+                    const rxmesh::RXMesh<p>& rxmesh)
     {
         rapidjson::Document subdoc(&m_doc.GetAllocator());
         subdoc.SetObject();
@@ -445,4 +445,4 @@ class CustomReport : public Report
         this->m_doc.AddMember("Model", subdoc, m_doc.GetAllocator());
     }
 };
-}  // namespace RXMESH
+}  // namespace rxmesh

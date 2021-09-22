@@ -7,7 +7,7 @@ __global__ static void test_iterator(uint32_t* suceess,
                                      uint16_t* patch_output,
                                      uint32_t  num_elements)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     uint32_t       local_id = threadIdx.x;
     RXMeshIterator iter(
         local_id, patch_output, patch_output, ltog_map, fixedOffset, 0);
@@ -50,7 +50,7 @@ TEST(RXMesh, Iterator)
     // n-1 n-1 n-1 | n-2 n-2 n-2 | ...... | 1 1 1 | 0 0 0
 
 
-    using namespace RXMESH;
+    using namespace rxmesh;
     constexpr uint32_t fixedOffset = 3;
     const uint32_t     N           = 32;
 

@@ -13,11 +13,11 @@ __device__ __inline__ T update_step(
     const uint32_t                    v0_id,
     const uint32_t                    v1_id,
     const uint32_t                    v2_id,
-    const RXMESH::RXMeshAttribute<T>& geo_distance,
-    const RXMESH::RXMeshAttribute<T>& coords,
+    const rxmesh::RXMeshAttribute<T>& geo_distance,
+    const rxmesh::RXMeshAttribute<T>& coords,
     const T                           infinity_val)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     const Vector<3, T> v0(coords(v0_id, 0), coords(v0_id, 1), coords(v0_id, 2));
     const Vector<3, T> v1(coords(v1_id, 0), coords(v1_id, 1), coords(v1_id, 2));
     const Vector<3, T> v2(coords(v2_id, 0), coords(v2_id, 1), coords(v2_id, 2));
@@ -75,18 +75,18 @@ __device__ __inline__ T update_step(
 
 template <typename T, uint32_t blockThreads>
 __launch_bounds__(blockThreads) __global__ static void relax_ptp_rxmesh(
-    const RXMESH::RXMeshContext             context,
-    const RXMESH::RXMeshAttribute<T>        coords,
-    RXMESH::RXMeshAttribute<T>              new_geo_dist,
-    const RXMESH::RXMeshAttribute<T>        old_geo_dist,
-    const RXMESH::RXMeshAttribute<uint32_t> toplesets,
+    const rxmesh::RXMeshContext             context,
+    const rxmesh::RXMeshAttribute<T>        coords,
+    rxmesh::RXMeshAttribute<T>              new_geo_dist,
+    const rxmesh::RXMeshAttribute<T>        old_geo_dist,
+    const rxmesh::RXMeshAttribute<uint32_t> toplesets,
     const uint32_t                          band_start,
     const uint32_t                          band_end,
     uint32_t*                               d_error,
     const T                                 infinity_val,
     const T                                 error_tol)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
 
     auto in_active_set = [&](uint32_t p_id) {
         uint32_t my_band = toplesets(p_id);

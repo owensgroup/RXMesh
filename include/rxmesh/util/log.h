@@ -7,7 +7,7 @@
 #include "spdlog/spdlog.h"
 
 
-namespace RXMESH {
+namespace rxmesh {
 
 class Log
 {
@@ -39,17 +39,17 @@ class Log
    private:
     inline static std::shared_ptr<spdlog::logger> m_logger;
 };
-}  // namespace RXMESH
+}  // namespace rxmesh
 
-#define RXMESH_TRACE(...) ::RXMESH::Log::get_logger()->trace(__VA_ARGS__)
-#define RXMESH_INFO(...) ::RXMESH::Log::get_logger()->info(__VA_ARGS__)
+#define RXMESH_TRACE(...) ::rxmesh::Log::get_logger()->trace(__VA_ARGS__)
+#define RXMESH_INFO(...) ::rxmesh::Log::get_logger()->info(__VA_ARGS__)
 #define RXMESH_WARN(...)                                                      \
-    ::RXMESH::Log::get_logger()->warn("Line {} File {}", __LINE__, __FILE__); \
-    ::RXMESH::Log::get_logger()->warn(__VA_ARGS__)
+    ::rxmesh::Log::get_logger()->warn("Line {} File {}", __LINE__, __FILE__); \
+    ::rxmesh::Log::get_logger()->warn(__VA_ARGS__)
 #define RXMESH_ERROR(...)                                                      \
-    ::RXMESH::Log::get_logger()->error("Line {} File {}", __LINE__, __FILE__); \
-    ::RXMESH::Log::get_logger()->error(__VA_ARGS__)
+    ::rxmesh::Log::get_logger()->error("Line {} File {}", __LINE__, __FILE__); \
+    ::rxmesh::Log::get_logger()->error(__VA_ARGS__)
 #define RXMESH_CRITICAL(...)                    \
-    ::RXMESH::Log::get_logger()->critical(      \
+    ::rxmesh::Log::get_logger()->critical(      \
         "Line {} File {}", __LINE__, __FILE__); \
-    ::RXMESH::Log::get_logger()->critical(__VA_ARGS__)
+    ::rxmesh::Log::get_logger()->critical(__VA_ARGS__)

@@ -9,8 +9,8 @@
 #include "rxmesh/util/export_tools.h"
 #include "rxmesh/util/math.h"
 
-namespace RXMESH {
-// extern std::vector<std::vector<RXMESH::float>> Verts; // TODO remove this
+namespace rxmesh {
+// extern std::vector<std::vector<rxmesh::float>> Verts; // TODO remove this
 
 //********************** Constructors/Destructors
 template <uint32_t patchSize>
@@ -144,7 +144,7 @@ void RXMesh<patchSize>::build_local(
     //=========== 5)
     // create an instance of Patcher and execute it and then move the
     // ownership to m_patcher
-    std::unique_ptr<PATCHER::Patcher> pp = std::make_unique<PATCHER::Patcher>(
+    std::unique_ptr<patcher::Patcher> pp = std::make_unique<patcher::Patcher>(
         patchSize, m_fvn, m_num_vertices, m_num_edges, true, m_quite);
     pp->execute(
         [this](uint32_t v0, uint32_t v1) { return this->get_edge_id(v0, v1); },
@@ -416,7 +416,7 @@ void RXMesh<patchSize>::build_patch_locally(const uint32_t patch_id)
         edges_owned_count + edges_not_owned_count != total_patch_num_edges ||
         vertices_owned_count + vertices_not_owned_count !=
             total_patch_num_vertices) {
-        RXMESH_ERROR("RXMesh::build_patch_locally() patch is " +
+        RXMESH_ERROR("rxmesh::build_patch_locally() patch is " +
                      std::to_string(patch_id) + " not built correctly!!");
     }
 
@@ -581,7 +581,7 @@ void RXMesh<patchSize>::set_num_vertices(
     m_num_vertices = 0;
     for (uint32_t i = 0; i < fv.size(); ++i) {
         if (fv[i].size() != 3) {
-            RXMESH_ERROR("RXMesh::count_vertices() Face" + std::to_string(i) +
+            RXMESH_ERROR("rxmesh::count_vertices() Face" + std::to_string(i) +
                          " is not triangles. Non-triangular faces are not "
                          "supported yet");
         }
@@ -610,7 +610,7 @@ void RXMesh<patchSize>::populate_edge_map(
 
         if (fv[f].size() < 3) {
             RXMESH_ERROR(
-                "RXMesh::populate_edge_map() Face {} has less than three "
+                "rxmesh::populate_edge_map() Face {} has less than three "
                 "vertices",
                 f);
         }
@@ -721,7 +721,7 @@ uint32_t RXMesh<patchSize>::get_edge_id(
         edge_id = m_edges_map.at(edge);
     } catch (const std::out_of_range&) {
         RXMESH_ERROR(
-            "RXMesh::get_edge_id() mapping edges went wrong."
+            "rxmesh::get_edge_id() mapping edges went wrong."
             " Can not find an edge connecting vertices {} and {}",
             edge.first,
             edge.second);
@@ -837,7 +837,7 @@ void RXMesh<patchSize>::sort(std::vector<std::vector<uint32_t>>& fv,
     }
     if (edge_counter != m_num_edges || vertex_counter != m_num_vertices ||
         face_counter != m_num_faces) {
-        RXMESH_ERROR("RXMesh::sort Error in assigning new IDs");
+        RXMESH_ERROR("rxmesh::sort Error in assigning new IDs");
     }
     //**** Apply changes
     m_max_valence_vertex_id = new_vertex_id[m_max_valence_vertex_id];
@@ -875,7 +875,7 @@ void RXMesh<patchSize>::sort(std::vector<std::vector<uint32_t>>& fv,
             if (e_it == edges_map.end()) {
                 edges_map.insert(std::make_pair(my_edge, edge_id));
             } else {
-                RXMESH_ERROR("RXMesh::sort Unknown error");
+                RXMESH_ERROR("rxmesh::sort Unknown error");
             }
         }
         m_edges_map.swap(edges_map);
@@ -1305,4 +1305,4 @@ void RXMesh<patchSize>::write_connectivity(std::fstream& file) const
 //**************************************************************************
 
 template class RXMesh<PATCH_SIZE>;
-}  // namespace RXMESH
+}  // namespace rxmesh

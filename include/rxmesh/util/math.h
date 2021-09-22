@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 #include <stdint.h>
 
-namespace RXMESH {
+namespace rxmesh {
 // 180.0/PI (multiply this by the radian angle to convert to degree)
 constexpr float RadToDeg = 57.295779513078550;
 
@@ -52,4 +52,4 @@ round_to_next_power_two(const uint32_t numToRound)
     return res;
 }
 
-}  // namespace RXMESH
+}  // namespace rxmesh

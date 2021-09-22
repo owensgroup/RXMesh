@@ -6,7 +6,7 @@
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/rxmesh_context.h"
 
-namespace RXMESH {
+namespace rxmesh {
 
 /**
  * load_patch_ad_size()
@@ -169,4 +169,4 @@ __device__ __forceinline__ void load_mesh(const RXMeshContext& context,
     }
 }
 
-}  // namespace RXMESH
+}  // namespace rxmesh

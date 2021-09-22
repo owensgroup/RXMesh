@@ -13,7 +13,7 @@ __global__ static void k_test_block_mat_transpose(uint16_t*      d_src,
                                                   uint16_t*      d_output)
 {
 
-    RXMESH::block_mat_transpose<rowOffset, blockThreads, itemPerThread>(
+    rxmesh::block_mat_transpose<rowOffset, blockThreads, itemPerThread>(
         num_rows, num_cols, d_src, d_output);
 }
 //**************************************************************************
@@ -22,7 +22,7 @@ __global__ static void k_test_block_mat_transpose(uint16_t*      d_src,
 template <typename T, uint32_t blockThreads>
 __global__ static void k_test_block_exclusive_sum(T* d_src, const uint32_t size)
 {
-    RXMESH::cub_block_exclusive_sum<T, blockThreads>(d_src, size);
+    rxmesh::cub_block_exclusive_sum<T, blockThreads>(d_src, size);
 }
 //**************************************************************************
 
@@ -31,7 +31,7 @@ __global__ static void k_test_block_exclusive_sum(T* d_src, const uint32_t size)
 template <typename T>
 __global__ static void k_test_atomicAdd(T* d_val)
 {
-    RXMESH::atomicAdd(d_val, 1);
+    rxmesh::atomicAdd(d_val, 1);
     /*__half* as_half = (__half*)(d_val);
     ::atomicAdd(as_half,1);
     __syncthreads();
@@ -62,7 +62,7 @@ class TestUtil
 
     bool test_scan()
     {
-        using namespace RXMESH;
+        using namespace rxmesh;
 
         constexpr uint32_t    blockThreads = 128;
         uint32_t              size         = 8144;
@@ -103,7 +103,7 @@ class TestUtil
     template <uint32_t numRows, uint32_t numCols, uint32_t rowOffset>
     bool test_block_mat_transpose()
     {
-        using namespace RXMESH;
+        using namespace rxmesh;
         // The matrix is numRows X numCols where every rows has rowOffset
         // non-zero elements. The matrix passed to the kernel contains the
         // column ids only and we also pass the rowOffset. The transposed matrix
@@ -237,7 +237,7 @@ class TestUtil
     template <typename T>
     bool test_atomicAdd(const uint32_t threads = 1024)
     {
-        using namespace RXMESH;
+        using namespace rxmesh;
 
         T  h_val = 0;
         T* d_val;
@@ -271,7 +271,7 @@ class TestUtil
 
 TEST(RXMesh, Util)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     TestUtil tc;
 
     EXPECT_TRUE(tc.test_scan());

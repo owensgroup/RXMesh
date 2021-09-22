@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include "rxmesh/util/macros.h"
 
-namespace RXMESH {
+namespace rxmesh {
 
 // context for the mesh parameters and pointers. everything is allocated
 // on rxmesh. this class is meant to be a vehicle to copy various parameters
@@ -322,4 +322,4 @@ class __align__(16) RXMeshContext
     // patch neighbour
     uint32_t *m_d_neighbour_patches, *m_d_neighbour_patches_offset;
 };
-}  // namespace RXMESH
+}  // namespace rxmesh

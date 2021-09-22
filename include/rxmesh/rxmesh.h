@@ -11,7 +11,7 @@
 
 class RXMeshTest;
 
-namespace RXMESH {
+namespace rxmesh {
 using coordT = float;
 
 // This class is responsible for building the data structure of representing
@@ -39,23 +39,23 @@ enum class Op
 inline std::string op_to_string(const Op& op)
 {
     switch (op) {
-        case RXMESH::Op::VV:
+        case rxmesh::Op::VV:
             return "VV";
-        case RXMESH::Op::VE:
+        case rxmesh::Op::VE:
             return "VE";
-        case RXMESH::Op::VF:
+        case rxmesh::Op::VF:
             return "VF";
-        case RXMESH::Op::FV:
+        case rxmesh::Op::FV:
             return "FV";
-        case RXMESH::Op::FE:
+        case rxmesh::Op::FE:
             return "FE";
-        case RXMESH::Op::FF:
+        case rxmesh::Op::FF:
             return "FF";
-        case RXMESH::Op::EV:
+        case rxmesh::Op::EV:
             return "EV";
-        case RXMESH::Op::EF:
+        case rxmesh::Op::EF:
             return "EF";
-        case RXMESH::Op::EE:
+        case rxmesh::Op::EE:
             return "EE";
         default:
             return "";
@@ -220,7 +220,7 @@ class RXMesh
         return m_total_gpu_storage_mb;
     }
 
-    const std::unique_ptr<PATCHER::Patcher>& get_patcher() const
+    const std::unique_ptr<patcher::Patcher>& get_patcher() const
     {
         return m_patcher;
     };
@@ -279,7 +279,7 @@ class RXMesh
         arr = (pt_T*)malloc(count * sizeof(pt_T));
         if (arr == NULL) {
             RXMESH_ERROR(
-                "RXMesh::host_malloc() malloc failed with count = {} and total "
+                "rxmesh::host_malloc() malloc failed with count = {} and total "
                 "size = {}",
                 count,
                 count * sizeof(pt_T));
@@ -343,7 +343,7 @@ class RXMesh
 
     // pointer to the patcher class responsible for everything related to
     // patching the mesh into small pieces
-    std::unique_ptr<PATCHER::Patcher> m_patcher;
+    std::unique_ptr<patcher::Patcher> m_patcher;
 
 
     //*************** Patch sub-matrices
@@ -432,4 +432,4 @@ class RXMesh
 };
 
 extern template class RXMesh<PATCH_SIZE>;
-}  // namespace RXMESH
+}  // namespace rxmesh

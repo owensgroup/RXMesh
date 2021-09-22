@@ -10,11 +10,11 @@
 
 
 template <typename T, uint32_t patchSize>
-void mcf_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
+void mcf_rxmesh(rxmesh::RXMeshStatic<patchSize>&   rxmesh_static,
                 const std::vector<std::vector<T>>& Verts,
-                const RXMESH::RXMeshAttribute<T>&  ground_truth)
+                const rxmesh::RXMeshAttribute<T>&  ground_truth)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
     // Report
@@ -43,51 +43,51 @@ void mcf_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
     // Different attributes used throughout the application
     RXMeshAttribute<T> input_coord;
     input_coord.set_name("coord");
-    input_coord.init(Verts.size(), 3u, RXMESH::LOCATION_ALL);
+    input_coord.init(Verts.size(), 3u, rxmesh::LOCATION_ALL);
     for (uint32_t i = 0; i < Verts.size(); ++i) {
         for (uint32_t j = 0; j < Verts[i].size(); ++j) {
             input_coord(i, j) = Verts[i][j];
         }
     }
-    input_coord.change_layout(RXMESH::HOST);
-    input_coord.move(RXMESH::HOST, RXMESH::DEVICE);
+    input_coord.change_layout(rxmesh::HOST);
+    input_coord.move(rxmesh::HOST, rxmesh::DEVICE);
 
     // S in CG
     RXMeshAttribute<T> S;
     S.set_name("S");
-    S.init(rxmesh_static.get_num_vertices(), 3u, RXMESH::DEVICE, RXMESH::SoA);
-    S.reset(0.0, RXMESH::DEVICE);
+    S.init(rxmesh_static.get_num_vertices(), 3u, rxmesh::DEVICE, rxmesh::SoA);
+    S.reset(0.0, rxmesh::DEVICE);
 
     // P in CG
     RXMeshAttribute<T> P;
     P.set_name("P");
-    P.init(rxmesh_static.get_num_vertices(), 3u, RXMESH::DEVICE, RXMESH::SoA);
-    P.reset(0.0, RXMESH::DEVICE);
+    P.init(rxmesh_static.get_num_vertices(), 3u, rxmesh::DEVICE, rxmesh::SoA);
+    P.reset(0.0, rxmesh::DEVICE);
 
     // R in CG
     RXMeshAttribute<T> R;
     R.set_name("P");
-    R.init(rxmesh_static.get_num_vertices(), 3u, RXMESH::DEVICE, RXMESH::SoA);
-    R.reset(0.0, RXMESH::DEVICE);
+    R.init(rxmesh_static.get_num_vertices(), 3u, rxmesh::DEVICE, rxmesh::SoA);
+    R.reset(0.0, rxmesh::DEVICE);
 
     // B in CG
     RXMeshAttribute<T> B;
     B.set_name("B");
-    B.init(rxmesh_static.get_num_vertices(), 3u, RXMESH::DEVICE, RXMESH::SoA);
-    B.reset(0.0, RXMESH::DEVICE);
+    B.init(rxmesh_static.get_num_vertices(), 3u, rxmesh::DEVICE, rxmesh::SoA);
+    B.reset(0.0, rxmesh::DEVICE);
 
     // X in CG
     RXMeshAttribute<T> X;
     X.set_name("X");
     X.init(rxmesh_static.get_num_vertices(),
            3u,
-           RXMESH::LOCATION_ALL,
-           RXMESH::SoA);
-    X.copy(input_coord, RXMESH::HOST, RXMESH::DEVICE);
+           rxmesh::LOCATION_ALL,
+           rxmesh::SoA);
+    X.copy(input_coord, rxmesh::HOST, rxmesh::DEVICE);
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh_static.prepare_launch_box(RXMESH::Op::VV, launch_box, false, true);
+    rxmesh_static.prepare_launch_box(rxmesh::Op::VV, launch_box, false, true);
 
 
     // init kernel to initialize RHS (B)
@@ -120,7 +120,7 @@ void mcf_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
         rxmesh_static.get_num_vertices(), B, S, R, P);
 
     // delta_new = <r,r>
-    R.reduce(delta_new, RXMESH::NORM2);
+    R.reduce(delta_new, rxmesh::NORM2);
 
     const Vector<3, T> delta_0(delta_new);
 
@@ -139,7 +139,7 @@ void mcf_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
                 Arg.time_step);
 
         // alpha = delta_new / <s,p>
-        S.reduce(alpha, RXMESH::DOT, &P);
+        S.reduce(alpha, rxmesh::DOT, &P);
 
         alpha = delta_new / alpha;
 
@@ -156,7 +156,7 @@ void mcf_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
 
 
         // delta_new = <r,r>
-        R.reduce(delta_new, RXMESH::NORM2);
+        R.reduce(delta_new, rxmesh::NORM2);
 
         CUDA_ERROR(cudaStreamSynchronize(0));
 
@@ -192,7 +192,7 @@ void mcf_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
         timer.elapsed_millis() / float(num_cg_iter_taken));
 
     // move output to host
-    X.move(RXMESH::DEVICE, RXMESH::HOST);
+    X.move(rxmesh::DEVICE, rxmesh::HOST);
 
     // output to obj
     // rxmesh_static.exportOBJ("mcf_rxmesh.obj",
