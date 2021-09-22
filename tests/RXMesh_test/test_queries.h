@@ -1,3 +1,4 @@
+#include <numeric>
 #include <vector>
 #include "gtest/gtest.h"
 #include "query.cuh"
@@ -169,6 +170,15 @@ TEST(RXMesh, Oriented_VV)
 
     // Make sure orientation is accurate
     // for the cube, all angle are either 45 or 90
+
+    auto vector_length = [](const dataT x, const dataT y, const dataT z) {
+        return std::sqrt(x * x + y * y + z * z);
+    };
+
+    auto dot = [](const std::vector<dataT>& u, const std::vector<dataT>& v) {
+        return std::inner_product(
+            std::begin(u), std::end(u), std::begin(v), 0.0);
+    };
 
     for (uint32_t v = 0; v < rxmesh_static.get_num_vertices(); ++v) {
 

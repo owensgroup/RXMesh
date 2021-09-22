@@ -13,6 +13,28 @@ vertex_normal_hardwired_kernel(const uint32_t  num_faces,
                                T*              d_vertex_normal)
 {
     uint32_t f_id = threadIdx.x + blockIdx.x * blockDim.x;
+
+    auto l2_norm_sq = [](const T ax0,
+                         const T ax1,
+                         const T ax2,
+                         const T bx0,
+                         const T bx1,
+                         const T bx2) {
+        // compute (xa0-xb0)*(xa0-xb0) + (xa1-xb1)*(xa1-xb1) +
+        // (xa2-xb2)*(xa2-xb2)
+        T x0 = ax0 - bx0;
+        T x1 = ax1 - bx1;
+        T x2 = ax2 - bx2;
+        return x0 * x0 + x1 * x1 + x2 * x2;
+    };
+
+    auto cross_product =
+        [](T xv1, T yv1, T zv1, T xv2, T yv2, T zv2, T& xx, T& yy, T& zz) {
+            xx = yv1 * zv2 - zv1 * yv2;
+            yy = zv1 * xv2 - xv1 * zv2;
+            zz = xv1 * yv2 - yv1 * xv2;
+        };
+
     if (f_id < num_faces) {
         uint32_t v0 = d_faces[f_id * 3];
         uint32_t v1 = d_faces[f_id * 3 + 1];
@@ -29,18 +51,18 @@ vertex_normal_hardwired_kernel(const uint32_t  num_faces,
 
         T nx, ny, nz;
 
-        RXMESH::cross_product(v1x - v0x,
-                              v1y - v0y,
-                              v1z - v0z,
-                              v2x - v0x,
-                              v2y - v0y,
-                              v2z - v0z,
-                              nx,
-                              ny,
-                              nz);
-        T l0 = RXMESH::l2_norm_sq(v0x, v0y, v0z, v1x, v1y, v1z);  // v0-v1
-        T l1 = RXMESH::l2_norm_sq(v1x, v1y, v1z, v2x, v2y, v2z);  // v1-v2
-        T l2 = RXMESH::l2_norm_sq(v2x, v2y, v2z, v0x, v0y, v0z);  // v2-v0
+        cross_product(v1x - v0x,
+                      v1y - v0y,
+                      v1z - v0z,
+                      v2x - v0x,
+                      v2y - v0y,
+                      v2z - v0z,
+                      nx,
+                      ny,
+                      nz);
+        T l0 = l2_norm_sq(v0x, v0y, v0z, v1x, v1y, v1z);  // v0-v1
+        T l1 = l2_norm_sq(v1x, v1y, v1z, v2x, v2y, v2z);  // v1-v2
+        T l2 = l2_norm_sq(v2x, v2y, v2z, v0x, v0y, v0z);  // v2-v0
 
         atomicAdd(&d_vertex_normal[v0 * 3 + 0], nx / (l0 + l2));
         atomicAdd(&d_vertex_normal[v0 * 3 + 1], ny / (l0 + l2));
