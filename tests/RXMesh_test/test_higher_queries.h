@@ -19,8 +19,7 @@ TEST(RXMesh, HigherQueries)
     }
 
     // RXMesh
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(
-        Faces, Verts, false, rxmesh_args.quite);
+    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, rxmesh_args.quite);
 
     uint32_t input_size = rxmesh_static.get_num_vertices();
 

@@ -21,8 +21,6 @@ struct arg
     uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
-    bool        shuffle   = false;
-    bool        sort      = false;
     uint32_t    num_seeds = 1;
 
 } Arg;
@@ -35,14 +33,6 @@ TEST(App, GEODESIC)
     using namespace rxmesh;
     using dataT = float;
 
-    if (Arg.shuffle) {
-        ASSERT_FALSE(Arg.sort) << " cannot shuffle and sort at the same time!";
-    }
-    if (Arg.sort) {
-        ASSERT_FALSE(Arg.shuffle)
-            << " cannot shuffle and sort at the same time!";
-    }
-
     // Select device
     cuda_query(Arg.device_id);
 
@@ -50,16 +40,9 @@ TEST(App, GEODESIC)
     // Load mesh
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
-
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
-    if (Arg.shuffle) {
-        shuffle_obj(Faces, Verts);
-    }
-
-    // Create RXMeshStatic instance. If Arg.sort is true, Faces and Verts will
-    // be sorted based on the patching happening inside RXMesh
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, Verts, Arg.sort, false);
+    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, false);
     ASSERT_TRUE(rxmesh_static.is_closed())
         << "Geodesic only works on watertight/closed manifold mesh without "
            "boundaries";
@@ -67,16 +50,9 @@ TEST(App, GEODESIC)
         << "Geodesic only works on watertight/closed manifold mesh without "
            "boundaries";
 
-    // Since OpenMesh only accepts input as obj files, if the input mesh is
-    // shuffled or sorted, we have to write it to a temp file so that OpenMesh
-    // can pick it up
     TriMesh input_mesh;
-    if (Arg.sort || Arg.shuffle) {
-        export_obj(Faces, Verts, "temp.obj", false);
-        ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, "temp.obj"));
-    } else {
-        ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
-    }
+    ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
+
 
     // Generate Seeds
     std::vector<uint32_t> h_seeds(Arg.num_seeds);
@@ -154,9 +130,7 @@ int main(int argc, char** argv)
                         "              Default is {} \n"
                         "              Hint: Only accepts OBJ files\n"
                         " -o:          JSON file output folder. Default is {} \n"
-                       // "-num_seeds:   Number of input seeds. Default is {}\n"                        
-                        " -s:          Shuffle input. Default is false.\n"
-                        " -p:          Sort input using patching output. Default is false.\n"
+                       // "-num_seeds:   Number of input seeds. Default is {}\n"
                         " -device_id:  GPU device ID. Default is {}",
             Arg.obj_file_name, Arg.output_folder ,Arg.num_seeds, Arg.device_id);
             // clang-format on
@@ -170,12 +144,6 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-o")) {
             Arg.output_folder =
                 std::string(get_cmd_option(argv, argv + argc, "-o"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-s")) {
-            Arg.shuffle = true;
-        }
-        if (cmd_option_exists(argv, argc + argv, "-p")) {
-            Arg.sort = true;
         }
         if (cmd_option_exists(argv, argc + argv, "-device_id")) {
             Arg.device_id =

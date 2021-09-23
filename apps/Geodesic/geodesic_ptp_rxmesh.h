@@ -27,14 +27,6 @@ inline bool geodesic_rxmesh(rxmesh::RXMeshStatic<patchSize>&    rxmesh_static,
     report.model_data(Arg.obj_file_name, rxmesh_static);
     report.add_member("seeds", h_seeds);
     report.add_member("method", std::string("RXMesh"));
-    std::string order = "default";
-    if (Arg.shuffle) {
-        order = "shuffle";
-    } else if (Arg.sort) {
-        order = "sorted";
-    }
-    report.add_member("input_order", order);
-
 
     // input coords
     rxmesh::RXMeshAttribute<T> input_coord;

@@ -31,14 +31,7 @@ void filtering_rxmesh(rxmesh::RXMeshStatic<patchSize>&  rxmesh_static,
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rxmesh_static);
-    report.add_member("method", std::string("RXMesh"));
-    std::string order = "default";
-    if (Arg.shuffle) {
-        order = "shuffle";
-    } else if (Arg.sort) {
-        order = "sorted";
-    }
-    report.add_member("input_order", order);
+    report.add_member("method", std::string("RXMesh"));    
     report.add_member("num_filter_iter", Arg.num_filter_iter);
 
 

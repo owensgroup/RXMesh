@@ -435,14 +435,7 @@ void mcf_openmesh(const int                   num_omp_threads,
     report.model_data(Arg.obj_file_name, input_mesh);
     std::string method =
         "OpenMesh " + std::to_string(num_omp_threads) + " Core";
-    report.add_member("method", method);
-    std::string order = "default";
-    if (Arg.shuffle) {
-        order = "shuffle";
-    } else if (Arg.sort) {
-        order = "sorted";
-    }
-    report.add_member("input_order", order);
+    report.add_member("method", method);        
     report.add_member("time_step", Arg.time_step);
     report.add_member("cg_tolerance", Arg.cg_tolerance);
     report.add_member("use_uniform_laplace", Arg.use_uniform_laplace);

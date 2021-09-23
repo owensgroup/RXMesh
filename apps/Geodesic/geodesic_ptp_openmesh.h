@@ -273,16 +273,8 @@ void geodesic_ptp_openmesh(TriMesh&                           input_mesh,
     report.model_data(Arg.obj_file_name, input_mesh);
     report.add_member("seeds", h_seeds);
     std::string method = "OpenMeshSingleCore";
-    report.add_member("method", method);
-    std::string order = "default";
-    if (Arg.shuffle) {
-        order = "shuffle";
-    } else if (Arg.sort) {
-        order = "sorted";
-    }
-    report.add_member("input_order", order);
-
-
+    report.add_member("method", method);    
+    
     // Geodesic distance attribute for all vertices
     geo_distance.set_name("GeodesicDistance");
     geo_distance.init(input_mesh.n_vertices(), 1u, rxmesh::HOST);

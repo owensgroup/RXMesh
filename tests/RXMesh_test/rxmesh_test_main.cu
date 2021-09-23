@@ -14,8 +14,6 @@ struct RXMeshTestArg
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     bool        quite         = false;
-    bool        shuffle       = false;
-    bool        sort          = false;
     int         argc          = argc;
     char**      argv          = argv;
 } rxmesh_args;
@@ -41,9 +39,7 @@ int main(int argc, char** argv)
                         "              Default is {} \n"
                         "              Hint: Only accepts OBJ files\n"
                         " -o:          JSON file output folder. Default is {} \n"
-                        " -num_run:    Number of iterations for performance testing. Default is {} \n"
-                        " -q:          Run in quite mode.\n"
-                        " -s:          Shuffle input. Default is false.\n"
+                        " -num_run:    Number of iterations for performance testing. Default is {} \n"                        
                         " -p:          Sort input using patching output. Default is false.\n"
                         " -device_id:  GPU device ID. Default is {}",
             rxmesh_args.obj_file_name, rxmesh_args.output_folder ,rxmesh_args.num_run,rxmesh_args.device_id);
@@ -71,12 +67,6 @@ int main(int argc, char** argv)
         }
         if (cmd_option_exists(argv, argc + argv, "-q")) {
             rxmesh_args.quite = true;
-        }
-        if (cmd_option_exists(argv, argc + argv, "-s")) {
-            rxmesh_args.shuffle = true;
-        }
-        if (cmd_option_exists(argv, argc + argv, "-p")) {
-            rxmesh_args.sort = true;
         }
     }
 

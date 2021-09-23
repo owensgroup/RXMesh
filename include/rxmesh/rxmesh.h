@@ -12,7 +12,6 @@
 class RXMeshTest;
 
 namespace rxmesh {
-using coordT = float;
 
 // This class is responsible for building the data structure of representing
 // the mesh a matrix (small sub-matrices). It should/can not be instantiated.
@@ -235,15 +234,12 @@ class RXMesh
     virtual void write_connectivity(std::fstream& file) const;
 
     // build everything from scratch including patches (use this)
-    RXMesh(std::vector<std::vector<uint32_t>>& fv,
-           std::vector<std::vector<coordT>>&   coordinates,
-           const bool                          sort  = false,
+    RXMesh(std::vector<std::vector<uint32_t>>& fv,           
            const bool                          quite = true);
 
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
-    void     build_local(std::vector<std::vector<uint32_t>>& fv,
-                         std::vector<std::vector<coordT>>&   coordinates);
+    void     build_local(std::vector<std::vector<uint32_t>>& fv);
     void     build_patch_locally(const uint32_t patch_id);
     void     populate_edge_map(const std::vector<std::vector<uint32_t>>& fv);
     uint16_t create_new_local_face(const uint32_t               patch_id,
@@ -301,10 +297,6 @@ class RXMesh
     void get_size(const std::vector<std::vector<Tin>>& input,
                   std::vector<Tad>&                    ad);
 
-    void sort(std::vector<std::vector<uint32_t>>& fv,
-              std::vector<std::vector<coordT>>&   coordinates);
-
-
     // www.techiedelight.com/use-std-pair-key-std-unordered_map-cpp/
     struct edge_key_hash
     {
@@ -330,8 +322,7 @@ class RXMesh
     uint32_t m_num_patches;
 
     bool m_is_input_edge_manifold;
-    bool m_is_input_closed;
-    bool m_is_sort;
+    bool m_is_input_closed;    
     bool m_quite;
 
     std::unordered_map<std::pair<uint32_t, uint32_t>, uint32_t, edge_key_hash>

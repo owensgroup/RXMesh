@@ -94,13 +94,6 @@ inline void vertex_normal_hardwired(
     report.system();
     report.model_data(Arg.obj_file_name, num_vertices, num_faces);
     report.add_member("method", std::string("Hardwired"));
-    std::string order = "default";
-    if (Arg.shuffle) {
-        order = "shuffle";
-    } else if (Arg.sort) {
-        order = "sorted";
-    }
-    report.add_member("input_order", order);
 
     std::vector<uint32_t> h_face(num_faces * 3);
     std::vector<T>        h_verts(num_vertices * 3);
@@ -183,6 +176,6 @@ inline void vertex_normal_hardwired(
     report.add_test(td);
 
     report.write(
-        Arg.output_folder + "/hardwired/" + order,
+        Arg.output_folder + "/hardwired",
         "VertexNormal_Hardwired_" + extract_file_name(Arg.obj_file_name));
 }

@@ -21,10 +21,8 @@ class RXMeshStatic : public RXMesh<patchSize>
     RXMeshStatic(const RXMeshStatic&) = delete;
 
     RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
-                 std::vector<std::vector<coordT>>&   coordinates,
-                 const bool                          sort  = false,
                  const bool                          quite = true)
-        : RXMesh<patchSize>(fv, coordinates, sort, quite){};
+        : RXMesh<patchSize>(fv, quite){};
 
     virtual ~RXMeshStatic()
     {

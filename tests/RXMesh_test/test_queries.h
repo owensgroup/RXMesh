@@ -124,8 +124,7 @@ TEST(RXMesh, Oriented_VV)
         import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces, true));
 
     // Instantiate RXMesh Static
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(
-        Faces, Verts, false, rxmesh_args.quite);
+    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, rxmesh_args.quite);
 
     EXPECT_TRUE(rxmesh_static.is_closed())
         << " Can't generate oriented VV for input with boundaries";
@@ -215,16 +214,6 @@ TEST(RXMesh, Oriented_VV)
 
 TEST(RXMesh, Queries)
 {
-    if (rxmesh_args.shuffle) {
-        ASSERT_FALSE(rxmesh_args.sort)
-            << " cannot shuffle and sort at the same time!";
-    }
-    if (rxmesh_args.sort) {
-        ASSERT_FALSE(rxmesh_args.shuffle)
-            << " cannot shuffle and sort at the same time!";
-    }
-
-
     bool oriented = false;
 
     // Select device
@@ -235,13 +224,8 @@ TEST(RXMesh, Queries)
     ASSERT_TRUE(
         import_obj(rxmesh_args.obj_file_name, Verts, Faces, rxmesh_args.quite));
 
-    if (rxmesh_args.shuffle) {
-        shuffle_obj(Faces, Verts);
-    }
-
     // RXMesh
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(
-        Faces, Verts, rxmesh_args.sort, rxmesh_args.quite);
+    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, rxmesh_args.quite);
 
 
     // Report
@@ -253,28 +237,14 @@ TEST(RXMesh, Queries)
     report.model_data(rxmesh_args.obj_file_name, rxmesh_static);
     report.add_member("method", std::string("RXMesh"));
 
-    std::string order = "default";
-    if (rxmesh_args.shuffle) {
-        order = "shuffle";
-    } else if (rxmesh_args.sort) {
-        order = "sorted";
-    }
-    report.add_member("input_order", order);
-
     // Tester to verify all queries
     ::RXMeshTest tester(true);
     EXPECT_TRUE(tester.run_ltog_mapping_test(rxmesh_static))
         << "Local-to-global mapping test failed";
 
     // adding query that we want to test
-    std::vector<Op> ops = {Op::VV,
-                           Op::VE,
-                           Op::VF,  //
-                           Op::FV,
-                           Op::FE,
-                           Op::FF,  //
-                           Op::EV,
-                           Op::EF};
+    std::vector<Op> ops = {
+        Op::VV, Op::VE, Op::VF, Op::FV, Op::FE, Op::FF, Op::EV, Op::EF};
 
 
     for (auto& ops_it : ops) {
@@ -364,6 +334,6 @@ TEST(RXMesh, Queries)
 
 
     report.write(
-        rxmesh_args.output_folder + "/rxmesh/" + order,
+        rxmesh_args.output_folder + "/rxmesh",
         "QueryTest_RXMesh_" + extract_file_name(rxmesh_args.obj_file_name));
 }

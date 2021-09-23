@@ -20,8 +20,6 @@ struct arg
     uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
-    bool        shuffle = false;
-    bool        sort    = false;
 } Arg;
 
 #include "vertex_normal_hardwired.cuh"
@@ -41,13 +39,6 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic<patchSize>&   rxmesh_static,
     report.system();
     report.model_data(Arg.obj_file_name, rxmesh_static);
     report.add_member("method", std::string("RXMesh"));
-    std::string order = "default";
-    if (Arg.shuffle) {
-        order = "shuffle";
-    } else if (Arg.sort) {
-        order = "sorted";
-    }
-    report.add_member("input_order", order);
     report.add_member("blockThreads", blockThreads);
 
     RXMeshAttribute<T> coords;
@@ -123,14 +114,6 @@ TEST(Apps, VertexNormal)
     using namespace rxmesh;
     using dataT = float;
 
-    if (Arg.shuffle) {
-        ASSERT_FALSE(Arg.sort) << " cannot shuffle and sort at the same time!";
-    }
-    if (Arg.sort) {
-        ASSERT_FALSE(Arg.shuffle)
-            << " cannot shuffle and sort at the same time!";
-    }
-
     // Select device
     cuda_query(Arg.device_id);
 
@@ -140,13 +123,8 @@ TEST(Apps, VertexNormal)
 
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
-    if (Arg.shuffle) {
-        shuffle_obj(Faces, Verts);
-    }
 
-    // Create RXMeshStatic instance. If Arg.sort is true, Faces and Verts will
-    // be sorted based on the patching happening inside RXMesh
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, Verts, Arg.sort, false);
+    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, false);
 
     //*** Serial reference
     std::vector<dataT> vertex_normal_gold(3 * Verts.size());
@@ -178,8 +156,6 @@ int main(int argc, char** argv)
                         "              Hint: Only accepts OBJ files\n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -num_run:    Number of iterations for performance testing. Default is {} \n"                        
-                        " -s:          Shuffle input. Default is false.\n"
-                        " -p:          Sort input using patching output. Default is false.\n"
                         " -device_id:  GPU device ID. Default is {}",
             Arg.obj_file_name, Arg.output_folder, Arg.num_run, Arg.device_id);
             // clang-format on
@@ -201,12 +177,6 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-device_id")) {
             Arg.device_id =
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-s")) {
-            Arg.shuffle = true;
-        }
-        if (cmd_option_exists(argv, argc + argv, "-p")) {
-            Arg.sort = true;
         }
     }
 
