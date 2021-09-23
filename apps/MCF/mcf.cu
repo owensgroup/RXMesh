@@ -46,17 +46,17 @@ TEST(App, MCF)
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
 
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, false);
+    RXMeshStatic rxmesh_static(Faces, false);
 
     TriMesh input_mesh;
     ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
 
 
-    //*** OpenMesh Impl
+    // OpenMesh Impl
     rxmesh::RXMeshAttribute<dataT> ground_truth;
     mcf_openmesh(omp_get_max_threads(), input_mesh, ground_truth);
 
-    //*** RXMesh Impl
+    // RXMesh Impl
     mcf_rxmesh(rxmesh_static, Verts, ground_truth);
 
 

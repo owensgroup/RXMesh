@@ -12,10 +12,8 @@
 namespace rxmesh {
 // extern std::vector<std::vector<rxmesh::float>> Verts; // TODO remove this
 
-//********************** Constructors/Destructors
-template <uint32_t patchSize>
-RXMesh<patchSize>::RXMesh(std::vector<std::vector<uint32_t>>& fv,
-                          const bool                          quite /*= true*/)
+RXMesh::RXMesh(std::vector<std::vector<uint32_t>>& fv,
+               const bool                          quite /*= true*/)
     : m_num_edges(0),
       m_num_faces(0),
       m_num_vertices(0),
@@ -26,6 +24,7 @@ RXMesh<patchSize>::RXMesh(std::vector<std::vector<uint32_t>>& fv,
       m_max_face_adjacent_faces(0),
       m_face_degree(3),
       m_num_patches(0),
+      m_patch_size(512),
       m_is_input_edge_manifold(true),
       m_is_input_closed(true),
       m_quite(quite),
@@ -52,8 +51,7 @@ RXMesh<patchSize>::RXMesh(std::vector<std::vector<uint32_t>>& fv,
     device_alloc_local();
 }
 
-template <uint32_t patchSize>
-RXMesh<patchSize>::~RXMesh()
+RXMesh::~RXMesh()
 {
     GPU_FREE(m_d_patches_ltog_v);
     GPU_FREE(m_d_patches_ltog_e);
@@ -73,12 +71,8 @@ RXMesh<patchSize>::~RXMesh()
     GPU_FREE(m_d_neighbour_patches);
     GPU_FREE(m_d_neighbour_patches_offset);
 };
-//**************************************************************************
 
-
-//********************** Builders
-template <uint32_t patchSize>
-void RXMesh<patchSize>::build_local(std::vector<std::vector<uint32_t>>& fv)
+void RXMesh::build_local(std::vector<std::vector<uint32_t>>& fv)
 {
     // we build everything here from scratch
     // 1) set num vertices
@@ -140,7 +134,7 @@ void RXMesh<patchSize>::build_local(std::vector<std::vector<uint32_t>>& fv)
     // create an instance of Patcher and execute it and then move the
     // ownership to m_patcher
     std::unique_ptr<patcher::Patcher> pp = std::make_unique<patcher::Patcher>(
-        patchSize, m_fvn, m_num_vertices, m_num_edges, true, m_quite);
+        m_patch_size, m_fvn, m_num_vertices, m_num_edges, true, m_quite);
     pp->execute(
         [this](uint32_t v0, uint32_t v1) { return this->get_edge_id(v0, v1); },
         ef);
@@ -252,8 +246,7 @@ void RXMesh<patchSize>::build_local(std::vector<std::vector<uint32_t>>& fv)
     m_max_ele_count = std::max(m_num_vertices, m_max_ele_count);
 }
 
-template <uint32_t patchSize>
-void RXMesh<patchSize>::build_patch_locally(const uint32_t patch_id)
+void RXMesh::build_patch_locally(const uint32_t patch_id)
 {
     // Build the patch in local index space
     // This is the two small matrices defining incident relation between
@@ -302,8 +295,8 @@ void RXMesh<patchSize>::build_patch_locally(const uint32_t patch_id)
     // count the number of elements owned and not owned by the patch
     uint16_t              num_edges_owned(0), num_vertices_owned(0);
     std::vector<uint32_t> tmp_e, tmp_v;
-    tmp_e.reserve(patchSize * 3);
-    tmp_v.reserve(patchSize);
+    tmp_e.reserve(m_patch_size * 3);
+    tmp_v.reserve(m_patch_size);
     auto insert_if_not_found = [](uint32_t               index,
                                   std::vector<uint32_t>& tmp) -> uint32_t {
         for (uint32_t i = 0; i < tmp.size(); ++i) {
@@ -426,23 +419,21 @@ void RXMesh<patchSize>::build_patch_locally(const uint32_t patch_id)
     m_h_patches_ltog_v.push_back(v_ltog);
 }
 
-template <uint32_t patchSize>
-uint16_t RXMesh<patchSize>::create_new_local_face(
-    const uint32_t               patch_id,
-    const uint32_t               global_f,
-    const std::vector<uint32_t>& fv,
-    uint16_t&                    faces_count,
-    uint16_t&                    edges_owned_count,
-    uint16_t&                    edges_not_owned_count,
-    uint16_t&                    vertices_owned_count,
-    uint16_t&                    vertices_not_owned_count,
-    const uint16_t               num_edges_owned,
-    const uint16_t               num_vertices_owned,
-    std::vector<uint32_t>&       f_ltog,
-    std::vector<uint32_t>&       e_ltog,
-    std::vector<uint32_t>&       v_ltog,
-    std::vector<uint16_t>&       fp,
-    std::vector<uint16_t>&       ep)
+uint16_t RXMesh::create_new_local_face(const uint32_t               patch_id,
+                                       const uint32_t               global_f,
+                                       const std::vector<uint32_t>& fv,
+                                       uint16_t&                    faces_count,
+                                       uint16_t&      edges_owned_count,
+                                       uint16_t&      edges_not_owned_count,
+                                       uint16_t&      vertices_owned_count,
+                                       uint16_t&      vertices_not_owned_count,
+                                       const uint16_t num_edges_owned,
+                                       const uint16_t num_vertices_owned,
+                                       std::vector<uint32_t>& f_ltog,
+                                       std::vector<uint32_t>& e_ltog,
+                                       std::vector<uint32_t>& v_ltog,
+                                       std::vector<uint16_t>& fp,
+                                       std::vector<uint16_t>& ep)
 {
 
     uint16_t local_f = faces_count++;
@@ -562,9 +553,7 @@ uint16_t RXMesh<patchSize>::create_new_local_face(
     return local_f;
 }
 
-template <uint32_t patchSize>
-void RXMesh<patchSize>::set_num_vertices(
-    const std::vector<std::vector<uint32_t>>& fv)
+void RXMesh::set_num_vertices(const std::vector<std::vector<uint32_t>>& fv)
 {
     m_num_vertices = 0;
     for (uint32_t i = 0; i < fv.size(); ++i) {
@@ -581,9 +570,7 @@ void RXMesh<patchSize>::set_num_vertices(
 }
 
 
-template <uint32_t patchSize>
-void RXMesh<patchSize>::populate_edge_map(
-    const std::vector<std::vector<uint32_t>>& fv)
+void RXMesh::populate_edge_map(const std::vector<std::vector<uint32_t>>& fv)
 {
 
     // create edges and populate edge_map
@@ -634,10 +621,9 @@ void RXMesh<patchSize>::populate_edge_map(
     }
 }
 
-template <uint32_t patchSize>
-void RXMesh<patchSize>::edge_incident_faces(
-    const std::vector<std::vector<uint32_t>>& fv,
-    std::vector<std::vector<uint32_t>>&       ef)
+
+void RXMesh::edge_incident_faces(const std::vector<std::vector<uint32_t>>& fv,
+                                 std::vector<std::vector<uint32_t>>&       ef)
 {
     // populate ef by the faces incident to each edge
     // must call populate_edge_map before call it
@@ -684,9 +670,8 @@ void RXMesh<patchSize>::edge_incident_faces(
     }
 }
 
-template <uint32_t patchSize>
-uint32_t RXMesh<patchSize>::get_edge_id(const uint32_t v0,
-                                        const uint32_t v1) const
+
+uint32_t RXMesh::get_edge_id(const uint32_t v0, const uint32_t v1) const
 {
     // v0 and v1 are two vertices in global space. we return the edge
     // id in global space also (by querying m_edges_map)
@@ -700,9 +685,7 @@ uint32_t RXMesh<patchSize>::get_edge_id(const uint32_t v0,
     return get_edge_id(edge);
 }
 
-template <uint32_t patchSize>
-uint32_t RXMesh<patchSize>::get_edge_id(
-    const std::pair<uint32_t, uint32_t>& edge) const
+uint32_t RXMesh::get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const
 {
     uint32_t edge_id = -1;
     try {
@@ -717,14 +700,10 @@ uint32_t RXMesh<patchSize>::get_edge_id(
 
     return edge_id;
 }
-//**************************************************************************
 
-//********************** Move to Device
-template <uint32_t patchSize>
 template <typename Tin, typename Tst>
-void RXMesh<patchSize>::get_starting_ids(
-    const std::vector<std::vector<Tin>>& input,
-    std::vector<Tst>&                    starting_id)
+void RXMesh::get_starting_ids(const std::vector<std::vector<Tin>>& input,
+                              std::vector<Tst>&                    starting_id)
 {
     // get the starting ids for the mesh elements in input and store it
     // in the first (x) component of starting_id
@@ -740,10 +719,10 @@ void RXMesh<patchSize>::get_starting_ids(
     }
 }
 
-template <uint32_t patchSize>
+
 template <typename Tin, typename Tad>
-void RXMesh<patchSize>::get_size(const std::vector<std::vector<Tin>>& input,
-                                 std::vector<Tad>&                    ad)
+void RXMesh::get_size(const std::vector<std::vector<Tin>>& input,
+                      std::vector<Tad>&                    ad)
 {
     // get the size of each element of input and store it as the second(y)
     // component in ad
@@ -754,11 +733,10 @@ void RXMesh<patchSize>::get_size(const std::vector<std::vector<Tin>>& input,
     }
 }
 
-template <uint32_t patchSize>
 template <typename T>
-void RXMesh<patchSize>::padding_to_multiple(std::vector<std::vector<T>>& input,
-                                            const uint32_t multiple,
-                                            const T        init_val)
+void RXMesh::padding_to_multiple(std::vector<std::vector<T>>& input,
+                                 const uint32_t               multiple,
+                                 const T                      init_val)
 {
     // resize each element on input to be mulitple of multiple by add
     // init_val to the end
@@ -771,8 +749,7 @@ void RXMesh<patchSize>::padding_to_multiple(std::vector<std::vector<T>>& input,
     }
 }
 
-template <uint32_t patchSize>
-void RXMesh<patchSize>::device_alloc_local()
+void RXMesh::device_alloc_local()
 {
 
     // allocate and transfer patch information to device
@@ -1023,13 +1000,7 @@ void RXMesh<patchSize>::device_alloc_local()
                           m_d_neighbour_patches_offset);
 }
 
-
-//**************************************************************************
-
-
-//********************** Export
-template <uint32_t patchSize>
-void RXMesh<patchSize>::write_connectivity(std::fstream& file) const
+void RXMesh::write_connectivity(std::fstream& file) const
 {
     for (uint32_t p = 0; p < m_num_patches; ++p) {  // for every patch
         assert(m_h_ad_size[p].w % 3 == 0);
@@ -1055,7 +1026,4 @@ void RXMesh<patchSize>::write_connectivity(std::fstream& file) const
     }
 }
 
-//**************************************************************************
-
-template class RXMesh<PATCH_SIZE>;
 }  // namespace rxmesh

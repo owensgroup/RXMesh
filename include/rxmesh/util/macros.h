@@ -6,8 +6,7 @@
 
 namespace rxmesh {
 
-typedef uint8_t    flag_t;
-constexpr uint32_t PATCH_SIZE = 512;
+typedef uint8_t flag_t;
 
 // TRANSPOSE_ITEM_PER_THREAD
 constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 11;

@@ -10,7 +10,6 @@
 #include "rxmesh/rxmesh_context.h"
 
 namespace rxmesh {
-//********************** Tools
 template <uint32_t rowOffset,
           uint32_t blockThreads,
           uint32_t itemPerThread = TRANSPOSE_ITEM_PER_THREAD>
@@ -92,7 +91,6 @@ __device__ __forceinline__ void block_mat_transpose(const uint32_t num_rows,
         }
     }
 }
-//*************************************************************************
 
 template <uint32_t blockThreads>
 __device__ __forceinline__ void v_v_oreinted(uint16_t*& s_offset_all_patches,
@@ -228,7 +226,7 @@ __device__ __forceinline__ void v_v_oreinted(uint16_t*& s_offset_all_patches,
         }
     }
 }
-//********************** 1) vertex incident edges
+
 template <uint32_t blockThreads>
 __device__ __forceinline__ void v_e(const uint32_t num_vertices,
                                     const uint32_t num_edges,
@@ -246,9 +244,7 @@ __device__ __forceinline__ void v_e(const uint32_t num_vertices,
     block_mat_transpose<2u, blockThreads>(
         num_edges, num_vertices, d_edges, d_output);
 }
-//*************************************************************************
 
-//********************** 0) Vertex adjacent vertices
 template <uint32_t blockThreads>
 __device__ __forceinline__ void v_v(const uint32_t num_vertices,
                                     const uint32_t num_edges,
@@ -293,10 +289,7 @@ __device__ __forceinline__ void v_v(const uint32_t num_vertices,
         }
     }
 }
-//*************************************************************************
 
-
-//********************** 3) Face incident vertices
 __device__ __forceinline__ void f_v(const uint32_t  num_edges,
                                     const uint16_t* d_edges,
                                     const uint32_t  num_faces,
@@ -326,10 +319,7 @@ __device__ __forceinline__ void f_v(const uint32_t  num_edges,
         }
     }
 }
-//*************************************************************************
 
-
-//********************** 2) Vertex incident faces
 template <uint32_t blockThreads>
 __device__ __forceinline__ void v_f(const uint32_t num_faces,
                                     const uint32_t num_edges,
@@ -353,9 +343,7 @@ __device__ __forceinline__ void v_f(const uint32_t num_faces,
     block_mat_transpose<3u, blockThreads>(
         num_faces, num_vertices, d_faces, d_edges);
 }
-//*************************************************************************
 
-//********************** 8) Edge incident faces
 template <uint32_t blockThreads>
 __device__ __forceinline__ void e_f(const uint32_t num_edges,
                                     const uint32_t num_faces,
@@ -375,10 +363,7 @@ __device__ __forceinline__ void e_f(const uint32_t num_edges,
     block_mat_transpose<3u, blockThreads>(
         num_faces, num_edges, d_faces, d_output, shift);
 }
-//*************************************************************************
 
-
-//********************** 5) Face adjacent faces
 template <uint32_t blockThreads>
 __device__ __forceinline__ void f_f(const uint32_t num_edges,
                                     const uint32_t num_faces,
@@ -458,10 +443,7 @@ __device__ __forceinline__ void f_f(const uint32_t num_edges,
         }
     }*/
 }
-//*************************************************************************
 
-
-//**********************
 template <uint32_t blockThreads, Op op>
 __device__ __forceinline__ void query(uint16_t*&     s_offset_all_patches,
                                       uint16_t*&     s_output_all_patches,
@@ -542,5 +524,4 @@ __device__ __forceinline__ void query(uint16_t*&     s_offset_all_patches,
     }  // namespace RXMESH
 }
 
-//*************************************************************************
 }  // namespace rxmesh

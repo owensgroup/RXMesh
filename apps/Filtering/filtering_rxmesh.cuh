@@ -10,8 +10,8 @@
 /**
  * filtering_rxmesh()
  */
-template <typename T, uint32_t patchSize>
-void filtering_rxmesh(rxmesh::RXMeshStatic<patchSize>&  rxmesh_static,
+template <typename T>
+void filtering_rxmesh(rxmesh::RXMeshStatic&             rxmesh_static,
                       std::vector<std::vector<T>>&      Verts,
                       const rxmesh::RXMeshAttribute<T>& ground_truth,
                       const size_t                      max_neighbour_size)
@@ -31,7 +31,7 @@ void filtering_rxmesh(rxmesh::RXMeshStatic<patchSize>&  rxmesh_static,
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rxmesh_static);
-    report.add_member("method", std::string("RXMesh"));    
+    report.add_member("method", std::string("RXMesh"));
     report.add_member("num_filter_iter", Arg.num_filter_iter);
 
 

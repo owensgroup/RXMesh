@@ -42,7 +42,6 @@ class Patcher
     void print_statistics();
 
 
-    //********************** Getter
     uint32_t get_num_patches() const
     {
         return m_num_patches;
@@ -154,8 +153,6 @@ class Patcher
     {
         return m_num_lloyd_run;
     }
-    //**************************************************************************
-
 
     ~Patcher();
 
@@ -190,7 +187,6 @@ class Patcher
         uint32_t* d_face_patch,
         uint32_t* d_patches_val);
     void parallel_execute(const std::vector<std::vector<uint32_t>>& ef);
-    //********
 
     const std::vector<std::vector<uint32_t>>& m_fvn;
 
@@ -221,7 +217,6 @@ class Patcher
     // utility vectors
     std::vector<uint32_t> m_frontier, m_tf, m_seeds;
     uint32_t              m_num_lloyd_run = 0;
-    //********
 };
 
 }  // namespace patcher

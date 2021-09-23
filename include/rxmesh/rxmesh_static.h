@@ -10,25 +10,22 @@
 
 namespace rxmesh {
 
-template <uint32_t patchSize = PATCH_SIZE>
-class RXMeshStatic : public RXMesh<patchSize>
+class RXMeshStatic : public RXMesh
 {
     // This class is responsible for query operation of static meshes. It
     // inherits the constructor and build methods from the base class RXMesh
     // and create new method(s) for queries
    public:
-    //********************** Constructors/Destructors
     RXMeshStatic(const RXMeshStatic&) = delete;
 
     RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
                  const bool                          quite = true)
-        : RXMesh<patchSize>(fv, quite){};
+        : RXMesh(fv, quite){};
 
     virtual ~RXMeshStatic()
     {
     }
 
-    //*********************************************************************
 
     /**
      * prepare_launch_box()

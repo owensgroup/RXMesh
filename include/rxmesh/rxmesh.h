@@ -68,7 +68,6 @@ enum class ELEMENT
     FACE   = 2
 };
 
-template <uint32_t patchSize = PATCH_SIZE>
 class RXMesh
 {
    public:
@@ -146,7 +145,7 @@ class RXMesh
 
     uint32_t get_patch_size() const
     {
-        return patchSize;
+        return m_patch_size;
     }
 
     uint32_t get_num_patches() const
@@ -234,8 +233,7 @@ class RXMesh
     virtual void write_connectivity(std::fstream& file) const;
 
     // build everything from scratch including patches (use this)
-    RXMesh(std::vector<std::vector<uint32_t>>& fv,           
-           const bool                          quite = true);
+    RXMesh(std::vector<std::vector<uint32_t>>& fv, const bool quite = true);
 
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
@@ -312,17 +310,18 @@ class RXMesh
     // our friend tester class
     friend class ::RXMeshTest;
 
-    // var
+
     uint32_t m_num_edges, m_num_faces, m_num_vertices, m_max_ele_count,
         m_max_valence, m_max_valence_vertex_id, m_max_edge_incident_faces,
         m_max_face_adjacent_faces;
     const uint32_t m_face_degree;
 
     // patches
-    uint32_t m_num_patches;
+    uint32_t       m_num_patches;
+    const uint32_t m_patch_size;
 
     bool m_is_input_edge_manifold;
-    bool m_is_input_closed;    
+    bool m_is_input_closed;
     bool m_quite;
 
     std::unordered_map<std::pair<uint32_t, uint32_t>, uint32_t, edge_key_hash>
@@ -421,6 +420,4 @@ class RXMesh
 
     double m_total_gpu_storage_mb;
 };
-
-extern template class RXMesh<PATCH_SIZE>;
 }  // namespace rxmesh

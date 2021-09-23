@@ -24,8 +24,8 @@ struct arg
 
 #include "vertex_normal_hardwired.cuh"
 
-template <typename T, uint32_t patchSize>
-void vertex_normal_rxmesh(rxmesh::RXMeshStatic<patchSize>&   rxmesh_static,
+template <typename T>
+void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
                           const std::vector<std::vector<T>>& Verts,
                           const std::vector<T>&              vertex_normal_gold)
 {
@@ -124,16 +124,16 @@ TEST(Apps, VertexNormal)
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
 
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, false);
+    RXMeshStatic rxmesh_static(Faces, false);
 
-    //*** Serial reference
+    // Serial reference
     std::vector<dataT> vertex_normal_gold(3 * Verts.size());
     vertex_normal_ref(Faces, Verts, vertex_normal_gold);
 
-    //*** RXMesh Impl
+    // RXMesh Impl
     vertex_normal_rxmesh(rxmesh_static, Verts, vertex_normal_gold);
 
-    //*** Hardwired Impl
+    // Hardwired Impl
     vertex_normal_hardwired(Faces, Verts, vertex_normal_gold);
 }
 

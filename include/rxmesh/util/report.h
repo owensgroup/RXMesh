@@ -268,9 +268,7 @@ struct Report
     }
 
     // get model data from RXMesh
-    template <uint32_t p>
-    void model_data(const std::string&       model_name,
-                    const rxmesh::RXMesh<p>& rxmesh)
+    void model_data(const std::string& model_name, const rxmesh::RXMesh& rxmesh)
     {
         rapidjson::Document subdoc(&m_doc.GetAllocator());
         subdoc.SetObject();

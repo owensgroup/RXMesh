@@ -22,7 +22,6 @@ namespace rxmesh {
 
 namespace patcher {
 
-//********************** Constructors/Destructors
 Patcher::Patcher(uint32_t                                  patch_size,
                  const std::vector<std::vector<uint32_t>>& fvn,
                  const uint32_t                            num_vertices,
@@ -86,10 +85,7 @@ void Patcher::mem_alloc()
 Patcher::~Patcher()
 {
 }
-//**************************************************************************
 
-
-//********************** Exporters/Importer
 void Patcher::print_statistics()
 {
     RXMESH_TRACE("Patcher: num_patches = {}", m_num_patches);
@@ -263,10 +259,7 @@ void Patcher::export_single_patch_edges(
         }
     }
 }
-//**************************************************************************
 
-
-//********************** executer/internal utilities
 void Patcher::execute(std::function<uint32_t(uint32_t, uint32_t)> get_edge_id,
                       const std::vector<std::vector<uint32_t>>&   ef)
 {
@@ -733,7 +726,6 @@ void Patcher::assign_patch(
     }
 }
 
-//********************** Parallel Execute
 void Patcher::populate_ff(const std::vector<std::vector<uint32_t>>& ef,
                           std::vector<uint32_t>&                    h_ff_values,
                           std::vector<uint32_t>&                    h_ff_offset)
@@ -1196,8 +1188,6 @@ uint32_t Patcher::construct_patches_compressed_parallel(
 
     return max_patch_size;
 }
-//**************************************************************************
-
 
 template void Patcher::export_single_patch(
     const std::vector<std::vector<double>>& Verts,

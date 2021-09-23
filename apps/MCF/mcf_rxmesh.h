@@ -9,8 +9,8 @@
 #include "rxmesh/util/vector.h"
 
 
-template <typename T, uint32_t patchSize>
-void mcf_rxmesh(rxmesh::RXMeshStatic<patchSize>&   rxmesh_static,
+template <typename T>
+void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
                 const std::vector<std::vector<T>>& Verts,
                 const rxmesh::RXMeshAttribute<T>&  ground_truth)
 {

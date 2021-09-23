@@ -73,7 +73,6 @@ int main(int argc, char** argv)
     if (!rxmesh_args.quite) {
         RXMESH_TRACE("input= {}", rxmesh_args.obj_file_name);
         RXMESH_TRACE("output_folder= {}", rxmesh_args.output_folder);
-        RXMESH_TRACE("PATCH_SIZE= {}", PATCH_SIZE);
         RXMESH_TRACE("num_run= {}", rxmesh_args.num_run);
         RXMESH_TRACE("device_id= {}", rxmesh_args.device_id);
     }

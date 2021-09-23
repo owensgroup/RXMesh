@@ -67,7 +67,6 @@ class RXMeshAttribute
 
 
    public:
-    //********************** Constructors/Destructor
     RXMeshAttribute()
         : m_name(nullptr),
           m_num_mesh_elements(0),
@@ -118,10 +117,7 @@ class RXMeshAttribute
         m_pitch.y = 0;
     }
 
-    //*********************************************************************
 
-
-    //********************** Setter/Getter
     void set_name(std::string name)
     {
         free(this->m_name);
@@ -193,10 +189,7 @@ class RXMeshAttribute
             }
         }
     }
-    //*********************************************************************
 
-
-    //********************** Memory Manipulation
     void init(uint32_t   num_elements,
               uint32_t   num_attributes_per_elements,
               locationT  target            = DEVICE,
@@ -568,9 +561,7 @@ class RXMeshAttribute
             }
         }
     }
-    //*********************************************************************
 
-    //********************** BLAS
     template <uint32_t N>
     void axpy(const RXMeshAttribute<T>& X,
               const Vector<N, T>        alpha,
@@ -782,11 +773,6 @@ class RXMeshAttribute
         }
     }
 
-
-    //*********************************************************************
-
-
-    //********************** Operators
     __host__ __device__ __forceinline__ T& operator()(uint32_t idx,
                                                       uint32_t attr)
     {
@@ -863,7 +849,6 @@ class RXMeshAttribute
 
 #endif
     }
-    //*********************************************************************
 
 
    private:
@@ -879,7 +864,7 @@ class RXMeshAttribute
             RXMESH_ERROR("RXMeshAttribute::set_pitch() unknown layout");
         }
     }
-    //********************** Member Variables
+
     char*     m_name;
     uint32_t  m_num_mesh_elements;
     uint32_t  m_num_attribute_per_element;
@@ -903,6 +888,5 @@ class RXMeshAttribute
     T**           m_d_reduce_output;
     cudaStream_t* m_reduce_streams;
     T**           m_norm2_temp_buffer;
-    //*********************************************************************
 };
 }  // namespace rxmesh

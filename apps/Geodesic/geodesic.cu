@@ -42,7 +42,7 @@ TEST(App, GEODESIC)
     std::vector<std::vector<uint32_t>> Faces;
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, false);
+    RXMeshStatic rxmesh_static(Faces, false);
     ASSERT_TRUE(rxmesh_static.is_closed())
         << "Geodesic only works on watertight/closed manifold mesh without "
            "boundaries";
@@ -66,7 +66,7 @@ TEST(App, GEODESIC)
     }
 
 
-    //*** OpenMesh Impl
+    // OpenMesh Impl
     RXMeshAttribute<dataT> ground_truth;
 
     // Save a map from vertex id to topleset (number of hops from
@@ -94,7 +94,7 @@ TEST(App, GEODESIC)
     toplesets.move(rxmesh::HOST, rxmesh::DEVICE);
 
 
-    //*** RXMesh Impl
+    // RXMesh Impl
     EXPECT_TRUE(geodesic_rxmesh(rxmesh_static,
                                 Faces,
                                 Verts,

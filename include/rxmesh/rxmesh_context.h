@@ -175,8 +175,6 @@ class __align__(16) RXMeshContext
         //}
     }
 
-
-    //********************** Getters
     __device__ __forceinline__ uint32_t get_num_edges() const
     {
         return m_num_edges;
@@ -278,7 +276,7 @@ class __align__(16) RXMeshContext
     {
         return m_d_patch_distribution_f;
     }
-    //**********************************************************************
+
 
     static __device__ __host__ __forceinline__ void unpack_edge_dir(
         const uint16_t edge_dir, uint16_t& edge, flag_t& dir)

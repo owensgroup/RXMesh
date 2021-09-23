@@ -6,8 +6,8 @@
 
 constexpr float EPS = 10e-6;
 
-template <typename T, uint32_t patchSize>
-inline bool geodesic_rxmesh(rxmesh::RXMeshStatic<patchSize>&    rxmesh_static,
+template <typename T>
+inline bool geodesic_rxmesh(rxmesh::RXMeshStatic&               rxmesh_static,
                             std::vector<std::vector<uint32_t>>& Faces,
                             std::vector<std::vector<T>>&        Verts,
                             const std::vector<uint32_t>&        h_seeds,

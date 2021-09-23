@@ -5,7 +5,6 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
 
-//********************** Mat transpose kernel
 template <uint32_t rowOffset, uint32_t blockThreads, uint32_t itemPerThread>
 __global__ static void k_test_block_mat_transpose(uint16_t*      d_src,
                                                   const uint32_t num_rows,
@@ -16,18 +15,13 @@ __global__ static void k_test_block_mat_transpose(uint16_t*      d_src,
     rxmesh::block_mat_transpose<rowOffset, blockThreads, itemPerThread>(
         num_rows, num_cols, d_src, d_output);
 }
-//**************************************************************************
 
-//********************** block scan inplace kernel
 template <typename T, uint32_t blockThreads>
 __global__ static void k_test_block_exclusive_sum(T* d_src, const uint32_t size)
 {
     rxmesh::cub_block_exclusive_sum<T, blockThreads>(d_src, size);
 }
-//**************************************************************************
 
-
-//********************** atomicAdd kernel
 template <typename T>
 __global__ static void k_test_atomicAdd(T* d_val)
 {
@@ -40,7 +34,6 @@ __global__ static void k_test_atomicAdd(T* d_val)
         d_val[0] = val;
     }*/
 }
-//**************************************************************************
 
 class TestUtil
 {
@@ -96,10 +89,8 @@ class TestUtil
 
         return passed;
     }
-    //**************************************************************************
 
 
-    //********************** Test matrix transpose
     template <uint32_t numRows, uint32_t numCols, uint32_t rowOffset>
     bool test_block_mat_transpose()
     {
@@ -231,8 +222,6 @@ class TestUtil
 
         return passed;
     }
-
-    //**************************************************************************
 
     template <typename T>
     bool test_atomicAdd(const uint32_t threads = 1024)

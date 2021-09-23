@@ -92,9 +92,7 @@ float launcher(const RXMeshContext&       context,
 /**
  * calc_fixed_offset()
  */
-template <uint32_t patchSize>
-inline uint32_t max_output_per_element(const RXMeshStatic<patchSize>& rxmesh,
-                                       const Op&                      op)
+inline uint32_t max_output_per_element(const RXMeshStatic& rxmesh, const Op& op)
 {
     if (op == Op::EV) {
         return 2;
@@ -124,7 +122,7 @@ TEST(RXMesh, Oriented_VV)
         import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces, true));
 
     // Instantiate RXMesh Static
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh_static(Faces, rxmesh_args.quite);
 
     EXPECT_TRUE(rxmesh_static.is_closed())
         << " Can't generate oriented VV for input with boundaries";
@@ -225,7 +223,7 @@ TEST(RXMesh, Queries)
         import_obj(rxmesh_args.obj_file_name, Verts, Faces, rxmesh_args.quite));
 
     // RXMesh
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh_static(Faces, rxmesh_args.quite);
 
 
     // Report
