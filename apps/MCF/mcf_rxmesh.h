@@ -188,7 +188,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
     X.move(rxmesh::DEVICE, rxmesh::HOST);
 
     // output to obj
-    // rxmesh_static.exportOBJ("mcf_rxmesh.obj",
+    // rxmesh_static.export_obj("mcf_rxmesh.obj",
     //                        [&X](uint32_t i, uint32_t j) { return X(i, j); });
 
     // Verify

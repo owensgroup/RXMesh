@@ -10,8 +10,6 @@
 #include "rxmesh/util/math.h"
 
 namespace rxmesh {
-// extern std::vector<std::vector<rxmesh::float>> Verts; // TODO remove this
-
 RXMesh::RXMesh(std::vector<std::vector<uint32_t>>& fv,
                const bool                          quite /*= true*/)
     : m_num_edges(0),
@@ -19,7 +17,6 @@ RXMesh::RXMesh(std::vector<std::vector<uint32_t>>& fv,
       m_num_vertices(0),
       m_max_ele_count(0),
       m_max_valence(0),
-      m_max_valence_vertex_id(INVALID32),
       m_max_edge_incident_faces(0),
       m_max_face_adjacent_faces(0),
       m_face_degree(3),
@@ -73,41 +70,15 @@ RXMesh::~RXMesh()
 };
 
 void RXMesh::build_local(std::vector<std::vector<uint32_t>>& fv)
-{
-    // we build everything here from scratch
-    // 1) set num vertices
-    // 2) populate edge_map
-    // 3) for each edge, store a list of faces that are incident to that edge
+{    
     // 4) copy fv to m_fvn and append the adjacent faces for each face using
     // info from 3)
     // 5) patch the mesh
     // 6) populate the local mesh
 
-    //=========== 1)
-    m_num_faces = static_cast<uint32_t>(fv.size());
-    set_num_vertices(fv);
-    //===============================
-
-
-    //=========== 2)
-    populate_edge_map(fv);
-    m_num_edges = static_cast<uint32_t>(m_edges_map.size());
-    //===============================
-
-
-    //=========== 3)
     std::vector<std::vector<uint32_t>> ef;
-    edge_incident_faces(fv, ef);
-    // caching mesh type; edge manifold, closed
-    for (uint32_t e = 0; e < ef.size(); ++e) {
-        if (ef[e].size() < 2) {
-            m_is_input_closed = false;
-        }
-        if (ef[e].size() > 2) {
-            m_is_input_edge_manifold = false;
-        }
-    }
-    //===============================
+    build_supporting_structures(fv, ef);
+    calc_statistics(fv, ef);
 
 
     //=========== 4)
@@ -244,6 +215,114 @@ void RXMesh::build_local(std::vector<std::vector<uint32_t>>& fv)
 
     m_max_ele_count = std::max(m_num_edges, m_num_faces);
     m_max_ele_count = std::max(m_num_vertices, m_max_ele_count);
+}
+
+void RXMesh::build_supporting_structures(
+    const std::vector<std::vector<uint32_t>>& fv,
+    std::vector<std::vector<uint32_t>>&       ef)
+{
+    m_num_faces    = static_cast<uint32_t>(fv.size());
+    m_num_vertices = 0;
+    m_num_edges    = 0;
+    m_edges_map.clear();
+
+    // assuming manifold mesh i.e., #E = 1.5#F
+    ef.clear();
+    uint32_t reserve_size =
+        static_cast<size_t>(1.5f * static_cast<float>(m_num_faces));
+    ef.reserve(reserve_size);
+    m_edges_map.reserve(reserve_size);
+
+    for (uint32_t f = 0; f < fv.size(); ++f) {
+        if (fv[f].size() != 3) {
+            RXMESH_ERROR(
+                "rxmesh::build_supporting_structures() Face {} is not "
+                "triangle. Non-triangular faces are not supported",
+                f);
+            exit(EXIT_FAILURE);
+        }
+
+        for (uint32_t v = 0; v < fv[f].size(); ++v) {
+            uint32_t v0 = fv[f][v];
+            uint32_t v1 = fv[f][(v + 1) % 3];
+
+            m_num_vertices = std::max(m_num_vertices, v0);
+
+            std::pair<uint32_t, uint32_t> edge   = edge_key(v0, v1);
+            auto                          e_iter = m_edges_map.find(edge);
+            if (e_iter == m_edges_map.end()) {
+                uint32_t edge_id = m_num_edges++;
+                m_edges_map.insert(std::make_pair(edge, edge_id));
+                std::vector<uint32_t> tmp(1, f);
+                ef.push_back(tmp);
+            } else {
+                ef[(*e_iter).second].push_back(f);
+            }
+        }
+    }
+    ++m_num_vertices;
+
+    if (m_num_edges != static_cast<uint32_t>(m_edges_map.size())) {
+        RXMESH_ERROR(
+            "rxmesh::build_supporting_structures() m_num_edges ({}) should "
+            "match the size of edge_map ({})",
+            m_num_edges,
+            m_edges_map.size());
+        exit(EXIT_FAILURE);
+    }
+}
+
+void RXMesh::calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
+                             const std::vector<std::vector<uint32_t>>& ef)
+{
+    if (m_num_vertices == 0 || m_num_faces == 0 || m_num_edges == 0 ||
+        fv.size() == 0 || ef.size() == 0) {
+        RXMESH_ERROR(
+            "RXMesh::calc_statistics() input mesh has not been initialized");
+        exit(EXIT_FAILURE);
+    }
+
+    // calc max valence, max ef, is input closed, and is input manifold
+    m_max_edge_incident_faces = 0;
+    m_max_valence             = 0;
+    std::vector<uint32_t> vv_count(m_num_vertices, 0);
+    m_is_input_closed        = true;
+    m_is_input_edge_manifold = true;
+    for (auto& e_iter : m_edges_map) {
+        uint32_t v0 = e_iter.first.first;
+        uint32_t v1 = e_iter.first.second;
+
+        vv_count[v0]++;
+        vv_count[v1]++;
+
+        m_max_valence = std::max(m_max_valence, vv_count[v0]);
+        m_max_valence = std::max(m_max_valence, vv_count[v1]);
+
+        uint32_t edge_id = e_iter.second;
+        m_max_edge_incident_faces =
+            std::max(m_max_edge_incident_faces, uint32_t(ef[edge_id].size()));
+
+        if (ef[edge_id].size() < 2) {
+            m_is_input_closed = false;
+        }
+        if (ef[edge_id].size() > 2) {
+            m_is_input_edge_manifold = false;
+        }
+    }
+
+    // calc max ff
+    m_max_face_adjacent_faces = 0;
+    for (uint32_t f = 0; f < fv.size(); ++f) {
+        uint32_t ff_count = 0;
+        for (uint32_t v = 0; v < fv[f].size(); ++v) {
+            uint32_t v0       = fv[f][v];
+            uint32_t v1       = fv[f][(v + 1) % 3];
+            uint32_t edge_num = get_edge_id(v0, v1);
+            ff_count += ef[edge_num].size() - 1;
+        }
+        m_max_face_adjacent_faces =
+            std::max(ff_count, m_max_face_adjacent_faces);
+    }
 }
 
 void RXMesh::build_patch_locally(const uint32_t patch_id)
@@ -553,124 +632,6 @@ uint16_t RXMesh::create_new_local_face(const uint32_t               patch_id,
     return local_f;
 }
 
-void RXMesh::set_num_vertices(const std::vector<std::vector<uint32_t>>& fv)
-{
-    m_num_vertices = 0;
-    for (uint32_t i = 0; i < fv.size(); ++i) {
-        if (fv[i].size() != 3) {
-            RXMESH_ERROR("rxmesh::count_vertices() Face" + std::to_string(i) +
-                         " is not triangles. Non-triangular faces are not "
-                         "supported yet");
-        }
-        for (uint32_t j = 0; j < fv[i].size(); ++j) {
-            m_num_vertices = std::max(m_num_vertices, fv[i][j]);
-        }
-    }
-    ++m_num_vertices;
-}
-
-
-void RXMesh::populate_edge_map(const std::vector<std::vector<uint32_t>>& fv)
-{
-
-    // create edges and populate edge_map
-    // and also compute max valence
-
-    m_edges_map.reserve(m_num_faces * 3);  // upper bound
-
-    std::vector<uint32_t> vv_count(m_num_vertices, 0);
-    m_max_valence = 0;
-
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
-
-        if (fv[f].size() < 3) {
-            RXMESH_ERROR(
-                "rxmesh::populate_edge_map() Face {} has less than three "
-                "vertices",
-                f);
-        }
-        for (uint32_t j = 0; j < fv[f].size(); ++j) {
-
-            uint32_t v0 = fv[f][j];
-            uint32_t v1 = (j != fv[f].size() - 1) ? fv[f][j + 1] : fv[f][0];
-
-            std::pair<uint32_t, uint32_t> my_edge = edge_key(v0, v1);
-
-            typename std::unordered_map<std::pair<uint32_t, uint32_t>,
-                                        uint32_t,
-                                        edge_key_hash>::const_iterator e_it =
-                m_edges_map.find(my_edge);
-
-            if (e_it == m_edges_map.end()) {
-                m_edges_map.insert(std::make_pair(my_edge, m_num_edges++));
-
-                vv_count[v0]++;
-                vv_count[v1]++;
-
-                // also set max valence
-                if (m_max_valence < vv_count[v0]) {
-                    m_max_valence           = vv_count[v0];
-                    m_max_valence_vertex_id = v0;
-                }
-                if (m_max_valence < vv_count[v1]) {
-                    m_max_valence           = vv_count[v1];
-                    m_max_valence_vertex_id = v1;
-                }
-            }
-        }
-    }
-}
-
-
-void RXMesh::edge_incident_faces(const std::vector<std::vector<uint32_t>>& fv,
-                                 std::vector<std::vector<uint32_t>>&       ef)
-{
-    // populate ef by the faces incident to each edge
-    // must call populate_edge_map before call it
-
-    assert(m_edges_map.size() > 0);
-
-    uint32_t num_edges = static_cast<uint32_t>(m_edges_map.size());
-
-    // reserve space assuming mesh is mostly manifold (edge is shared by
-    // two faces)
-    ef.clear();
-    ef.resize(num_edges, std::vector<uint32_t>(0));
-    for (uint32_t e = 0; e < num_edges; ++e) {
-        ef[e].reserve(2);
-    }
-
-    m_max_edge_incident_faces = 0;
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
-
-        for (uint32_t j = 0; j < fv[f].size(); ++j) {
-
-            uint32_t v0 = fv[f][j];
-            uint32_t v1 = (j != fv[f].size() - 1) ? fv[f][j + 1] : fv[f][0];
-
-            uint32_t edge_num = get_edge_id(v0, v1);
-            ef[edge_num].push_back(f);
-            m_max_edge_incident_faces = std::max(m_max_edge_incident_faces,
-                                                 uint32_t(ef[edge_num].size()));
-        }
-    }
-
-    // calc m_max_face_adjacent_faces
-    m_max_face_adjacent_faces = 0;
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
-        uint32_t ff_count = 0;
-        for (uint32_t j = 0; j < fv[f].size(); ++j) {
-            uint32_t v0 = fv[f][j];
-            uint32_t v1 = (j != fv[f].size() - 1) ? fv[f][j + 1] : fv[f][0];
-            uint32_t edge_num = get_edge_id(v0, v1);
-            ff_count += ef[edge_num].size() - 1;
-        }
-        m_max_face_adjacent_faces =
-            std::max(ff_count, m_max_face_adjacent_faces);
-    }
-}
-
-
 uint32_t RXMesh::get_edge_id(const uint32_t v0, const uint32_t v1) const
 {
     // v0 and v1 are two vertices in global space. we return the edge
@@ -696,6 +657,7 @@ uint32_t RXMesh::get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const
             " Can not find an edge connecting vertices {} and {}",
             edge.first,
             edge.second);
+        exit(EXIT_FAILURE);
     }
 
     return edge_id;

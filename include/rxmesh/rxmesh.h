@@ -13,23 +13,14 @@ class RXMeshTest;
 
 namespace rxmesh {
 
-// This class is responsible for building the data structure of representing
-// the mesh a matrix (small sub-matrices). It should/can not be instantiated.
-// In order to use it, use RXMeshStatic
-
 enum class Op
 {
-    // Vertex
     VV = 0,
     VE = 1,
     VF = 2,
-
-    // Face
     FV = 3,
     FE = 4,
     FF = 5,
-
-    // Edge
     EV = 6,
     EE = 7,
     EF = 8,
@@ -56,8 +47,10 @@ inline std::string op_to_string(const Op& op)
             return "EF";
         case rxmesh::Op::EE:
             return "EE";
-        default:
+        default: {
+            RXMESH_ERROR("op_to_string() unknown input operation");
             return "";
+        }
     }
 }
 
@@ -71,9 +64,17 @@ enum class ELEMENT
 class RXMesh
 {
    public:
-    // Exporter
+    /**
+     * @brief Export the mesh to obj file
+     *
+     * @tparam VertT Lambda function type [inferred]
+     * @param filename the output file
+     * @param getCoords lambda function that takes two uint32_t/int parameters
+     * and return a real number. The first parameter is the vertex id. The
+     * second parameter is dimension (0,1, or 2)
+     */
     template <typename VertT>
-    void exportOBJ(const std::string& filename, VertT getCoords)
+    void export_obj(const std::string& filename, VertT getCoords)
     {
         std::string  fn = STRINGIFY(OUTPUT_DIR) + filename;
         std::fstream file(fn, std::ios::out);
@@ -95,7 +96,6 @@ class RXMesh
     }
 
 
-    // getter
     uint32_t get_num_vertices() const
     {
         return m_num_vertices;
@@ -157,7 +157,6 @@ class RXMesh
     {
         return m_patcher->get_num_components();
     }
-
 
     void get_max_min_avg_patch_size(uint32_t& min_p,
                                     uint32_t& max_p,
@@ -226,20 +225,40 @@ class RXMesh
    protected:
     virtual ~RXMesh();
 
-    RXMeshContext m_rxmesh_context;
-
     RXMesh(const RXMesh&) = delete;
 
-    virtual void write_connectivity(std::fstream& file) const;
-
-    // build everything from scratch including patches (use this)
     RXMesh(std::vector<std::vector<uint32_t>>& fv, const bool quite = true);
 
-    uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
+    /**
+     * @brief build different supporting data structure used to build RXMesh
+     *
+     * Set the number of vertices, edges, and faces, populate edge_map (which
+     * takes two connected vertices and returns their edge id), build
+     * face-incident-faces data structure (used to in creating patches). This is
+     * done using a single pass over FV
+     *
+     * @param fv input face incident vertices
+     * @param ef output edge incident faces
+     */
+    void build_supporting_structures(
+        const std::vector<std::vector<uint32_t>>& fv,
+        std::vector<std::vector<uint32_t>>&       ef);
+
+    /**
+     * @brief Calculate various statistics for the input mesh
+     *
+     * Calculate max valence, max edge incident faces, max face adjacent faces,
+     * if the input is closed, and if the input is edge manifold
+     * 
+     * @param fv input face incident vertices
+     * @param ef input edge incident faces
+     */
+    void calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
+                         const std::vector<std::vector<uint32_t>>& ef);
 
     void     build_local(std::vector<std::vector<uint32_t>>& fv);
     void     build_patch_locally(const uint32_t patch_id);
-    void     populate_edge_map(const std::vector<std::vector<uint32_t>>& fv);
+    
     uint16_t create_new_local_face(const uint32_t               patch_id,
                                    const uint32_t               global_f,
                                    const std::vector<uint32_t>& fv,
@@ -255,9 +274,6 @@ class RXMesh
                                    std::vector<uint32_t>& v_ltog,
                                    std::vector<uint16_t>& fp,
                                    std::vector<uint16_t>& ep);
-    void     set_num_vertices(const std::vector<std::vector<uint32_t>>& fv);
-    void     edge_incident_faces(const std::vector<std::vector<uint32_t>>& fv,
-                                 std::vector<std::vector<uint32_t>>&       ef);
 
     inline std::pair<uint32_t, uint32_t> edge_key(const uint32_t v0,
                                                   const uint32_t v1) const
@@ -265,19 +281,6 @@ class RXMesh
         uint32_t i = std::max(v0, v1);
         uint32_t j = std::min(v0, v1);
         return std::make_pair(i, j);
-    }
-
-    template <typename pt_T>
-    void host_malloc(pt_T*& arr, uint32_t count)
-    {
-        arr = (pt_T*)malloc(count * sizeof(pt_T));
-        if (arr == NULL) {
-            RXMESH_ERROR(
-                "rxmesh::host_malloc() malloc failed with count = {} and total "
-                "size = {}",
-                count,
-                count * sizeof(pt_T));
-        }
     }
 
     void device_alloc_local();
@@ -295,9 +298,9 @@ class RXMesh
     void get_size(const std::vector<std::vector<Tin>>& input,
                   std::vector<Tad>&                    ad);
 
-    // www.techiedelight.com/use-std-pair-key-std-unordered_map-cpp/
     struct edge_key_hash
     {
+        // www.techiedelight.com/use-std-pair-key-std-unordered_map-cpp/
         template <class T>
         inline std::size_t operator()(const std::pair<T, T>& e_key) const
         {
@@ -305,15 +308,17 @@ class RXMesh
         }
     };
 
-    // variables
+    uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
+
+    virtual void write_connectivity(std::fstream& file) const;
 
     // our friend tester class
     friend class ::RXMeshTest;
 
+    RXMeshContext m_rxmesh_context;
 
     uint32_t m_num_edges, m_num_faces, m_num_vertices, m_max_ele_count,
-        m_max_valence, m_max_valence_vertex_id, m_max_edge_incident_faces,
-        m_max_face_adjacent_faces;
+        m_max_valence, m_max_edge_incident_faces, m_max_face_adjacent_faces;
     const uint32_t m_face_degree;
 
     // patches

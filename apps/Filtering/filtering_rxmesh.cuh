@@ -118,7 +118,7 @@ void filtering_rxmesh(rxmesh::RXMeshStatic&             rxmesh_static,
     coords.copy(*double_buffer[d], rxmesh::DEVICE, rxmesh::HOST);
 
     // output to obj
-    // rxmesh_static.exportOBJ(
+    // rxmesh_static.export_obj(
     //   "output_rxmesh" + std::to_string(Arg.num_filter_iter) + ".obj",
     //   [&](uint32_t i, uint32_t j) { return coords(i, j); });
 
