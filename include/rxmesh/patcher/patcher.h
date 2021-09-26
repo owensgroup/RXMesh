@@ -2,6 +2,9 @@
 
 #include <stdint.h>
 #include <functional>
+#include <unordered_map>
+#include "rxmesh/util/util.h"
+
 namespace rxmesh {
 
 namespace patcher {
@@ -9,36 +12,22 @@ namespace patcher {
 class Patcher
 {
    public:
+    Patcher() = default;
+
     Patcher(uint32_t                                  patch_size,
             const std::vector<std::vector<uint32_t>>& fvn,
-            const uint32_t                            num_vertices,
-            const uint32_t                            num_edges,
-            const bool                                is_multi_component = true,
-            const bool                                quite = true);
+            const std::vector<std::vector<uint32_t>>& ff,
+            const std::vector<std::vector<uint32_t>>& fv,
+            const std::unordered_map<std::pair<uint32_t, uint32_t>,
+                                     uint32_t,
+                                     ::rxmesh::detail::edge_key_hash> edges_map,
+            const uint32_t num_vertices,
+            const uint32_t num_edges,
+            const bool     quite);
 
     void execute(std::function<uint32_t(uint32_t, uint32_t)> get_edge_id,
                  const std::vector<std::vector<uint32_t>>&   ef);
 
-    template <class T_d>
-    void export_patches(const std::vector<std::vector<T_d>>& Verts);
-
-    template <class T_d>
-    void export_components(
-        const std::vector<std::vector<T_d>>&      Verts,
-        const std::vector<std::vector<uint32_t>>& components);
-
-    template <class T_d>
-    void export_ext_ribbon(const std::vector<std::vector<T_d>>& Verts,
-                           int                                  patch_id);
-
-    template <class T_d>
-    void export_single_patch(const std::vector<std::vector<T_d>>& Verts,
-                             int                                  patch_id);
-
-    template <class T_d, typename EdgeIDFunc>
-    void export_single_patch_edges(const std::vector<std::vector<T_d>>& Verts,
-                                   int        patch_id,
-                                   EdgeIDFunc get_edge_id);
     void print_statistics();
 
 
@@ -154,12 +143,19 @@ class Patcher
         return m_num_lloyd_run;
     }
 
-    ~Patcher();
+    ~Patcher() = default;
 
    private:
-    void mem_alloc();
+    /**
+     * @brief Allocate various auxiliary memory needed
+     */
+    void allocate_memory();
 
     void assign_patch(std::function<uint32_t(uint32_t, uint32_t)> get_edge_id);
+    void Patcher::assign_patch(
+        const std::unordered_map<std::pair<uint32_t, uint32_t>,
+                                 uint32_t,
+                                 ::rxmesh::detail::edge_key_hash> edges_map);
 
     void initialize_cluster_seeds();
     void initialize_random_seeds();
@@ -197,9 +193,6 @@ class Patcher
     // store the face, vertex, edge patch
     std::vector<uint32_t> m_face_patch, m_vertex_patch, m_edge_patch;
 
-    bool m_is_multi_component;
-    bool m_quite;
-
     uint32_t m_num_components;
 
     // Stores the patches in compressed format
@@ -215,7 +208,7 @@ class Patcher
     float m_patching_time_ms;
 
     // utility vectors
-    std::vector<uint32_t> m_frontier, m_tf, m_seeds;
+    std::vector<uint32_t> m_seeds;
     uint32_t              m_num_lloyd_run = 0;
 };
 

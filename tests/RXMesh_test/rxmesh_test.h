@@ -132,7 +132,8 @@ class RXMeshTest
                 uint32_t v0 = rxmesh.m_fvn[i][j];
                 uint32_t v1 =
                     (j != 2) ? rxmesh.m_fvn[i][j + 1] : rxmesh.m_fvn[i][0];
-                std::pair<uint32_t, uint32_t> my_edge = rxmesh.edge_key(v0, v1);
+                std::pair<uint32_t, uint32_t> my_edge =
+                    rxmesh::detail::edge_key(v0, v1);
                 uint32_t edge_id = rxmesh.get_edge_id(my_edge);
                 ff[j]            = edge_id;
             }
@@ -564,7 +565,7 @@ class RXMeshTest
 
             // 4)
             // use the convered vertices to look for the edge global id
-            auto my_edge = rxmesh.edge_key(v0_ltog, v1_ltog);
+            auto my_edge = rxmesh::detail::edge_key(v0_ltog, v1_ltog);
 
             uint32_t e_g;
             try {

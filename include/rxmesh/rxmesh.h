@@ -8,6 +8,7 @@
 #include "rxmesh/rxmesh_context.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/macros.h"
+#include "rxmesh/util/util.h"
 
 class RXMeshTest;
 
@@ -239,26 +240,28 @@ class RXMesh
      *
      * @param fv input face incident vertices
      * @param ef output edge incident faces
+     * @param ef output face adjacent faces
      */
     void build_supporting_structures(
         const std::vector<std::vector<uint32_t>>& fv,
-        std::vector<std::vector<uint32_t>>&       ef);
+        std::vector<std::vector<uint32_t>>&       ef,
+        std::vector<std::vector<uint32_t>>&       ff);
 
     /**
      * @brief Calculate various statistics for the input mesh
      *
      * Calculate max valence, max edge incident faces, max face adjacent faces,
      * if the input is closed, and if the input is edge manifold
-     * 
+     *
      * @param fv input face incident vertices
      * @param ef input edge incident faces
      */
     void calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
                          const std::vector<std::vector<uint32_t>>& ef);
 
-    void     build_local(std::vector<std::vector<uint32_t>>& fv);
-    void     build_patch_locally(const uint32_t patch_id);
-    
+    void build_local(std::vector<std::vector<uint32_t>>& fv);
+    void build_patch_locally(const uint32_t patch_id);
+
     uint16_t create_new_local_face(const uint32_t               patch_id,
                                    const uint32_t               global_f,
                                    const std::vector<uint32_t>& fv,
@@ -275,13 +278,6 @@ class RXMesh
                                    std::vector<uint16_t>& fp,
                                    std::vector<uint16_t>& ep);
 
-    inline std::pair<uint32_t, uint32_t> edge_key(const uint32_t v0,
-                                                  const uint32_t v1) const
-    {
-        uint32_t i = std::max(v0, v1);
-        uint32_t j = std::min(v0, v1);
-        return std::make_pair(i, j);
-    }
 
     void device_alloc_local();
 
@@ -297,16 +293,6 @@ class RXMesh
     template <typename Tin, typename Tad>
     void get_size(const std::vector<std::vector<Tin>>& input,
                   std::vector<Tad>&                    ad);
-
-    struct edge_key_hash
-    {
-        // www.techiedelight.com/use-std-pair-key-std-unordered_map-cpp/
-        template <class T>
-        inline std::size_t operator()(const std::pair<T, T>& e_key) const
-        {
-            return std::hash<T>()(e_key.first * 8191 + e_key.second * 11003);
-        }
-    };
 
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
@@ -329,7 +315,9 @@ class RXMesh
     bool m_is_input_closed;
     bool m_quite;
 
-    std::unordered_map<std::pair<uint32_t, uint32_t>, uint32_t, edge_key_hash>
+    std::unordered_map<std::pair<uint32_t, uint32_t>,
+                       uint32_t,
+                       detail::edge_key_hash>
         m_edges_map;
 
     // store a copy of face incident vertices along with the neighbor

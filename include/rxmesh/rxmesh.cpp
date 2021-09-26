@@ -8,6 +8,7 @@
 #include "rxmesh/rxmesh_context.h"
 #include "rxmesh/util/export_tools.h"
 #include "rxmesh/util/math.h"
+#include "rxmesh/util/util.h"
 
 namespace rxmesh {
 RXMesh::RXMesh(std::vector<std::vector<uint32_t>>& fv,
@@ -70,25 +71,24 @@ RXMesh::~RXMesh()
 };
 
 void RXMesh::build_local(std::vector<std::vector<uint32_t>>& fv)
-{    
-    // 4) copy fv to m_fvn and append the adjacent faces for each face using
-    // info from 3)
+{
+
     // 5) patch the mesh
     // 6) populate the local mesh
 
+    std::vector<std::vector<uint32_t>> ff;
     std::vector<std::vector<uint32_t>> ef;
-    build_supporting_structures(fv, ef);
+    build_supporting_structures(fv, ef, ff);
     calc_statistics(fv, ef);
 
 
     //=========== 4)
     // copy fv
+
     std::vector<std::vector<uint32_t>> rep(fv);
     rep.swap(m_fvn);
     // extend m_fvn by adding the face neighbors
     for (uint32_t e = 0; e < ef.size(); ++e) {
-        assert(ef[e].size() != 0);  // we don't handle dangling edges
-
         for (uint32_t f = 0; f < ef[e].size(); ++f) {
             uint32_t f0 = ef[e][f];
             for (uint32_t s = f + 1; s < ef[e].size(); ++s) {
@@ -104,8 +104,15 @@ void RXMesh::build_local(std::vector<std::vector<uint32_t>>& fv)
     //=========== 5)
     // create an instance of Patcher and execute it and then move the
     // ownership to m_patcher
-    std::unique_ptr<patcher::Patcher> pp = std::make_unique<patcher::Patcher>(
-        m_patch_size, m_fvn, m_num_vertices, m_num_edges, true, m_quite);
+    std::unique_ptr<patcher::Patcher> pp =
+        std::make_unique<patcher::Patcher>(m_patch_size,
+                                           m_fvn,
+                                           ff,
+                                           fv,
+                                           m_edges_map,
+                                           m_num_vertices,
+                                           m_num_edges,
+                                           m_quite);
     pp->execute(
         [this](uint32_t v0, uint32_t v1) { return this->get_edge_id(v0, v1); },
         ef);
@@ -219,7 +226,8 @@ void RXMesh::build_local(std::vector<std::vector<uint32_t>>& fv)
 
 void RXMesh::build_supporting_structures(
     const std::vector<std::vector<uint32_t>>& fv,
-    std::vector<std::vector<uint32_t>>&       ef)
+    std::vector<std::vector<uint32_t>>&       ef,
+    std::vector<std::vector<uint32_t>>&       ff)
 {
     m_num_faces    = static_cast<uint32_t>(fv.size());
     m_num_vertices = 0;
@@ -232,6 +240,10 @@ void RXMesh::build_supporting_structures(
         static_cast<size_t>(1.5f * static_cast<float>(m_num_faces));
     ef.reserve(reserve_size);
     m_edges_map.reserve(reserve_size);
+
+
+    ff.clear();
+    ff.resize(m_num_faces, std::vector<uint32_t>(0));
 
     for (uint32_t f = 0; f < fv.size(); ++f) {
         if (fv[f].size() != 3) {
@@ -248,7 +260,7 @@ void RXMesh::build_supporting_structures(
 
             m_num_vertices = std::max(m_num_vertices, v0);
 
-            std::pair<uint32_t, uint32_t> edge   = edge_key(v0, v1);
+            std::pair<uint32_t, uint32_t> edge   = detail::edge_key(v0, v1);
             auto                          e_iter = m_edges_map.find(edge);
             if (e_iter == m_edges_map.end()) {
                 uint32_t edge_id = m_num_edges++;
@@ -256,7 +268,15 @@ void RXMesh::build_supporting_structures(
                 std::vector<uint32_t> tmp(1, f);
                 ef.push_back(tmp);
             } else {
-                ef[(*e_iter).second].push_back(f);
+                uint32_t edge_id = (*e_iter).second;
+
+                for (uint32_t f0 = 0; f0 < ef[edge_id].size(); ++f0) {
+                    uint32_t other_face = ef[edge_id][f0];
+                    ff[other_face].push_back(f);
+                    ff[f].push_back(other_face);
+                }
+
+                ef[edge_id].push_back(f);
             }
         }
     }
@@ -394,7 +414,7 @@ void RXMesh::build_patch_locally(const uint32_t patch_id)
 
             // find the edge in m_edge_map with v0,v1
             std::pair<uint32_t, uint32_t> my_edge =
-                edge_key(global_v0, global_v1);
+                detail::edge_key(global_v0, global_v1);
             uint32_t global_e = get_edge_id(my_edge);
 
             uint32_t v_index = insert_if_not_found(global_v0, tmp_v);
@@ -565,7 +585,7 @@ uint16_t RXMesh::create_new_local_face(const uint32_t               patch_id,
         uint32_t global_v1 = fv[(j + 1) % m_face_degree];
 
         // find the edge in m_edge_map with v0,v1
-        std::pair<uint32_t, uint32_t> my_edge = edge_key(global_v0, global_v1);
+        std::pair<uint32_t, uint32_t> my_edge = detail::edge_key(global_v0, global_v1);
 
         assert(my_edge.first == global_v0 || my_edge.first == global_v1);
         assert(my_edge.second == global_v0 || my_edge.second == global_v1);
@@ -638,7 +658,7 @@ uint32_t RXMesh::get_edge_id(const uint32_t v0, const uint32_t v1) const
     // id in global space also (by querying m_edges_map)
     assert(m_edges_map.size() != 0);
 
-    std::pair<uint32_t, uint32_t> edge = edge_key(v0, v1);
+    std::pair<uint32_t, uint32_t> edge = detail::edge_key(v0, v1);
 
     assert(edge.first == v0 || edge.first == v1);
     assert(edge.second == v0 || edge.second == v1);

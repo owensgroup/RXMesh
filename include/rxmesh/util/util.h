@@ -359,4 +359,35 @@ void in_place_matrix_transpose(RandomIterator first,
         } while ((first + a) != cycle);
     }
 }
+
+namespace detail {
+
+/**
+ * @brief hash function that takes a pair of vertices and returns a unique
+ * values. Used for storing vertex-edge relation in std map
+ */
+struct edge_key_hash
+{
+    // www.techiedelight.com/use-std-pair-key-std-unordered_map-cpp/
+    template <class T>
+    inline std::size_t operator()(const std::pair<T, T>& e_key) const
+    {
+        return std::hash<T>()(e_key.first * 8191 + e_key.second * 11003);
+    }
+};
+
+/**
+ * @brief return consistent edge key given two vertices
+ * @param v0 
+ * @param v1
+ * @return
+ */
+inline std::pair<uint32_t, uint32_t> edge_key(const uint32_t v0,
+                                              const uint32_t v1)
+{
+    uint32_t i = std::max(v0, v1);
+    uint32_t j = std::min(v0, v1);
+    return std::make_pair(i, j);
+}
+}  // namespace detail
 }  // namespace rxmesh
