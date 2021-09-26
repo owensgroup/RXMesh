@@ -1,10 +1,12 @@
-#include "rxmesh.h"
 
 #include <assert.h>
 #include <exception>
 #include <memory>
+#include <numeric>
 #include <queue>
+
 #include "patcher/patcher.h"
+#include "rxmesh/rxmesh.h"
 #include "rxmesh/rxmesh_context.h"
 #include "rxmesh/util/export_tools.h"
 #include "rxmesh/util/math.h"
@@ -77,13 +79,12 @@ void RXMesh::build_local(std::vector<std::vector<uint32_t>>& fv)
     // 6) populate the local mesh
 
     std::vector<std::vector<uint32_t>> ff;
+    std::vector<uint32_t>              ff_values;
+    std::vector<uint32_t>              ff_offset;
     std::vector<std::vector<uint32_t>> ef;
-    build_supporting_structures(fv, ef, ff);
+    build_supporting_structures(fv, ef, ff_offset, ff_values, ff);
     calc_statistics(fv, ef);
 
-
-    //=========== 4)
-    // copy fv
 
     std::vector<std::vector<uint32_t>> rep(fv);
     rep.swap(m_fvn);
@@ -98,29 +99,20 @@ void RXMesh::build_local(std::vector<std::vector<uint32_t>>& fv)
             }
         }
     }
-    //===============================
+    
+    m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
+                                                   m_fvn,
+                                                   ff,
+                                                   ff_offset,
+                                                   ff_values,
+                                                   fv,
+                                                   m_edges_map,
+                                                   m_num_vertices,
+                                                   m_num_edges,
+                                                   m_quite);
 
-
-    //=========== 5)
-    // create an instance of Patcher and execute it and then move the
-    // ownership to m_patcher
-    std::unique_ptr<patcher::Patcher> pp =
-        std::make_unique<patcher::Patcher>(m_patch_size,
-                                           m_fvn,
-                                           ff,
-                                           fv,
-                                           m_edges_map,
-                                           m_num_vertices,
-                                           m_num_edges,
-                                           m_quite);
-    pp->execute(
-        [this](uint32_t v0, uint32_t v1) { return this->get_edge_id(v0, v1); },
-        ef);
-
-    m_patcher     = std::move(pp);
-    m_num_patches = m_patcher->get_num_patches();
-    // m_patcher->export_patches(Verts);
-    //===============================
+    m_num_patches = m_patcher->get_num_patches();    
+    
 
     //=========== 6)
     m_max_size.x = m_max_size.y = 0;
@@ -227,6 +219,8 @@ void RXMesh::build_local(std::vector<std::vector<uint32_t>>& fv)
 void RXMesh::build_supporting_structures(
     const std::vector<std::vector<uint32_t>>& fv,
     std::vector<std::vector<uint32_t>>&       ef,
+    std::vector<uint32_t>&                    ff_offset,
+    std::vector<uint32_t>&                    ff_values,
     std::vector<std::vector<uint32_t>>&       ff)
 {
     m_num_faces    = static_cast<uint32_t>(fv.size());
@@ -244,6 +238,7 @@ void RXMesh::build_supporting_structures(
 
     ff.clear();
     ff.resize(m_num_faces, std::vector<uint32_t>(0));
+    std::vector<uint32_t> ff_size(m_num_faces, 0);
 
     for (uint32_t f = 0; f < fv.size(); ++f) {
         if (fv[f].size() != 3) {
@@ -274,7 +269,9 @@ void RXMesh::build_supporting_structures(
                     uint32_t other_face = ef[edge_id][f0];
                     ff[other_face].push_back(f);
                     ff[f].push_back(other_face);
+                    ++ff_size[other_face];
                 }
+                ff_size[f] += ef[edge_id].size();
 
                 ef[edge_id].push_back(f);
             }
@@ -289,6 +286,29 @@ void RXMesh::build_supporting_structures(
             m_num_edges,
             m_edges_map.size());
         exit(EXIT_FAILURE);
+    }
+
+    ff_offset.resize(m_num_faces);
+    std::inclusive_scan(ff_size.begin(), ff_size.end(), ff_offset.begin());
+    ff_values.clear();
+    ff_values.resize(ff_offset.back());
+    std::fill(ff_size.begin(), ff_size.end(), 0);
+
+    for (uint32_t e = 0; e < m_num_edges; ++e) {
+        for (uint32_t i = 0; i < ef[e].size(); ++i) {
+            uint32_t f0 = ef[e][i];
+            for (uint32_t j = i + 1; j < ef[e].size(); ++j) {
+                uint32_t f1 = ef[e][j];
+
+                uint32_t f0_offset = ff_size[f0]++;
+                uint32_t f1_offset = ff_size[f1]++;
+                f0_offset += (f0 == 0) ? 0 : ff_offset[f0 - 1];
+                f1_offset += (f1 == 0) ? 0 : ff_offset[f1 - 1];
+
+                ff_values[f0_offset] = f1;
+                ff_values[f1_offset] = f0;
+            }
+        }
     }
 }
 
@@ -585,7 +605,8 @@ uint16_t RXMesh::create_new_local_face(const uint32_t               patch_id,
         uint32_t global_v1 = fv[(j + 1) % m_face_degree];
 
         // find the edge in m_edge_map with v0,v1
-        std::pair<uint32_t, uint32_t> my_edge = detail::edge_key(global_v0, global_v1);
+        std::pair<uint32_t, uint32_t> my_edge =
+            detail::edge_key(global_v0, global_v1);
 
         assert(my_edge.first == global_v0 || my_edge.first == global_v1);
         assert(my_edge.second == global_v0 || my_edge.second == global_v1);

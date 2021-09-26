@@ -245,6 +245,8 @@ class RXMesh
     void build_supporting_structures(
         const std::vector<std::vector<uint32_t>>& fv,
         std::vector<std::vector<uint32_t>>&       ef,
+        std::vector<uint32_t>&                    ff_offset,
+        std::vector<uint32_t>&                    ff_values,
         std::vector<std::vector<uint32_t>>&       ff);
 
     /**

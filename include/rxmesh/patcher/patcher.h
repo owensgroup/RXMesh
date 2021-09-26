@@ -17,6 +17,8 @@ class Patcher
     Patcher(uint32_t                                  patch_size,
             const std::vector<std::vector<uint32_t>>& fvn,
             const std::vector<std::vector<uint32_t>>& ff,
+            const std::vector<uint32_t>&              ff_offset,
+            const std::vector<uint32_t>&              ff_values,
             const std::vector<std::vector<uint32_t>>& fv,
             const std::unordered_map<std::pair<uint32_t, uint32_t>,
                                      uint32_t,
@@ -147,17 +149,26 @@ class Patcher
 
    private:
     /**
-     * @brief Allocate various auxiliary memory needed
+     * @brief Allocate various auxiliary memory needed to store patches info on
+     * the host
      */
     void allocate_memory();
 
-    void assign_patch(std::function<uint32_t(uint32_t, uint32_t)> get_edge_id);
+    /**
+     * @brief Allocate various temporarily memory on the device needed to
+     * compute patches on the device
+     * @param ff_offset offset indicate start (and end) to index ff_values to
+     * get face-incident-faces
+     * @param ff_values stores face-incident-faces in compressed format
+     */
+    void allocate_device_memory(const std::vector<uint32_t>& ff_offset,
+                                const std::vector<uint32_t>& ff_values);
+        
     void Patcher::assign_patch(
         const std::unordered_map<std::pair<uint32_t, uint32_t>,
                                  uint32_t,
                                  ::rxmesh::detail::edge_key_hash> edges_map);
 
-    void initialize_cluster_seeds();
     void initialize_random_seeds();
     void get_multi_components(std::vector<std::vector<uint32_t>>& components);
 
@@ -168,10 +179,7 @@ class Patcher
     void postprocess();
     void get_adjacent_faces(uint32_t face_id, std::vector<uint32_t>& ff) const;
     void get_incident_vertices(uint32_t face_id, std::vector<uint32_t>& fv);
-
-    void     populate_ff(const std::vector<std::vector<uint32_t>>& ef,
-                         std::vector<uint32_t>&                    h_ff_values,
-                         std::vector<uint32_t>&                    h_ff_offset);
+        
     uint32_t construct_patches_compressed_parallel(
         void*     d_cub_temp_storage_max,
         size_t    cub_temp_storage_bytes_max,
@@ -182,21 +190,25 @@ class Patcher
         uint32_t* d_patches_offset,
         uint32_t* d_face_patch,
         uint32_t* d_patches_val);
-    void parallel_execute(const std::vector<std::vector<uint32_t>>& ef);
+    
+    void run_lloyd();
 
     const std::vector<std::vector<uint32_t>>& m_fvn;
 
-    uint32_t m_patch_size;
-    uint32_t m_num_patches, m_num_vertices, m_num_edges, m_num_faces,
-        m_num_seeds, m_max_num_patches;
+    uint32_t m_patch_size, m_num_patches, m_num_vertices, m_num_edges,
+        m_num_faces, m_num_seeds, m_max_num_patches, m_num_components,
+        m_num_lloyd_run;
 
     // store the face, vertex, edge patch
     std::vector<uint32_t> m_face_patch, m_vertex_patch, m_edge_patch;
+    uint32_t*             m_d_face_patch;
 
-    uint32_t m_num_components;
 
     // Stores the patches in compressed format
     std::vector<uint32_t> m_patches_val, m_patches_offset;
+
+    // deallocated immediately after computing patches
+    uint32_t *m_d_patches_offset, *m_d_patches_size, *m_d_patches_val;
 
     // Stores ribbon in compressed format
     std::vector<uint32_t> m_ribbon_ext_val, m_ribbon_ext_offset;
@@ -207,9 +219,22 @@ class Patcher
     // caching the time taken to construct the patches
     float m_patching_time_ms;
 
-    // utility vectors
     std::vector<uint32_t> m_seeds;
-    uint32_t              m_num_lloyd_run = 0;
+
+    // deallocated immediately after computing patches
+    uint32_t*             m_d_seeds;
+
+    // stores ff on the device (deallocated immediately after computing patches)
+    uint32_t *m_d_ff_values, *m_d_ff_offset;
+
+    // utility used during creating patches (deallocated immediately after
+    // computing patches)
+    uint32_t *m_d_queue, *m_d_queue_ptr, *m_d_new_num_patches,
+        *m_d_max_patch_size;
+
+    // CUB temp memory(deallocated immediately after computing patches)
+    void * m_d_cub_temp_storage_scan, *m_d_cub_temp_storage_max;
+    size_t m_cub_scan_bytes, m_cub_max_bytes;
 };
 
 }  // namespace patcher
