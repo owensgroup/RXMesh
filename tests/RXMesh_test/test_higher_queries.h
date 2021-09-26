@@ -13,10 +13,8 @@ TEST(RXMesh, HigherQueries)
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
     std::vector<std::vector<uint32_t>> Faces;
-    if (!import_obj(
-            rxmesh_args.obj_file_name, Verts, Faces, rxmesh_args.quite)) {
-        exit(EXIT_FAILURE);
-    }
+    ASSERT_TRUE(
+        import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, true));
 
     // RXMesh
     RXMeshStatic rxmesh_static(Faces, rxmesh_args.quite);
