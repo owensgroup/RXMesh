@@ -99,7 +99,7 @@ inline uint32_t max_output_per_element(const RXMeshStatic& rxmesh, const Op& op)
     } else if (op == Op::EF) {
         return rxmesh.get_max_edge_incident_faces();
     } else if (op == Op::FV || op == Op::FE) {
-        return rxmesh.get_face_degree();
+        return 3;
     } else if (op == Op::FF) {
         return rxmesh.get_max_edge_adjacent_faces();
     } else if (op == Op::VV || op == Op::VE || op == Op::VF) {
@@ -163,7 +163,7 @@ TEST(RXMesh, Oriented_VV)
 
     RXMeshTest tester(true);
     EXPECT_TRUE(tester.run_query_verifier(
-        rxmesh_static, Op::VV, input_container, output_container));
+        rxmesh_static, Faces, Op::VV, input_container, output_container));
 
     // Make sure orientation is accurate
     // for the cube, all angle are either 45 or 90
@@ -237,7 +237,7 @@ TEST(RXMesh, Queries)
 
     // Tester to verify all queries
     ::RXMeshTest tester(true);
-    EXPECT_TRUE(tester.run_ltog_mapping_test(rxmesh_static))
+    EXPECT_TRUE(tester.run_ltog_mapping_test(rxmesh_static, Faces))
         << "Local-to-global mapping test failed";
 
     // adding query that we want to test
@@ -313,7 +313,7 @@ TEST(RXMesh, Queries)
 
         // verify
         bool passed = tester.run_query_verifier(
-            rxmesh_static, ops_it, input_container, output_container);
+            rxmesh_static, Faces, ops_it, input_container, output_container);
 
         td.passed.push_back(passed);
         EXPECT_TRUE(passed) << "Testing: " << td.test_name;

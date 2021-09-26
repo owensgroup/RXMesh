@@ -16,8 +16,7 @@ class __align__(16) RXMeshContext
     RXMeshContext()
         : m_num_edges(0),
           m_num_faces(0),
-          m_num_vertices(0),
-          m_face_degree(0),
+          m_num_vertices(0),          
           m_max_valence(0),
           m_max_edge_incident_faces(0),
           m_max_face_adjacent_faces(0),
@@ -47,8 +46,7 @@ class __align__(16) RXMeshContext
 
     void init(const uint32_t num_edges,
               const uint32_t num_faces,
-              const uint32_t num_vertices,
-              const uint32_t face_degree,
+              const uint32_t num_vertices,              
               const uint32_t max_valence,
               const uint32_t max_edge_incident_faces,
               const uint32_t max_face_adjacent_faces,
@@ -76,8 +74,7 @@ class __align__(16) RXMeshContext
 
         m_num_edges                  = num_edges;
         m_num_faces                  = num_faces;
-        m_num_vertices               = num_vertices;
-        m_face_degree                = face_degree;
+        m_num_vertices               = num_vertices;        
         m_max_valence                = max_valence;
         m_max_edge_incident_faces    = max_edge_incident_faces;
         m_max_face_adjacent_faces    = max_face_adjacent_faces;
@@ -186,11 +183,7 @@ class __align__(16) RXMeshContext
     __device__ __forceinline__ uint32_t get_num_vertices() const
     {
         return m_num_vertices;
-    }
-    __device__ __forceinline__ uint32_t get_face_degree() const
-    {
-        return m_face_degree;
-    }
+    }  
     __device__ __forceinline__ uint32_t get_max_valence() const
     {
         return m_max_valence;
@@ -287,13 +280,13 @@ class __align__(16) RXMeshContext
 
    private:
     // mesh elements count
-    uint32_t m_num_edges, m_num_faces, m_num_vertices, m_face_degree,
+    uint32_t m_num_edges, m_num_faces, m_num_vertices, 
         m_max_valence, m_max_edge_incident_faces, m_max_face_adjacent_faces,
         m_num_patches;
 
 
     // max max_num_edges_per_patch*2 for all patches rounded to multiple of 32
-    // max max_num_faces_per_patch*m_face_degree for all patches rounded to
+    // max max_num_faces_per_patch*3 for all patches rounded to
     // multiple of 32
     uint2 m_d_max_size;
 

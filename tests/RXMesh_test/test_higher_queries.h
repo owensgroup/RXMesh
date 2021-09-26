@@ -54,8 +54,8 @@ TEST(RXMesh, HigherQueries)
     input_container.move(rxmesh::DEVICE, rxmesh::HOST);
 
     // verify
-    EXPECT_TRUE(tester.run_higher_query_verifier(
-        rxmesh_static, input_container, output_container));
+    EXPECT_TRUE(
+        tester.test_VVV(rxmesh_static, input_container, output_container));
 
 
     input_container.release();

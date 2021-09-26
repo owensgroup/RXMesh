@@ -15,8 +15,6 @@ class Patcher
     Patcher() = default;
 
     Patcher(uint32_t                                  patch_size,
-            const std::vector<std::vector<uint32_t>>& fvn,
-            const std::vector<std::vector<uint32_t>>& ff,
             const std::vector<uint32_t>&              ff_offset,
             const std::vector<uint32_t>&              ff_values,
             const std::vector<std::vector<uint32_t>>& fv,
@@ -27,11 +25,9 @@ class Patcher
             const uint32_t num_edges,
             const bool     quite);
 
-    void execute(std::function<uint32_t(uint32_t, uint32_t)> get_edge_id,
-                 const std::vector<std::vector<uint32_t>>&   ef);
+    virtual ~Patcher();
 
     void print_statistics();
-
 
     uint32_t get_num_patches() const
     {
@@ -46,6 +42,21 @@ class Patcher
     std::vector<uint32_t>& get_face_patch()
     {
         return m_face_patch;
+    }
+
+    uint32_t* get_device_face_patch()
+    {
+        return m_d_face_patch;                              
+    }
+
+    uint32_t* get_device_vertex_patch()
+    {
+        return m_d_vertex_patch;        
+    }
+
+    uint32_t* get_device_edge_patch()
+    {
+        return m_d_edge_patch;
     }
 
     std::vector<uint32_t>& get_vertex_patch()
@@ -145,8 +156,6 @@ class Patcher
         return m_num_lloyd_run;
     }
 
-    ~Patcher() = default;
-
    private:
     /**
      * @brief Allocate various auxiliary memory needed to store patches info on
@@ -163,37 +172,32 @@ class Patcher
      */
     void allocate_device_memory(const std::vector<uint32_t>& ff_offset,
                                 const std::vector<uint32_t>& ff_values);
-        
+
     void Patcher::assign_patch(
+        const std::vector<std::vector<uint32_t>>&                 fv,
         const std::unordered_map<std::pair<uint32_t, uint32_t>,
                                  uint32_t,
                                  ::rxmesh::detail::edge_key_hash> edges_map);
 
-    void initialize_random_seeds();
-    void get_multi_components(std::vector<std::vector<uint32_t>>& components);
+    void initialize_random_seeds(const std::vector<uint32_t>& ff_offset,
+                                 const std::vector<uint32_t>& ff_values);
+
+    void get_multi_components(std::vector<std::vector<uint32_t>>& components,
+                              const std::vector<uint32_t>&        ff_offset,
+                              const std::vector<uint32_t>&        ff_values);
 
     void initialize_random_seeds_single_component();
     void generate_random_seed_from_component(std::vector<uint32_t>& component,
                                              uint32_t               num_seeds);
 
-    void postprocess();
-    void get_adjacent_faces(uint32_t face_id, std::vector<uint32_t>& ff) const;
-    void get_incident_vertices(uint32_t face_id, std::vector<uint32_t>& fv);
-        
-    uint32_t construct_patches_compressed_parallel(
-        void*     d_cub_temp_storage_max,
-        size_t    cub_temp_storage_bytes_max,
-        uint32_t* d_patches_size,
-        uint32_t* d_max_patch_size,
-        void*     d_cub_temp_storage_scan,
-        size_t    cub_temp_storage_bytes_scan,
-        uint32_t* d_patches_offset,
-        uint32_t* d_face_patch,
-        uint32_t* d_patches_val);
-    
+    void postprocess(const std::vector<std::vector<uint32_t>>& fv,
+                     const std::vector<uint32_t>&              ff_offset,
+                     const std::vector<uint32_t>&              ff_values);
+
+    uint32_t construct_patches_compressed_format();
+
     void run_lloyd();
 
-    const std::vector<std::vector<uint32_t>>& m_fvn;
 
     uint32_t m_patch_size, m_num_patches, m_num_vertices, m_num_edges,
         m_num_faces, m_num_seeds, m_max_num_patches, m_num_components,
@@ -201,7 +205,7 @@ class Patcher
 
     // store the face, vertex, edge patch
     std::vector<uint32_t> m_face_patch, m_vertex_patch, m_edge_patch;
-    uint32_t*             m_d_face_patch;
+    uint32_t *            m_d_face_patch, *m_d_vertex_patch, *m_d_edge_patch;
 
 
     // Stores the patches in compressed format
@@ -221,8 +225,8 @@ class Patcher
 
     std::vector<uint32_t> m_seeds;
 
-    // deallocated immediately after computing patches
-    uint32_t*             m_d_seeds;
+    // (deallocated immediately after computing patches)
+    uint32_t* m_d_seeds;
 
     // stores ff on the device (deallocated immediately after computing patches)
     uint32_t *m_d_ff_values, *m_d_ff_offset;

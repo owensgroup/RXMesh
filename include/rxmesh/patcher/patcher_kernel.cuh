@@ -5,6 +5,17 @@ namespace rxmesh {
 
 namespace patcher {
 
+__global__ static void shift(const uint32_t num_faces,
+                             uint32_t*      face_patch,                             
+                             uint32_t*      patches_val)
+{
+    uint32_t tid = threadIdx.x + blockIdx.x * blockDim.x;
+    while (tid < num_faces) {
+        face_patch[tid] = face_patch[tid] >> 1;
+        patches_val[tid] = patches_val[tid] >> 1;
+        tid += blockDim.x * gridDim.x;
+    }
+}
 
 __device__ __forceinline__ const uint32_t* get_face_faces(
     const uint32_t* d_ff_offset,

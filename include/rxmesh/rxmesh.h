@@ -124,10 +124,6 @@ class RXMesh
     {
         return m_max_face_adjacent_faces;
     }
-    uint32_t get_face_degree() const
-    {
-        return m_face_degree;
-    }
 
     const RXMeshContext& get_context() const
     {
@@ -228,7 +224,8 @@ class RXMesh
 
     RXMesh(const RXMesh&) = delete;
 
-    RXMesh(std::vector<std::vector<uint32_t>>& fv, const bool quite = true);
+    RXMesh(const std::vector<std::vector<uint32_t>>& fv,
+           const bool                                quite = true);
 
     /**
      * @brief build different supporting data structure used to build RXMesh
@@ -246,8 +243,7 @@ class RXMesh
         const std::vector<std::vector<uint32_t>>& fv,
         std::vector<std::vector<uint32_t>>&       ef,
         std::vector<uint32_t>&                    ff_offset,
-        std::vector<uint32_t>&                    ff_values,
-        std::vector<std::vector<uint32_t>>&       ff);
+        std::vector<uint32_t>&                    ff_values);
 
     /**
      * @brief Calculate various statistics for the input mesh
@@ -261,8 +257,9 @@ class RXMesh
     void calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
                          const std::vector<std::vector<uint32_t>>& ef);
 
-    void build_local(std::vector<std::vector<uint32_t>>& fv);
-    void build_patch_locally(const uint32_t patch_id);
+    void build_local(const std::vector<std::vector<uint32_t>>& fv);
+    void build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
+                            const uint32_t                            patch_id);
 
     uint16_t create_new_local_face(const uint32_t               patch_id,
                                    const uint32_t               global_f,
@@ -307,24 +304,18 @@ class RXMesh
 
     uint32_t m_num_edges, m_num_faces, m_num_vertices, m_max_ele_count,
         m_max_valence, m_max_edge_incident_faces, m_max_face_adjacent_faces;
-    const uint32_t m_face_degree;
 
     // patches
     uint32_t       m_num_patches;
     const uint32_t m_patch_size;
-
-    bool m_is_input_edge_manifold;
-    bool m_is_input_closed;
-    bool m_quite;
+    bool           m_is_input_edge_manifold;
+    bool           m_is_input_closed;
+    bool           m_quite;
 
     std::unordered_map<std::pair<uint32_t, uint32_t>,
                        uint32_t,
                        detail::edge_key_hash>
         m_edges_map;
-
-    // store a copy of face incident vertices along with the neighbor
-    // faces of that face
-    std::vector<std::vector<uint32_t>> m_fvn;
 
     // pointer to the patcher class responsible for everything related to
     // patching the mesh into small pieces
@@ -381,9 +372,6 @@ class RXMesh
     // in m_d_ad_size_ltog_MESHELE (ad for address) where MESHELE could be
     // v,e, or f. This is for the mapping pointers
     // For incidence pointers, we only need store the starting id
-
-    //** face/vertex/edge patch (indexed by in global space)
-    uint32_t *m_d_face_patch, *m_d_vertex_patch, *m_d_edge_patch;
 
     //** mapping
     uint32_t *m_d_patches_ltog_v, *m_d_patches_ltog_e, *m_d_patches_ltog_f;

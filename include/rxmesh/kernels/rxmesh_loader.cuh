@@ -28,7 +28,7 @@ __device__ __forceinline__ void load_patch_ad_size(const RXMeshContext& context,
     ad_size_ltog_e = context.get_ad_size_ltog_e()[p_id];
     ad_size_ltog_f = context.get_ad_size_ltog_f()[p_id];
     assert(ad_size.y % 2 == 0);
-    assert(ad_size.w % context.get_face_degree() == 0);
+    assert(ad_size.w % 3 == 0);
 
     /*if (threadIdx.x == 0) {
         printf("\n   blockIdx.x= %u, p_id = %u \n"

@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <iomanip>
+#include <vector>
 #include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_context.h"
 #include "rxmesh/rxmesh_static.h"
@@ -18,17 +19,18 @@ class RXMeshTest
      * run_query_verifier()
      */
     bool run_query_verifier(
-        const rxmesh::RXMeshStatic&              rxmesh,
-        const rxmesh::Op                         op,
-        const rxmesh::RXMeshAttribute<uint32_t>& input_container,
-        const rxmesh::RXMeshAttribute<uint32_t>& output_container)
+        const rxmesh::RXMeshStatic&               rxmesh,
+        const std::vector<std::vector<uint32_t>>& fv,
+        const rxmesh::Op                          op,
+        const rxmesh::RXMeshAttribute<uint32_t>&  input_container,
+        const rxmesh::RXMeshAttribute<uint32_t>&  output_container)
     {
 
         // run test on specific query operation on an instance of rxmesh. this
         // does not account for patching so works only on big matrices data-
         // structure
 
-        populate_FE(rxmesh);
+        populate_FE(rxmesh, fv);
         switch (op) {
             case rxmesh::Op::VV:
                 return test_VV(rxmesh, input_container, output_container);
@@ -39,11 +41,11 @@ class RXMeshTest
                 break;
 
             case rxmesh::Op::VF:
-                return test_VF(rxmesh, input_container, output_container);
+                return test_VF(rxmesh, fv, input_container, output_container);
                 break;
 
             case rxmesh::Op::FV:
-                return test_FV(rxmesh, input_container, output_container);
+                return test_FV(rxmesh, fv, input_container, output_container);
                 break;
 
             case rxmesh::Op::FE:
@@ -68,28 +70,17 @@ class RXMeshTest
         return false;
     }
 
-    /**
-     * run_higher_query_verifier()
-     */
-    bool run_higher_query_verifier(
-        const rxmesh::RXMeshStatic&              rxmesh,
-        const rxmesh::RXMeshAttribute<uint32_t>& input_container,
-        const rxmesh::RXMeshAttribute<uint32_t>& output_container)
-    {
-        populate_FE(rxmesh);
-        return test_VVV(rxmesh, input_container, output_container);
-    }
-
 
     /**
      * run_ltog_mapping_test()
      */
-    bool run_ltog_mapping_test(const rxmesh::RXMesh& rxmesh)
+    bool run_ltog_mapping_test(const rxmesh::RXMesh&                     rxmesh,
+                               const std::vector<std::vector<uint32_t>>& fv)
     {
         // check if the mapping created for each patch is consistent
         // i.e., what you have in the local index space represents the global
         // space
-        populate_FE(rxmesh);
+        populate_FE(rxmesh, fv);
         for (uint32_t p = 0; p < rxmesh.m_num_patches; ++p) {
             bool edges_ok(true), faces_ok(true);
             check_mapping(rxmesh, p, edges_ok, faces_ok);
@@ -100,48 +91,9 @@ class RXMeshTest
         return true;
     }
 
-   private:
-    bool                               m_quite;
-    std::vector<std::vector<uint32_t>> m_h_FE;
-
-    void populate_FE(const rxmesh::RXMesh& rxmesh)
-    {
-
-        // populate m_h_FE (in global space) with global edge numbers
-        // m_h_FE should be uninitialized
-        // should call this only if verification is needed.
-
-        if (m_h_FE.size() > 0) {
-            return;
-        }
-        m_h_FE.clear();
-
-        if (rxmesh.m_edges_map.size() == 0) {
-            RXMESH_ERROR(
-                "RXMeshTest::populate_FE() can not call me before"
-                " populating m_edges_map");
-        }
-
-        for (uint32_t f = 0; f < rxmesh.m_num_faces; ++f) {
-            uint32_t i = f;
-
-            std::vector<uint32_t> ff(3);
-
-            for (uint32_t j = 0; j < 3; ++j) {
-
-                uint32_t v0 = rxmesh.m_fvn[i][j];
-                uint32_t v1 =
-                    (j != 2) ? rxmesh.m_fvn[i][j + 1] : rxmesh.m_fvn[i][0];
-                std::pair<uint32_t, uint32_t> my_edge =
-                    rxmesh::detail::edge_key(v0, v1);
-                uint32_t edge_id = rxmesh.get_edge_id(my_edge);
-                ff[j]            = edge_id;
-            }
-            m_h_FE.push_back(ff);
-        }
-    }
-
-   private:
+    /**
+     * test_VVV()
+     */
     bool test_VVV(const rxmesh::RXMeshStatic&              rxmesh,
                   const rxmesh::RXMeshAttribute<uint32_t>& input_container,
                   const rxmesh::RXMeshAttribute<uint32_t>& output_container)
@@ -195,6 +147,43 @@ class RXMeshTest
                         v_v_v,
                         input_container,
                         output_container);
+    }
+
+   private:
+    bool                               m_quite;
+    std::vector<std::vector<uint32_t>> m_h_FE;
+
+    void populate_FE(const rxmesh::RXMesh&                     rxmesh,
+                     const std::vector<std::vector<uint32_t>>& fv)
+    {
+        if (m_h_FE.size() > 0) {
+            return;
+        }
+        m_h_FE.clear();
+
+        if (rxmesh.m_edges_map.size() == 0) {
+            RXMESH_ERROR(
+                "RXMeshTest::populate_FE() can not call me before"
+                " populating m_edges_map");
+        }
+
+        for (uint32_t f = 0; f < rxmesh.m_num_faces; ++f) {
+            uint32_t i = f;
+
+            std::vector<uint32_t> ff(3);
+
+            for (uint32_t j = 0; j < 3; ++j) {
+
+                uint32_t v0 = fv[i][j];
+                uint32_t v1 = fv[i][(j + 1) % 3];
+
+                std::pair<uint32_t, uint32_t> my_edge =
+                    rxmesh::detail::edge_key(v0, v1);
+                uint32_t edge_id = rxmesh.get_edge_id(my_edge);
+                ff[j]            = edge_id;
+            }
+            m_h_FE.push_back(ff);
+        }
     }
 
     bool test_VV(const rxmesh::RXMeshStatic&              rxmesh,
@@ -251,23 +240,22 @@ class RXMeshTest
                         output_container);
     }
 
-    bool test_VF(const rxmesh::RXMeshStatic&              rxmesh,
-                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
-                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
+    bool test_VF(const rxmesh::RXMeshStatic&               rxmesh,
+                 const std::vector<std::vector<uint32_t>>& fv,
+                 const rxmesh::RXMeshAttribute<uint32_t>&  input_container,
+                 const rxmesh::RXMeshAttribute<uint32_t>&  output_container)
     {
 
         // construct FV
-
+        if (rxmesh.m_num_faces != fv.size()) {
+            return false;
+        }
         std::vector<std::vector<uint32_t>> v_f(rxmesh.m_num_vertices,
                                                std::vector<uint32_t>(0));
 
-        // TODO this depends on m_fvn which does not record any changes
-        // but it is what the user has passed. Should compute v_f based on
-        // m_edge_map for consistency
-        uint32_t f_deg = rxmesh.m_face_degree;
-        for (uint32_t f = 0; f < rxmesh.m_num_faces; f++) {
-            for (uint32_t v = 0; v < f_deg; v++) {
-                uint32_t vert = rxmesh.m_fvn[f][v];
+        for (uint32_t f = 0; f < fv.size(); f++) {
+            for (uint32_t v = 0; v < 3; v++) {
+                uint32_t vert = fv[f][v];
                 v_f[vert].push_back(f);
             }
         }
@@ -279,28 +267,14 @@ class RXMeshTest
                         output_container);
     }
 
-    bool test_FV(const rxmesh::RXMeshStatic&              rxmesh,
-                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
-                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
+    bool test_FV(const rxmesh::RXMeshStatic&               rxmesh,
+                 const std::vector<std::vector<uint32_t>>& fv,
+                 const rxmesh::RXMeshAttribute<uint32_t>&  input_container,
+                 const rxmesh::RXMeshAttribute<uint32_t>&  output_container)
     {
-
-        // construct FV
-
-        uint32_t f_deg = rxmesh.m_face_degree;
-
-        std::vector<std::vector<uint32_t>> f_v(rxmesh.m_num_faces,
-                                               std::vector<uint32_t>(f_deg));
-
-        for (uint32_t f = 0; f < rxmesh.m_num_faces; f++) {
-
-            std::memcpy(f_v[f].data(),
-                        rxmesh.m_fvn[f].data(),
-                        f_deg * sizeof(uint32_t));
-        }
-
         // two-way verification
         return verifier(rxmesh.get_patcher()->get_face_patch().data(),
-                        f_v,
+                        fv,
                         input_container,
                         output_container);
     }
@@ -312,13 +286,11 @@ class RXMeshTest
 
         // construct FE
 
-        uint32_t f_deg = rxmesh.m_face_degree;
-
         std::vector<std::vector<uint32_t>> f_e(rxmesh.m_num_faces,
                                                std::vector<uint32_t>(0));
 
         for (uint32_t f = 0; f < rxmesh.m_num_faces; f++) {
-            f_e[f].reserve(f_deg);
+            f_e[f].reserve(3);
         }
 
         for (uint32_t f = 0; f < rxmesh.m_num_faces; f++) {
@@ -421,9 +393,8 @@ class RXMeshTest
         std::vector<std::vector<uint32_t>> e_f(rxmesh.m_num_edges,
                                                std::vector<uint32_t>(0));
 
-        uint32_t f_deg = rxmesh.m_face_degree;
         for (uint32_t f = 0; f < rxmesh.m_num_faces; f++) {
-            for (uint32_t e = 0; e < f_deg; e++) {
+            for (uint32_t e = 0; e < 3; e++) {
                 uint32_t edge = m_h_FE[f][e];
                 e_f[edge].push_back(f);
             }
@@ -633,10 +604,9 @@ class RXMeshTest
 
         // 5) check if the resulting global face id in 4) matches that
         // obtained in 1)
-        uint32_t              deg = rxmesh.m_face_degree;
-        std::vector<uint16_t> e_l(deg);
-        std::vector<uint16_t> e_g(deg);
-        std::vector<uint16_t> e_ltog(deg);
+        std::vector<uint16_t> e_l(3);
+        std::vector<uint16_t> e_g(3);
+        std::vector<uint16_t> e_ltog(3);
 
         for (uint16_t f_l = 0; f_l < num_p_faces; ++f_l) {
             // 1)
@@ -646,9 +616,8 @@ class RXMeshTest
 
             // 2)
             // get the local edges
-            for (uint32_t i = 0; i < deg; ++i) {
-                e_l[i] =
-                    rxmesh.m_h_patches_faces.at(patch_id).at(f_l * deg + i);
+            for (uint32_t i = 0; i < 3; ++i) {
+                e_l[i] = rxmesh.m_h_patches_faces.at(patch_id).at(f_l * 3 + i);
                 // shift right because the first bit is reserved for edge
                 // direction
                 flag_t dir(0);
@@ -657,20 +626,20 @@ class RXMeshTest
 
             // 3)
             // convert the local edges to global
-            for (uint32_t i = 0; i < deg; ++i) {
+            for (uint32_t i = 0; i < 3; ++i) {
                 e_ltog[i] =
                     (rxmesh.m_h_patches_ltog_e.at(patch_id).at(e_l[i]) >> 1);
             }
 
             // 4)
             // from the mapped face (f_ltog) get its global edges
-            for (uint32_t i = 0; i < deg; ++i) {
+            for (uint32_t i = 0; i < 3; ++i) {
                 e_g[i] = m_h_FE[f_ltog][i];
             }
 
             // 5)
             // check if the global edges matches the mapping edges
-            for (uint32_t i = 0; i < deg; ++i) {
+            for (uint32_t i = 0; i < 3; ++i) {
                 if (e_g[i] != e_ltog[i]) {
                     if (!m_quite) {
                         RXMESH_ERROR(
