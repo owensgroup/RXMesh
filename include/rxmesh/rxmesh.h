@@ -257,7 +257,7 @@ class RXMesh
     void calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
                          const std::vector<std::vector<uint32_t>>& ef);
 
-    void build_local(const std::vector<std::vector<uint32_t>>& fv);
+    void build(const std::vector<std::vector<uint32_t>>& fv);
     void build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
                             const uint32_t                            patch_id);
 
@@ -278,7 +278,7 @@ class RXMesh
                                    std::vector<uint16_t>& ep);
 
 
-    void device_alloc_local();
+    void move_to_device();
 
     template <typename Tin, typename Tst>
     void get_starting_ids(const std::vector<std::vector<Tin>>& input,
@@ -343,11 +343,6 @@ class RXMesh
     //.y edges
     //.z vertex
     std::vector<uint4> m_h_owned_size;
-
-    uint2 m_max_size;  // max number of edges(*2) and faces(*face_degree)
-                       // in a patch
-                       // this counts the size of edges and faces arrays
-                       // rounded up to multiple of 32
 
     //** mappings
     // local to global map for (v)ertices (e)dges and (f)aces

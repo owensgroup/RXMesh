@@ -50,8 +50,8 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
       m_total_gpu_storage_mb(0)
 {
     // Build everything from scratch including patches
-    build_local(fv);
-    device_alloc_local();
+    build(fv);
+    move_to_device();
 }
 
 RXMesh::~RXMesh()
@@ -73,13 +73,12 @@ RXMesh::~RXMesh()
     GPU_FREE(m_d_owned_size);
 };
 
-void RXMesh::build_local(const std::vector<std::vector<uint32_t>>& fv)
+void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
 {
     std::vector<uint32_t>              ff_values;
     std::vector<uint32_t>              ff_offset;
     std::vector<std::vector<uint32_t>> ef;
     build_supporting_structures(fv, ef, ff_offset, ff_values);
-    calc_statistics(fv, ef);
 
     m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
                                                    ff_offset,
@@ -94,17 +93,11 @@ void RXMesh::build_local(const std::vector<std::vector<uint32_t>>& fv)
 
 
     m_max_size.x = m_max_size.y = 0;
+    
     m_h_owned_size.resize(m_num_patches);
     for (uint32_t p = 0; p < m_num_patches; ++p) {
-        build_single_patch(fv, p);
-        m_max_size.x = static_cast<unsigned int>(
-            std::max(size_t(m_max_size.x), m_h_patches_edges[p].size()));
-        m_max_size.y = static_cast<unsigned int>(
-            std::max(size_t(m_max_size.y), m_h_patches_faces[p].size()));
-    }
-
-    m_max_size.x = round_up_multiple(m_max_size.x, 32u);
-    m_max_size.y = round_up_multiple(m_max_size.y, 32u);
+        build_single_patch(fv, p);    
+    }   
 
     m_max_vertices_per_patch       = 0;
     m_max_edges_per_patch          = 0;
@@ -165,6 +158,7 @@ void RXMesh::build_local(const std::vector<std::vector<uint32_t>>& fv)
     ex_scan(m_h_patch_distribution_e);
     ex_scan(m_h_patch_distribution_f);
 
+    calc_statistics(fv, ef);
     if (!m_quite) {
         RXMESH_TRACE("#Vertices = {}, #Faces= {}, #Edges= {}",
                      m_num_vertices,
@@ -176,8 +170,6 @@ void RXMesh::build_local(const std::vector<std::vector<uint32_t>>& fv)
         RXMESH_TRACE("max valence = {}", m_max_valence);
         RXMESH_TRACE("max edge incident faces = {}", m_max_edge_incident_faces);
         RXMESH_TRACE("max face adjacent faces = {}", m_max_face_adjacent_faces);
-        RXMESH_TRACE("per-patch maximum edges references= {}", m_max_size.x);
-        RXMESH_TRACE("per-patch maximum  faces references= {}", m_max_size.y);
         RXMESH_TRACE("per-patch maximum face count (owned)= {} ({})",
                      m_max_faces_per_patch,
                      m_max_owned_faces_per_patch);
@@ -188,7 +180,6 @@ void RXMesh::build_local(const std::vector<std::vector<uint32_t>>& fv)
                      m_max_vertices_per_patch,
                      m_max_owned_vertices_per_patch);
     }
-    //===============================
 
     m_max_ele_count = std::max(m_num_edges, m_num_faces);
     m_max_ele_count = std::max(m_num_vertices, m_max_ele_count);
@@ -725,7 +716,7 @@ void RXMesh::padding_to_multiple(std::vector<std::vector<T>>& input,
     }
 }
 
-void RXMesh::device_alloc_local()
+void RXMesh::move_to_device()
 {
 
     // allocate and transfer patch information to device
@@ -943,7 +934,6 @@ void RXMesh::device_alloc_local()
                           m_d_patches_faces,
                           m_d_ad_size,
                           m_d_owned_size,
-                          m_max_size,
                           m_d_patch_distribution_v,
                           m_d_patch_distribution_e,
                           m_d_patch_distribution_f,

@@ -40,8 +40,7 @@ class __align__(16) RXMeshContext
           m_d_neighbour_patches(nullptr),
           m_d_neighbour_patches_offset(nullptr)
 
-    {
-        m_d_max_size.x = m_d_max_size.y = 0;
+    {        
     }
 
     void init(const uint32_t num_edges,
@@ -63,8 +62,7 @@ class __align__(16) RXMeshContext
               uint16_t*      d_patches_edges,
               uint16_t*      d_patches_faces,
               uint4*         d_ad_size,
-              uint4*         d_owned_size,
-              uint2          max_size,
+              uint4*         d_owned_size,              
               uint32_t*      d_patch_distribution_v,
               uint32_t*      d_patch_distribution_e,
               uint32_t*      d_patch_distribution_f,
@@ -91,8 +89,7 @@ class __align__(16) RXMeshContext
         m_d_patches_edges            = d_patches_edges;
         m_d_patches_faces            = d_patches_faces;
         m_d_ad_size                  = d_ad_size;
-        m_d_owned_size               = d_owned_size;
-        m_d_max_size                 = max_size;
+        m_d_owned_size               = d_owned_size;        
         m_d_patch_distribution_v     = d_patch_distribution_v;
         m_d_patch_distribution_e     = d_patch_distribution_e;
         m_d_patch_distribution_f     = d_patch_distribution_f;
@@ -252,11 +249,7 @@ class __align__(16) RXMeshContext
     __device__ __forceinline__ uint4* get_size_owned() const
     {
         return m_d_owned_size;
-    }
-    __device__ __forceinline__ uint2 get_max_size() const
-    {
-        return m_d_max_size;
-    }
+    }   
     __device__ __forceinline__ uint32_t* get_vertex_distribution() const
     {
         return m_d_patch_distribution_v;
@@ -284,13 +277,7 @@ class __align__(16) RXMeshContext
         m_max_valence, m_max_edge_incident_faces, m_max_face_adjacent_faces,
         m_num_patches;
 
-
-    // max max_num_edges_per_patch*2 for all patches rounded to multiple of 32
-    // max max_num_faces_per_patch*3 for all patches rounded to
-    // multiple of 32
-    uint2 m_d_max_size;
-
-    //** face/vertex/edge patch (indexed by in global space)
+    // face/vertex/edge patch (indexed by in global space)
     uint32_t *m_d_face_patch, *m_d_edge_patch, *m_d_vertex_patch;
 
     // mapping
