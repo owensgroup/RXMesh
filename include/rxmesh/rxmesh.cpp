@@ -30,8 +30,6 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
       m_max_vertices_per_patch(0),
       m_max_edges_per_patch(0),
       m_max_faces_per_patch(0),
-      m_max_owned_vertices_per_patch(0),
-      m_max_owned_edges_per_patch(0),
       m_d_patches_ltog_v(nullptr),
       m_d_patches_ltog_e(nullptr),
       m_d_patches_ltog_f(nullptr),
@@ -91,20 +89,14 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
 
     m_num_patches = m_patcher->get_num_patches();
 
-
-    m_max_size.x = m_max_size.y = 0;
-    
     m_h_owned_size.resize(m_num_patches);
     for (uint32_t p = 0; p < m_num_patches; ++p) {
-        build_single_patch(fv, p);    
-    }   
+        build_single_patch(fv, p);
+    }
 
-    m_max_vertices_per_patch       = 0;
-    m_max_edges_per_patch          = 0;
-    m_max_faces_per_patch          = 0;
-    m_max_owned_vertices_per_patch = 0;
-    m_max_owned_edges_per_patch    = 0;
-    m_max_owned_faces_per_patch    = 0;
+    m_max_vertices_per_patch = 0;
+    m_max_edges_per_patch    = 0;
+    m_max_faces_per_patch    = 0;
     for (uint32_t p = 0; p < m_num_patches; ++p) {
         m_max_vertices_per_patch = std::max(
             m_max_vertices_per_patch, uint32_t(m_h_patches_ltog_v[p].size()));
@@ -112,13 +104,6 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
             m_max_edges_per_patch, uint32_t(m_h_patches_ltog_e[p].size()));
         m_max_faces_per_patch = std::max(
             m_max_faces_per_patch, uint32_t(m_h_patches_ltog_f[p].size()));
-
-        m_max_owned_faces_per_patch =
-            std::max(m_max_owned_faces_per_patch, m_h_owned_size[p].x);
-        m_max_owned_edges_per_patch =
-            std::max(m_max_owned_edges_per_patch, m_h_owned_size[p].y);
-        m_max_owned_vertices_per_patch =
-            std::max(m_max_owned_vertices_per_patch, m_h_owned_size[p].z);
     }
 
     // scanned histogram of element count in patches
@@ -170,15 +155,12 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
         RXMESH_TRACE("max valence = {}", m_max_valence);
         RXMESH_TRACE("max edge incident faces = {}", m_max_edge_incident_faces);
         RXMESH_TRACE("max face adjacent faces = {}", m_max_face_adjacent_faces);
-        RXMESH_TRACE("per-patch maximum face count (owned)= {} ({})",
-                     m_max_faces_per_patch,
-                     m_max_owned_faces_per_patch);
-        RXMESH_TRACE("per-patch maximum edge count (owned) = {} ({})",
-                     m_max_edges_per_patch,
-                     m_max_owned_edges_per_patch);
-        RXMESH_TRACE("per-patch maximum vertex count (owned)= {} ({})",
-                     m_max_vertices_per_patch,
-                     m_max_owned_vertices_per_patch);
+        RXMESH_TRACE("per-patch maximum face count = {}",
+                     m_max_faces_per_patch);
+        RXMESH_TRACE("per-patch maximum edge count = {}",
+                     m_max_edges_per_patch);
+        RXMESH_TRACE("per-patch maximum vertex count = {}",
+                     m_max_vertices_per_patch);
     }
 
     m_max_ele_count = std::max(m_num_edges, m_num_faces);

@@ -182,21 +182,6 @@ class RXMesh
         return m_max_faces_per_patch;
     }
 
-    uint32_t get_per_patch_max_owned_vertices() const
-    {
-        return m_max_owned_vertices_per_patch;
-    }
-
-    uint32_t get_per_patch_max_owned_edges() const
-    {
-        return m_max_owned_edges_per_patch;
-    }
-
-    uint32_t get_per_patch_max_owned_faces() const
-    {
-        return m_max_owned_faces_per_patch;
-    }
-
     float get_patching_time() const
     {
         return m_patcher->get_patching_time();
@@ -327,8 +312,7 @@ class RXMesh
     //****** Host
     uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
         m_max_faces_per_patch;
-    uint32_t m_max_owned_vertices_per_patch, m_max_owned_edges_per_patch,
-        m_max_owned_faces_per_patch;
+
     //** main incident relations
     std::vector<std::vector<uint16_t>> m_h_patches_edges;
     std::vector<std::vector<uint16_t>> m_h_patches_faces;
