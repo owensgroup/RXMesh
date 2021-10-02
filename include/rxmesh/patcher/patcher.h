@@ -173,7 +173,7 @@ class Patcher
     void allocate_device_memory(const std::vector<uint32_t>& ff_offset,
                                 const std::vector<uint32_t>& ff_values);
 
-    void Patcher::assign_patch(
+    void assign_patch(
         const std::vector<std::vector<uint32_t>>&                 fv,
         const std::unordered_map<std::pair<uint32_t, uint32_t>,
                                  uint32_t,
