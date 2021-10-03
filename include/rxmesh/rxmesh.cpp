@@ -17,8 +17,7 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
                const bool                                quite /*= true*/)
     : m_num_edges(0),
       m_num_faces(0),
-      m_num_vertices(0),
-      m_max_ele_count(0),
+      m_num_vertices(0),      
       m_max_valence(0),
       m_max_edge_incident_faces(0),
       m_max_face_adjacent_faces(0),
@@ -38,9 +37,6 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
       m_d_ad_size_ltog_f(nullptr),
       m_d_patches_edges(nullptr),
       m_d_patches_faces(nullptr),
-      m_d_patch_distribution_v(nullptr),
-      m_d_patch_distribution_e(nullptr),
-      m_d_patch_distribution_f(nullptr),
       m_d_ad_size(nullptr),
       m_d_owned_size(nullptr),
       m_d_neighbour_patches(nullptr),
@@ -63,9 +59,6 @@ RXMesh::~RXMesh()
     GPU_FREE(m_d_ad_size_ltog_e);
     GPU_FREE(m_d_ad_size_ltog_f);
     GPU_FREE(m_d_ad_size);
-    GPU_FREE(m_d_patch_distribution_v);
-    GPU_FREE(m_d_patch_distribution_e);
-    GPU_FREE(m_d_patch_distribution_f);
     GPU_FREE(m_d_neighbour_patches);
     GPU_FREE(m_d_neighbour_patches_offset);
     GPU_FREE(m_d_owned_size);
@@ -94,55 +87,6 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
         build_single_patch(fv, p);
     }
 
-    m_max_vertices_per_patch = 0;
-    m_max_edges_per_patch    = 0;
-    m_max_faces_per_patch    = 0;
-    for (uint32_t p = 0; p < m_num_patches; ++p) {
-        m_max_vertices_per_patch = std::max(
-            m_max_vertices_per_patch, uint32_t(m_h_patches_ltog_v[p].size()));
-        m_max_edges_per_patch = std::max(
-            m_max_edges_per_patch, uint32_t(m_h_patches_ltog_e[p].size()));
-        m_max_faces_per_patch = std::max(
-            m_max_faces_per_patch, uint32_t(m_h_patches_ltog_f[p].size()));
-    }
-
-    // scanned histogram of element count in patches
-    m_h_patch_distribution_v.resize(m_num_patches + 1, 0);
-    m_h_patch_distribution_e.resize(m_num_patches + 1, 0);
-    m_h_patch_distribution_f.resize(m_num_patches + 1, 0);
-
-    for (uint32_t v = 0; v < m_num_vertices; ++v) {
-        uint32_t patch = m_patcher->get_vertex_patch_id(v);
-        if (patch != INVALID32) {
-            m_h_patch_distribution_v[patch]++;
-        }
-    }
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
-        uint32_t patch = m_patcher->get_face_patch_id(f);
-        if (patch != INVALID32) {
-            m_h_patch_distribution_f[patch]++;
-        }
-    }
-    for (uint32_t e = 0; e < m_num_edges; ++e) {
-        uint32_t patch = m_patcher->get_edge_patch_id(e);
-        if (patch != INVALID32) {
-            m_h_patch_distribution_e[patch]++;
-        }
-    }
-    auto ex_scan = [](std::vector<uint32_t>& vv) {
-        uint32_t dd = 0;
-        for (uint32_t i = 1; i < vv.size(); ++i) {
-            uint32_t temp = vv[i];
-            vv[i]         = dd + vv[i - 1];
-            dd            = temp;
-        }
-        vv[0] = 0;
-    };
-
-    ex_scan(m_h_patch_distribution_v);
-    ex_scan(m_h_patch_distribution_e);
-    ex_scan(m_h_patch_distribution_f);
-
     calc_statistics(fv, ef);
     if (!m_quite) {
         RXMESH_TRACE("#Vertices = {}, #Faces= {}, #Edges= {}",
@@ -161,10 +105,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
                      m_max_edges_per_patch);
         RXMESH_TRACE("per-patch maximum vertex count = {}",
                      m_max_vertices_per_patch);
-    }
-
-    m_max_ele_count = std::max(m_num_edges, m_num_faces);
-    m_max_ele_count = std::max(m_num_vertices, m_max_ele_count);
+    }    
 }
 
 void RXMesh::build_supporting_structures(
@@ -307,6 +248,19 @@ void RXMesh::calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
         }
         m_max_face_adjacent_faces =
             std::max(ff_count, m_max_face_adjacent_faces);
+    }
+
+    // max number of vertices/edges/faces per patch
+    m_max_vertices_per_patch = 0;
+    m_max_edges_per_patch    = 0;
+    m_max_faces_per_patch    = 0;
+    for (uint32_t p = 0; p < m_num_patches; ++p) {
+        m_max_vertices_per_patch = std::max(
+            m_max_vertices_per_patch, uint32_t(m_h_patches_ltog_v[p].size()));
+        m_max_edges_per_patch = std::max(
+            m_max_edges_per_patch, uint32_t(m_h_patches_ltog_e[p].size()));
+        m_max_faces_per_patch = std::max(
+            m_max_faces_per_patch, uint32_t(m_h_patches_ltog_f[p].size()));
     }
 }
 
@@ -854,26 +808,6 @@ void RXMesh::move_to_device()
                           sizeof(uint4) * (m_num_patches),
                           cudaMemcpyHostToDevice));
 
-    CUDA_ERROR(cudaMalloc((void**)&m_d_patch_distribution_v,
-                          (m_num_patches + 1) * sizeof(uint32_t)));
-    CUDA_ERROR(cudaMalloc((void**)&m_d_patch_distribution_e,
-                          (m_num_patches + 1) * sizeof(uint32_t)));
-    CUDA_ERROR(cudaMalloc((void**)&m_d_patch_distribution_f,
-                          (m_num_patches + 1) * sizeof(uint32_t)));
-    CUDA_ERROR(cudaMemcpy(m_d_patch_distribution_v,
-                          m_h_patch_distribution_v.data(),
-                          (m_num_patches + 1) * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-    CUDA_ERROR(cudaMemcpy(m_d_patch_distribution_e,
-                          m_h_patch_distribution_e.data(),
-                          (m_num_patches + 1) * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-    CUDA_ERROR(cudaMemcpy(m_d_patch_distribution_f,
-                          m_h_patch_distribution_f.data(),
-                          (m_num_patches + 1) * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-
-
     uint32_t* n_patches        = m_patcher->get_neighbour_patches();
     uint32_t* n_patches_offset = m_patcher->get_neighbour_patches_offset();
 
@@ -916,9 +850,6 @@ void RXMesh::move_to_device()
                           m_d_patches_faces,
                           m_d_ad_size,
                           m_d_owned_size,
-                          m_d_patch_distribution_v,
-                          m_d_patch_distribution_e,
-                          m_d_patch_distribution_f,
                           m_d_neighbour_patches,
                           m_d_neighbour_patches_offset);
 }

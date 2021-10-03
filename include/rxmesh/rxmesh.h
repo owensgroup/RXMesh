@@ -234,7 +234,8 @@ class RXMesh
      * @brief Calculate various statistics for the input mesh
      *
      * Calculate max valence, max edge incident faces, max face adjacent faces,
-     * if the input is closed, and if the input is edge manifold
+     * if the input is closed, if the input is edge manifold, and max number of
+     * vertices/edges/faces per patch
      *
      * @param fv input face incident vertices
      * @param ef input edge incident faces
@@ -287,8 +288,8 @@ class RXMesh
 
     RXMeshContext m_rxmesh_context;
 
-    uint32_t m_num_edges, m_num_faces, m_num_vertices, m_max_ele_count,
-        m_max_valence, m_max_edge_incident_faces, m_max_face_adjacent_faces;
+    uint32_t m_num_edges, m_num_faces, m_num_vertices, m_max_valence,
+        m_max_edge_incident_faces, m_max_face_adjacent_faces;
 
     // patches
     uint32_t       m_num_patches;
@@ -339,7 +340,7 @@ class RXMesh
         m_h_ad_size_ltog_f;
 
 
-    //****** Device
+    // Device
     // Each device pointer points to a long array that holds specific data
     // separated by patch id
     //       ____________ _____________ ____________
@@ -352,18 +353,13 @@ class RXMesh
     // v,e, or f. This is for the mapping pointers
     // For incidence pointers, we only need store the starting id
 
-    //** mapping
+    // mapping
     uint32_t *m_d_patches_ltog_v, *m_d_patches_ltog_e, *m_d_patches_ltog_f;
     uint2 *   m_d_ad_size_ltog_v, *m_d_ad_size_ltog_e, *m_d_ad_size_ltog_f;
 
-    //** incidence
+    // incidence
     uint16_t *m_d_patches_edges, *m_d_patches_faces;
 
-    //*** Scanned histogram of the number of mesh elements per patch
-    std::vector<uint32_t> m_h_patch_distribution_v, m_h_patch_distribution_e,
-        m_h_patch_distribution_f;
-    uint32_t *m_d_patch_distribution_v, *m_d_patch_distribution_e,
-        *m_d_patch_distribution_f;
 
     //.x edge address
     //.y edge size

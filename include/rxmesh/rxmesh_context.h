@@ -16,7 +16,7 @@ class __align__(16) RXMeshContext
     RXMeshContext()
         : m_num_edges(0),
           m_num_faces(0),
-          m_num_vertices(0),          
+          m_num_vertices(0),
           m_max_valence(0),
           m_max_edge_incident_faces(0),
           m_max_face_adjacent_faces(0),
@@ -32,20 +32,17 @@ class __align__(16) RXMeshContext
           m_d_ad_size_ltog_f(nullptr),
           m_d_patches_edges(nullptr),
           m_d_patches_faces(nullptr),
-          m_d_patch_distribution_v(nullptr),
-          m_d_patch_distribution_e(nullptr),
-          m_d_patch_distribution_f(nullptr),
           m_d_ad_size(nullptr),
           m_d_owned_size(nullptr),
           m_d_neighbour_patches(nullptr),
           m_d_neighbour_patches_offset(nullptr)
 
-    {        
+    {
     }
 
     void init(const uint32_t num_edges,
               const uint32_t num_faces,
-              const uint32_t num_vertices,              
+              const uint32_t num_vertices,
               const uint32_t max_valence,
               const uint32_t max_edge_incident_faces,
               const uint32_t max_face_adjacent_faces,
@@ -62,17 +59,14 @@ class __align__(16) RXMeshContext
               uint16_t*      d_patches_edges,
               uint16_t*      d_patches_faces,
               uint4*         d_ad_size,
-              uint4*         d_owned_size,              
-              uint32_t*      d_patch_distribution_v,
-              uint32_t*      d_patch_distribution_e,
-              uint32_t*      d_patch_distribution_f,
+              uint4*         d_owned_size,
               uint32_t*      d_neighbour_patches,
               uint32_t*      d_neighbour_patches_offset)
     {
 
         m_num_edges                  = num_edges;
         m_num_faces                  = num_faces;
-        m_num_vertices               = num_vertices;        
+        m_num_vertices               = num_vertices;
         m_max_valence                = max_valence;
         m_max_edge_incident_faces    = max_edge_incident_faces;
         m_max_face_adjacent_faces    = max_face_adjacent_faces;
@@ -89,10 +83,7 @@ class __align__(16) RXMeshContext
         m_d_patches_edges            = d_patches_edges;
         m_d_patches_faces            = d_patches_faces;
         m_d_ad_size                  = d_ad_size;
-        m_d_owned_size               = d_owned_size;        
-        m_d_patch_distribution_v     = d_patch_distribution_v;
-        m_d_patch_distribution_e     = d_patch_distribution_e;
-        m_d_patch_distribution_f     = d_patch_distribution_f;
+        m_d_owned_size               = d_owned_size;
         m_d_neighbour_patches        = d_neighbour_patches;
         m_d_neighbour_patches_offset = d_neighbour_patches_offset;
     }
@@ -180,7 +171,7 @@ class __align__(16) RXMeshContext
     __device__ __forceinline__ uint32_t get_num_vertices() const
     {
         return m_num_vertices;
-    }  
+    }
     __device__ __forceinline__ uint32_t get_max_valence() const
     {
         return m_max_valence;
@@ -249,18 +240,6 @@ class __align__(16) RXMeshContext
     __device__ __forceinline__ uint4* get_size_owned() const
     {
         return m_d_owned_size;
-    }   
-    __device__ __forceinline__ uint32_t* get_vertex_distribution() const
-    {
-        return m_d_patch_distribution_v;
-    }
-    __device__ __forceinline__ uint32_t* get_edge_distribution() const
-    {
-        return m_d_patch_distribution_e;
-    }
-    __device__ __forceinline__ uint32_t* get_face_distribution() const
-    {
-        return m_d_patch_distribution_f;
     }
 
 
@@ -273,9 +252,8 @@ class __align__(16) RXMeshContext
 
    private:
     // mesh elements count
-    uint32_t m_num_edges, m_num_faces, m_num_vertices, 
-        m_max_valence, m_max_edge_incident_faces, m_max_face_adjacent_faces,
-        m_num_patches;
+    uint32_t m_num_edges, m_num_faces, m_num_vertices, m_max_valence,
+        m_max_edge_incident_faces, m_max_face_adjacent_faces, m_num_patches;
 
     // face/vertex/edge patch (indexed by in global space)
     uint32_t *m_d_face_patch, *m_d_edge_patch, *m_d_vertex_patch;
@@ -286,10 +264,6 @@ class __align__(16) RXMeshContext
 
     // incidence
     uint16_t *m_d_patches_edges, *m_d_patches_faces;
-
-    // scanned histogram of the mesh elements distribution per patch
-    uint32_t *m_d_patch_distribution_v, *m_d_patch_distribution_e,
-        *m_d_patch_distribution_f;
 
     //.x edge address .y edge size  .z face address .w face size
     uint4* m_d_ad_size;

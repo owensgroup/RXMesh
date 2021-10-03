@@ -25,25 +25,14 @@ __launch_bounds__(blockThreads) __global__
 
     assert(output_container.is_device_allocated());
 
-    uint32_t block_offset = 0;
-    if constexpr (op == Op::EV || op == Op::EF) {
-        block_offset = context.get_edge_distribution()[blockIdx.x];
-    } else if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
-        block_offset = context.get_face_distribution()[blockIdx.x];
-    } else if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
-        block_offset = context.get_vertex_distribution()[blockIdx.x];
-    }
-
     auto store_lambda = [&](uint32_t id, RXMeshIterator& iter) {
         assert(iter.size() < output_container.get_num_attribute_per_element());
 
-        uint32_t id_offset = block_offset + iter.local_id();
-        d_src(id_offset)   = id;
-
-        output_container(id_offset, 0) = iter.size();
+        d_src(id)               = id;
+        output_container(id, 0) = iter.size();
 
         for (uint32_t i = 0; i < iter.size(); ++i) {
-            output_container(id_offset, i + 1) = iter[i];
+            output_container(id, i + 1) = iter[i];
         }
     };
 
