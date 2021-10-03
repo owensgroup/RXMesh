@@ -109,7 +109,7 @@ __device__ __inline__ void query_block_dispatcher(
     uint16_t local_id  = threadIdx.x;
     while (local_id < num_src_in_patch) {
         is_active =
-            local_id || compute_active_set(input_mapping[local_id] >> 1);
+            local_id || compute_active_set(input_mapping[local_id]);
         local_id += blockThreads;
     }
 
@@ -195,8 +195,7 @@ __device__ __inline__ void query_block_dispatcher(
         load_mapping(context,
                      output_element,
                      output_ele_ad_size,
-                     s_output_mapping,
-                     false);
+                     s_output_mapping);
     }
     __syncthreads();
 }
@@ -241,7 +240,7 @@ __device__ __inline__ void query_block_dispatcher(
     uint16_t local_id = threadIdx.x;
     while (local_id < num_src_in_patch) {
 
-        uint32_t global_id = input_mapping[local_id] >> 1;
+        uint32_t global_id = input_mapping[local_id];
 
         if (compute_active_set(global_id)) {
             constexpr uint32_t fixed_offset =

@@ -106,8 +106,7 @@ __device__ __forceinline__ void load_patch_faces(const RXMeshContext& context,
 __device__ __forceinline__ void load_mapping(const RXMeshContext& context,
                                              const ELEMENT        ele,
                                              const uint2& s_ad_size_ltog,
-                                             uint32_t*    mapping,
-                                             const bool   keep_patch_bit)
+                                             uint32_t*    mapping)
 {
     // whole block should be calling this
     for (uint32_t i = threadIdx.x, start = s_ad_size_ltog.x;
@@ -116,26 +115,13 @@ __device__ __forceinline__ void load_mapping(const RXMeshContext& context,
 
         switch (ele) {
             case ELEMENT::VERTEX:
-                if (keep_patch_bit) {
-                    mapping[i] = context.get_patches_ltog_v()[i + start];
-                } else {
-                    mapping[i] = (context.get_patches_ltog_v()[i + start] >> 1);
-                }
-
+                mapping[i] = context.get_patches_ltog_v()[i + start];
                 break;
             case ELEMENT::EDGE:
-                if (keep_patch_bit) {
-                    mapping[i] = context.get_patches_ltog_e()[i + start];
-                } else {
-                    mapping[i] = (context.get_patches_ltog_e()[i + start] >> 1);
-                }
+                mapping[i] = context.get_patches_ltog_e()[i + start];
                 break;
             case ELEMENT::FACE:
-                if (keep_patch_bit) {
-                    mapping[i] = context.get_patches_ltog_f()[i + start];
-                } else {
-                    mapping[i] = (context.get_patches_ltog_f()[i + start] >> 1);
-                }
+                mapping[i] = context.get_patches_ltog_f()[i + start];
                 break;
             default:
                 assert(1 != 1);

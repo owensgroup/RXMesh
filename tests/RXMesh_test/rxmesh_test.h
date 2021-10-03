@@ -517,8 +517,7 @@ class RXMeshTest
 
             // 1)
             // convert the local edge to global one
-            uint32_t e_ltog =
-                (rxmesh.m_h_patches_ltog_e.at(patch_id).at(e_l) >> 1);
+            uint32_t e_ltog = rxmesh.m_h_patches_ltog_e.at(patch_id).at(e_l);
 
             // 2)
             // get the local vertices
@@ -528,10 +527,8 @@ class RXMeshTest
 
             // 3)
             // convert the local vertices to global
-            uint32_t v0_ltog =
-                (rxmesh.m_h_patches_ltog_v.at(patch_id).at(v0_l) >> 1);
-            uint32_t v1_ltog =
-                (rxmesh.m_h_patches_ltog_v.at(patch_id).at(v1_l) >> 1);
+            uint32_t v0_ltog = rxmesh.m_h_patches_ltog_v.at(patch_id).at(v0_l);
+            uint32_t v1_ltog = rxmesh.m_h_patches_ltog_v.at(patch_id).at(v1_l);
 
 
             // 4)
@@ -611,8 +608,7 @@ class RXMeshTest
         for (uint16_t f_l = 0; f_l < num_p_faces; ++f_l) {
             // 1)
             // convert the local face to global one
-            uint32_t f_ltog =
-                (rxmesh.m_h_patches_ltog_f.at(patch_id).at(f_l) >> 1);
+            uint32_t f_ltog = rxmesh.m_h_patches_ltog_f.at(patch_id).at(f_l);
 
             // 2)
             // get the local edges
@@ -627,8 +623,7 @@ class RXMeshTest
             // 3)
             // convert the local edges to global
             for (uint32_t i = 0; i < 3; ++i) {
-                e_ltog[i] =
-                    (rxmesh.m_h_patches_ltog_e.at(patch_id).at(e_l[i]) >> 1);
+                e_ltog[i] = rxmesh.m_h_patches_ltog_e.at(patch_id).at(e_l[i]);
             }
 
             // 4)

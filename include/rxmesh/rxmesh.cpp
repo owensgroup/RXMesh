@@ -38,7 +38,7 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
       m_d_patches_edges(nullptr),
       m_d_patches_faces(nullptr),
       m_d_ad_size(nullptr),
-      m_d_owned_size(nullptr),      
+      m_d_owned_size(nullptr),
       m_total_gpu_storage_mb(0)
 {
     // Build everything from scratch including patches
@@ -75,7 +75,7 @@ RXMesh::~RXMesh()
     GPU_FREE(m_d_ad_size_ltog_v);
     GPU_FREE(m_d_ad_size_ltog_e);
     GPU_FREE(m_d_ad_size_ltog_f);
-    GPU_FREE(m_d_ad_size);    
+    GPU_FREE(m_d_ad_size);
     GPU_FREE(m_d_owned_size);
 };
 
@@ -309,6 +309,13 @@ void RXMesh::build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
     std::vector<uint32_t> tmp_e, tmp_v;
     tmp_e.reserve(m_patch_size * 3);
     tmp_v.reserve(m_patch_size);
+
+    // Count the number of elements owned and total number of mesh elements in
+    // the patch. For the faces, this easy since the patcher already separate
+    // the faces into faces in the patch and ribbon where the former is the
+    // number of faces owned by the patch. For edges and vertices, we have to
+    // go over all faces in the patch (including ribbons) to count them.    
+
     auto insert_if_not_found = [](uint32_t               index,
                                   std::vector<uint32_t>& tmp) -> uint32_t {
         for (uint32_t i = 0; i < tmp.size(); ++i) {
@@ -331,13 +338,14 @@ void RXMesh::build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
             uint32_t global_e = get_edge_id(my_edge);
 
             uint32_t v_index = insert_if_not_found(global_v0, tmp_v);
+
             if (v_index != INVALID32) {
                 total_patch_num_vertices++;
                 if (m_patcher->get_vertex_patch_id(global_v0) == patch_id) {
                     num_vertices_owned++;
                 }
             }
-
+            
             uint32_t e_index = insert_if_not_found(global_e, tmp_e);
             if (e_index != INVALID32) {
                 total_patch_num_edges++;
@@ -432,30 +440,26 @@ void RXMesh::build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
     m_h_patches_ltog_v.push_back(v_ltog);
 }
 
-uint16_t RXMesh::create_new_local_face(const uint32_t               patch_id,
-                                       const uint32_t               global_f,
-                                       const std::vector<uint32_t>& fv,
-                                       uint16_t&                    faces_count,
-                                       uint16_t&      edges_owned_count,
-                                       uint16_t&      edges_not_owned_count,
-                                       uint16_t&      vertices_owned_count,
-                                       uint16_t&      vertices_not_owned_count,
-                                       const uint16_t num_edges_owned,
-                                       const uint16_t num_vertices_owned,
-                                       std::vector<uint32_t>& f_ltog,
-                                       std::vector<uint32_t>& e_ltog,
-                                       std::vector<uint32_t>& v_ltog,
-                                       std::vector<uint16_t>& fp,
-                                       std::vector<uint16_t>& ep)
+void RXMesh::create_new_local_face(const uint32_t               patch_id,
+                                   const uint32_t               global_f,
+                                   const std::vector<uint32_t>& fv,
+                                   uint16_t&                    faces_count,
+                                   uint16_t&      edges_owned_count,
+                                   uint16_t&      edges_not_owned_count,
+                                   uint16_t&      vertices_owned_count,
+                                   uint16_t&      vertices_not_owned_count,
+                                   const uint16_t num_edges_owned,
+                                   const uint16_t num_vertices_owned,
+                                   std::vector<uint32_t>& f_ltog,
+                                   std::vector<uint32_t>& e_ltog,
+                                   std::vector<uint32_t>& v_ltog,
+                                   std::vector<uint16_t>& fp,
+                                   std::vector<uint16_t>& ep)
 {
 
-    uint16_t local_f = faces_count++;
-    f_ltog[local_f]  = global_f;
+    const uint16_t local_f = faces_count++;
+    f_ltog[local_f]        = global_f;
 
-    // shift to left and set first bit to 1 if global_f's patch is this patch
-    f_ltog[local_f] = f_ltog[local_f] << 1;
-    f_ltog[local_f] =
-        f_ltog[local_f] | (m_patcher->get_face_patch_id(global_f) == patch_id);
 
     auto find_increment_index = [&patch_id](
                                     const uint32_t&        global,
@@ -468,27 +472,25 @@ uint16_t RXMesh::create_new_local_face(const uint32_t               patch_id,
         incremented = true;
 
         for (uint16_t id = 0; id < owned_count; ++id) {
-            if (global == (vect[id] >> 1)) {
+            if (global == vect[id]) {
                 incremented = false;
                 return id;
             }
         }
 
         for (uint16_t id = num_owned; id < num_owned + not_owned_count; ++id) {
-            if (global == (vect[id] >> 1)) {
+            if (global == vect[id]) {
                 incremented = false;
                 return id;
             }
         }
-        uint32_t to_store = (global << 1);
         uint16_t ret_id;
         if (ele_patch == patch_id) {
-            to_store = to_store | 1;
-            ret_id   = owned_count++;
+            ret_id = owned_count++;
         } else {
             ret_id = num_owned + (not_owned_count++);
         }
-        vect[ret_id] = to_store;
+        vect[ret_id] = global;
         return ret_id;
     };
 
@@ -563,8 +565,6 @@ uint16_t RXMesh::create_new_local_face(const uint32_t               patch_id,
         local_e             = local_e | (dir & 1);
         fp[local_f * 3 + j] = local_e;
     }
-
-    return local_f;
 }
 
 uint32_t RXMesh::get_edge_id(const uint32_t v0, const uint32_t v1) const
@@ -832,7 +832,7 @@ void RXMesh::write_connectivity(std::fstream& file) const
         assert(m_h_ad_size[p].w % 3 == 0);
         uint16_t patch_num_faces = m_h_ad_size[p].w / 3;
         for (uint32_t f = 0; f < patch_num_faces; ++f) {
-            uint32_t f_global = m_h_patches_ltog_f[p][f] >> 1;
+            uint32_t f_global = m_h_patches_ltog_f[p][f];
             if (m_patcher->get_face_patch_id(f_global) != p) {
                 // if it is a ribbon
                 continue;
@@ -845,7 +845,7 @@ void RXMesh::write_connectivity(std::fstream& file) const
                 RXMeshContext::unpack_edge_dir(edge, edge, dir);
                 uint16_t e_id = (2 * edge) + dir;
                 uint16_t v    = m_h_patches_edges[p][e_id];
-                file << (m_h_patches_ltog_v[p][v] >> 1) + 1 << " ";
+                file << m_h_patches_ltog_v[p][v] + 1 << " ";
             }
             file << std::endl;
         }
