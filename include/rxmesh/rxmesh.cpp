@@ -17,7 +17,7 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
                const bool                                quite /*= true*/)
     : m_num_edges(0),
       m_num_faces(0),
-      m_num_vertices(0),      
+      m_num_vertices(0),
       m_max_valence(0),
       m_max_edge_incident_faces(0),
       m_max_face_adjacent_faces(0),
@@ -38,14 +38,31 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
       m_d_patches_edges(nullptr),
       m_d_patches_faces(nullptr),
       m_d_ad_size(nullptr),
-      m_d_owned_size(nullptr),
-      m_d_neighbour_patches(nullptr),
-      m_d_neighbour_patches_offset(nullptr),
+      m_d_owned_size(nullptr),      
       m_total_gpu_storage_mb(0)
 {
     // Build everything from scratch including patches
     build(fv);
     move_to_device();
+
+    if (!m_quite) {
+        RXMESH_TRACE("#Vertices = {}, #Faces= {}, #Edges= {}",
+                     m_num_vertices,
+                     m_num_faces,
+                     m_num_edges);
+        RXMESH_TRACE("Input is {} edge manifold",
+                     ((m_is_input_edge_manifold) ? "" : " Not"));
+        RXMESH_TRACE("Input is {} closed", ((m_is_input_closed) ? "" : " Not"));
+        RXMESH_TRACE("max valence = {}", m_max_valence);
+        RXMESH_TRACE("max edge incident faces = {}", m_max_edge_incident_faces);
+        RXMESH_TRACE("max face adjacent faces = {}", m_max_face_adjacent_faces);
+        RXMESH_TRACE("per-patch maximum face count = {}",
+                     m_max_faces_per_patch);
+        RXMESH_TRACE("per-patch maximum edge count = {}",
+                     m_max_edges_per_patch);
+        RXMESH_TRACE("per-patch maximum vertex count = {}",
+                     m_max_vertices_per_patch);
+    }
 }
 
 RXMesh::~RXMesh()
@@ -58,9 +75,7 @@ RXMesh::~RXMesh()
     GPU_FREE(m_d_ad_size_ltog_v);
     GPU_FREE(m_d_ad_size_ltog_e);
     GPU_FREE(m_d_ad_size_ltog_f);
-    GPU_FREE(m_d_ad_size);
-    GPU_FREE(m_d_neighbour_patches);
-    GPU_FREE(m_d_neighbour_patches_offset);
+    GPU_FREE(m_d_ad_size);    
     GPU_FREE(m_d_owned_size);
 };
 
@@ -82,30 +97,12 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
 
     m_num_patches = m_patcher->get_num_patches();
 
-    m_h_owned_size.resize(m_num_patches);
+    m_h_owned_size.reserve(m_num_patches);
     for (uint32_t p = 0; p < m_num_patches; ++p) {
         build_single_patch(fv, p);
     }
 
     calc_statistics(fv, ef);
-    if (!m_quite) {
-        RXMESH_TRACE("#Vertices = {}, #Faces= {}, #Edges= {}",
-                     m_num_vertices,
-                     m_num_faces,
-                     m_num_edges);
-        RXMESH_TRACE("Input is {} edge manifold",
-                     ((m_is_input_edge_manifold) ? "" : " Not"));
-        RXMESH_TRACE("Input is {} closed", ((m_is_input_closed) ? "" : " Not"));
-        RXMESH_TRACE("max valence = {}", m_max_valence);
-        RXMESH_TRACE("max edge incident faces = {}", m_max_edge_incident_faces);
-        RXMESH_TRACE("max face adjacent faces = {}", m_max_face_adjacent_faces);
-        RXMESH_TRACE("per-patch maximum face count = {}",
-                     m_max_faces_per_patch);
-        RXMESH_TRACE("per-patch maximum edge count = {}",
-                     m_max_edges_per_patch);
-        RXMESH_TRACE("per-patch maximum vertex count = {}",
-                     m_max_vertices_per_patch);
-    }    
 }
 
 void RXMesh::build_supporting_structures(
@@ -267,21 +264,19 @@ void RXMesh::calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
 void RXMesh::build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
                                 const uint32_t patch_id)
 {
-    // Build the patch in local index space
+    // Build the patch local index space
     // This is the two small matrices defining incident relation between
     // edge-vertices and faces-edges along with the mapping from local to
     // global space for vertices, edge, and faces
 
-    // We we create a new patch, we make sure that the elements owned by the
+    // When we create a new patch, we make sure that the elements owned by the
     // patch will have local indices lower than any elements (of the same type)
     // that is not owned by the patch
-    const uint32_t *p_val(m_patcher->get_patches_val()),
-        *p_off(m_patcher->get_patches_offset());
-
 
     // patch start and end
-    const uint32_t p_start = (patch_id == 0) ? 0 : p_off[patch_id - 1];
-    const uint32_t p_end   = p_off[patch_id];
+    const uint32_t p_start =
+        (patch_id == 0) ? 0 : m_patcher->get_patches_offset()[patch_id - 1];
+    const uint32_t p_end = m_patcher->get_patches_offset()[patch_id];
     const uint32_t r_start =
         (patch_id == 0) ? 0 :
                           m_patcher->get_external_ribbon_offset()[patch_id - 1];
@@ -293,25 +288,23 @@ void RXMesh::build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
 
     assert(total_patch_num_faces <= m_num_faces);
 
-    //** faces
     // container for this patch local faces i.e., face incident edges
     std::vector<uint16_t> fp(3 * total_patch_num_faces);
 
-    // the mapping from this patch local space (uint16_t) to global one
-    std::vector<uint32_t> f_ltog(total_patch_num_faces);
-
-    //** edges
     // container for this patch local edges i.e., edge incident vertices
     std::vector<uint16_t> ep;
+    ep.reserve(3 * total_patch_num_faces);  // assuming manifold patch
 
-    // the mapping from this patch local space to global one
+    // the mapping from this patch local index space to global index space
+    std::vector<uint32_t> f_ltog(total_patch_num_faces);
     std::vector<uint32_t> e_ltog;
-
-    //** vertices
-    // the mapping from this patch local space to global one
+    e_ltog.reserve(
+        static_cast<uint32_t>(1.5 * static_cast<float>(total_patch_num_faces)));
     std::vector<uint32_t> v_ltog;
+    v_ltog.reserve(
+        static_cast<uint32_t>(0.5 * static_cast<float>(total_patch_num_faces)));
 
-    // count the number of elements owned and not owned by the patch
+    // count the number of elements owned by the patch
     uint16_t              num_edges_owned(0), num_vertices_owned(0);
     std::vector<uint32_t> tmp_e, tmp_v;
     tmp_e.reserve(m_patch_size * 3);
@@ -355,7 +348,7 @@ void RXMesh::build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
         }
     };
     for (uint32_t s = p_start; s < p_end; ++s) {
-        uint32_t global_f = p_val[s];
+        uint32_t global_f = m_patcher->get_patches_val()[s];
         count_num_elements(global_f);
     }
     for (uint32_t s = r_start; s < r_end; ++s) {
@@ -372,7 +365,7 @@ void RXMesh::build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
     uint16_t faces_count(0), edges_owned_count(0), edges_not_owned_count(0),
         vertices_owned_count(0), vertices_not_owned_count(0);
     for (uint32_t s = p_start; s < p_end; ++s) {
-        uint32_t global_f = p_val[s];
+        uint32_t global_f = m_patcher->get_patches_val()[s];
         create_new_local_face(patch_id,
                               global_f,
                               fv[global_f],
@@ -420,10 +413,11 @@ void RXMesh::build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
                      std::to_string(patch_id) + " not built correctly!!");
     }
 
-
-    m_h_owned_size[patch_id].x = (p_end - p_start);
-    m_h_owned_size[patch_id].y = num_edges_owned;
-    m_h_owned_size[patch_id].z = num_vertices_owned;
+    uint4 owned_size;
+    owned_size.x = p_end - p_start;
+    owned_size.y = num_edges_owned;
+    owned_size.z = num_vertices_owned;
+    m_h_owned_size.push_back(owned_size);
 
     // faces
     m_h_patches_faces.push_back(fp);
@@ -808,26 +802,6 @@ void RXMesh::move_to_device()
                           sizeof(uint4) * (m_num_patches),
                           cudaMemcpyHostToDevice));
 
-    uint32_t* n_patches        = m_patcher->get_neighbour_patches();
-    uint32_t* n_patches_offset = m_patcher->get_neighbour_patches_offset();
-
-    CUDA_ERROR(cudaMalloc((void**)&m_d_neighbour_patches_offset,
-                          m_num_patches * sizeof(uint32_t)));
-    CUDA_ERROR(cudaMemcpy(m_d_neighbour_patches_offset,
-                          n_patches_offset,
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-    if (n_patches) {
-        CUDA_ERROR(
-            cudaMalloc((void**)&m_d_neighbour_patches,
-                       n_patches_offset[m_num_patches - 1] * sizeof(uint32_t)));
-        CUDA_ERROR(
-            cudaMemcpy(m_d_neighbour_patches,
-                       n_patches,
-                       n_patches_offset[m_num_patches - 1] * sizeof(uint32_t),
-                       cudaMemcpyHostToDevice));
-    }
-
 
     // Allocate and copy the context to the gpu
     m_rxmesh_context.init(m_num_edges,
@@ -849,9 +823,7 @@ void RXMesh::move_to_device()
                           m_d_patches_edges,
                           m_d_patches_faces,
                           m_d_ad_size,
-                          m_d_owned_size,
-                          m_d_neighbour_patches,
-                          m_d_neighbour_patches_offset);
+                          m_d_owned_size);
 }
 
 void RXMesh::write_connectivity(std::fstream& file) const

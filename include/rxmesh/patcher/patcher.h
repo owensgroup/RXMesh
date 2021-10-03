@@ -79,16 +79,6 @@ class Patcher
         return m_patches_offset.data();
     }
 
-    uint32_t* get_neighbour_patches()
-    {
-        return m_neighbour_patches.data();
-    }
-
-    uint32_t* get_neighbour_patches_offset()
-    {
-        return m_neighbour_patches_offset.data();
-    }
-
     std::vector<uint32_t>& get_external_ribbon_val()
     {
         return m_ribbon_ext_val;
@@ -216,9 +206,6 @@ class Patcher
 
     // Stores ribbon in compressed format
     std::vector<uint32_t> m_ribbon_ext_val, m_ribbon_ext_offset;
-
-    // Stores neighbour patches in compressed format
-    std::vector<uint32_t> m_neighbour_patches, m_neighbour_patches_offset;
 
     // caching the time taken to construct the patches
     float m_patching_time_ms;

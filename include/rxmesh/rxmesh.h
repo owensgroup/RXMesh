@@ -308,9 +308,9 @@ class RXMesh
     std::unique_ptr<patcher::Patcher> m_patcher;
 
 
-    //*************** Patch sub-matrices
+    // Patch sub-matrices
 
-    //****** Host
+    // Host
     uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
         m_max_faces_per_patch;
 
@@ -372,9 +372,6 @@ class RXMesh
     //.y edges
     //.z vertex
     uint4* m_d_owned_size;
-
-    // neighbour patches
-    uint32_t *m_d_neighbour_patches, *m_d_neighbour_patches_offset;
 
     double m_total_gpu_storage_mb;
 };

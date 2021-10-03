@@ -33,10 +33,7 @@ class __align__(16) RXMeshContext
           m_d_patches_edges(nullptr),
           m_d_patches_faces(nullptr),
           m_d_ad_size(nullptr),
-          m_d_owned_size(nullptr),
-          m_d_neighbour_patches(nullptr),
-          m_d_neighbour_patches_offset(nullptr)
-
+          m_d_owned_size(nullptr)
     {
     }
 
@@ -59,9 +56,7 @@ class __align__(16) RXMeshContext
               uint16_t*      d_patches_edges,
               uint16_t*      d_patches_faces,
               uint4*         d_ad_size,
-              uint4*         d_owned_size,
-              uint32_t*      d_neighbour_patches,
-              uint32_t*      d_neighbour_patches_offset)
+              uint4*         d_owned_size)
     {
 
         m_num_edges                  = num_edges;
@@ -83,9 +78,7 @@ class __align__(16) RXMeshContext
         m_d_patches_edges            = d_patches_edges;
         m_d_patches_faces            = d_patches_faces;
         m_d_ad_size                  = d_ad_size;
-        m_d_owned_size               = d_owned_size;
-        m_d_neighbour_patches        = d_neighbour_patches;
-        m_d_neighbour_patches_offset = d_neighbour_patches_offset;
+        m_d_owned_size               = d_owned_size;        
     }
 
 
@@ -270,8 +263,5 @@ class __align__(16) RXMeshContext
 
     //.x faces .y edges .z vertex
     uint4* m_d_owned_size;
-
-    // patch neighbour
-    uint32_t *m_d_neighbour_patches, *m_d_neighbour_patches_offset;
 };
 }  // namespace rxmesh

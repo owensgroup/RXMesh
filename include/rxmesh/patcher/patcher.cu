@@ -78,8 +78,7 @@ Patcher::Patcher(uint32_t                                        patch_size,
         for (uint32_t i = 0; i < m_num_faces; ++i) {
             m_face_patch[i]  = 0;
             m_patches_val[i] = i;
-        }
-        m_neighbour_patches_offset.resize(1, 0);
+        }        
         allocate_device_memory(ff_offset, ff_values);
         assign_patch(fv, edges_map);
     } else {
@@ -392,8 +391,7 @@ void Patcher::postprocess(const std::vector<std::vector<uint32_t>>& fv,
                           const std::vector<uint32_t>&              ff_offset,
                           const std::vector<uint32_t>&              ff_values)
 {
-    // Post process the patches by extracting the ribbons and populate the
-    // neighbour patches storage
+    // Post process the patches by extracting the ribbons 
     //
     // For patch P, we start first by identifying boundary faces; faces that has
     // an edge on P's boundary. These faces are captured by querying the
@@ -407,9 +405,6 @@ void Patcher::postprocess(const std::vector<std::vector<uint32_t>>& fv,
 
     std::vector<uint32_t> bd_vertices;
     bd_vertices.reserve(m_patch_size);
-
-    m_neighbour_patches_offset.resize(m_num_patches);
-    m_neighbour_patches.reserve(m_num_patches * 3);
 
     // build vertex incident faces
     std::vector<std::vector<uint32_t>> vertex_incident_faces(
@@ -427,10 +422,6 @@ void Patcher::postprocess(const std::vector<std::vector<uint32_t>>& fv,
 
         uint32_t p_start = (cur_p == 0) ? 0 : m_patches_offset[cur_p - 1];
         uint32_t p_end   = m_patches_offset[cur_p];
-
-        m_neighbour_patches_offset[cur_p] =
-            (cur_p == 0) ? 0 : m_neighbour_patches_offset[cur_p - 1];
-        uint32_t neighbour_patch_start = m_neighbour_patches_offset[cur_p];
 
         bd_vertices.clear();
         frontier.clear();
@@ -458,19 +449,6 @@ void Patcher::postprocess(const std::vector<std::vector<uint32_t>>& fv,
                         added = true;
                     }
 
-                    // add n_patch as a neighbour patch to the current patch
-                    auto itt = std::find(
-                        m_neighbour_patches.begin() + neighbour_patch_start,
-                        m_neighbour_patches.end(),
-                        n_patch);
-
-                    if (itt == m_neighbour_patches.end()) {
-                        m_neighbour_patches.push_back(n_patch);
-                        ++m_neighbour_patches_offset[cur_p];
-                        assert(m_neighbour_patches_offset[cur_p] ==
-                               m_neighbour_patches.size());
-                    }
-
                     // find/add the boundary vertices; these are the vertices
                     // that are shared between face and n
 
@@ -484,7 +462,7 @@ void Patcher::postprocess(const std::vector<std::vector<uint32_t>>& fv,
                     }
 
                     // we don't break out of this loop because we want to get
-                    // all the neighbour patches and boundary vertices
+                    // all the boundary vertices
                     // break;
                 }
             }
