@@ -247,6 +247,13 @@ class RXMesh
     void build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
                             const uint32_t                            patch_id);
 
+    void build_single_patch_ltog(const std::vector<std::vector<uint32_t>>& fv,
+                                 const uint32_t patch_id);
+
+    void build_single_patch_topology(
+        const std::vector<std::vector<uint32_t>>& fv,
+        const uint32_t                            patch_id);
+
     void create_new_local_face(const uint32_t               patch_id,
                                const uint32_t               global_f,
                                const std::vector<uint32_t>& fv,
