@@ -434,17 +434,17 @@ void RXMesh::build_single_patch_topology(
 
                 is_added_edge[local_edge_id] = true;
 
-                uint16_t local_v0 =
-                    find_local_index(global_v0,
-                                     m_patcher->get_vertex_patch_id(global_v0),
-                                     m_h_owned_size[patch_id].z,
-                                     m_h_patches_ltog_v[patch_id]);
+                uint16_t local_v0 = find_local_index(
+                    edge_key.first,
+                    m_patcher->get_vertex_patch_id(edge_key.first),
+                    m_h_owned_size[patch_id].z,
+                    m_h_patches_ltog_v[patch_id]);
 
-                uint16_t local_v1 =
-                    find_local_index(global_v1,
-                                     m_patcher->get_vertex_patch_id(global_v1),
-                                     m_h_owned_size[patch_id].z,
-                                     m_h_patches_ltog_v[patch_id]);
+                uint16_t local_v1 = find_local_index(
+                    edge_key.second,
+                    m_patcher->get_vertex_patch_id(edge_key.second),
+                    m_h_owned_size[patch_id].z,
+                    m_h_patches_ltog_v[patch_id]);
 
                 assert(local_v0 != INVALID16 && local_v1 != INVALID16);
 
