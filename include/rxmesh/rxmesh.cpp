@@ -104,7 +104,8 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
     m_h_patches_faces.resize(m_num_patches);
     m_h_patches_edges.resize(m_num_patches);
 
-    for (uint32_t p = 0; p < m_num_patches; ++p) {
+#pragma omp parallel for 
+    for (int p = 0; p < m_num_patches; ++p) {
         build_single_patch(fv, p);
     }
 
