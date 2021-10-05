@@ -254,22 +254,6 @@ class RXMesh
         const std::vector<std::vector<uint32_t>>& fv,
         const uint32_t                            patch_id);
 
-    void create_new_local_face(const uint32_t               patch_id,
-                               const uint32_t               global_f,
-                               const std::vector<uint32_t>& fv,
-                               uint16_t&                    faces_count,
-                               uint16_t&                    edges_owned_count,
-                               uint16_t&              edges_not_owned_count,
-                               uint16_t&              vertices_owned_count,
-                               uint16_t&              vertices_not_owned_count,
-                               const uint16_t         num_edges_owned,
-                               const uint16_t         num_vertices_owned,
-                               std::vector<uint32_t>& f_ltog,
-                               std::vector<uint32_t>& e_ltog,
-                               std::vector<uint32_t>& v_ltog,
-                               std::vector<uint16_t>& fp,
-                               std::vector<uint16_t>& ep);
-
 
     void move_to_device();
 

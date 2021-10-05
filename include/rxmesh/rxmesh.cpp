@@ -270,185 +270,18 @@ void RXMesh::calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
 void RXMesh::build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
                                 const uint32_t patch_id)
 {
+    // Build the patch local index space
+    // This is the two small matrices defining incident relation between
+    // edge-vertices and faces-edges (i.e., the topology) along with the mapping
+    // from local to global space for vertices, edge, and faces
+
+    // When we create a new patch, we make sure that the elements owned by the
+    // patch will have local indices lower than any other elements (of the same
+    // type) that is not owned by the patch.
+
     build_single_patch_ltog(fv, patch_id);
 
     build_single_patch_topology(fv, patch_id);
-
-    // Build the patch local index space
-    // This is the two small matrices defining incident relation between
-    // edge-vertices and faces-edges along with the mapping from local to
-    // global space for vertices, edge, and faces
-
-    // When we create a new patch, we make sure that the elements owned by the
-    // patch will have local indices lower than any elements (of the same type)
-    // that is not owned by the patch
-
-    // patch start and end
-    const uint32_t p_start =
-        (patch_id == 0) ? 0 : m_patcher->get_patches_offset()[patch_id - 1];
-    const uint32_t p_end = m_patcher->get_patches_offset()[patch_id];
-    const uint32_t r_start =
-        (patch_id == 0) ? 0 :
-                          m_patcher->get_external_ribbon_offset()[patch_id - 1];
-    const uint32_t r_end = m_patcher->get_external_ribbon_offset()[patch_id];
-
-    const uint32_t total_patch_num_faces =
-        (p_end - p_start) + (r_end - r_start);
-    uint16_t total_patch_num_edges(0), total_patch_num_vertices(0);
-
-    assert(total_patch_num_faces <= m_num_faces);
-
-    // container for this patch local faces i.e., face incident edges
-    std::vector<uint16_t> fp(3 * total_patch_num_faces);
-
-    // container for this patch local edges i.e., edge incident vertices
-    std::vector<uint16_t> ep;
-    ep.reserve(3 * total_patch_num_faces);  // assuming manifold patch
-
-    // the mapping from this patch local index space to global index space
-    std::vector<uint32_t> f_ltog(total_patch_num_faces);
-    std::vector<uint32_t> e_ltog;
-    e_ltog.reserve(
-        static_cast<uint32_t>(1.5 * static_cast<float>(total_patch_num_faces)));
-    std::vector<uint32_t> v_ltog;
-    v_ltog.reserve(
-        static_cast<uint32_t>(0.5 * static_cast<float>(total_patch_num_faces)));
-
-    // count the number of elements owned by the patch
-    uint16_t              num_edges_owned(0), num_vertices_owned(0);
-    std::vector<uint32_t> tmp_e, tmp_v;
-    tmp_e.reserve(m_patch_size * 3);
-    tmp_v.reserve(m_patch_size);
-
-    // Count the number of elements owned and total number of mesh elements in
-    // the patch. For the faces, this easy since the patcher already separate
-    // the faces into faces in the patch and ribbon where the former is the
-    // number of faces owned by the patch. For edges and vertices, we have to
-    // go over all faces in the patch (including ribbons) to count them.
-
-    auto insert_if_not_found = [](uint32_t               index,
-                                  std::vector<uint32_t>& tmp) -> uint32_t {
-        for (uint32_t i = 0; i < tmp.size(); ++i) {
-            if (tmp[i] == index) {
-                return INVALID32;
-            }
-        }
-        tmp.push_back(index);
-        return static_cast<uint32_t>(tmp.size() - 1);
-    };
-    auto count_num_elements = [&](uint32_t global_f) {
-        for (uint32_t j = 0; j < 3; j++) {
-            // find the edge global id
-            uint32_t global_v0 = fv[global_f][j];
-            uint32_t global_v1 = fv[global_f][(j + 1) % 3];
-
-            // find the edge in m_edge_map with v0,v1
-            std::pair<uint32_t, uint32_t> my_edge =
-                detail::edge_key(global_v0, global_v1);
-            uint32_t global_e = get_edge_id(my_edge);
-
-            uint32_t v_index = insert_if_not_found(global_v0, tmp_v);
-
-            if (v_index != INVALID32) {
-                total_patch_num_vertices++;
-                if (m_patcher->get_vertex_patch_id(global_v0) == patch_id) {
-                    num_vertices_owned++;
-                }
-            }
-
-
-            uint32_t e_index = insert_if_not_found(global_e, tmp_e);
-            if (e_index != INVALID32) {
-                total_patch_num_edges++;
-                if (m_patcher->get_edge_patch_id(global_e) == patch_id) {
-                    num_edges_owned++;
-                }
-            }
-        }
-    };
-    for (uint32_t s = p_start; s < p_end; ++s) {
-        uint32_t global_f = m_patcher->get_patches_val()[s];
-        count_num_elements(global_f);
-    }
-    for (uint32_t s = r_start; s < r_end; ++s) {
-        uint32_t global_f = m_patcher->get_external_ribbon_val()[s];
-        count_num_elements(global_f);
-    }
-
-    // 1) loop over patch faces
-    e_ltog.resize(total_patch_num_edges);
-    v_ltog.resize(total_patch_num_vertices);
-    ep.resize(total_patch_num_edges * 2);
-
-    // to track how many faces/edges/vertices we have locally created so far
-    uint16_t faces_count(0), edges_owned_count(0), edges_not_owned_count(0),
-        vertices_owned_count(0), vertices_not_owned_count(0);
-    for (uint32_t s = p_start; s < p_end; ++s) {
-        uint32_t global_f = m_patcher->get_patches_val()[s];
-        create_new_local_face(patch_id,
-                              global_f,
-                              fv[global_f],
-                              faces_count,
-                              edges_owned_count,
-                              edges_not_owned_count,
-                              vertices_owned_count,
-                              vertices_not_owned_count,
-                              num_edges_owned,
-                              num_vertices_owned,
-                              f_ltog,
-                              e_ltog,
-                              v_ltog,
-                              fp,
-                              ep);
-    }
-
-
-    // 2) loop over ribbon faces
-    for (uint32_t s = r_start; s < r_end; ++s) {
-        uint32_t global_f = m_patcher->get_external_ribbon_val()[s];
-        create_new_local_face(patch_id,
-                              global_f,
-                              fv[global_f],
-                              faces_count,
-                              edges_owned_count,
-                              edges_not_owned_count,
-                              vertices_owned_count,
-                              vertices_not_owned_count,
-                              num_edges_owned,
-                              num_vertices_owned,
-                              f_ltog,
-                              e_ltog,
-                              v_ltog,
-                              fp,
-                              ep);
-    }
-
-    if (vertices_owned_count != num_vertices_owned ||
-        edges_owned_count != num_edges_owned ||
-        edges_owned_count + edges_not_owned_count != total_patch_num_edges ||
-        vertices_owned_count + vertices_not_owned_count !=
-            total_patch_num_vertices) {
-        RXMESH_ERROR("rxmesh::build_single_patch() patch is " +
-                     std::to_string(patch_id) + " not built correctly!!");
-    }
-
-    uint4 owned_size;
-    owned_size.x = p_end - p_start;
-    owned_size.y = num_edges_owned;
-    owned_size.z = num_vertices_owned;
-    m_h_owned_size.push_back(owned_size);
-
-    // faces
-    m_h_patches_faces.push_back(fp);
-    m_h_patches_ltog_f.push_back(f_ltog);
-
-
-    // edges
-    m_h_patches_edges.push_back(ep);
-    m_h_patches_ltog_e.push_back(e_ltog);
-
-    // vertices
-    m_h_patches_ltog_v.push_back(v_ltog);
 }
 
 void RXMesh::build_single_patch_ltog(
@@ -547,9 +380,19 @@ void RXMesh::build_single_patch_topology(
 
     std::vector<bool> is_added_edge(patch_num_edges, false);
 
-    auto find_local_index = [](const uint32_t               global_id,
-                               const std::vector<uint32_t>& ltog) -> uint16_t {
-        auto it = std::lower_bound(ltog.begin(), ltog.end(), global_id);
+    auto find_local_index = [&patch_id](
+                                const uint32_t               global_id,
+                                const uint32_t               element_patch,
+                                const uint32_t               num_owned_elements,
+                                const std::vector<uint32_t>& ltog) -> uint16_t {
+        uint32_t start = 0;
+        uint32_t end   = num_owned_elements;
+        if (element_patch != patch_id) {
+            start = num_owned_elements;
+            end   = ltog.size();
+        }
+        auto it = std::lower_bound(
+            ltog.begin() + start, ltog.begin() + end, global_id);
         if (it == ltog.end()) {
             return INVALID16;
         } else {
@@ -581,7 +424,10 @@ void RXMesh::build_single_patch_topology(
             uint32_t global_edge_id = get_edge_id(edge_key);
 
             uint16_t local_edge_id =
-                find_local_index(global_edge_id, m_h_patches_ltog_e[patch_id]);
+                find_local_index(global_edge_id,
+                                 m_patcher->get_edge_patch_id(global_edge_id),
+                                 m_h_owned_size[patch_id].y,
+                                 m_h_patches_ltog_e[patch_id]);
 
             assert(local_edge_id != INVALID16);
             if (!is_added_edge[local_edge_id]) {
@@ -589,10 +435,16 @@ void RXMesh::build_single_patch_topology(
                 is_added_edge[local_edge_id] = true;
 
                 uint16_t local_v0 =
-                    find_local_index(global_v0, m_h_patches_ltog_v[patch_id]);
+                    find_local_index(global_v0,
+                                     m_patcher->get_vertex_patch_id(global_v0),
+                                     m_h_owned_size[patch_id].z,
+                                     m_h_patches_ltog_v[patch_id]);
 
                 uint16_t local_v1 =
-                    find_local_index(global_v1, m_h_patches_ltog_v[patch_id]);
+                    find_local_index(global_v1,
+                                     m_patcher->get_vertex_patch_id(global_v1),
+                                     m_h_owned_size[patch_id].z,
+                                     m_h_patches_ltog_v[patch_id]);
 
                 assert(local_v0 != INVALID16 && local_v1 != INVALID16);
 
@@ -618,133 +470,6 @@ void RXMesh::build_single_patch_topology(
     for (int f = r_start; f < r_end; ++f) {
         uint32_t face_id = m_patcher->get_external_ribbon_val()[f];
         add_new_face(face_id, local_face_id++);
-    }
-}
-
-void RXMesh::create_new_local_face(const uint32_t               patch_id,
-                                   const uint32_t               global_f,
-                                   const std::vector<uint32_t>& fv,
-                                   uint16_t&                    faces_count,
-                                   uint16_t&      edges_owned_count,
-                                   uint16_t&      edges_not_owned_count,
-                                   uint16_t&      vertices_owned_count,
-                                   uint16_t&      vertices_not_owned_count,
-                                   const uint16_t num_edges_owned,
-                                   const uint16_t num_vertices_owned,
-                                   std::vector<uint32_t>& f_ltog,
-                                   std::vector<uint32_t>& e_ltog,
-                                   std::vector<uint32_t>& v_ltog,
-                                   std::vector<uint16_t>& fp,
-                                   std::vector<uint16_t>& ep)
-{
-
-    const uint16_t local_f = faces_count++;
-    f_ltog[local_f]        = global_f;
-
-
-    auto find_increment_index = [&patch_id](
-                                    const uint32_t&        global,
-                                    std::vector<uint32_t>& vect,
-                                    uint16_t&              owned_count,
-                                    uint16_t&              not_owned_count,
-                                    const uint16_t         num_owned,
-                                    bool&                  incremented,
-                                    const uint32_t ele_patch) -> uint16_t {
-        incremented = true;
-
-        for (uint16_t id = 0; id < owned_count; ++id) {
-            if (global == vect[id]) {
-                incremented = false;
-                return id;
-            }
-        }
-
-        for (uint16_t id = num_owned; id < num_owned + not_owned_count; ++id) {
-            if (global == vect[id]) {
-                incremented = false;
-                return id;
-            }
-        }
-        uint16_t ret_id;
-        if (ele_patch == patch_id) {
-            ret_id = owned_count++;
-        } else {
-            ret_id = num_owned + (not_owned_count++);
-        }
-        vect[ret_id] = global;
-        return ret_id;
-    };
-
-    for (uint32_t j = 0; j < 3; j++) {
-
-        // find the edge global id
-        uint32_t global_v0 = fv[j];
-        uint32_t global_v1 = fv[(j + 1) % 3];
-
-        // find the edge in m_edge_map with v0,v1
-        std::pair<uint32_t, uint32_t> my_edge =
-            detail::edge_key(global_v0, global_v1);
-
-        assert(my_edge.first == global_v0 || my_edge.first == global_v1);
-        assert(my_edge.second == global_v0 || my_edge.second == global_v1);
-
-        int dir = 1;
-        if (my_edge.first == global_v0 && my_edge.second == global_v1) {
-            dir = 0;
-        }
-
-        uint32_t global_e = get_edge_id(my_edge);
-
-        // convert edge to local index by searching for it. if not
-        // found, then increment the number of local edges
-        bool     new_e(false);
-        uint16_t local_e =
-            find_increment_index(global_e,
-                                 e_ltog,
-                                 edges_owned_count,
-                                 edges_not_owned_count,
-                                 num_edges_owned,
-                                 new_e,
-                                 m_patcher->get_edge_patch_id(global_e));
-
-        if (new_e) {
-            // if it is new edges, then we need to either look for
-            // its vertices. if there were inserted before in the
-            // patch, then retrieve their local id. otherwise, we
-            // new vertices to the patch
-            assert(my_edge.first != my_edge.second);
-
-            bool     new_v(false);
-            uint16_t local_v0 = find_increment_index(
-                my_edge.first,
-                v_ltog,
-                vertices_owned_count,
-                vertices_not_owned_count,
-                num_vertices_owned,
-                new_v,
-                m_patcher->get_vertex_patch_id(my_edge.first));
-
-            uint16_t local_v1 = find_increment_index(
-                my_edge.second,
-                v_ltog,
-                vertices_owned_count,
-                vertices_not_owned_count,
-                num_vertices_owned,
-                new_v,
-                m_patcher->get_vertex_patch_id(my_edge.second));
-
-            assert(local_v0 != local_v1);
-
-            // new edges are appended in the end of e_ltog
-            // and so as their vertices in ep
-            ep[2 * local_e]     = local_v0;
-            ep[2 * local_e + 1] = local_v1;
-        }
-        // shift local_e to left
-        // set the first bit to 1 if (dir ==1)
-        local_e             = local_e << 1;
-        local_e             = local_e | (dir & 1);
-        fp[local_f * 3 + j] = local_e;
     }
 }
 
