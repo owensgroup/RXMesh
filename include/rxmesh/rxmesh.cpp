@@ -104,7 +104,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
     m_h_patches_faces.resize(m_num_patches);
     m_h_patches_edges.resize(m_num_patches);
 
-#pragma omp parallel for 
+#pragma omp parallel for
     for (int p = 0; p < m_num_patches; ++p) {
         build_single_patch(fv, p);
     }
@@ -505,53 +505,6 @@ uint32_t RXMesh::get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const
     return edge_id;
 }
 
-template <typename Tin, typename Tst>
-void RXMesh::get_starting_ids(const std::vector<std::vector<Tin>>& input,
-                              std::vector<Tst>&                    starting_id)
-{
-    // get the starting ids for the mesh elements in input and store it
-    // in the first (x) component of starting_id
-
-    // uint32_t prv = 0;
-    assert(starting_id.size() > 0);
-    assert(starting_id.size() > input.size());
-    starting_id[0].x = 0;
-    for (uint32_t p = 1; p <= input.size(); ++p) {
-        starting_id[p].x = starting_id[p - 1].x + input[p - 1].size();
-        // starting_id[p].x = input[p].size() + prv;
-        // prv = starting_id[p].x;
-    }
-}
-
-
-template <typename Tin, typename Tad>
-void RXMesh::get_size(const std::vector<std::vector<Tin>>& input,
-                      std::vector<Tad>&                    ad)
-{
-    // get the size of each element of input and store it as the second(y)
-    // component in ad
-    assert(ad.size() >= input.size());
-
-    for (uint32_t p = 0; p < input.size(); ++p) {
-        ad[p].y = input[p].size();
-    }
-}
-
-template <typename T>
-void RXMesh::padding_to_multiple(std::vector<std::vector<T>>& input,
-                                 const uint32_t               multiple,
-                                 const T                      init_val)
-{
-    // resize each element on input to be mulitple of multiple by add
-    // init_val to the end
-
-    for (uint32_t p = 0; p < input.size(); ++p) {
-        const uint32_t new_size =
-            round_up_multiple(uint32_t(input[p].size()), multiple);
-        assert(new_size >= input[p].size());
-        input[p].resize(new_size, static_cast<T>(init_val));
-    }
-}
 
 void RXMesh::move_to_device()
 {
@@ -566,6 +519,18 @@ void RXMesh::move_to_device()
     m_h_ad_size.resize(m_num_patches + 1);
 
     // get mesh element count per patch
+
+    auto get_size = [](const std::vector<std::vector<uint32_t>>& input,
+                       std::vector<uint2>&                       ad) {
+        // get the size of each element of input and store it as the second(y)
+        // component in ad
+        assert(ad.size() >= input.size());
+
+        for (uint32_t p = 0; p < input.size(); ++p) {
+            ad[p].y = input[p].size();
+        }
+    };
+
     get_size(m_h_patches_ltog_v, m_h_ad_size_ltog_v);
     get_size(m_h_patches_ltog_e, m_h_ad_size_ltog_e);
     get_size(m_h_patches_ltog_f, m_h_ad_size_ltog_f);
@@ -577,22 +542,43 @@ void RXMesh::move_to_device()
     }
 
 
+    auto padding_to_multiple =
+        [](auto& input, const uint32_t multiple, const uint32_t init_val) {
+            // resize each element on input to be multiple of multiple by add
+            // init_val to the end
+
+            for (uint32_t p = 0; p < input.size(); ++p) {
+                const uint32_t new_size =
+                    round_up_multiple(uint32_t(input[p].size()), multiple);
+                assert(new_size >= input[p].size());
+                input[p].resize(new_size, init_val);
+            }
+        };
+
     // increase to multiple so that each vector size is multiple of 32
-    // so that when we copy it to the device, read will be coalesced
-    padding_to_multiple(
-        m_h_patches_edges, WARPSIZE, static_cast<uint16_t>(INVALID16));
-    padding_to_multiple(
-        m_h_patches_faces, WARPSIZE, static_cast<uint16_t>(INVALID16));
-    padding_to_multiple(
-        m_h_patches_ltog_v, WARPSIZE, static_cast<uint32_t>(INVALID32));
-    padding_to_multiple(
-        m_h_patches_ltog_e, WARPSIZE, static_cast<uint32_t>(INVALID32));
-    padding_to_multiple(
-        m_h_patches_ltog_f, WARPSIZE, static_cast<uint32_t>(INVALID32));
+    // to improve memory accesses on the GPUs
+    padding_to_multiple(m_h_patches_edges, WARPSIZE, INVALID16);
+    padding_to_multiple(m_h_patches_faces, WARPSIZE, INVALID16);
+    padding_to_multiple(m_h_patches_ltog_v, WARPSIZE, INVALID32);
+    padding_to_multiple(m_h_patches_ltog_e, WARPSIZE, INVALID32);
+    padding_to_multiple(m_h_patches_ltog_f, WARPSIZE, INVALID32);
+
 
     // get the starting id of each patch
     std::vector<uint1> h_edges_ad(m_num_patches + 1),
         h_faces_ad(m_num_patches + 1);
+
+    auto get_starting_ids = [](const auto& input, auto& starting_id) {
+        // get the starting ids for the mesh elements in input and store it
+        // in the first (x) component of starting_id
+
+        assert(starting_id.size() > 0);
+        assert(starting_id.size() > input.size());
+        starting_id[0].x = 0;
+        for (uint32_t p = 1; p <= input.size(); ++p) {
+            starting_id[p].x = starting_id[p - 1].x + input[p - 1].size();
+        }
+    };
 
     get_starting_ids(m_h_patches_ltog_v, m_h_ad_size_ltog_v);
     get_starting_ids(m_h_patches_ltog_e, m_h_ad_size_ltog_e);

@@ -257,19 +257,6 @@ class RXMesh
 
     void move_to_device();
 
-    template <typename Tin, typename Tst>
-    void get_starting_ids(const std::vector<std::vector<Tin>>& input,
-                          std::vector<Tst>&                    starting_id);
-
-    template <typename T>
-    void padding_to_multiple(std::vector<std::vector<T>>& input,
-                             const uint32_t               multiple,
-                             const T                      init_val);
-
-    template <typename Tin, typename Tad>
-    void get_size(const std::vector<std::vector<Tin>>& input,
-                  std::vector<Tad>&                    ad);
-
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
     virtual void write_connectivity(std::fstream& file) const;
