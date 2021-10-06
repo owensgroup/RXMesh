@@ -14,7 +14,7 @@ RXMesh is a surface triangle mesh data structure and programming model for proce
 This repository provides 1) source code to reproduce the results presented in the paper (git tag [`v0.1.0`](https://github.com/owensgroup/RXMesh/tree/v0.1.0)) and 2) ongoing development of RXMesh. For 1), all input models used in the paper can be found [here](https://ucdavis365-my.sharepoint.com/:f:/g/personal/ahmahmoud_ucdavis_edu/En-vEpIdSGBHqvCIa-MVXRQBg5g7GfM3P3RwZBHL4Hby3w?e=2EVnJd). Models were collected from [Thingi10K](https://ten-thousand-models.appspot.com/) and [Smithsonian 3D](https://3d.si.edu/explore) repository. 
 
 ## **A Quick Glance**
-RXMesh is a CUDA/C++ header-only library. All unit tests are under `tests\` folder. This includes the unit test for some basic functionalities along with the unit test for the query operations. All applications are under `apps\` folder.
+RXMesh is a CUDA/C++ header-only library. All unit tests are under `tests/` folder. This includes the unit test for some basic functionalities along with the unit test for the query operations. All applications are under `apps/` folder.
 
 ## **Compilation**
 The code can be compiled on Ubuntu (GCC 9) and Windows (Visual Studio 2019) providing that CUDA (>=11.1.0) is installed. To run the executable(s), an NVIDIA GPU should be installed on the machine.
@@ -35,6 +35,18 @@ All the dependencies are installed automatically! To compile the code:
 > cmake ../
 ```
 Depending on the system, this will generate either a `.sln` project on Windows or a `make` file for a Linux system.
+
+### **Replicability**
+The scripts used to generate the data shown in the paper can be found under
+* [Figure 6](https://github.com/owensgroup/RXMesh/blob/main/tests/RXMesh_test/benchmark.sh)
+* [Figure 8 (a)](https://github.com/owensgroup/RXMesh/blob/main/apps/MCF/benchmark.sh)
+* [Figure 8 (b)](https://github.com/owensgroup/RXMesh/blob/main/apps/Geodesic/benchmark.sh)
+* [Figure 8 (c)](https://github.com/owensgroup/RXMesh/blob/main/apps/Filtering/benchmark.sh)
+* [Figure 8 (d)](https://github.com/owensgroup/RXMesh/blob/main/apps/VertexNormal/benchmark.sh)
+
+Each script should be run from the script's containing directory after compiling the code in `build/` directory. The only input parameter needed is the path to the input OBJ files. The resulting JSON files will be written to `output/` directory. 
+
+
 
 ## **Bibtex**
 ```
