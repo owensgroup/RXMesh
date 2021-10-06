@@ -36,7 +36,9 @@ All the dependencies are installed automatically! To compile the code:
 ```
 Depending on the system, this will generate either a `.sln` project on Windows or a `make` file for a Linux system.
 
-### **Replicability**
+## **Replicability**
+This repo was awarded the [replicability stamp](http://www.replicabilitystamp.org#https-github-com-owensgroup-rxmesh) by the Graphics Replicability Stamp Initiative (GRSI).
+
 The scripts used to generate the data shown in the paper can be found under
 * [Figure 6](https://github.com/owensgroup/RXMesh/blob/main/tests/RXMesh_test/benchmark.sh)
 * [Figure 8 (a)](https://github.com/owensgroup/RXMesh/blob/main/apps/MCF/benchmark.sh)
