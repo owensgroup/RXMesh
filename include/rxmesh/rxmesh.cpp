@@ -38,8 +38,7 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
       m_d_patches_edges(nullptr),
       m_d_patches_faces(nullptr),
       m_d_ad_size(nullptr),
-      m_d_owned_size(nullptr),
-      m_total_gpu_storage_mb(0)
+      m_d_owned_size(nullptr)
 {
     // Build everything from scratch including patches
     build(fv);
@@ -604,20 +603,7 @@ void RXMesh::move_to_device()
                           sizeof(uint16_t) * m_h_ad_size.back().x));
     CUDA_ERROR(cudaMalloc((void**)&m_d_patches_faces,
                           sizeof(uint16_t) * m_h_ad_size.back().z));
-    if (!m_quite) {
-        uint32_t patch_local_storage =
-            sizeof(uint16_t) * (m_h_ad_size.back().x + m_h_ad_size.back().z) +
-            sizeof(uint32_t) *
-                (m_h_ad_size_ltog_v.back().x + m_h_ad_size_ltog_e.back().x +
-                 m_h_ad_size_ltog_f.back().x);
-        uint32_t patch_membership_storage =
-            (m_num_faces + m_num_edges + m_num_vertices) * sizeof(uint32_t);
-        m_total_gpu_storage_mb =
-            double(patch_local_storage + patch_membership_storage) /
-            double(1024 * 1024);
-        RXMESH_TRACE("Total storage = {0:f} Mb", m_total_gpu_storage_mb);
-    }
-
+    
     // alloc ad_size_ltog and edges_/faces_ad
     CUDA_ERROR(cudaMalloc((void**)&m_d_ad_size_ltog_v,
                           sizeof(uint2) * (m_num_patches + 1)));

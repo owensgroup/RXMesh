@@ -298,9 +298,7 @@ struct Report
             "per_patch_max_edges", rxmesh.get_per_patch_max_edges(), subdoc);
         add_member(
             "per_patch_max_faces", rxmesh.get_per_patch_max_faces(), subdoc);
-        add_member("ribbon_overhead (%)", rxmesh.get_ribbon_overhead(), subdoc);
-        add_member(
-            "total_gpu_storage (mb)", rxmesh.get_gpu_storage_mb(), subdoc);
+        add_member("ribbon_overhead (%)", rxmesh.get_ribbon_overhead(), subdoc);        
         m_doc.AddMember("Model", subdoc, m_doc.GetAllocator());
     }
 

@@ -194,11 +194,6 @@ class RXMesh
 
     uint32_t get_edge_id(const uint32_t v0, const uint32_t v1) const;
 
-    double get_gpu_storage_mb() const
-    {
-        return m_total_gpu_storage_mb;
-    }
-
     const std::unique_ptr<patcher::Patcher>& get_patcher() const
     {
         return m_patcher;
@@ -351,6 +346,5 @@ class RXMesh
     //.z vertex
     uint4* m_d_owned_size;
 
-    double m_total_gpu_storage_mb;
 };
 }  // namespace rxmesh
