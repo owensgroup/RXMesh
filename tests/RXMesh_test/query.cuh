@@ -5,9 +5,9 @@
 
 #include "rxmesh/kernels/rxmesh_iterator.cuh"
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
-#include "rxmesh/rxmesh.h"
 #include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_context.h"
+#include "rxmesh/rxmesh_types.h"
 
 /**
  * query()

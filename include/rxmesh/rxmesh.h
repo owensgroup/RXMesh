@@ -6,6 +6,7 @@
 #include <vector>
 #include "rxmesh/patcher/patcher.h"
 #include "rxmesh/rxmesh_context.h"
+#include "rxmesh/rxmesh_types.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
@@ -13,54 +14,6 @@
 class RXMeshTest;
 
 namespace rxmesh {
-
-enum class Op
-{
-    VV = 0,
-    VE = 1,
-    VF = 2,
-    FV = 3,
-    FE = 4,
-    FF = 5,
-    EV = 6,
-    EE = 7,
-    EF = 8,
-};
-
-inline std::string op_to_string(const Op& op)
-{
-    switch (op) {
-        case rxmesh::Op::VV:
-            return "VV";
-        case rxmesh::Op::VE:
-            return "VE";
-        case rxmesh::Op::VF:
-            return "VF";
-        case rxmesh::Op::FV:
-            return "FV";
-        case rxmesh::Op::FE:
-            return "FE";
-        case rxmesh::Op::FF:
-            return "FF";
-        case rxmesh::Op::EV:
-            return "EV";
-        case rxmesh::Op::EF:
-            return "EF";
-        case rxmesh::Op::EE:
-            return "EE";
-        default: {
-            RXMESH_ERROR("op_to_string() unknown input operation");
-            return "";
-        }
-    }
-}
-
-enum class ELEMENT
-{
-    VERTEX = 0,
-    EDGE   = 1,
-    FACE   = 2
-};
 
 class RXMesh
 {
@@ -345,6 +298,5 @@ class RXMesh
     //.y edges
     //.z vertex
     uint4* m_d_owned_size;
-
 };
 }  // namespace rxmesh

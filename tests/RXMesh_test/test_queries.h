@@ -4,7 +4,7 @@
 #include "query.cuh"
 #include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_static.h"
-#include "rxmesh/rxmesh_util.h"
+
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/math.h"
 #include "rxmesh/util/report.h"

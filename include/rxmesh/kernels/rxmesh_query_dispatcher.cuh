@@ -7,9 +7,9 @@
 #include "rxmesh/kernels/rxmesh_iterator.cuh"
 #include "rxmesh/kernels/rxmesh_loader.cuh"
 #include "rxmesh/kernels/rxmesh_queries.cuh"
-#include "rxmesh/rxmesh.h"
 #include "rxmesh/rxmesh_context.h"
-#include "rxmesh/rxmesh_util.h"
+#include "rxmesh/rxmesh_types.h"
+
 
 
 namespace rxmesh {
@@ -108,8 +108,7 @@ __device__ __inline__ void query_block_dispatcher(
     bool     is_active = false;
     uint16_t local_id  = threadIdx.x;
     while (local_id < num_src_in_patch) {
-        is_active =
-            local_id || compute_active_set(input_mapping[local_id]);
+        is_active = local_id || compute_active_set(input_mapping[local_id]);
         local_id += blockThreads;
     }
 
@@ -192,10 +191,8 @@ __device__ __inline__ void query_block_dispatcher(
             s_output_mapping = (uint32_t*)&shrd_mem[last_vv + last_vv % 2];
         }
 
-        load_mapping(context,
-                     output_element,
-                     output_ele_ad_size,
-                     s_output_mapping);
+        load_mapping(
+            context, output_element, output_ele_ad_size, s_output_mapping);
     }
     __syncthreads();
 }

@@ -4,7 +4,6 @@
 #include "rxmesh/kernels/prototype.cuh"
 #include "rxmesh/launch_box.h"
 #include "rxmesh/rxmesh.h"
-#include "rxmesh/rxmesh_util.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/timer.h"
 

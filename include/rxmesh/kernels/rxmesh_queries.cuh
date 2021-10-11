@@ -6,8 +6,8 @@
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/rxmesh_loader.cuh"
 #include "rxmesh/kernels/util.cuh"
-#include "rxmesh/rxmesh.h"
 #include "rxmesh/rxmesh_context.h"
+#include "rxmesh/rxmesh_types.h"
 
 namespace rxmesh {
 template <uint32_t rowOffset,

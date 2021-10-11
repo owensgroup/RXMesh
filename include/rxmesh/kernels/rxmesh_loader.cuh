@@ -3,8 +3,8 @@
 #include <assert.h>
 #include <stdint.h>
 
-#include "rxmesh/rxmesh.h"
 #include "rxmesh/rxmesh_context.h"
+#include "rxmesh/rxmesh_types.h"
 
 namespace rxmesh {
 

@@ -5,9 +5,9 @@
 
 #include "rxmesh/kernels/rxmesh_iterator.cuh"
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
-#include "rxmesh/rxmesh.h"
 #include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_context.h"
+#include "rxmesh/rxmesh_types.h"
 
 /**
  * higher_query()
@@ -20,7 +20,7 @@ __launch_bounds__(blockThreads) __global__
                              const bool                        oriented = false)
 {
     using namespace rxmesh;
-    
+
     // the mesh element that this thread is assigned to
     uint32_t thread_element = INVALID32;
 
@@ -36,7 +36,7 @@ __launch_bounds__(blockThreads) __global__
         num_vv          = num_vv_1st_ring;
 
         // record the mesh element that this thread is assigned to
-        thread_element = id;        
+        thread_element        = id;
         d_src(thread_element) = id;
 
         output_container(thread_element, 0) = iter.size();
