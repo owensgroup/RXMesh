@@ -198,7 +198,7 @@ struct FaceHandle
  * @brief Patch stores the information needed for query operations in a patch.
  * Accessible from the host and device
  */
-struct Patch
+struct ALIGN(16) PatchInfo
 {
     // The topology information: edge incident vertices and face incident edges
     LocalVertexT* m_ev;
@@ -206,7 +206,9 @@ struct Patch
 
 
     // Non-owned mesh elements patch ID
-    uint32_t *m_not_owned_patch_v, *m_not_owned_patch_e, *m_not_owned_patch_f;
+    uint32_t* m_not_owned_patch_v;
+    uint32_t* m_not_owned_patch_e;
+    uint32_t* m_not_owned_patch_f;
 
 
     // Non-owned mesh elements local ID
@@ -216,6 +218,7 @@ struct Patch
 
     // Number of mesh elements in the patch
     uint16_t m_num_vertices, m_num_edges, m_num_faces;
+    uint16_t m_num_owned_vertices, m_num_owned_edges, m_num_owned_faces;
 
     // The index of this patch (relative to all other patches)
     uint32_t m_patch_id;

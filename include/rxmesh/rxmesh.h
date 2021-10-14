@@ -145,7 +145,7 @@ class RXMesh
         return m_patcher->get_num_lloyd_run();
     }
 
-    uint32_t get_edge_id(const uint32_t v0, const uint32_t v1) const;
+     uint32_t get_edge_id(const uint32_t v0, const uint32_t v1) const;
 
     const std::unique_ptr<patcher::Patcher>& get_patcher() const
     {
@@ -204,6 +204,8 @@ class RXMesh
 
 
     void move_to_device();
+
+    void build_device();
 
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
@@ -298,5 +300,8 @@ class RXMesh
     //.y edges
     //.z vertex
     uint4* m_d_owned_size;
+
+
+    Patch* m_patches;
 };
 }  // namespace rxmesh

@@ -42,6 +42,7 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
 {
     // Build everything from scratch including patches
     build(fv);
+    build_device();
     move_to_device();
 
     if (!m_quite) {
@@ -504,7 +505,6 @@ uint32_t RXMesh::get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const
     return edge_id;
 }
 
-
 void RXMesh::move_to_device()
 {
 
@@ -603,7 +603,7 @@ void RXMesh::move_to_device()
                           sizeof(uint16_t) * m_h_ad_size.back().x));
     CUDA_ERROR(cudaMalloc((void**)&m_d_patches_faces,
                           sizeof(uint16_t) * m_h_ad_size.back().z));
-    
+
     // alloc ad_size_ltog and edges_/faces_ad
     CUDA_ERROR(cudaMalloc((void**)&m_d_ad_size_ltog_v,
                           sizeof(uint2) * (m_num_patches + 1)));
@@ -703,6 +703,91 @@ void RXMesh::move_to_device()
                           m_d_patches_faces,
                           m_d_ad_size,
                           m_d_owned_size);
+}
+
+void RXMesh::build_device()
+{
+    CUDA_ERROR(
+        cudaMalloc((void**)&m_patches, m_num_patches * sizeof(PatchInfo)));
+
+    //#pragma omp parallel for
+    for (int p = 0; p < m_num_patches; ++p) {
+        PatchInfo patch;
+        patch.m_num_faces          = m_h_patches_ltog_f[p].size();
+        patch.m_num_edges          = m_h_patches_ltog_e[p].size();
+        patch.m_num_vertices       = m_h_patches_ltog_v[p].size();
+        patch.m_num_owned_faces    = m_h_owned_size[p].x;
+        patch.m_num_owned_edges    = m_h_owned_size[p].y;
+        patch.m_num_owned_vertices = m_h_owned_size[p].z;
+        patch.m_patch_id           = p;
+
+        uint32_t num_not_owned_faces =
+            patch.m_num_faces - patch.m_num_owned_faces;
+        uint32_t num_not_owned_edges =
+            patch.m_num_edges - patch.m_num_owned_edges;
+        uint32_t num_not_owned_vertices =
+            patch.m_num_vertices - patch.m_num_owned_vertices;
+
+        std::vector<LocalFaceT> not_owned_id_f(num_not_owned_faces);
+        LocalFaceT*             d_not_owned_id_f;
+        CUDA_ERROR(cudaMalloc((void**)&d_not_owned_id_f,
+                              sizeof(LocalFaceT) * num_not_owned_faces));
+
+        std::vector<LocalEdgeT> not_owned_id_e(num_not_owned_edges);
+        LocalEdgeT*             d_not_owned_id_e;
+        CUDA_ERROR(cudaMalloc((void**)&d_not_owned_id_e,
+                              sizeof(LocalEdgeT) * num_not_owned_edges));
+
+
+        std::vector<LocalVertexT> not_owned_id_v(num_not_owned_vertices);
+        LocalVertexT*             d_not_owned_id_v;
+        CUDA_ERROR(cudaMalloc((void**)&d_not_owned_id_v,
+                              sizeof(LocalVertexT) * num_not_owned_vertices));
+
+
+        std::vector<uint32_t> not_owned_patch_f(num_not_owned_faces);
+        uint32_t*             d_not_owned_patch_f;
+        CUDA_ERROR(cudaMalloc((void**)&d_not_owned_patch_f,
+                              sizeof(uint32_t) * num_not_owned_faces));
+
+        std::vector<uint32_t> not_owned_patch_e(num_not_owned_edges);
+        uint32_t*             d_not_owned_patch_e;
+        CUDA_ERROR(cudaMalloc((void**)&d_not_owned_patch_e,
+                              sizeof(uint32_t) * num_not_owned_edges));
+
+        std::vector<uint32_t> not_owned_patch_v(num_not_owned_vertices);
+        uint32_t*             d_not_owned_patch_v;
+        CUDA_ERROR(cudaMalloc((void**)&d_not_owned_patch_v,
+                              sizeof(uint32_t) * num_not_owned_vertices));
+
+        for (uint32_t i = 0; i < num_not_owned_faces; ++i) {
+            uint16_t local_id =
+                static_cast<uint16_t>(i + patch.m_num_owned_faces);
+            uint32_t global_id    = m_h_patches_ltog_f[p][local_id];
+            uint32_t owning_patch = m_patcher->get_face_patch_id(global_id);
+            not_owned_patch_f[i]  = owning_patch;
+
+            auto it =
+                std::lower_bound(m_h_patches_ltog_f[owning_patch].begin(),
+                                 m_h_patches_ltog_f[owning_patch].begin() +
+                                     m_h_owned_size[owning_patch].x,
+                                 global_id);
+            if (it == m_h_patches_ltog_f[owning_patch].end()) {
+                RXMESH_ERROR(
+                    "rxmesh::build_device can not find the local id of {} in "
+                    "patch {}. Maybe this patch does not own this mesh "
+                    "element.",
+                    global_id,
+                    owning_patch);
+            } else {
+                not_owned_id_f[i].id = static_cast<uint16_t>(
+                    it - m_h_patches_ltog_f[owning_patch].begin());
+            }
+        }
+
+        CUDA_ERROR(cudaMemcpy(
+            m_patches + p, &patch, sizeof(PatchInfo), cudaMemcpyHostToDevice));
+    }
 }
 
 void RXMesh::write_connectivity(std::fstream& file) const

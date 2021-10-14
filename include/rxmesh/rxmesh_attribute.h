@@ -54,18 +54,17 @@ static std::string location_to_string(locationT target)
     return str;
 }
 
+/**
+ * @brief  Here we manage the attributes on top of the mesh. An attributes is
+ * attached to mesh element (e.g., vertices, edges, or faces).
+ * largely inspired by
+ * https://github.com/gunrock/gunrock/blob/master/gunrock/util/array_utils.cuh
+ * 
+ * @tparam T type of the attribute
+ */
 template <class T>
 class RXMeshAttribute
 {
-    // Here we manage the attributes on top of the mesh. An attributes is
-    // attached to mesh element (e.g., vertices, edges, or faces). The user
-    // is expected to declare as many attributes as expected to be used
-    // during the lifetime of RXMesh
-
-    // largely inspired by
-    // https://github.com/gunrock/gunrock/blob/master/gunrock/util/array_utils.cuh
-
-
    public:
     RXMeshAttribute()
         : m_name(nullptr),
