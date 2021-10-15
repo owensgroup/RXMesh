@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "rxmesh/rxmesh_types.h"
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
@@ -35,7 +36,8 @@ class __align__(16) RXMeshContext
           m_d_ad_size(nullptr),
           m_d_num_owned_f(nullptr),
           m_d_num_owned_e(nullptr),
-          m_d_num_owned_v(nullptr)
+          m_d_num_owned_v(nullptr),
+          m_patches_info(nullptr)
     {
     }
 
@@ -60,7 +62,8 @@ class __align__(16) RXMeshContext
               uint4*         d_ad_size,
               uint16_t*      d_num_owned_f,
               uint16_t*      d_num_owned_e,
-              uint16_t*      d_num_owned_v)
+              uint16_t*      d_num_owned_v,
+              PatchInfo*     patches)
     {
 
         m_num_edges               = num_edges;
@@ -85,6 +88,7 @@ class __align__(16) RXMeshContext
         m_d_num_owned_f           = d_num_owned_f;
         m_d_num_owned_e           = d_num_owned_e;
         m_d_num_owned_v           = d_num_owned_v;
+        m_patches_info                 = patches;
     }
 
 
@@ -251,7 +255,10 @@ class __align__(16) RXMeshContext
         return m_d_num_owned_v;
     }
 
-
+    __device__ __forceinline__ PatchInfo* get_patches_info() const
+    {
+        return m_patches_info;
+    }
     static __device__ __host__ __forceinline__ void unpack_edge_dir(
         const uint16_t edge_dir, uint16_t& edge, flag_t& dir)
     {
@@ -280,5 +287,6 @@ class __align__(16) RXMeshContext
     // number of owned faces, edges, and vertices per patch
     uint16_t *m_d_num_owned_f, *m_d_num_owned_e, *m_d_num_owned_v;
 
+    PatchInfo* m_patches_info;
 };
 }  // namespace rxmesh

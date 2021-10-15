@@ -45,6 +45,31 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
     build_device();
     move_to_device();
 
+    // Allocate and copy the context to the gpu
+    m_rxmesh_context.init(m_num_edges,
+                          m_num_faces,
+                          m_num_vertices,
+                          m_max_valence,
+                          m_max_edge_incident_faces,
+                          m_max_face_adjacent_faces,
+                          m_num_patches,
+                          m_patcher->get_device_face_patch(),
+                          m_patcher->get_device_edge_patch(),
+                          m_patcher->get_device_vertex_patch(),
+                          m_d_patches_ltog_v,
+                          m_d_patches_ltog_e,
+                          m_d_patches_ltog_f,
+                          m_d_ad_size_ltog_v,
+                          m_d_ad_size_ltog_e,
+                          m_d_ad_size_ltog_f,
+                          m_d_patches_edges,
+                          m_d_patches_faces,
+                          m_d_ad_size,
+                          m_d_num_owned_f,
+                          m_d_num_owned_e,
+                          m_d_num_owned_v,
+                          m_patches_info);
+
     if (!m_quite) {
         RXMESH_TRACE("#Vertices = {}, #Faces= {}, #Edges= {}",
                      m_num_vertices,
@@ -407,13 +432,20 @@ void RXMesh::build_single_patch_topology(
     };
 
 
-    auto add_new_face = [&](uint32_t global_face_id, uint16_t local_face_id) {
+    auto add_new_face = [&](const uint32_t global_face_id) {
+        const uint16_t local_face_id =
+            find_local_index(global_face_id,
+                             m_patcher->get_face_patch_id(global_face_id),
+                             m_h_num_owned_f[patch_id],
+                             m_h_patches_ltog_f[patch_id]);
+
         for (uint32_t v = 0; v < 3; ++v) {
 
-            uint32_t global_v0 = fv[global_face_id][v];
-            uint32_t global_v1 = fv[global_face_id][(v + 1) % 3];
 
-            uint32_t edge_id = get_edge_id(global_v0, global_v1);
+            const uint32_t global_v0 = fv[global_face_id][v];
+            const uint32_t global_v1 = fv[global_face_id][(v + 1) % 3];
+
+            const uint32_t edge_id = get_edge_id(global_v0, global_v1);
 
             std::pair<uint32_t, uint32_t> edge_key =
                 detail::edge_key(global_v0, global_v1);
@@ -427,7 +459,7 @@ void RXMesh::build_single_patch_topology(
                 dir = 0;
             }
 
-            uint32_t global_edge_id = get_edge_id(edge_key);
+            const uint32_t global_edge_id = get_edge_id(edge_key);
 
             uint16_t local_edge_id =
                 find_local_index(global_edge_id,
@@ -440,13 +472,13 @@ void RXMesh::build_single_patch_topology(
 
                 is_added_edge[local_edge_id] = true;
 
-                uint16_t local_v0 = find_local_index(
+                const uint16_t local_v0 = find_local_index(
                     edge_key.first,
                     m_patcher->get_vertex_patch_id(edge_key.first),
                     m_h_num_owned_v[patch_id],
                     m_h_patches_ltog_v[patch_id]);
 
-                uint16_t local_v1 = find_local_index(
+                const uint16_t local_v1 = find_local_index(
                     edge_key.second,
                     m_patcher->get_vertex_patch_id(edge_key.second),
                     m_h_num_owned_v[patch_id],
@@ -467,15 +499,14 @@ void RXMesh::build_single_patch_topology(
     };
 
 
-    uint16_t local_face_id = 0;
     for (int f = p_start; f < p_end; ++f) {
         uint32_t face_id = m_patcher->get_patches_val()[f];
-        add_new_face(face_id, local_face_id++);
+        add_new_face(face_id);
     }
 
     for (int f = r_start; f < r_end; ++f) {
         uint32_t face_id = m_patcher->get_external_ribbon_val()[f];
-        add_new_face(face_id, local_face_id++);
+        add_new_face(face_id);
     }
 }
 
@@ -698,37 +729,12 @@ void RXMesh::move_to_device()
                           m_h_num_owned_v.data(),
                           sizeof(uint16_t) * m_num_patches,
                           cudaMemcpyHostToDevice));
-
-
-    // Allocate and copy the context to the gpu
-    m_rxmesh_context.init(m_num_edges,
-                          m_num_faces,
-                          m_num_vertices,
-                          m_max_valence,
-                          m_max_edge_incident_faces,
-                          m_max_face_adjacent_faces,
-                          m_num_patches,
-                          m_patcher->get_device_face_patch(),
-                          m_patcher->get_device_edge_patch(),
-                          m_patcher->get_device_vertex_patch(),
-                          m_d_patches_ltog_v,
-                          m_d_patches_ltog_e,
-                          m_d_patches_ltog_f,
-                          m_d_ad_size_ltog_v,
-                          m_d_ad_size_ltog_e,
-                          m_d_ad_size_ltog_f,
-                          m_d_patches_edges,
-                          m_d_patches_faces,
-                          m_d_ad_size,
-                          m_d_num_owned_f,
-                          m_d_num_owned_e,
-                          m_d_num_owned_v);
 }
 
 void RXMesh::build_device()
 {
     CUDA_ERROR(
-        cudaMalloc((void**)&m_patches, m_num_patches * sizeof(PatchInfo)));
+        cudaMalloc((void**)&m_patches_info, m_num_patches * sizeof(PatchInfo)));
 
     //#pragma omp parallel for
     for (int p = 0; p < m_num_patches; ++p) {
@@ -815,8 +821,10 @@ void RXMesh::build_device()
                            patch.m_not_owned_id_v,
                            patch.m_not_owned_patch_v);
 
-        CUDA_ERROR(cudaMemcpy(
-            m_patches + p, &patch, sizeof(PatchInfo), cudaMemcpyHostToDevice));
+        CUDA_ERROR(cudaMemcpy(m_patches_info + p,
+                              &patch,
+                              sizeof(PatchInfo),
+                              cudaMemcpyHostToDevice));
     }
 }
 

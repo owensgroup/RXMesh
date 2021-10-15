@@ -170,7 +170,7 @@ class RXMeshTest
         for (uint32_t f = 0; f < rxmesh.m_num_faces; ++f) {
             uint32_t i = f;
 
-            std::vector<uint32_t> ff(3);
+            std::vector<uint32_t> fe(3);
 
             for (uint32_t j = 0; j < 3; ++j) {
 
@@ -180,9 +180,9 @@ class RXMeshTest
                 std::pair<uint32_t, uint32_t> my_edge =
                     rxmesh::detail::edge_key(v0, v1);
                 uint32_t edge_id = rxmesh.get_edge_id(my_edge);
-                ff[j]            = edge_id;
+                fe[j]            = edge_id;
             }
-            m_h_FE.push_back(ff);
+            m_h_FE.push_back(fe);
         }
     }
 

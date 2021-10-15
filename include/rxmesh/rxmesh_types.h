@@ -196,7 +196,7 @@ struct FaceHandle
 
 /**
  * @brief PatchInfo stores the information needed for query operations in a
- * patch. Accessible from the host and device
+ * patch
  */
 struct ALIGN(16) PatchInfo
 {
