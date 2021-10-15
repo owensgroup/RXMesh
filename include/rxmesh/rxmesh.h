@@ -145,7 +145,7 @@ class RXMesh
         return m_patcher->get_num_lloyd_run();
     }
 
-     uint32_t get_edge_id(const uint32_t v0, const uint32_t v1) const;
+    uint32_t get_edge_id(const uint32_t v0, const uint32_t v1) const;
 
     const std::unique_ptr<patcher::Patcher>& get_patcher() const
     {
@@ -251,11 +251,8 @@ class RXMesh
     //.w face size
     std::vector<uint4> m_h_ad_size;
 
-    // the size of owned mesh elements per patch
-    //.x faces
-    //.y edges
-    //.z vertex
-    std::vector<uint4> m_h_owned_size;
+    // the number of owned mesh elements per patch
+    std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;
 
     //** mappings
     // local to global map for (v)ertices (e)dges and (f)aces
@@ -295,13 +292,10 @@ class RXMesh
     //.w face size
     uint4* m_d_ad_size;
 
-    // the size of owned mesh elements per patch
-    //.x faces
-    //.y edges
-    //.z vertex
-    uint4* m_d_owned_size;
+    // the number of owned mesh elements per patch
+    uint16_t *m_d_num_owned_f, *m_d_num_owned_e, *m_d_num_owned_v;
 
 
-    Patch* m_patches;
+    PatchInfo* m_patches;
 };
 }  // namespace rxmesh

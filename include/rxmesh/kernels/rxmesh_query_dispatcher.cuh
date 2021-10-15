@@ -11,7 +11,6 @@
 #include "rxmesh/rxmesh_types.h"
 
 
-
 namespace rxmesh {
 
 namespace detail {
@@ -87,19 +86,20 @@ __device__ __inline__ void query_block_dispatcher(
         case rxmesh::ELEMENT::VERTEX: {
             input_mapping =
                 context.get_patches_ltog_v() + src_element_ad_size.x;
-            num_src_in_patch = context.get_size_owned()[current_patch_id].z;
+            num_src_in_patch =
+                context.get_num_owned_vertices()[current_patch_id];
             break;
         }
         case rxmesh::ELEMENT::EDGE: {
             input_mapping =
                 context.get_patches_ltog_e() + src_element_ad_size.x;
-            num_src_in_patch = context.get_size_owned()[current_patch_id].y;
+            num_src_in_patch = context.get_num_owned_edges()[current_patch_id];
             break;
         }
         case rxmesh::ELEMENT::FACE: {
             input_mapping =
                 context.get_patches_ltog_f() + src_element_ad_size.x;
-            num_src_in_patch = context.get_size_owned()[current_patch_id].x;
+            num_src_in_patch = context.get_num_owned_faces()[current_patch_id];
             break;
         }
     }

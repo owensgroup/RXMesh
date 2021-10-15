@@ -33,7 +33,9 @@ class __align__(16) RXMeshContext
           m_d_patches_edges(nullptr),
           m_d_patches_faces(nullptr),
           m_d_ad_size(nullptr),
-          m_d_owned_size(nullptr)
+          m_d_num_owned_f(nullptr),
+          m_d_num_owned_e(nullptr),
+          m_d_num_owned_v(nullptr)
     {
     }
 
@@ -56,29 +58,33 @@ class __align__(16) RXMeshContext
               uint16_t*      d_patches_edges,
               uint16_t*      d_patches_faces,
               uint4*         d_ad_size,
-              uint4*         d_owned_size)
+              uint16_t*      d_num_owned_f,
+              uint16_t*      d_num_owned_e,
+              uint16_t*      d_num_owned_v)
     {
 
-        m_num_edges                  = num_edges;
-        m_num_faces                  = num_faces;
-        m_num_vertices               = num_vertices;
-        m_max_valence                = max_valence;
-        m_max_edge_incident_faces    = max_edge_incident_faces;
-        m_max_face_adjacent_faces    = max_face_adjacent_faces;
-        m_num_patches                = num_patches;
-        m_d_face_patch               = d_face_patch;
-        m_d_edge_patch               = d_edge_patch;
-        m_d_vertex_patch             = d_vertex_patch;
-        m_d_patches_ltog_v           = d_patches_ltog_v;
-        m_d_patches_ltog_e           = d_patches_ltog_e;
-        m_d_patches_ltog_f           = d_patches_ltog_f;
-        m_d_ad_size_ltog_v           = d_ad_size_ltog_v;
-        m_d_ad_size_ltog_e           = d_ad_size_ltog_e;
-        m_d_ad_size_ltog_f           = d_ad_size_ltog_f;
-        m_d_patches_edges            = d_patches_edges;
-        m_d_patches_faces            = d_patches_faces;
-        m_d_ad_size                  = d_ad_size;
-        m_d_owned_size               = d_owned_size;        
+        m_num_edges               = num_edges;
+        m_num_faces               = num_faces;
+        m_num_vertices            = num_vertices;
+        m_max_valence             = max_valence;
+        m_max_edge_incident_faces = max_edge_incident_faces;
+        m_max_face_adjacent_faces = max_face_adjacent_faces;
+        m_num_patches             = num_patches;
+        m_d_face_patch            = d_face_patch;
+        m_d_edge_patch            = d_edge_patch;
+        m_d_vertex_patch          = d_vertex_patch;
+        m_d_patches_ltog_v        = d_patches_ltog_v;
+        m_d_patches_ltog_e        = d_patches_ltog_e;
+        m_d_patches_ltog_f        = d_patches_ltog_f;
+        m_d_ad_size_ltog_v        = d_ad_size_ltog_v;
+        m_d_ad_size_ltog_e        = d_ad_size_ltog_e;
+        m_d_ad_size_ltog_f        = d_ad_size_ltog_f;
+        m_d_patches_edges         = d_patches_edges;
+        m_d_patches_faces         = d_patches_faces;
+        m_d_ad_size               = d_ad_size;
+        m_d_num_owned_f           = d_num_owned_f;
+        m_d_num_owned_e           = d_num_owned_e;
+        m_d_num_owned_v           = d_num_owned_v;
     }
 
 
@@ -230,9 +236,19 @@ class __align__(16) RXMeshContext
     {
         return m_d_ad_size;
     }
-    __device__ __forceinline__ uint4* get_size_owned() const
+    __device__ __forceinline__ uint16_t* get_num_owned_faces() const
     {
-        return m_d_owned_size;
+        return m_d_num_owned_f;
+    }
+
+    __device__ __forceinline__ uint16_t* get_num_owned_edges() const
+    {
+        return m_d_num_owned_e;
+    }
+
+    __device__ __forceinline__ uint16_t* get_num_owned_vertices() const
+    {
+        return m_d_num_owned_v;
     }
 
 
@@ -261,7 +277,8 @@ class __align__(16) RXMeshContext
     //.x edge address .y edge size  .z face address .w face size
     uint4* m_d_ad_size;
 
-    //.x faces .y edges .z vertex
-    uint4* m_d_owned_size;
+    // number of owned faces, edges, and vertices per patch
+    uint16_t *m_d_num_owned_f, *m_d_num_owned_e, *m_d_num_owned_v;
+
 };
 }  // namespace rxmesh
