@@ -46,12 +46,12 @@ class Patcher
 
     uint32_t* get_device_face_patch()
     {
-        return m_d_face_patch;                              
+        return m_d_face_patch;
     }
 
     uint32_t* get_device_vertex_patch()
     {
-        return m_d_vertex_patch;        
+        return m_d_vertex_patch;
     }
 
     uint32_t* get_device_edge_patch()
