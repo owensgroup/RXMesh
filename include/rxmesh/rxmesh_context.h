@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "rxmesh/patch_info.h"
 #include "rxmesh/rxmesh_types.h"
 #include "rxmesh/util/macros.h"
 
@@ -88,7 +89,7 @@ class __align__(16) RXMeshContext
         m_d_num_owned_f           = d_num_owned_f;
         m_d_num_owned_e           = d_num_owned_e;
         m_d_num_owned_v           = d_num_owned_v;
-        m_patches_info                 = patches;
+        m_patches_info            = patches;
     }
 
 

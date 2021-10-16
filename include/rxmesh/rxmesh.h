@@ -4,6 +4,7 @@
 #include <memory>
 #include <unordered_map>
 #include <vector>
+#include "rxmesh/patch_info.h"
 #include "rxmesh/patcher/patcher.h"
 #include "rxmesh/rxmesh_context.h"
 #include "rxmesh/rxmesh_types.h"
