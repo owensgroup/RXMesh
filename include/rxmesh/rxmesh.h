@@ -244,8 +244,8 @@ class RXMesh
         m_max_faces_per_patch;
 
     //** main incident relations
-    std::vector<std::vector<uint16_t>> m_h_patches_edges;
-    std::vector<std::vector<uint16_t>> m_h_patches_faces;
+    std::vector<std::vector<uint16_t>> m_h_patches_ev;
+    std::vector<std::vector<uint16_t>> m_h_patches_fe;
     //.x edge address
     //.y edge size
     //.z face address

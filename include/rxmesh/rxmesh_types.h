@@ -97,10 +97,10 @@ void __device__ __host__ __inline__ io_elements(const Op& op,
  */
 struct LocalVertexT
 {
-    LocalVertexT() : id(INVALID16)
+    __device__ __host__ LocalVertexT() : id(INVALID16)
     {
     }
-    LocalVertexT(uint16_t id) : id(id)
+    __device__ __host__ LocalVertexT(uint16_t id) : id(id)
     {
     }
     uint16_t id;
@@ -111,10 +111,10 @@ struct LocalVertexT
  */
 struct LocalEdgeT
 {
-    LocalEdgeT() : id(INVALID16)
+    __device__ __host__ LocalEdgeT() : id(INVALID16)
     {
     }
-    LocalEdgeT(uint16_t id) : id(id)
+    __device__ __host__ LocalEdgeT(uint16_t id) : id(id)
     {
     }
     uint16_t id;
@@ -125,10 +125,10 @@ struct LocalEdgeT
  */
 struct LocalFaceT
 {
-    LocalFaceT() : id(INVALID16)
+    __device__ __host__ LocalFaceT() : id(INVALID16)
     {
     }
-    LocalFaceT(uint16_t id) : id(id)
+    __device__ __host__ LocalFaceT(uint16_t id) : id(id)
     {
     }
     uint16_t id;
@@ -140,10 +140,11 @@ struct LocalFaceT
  */
 struct VertexHandle
 {
-    VertexHandle() : m_patch_id(INVALID32), m_v({INVALID16})
+    __device__ __host__ VertexHandle() : m_patch_id(INVALID32), m_v({INVALID16})
     {
     }
-    VertexHandle(uint32_t patch_id, LocalVertexT vertex_local_id)
+    __device__ __host__ VertexHandle(uint32_t     patch_id,
+                                     LocalVertexT vertex_local_id)
         : m_patch_id(patch_id), m_v(vertex_local_id)
     {
     }
@@ -170,10 +171,10 @@ struct VertexHandle
  */
 struct EdgeHandle
 {
-    EdgeHandle() : m_patch_id(INVALID32), m_e({INVALID16})
+    __device__ __host__ EdgeHandle() : m_patch_id(INVALID32), m_e({INVALID16})
     {
     }
-    EdgeHandle(uint32_t patch_id, LocalEdgeT edge_local_id)
+    __device__ __host__ EdgeHandle(uint32_t patch_id, LocalEdgeT edge_local_id)
         : m_patch_id(patch_id), m_e(edge_local_id)
     {
     }
@@ -198,10 +199,10 @@ struct EdgeHandle
  */
 struct FaceHandle
 {
-    FaceHandle() : m_patch_id(INVALID32), m_f({INVALID16})
+    __device__ __host__ FaceHandle() : m_patch_id(INVALID32), m_f({INVALID16})
     {
     }
-    FaceHandle(uint32_t patch_id, LocalFaceT face_local_id)
+    __device__ __host__ FaceHandle(uint32_t patch_id, LocalFaceT face_local_id)
         : m_patch_id(patch_id), m_f(face_local_id)
     {
     }

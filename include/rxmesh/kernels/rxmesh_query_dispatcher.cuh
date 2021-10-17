@@ -4,6 +4,7 @@
 #include <cub/block/block_discontinuity.cuh>
 
 #include "rxmesh/kernels/collective.cuh"
+#include "rxmesh/kernels/debug.cuh"
 #include "rxmesh/kernels/rxmesh_iterator.cuh"
 #include "rxmesh/kernels/rxmesh_loader.cuh"
 #include "rxmesh/kernels/rxmesh_queries.cuh"
@@ -18,18 +19,16 @@ namespace detail {
 /**
  * query_block_dispatcher()
  */
-template <Op op, uint32_t blockThreads, typename activeSetT>
+template <Op op, typename T, uint32_t blockThreads, typename activeSetT>
 __device__ __inline__ void query_block_dispatcher_v1(
-    const RXMeshContext& context,
-    const uint32_t       patch_id,
-    activeSetT           compute_active_set,
-    const bool           oriented,
-    uint32_t&            num_src_in_patch,
-    uint16_t*&           s_output_offset,
-    uint16_t*&           s_output_value)
+    const PatchInfo& patch_info,
+    activeSetT       compute_active_set,
+    const bool       oriented,
+    uint32_t&        num_src_in_patch,
+    uint16_t*&       s_output_offset,
+    T*&              s_output_value)
 {
-    /*static_assert(op != Op::EE, "Op::EE is not supported!");
-    assert(patch_id < context.get_num_patches());
+    static_assert(op != Op::EE, "Op::EE is not supported!");
 
 
     ELEMENT src_element, output_element;
@@ -37,16 +36,17 @@ __device__ __inline__ void query_block_dispatcher_v1(
 
     extern __shared__ uint16_t shrd_mem[];
 
-
     s_output_offset = shrd_mem;
-    s_output_value  = shrd_mem;
-    uint16_t *s_patch_edges(shrd_mem), *s_patch_faces(shrd_mem);
+    s_output_value  = reinterpret_cast<T*>(shrd_mem);
 
-    constexpr bool load_faces = (op == Op::VF || op == Op::EE || op == Op::EF ||
-                                 op == Op::FV || op == Op::FE || op == Op::FF);
-    constexpr bool load_edges = (op == Op::VV || op == Op::VE || op == Op::VF ||
-                                 op == Op::EV || op == Op::FV);
-    static_assert(load_edges || load_faces,
+    LocalVertexT* s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
+    LocalEdgeT*   s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
+
+    constexpr bool load_fe  = (op == Op::VF || op == Op::EE || op == Op::EF ||
+                              op == Op::FV || op == Op::FE || op == Op::FF);
+    constexpr bool loead_ev = (op == Op::VV || op == Op::VE || op == Op::VF ||
+                               op == Op::EV || op == Op::FV);
+    static_assert(loead_ev || load_fe,
                   "At least faces or edges needs to be loaded");
 
     constexpr bool is_fixed_offset =
@@ -54,25 +54,22 @@ __device__ __inline__ void query_block_dispatcher_v1(
 
     __syncthreads();
 
-    
-    // Check if any of the vertices are in the active set
+
+    // Check if any of the mesh elements are in the active set
     // input mapping does not need to be stored in shared memory since it will
     // be read coalesced, we can rely on L1 cache here
     num_src_in_patch = 0;
     switch (src_element) {
         case rxmesh::ELEMENT::VERTEX: {
-            num_src_in_patch =
-                context.get_patches_info()[patch_id].m_num_owned_vertices;
+            num_src_in_patch = patch_info.num_owned_vertices;
             break;
         }
         case rxmesh::ELEMENT::EDGE: {
-            num_src_in_patch =
-                context.get_patches_info()[patch_id].m_num_owned_edges;
+            num_src_in_patch = patch_info.num_owned_edges;
             break;
         }
         case rxmesh::ELEMENT::FACE: {
-            num_src_in_patch =
-                context.get_patches_info()[patch_id].m_num_owned_faces;
+            num_src_in_patch = patch_info.num_owned_faces;
             break;
         }
     }
@@ -81,89 +78,41 @@ __device__ __inline__ void query_block_dispatcher_v1(
     bool     is_active = false;
     uint16_t local_id  = threadIdx.x;
     while (local_id < num_src_in_patch) {
-        is_active = local_id || compute_active_set({patch_id, loca_id});
+        is_active =
+            local_id || compute_active_set({patch_info.patch_id, local_id});
         local_id += blockThreads;
     }
-
 
     if (__syncthreads_or(is_active) == 0) {
         return;
     }
 
     // 2) Load the patch info
-    load_mesh(
-        context, load_edges, load_faces, s_patch_edges, s_patch_faces, ad_size);
-    __syncthreads();
-
+    load_mesh<blockThreads>(patch_info, loead_ev, load_fe, s_ev, s_fe);
+    __syncthreads();    
     // 3)Perform the query operation
-    if (oriented) {
+    /*if (oriented) {
         assert(op == Op::VV);
         if constexpr (op == Op::VV) {
             v_v_oreinted<blockThreads>(s_output_offset,
                                        s_output_value,
-                                       s_patch_edges,
+                                       s_ev,
                                        context,
                                        ad_size,
-                                       ad_size_ltog_v.y,
+                                       patch_info.num_vertices,
                                        num_src_in_patch);
         }
     } else {
         query<blockThreads, op>(s_output_offset,
                                 s_output_value,
-                                s_patch_edges,
-                                s_patch_faces,
-                                ad_size_ltog_v.y,
-                                ad_size_ltog_e.y,
-                                ad_size_ltog_f.y);
-    }
+                                s_ev,
+                                s_fe,
+                                patch_info.num_vertices,
+                                patch_info.num_edges,
+                                patch_info.num_faces);
+    }*/
 
-
-    // 4) load output mapping
-    s_output_mapping = nullptr;
-    if (output_needs_mapping) {
-        // Read comments in calc_shared_memory() to understand how we calculate
-        // s_output_mapping pointer location in shared memory such that it does
-        // not overwrite the results
-
-        // We add ad_size.w % 2 for padding in case ad_size.w  is not
-        // dividable by 2 in which case memory misalignment happens
-        if constexpr (op == Op::FE) {
-            s_output_mapping =
-                (uint32_t*)&shrd_mem[ad_size.w + (ad_size.w % 2)];
-        }
-        if constexpr (op == Op::EV) {
-            s_output_mapping = (uint32_t*)&shrd_mem[ad_size.y];
-        }
-        if constexpr (op == Op::FV) {
-            s_output_mapping =
-                (uint32_t*)&shrd_mem[ad_size.w + (ad_size.w % 2) + ad_size.y];
-        }
-        if constexpr (op == Op::VE) {
-            s_output_mapping = (uint32_t*)&shrd_mem[2 * ad_size.y];
-        }
-        if constexpr (op == Op::EF || op == Op::VF) {
-            s_output_mapping = (uint32_t*)&shrd_mem[2 * ad_size.w];
-        }
-        if constexpr (op == Op::FF) {
-            // FF uses a lot of shared memory and some of it can be overridden
-            // but we need to wait for the query to be done.
-            __syncthreads();
-            s_output_mapping = (uint32_t*)&shrd_mem[0];
-        }
-
-        if constexpr (op == Op::VV) {
-            // We use extra shared memory that is read only for VV which we can
-            // just use for loading ltog. The drawback is that we need to wait
-            // for the query to finish first before overwriting it with ltog
-            __syncthreads();
-            uint16_t last_vv = ad_size_ltog_v.y + 1 + 2 * ad_size_ltog_e.y;
-            s_output_mapping = (uint32_t*)&shrd_mem[last_vv + last_vv % 2];
-        }
-
-        load_mapping(
-            context, output_element, output_ele_ad_size, s_output_mapping);
-    }
-    __syncthreads();*/
+    __syncthreads();
 }
 /**
  * query_block_dispatcher()
@@ -227,7 +176,7 @@ __device__ __inline__ void query_block_dispatcher(
                        ad_size_ltog_e,
                        ad_size_ltog_f);
 
-    // Check if any of the vertices are in the active set
+    // Check if any of the mesh elements are in the active set
     // input mapping does not need to be stored in shared memory since it will
     // be read coalesced, we can rely on L1 cache here
     input_mapping    = nullptr;
@@ -350,7 +299,11 @@ __device__ __inline__ void query_block_dispatcher(
 /**
  * query_block_dispatcher_v1()
  */
-template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
+template <Op op,
+          typename T,
+          uint32_t blockThreads,
+          typename computeT,
+          typename activeSetT>
 __device__ __inline__ void query_block_dispatcher_v1(
     const RXMeshContext& context,
     const uint32_t       patch_id,
@@ -359,14 +312,18 @@ __device__ __inline__ void query_block_dispatcher_v1(
     const bool           oriented = false)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
+    static_assert(std::is_same<T, LocalEdgeT>::value ||
+                  std::is_same<T, LocalFaceT>::value ||
+                  std::is_same<T, LocalVertexT>::value);
+
     assert(patch_id < context.get_num_patches());
 
     uint32_t  num_src_in_patch = 0;
-    uint16_t *s_output_offset(nullptr), *s_output_value(nullptr);
+    uint16_t* s_output_offset(nullptr);
+    T*        s_output_value(nullptr);
 
-    detail::template query_block_dispatcher_v1<op, blockThreads>(
-        context,
-        patch_id,
+    detail::template query_block_dispatcher_v1<op, T, blockThreads>(
+        context.get_patches_info()[patch_id],
         compute_active_set,
         oriented,
         num_src_in_patch,
@@ -478,8 +435,24 @@ __device__ __inline__ void query_block_dispatcher_v1(
     if (blockIdx.x >= context.get_num_patches()) {
         return;
     }
-    query_block_dispatcher_v1<op, blockThreads>(
-        context, blockIdx.x, compute_op, compute_active_set, oriented);
+
+    if constexpr (op == rxmesh::Op::VV || op == rxmesh::Op::EV ||
+                  op == rxmesh::Op::FV) {
+        query_block_dispatcher_v1<op, LocalVertexT, blockThreads>(
+            context, blockIdx.x, compute_op, compute_active_set, oriented);
+    }
+
+    if constexpr (op == rxmesh::Op::VE || op == rxmesh::Op::EE ||
+                  op == rxmesh::Op::FE) {
+        query_block_dispatcher_v1<op, LocalEdgeT, blockThreads>(
+            context, blockIdx.x, compute_op, compute_active_set, oriented);
+    }
+
+    if constexpr (op == rxmesh::Op::VF || op == rxmesh::Op::EF ||
+                  op == rxmesh::Op::FF) {
+        query_block_dispatcher_v1<op, LocalFaceT, blockThreads>(
+            context, blockIdx.x, compute_op, compute_active_set, oriented);
+    }
 }
 
 /**
@@ -516,38 +489,22 @@ __device__ __inline__ void query_block_dispatcher_v1(
     if (blockIdx.x >= context.get_num_patches()) {
         return;
     }
+    if constexpr (op == rxmesh::Op::VV || op == rxmesh::Op::VE ||
+                  op == rxmesh::Op::VF) {
+        query_block_dispatcher_v1<op, blockThreads>(
+            context, compute_op, [](VertexHandle) { return true; }, oriented);
+    }
 
-    switch (op) {
-        case rxmesh::Op::VV:
-        case rxmesh::Op::VE:
-        case rxmesh::Op::VF:
-            query_block_dispatcher_v1<op, blockThreads>(
-                context,
-                blockIdx.x,
-                compute_op,
-                [](VertexHandle) { return true; },
-                oriented);
-            break;
-        case rxmesh::Op::FV:
-        case rxmesh::Op::FE:
-        case rxmesh::Op::FF:
-            query_block_dispatcher_v1<op, blockThreads>(
-                context,
-                blockIdx.x,
-                compute_op,
-                [](FaceHandle) { return true; },
-                oriented);
-            break;
-        case rxmesh::Op::EV:
-        case rxmesh::Op::EE:
-        case rxmesh::Op::EF:
-            query_block_dispatcher_v1<op, blockThreads>(
-                context,
-                blockIdx.x,
-                compute_op,
-                [](EdgeHandle) { return true; },
-                oriented);
-            break;
+    if constexpr (op == rxmesh::Op::FV || op == rxmesh::Op::FE ||
+                  op == rxmesh::Op::FF) {
+        query_block_dispatcher_v1<op, blockThreads>(
+            context, compute_op, [](FaceHandle) { return true; }, oriented);
+    }
+
+    if constexpr (op == rxmesh::Op::EV || op == rxmesh::Op::EE ||
+                  op == rxmesh::Op::EF) {
+        query_block_dispatcher_v1<op, blockThreads>(
+            context, compute_op, [](EdgeHandle) { return true; }, oriented);
     }
 }
 /**

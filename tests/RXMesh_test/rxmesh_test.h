@@ -502,7 +502,7 @@ class RXMeshTest
         // 1) For each local edge in the patch, get its global id using the
         // mapping (using m_h_patches_ltog_e)
 
-        // 2) get the local edge's local vertices (using m_h_patches_edges)
+        // 2) get the local edge's local vertices (using m_h_patches_ev)
 
         // 3) map the local vertices to their global id (using
         // m_h_patches_ltog_v)
@@ -521,9 +521,8 @@ class RXMeshTest
 
             // 2)
             // get the local vertices
-            uint16_t v0_l = rxmesh.m_h_patches_edges.at(patch_id).at(e_l * 2);
-            uint16_t v1_l =
-                rxmesh.m_h_patches_edges.at(patch_id).at(e_l * 2 + 1);
+            uint16_t v0_l = rxmesh.m_h_patches_ev.at(patch_id).at(e_l * 2);
+            uint16_t v1_l = rxmesh.m_h_patches_ev.at(patch_id).at(e_l * 2 + 1);
 
             // 3)
             // convert the local vertices to global
@@ -590,13 +589,13 @@ class RXMeshTest
         // 1) for each local face in the patch, get its global id using the
         // mapping (using m_h_patches_ltog_f)
 
-        // 2) get the local face's local edges (using m_h_patches_faces)
+        // 2) get the local face's local edges (using m_h_patches_fe)
 
         // 3) map the local edges to their global id
         //(using m_h_patches_ltog_v)
 
         // 4) use the converted edges to get their global face id (using
-        // m_h_patches_faces)
+        // m_h_patches_fe)
 
 
         // 5) check if the resulting global face id in 4) matches that
@@ -613,7 +612,7 @@ class RXMeshTest
             // 2)
             // get the local edges
             for (uint32_t i = 0; i < 3; ++i) {
-                e_l[i] = rxmesh.m_h_patches_faces.at(patch_id).at(f_l * 3 + i);
+                e_l[i] = rxmesh.m_h_patches_fe.at(patch_id).at(f_l * 3 + i);
                 // shift right because the first bit is reserved for edge
                 // direction
                 flag_t dir(0);

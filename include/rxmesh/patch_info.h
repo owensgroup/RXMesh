@@ -14,27 +14,27 @@ namespace rxmesh {
 struct ALIGN(16) PatchInfo
 {
     // The topology information: edge incident vertices and face incident edges
-    LocalVertexT* m_ev;
-    LocalEdgeT*   m_fe;
+    LocalVertexT* ev;
+    LocalEdgeT*   fe;
 
 
     // Non-owned mesh elements patch ID
-    uint32_t* m_not_owned_patch_v;
-    uint32_t* m_not_owned_patch_e;
-    uint32_t* m_not_owned_patch_f;
+    uint32_t* not_owned_patch_v;
+    uint32_t* not_owned_patch_e;
+    uint32_t* not_owned_patch_f;
 
 
     // Non-owned mesh elements local ID
-    LocalVertexT* m_not_owned_id_v;
-    LocalEdgeT*   m_not_owned_id_e;
-    LocalFaceT*   m_not_owned_id_f;
+    LocalVertexT* not_owned_id_v;
+    LocalEdgeT*   not_owned_id_e;
+    LocalFaceT*   not_owned_id_f;
 
     // Number of mesh elements in the patch
-    uint16_t m_num_vertices, m_num_edges, m_num_faces;
-    uint16_t m_num_owned_vertices, m_num_owned_edges, m_num_owned_faces;
+    uint16_t num_vertices, num_edges, num_faces;
+    uint16_t num_owned_vertices, num_owned_edges, num_owned_faces;
 
     // The index of this patch (relative to all other patches)
-    uint32_t m_patch_id;
+    uint32_t patch_id;
 
     /**
      * @brief Return a unique handle to a local vertex
@@ -43,7 +43,7 @@ struct ALIGN(16) PatchInfo
      */
     uint64_t __device__ __host__ __inline__ unique_id(LocalVertexT local_id)
     {
-        return unique_id(local_id.id, m_patch_id);
+        return unique_id(local_id.id, patch_id);
     }
 
 
@@ -54,7 +54,7 @@ struct ALIGN(16) PatchInfo
      */
     uint64_t __device__ __host__ __inline__ unique_id(LocalEdgeT local_id)
     {
-        return unique_id(local_id.id, m_patch_id);
+        return unique_id(local_id.id, patch_id);
     }
 
 
@@ -65,7 +65,7 @@ struct ALIGN(16) PatchInfo
      */
     uint64_t __device__ __host__ __inline__ unique_id(LocalFaceT local_id)
     {
-        return unique_id(local_id.id, m_patch_id);
+        return unique_id(local_id.id, patch_id);
     }
 
 
