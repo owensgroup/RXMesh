@@ -37,7 +37,7 @@ __device__ __inline__ void query_block_dispatcher_v1(
     extern __shared__ uint16_t shrd_mem[];
 
     s_output_offset = shrd_mem;
-    s_output_value  = reinterpret_cast<T*>(shrd_mem);
+
 
     LocalVertexT* s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
     LocalEdgeT*   s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
@@ -89,28 +89,30 @@ __device__ __inline__ void query_block_dispatcher_v1(
 
     // 2) Load the patch info
     load_mesh<blockThreads>(patch_info, loead_ev, load_fe, s_ev, s_fe);
-    __syncthreads();    
+    __syncthreads();
     // 3)Perform the query operation
-    /*if (oriented) {
+    if (oriented) {
         assert(op == Op::VV);
         if constexpr (op == Op::VV) {
-            v_v_oreinted<blockThreads>(s_output_offset,
+            /*v_v_oreinted<blockThreads>(s_output_offset,
                                        s_output_value,
                                        s_ev,
                                        context,
                                        ad_size,
                                        patch_info.num_vertices,
-                                       num_src_in_patch);
+                                       num_src_in_patch);*/
         }
     } else {
+        uint16_t* temp_output;
         query<blockThreads, op>(s_output_offset,
-                                s_output_value,
-                                s_ev,
-                                s_fe,
+                                temp_output,
+                                reinterpret_cast<uint16_t*>(s_ev),
+                                reinterpret_cast<uint16_t*>(s_fe),
                                 patch_info.num_vertices,
                                 patch_info.num_edges,
                                 patch_info.num_faces);
-    }*/
+        s_output_value = reinterpret_cast<T*>(temp_output);
+    }
 
     __syncthreads();
 }
@@ -336,28 +338,26 @@ __device__ __inline__ void query_block_dispatcher_v1(
     // 5) Call compute on the output in shared memory by looping over all
     // source elements in this patch.
 
-    /*uint16_t local_id = threadIdx.x;
-    while (local_id < num_src_in_patch) {
-
-        uint32_t global_id = input_mapping[local_id];
-
-        if (compute_active_set(global_id)) {
+    uint16_t local_id = threadIdx.x;
+    while (local_id < num_src_in_patch) {                
+        
+        if (compute_active_set({patch_id, local_id})) {
             constexpr uint32_t fixed_offset =
                 ((op == Op::EV)                 ? 2 :
                  (op == Op::FV || op == Op::FE) ? 3 :
                                                   0);
-            RXMeshIterator iter(local_id,
+            /*RXMeshIterator iter(local_id,
                                 s_output_value,
                                 s_output_offset,
                                 fixed_offset,
                                 num_src_in_patch,
                                 int(op == Op::FE));
 
-            compute_op(global_id, iter);
+            compute_op({patch_id, local_id}, iter);*/
         }
 
         local_id += blockThreads;
-    }*/
+    }
 }
 
 /**

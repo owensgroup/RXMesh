@@ -48,7 +48,7 @@ __launch_bounds__(blockThreads) __global__
                          rxmesh::RXMeshAttribute<uint32_t> d_src,
                          rxmesh::RXMeshAttribute<uint32_t> output_container,
                          const bool                        oriented = false)
-{
+{    
     using namespace rxmesh;
 
     static_assert(op != Op::EE, "Op::EE is not supported!");

@@ -95,7 +95,7 @@ __device__ __forceinline__ void block_mat_transpose(const uint32_t num_rows,
 template <uint32_t blockThreads>
 __device__ __forceinline__ void v_v_oreinted(uint16_t*& s_output_offset,
                                              uint16_t*& s_output_value,
-                                             uint16_t*  s_patch_edges,
+                                             uint16_t*  s_ev,
                                              const RXMeshContext& context,
                                              const uint4&         ad_size,
                                              const uint16_t       num_vertices,
@@ -104,8 +104,8 @@ __device__ __forceinline__ void v_v_oreinted(uint16_t*& s_output_offset,
     const uint32_t num_faces = ad_size.w / 3;
     const uint32_t num_edges = ad_size.y / 2;
 
-    s_output_offset = &s_patch_edges[0];
-    s_output_value  = &s_patch_edges[num_vertices + 1 + (num_vertices + 1) % 2];
+    s_output_offset = &s_ev[0];
+    s_output_value  = &s_ev[num_vertices + 1 + (num_vertices + 1) % 2];
 
     // start by loading the faces while also doing transposing EV (might
     // increase ILP)
@@ -205,8 +205,8 @@ __device__ __forceinline__ void v_v_oreinted(uint16_t*& s_output_offset,
     __syncthreads();
 
     // Load EV into s_patch_EF since both has the same size (2*#E)
-    s_patch_edges = &s_patch_EF[0];
-    load_patch_edges(context, s_patch_edges, ad_size);
+    s_ev = &s_patch_EF[0];
+    load_patch_edges(context, s_ev, ad_size);
     __syncthreads();
 
     for (uint32_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
@@ -216,8 +216,8 @@ __device__ __forceinline__ void v_v_oreinted(uint16_t*& s_output_offset,
 
         for (uint32_t e = start; e < end; ++e) {
             uint16_t edge = s_output_value[e];
-            uint16_t v0   = s_patch_edges[2 * edge];
-            uint16_t v1   = s_patch_edges[2 * edge + 1];
+            uint16_t v0   = s_ev[2 * edge];
+            uint16_t v1   = s_ev[2 * edge + 1];
 
             assert(v0 == v || v1 == v);
             // d_output[e] = (v0 == v) ? v1 : v0;
@@ -227,8 +227,8 @@ __device__ __forceinline__ void v_v_oreinted(uint16_t*& s_output_offset,
 }
 
 template <uint32_t blockThreads>
-__device__ __forceinline__ void v_e(const uint32_t num_vertices,
-                                    const uint32_t num_edges,
+__device__ __forceinline__ void v_e(const uint16_t num_vertices,
+                                    const uint16_t num_edges,
                                     uint16_t*      d_edges,
                                     uint16_t*      d_output)
 {
@@ -245,8 +245,8 @@ __device__ __forceinline__ void v_e(const uint32_t num_vertices,
 }
 
 template <uint32_t blockThreads>
-__device__ __forceinline__ void v_v(const uint32_t num_vertices,
-                                    const uint32_t num_edges,
+__device__ __forceinline__ void v_v(const uint16_t num_vertices,
+                                    const uint16_t num_edges,
                                     uint16_t*      d_edges,
                                     uint16_t*      d_output)
 {
@@ -289,9 +289,9 @@ __device__ __forceinline__ void v_v(const uint32_t num_vertices,
     }
 }
 
-__device__ __forceinline__ void f_v(const uint32_t  num_edges,
+__device__ __forceinline__ void f_v(const uint16_t  num_edges,
                                     const uint16_t* d_edges,
-                                    const uint32_t  num_faces,
+                                    const uint16_t  num_faces,
                                     uint16_t*       d_faces)
 {
     // M_FV = M_FE \dot M_EV
@@ -320,9 +320,9 @@ __device__ __forceinline__ void f_v(const uint32_t  num_edges,
 }
 
 template <uint32_t blockThreads>
-__device__ __forceinline__ void v_f(const uint32_t num_faces,
-                                    const uint32_t num_edges,
-                                    const uint32_t num_vertices,
+__device__ __forceinline__ void v_f(const uint16_t num_faces,
+                                    const uint16_t num_edges,
+                                    const uint16_t num_vertices,
                                     uint16_t*      d_edges,
                                     uint16_t*      d_faces)
 {
@@ -344,8 +344,8 @@ __device__ __forceinline__ void v_f(const uint32_t num_faces,
 }
 
 template <uint32_t blockThreads>
-__device__ __forceinline__ void e_f(const uint32_t num_edges,
-                                    const uint32_t num_faces,
+__device__ __forceinline__ void e_f(const uint16_t num_edges,
+                                    const uint16_t num_faces,
                                     uint16_t*      d_faces,
                                     uint16_t*      d_output,
                                     int            shift = 1)
@@ -364,8 +364,8 @@ __device__ __forceinline__ void e_f(const uint32_t num_edges,
 }
 
 template <uint32_t blockThreads>
-__device__ __forceinline__ void f_f(const uint32_t num_edges,
-                                    const uint32_t num_faces,
+__device__ __forceinline__ void f_f(const uint16_t num_edges,
+                                    const uint16_t num_faces,
                                     uint16_t*      s_FE,
                                     uint16_t*      s_FF_offset,
                                     uint16_t*      s_FF_output)
@@ -446,73 +446,63 @@ __device__ __forceinline__ void f_f(const uint32_t num_edges,
 template <uint32_t blockThreads, Op op>
 __device__ __forceinline__ void query(uint16_t*&     s_output_offset,
                                       uint16_t*&     s_output_value,
-                                      uint16_t*      s_patch_edges,
-                                      uint16_t*      s_patch_faces,
-                                      const uint32_t num_vertices,
-                                      const uint32_t num_edges,
-                                      const uint32_t num_faces)
+                                      uint16_t*      s_ev,
+                                      uint16_t*      s_fe,
+                                      const uint16_t num_vertices,
+                                      const uint16_t num_edges,
+                                      const uint16_t num_faces)
 {
 
 
     switch (op) {
         case Op::VV: {
             assert(num_vertices <= 2 * num_edges);
-            s_output_offset = &s_patch_edges[0];
-            s_output_value  = &s_patch_edges[num_vertices + 1];
-            v_v<blockThreads>(
-                num_vertices, num_edges, s_patch_edges, s_output_value);
+            s_output_offset = &s_ev[0];
+            s_output_value  = &s_ev[num_vertices + 1];
+            v_v<blockThreads>(num_vertices, num_edges, s_ev, s_output_value);
             break;
         }
         case Op::VE: {
             assert(num_vertices <= 2 * num_edges);
-            s_output_offset = &s_patch_edges[0];
-            s_output_value  = &s_patch_edges[num_vertices + 1];
-            v_e<blockThreads>(
-                num_vertices, num_edges, s_patch_edges, s_output_value);
+            s_output_offset = &s_ev[0];
+            s_output_value  = &s_ev[num_vertices + 1];
+            v_e<blockThreads>(num_vertices, num_edges, s_ev, s_output_value);
             break;
         }
         case Op::VF: {
             assert(num_vertices <= 2 * num_edges);
-            s_output_value  = &s_patch_edges[0];
-            s_output_offset = &s_patch_faces[0];
-            v_f<blockThreads>(num_faces,
-                              num_edges,
-                              num_vertices,
-                              s_patch_edges,
-                              s_patch_faces);
+            s_output_offset = &s_fe[0];
+            s_output_value  = &s_ev[0];            
+            v_f<blockThreads>(num_faces, num_edges, num_vertices, s_ev, s_fe);
             break;
         }
         case Op::EV: {
-            s_output_value = s_patch_edges;
+            s_output_value = s_ev;
             break;
         }
         case Op::EF: {
             assert(num_edges <= 3 * num_faces);
-            s_output_offset = &s_patch_faces[0];
-            s_output_value  = &s_patch_faces[num_edges + 1];
-            e_f<blockThreads>(
-                num_edges, num_faces, s_patch_faces, s_output_value);
+            s_output_offset = &s_fe[0];
+            s_output_value  = &s_fe[num_edges + 1];
+            e_f<blockThreads>(num_edges, num_faces, s_fe, s_output_value);
             break;
         }
         case Op::FV: {
-            s_output_value = s_patch_faces;
-            f_v(num_edges, s_patch_edges, num_faces, s_patch_faces);
+            s_output_value = s_fe;
+            f_v(num_edges, s_ev, num_faces, s_fe);
             break;
         }
         case Op::FE: {
-            s_output_value = s_patch_faces;
+            s_output_value = s_fe;
             break;
         }
         case Op::FF: {
             assert(num_edges <= 3 * num_faces);
-            s_output_offset = &s_patch_faces[3 * num_faces + 2 * 3 * num_faces];
-            //                    ^^^^FE             ^^^^^EF
+            s_output_offset = &s_fe[3 * num_faces + 2 * 3 * num_faces];
+            //                      ^^^^FE             ^^^^^EF
             s_output_value = &s_output_offset[num_faces + 1];
-            f_f<blockThreads>(num_edges,
-                              num_faces,
-                              s_patch_faces,
-                              s_output_offset,
-                              s_output_value);
+            f_f<blockThreads>(
+                num_edges, num_faces, s_fe, s_output_offset, s_output_value);
 
             break;
         }

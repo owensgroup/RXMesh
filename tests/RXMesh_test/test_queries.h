@@ -11,8 +11,16 @@
 #include "rxmesh_test.h"
 using namespace rxmesh;
 
+
 /**
- * launcher()
+ * @brief
+ * @param context
+ * @param op
+ * @param input_container
+ * @param output_container
+ * @param launch_box
+ * @param oriented
+ * @return
  */
 template <uint32_t blockThreads>
 float launcher(const RXMeshContext&       context,
@@ -90,7 +98,95 @@ float launcher(const RXMeshContext&       context,
 }
 
 /**
- * calc_fixed_offset()
+ * @brief
+ * @param context
+ * @param op
+ * @param input_container
+ * @param output_container
+ * @param launch_box
+ * @param oriented
+ * @return
+ */
+template <uint32_t blockThreads>
+float launcher_v1(const RXMeshContext&       context,
+                  const Op                   op,
+                  RXMeshAttribute<uint32_t>& input_container,
+                  RXMeshAttribute<uint32_t>& output_container,
+                  LaunchBox<blockThreads>&   launch_box,
+                  const bool                 oriented = false)
+{
+    CUDA_ERROR(cudaProfilerStart());
+    GPUTimer timer;
+    timer.start();
+
+    switch (op) {
+        case Op::VV:
+            query_v1<Op::VV, blockThreads><<<launch_box.blocks,
+                                             blockThreads,
+                                             launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container, oriented);
+            break;
+        case Op::VE:
+            query_v1<Op::VE, blockThreads><<<launch_box.blocks,
+                                             blockThreads,
+                                             launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
+            break;
+        case Op::VF:
+            query_v1<Op::VF, blockThreads><<<launch_box.blocks,
+                                             blockThreads,
+                                             launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
+            break;
+        case Op::EV:
+            query_v1<Op::EV, blockThreads><<<launch_box.blocks,
+                                             blockThreads,
+                                             launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
+            break;
+        case Op::EE:
+            RXMESH_ERROR(
+                "RXMeshStatic::launcher_no_src() Op::EE is not "
+                "supported!!");
+            break;
+        case Op::EF:
+            query_v1<Op::EF, blockThreads><<<launch_box.blocks,
+                                             blockThreads,
+                                             launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
+            break;
+        case Op::FV:
+            query_v1<Op::FV, blockThreads><<<launch_box.blocks,
+                                             blockThreads,
+                                             launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
+            break;
+        case Op::FE:
+            query_v1<Op::FE, blockThreads><<<launch_box.blocks,
+                                             blockThreads,
+                                             launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
+            break;
+        case Op::FF:
+            query_v1<Op::FF, blockThreads><<<launch_box.blocks,
+                                             blockThreads,
+                                             launch_box.smem_bytes_dyn>>>(
+                context, input_container, output_container);
+            break;
+    }
+
+    timer.stop();
+    CUDA_ERROR(cudaDeviceSynchronize());
+    CUDA_ERROR(cudaGetLastError());
+    CUDA_ERROR(cudaProfilerStop());
+    return timer.elapsed_millis();
+}
+
+/**
+ * @brief
+ * @param rxmesh
+ * @param op
+ * @return
  */
 inline uint32_t max_output_per_element(const RXMeshStatic& rxmesh, const Op& op)
 {
@@ -109,6 +205,7 @@ inline uint32_t max_output_per_element(const RXMeshStatic& rxmesh, const Op& op)
         return -1u;
     }
 }
+
 
 TEST(RXMesh, Oriented_VV)
 {
@@ -296,12 +393,12 @@ TEST(RXMesh, Queries)
             input_container.reset(INVALID32, rxmesh::DEVICE);
 
             // launch query
-            float tt = launcher(rxmesh_static.get_context(),
-                                ops_it,
-                                input_container,
-                                output_container,
-                                launch_box,
-                                oriented);
+            float tt = launcher_v1(rxmesh_static.get_context(),
+                                   ops_it,
+                                   input_container,
+                                   output_container,
+                                   launch_box,
+                                   oriented);
             total_time += tt;
             td.time_ms.push_back(tt);
         }
