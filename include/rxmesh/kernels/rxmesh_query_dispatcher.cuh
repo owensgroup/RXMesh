@@ -339,21 +339,43 @@ __device__ __inline__ void query_block_dispatcher_v1(
     // source elements in this patch.
 
     uint16_t local_id = threadIdx.x;
-    while (local_id < num_src_in_patch) {                
-        
+    while (local_id < num_src_in_patch) {
+
         if (compute_active_set({patch_id, local_id})) {
             constexpr uint32_t fixed_offset =
                 ((op == Op::EV)                 ? 2 :
                  (op == Op::FV || op == Op::FE) ? 3 :
                                                   0);
-            /*RXMeshIterator iter(local_id,
-                                s_output_value,
-                                s_output_offset,
-                                fixed_offset,
-                                num_src_in_patch,
-                                int(op == Op::FE));
-
-            compute_op({patch_id, local_id}, iter);*/
+            if constexpr (op == rxmesh::Op::VV || op == rxmesh::Op::EV ||
+                          op == rxmesh::Op::FV) {
+                RXMeshVertexIterator iter(local_id,
+                                          s_output_value,
+                                          s_output_offset,
+                                          fixed_offset,
+                                          patch_id,
+                                          int(op == Op::FE));
+                compute_op({patch_id, local_id}, iter);
+            }
+            if constexpr (op == rxmesh::Op::VE || op == rxmesh::Op::EE ||
+                          op == rxmesh::Op::FE) {
+                RXMeshEdgeIterator iter(local_id,
+                                        s_output_value,
+                                        s_output_offset,
+                                        fixed_offset,
+                                        patch_id,
+                                        int(op == Op::FE));
+                compute_op({patch_id, local_id}, iter);
+            }
+            if constexpr (op == rxmesh::Op::VF || op == rxmesh::Op::EF ||
+                          op == rxmesh::Op::FF) {
+                RXMeshFaceIterator iter(local_id,
+                                        s_output_value,
+                                        s_output_offset,
+                                        fixed_offset,
+                                        patch_id,
+                                        int(op == Op::FE));
+                compute_op({patch_id, local_id}, iter);
+            }
         }
 
         local_id += blockThreads;
