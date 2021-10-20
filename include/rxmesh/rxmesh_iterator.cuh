@@ -130,11 +130,11 @@ struct RXMeshIterator
     }
 };
 
-template <typename HandleT>
+template <typename HandleT, typename LocalT>
 struct RXMeshIteratorV1
 {
     __device__ RXMeshIteratorV1(const uint16_t  local_id,
-                                const uint16_t* patch_output,
+                                const LocalT*   patch_output,
                                 const uint16_t* patch_offset,
                                 const uint32_t  offset_size,
                                 const uint32_t  patch_id,
@@ -159,7 +159,7 @@ struct RXMeshIteratorV1
     {
         assert(m_patch_output);
         assert(i + m_begin < m_end);
-        return {m_patch_id, ((m_patch_output[m_begin + i]) >> m_shift)};
+        return {m_patch_id, ((m_patch_output[m_begin + i].id) >> m_shift)};
     }
 
     __device__ HandleT operator*() const
@@ -220,7 +220,7 @@ struct RXMeshIteratorV1
 
 
    private:
-    const uint16_t* m_patch_output;
+    const LocalT*   m_patch_output;
     const uint16_t* m_patch_offset;
     const uint32_t  m_patch_id;
     uint16_t        m_local_id;
@@ -244,8 +244,8 @@ struct RXMeshIteratorV1
     }
 };
 
-using RXMeshVertexIterator = RXMeshIteratorV1<VertexHandle>;
-using RXMeshEdgeIterator   = RXMeshIteratorV1<EdgeHandle>;
-using RXMeshFaceIterator   = RXMeshIteratorV1<FaceHandle>;
+using RXMeshVertexIterator = RXMeshIteratorV1<VertexHandle, LocalVertexT>;
+using RXMeshEdgeIterator   = RXMeshIteratorV1<EdgeHandle, LocalEdgeT>;
+using RXMeshFaceIterator   = RXMeshIteratorV1<FaceHandle, LocalFaceT>;
 
 }  // namespace rxmesh
