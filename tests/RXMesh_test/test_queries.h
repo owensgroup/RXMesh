@@ -152,8 +152,7 @@ float launcher_v1(const RXMeshContext&       context,
             break;
         case Op::EE:
             RXMESH_ERROR(
-                "RXMeshStatic::launcher_no_src() Op::EE is not "
-                "supported!!");
+                "RXMeshStatic::launcher_no_src() Op::EE is not supported!!");
             break;
         case Op::EF:
             query_v1<EdgeHandle, RXMeshFaceIterator, Op::EF, blockThreads>

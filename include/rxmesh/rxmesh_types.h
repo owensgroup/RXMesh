@@ -134,6 +134,24 @@ struct LocalFaceT
     uint16_t id;
 };
 
+namespace detail {
+/**
+ * @brief Return unique index of the local mesh element composed by the
+ * patch id and the local index
+ *
+ * @param local_id the local within-patch mesh element id
+ * @param patch_id the patch owning the mesh element
+ * @return
+ */
+uint64_t __device__ __host__ __forceinline__ unique_id(uint16_t local_id,
+                                                       uint32_t patch_id)
+{
+    uint64_t ret = local_id;
+    ret |= ret << 32;
+    ret |= patch_id;
+    return ret;
+}
+}  // namespace detail
 
 /**
  * @brief Unique identifier for vertices
@@ -159,6 +177,11 @@ struct VertexHandle
         const VertexHandle& rhs) const
     {
         return !(*this == rhs);
+    }
+
+    uint64_t __device__ __host__ __inline__ unique_id()
+    {
+        return detail::unique_id(m_v.id, m_patch_id);
     }
 
    private:
@@ -189,6 +212,11 @@ struct EdgeHandle
         return !(*this == rhs);
     }
 
+    uint64_t __device__ __host__ __inline__ unique_id()
+    {
+        return detail::unique_id(m_e.id, m_patch_id);
+    }
+
    private:
     uint32_t   m_patch_id;
     LocalEdgeT m_e;
@@ -215,6 +243,11 @@ struct FaceHandle
     bool __device__ __host__ __inline__ operator!=(const FaceHandle& rhs) const
     {
         return !(*this == rhs);
+    }
+
+    uint64_t __device__ __host__ __inline__ unique_id()
+    {
+        return detail::unique_id(m_f.id, m_patch_id);
     }
 
    private:

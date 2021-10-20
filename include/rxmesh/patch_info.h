@@ -35,56 +35,6 @@ struct ALIGN(16) PatchInfo
 
     // The index of this patch (relative to all other patches)
     uint32_t patch_id;
-
-    /**
-     * @brief Return a unique handle to a local vertex
-     * @param local_id the local within-patch vertex id
-     * @return
-     */
-    uint64_t __device__ __host__ __inline__ unique_id(LocalVertexT local_id)
-    {
-        return unique_id(local_id.id, patch_id);
-    }
-
-
-    /**
-     * @brief Return a unique handle to a local edge
-     * @param local_id the local within-patch edge id
-     * @return
-     */
-    uint64_t __device__ __host__ __inline__ unique_id(LocalEdgeT local_id)
-    {
-        return unique_id(local_id.id, patch_id);
-    }
-
-
-    /**
-     * @brief Return a unique handle to a local face
-     * @param local_id the local within-patch face id
-     * @return
-     */
-    uint64_t __device__ __host__ __inline__ unique_id(LocalFaceT local_id)
-    {
-        return unique_id(local_id.id, patch_id);
-    }
-
-
-    /**
-     * @brief Return unique index of the local mesh element composed by the
-     * patch id and the local index
-     *
-     * @param local_id the local within-patch mesh element id
-     * @param patch_id the patch owning the mesh element
-     * @return
-     */
-    static uint64_t __device__ __host__ __inline__ unique_id(uint16_t local_id,
-                                                             uint32_t patch_id)
-    {
-        uint64_t ret = local_id;
-        ret |= ret << 32;
-        ret |= patch_id;
-        return ret;
-    }
 };
 
 }  // namespace rxmesh
