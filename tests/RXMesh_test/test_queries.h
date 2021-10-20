@@ -5,10 +5,12 @@
 #include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_static.h"
 
+#include "rxmesh/rxmesh_iterator.cuh"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/math.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh_test.h"
+
 using namespace rxmesh;
 
 
@@ -121,28 +123,32 @@ float launcher_v1(const RXMeshContext&       context,
 
     switch (op) {
         case Op::VV:
-            query_v1<Op::VV, blockThreads><<<launch_box.blocks,
-                                             blockThreads,
-                                             launch_box.smem_bytes_dyn>>>(
-                context, input_container, output_container, oriented);
+            query_v1<VertexHandle, RXMeshVertexIterator, Op::VV, blockThreads>
+                <<<launch_box.blocks,
+                   blockThreads,
+                   launch_box.smem_bytes_dyn>>>(
+                    context, input_container, output_container, oriented);
             break;
         case Op::VE:
-            query_v1<Op::VE, blockThreads><<<launch_box.blocks,
-                                             blockThreads,
-                                             launch_box.smem_bytes_dyn>>>(
-                context, input_container, output_container);
+            query_v1<VertexHandle, RXMeshEdgeIterator, Op::VE, blockThreads>
+                <<<launch_box.blocks,
+                   blockThreads,
+                   launch_box.smem_bytes_dyn>>>(
+                    context, input_container, output_container);
             break;
         case Op::VF:
-            query_v1<Op::VF, blockThreads><<<launch_box.blocks,
-                                             blockThreads,
-                                             launch_box.smem_bytes_dyn>>>(
-                context, input_container, output_container);
+            query_v1<VertexHandle, RXMeshFaceIterator, Op::VF, blockThreads>
+                <<<launch_box.blocks,
+                   blockThreads,
+                   launch_box.smem_bytes_dyn>>>(
+                    context, input_container, output_container);
             break;
         case Op::EV:
-            query_v1<Op::EV, blockThreads><<<launch_box.blocks,
-                                             blockThreads,
-                                             launch_box.smem_bytes_dyn>>>(
-                context, input_container, output_container);
+            query_v1<EdgeHandle, RXMeshVertexIterator, Op::EV, blockThreads>
+                <<<launch_box.blocks,
+                   blockThreads,
+                   launch_box.smem_bytes_dyn>>>(
+                    context, input_container, output_container);
             break;
         case Op::EE:
             RXMESH_ERROR(
@@ -150,28 +156,32 @@ float launcher_v1(const RXMeshContext&       context,
                 "supported!!");
             break;
         case Op::EF:
-            query_v1<Op::EF, blockThreads><<<launch_box.blocks,
-                                             blockThreads,
-                                             launch_box.smem_bytes_dyn>>>(
-                context, input_container, output_container);
+            query_v1<EdgeHandle, RXMeshFaceIterator, Op::EF, blockThreads>
+                <<<launch_box.blocks,
+                   blockThreads,
+                   launch_box.smem_bytes_dyn>>>(
+                    context, input_container, output_container);
             break;
         case Op::FV:
-            query_v1<Op::FV, blockThreads><<<launch_box.blocks,
-                                             blockThreads,
-                                             launch_box.smem_bytes_dyn>>>(
-                context, input_container, output_container);
+            query_v1<FaceHandle, RXMeshVertexIterator, Op::FV, blockThreads>
+                <<<launch_box.blocks,
+                   blockThreads,
+                   launch_box.smem_bytes_dyn>>>(
+                    context, input_container, output_container);
             break;
         case Op::FE:
-            query_v1<Op::FE, blockThreads><<<launch_box.blocks,
-                                             blockThreads,
-                                             launch_box.smem_bytes_dyn>>>(
-                context, input_container, output_container);
+            query_v1<FaceHandle, RXMeshEdgeIterator, Op::FE, blockThreads>
+                <<<launch_box.blocks,
+                   blockThreads,
+                   launch_box.smem_bytes_dyn>>>(
+                    context, input_container, output_container);
             break;
         case Op::FF:
-            query_v1<Op::FF, blockThreads><<<launch_box.blocks,
-                                             blockThreads,
-                                             launch_box.smem_bytes_dyn>>>(
-                context, input_container, output_container);
+            query_v1<FaceHandle, RXMeshFaceIterator, Op::FF, blockThreads>
+                <<<launch_box.blocks,
+                   blockThreads,
+                   launch_box.smem_bytes_dyn>>>(
+                    context, input_container, output_container);
             break;
     }
 

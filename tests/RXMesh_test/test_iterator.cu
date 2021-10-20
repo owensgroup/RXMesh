@@ -1,5 +1,5 @@
 #include "gtest/gtest.h"
-#include "rxmesh/kernels/rxmesh_iterator.cuh"
+#include "rxmesh/rxmesh_iterator.cuh"
 #include "rxmesh/util/util.h"
 template <uint32_t fixedOffset>
 __global__ static void test_iterator(uint32_t* suceess,

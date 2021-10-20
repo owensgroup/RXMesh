@@ -5,10 +5,10 @@
 
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/debug.cuh"
-#include "rxmesh/kernels/rxmesh_iterator.cuh"
 #include "rxmesh/kernels/rxmesh_loader.cuh"
 #include "rxmesh/kernels/rxmesh_queries.cuh"
 #include "rxmesh/rxmesh_context.h"
+#include "rxmesh/rxmesh_iterator.cuh"
 #include "rxmesh/rxmesh_types.h"
 
 
@@ -17,7 +17,7 @@ namespace rxmesh {
 namespace detail {
 
 /**
- * query_block_dispatcher()
+ * query_block_dispatcher_v1()
  */
 template <Op op, typename T, uint32_t blockThreads, typename activeSetT>
 __device__ __inline__ void query_block_dispatcher_v1(
@@ -60,15 +60,15 @@ __device__ __inline__ void query_block_dispatcher_v1(
     // be read coalesced, we can rely on L1 cache here
     num_src_in_patch = 0;
     switch (src_element) {
-        case rxmesh::ELEMENT::VERTEX: {
+        case ELEMENT::VERTEX: {
             num_src_in_patch = patch_info.num_owned_vertices;
             break;
         }
-        case rxmesh::ELEMENT::EDGE: {
+        case ELEMENT::EDGE: {
             num_src_in_patch = patch_info.num_owned_edges;
             break;
         }
-        case rxmesh::ELEMENT::FACE: {
+        case ELEMENT::FACE: {
             num_src_in_patch = patch_info.num_owned_faces;
             break;
         }
@@ -184,19 +184,19 @@ __device__ __inline__ void query_block_dispatcher(
     input_mapping    = nullptr;
     num_src_in_patch = 0;
     switch (src_element) {
-        case rxmesh::ELEMENT::VERTEX: {
+        case ELEMENT::VERTEX: {
             input_mapping =
                 context.get_patches_ltog_v() + src_element_ad_size.x;
             num_src_in_patch = context.get_num_owned_vertices()[patch_id];
             break;
         }
-        case rxmesh::ELEMENT::EDGE: {
+        case ELEMENT::EDGE: {
             input_mapping =
                 context.get_patches_ltog_e() + src_element_ad_size.x;
             num_src_in_patch = context.get_num_owned_edges()[patch_id];
             break;
         }
-        case rxmesh::ELEMENT::FACE: {
+        case ELEMENT::FACE: {
             input_mapping =
                 context.get_patches_ltog_f() + src_element_ad_size.x;
             num_src_in_patch = context.get_num_owned_faces()[patch_id];
@@ -346,8 +346,7 @@ __device__ __inline__ void query_block_dispatcher_v1(
                 ((op == Op::EV)                 ? 2 :
                  (op == Op::FV || op == Op::FE) ? 3 :
                                                   0);
-            if constexpr (op == rxmesh::Op::VV || op == rxmesh::Op::EV ||
-                          op == rxmesh::Op::FV) {
+            if constexpr (op == Op::VV || op == Op::EV || op == Op::FV) {
                 RXMeshVertexIterator iter(local_id,
                                           s_output_value,
                                           s_output_offset,
@@ -356,8 +355,7 @@ __device__ __inline__ void query_block_dispatcher_v1(
                                           int(op == Op::FE));
                 compute_op({patch_id, local_id}, iter);
             }
-            if constexpr (op == rxmesh::Op::VE || op == rxmesh::Op::EE ||
-                          op == rxmesh::Op::FE) {
+            if constexpr (op == Op::VE || op == Op::EE || op == Op::FE) {
                 RXMeshEdgeIterator iter(local_id,
                                         s_output_value,
                                         s_output_offset,
@@ -366,8 +364,7 @@ __device__ __inline__ void query_block_dispatcher_v1(
                                         int(op == Op::FE));
                 compute_op({patch_id, local_id}, iter);
             }
-            if constexpr (op == rxmesh::Op::VF || op == rxmesh::Op::EF ||
-                          op == rxmesh::Op::FF) {
+            if constexpr (op == Op::VF || op == Op::EF || op == Op::FF) {
                 RXMeshFaceIterator iter(local_id,
                                         s_output_value,
                                         s_output_offset,
@@ -458,20 +455,17 @@ __device__ __inline__ void query_block_dispatcher_v1(
         return;
     }
 
-    if constexpr (op == rxmesh::Op::VV || op == rxmesh::Op::EV ||
-                  op == rxmesh::Op::FV) {
+    if constexpr (op == Op::VV || op == Op::EV || op == Op::FV) {
         query_block_dispatcher_v1<op, LocalVertexT, blockThreads>(
             context, blockIdx.x, compute_op, compute_active_set, oriented);
     }
 
-    if constexpr (op == rxmesh::Op::VE || op == rxmesh::Op::EE ||
-                  op == rxmesh::Op::FE) {
+    if constexpr (op == Op::VE || op == Op::EE || op == Op::FE) {
         query_block_dispatcher_v1<op, LocalEdgeT, blockThreads>(
             context, blockIdx.x, compute_op, compute_active_set, oriented);
     }
 
-    if constexpr (op == rxmesh::Op::VF || op == rxmesh::Op::EF ||
-                  op == rxmesh::Op::FF) {
+    if constexpr (op == Op::VF || op == Op::EF || op == Op::FF) {
         query_block_dispatcher_v1<op, LocalFaceT, blockThreads>(
             context, blockIdx.x, compute_op, compute_active_set, oriented);
     }
@@ -511,20 +505,17 @@ __device__ __inline__ void query_block_dispatcher_v1(
     if (blockIdx.x >= context.get_num_patches()) {
         return;
     }
-    if constexpr (op == rxmesh::Op::VV || op == rxmesh::Op::VE ||
-                  op == rxmesh::Op::VF) {
+    if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
         query_block_dispatcher_v1<op, blockThreads>(
             context, compute_op, [](VertexHandle) { return true; }, oriented);
     }
 
-    if constexpr (op == rxmesh::Op::FV || op == rxmesh::Op::FE ||
-                  op == rxmesh::Op::FF) {
+    if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
         query_block_dispatcher_v1<op, blockThreads>(
             context, compute_op, [](FaceHandle) { return true; }, oriented);
     }
 
-    if constexpr (op == rxmesh::Op::EV || op == rxmesh::Op::EE ||
-                  op == rxmesh::Op::EF) {
+    if constexpr (op == Op::EV || op == Op::EE || op == Op::EF) {
         query_block_dispatcher_v1<op, blockThreads>(
             context, compute_op, [](EdgeHandle) { return true; }, oriented);
     }
@@ -569,19 +560,19 @@ __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
     uint32_t element_patch = INVALID32;
     if (element_id != INVALID32) {
         switch (op) {
-            case rxmesh::Op::VV:
-            case rxmesh::Op::VE:
-            case rxmesh::Op::VF:
+            case Op::VV:
+            case Op::VE:
+            case Op::VF:
                 element_patch = context.get_vertex_patch()[element_id];
                 break;
-            case rxmesh::Op::FV:
-            case rxmesh::Op::FE:
-            case rxmesh::Op::FF:
+            case Op::FV:
+            case Op::FE:
+            case Op::FF:
                 element_patch = context.get_face_patch()[element_id];
                 break;
-            case rxmesh::Op::EV:
-            case rxmesh::Op::EE:
-            case rxmesh::Op::EF:
+            case Op::EV:
+            case Op::EE:
+            case Op::EF:
                 element_patch = context.get_edge_patch()[element_id];
                 break;
         }

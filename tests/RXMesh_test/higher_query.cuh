@@ -3,10 +3,10 @@
 #include <assert.h>
 #include <stdint.h>
 
-#include "rxmesh/kernels/rxmesh_iterator.cuh"
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
 #include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_context.h"
+#include "rxmesh/rxmesh_iterator.cuh"
 #include "rxmesh/rxmesh_types.h"
 
 /**
