@@ -48,8 +48,8 @@ template <typename HandleT,
           uint32_t   blockThreads>
 __launch_bounds__(blockThreads) __global__
     static void query_v1(const rxmesh::RXMeshContext       context,
-                         rxmesh::RXMeshAttribute<uint32_t> d_src,
-                         rxmesh::RXMeshAttribute<uint32_t> output_container,
+                         rxmesh::RXMeshAttribute<uint64_t> d_src,
+                         rxmesh::RXMeshAttribute<uint64_t> output_container,
                          const bool                        oriented = false)
 {
     using namespace rxmesh;
