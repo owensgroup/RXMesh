@@ -134,7 +134,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
     m_h_patches_ev.resize(m_num_patches);
 
     //#pragma omp parallel for
-    for (int p = 0; p < m_num_patches; ++p) {
+    for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
         build_single_patch(fv, p);
     }
 
@@ -352,12 +352,12 @@ void RXMesh::build_single_patch_ltog(
     };
 
     uint16_t local_face_id = 0;
-    for (int f = p_start; f < p_end; ++f) {
+    for (uint32_t f = p_start; f < p_end; ++f) {
         uint32_t face_id = m_patcher->get_patches_val()[f];
         add_new_face(face_id, local_face_id++);
     }
 
-    for (int f = r_start; f < r_end; ++f) {
+    for (uint32_t f = r_start; f < r_end; ++f) {
         uint32_t face_id = m_patcher->get_external_ribbon_val()[f];
         add_new_face(face_id, local_face_id++);
     }
@@ -445,8 +445,6 @@ void RXMesh::build_single_patch_topology(
             const uint32_t global_v0 = fv[global_face_id][v];
             const uint32_t global_v1 = fv[global_face_id][(v + 1) % 3];
 
-            const uint32_t edge_id = get_edge_id(global_v0, global_v1);
-
             std::pair<uint32_t, uint32_t> edge_key =
                 detail::edge_key(global_v0, global_v1);
 
@@ -499,12 +497,12 @@ void RXMesh::build_single_patch_topology(
     };
 
 
-    for (int f = p_start; f < p_end; ++f) {
+    for (uint32_t f = p_start; f < p_end; ++f) {
         uint32_t face_id = m_patcher->get_patches_val()[f];
         add_new_face(face_id);
     }
 
-    for (int f = r_start; f < r_end; ++f) {
+    for (uint32_t f = r_start; f < r_end; ++f) {
         uint32_t face_id = m_patcher->get_external_ribbon_val()[f];
         add_new_face(face_id);
     }
@@ -737,7 +735,7 @@ void RXMesh::build_device()
         cudaMalloc((void**)&m_patches_info, m_num_patches * sizeof(PatchInfo)));
 
     //#pragma omp parallel for
-    for (int p = 0; p < m_num_patches; ++p) {
+    for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
         PatchInfo patch;
         patch.num_faces          = m_h_patches_ltog_f[p].size();
         patch.num_edges          = m_h_patches_ltog_e[p].size();
@@ -771,7 +769,7 @@ void RXMesh::build_device()
                 auto*&                                    d_not_owned_id,
                 uint32_t*&                                d_not_owned_patch) {
                 using LocalT =
-                    std::remove_reference<decltype(*d_not_owned_id)>::type;
+                    typename std::remove_reference<decltype(*d_not_owned_id)>::type;
 
                 const uint16_t num_not_owned = ltog[p].size() - num_owned[p];
 
