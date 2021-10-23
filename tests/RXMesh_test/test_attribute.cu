@@ -447,7 +447,6 @@ void test_copy()
     using namespace rxmesh;
     uint32_t                       num_mesh_elements = 2048;
     rxmesh::RXMeshAttribute<float> rxmesh_attr;
-
     rxmesh_attr.set_name("float_attr");
     rxmesh_attr.init(num_mesh_elements, 1, rxmesh::HOST, rxmesh::AoS);
 
@@ -459,6 +458,9 @@ void test_copy()
 
     EXPECT_EQ(num_mesh_elements, copy.get_num_mesh_elements());
     EXPECT_EQ(1, copy.get_num_attribute_per_element());
+    std::string name (copy.get_name());
+
+    EXPECT_TRUE(name == "float_attr");
 
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
         EXPECT_EQ(rxmesh_attr(i), i) << " TestAttributes::test_copy failed";

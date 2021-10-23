@@ -4,6 +4,7 @@
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/rxmesh_attribute.cuh"
 #include "rxmesh/kernels/util.cuh"
+#include "rxmesh/util/log.h"
 #include "rxmesh/util/util.h"
 #include "rxmesh/util/vector.h"
 
@@ -62,6 +63,10 @@ class RXMeshAttributeBase
 {
    public:
     RXMeshAttributeBase() = default;
+
+    // virtual RXMeshAttributeBase* clone() const = 0;
+
+    virtual const char* get_name() const = 0;
 
     virtual ~RXMeshAttributeBase() = default;
 };
@@ -139,6 +144,19 @@ class RXMeshAttribute : public RXMeshAttributeBase
         this->m_name = (char*)malloc(sizeof(char) * name.length() + 1);
         strcpy(this->m_name, name.c_str());
     }
+
+    const char* get_name() const
+    {
+        return m_name;
+    }
+
+    // virtual RXMeshAttributeBase* clone() const
+    //{
+    //    RXMeshAttribute<T>* attr = new RXMeshAttribute<T>(m_name);
+    //    *attr                    = *this;
+    //    return attr;
+    //
+    //}
 
     __host__ __device__ __forceinline__ uint32_t get_num_mesh_elements() const
     {
@@ -787,7 +805,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
 #endif
     }
 
-    __host__ RXMeshAttribute& operator=(const RXMeshAttribute& rhs)
+    RXMeshAttribute& operator=(const RXMeshAttribute& rhs)
     {
         if (rhs.m_name != nullptr) {
             this->m_name =
@@ -959,13 +977,13 @@ class RXMeshAttribute : public RXMeshAttributeBase
 };
 
 /**
- * @brief Attributes for faces
- * TODO
+ * @brief Attributes for faces 
  * @tparam T the attribute type
  */
 template <class T>
 class RXMeshFaceAttribute : public RXMeshAttribute<T>
 {
+   public:
     RXMeshFaceAttribute() : RXMeshAttribute<T>()
     {
     }
@@ -977,13 +995,14 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
 
 
 /**
- * @brief Attributes for edges
- * TODO
+ * @brief Attributes for edges 
  * @tparam T the attribute type
  */
 template <class T>
 class RXMeshEdgeAttribute : public RXMeshAttribute<T>
 {
+   public:
+
     RXMeshEdgeAttribute() : RXMeshAttribute<T>()
     {
     }
@@ -995,13 +1014,14 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
 
 
 /**
- * @brief Attributes for vertices
- * TODO
+ * @brief Attributes for vertices 
  * @tparam T the attribute type
  */
 template <class T>
 class RXMeshVertexAttribute : public RXMeshAttribute<T>
 {
+   public:
+
     RXMeshVertexAttribute() : RXMeshAttribute<T>()
     {
     }
@@ -1016,27 +1036,78 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
  */
 class RXMeshAttributeContainer
 {
+   public:
     RXMeshAttributeContainer()          = default;
     virtual ~RXMeshAttributeContainer() = default;
 
-
-    RXMeshAttributeContainer(const RXMeshAttributeContainer& rhs)
+    size_t size()
     {
-        operator=(rhs);
+        return m_attr_container.size();
     }
 
-
-    RXMeshAttributeContainer& operator=(const RXMeshAttributeContainer& rhs)
+    std::vector<std::string> get_attribute_names() const
     {
-        if (this != &rhs) {            
-            m_attr_container.resize(rhs.m_attr_container.size());
-            for (size_t i = 0; i < m_attr_container.size(); ++i) {
-                m_attr_container[i] = rhs.m_attr_container[i];
+        std::vector<std::string> names;
+        for (size_t i = 0; i < m_attr_container.size(); ++i) {
+            names.push_back(m_attr_container[i]->get_name());
+        }
+        return names;
+    }
+
+    template <typename T>
+    std::shared_ptr<RXMeshAttribute<T>> add(const char* const name)
+    {
+        if (does_exist(name)) {
+            RXMESH_WARN(
+                "RXMeshAttributeContainer::add() adding an attribute with "
+                "name {} already exists!",
+                std::string(name));
+        }
+
+        auto new_attr = std::make_shared<RXMeshAttribute<T>>(name);
+        m_attr_container.push_back(new_attr);
+        return new_attr;
+    }
+
+    bool does_exist(const char* const name)
+    {
+        for (size_t i = 0; i < m_attr_container.size(); ++i) {
+            if (!strcmp(m_attr_container[i]->get_name(), name)) {
+                return true;
             }
         }
-        return *this;
+        return false;
     }
 
+    template <typename T>
+    RXMeshAttribute<T>* get_attribute(const char* const name)
+    {
+        for (size_t i = 0; i < m_attr_container.size(); ++i) {
+            if (!strcmp(m_attr_container[i]->get_name(), name)) {
+                return m_attr_container[i];
+            }
+        }
+        RXMESH_ERROR(
+            "RXMeshAttributeContainer::get_attribute() No attribute exists "
+            "with name {}",
+            std::string(name));
+    }
+
+    template <typename T>
+    void remove_attribute(RXMeshAttribute<T>& attr)
+    {
+        for (auto it = m_attr_container.begin(); it != m_attr_container.end();
+             ++it) {
+
+            if (*it == attr) {
+                attr.release();
+                m_attr_container.erase(it);
+                break;
+            }
+        }
+    }
+
+   private:
     std::vector<std::shared_ptr<RXMeshAttributeBase>> m_attr_container;
 };
 

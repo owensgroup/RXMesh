@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include <assert.h>
 #include <cuda_profiler_api.h>
+#include <memory>
 #include "rxmesh/kernels/prototype.cuh"
 #include "rxmesh/launch_box.h"
 #include "rxmesh/rxmesh.h"
@@ -53,28 +54,33 @@ class RXMeshStatic : public RXMesh
             op, launch_box, is_higher_query, oriented);
     }
 
-    // TODO
+
     template <class T>
-    RXMeshFaceAttribute<T> face_attribute(const std::string& name,
-                                          const T            t = T())
+    std::shared_ptr<RXMeshFaceAttribute<T>> add_face_attribute(
+        const std::string& name,
+        const T            t = T())
     {
-        return RXMeshFaceAttribute<T>();
+        return std::dynamic_pointer_cast<RXMeshFaceAttribute<T>>(
+            m_attr_container.template add<T>(name.c_str()));
     }
 
-    // TODO
-    template <class T>
-    RXMeshEdgeAttribute<T> edge_attribute(const std::string& name,
-                                          const T            t = T())
-    {
-        return RXMeshEdgeAttribute<T>();
-    }
 
-    // TODO
     template <class T>
-    RXMeshVertexAttribute<T> vertex_attribute(const std::string& name,
-                                              const T            t = T())
+    std::shared_ptr<RXMeshEdgeAttribute<T>> add_edge_attribute(
+        const std::string& name,
+        const T            t = T())
     {
-        return RXMeshVertexAttribute<T>();
+        return std::dynamic_pointer_cast<RXMeshEdgeAttribute<T>>(
+            m_attr_container.template add<T>(name.c_str()));
+    }
+        
+    template <class T>
+    std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
+        const std::string& name,
+        const T            t = T())
+    {
+        return std::dynamic_pointer_cast<add_vertex_attribute<T>>(
+            m_attr_container.template add<T>(name.c_str()));
     }
 
    protected:
@@ -360,5 +366,8 @@ class RXMeshStatic : public RXMesh
         }
         return static_cast<uint32_t>(smem_bytes_static);
     }
+
+
+    RXMeshAttributeContainer m_attr_container;
 };
 }  // namespace rxmesh
