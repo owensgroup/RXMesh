@@ -59,7 +59,7 @@ static std::string location_to_string(locationT target)
  * attached to mesh element (e.g., vertices, edges, or faces).
  * largely inspired by
  * https://github.com/gunrock/gunrock/blob/master/gunrock/util/array_utils.cuh
- * 
+ *
  * @tparam T type of the attribute
  */
 template <class T>
@@ -888,4 +888,59 @@ class RXMeshAttribute
     cudaStream_t* m_reduce_streams;
     T**           m_norm2_temp_buffer;
 };
+
+/**
+ * @brief Attributes for faces
+ * TODO
+ * @tparam T the attribute type
+ */
+template <class T>
+class RXMeshFaceAttribute : RXMeshAttribute<T>
+{
+    RXMeshFaceAttribute() : RXMeshAttribute<T>()
+    {
+    }
+
+    RXMeshFaceAttribute(const char* const name) : RXMeshAttribute<T>(name)
+    {
+    }
+};
+
+
+/**
+ * @brief Attributes for edges
+ * TODO
+ * @tparam T the attribute type
+ */
+template <class T>
+class RXMeshEdgeAttribute : RXMeshAttribute<T>
+{
+    RXMeshEdgeAttribute() : RXMeshAttribute<T>()
+    {
+    }
+
+    RXMeshEdgeAttribute(const char* const name) : RXMeshAttribute<T>(name)
+    {
+    }
+};
+
+
+/**
+ * @brief Attributes for vertices
+ * TODO
+ * @tparam T the attribute type
+ */
+template <class T>
+class RXMeshVertexAttribute : RXMeshAttribute<T>
+{
+    RXMeshVertexAttribute() : RXMeshAttribute<T>()
+    {
+    }
+
+    RXMeshVertexAttribute(const char* const name) : RXMeshAttribute<T>(name)
+    {
+    }
+};
+
+
 }  // namespace rxmesh

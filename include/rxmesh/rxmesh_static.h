@@ -4,6 +4,7 @@
 #include "rxmesh/kernels/prototype.cuh"
 #include "rxmesh/launch_box.h"
 #include "rxmesh/rxmesh.h"
+#include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/timer.h"
 
@@ -50,6 +51,30 @@ class RXMeshStatic : public RXMesh
 
         this->template calc_shared_memory<blockThreads>(
             op, launch_box, is_higher_query, oriented);
+    }
+
+    // TODO
+    template <class T>
+    RXMeshFaceAttribute<T> face_attribute(const std::string& name,
+                                          const T            t = T())
+    {
+        return RXMeshFaceAttribute<T>();
+    }
+
+    // TODO
+    template <class T>
+    RXMeshEdgeAttribute<T> edge_attribute(const std::string& name,
+                                          const T            t = T())
+    {
+        return RXMeshEdgeAttribute<T>();
+    }
+
+    // TODO
+    template <class T>
+    RXMeshVertexAttribute<T> vertex_attribute(const std::string& name,
+                                              const T            t = T())
+    {
+        return RXMeshVertexAttribute<T>();
     }
 
    protected:

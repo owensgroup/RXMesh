@@ -17,6 +17,9 @@ constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 11;
 // assuming a 32-bit index
 #define FULL_MASK 0xffffffff
 
+// unsigned 64-bit
+#define INVALID64 0xFFFFFFFFFFFFFFFFu
+
 // unsigned 32-bit
 #define INVALID32 0xFFFFFFFFu
 
