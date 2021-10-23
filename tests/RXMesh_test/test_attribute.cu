@@ -442,7 +442,30 @@ bool test_dot()
     return is_passed;
 }
 
+void test_copy()
+{
+    using namespace rxmesh;
+    uint32_t                       num_mesh_elements = 2048;
+    rxmesh::RXMeshAttribute<float> rxmesh_attr;
 
+    rxmesh_attr.set_name("float_attr");
+    rxmesh_attr.init(num_mesh_elements, 1, rxmesh::HOST, rxmesh::AoS);
+
+    for (uint32_t i = 0; i < num_mesh_elements; ++i) {
+        rxmesh_attr(i) = i;
+    }
+
+    auto copy = rxmesh_attr;
+
+    EXPECT_EQ(num_mesh_elements, copy.get_num_mesh_elements());
+    EXPECT_EQ(1, copy.get_num_attribute_per_element());
+
+    for (uint32_t i = 0; i < num_mesh_elements; ++i) {
+        EXPECT_EQ(rxmesh_attr(i), i) << " TestAttributes::test_copy failed";
+    }
+
+    rxmesh_attr.release();
+}
 TEST(RXMesh, Attributes)
 {
     using namespace rxmesh;
@@ -453,6 +476,7 @@ TEST(RXMesh, Attributes)
     EXPECT_TRUE(test_reduce()) << " TestAttributes::test_reduce failed";
     EXPECT_TRUE(test_norm2()) << " TestAttributes::test_norm2 failed";
     EXPECT_TRUE(test_dot()) << " TestAttributes::test_dot failed";
+    test_copy();
 
     CUDA_ERROR(cudaDeviceSynchronize());
 }

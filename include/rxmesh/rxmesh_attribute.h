@@ -54,6 +54,18 @@ static std::string location_to_string(locationT target)
     return str;
 }
 
+
+/**
+ * @brief Base untyped attributes used as an interface for attribute container
+ */
+class RXMeshAttributeBase
+{
+   public:
+    RXMeshAttributeBase() = default;
+
+    virtual ~RXMeshAttributeBase() = default;
+};
+
 /**
  * @brief  Here we manage the attributes on top of the mesh. An attributes is
  * attached to mesh element (e.g., vertices, edges, or faces).
@@ -63,11 +75,12 @@ static std::string location_to_string(locationT target)
  * @tparam T type of the attribute
  */
 template <class T>
-class RXMeshAttribute
+class RXMeshAttribute : public RXMeshAttributeBase
 {
    public:
     RXMeshAttribute()
-        : m_name(nullptr),
+        : RXMeshAttributeBase(),
+          m_name(nullptr),
           m_num_mesh_elements(0),
           m_num_attribute_per_element(0),
           m_allocated(LOCATION_NONE),
@@ -116,6 +129,9 @@ class RXMeshAttribute
         m_pitch.y = 0;
     }
 
+    RXMeshAttribute(const RXMeshAttribute& rhs) = default;
+
+    virtual ~RXMeshAttribute() = default;
 
     void set_name(std::string name)
     {
@@ -216,74 +232,7 @@ class RXMeshAttribute
         }
 
         if (!m_is_reduce_allocated && with_reduce_alloc) {
-            // Reduce operations are either SUM, MIN, MAX, or NORM2
-            // NORM2 produce is done in two passes, the first pass uses cub
-            // device API to multiply the input and then store in a temp buffer
-            // (every CUDA block outputs a single value) which then is used for
-            // the second pass using cub host API The other three operations
-            // uses only cub host API. cub host API requires temp buffer which
-            // is taken as the max of what NORM2 requires and the other three
-            // operations.
-
-            // NORM2 temp buffer (to store the per-block output)
-            uint32_t num_blocks = DIVIDE_UP(m_num_mesh_elements, m_block_size);
-            m_norm2_temp_buffer =
-                (T**)malloc(sizeof(T*) * m_num_attribute_per_element);
-            if (!m_norm2_temp_buffer) {
-                RXMESH_ERROR(
-                    "RXMeshAttribute::init() could not allocate "
-                    "m_norm2_temp_buffer.");
-            }
-            for (uint32_t i = 0; i < m_num_attribute_per_element; ++i) {
-                CUDA_ERROR(cudaMalloc(&m_norm2_temp_buffer[i],
-                                      sizeof(T) * num_blocks));
-            }
-
-            m_d_reduce_output =
-                (T**)malloc(sizeof(T*) * m_num_attribute_per_element);
-            if (!m_d_reduce_output) {
-                RXMESH_ERROR(
-                    "RXMeshAttribute::init() could not allocate "
-                    "m_d_reduce_output.");
-            }
-            m_d_reduce_temp_storage =
-                (void**)malloc(sizeof(void*) * m_num_attribute_per_element);
-            if (!m_d_reduce_temp_storage) {
-                RXMESH_ERROR(
-                    "RXMeshAttribute::init() could not allocate "
-                    "m_d_reduce_temp_storage.");
-            }
-            m_reduce_streams = (cudaStream_t*)malloc(
-                sizeof(cudaStream_t) * m_num_attribute_per_element);
-            if (!m_d_reduce_output) {
-                RXMESH_ERROR(
-                    "RXMeshAttribute::init() could not allocate "
-                    "m_reduce_streams.");
-            }
-            {  // get the num bytes for cub device-wide reduce
-                size_t norm2_temp_bytes(0), other_reduce_temp_bytes(0);
-                T*     d_out(NULL);
-                m_d_reduce_temp_storage[0] = NULL;
-                cub::DeviceReduce::Sum(m_d_reduce_temp_storage[0],
-                                       norm2_temp_bytes,
-                                       m_d_attr,
-                                       d_out,
-                                       num_blocks);
-                cub::DeviceReduce::Sum(m_d_reduce_temp_storage[0],
-                                       other_reduce_temp_bytes,
-                                       m_d_attr,
-                                       d_out,
-                                       m_num_mesh_elements);
-                m_reduce_temp_storage_bytes =
-                    std::max(norm2_temp_bytes, other_reduce_temp_bytes);
-            }
-
-            for (uint32_t i = 0; i < m_num_attribute_per_element; ++i) {
-                CUDA_ERROR(cudaMalloc(&m_d_reduce_temp_storage[i],
-                                      m_reduce_temp_storage_bytes));
-                CUDA_ERROR(cudaMalloc(&m_d_reduce_output[i], sizeof(T)));
-                CUDA_ERROR(cudaStreamCreate(&m_reduce_streams[i]));
-            }
+            allocate_reduce_temp_storage(0);
         }
     }
 
@@ -838,6 +787,52 @@ class RXMeshAttribute
 #endif
     }
 
+    __host__ RXMeshAttribute& operator=(const RXMeshAttribute& rhs)
+    {
+        if (rhs.m_name != nullptr) {
+            this->m_name =
+                (char*)malloc(sizeof(char) * (strlen(rhs.m_name) + 1));
+            strcpy(this->m_name, rhs.m_name);
+        }
+        m_num_mesh_elements         = rhs.m_num_mesh_elements;
+        m_num_attribute_per_element = rhs.m_num_attribute_per_element;
+        m_allocated                 = rhs.m_allocated;
+        if (rhs.is_device_allocated()) {
+            if (rhs.m_num_mesh_elements != 0) {
+                uint64_t num_bytes = sizeof(T) * rhs.m_num_mesh_elements *
+                                     rhs.m_num_attribute_per_element;
+                CUDA_ERROR(cudaMalloc((void**)&m_d_attr, num_bytes));
+                CUDA_ERROR(cudaMemcpy(m_d_attr,
+                                      rhs.m_d_attr,
+                                      num_bytes,
+                                      cudaMemcpyDeviceToDevice));
+            }
+        }
+        if (rhs.is_host_allocated()) {
+            if (rhs.m_num_mesh_elements != 0) {
+                uint64_t num_bytes = sizeof(T) * rhs.m_num_mesh_elements *
+                                     rhs.m_num_attribute_per_element;
+                m_h_attr = (T*)malloc(num_bytes);
+                std::memcpy((void*)m_h_attr, rhs.m_h_attr, num_bytes);
+            }
+        }
+        m_layout            = rhs.m_layout;
+        m_pitch.x           = rhs.m_pitch.x;
+        m_pitch.y           = rhs.m_pitch.y;
+        m_is_axpy_allocated = rhs.m_is_axpy_allocated;
+        if (rhs.m_is_axpy_allocated) {
+            CUDA_ERROR(cudaMalloc((void**)&d_axpy_alpha,
+                                  m_num_attribute_per_element * sizeof(T)));
+            CUDA_ERROR(cudaMalloc((void**)&d_axpy_beta,
+                                  m_num_attribute_per_element * sizeof(T)));
+        }
+        m_is_reduce_allocated = rhs.m_is_reduce_allocated;
+        if (rhs.m_is_reduce_allocated) {
+            allocate_reduce_temp_storage(m_is_reduce_allocated);
+        }
+        return *this;
+    }
+
     __host__ __device__ __forceinline__ bool is_empty() const
     {
 #ifdef __CUDA_ARCH__
@@ -861,6 +856,80 @@ class RXMeshAttribute
             m_pitch.y = m_num_mesh_elements;
         } else {
             RXMESH_ERROR("RXMeshAttribute::set_pitch() unknown layout");
+        }
+    }
+
+    void allocate_reduce_temp_storage(size_t reduce_temp_bytes)
+    {
+
+        // Reduce operations are either SUM, MIN, MAX, or NORM2
+        // NORM2 produce is done in two passes, the first pass uses cub
+        // device API to multiply the input and then store in a temp buffer
+        // (every CUDA block outputs a single value) which then is used for
+        // the second pass using cub host API The other three operations
+        // uses only cub host API. cub host API requires temp buffer which
+        // is taken as the max of what NORM2 requires and the other three
+        // operations.
+
+        // NORM2 temp buffer (to store the per-block output)
+        uint32_t num_blocks = DIVIDE_UP(m_num_mesh_elements, m_block_size);
+        m_norm2_temp_buffer =
+            (T**)malloc(sizeof(T*) * m_num_attribute_per_element);
+        if (!m_norm2_temp_buffer) {
+            RXMESH_ERROR(
+                "RXMeshAttribute::allocate_reduce_temp_storage() could not "
+                "allocate m_norm2_temp_buffer.");
+        }
+        for (uint32_t i = 0; i < m_num_attribute_per_element; ++i) {
+            CUDA_ERROR(
+                cudaMalloc(&m_norm2_temp_buffer[i], sizeof(T) * num_blocks));
+        }
+
+        m_d_reduce_output =
+            (T**)malloc(sizeof(T*) * m_num_attribute_per_element);
+        if (!m_d_reduce_output) {
+            RXMESH_ERROR(
+                "RXMeshAttribute::allocate_reduce_temp_storage() could not "
+                "allocate m_d_reduce_output.");
+        }
+        m_d_reduce_temp_storage =
+            (void**)malloc(sizeof(void*) * m_num_attribute_per_element);
+        if (!m_d_reduce_temp_storage) {
+            RXMESH_ERROR(
+                "RXMeshAttribute::allocate_reduce_temp_storage() could not "
+                "allocate m_d_reduce_temp_storage.");
+        }
+        m_reduce_streams = (cudaStream_t*)malloc(sizeof(cudaStream_t) *
+                                                 m_num_attribute_per_element);
+        if (!m_d_reduce_output) {
+            RXMESH_ERROR(
+                "RXMeshAttribute::init() could not allocate "
+                "m_reduce_streams.");
+        }
+        if (reduce_temp_bytes == 0) {
+            // get the num bytes for cub device-wide reduce
+            size_t norm2_temp_bytes(0), other_reduce_temp_bytes(0);
+            T*     d_out(NULL);
+            m_d_reduce_temp_storage[0] = NULL;
+            cub::DeviceReduce::Sum(m_d_reduce_temp_storage[0],
+                                   norm2_temp_bytes,
+                                   m_d_attr,
+                                   d_out,
+                                   num_blocks);
+            cub::DeviceReduce::Sum(m_d_reduce_temp_storage[0],
+                                   other_reduce_temp_bytes,
+                                   m_d_attr,
+                                   d_out,
+                                   m_num_mesh_elements);
+            m_reduce_temp_storage_bytes =
+                std::max(norm2_temp_bytes, other_reduce_temp_bytes);
+        }
+
+        for (uint32_t i = 0; i < m_num_attribute_per_element; ++i) {
+            CUDA_ERROR(cudaMalloc(&m_d_reduce_temp_storage[i],
+                                  m_reduce_temp_storage_bytes));
+            CUDA_ERROR(cudaMalloc(&m_d_reduce_output[i], sizeof(T)));
+            CUDA_ERROR(cudaStreamCreate(&m_reduce_streams[i]));
         }
     }
 
@@ -895,7 +964,7 @@ class RXMeshAttribute
  * @tparam T the attribute type
  */
 template <class T>
-class RXMeshFaceAttribute : RXMeshAttribute<T>
+class RXMeshFaceAttribute : public RXMeshAttribute<T>
 {
     RXMeshFaceAttribute() : RXMeshAttribute<T>()
     {
@@ -913,7 +982,7 @@ class RXMeshFaceAttribute : RXMeshAttribute<T>
  * @tparam T the attribute type
  */
 template <class T>
-class RXMeshEdgeAttribute : RXMeshAttribute<T>
+class RXMeshEdgeAttribute : public RXMeshAttribute<T>
 {
     RXMeshEdgeAttribute() : RXMeshAttribute<T>()
     {
@@ -931,7 +1000,7 @@ class RXMeshEdgeAttribute : RXMeshAttribute<T>
  * @tparam T the attribute type
  */
 template <class T>
-class RXMeshVertexAttribute : RXMeshAttribute<T>
+class RXMeshVertexAttribute : public RXMeshAttribute<T>
 {
     RXMeshVertexAttribute() : RXMeshAttribute<T>()
     {
@@ -942,5 +1011,33 @@ class RXMeshVertexAttribute : RXMeshAttribute<T>
     }
 };
 
+/**
+ * @brief Attribute container used to managing attributes
+ */
+class RXMeshAttributeContainer
+{
+    RXMeshAttributeContainer()          = default;
+    virtual ~RXMeshAttributeContainer() = default;
+
+
+    RXMeshAttributeContainer(const RXMeshAttributeContainer& rhs)
+    {
+        operator=(rhs);
+    }
+
+
+    RXMeshAttributeContainer& operator=(const RXMeshAttributeContainer& rhs)
+    {
+        if (this != &rhs) {            
+            m_attr_container.resize(rhs.m_attr_container.size());
+            for (size_t i = 0; i < m_attr_container.size(); ++i) {
+                m_attr_container[i] = rhs.m_attr_container[i];
+            }
+        }
+        return *this;
+    }
+
+    std::vector<std::shared_ptr<RXMeshAttributeBase>> m_attr_container;
+};
 
 }  // namespace rxmesh
