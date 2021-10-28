@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 #include "rxmesh/util/vector.h"
 
-TEST(RXMESH, Vector)
+TEST(RXMesh, Vector)
 {
     using namespace rxmesh;
 

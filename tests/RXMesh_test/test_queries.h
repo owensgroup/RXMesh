@@ -216,7 +216,7 @@ inline uint32_t max_output_per_element(const RXMeshStatic& rxmesh, const Op& op)
 }
 
 
-TEST(RXMesh, Oriented_VV)
+TEST(RXMeshStatic, Oriented_VV)
 {
 
     // Select device
@@ -316,7 +316,7 @@ TEST(RXMesh, Oriented_VV)
 }
 
 
-TEST(RXMesh, Queries)
+TEST(RXMeshStatic, Queries)
 {
     bool oriented = false;
 

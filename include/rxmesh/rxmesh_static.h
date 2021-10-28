@@ -11,11 +11,13 @@
 
 namespace rxmesh {
 
+/**
+ * @brief This class is responsible for query operations of static meshes. It
+ * extends RXMesh with methods needed to launch kernel and do computation on the
+ * mesh as well as managing mesh attributes
+ */
 class RXMeshStatic : public RXMesh
-{
-    // This class is responsible for query operation of static meshes. It
-    // inherits the constructor and build methods from the base class RXMesh
-    // and create new method(s) for queries
+{    
    public:
     RXMeshStatic(const RXMeshStatic&) = delete;
 
@@ -27,11 +29,16 @@ class RXMeshStatic : public RXMesh
     {
     }
 
-
     /**
-     * prepare_launch_box()
+     * @brief populate the launch_box with grid size and dynamic shared memory
+     * needed for kernel launch
      * TODO provide variadic version of this function that can accept multiple
      * ops
+     * @param op Query operation done inside this the kernel
+     * @param launch_box input launch box to be populated
+     * @param is_higher_query if the query done will be a higher ordered e.g.,
+     * k-ring
+     * @param oriented if the query is oriented. Valid only for Op::VV queries
      */
     template <uint32_t blockThreads>
     void prepare_launch_box(const Op                 op,
@@ -54,7 +61,13 @@ class RXMeshStatic : public RXMesh
             op, launch_box, is_higher_query, oriented);
     }
 
-
+    /**
+     * @brief Adding a new face attribute
+     * @tparam T type of the attribute
+     * @param name name of the attribute
+     * @param t initial value
+     * @return shared pointer to the created attribute
+     */
     template <class T>
     std::shared_ptr<RXMeshFaceAttribute<T>> add_face_attribute(
         const std::string& name,
@@ -64,7 +77,13 @@ class RXMeshStatic : public RXMesh
             m_attr_container.template add<T>(name.c_str()));
     }
 
-
+    /**
+     * @brief Adding a new edge attribute
+     * @tparam T type of the attribute
+     * @param name name of the attribute
+     * @param t initial value
+     * @return shared pointer to the created attribute
+     */
     template <class T>
     std::shared_ptr<RXMeshEdgeAttribute<T>> add_edge_attribute(
         const std::string& name,
@@ -73,7 +92,14 @@ class RXMeshStatic : public RXMesh
         return std::dynamic_pointer_cast<RXMeshEdgeAttribute<T>>(
             m_attr_container.template add<T>(name.c_str()));
     }
-        
+
+    /**
+     * @brief Adding a new vertex attribute
+     * @tparam T type of the attribute
+     * @param name name of the attribute
+     * @param t initial value
+     * @return shared pointer to the created attribute
+     */
     template <class T>
     std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
         const std::string& name,

@@ -72,10 +72,10 @@ __global__ static void generate_values(rxmesh::RXMeshAttribute<T> mesh_attr)
     }
 }
 
-
-bool test_host(uint32_t attributes_per_element)
+TEST(RXMeshAttribute, Host)
 {
     using namespace rxmesh;
+    const uint32_t attributes_per_element = 3u;
     // mesh attr on host
     uint32_t                       num_mesh_elements = 2048;
     rxmesh::RXMeshAttribute<float> rxmesh_attr;
@@ -120,15 +120,14 @@ bool test_host(uint32_t attributes_per_element)
 
     // release rxmesh_attribute memory on host and device
     rxmesh_attr.release();
-
-    // reporting
-    return h_success == 1;
+        
+    EXPECT_EQ(h_success, 1);
 }
 
-
-bool test_device(uint32_t attributes_per_element)
+TEST(RXMeshAttribute, Device)
 {
     using namespace rxmesh;
+    const uint32_t attributes_per_element = 3u;
     // Test generating values on device and processing it on host
 
     // mesh attr on host (but allocated on device)
@@ -171,10 +170,10 @@ bool test_device(uint32_t attributes_per_element)
     // release rxmesh_attribute memory on host and device
     rxmesh_attr.release();
 
-    return suceess;
+    EXPECT_TRUE(suceess);
 }
 
-/*bool test_vector()
+/*TEST(RXMeshAttribute, Vector)
 {
     using namespace rxmesh;
     // mesh attr on host
@@ -218,16 +217,15 @@ bool test_device(uint32_t attributes_per_element)
 
     // release rxmesh_attribute memory on host and device
     rxmesh_attr.release();
-
-    // reporting
-    return h_success == 1;
+        
+    EXPECT_EQ(h_success, 1);    
 }*/
 
-bool test_axpy(uint32_t attributes_per_element)
+TEST(RXMeshAttribute, AXPY)
 {
     using namespace rxmesh;
-
-    float x_val(1.0), y_val(3.0), alpha_val(5.0), beta_val(7.0);
+    const uint32_t attributes_per_element = 3u;
+    float          x_val(1.0), y_val(3.0), alpha_val(5.0), beta_val(7.0);
 
     uint32_t                       num_mesh_elements = 2048;
     rxmesh::RXMeshAttribute<float> X;
@@ -286,12 +284,10 @@ bool test_axpy(uint32_t attributes_per_element)
     X.release();
     Y.release();
 
-
-    return is_passed;
+    EXPECT_TRUE(is_passed);
 }
 
-
-bool test_reduce()
+TEST(RXMeshAttribute, Reduce)
 {
     using namespace rxmesh;
     constexpr uint32_t             attributes_per_element = 3;
@@ -335,11 +331,10 @@ bool test_reduce()
     X.release();
 
 
-    return is_passed;
+    EXPECT_TRUE(is_passed);
 }
 
-
-bool test_norm2()
+TEST(RXMeshAttribute, Norm2)
 {
     using namespace rxmesh;
     constexpr uint32_t             attributes_per_element = 3;
@@ -383,11 +378,10 @@ bool test_norm2()
     X.release();
 
 
-    return is_passed;
+    EXPECT_TRUE(is_passed);
 }
 
-
-bool test_dot()
+TEST(RXMeshAttribute, Dot)
 {
     using namespace rxmesh;
     constexpr uint32_t             attributes_per_element = 3;
@@ -438,11 +432,10 @@ bool test_dot()
     X.release();
     Y.release();
 
-
-    return is_passed;
+    EXPECT_TRUE(is_passed);
 }
 
-void test_copy()
+TEST(RXMeshAttribute, Copy)
 {
     using namespace rxmesh;
     uint32_t                       num_mesh_elements = 2048;
@@ -458,7 +451,7 @@ void test_copy()
 
     EXPECT_EQ(num_mesh_elements, copy.get_num_mesh_elements());
     EXPECT_EQ(1, copy.get_num_attribute_per_element());
-    std::string name (copy.get_name());
+    std::string name(copy.get_name());
 
     EXPECT_TRUE(name == "float_attr");
 
@@ -468,17 +461,8 @@ void test_copy()
 
     rxmesh_attr.release();
 }
-TEST(RXMesh, Attributes)
-{
-    using namespace rxmesh;
-    EXPECT_TRUE(test_host(3u)) << " TestAttributes::tes_host failed";
-    EXPECT_TRUE(test_device(3u)) << " TestAttributes::tes_device failed";
-    // EXPECT_TRUE(test_vector()) << " TestAttributes::test_vector failed";
-    EXPECT_TRUE(test_axpy(3u)) << " TestAttributes::test_axpy failed";
-    EXPECT_TRUE(test_reduce()) << " TestAttributes::test_reduce failed";
-    EXPECT_TRUE(test_norm2()) << " TestAttributes::test_norm2 failed";
-    EXPECT_TRUE(test_dot()) << " TestAttributes::test_dot failed";
-    test_copy();
 
-    CUDA_ERROR(cudaDeviceSynchronize());
+TEST(RXMeshAttribute, AddingAndRemoving)
+{   
+    
 }
