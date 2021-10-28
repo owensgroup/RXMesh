@@ -105,7 +105,7 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         const T            t = T())
     {
-        return std::dynamic_pointer_cast<add_vertex_attribute<T>>(
+        return std::dynamic_pointer_cast<RXMeshVertexAttribute<T>>(
             m_attr_container.template add<T>(name.c_str()));
     }
 
