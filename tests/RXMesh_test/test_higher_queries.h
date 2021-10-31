@@ -23,42 +23,33 @@ TEST(RXMeshStatic, HigherQueries)
     uint32_t input_size = rxmesh_static.get_num_vertices();
 
     // input/output container
-    RXMeshAttribute<uint32_t> input_container;
-    input_container.init(
-        input_size, 1u, rxmesh::DEVICE, rxmesh::AoS, false, false);
+    auto input_container = rxmesh_static.add_vertex_attribute<uint32_t>(
+        "input", 1u, rxmesh::LOCATION_ALL, rxmesh::AoS, false, false);
 
-    RXMeshAttribute<uint32_t> output_container;
-    output_container.init(input_size,
-                          input_size,  // that is a bit excessive
-                          rxmesh::DEVICE,
-                          rxmesh::SoA,
-                          false,
-                          false);
+    auto output_container = rxmesh_static.add_vertex_attribute<uint32_t>(
+        "output", input_size, rxmesh::LOCATION_ALL, rxmesh::SoA, false, false);
+    //           ^^that is a bit excessive
 
     // launch box
     constexpr uint32_t      blockThreads = 512;
     LaunchBox<blockThreads> launch_box;
     rxmesh_static.prepare_launch_box(Op::VV, launch_box, true, false);
 
-    output_container.reset(INVALID32, rxmesh::DEVICE);
-    input_container.reset(INVALID32, rxmesh::DEVICE);
+    output_container->reset(INVALID32, rxmesh::DEVICE);
+    input_container->reset(INVALID32, rxmesh::DEVICE);
 
     ::RXMeshTest tester(true);
 
     // launch
     higher_query<Op::VV, blockThreads>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh_static.get_context(), input_container, output_container);
+            rxmesh_static.get_context(), *input_container, *output_container);
 
     // move containers to the CPU for testing
-    output_container.move(rxmesh::DEVICE, rxmesh::HOST);
-    input_container.move(rxmesh::DEVICE, rxmesh::HOST);
+    output_container->move(rxmesh::DEVICE, rxmesh::HOST);
+    input_container->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // verify
     EXPECT_TRUE(
-        tester.test_VVV(rxmesh_static, input_container, output_container));
-
-
-    input_container.release();
-    output_container.release();
+        tester.test_VVV(rxmesh_static, *input_container, *output_container));
 }

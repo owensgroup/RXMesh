@@ -12,7 +12,7 @@ namespace rxmesh {
 class Log
 {
    public:
-    static void init()
+    static void init(spdlog::level::level_enum level = spdlog::level::trace)
     {
         std::vector<spdlog::sink_ptr> sinks;
         sinks.emplace_back(
@@ -26,8 +26,8 @@ class Log
         m_logger = std::make_shared<spdlog::logger>(
             "RXMesh", begin(sinks), end(sinks));
         spdlog::register_logger(m_logger);
-        m_logger->set_level(spdlog::level::trace);
-        m_logger->flush_on(spdlog::level::trace);
+        m_logger->set_level(level);
+        m_logger->flush_on(level);
     }
 
     inline static std::shared_ptr<spdlog::logger>& get_logger()

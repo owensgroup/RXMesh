@@ -41,24 +41,21 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
     report.add_member("method", std::string("RXMesh"));
     report.add_member("blockThreads", blockThreads);
 
-    RXMeshAttribute<T> coords;
-    coords.set_name("coord");
-    coords.init(Verts.size(), 3u, rxmesh::LOCATION_ALL);
+    auto coords =
+        rxmesh_static.add_vertex_attribute<T>("coord", 3, rxmesh::LOCATION_ALL);
     // fill in the coordinates
     for (uint32_t i = 0; i < Verts.size(); ++i) {
         for (uint32_t j = 0; j < Verts[i].size(); ++j) {
-            coords(i, j) = Verts[i][j];
+            (*coords)(i, j) = Verts[i][j];
         }
     }
     // move the coordinates to device
-    coords.move(rxmesh::HOST, rxmesh::DEVICE);
+    coords->move(rxmesh::HOST, rxmesh::DEVICE);
 
 
     // normals
-    RXMeshAttribute<T> rxmesh_normal;
-    rxmesh_normal.set_name("normal");
-    rxmesh_normal.init(
-        coords.get_num_mesh_elements(), 3u, rxmesh::LOCATION_ALL);
+    auto rxmesh_normal = rxmesh_static.add_vertex_attribute<T>(
+        "normals", 3, rxmesh::LOCATION_ALL);
 
     // launch box
     LaunchBox<blockThreads> launch_box;
@@ -70,13 +67,13 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
 
     float vn_time = 0;
     for (uint32_t itr = 0; itr < Arg.num_run; ++itr) {
-        rxmesh_normal.reset(0, rxmesh::DEVICE);
+        rxmesh_normal->reset(0, rxmesh::DEVICE);
         GPUTimer timer;
         timer.start();
 
         compute_vertex_normal<T, blockThreads>
             <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-                rxmesh_static.get_context(), coords, rxmesh_normal);
+                rxmesh_static.get_context(), *coords, *rxmesh_normal);
 
         timer.stop();
         CUDA_ERROR(cudaDeviceSynchronize());
@@ -90,18 +87,14 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
                  vn_time / Arg.num_run);
 
     // Verify
-    rxmesh_normal.move(rxmesh::DEVICE, rxmesh::HOST);
+    rxmesh_normal->move(rxmesh::DEVICE, rxmesh::HOST);
 
     bool passed = compare(vertex_normal_gold.data(),
-                          rxmesh_normal.get_pointer(rxmesh::HOST),
-                          coords.get_num_mesh_elements() * 3,
+                          rxmesh_normal->get_pointer(rxmesh::HOST),
+                          rxmesh_static.get_num_vertices() * 3,
                           false);
     td.passed.push_back(passed);
     EXPECT_TRUE(passed) << " RXMesh Validation failed \n";
-
-    // Release allocation
-    rxmesh_normal.release();
-    coords.release();
 
     // Finalize report
     report.add_test(td);
