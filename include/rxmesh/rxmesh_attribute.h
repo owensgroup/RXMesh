@@ -1058,7 +1058,13 @@ class RXMeshAttributeContainer
 {
    public:
     RXMeshAttributeContainer()          = default;
-    virtual ~RXMeshAttributeContainer() = default;
+    virtual ~RXMeshAttributeContainer()
+    {        
+        while (!m_attr_container.empty()) {
+            m_attr_container.back()->release(LOCATION_ALL);
+            m_attr_container.pop_back();
+        }
+    }
 
     size_t size()
     {

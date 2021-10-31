@@ -23,7 +23,10 @@ class RXMeshStatic : public RXMesh
 
     RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
                  const bool                          quite = true)
-        : RXMesh(fv, quite){};
+        : RXMesh(fv, quite)
+    {
+        m_attr_container = std::make_shared<RXMeshAttributeContainer>();
+    };
 
     virtual ~RXMeshStatic()
     {
@@ -84,7 +87,7 @@ class RXMeshStatic : public RXMesh
         const bool         with_axpy_alloc   = true,
         const bool         with_reduce_alloc = true)
     {
-        return m_attr_container.template add<RXMeshFaceAttribute<T>>(
+        return m_attr_container->template add<RXMeshFaceAttribute<T>>(
             name.c_str(),
             this->get_num_faces(),
             num_attributes,
@@ -116,7 +119,7 @@ class RXMeshStatic : public RXMesh
         const bool         with_axpy_alloc   = true,
         const bool         with_reduce_alloc = true)
     {
-        return m_attr_container.template add<RXMeshEdgeAttribute<T>>(
+        return m_attr_container->template add<RXMeshEdgeAttribute<T>>(
             name.c_str(),
             this->get_num_edges(),
             num_attributes,
@@ -148,7 +151,7 @@ class RXMeshStatic : public RXMesh
         const bool         with_axpy_alloc   = true,
         const bool         with_reduce_alloc = true)
     {
-        return m_attr_container.template add<RXMeshVertexAttribute<T>>(
+        return m_attr_container->template add<RXMeshVertexAttribute<T>>(
             name.c_str(),
             this->get_num_vertices(),
             num_attributes,
@@ -166,7 +169,7 @@ class RXMeshStatic : public RXMesh
      */
     bool does_attribute_exist(const std::string& name)
     {
-        return m_attr_container.does_exist(name.c_str());
+        return m_attr_container->does_exist(name.c_str());
     }
 
     /**
@@ -178,12 +181,12 @@ class RXMeshStatic : public RXMesh
         if (!this->does_attribute_exist(name)) {
             RXMESH_WARN(
                 "RXMeshStatic::remove_attribute() trying to remove an "
-                "attribute that does not exit with name {}",                
+                "attribute that does not exit with name {}",
                 name);
             return;
         }
 
-        m_attr_container.remove(name.c_str());
+        m_attr_container->remove(name.c_str());
     }
 
    protected:
@@ -471,6 +474,6 @@ class RXMeshStatic : public RXMesh
     }
 
 
-    RXMeshAttributeContainer m_attr_container;
+    std::shared_ptr<RXMeshAttributeContainer> m_attr_container;
 };
 }  // namespace rxmesh
