@@ -17,7 +17,7 @@ namespace rxmesh {
  * mesh as well as managing mesh attributes
  */
 class RXMeshStatic : public RXMesh
-{    
+{
    public:
     RXMeshStatic(const RXMeshStatic&) = delete;
 
@@ -61,52 +61,120 @@ class RXMeshStatic : public RXMesh
             op, launch_box, is_higher_query, oriented);
     }
 
+
     /**
      * @brief Adding a new face attribute
      * @tparam T type of the attribute
-     * @param name name of the attribute
-     * @param t initial value
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param num_attributes number of the attributes
+     * @param location where to allocate the attributes
+     * @param layout as SOA or AOS
+     * @param with_axpy_alloc wither this attributes will run axpy operations
+     * @param with_reduce_alloc wither this attribute will run reduce
+     * operations
      * @return shared pointer to the created attribute
      */
     template <class T>
     std::shared_ptr<RXMeshFaceAttribute<T>> add_face_attribute(
         const std::string& name,
-        const T            t = T())
+        uint32_t           num_attributes,
+        locationT          location          = DEVICE,
+        layoutT            layout            = AoS,
+        const bool         with_axpy_alloc   = true,
+        const bool         with_reduce_alloc = true)
     {
-        return std::dynamic_pointer_cast<RXMeshFaceAttribute<T>>(
-            m_attr_container.template add<T>(name.c_str()));
+        return m_attr_container.template add<RXMeshFaceAttribute<T>>(
+            name.c_str(),
+            this->get_num_faces(),
+            num_attributes,
+            location,
+            layout,
+            with_axpy_alloc,
+            with_reduce_alloc);
     }
 
     /**
      * @brief Adding a new edge attribute
      * @tparam T type of the attribute
-     * @param name name of the attribute
-     * @param t initial value
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param num_attributes number of the attributes
+     * @param location where to allocate the attributes
+     * @param layout as SOA or AOS
+     * @param with_axpy_alloc wither this attributes will run axpy operations
+     * @param with_reduce_alloc wither this attribute will run reduce
+     * operations
      * @return shared pointer to the created attribute
      */
     template <class T>
     std::shared_ptr<RXMeshEdgeAttribute<T>> add_edge_attribute(
         const std::string& name,
-        const T            t = T())
+        uint32_t           num_attributes,
+        locationT          location          = DEVICE,
+        layoutT            layout            = AoS,
+        const bool         with_axpy_alloc   = true,
+        const bool         with_reduce_alloc = true)
     {
-        return std::dynamic_pointer_cast<RXMeshEdgeAttribute<T>>(
-            m_attr_container.template add<T>(name.c_str()));
+        return m_attr_container.template add<RXMeshEdgeAttribute<T>>(
+            name.c_str(),
+            this->get_num_edges(),
+            num_attributes,
+            location,
+            layout,
+            with_axpy_alloc,
+            with_reduce_alloc);
     }
 
     /**
      * @brief Adding a new vertex attribute
      * @tparam T type of the attribute
-     * @param name name of the attribute
-     * @param t initial value
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param num_attributes number of the attributes
+     * @param location where to allocate the attributes
+     * @param layout as SOA or AOS
+     * @param with_axpy_alloc wither this attributes will run axpy operations
+     * @param with_reduce_alloc wither this attribute will run reduce
+     * operations
      * @return shared pointer to the created attribute
      */
     template <class T>
     std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
         const std::string& name,
-        const T            t = T())
+        uint32_t           num_attributes,
+        locationT          location          = DEVICE,
+        layoutT            layout            = AoS,
+        const bool         with_axpy_alloc   = true,
+        const bool         with_reduce_alloc = true)
     {
-        return std::dynamic_pointer_cast<RXMeshVertexAttribute<T>>(
-            m_attr_container.template add<T>(name.c_str()));
+        return m_attr_container.template add<RXMeshVertexAttribute<T>>(
+            name.c_str(),
+            this->get_num_vertices(),
+            num_attributes,
+            location,
+            layout,
+            with_axpy_alloc,
+            with_reduce_alloc);
+    }
+
+
+    /**
+     * @brief Checks if an attribute exists given its name
+     * @param name the attribute name
+     * @return True if the attribute exists. False otherwise.
+     */
+    bool does_attribute_exist(const std::string& name)
+    {
+        return m_attr_container.does_exist(name.c_str());
+    }
+
+    /**
+     * @brief Remove an attribute. Could be vertex, edge, or face attribute
+     * @param name the attribute name
+     */
+    void remove_attribute(const std::string& name)
+    {
     }
 
    protected:

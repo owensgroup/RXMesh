@@ -30,7 +30,7 @@ __launch_bounds__(blockThreads) __global__
     // computation done on the first ring/level
     // this is similar to the lambda function for query_block_dispatcher()
     auto first_level_lambda = [&](uint32_t id, RXMeshIterator& iter) {
-        assert(iter.size() < output_container.get_num_attribute_per_element());
+        assert(iter.size() < output_container.get_num_attributes());
 
         num_vv_1st_ring = iter.size();
         num_vv          = num_vv_1st_ring;

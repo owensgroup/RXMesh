@@ -22,15 +22,15 @@ __global__ void rxmesh_attribute_axpy(const RXMeshAttribute<T> X,
     // INVALID32. Otherwise, they should point to a single variable
 
     assert(X.get_num_mesh_elements() == Y.get_num_mesh_elements());
-    assert(X.get_num_attribute_per_element() ==
-           Y.get_num_attribute_per_element());
+    assert(X.get_num_attributes() ==
+           Y.get_num_attributes());
 
     uint32_t idx = threadIdx.x + blockIdx.x * blockDim.x;
 
     if (idx < X.get_num_mesh_elements()) {
 
         if (attribute_id == INVALID32) {
-            for (uint32_t attr = 0; attr < X.get_num_attribute_per_element();
+            for (uint32_t attr = 0; attr < X.get_num_attributes();
                  ++attr) {
                 Y(idx, attr) =
                     alpha[attr] * X(idx, attr) + beta[attr] * Y(idx, attr);

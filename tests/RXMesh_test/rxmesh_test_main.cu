@@ -5,7 +5,6 @@
 #include "rxmesh/util/vector.h"
 
 using dataT = float;
-std::vector<std::vector<dataT>> Verts;
 
 struct RXMeshTestArg
 {
@@ -20,6 +19,7 @@ struct RXMeshTestArg
 
 #include "test_higher_queries.h"
 #include "test_queries.h"
+#include "test_attribute.cuh"
 
 
 int main(int argc, char** argv)

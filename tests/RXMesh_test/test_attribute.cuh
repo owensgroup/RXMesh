@@ -40,8 +40,7 @@ __global__ static void test_values(rxmesh::RXMeshAttribute<T> mesh_attr,
         assert((mesh_attr.get_allocated() & rxmesh::DEVICE) == rxmesh::DEVICE);
         uint32_t num_mesh_elements = mesh_attr.get_num_mesh_elements();
         for (uint32_t i = 0; i < num_mesh_elements; ++i) {
-            for (uint32_t j = 0; j < mesh_attr.get_num_attribute_per_element();
-                 ++j) {
+            for (uint32_t j = 0; j < mesh_attr.get_num_attributes(); ++j) {
                 if (mesh_attr(i, j) != i + j) {
 
                     *suceess = 0;
@@ -64,8 +63,7 @@ __global__ static void generate_values(rxmesh::RXMeshAttribute<T> mesh_attr)
 
         uint32_t num_mesh_elements = mesh_attr.get_num_mesh_elements();
         for (uint32_t i = 0; i < num_mesh_elements; ++i) {
-            for (uint32_t j = 0; j < mesh_attr.get_num_attribute_per_element();
-                 ++j) {
+            for (uint32_t j = 0; j < mesh_attr.get_num_attributes(); ++j) {
                 mesh_attr(i, j) = i + j;
             }
         }
@@ -120,7 +118,7 @@ TEST(RXMeshAttribute, Host)
 
     // release rxmesh_attribute memory on host and device
     rxmesh_attr.release();
-        
+
     EXPECT_EQ(h_success, 1);
 }
 
@@ -217,8 +215,8 @@ TEST(RXMeshAttribute, Device)
 
     // release rxmesh_attribute memory on host and device
     rxmesh_attr.release();
-        
-    EXPECT_EQ(h_success, 1);    
+
+    EXPECT_EQ(h_success, 1);
 }*/
 
 TEST(RXMeshAttribute, AXPY)
@@ -450,7 +448,7 @@ TEST(RXMeshAttribute, Copy)
     auto copy = rxmesh_attr;
 
     EXPECT_EQ(num_mesh_elements, copy.get_num_mesh_elements());
-    EXPECT_EQ(1, copy.get_num_attribute_per_element());
+    EXPECT_EQ(1, copy.get_num_attributes());
     std::string name(copy.get_name());
 
     EXPECT_TRUE(name == "float_attr");
@@ -463,6 +461,25 @@ TEST(RXMeshAttribute, Copy)
 }
 
 TEST(RXMeshAttribute, AddingAndRemoving)
-{   
+{
+    using namespace rxmesh;
+        
+    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+
+    std::vector<std::vector<dataT>>    Verts;
+    std::vector<std::vector<uint32_t>> Faces;
+
+    ASSERT_TRUE(
+        import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, true));
+
+    
+    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
+
+    std::string attr_name   = "v_attr";
+
+    auto vertex_attr = rxmesh.add_vertex_attribute<float>(attr_name, 3);
+
+    EXPECT_TRUE(rxmesh.does_attribute_exist(attr_name));
+
     
 }

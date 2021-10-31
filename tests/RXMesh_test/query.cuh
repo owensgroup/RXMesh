@@ -26,7 +26,7 @@ __launch_bounds__(blockThreads) __global__
     assert(output_container.is_device_allocated());
 
     auto store_lambda = [&](uint32_t id, RXMeshIterator& iter) {
-        assert(iter.size() < output_container.get_num_attribute_per_element());
+        assert(iter.size() < output_container.get_num_attributes());
 
         d_src(id)               = id;
         output_container(id, 0) = iter.size();

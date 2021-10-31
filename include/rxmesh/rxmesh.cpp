@@ -41,6 +41,12 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
       m_d_ad_size(nullptr)
 {
     // Build everything from scratch including patches
+    if (fv.empty()) {
+        RXMESH_ERROR(
+            "RXMesh::RXMesh input fv is empty. Can not be build RXMesh "
+            "properly");
+        exit(EXIT_FAILURE);
+    }
     build(fv);
     build_device();
     move_to_device();
@@ -768,8 +774,8 @@ void RXMesh::build_device()
                 const std::vector<uint16_t>&              num_owned,
                 auto*&                                    d_not_owned_id,
                 uint32_t*&                                d_not_owned_patch) {
-                using LocalT =
-                    typename std::remove_reference<decltype(*d_not_owned_id)>::type;
+                using LocalT = typename std::remove_reference<
+                    decltype(*d_not_owned_id)>::type;
 
                 const uint16_t num_not_owned = ltog[p].size() - num_owned[p];
 

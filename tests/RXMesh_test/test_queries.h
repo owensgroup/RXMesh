@@ -222,6 +222,7 @@ TEST(RXMeshStatic, Oriented_VV)
     // Select device
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
+    std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
     ASSERT_TRUE(
@@ -325,6 +326,7 @@ TEST(RXMeshStatic, Queries)
     // Select device
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
+    std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
     ASSERT_TRUE(
