@@ -3,10 +3,7 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/vector.h"
 
-/**
- * test_vector()
- */
-__global__ static void test_vector(
+/*__global__ static void test_vector(
     rxmesh::RXMeshAttribute<rxmesh::Vector3f> mesh_attr,
     uint32_t*                                 suceess)
 {
@@ -24,11 +21,8 @@ __global__ static void test_vector(
             }
         }
     }
-}
+}*/
 
-/**
- * test_values()
- */
 template <class T>
 __global__ static void test_values(rxmesh::RXMeshAttribute<T> mesh_attr,
                                    uint32_t*                  suceess)
@@ -51,9 +45,6 @@ __global__ static void test_values(rxmesh::RXMeshAttribute<T> mesh_attr,
     }
 }
 
-/**
- * generate_values()
- */
 template <class T>
 __global__ static void generate_values(rxmesh::RXMeshAttribute<T> mesh_attr)
 {
@@ -463,7 +454,7 @@ TEST(RXMeshAttribute, Copy)
 TEST(RXMeshAttribute, AddingAndRemoving)
 {
     using namespace rxmesh;
-        
+
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
     std::vector<std::vector<dataT>>    Verts;
@@ -472,14 +463,43 @@ TEST(RXMeshAttribute, AddingAndRemoving)
     ASSERT_TRUE(
         import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, true));
 
-    
+
     RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
 
-    std::string attr_name   = "v_attr";
+    std::string attr_name = "v_attr";
 
-    auto vertex_attr = rxmesh.add_vertex_attribute<float>(attr_name, 3);
+    auto vertex_attr =
+        rxmesh.add_vertex_attribute<float>(attr_name, 3, rxmesh::LOCATION_ALL);
 
     EXPECT_TRUE(rxmesh.does_attribute_exist(attr_name));
 
-    
+    for (uint32_t v = 0; v < rxmesh.get_num_vertices(); ++v) {
+        for (uint32_t i = 0; i < 3; ++i) {
+            (*vertex_attr)(v, i) = v + i;
+        }
+    }
+
+    vertex_attr->move(rxmesh::HOST, rxmesh::DEVICE);
+
+    // device success variable
+    uint32_t* d_success = nullptr;
+    CUDA_ERROR(cudaMalloc((void**)&d_success, sizeof(uint32_t)));
+
+
+    // actual testing
+    test_values<float><<<1, 1>>>(*vertex_attr, d_success);
+
+    CUDA_ERROR(cudaPeekAtLastError());
+    CUDA_ERROR(cudaGetLastError());
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+    // host success variable
+    uint32_t h_success(0);
+    CUDA_ERROR(cudaMemcpy(
+        &h_success, d_success, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+
+    // free device
+    GPU_FREE(d_success);
+
+    rxmesh.remove_attribute(attr_name);
 }

@@ -175,6 +175,15 @@ class RXMeshStatic : public RXMesh
      */
     void remove_attribute(const std::string& name)
     {
+        if (!this->does_attribute_exist(name)) {
+            RXMESH_WARN(
+                "RXMeshStatic::remove_attribute() trying to remove an "
+                "attribute that does not exit with name {}",                
+                name);
+            return;
+        }
+
+        m_attr_container.remove(name.c_str());
     }
 
    protected:

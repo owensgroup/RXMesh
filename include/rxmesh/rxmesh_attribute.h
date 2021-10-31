@@ -68,6 +68,8 @@ class RXMeshAttributeBase
 
     virtual const char* get_name() const = 0;
 
+    virtual void release(locationT location) = 0;
+
     virtual ~RXMeshAttributeBase() = default;
 };
 
@@ -110,7 +112,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
         m_pitch.y = 0;
     }
 
-    RXMeshAttribute(const char* const name)
+    RXMeshAttribute(const char* name)
         : m_name(nullptr),
           m_num_mesh_elements(0),
           m_num_attributes(0),
@@ -149,14 +151,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
     {
         return m_name;
     }
-
-    // virtual RXMeshAttributeBase* clone() const
-    //{
-    //    RXMeshAttribute<T>* attr = new RXMeshAttribute<T>(m_name);
-    //    *attr                    = *this;
-    //    return attr;
-    //
-    //}
 
     __host__ __device__ __forceinline__ uint32_t get_num_mesh_elements() const
     {
@@ -978,17 +972,15 @@ template <class T>
 class RXMeshFaceAttribute : public RXMeshAttribute<T>
 {
    public:
-    RXMeshFaceAttribute() : RXMeshAttribute<T>()
-    {
-    }
+    RXMeshFaceAttribute() = default;
 
-    RXMeshFaceAttribute(const char* const name,
-                        uint32_t          num_faces,
-                        uint32_t          num_attributes,
-                        locationT         location,
-                        layoutT           layout,
-                        const bool        with_axpy_alloc,
-                        const bool        with_reduce_alloc)
+    RXMeshFaceAttribute(const char* name,
+                        uint32_t    num_faces,
+                        uint32_t    num_attributes,
+                        locationT   location,
+                        layoutT     layout,
+                        const bool  with_axpy_alloc,
+                        const bool  with_reduce_alloc)
         : RXMeshAttribute<T>(name)
     {
         this->init(num_faces,
@@ -1009,15 +1001,13 @@ template <class T>
 class RXMeshEdgeAttribute : public RXMeshAttribute<T>
 {
    public:
-    RXMeshEdgeAttribute() : RXMeshAttribute<T>()
-    {
-    }
+    RXMeshEdgeAttribute() = default;
 
-    RXMeshEdgeAttribute(const char* const name,
-                        uint32_t          num_edges,
-                        uint32_t          num_attributes,
-                        locationT         location,
-                        layoutT           layout,
+    RXMeshEdgeAttribute(const char* name,
+                        uint32_t    num_edges,
+                        uint32_t    num_attributes,
+                        locationT   location,
+                        layoutT     layout,
 
                         const bool with_axpy_alloc,
                         const bool with_reduce_alloc)
@@ -1041,17 +1031,15 @@ template <class T>
 class RXMeshVertexAttribute : public RXMeshAttribute<T>
 {
    public:
-    RXMeshVertexAttribute() : RXMeshAttribute<T>()
-    {
-    }
+    RXMeshVertexAttribute() = default;
 
-    RXMeshVertexAttribute(const char* const name,
-                          uint32_t          num_vertices,
-                          uint32_t          num_attributes,
-                          locationT         location,
-                          layoutT           layout,
-                          const bool        with_axpy_alloc,
-                          const bool        with_reduce_alloc)
+    RXMeshVertexAttribute(const char* name,
+                          uint32_t    num_vertices,
+                          uint32_t    num_attributes,
+                          locationT   location,
+                          layoutT     layout,
+                          const bool  with_axpy_alloc,
+                          const bool  with_reduce_alloc)
         : RXMeshAttribute<T>(name)
     {
         this->init(num_vertices,
@@ -1064,7 +1052,7 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
 };
 
 /**
- * @brief Attribute container used to managing attributes
+ * @brief Attribute container used to managing attributes from RXMeshStatic
  */
 class RXMeshAttributeContainer
 {
@@ -1087,13 +1075,13 @@ class RXMeshAttributeContainer
     }
 
     template <typename AttrT>
-    std::shared_ptr<AttrT> add(const char* const name,
-                               uint32_t          num_elements,
-                               uint32_t          num_attributes,
-                               locationT         location,
-                               layoutT           layout,
-                               const bool        with_axpy_alloc,
-                               const bool        with_reduce_alloc)
+    std::shared_ptr<AttrT> add(const char* name,
+                               uint32_t    num_elements,
+                               uint32_t    num_attributes,
+                               locationT   location,
+                               layoutT     layout,
+                               const bool  with_axpy_alloc,
+                               const bool  with_reduce_alloc)
     {
         if (does_exist(name)) {
             RXMESH_WARN(
@@ -1115,7 +1103,7 @@ class RXMeshAttributeContainer
         return new_attr;
     }
 
-    bool does_exist(const char* const name)
+    bool does_exist(const char* name)
     {
         for (size_t i = 0; i < m_attr_container.size(); ++i) {
             if (!strcmp(m_attr_container[i]->get_name(), name)) {
@@ -1125,28 +1113,13 @@ class RXMeshAttributeContainer
         return false;
     }
 
-    template <typename T>
-    std::shared_ptr<RXMeshAttribute<T>> get_attribute(const char* const name)
-    {
-        for (size_t i = 0; i < m_attr_container.size(); ++i) {
-            if (!strcmp(m_attr_container[i]->get_name(), name)) {
-                return m_attr_container[i];
-            }
-        }
-        RXMESH_ERROR(
-            "RXMeshAttributeContainer::get_attribute() No attribute exists "
-            "with name {}",
-            std::string(name));
-    }
-
-    template <typename T>
-    void remove(RXMeshAttribute<T>& attr)
+    void remove(const char* name)
     {
         for (auto it = m_attr_container.begin(); it != m_attr_container.end();
              ++it) {
 
-            if (*it == attr) {
-                attr.release();
+            if (!strcmp((*it)->get_name(), name)) {
+                (*it)->release(LOCATION_ALL);
                 m_attr_container.erase(it);
                 break;
             }
