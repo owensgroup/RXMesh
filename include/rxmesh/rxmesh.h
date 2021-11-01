@@ -297,6 +297,6 @@ class RXMesh
     uint16_t *m_d_num_owned_f, *m_d_num_owned_e, *m_d_num_owned_v;
 
 
-    PatchInfo* m_patches_info;
+    PatchInfo* m_d_patches_info;
 };
 }  // namespace rxmesh

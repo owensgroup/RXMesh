@@ -161,6 +161,7 @@ struct VertexHandle
     __device__ __host__ VertexHandle() : m_patch_id(INVALID32), m_v({INVALID16})
     {
     }
+
     __device__ __host__ VertexHandle(uint32_t     patch_id,
                                      LocalVertexT vertex_local_id)
         : m_patch_id(patch_id), m_v(vertex_local_id)
@@ -197,6 +198,7 @@ struct EdgeHandle
     __device__ __host__ EdgeHandle() : m_patch_id(INVALID32), m_e({INVALID16})
     {
     }
+
     __device__ __host__ EdgeHandle(uint32_t patch_id, LocalEdgeT edge_local_id)
         : m_patch_id(patch_id), m_e(edge_local_id)
     {
@@ -230,6 +232,7 @@ struct FaceHandle
     __device__ __host__ FaceHandle() : m_patch_id(INVALID32), m_f({INVALID16})
     {
     }
+
     __device__ __host__ FaceHandle(uint32_t patch_id, LocalFaceT face_local_id)
         : m_patch_id(patch_id), m_f(face_local_id)
     {

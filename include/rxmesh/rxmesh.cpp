@@ -74,7 +74,7 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
                           m_d_num_owned_f,
                           m_d_num_owned_e,
                           m_d_num_owned_v,
-                          m_patches_info);
+                          m_d_patches_info);
 
     if (!m_quite) {
         RXMESH_TRACE("#Vertices = {}, #Faces= {}, #Edges= {}",
@@ -737,8 +737,8 @@ void RXMesh::move_to_device()
 
 void RXMesh::build_device()
 {
-    CUDA_ERROR(
-        cudaMalloc((void**)&m_patches_info, m_num_patches * sizeof(PatchInfo)));
+    CUDA_ERROR(cudaMalloc((void**)&m_d_patches_info,
+                          m_num_patches * sizeof(PatchInfo)));
 
     //#pragma omp parallel for
     for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
@@ -841,7 +841,7 @@ void RXMesh::build_device()
                            patch.not_owned_id_v,
                            patch.not_owned_patch_v);
 
-        CUDA_ERROR(cudaMemcpy(m_patches_info + p,
+        CUDA_ERROR(cudaMemcpy(m_d_patches_info + p,
                               &patch,
                               sizeof(PatchInfo),
                               cudaMemcpyHostToDevice));

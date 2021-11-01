@@ -4,6 +4,7 @@
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/rxmesh_attribute.cuh"
 #include "rxmesh/kernels/util.cuh"
+#include "rxmesh/rxmesh_types.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/util.h"
 #include "rxmesh/util/vector.h"
@@ -78,7 +79,8 @@ class RXMeshAttributeBase
  * attached to mesh element (e.g., vertices, edges, or faces).
  * largely inspired by
  * https://github.com/gunrock/gunrock/blob/master/gunrock/util/array_utils.cuh
- *
+ * It is discouraged to use RXMeshAttribute directly in favor of using
+ * add_X_attributes() from RXMeshStatic.
  * @tparam T type of the attribute
  */
 template <class T>
@@ -93,6 +95,9 @@ class RXMeshAttribute : public RXMeshAttributeBase
           m_allocated(LOCATION_NONE),
           m_h_attr(nullptr),
           m_d_attr(nullptr),
+          m_h_attr_v1(nullptr),
+          m_d_attr_v1(nullptr),
+          m_num_patches(0),
           m_layout(AoS),
           d_axpy_alpha(nullptr),
           d_axpy_beta(nullptr),
@@ -107,9 +112,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
         this->m_name    = (char*)malloc(sizeof(char) * 1);
         this->m_name[0] = '\0';
-        allocate(0, LOCATION_NONE);
-        m_pitch.x = 0;
-        m_pitch.y = 0;
     }
 
     RXMeshAttribute(const char* name)
@@ -119,6 +121,9 @@ class RXMeshAttribute : public RXMeshAttributeBase
           m_allocated(LOCATION_NONE),
           m_h_attr(nullptr),
           m_d_attr(nullptr),
+          m_h_attr_v1(nullptr),
+          m_d_attr_v1(nullptr),
+          m_num_patches(0),
           m_layout(AoS),
           d_axpy_alpha(nullptr),
           d_axpy_beta(nullptr),
@@ -131,9 +136,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
             this->m_name = (char*)malloc(sizeof(char) * (strlen(name) + 1));
             strcpy(this->m_name, name);
         }
-        allocate(0, LOCATION_NONE);
-        m_pitch.x = 0;
-        m_pitch.y = 0;
     }
 
     RXMeshAttribute(const RXMeshAttribute& rhs) = default;
@@ -189,6 +191,19 @@ class RXMeshAttribute : public RXMeshAttributeBase
         return nullptr;
     }
 
+    __host__ __device__ __forceinline__ T** get_pointer_v1(
+        locationT location) const
+    {
+
+        if (location == DEVICE) {
+            return m_d_attr_v1;
+        }
+        if (location == HOST) {
+            return m_h_attr_v1;
+        }
+        return nullptr;
+    }
+
     void reset(const T value, locationT location, cudaStream_t stream = NULL)
     {
 
@@ -228,9 +243,8 @@ class RXMeshAttribute : public RXMeshAttributeBase
         if (num_elements == 0) {
             return;
         }
-        allocate(num_elements, location);
+        allocate(location);
         m_layout = layout;
-        set_pitch();
 
         if (!m_is_axpy_allocated && with_axpy_alloc) {
             CUDA_ERROR(cudaMalloc((void**)&d_axpy_alpha,
@@ -245,38 +259,35 @@ class RXMeshAttribute : public RXMeshAttributeBase
         }
     }
 
-    void allocate(uint32_t num_mesh_elements, locationT location = DEVICE)
+    void init_v1(const std::vector<uint32_t>& element_per_patch,
+                 uint32_t                     num_elements,
+                 uint32_t                     num_attributes,
+                 locationT                    location          = DEVICE,
+                 layoutT                      layout            = AoS,
+                 const bool                   with_axpy_alloc   = true,
+                 const bool                   with_reduce_alloc = true)
     {
+        release();
+        m_allocated               = LOCATION_NONE;
+        this->m_num_mesh_elements = num_elements;
+        this->m_num_attributes    = num_attributes;
+        if (num_elements == 0) {
+            return;
+        }
+        allocate(location);
+        m_layout = layout;
 
-        if ((location & HOST) == HOST) {
-            release(HOST);
-            if (num_mesh_elements != 0) {
-                m_h_attr = (T*)malloc(sizeof(T) * num_mesh_elements *
-                                      m_num_attributes);
-                if (!m_h_attr) {
-                    RXMESH_ERROR(
-                        " RXMeshAttribute::allocate() allocation on {} failed "
-                        "with #mesh_elemnts = {} and #attributes per element = "
-                        "{}" +
-                            location_to_string(HOST),
-                        num_mesh_elements,
-                        m_num_attributes);
-                }
-            }
-            m_allocated = m_allocated | HOST;
+        if (!m_is_axpy_allocated && with_axpy_alloc) {
+            CUDA_ERROR(cudaMalloc((void**)&d_axpy_alpha,
+                                  m_num_attributes * sizeof(T)));
+            CUDA_ERROR(
+                cudaMalloc((void**)&d_axpy_beta, m_num_attributes * sizeof(T)));
+            m_is_axpy_allocated = true;
         }
 
-
-        if ((location & DEVICE) == DEVICE) {
-            release(DEVICE);
-            if (num_mesh_elements != 0) {
-                CUDA_ERROR(cudaMalloc(
-                    (void**)&(m_d_attr),
-                    sizeof(T) * num_mesh_elements * m_num_attributes));
-            }
-            m_allocated = m_allocated | DEVICE;
+        if (!m_is_reduce_allocated && with_reduce_alloc) {
+            allocate_reduce_temp_storage(0);
         }
-        this->m_num_mesh_elements = num_mesh_elements;
     }
 
     void move(locationT source, locationT location)
@@ -294,7 +305,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
         if (((location & HOST) == HOST || (location & DEVICE) == DEVICE) &&
             ((location & m_allocated) != location)) {
-            allocate(this->m_num_mesh_elements, location);
+            allocate(location);
         }
 
         if (this->m_num_mesh_elements == 0) {
@@ -334,8 +345,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
         if (location == LOCATION_ALL || m_allocated == 0) {
             m_num_mesh_elements = 0;
-            m_pitch.x           = 0;
-            m_pitch.y           = 0;
 
             if (m_is_axpy_allocated) {
                 GPU_FREE(d_axpy_alpha);
@@ -513,7 +522,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
                     m_h_attr, m_h_attr + size, uint64_t(num_cols));
 
                 m_layout = (m_layout == SoA) ? AoS : SoA;
-                set_pitch();
             }
         }
     }
@@ -735,27 +743,24 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
         assert(attr < m_num_attributes);
         assert(idx < m_num_mesh_elements);
-        assert(m_pitch.x > 0 && m_pitch.y > 0);
+
+        const uint32_t pitch_x = (m_layout == AoS) ? m_num_attributes : 1;
+        const uint32_t pitch_y = (m_layout == AoS) ? 1 : m_num_mesh_elements;
 
 #ifdef __CUDA_ARCH__
-        return m_d_attr[idx * m_pitch.x + attr * m_pitch.y];
+        return m_d_attr[idx * pitch_x + attr * pitch_y];
+
 #else
-        return m_h_attr[idx * m_pitch.x + attr * m_pitch.y];
+        return m_h_attr[idx * pitch_x + attr * pitch_y];
 #endif
     }
 
     __host__ __device__ __forceinline__ T& operator()(uint32_t idx)
     {
         // for m_num_attributes =1
-
         assert(m_num_attributes == 1);
         assert(idx < m_num_mesh_elements);
-
-#ifdef __CUDA_ARCH__
-        return m_d_attr[idx];
-#else
-        return m_h_attr[idx];
-#endif
+        return (*this)(idx, 0);
     }
 
     __host__ __device__ __forceinline__ T& operator()(uint32_t idx,
@@ -765,26 +770,25 @@ class RXMeshAttribute : public RXMeshAttributeBase
         assert(attr < m_num_attributes);
         assert(idx < m_num_mesh_elements);
 
+        const uint32_t pitch_x = (m_layout == AoS) ? m_num_attributes : 1;
+        const uint32_t pitch_y = (m_layout == AoS) ? 1 : m_num_mesh_elements;
+
 #ifdef __CUDA_ARCH__
-        return m_d_attr[idx * m_pitch.x + attr * m_pitch.y];
+        return m_d_attr[idx * pitch_x + attr * pitch_y];
+
 #else
-        return m_h_attr[idx * m_pitch.x + attr * m_pitch.y];
+        return m_h_attr[idx * pitch_x + attr * pitch_y];
 #endif
     }
 
     __host__ __device__ __forceinline__ T& operator()(uint32_t idx) const
     {
         // for m_num_attributes =1
-
         assert(m_num_attributes == 1);
         assert(idx < m_num_mesh_elements);
-
-#ifdef __CUDA_ARCH__
-        return m_d_attr[idx];
-#else
-        return m_h_attr[idx];
-#endif
+        return (*this)(idx, 0);
     }
+
 
     __host__ __device__ __forceinline__ T* operator->() const
     {
@@ -825,8 +829,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
             }
         }
         m_layout            = rhs.m_layout;
-        m_pitch.x           = rhs.m_pitch.x;
-        m_pitch.y           = rhs.m_pitch.y;
         m_is_axpy_allocated = rhs.m_is_axpy_allocated;
         if (rhs.m_is_axpy_allocated) {
             CUDA_ERROR(cudaMalloc((void**)&d_axpy_alpha,
@@ -854,16 +856,68 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
 
    private:
-    void set_pitch()
+    void allocate(locationT location)
     {
-        if (m_layout == AoS) {
-            m_pitch.x = m_num_attributes;
-            m_pitch.y = 1;
-        } else if (m_layout == SoA) {
-            m_pitch.x = 1;
-            m_pitch.y = m_num_mesh_elements;
-        } else {
-            RXMESH_ERROR("RXMeshAttribute::set_pitch() unknown layout");
+
+        if ((location & HOST) == HOST) {
+            release(HOST);
+            if (m_num_mesh_elements != 0) {
+                m_h_attr = (T*)malloc(sizeof(T) * m_num_mesh_elements *
+                                      m_num_attributes);
+                if (!m_h_attr) {
+                    RXMESH_ERROR(
+                        " RXMeshAttribute::allocate() allocation on {} failed "
+                        "with #mesh_elemnts = {} and #attributes per element = "
+                        "{}" +
+                            location_to_string(HOST),
+                        m_num_mesh_elements,
+                        m_num_attributes);
+                }
+            }
+            m_allocated = m_allocated | HOST;
+        }
+
+
+        if ((location & DEVICE) == DEVICE) {
+            release(DEVICE);
+            if (m_num_mesh_elements != 0) {
+                CUDA_ERROR(cudaMalloc(
+                    (void**)&(m_d_attr),
+                    sizeof(T) * m_num_mesh_elements * m_num_attributes));
+            }
+            m_allocated = m_allocated | DEVICE;
+        }
+    }
+
+
+    void allocate_v1(locationT location)
+    {
+
+        if ((location & HOST) == HOST) {
+            release(HOST);
+            if (m_num_patches != 0) {
+                m_h_attr_v1 = (T*)malloc(sizeof(T*) * m_num_patches);
+                if (!m_h_attr_v1) {
+                    RXMESH_ERROR(
+                        " RXMeshAttribute::allocate() allocation on {} failed "
+                        "with #mesh_elemnts = {} and #attributes per element = "
+                        "{}" +
+                            location_to_string(HOST),
+                        m_num_mesh_elements,
+                        m_num_attributes);
+                }
+            }
+            m_allocated = m_allocated | HOST;
+        }
+
+
+        if ((location & DEVICE) == DEVICE) {
+            release(DEVICE);
+            if (m_num_patches != 0) {
+                CUDA_ERROR(cudaMalloc((void**)&(m_d_attr_v1),
+                                      sizeof(T*) * m_num_patches));
+            }
+            m_allocated = m_allocated | DEVICE;
         }
     }
 
@@ -945,9 +999,10 @@ class RXMeshAttribute : public RXMeshAttributeBase
     locationT m_allocated;
     T*        m_h_attr;
     T*        m_d_attr;
+    T**       m_h_attr_v1;
+    T**       m_d_attr_v1;
+    uint32_t  m_num_patches;
     layoutT   m_layout;
-    // to index: id*m_pitch.x + attr*m_pitch.y
-    uint2 m_pitch;
 
     constexpr static uint32_t m_block_size = 256;
 
@@ -990,6 +1045,30 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
                    with_axpy_alloc,
                    with_reduce_alloc);
     }
+
+    __host__ __device__ __forceinline__ T& operator()(FaceHandle fid,
+                                                      uint32_t   attr) const
+    {
+        return 0;
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(FaceHandle fid) const
+    {
+        return (*this)(fid, 0);
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(FaceHandle fid,
+                                                      uint32_t   attr)
+    {
+        return 0;
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(FaceHandle fid)
+    {
+        return (*this)(fid, 0);
+    }
+
+   private:
 };
 
 
@@ -1020,6 +1099,30 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
                    with_axpy_alloc,
                    with_reduce_alloc);
     }
+
+    __host__ __device__ __forceinline__ T& operator()(EdgeHandle fid,
+                                                      uint32_t   attr) const
+    {
+        return 0;
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(EdgeHandle fid) const
+    {
+        return (*this)(fid, 0);
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(EdgeHandle fid,
+                                                      uint32_t   attr)
+    {
+        return 0;
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(EdgeHandle fid)
+    {
+        return (*this)(fid, 0);
+    }
+
+   private:
 };
 
 
@@ -1049,6 +1152,50 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
                    with_axpy_alloc,
                    with_reduce_alloc);
     }
+
+    __host__ __device__ __forceinline__ T& operator()(uint32_t idx) const
+    {
+        return (*this)(idx, 0);
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(uint32_t idx)
+    {
+        return (*this)(idx, 0);
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(uint32_t idx,
+                                                      uint32_t attr) const
+    {
+        return (*this)(idx, attr);
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(uint32_t idx,
+                                                      uint32_t attr)
+    {
+        return (*this)(idx, attr);
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(VertexHandle fid,
+                                                      uint32_t     attr) const
+    {
+        return 0;
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(VertexHandle fid) const
+    {
+        return (*this)(fid, 0);
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(VertexHandle fid,
+                                                      uint32_t     attr)
+    {
+        return 0;
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(VertexHandle fid)
+    {
+        return (*this)(fid, 0);
+    }
 };
 
 /**
@@ -1057,9 +1204,9 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
 class RXMeshAttributeContainer
 {
    public:
-    RXMeshAttributeContainer()          = default;
+    RXMeshAttributeContainer() = default;
     virtual ~RXMeshAttributeContainer()
-    {        
+    {
         while (!m_attr_container.empty()) {
             m_attr_container.back()->release(LOCATION_ALL);
             m_attr_container.pop_back();
