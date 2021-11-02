@@ -77,6 +77,7 @@ class RXMeshStatic : public RXMesh
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
+     * TODO remove location input parameter
      */
     template <class T>
     std::shared_ptr<RXMeshFaceAttribute<T>> add_face_attribute(
@@ -89,9 +90,8 @@ class RXMeshStatic : public RXMesh
     {
         return m_attr_container->template add<RXMeshFaceAttribute<T>>(
             name.c_str(),
-            this->get_num_faces(),
+            this->m_h_num_owned_f,
             num_attributes,
-            location,
             layout,
             with_axpy_alloc,
             with_reduce_alloc);
@@ -109,6 +109,7 @@ class RXMeshStatic : public RXMesh
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
+     * TODO remove location input parameter
      */
     template <class T>
     std::shared_ptr<RXMeshEdgeAttribute<T>> add_edge_attribute(
@@ -121,9 +122,8 @@ class RXMeshStatic : public RXMesh
     {
         return m_attr_container->template add<RXMeshEdgeAttribute<T>>(
             name.c_str(),
-            this->get_num_edges(),
+            this->m_h_num_owned_e,
             num_attributes,
-            location,
             layout,
             with_axpy_alloc,
             with_reduce_alloc);
@@ -141,6 +141,7 @@ class RXMeshStatic : public RXMesh
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
+     * TODO remove location input parameter
      */
     template <class T>
     std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
@@ -153,9 +154,8 @@ class RXMeshStatic : public RXMesh
     {
         return m_attr_container->template add<RXMeshVertexAttribute<T>>(
             name.c_str(),
-            this->get_num_vertices(),
+            this->m_h_num_owned_v,
             num_attributes,
-            location,
             layout,
             with_axpy_alloc,
             with_reduce_alloc);

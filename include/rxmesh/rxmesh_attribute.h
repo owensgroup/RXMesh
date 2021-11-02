@@ -71,6 +71,8 @@ class RXMeshAttributeBase
 
     virtual void release(locationT location) = 0;
 
+    virtual void release_v1() = 0;
+
     virtual ~RXMeshAttributeBase() = default;
 };
 
@@ -93,11 +95,12 @@ class RXMeshAttribute : public RXMeshAttributeBase
           m_num_mesh_elements(0),
           m_num_attributes(0),
           m_allocated(LOCATION_NONE),
+          m_is_allocated(false),
           m_h_attr(nullptr),
           m_d_attr(nullptr),
-          m_h_attr_v1(nullptr),
-          m_d_attr_v1(nullptr),
+          m_attr(nullptr),
           m_num_patches(0),
+          m_element_per_patch(nullptr),
           m_layout(AoS),
           d_axpy_alpha(nullptr),
           d_axpy_beta(nullptr),
@@ -119,11 +122,12 @@ class RXMeshAttribute : public RXMeshAttributeBase
           m_num_mesh_elements(0),
           m_num_attributes(0),
           m_allocated(LOCATION_NONE),
+          m_is_allocated(false),
           m_h_attr(nullptr),
           m_d_attr(nullptr),
-          m_h_attr_v1(nullptr),
-          m_d_attr_v1(nullptr),
+          m_attr(nullptr),
           m_num_patches(0),
+          m_element_per_patch(nullptr),
           m_layout(AoS),
           d_axpy_alpha(nullptr),
           d_axpy_beta(nullptr),
@@ -191,19 +195,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
         return nullptr;
     }
 
-    __host__ __device__ __forceinline__ T** get_pointer_v1(
-        locationT location) const
-    {
-
-        if (location == DEVICE) {
-            return m_d_attr_v1;
-        }
-        if (location == HOST) {
-            return m_h_attr_v1;
-        }
-        return nullptr;
-    }
-
     void reset(const T value, locationT location, cudaStream_t stream = NULL)
     {
 
@@ -259,23 +250,22 @@ class RXMeshAttribute : public RXMeshAttributeBase
         }
     }
 
-    void init_v1(const std::vector<uint32_t>& element_per_patch,
-                 uint32_t                     num_elements,
-                 uint32_t                     num_attributes,
-                 locationT                    location          = DEVICE,
-                 layoutT                      layout            = AoS,
+    void init_v1(const std::vector<uint16_t>& element_per_patch,
+                 const uint32_t               num_attributes,
+                 const layoutT                layout            = AoS,
                  const bool                   with_axpy_alloc   = true,
                  const bool                   with_reduce_alloc = true)
     {
         release();
-        m_allocated               = LOCATION_NONE;
-        this->m_num_mesh_elements = num_elements;
-        this->m_num_attributes    = num_attributes;
-        if (num_elements == 0) {
+        m_num_patches    = element_per_patch.size();
+        m_num_attributes = num_attributes;
+        m_layout         = layout;
+
+        if (m_num_patches == 0) {
             return;
         }
-        allocate(location);
-        m_layout = layout;
+
+        allocate_v1(element_per_patch);
 
         if (!m_is_axpy_allocated && with_axpy_alloc) {
             CUDA_ERROR(cudaMalloc((void**)&d_axpy_alpha,
@@ -351,6 +341,40 @@ class RXMeshAttribute : public RXMeshAttributeBase
                 GPU_FREE(d_axpy_beta);
                 m_is_axpy_allocated = false;
             }
+            if (m_is_reduce_allocated) {
+                for (uint32_t i = 0; i < m_num_attributes; ++i) {
+                    GPU_FREE(m_d_reduce_temp_storage[i]);
+                    GPU_FREE(m_norm2_temp_buffer[i]);
+                    GPU_FREE(m_d_reduce_output[i]);
+                    CUDA_ERROR(cudaStreamDestroy(m_reduce_streams[i]));
+                }
+                m_is_reduce_allocated = false;
+                free(m_reduce_streams);
+                free(m_d_reduce_output);
+                free(m_norm2_temp_buffer);
+                free(m_d_reduce_temp_storage);
+            }
+        }
+    }
+
+    void release_v1()
+    {
+        if (m_is_allocated) {
+            GPU_FREE(m_d_attr);
+            GPU_FREE(m_element_per_patch);
+
+            m_is_allocated = false;
+
+            m_num_mesh_elements = 0;
+            m_num_patches       = 0;
+            m_num_attributes    = 0;
+
+            if (m_is_axpy_allocated) {
+                GPU_FREE(d_axpy_alpha);
+                GPU_FREE(d_axpy_beta);
+                m_is_axpy_allocated = false;
+            }
+
             if (m_is_reduce_allocated) {
                 for (uint32_t i = 0; i < m_num_attributes; ++i) {
                     GPU_FREE(m_d_reduce_temp_storage[i]);
@@ -890,35 +914,26 @@ class RXMeshAttribute : public RXMeshAttributeBase
     }
 
 
-    void allocate_v1(locationT location)
+    void allocate_v1(const std::vector<uint16_t>& element_per_patch)
     {
 
-        if ((location & HOST) == HOST) {
-            release(HOST);
-            if (m_num_patches != 0) {
-                m_h_attr_v1 = (T*)malloc(sizeof(T*) * m_num_patches);
-                if (!m_h_attr_v1) {
-                    RXMESH_ERROR(
-                        " RXMeshAttribute::allocate() allocation on {} failed "
-                        "with #mesh_elemnts = {} and #attributes per element = "
-                        "{}" +
-                            location_to_string(HOST),
-                        m_num_mesh_elements,
-                        m_num_attributes);
-                }
+        release_v1();
+
+        if (m_num_patches != 0) {
+            CUDA_ERROR(cudaMallocManaged((void**)&(m_attr),
+                                         sizeof(T*) * m_num_patches));
+
+            CUDA_ERROR(cudaMallocManaged((void**)&(m_element_per_patch),
+                                         sizeof(uint16_t) * m_num_patches));
+
+            for (uint32_t p = 0; p < m_num_patches; ++p) {
+                m_element_per_patch[p] = element_per_patch[p];
+                CUDA_ERROR(cudaMallocManaged((void**)&(m_attr[p]),
+                                             sizeof(T) * element_per_patch[p]));
             }
-            m_allocated = m_allocated | HOST;
         }
 
-
-        if ((location & DEVICE) == DEVICE) {
-            release(DEVICE);
-            if (m_num_patches != 0) {
-                CUDA_ERROR(cudaMalloc((void**)&(m_d_attr_v1),
-                                      sizeof(T*) * m_num_patches));
-            }
-            m_allocated = m_allocated | DEVICE;
-        }
+        m_is_allocated = true;
     }
 
     void allocate_reduce_temp_storage(size_t reduce_temp_bytes)
@@ -997,11 +1012,12 @@ class RXMeshAttribute : public RXMeshAttributeBase
     uint32_t  m_num_mesh_elements;
     uint32_t  m_num_attributes;
     locationT m_allocated;
+    bool      m_is_allocated;
     T*        m_h_attr;
     T*        m_d_attr;
-    T**       m_h_attr_v1;
-    T**       m_d_attr_v1;
+    T**       m_attr;
     uint32_t  m_num_patches;
+    uint16_t* m_element_per_patch;
     layoutT   m_layout;
 
     constexpr static uint32_t m_block_size = 256;
@@ -1029,21 +1045,19 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
    public:
     RXMeshFaceAttribute() = default;
 
-    RXMeshFaceAttribute(const char* name,
-                        uint32_t    num_faces,
-                        uint32_t    num_attributes,
-                        locationT   location,
-                        layoutT     layout,
-                        const bool  with_axpy_alloc,
-                        const bool  with_reduce_alloc)
+    RXMeshFaceAttribute(const char*                  name,
+                        const std::vector<uint16_t>& face_per_patch,
+                        const uint32_t               num_attributes,
+                        const layoutT                layout,
+                        const bool                   with_axpy_alloc,
+                        const bool                   with_reduce_alloc)
         : RXMeshAttribute<T>(name)
     {
-        this->init(num_faces,
-                   num_attributes,
-                   location,
-                   layout,
-                   with_axpy_alloc,
-                   with_reduce_alloc);
+        this->init_v1(face_per_patch,
+                      num_attributes,
+                      layout,
+                      with_axpy_alloc,
+                      with_reduce_alloc);
     }
 
     __host__ __device__ __forceinline__ T& operator()(FaceHandle fid,
@@ -1082,22 +1096,19 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
    public:
     RXMeshEdgeAttribute() = default;
 
-    RXMeshEdgeAttribute(const char* name,
-                        uint32_t    num_edges,
-                        uint32_t    num_attributes,
-                        locationT   location,
-                        layoutT     layout,
-
-                        const bool with_axpy_alloc,
-                        const bool with_reduce_alloc)
+    RXMeshEdgeAttribute(const char*                  name,
+                        const std::vector<uint16_t>& edge_per_patch,
+                        const uint32_t               num_attributes,
+                        const layoutT                layout,
+                        const bool                   with_axpy_alloc,
+                        const bool                   with_reduce_alloc)
         : RXMeshAttribute<T>(name)
     {
-        this->init(num_edges,
-                   num_attributes,
-                   location,
-                   layout,
-                   with_axpy_alloc,
-                   with_reduce_alloc);
+        this->init_v1(edge_per_patch,
+                      num_attributes,
+                      layout,
+                      with_axpy_alloc,
+                      with_reduce_alloc);
     }
 
     __host__ __device__ __forceinline__ T& operator()(EdgeHandle fid,
@@ -1136,21 +1147,19 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
    public:
     RXMeshVertexAttribute() = default;
 
-    RXMeshVertexAttribute(const char* name,
-                          uint32_t    num_vertices,
-                          uint32_t    num_attributes,
-                          locationT   location,
-                          layoutT     layout,
-                          const bool  with_axpy_alloc,
-                          const bool  with_reduce_alloc)
+    RXMeshVertexAttribute(const char*                  name,
+                          const std::vector<uint16_t>& vertex_per_patch,
+                          const uint32_t               num_attributes,
+                          const layoutT                layout,
+                          const bool                   with_axpy_alloc,
+                          const bool                   with_reduce_alloc)
         : RXMeshAttribute<T>(name)
     {
-        this->init(num_vertices,
-                   num_attributes,
-                   location,
-                   layout,
-                   with_axpy_alloc,
-                   with_reduce_alloc);
+        this->init_v1(vertex_per_patch,
+                      num_attributes,
+                      layout,
+                      with_axpy_alloc,
+                      with_reduce_alloc);
     }
 
     __host__ __device__ __forceinline__ T& operator()(uint32_t idx) const
@@ -1208,7 +1217,7 @@ class RXMeshAttributeContainer
     virtual ~RXMeshAttributeContainer()
     {
         while (!m_attr_container.empty()) {
-            m_attr_container.back()->release(LOCATION_ALL);
+            m_attr_container.back()->release_v1();
             m_attr_container.pop_back();
         }
     }
@@ -1228,13 +1237,12 @@ class RXMeshAttributeContainer
     }
 
     template <typename AttrT>
-    std::shared_ptr<AttrT> add(const char* name,
-                               uint32_t    num_elements,
-                               uint32_t    num_attributes,
-                               locationT   location,
-                               layoutT     layout,
-                               const bool  with_axpy_alloc,
-                               const bool  with_reduce_alloc)
+    std::shared_ptr<AttrT> add(const char*            name,
+                               std::vector<uint16_t>& element_per_patch,
+                               uint32_t               num_attributes,
+                               layoutT                layout,
+                               const bool             with_axpy_alloc,
+                               const bool             with_reduce_alloc)
     {
         if (does_exist(name)) {
             RXMESH_WARN(
@@ -1244,9 +1252,8 @@ class RXMeshAttributeContainer
         }
 
         auto new_attr = std::make_shared<AttrT>(name,
-                                                num_elements,
+                                                element_per_patch,
                                                 num_attributes,
-                                                location,
                                                 layout,
                                                 with_axpy_alloc,
                                                 with_reduce_alloc);
