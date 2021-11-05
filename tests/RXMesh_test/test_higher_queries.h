@@ -24,10 +24,10 @@ TEST(RXMeshStatic, HigherQueries)
 
     // input/output container
     auto input_container = rxmesh_static.add_vertex_attribute<uint32_t>(
-        "input", 1u, rxmesh::LOCATION_ALL, rxmesh::AoS, false, false);
+        "input", 1u, rxmesh::LOCATION_ALL, rxmesh::AoS, false);
 
     auto output_container = rxmesh_static.add_vertex_attribute<uint32_t>(
-        "output", input_size, rxmesh::LOCATION_ALL, rxmesh::SoA, false, false);
+        "output", input_size, rxmesh::LOCATION_ALL, rxmesh::SoA, false);
     //           ^^that is a bit excessive
 
     // launch box

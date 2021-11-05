@@ -85,7 +85,6 @@ class RXMeshStatic : public RXMesh
         uint32_t           num_attributes,
         locationT          location          = DEVICE,
         layoutT            layout            = AoS,
-        const bool         with_axpy_alloc   = true,
         const bool         with_reduce_alloc = true)
     {
         return m_attr_container->template add<RXMeshFaceAttribute<T>>(
@@ -93,7 +92,6 @@ class RXMeshStatic : public RXMesh
             this->m_h_num_owned_f,
             num_attributes,
             layout,
-            with_axpy_alloc,
             with_reduce_alloc);
     }
 
@@ -117,7 +115,6 @@ class RXMeshStatic : public RXMesh
         uint32_t           num_attributes,
         locationT          location          = DEVICE,
         layoutT            layout            = AoS,
-        const bool         with_axpy_alloc   = true,
         const bool         with_reduce_alloc = true)
     {
         return m_attr_container->template add<RXMeshEdgeAttribute<T>>(
@@ -125,7 +122,6 @@ class RXMeshStatic : public RXMesh
             this->m_h_num_owned_e,
             num_attributes,
             layout,
-            with_axpy_alloc,
             with_reduce_alloc);
     }
 
@@ -149,7 +145,6 @@ class RXMeshStatic : public RXMesh
         uint32_t           num_attributes,
         locationT          location          = DEVICE,
         layoutT            layout            = AoS,
-        const bool         with_axpy_alloc   = true,
         const bool         with_reduce_alloc = true)
     {
         return m_attr_container->template add<RXMeshVertexAttribute<T>>(
@@ -157,7 +152,6 @@ class RXMeshStatic : public RXMesh
             this->m_h_num_owned_v,
             num_attributes,
             layout,
-            with_axpy_alloc,
             with_reduce_alloc);
     }
 

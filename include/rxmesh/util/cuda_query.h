@@ -67,7 +67,7 @@ cudaDeviceProp cuda_query(const int dev, bool quite = false)
             " a CUDA-supported GPU!!!");
     }
 
-    cudaSetDevice(dev);
+    CUDA_ERROR(cudaSetDevice(dev));
     cudaDeviceProp devProp;
 
     CUDA_ERROR(cudaGetDeviceProperties(&devProp, dev));
