@@ -158,6 +158,9 @@ uint64_t __device__ __host__ __forceinline__ unique_id(uint16_t local_id,
  */
 struct VertexHandle
 {
+    template <typename T>
+    friend class RXMeshVertexAttribute;
+
     __device__ __host__ VertexHandle() : m_patch_id(INVALID32), m_v({INVALID16})
     {
     }
@@ -195,6 +198,9 @@ struct VertexHandle
  */
 struct EdgeHandle
 {
+    template <typename T>
+    friend class RXMeshEdgeAttribute;
+
     __device__ __host__ EdgeHandle() : m_patch_id(INVALID32), m_e({INVALID16})
     {
     }
@@ -229,6 +235,9 @@ struct EdgeHandle
  */
 struct FaceHandle
 {
+    template <typename T>
+    friend class RXMeshFaceAttribute;
+
     __device__ __host__ FaceHandle() : m_patch_id(INVALID32), m_f({INVALID16})
     {
     }

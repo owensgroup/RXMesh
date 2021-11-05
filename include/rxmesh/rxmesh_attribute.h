@@ -793,8 +793,9 @@ class RXMeshAttribute : public RXMeshAttributeBase
         }
     }
 
-    __host__ __device__ __forceinline__ T& operator()(uint32_t idx,
-                                                      uint32_t attr)
+    // TODO remove
+    __host__ __device__ __forceinline__ T& operator()(const uint32_t idx,
+                                                      const uint32_t attr)
     {
 
         assert(attr < m_num_attributes);
@@ -811,7 +812,8 @@ class RXMeshAttribute : public RXMeshAttributeBase
 #endif
     }
 
-    __host__ __device__ __forceinline__ T& operator()(uint32_t idx)
+    // TODO remove
+    __host__ __device__ __forceinline__ T& operator()(const uint32_t idx)
     {
         // for m_num_attributes =1
         assert(m_num_attributes == 1);
@@ -819,8 +821,9 @@ class RXMeshAttribute : public RXMeshAttributeBase
         return (*this)(idx, 0);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(uint32_t idx,
-                                                      uint32_t attr) const
+    // TODO remove
+    __host__ __device__ __forceinline__ T& operator()(const uint32_t idx,
+                                                      const uint32_t attr) const
     {
 
         assert(attr < m_num_attributes);
@@ -837,7 +840,8 @@ class RXMeshAttribute : public RXMeshAttributeBase
 #endif
     }
 
-    __host__ __device__ __forceinline__ T& operator()(uint32_t idx) const
+    // TODO remove
+    __host__ __device__ __forceinline__ T& operator()(const uint32_t idx) const
     {
         // for m_num_attributes =1
         assert(m_num_attributes == 1);
@@ -845,6 +849,34 @@ class RXMeshAttribute : public RXMeshAttributeBase
         return (*this)(idx, 0);
     }
 
+
+    __host__ __device__ __forceinline__ T& operator()(const uint32_t patch_id,
+                                                      const uint16_t local_id,
+                                                      const uint32_t attr) const
+    {
+        assert(patch_id < m_num_patches);
+        assert(attr < m_num_attributes);
+
+        const uint32_t pitch_x = (m_layout == AoS) ? m_num_attributes : 1;
+        const uint32_t pitch_y =
+            (m_layout == AoS) ? 1 : m_element_per_patch[patch_id];
+
+        m_attr[patch_id][local_id * pitch_x + attr * pitch_y];
+    }
+
+    __host__ __device__ __forceinline__ T& operator()(const uint32_t patch_id,
+                                                      const uint16_t local_id,
+                                                      const uint32_t attr)
+    {
+        assert(patch_id < m_num_patches);
+        assert(attr < m_num_attributes);
+
+        const uint32_t pitch_x = (m_layout == AoS) ? m_num_attributes : 1;
+        const uint32_t pitch_y =
+            (m_layout == AoS) ? 1 : m_element_per_patch[patch_id];
+
+        m_attr[patch_id][local_id * pitch_x + attr * pitch_y];
+    }
 
     __host__ __device__ __forceinline__ T* operator->() const
     {
@@ -1089,26 +1121,27 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
             face_per_patch, num_attributes, layout, with_reduce_alloc);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(FaceHandle fid,
-                                                      uint32_t   attr) const
+    __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
+                                                      const uint32_t attr) const
     {
-        return 0;
+        return (*this)(f_handle.m_patch_id, f_handle.m_f.id, attr);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(FaceHandle fid) const
+    __host__ __device__ __forceinline__ T& operator()(
+        const FaceHandle f_handle) const
     {
-        return (*this)(fid, 0);
+        return (*this)(f_handle, 0);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(FaceHandle fid,
-                                                      uint32_t   attr)
+    __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
+                                                      const uint32_t   attr)
     {
-        return 0;
+        return (*this)(f_handle.m_patch_id, f_handle.m_f.id, attr);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(FaceHandle fid)
+    __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle)
     {
-        return (*this)(fid, 0);
+        return (*this)(f_handle, 0);
     }
 
    private:
@@ -1136,26 +1169,27 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
             edge_per_patch, num_attributes, layout, with_reduce_alloc);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(EdgeHandle fid,
-                                                      uint32_t   attr) const
+    __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
+                                                      const uint32_t attr) const
     {
-        return 0;
+        return (*this)(e_handle.m_patch_id, e_handle.m_e.id, attr);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(EdgeHandle fid) const
+    __host__ __device__ __forceinline__ T& operator()(
+        const EdgeHandle e_handle) const
     {
-        return (*this)(fid, 0);
+        return (*this)(e_handle, 0);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(EdgeHandle fid,
-                                                      uint32_t   attr)
+    __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
+                                                      const uint32_t   attr)
     {
-        return 0;
+        return (*this)(e_handle.m_patch_id, e_handle.m_e.id, attr);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(EdgeHandle fid)
+    __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle)
     {
-        return (*this)(fid, 0);
+        return (*this)(e_handle, 0);
     }
 
    private:
@@ -1183,48 +1217,44 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
             vertex_per_patch, num_attributes, layout, with_reduce_alloc);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(uint32_t idx) const
-    {
-        return (*this)(idx, 0);
-    }
-
-    __host__ __device__ __forceinline__ T& operator()(uint32_t idx)
-    {
-        return (*this)(idx, 0);
-    }
-
-    __host__ __device__ __forceinline__ T& operator()(uint32_t idx,
-                                                      uint32_t attr) const
+    // TODO remove
+    __host__ __device__ __forceinline__ T& operator()(const uint32_t idx,
+                                                      const uint32_t attr) const
     {
         return (*this)(idx, attr);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(uint32_t idx,
-                                                      uint32_t attr)
+    // TODO remove
+    __host__ __device__ __forceinline__ T& operator()(const uint32_t idx,
+                                                      const uint32_t attr)
     {
         return (*this)(idx, attr);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(VertexHandle fid,
-                                                      uint32_t     attr) const
+    __host__ __device__ __forceinline__ T& operator()(
+        const VertexHandle v_handle,
+        const uint32_t     attr) const
     {
-        return 0;
+        return (*this)(v_handle.m_patch_id, v_handle.m_v.id, attr);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(VertexHandle fid) const
+    __host__ __device__ __forceinline__ T& operator()(
+        const VertexHandle v_handle) const
     {
-        return (*this)(fid, 0);
+        return (*this)(v_handle, 0);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(VertexHandle fid,
-                                                      uint32_t     attr)
+    __host__ __device__ __forceinline__ T& operator()(
+        const VertexHandle v_handle,
+        const uint32_t     attr)
     {
-        return 0;
+        return (*this)(v_handle.m_patch_id, v_handle.m_v, attr);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(VertexHandle fid)
+    __host__ __device__ __forceinline__ T& operator()(
+        const VertexHandle v_handle)
     {
-        return (*this)(fid, 0);
+        return (*this)(v_handle, 0);
     }
 };
 
