@@ -193,6 +193,11 @@ struct VertexHandle
     LocalVertexT m_v;
 };
 
+inline std::ostream& operator<<(std::ostream& os, VertexHandle v_handle)
+{
+    return (os << 'v' << v_handle.unique_id());
+}
+
 /**
  * @brief Unique identifier for edges
  */
@@ -230,6 +235,10 @@ struct EdgeHandle
     LocalEdgeT m_e;
 };
 
+inline std::ostream& operator<<(std::ostream& os, EdgeHandle e_handle)
+{
+    return (os << 'e' << e_handle.unique_id());
+}
 /**
  * @brief Unique identifier for faces
  */
@@ -266,5 +275,8 @@ struct FaceHandle
     uint32_t   m_patch_id;
     LocalFaceT m_f;
 };
-
+inline std::ostream& operator<<(std::ostream& os, FaceHandle f_handle)
+{
+    return (os << 'f' << f_handle.unique_id());
+}
 }  // namespace rxmesh
