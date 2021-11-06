@@ -143,12 +143,12 @@ namespace detail {
  * @param patch_id the patch owning the mesh element
  * @return
  */
-uint64_t __device__ __host__ __forceinline__ unique_id(uint16_t local_id,
-                                                       uint32_t patch_id)
+uint64_t __device__ __host__ __forceinline__ unique_id(const uint16_t local_id,
+                                                       const uint32_t patch_id)
 {
-    uint64_t ret = local_id;
+    uint64_t ret = patch_id;
     ret |= ret << 32;
-    ret |= patch_id;
+    ret |= local_id;
     return ret;
 }
 }  // namespace detail
@@ -257,7 +257,7 @@ struct FaceHandle
         return !(*this == rhs);
     }
 
-    uint64_t __device__ __host__ __inline__ unique_id()
+    uint64_t __device__ __host__ __inline__ unique_id() const
     {
         return detail::unique_id(m_f.id, m_patch_id);
     }
