@@ -861,7 +861,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
         const uint32_t pitch_y =
             (m_layout == AoS) ? 1 : m_element_per_patch[patch_id];
 
-        m_attr[patch_id][local_id * pitch_x + attr * pitch_y];
+        return m_attr[patch_id][local_id * pitch_x + attr * pitch_y];
     }
 
     __host__ __device__ __forceinline__ T& operator()(const uint32_t patch_id,
@@ -875,7 +875,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
         const uint32_t pitch_y =
             (m_layout == AoS) ? 1 : m_element_per_patch[patch_id];
 
-        m_attr[patch_id][local_id * pitch_x + attr * pitch_y];
+        return m_attr[patch_id][local_id * pitch_x + attr * pitch_y];
     }
 
     __host__ __device__ __forceinline__ T* operator->() const
@@ -1124,7 +1124,8 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
                                                       const uint32_t attr) const
     {
-        return (*this)(f_handle.m_patch_id, f_handle.m_f.id, attr);
+        return RXMeshAttribute<T>::operator()(
+            f_handle.m_patch_id, f_handle.m_f.id, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(
@@ -1136,15 +1137,14 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
                                                       const uint32_t   attr)
     {
-        return (*this)(f_handle.m_patch_id, f_handle.m_f.id, attr);
+        return RXMeshAttribute<T>::operator()(
+            f_handle.m_patch_id, f_handle.m_f.id, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle)
     {
         return (*this)(f_handle, 0);
     }
-
-   private:
 };
 
 
@@ -1172,7 +1172,8 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
                                                       const uint32_t attr) const
     {
-        return (*this)(e_handle.m_patch_id, e_handle.m_e.id, attr);
+        return RXMeshAttribute<T>::operator()(
+            e_handle.m_patch_id, e_handle.m_e.id, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(
@@ -1184,15 +1185,14 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
                                                       const uint32_t   attr)
     {
-        return (*this)(e_handle.m_patch_id, e_handle.m_e.id, attr);
+        return RXMeshAttribute<T>::operator()(
+            e_handle.m_patch_id, e_handle.m_e.id, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle)
     {
         return (*this)(e_handle, 0);
     }
-
-   private:
 };
 
 
@@ -1235,7 +1235,8 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
         const VertexHandle v_handle,
         const uint32_t     attr) const
     {
-        return (*this)(v_handle.m_patch_id, v_handle.m_v.id, attr);
+        return RXMeshAttribute<T>::operator()(
+            v_handle.m_patch_id, v_handle.m_v.id, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(
@@ -1248,7 +1249,8 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
         const VertexHandle v_handle,
         const uint32_t     attr)
     {
-        return (*this)(v_handle.m_patch_id, v_handle.m_v, attr);
+        return RXMeshAttribute<T>::operator()(
+            v_handle.m_patch_id, v_handle.m_v.id, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(
@@ -1265,6 +1267,7 @@ class RXMeshAttributeContainer
 {
    public:
     RXMeshAttributeContainer() = default;
+
     virtual ~RXMeshAttributeContainer()
     {
         while (!m_attr_container.empty()) {
