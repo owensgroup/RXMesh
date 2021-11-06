@@ -11,6 +11,7 @@ set( SOURCE_LIST
 	test_higher_queries.h
 	query.cuh	
 	higher_query.cuh
+	test_for_each.h
 )
 
 target_sources( RXMesh_test 

@@ -33,6 +33,69 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
+     * @brief Apply a lambda function to all vertices in the mesh
+     * @tparam LambdaT type of the lambda function (inferred)
+     * @param apply lambda function to be applied for all vertices. The lambda
+     * function signature takes a VertexHandle
+     */
+    template <typename LambdaT>
+    void for_each_vertex(LambdaT apply)
+    {
+        const int num_patches = this->get_num_patches();
+#pragma omp parallel for collapse(2)
+        for (int p = 0; p < num_patches; ++p) {
+            const int num_vertices = static_cast<int>(this->m_h_num_owned_v[p]);
+            for (int v = 0; v < num_vertices; ++v) {
+                const VertexHandle v_handle(static_cast<uint32_t>(p),
+                                            static_cast<uint16_t>(v));
+                apply(v_handle);
+            }
+        }
+    }
+
+    /**
+     * @brief Apply a lambda function to all edges in the mesh
+     * @tparam LambdaT type of the lambda function (inferred)
+     * @param apply lambda function to be applied for all edges. The lambda
+     * function signature takes a EdgeHandle
+     */
+    template <typename LambdaT>
+    void for_each_edge(LambdaT apply)
+    {
+        const int num_patches = this->get_num_patches();
+#pragma omp parallel for collapse(2)
+        for (int p = 0; p < num_patches; ++p) {
+            const int num_edges = static_cast<int>(this->m_h_num_owned_e[p]);
+            for (int e = 0; e < num_edges; ++e) {
+                const EdgeHandle e_handle(static_cast<uint32_t>(p),
+                                          static_cast<uint16_t>(e));
+                apply(e_handle);
+            }
+        }
+    }
+
+    /**
+     * @brief Apply a lambda function to all faces in the mesh
+     * @tparam LambdaT type of the lambda function (inferred)
+     * @param apply lambda function to be applied for all faces. The lambda
+     * function signature takes a FaceHandle
+     */
+    template <typename LambdaT>
+    void for_each_face(LambdaT apply)
+    {
+        const int num_patches = this->get_num_patches();
+#pragma omp parallel for collapse(2)
+        for (int p = 0; p < num_patches; ++p) {
+            const int num_faces = static_cast<int>(this->m_h_num_owned_f[p]);
+            for (int f = 0; f < num_faces; ++f) {
+                const FaceHandle f_handle(static_cast<uint32_t>(p),
+                                          static_cast<uint16_t>(f));
+                apply(f_handle);
+            }
+        }
+    }
+
+    /**
      * @brief populate the launch_box with grid size and dynamic shared memory
      * needed for kernel launch
      * TODO provide variadic version of this function that can accept multiple

@@ -20,7 +20,7 @@ struct RXMeshTestArg
 #include "test_higher_queries.h"
 #include "test_queries.h"
 #include "test_attribute.cuh"
-
+#include "test_for_each.h"
 
 int main(int argc, char** argv)
 {
