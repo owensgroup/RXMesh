@@ -68,38 +68,47 @@ cudaDeviceProp cuda_query(const int dev, bool quite = false)
     }
 
     CUDA_ERROR(cudaSetDevice(dev));
-    cudaDeviceProp devProp;
+    cudaDeviceProp dev_prop;
 
-    CUDA_ERROR(cudaGetDeviceProperties(&devProp, dev));
+    CUDA_ERROR(cudaGetDeviceProperties(&dev_prop, dev));
 
     if (!quite) {
 
         RXMESH_TRACE("Total number of device: {}", deviceCount);
         RXMESH_TRACE("Using device Number: {}", dev);
-        RXMESH_TRACE("Device name: {}", devProp.name);
+
+        RXMESH_TRACE("Device name: {}", dev_prop.name);
         RXMESH_TRACE("Compute Capability: {}.{}",
-                     (int)devProp.major,
-                     (int)devProp.minor);
+                     (int)dev_prop.major,
+                     (int)dev_prop.minor);
         RXMESH_TRACE("Total amount of global memory (MB): {0:.1f}",
-                     (float)devProp.totalGlobalMem / 1048576.0f);
+                     (float)dev_prop.totalGlobalMem / 1048576.0f);
         RXMESH_TRACE("{} Multiprocessors, {} CUDA Cores/MP: {} CUDA Cores",
-                     devProp.multiProcessorCount,
-                     convert_SMV_to_cores(devProp.major, devProp.minor),
-                     convert_SMV_to_cores(devProp.major, devProp.minor) *
-                         devProp.multiProcessorCount);
+                     dev_prop.multiProcessorCount,
+                     convert_SMV_to_cores(dev_prop.major, dev_prop.minor),
+                     convert_SMV_to_cores(dev_prop.major, dev_prop.minor) *
+                         dev_prop.multiProcessorCount);
+        RXMESH_TRACE("ECC support: {}",
+                     (dev_prop.ECCEnabled ? "Enabled" : "Disabled"));
         RXMESH_TRACE("GPU Max Clock rate: {0:.1f} MHz ({1:.2f} GHz)",
-                     devProp.clockRate * 1e-3f,
-                     devProp.clockRate * 1e-6f);
+                     dev_prop.clockRate * 1e-3f,
+                     dev_prop.clockRate * 1e-6f);
         RXMESH_TRACE("Memory Clock rate: {0:.1f} Mhz",
-                     devProp.memoryClockRate * 1e-3f);
-        RXMESH_TRACE("Memory Bus Width:  {}-bit", devProp.memoryBusWidth);
-        const double maxBW = 2.0 * devProp.memoryClockRate *
-                             (devProp.memoryBusWidth / 8.0) / 1.0E6;
+                     dev_prop.memoryClockRate * 1e-3f);
+        RXMESH_TRACE("Memory Bus Width:  {}-bit", dev_prop.memoryBusWidth);
+        const double maxBW = 2.0 * dev_prop.memoryClockRate *
+                             (dev_prop.memoryBusWidth / 8.0) / 1.0E6;
         RXMESH_TRACE("Peak Memory Bandwidth: {0:f}(GB/s)", maxBW);
         RXMESH_TRACE("Kernels compiled for compute capability: {}",
                      cuda_arch());
     }
 
-    return devProp;
+    if (!dev_prop.managedMemory) {
+        RXMESH_ERROR(
+            "The selected device does not support CUDA unified memory");
+        exit(EXIT_FAILURE);
+    }
+
+    return dev_prop;
 }
 }  // namespace rxmesh
