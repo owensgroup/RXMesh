@@ -238,7 +238,7 @@ TEST(RXMeshStatic, Oriented_VV)
     RXMeshAttribute<uint32_t> input_container;
     input_container.init(rxmesh_static.get_num_vertices(),
                          1u,
-                         rxmesh::DEVICE,
+                         rxmesh::LOCATION_ALL,
                          rxmesh::AoS,
                          false,
                          false);
@@ -246,7 +246,7 @@ TEST(RXMeshStatic, Oriented_VV)
     RXMeshAttribute<uint32_t> output_container;
     output_container.init(rxmesh_static.get_num_vertices(),
                           max_output_per_element(rxmesh_static, Op::VV) + 1,
-                          rxmesh::DEVICE,
+                          rxmesh::LOCATION_ALL,
                           rxmesh::SoA,
                           false,
                           false);
@@ -371,7 +371,7 @@ TEST(RXMeshStatic, Queries)
         // input/output container
         RXMeshAttribute<containerT> input_container;
         input_container.init(
-            input_size, 1u, rxmesh::DEVICE, rxmesh::AoS, false, false);
+            input_size, 1u, rxmesh::LOCATION_ALL, rxmesh::AoS, false, false);
 
         // allocate output container
         // for each mesh element, we reserve the maximum possible output based
@@ -381,7 +381,7 @@ TEST(RXMeshStatic, Queries)
         RXMeshAttribute<containerT> output_container;
         output_container.init(input_size,
                               max_output_per_element(rxmesh_static, ops_it) + 1,
-                              rxmesh::DEVICE,
+                              rxmesh::LOCATION_ALL,
                               rxmesh::SoA,
                               false,
                               false);
@@ -423,7 +423,8 @@ TEST(RXMeshStatic, Queries)
 
         // verify
         bool passed /*= tester.run_query_verifier(
-            rxmesh_static, Faces, ops_it, input_container, output_container)*/;
+            rxmesh_static, Faces, ops_it, input_container, output_container)*/
+            ;
 
         td.passed.push_back(passed);
         EXPECT_TRUE(passed) << "Testing: " << td.test_name;

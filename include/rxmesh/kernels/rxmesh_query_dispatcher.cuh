@@ -544,7 +544,7 @@ __device__ __inline__ void query_block_dispatcher(
 
 
 /**
- * query_block_dispatcher()
+ * query_block_dispatcher() for higher queries 
  */
 template <Op op, uint32_t blockThreads, typename computeT>
 __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,

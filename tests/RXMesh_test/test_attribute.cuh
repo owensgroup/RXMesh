@@ -70,8 +70,10 @@ TEST(RXMeshAttribute, Host)
     rxmesh::RXMeshAttribute<float> rxmesh_attr;
 
     rxmesh_attr.set_name("float_attr");
-    rxmesh_attr.init(
-        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
+    rxmesh_attr.init(num_mesh_elements,
+                     attributes_per_element,
+                     rxmesh::LOCATION_ALL,
+                     rxmesh::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -123,7 +125,8 @@ TEST(RXMeshAttribute, Device)
     uint32_t                          num_mesh_elements = 2048;
     rxmesh::RXMeshAttribute<uint32_t> rxmesh_attr;
     rxmesh_attr.set_name("int_attr");
-    rxmesh_attr.init(num_mesh_elements, attributes_per_element, rxmesh::DEVICE);
+    rxmesh_attr.init(
+        num_mesh_elements, attributes_per_element, rxmesh::LOCATION_ALL);
 
 
     // generate some numbers on device
@@ -222,10 +225,14 @@ TEST(RXMeshAttribute, AXPY)
 
     X.set_name("X");
     Y.set_name("Y");
-    X.init(
-        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
-    Y.init(
-        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
+    X.init(num_mesh_elements,
+           attributes_per_element,
+           rxmesh::LOCATION_ALL,
+           rxmesh::AoS);
+    Y.init(num_mesh_elements,
+           attributes_per_element,
+           rxmesh::LOCATION_ALL,
+           rxmesh::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -284,8 +291,10 @@ TEST(RXMeshAttribute, Reduce)
     rxmesh::RXMeshAttribute<float> X;
 
     X.set_name("X");
-    X.init(
-        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
+    X.init(num_mesh_elements,
+           attributes_per_element,
+           rxmesh::LOCATION_ALL,
+           rxmesh::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -331,8 +340,10 @@ TEST(RXMeshAttribute, Norm2)
     rxmesh::RXMeshAttribute<float> X;
 
     X.set_name("X");
-    X.init(
-        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
+    X.init(num_mesh_elements,
+           attributes_per_element,
+           rxmesh::LOCATION_ALL,
+           rxmesh::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -380,10 +391,14 @@ TEST(RXMeshAttribute, Dot)
 
     X.set_name("X");
     Y.set_name("Y");
-    X.init(
-        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
-    Y.init(
-        num_mesh_elements, attributes_per_element, rxmesh::HOST, rxmesh::AoS);
+    X.init(num_mesh_elements,
+           attributes_per_element,
+           rxmesh::LOCATION_ALL,
+           rxmesh::AoS);
+    Y.init(num_mesh_elements,
+           attributes_per_element,
+           rxmesh::LOCATION_ALL,
+           rxmesh::AoS);
 
     // generate some numbers as AoS
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
@@ -430,7 +445,7 @@ TEST(RXMeshAttribute, Copy)
     uint32_t                       num_mesh_elements = 2048;
     rxmesh::RXMeshAttribute<float> rxmesh_attr;
     rxmesh_attr.set_name("float_attr");
-    rxmesh_attr.init(num_mesh_elements, 1, rxmesh::HOST, rxmesh::AoS);
+    rxmesh_attr.init(num_mesh_elements, 1, rxmesh::LOCATION_ALL, rxmesh::AoS);
 
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {
         rxmesh_attr(i) = i;
@@ -473,33 +488,12 @@ TEST(RXMeshAttribute, AddingAndRemoving)
 
     EXPECT_TRUE(rxmesh.does_attribute_exist(attr_name));
 
-    for (uint32_t v = 0; v < rxmesh.get_num_vertices(); ++v) {
-        for (uint32_t i = 0; i < 3; ++i) {
-            (*vertex_attr)(v, i) = v + i;
-        }
-    }
 
-    vertex_attr->move(rxmesh::HOST, rxmesh::DEVICE);
+    vertex_attr->move_v1(rxmesh::HOST, rxmesh::DEVICE);
 
-    // device success variable
-    uint32_t* d_success = nullptr;
-    CUDA_ERROR(cudaMalloc((void**)&d_success, sizeof(uint32_t)));
-
-
-    // actual testing
-    test_values<float><<<1, 1>>>(*vertex_attr, d_success);
-
-    CUDA_ERROR(cudaPeekAtLastError());
-    CUDA_ERROR(cudaGetLastError());
     CUDA_ERROR(cudaDeviceSynchronize());
 
-    // host success variable
-    uint32_t h_success(0);
-    CUDA_ERROR(cudaMemcpy(
-        &h_success, d_success, sizeof(uint32_t), cudaMemcpyDeviceToHost));
-
-    // free device
-    GPU_FREE(d_success);
-
+    // this is not neccessary in general but we are just testing the
+    // functionality here
     rxmesh.remove_attribute(attr_name);
 }

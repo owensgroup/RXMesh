@@ -366,8 +366,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
         }
 
         if (location == LOCATION_ALL || m_allocated == 0) {
-            m_num_mesh_elements = 0;
-
             if (m_is_axpy_allocated) {
                 GPU_FREE(d_axpy_alpha);
                 GPU_FREE(d_axpy_beta);

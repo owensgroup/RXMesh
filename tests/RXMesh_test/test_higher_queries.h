@@ -7,7 +7,7 @@
 
 using namespace rxmesh;
 
-TEST(RXMeshStatic, HigherQueries)
+TEST(RXMeshStatic, DISABLED_HigherQueries)
 {
     // Select device
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
