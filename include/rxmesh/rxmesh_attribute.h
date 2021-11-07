@@ -103,6 +103,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
           m_element_per_patch(nullptr),
           m_layout(AoS),
           m_gpu_id(0),
+          m_can_prefetch(false),
           d_axpy_alpha(nullptr),
           d_axpy_beta(nullptr),
           m_is_axpy_allocated(false),
@@ -131,13 +132,18 @@ class RXMeshAttribute : public RXMeshAttributeBase
           m_element_per_patch(nullptr),
           m_layout(AoS),
           m_gpu_id(0),
+          m_can_prefetch(false),
           d_axpy_alpha(nullptr),
           d_axpy_beta(nullptr),
           m_is_axpy_allocated(false),
           m_is_reduce_allocated(false),
           m_reduce_temp_storage_bytes(0)
     {
-        CUDA_ERROR(cudaGetDevice(&m_gpu_id));
+        auto prop      = cuda_query(m_gpu_id, true);
+        m_can_prefetch = prop.concurrentManagedAccess == 1;
+        RXMESH_INFO(
+            "RXMeshAttribute: device {} does not support memory prefetching",
+            m_gpu_id);
         if (name != nullptr) {
             this->m_name = (char*)malloc(sizeof(char) * (strlen(name) + 1));
             strcpy(this->m_name, name);
@@ -314,39 +320,45 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
     void move_v1(locationT source, locationT target, cudaStream_t stream = NULL)
     {
-        if (source == target) {
-            RXMESH_WARN(
-                "RXMeshAttribute::move_v1() source ({}) and target ({}) are "
-                "the same.",
-                location_to_string(source),
-                location_to_string(target));
-            return;
-        }
+        if (m_can_prefetch) {
 
-        if (this->m_num_patches == 0) {
-            return;
-        }
+            if (source == target) {
+                RXMESH_WARN(
+                    "RXMeshAttribute::move_v1() source ({}) and target ({}) "
+                    "are "
+                    "the same.",
+                    location_to_string(source),
+                    location_to_string(target));
+                return;
+            }
 
-        const int dst_device = (target == DEVICE) ? m_gpu_id : cudaCpuDeviceId;
+            if (this->m_num_patches == 0) {
+                return;
+            }
 
-        for (uint32_t p = 0; p < m_num_patches; ++p) {
-            CUDA_ERROR(cudaMemPrefetchAsync(m_attr[p],
-                                            sizeof(T) * m_element_per_patch[p],
+            const int dst_device =
+                (target == DEVICE) ? m_gpu_id : cudaCpuDeviceId;
+
+            for (uint32_t p = 0; p < m_num_patches; ++p) {
+                CUDA_ERROR(
+                    cudaMemPrefetchAsync(m_attr[p],
+                                         sizeof(T) * m_element_per_patch[p],
+                                         dst_device,
+                                         stream));
+            }
+            CUDA_ERROR(cudaMemPrefetchAsync(
+                m_attr, sizeof(T*) * m_num_patches, dst_device, stream));
+
+            CUDA_ERROR(cudaMemPrefetchAsync(m_element_per_patch,
+                                            sizeof(uint16_t) * m_num_patches,
                                             dst_device,
                                             stream));
-        }
-        CUDA_ERROR(cudaMemPrefetchAsync(
-            m_attr, sizeof(T*) * m_num_patches, dst_device, stream));
 
-        CUDA_ERROR(cudaMemPrefetchAsync(m_element_per_patch,
-                                        sizeof(uint16_t) * m_num_patches,
-                                        dst_device,
-                                        stream));
-
-        if (target == HOST) {
-            // make sure that data is not accessed from host before prefetching
-            // is done
-            CUDA_ERROR(cudaStreamSynchronize(stream));
+            if (target == HOST) {
+                // make sure that data is not accessed from host before
+                // prefetching is done
+                CUDA_ERROR(cudaStreamSynchronize(stream));
+            }
         }
     }
 
@@ -895,6 +907,8 @@ class RXMeshAttribute : public RXMeshAttributeBase
         m_num_mesh_elements = rhs.m_num_mesh_elements;
         m_num_attributes    = rhs.m_num_attributes;
         m_allocated         = rhs.m_allocated;
+        m_gpu_id            = rhs.m_gpu_id;
+        m_can_prefetch      = rhs.m_can_prefetch;
         if (rhs.is_device_allocated()) {
             if (rhs.m_num_mesh_elements != 0) {
                 uint64_t num_bytes =
@@ -1082,6 +1096,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
     uint16_t* m_element_per_patch;
     layoutT   m_layout;
     int       m_gpu_id;
+    bool      m_can_prefetch;
 
     constexpr static uint32_t m_block_size = 256;
 
