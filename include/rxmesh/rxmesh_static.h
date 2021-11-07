@@ -146,7 +146,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshFaceAttribute<T>> add_face_attribute(
         const std::string& name,
         uint32_t           num_attributes,
-        locationT          location          = DEVICE,
+        locationT          location          = LOCALE_ALL,
         layoutT            layout            = AoS,
         const bool         with_reduce_alloc = true)
     {
@@ -176,7 +176,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshEdgeAttribute<T>> add_edge_attribute(
         const std::string& name,
         uint32_t           num_attributes,
-        locationT          location          = DEVICE,
+        locationT          location          = LOCALE_ALL,
         layoutT            layout            = AoS,
         const bool         with_reduce_alloc = true)
     {
@@ -206,7 +206,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
         const std::string& name,
         uint32_t           num_attributes,
-        locationT          location          = DEVICE,
+        locationT          location          = LOCALE_ALL,
         layoutT            layout            = AoS,
         const bool         with_reduce_alloc = true)
     {

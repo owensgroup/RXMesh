@@ -10,7 +10,7 @@
 #include "rxmesh/rxmesh_context.h"
 #include "rxmesh/rxmesh_iterator.cuh"
 #include "rxmesh/rxmesh_types.h"
-
+#include "rxmesh/util/meta.h"
 
 namespace rxmesh {
 
@@ -301,11 +301,7 @@ __device__ __inline__ void query_block_dispatcher(
 /**
  * query_block_dispatcher_v1()
  */
-template <Op op,
-          typename T,
-          uint32_t blockThreads,
-          typename computeT,
-          typename activeSetT>
+template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
 __device__ __inline__ void query_block_dispatcher_v1(
     const RXMeshContext& context,
     const uint32_t       patch_id,
@@ -313,18 +309,46 @@ __device__ __inline__ void query_block_dispatcher_v1(
     activeSetT           compute_active_set,
     const bool           oriented = false)
 {
+    // Extract the type of the input parameters of the compute lambda function.
+    // The first parameter should be Vertex/Edge/FaceHandle and second parameter
+    // should be RXMeshVertex/Edge/FaceIterator
+
+    using ComputeTraits = detail::FunctionTraits<computeT>;
+    using Compute0Arg   = typename ComputeTraits::template arg<0>::type;
+    using Compute1Arg   = typename ComputeTraits::template arg<1>::type;
+    using ComputeHandleT =
+        std::conditional_t<std::is_reference_v<Compute0Arg>,
+                           std::remove_reference_t<Compute0Arg>,
+                           Compute0Arg>;
+    using ComputeIteratorT =
+        std::conditional_t<std::is_reference_v<Compute1Arg>,
+                           std::remove_reference_t<Compute1Arg>,
+                           Compute1Arg>;
+    using LocalT = typename ComputeHandleT::LocalT;
+    // Extract the type of the single input parameter of the active_set lambda
+    // function. It should be Vertex/Edge/FaceHandle and it should match the
+    // first parameter of the compute lambda function
+    using ActiveSetTraits = detail::FunctionTraits<activeSetT>;
+    using ActiveSet0Arg   = typename ActiveSetTraits::template arg<0>::type;
+    using ActiveSetHandleT =
+        std::conditional_t<std::is_reference_v<ActiveSet0Arg>,
+                           std::remove_reference_t<ActiveSet0Arg>,
+                           ActiveSet0Arg>;
+    static_assert(
+        std::is_same_v<ActiveSetHandleT, ComputeHandleT>,
+        "First argument of compute_op lambda function should match the first "
+        "argument of active_set lambda function ");
+
     static_assert(op != Op::EE, "Op::EE is not supported!");
-    static_assert(std::is_same<T, LocalEdgeT>::value ||
-                  std::is_same<T, LocalFaceT>::value ||
-                  std::is_same<T, LocalVertexT>::value);
+
 
     assert(patch_id < context.get_num_patches());
 
     uint32_t  num_src_in_patch = 0;
     uint16_t* s_output_offset(nullptr);
-    T*        s_output_value(nullptr);
+    LocalT*   s_output_value(nullptr);
 
-    detail::template query_block_dispatcher_v1<op, T, blockThreads>(
+    detail::template query_block_dispatcher_v1<op, LocalT, blockThreads>(
         context.get_patches_info()[patch_id],
         compute_active_set,
         oriented,
@@ -335,7 +359,7 @@ __device__ __inline__ void query_block_dispatcher_v1(
     assert(s_output_offset);
     assert(s_output_value);
 
-    // 5) Call compute on the output in shared memory by looping over all
+    // Call compute on the output in shared memory by looping over all
     // source elements in this patch.
 
     uint16_t local_id = threadIdx.x;
@@ -346,33 +370,17 @@ __device__ __inline__ void query_block_dispatcher_v1(
                 ((op == Op::EV)                 ? 2 :
                  (op == Op::FV || op == Op::FE) ? 3 :
                                                   0);
-            if constexpr (op == Op::VV || op == Op::EV || op == Op::FV) {
-                RXMeshVertexIterator iter(local_id,
-                                          s_output_value,
-                                          s_output_offset,
-                                          fixed_offset,
-                                          patch_id,
-                                          int(op == Op::FE));
-                compute_op({patch_id, local_id}, iter);
-            }
-            if constexpr (op == Op::VE || op == Op::EE || op == Op::FE) {
-                RXMeshEdgeIterator iter(local_id,
-                                        s_output_value,
-                                        s_output_offset,
-                                        fixed_offset,
-                                        patch_id,
-                                        int(op == Op::FE));
-                compute_op({patch_id, local_id}, iter);
-            }
-            if constexpr (op == Op::VF || op == Op::EF || op == Op::FF) {
-                RXMeshFaceIterator iter(local_id,
-                                        s_output_value,
-                                        s_output_offset,
-                                        fixed_offset,
-                                        patch_id,
-                                        int(op == Op::FE));
-                compute_op({patch_id, local_id}, iter);
-            }
+
+
+            ComputeHandleT   handle(patch_id, local_id);
+            ComputeIteratorT iter(local_id,
+                                  s_output_value,
+                                  s_output_offset,
+                                  fixed_offset,
+                                  patch_id,
+                                  int(op == Op::FE));
+
+            compute_op(handle, iter);
         }
 
         local_id += blockThreads;
@@ -381,6 +389,7 @@ __device__ __inline__ void query_block_dispatcher_v1(
 
 /**
  * query_block_dispatcher()
+ * TODO remove
  */
 template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
 __device__ __inline__ void query_block_dispatcher(
@@ -455,24 +464,13 @@ __device__ __inline__ void query_block_dispatcher_v1(
         return;
     }
 
-    if constexpr (op == Op::VV || op == Op::EV || op == Op::FV) {
-        query_block_dispatcher_v1<op, LocalVertexT, blockThreads>(
-            context, blockIdx.x, compute_op, compute_active_set, oriented);
-    }
-
-    if constexpr (op == Op::VE || op == Op::EE || op == Op::FE) {
-        query_block_dispatcher_v1<op, LocalEdgeT, blockThreads>(
-            context, blockIdx.x, compute_op, compute_active_set, oriented);
-    }
-
-    if constexpr (op == Op::VF || op == Op::EF || op == Op::FF) {
-        query_block_dispatcher_v1<op, LocalFaceT, blockThreads>(
-            context, blockIdx.x, compute_op, compute_active_set, oriented);
-    }
+    query_block_dispatcher_v1<op, blockThreads>(
+        context, blockIdx.x, compute_op, compute_active_set, oriented);
 }
 
 /**
  * query_block_dispatcher()
+ * TODO remove
  */
 template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
 __device__ __inline__ void query_block_dispatcher(
@@ -502,26 +500,21 @@ __device__ __inline__ void query_block_dispatcher_v1(
     computeT             compute_op,
     const bool           oriented = false)
 {
-    if (blockIdx.x >= context.get_num_patches()) {
-        return;
-    }
-    if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
-        query_block_dispatcher_v1<op, blockThreads>(
-            context, compute_op, [](VertexHandle) { return true; }, oriented);
-    }
+    // Extract the type of the first input parameters of the compute lambda
+    // function. It should be Vertex/Edge/FaceHandle
+    using ComputeTraits = detail::FunctionTraits<computeT>;
+    using Compute0Arg   = typename ComputeTraits::template arg<0>::type;
+    using ComputeHandleT =
+        std::conditional_t<std::is_reference_v<Compute0Arg>,
+                           std::remove_reference_t<Compute0Arg>,
+                           Compute0Arg>;
 
-    if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
-        query_block_dispatcher_v1<op, blockThreads>(
-            context, compute_op, [](FaceHandle) { return true; }, oriented);
-    }
-
-    if constexpr (op == Op::EV || op == Op::EE || op == Op::EF) {
-        query_block_dispatcher_v1<op, blockThreads>(
-            context, compute_op, [](EdgeHandle) { return true; }, oriented);
-    }
+    query_block_dispatcher_v1<op, blockThreads>(
+        context, compute_op, [](ComputeHandleT) { return true; }, oriented);
 }
 /**
  * query_block_dispatcher()
+ * TODO remove
  */
 template <Op op, uint32_t blockThreads, typename computeT>
 __device__ __inline__ void query_block_dispatcher(
@@ -544,7 +537,7 @@ __device__ __inline__ void query_block_dispatcher(
 
 
 /**
- * query_block_dispatcher() for higher queries 
+ * query_block_dispatcher() for higher queries
  */
 template <Op op, uint32_t blockThreads, typename computeT>
 __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,

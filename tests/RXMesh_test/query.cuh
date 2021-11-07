@@ -39,26 +39,16 @@ __launch_bounds__(blockThreads) __global__
     query_block_dispatcher<op, blockThreads>(context, store_lambda, oriented);
 }
 
-/**
- * query()
- */
-template <typename HandleT,
-          typename IterT,
-          rxmesh::Op op,
-          uint32_t   blockThreads>
-__launch_bounds__(blockThreads) __global__
-    static void query_v1(const rxmesh::RXMeshContext       context,
-                         rxmesh::RXMeshAttribute<uint64_t> d_src,
-                         rxmesh::RXMeshAttribute<uint64_t> output_container,
-                         const bool                        oriented = false)
+template <uint32_t blockThreads>
+__launch_bounds__(blockThreads) __global__ static void query_vv(
+    const rxmesh::RXMeshContext                         context,
+    rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle> input,
+    rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle> output,
+    const bool                                          oriented = false)
 {
     using namespace rxmesh;
 
-    static_assert(op != Op::EE, "Op::EE is not supported!");
-
-    assert(output_container.is_device_allocated());
-
-    auto store_lambda = [&](HandleT id, IterT& iter) {
+    auto store_lambda = [&](VertexHandle& input, RXMeshVertexIterator& iter) {
         //    d_src(id)               = id;
         //    output_container(id, 0) = iter.size();
         //
@@ -67,6 +57,6 @@ __launch_bounds__(blockThreads) __global__
         //    }
     };
 
-    query_block_dispatcher_v1<op, blockThreads>(
+    query_block_dispatcher_v1<Op::VV, blockThreads>(
         context, store_lambda, oriented);
 }

@@ -158,6 +158,8 @@ uint64_t __device__ __host__ __forceinline__ unique_id(const uint16_t local_id,
  */
 struct VertexHandle
 {
+    using LocalT = LocalVertexT;
+
     template <typename T>
     friend class RXMeshVertexAttribute;
 
@@ -203,6 +205,8 @@ inline std::ostream& operator<<(std::ostream& os, VertexHandle v_handle)
  */
 struct EdgeHandle
 {
+    using LocalT = LocalEdgeT;
+
     template <typename T>
     friend class RXMeshEdgeAttribute;
 
@@ -244,6 +248,8 @@ inline std::ostream& operator<<(std::ostream& os, EdgeHandle e_handle)
  */
 struct FaceHandle
 {
+    using LocalT = LocalFaceT;
+
     template <typename T>
     friend class RXMeshFaceAttribute;
 

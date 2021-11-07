@@ -121,7 +121,7 @@ float launcher_v1(const RXMeshContext&       context,
     GPUTimer timer;
     timer.start();
 
-    switch (op) {
+    /*switch (op) {
         case Op::VV:
             query_v1<VertexHandle, RXMeshVertexIterator, Op::VV, blockThreads>
                 <<<launch_box.blocks,
@@ -182,7 +182,7 @@ float launcher_v1(const RXMeshContext&       context,
                    launch_box.smem_bytes_dyn>>>(
                     context, input_container, output_container);
             break;
-    }
+    }*/
 
     timer.stop();
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -316,6 +316,76 @@ TEST(RXMeshStatic, Oriented_VV)
     output_container.release();
 }
 
+void query_vv(RXMeshStatic& rxmesh,
+              RXMeshTest&   tester,
+              Report&       report,
+              bool          oriented)
+{
+    // input container
+    auto input = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
+
+    auto output = rxmesh.add_vertex_attribute<VertexHandle>(
+        "output", rxmesh.get_max_valence() + 1);
+
+    // launch box
+    constexpr uint32_t      blockThreads = 256;
+    LaunchBox<blockThreads> launch_box;
+    rxmesh.prepare_launch_box(Op::VV, launch_box, false, oriented);
+
+    // test data
+    TestData td;
+    td.test_name   = op_to_string(Op::VV);
+    td.num_threads = launch_box.num_threads;
+    td.num_blocks  = launch_box.blocks;
+    td.dyn_smem    = launch_box.smem_bytes_dyn;
+    td.static_smem = launch_box.smem_bytes_static;
+
+    float total_time = 0;
+    CUDA_ERROR(cudaProfilerStart());
+    GPUTimer timer;
+
+    for (uint32_t itr = 0; itr < rxmesh_args.num_run; itr++) {
+
+        // input.reset(INVALID64, rxmesh::DEVICE);
+        // output.reset(INVALID64, rxmesh::DEVICE);
+
+        timer.start();
+        query_vv<blockThreads>
+            <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
+                rxmesh.get_context(), *input, *output, oriented);
+
+        timer.stop();
+        CUDA_ERROR(cudaDeviceSynchronize());
+        CUDA_ERROR(cudaGetLastError());
+        CUDA_ERROR(cudaProfilerStop());
+
+        total_time += timer.elapsed_millis();
+        td.time_ms.push_back(timer.elapsed_millis());
+    }
+
+    // move containers to the CPU for testing
+    output->move_v1(rxmesh::DEVICE, rxmesh::HOST);
+    input->move_v1(rxmesh::DEVICE, rxmesh::HOST);
+
+    // verify
+    bool passed /*= tester.run_query_verifier(
+        rxmesh, Faces, ops_it, input_container, output_container)*/
+        ;
+
+    td.passed.push_back(passed);
+    EXPECT_TRUE(passed) << "Testing: " << td.test_name;
+
+    report.add_test(td);
+    if (!rxmesh_args.quite) {
+        RXMESH_TRACE(" {} {} time = {} (ms)",
+                     td.test_name.c_str(),
+                     (passed ? " passed " : " failed "),
+                     total_time / float(rxmesh_args.num_run));
+    }
+
+    rxmesh.remove_attribute("input");
+    rxmesh.remove_attribute("output");
+}
 
 TEST(RXMeshStatic, Queries)
 {
@@ -349,6 +419,9 @@ TEST(RXMeshStatic, Queries)
     ::RXMeshTest tester(true);
     EXPECT_TRUE(tester.run_ltog_mapping_test(rxmesh_static, Faces))
         << "Local-to-global mapping test failed";
+
+    query_vv(rxmesh_static, tester, report, oriented);
+
 
     // adding query that we want to test
     std::vector<Op> ops = {
