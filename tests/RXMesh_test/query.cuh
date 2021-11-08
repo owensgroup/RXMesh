@@ -48,13 +48,12 @@ __launch_bounds__(blockThreads) __global__ static void query_vv(
 {
     using namespace rxmesh;
 
-    auto store_lambda = [&](VertexHandle& input, RXMeshVertexIterator& iter) {
-        //    d_src(id)               = id;
-        //    output_container(id, 0) = iter.size();
-        //
-        //    for (uint32_t i = 0; i < iter.size(); ++i) {
-        //        output_container(id, i + 1) = iter[i];
-        //    }
+    auto store_lambda = [&](VertexHandle& id, RXMeshVertexIterator& iter) {
+        input(id) = id;
+
+        for (uint32_t i = 0; i < iter.size(); ++i) {
+            output(id, i) = iter[i];
+        }
     };
 
     query_block_dispatcher_v1<Op::VV, blockThreads>(
