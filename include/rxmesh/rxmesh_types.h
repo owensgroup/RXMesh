@@ -154,7 +154,7 @@ uint64_t __device__ __host__ __forceinline__ unique_id(const uint16_t local_id,
 }  // namespace detail
 
 /**
- * @brief Unique identifier for vertices
+ * @brief vertices identifier
  */
 struct VertexHandle
 {
@@ -185,6 +185,11 @@ struct VertexHandle
         return !(*this == rhs);
     }
 
+    bool __device__ __host__ __inline__ is_valid() const
+    {
+        return m_patch_id != INVALID32 && m_v.id != INVALID16;
+    }
+
     uint64_t __device__ __host__ __inline__ unique_id()
     {
         return detail::unique_id(m_v.id, m_patch_id);
@@ -195,13 +200,16 @@ struct VertexHandle
     LocalVertexT m_v;
 };
 
+/**
+ * @brief print vertex unique_id to stream  
+*/
 inline std::ostream& operator<<(std::ostream& os, VertexHandle v_handle)
 {
     return (os << 'v' << v_handle.unique_id());
 }
 
 /**
- * @brief Unique identifier for edges
+ * @brief edges identifier
  */
 struct EdgeHandle
 {
@@ -229,6 +237,11 @@ struct EdgeHandle
         return !(*this == rhs);
     }
 
+    bool __device__ __host__ __inline__ is_valid() const
+    {
+        return m_patch_id != INVALID32 && m_e.id != INVALID16;
+    }
+
     uint64_t __device__ __host__ __inline__ unique_id()
     {
         return detail::unique_id(m_e.id, m_patch_id);
@@ -239,12 +252,16 @@ struct EdgeHandle
     LocalEdgeT m_e;
 };
 
+/**
+ * @brief print edge unique_id to stream
+ */
 inline std::ostream& operator<<(std::ostream& os, EdgeHandle e_handle)
 {
     return (os << 'e' << e_handle.unique_id());
 }
+
 /**
- * @brief Unique identifier for faces
+ * @brief faces identifier
  */
 struct FaceHandle
 {
@@ -272,6 +289,11 @@ struct FaceHandle
         return !(*this == rhs);
     }
 
+    bool __device__ __host__ __inline__ is_valid() const
+    {
+        return m_patch_id != INVALID32 && m_f.id != INVALID16;
+    }
+
     uint64_t __device__ __host__ __inline__ unique_id() const
     {
         return detail::unique_id(m_f.id, m_patch_id);
@@ -281,6 +303,10 @@ struct FaceHandle
     uint32_t   m_patch_id;
     LocalFaceT m_f;
 };
+
+/**
+ * @brief print face unique_id to stream
+ */
 inline std::ostream& operator<<(std::ostream& os, FaceHandle f_handle)
 {
     return (os << 'f' << f_handle.unique_id());
