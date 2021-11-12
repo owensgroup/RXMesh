@@ -147,7 +147,7 @@ struct RXMeshIteratorV1
         set(local_id, offset_size);
     }
 
-    RXMeshIteratorV1(const RXMeshIteratorV1& orig) = default;
+    __device__ RXMeshIteratorV1(const RXMeshIteratorV1& orig) = default;
 
 
     __device__ uint16_t size() const

@@ -39,12 +39,15 @@ __launch_bounds__(blockThreads) __global__
     query_block_dispatcher<op, blockThreads>(context, store_lambda, oriented);
 }
 
-template <uint32_t blockThreads>
-__launch_bounds__(blockThreads) __global__ static void query_vv(
-    const rxmesh::RXMeshContext                         context,
-    rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle> input,
-    rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle> output,
-    const bool                                          oriented = false)
+template <uint32_t   blockThreads,
+          rxmesh::Op op,          
+          typename InputAttributeT,
+          typename OutputAttributeT>
+__launch_bounds__(blockThreads) __global__
+    static void query_kernel(const rxmesh::RXMeshContext context,
+                             InputAttributeT             input,
+                             OutputAttributeT            output,
+                             const bool                  oriented = false)
 {
     using namespace rxmesh;
 
@@ -56,6 +59,6 @@ __launch_bounds__(blockThreads) __global__ static void query_vv(
         }
     };
 
-    query_block_dispatcher_v1<Op::VV, blockThreads>(
+    query_block_dispatcher_v1<op, blockThreads>(
         context, store_lambda, oriented);
 }

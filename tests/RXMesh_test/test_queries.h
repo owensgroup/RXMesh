@@ -1,15 +1,18 @@
+#include <functional>
 #include <numeric>
 #include <vector>
-#include "gtest/gtest.h"
-#include "query.cuh"
-#include "rxmesh/rxmesh_attribute.h"
-#include "rxmesh/rxmesh_static.h"
 
+#include "gtest/gtest.h"
+
+#include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_iterator.cuh"
+#include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/math.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh_test.h"
+
+#include "query.cuh"
 
 using namespace rxmesh;
 
@@ -37,7 +40,7 @@ TEST(RXMeshStatic, Oriented_VV)
 {
 
     // Select device
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    /*cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
@@ -130,7 +133,7 @@ TEST(RXMeshStatic, Oriented_VV)
 
 
     input_container.release();
-    output_container.release();
+    output_container.release();*/
 }
 
 template <rxmesh::Op op,
@@ -142,7 +145,7 @@ void launcher(RXMeshStatic&     rxmesh,
               InputAttributeT&  input,
               OutputAttributeT& output,
               RXMeshTest&       tester,
-              Report&           report,
+              Report&           report,              
               bool              oriented)
 {
 
@@ -165,18 +168,54 @@ void launcher(RXMeshStatic&     rxmesh,
 
     for (uint32_t itr = 0; itr < rxmesh_args.num_run; itr++) {
 
-        rxmesh.for_each_vertex([&](const InputHandleT& handle) {
-            input(handle) = InputHandleT();
-        });
+        // Reset input
+        // if input is a vertex
+        if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
+            rxmesh.for_each_vertex([&](const InputHandleT& handle) {
+                input(handle) = InputHandleT();
+            });
+        }
+        // if input is an edge
+        if constexpr (op == Op::EV || op == Op::EF) {
+            rxmesh.for_each_edge([&](const InputHandleT& handle) {
+                input(handle) = InputHandleT();
+            });
+        }
+        // if input is a face
+        if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
+            rxmesh.for_each_face([&](const InputHandleT& handle) {
+                input(handle) = InputHandleT();
+            });
+        }
 
-        rxmesh.for_each_vertex([&](const OutputHandleT& handle) {
-            for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
-                output(handle, j) = OutputHandleT();
-            }
-        });
+        // Reset output
+        // if output is a vertex
+        if constexpr (op == Op::VV || op == Op::EV || op == Op::FV) {
+            rxmesh.for_each_vertex([&](const OutputHandleT& handle) {
+                for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
+                    output(handle, j) = OutputHandleT();
+                }
+            });
+        }
+        // if output is an edge
+        if constexpr (op == Op::VE || op == Op::FE) {
+            rxmesh.for_each_edge([&](const OutputHandleT& handle) {
+                for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
+                    output(handle, j) = OutputHandleT();
+                }
+            });
+        }
+        // if output is a face
+        if constexpr (op == Op::VF || op == Op::EF || op == Op::FF) {
+            rxmesh.for_each_face([&](const OutputHandleT& handle) {
+                for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
+                    output(handle, j) = OutputHandleT();
+                }
+            });
+        }
 
         timer.start();
-        query_vv<blockThreads>
+        query_kernel<blockThreads, op>
             <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
                 rxmesh.get_context(), input, output, oriented);
 
@@ -210,7 +249,7 @@ void launcher(RXMeshStatic&     rxmesh,
     }
 }
 
-TEST(RXMeshStatic, Queries_v1)
+TEST(RXMeshStatic, Queries)
 {
     bool oriented = false;
 
