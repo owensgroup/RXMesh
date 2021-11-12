@@ -130,15 +130,15 @@ struct RXMeshIterator
     }
 };
 
-template <typename HandleT, typename LocalT>
+template <typename HandleT>
 struct RXMeshIteratorV1
 {
-    __device__ RXMeshIteratorV1(const uint16_t  local_id,
-                                const LocalT*   patch_output,
-                                const uint16_t* patch_offset,
-                                const uint32_t  offset_size,
-                                const uint32_t  patch_id,
-                                int             shift = 0)
+    __device__ RXMeshIteratorV1(const uint16_t                  local_id,
+                                const typename HandleT::LocalT* patch_output,
+                                const uint16_t*                 patch_offset,
+                                const uint32_t                  offset_size,
+                                const uint32_t                  patch_id,
+                                int                             shift = 0)
         : m_patch_output(patch_output),
           m_patch_offset(patch_offset),
           m_patch_id(patch_id),
@@ -147,7 +147,7 @@ struct RXMeshIteratorV1
         set(local_id, offset_size);
     }
 
-    __device__ RXMeshIteratorV1(const RXMeshIteratorV1& orig) = default;
+    RXMeshIteratorV1(const RXMeshIteratorV1& orig) = default;
 
 
     __device__ uint16_t size() const
@@ -220,14 +220,14 @@ struct RXMeshIteratorV1
 
 
    private:
-    const LocalT*   m_patch_output;
-    const uint16_t* m_patch_offset;
-    const uint32_t  m_patch_id;
-    uint16_t        m_local_id;
-    uint16_t        m_begin;
-    uint16_t        m_end;
-    uint16_t        m_current;
-    int             m_shift;
+    const typename HandleT::LocalT* m_patch_output;
+    const uint16_t*                 m_patch_offset;
+    const uint32_t                  m_patch_id;
+    uint16_t                        m_local_id;
+    uint16_t                        m_begin;
+    uint16_t                        m_end;
+    uint16_t                        m_current;
+    int                             m_shift;
 
     __device__ void set(const uint16_t local_id, const uint32_t offset_size)
     {
@@ -244,8 +244,8 @@ struct RXMeshIteratorV1
     }
 };
 
-using RXMeshVertexIterator = RXMeshIteratorV1<VertexHandle, LocalVertexT>;
-using RXMeshEdgeIterator   = RXMeshIteratorV1<EdgeHandle, LocalEdgeT>;
-using RXMeshFaceIterator   = RXMeshIteratorV1<FaceHandle, LocalFaceT>;
+using RXMeshVertexIterator = RXMeshIteratorV1<VertexHandle>;
+using RXMeshEdgeIterator   = RXMeshIteratorV1<EdgeHandle>;
+using RXMeshFaceIterator   = RXMeshIteratorV1<FaceHandle>;
 
 }  // namespace rxmesh

@@ -145,7 +145,7 @@ void launcher(RXMeshStatic&     rxmesh,
               InputAttributeT&  input,
               OutputAttributeT& output,
               RXMeshTest&       tester,
-              Report&           report,              
+              Report&           report,
               bool              oriented)
 {
 
@@ -215,7 +215,7 @@ void launcher(RXMeshStatic&     rxmesh,
         }
 
         timer.start();
-        query_kernel<blockThreads, op>
+        query_kernel<blockThreads, op, InputHandleT, OutputHandleT>
             <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
                 rxmesh.get_context(), input, output, oriented);
 

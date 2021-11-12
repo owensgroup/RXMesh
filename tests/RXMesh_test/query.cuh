@@ -40,7 +40,9 @@ __launch_bounds__(blockThreads) __global__
 }
 
 template <uint32_t   blockThreads,
-          rxmesh::Op op,          
+          rxmesh::Op op,
+          typename InputHandleT,
+          typename OutputHandleT,
           typename InputAttributeT,
           typename OutputAttributeT>
 __launch_bounds__(blockThreads) __global__
@@ -51,7 +53,8 @@ __launch_bounds__(blockThreads) __global__
 {
     using namespace rxmesh;
 
-    auto store_lambda = [&](VertexHandle& id, RXMeshVertexIterator& iter) {
+    auto store_lambda = [&](InputHandleT&                    id,
+                            RXMeshIteratorV1<OutputHandleT>& iter) {
         input(id) = id;
 
         for (uint32_t i = 0; i < iter.size(); ++i) {
