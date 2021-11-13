@@ -42,7 +42,7 @@ class RXMeshStatic : public RXMesh
     void for_each_vertex(LambdaT apply)
     {
         const int num_patches = this->get_num_patches();
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for
         for (int p = 0; p < num_patches; ++p) {
             const int num_vertices = static_cast<int>(this->m_h_num_owned_v[p]);
             for (int v = 0; v < num_vertices; ++v) {
@@ -63,7 +63,7 @@ class RXMeshStatic : public RXMesh
     void for_each_edge(LambdaT apply)
     {
         const int num_patches = this->get_num_patches();
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for
         for (int p = 0; p < num_patches; ++p) {
             const int num_edges = static_cast<int>(this->m_h_num_owned_e[p]);
             for (int e = 0; e < num_edges; ++e) {
@@ -84,7 +84,7 @@ class RXMeshStatic : public RXMesh
     void for_each_face(LambdaT apply)
     {
         const int num_patches = this->get_num_patches();
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for
         for (int p = 0; p < num_patches; ++p) {
             const int num_faces = static_cast<int>(this->m_h_num_owned_f[p]);
             for (int f = 0; f < num_faces; ++f) {
@@ -146,7 +146,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshFaceAttribute<T>> add_face_attribute(
         const std::string& name,
         uint32_t           num_attributes,
-        locationT          location          = LOCALE_ALL,
+        locationT          location          = LOCATION_ALL,
         layoutT            layout            = AoS,
         const bool         with_reduce_alloc = true)
     {
@@ -176,7 +176,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshEdgeAttribute<T>> add_edge_attribute(
         const std::string& name,
         uint32_t           num_attributes,
-        locationT          location          = LOCALE_ALL,
+        locationT          location          = LOCATION_ALL,
         layoutT            layout            = AoS,
         const bool         with_reduce_alloc = true)
     {
@@ -206,7 +206,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
         const std::string& name,
         uint32_t           num_attributes,
-        locationT          location          = LOCALE_ALL,
+        locationT          location          = LOCATION_ALL,
         layoutT            layout            = AoS,
         const bool         with_reduce_alloc = true)
     {
