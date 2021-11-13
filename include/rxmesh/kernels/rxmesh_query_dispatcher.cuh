@@ -324,7 +324,7 @@ __device__ __inline__ void query_block_dispatcher_v1(
         std::conditional_t<std::is_reference_v<Compute1Arg>,
                            std::remove_reference_t<Compute1Arg>,
                            Compute1Arg>;
-    using LocalT = typename ComputeHandleT::LocalT;
+    using LocalT = typename ComputeIteratorT::LocalT;
     // Extract the type of the single input parameter of the active_set lambda
     // function. It should be Vertex/Edge/FaceHandle and it should match the
     // first parameter of the compute lambda function

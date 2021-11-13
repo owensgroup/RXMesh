@@ -168,11 +168,15 @@ void launcher(RXMeshStatic&     rxmesh,
 
     for (uint32_t itr = 0; itr < rxmesh_args.num_run; itr++) {
 
-        // Reset input
-        // if input is a vertex
+        // Reset input/output
         if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
             rxmesh.for_each_vertex([&](const InputHandleT& handle) {
                 input(handle) = InputHandleT();
+            });
+            rxmesh.for_each_vertex([&](const InputHandleT& handle) {
+                for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
+                    output(handle, j) = OutputHandleT();
+                }
             });
         }
         // if input is an edge
@@ -180,39 +184,24 @@ void launcher(RXMeshStatic&     rxmesh,
             rxmesh.for_each_edge([&](const InputHandleT& handle) {
                 input(handle) = InputHandleT();
             });
+            rxmesh.for_each_edge([&](const InputHandleT& handle) {
+                for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
+                    output(handle, j) = OutputHandleT();
+                }
+            });
         }
         // if input is a face
         if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
             rxmesh.for_each_face([&](const InputHandleT& handle) {
                 input(handle) = InputHandleT();
             });
+            rxmesh.for_each_face([&](const InputHandleT& handle) {
+                for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
+                    output(handle, j) = OutputHandleT();
+                }
+            });
         }
 
-        // Reset output
-        // if output is a vertex
-        if constexpr (op == Op::VV || op == Op::EV || op == Op::FV) {
-            rxmesh.for_each_vertex([&](const OutputHandleT& handle) {
-                for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
-                    output(handle, j) = OutputHandleT();
-                }
-            });
-        }
-        // if output is an edge
-        if constexpr (op == Op::VE || op == Op::FE) {
-            rxmesh.for_each_edge([&](const OutputHandleT& handle) {
-                for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
-                    output(handle, j) = OutputHandleT();
-                }
-            });
-        }
-        // if output is a face
-        if constexpr (op == Op::VF || op == Op::EF || op == Op::FF) {
-            rxmesh.for_each_face([&](const OutputHandleT& handle) {
-                for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
-                    output(handle, j) = OutputHandleT();
-                }
-            });
-        }
 
         timer.start();
         query_kernel<blockThreads, op, InputHandleT, OutputHandleT>
@@ -288,9 +277,85 @@ TEST(RXMeshStatic, Queries)
             "output", rxmesh.get_max_valence());
         launcher<Op::VV, VertexHandle, VertexHandle>(
             rxmesh, *input, *output, tester, report, oriented);
+        rxmesh.remove_attribute("input");
+        rxmesh.remove_attribute("output");
     }
 
 
+    {
+        // VE
+        auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
+        auto output = rxmesh.add_vertex_attribute<EdgeHandle>(
+            "output", rxmesh.get_max_valence());
+        launcher<Op::VE, VertexHandle, EdgeHandle>(
+            rxmesh, *input, *output, tester, report, oriented);
+        rxmesh.remove_attribute("input");
+        rxmesh.remove_attribute("output");
+    }
+
+    {
+        // VF
+        auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
+        auto output = rxmesh.add_vertex_attribute<FaceHandle>(
+            "output", rxmesh.get_max_valence());
+        launcher<Op::VF, VertexHandle, FaceHandle>(
+            rxmesh, *input, *output, tester, report, oriented);
+        rxmesh.remove_attribute("input");
+        rxmesh.remove_attribute("output");
+    }
+
+
+    {
+        // EV
+        auto input  = rxmesh.add_edge_attribute<EdgeHandle>("input", 1);
+        auto output = rxmesh.add_edge_attribute<VertexHandle>("output", 2);
+        launcher<Op::EV, EdgeHandle, VertexHandle>(
+            rxmesh, *input, *output, tester, report, oriented);
+        rxmesh.remove_attribute("input");
+        rxmesh.remove_attribute("output");
+    }
+
+    {
+        // EF
+        auto input  = rxmesh.add_edge_attribute<EdgeHandle>("input", 1);
+        auto output = rxmesh.add_edge_attribute<FaceHandle>(
+            "output", rxmesh.get_max_edge_incident_faces());
+        launcher<Op::EF, EdgeHandle, FaceHandle>(
+            rxmesh, *input, *output, tester, report, oriented);
+        rxmesh.remove_attribute("input");
+        rxmesh.remove_attribute("output");
+    }
+
+    {
+        // FV
+        auto input  = rxmesh.add_face_attribute<FaceHandle>("input", 1);
+        auto output = rxmesh.add_face_attribute<VertexHandle>("output", 3);
+        launcher<Op::FV, FaceHandle, VertexHandle>(
+            rxmesh, *input, *output, tester, report, oriented);
+        rxmesh.remove_attribute("input");
+        rxmesh.remove_attribute("output");
+    }
+
+    {
+        // FE
+        auto input  = rxmesh.add_face_attribute<FaceHandle>("input", 1);
+        auto output = rxmesh.add_face_attribute<EdgeHandle>("output", 2);
+        launcher<Op::FE, FaceHandle, EdgeHandle>(
+            rxmesh, *input, *output, tester, report, oriented);
+        rxmesh.remove_attribute("input");
+        rxmesh.remove_attribute("output");
+    }
+
+    {
+        // FF
+        auto input  = rxmesh.add_face_attribute<FaceHandle>("input", 1);
+        auto output = rxmesh.add_face_attribute<FaceHandle>(
+            "output", rxmesh.get_max_edge_adjacent_faces() - 1);
+        launcher<Op::FF, FaceHandle, FaceHandle>(
+            rxmesh, *input, *output, tester, report, oriented);
+        rxmesh.remove_attribute("input");
+        rxmesh.remove_attribute("output");
+    }
     // Write the report
     report.write(
         rxmesh_args.output_folder + "/rxmesh",
