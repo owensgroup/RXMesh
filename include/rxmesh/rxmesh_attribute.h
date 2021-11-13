@@ -5,6 +5,7 @@
 #include "rxmesh/kernels/rxmesh_attribute.cuh"
 #include "rxmesh/kernels/util.cuh"
 #include "rxmesh/rxmesh_types.h"
+#include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/util.h"
 #include "rxmesh/util/vector.h"
