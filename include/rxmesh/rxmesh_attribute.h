@@ -10,6 +10,8 @@
 #include "rxmesh/util/util.h"
 #include "rxmesh/util/vector.h"
 
+class RXMeshTest;
+
 namespace rxmesh {
 
 // Flags for where the attributes array resides
@@ -63,6 +65,9 @@ static std::string location_to_string(locationT location)
  */
 class RXMeshAttributeBase
 {
+    // our friend tester class
+    friend class ::RXMeshTest;
+
    public:
     RXMeshAttributeBase() = default;
 

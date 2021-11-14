@@ -203,7 +203,7 @@ class RXMesh
         const std::vector<std::vector<uint32_t>>& fv,
         const uint32_t                            patch_id);
 
-
+    //TODO remove
     void move_to_device();
 
     void build_device();
@@ -262,6 +262,7 @@ class RXMesh
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
 
     // storing the start id(x) and element count(y)
+    //TODO delete 
     std::vector<uint2> m_h_ad_size_ltog_v, m_h_ad_size_ltog_e,
         m_h_ad_size_ltog_f;
 

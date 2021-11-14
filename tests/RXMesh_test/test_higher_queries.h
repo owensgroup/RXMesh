@@ -18,38 +18,37 @@ TEST(RXMeshStatic, DISABLED_HigherQueries)
         import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, true));
 
     // RXMesh
-    RXMeshStatic rxmesh_static(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
 
-    uint32_t input_size = rxmesh_static.get_num_vertices();
+    uint32_t input_size = rxmesh.get_num_vertices();
 
     // input/output container
-    auto input_container = rxmesh_static.add_vertex_attribute<uint32_t>(
+    auto input_container = rxmesh.add_vertex_attribute<uint32_t>(
         "input", 1u, rxmesh::LOCATION_ALL, rxmesh::AoS, false);
 
-    auto output_container = rxmesh_static.add_vertex_attribute<uint32_t>(
+    auto output_container = rxmesh.add_vertex_attribute<uint32_t>(
         "output", input_size, rxmesh::LOCATION_ALL, rxmesh::SoA, false);
     //           ^^that is a bit excessive
 
     // launch box
     constexpr uint32_t      blockThreads = 512;
     LaunchBox<blockThreads> launch_box;
-    rxmesh_static.prepare_launch_box(Op::VV, launch_box, true, false);
+    rxmesh.prepare_launch_box(Op::VV, launch_box, true, false);
 
     output_container->reset(INVALID32, rxmesh::DEVICE);
     input_container->reset(INVALID32, rxmesh::DEVICE);
 
-    ::RXMeshTest tester(true);
+    ::RXMeshTest tester(rxmesh, Faces, true);
 
     // launch
     higher_query<Op::VV, blockThreads>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh_static.get_context(), *input_container, *output_container);
+            rxmesh.get_context(), *input_container, *output_container);
 
     // move containers to the CPU for testing
     output_container->move(rxmesh::DEVICE, rxmesh::HOST);
     input_container->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // verify
-    EXPECT_TRUE(
-        tester.test_VVV(rxmesh_static, *input_container, *output_container));
+    EXPECT_TRUE(tester.test_VVV(rxmesh, *input_container, *output_container));
 }

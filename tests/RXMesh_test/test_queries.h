@@ -17,30 +17,11 @@
 using namespace rxmesh;
 
 
-inline uint32_t max_output_per_element(const RXMeshStatic& rxmesh, const Op& op)
-{
-    if (op == Op::EV) {
-        return 2;
-    } else if (op == Op::EF) {
-        return rxmesh.get_max_edge_incident_faces();
-    } else if (op == Op::FV || op == Op::FE) {
-        return 3;
-    } else if (op == Op::FF) {
-        return rxmesh.get_max_edge_adjacent_faces();
-    } else if (op == Op::VV || op == Op::VE || op == Op::VF) {
-        return rxmesh.get_max_valence();
-    } else {
-        RXMESH_ERROR("calc_fixed_offset() Invalid op " + op_to_string(op));
-        return -1u;
-    }
-}
-
-
 TEST(RXMeshStatic, Oriented_VV)
 {
 
     // Select device
-    /*cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
@@ -49,48 +30,35 @@ TEST(RXMeshStatic, Oriented_VV)
         import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces, true));
 
     // Instantiate RXMesh Static
-    RXMeshStatic rxmesh_static(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
 
-    EXPECT_TRUE(rxmesh_static.is_closed())
+    EXPECT_TRUE(rxmesh.is_closed())
         << " Can't generate oriented VV for input with boundaries";
 
     // input/output container
-    RXMeshAttribute<uint32_t> input_container;
-    input_container.init(rxmesh_static.get_num_vertices(),
-                         1u,
-                         rxmesh::LOCATION_ALL,
-                         rxmesh::AoS,
-                         false,
-                         false);
-
-    RXMeshAttribute<uint32_t> output_container;
-    output_container.init(rxmesh_static.get_num_vertices(),
-                          max_output_per_element(rxmesh_static, Op::VV) + 1,
-                          rxmesh::LOCATION_ALL,
-                          rxmesh::SoA,
-                          false,
-                          false);
+    auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
+    auto output = rxmesh.add_vertex_attribute<VertexHandle>(
+        "output", rxmesh.get_max_valence());
 
     // launch box
-    LaunchBox<256> launch_box;
-    rxmesh_static.prepare_launch_box(Op::VV, launch_box, false, true);
+    constexpr uint32_t      blockThreads = 256;
+    LaunchBox<blockThreads> launch_box;
+    rxmesh.prepare_launch_box(Op::VV, launch_box, false, true);
 
-    // launch query
-    float tt = launcher(rxmesh_static.get_context(),
-                        Op::VV,
-                        input_container,
-                        output_container,
-                        launch_box,
-                        true);
+    // query
+    query_kernel<blockThreads, Op::VV, VertexHandle, VertexHandle>
+        <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
+            rxmesh.get_context(), *input, *output, true);
 
+    CUDA_ERROR(cudaDeviceSynchronize());
 
     // move containers to the CPU for testing
-    output_container.move(rxmesh::DEVICE, rxmesh::HOST);
-    input_container.move(rxmesh::DEVICE, rxmesh::HOST);
+    output->move_v1(rxmesh::DEVICE, rxmesh::HOST);
+    input->move_v1(rxmesh::DEVICE, rxmesh::HOST);
 
-    RXMeshTest tester(true);
-    EXPECT_TRUE(tester.run_query_verifier(
-        rxmesh_static, Faces, Op::VV, input_container, output_container));
+    RXMeshTest tester(rxmesh, Faces, rxmesh_args.quite);
+    /*EXPECT_TRUE(
+        tester.run_query_verifier(rxmesh, Faces, Op::VV, *input, *output));*/
 
     // Make sure orientation is accurate
     // for the cube, all angle are either 45 or 90
@@ -104,14 +72,14 @@ TEST(RXMeshStatic, Oriented_VV)
             std::begin(u), std::end(u), std::begin(v), 0.0);
     };
 
-    for (uint32_t v = 0; v < rxmesh_static.get_num_vertices(); ++v) {
+    /*for (uint32_t v = 0; v < rxmesh.get_num_vertices(); ++v) {
 
-        uint32_t vertex = input_container(v);
+        uint32_t vertex = input(v);
 
-        uint32_t v_0 = output_container(v, output_container(v, 0));
-        for (uint32_t i = 1; i < output_container(v, 0); ++i) {
+        uint32_t v_0 = output(v, output(v, 0));
+        for (uint32_t i = 1; i < output(v, 0); ++i) {
 
-            uint32_t v_1 = output_container(v, i);
+            uint32_t v_1 = output(v, i);
 
             std::vector<dataT> p1{Verts[vertex][0] - Verts[v_0][0],
                                   Verts[vertex][1] - Verts[v_0][1],
@@ -129,11 +97,7 @@ TEST(RXMeshStatic, Oriented_VV)
                         std::abs(theta - 45) < 0.0001);
             v_0 = v_1;
         }
-    }
-
-
-    input_container.release();
-    output_container.release();*/
+    }*/
 }
 
 template <rxmesh::Op op,
@@ -222,9 +186,7 @@ void launcher(RXMeshStatic&     rxmesh,
     input.move_v1(rxmesh::DEVICE, rxmesh::HOST);
 
     // verify
-    bool passed /*= tester.run_query_verifier(
-        rxmesh, Faces, ops_it, input_container, output_container)*/
-        ;
+    bool passed = tester.run_test(rxmesh, input, output);
 
     td.passed.push_back(passed);
     EXPECT_TRUE(passed) << "Testing: " << td.test_name;
@@ -266,7 +228,7 @@ TEST(RXMeshStatic, Queries)
 
 
     // Tester to verify all queries
-    ::RXMeshTest tester(true);
+    ::RXMeshTest tester(rxmesh, Faces, rxmesh_args.quite);
     EXPECT_TRUE(tester.run_ltog_mapping_test(rxmesh, Faces))
         << "Local-to-global mapping test failed";
 
@@ -282,7 +244,7 @@ TEST(RXMeshStatic, Queries)
     }
 
 
-    {
+    /*{
         // VE
         auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
         auto output = rxmesh.add_vertex_attribute<EdgeHandle>(
@@ -355,7 +317,7 @@ TEST(RXMeshStatic, Queries)
             rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
         rxmesh.remove_attribute("output");
-    }
+    }*/
     // Write the report
     report.write(
         rxmesh_args.output_folder + "/rxmesh",
