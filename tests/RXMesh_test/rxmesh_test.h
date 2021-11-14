@@ -189,17 +189,46 @@ class RXMeshTest
 
         bool res = true;
         for (uint32_t p = 0; p < rxmesh.get_num_patches(); ++p) {
-            for (uint32_t v = 0; v < rxmesh.m_h_num_owned_v[p]; ++v) {               
+            for (uint32_t v = 0; v < rxmesh.m_h_num_owned_v[p]; ++v) {
                 rxmesh::VertexHandle vh(p, v);
                 if (input(vh) != vh) {
                     res = false;
                     break;
                 }
 
-                 uint32_t v_global = rxmesh.m_h_patches_ltog_v[p][v];
+                uint32_t v_global = rxmesh.m_h_patches_ltog_v[p][v];
+
+                uint32_t num_vv = 0;
+                for (uint32_t i = 0; i < output.get_num_attributes(); ++i) {
+                    rxmesh::VertexHandle vvh = output(vh, i);
+                    if (vvh.is_valid()) {
+                        num_vv++;
+
+                        // extract local id from vvh's unique id
+                        uint64_t uid       = vvh.unique_id();
+                        uint16_t lid       = uid & ((1 << 16) - 1);
+                        uint32_t vv_global = rxmesh.m_h_patches_ltog_v[p][lid];
+
+                        uint32_t id =
+                            rxmesh::find_index(vv_global, v_v[v_global]);
+
+                        if (id == std::numeric_limits<uint32_t>::max()) {
+                            res = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (!res) {
+                    break;
+                }
+                if (num_vv != v_v[v_global].size()) {
+                    res = false;
+                    // break;
+                }
             }
             if (!res) {
-                break;
+                // break;
             }
         }
 
