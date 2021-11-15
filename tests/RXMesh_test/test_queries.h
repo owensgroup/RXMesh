@@ -244,7 +244,7 @@ TEST(RXMeshStatic, Queries)
     }
 
 
-    /*{
+    {
         // VE
         auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
         auto output = rxmesh.add_vertex_attribute<EdgeHandle>(
@@ -317,7 +317,8 @@ TEST(RXMeshStatic, Queries)
             rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
         rxmesh.remove_attribute("output");
-    }*/
+    }
+
     // Write the report
     report.write(
         rxmesh_args.output_folder + "/rxmesh",

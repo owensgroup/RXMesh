@@ -235,6 +235,80 @@ class RXMeshTest
         return res;
     }
 
+    /**
+     * @brief verify VE query
+     */
+    bool run_test(
+        const rxmesh::RXMeshStatic&                                rxmesh,
+        const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& input,
+        const rxmesh::RXMeshVertexAttribute<rxmesh::EdgeHandle>&   output)
+    {
+        return false;
+    }
+
+    /**
+     * @brief verify VF query
+     */
+    bool run_test(
+        const rxmesh::RXMeshStatic&                                rxmesh,
+        const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& input,
+        const rxmesh::RXMeshVertexAttribute<rxmesh::FaceHandle>&   output)
+    {
+        return false;
+    }
+
+    /**
+     * @brief verify EV query
+     */
+    bool run_test(
+        const rxmesh::RXMeshStatic&                              rxmesh,
+        const rxmesh::RXMeshEdgeAttribute<rxmesh::EdgeHandle>&   input,
+        const rxmesh::RXMeshEdgeAttribute<rxmesh::VertexHandle>& output)
+    {
+        return false;
+    }
+
+    /**
+     * @brief verify EF query
+     */
+    bool run_test(const rxmesh::RXMeshStatic&                            rxmesh,
+                  const rxmesh::RXMeshEdgeAttribute<rxmesh::EdgeHandle>& input,
+                  const rxmesh::RXMeshEdgeAttribute<rxmesh::FaceHandle>& output)
+    {
+        return false;
+    }
+
+    /**
+     * @brief verify FV query
+     */
+    bool run_test(
+        const rxmesh::RXMeshStatic&                              rxmesh,
+        const rxmesh::RXMeshFaceAttribute<rxmesh::FaceHandle>&   input,
+        const rxmesh::RXMeshFaceAttribute<rxmesh::VertexHandle>& output)
+    {
+        return false;
+    }
+
+    /**
+     * @brief verify FE query
+     */
+    bool run_test(const rxmesh::RXMeshStatic&                            rxmesh,
+                  const rxmesh::RXMeshFaceAttribute<rxmesh::FaceHandle>& input,
+                  const rxmesh::RXMeshFaceAttribute<rxmesh::EdgeHandle>& output)
+    {
+        return false;
+    }
+
+    /**
+     * @brief verify FF query
+     */
+    bool run_test(const rxmesh::RXMeshStatic&                            rxmesh,
+                  const rxmesh::RXMeshFaceAttribute<rxmesh::FaceHandle>& input,
+                  const rxmesh::RXMeshFaceAttribute<rxmesh::FaceHandle>& output)
+    {
+        return false;
+    }
+
     bool test_VV(const rxmesh::RXMeshStatic&              rxmesh,
                  const rxmesh::RXMeshAttribute<uint32_t>& input_container,
                  const rxmesh::RXMeshAttribute<uint32_t>& output_container)
