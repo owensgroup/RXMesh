@@ -154,6 +154,7 @@ class RXMeshStatic : public RXMesh
             name.c_str(),
             this->m_h_num_owned_f,
             num_attributes,
+            location,
             layout,
             with_reduce_alloc);
     }
@@ -184,6 +185,7 @@ class RXMeshStatic : public RXMesh
             name.c_str(),
             this->m_h_num_owned_e,
             num_attributes,
+            location,
             layout,
             with_reduce_alloc);
     }
@@ -214,6 +216,7 @@ class RXMeshStatic : public RXMesh
             name.c_str(),
             this->m_h_num_owned_v,
             num_attributes,
+            location,
             layout,
             with_reduce_alloc);
     }

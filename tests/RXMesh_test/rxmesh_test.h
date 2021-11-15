@@ -224,11 +224,11 @@ class RXMeshTest
                 }
                 if (num_vv != v_v[v_global].size()) {
                     res = false;
-                    // break;
+                    break;
                 }
             }
             if (!res) {
-                // break;
+                break;
             }
         }
 
