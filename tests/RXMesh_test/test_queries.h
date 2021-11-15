@@ -17,7 +17,7 @@
 using namespace rxmesh;
 
 
-TEST(RXMeshStatic, Oriented_VV)
+TEST(RXMeshStatic, DISABLED_Oriented_VV)
 {
 
     // Select device
@@ -46,9 +46,9 @@ TEST(RXMeshStatic, Oriented_VV)
     rxmesh.prepare_launch_box(Op::VV, launch_box, false, true);
 
     // query
-    query_kernel<blockThreads, Op::VV, VertexHandle, VertexHandle>
+    /*query_kernel<blockThreads, Op::VV, VertexHandle, VertexHandle>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh.get_context(), *input, *output, true);
+            rxmesh.get_context(), *input, *output, true);*/
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
@@ -301,7 +301,7 @@ TEST(RXMeshStatic, Queries)
     {
         // FE
         auto input  = rxmesh.add_face_attribute<FaceHandle>("input", 1);
-        auto output = rxmesh.add_face_attribute<EdgeHandle>("output", 2);
+        auto output = rxmesh.add_face_attribute<EdgeHandle>("output", 3);
         launcher<Op::FE, FaceHandle, EdgeHandle>(
             rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
@@ -312,7 +312,7 @@ TEST(RXMeshStatic, Queries)
         // FF
         auto input  = rxmesh.add_face_attribute<FaceHandle>("input", 1);
         auto output = rxmesh.add_face_attribute<FaceHandle>(
-            "output", rxmesh.get_max_edge_adjacent_faces() - 1);
+            "output", rxmesh.get_max_edge_adjacent_faces() + 2);
         launcher<Op::FF, FaceHandle, FaceHandle>(
             rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");

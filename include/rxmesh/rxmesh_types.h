@@ -147,7 +147,7 @@ uint64_t __device__ __host__ __forceinline__ unique_id(const uint16_t local_id,
                                                        const uint32_t patch_id)
 {
     uint64_t ret = patch_id;
-    ret |= ret << 32;
+    ret          = (ret << 32);
     ret |= local_id;
     return ret;
 }
@@ -201,8 +201,8 @@ struct VertexHandle
 };
 
 /**
- * @brief print vertex unique_id to stream  
-*/
+ * @brief print vertex unique_id to stream
+ */
 inline std::ostream& operator<<(std::ostream& os, VertexHandle v_handle)
 {
     return (os << 'v' << v_handle.unique_id());
