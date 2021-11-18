@@ -197,6 +197,8 @@ class RXMeshTest
 
                 uint32_t v_global = rxmesh.m_h_patches_ltog_v[p][v];
 
+                // Check correctness
+                // check if all output VV are correct
                 uint32_t num_vv = 0;
                 for (uint32_t i = 0; i < output.get_num_attributes(); ++i) {
                     rxmesh::VertexHandle vvh = output(vh, i);
@@ -219,6 +221,31 @@ class RXMeshTest
 
                 if (num_vv != v_v[v_global].size()) {
                     return false;
+                }
+
+                // Check completeness
+                // check if all ground truth VV are in the output
+                for (uint32_t i = 0; i < v_v[v_global].size(); ++i) {
+                    uint32_t vv = v_v[v_global][i];
+
+                    bool found = false;
+                    for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
+                        rxmesh::VertexHandle vvh = output(vh, j);
+                        if (vvh.is_valid()) {
+                            uint64_t uid = vvh.unique_id();
+                            uint16_t lid = uid & ((1 << 16) - 1);
+                            uint32_t vv_global =
+                                rxmesh.m_h_patches_ltog_v[p][lid];
+                            if (vv_global == vv) {
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!found) {
+                        return false;
+                    }
                 }
             }
         }
