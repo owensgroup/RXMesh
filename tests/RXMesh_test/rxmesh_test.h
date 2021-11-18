@@ -187,13 +187,12 @@ class RXMeshTest
             v_v[vertices.second].push_back(vertices.first);
         }
 
-        bool res = true;
+
         for (uint32_t p = 0; p < rxmesh.get_num_patches(); ++p) {
             for (uint32_t v = 0; v < rxmesh.m_h_num_owned_v[p]; ++v) {
                 rxmesh::VertexHandle vh(p, v);
                 if (input(vh) != vh) {
-                    res = false;
-                    break;
+                    return false;
                 }
 
                 uint32_t v_global = rxmesh.m_h_patches_ltog_v[p][v];
@@ -213,26 +212,18 @@ class RXMeshTest
                             rxmesh::find_index(vv_global, v_v[v_global]);
 
                         if (id == std::numeric_limits<uint32_t>::max()) {
-                            res = false;
-                            break;
+                            return false;
                         }
                     }
                 }
 
-                if (!res) {
-                    break;
-                }
                 if (num_vv != v_v[v_global].size()) {
-                    res = false;
-                    break;
+                    return false;
                 }
-            }
-            if (!res) {
-                break;
             }
         }
 
-        return res;
+        return true;
     }
 
     /**

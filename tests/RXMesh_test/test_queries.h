@@ -166,6 +166,8 @@ void launcher(RXMeshStatic&     rxmesh,
             });
         }
 
+        output.move_v1(rxmesh::HOST, rxmesh::DEVICE);
+        input.move_v1(rxmesh::HOST, rxmesh::DEVICE);
 
         timer.start();
         query_kernel<blockThreads, op, InputHandleT, OutputHandleT>
