@@ -42,7 +42,7 @@ class RXMeshTest
             m_h_FE.push_back(fe);
         }
     }
-    
+
 
     bool run_ltog_mapping_test(const rxmesh::RXMesh&                     rxmesh,
                                const std::vector<std::vector<uint32_t>>& fv)
@@ -60,12 +60,15 @@ class RXMeshTest
         return true;
     }
 
-    bool test_VVV(const rxmesh::RXMeshStatic&              rxmesh,
-                  const rxmesh::RXMeshAttribute<uint32_t>& input_container,
-                  const rxmesh::RXMeshAttribute<uint32_t>& output_container)
+    /**
+     * @brief verify VVV (2-ring) query
+     */
+    bool run_test_vvv(
+        const rxmesh::RXMeshStatic&                                rxmesh,
+        const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& input,
+        const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& output)
     {
 
-        // construct VV
         std::vector<std::vector<uint32_t>> v_v(rxmesh.m_num_vertices,
                                                std::vector<uint32_t>(0));
 
@@ -107,12 +110,14 @@ class RXMeshTest
             }
         }
 
-
-        // two-way verification
-        return verifier(rxmesh.get_patcher()->get_vertex_patch().data(),
-                        v_v_v,
-                        input_container,
-                        output_container);
+        return verifier<rxmesh::VertexHandle, rxmesh::VertexHandle>(
+            v_v_v,
+            rxmesh,
+            rxmesh.m_h_num_owned_v,
+            rxmesh.m_h_patches_ltog_v,
+            rxmesh.m_h_patches_ltog_v,
+            input,
+            output);
     }
 
     /**
@@ -136,13 +141,14 @@ class RXMeshTest
             v_v[vertices.second].push_back(vertices.first);
         }
 
-        return verifier(v_v,
-                        rxmesh,
-                        rxmesh.m_h_num_owned_v,
-                        rxmesh.m_h_patches_ltog_v,
-                        rxmesh.m_h_patches_ltog_v,
-                        input,
-                        output);
+        return verifier<rxmesh::VertexHandle, rxmesh::VertexHandle>(
+            v_v,
+            rxmesh,
+            rxmesh.m_h_num_owned_v,
+            rxmesh.m_h_patches_ltog_v,
+            rxmesh.m_h_patches_ltog_v,
+            input,
+            output);
     }
 
     /**
@@ -166,13 +172,14 @@ class RXMeshTest
             v_e[vertices.second].push_back(edge);
         }
 
-        return verifier(v_e,
-                        rxmesh,
-                        rxmesh.m_h_num_owned_v,
-                        rxmesh.m_h_patches_ltog_v,
-                        rxmesh.m_h_patches_ltog_e,
-                        input,
-                        output);
+        return verifier<rxmesh::VertexHandle, rxmesh::EdgeHandle>(
+            v_e,
+            rxmesh,
+            rxmesh.m_h_num_owned_v,
+            rxmesh.m_h_patches_ltog_v,
+            rxmesh.m_h_patches_ltog_e,
+            input,
+            output);
     }
 
     /**
@@ -194,7 +201,25 @@ class RXMeshTest
         const rxmesh::RXMeshEdgeAttribute<rxmesh::EdgeHandle>&   input,
         const rxmesh::RXMeshEdgeAttribute<rxmesh::VertexHandle>& output)
     {
-        return false;
+
+        std::vector<std::vector<uint32_t>> e_v(rxmesh.m_num_edges,
+                                               std::vector<uint32_t>(2));
+
+        auto e_it = rxmesh.m_edges_map.begin();
+        while (e_it != rxmesh.m_edges_map.end()) {
+            e_v[e_it->second][0] = (e_it->first).first;
+            e_v[e_it->second][1] = (e_it->first).second;
+            e_it++;
+        }
+
+        return verifier<rxmesh::EdgeHandle, rxmesh::VertexHandle>(
+            e_v,
+            rxmesh,
+            rxmesh.m_h_num_owned_e,
+            rxmesh.m_h_patches_ltog_e,
+            rxmesh.m_h_patches_ltog_v,
+            input,
+            output);
     }
 
     /**
@@ -239,105 +264,6 @@ class RXMeshTest
     }
 
 
-    template <typename InputHandle, typename OutputHandle>
-    bool verifier(const std::vector<std::vector<uint32_t>>& gt,
-                  const rxmesh::RXMeshStatic&               rxmesh,
-                  const std::vector<uint16_t>& num_owned_input_elements,
-                  const std::vector<std::vector<uint32_t>>&         input_ltog,
-                  const std::vector<std::vector<uint32_t>>&         output_ltog,
-                  const rxmesh::RXMeshVertexAttribute<InputHandle>& input,
-                  const rxmesh::RXMeshVertexAttribute<OutputHandle>& output)
-    {
-        for (uint32_t p = 0; p < rxmesh.get_num_patches(); ++p) {
-            for (uint32_t e = 0; e < num_owned_input_elements[p]; ++e) {
-                InputHandle eh(p, e);
-                if (input(eh) != eh) {
-                    return false;
-                }
-
-                uint32_t e_global = input_ltog[p][e];
-
-                // Check correctness
-                // check if all output XX are correct
-                uint32_t num_xx = 0;
-                for (uint32_t i = 0; i < output.get_num_attributes(); ++i) {
-                    OutputHandle xxh = output(eh, i);
-                    if (xxh.is_valid()) {
-                        num_xx++;
-
-                        // extract local id from xxh's unique id
-                        uint64_t uid       = xxh.unique_id();
-                        uint16_t lid       = uid & ((1 << 16) - 1);
-                        uint32_t xx_global = output_ltog[p][lid];
-
-                        uint32_t id =
-                            rxmesh::find_index(xx_global, gt[e_global]);
-
-                        if (id == std::numeric_limits<uint32_t>::max()) {
-                            return false;
-                        }
-                    }
-                }
-
-                if (num_xx != gt[e_global].size()) {
-                    return false;
-                }
-
-                // Check completeness
-                // check if all ground truth XX are in the output
-                for (uint32_t i = 0; i < gt[e_global].size(); ++i) {
-                    uint32_t xx = gt[e_global][i];
-
-                    bool found = false;
-                    for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
-                        OutputHandle xxh = output(eh, j);
-                        if (xxh.is_valid()) {
-                            uint64_t uid       = xxh.unique_id();
-                            uint16_t lid       = uid & ((1 << 16) - 1);
-                            uint32_t xx_global = output_ltog[p][lid];
-                            if (xx_global == xx) {
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!found) {
-                        return false;
-                    }
-                }
-            }
-        }
-    }
-
-
-    bool test_VE(const rxmesh::RXMeshStatic&              rxmesh,
-                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
-                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
-    {
-
-        // construct VE
-
-        std::vector<std::vector<uint32_t>> v_e(rxmesh.m_num_vertices,
-                                               std::vector<uint32_t>(0));
-
-        auto e_it  = rxmesh.m_edges_map.begin();
-        auto e_end = rxmesh.m_edges_map.end();
-
-        for (; e_it != e_end; e_it++) {
-            std::pair<uint32_t, uint32_t> vertices = e_it->first;
-            uint32_t                      edge     = e_it->second;
-            v_e[vertices.first].push_back(edge);
-            v_e[vertices.second].push_back(edge);
-        }
-
-        // two-way verification
-        return verifier(rxmesh.get_patcher()->get_vertex_patch().data(),
-                        v_e,
-                        input_container,
-                        output_container);
-    }
-
     bool test_VF(const rxmesh::RXMeshStatic&               rxmesh,
                  const std::vector<std::vector<uint32_t>>& fv,
                  const rxmesh::RXMeshAttribute<uint32_t>&  input_container,
@@ -358,11 +284,7 @@ class RXMeshTest
             }
         }
 
-        // two-way verification
-        return verifier(rxmesh.get_patcher()->get_vertex_patch().data(),
-                        v_f,
-                        input_container,
-                        output_container);
+        return false;
     }
 
     bool test_FV(const rxmesh::RXMeshStatic&               rxmesh,
@@ -370,11 +292,7 @@ class RXMeshTest
                  const rxmesh::RXMeshAttribute<uint32_t>&  input_container,
                  const rxmesh::RXMeshAttribute<uint32_t>&  output_container)
     {
-        // two-way verification
-        return verifier(rxmesh.get_patcher()->get_face_patch().data(),
-                        fv,
-                        input_container,
-                        output_container);
+        return false;
     }
 
     bool test_FE(const rxmesh::RXMeshStatic&              rxmesh,
@@ -402,11 +320,7 @@ class RXMeshTest
         }
 
 
-        // two-way verification
-        return verifier(rxmesh.get_patcher()->get_face_patch().data(),
-                        f_e,
-                        input_container,
-                        output_container);
+        return false;
     }
 
     bool test_FF(const rxmesh::RXMeshStatic&              rxmesh,
@@ -449,37 +363,9 @@ class RXMeshTest
             }
         }
 
-        // two-way verification
-        return verifier(rxmesh.get_patcher()->get_face_patch().data(),
-                        f_f,
-                        input_container,
-                        output_container);
+        return false;
     }
 
-    bool test_EV(const rxmesh::RXMeshStatic&              rxmesh,
-                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
-                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
-    {
-
-        // construct EV
-
-        std::vector<std::vector<uint32_t>> e_v(rxmesh.m_num_edges,
-                                               std::vector<uint32_t>(2));
-
-        auto e_it = rxmesh.m_edges_map.begin();
-        while (e_it != rxmesh.m_edges_map.end()) {
-            e_v[e_it->second][0] = (e_it->first).first;
-            e_v[e_it->second][1] = (e_it->first).second;
-            e_it++;
-        }
-
-
-        // two-way verification
-        return verifier(rxmesh.get_patcher()->get_edge_patch().data(),
-                        e_v,
-                        input_container,
-                        output_container);
-    }
 
     bool test_EF(const rxmesh::RXMeshStatic&              rxmesh,
                  const rxmesh::RXMeshAttribute<uint32_t>& input_container,
@@ -498,79 +384,84 @@ class RXMeshTest
             }
         }
 
-        // two-way verification
-        return verifier(rxmesh.get_patcher()->get_edge_patch().data(),
-                        e_f,
-                        input_container,
-                        output_container);
+        return false;
     }
 
-    bool verifier(const uint32_t*                           element_patch,
-                  const std::vector<std::vector<uint32_t>>& mesh_ele,
-                  const rxmesh::RXMeshAttribute<uint32_t>&  input_container,
-                  const rxmesh::RXMeshAttribute<uint32_t>&  output_container)
+   private:
+    template <typename InputHandleT,
+              typename OutputHandleT,
+              typename InputAttributeT,
+              typename OutputAttributeT>
+    bool verifier(const std::vector<std::vector<uint32_t>>& gt,
+                  const rxmesh::RXMeshStatic&               rxmesh,
+                  const std::vector<uint16_t>& num_owned_input_elements,
+                  const std::vector<std::vector<uint32_t>>& input_ltog,
+                  const std::vector<std::vector<uint32_t>>& output_ltog,
+                  const InputAttributeT&                    input,
+                  const OutputAttributeT&                   output)
     {
-
-        bool results = true;
-
-        const uint32_t input_size = input_container.get_num_mesh_elements();
-
-        assert(input_size == output_container.get_num_mesh_elements());
-
-        for (uint32_t v = 0; v < input_size; v++) {
-
-            const uint32_t src_ele = input_container(v);
-
-            if (src_ele == INVALID32) {
-                // means it is isolated element so don't bother
-                continue;
-            }
-            // check for correctness (e.g, all edges in h_output are actually
-            // edges incident to the vertex v)
-            for (uint32_t i = 1; i <= output_container(v, 0); ++i) {
-
-                uint32_t id = rxmesh::find_index(output_container(v, i),
-                                                 mesh_ele[src_ele]);
-
-                if (id == std::numeric_limits<uint32_t>::max()) {
-                    if (!m_quite) {
-                        RXMESH_ERROR(
-                            "RXMeshTest::verifier() element {} is not incident "
-                            "to {}",
-                            output_container(v, i),
-                            src_ele);
-                    }
-                    results = false;
+        for (uint32_t p = 0; p < rxmesh.get_num_patches(); ++p) {
+            for (uint32_t e = 0; e < num_owned_input_elements[p]; ++e) {
+                InputHandleT eh(p, e);
+                if (input(eh) != eh) {
+                    return false;
                 }
-            }
 
-            // check for completeness (e.g, that all edges incident to the
-            // vertex v are actually returned in output_container)
-            for (uint32_t i = 0; i < mesh_ele[src_ele].size(); i++) {
-                uint32_t e     = mesh_ele[src_ele][i];
-                bool     found = false;
-                for (uint32_t j = 1; j <= output_container(v, 0); j++) {
-                    if (output_container(v, j) == e) {
-                        found = true;
-                        break;
+                uint32_t e_global = input_ltog[p][e];
+
+                // Check correctness
+                // check if all output XX are correct
+                uint32_t num_xx = 0;
+                for (uint32_t i = 0; i < output.get_num_attributes(); ++i) {
+                    OutputHandleT xxh = output(eh, i);
+                    if (xxh.is_valid()) {
+                        num_xx++;
+
+                        // extract local id from xxh's unique id
+                        uint64_t uid       = xxh.unique_id();
+                        uint16_t lid       = uid & ((1 << 16) - 1);
+                        uint32_t xx_global = output_ltog[p][lid];
+
+                        uint32_t id =
+                            rxmesh::find_index(xx_global, gt[e_global]);
+
+                        if (id == std::numeric_limits<uint32_t>::max()) {
+                            return false;
+                        }
                     }
                 }
 
-                if (!found) {
-                    if (!m_quite) {
-                        RXMESH_ERROR(
-                            "RXMeshTest::verifier() element {} is not incident "
-                            "to {}",
-                            e,
-                            src_ele);
+                if (num_xx != gt[e_global].size()) {
+                    return false;
+                }
+
+                // Check completeness
+                // check if all ground truth XX are in the output
+                for (uint32_t i = 0; i < gt[e_global].size(); ++i) {
+                    uint32_t xx = gt[e_global][i];
+
+                    bool found = false;
+                    for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
+                        OutputHandleT xxh = output(eh, j);
+                        if (xxh.is_valid()) {
+                            uint64_t uid       = xxh.unique_id();
+                            uint16_t lid       = uid & ((1 << 16) - 1);
+                            uint32_t xx_global = output_ltog[p][lid];
+                            if (xx_global == xx) {
+                                found = true;
+                                break;
+                            }
+                        }
                     }
-                    results = false;
+
+                    if (!found) {
+                        return false;
+                    }
                 }
             }
         }
-
-        return results;
     }
+
 
     void check_mapping(const rxmesh::RXMesh& rxmesh,
                        const uint32_t        patch_id,

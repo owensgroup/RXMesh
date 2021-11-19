@@ -50,5 +50,5 @@ TEST(RXMeshStatic, DISABLED_HigherQueries)
     input_container->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // verify
-    EXPECT_TRUE(tester.test_VVV(rxmesh, *input_container, *output_container));
+    //EXPECT_TRUE(tester.test_VVV(rxmesh, *input_container, *output_container));
 }

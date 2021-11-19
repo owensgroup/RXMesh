@@ -57,8 +57,8 @@ TEST(RXMeshStatic, DISABLED_Oriented_VV)
     input->move_v1(rxmesh::DEVICE, rxmesh::HOST);
 
     RXMeshTest tester(rxmesh, Faces, rxmesh_args.quite);
-    /*EXPECT_TRUE(
-        tester.run_query_verifier(rxmesh, Faces, Op::VV, *input, *output));*/
+    EXPECT_TRUE(tester.run_test(rxmesh, *input, *output));
+
 
     // Make sure orientation is accurate
     // for the cube, all angle are either 45 or 90
