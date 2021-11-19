@@ -42,58 +42,7 @@ class RXMeshTest
             m_h_FE.push_back(fe);
         }
     }
-
-    bool run_query_verifier(
-        const rxmesh::RXMeshStatic&               rxmesh,
-        const std::vector<std::vector<uint32_t>>& fv,
-        const rxmesh::Op                          op,
-        const rxmesh::RXMeshAttribute<uint32_t>&  input_container,
-        const rxmesh::RXMeshAttribute<uint32_t>&  output_container)
-    {
-
-        // run test on specific query operation on an instance of rxmesh. this
-        // does not account for patching so works only on big matrices data-
-        // structure
-
-        switch (op) {
-            case rxmesh::Op::VV:
-                return test_VV(rxmesh, input_container, output_container);
-                break;
-
-            case rxmesh::Op::VE:
-                return test_VE(rxmesh, input_container, output_container);
-                break;
-
-            case rxmesh::Op::VF:
-                return test_VF(rxmesh, fv, input_container, output_container);
-                break;
-
-            case rxmesh::Op::FV:
-                return test_FV(rxmesh, fv, input_container, output_container);
-                break;
-
-            case rxmesh::Op::FE:
-                return test_FE(rxmesh, input_container, output_container);
-                break;
-
-            case rxmesh::Op::FF:
-                return test_FF(rxmesh, input_container, output_container);
-                break;
-
-            case rxmesh::Op::EV:
-                return test_EV(rxmesh, input_container, output_container);
-                break;
-            case rxmesh::Op::EF:
-                return test_EF(rxmesh, input_container, output_container);
-                break;
-
-            default:
-                RXMESH_ERROR("RXMeshTest::run_test() Op is not supported!!");
-                break;
-        }
-        return false;
-    }
-
+    
 
     bool run_ltog_mapping_test(const rxmesh::RXMesh&                     rxmesh,
                                const std::vector<std::vector<uint32_t>>& fv)
@@ -194,70 +143,6 @@ class RXMeshTest
                         rxmesh.m_h_patches_ltog_v,
                         input,
                         output);
-
-        /*for (uint32_t p = 0; p < rxmesh.get_num_patches(); ++p) {
-            for (uint32_t v = 0; v < rxmesh.m_h_num_owned_v[p]; ++v) {
-                rxmesh::VertexHandle vh(p, v);
-                if (input(vh) != vh) {
-                    return false;
-                }
-
-                uint32_t v_global = rxmesh.m_h_patches_ltog_v[p][v];
-
-                // Check correctness
-                // check if all output VV are correct
-                uint32_t num_vv = 0;
-                for (uint32_t i = 0; i < output.get_num_attributes(); ++i) {
-                    rxmesh::VertexHandle vvh = output(vh, i);
-                    if (vvh.is_valid()) {
-                        num_vv++;
-
-                        // extract local id from vvh's unique id
-                        uint64_t uid       = vvh.unique_id();
-                        uint16_t lid       = uid & ((1 << 16) - 1);
-                        uint32_t vv_global = rxmesh.m_h_patches_ltog_v[p][lid];
-
-                        uint32_t id =
-                            rxmesh::find_index(vv_global, v_v[v_global]);
-
-                        if (id == std::numeric_limits<uint32_t>::max()) {
-                            return false;
-                        }
-                    }
-                }
-
-                if (num_vv != v_v[v_global].size()) {
-                    return false;
-                }
-
-                // Check completeness
-                // check if all ground truth VV are in the output
-                for (uint32_t i = 0; i < v_v[v_global].size(); ++i) {
-                    uint32_t vv = v_v[v_global][i];
-
-                    bool found = false;
-                    for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
-                        rxmesh::VertexHandle vvh = output(vh, j);
-                        if (vvh.is_valid()) {
-                            uint64_t uid = vvh.unique_id();
-                            uint16_t lid = uid & ((1 << 16) - 1);
-                            uint32_t vv_global =
-                                rxmesh.m_h_patches_ltog_v[p][lid];
-                            if (vv_global == vv) {
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!found) {
-                        return false;
-                    }
-                }
-            }
-        }
-
-        return true;*/
     }
 
     /**
@@ -268,7 +153,26 @@ class RXMeshTest
         const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& input,
         const rxmesh::RXMeshVertexAttribute<rxmesh::EdgeHandle>&   output)
     {
-        return false;
+        std::vector<std::vector<uint32_t>> v_e(rxmesh.m_num_vertices,
+                                               std::vector<uint32_t>(0));
+
+        auto e_it  = rxmesh.m_edges_map.begin();
+        auto e_end = rxmesh.m_edges_map.end();
+
+        for (; e_it != e_end; e_it++) {
+            std::pair<uint32_t, uint32_t> vertices = e_it->first;
+            uint32_t                      edge     = e_it->second;
+            v_e[vertices.first].push_back(edge);
+            v_e[vertices.second].push_back(edge);
+        }
+
+        return verifier(v_e,
+                        rxmesh,
+                        rxmesh.m_h_num_owned_v,
+                        rxmesh.m_h_patches_ltog_v,
+                        rxmesh.m_h_patches_ltog_e,
+                        input,
+                        output);
     }
 
     /**
@@ -406,33 +310,6 @@ class RXMeshTest
         }
     }
 
-
-    bool test_VV(const rxmesh::RXMeshStatic&              rxmesh,
-                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
-                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
-    {
-
-        // construct VV
-
-        std::vector<std::vector<uint32_t>> v_v(rxmesh.m_num_vertices,
-                                               std::vector<uint32_t>(0));
-
-        auto e_it  = rxmesh.m_edges_map.begin();
-        auto e_end = rxmesh.m_edges_map.end();
-
-        for (; e_it != e_end; e_it++) {
-            std::pair<uint32_t, uint32_t> vertices = e_it->first;
-
-            v_v[vertices.first].push_back(vertices.second);
-            v_v[vertices.second].push_back(vertices.first);
-        }
-
-        // two-way verification
-        return verifier(rxmesh.get_patcher()->get_vertex_patch().data(),
-                        v_v,
-                        input_container,
-                        output_container);
-    }
 
     bool test_VE(const rxmesh::RXMeshStatic&              rxmesh,
                  const rxmesh::RXMeshAttribute<uint32_t>& input_container,
