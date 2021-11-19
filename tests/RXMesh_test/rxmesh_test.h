@@ -187,8 +187,15 @@ class RXMeshTest
             v_v[vertices.second].push_back(vertices.first);
         }
 
+        return verifier(v_v,
+                        rxmesh,
+                        rxmesh.m_h_num_owned_v,
+                        rxmesh.m_h_patches_ltog_v,
+                        rxmesh.m_h_patches_ltog_v,
+                        input,
+                        output);
 
-        for (uint32_t p = 0; p < rxmesh.get_num_patches(); ++p) {
+        /*for (uint32_t p = 0; p < rxmesh.get_num_patches(); ++p) {
             for (uint32_t v = 0; v < rxmesh.m_h_num_owned_v[p]; ++v) {
                 rxmesh::VertexHandle vh(p, v);
                 if (input(vh) != vh) {
@@ -250,7 +257,7 @@ class RXMeshTest
             }
         }
 
-        return true;
+        return true;*/
     }
 
     /**
@@ -326,6 +333,79 @@ class RXMeshTest
     {
         return false;
     }
+
+
+    template <typename InputHandle, typename OutputHandle>
+    bool verifier(const std::vector<std::vector<uint32_t>>& gt,
+                  const rxmesh::RXMeshStatic&               rxmesh,
+                  const std::vector<uint16_t>& num_owned_input_elements,
+                  const std::vector<std::vector<uint32_t>>&         input_ltog,
+                  const std::vector<std::vector<uint32_t>>&         output_ltog,
+                  const rxmesh::RXMeshVertexAttribute<InputHandle>& input,
+                  const rxmesh::RXMeshVertexAttribute<OutputHandle>& output)
+    {
+        for (uint32_t p = 0; p < rxmesh.get_num_patches(); ++p) {
+            for (uint32_t e = 0; e < num_owned_input_elements[p]; ++e) {
+                InputHandle eh(p, e);
+                if (input(eh) != eh) {
+                    return false;
+                }
+
+                uint32_t e_global = input_ltog[p][e];
+
+                // Check correctness
+                // check if all output XX are correct
+                uint32_t num_xx = 0;
+                for (uint32_t i = 0; i < output.get_num_attributes(); ++i) {
+                    OutputHandle xxh = output(eh, i);
+                    if (xxh.is_valid()) {
+                        num_xx++;
+
+                        // extract local id from xxh's unique id
+                        uint64_t uid       = xxh.unique_id();
+                        uint16_t lid       = uid & ((1 << 16) - 1);
+                        uint32_t xx_global = output_ltog[p][lid];
+
+                        uint32_t id =
+                            rxmesh::find_index(xx_global, gt[e_global]);
+
+                        if (id == std::numeric_limits<uint32_t>::max()) {
+                            return false;
+                        }
+                    }
+                }
+
+                if (num_xx != gt[e_global].size()) {
+                    return false;
+                }
+
+                // Check completeness
+                // check if all ground truth XX are in the output
+                for (uint32_t i = 0; i < gt[e_global].size(); ++i) {
+                    uint32_t xx = gt[e_global][i];
+
+                    bool found = false;
+                    for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
+                        OutputHandle xxh = output(eh, j);
+                        if (xxh.is_valid()) {
+                            uint64_t uid       = xxh.unique_id();
+                            uint16_t lid       = uid & ((1 << 16) - 1);
+                            uint32_t xx_global = output_ltog[p][lid];
+                            if (xx_global == xx) {
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!found) {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
 
     bool test_VV(const rxmesh::RXMeshStatic&              rxmesh,
                  const rxmesh::RXMeshAttribute<uint32_t>& input_container,
