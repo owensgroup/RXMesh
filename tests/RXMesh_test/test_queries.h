@@ -46,9 +46,9 @@ TEST(RXMeshStatic, DISABLED_Oriented_VV)
     rxmesh.prepare_launch_box(Op::VV, launch_box, false, true);
 
     // query
-    /*query_kernel<blockThreads, Op::VV, VertexHandle, VertexHandle>
+    query_kernel<blockThreads, Op::VV, VertexHandle, VertexHandle>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh.get_context(), *input, *output, true);*/
+            rxmesh.get_context(), *input, *output, true);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
@@ -57,7 +57,7 @@ TEST(RXMeshStatic, DISABLED_Oriented_VV)
     input->move_v1(rxmesh::DEVICE, rxmesh::HOST);
 
     RXMeshTest tester(rxmesh, Faces, rxmesh_args.quite);
-    EXPECT_TRUE(tester.run_test(rxmesh, *input, *output));
+    EXPECT_TRUE(tester.run_test(rxmesh, Faces, *input, *output));
 
 
     // Make sure orientation is accurate
@@ -105,12 +105,13 @@ template <rxmesh::Op op,
           typename OutputHandleT,
           typename InputAttributeT,
           typename OutputAttributeT>
-void launcher(RXMeshStatic&     rxmesh,
-              InputAttributeT&  input,
-              OutputAttributeT& output,
-              RXMeshTest&       tester,
-              Report&           report,
-              bool              oriented)
+void launcher(const std::vector<std::vector<uint32_t>>& Faces,
+              RXMeshStatic&                             rxmesh,
+              InputAttributeT&                          input,
+              OutputAttributeT&                         output,
+              RXMeshTest&                               tester,
+              Report&                                   report,
+              bool                                      oriented)
 {
 
     // launch box
@@ -188,7 +189,7 @@ void launcher(RXMeshStatic&     rxmesh,
     input.move_v1(rxmesh::DEVICE, rxmesh::HOST);
 
     // verify
-    bool passed = tester.run_test(rxmesh, input, output);
+    bool passed = tester.run_test(rxmesh, Faces, input, output);
 
     td.passed.push_back(passed);
     EXPECT_TRUE(passed) << "Testing: " << td.test_name;
@@ -240,7 +241,7 @@ TEST(RXMeshStatic, Queries)
         auto output = rxmesh.add_vertex_attribute<VertexHandle>(
             "output", rxmesh.get_max_valence());
         launcher<Op::VV, VertexHandle, VertexHandle>(
-            rxmesh, *input, *output, tester, report, oriented);
+            Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
         rxmesh.remove_attribute("output");
     }
@@ -252,7 +253,7 @@ TEST(RXMeshStatic, Queries)
         auto output = rxmesh.add_vertex_attribute<EdgeHandle>(
             "output", rxmesh.get_max_valence());
         launcher<Op::VE, VertexHandle, EdgeHandle>(
-            rxmesh, *input, *output, tester, report, oriented);
+            Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
         rxmesh.remove_attribute("output");
     }
@@ -263,7 +264,7 @@ TEST(RXMeshStatic, Queries)
         auto output = rxmesh.add_vertex_attribute<FaceHandle>(
             "output", rxmesh.get_max_valence());
         launcher<Op::VF, VertexHandle, FaceHandle>(
-            rxmesh, *input, *output, tester, report, oriented);
+            Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
         rxmesh.remove_attribute("output");
     }
@@ -274,7 +275,7 @@ TEST(RXMeshStatic, Queries)
         auto input  = rxmesh.add_edge_attribute<EdgeHandle>("input", 1);
         auto output = rxmesh.add_edge_attribute<VertexHandle>("output", 2);
         launcher<Op::EV, EdgeHandle, VertexHandle>(
-            rxmesh, *input, *output, tester, report, oriented);
+            Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
         rxmesh.remove_attribute("output");
     }
@@ -285,7 +286,7 @@ TEST(RXMeshStatic, Queries)
         auto output = rxmesh.add_edge_attribute<FaceHandle>(
             "output", rxmesh.get_max_edge_incident_faces());
         launcher<Op::EF, EdgeHandle, FaceHandle>(
-            rxmesh, *input, *output, tester, report, oriented);
+            Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
         rxmesh.remove_attribute("output");
     }
@@ -295,7 +296,7 @@ TEST(RXMeshStatic, Queries)
         auto input  = rxmesh.add_face_attribute<FaceHandle>("input", 1);
         auto output = rxmesh.add_face_attribute<VertexHandle>("output", 3);
         launcher<Op::FV, FaceHandle, VertexHandle>(
-            rxmesh, *input, *output, tester, report, oriented);
+            Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
         rxmesh.remove_attribute("output");
     }
@@ -305,7 +306,7 @@ TEST(RXMeshStatic, Queries)
         auto input  = rxmesh.add_face_attribute<FaceHandle>("input", 1);
         auto output = rxmesh.add_face_attribute<EdgeHandle>("output", 3);
         launcher<Op::FE, FaceHandle, EdgeHandle>(
-            rxmesh, *input, *output, tester, report, oriented);
+            Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
         rxmesh.remove_attribute("output");
     }
@@ -316,7 +317,7 @@ TEST(RXMeshStatic, Queries)
         auto output = rxmesh.add_face_attribute<FaceHandle>(
             "output", rxmesh.get_max_edge_adjacent_faces() + 2);
         launcher<Op::FF, FaceHandle, FaceHandle>(
-            rxmesh, *input, *output, tester, report, oriented);
+            Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
         rxmesh.remove_attribute("output");
     }
