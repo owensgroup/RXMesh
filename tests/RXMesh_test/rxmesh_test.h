@@ -229,7 +229,24 @@ class RXMeshTest
                   const rxmesh::RXMeshEdgeAttribute<rxmesh::EdgeHandle>& input,
                   const rxmesh::RXMeshEdgeAttribute<rxmesh::FaceHandle>& output)
     {
-        return false;
+        std::vector<std::vector<uint32_t>> e_f(rxmesh.m_num_edges,
+                                               std::vector<uint32_t>(0));
+
+        for (uint32_t f = 0; f < rxmesh.m_num_faces; f++) {
+            for (uint32_t e = 0; e < 3; e++) {
+                uint32_t edge = m_h_FE[f][e];
+                e_f[edge].push_back(f);
+            }
+        }
+
+        return verifier<rxmesh::EdgeHandle, rxmesh::FaceHandle>(
+            e_f,
+            rxmesh,
+            rxmesh.m_h_num_owned_e,
+            rxmesh.m_h_patches_ltog_e,
+            rxmesh.m_h_patches_ltog_f,
+            input,
+            output);
     }
 
     /**
@@ -250,7 +267,14 @@ class RXMeshTest
                   const rxmesh::RXMeshFaceAttribute<rxmesh::FaceHandle>& input,
                   const rxmesh::RXMeshFaceAttribute<rxmesh::EdgeHandle>& output)
     {
-        return false;
+        return verifier<rxmesh::FaceHandle, rxmesh::EdgeHandle>(
+            m_h_FE,
+            rxmesh,
+            rxmesh.m_h_num_owned_f,
+            rxmesh.m_h_patches_ltog_f,
+            rxmesh.m_h_patches_ltog_e,
+            input,
+            output);
     }
 
     /**
@@ -260,76 +284,6 @@ class RXMeshTest
                   const rxmesh::RXMeshFaceAttribute<rxmesh::FaceHandle>& input,
                   const rxmesh::RXMeshFaceAttribute<rxmesh::FaceHandle>& output)
     {
-        return false;
-    }
-
-
-    bool test_VF(const rxmesh::RXMeshStatic&               rxmesh,
-                 const std::vector<std::vector<uint32_t>>& fv,
-                 const rxmesh::RXMeshAttribute<uint32_t>&  input_container,
-                 const rxmesh::RXMeshAttribute<uint32_t>&  output_container)
-    {
-
-        // construct FV
-        if (rxmesh.m_num_faces != fv.size()) {
-            return false;
-        }
-        std::vector<std::vector<uint32_t>> v_f(rxmesh.m_num_vertices,
-                                               std::vector<uint32_t>(0));
-
-        for (uint32_t f = 0; f < fv.size(); f++) {
-            for (uint32_t v = 0; v < 3; v++) {
-                uint32_t vert = fv[f][v];
-                v_f[vert].push_back(f);
-            }
-        }
-
-        return false;
-    }
-
-    bool test_FV(const rxmesh::RXMeshStatic&               rxmesh,
-                 const std::vector<std::vector<uint32_t>>& fv,
-                 const rxmesh::RXMeshAttribute<uint32_t>&  input_container,
-                 const rxmesh::RXMeshAttribute<uint32_t>&  output_container)
-    {
-        return false;
-    }
-
-    bool test_FE(const rxmesh::RXMeshStatic&              rxmesh,
-                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
-                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
-    {
-
-        // construct FE
-
-        std::vector<std::vector<uint32_t>> f_e(rxmesh.m_num_faces,
-                                               std::vector<uint32_t>(0));
-
-        for (uint32_t f = 0; f < rxmesh.m_num_faces; f++) {
-            f_e[f].reserve(3);
-        }
-
-        for (uint32_t f = 0; f < rxmesh.m_num_faces; f++) {
-            uint32_t e0 = m_h_FE[f][0];
-            uint32_t e1 = m_h_FE[f][1];
-            uint32_t e2 = m_h_FE[f][2];
-
-            f_e[f].push_back(e0);
-            f_e[f].push_back(e1);
-            f_e[f].push_back(e2);
-        }
-
-
-        return false;
-    }
-
-    bool test_FF(const rxmesh::RXMeshStatic&              rxmesh,
-                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
-                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
-    {
-
-        // construct FF
-
         std::vector<std::vector<uint32_t>> f_f(rxmesh.m_num_faces,
                                                std::vector<uint32_t>(0));
 
@@ -363,27 +317,46 @@ class RXMeshTest
             }
         }
 
-        return false;
+
+        return verifier<rxmesh::FaceHandle, rxmesh::FaceHandle>(
+            f_f,
+            rxmesh,
+            rxmesh.m_h_num_owned_f,
+            rxmesh.m_h_patches_ltog_f,
+            rxmesh.m_h_patches_ltog_f,
+            input,
+            output);
     }
 
 
-    bool test_EF(const rxmesh::RXMeshStatic&              rxmesh,
-                 const rxmesh::RXMeshAttribute<uint32_t>& input_container,
-                 const rxmesh::RXMeshAttribute<uint32_t>& output_container)
+    bool test_VF(const rxmesh::RXMeshStatic&               rxmesh,
+                 const std::vector<std::vector<uint32_t>>& fv,
+                 const rxmesh::RXMeshAttribute<uint32_t>&  input_container,
+                 const rxmesh::RXMeshAttribute<uint32_t>&  output_container)
     {
 
-        // construct EF
-
-        std::vector<std::vector<uint32_t>> e_f(rxmesh.m_num_edges,
+        // construct FV
+        if (rxmesh.m_num_faces != fv.size()) {
+            return false;
+        }
+        std::vector<std::vector<uint32_t>> v_f(rxmesh.m_num_vertices,
                                                std::vector<uint32_t>(0));
 
-        for (uint32_t f = 0; f < rxmesh.m_num_faces; f++) {
-            for (uint32_t e = 0; e < 3; e++) {
-                uint32_t edge = m_h_FE[f][e];
-                e_f[edge].push_back(f);
+        for (uint32_t f = 0; f < fv.size(); f++) {
+            for (uint32_t v = 0; v < 3; v++) {
+                uint32_t vert = fv[f][v];
+                v_f[vert].push_back(f);
             }
         }
 
+        return false;
+    }
+
+    bool test_FV(const rxmesh::RXMeshStatic&               rxmesh,
+                 const std::vector<std::vector<uint32_t>>& fv,
+                 const rxmesh::RXMeshAttribute<uint32_t>&  input_container,
+                 const rxmesh::RXMeshAttribute<uint32_t>&  output_container)
+    {
         return false;
     }
 
