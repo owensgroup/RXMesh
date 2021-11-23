@@ -16,6 +16,7 @@ namespace rxmesh {
  * @param ad_size_ltog_e
  * @param ad_size_ltog_f
  * @return
+ * TODO remove
  */
 __device__ __forceinline__ void load_patch_ad_size(const RXMeshContext& context,
                                                    const uint32_t       p_id,
@@ -43,6 +44,7 @@ __device__ __forceinline__ void load_patch_ad_size(const RXMeshContext& context,
  * @param patch_edges
  * @param ad_sz
  * @return
+ * TODO remove 
  */
 __device__ __forceinline__ void load_patch_edges(const RXMeshContext& context,
                                                  uint16_t*    patch_edges,
@@ -107,6 +109,7 @@ __device__ __forceinline__ void load_patch_faces(const RXMeshContext& context,
  * @param s_ad_size_ltog
  * @param mapping
  * @return
+ * TODO remove
  */
 __device__ __forceinline__ void load_mapping(const RXMeshContext& context,
                                              const ELEMENT        ele,
@@ -145,6 +148,7 @@ __device__ __forceinline__ void load_mapping(const RXMeshContext& context,
  * @param s_patch_faces
  * @param ad_size
  * @return
+ * TODO remove
  */
 __device__ __forceinline__ void load_mesh(const RXMeshContext& context,
                                           const bool           load_edges,
@@ -213,7 +217,7 @@ __device__ __forceinline__ void load_patch_EV(const PatchInfo& patch_info,
     uint32_t* output_ev32 = reinterpret_cast<uint32_t*>(ev);
 #pragma unroll 2
     for (uint32_t i = threadIdx.x; i < num_edges; i += blockThreads) {
-        uint32_t a     = input_ev32[i];        
+        uint32_t a     = input_ev32[i];
         output_ev32[i] = a;
     }
 }

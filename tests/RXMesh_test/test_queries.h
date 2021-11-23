@@ -17,9 +17,8 @@
 using namespace rxmesh;
 
 
-TEST(RXMeshStatic, DISABLED_Oriented_VV)
+TEST(RXMeshStatic, Oriented_VV)
 {
-
     // Select device
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
@@ -39,6 +38,16 @@ TEST(RXMeshStatic, DISABLED_Oriented_VV)
     auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
     auto output = rxmesh.add_vertex_attribute<VertexHandle>(
         "output", rxmesh.get_max_valence());
+
+    rxmesh.for_each_vertex([&](const VertexHandle& handle) {
+        (*input)(handle) = VertexHandle();
+        for (uint32_t j = 0; j < (*output).get_num_attributes(); ++j) {
+            (*output)(handle, j) = VertexHandle();
+        }
+    });
+
+    output->move_v1(rxmesh::HOST, rxmesh::DEVICE);
+    input->move_v1(rxmesh::HOST, rxmesh::DEVICE);
 
     // launch box
     constexpr uint32_t      blockThreads = 256;
@@ -74,28 +83,33 @@ TEST(RXMeshStatic, DISABLED_Oriented_VV)
 
     /*for (uint32_t v = 0; v < rxmesh.get_num_vertices(); ++v) {
 
-        uint32_t vertex = input(v);
+        auto vertex = (*input)(v);
 
-        uint32_t v_0 = output(v, output(v, 0));
-        for (uint32_t i = 1; i < output(v, 0); ++i) {
+        auto v_0 = (*output)(v, output(v, 0));
+        for (uint32_t i = 1; i < (*output).get_num_attributes(); ++i) {
 
-            uint32_t v_1 = output(v, i);
+            uint32_t v_1 = (*output)(v, i);
 
-            std::vector<dataT> p1{Verts[vertex][0] - Verts[v_0][0],
-                                  Verts[vertex][1] - Verts[v_0][1],
-                                  Verts[vertex][2] - Verts[v_0][2]};
+            if (v_1.is_valid()) {
 
-            std::vector<dataT> p2{Verts[vertex][0] - Verts[v_1][0],
-                                  Verts[vertex][1] - Verts[v_1][1],
-                                  Verts[vertex][2] - Verts[v_1][2]};
-            dataT              dot_pro = dot(p1, p2);
-            dataT              theta =
-                std::acos(dot_pro / (vector_length(p1[0], p1[1], p1[2]) *
-                                     vector_length(p2[0], p2[1], p2[2])));
-            theta = (theta * 180) / 3.14159265;
-            EXPECT_TRUE(std::abs(theta - 90) < 0.0001 ||
-                        std::abs(theta - 45) < 0.0001);
-            v_0 = v_1;
+                std::vector<dataT> p1{Verts[vertex][0] - Verts[v_0][0],
+                                      Verts[vertex][1] - Verts[v_0][1],
+                                      Verts[vertex][2] - Verts[v_0][2]};
+
+                std::vector<dataT> p2{Verts[vertex][0] - Verts[v_1][0],
+                                      Verts[vertex][1] - Verts[v_1][1],
+                                      Verts[vertex][2] - Verts[v_1][2]};
+                dataT              dot_pro = dot(p1, p2);
+                dataT              theta =
+                    std::acos(dot_pro / (vector_length(p1[0], p1[1], p1[2]) *
+                                         vector_length(p2[0], p2[1], p2[2])));
+                theta = (theta * 180) / 3.14159265;
+                EXPECT_TRUE(std::abs(theta - 90) < 0.0001 ||
+                            std::abs(theta - 45) < 0.0001);
+                v_0 = v_1;
+            } else {
+                break;
+            }
         }
     }*/
 }

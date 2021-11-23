@@ -94,13 +94,12 @@ __device__ __inline__ void query_block_dispatcher_v1(
     if (oriented) {
         assert(op == Op::VV);
         if constexpr (op == Op::VV) {
-            /*v_v_oreinted<blockThreads>(s_output_offset,
-                                       s_output_value,
-                                       s_ev,
-                                       context,
-                                       ad_size,
-                                       patch_info.num_vertices,
-                                       num_src_in_patch);*/
+            uint16_t* temp_output;
+            v_v_oreinted<blockThreads>(patch_info,
+                                       s_output_offset,
+                                       temp_output,
+                                       reinterpret_cast<uint16_t*>(s_ev));
+            s_output_value = reinterpret_cast<T*>(temp_output);
         }
     } else {
         uint16_t* temp_output;
@@ -230,13 +229,13 @@ __device__ __inline__ void query_block_dispatcher(
     if (oriented) {
         assert(op == Op::VV);
         if constexpr (op == Op::VV) {
-            v_v_oreinted<blockThreads>(s_output_offset,
+            /*v_v_oreinted<blockThreads>(s_output_offset,
                                        s_output_value,
                                        s_patch_edges,
                                        context,
                                        ad_size,
                                        ad_size_ltog_v.y,
-                                       num_src_in_patch);
+                                       num_src_in_patch);*/
         }
     } else {
         query<blockThreads, op>(s_output_offset,
