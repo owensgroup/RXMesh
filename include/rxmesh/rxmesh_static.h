@@ -44,10 +44,8 @@ class RXMeshStatic : public RXMesh
         const int num_patches = this->get_num_patches();
 #pragma omp parallel for
         for (int p = 0; p < num_patches; ++p) {
-            const int num_vertices = static_cast<int>(this->m_h_num_owned_v[p]);
-            for (int v = 0; v < num_vertices; ++v) {
-                const VertexHandle v_handle(static_cast<uint32_t>(p),
-                                            static_cast<uint16_t>(v));
+            for (uint16_t v = 0; v < this->m_h_num_owned_v[p]; ++v) {
+                const VertexHandle v_handle(static_cast<uint32_t>(p), v);
                 apply(v_handle);
             }
         }
@@ -65,10 +63,8 @@ class RXMeshStatic : public RXMesh
         const int num_patches = this->get_num_patches();
 #pragma omp parallel for
         for (int p = 0; p < num_patches; ++p) {
-            const int num_edges = static_cast<int>(this->m_h_num_owned_e[p]);
-            for (int e = 0; e < num_edges; ++e) {
-                const EdgeHandle e_handle(static_cast<uint32_t>(p),
-                                          static_cast<uint16_t>(e));
+            for (uint16_t e = 0; e < this->m_h_num_owned_e[p]; ++e) {
+                const EdgeHandle e_handle(static_cast<uint32_t>(p), e);
                 apply(e_handle);
             }
         }
@@ -86,10 +82,8 @@ class RXMeshStatic : public RXMesh
         const int num_patches = this->get_num_patches();
 #pragma omp parallel for
         for (int p = 0; p < num_patches; ++p) {
-            const int num_faces = static_cast<int>(this->m_h_num_owned_f[p]);
-            for (int f = 0; f < num_faces; ++f) {
-                const FaceHandle f_handle(static_cast<uint32_t>(p),
-                                          static_cast<uint16_t>(f));
+            for (int f = 0; f < this->m_h_num_owned_f[p]; ++f) {
+                const FaceHandle f_handle(static_cast<uint32_t>(p), f);
                 apply(f_handle);
             }
         }
@@ -221,6 +215,59 @@ class RXMeshStatic : public RXMesh
             with_reduce_alloc);
     }
 
+    template <class T>
+    std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
+        const std::vector<std::vector<T>>& v_attributes,
+        const std::string&                 name,
+        locationT                          location          = LOCATION_ALL,
+        layoutT                            layout            = AoS,
+        const bool                         with_reduce_alloc = true)
+    {
+        if (v_attributes.empty()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::add_vertex_attribute() input attribute is "
+                "empty");
+        }
+
+        if (v_attributes.size() != get_num_vertices()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::add_vertex_attribute() input attribute size "
+                "({}) is not the same as number of vertices in the input mesh "
+                "({})",
+                v_attributes.size(),
+                get_num_vertices());
+        }
+
+        uint32_t num_attributes = v_attributes[0].size();
+
+        auto ret = m_attr_container->template add<RXMeshVertexAttribute<T>>(
+            name.c_str(),
+            this->m_h_num_owned_v,
+            num_attributes,
+            location,
+            layout,
+            with_reduce_alloc);
+
+        // populate the attribute before returning it
+        const int num_patches = this->get_num_patches();
+#pragma omp parallel for
+        for (int p = 0; p < num_patches; ++p) {
+            for (uint16_t v = 0; v < this->m_h_num_owned_v[p]; ++v) {
+
+                const VertexHandle v_handle(static_cast<uint32_t>(p), v);
+
+                uint32_t global_v = m_h_patches_ltog_v[p][v];
+
+                for (uint32_t a = 0; a < num_attributes; ++a) {
+                    (*ret)(v_handle, a) = v_attributes[global_v][a];
+                }
+            }
+        }
+
+        // move to device
+        ret->move_v1(rxmesh::HOST, rxmesh::DEVICE);
+        return ret;
+    }
 
     /**
      * @brief Checks if an attribute exists given its name

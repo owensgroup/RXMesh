@@ -34,6 +34,8 @@ TEST(RXMeshStatic, Oriented_VV)
     EXPECT_TRUE(rxmesh.is_closed())
         << " Can't generate oriented VV for input with boundaries";
 
+    auto coordinates = rxmesh.add_vertex_attribute<dataT>(Verts, "coordinates");
+
     // input/output container
     auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
     auto output = rxmesh.add_vertex_attribute<VertexHandle>(
@@ -81,37 +83,36 @@ TEST(RXMeshStatic, Oriented_VV)
             std::begin(u), std::end(u), std::begin(v), 0.0);
     };
 
-    /*for (uint32_t v = 0; v < rxmesh.get_num_vertices(); ++v) {
+    rxmesh.for_each_vertex([&](const VertexHandle& vertex) {
+        for (uint32_t i = 0; i < (*output).get_num_attributes(); ++i) {
 
-        auto vertex = (*input)(v);
+            uint32_t j = (i + 1) % output->get_num_attributes();
 
-        auto v_0 = (*output)(v, output(v, 0));
-        for (uint32_t i = 1; i < (*output).get_num_attributes(); ++i) {
+            auto v_0 = (*output)(vertex, i);
+            auto v_1 = (*output)(vertex, j);
 
-            uint32_t v_1 = (*output)(v, i);
+            if (v_1.is_valid() && v_0.is_valid()) {
 
-            if (v_1.is_valid()) {
+                std::vector<dataT> p1{
+                    (*coordinates)(vertex, 0) - (*coordinates)(v_0, 0),
+                    (*coordinates)(vertex, 1) - (*coordinates)(v_0, 1),
+                    (*coordinates)(vertex, 2) - (*coordinates)(v_0, 2)};
 
-                std::vector<dataT> p1{Verts[vertex][0] - Verts[v_0][0],
-                                      Verts[vertex][1] - Verts[v_0][1],
-                                      Verts[vertex][2] - Verts[v_0][2]};
+                std::vector<dataT> p2{
+                    (*coordinates)(vertex, 0) - (*coordinates)(v_1, 0),
+                    (*coordinates)(vertex, 1) - (*coordinates)(v_1, 1),
+                    (*coordinates)(vertex, 2) - (*coordinates)(v_1, 2)};
 
-                std::vector<dataT> p2{Verts[vertex][0] - Verts[v_1][0],
-                                      Verts[vertex][1] - Verts[v_1][1],
-                                      Verts[vertex][2] - Verts[v_1][2]};
-                dataT              dot_pro = dot(p1, p2);
-                dataT              theta =
+                dataT dot_pro = dot(p1, p2);
+                dataT theta =
                     std::acos(dot_pro / (vector_length(p1[0], p1[1], p1[2]) *
                                          vector_length(p2[0], p2[1], p2[2])));
                 theta = (theta * 180) / 3.14159265;
                 EXPECT_TRUE(std::abs(theta - 90) < 0.0001 ||
-                            std::abs(theta - 45) < 0.0001);
-                v_0 = v_1;
-            } else {
-                break;
+                            std::abs(theta - 45) < 0.0001);                
             }
         }
-    }*/
+    });
 }
 
 template <rxmesh::Op op,
