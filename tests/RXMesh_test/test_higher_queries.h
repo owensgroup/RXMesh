@@ -9,6 +9,7 @@ TEST(RXMeshStatic, HigherQueries)
 {
     using namespace rxmesh;
 
+
     // Select device
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
@@ -49,9 +50,9 @@ TEST(RXMeshStatic, HigherQueries)
     RXMeshTest tester(rxmesh, Faces, true);
 
     // launch
-    // higher_query<Op::VV, blockThreads>
-    //     <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-    //         rxmesh.get_context(), *input, *output);
+    higher_query<blockThreads, Op::VV>
+        <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
+            rxmesh.get_context(), *input, *output);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
@@ -60,5 +61,5 @@ TEST(RXMeshStatic, HigherQueries)
     input->move_v1(rxmesh::DEVICE, rxmesh::HOST);
 
     // verify
-    EXPECT_TRUE(tester.run_test(rxmesh, Faces, *input, *output, true));    
+    EXPECT_TRUE(tester.run_test(rxmesh, Faces, *input, *output, true));
 }
