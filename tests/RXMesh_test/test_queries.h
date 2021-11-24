@@ -14,11 +14,10 @@
 
 #include "query.cuh"
 
-using namespace rxmesh;
-
-
 TEST(RXMeshStatic, Oriented_VV)
 {
+    using namespace rxmesh;
+
     // Select device
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
@@ -28,7 +27,7 @@ TEST(RXMeshStatic, Oriented_VV)
     ASSERT_TRUE(
         import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces, true));
 
-    // Instantiate RXMesh Static
+    // RXMesh
     RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
 
     EXPECT_TRUE(rxmesh.is_closed())
@@ -109,7 +108,7 @@ TEST(RXMeshStatic, Oriented_VV)
                                          vector_length(p2[0], p2[1], p2[2])));
                 theta = (theta * 180) / 3.14159265;
                 EXPECT_TRUE(std::abs(theta - 90) < 0.0001 ||
-                            std::abs(theta - 45) < 0.0001);                
+                            std::abs(theta - 45) < 0.0001);
             }
         }
     });
@@ -121,13 +120,14 @@ template <rxmesh::Op op,
           typename InputAttributeT,
           typename OutputAttributeT>
 void launcher(const std::vector<std::vector<uint32_t>>& Faces,
-              RXMeshStatic&                             rxmesh,
+              rxmesh::RXMeshStatic&                     rxmesh,
               InputAttributeT&                          input,
               OutputAttributeT&                         output,
               RXMeshTest&                               tester,
-              Report&                                   report,
+              rxmesh::Report&                           report,
               bool                                      oriented)
 {
+    using namespace rxmesh;
 
     // launch box
     constexpr uint32_t      blockThreads = 256;
@@ -220,6 +220,8 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
 
 TEST(RXMeshStatic, Queries)
 {
+    using namespace rxmesh;
+
     bool oriented = false;
 
     // Select device

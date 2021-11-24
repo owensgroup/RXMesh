@@ -60,75 +60,17 @@ class RXMeshTest
         return true;
     }
 
-    /**
-     * @brief verify VVV (2-ring) query
-     */
-    bool run_test_vvv(
-        const rxmesh::RXMeshStatic&                                rxmesh,
-        const std::vector<std::vector<uint32_t>>&                  fv,
-        const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& input,
-        const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& output)
-    {
-
-        std::vector<std::vector<uint32_t>> v_v(rxmesh.m_num_vertices,
-                                               std::vector<uint32_t>(0));
-
-        auto e_it  = rxmesh.m_edges_map.begin();
-        auto e_end = rxmesh.m_edges_map.end();
-
-        for (; e_it != e_end; e_it++) {
-            std::pair<uint32_t, uint32_t> vertices = e_it->first;
-
-            v_v[vertices.first].push_back(vertices.second);
-            v_v[vertices.second].push_back(vertices.first);
-        }
-
-        // use VV to construct VVV
-        std::vector<std::vector<uint32_t>> v_v_v = v_v;
-        for (uint32_t v = 0; v < v_v_v.size(); ++v) {
-
-            // loop over the v_v list of the vertex v
-            for (uint32_t i = 0; i < v_v[v].size(); ++i) {
-
-                // this is a vertex in the 1-ring (v_v) of v
-                uint32_t n = v_v_v[v][i];
-
-                // loop over the v_v list (1-ring) of n
-                for (uint32_t j = 0; j < v_v[n].size(); ++j) {
-
-                    // a candidate to be added to the 2-ring of v
-                    uint32_t candid = v_v[n][j];
-
-                    // but we need to check first if it is not duplicate and
-                    // it is not v itself
-                    if (candid != v &&
-                        rxmesh::find_index(candid, v_v_v[v]) ==
-                            std::numeric_limits<uint32_t>::max()) {
-
-                        v_v_v[v].push_back(candid);
-                    }
-                }
-            }
-        }
-
-        return verifier<rxmesh::VertexHandle, rxmesh::VertexHandle>(
-            v_v_v,
-            rxmesh,
-            rxmesh.m_h_num_owned_v,
-            rxmesh.m_h_patches_ltog_v,
-            rxmesh.m_h_patches_ltog_v,
-            input,
-            output);
-    }
 
     /**
-     * @brief verify VV query
+     * @brief verify VV query. If is_higher_query is true, it verifies 2-ring
+     * queries
      */
     bool run_test(
         const rxmesh::RXMeshStatic&                                rxmesh,
         const std::vector<std::vector<uint32_t>>&                  fv,
         const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& input,
-        const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& output)
+        const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& output,
+        const bool is_higher_query = false)
     {
         std::vector<std::vector<uint32_t>> v_v(rxmesh.get_num_vertices(),
                                                std::vector<uint32_t>(0));
@@ -141,6 +83,45 @@ class RXMeshTest
 
             v_v[vertices.first].push_back(vertices.second);
             v_v[vertices.second].push_back(vertices.first);
+        }
+
+        if (is_higher_query) {
+            // use VV to construct VVV
+            std::vector<std::vector<uint32_t>> v_v_v = v_v;
+            for (uint32_t v = 0; v < v_v_v.size(); ++v) {
+
+                // loop over the v_v list of the vertex v
+                for (uint32_t i = 0; i < v_v[v].size(); ++i) {
+
+                    // this is a vertex in the 1-ring (v_v) of v
+                    uint32_t n = v_v_v[v][i];
+
+                    // loop over the v_v list (1-ring) of n
+                    for (uint32_t j = 0; j < v_v[n].size(); ++j) {
+
+                        // a candidate to be added to the 2-ring of v
+                        uint32_t candid = v_v[n][j];
+
+                        // but we need to check first if it is not duplicate and
+                        // it is not v itself
+                        if (candid != v &&
+                            rxmesh::find_index(candid, v_v_v[v]) ==
+                                std::numeric_limits<uint32_t>::max()) {
+
+                            v_v_v[v].push_back(candid);
+                        }
+                    }
+                }
+            }
+
+            return verifier<rxmesh::VertexHandle, rxmesh::VertexHandle>(
+                v_v_v,
+                rxmesh,
+                rxmesh.m_h_num_owned_v,
+                rxmesh.m_h_patches_ltog_v,
+                rxmesh.m_h_patches_ltog_v,
+                input,
+                output);
         }
 
         return verifier<rxmesh::VertexHandle, rxmesh::VertexHandle>(

@@ -5,17 +5,17 @@
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh_test.h"
 
-using namespace rxmesh;
-
-TEST(RXMeshStatic, DISABLED_HigherQueries)
+TEST(RXMeshStatic, HigherQueries)
 {
+    using namespace rxmesh;
+
     // Select device
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
-    ASSERT_TRUE(
-        import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, true));
+    ASSERT_TRUE(import_obj(
+        STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, rxmesh_args.quite));
 
     // RXMesh
     RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
@@ -23,32 +23,42 @@ TEST(RXMeshStatic, DISABLED_HigherQueries)
     uint32_t input_size = rxmesh.get_num_vertices();
 
     // input/output container
-    auto input_container = rxmesh.add_vertex_attribute<uint32_t>(
-        "input", 1u, rxmesh::LOCATION_ALL, rxmesh::AoS, false);
+    auto input = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
 
-    auto output_container = rxmesh.add_vertex_attribute<uint32_t>(
-        "output", input_size, rxmesh::LOCATION_ALL, rxmesh::SoA, false);
-    //           ^^that is a bit excessive
+    // we assume that every vertex could store up to num_vertices as its
+    // neighbor vertices which is a bit excessive
+    auto output =
+        rxmesh.add_vertex_attribute<VertexHandle>("output", input_size);
+
+    rxmesh.for_each_vertex([&](const VertexHandle& handle) {
+        (*input)(handle) = VertexHandle();
+        for (uint32_t j = 0; j < (*output).get_num_attributes(); ++j) {
+            (*output)(handle, j) = VertexHandle();
+        }
+    });
+
+    output->move_v1(rxmesh::HOST, rxmesh::DEVICE);
+    input->move_v1(rxmesh::HOST, rxmesh::DEVICE);
 
     // launch box
     constexpr uint32_t      blockThreads = 512;
     LaunchBox<blockThreads> launch_box;
     rxmesh.prepare_launch_box(Op::VV, launch_box, true, false);
 
-    output_container->reset(INVALID32, rxmesh::DEVICE);
-    input_container->reset(INVALID32, rxmesh::DEVICE);
 
-    ::RXMeshTest tester(rxmesh, Faces, true);
+    RXMeshTest tester(rxmesh, Faces, true);
 
     // launch
-    higher_query<Op::VV, blockThreads>
-        <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh.get_context(), *input_container, *output_container);
+    // higher_query<Op::VV, blockThreads>
+    //     <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
+    //         rxmesh.get_context(), *input, *output);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
 
     // move containers to the CPU for testing
-    output_container->move(rxmesh::DEVICE, rxmesh::HOST);
-    input_container->move(rxmesh::DEVICE, rxmesh::HOST);
+    output->move_v1(rxmesh::DEVICE, rxmesh::HOST);
+    input->move_v1(rxmesh::DEVICE, rxmesh::HOST);
 
     // verify
-    //EXPECT_TRUE(tester.test_VVV(rxmesh, *input_container, *output_container));
+    EXPECT_TRUE(tester.run_test(rxmesh, Faces, *input, *output, true));    
 }
