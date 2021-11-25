@@ -162,6 +162,7 @@ struct VertexHandle
 
     template <typename T>
     friend class RXMeshVertexAttribute;
+    friend class RXMeshStatic;
 
     __device__ __host__ VertexHandle() : m_patch_id(INVALID32), m_v({INVALID16})
     {
@@ -217,6 +218,7 @@ struct EdgeHandle
 
     template <typename T>
     friend class RXMeshEdgeAttribute;
+    friend class RXMeshStatic;
 
     __device__ __host__ EdgeHandle() : m_patch_id(INVALID32), m_e({INVALID16})
     {
@@ -269,6 +271,7 @@ struct FaceHandle
 
     template <typename T>
     friend class RXMeshFaceAttribute;
+    friend class RXMeshStatic;
 
     __device__ __host__ FaceHandle() : m_patch_id(INVALID32), m_f({INVALID16})
     {

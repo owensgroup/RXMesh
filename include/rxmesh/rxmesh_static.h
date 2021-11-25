@@ -6,6 +6,7 @@
 #include "rxmesh/launch_box.h"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/rxmesh_attribute.h"
+#include "rxmesh/rxmesh_types.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/timer.h"
 
@@ -294,6 +295,39 @@ class RXMeshStatic : public RXMesh
         }
 
         m_attr_container->remove(name.c_str());
+    }
+
+
+    /**
+     * @brief Map a vertex handle into a global index as seen in the input
+     * to RXMeshStatic
+     * @param vh input vertex handle
+     * @return the global index of vh
+     */
+    uint32_t map_to_global(const VertexHandle vh) const
+    {
+        return m_h_patches_ltog_v[vh.m_patch_id][vh.m_v.id];
+    }
+
+    /**
+     * @brief Map an edge handle into a global index
+     * @param eh input edge handle
+     * @return the global index of eh
+     */
+    uint32_t map_to_global(const EdgeHandle eh) const
+    {
+        return m_h_patches_ltog_e[eh.m_patch_id][eh.m_e.id];
+    }
+
+    /**
+     * @brief Map a face handle into a global index as seen in the input
+     * to RXMeshStatic
+     * @param vh input face handle
+     * @return the global index of fh
+     */
+    uint32_t map_to_global(const FaceHandle fh) const
+    {
+        return m_h_patches_ltog_f[fh.m_patch_id][fh.m_f.id];
     }
 
    protected:
