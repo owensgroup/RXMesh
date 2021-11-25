@@ -25,7 +25,7 @@ struct arg
 #include "vertex_normal_hardwired.cuh"
 
 template <typename T>
-void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
+void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
                           const std::vector<std::vector<T>>& Verts,
                           const std::vector<T>&              vertex_normal_gold)
 {
@@ -37,29 +37,20 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
     report.command_line(Arg.argc, Arg.argv);
     report.device();
     report.system();
-    report.model_data(Arg.obj_file_name, rxmesh_static);
+    report.model_data(Arg.obj_file_name, rxmesh);
     report.add_member("method", std::string("RXMesh"));
     report.add_member("blockThreads", blockThreads);
 
-    auto coords =
-        rxmesh_static.add_vertex_attribute<T>("coord", 3, rxmesh::LOCATION_ALL);
-    // fill in the coordinates
-    for (uint32_t i = 0; i < Verts.size(); ++i) {
-        for (uint32_t j = 0; j < Verts[i].size(); ++j) {
-            (*coords)(i, j) = Verts[i][j];
-        }
-    }
-    // move the coordinates to device
-    coords->move(rxmesh::HOST, rxmesh::DEVICE);
+    auto coords = rxmesh.add_vertex_attribute<T>(Verts, "coordinates");
 
 
     // normals
-    auto rxmesh_normal = rxmesh_static.add_vertex_attribute<T>(
-        "normals", 3, rxmesh::LOCATION_ALL);
+    auto v_normals =
+        rxmesh.add_vertex_attribute<T>("v_normals", 3, rxmesh::LOCATION_ALL);
 
     // launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh_static.prepare_launch_box(rxmesh::Op::FV, launch_box);
+    rxmesh.prepare_launch_box(rxmesh::Op::FV, launch_box);
 
 
     TestData td;
@@ -67,13 +58,14 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
 
     float vn_time = 0;
     for (uint32_t itr = 0; itr < Arg.num_run; ++itr) {
-        rxmesh_normal->reset(0, rxmesh::DEVICE);
+        // TODO
+        // v_normals->reset(0, rxmesh::DEVICE);
         GPUTimer timer;
         timer.start();
 
         compute_vertex_normal<T, blockThreads>
             <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-                rxmesh_static.get_context(), *coords, *rxmesh_normal);
+                rxmesh.get_context(), *coords, *v_normals);
 
         timer.stop();
         CUDA_ERROR(cudaDeviceSynchronize());
@@ -87,14 +79,17 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
                  vn_time / Arg.num_run);
 
     // Verify
-    rxmesh_normal->move(rxmesh::DEVICE, rxmesh::HOST);
+    v_normals->move_v1(rxmesh::DEVICE, rxmesh::HOST);
 
-    bool passed = compare(vertex_normal_gold.data(),
-                          rxmesh_normal->get_pointer(rxmesh::HOST),
-                          rxmesh_static.get_num_vertices() * 3,
-                          false);
-    td.passed.push_back(passed);
-    EXPECT_TRUE(passed) << " RXMesh Validation failed \n";
+    rxmesh.for_each_vertex([&](const VertexHandle& vh) {
+        uint32_t v_id = rxmesh.map_to_global(vh);
+
+        for (uint32_t i = 0; i < 3; ++i) {
+            EXPECT_NEAR(std::abs(vertex_normal_gold[v_id * 3 + i]),
+                        std::abs((*v_normals)(vh, i)),
+                        0.0001);
+        }
+    });
 
     // Finalize report
     report.add_test(td);
@@ -117,14 +112,14 @@ TEST(Apps, VertexNormal)
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
 
-    RXMeshStatic rxmesh_static(Faces, false);
+    RXMeshStatic rxmesh(Faces, false);
 
     // Serial reference
     std::vector<dataT> vertex_normal_gold(3 * Verts.size());
     vertex_normal_ref(Faces, Verts, vertex_normal_gold);
 
     // RXMesh Impl
-    vertex_normal_rxmesh(rxmesh_static, Verts, vertex_normal_gold);
+    vertex_normal_rxmesh(rxmesh, Verts, vertex_normal_gold);
 
     // Hardwired Impl
     vertex_normal_hardwired(Faces, Verts, vertex_normal_gold);
