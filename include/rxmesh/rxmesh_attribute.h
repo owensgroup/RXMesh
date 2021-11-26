@@ -1196,8 +1196,12 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
                         const uint32_t               num_attributes,
                         locationT                    location,
                         const layoutT                layout,
-                        const bool                   with_reduce_alloc)
-        : RXMeshAttribute<T>(name)
+                        const bool                   with_reduce_alloc,
+                        const PatchInfo*             h_patches_info,
+                        const PatchInfo*             d_patches_info)
+        : RXMeshAttribute<T>(name),
+          m_h_patches_info(m_h_patches_info),
+          m_d_patches_info(m_d_patches_info)
     {
         this->init_v1(face_per_patch,
                       num_attributes,
@@ -1230,6 +1234,9 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
     {
         return (*this)(f_handle, 0);
     }
+
+   private:
+    const PatchInfo *m_h_patches_info, *m_d_patches_info;
 };
 
 
@@ -1248,8 +1255,12 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
                         const uint32_t               num_attributes,
                         locationT                    location,
                         const layoutT                layout,
-                        const bool                   with_reduce_alloc)
-        : RXMeshAttribute<T>(name)
+                        const bool                   with_reduce_alloc,
+                        const PatchInfo*             h_patches_info,
+                        const PatchInfo*             d_patches_info)
+        : RXMeshAttribute<T>(name),
+          m_h_patches_info(m_h_patches_info),
+          m_d_patches_info(m_d_patches_info)
     {
         this->init_v1(edge_per_patch,
                       num_attributes,
@@ -1282,6 +1293,9 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
     {
         return (*this)(e_handle, 0);
     }
+
+   private:
+    const PatchInfo *m_h_patches_info, *m_d_patches_info;
 };
 
 
@@ -1300,8 +1314,12 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
                           const uint32_t               num_attributes,
                           locationT                    location,
                           const layoutT                layout,
-                          const bool                   with_reduce_alloc)
-        : RXMeshAttribute<T>(name)
+                          const bool                   with_reduce_alloc,
+                          const PatchInfo*             h_patches_info,
+                          const PatchInfo*             d_patches_info)
+        : RXMeshAttribute<T>(name),
+          m_h_patches_info(m_h_patches_info),
+          m_d_patches_info(m_d_patches_info)
     {
         this->init_v1(vertex_per_patch,
                       num_attributes,
@@ -1328,6 +1346,7 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
         const VertexHandle v_handle,
         const uint32_t     attr) const
     {
+
         return RXMeshAttribute<T>::operator()(
             v_handle.m_patch_id, v_handle.m_v.id, attr);
     }
@@ -1351,6 +1370,9 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
     {
         return (*this)(v_handle, 0);
     }
+
+   private:
+    const PatchInfo *m_h_patches_info, *m_d_patches_info;
 };
 
 /**
@@ -1389,7 +1411,9 @@ class RXMeshAttributeContainer
                                uint32_t               num_attributes,
                                locationT              location,
                                layoutT                layout,
-                               const bool             with_reduce_alloc)
+                               const bool             with_reduce_alloc,
+                               const PatchInfo*       h_patches_info,
+                               const PatchInfo*       d_patches_info)
     {
         if (does_exist(name)) {
             RXMESH_WARN(
@@ -1403,7 +1427,9 @@ class RXMeshAttributeContainer
                                                 num_attributes,
                                                 location,
                                                 layout,
-                                                with_reduce_alloc);
+                                                with_reduce_alloc,
+                                                h_patches_info,
+                                                d_patches_info);
         m_attr_container.push_back(
             std::dynamic_pointer_cast<RXMeshAttributeBase>(new_attr));
 
