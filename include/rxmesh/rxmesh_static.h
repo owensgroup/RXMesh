@@ -131,7 +131,6 @@ class RXMeshStatic : public RXMesh
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
      * @param layout as SOA or AOS
-     * @param with_axpy_alloc wither this attributes will run axpy operations
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
@@ -151,7 +150,34 @@ class RXMeshStatic : public RXMesh
             num_attributes,
             location,
             layout,
-            with_reduce_alloc);
+            with_reduce_alloc,
+            this->m_h_patches_info,
+            this->m_d_patches_info);
+    }
+
+    /**
+     * @brief Adding a new face attribute by reading values from a host buffer
+     * f_attributes where the order of faces is the same as the order of
+     * faces given to the constructor
+     * @tparam T type of the attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names     
+     * @param location where to allocate the attributes
+     * @param layout as SOA or AOS
+     * @param with_reduce_alloc wither this attribute will run reduce
+     * operations
+     * @return shared pointer to the created attribute
+     * TODO remove location input parameter
+     * TODO implement this
+     */
+    template <class T>
+    std::shared_ptr<RXMeshVertexAttribute<T>> add_face_attribute(
+        const std::vector<std::vector<T>>& f_attributes,
+        const std::string&                 name,
+        locationT                          location          = LOCATION_ALL,
+        layoutT                            layout            = AoS,
+        const bool                         with_reduce_alloc = true)
+    {
     }
 
     /**
@@ -162,7 +188,6 @@ class RXMeshStatic : public RXMesh
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
      * @param layout as SOA or AOS
-     * @param with_axpy_alloc wither this attributes will run axpy operations
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
@@ -182,7 +207,9 @@ class RXMeshStatic : public RXMesh
             num_attributes,
             location,
             layout,
-            with_reduce_alloc);
+            with_reduce_alloc,
+            this->m_h_patches_info,
+            this->m_d_patches_info);
     }
 
     /**
@@ -193,7 +220,6 @@ class RXMeshStatic : public RXMesh
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
      * @param layout as SOA or AOS
-     * @param with_axpy_alloc wither this attributes will run axpy operations
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
@@ -213,9 +239,25 @@ class RXMeshStatic : public RXMesh
             num_attributes,
             location,
             layout,
-            with_reduce_alloc);
+            with_reduce_alloc,
+            this->m_h_patches_info,
+            this->m_d_patches_info);
     }
 
+    /**
+     * @brief Adding a new vertex attribute by reading values from a host buffer
+     * v_attributes where the order of vertices is the same as the order of
+     * vertices given to the constructor
+     * @tparam T type of the attribute
+     * @param v_attributes attributes to read
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param location where to allocate the attributes
+     * @param layout as SOA or AOS
+     * @param with_reduce_alloc wither this attribute will run reduce
+     * operations
+     * @return shared pointer to the created attribute
+     */
     template <class T>
     std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
         const std::vector<std::vector<T>>& v_attributes,
@@ -247,7 +289,9 @@ class RXMeshStatic : public RXMesh
             num_attributes,
             location,
             layout,
-            with_reduce_alloc);
+            with_reduce_alloc,
+            this->m_h_patches_info,
+            this->m_d_patches_info);
 
         // populate the attribute before returning it
         const int num_patches = this->get_num_patches();
@@ -328,6 +372,52 @@ class RXMeshStatic : public RXMesh
     uint32_t map_to_global(const FaceHandle fh) const
     {
         return m_h_patches_ltog_f[fh.m_patch_id][fh.m_f.id];
+    }
+
+    /**
+     * @brief Export the mesh to obj file
+     * @tparam T type of vertices coordinates
+     * @param filename the output file
+     * @param coords vertices coordinates
+     */
+    template <typename T>
+    void export_obj(const std::string&              filename,
+                    const RXMeshVertexAttribute<T>& coords)
+    {
+        std::string  fn = filename;
+        std::fstream file(fn, std::ios::out);
+        file.precision(30);
+
+        uint32_t num_v = 0;
+        for (uint32_t p = 0; p < this->m_num_patches; ++p) {
+
+            const uint32_t p_num_vertices = this->m_h_patches_ltog_v[p].size();
+
+            for (uint16_t v = 0; v < p_num_vertices; ++v) {
+                // LocalVertexT lv(v);
+                VertexHandle vh(p, {v});
+                file << "v " << coords(vh, 0) << " " << coords(vh, 1) << " "
+                     << coords(vh, 2) << std::endl;
+            }
+
+            const uint32_t p_num_faces = this->m_h_num_owned_f[p];
+
+            for (uint32_t f = 0; f < p_num_faces; ++f) {
+
+                file << "f ";
+                for (uint32_t e = 0; e < 3; ++e) {
+                    uint16_t edge = this->m_h_patches_fe[p][3 * f + e];
+                    flag_t   dir(0);
+                    RXMeshContext::unpack_edge_dir(edge, edge, dir);
+                    uint16_t e_id = (2 * edge) + dir;
+                    uint16_t v    = this->m_h_patches_ev[p][e_id];
+                    file << v + num_v + 1 << " ";
+                }
+                file << std::endl;
+            }
+
+            num_v += p_num_vertices;
+        }
     }
 
    protected:

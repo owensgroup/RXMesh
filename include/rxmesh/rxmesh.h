@@ -19,38 +19,6 @@ namespace rxmesh {
 class RXMesh
 {
    public:
-    /**
-     * @brief Export the mesh to obj file
-     *
-     * @tparam VertT Lambda function type [inferred]
-     * @param filename the output file
-     * @param getCoords lambda function that takes two uint32_t/int parameters
-     * and return a real number. The first parameter is the vertex id. The
-     * second parameter is dimension (0,1, or 2)
-     */
-    template <typename VertT>
-    void export_obj(const std::string& filename, VertT getCoords)
-    {
-        std::string  fn = STRINGIFY(OUTPUT_DIR) + filename;
-        std::fstream file(fn, std::ios::out);
-        file.precision(30);
-
-        // write vertices
-        for (uint32_t v = 0; v < m_num_vertices; ++v) {
-            uint32_t v_id = v;
-
-            file << "v  ";
-            for (uint32_t i = 0; i < 3; ++i) {
-                file << getCoords(v_id, i) << "  ";
-            }
-            file << std::endl;
-        }
-        // write connectivity
-        write_connectivity(file);
-        file.close();
-    }
-
-
     uint32_t get_num_vertices() const
     {
         return m_num_vertices;
@@ -203,14 +171,11 @@ class RXMesh
         const std::vector<std::vector<uint32_t>>& fv,
         const uint32_t                            patch_id);
 
-    //TODO remove
-    void move_to_device();
-
+    
     void build_device();
 
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
-    virtual void write_connectivity(std::fstream& file) const;
 
     // our friend tester class
     friend class ::RXMeshTest;
@@ -250,6 +215,7 @@ class RXMesh
     //.y edge size
     //.z face address
     //.w face size
+    // TODO delete
     std::vector<uint4> m_h_ad_size;
 
     // the number of owned mesh elements per patch
@@ -262,29 +228,17 @@ class RXMesh
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
 
     // storing the start id(x) and element count(y)
-    //TODO delete 
+    // TODO delete
     std::vector<uint2> m_h_ad_size_ltog_v, m_h_ad_size_ltog_e,
         m_h_ad_size_ltog_f;
 
-
-    // Device
-    // Each device pointer points to a long array that holds specific data
-    // separated by patch id
-    //       ____________ _____________ ____________
-    //      |____________|_____________|____________|
-    //           ^^            ^^            ^^
-    //      patch 1 data  patch 2 data   patch 3 data
-
-    // We store the starting id and the size of mesh elements for each patch
-    // in m_d_ad_size_ltog_MESHELE (ad for address) where MESHELE could be
-    // v,e, or f. This is for the mapping pointers
-    // For incidence pointers, we only need store the starting id
-
     // mapping
+    // TODO remove
     uint32_t *m_d_patches_ltog_v, *m_d_patches_ltog_e, *m_d_patches_ltog_f;
     uint2 *   m_d_ad_size_ltog_v, *m_d_ad_size_ltog_e, *m_d_ad_size_ltog_f;
 
     // incidence
+    // TODO remove
     uint16_t *m_d_patches_edges, *m_d_patches_faces;
 
 
@@ -292,12 +246,14 @@ class RXMesh
     //.y edge size
     //.z face address
     //.w face size
+    // TODO remove
     uint4* m_d_ad_size;
 
     // the number of owned mesh elements per patch
+    // TODO remove
     uint16_t *m_d_num_owned_f, *m_d_num_owned_e, *m_d_num_owned_v;
 
 
-    PatchInfo* m_d_patches_info;
+    PatchInfo *m_d_patches_info, *m_h_patches_info;
 };
 }  // namespace rxmesh
