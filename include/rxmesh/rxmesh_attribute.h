@@ -1,9 +1,11 @@
 #pragma once
 
 #include <assert.h>
+#include <utility>
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/rxmesh_attribute.cuh"
 #include "rxmesh/kernels/util.cuh"
+#include "rxmesh/patch_info.h"
 #include "rxmesh/rxmesh_types.h"
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/log.h"
@@ -1213,8 +1215,14 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
                                                       const uint32_t attr) const
     {
-        return RXMeshAttribute<T>::operator()(
-            f_handle.m_patch_id, f_handle.m_f.id, attr);
+#ifdef __CUDA_ARCH__
+        auto pl = m_d_patches_info[f_handle.m_patch_id].get_patch_and_local_id(
+            f_handle);
+#else
+        auto pl = m_h_patches_info[f_handle.m_patch_id].get_patch_and_local_id(
+            f_handle);
+#endif
+        return RXMeshAttribute<T>::operator()(pl.first, pl.second, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(
@@ -1226,8 +1234,14 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
                                                       const uint32_t   attr)
     {
-        return RXMeshAttribute<T>::operator()(
-            f_handle.m_patch_id, f_handle.m_f.id, attr);
+#ifdef __CUDA_ARCH__
+        auto pl = m_d_patches_info[f_handle.m_patch_id].get_patch_and_local_id(
+            f_handle);
+#else
+        auto pl = m_h_patches_info[f_handle.m_patch_id].get_patch_and_local_id(
+            f_handle);
+#endif
+        return RXMeshAttribute<T>::operator()(pl.first, pl.second, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle)
@@ -1236,7 +1250,8 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
     }
 
    private:
-    const PatchInfo *m_h_patches_info, *m_d_patches_info;
+    const PatchInfo* m_h_patches_info;
+    const PatchInfo* m_d_patches_info;
 };
 
 
@@ -1272,8 +1287,14 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
                                                       const uint32_t attr) const
     {
-        return RXMeshAttribute<T>::operator()(
-            e_handle.m_patch_id, e_handle.m_e.id, attr);
+#ifdef __CUDA_ARCH__
+        auto pl = m_d_patches_info[e_handle.m_patch_id].get_patch_and_local_id(
+            e_handle);
+#else
+        auto pl = m_h_patches_info[e_handle.m_patch_id].get_patch_and_local_id(
+            e_handle);
+#endif
+        return RXMeshAttribute<T>::operator()(pl.first, pl.second, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(
@@ -1285,8 +1306,14 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
                                                       const uint32_t   attr)
     {
-        return RXMeshAttribute<T>::operator()(
-            e_handle.m_patch_id, e_handle.m_e.id, attr);
+#ifdef __CUDA_ARCH__
+        auto pl = m_d_patches_info[e_handle.m_patch_id].get_patch_and_local_id(
+            e_handle);
+#else
+        auto pl = m_h_patches_info[e_handle.m_patch_id].get_patch_and_local_id(
+            e_handle);
+#endif
+        return RXMeshAttribute<T>::operator()(pl.first, pl.second, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle)
@@ -1295,7 +1322,8 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
     }
 
    private:
-    const PatchInfo *m_h_patches_info, *m_d_patches_info;
+    const PatchInfo* m_h_patches_info;
+    const PatchInfo* m_d_patches_info;
 };
 
 
@@ -1383,7 +1411,8 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
     }
 
    private:
-    const PatchInfo *m_h_patches_info, *m_d_patches_info;
+    const PatchInfo* m_h_patches_info;
+    const PatchInfo* m_d_patches_info;
 };
 
 /**

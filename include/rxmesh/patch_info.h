@@ -38,8 +38,8 @@ struct ALIGN(16) PatchInfo
     uint32_t patch_id;
 
 
-    __host__ __device__ std::pair<uint32_t, uint16_t>
-    get_patch_and_local_id(const VertexHandle vh) const
+    __host__ __device__ __forceinline__ std::pair<uint32_t, uint16_t>
+    get_patch_and_local_id(const VertexHandle& vh) const
     {
         assert(vh.is_valid());
         assert(patch_id == vh.m_patch_id);
@@ -50,6 +50,41 @@ struct ALIGN(16) PatchInfo
         if (l >= num_owned_vertices) {
             p = not_owned_patch_v[l - num_owned_vertices];
             l = not_owned_id_v[l - num_owned_vertices].id;            
+        }
+
+        return std::make_pair(p, l);
+    }
+
+
+    __host__ __device__ __forceinline__ std::pair<uint32_t, uint16_t>
+    get_patch_and_local_id(const EdgeHandle& eh) const
+    {
+        assert(eh.is_valid());
+        assert(patch_id == eh.m_patch_id);
+
+        uint32_t p = patch_id;
+        uint16_t l = eh.m_e.id;
+
+        if (l >= num_owned_edges) {
+            p = not_owned_patch_e[l - num_owned_edges];
+            l = not_owned_id_e[l - num_owned_edges].id;
+        }
+
+        return std::make_pair(p, l);
+    }
+
+    __host__ __device__ __forceinline__ std::pair<uint32_t, uint16_t>
+    get_patch_and_local_id(const FaceHandle& fh) const
+    {
+        assert(fh.is_valid());
+        assert(patch_id == fh.m_patch_id);
+
+        uint32_t p = patch_id;
+        uint16_t l = fh.m_f.id;
+
+        if (l >= num_owned_faces) {
+            p = not_owned_patch_f[l - num_owned_faces];
+            l = not_owned_id_f[l - num_owned_faces].id;
         }
 
         return std::make_pair(p, l);
