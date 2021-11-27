@@ -161,7 +161,7 @@ class RXMeshStatic : public RXMesh
      * faces given to the constructor
      * @tparam T type of the attribute
      * @param name of the attribute. Should not collide with other attributes
-     * names     
+     * names
      * @param location where to allocate the attributes
      * @param layout as SOA or AOS
      * @param with_reduce_alloc wither this attribute will run reduce
@@ -391,7 +391,8 @@ class RXMeshStatic : public RXMesh
         uint32_t num_v = 0;
         for (uint32_t p = 0; p < this->m_num_patches; ++p) {
 
-            const uint32_t p_num_vertices = this->m_h_patches_ltog_v[p].size();
+            const uint32_t p_num_vertices =
+                this->m_h_patches_info[p].num_vertices;
 
             for (uint16_t v = 0; v < p_num_vertices; ++v) {
                 // LocalVertexT lv(v);
@@ -400,17 +401,18 @@ class RXMeshStatic : public RXMesh
                      << coords(vh, 2) << std::endl;
             }
 
-            const uint32_t p_num_faces = this->m_h_num_owned_f[p];
+            const uint32_t p_num_faces =
+                this->m_h_patches_info[p].num_owned_faces;
 
             for (uint32_t f = 0; f < p_num_faces; ++f) {
 
                 file << "f ";
                 for (uint32_t e = 0; e < 3; ++e) {
-                    uint16_t edge = this->m_h_patches_fe[p][3 * f + e];
+                    uint16_t edge = this->m_h_patches_info[p].fe[3 * f + e].id;
                     flag_t   dir(0);
                     RXMeshContext::unpack_edge_dir(edge, edge, dir);
                     uint16_t e_id = (2 * edge) + dir;
-                    uint16_t v    = this->m_h_patches_ev[p][e_id];
+                    uint16_t v    = this->m_h_patches_info[p].ev[e_id].id;
                     file << v + num_v + 1 << " ";
                 }
                 file << std::endl;

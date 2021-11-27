@@ -1200,8 +1200,8 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
                         const PatchInfo*             h_patches_info,
                         const PatchInfo*             d_patches_info)
         : RXMeshAttribute<T>(name),
-          m_h_patches_info(m_h_patches_info),
-          m_d_patches_info(m_d_patches_info)
+          m_h_patches_info(h_patches_info),
+          m_d_patches_info(d_patches_info)
     {
         this->init_v1(face_per_patch,
                       num_attributes,
@@ -1259,8 +1259,8 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
                         const PatchInfo*             h_patches_info,
                         const PatchInfo*             d_patches_info)
         : RXMeshAttribute<T>(name),
-          m_h_patches_info(m_h_patches_info),
-          m_d_patches_info(m_d_patches_info)
+          m_h_patches_info(h_patches_info),
+          m_d_patches_info(d_patches_info)
     {
         this->init_v1(edge_per_patch,
                       num_attributes,
@@ -1318,8 +1318,8 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
                           const PatchInfo*             h_patches_info,
                           const PatchInfo*             d_patches_info)
         : RXMeshAttribute<T>(name),
-          m_h_patches_info(m_h_patches_info),
-          m_d_patches_info(m_d_patches_info)
+          m_h_patches_info(h_patches_info),
+          m_d_patches_info(d_patches_info)
     {
         this->init_v1(vertex_per_patch,
                       num_attributes,
@@ -1346,9 +1346,14 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
         const VertexHandle v_handle,
         const uint32_t     attr) const
     {
-
-        return RXMeshAttribute<T>::operator()(
-            v_handle.m_patch_id, v_handle.m_v.id, attr);
+#ifdef __CUDA_ARCH__
+        auto pl = m_d_patches_info[v_handle.m_patch_id].get_patch_and_local_id(
+            v_handle);
+#else
+        auto pl = m_h_patches_info[v_handle.m_patch_id].get_patch_and_local_id(
+            v_handle);
+#endif
+        return RXMeshAttribute<T>::operator()(pl.first, pl.second, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(
@@ -1361,8 +1366,14 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
         const VertexHandle v_handle,
         const uint32_t     attr)
     {
-        return RXMeshAttribute<T>::operator()(
-            v_handle.m_patch_id, v_handle.m_v.id, attr);
+#ifdef __CUDA_ARCH__
+        auto pl = m_d_patches_info[v_handle.m_patch_id].get_patch_and_local_id(
+            v_handle);
+#else
+        auto pl = m_h_patches_info[v_handle.m_patch_id].get_patch_and_local_id(
+            v_handle);
+#endif
+        return RXMeshAttribute<T>::operator()(pl.first, pl.second, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(

@@ -2,6 +2,7 @@
 #include <cuda_runtime_api.h>
 #include <stdint.h>
 #include <string>
+#include <utility>
 #include "rxmesh/rxmesh_types.h"
 #include "rxmesh/util/macros.h"
 
@@ -35,6 +36,24 @@ struct ALIGN(16) PatchInfo
 
     // The index of this patch (relative to all other patches)
     uint32_t patch_id;
+
+
+    __host__ __device__ std::pair<uint32_t, uint16_t>
+    get_patch_and_local_id(const VertexHandle vh) const
+    {
+        assert(vh.is_valid());
+        assert(patch_id == vh.m_patch_id);
+
+        uint32_t p = patch_id;
+        uint16_t l = vh.m_v.id;
+
+        if (l >= num_owned_vertices) {
+            p = not_owned_patch_v[l - num_owned_vertices];
+            l = not_owned_id_v[l - num_owned_vertices].id;            
+        }
+
+        return std::make_pair(p, l);
+    }
 };
 
 }  // namespace rxmesh
