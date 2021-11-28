@@ -10,7 +10,7 @@
 
 
 template <typename T>
-void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
+void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
                 const std::vector<std::vector<T>>& Verts,
                 const rxmesh::RXMeshAttribute<T>&  ground_truth)
 {
@@ -22,7 +22,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
     report.command_line(Arg.argc, Arg.argv);
     report.device();
     report.system();
-    report.model_data(Arg.obj_file_name, rxmesh_static);
+    report.model_data(Arg.obj_file_name, rxmesh);
     report.add_member("method", std::string("RXMesh"));
     report.add_member("time_step", Arg.time_step);
     report.add_member("cg_tolerance", Arg.cg_tolerance);
@@ -30,12 +30,12 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
     report.add_member("max_num_cg_iter", Arg.max_num_cg_iter);
     report.add_member("blockThreads", blockThreads);
 
-    ASSERT_TRUE(rxmesh_static.is_closed())
+    ASSERT_TRUE(rxmesh.is_closed())
         << "mcf_rxmesh only takes watertight/closed mesh without boundaries";
 
     // Different attributes used throughout the application
     auto input_coord =
-        rxmesh_static.add_vertex_attribute<T>("coord", 3, rxmesh::LOCATION_ALL);
+        rxmesh.add_vertex_attribute<T>("coord", 3, rxmesh::LOCATION_ALL);
     for (uint32_t i = 0; i < Verts.size(); ++i) {
         for (uint32_t j = 0; j < Verts[i].size(); ++j) {
             (*input_coord)(i, j) = Verts[i][j];
@@ -45,40 +45,40 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
     input_coord->move(rxmesh::HOST, rxmesh::DEVICE);
 
     // S in CG
-    auto S = rxmesh_static.add_vertex_attribute<T>(
-        "S", 3, rxmesh::DEVICE, rxmesh::SoA);
+    auto S =
+        rxmesh.add_vertex_attribute<T>("S", 3, rxmesh::DEVICE, rxmesh::SoA);
     S->reset(0.0, rxmesh::DEVICE);
 
     // P in CG
-    auto P = rxmesh_static.add_vertex_attribute<T>(
-        "P", 3, rxmesh::DEVICE, rxmesh::SoA);
+    auto P =
+        rxmesh.add_vertex_attribute<T>("P", 3, rxmesh::DEVICE, rxmesh::SoA);
     P->reset(0.0, rxmesh::DEVICE);
 
     // R in CG
-    auto R = rxmesh_static.add_vertex_attribute<T>(
-        "R", 3, rxmesh::DEVICE, rxmesh::SoA);
+    auto R =
+        rxmesh.add_vertex_attribute<T>("R", 3, rxmesh::DEVICE, rxmesh::SoA);
     R->reset(0.0, rxmesh::DEVICE);
 
     // B in CG
-    auto B = rxmesh_static.add_vertex_attribute<T>(
-        "B", 3, rxmesh::DEVICE, rxmesh::SoA);
+    auto B =
+        rxmesh.add_vertex_attribute<T>("B", 3, rxmesh::DEVICE, rxmesh::SoA);
     B->reset(0.0, rxmesh::DEVICE);
 
     // X in CG
-    auto X = rxmesh_static.add_vertex_attribute<T>(
+    auto X = rxmesh.add_vertex_attribute<T>(
         "X", 3, rxmesh::LOCATION_ALL, rxmesh::SoA);
     X->copy(*input_coord, rxmesh::HOST, rxmesh::DEVICE);
 
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh_static.prepare_launch_box(rxmesh::Op::VV, launch_box, false, true);
+    rxmesh.prepare_launch_box(rxmesh::Op::VV, launch_box, false, true);
 
 
     // init kernel to initialize RHS (B)
     init_B<T, blockThreads>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh_static.get_context(), *X, *B, Arg.use_uniform_laplace);
+            rxmesh.get_context(), *X, *B, Arg.use_uniform_laplace);
 
     // CG scalars
     Vector<3, T> alpha(T(0)), beta(T(0)), delta_new(T(0)), delta_old(T(0)),
@@ -90,7 +90,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
     // s = Ax
     mcf_matvec<T, blockThreads>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh_static.get_context(),
+            rxmesh.get_context(),
             *input_coord,
             *X,
             *S,
@@ -100,9 +100,9 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
     // r = b - s = b - Ax
     // p=r
     const uint32_t num_blocks =
-        DIVIDE_UP(rxmesh_static.get_num_vertices(), blockThreads);
+        DIVIDE_UP(rxmesh.get_num_vertices(), blockThreads);
     init_PR<T><<<num_blocks, blockThreads>>>(
-        rxmesh_static.get_num_vertices(), *B, *S, *R, *P);
+        rxmesh.get_num_vertices(), *B, *S, *R, *P);
 
     // delta_new = <r,r>
     R->reduce(delta_new, rxmesh::NORM2);
@@ -116,7 +116,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
 
         mcf_matvec<T, blockThreads>
             <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-                rxmesh_static.get_context(),
+                rxmesh.get_context(),
                 *input_coord,
                 *P,
                 *S,
@@ -180,13 +180,12 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh_static,
     X->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // output to obj
-    //rxmesh_static.export_obj(
-    //    "mcf_rxmesh.obj", [&X](uint32_t i, uint32_t j) { return (*X)(i, j); });
+    rxmesh.export_obj("mcf_rxmesh.obj", *X);
 
     // Verify
     bool    passed = true;
     const T tol    = 0.001;
-    for (uint32_t v = 0; v < rxmesh_static.get_num_vertices(); ++v) {
+    for (uint32_t v = 0; v < rxmesh.get_num_vertices(); ++v) {
         if (std::fabs((*X)(v, 0) - ground_truth(v, 0)) >
                 tol * std::fabs(ground_truth(v, 0)) ||
             std::fabs((*X)(v, 1) - ground_truth(v, 1)) >

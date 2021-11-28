@@ -105,7 +105,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
           m_allocated(LOCATION_NONE),
           m_h_attr(nullptr),
           m_d_attr(nullptr),
-          m_attr(nullptr),
           m_h_attr_v1(nullptr),
           m_d_attr_v1(nullptr),
           m_h_ptr_on_device(nullptr),
@@ -135,7 +134,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
           m_allocated(LOCATION_NONE),
           m_h_attr(nullptr),
           m_d_attr(nullptr),
-          m_attr(nullptr),
           m_h_attr_v1(nullptr),
           m_d_attr_v1(nullptr),
           m_h_ptr_on_device(nullptr),
@@ -229,6 +227,33 @@ class RXMeshAttribute : public RXMeshAttributeBase
             for (uint32_t i = 0; i < m_num_mesh_elements * m_num_attributes;
                  ++i) {
                 m_h_attr[i] = value;
+            }
+        }
+    }
+
+    void reset_v1(const T value, locationT location, cudaStream_t stream = NULL)
+    {
+        if ((location & DEVICE) == DEVICE) {
+
+            assert((m_allocated & DEVICE) == DEVICE);
+
+            const int threads = 256;
+            memset_attribute<T>
+                <<<m_num_patches, threads, 0, stream>>>(*this,
+                                                        value,
+                                                        m_d_element_per_patch,
+                                                        m_num_patches,
+                                                        m_num_attributes);            
+        }
+
+
+        if ((location & HOST) == HOST) {
+            assert((m_allocated & HOST) == HOST);
+#pragma omp parallel for
+            for (int p = 0; p < m_num_patches; ++p) {
+                for (int e = 0; e < m_h_element_per_patch[p]; ++e) {
+                    m_h_attr_v1[p][e] = value;
+                }
             }
         }
     }
@@ -1161,7 +1186,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
     T**       m_h_attr_v1;
     T**       m_h_ptr_on_device;
     T**       m_d_attr_v1;
-    T**       m_attr;
     uint32_t  m_num_patches;
     uint16_t* m_d_element_per_patch;
     uint16_t* m_h_element_per_patch;

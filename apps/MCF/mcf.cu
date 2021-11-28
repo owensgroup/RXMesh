@@ -46,7 +46,7 @@ TEST(App, MCF)
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
 
-    RXMeshStatic rxmesh_static(Faces, false);
+    RXMeshStatic rxmesh(Faces, false);
 
     TriMesh input_mesh;
     ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
@@ -57,7 +57,7 @@ TEST(App, MCF)
     mcf_openmesh(omp_get_max_threads(), input_mesh, ground_truth);
 
     // RXMesh Impl
-    mcf_rxmesh(rxmesh_static, Verts, ground_truth);
+    mcf_rxmesh(rxmesh, Verts, ground_truth);
 
 
     // Release allocation

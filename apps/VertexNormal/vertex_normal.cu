@@ -57,9 +57,8 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     td.test_name = "VertexNormal";
 
     float vn_time = 0;
-    for (uint32_t itr = 0; itr < Arg.num_run; ++itr) {
-        // TODO
-        // v_normals->reset(0, rxmesh::DEVICE);
+    for (uint32_t itr = 0; itr < Arg.num_run; ++itr) {        
+         v_normals->reset_v1(0, rxmesh::DEVICE);
         GPUTimer timer;
         timer.start();
 

@@ -22,16 +22,14 @@ __global__ void rxmesh_attribute_axpy(const RXMeshAttribute<T> X,
     // INVALID32. Otherwise, they should point to a single variable
 
     assert(X.get_num_mesh_elements() == Y.get_num_mesh_elements());
-    assert(X.get_num_attributes() ==
-           Y.get_num_attributes());
+    assert(X.get_num_attributes() == Y.get_num_attributes());
 
     uint32_t idx = threadIdx.x + blockIdx.x * blockDim.x;
 
     if (idx < X.get_num_mesh_elements()) {
 
         if (attribute_id == INVALID32) {
-            for (uint32_t attr = 0; attr < X.get_num_attributes();
-                 ++attr) {
+            for (uint32_t attr = 0; attr < X.get_num_attributes(); ++attr) {
                 Y(idx, attr) =
                     alpha[attr] * X(idx, attr) + beta[attr] * Y(idx, attr);
             }
@@ -84,4 +82,23 @@ __global__ void rxmesh_attribute_dot(const RXMeshAttribute<T> X,
         d_block_output[blockIdx.x] = block_sum;
     }
 }
+
+template <class T>
+__global__ void memset_attribute(const RXMeshAttribute<T> attr,
+                                 const T                  value,
+                                 const uint16_t*          d_element_per_patch,
+                                 const uint32_t           num_patches,
+                                 const uint32_t           num_attributes)
+{
+    uint32_t p_id = blockIdx.x;
+    if (p_id < num_patches) {
+        uint16_t element_per_patch = d_element_per_patch[p_id];
+        for (uint32_t i = threadIdx.x; i < element_per_patch; i += blockDim.x) {
+            for (uint32_t j = 0; j < num_attributes; ++j) {
+                attr(p_id, i, j) = value;
+            }
+        }
+    }
+}
+
 }  // namespace rxmesh
