@@ -40,15 +40,8 @@ TEST(RXMeshStatic, Oriented_VV)
     auto output = rxmesh.add_vertex_attribute<VertexHandle>(
         "output", rxmesh.get_max_valence());
 
-    rxmesh.for_each_vertex([&](const VertexHandle& handle) {
-        (*input)(handle) = VertexHandle();
-        for (uint32_t j = 0; j < (*output).get_num_attributes(); ++j) {
-            (*output)(handle, j) = VertexHandle();
-        }
-    });
-
-    output->move_v1(rxmesh::HOST, rxmesh::DEVICE);
-    input->move_v1(rxmesh::HOST, rxmesh::DEVICE);
+    input->reset_v1(VertexHandle(), rxmesh::DEVICE);
+    output->reset_v1(VertexHandle(), rxmesh::DEVICE);
 
     // launch box
     constexpr uint32_t      blockThreads = 256;
@@ -149,41 +142,8 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
     for (uint32_t itr = 0; itr < rxmesh_args.num_run; itr++) {
 
         // Reset input/output
-        if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
-            rxmesh.for_each_vertex([&](const InputHandleT& handle) {
-                input(handle) = InputHandleT();
-            });
-            rxmesh.for_each_vertex([&](const InputHandleT& handle) {
-                for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
-                    output(handle, j) = OutputHandleT();
-                }
-            });
-        }
-        // if input is an edge
-        if constexpr (op == Op::EV || op == Op::EF) {
-            rxmesh.for_each_edge([&](const InputHandleT& handle) {
-                input(handle) = InputHandleT();
-            });
-            rxmesh.for_each_edge([&](const InputHandleT& handle) {
-                for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
-                    output(handle, j) = OutputHandleT();
-                }
-            });
-        }
-        // if input is a face
-        if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
-            rxmesh.for_each_face([&](const InputHandleT& handle) {
-                input(handle) = InputHandleT();
-            });
-            rxmesh.for_each_face([&](const InputHandleT& handle) {
-                for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
-                    output(handle, j) = OutputHandleT();
-                }
-            });
-        }
-
-        output.move_v1(rxmesh::HOST, rxmesh::DEVICE);
-        input.move_v1(rxmesh::HOST, rxmesh::DEVICE);
+        input.reset_v1(InputHandleT(), rxmesh::DEVICE);
+        output.reset_v1(OutputHandleT(), rxmesh::DEVICE);
 
         timer.start();
         query_kernel<blockThreads, op, InputHandleT, OutputHandleT>
