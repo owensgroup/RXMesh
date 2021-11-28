@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <cuda_profiler_api.h>
 #include <memory>
+#include "rxmesh/kernels/for_each.cuh"
 #include "rxmesh/kernels/prototype.cuh"
 #include "rxmesh/launch_box.h"
 #include "rxmesh/rxmesh.h"
@@ -40,14 +41,35 @@ class RXMeshStatic : public RXMesh
      * function signature takes a VertexHandle
      */
     template <typename LambdaT>
-    void for_each_vertex(LambdaT apply)
+    void for_each_vertex(locationT    location,
+                         LambdaT      apply,
+                         cudaStream_t stream = NULL)
     {
-        const int num_patches = this->get_num_patches();
+        if ((location & HOST) == HOST) {
+            const int num_patches = this->get_num_patches();
 #pragma omp parallel for
-        for (int p = 0; p < num_patches; ++p) {
-            for (uint16_t v = 0; v < this->m_h_num_owned_v[p]; ++v) {
-                const VertexHandle v_handle(static_cast<uint32_t>(p), v);
-                apply(v_handle);
+            for (int p = 0; p < num_patches; ++p) {
+                for (uint16_t v = 0;
+                     v < this->m_h_patches_info[p].num_owned_vertices;
+                     ++v) {
+                    const VertexHandle v_handle(static_cast<uint32_t>(p), v);
+                    apply(v_handle);
+                }
+            }
+        }
+
+        if ((location & DEVICE) == DEVICE) {
+            if constexpr (IS_HD_LAMBDA(LambdaT) || IS_D_LAMBDA(LambdaT)) {
+
+                const int num_patches = this->get_num_patches();
+                const int threads     = 256;
+                detail::for_each_vertex<<<num_patches, threads, 0, stream>>>(
+                    num_patches, this->m_d_patches_info, apply);
+            } else {
+                RXMESH_ERROR(
+                    "RXMeshStatic::for_each_vertex() Input lambda function "
+                    "should be annotated with  __device__ for execution on "
+                    "device");
             }
         }
     }
@@ -59,14 +81,35 @@ class RXMeshStatic : public RXMesh
      * function signature takes a EdgeHandle
      */
     template <typename LambdaT>
-    void for_each_edge(LambdaT apply)
+    void for_each_edge(locationT    location,
+                       LambdaT      apply,
+                       cudaStream_t stream = NULL)
     {
-        const int num_patches = this->get_num_patches();
+        if ((location & HOST) == HOST) {
+            const int num_patches = this->get_num_patches();
 #pragma omp parallel for
-        for (int p = 0; p < num_patches; ++p) {
-            for (uint16_t e = 0; e < this->m_h_num_owned_e[p]; ++e) {
-                const EdgeHandle e_handle(static_cast<uint32_t>(p), e);
-                apply(e_handle);
+            for (int p = 0; p < num_patches; ++p) {
+                for (uint16_t e = 0;
+                     e < this->m_h_patches_info[p].num_owned_edges;
+                     ++e) {
+                    const EdgeHandle e_handle(static_cast<uint32_t>(p), e);
+                    apply(e_handle);
+                }
+            }
+        }
+
+        if ((location & DEVICE) == DEVICE) {
+            if constexpr (IS_HD_LAMBDA(LambdaT) || IS_D_LAMBDA(LambdaT)) {
+
+                const int num_patches = this->get_num_patches();
+                const int threads     = 256;
+                detail::for_each_edge<<<num_patches, threads, 0, stream>>>(
+                    num_patches, this->m_d_patches_info, apply);
+            } else {
+                RXMESH_ERROR(
+                    "RXMeshStatic::for_each_edge() Input lambda function "
+                    "should be annotated with  __device__ for execution on "
+                    "device");
             }
         }
     }
@@ -78,14 +121,34 @@ class RXMeshStatic : public RXMesh
      * function signature takes a FaceHandle
      */
     template <typename LambdaT>
-    void for_each_face(LambdaT apply)
+    void for_each_face(locationT    location,
+                       LambdaT      apply,
+                       cudaStream_t stream = NULL)
     {
-        const int num_patches = this->get_num_patches();
+        if ((location & HOST) == HOST) {
+            const int num_patches = this->get_num_patches();
 #pragma omp parallel for
-        for (int p = 0; p < num_patches; ++p) {
-            for (int f = 0; f < this->m_h_num_owned_f[p]; ++f) {
-                const FaceHandle f_handle(static_cast<uint32_t>(p), f);
-                apply(f_handle);
+            for (int p = 0; p < num_patches; ++p) {
+                for (int f = 0; f < this->m_h_patches_info[p].num_owned_faces;
+                     ++f) {
+                    const FaceHandle f_handle(static_cast<uint32_t>(p), f);
+                    apply(f_handle);
+                }
+            }
+        }
+
+        if ((location & DEVICE) == DEVICE) {
+            if constexpr (IS_HD_LAMBDA(LambdaT) || IS_D_LAMBDA(LambdaT)) {
+
+                const int num_patches = this->get_num_patches();
+                const int threads     = 256;
+                detail::for_each_face<<<num_patches, threads, 0, stream>>>(
+                    num_patches, this->m_d_patches_info, apply);
+            } else {
+                RXMESH_ERROR(
+                    "RXMeshStatic::for_each_face() Input lambda function "
+                    "should be annotated with  __device__ for execution on "
+                    "device");
             }
         }
     }
@@ -134,7 +197,6 @@ class RXMeshStatic : public RXMesh
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
-     * TODO remove location input parameter
      */
     template <class T>
     std::shared_ptr<RXMeshFaceAttribute<T>> add_face_attribute(
@@ -158,23 +220,21 @@ class RXMeshStatic : public RXMesh
     /**
      * @brief Adding a new face attribute by reading values from a host buffer
      * f_attributes where the order of faces is the same as the order of
-     * faces given to the constructor
+     * faces given to the constructor.The attributes are populated on device
+     * and host
      * @tparam T type of the attribute
      * @param name of the attribute. Should not collide with other attributes
      * names
-     * @param location where to allocate the attributes
      * @param layout as SOA or AOS
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
-     * TODO remove location input parameter
      * TODO implement this
      */
     template <class T>
     std::shared_ptr<RXMeshVertexAttribute<T>> add_face_attribute(
         const std::vector<std::vector<T>>& f_attributes,
         const std::string&                 name,
-        locationT                          location          = LOCATION_ALL,
         layoutT                            layout            = AoS,
         const bool                         with_reduce_alloc = true)
     {
@@ -191,7 +251,6 @@ class RXMeshStatic : public RXMesh
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
-     * TODO remove location input parameter
      */
     template <class T>
     std::shared_ptr<RXMeshEdgeAttribute<T>> add_edge_attribute(
@@ -223,7 +282,6 @@ class RXMeshStatic : public RXMesh
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
-     * TODO remove location input parameter
      */
     template <class T>
     std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
@@ -247,12 +305,12 @@ class RXMeshStatic : public RXMesh
     /**
      * @brief Adding a new vertex attribute by reading values from a host buffer
      * v_attributes where the order of vertices is the same as the order of
-     * vertices given to the constructor
+     * vertices given to the constructor. The attributes are populated on device
+     * and host
      * @tparam T type of the attribute
      * @param v_attributes attributes to read
      * @param name of the attribute. Should not collide with other attributes
      * names
-     * @param location where to allocate the attributes
      * @param layout as SOA or AOS
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
@@ -262,7 +320,6 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
         const std::vector<std::vector<T>>& v_attributes,
         const std::string&                 name,
-        locationT                          location          = LOCATION_ALL,
         layoutT                            layout            = AoS,
         const bool                         with_reduce_alloc = true)
     {
@@ -287,7 +344,7 @@ class RXMeshStatic : public RXMesh
             name.c_str(),
             this->m_h_num_owned_v,
             num_attributes,
-            location,
+            LOCATION_ALL,
             layout,
             with_reduce_alloc,
             this->m_h_patches_info,

@@ -23,11 +23,12 @@ TEST(RXMeshStatic, ForEach)
     std::atomic_uint32_t num_e = 0;
     std::atomic_uint32_t num_f = 0;
 
-    rxmesh_static.for_each_vertex([&](const VertexHandle vh) { num_v++; });
+    rxmesh_static.for_each_vertex(HOST,
+                                  [&](const VertexHandle vh) { num_v++; });
 
-    rxmesh_static.for_each_edge([&](const EdgeHandle eh) { num_e++; });
+    rxmesh_static.for_each_edge(HOST, [&](const EdgeHandle eh) { num_e++; });
 
-    rxmesh_static.for_each_face([&](const FaceHandle fh) { num_f++; });
+    rxmesh_static.for_each_face(HOST, [&](const FaceHandle fh) { num_f++; });
 
     EXPECT_EQ(num_v, rxmesh_static.get_num_vertices());
 

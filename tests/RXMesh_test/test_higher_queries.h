@@ -31,7 +31,7 @@ TEST(RXMeshStatic, HigherQueries)
     auto output =
         rxmesh.add_vertex_attribute<VertexHandle>("output", input_size);
 
-    rxmesh.for_each_vertex([&](const VertexHandle& handle) {
+    rxmesh.for_each_vertex(HOST, [&](const VertexHandle& handle) {
         (*input)(handle) = VertexHandle();
         for (uint32_t j = 0; j < (*output).get_num_attributes(); ++j) {
             (*output)(handle, j) = VertexHandle();

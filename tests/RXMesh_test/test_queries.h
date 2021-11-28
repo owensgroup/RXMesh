@@ -75,7 +75,7 @@ TEST(RXMeshStatic, Oriented_VV)
             std::begin(u), std::end(u), std::begin(v), 0.0);
     };
 
-    rxmesh.for_each_vertex([&](const VertexHandle& vertex) {
+    rxmesh.for_each_vertex(HOST, [&](const VertexHandle& vertex) {
         for (uint32_t i = 0; i < (*output).get_num_attributes(); ++i) {
 
             uint32_t j = (i + 1) % output->get_num_attributes();

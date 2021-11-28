@@ -117,6 +117,7 @@ __device__ __inline__ void query_block_dispatcher_v1(
 }
 /**
  * query_block_dispatcher()
+ * TODO remove
  */
 template <Op op, uint32_t blockThreads, typename activeSetT>
 __device__ __inline__ void query_block_dispatcher(

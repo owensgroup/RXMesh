@@ -420,6 +420,8 @@ class RXMeshTest
                 }
             }
         }
+
+        return true;
     }
 
 
