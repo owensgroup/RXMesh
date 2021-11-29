@@ -34,11 +34,15 @@ class RXMeshStatic : public RXMesh
     {
     }
 
+
     /**
-     * @brief Apply a lambda function to all vertices in the mesh
+     * @brief Apply a lambda function on all vertices in the mesh
      * @tparam LambdaT type of the lambda function (inferred)
-     * @param apply lambda function to be applied for all vertices. The lambda
+     * @param location the execution location
+     * @param apply lambda function to be applied on all vertices. The lambda
      * function signature takes a VertexHandle
+     * @param stream the stream used to run the kernel in case of DEVICE
+     * execution location
      */
     template <typename LambdaT>
     void for_each_vertex(locationT    location,
@@ -75,10 +79,13 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
-     * @brief Apply a lambda function to all edges in the mesh
+     * @brief Apply a lambda function on all edges in the mesh
      * @tparam LambdaT type of the lambda function (inferred)
-     * @param apply lambda function to be applied for all edges. The lambda
+     * @param location the execution location
+     * @param apply lambda function to be applied on all edges. The lambda
      * function signature takes a EdgeHandle
+     * @param stream the stream used to run the kernel in case of DEVICE
+     * execution location
      */
     template <typename LambdaT>
     void for_each_edge(locationT    location,
@@ -115,10 +122,13 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
-     * @brief Apply a lambda function to all faces in the mesh
+     * @brief Apply a lambda function on all faces in the mesh
      * @tparam LambdaT type of the lambda function (inferred)
-     * @param apply lambda function to be applied for all faces. The lambda
+     * @param location the execution location
+     * @param apply lambda function to be applied on all faces. The lambda
      * function signature takes a FaceHandle
+     * @param stream the stream used to run the kernel in case of DEVICE
+     * execution location
      */
     template <typename LambdaT>
     void for_each_face(locationT    location,
