@@ -40,7 +40,7 @@ int main(int argc, char** argv)
                         "              Hint: Only accepts OBJ files\n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -num_run:    Number of iterations for performance testing. Default is {} \n"                        
-                        " -p:          Sort input using patching output. Default is false.\n"
+                        " -q:          Run in quite mode. Default is false\n"
                         " -device_id:  GPU device ID. Default is {}",
             rxmesh_args.obj_file_name, rxmesh_args.output_folder ,rxmesh_args.num_run,rxmesh_args.device_id);
             // clang-format on
