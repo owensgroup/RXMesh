@@ -112,9 +112,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
           m_d_element_per_patch(nullptr),
           m_h_element_per_patch(nullptr),
           m_layout(AoS),
-          d_axpy_alpha(nullptr),
-          d_axpy_beta(nullptr),
-          m_is_axpy_allocated(false),
           m_is_reduce_allocated(false),
           m_reduce_temp_storage_bytes(0),
           m_d_reduce_temp_storage(nullptr),
@@ -141,9 +138,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
           m_d_element_per_patch(nullptr),
           m_h_element_per_patch(nullptr),
           m_layout(AoS),
-          d_axpy_alpha(nullptr),
-          d_axpy_beta(nullptr),
-          m_is_axpy_allocated(false),
           m_is_reduce_allocated(false),
           m_reduce_temp_storage_bytes(0)
     {
@@ -243,7 +237,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
                                                         value,
                                                         m_d_element_per_patch,
                                                         m_num_patches,
-                                                        m_num_attributes);            
+                                                        m_num_attributes);
         }
 
 
@@ -274,14 +268,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
         }
         allocate(location);
         m_layout = layout;
-
-        if (!m_is_axpy_allocated && with_axpy_alloc) {
-            CUDA_ERROR(cudaMalloc((void**)&d_axpy_alpha,
-                                  m_num_attributes * sizeof(T)));
-            CUDA_ERROR(
-                cudaMalloc((void**)&d_axpy_beta, m_num_attributes * sizeof(T)));
-            m_is_axpy_allocated = true;
-        }
 
         if (!m_is_reduce_allocated && with_reduce_alloc) {
             allocate_reduce_temp_storage(0);
@@ -417,11 +403,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
         }
 
         if (location == LOCATION_ALL || m_allocated == 0) {
-            if (m_is_axpy_allocated) {
-                GPU_FREE(d_axpy_alpha);
-                GPU_FREE(d_axpy_beta);
-                m_is_axpy_allocated = false;
-            }
             if (m_is_reduce_allocated) {
                 for (uint32_t i = 0; i < m_num_attributes; ++i) {
                     GPU_FREE(m_d_reduce_temp_storage[i]);
@@ -462,11 +443,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
         }
 
         if (m_allocated == 0) {
-            if (m_is_axpy_allocated) {
-                GPU_FREE(d_axpy_alpha);
-                GPU_FREE(d_axpy_beta);
-                m_is_axpy_allocated = false;
-            }
             if (m_is_reduce_allocated) {
                 for (uint32_t i = 0; i < m_num_attributes; ++i) {
                     GPU_FREE(m_d_reduce_temp_storage[i]);
@@ -638,62 +614,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
                     m_h_attr, m_h_attr + size, uint64_t(num_cols));
 
                 m_layout = (m_layout == SoA) ? AoS : SoA;
-            }
-        }
-    }
-
-    template <uint32_t N>
-    void axpy(const RXMeshAttribute<T>& X,
-              const Vector<N, T>        alpha,
-              const Vector<N, T>        beta,
-              const locationT           location     = DEVICE,
-              const uint32_t            attribute_id = INVALID32,
-              cudaStream_t              stream       = NULL)
-    {
-        // Implements
-        // Y = alpha*X + beta*Y
-        // where Y is *this.
-        // alpha and beta is passed as vector so different values can be applied
-        // to each attribute.
-        // if attribute == INVALID32, then axpy is applied on all attributes
-        // and alpha (and beta) should be of size m_num_attributes.
-        // Otherwise axpy will be only applied on the given attribute number
-        //(should be less than m_num_attributes) and alpha (and
-        // beta) should be of size one
-        // location tells on which side (host to device) the operation
-        // will run
-
-        const uint32_t num_attribute =
-            (attribute_id == INVALID32) ? m_num_attributes : 1;
-        assert(N >= num_attribute);
-
-        if ((location & DEVICE) == DEVICE) {
-
-            const uint32_t blocks =
-                DIVIDE_UP(m_num_mesh_elements, m_block_size);
-
-            CUDA_ERROR(cudaMemcpyAsync(d_axpy_alpha,
-                                       (void*)&alpha,
-                                       sizeof(Vector<N, T>),
-                                       cudaMemcpyHostToDevice,
-                                       stream));
-            CUDA_ERROR(cudaMemcpyAsync(d_axpy_beta,
-                                       (void*)&beta,
-                                       sizeof(Vector<N, T>),
-                                       cudaMemcpyHostToDevice,
-                                       stream));
-
-            rxmesh_attribute_axpy<T><<<blocks, m_block_size, 0, stream>>>(
-                X, d_axpy_alpha, *this, d_axpy_beta, attribute_id);
-
-            cudaStreamSynchronize(stream);
-        }
-        if ((location & HOST) == HOST) {
-            for (uint32_t i = 0; i < m_num_mesh_elements; ++i) {
-                for (uint32_t j = 0; j < m_num_attributes; ++j) {
-                    (*this)(i, j) =
-                        alpha[j] * X(i, j) + beta[j] * (*this)(i, j);
-                }
             }
         }
     }
@@ -988,14 +908,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
                 std::memcpy((void*)m_h_attr, rhs.m_h_attr, num_bytes);
             }
         }
-        m_layout            = rhs.m_layout;
-        m_is_axpy_allocated = rhs.m_is_axpy_allocated;
-        if (rhs.m_is_axpy_allocated) {
-            CUDA_ERROR(cudaMalloc((void**)&d_axpy_alpha,
-                                  m_num_attributes * sizeof(T)));
-            CUDA_ERROR(
-                cudaMalloc((void**)&d_axpy_beta, m_num_attributes * sizeof(T)));
-        }
+        m_layout              = rhs.m_layout;
         m_is_reduce_allocated = rhs.m_is_reduce_allocated;
         if (rhs.m_is_reduce_allocated) {
             allocate_reduce_temp_storage(m_is_reduce_allocated);
@@ -1194,9 +1107,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
     constexpr static uint32_t m_block_size = 256;
 
-    // temp array for alpha and beta parameters of axpy allocated on the device
-    T *  d_axpy_alpha, *d_axpy_beta;
-    bool m_is_axpy_allocated;
 
     // temp array for reduce operations
     bool          m_is_reduce_allocated;

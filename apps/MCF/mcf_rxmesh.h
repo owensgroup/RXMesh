@@ -8,11 +8,47 @@
 #include "rxmesh/util/timer.h"
 #include "rxmesh/util/vector.h"
 
+template <typename T>
+void axpy(rxmesh::RXMeshStatic&                   rxmesh,
+          rxmesh::RXMeshVertexAttribute<T>&       y,
+          const rxmesh::RXMeshVertexAttribute<T>& x,
+          const rxmesh::Vector<3, T>              alpha,
+          const rxmesh::Vector<3, T>              beta,
+          cudaStream_t                            stream = NULL)
+{
+    // Y = alpha*X + beta*Y
+    rxmesh.for_each_vertex(
+        rxmesh::DEVICE,
+        [y, x, alpha, beta] __device__(const rxmesh::VertexHandle vh) {
+            for (uint32_t i = 0; i < 3; ++i) {
+                y(vh, i) = alpha[i] * x(vh, i) + beta[i] * y(vh, i);
+            }
+        });
+}
+
+template <typename T>
+void init_PR(rxmesh::RXMeshStatic&                   rxmesh,
+             const rxmesh::RXMeshVertexAttribute<T>& B,
+             const rxmesh::RXMeshVertexAttribute<T>& S,
+             rxmesh::RXMeshVertexAttribute<T>&       R,
+             rxmesh::RXMeshVertexAttribute<T>&       P)
+{
+    rxmesh.for_each_vertex(
+        rxmesh::DEVICE, [B, S, R, P] __device__(const rxmesh::VertexHandle vh) {
+            R(vh, 0) = B(vh, 0) - S(vh, 0);
+            R(vh, 1) = B(vh, 1) - S(vh, 1);
+            R(vh, 2) = B(vh, 2) - S(vh, 2);
+
+            P(vh, 0) = R(vh, 0);
+            P(vh, 1) = R(vh, 1);
+            P(vh, 2) = R(vh, 2);
+        });
+}
 
 template <typename T>
 void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
                 const std::vector<std::vector<T>>& Verts,
-                const rxmesh::RXMeshAttribute<T>&  ground_truth)
+                const std::vector<std::vector<T>>& ground_truth)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -35,38 +71,32 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
     // Different attributes used throughout the application
     auto input_coord =
-        rxmesh.add_vertex_attribute<T>("coord", 3, rxmesh::LOCATION_ALL);
-    for (uint32_t i = 0; i < Verts.size(); ++i) {
-        for (uint32_t j = 0; j < Verts[i].size(); ++j) {
-            (*input_coord)(i, j) = Verts[i][j];
-        }
-    }
-    input_coord->change_layout(rxmesh::HOST);
-    input_coord->move(rxmesh::HOST, rxmesh::DEVICE);
+        rxmesh.add_vertex_attribute<T>(Verts, "coord", rxmesh::LOCATION_ALL);
 
     // S in CG
     auto S =
         rxmesh.add_vertex_attribute<T>("S", 3, rxmesh::DEVICE, rxmesh::SoA);
-    S->reset(0.0, rxmesh::DEVICE);
+    S->reset_v1(0.0, rxmesh::DEVICE);
 
     // P in CG
     auto P =
         rxmesh.add_vertex_attribute<T>("P", 3, rxmesh::DEVICE, rxmesh::SoA);
-    P->reset(0.0, rxmesh::DEVICE);
+    P->reset_v1(0.0, rxmesh::DEVICE);
 
     // R in CG
     auto R =
         rxmesh.add_vertex_attribute<T>("R", 3, rxmesh::DEVICE, rxmesh::SoA);
-    R->reset(0.0, rxmesh::DEVICE);
+    R->reset_v1(0.0, rxmesh::DEVICE);
 
     // B in CG
     auto B =
         rxmesh.add_vertex_attribute<T>("B", 3, rxmesh::DEVICE, rxmesh::SoA);
-    B->reset(0.0, rxmesh::DEVICE);
+    B->reset_v1(0.0, rxmesh::DEVICE);
 
-    // X in CG
+    // X in CG (the output)
     auto X = rxmesh.add_vertex_attribute<T>(
         "X", 3, rxmesh::LOCATION_ALL, rxmesh::SoA);
+    // TODO use copy_v1
     X->copy(*input_coord, rxmesh::HOST, rxmesh::DEVICE);
 
 
@@ -98,11 +128,9 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
             Arg.time_step);
 
     // r = b - s = b - Ax
-    // p=r
-    const uint32_t num_blocks =
-        DIVIDE_UP(rxmesh.get_num_vertices(), blockThreads);
-    init_PR<T><<<num_blocks, blockThreads>>>(
-        rxmesh.get_num_vertices(), *B, *S, *R, *P);
+    // p=rk
+    init_PR(rxmesh, *B, *S, *R, *P);
+
 
     // delta_new = <r,r>
     R->reduce(delta_new, rxmesh::NORM2);
@@ -128,11 +156,11 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
         alpha = delta_new / alpha;
 
-        // x =  x + alpha*p
-        X->axpy(*P, alpha, ones);
+        // x =  alpha*p + x
+        axpy(rxmesh, *X, *P, alpha, ones);
 
-        // r = r - alpha*s
-        R->axpy(*S, -alpha, ones);
+        // r = - alpha*s + r
+        axpy(rxmesh, *R, *S, -alpha, ones);
 
 
         // delta_old = delta_new
@@ -157,7 +185,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
         beta = delta_new / delta_old;
 
         // p = beta*p + r
-        P->axpy(*R, ones, beta);
+        axpy(rxmesh, *P, *R, ones, beta);
 
         ++num_cg_iter_taken;
 
@@ -183,21 +211,16 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     rxmesh.export_obj("mcf_rxmesh.obj", *X);
 
     // Verify
-    bool    passed = true;
-    const T tol    = 0.001;
-    for (uint32_t v = 0; v < rxmesh.get_num_vertices(); ++v) {
-        if (std::fabs((*X)(v, 0) - ground_truth(v, 0)) >
-                tol * std::fabs(ground_truth(v, 0)) ||
-            std::fabs((*X)(v, 1) - ground_truth(v, 1)) >
-                tol * std::fabs(ground_truth(v, 1)) ||
-            std::fabs((*X)(v, 2) - ground_truth(v, 2)) >
-                tol * std::fabs(ground_truth(v, 2))) {
-            passed = false;
-            break;
-        }
-    }
+    const T tol = 0.001;
+    rxmesh.for_each_vertex(HOST, [&](const VertexHandle& vh) {
+        uint32_t v_id = rxmesh.map_to_global(vh);
 
-    EXPECT_TRUE(passed);
+        for (uint32_t i = 0; i < 3; ++i) {
+            EXPECT_LT(std::abs(((*X)(vh, i) - ground_truth[v_id][i]) /
+                               ground_truth[v_id][i]),
+                      tol);
+        }
+    });
 
 
     // Finalize report
@@ -208,7 +231,6 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     TestData td;
     td.test_name = "MCF";
     td.time_ms.push_back(timer.elapsed_millis() / float(num_cg_iter_taken));
-    td.passed.push_back(passed);
     report.add_test(td);
     report.write(Arg.output_folder + "/rxmesh",
                  "MCF_RXMesh_" + extract_file_name(Arg.obj_file_name));

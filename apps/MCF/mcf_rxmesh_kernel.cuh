@@ -8,39 +8,15 @@
 #include "rxmesh/util/vector.h"
 
 /**
- * init_PR()
- */
-template <typename T>
-__global__ static void init_PR(const uint32_t                   num_vertices,
-                               const rxmesh::RXMeshAttribute<T> B,
-                               const rxmesh::RXMeshAttribute<T> S,
-                               rxmesh::RXMeshAttribute<T>       R,
-                               rxmesh::RXMeshAttribute<T>       P)
-{
-    // r = b-s = b - Ax
-    // p= r
-    uint32_t idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (idx < num_vertices) {
-        R(idx, 0) = B(idx, 0) - S(idx, 0);
-        R(idx, 1) = B(idx, 1) - S(idx, 1);
-        R(idx, 2) = B(idx, 2) - S(idx, 2);
-
-        P(idx, 0) = R(idx, 0);
-        P(idx, 1) = R(idx, 1);
-        P(idx, 2) = R(idx, 2);
-    }
-}
-
-/**
  * edge_cotan_weight()
  */
 template <typename T>
 __device__ __forceinline__ T
-edge_cotan_weight(const uint32_t                    p_id,
-                  const uint32_t                    r_id,
-                  const uint32_t                    q_id,
-                  const uint32_t                    s_id,
-                  const rxmesh::RXMeshAttribute<T>& X)
+edge_cotan_weight(const rxmesh::VertexHandle&             p_id,
+                  const rxmesh::VertexHandle&             r_id,
+                  const rxmesh::VertexHandle&             q_id,
+                  const rxmesh::VertexHandle&             s_id,
+                  const rxmesh::RXMeshVertexAttribute<T>& X)
 {
     // Get the edge weight between the two vertices p-r where
     // q and s composes the diamond around p-r
@@ -59,10 +35,10 @@ edge_cotan_weight(const uint32_t                    p_id,
  */
 template <typename T>
 __device__ __forceinline__ T
-partial_voronoi_area(const uint32_t                    p_id,  // center
-                     const uint32_t                    q_id,  // before center
-                     const uint32_t                    r_id,  // after center
-                     const rxmesh::RXMeshAttribute<T>& X)
+partial_voronoi_area(const rxmesh::VertexHandle& p_id,  // center
+                     const rxmesh::VertexHandle& q_id,  // before center
+                     const rxmesh::VertexHandle& r_id,  // after center
+                     const rxmesh::RXMeshVertexAttribute<T>& X)
 {
     // compute partial Voronoi area of the center vertex that is associated with
     // the triangle p->q->r (oriented ccw)
@@ -80,14 +56,15 @@ partial_voronoi_area(const uint32_t                    p_id,  // center
  */
 template <typename T, uint32_t blockThreads>
 __launch_bounds__(blockThreads) __global__
-    static void init_B(const rxmesh::RXMeshContext      context,
-                       const rxmesh::RXMeshAttribute<T> X,
-                       rxmesh::RXMeshAttribute<T>       B,
-                       const bool                       use_uniform_laplace)
+    static void init_B(const rxmesh::RXMeshContext            context,
+                       const rxmesh::RXMeshVertexAttribute<T> X,
+                       rxmesh::RXMeshVertexAttribute<T>       B,
+                       const bool use_uniform_laplace)
 {
     using namespace rxmesh;
 
-    auto init_lambda = [&](uint32_t p_id, RXMeshIterator& iter) {
+    auto init_lambda = [&](VertexHandle&               p_id,
+                           const RXMeshVertexIterator& iter) {
         if (use_uniform_laplace) {
             const T valence = static_cast<T>(iter.size());
             B(p_id, 0)      = X(p_id, 0) * valence;
@@ -99,11 +76,11 @@ __launch_bounds__(blockThreads) __global__
             T v_weight = 0;
 
             // this is the last vertex in the one-ring (before r_id)
-            uint32_t q_id = iter.back();
+            VertexHandle q_id = iter.back();
 
             for (uint32_t v = 0; v < iter.size(); ++v) {
                 // the current one ring vertex
-                uint32_t r_id = iter[v];
+                VertexHandle r_id = iter[v];
 
                 T tri_area = partial_voronoi_area(p_id, q_id, r_id, X);
 
@@ -121,7 +98,7 @@ __launch_bounds__(blockThreads) __global__
 
     // With uniform Laplacian, we just need the valence, thus we
     // call query_block_dispatcher and set oriented to false
-    query_block_dispatcher<Op::VV, blockThreads>(
+    query_block_dispatcher_v1<Op::VV, blockThreads>(
         context, init_lambda, !use_uniform_laplace);
 }
 
@@ -130,12 +107,12 @@ __launch_bounds__(blockThreads) __global__
  */
 template <typename T, uint32_t blockThreads>
 __launch_bounds__(blockThreads) __global__
-    static void mcf_matvec(const rxmesh::RXMeshContext      context,
-                           const rxmesh::RXMeshAttribute<T> coords,
-                           const rxmesh::RXMeshAttribute<T> in,
-                           rxmesh::RXMeshAttribute<T>       out,
-                           const bool                       use_uniform_laplace,
-                           const T                          time_step)
+    static void mcf_matvec(const rxmesh::RXMeshContext            context,
+                           const rxmesh::RXMeshVertexAttribute<T> coords,
+                           const rxmesh::RXMeshVertexAttribute<T> in,
+                           rxmesh::RXMeshVertexAttribute<T>       out,
+                           const bool use_uniform_laplace,
+                           const T    time_step)
 {
 
     // To compute the vertex cotan weight, we use the following configuration
@@ -152,7 +129,8 @@ __launch_bounds__(blockThreads) __global__
     */
     using namespace rxmesh;
 
-    auto matvec_lambda = [&](uint32_t p_id, RXMeshIterator& iter) {
+    auto matvec_lambda = [&](VertexHandle&               p_id,
+                             const RXMeshVertexIterator& iter) {
         T sum_e_weight(0);
 
         Vector<3, T> x(T(0));
@@ -161,18 +139,19 @@ __launch_bounds__(blockThreads) __global__
         T v_weight(0);
 
         // this is the last vertex in the one-ring (before r_id)
-        uint32_t q_id = iter.back();
+        VertexHandle q_id = iter.back();
 
         for (uint32_t v = 0; v < iter.size(); ++v) {
             // the current one ring vertex
-            uint32_t r_id = iter[v];
+            VertexHandle r_id = iter[v];
 
             T e_weight = 0;
             if (use_uniform_laplace) {
                 e_weight = 1;
             } else {
                 // the second vertex in the one ring (after r_id)
-                uint32_t s_id = (v == iter.size() - 1) ? iter[0] : iter[v + 1];
+                VertexHandle s_id =
+                    (v == iter.size() - 1) ? iter[0] : iter[v + 1];
 
                 e_weight = edge_cotan_weight(p_id, r_id, q_id, s_id, coords);
 
@@ -216,6 +195,6 @@ __launch_bounds__(blockThreads) __global__
 
     // With uniform Laplacian, we just need the valence, thus we
     // call query_block_dispatcher and set oriented to false
-    query_block_dispatcher<Op::VV, blockThreads>(
+    query_block_dispatcher_v1<Op::VV, blockThreads>(
         context, matvec_lambda, !use_uniform_laplace);
 }

@@ -2,7 +2,6 @@
 #include "../common/openmesh_report.h"
 #include "../common/openmesh_trimesh.h"
 #include "mcf_util.h"
-#include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/util/timer.h"
 #include "rxmesh/util/vector.h"
 
@@ -10,24 +9,24 @@
  * axpy3()
  */
 template <typename T>
-void axpy3(const rxmesh::RXMeshAttribute<T>& X,
-           rxmesh::Vector<3, T>              alpha,
-           rxmesh::Vector<3, T>              beta,
-           rxmesh::RXMeshAttribute<T>&       Y,
-           const int                         num_omp_threads)
+void axpy3(const std::vector<std::vector<T>>& X,
+           rxmesh::Vector<3, T>               alpha,
+           rxmesh::Vector<3, T>               beta,
+           std::vector<std::vector<T>>&       Y,
+           const int                          num_omp_threads)
 {
     // Y = beta*Y + alpha*X
 
-    int size = static_cast<int>(X.get_num_mesh_elements());
+    int size = static_cast<int>(X.size());
 #pragma omp parallel for schedule(static) num_threads(num_omp_threads)
     for (int i = 0; i < size; ++i) {
-        Y(i, 0) *= beta[0];
-        Y(i, 1) *= beta[1];
-        Y(i, 2) *= beta[2];
+        Y[i][0] *= beta[0];
+        Y[i][1] *= beta[1];
+        Y[i][2] *= beta[2];
 
-        Y(i, 0) += alpha[0] * X(i, 0);
-        Y(i, 1) += alpha[1] * X(i, 1);
-        Y(i, 2) += alpha[2] * X(i, 2);
+        Y[i][0] += alpha[0] * X[i][0];
+        Y[i][1] += alpha[1] * X[i][1];
+        Y[i][2] += alpha[2] * X[i][2];
     }
 }
 
@@ -35,21 +34,21 @@ void axpy3(const rxmesh::RXMeshAttribute<T>& X,
  * dot3()
  */
 template <typename T>
-void dot3(const rxmesh::RXMeshAttribute<T>& A,
-          const rxmesh::RXMeshAttribute<T>& B,
-          rxmesh::Vector<3, T>&             res,
-          const int                         num_omp_threads)
+void dot3(const std::vector<std::vector<T>>& A,
+          const std::vector<std::vector<T>>& B,
+          rxmesh::Vector<3, T>&              res,
+          const int                          num_omp_threads)
 {
     // creating temp variables because variable in 'reduction' clause/directive
     // cannot have reference type
 
     T   x_sum(0), y_sum(0), z_sum(0);
-    int size = static_cast<int>(A.get_num_mesh_elements());
+    int size = static_cast<int>(A.size());
 #pragma omp parallel for schedule(static) num_threads(num_omp_threads) reduction(+ : x_sum,y_sum,z_sum)
     for (int i = 0; i < size; ++i) {
-        x_sum += A(i, 0) * B(i, 0);
-        y_sum += A(i, 1) * B(i, 1);
-        z_sum += A(i, 2) * B(i, 2);
+        x_sum += A[i][0] * B[i][0];
+        y_sum += A[i][1] * B[i][1];
+        z_sum += A[i][2] * B[i][2];
     }
 
     res[0] = x_sum;
@@ -120,10 +119,10 @@ T edge_cotan_weight(const int      p_id,
 
 
 template <typename T>
-void mcf_matvec(TriMesh&                          mesh,
-                const rxmesh::RXMeshAttribute<T>& in,
-                rxmesh::RXMeshAttribute<T>&       out,
-                const int                         num_omp_threads)
+void mcf_matvec(TriMesh&                           mesh,
+                const std::vector<std::vector<T>>& in,
+                std::vector<std::vector<T>>&       out,
+                const int                          num_omp_threads)
 {
     // Matrix vector multiplication operation based on uniform Laplacian weight
     // defined in Equation 7 in Implicit Fairing of Irregular Meshes using
@@ -190,9 +189,9 @@ void mcf_matvec(TriMesh&                          mesh,
             e_weight *= static_cast<T>(Arg.time_step);
             sum_e_weight += e_weight;
 
-            x[0] -= e_weight * in(r_id, 0);
-            x[1] -= e_weight * in(r_id, 1);
-            x[2] -= e_weight * in(r_id, 2);
+            x[0] -= e_weight * in[r_id][0];
+            x[1] -= e_weight * in[r_id][1];
+            x[2] -= e_weight * in[r_id][2];
 
             if (Arg.use_uniform_laplace) {
                 ++v_weight;
@@ -218,9 +217,9 @@ void mcf_matvec(TriMesh&                          mesh,
         assert(!std::isinf(v_weight));
 
         T diag       = ((1.0 / v_weight) + sum_e_weight);
-        out(p_id, 0) = x[0] + diag * in(p_id, 0);
-        out(p_id, 1) = x[1] + diag * in(p_id, 1);
-        out(p_id, 2) = x[2] + diag * in(p_id, 2);
+        out[p_id][0] = x[0] + diag * in[p_id][0];
+        out[p_id][1] = x[1] + diag * in[p_id][1];
+        out[p_id][2] = x[2] + diag * in[p_id][2];
     }
 }
 
@@ -229,16 +228,16 @@ void mcf_matvec(TriMesh&                          mesh,
  * cg()
  */
 template <typename T>
-void cg(TriMesh&                    mesh,
-        rxmesh::RXMeshAttribute<T>& X,
-        rxmesh::RXMeshAttribute<T>& B,
-        rxmesh::RXMeshAttribute<T>& R,
-        rxmesh::RXMeshAttribute<T>& P,
-        rxmesh::RXMeshAttribute<T>& S,
-        uint32_t&                   num_cg_iter_taken,
-        rxmesh::Vector<3, T>&       start_residual,
-        rxmesh::Vector<3, T>&       stop_residual,
-        const int                   num_omp_threads)
+void cg(TriMesh&                     mesh,
+        std::vector<std::vector<T>>& X,
+        std::vector<std::vector<T>>& B,
+        std::vector<std::vector<T>>& R,
+        std::vector<std::vector<T>>& P,
+        std::vector<std::vector<T>>& S,
+        uint32_t&                    num_cg_iter_taken,
+        rxmesh::Vector<3, T>&        start_residual,
+        rxmesh::Vector<3, T>&        stop_residual,
+        const int                    num_omp_threads)
 {
     // CG solver. Solve for the three coordinates simultaneously
 
@@ -250,13 +249,13 @@ void cg(TriMesh&                    mesh,
     // p = r
 #pragma omp parallel for schedule(static) num_threads(num_omp_threads)
     for (int i = 0; i < int(mesh.n_vertices()); ++i) {
-        R(i, 0) = B(i, 0) - S(i, 0);
-        R(i, 1) = B(i, 1) - S(i, 1);
-        R(i, 2) = B(i, 2) - S(i, 2);
+        R[i][0] = B[i][0] - S[i][0];
+        R[i][1] = B[i][1] - S[i][1];
+        R[i][2] = B[i][2] - S[i][2];
 
-        P(i, 0) = R(i, 0);
-        P(i, 1) = R(i, 1);
-        P(i, 2) = R(i, 2);
+        P[i][0] = R[i][0];
+        P[i][1] = R[i][1];
+        P[i][2] = R[i][2];
     }
 
     // delta_new = <r,r>
@@ -314,13 +313,13 @@ void cg(TriMesh&                    mesh,
  * implicit_smoothing()
  */
 template <typename T>
-void implicit_smoothing(TriMesh&                    mesh,
-                        rxmesh::RXMeshAttribute<T>& X,
-                        uint32_t&                   num_cg_iter_taken,
-                        float&                      time,
-                        rxmesh::Vector<3, T>&       start_residual,
-                        rxmesh::Vector<3, T>&       stop_residual,
-                        const int                   num_omp_threads)
+void implicit_smoothing(TriMesh&                     mesh,
+                        std::vector<std::vector<T>>& X,
+                        uint32_t&                    num_cg_iter_taken,
+                        float&                       time,
+                        rxmesh::Vector<3, T>&        start_residual,
+                        rxmesh::Vector<3, T>&        stop_residual,
+                        const int                    num_omp_threads)
 {
 
     for (TriMesh::VertexIter v_it = mesh.vertices_begin();
@@ -332,31 +331,16 @@ void implicit_smoothing(TriMesh&                    mesh,
     }
 
     // CG containers
-    rxmesh::RXMeshAttribute<T> B, R, P, S;
-
-    X.init(mesh.n_vertices(), 3u, rxmesh::HOST);
-    X.reset(0.0, rxmesh::HOST);
-
-    S.init(mesh.n_vertices(), 3u, rxmesh::HOST);
-    S.reset(0.0, rxmesh::HOST);
-
-    P.init(mesh.n_vertices(), 3u, rxmesh::HOST);
-    P.reset(0.0, rxmesh::HOST);
-
-    R.init(mesh.n_vertices(), 3u, rxmesh::HOST);
-    R.reset(0.0, rxmesh::HOST);
-
-    B.init(mesh.n_vertices(), 3u, rxmesh::HOST);
-    B.reset(0.0, rxmesh::HOST);
+    std::vector<std::vector<T>> B(X), R(X), P(X), S(X);
 
 #pragma omp parallel for
     for (uint32_t v_id = 0; v_id < mesh.n_vertices(); ++v_id) {
         TriMesh::VertexIter v_iter = mesh.vertices_begin() + v_id;
 
         // LHS
-        X(v_id, 0) = mesh.point(*v_iter)[0];
-        X(v_id, 1) = mesh.point(*v_iter)[1];
-        X(v_id, 2) = mesh.point(*v_iter)[2];
+        X[v_id][0] = mesh.point(*v_iter)[0];
+        X[v_id][1] = mesh.point(*v_iter)[1];
+        X[v_id][2] = mesh.point(*v_iter)[2];
 
         // RHS
         T v_weight = 1;
@@ -366,9 +350,9 @@ void implicit_smoothing(TriMesh&                    mesh,
         }
         // will fix it later for cotan weight
 
-        B(v_id, 0) = X(v_id, 0) * v_weight;
-        B(v_id, 1) = X(v_id, 1) * v_weight;
-        B(v_id, 2) = X(v_id, 2) * v_weight;
+        B[v_id][0] = X[v_id][0] * v_weight;
+        B[v_id][1] = X[v_id][1] * v_weight;
+        B[v_id][2] = X[v_id][2] * v_weight;
     }
 
     if (!Arg.use_uniform_laplace) {
@@ -396,9 +380,9 @@ void implicit_smoothing(TriMesh&                    mesh,
                 assert(q_iter == vv_iter);
             }
             v_weight   = 0.5 / v_weight;
-            B(v_id, 0) = X(v_id, 0) / v_weight;
-            B(v_id, 1) = X(v_id, 1) / v_weight;
-            B(v_id, 2) = X(v_id, 2) / v_weight;
+            B[v_id][0] = X[v_id][0] / v_weight;
+            B[v_id][1] = X[v_id][1] / v_weight;
+            B[v_id][2] = X[v_id][2] / v_weight;
         }
     }
 
@@ -424,9 +408,9 @@ void implicit_smoothing(TriMesh&                    mesh,
 }
 
 template <typename T>
-void mcf_openmesh(const int                   num_omp_threads,
-                  TriMesh&                    input_mesh,
-                  rxmesh::RXMeshAttribute<T>& smoothed_coord)
+void mcf_openmesh(const int                    num_omp_threads,
+                  TriMesh&                     input_mesh,
+                  std::vector<std::vector<T>>& smoothed_coord)
 {
     // Report
     OpenMeshReport report("MCF_OpenMesh");
@@ -435,7 +419,7 @@ void mcf_openmesh(const int                   num_omp_threads,
     report.model_data(Arg.obj_file_name, input_mesh);
     std::string method =
         "OpenMesh " + std::to_string(num_omp_threads) + " Core";
-    report.add_member("method", method);        
+    report.add_member("method", method);
     report.add_member("time_step", Arg.time_step);
     report.add_member("cg_tolerance", Arg.cg_tolerance);
     report.add_member("use_uniform_laplace", Arg.use_uniform_laplace);
@@ -467,9 +451,9 @@ void mcf_openmesh(const int                   num_omp_threads,
     //#pragma omp parallel for
     //    for (int v_id = 0; v_id < int(input_mesh.n_vertices()); ++v_id) {
     //        TriMesh::VertexIter v_iter = input_mesh.vertices_begin() + v_id;
-    //        input_mesh.point(*v_iter)[0] = smoothed_coord(v_id, 0);
-    //        input_mesh.point(*v_iter)[1] = smoothed_coord(v_id, 1);
-    //        input_mesh.point(*v_iter)[2] = smoothed_coord(v_id, 2);
+    //        input_mesh.point(*v_iter)[0] = smoothed_coord[v_id][0];
+    //        input_mesh.point(*v_iter)[1] = smoothed_coord[v_id][1];
+    //        input_mesh.point(*v_iter)[2] = smoothed_coord[v_id][2];
     //    }
     //    std::string fn = STRINGIFY(OUTPUT_DIR) "mcf_openmesh.obj";
     //    if (!OpenMesh::IO::write_mesh(input_mesh, fn)) {

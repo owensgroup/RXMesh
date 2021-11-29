@@ -53,15 +53,11 @@ TEST(App, MCF)
 
 
     // OpenMesh Impl
-    rxmesh::RXMeshAttribute<dataT> ground_truth;
+    std::vector<std::vector<dataT>> ground_truth(Verts);
     mcf_openmesh(omp_get_max_threads(), input_mesh, ground_truth);
 
     // RXMesh Impl
     mcf_rxmesh(rxmesh, Verts, ground_truth);
-
-
-    // Release allocation
-    ground_truth.release();
 }
 
 int main(int argc, char** argv)
