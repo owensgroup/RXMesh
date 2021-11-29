@@ -244,7 +244,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
         if ((location & HOST) == HOST) {
             assert((m_allocated & HOST) == HOST);
 #pragma omp parallel for
-            for (int p = 0; p < m_num_patches; ++p) {
+            for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
                 for (int e = 0; e < m_h_element_per_patch[p]; ++e) {
                     m_h_attr_v1[p][e] = value;
                 }
