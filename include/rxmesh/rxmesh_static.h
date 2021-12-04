@@ -203,7 +203,7 @@ class RXMeshStatic : public RXMesh
      * names
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
-     * @param layout as SOA or AOS
+     * @param layout as SoA or AoS
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
@@ -213,7 +213,7 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location          = LOCATION_ALL,
-        layoutT            layout            = AoS,
+        layoutT            layout            = SoA,
         const bool         with_reduce_alloc = true)
     {
         return m_attr_container->template add<RXMeshFaceAttribute<T>>(
@@ -235,7 +235,7 @@ class RXMeshStatic : public RXMesh
      * @tparam T type of the attribute
      * @param name of the attribute. Should not collide with other attributes
      * names
-     * @param layout as SOA or AOS
+     * @param layout as SoA or AoS
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
@@ -245,7 +245,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshVertexAttribute<T>> add_face_attribute(
         const std::vector<std::vector<T>>& f_attributes,
         const std::string&                 name,
-        layoutT                            layout            = AoS,
+        layoutT                            layout            = SoA,
         const bool                         with_reduce_alloc = true)
     {
     }
@@ -257,7 +257,7 @@ class RXMeshStatic : public RXMesh
      * names
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
-     * @param layout as SOA or AOS
+     * @param layout as SoA or AoS
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
@@ -267,7 +267,7 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location          = LOCATION_ALL,
-        layoutT            layout            = AoS,
+        layoutT            layout            = SoA,
         const bool         with_reduce_alloc = true)
     {
         return m_attr_container->template add<RXMeshEdgeAttribute<T>>(
@@ -288,7 +288,7 @@ class RXMeshStatic : public RXMesh
      * names
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
-     * @param layout as SOA or AOS
+     * @param layout as SoA or AoS
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
@@ -298,7 +298,7 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location          = LOCATION_ALL,
-        layoutT            layout            = AoS,
+        layoutT            layout            = SoA,
         const bool         with_reduce_alloc = true)
     {
         return m_attr_container->template add<RXMeshVertexAttribute<T>>(
@@ -321,7 +321,7 @@ class RXMeshStatic : public RXMesh
      * @param v_attributes attributes to read
      * @param name of the attribute. Should not collide with other attributes
      * names
-     * @param layout as SOA or AOS
+     * @param layout as SoA or AoS
      * @param with_reduce_alloc wither this attribute will run reduce
      * operations
      * @return shared pointer to the created attribute
@@ -330,7 +330,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
         const std::vector<std::vector<T>>& v_attributes,
         const std::string&                 name,
-        layoutT                            layout            = AoS,
+        layoutT                            layout            = SoA,
         const bool                         with_reduce_alloc = true)
     {
         if (v_attributes.empty()) {

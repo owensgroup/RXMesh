@@ -136,7 +136,7 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
     td.static_smem = launch_box.smem_bytes_static;
 
     float total_time = 0;
-    CUDA_ERROR(cudaProfilerStart());
+    
     GPUTimer timer;
 
     for (uint32_t itr = 0; itr < rxmesh_args.num_run; itr++) {
@@ -145,6 +145,7 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
         input.reset_v1(InputHandleT(), rxmesh::DEVICE);
         output.reset_v1(OutputHandleT(), rxmesh::DEVICE);
 
+        CUDA_ERROR(cudaProfilerStart());
         timer.start();
         query_kernel<blockThreads, op, InputHandleT, OutputHandleT>
             <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
