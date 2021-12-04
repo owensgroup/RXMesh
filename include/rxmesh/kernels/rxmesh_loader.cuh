@@ -211,7 +211,7 @@ template <uint32_t blockThreads>
 __device__ __forceinline__ void load_patch_EV(const PatchInfo& patch_info,
                                               LocalVertexT*    ev)
 {
-    uint32_t        num_edges = patch_info.num_edges;
+    const uint32_t        num_edges = patch_info.num_edges;
     const uint32_t* input_ev32 =
         reinterpret_cast<const uint32_t*>(patch_info.ev);
     uint32_t* output_ev32 = reinterpret_cast<uint32_t*>(ev);

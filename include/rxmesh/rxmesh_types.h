@@ -156,7 +156,7 @@ uint64_t __device__ __host__ __forceinline__ unique_id(const uint16_t local_id,
 /**
  * @brief vertices identifier
  */
-struct VertexHandle
+struct ALIGN(8) VertexHandle
 {
     using LocalT = LocalVertexT;
 
@@ -213,7 +213,7 @@ inline std::ostream& operator<<(std::ostream& os, VertexHandle v_handle)
 /**
  * @brief edges identifier
  */
-struct EdgeHandle
+struct ALIGN(8) EdgeHandle
 {
     using LocalT = LocalEdgeT;
 
@@ -267,7 +267,7 @@ inline std::ostream& operator<<(std::ostream& os, EdgeHandle e_handle)
 /**
  * @brief faces identifier
  */
-struct FaceHandle
+struct ALIGN(8) FaceHandle
 {
     using LocalT = LocalFaceT;
 

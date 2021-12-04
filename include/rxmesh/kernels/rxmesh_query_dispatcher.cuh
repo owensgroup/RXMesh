@@ -51,9 +51,7 @@ __device__ __inline__ void query_block_dispatcher_v1(
 
     constexpr bool is_fixed_offset =
         (op == Op::EV || op == Op::FV || op == Op::FE);
-
-    __syncthreads();
-
+    
 
     // Check if any of the mesh elements are in the active set
     // input mapping does not need to be stored in shared memory since it will

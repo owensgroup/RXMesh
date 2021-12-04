@@ -578,7 +578,7 @@ void Patcher::run_lloyd()
 {
     std::vector<uint32_t> h_queue_ptr{0, m_num_patches, m_num_patches};
 
-    CUDA_ERROR(cudaProfilerStart());
+    //CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
     timer.start();
 
@@ -691,7 +691,7 @@ void Patcher::run_lloyd()
     CUDA_ERROR(cudaDeviceSynchronize());
     CUDA_ERROR(cudaGetLastError());
     m_patching_time_ms = timer.elapsed_millis();
-    CUDA_ERROR(cudaProfilerStop());
+    //CUDA_ERROR(cudaProfilerStop());
 
 
     // move data to host
