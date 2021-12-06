@@ -1,4 +1,5 @@
 #include "gtest/gtest.h"
+#include "rxmesh/reduce_handle.h"
 #include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/vector.h"
@@ -23,147 +24,6 @@
     }
 }*/
 
-template <class T>
-__global__ static void test_values(rxmesh::RXMeshAttribute<T> mesh_attr,
-                                   uint32_t*                  suceess)
-{
-
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        *suceess = 1;
-
-        assert((mesh_attr.get_allocated() & rxmesh::DEVICE) == rxmesh::DEVICE);
-        uint32_t num_mesh_elements = mesh_attr.get_num_mesh_elements();
-        for (uint32_t i = 0; i < num_mesh_elements; ++i) {
-            for (uint32_t j = 0; j < mesh_attr.get_num_attributes(); ++j) {
-                if (mesh_attr(i, j) != i + j) {
-
-                    *suceess = 0;
-                    return;
-                }
-            }
-        }
-    }
-}
-
-template <class T>
-__global__ static void generate_values(rxmesh::RXMeshAttribute<T> mesh_attr)
-{
-
-    if (threadIdx.x == 0 && blockIdx.x == 0) {
-        assert((mesh_attr.get_allocated() & rxmesh::DEVICE) == rxmesh::DEVICE);
-
-        uint32_t num_mesh_elements = mesh_attr.get_num_mesh_elements();
-        for (uint32_t i = 0; i < num_mesh_elements; ++i) {
-            for (uint32_t j = 0; j < mesh_attr.get_num_attributes(); ++j) {
-                mesh_attr(i, j) = i + j;
-            }
-        }
-    }
-}
-
-TEST(RXMeshAttribute, Host)
-{
-    using namespace rxmesh;
-    const uint32_t attributes_per_element = 3u;
-    // mesh attr on host
-    uint32_t                       num_mesh_elements = 2048;
-    rxmesh::RXMeshAttribute<float> rxmesh_attr;
-
-    rxmesh_attr.set_name("float_attr");
-    rxmesh_attr.init(num_mesh_elements,
-                     attributes_per_element,
-                     rxmesh::LOCATION_ALL,
-                     rxmesh::AoS);
-
-    // generate some numbers as AoS
-    for (uint32_t i = 0; i < num_mesh_elements; ++i) {
-        for (uint32_t j = 0; j < attributes_per_element; ++j) {
-            rxmesh_attr(i, j) = i + j;
-        }
-    }
-
-    // change the layout to SoA (good for gpu)
-    rxmesh_attr.change_layout(rxmesh::HOST);
-
-    // move memory to device
-    rxmesh_attr.move(rxmesh::HOST, rxmesh::DEVICE);
-
-
-    // device success variable
-    uint32_t* d_success = nullptr;
-    CUDA_ERROR(cudaMalloc((void**)&d_success, sizeof(uint32_t)));
-
-
-    // actual testing
-    test_values<float><<<1, 1>>>(rxmesh_attr, d_success);
-
-    CUDA_ERROR(cudaPeekAtLastError());
-    CUDA_ERROR(cudaGetLastError());
-    CUDA_ERROR(cudaDeviceSynchronize());
-
-    // host success variable
-    uint32_t h_success(0);
-    CUDA_ERROR(cudaMemcpy(
-        &h_success, d_success, sizeof(uint32_t), cudaMemcpyDeviceToHost));
-
-    // free device
-    GPU_FREE(d_success);
-
-    // release rxmesh_attribute memory on host and device
-    rxmesh_attr.release();
-
-    EXPECT_EQ(h_success, 1);
-}
-
-TEST(RXMeshAttribute, Device)
-{
-    using namespace rxmesh;
-    const uint32_t attributes_per_element = 3u;
-    // Test generating values on device and processing it on host
-
-    // mesh attr on host (but allocated on device)
-    uint32_t                          num_mesh_elements = 2048;
-    rxmesh::RXMeshAttribute<uint32_t> rxmesh_attr;
-    rxmesh_attr.set_name("int_attr");
-    rxmesh_attr.init(
-        num_mesh_elements, attributes_per_element, rxmesh::LOCATION_ALL);
-
-
-    // generate some numbers on device
-    generate_values<<<1, 1>>>(rxmesh_attr);
-
-    CUDA_ERROR(cudaDeviceSynchronize());
-    CUDA_ERROR(cudaGetLastError());
-
-
-    // move the generate values to host
-    rxmesh_attr.move(rxmesh::DEVICE, rxmesh::HOST);
-
-    // change the layout to SoA
-    rxmesh_attr.change_layout(rxmesh::HOST);
-
-    // testing
-    bool suceess = true;
-    assert((rxmesh_attr.get_allocated() & rxmesh::HOST) == rxmesh::HOST);
-    num_mesh_elements = rxmesh_attr.get_num_mesh_elements();
-
-    for (uint32_t i = 0; i < num_mesh_elements; ++i) {
-        for (uint32_t j = 0; j < attributes_per_element; ++j) {
-            if (rxmesh_attr(i, j) != i + j) {
-                suceess = false;
-                break;
-            }
-        }
-        if (!suceess) {
-            break;
-        }
-    }
-
-    // release rxmesh_attribute memory on host and device
-    rxmesh_attr.release();
-
-    EXPECT_TRUE(suceess);
-}
 
 /*TEST(RXMeshAttribute, Vector)
 {
@@ -212,162 +72,91 @@ TEST(RXMeshAttribute, Device)
 
     EXPECT_EQ(h_success, 1);
 }*/
-
-TEST(RXMeshAttribute, Reduce)
+template <typename T>
+void norm2_populate(rxmesh::RXMeshStatic&             rxmesh,
+                    rxmesh::RXMeshVertexAttribute<T>& v,
+                    T                                 val)
 {
-    using namespace rxmesh;
-    constexpr uint32_t             attributes_per_element = 3;
-    uint32_t                       num_mesh_elements      = 2048;
-    rxmesh::RXMeshAttribute<float> X;
-
-    X.set_name("X");
-    X.init(num_mesh_elements,
-           attributes_per_element,
-           rxmesh::LOCATION_ALL,
-           rxmesh::AoS);
-
-    // generate some numbers as AoS
-    for (uint32_t i = 0; i < num_mesh_elements; ++i) {
-        for (uint32_t j = 0; j < attributes_per_element; ++j) {
-            X(i, j) = j + 1;
-        }
-    }
-
-    X.change_layout(rxmesh::HOST);
-    X.move(rxmesh::HOST, rxmesh::DEVICE);
-    Vector<attributes_per_element, float> output;
-
-    // call reduce
-    X.reduce(output, rxmesh::SUM);
-
-
-    // sync
-    CUDA_ERROR(cudaDeviceSynchronize());
-    CUDA_ERROR(cudaPeekAtLastError());
-    CUDA_ERROR(cudaGetLastError());
-
-    bool is_passed = true;
-
-    for (uint32_t j = 0; j < attributes_per_element; ++j) {
-        if (output[j] != num_mesh_elements * (j + 1)) {
-            is_passed = false;
-            break;
-        }
-    }
-
-    // release rxmesh_attribute memory on host and device
-    X.release();
-
-
-    EXPECT_TRUE(is_passed);
+    rxmesh.for_each_vertex(
+        rxmesh::DEVICE,
+        [v, val] __device__(const rxmesh::VertexHandle vh) { v(vh) = val; });
 }
 
 TEST(RXMeshAttribute, Norm2)
 {
+
     using namespace rxmesh;
-    constexpr uint32_t             attributes_per_element = 3;
-    uint32_t                       num_mesh_elements      = 2048;
-    rxmesh::RXMeshAttribute<float> X;
 
-    X.set_name("X");
-    X.init(num_mesh_elements,
-           attributes_per_element,
-           rxmesh::LOCATION_ALL,
-           rxmesh::AoS);
+    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    // generate some numbers as AoS
-    for (uint32_t i = 0; i < num_mesh_elements; ++i) {
-        for (uint32_t j = 0; j < attributes_per_element; ++j) {
-            X(i, j) = 2;
-        }
-    }
+    std::vector<std::vector<dataT>>    Verts;
+    std::vector<std::vector<uint32_t>> Faces;
 
-    X.change_layout(rxmesh::HOST);
-    X.move(rxmesh::HOST, rxmesh::DEVICE);
-    Vector<attributes_per_element, float> output;
+    ASSERT_TRUE(
+        import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, true));
 
-    // call reduce
-    X.reduce(output, rxmesh::NORM2);
+    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
 
+    auto attr = rxmesh.add_vertex_attribute<float>("v", 3, rxmesh::DEVICE);
 
-    // sync
+    const float val(2.0);
+
+    norm2_populate<float>(rxmesh, *attr, val);
+
+    ReduceHandle reduce(*attr);
+
+    float output = reduce.norm2(*attr);
+
     CUDA_ERROR(cudaDeviceSynchronize());
-    CUDA_ERROR(cudaPeekAtLastError());
-    CUDA_ERROR(cudaGetLastError());
 
-    bool is_passed = true;
-
-    for (uint32_t j = 0; j < attributes_per_element; ++j) {
-        if (output[j] != 4 * num_mesh_elements) {
-            is_passed = false;
-            break;
-        }
-    }
-
-    // release rxmesh_attribute memory on host and device
-    X.release();
-
-
-    EXPECT_TRUE(is_passed);
+    EXPECT_FLOAT_EQ(output, std::sqrt(val * val * rxmesh.get_num_vertices()));
 }
 
+template <typename T>
+void dot_populate(rxmesh::RXMeshStatic&             rxmesh,
+                  rxmesh::RXMeshVertexAttribute<T>& v1,
+                  rxmesh::RXMeshVertexAttribute<T>& v2,
+                  T                                 v1_val,
+                  T                                 v2_val)
+{
+    rxmesh.for_each_vertex(
+        rxmesh::DEVICE,
+        [v1, v2, v1_val, v2_val] __device__(const rxmesh::VertexHandle vh) {
+            v1(vh) = v1_val;
+            v2(vh) = v2_val;
+        });
+}
 TEST(RXMeshAttribute, Dot)
 {
     using namespace rxmesh;
-    constexpr uint32_t             attributes_per_element = 3;
-    uint32_t                       num_mesh_elements      = 2048;
-    rxmesh::RXMeshAttribute<float> X;
-    rxmesh::RXMeshAttribute<float> Y;
 
-    X.set_name("X");
-    Y.set_name("Y");
-    X.init(num_mesh_elements,
-           attributes_per_element,
-           rxmesh::LOCATION_ALL,
-           rxmesh::AoS);
-    Y.init(num_mesh_elements,
-           attributes_per_element,
-           rxmesh::LOCATION_ALL,
-           rxmesh::AoS);
+    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    // generate some numbers as AoS
-    for (uint32_t i = 0; i < num_mesh_elements; ++i) {
-        for (uint32_t j = 0; j < attributes_per_element; ++j) {
-            X(i, j) = 2;
-            Y(i, j) = 3;
-        }
-    }
+    std::vector<std::vector<dataT>>    Verts;
+    std::vector<std::vector<uint32_t>> Faces;
 
-    X.change_layout(rxmesh::HOST);
-    X.move(rxmesh::HOST, rxmesh::DEVICE);
-    Y.change_layout(rxmesh::HOST);
-    Y.move(rxmesh::HOST, rxmesh::DEVICE);
-    Vector<attributes_per_element, float> output;
+    ASSERT_TRUE(
+        import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, true));
 
-    // call reduce
-    X.reduce(output, rxmesh::DOT, &Y);
+    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
 
+    auto v1_attr = rxmesh.add_vertex_attribute<float>("v1", 3, rxmesh::DEVICE);
+    auto v2_attr = rxmesh.add_vertex_attribute<float>("v2", 3, rxmesh::DEVICE);
 
-    // sync
+    const float v1_val(2.0);
+    const float v2_val(3.0);
+
+    dot_populate<float>(rxmesh, *v1_attr, *v2_attr, v1_val, v2_val);
+
+    ReduceHandle reduce(*v1_attr);
+
+    float output = reduce.dot(*v1_attr, *v2_attr);
+
     CUDA_ERROR(cudaDeviceSynchronize());
-    CUDA_ERROR(cudaPeekAtLastError());
-    CUDA_ERROR(cudaGetLastError());
 
-    bool is_passed = true;
-
-    for (uint32_t j = 0; j < attributes_per_element; ++j) {
-        if (output[j] != 6 * num_mesh_elements) {
-            is_passed = false;
-            break;
-        }
-    }
-
-    // release rxmesh_attribute memory on host and device
-    X.release();
-    Y.release();
-
-    EXPECT_TRUE(is_passed);
+    EXPECT_FLOAT_EQ(output, v1_val * v2_val * rxmesh.get_num_vertices());
 }
+
 
 TEST(RXMeshAttribute, Copy)
 {

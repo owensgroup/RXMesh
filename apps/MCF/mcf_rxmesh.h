@@ -133,7 +133,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
 
     // delta_new = <r,r>
-    R->reduce(delta_new, rxmesh::NORM2);
+    //R->reduce(delta_new, rxmesh::NORM2);
 
     const Vector<3, T> delta_0(delta_new);
 
@@ -152,7 +152,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
                 Arg.time_step);
 
         // alpha = delta_new / <s,p>
-        S->reduce(alpha, rxmesh::DOT, P.get());
+        //S->reduce(alpha, rxmesh::DOT, P.get());
 
         alpha = delta_new / alpha;
 
@@ -169,7 +169,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
 
         // delta_new = <r,r>
-        R->reduce(delta_new, rxmesh::NORM2);
+        //R->reduce(delta_new, rxmesh::NORM2);
 
         CUDA_ERROR(cudaStreamSynchronize(0));
 
@@ -208,7 +208,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     X->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // output to obj
-    rxmesh.export_obj("mcf_rxmesh.obj", *X);
+    //rxmesh.export_obj("mcf_rxmesh.obj", *X);
 
     // Verify
     const T tol = 0.001;

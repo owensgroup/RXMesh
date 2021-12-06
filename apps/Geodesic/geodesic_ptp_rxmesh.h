@@ -36,8 +36,7 @@ inline bool geodesic_rxmesh(rxmesh::RXMeshStatic&               rxmesh_static,
         for (uint32_t j = 0; j < Verts[i].size(); ++j) {
             input_coord(i, j) = Verts[i][j];
         }
-    }
-    input_coord.change_layout(rxmesh::HOST);
+    }    
     input_coord.move(rxmesh::HOST, rxmesh::DEVICE);
 
     // RXMesh launch box

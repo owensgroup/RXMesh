@@ -203,8 +203,7 @@ class RXMeshStatic : public RXMesh
      * names
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
-     * @param layout as SoA or AoS
-     * @param with_reduce_alloc wither this attribute will run reduce
+     * @param layout as SoA or AoS     
      * operations
      * @return shared pointer to the created attribute
      */
@@ -213,16 +212,14 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location          = LOCATION_ALL,
-        layoutT            layout            = SoA,
-        const bool         with_reduce_alloc = true)
+        layoutT            layout            = SoA)
     {
         return m_attr_container->template add<RXMeshFaceAttribute<T>>(
             name.c_str(),
             this->m_h_num_owned_f,
             num_attributes,
             location,
-            layout,
-            with_reduce_alloc,
+            layout,            
             this->m_h_patches_info,
             this->m_d_patches_info);
     }
@@ -235,8 +232,7 @@ class RXMeshStatic : public RXMesh
      * @tparam T type of the attribute
      * @param name of the attribute. Should not collide with other attributes
      * names
-     * @param layout as SoA or AoS
-     * @param with_reduce_alloc wither this attribute will run reduce
+     * @param layout as SoA or AoS     
      * operations
      * @return shared pointer to the created attribute
      * TODO implement this
@@ -245,8 +241,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshVertexAttribute<T>> add_face_attribute(
         const std::vector<std::vector<T>>& f_attributes,
         const std::string&                 name,
-        layoutT                            layout            = SoA,
-        const bool                         with_reduce_alloc = true)
+        layoutT                            layout            = SoA)
     {
     }
 
@@ -257,8 +252,7 @@ class RXMeshStatic : public RXMesh
      * names
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
-     * @param layout as SoA or AoS
-     * @param with_reduce_alloc wither this attribute will run reduce
+     * @param layout as SoA or AoS     
      * operations
      * @return shared pointer to the created attribute
      */
@@ -267,16 +261,14 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location          = LOCATION_ALL,
-        layoutT            layout            = SoA,
-        const bool         with_reduce_alloc = true)
+        layoutT            layout            = SoA)
     {
         return m_attr_container->template add<RXMeshEdgeAttribute<T>>(
             name.c_str(),
             this->m_h_num_owned_e,
             num_attributes,
             location,
-            layout,
-            with_reduce_alloc,
+            layout,            
             this->m_h_patches_info,
             this->m_d_patches_info);
     }
@@ -288,8 +280,7 @@ class RXMeshStatic : public RXMesh
      * names
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
-     * @param layout as SoA or AoS
-     * @param with_reduce_alloc wither this attribute will run reduce
+     * @param layout as SoA or AoS     
      * operations
      * @return shared pointer to the created attribute
      */
@@ -298,16 +289,14 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location          = LOCATION_ALL,
-        layoutT            layout            = SoA,
-        const bool         with_reduce_alloc = true)
+        layoutT            layout            = SoA)
     {
         return m_attr_container->template add<RXMeshVertexAttribute<T>>(
             name.c_str(),
             this->m_h_num_owned_v,
             num_attributes,
             location,
-            layout,
-            with_reduce_alloc,
+            layout,            
             this->m_h_patches_info,
             this->m_d_patches_info);
     }
@@ -321,8 +310,7 @@ class RXMeshStatic : public RXMesh
      * @param v_attributes attributes to read
      * @param name of the attribute. Should not collide with other attributes
      * names
-     * @param layout as SoA or AoS
-     * @param with_reduce_alloc wither this attribute will run reduce
+     * @param layout as SoA or AoS     
      * operations
      * @return shared pointer to the created attribute
      */
@@ -330,8 +318,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
         const std::vector<std::vector<T>>& v_attributes,
         const std::string&                 name,
-        layoutT                            layout            = SoA,
-        const bool                         with_reduce_alloc = true)
+        layoutT                            layout            = SoA)
     {
         if (v_attributes.empty()) {
             RXMESH_ERROR(
@@ -355,8 +342,7 @@ class RXMeshStatic : public RXMesh
             this->m_h_num_owned_v,
             num_attributes,
             LOCATION_ALL,
-            layout,
-            with_reduce_alloc,
+            layout,            
             this->m_h_patches_info,
             this->m_d_patches_info);
 
