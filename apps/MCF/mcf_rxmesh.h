@@ -2,6 +2,7 @@
 
 #include <cuda_profiler_api.h>
 #include "mcf_rxmesh_kernel.cuh"
+#include "rxmesh/reduce_handle.h"
 #include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/report.h"
@@ -12,8 +13,8 @@ template <typename T>
 void axpy(rxmesh::RXMeshStatic&                   rxmesh,
           rxmesh::RXMeshVertexAttribute<T>&       y,
           const rxmesh::RXMeshVertexAttribute<T>& x,
-          const rxmesh::Vector<3, T>              alpha,
-          const rxmesh::Vector<3, T>              beta,
+          const T                                 alpha,
+          const T                                 beta,
           cudaStream_t                            stream = NULL)
 {
     // Y = alpha*X + beta*Y
@@ -21,7 +22,7 @@ void axpy(rxmesh::RXMeshStatic&                   rxmesh,
         rxmesh::DEVICE,
         [y, x, alpha, beta] __device__(const rxmesh::VertexHandle vh) {
             for (uint32_t i = 0; i < 3; ++i) {
-                y(vh, i) = alpha[i] * x(vh, i) + beta[i] * y(vh, i);
+                y(vh, i) = alpha * x(vh, i) + beta * y(vh, i);
             }
         });
 }
@@ -94,11 +95,9 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     B->reset_v1(0.0, rxmesh::DEVICE);
 
     // X in CG (the output)
-    auto X = rxmesh.add_vertex_attribute<T>(
-        "X", 3, rxmesh::LOCATION_ALL, rxmesh::SoA);
-    // TODO use copy_v1
-    X->copy(*input_coord, rxmesh::HOST, rxmesh::DEVICE);
+    auto X = rxmesh.add_vertex_attribute<T>(Verts, "X", rxmesh::LOCATION_ALL);
 
+    ReduceHandle<T> reduce_handle(*X);
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box;
@@ -111,8 +110,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
             rxmesh.get_context(), *X, *B, Arg.use_uniform_laplace);
 
     // CG scalars
-    Vector<3, T> alpha(T(0)), beta(T(0)), delta_new(T(0)), delta_old(T(0)),
-        ones(T(1));
+    T alpha(0), beta(0), delta_new(0), delta_old(0);
 
     GPUTimer timer;
     timer.start();
@@ -133,9 +131,9 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
 
     // delta_new = <r,r>
-    //R->reduce(delta_new, rxmesh::NORM2);
+    delta_new = reduce_handle.norm2(*R);
 
-    const Vector<3, T> delta_0(delta_new);
+    const T delta_0(delta_new);
 
     uint32_t num_cg_iter_taken = 0;
 
@@ -152,15 +150,14 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
                 Arg.time_step);
 
         // alpha = delta_new / <s,p>
-        //S->reduce(alpha, rxmesh::DOT, P.get());
-
+        alpha = reduce_handle.dot(*S, *P);
         alpha = delta_new / alpha;
 
         // x =  alpha*p + x
-        axpy(rxmesh, *X, *P, alpha, ones);
+        axpy(rxmesh, *X, *P, alpha, 1.f);
 
         // r = - alpha*s + r
-        axpy(rxmesh, *R, *S, -alpha, ones);
+        axpy(rxmesh, *R, *S, -alpha, 1.f);
 
 
         // delta_old = delta_new
@@ -169,15 +166,13 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
 
         // delta_new = <r,r>
-        //R->reduce(delta_new, rxmesh::NORM2);
+        delta_new = reduce_handle.norm2(*R);
 
         CUDA_ERROR(cudaStreamSynchronize(0));
 
 
         // exit if error is getting too low across three coordinates
-        if (delta_new[0] < Arg.cg_tolerance * Arg.cg_tolerance * delta_0[0] &&
-            delta_new[1] < Arg.cg_tolerance * Arg.cg_tolerance * delta_0[1] &&
-            delta_new[2] < Arg.cg_tolerance * Arg.cg_tolerance * delta_0[2]) {
+        if (delta_new < Arg.cg_tolerance * Arg.cg_tolerance * delta_0) {
             break;
         }
 
@@ -185,7 +180,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
         beta = delta_new / delta_old;
 
         // p = beta*p + r
-        axpy(rxmesh, *P, *R, ones, beta);
+        axpy(rxmesh, *P, *R, 1.f, beta);
 
         ++num_cg_iter_taken;
 
@@ -205,10 +200,10 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
         timer.elapsed_millis() / float(num_cg_iter_taken));
 
     // move output to host
-    X->move(rxmesh::DEVICE, rxmesh::HOST);
+    X->move_v1(rxmesh::DEVICE, rxmesh::HOST);
 
     // output to obj
-    //rxmesh.export_obj("mcf_rxmesh.obj", *X);
+    rxmesh.export_obj("mcf_rxmesh.obj", *X);
 
     // Verify
     const T tol = 0.001;
@@ -224,8 +219,8 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
 
     // Finalize report
-    report.add_member("start_residual", to_string(delta_0));
-    report.add_member("end_residual", to_string(delta_new));
+    report.add_member("start_residual", delta_0);
+    report.add_member("end_residual", delta_new);
     report.add_member("num_cg_iter_taken", num_cg_iter_taken);
     report.add_member("total_time (ms)", timer.elapsed_millis());
     TestData td;
