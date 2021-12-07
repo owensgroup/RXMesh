@@ -192,7 +192,7 @@ struct ALIGN(8) VertexHandle
         return m_patch_id != INVALID32 && m_v.id != INVALID16;
     }
 
-    uint64_t __device__ __host__ __inline__ unique_id()
+    uint64_t __device__ __host__ __inline__ unique_id() const
     {
         return detail::unique_id(m_v.id, m_patch_id);
     }
@@ -246,7 +246,7 @@ struct ALIGN(8) EdgeHandle
         return m_patch_id != INVALID32 && m_e.id != INVALID16;
     }
 
-    uint64_t __device__ __host__ __inline__ unique_id()
+    uint64_t __device__ __host__ __inline__ unique_id() const
     {
         return detail::unique_id(m_e.id, m_patch_id);
     }

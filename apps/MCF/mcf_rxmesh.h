@@ -132,6 +132,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
     // delta_new = <r,r>
     delta_new = reduce_handle.norm2(*R);
+    delta_new *= delta_new;
 
     const T delta_0(delta_new);
 
@@ -167,6 +168,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
         // delta_new = <r,r>
         delta_new = reduce_handle.norm2(*R);
+        delta_new *= delta_new;
 
         CUDA_ERROR(cudaStreamSynchronize(0));
 
