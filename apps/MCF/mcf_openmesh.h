@@ -10,8 +10,8 @@
  */
 template <typename T>
 void axpy3(const std::vector<std::vector<T>>& X,
-           rxmesh::Vector<3, T>               alpha,
-           rxmesh::Vector<3, T>               beta,
+           const T                            alpha,
+           const T                            beta,
            std::vector<std::vector<T>>&       Y,
            const int                          num_omp_threads)
 {
@@ -20,13 +20,13 @@ void axpy3(const std::vector<std::vector<T>>& X,
     int size = static_cast<int>(X.size());
 #pragma omp parallel for schedule(static) num_threads(num_omp_threads)
     for (int i = 0; i < size; ++i) {
-        Y[i][0] *= beta[0];
-        Y[i][1] *= beta[1];
-        Y[i][2] *= beta[2];
+        Y[i][0] *= beta;
+        Y[i][1] *= beta;
+        Y[i][2] *= beta;
 
-        Y[i][0] += alpha[0] * X[i][0];
-        Y[i][1] += alpha[1] * X[i][1];
-        Y[i][2] += alpha[2] * X[i][2];
+        Y[i][0] += alpha * X[i][0];
+        Y[i][1] += alpha * X[i][1];
+        Y[i][2] += alpha * X[i][2];
     }
 }
 
@@ -34,26 +34,23 @@ void axpy3(const std::vector<std::vector<T>>& X,
  * dot3()
  */
 template <typename T>
-void dot3(const std::vector<std::vector<T>>& A,
-          const std::vector<std::vector<T>>& B,
-          rxmesh::Vector<3, T>&              res,
-          const int                          num_omp_threads)
+T dot3(const std::vector<std::vector<T>>& A,
+       const std::vector<std::vector<T>>& B,
+       const int                          num_omp_threads)
 {
-    // creating temp variables because variable in 'reduction' clause/directive
-    // cannot have reference type
 
-    T   x_sum(0), y_sum(0), z_sum(0);
+    T   ret  = 0;
     int size = static_cast<int>(A.size());
-#pragma omp parallel for schedule(static) num_threads(num_omp_threads) reduction(+ : x_sum,y_sum,z_sum)
+#pragma omp parallel for schedule(static) num_threads(num_omp_threads) reduction(+ : ret)
     for (int i = 0; i < size; ++i) {
-        x_sum += A[i][0] * B[i][0];
-        y_sum += A[i][1] * B[i][1];
-        z_sum += A[i][2] * B[i][2];
+        T partial = 0;
+        for (size_t j = 0; j < A[i].size(); ++j) {
+            partial += A[i][j] * B[i][j];
+        }
+        ret += partial;
     }
 
-    res[0] = x_sum;
-    res[1] = y_sum;
-    res[2] = z_sum;
+    return ret;
 }
 
 /**
@@ -235,8 +232,8 @@ void cg(TriMesh&                     mesh,
         std::vector<std::vector<T>>& P,
         std::vector<std::vector<T>>& S,
         uint32_t&                    num_cg_iter_taken,
-        rxmesh::Vector<3, T>&        start_residual,
-        rxmesh::Vector<3, T>&        stop_residual,
+        T&                           start_residual,
+        T&                           stop_residual,
         const int                    num_omp_threads)
 {
     // CG solver. Solve for the three coordinates simultaneously
@@ -259,49 +256,44 @@ void cg(TriMesh&                     mesh,
     }
 
     // delta_new = <r,r>
-    rxmesh::Vector<3, T> delta_new;
-    dot3(R, R, delta_new, num_omp_threads);
+    T delta_new = dot3(R, R, num_omp_threads);
 
     // delta_0 = delta_new
-    const rxmesh::Vector<3, T> delta_0(delta_new);
+    const T delta_0(delta_new);
 
     start_residual = delta_0;
-    const rxmesh::Vector<3, T> ones(1);
-    uint32_t                   iter = 0;
+    uint32_t iter  = 0;
     while (iter < Arg.max_num_cg_iter) {
         // s = Ap
         mcf_matvec(mesh, P, S, num_omp_threads);
 
         // alpha = delta_new / <s,p>
-        rxmesh::Vector<3, T> alpha;
-        dot3(S, P, alpha, num_omp_threads);
-        alpha = delta_new / alpha;
+        T alpha = dot3(S, P, num_omp_threads);
+        alpha   = delta_new / alpha;
 
 
         // x =  x + alpha*p
-        axpy3(P, alpha, ones, X, num_omp_threads);
+        axpy3(P, alpha, T(1), X, num_omp_threads);
 
         // r = r - alpha*s
-        axpy3(S, -alpha, ones, R, num_omp_threads);
+        axpy3(S, -alpha, T(1), R, num_omp_threads);
 
         // delta_old = delta_new
-        rxmesh::Vector<3, T> delta_old(delta_new);
+        T delta_old(delta_new);
 
         // delta_new = <r,r>
-        dot3(R, R, delta_new, num_omp_threads);
+        delta_new = dot3(R, R, num_omp_threads);
 
         // beta = delta_new/delta_old
-        rxmesh::Vector<3, T> beta(delta_new / delta_old);
+        T beta(delta_new / delta_old);
 
         // exit if error is getting too low across three coordinates
-        if (delta_new[0] < Arg.cg_tolerance * Arg.cg_tolerance * delta_0[0] &&
-            delta_new[1] < Arg.cg_tolerance * Arg.cg_tolerance * delta_0[1] &&
-            delta_new[2] < Arg.cg_tolerance * Arg.cg_tolerance * delta_0[2]) {
+        if (delta_new < Arg.cg_tolerance * Arg.cg_tolerance * delta_0) {
             break;
         }
 
         // p = beta*p + r
-        axpy3(R, ones, beta, P, num_omp_threads);
+        axpy3(R, T(1), beta, P, num_omp_threads);
 
         ++iter;
     }
@@ -317,8 +309,8 @@ void implicit_smoothing(TriMesh&                     mesh,
                         std::vector<std::vector<T>>& X,
                         uint32_t&                    num_cg_iter_taken,
                         float&                       time,
-                        rxmesh::Vector<3, T>&        start_residual,
-                        rxmesh::Vector<3, T>&        stop_residual,
+                        T&                           start_residual,
+                        T&                           stop_residual,
                         const int                    num_omp_threads)
 {
 
@@ -427,10 +419,10 @@ void mcf_openmesh(const int                    num_omp_threads,
 
 
     // implicit smoothing
-    uint32_t             num_cg_iter_taken = 0;
-    float                time              = 0;
-    rxmesh::Vector<3, T> start_residual;
-    rxmesh::Vector<3, T> stop_residual;
+    uint32_t num_cg_iter_taken = 0;
+    float    time              = 0;
+    T        start_residual;
+    T        stop_residual;
 
     implicit_smoothing(input_mesh,
                        smoothed_coord,
@@ -461,8 +453,8 @@ void mcf_openmesh(const int                    num_omp_threads,
     //    }
 
     // Finalize report
-    report.add_member("start_residual", to_string(start_residual));
-    report.add_member("end_residual", to_string(stop_residual));
+    report.add_member("start_residual", start_residual);
+    report.add_member("end_residual", stop_residual);
     report.add_member("num_cg_iter_taken", num_cg_iter_taken);
     report.add_member("total_time (ms)", time);
     rxmesh::TestData td;
