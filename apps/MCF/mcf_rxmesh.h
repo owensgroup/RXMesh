@@ -138,9 +138,13 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
     uint32_t num_cg_iter_taken = 0;
 
+    GPUTimer matvec_timer;
+    float    matvec_time = 0;
+
+
     while (num_cg_iter_taken < Arg.max_num_cg_iter) {
         // s = Ap
-
+        matvec_timer.start();
         mcf_matvec<T, blockThreads>
             <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
                 rxmesh.get_context(),
@@ -149,6 +153,8 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
                 *S,
                 Arg.use_uniform_laplace,
                 Arg.time_step);
+        matvec_timer.stop();
+        matvec_time += matvec_timer.elapsed_millis();
 
         // alpha = delta_new / <s,p>
         alpha = reduce_handle.dot(*S, *P);
@@ -196,16 +202,19 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
 
     RXMESH_TRACE(
-        "mcf_rxmesh() took {} (ms) and {} iterations (i.e., {} ms/iter) ",
+        "mcf_rxmesh() took {} (ms) and {} iterations (i.e., {} ms/iter), "
+        "mat_vec time {} (ms) (i.e., {} ms/iter)",
         timer.elapsed_millis(),
         num_cg_iter_taken,
-        timer.elapsed_millis() / float(num_cg_iter_taken));
+        timer.elapsed_millis() / float(num_cg_iter_taken),
+        matvec_time,
+        matvec_time / float(num_cg_iter_taken));
 
     // move output to host
     X->move_v1(rxmesh::DEVICE, rxmesh::HOST);
 
     // output to obj
-    rxmesh.export_obj("mcf_rxmesh.obj", *X);
+    // rxmesh.export_obj("mcf_rxmesh.obj", *X);
 
     // Verify
     const T tol = 0.001;
@@ -225,6 +234,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     report.add_member("end_residual", delta_new);
     report.add_member("num_cg_iter_taken", num_cg_iter_taken);
     report.add_member("total_time (ms)", timer.elapsed_millis());
+    report.add_member("matvec_time (ms)", matvec_time);
     TestData td;
     td.test_name = "MCF";
     td.time_ms.push_back(timer.elapsed_millis() / float(num_cg_iter_taken));
