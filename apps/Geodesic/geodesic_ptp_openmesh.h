@@ -9,15 +9,14 @@
 #include "../common/openmesh_report.h"
 #include "../common/openmesh_trimesh.h"
 #include "gtest/gtest.h"
-#include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh/util/timer.h"
 
-inline float compute_toplesets(TriMesh&                           mesh,
-                               std::vector<uint32_t>&             sorted_index,
-                               std::vector<uint32_t>&             limits,
-                               rxmesh::RXMeshAttribute<uint32_t>& toplesets,
-                               const std::vector<uint32_t>&       h_seeds)
+inline float compute_toplesets(TriMesh&                     mesh,
+                               std::vector<uint32_t>&       sorted_index,
+                               std::vector<uint32_t>&       limits,
+                               std::vector<uint32_t>&       toplesets,
+                               const std::vector<uint32_t>& h_seeds)
 {
     limits.clear();
     limits.reserve(mesh.n_vertices() / 2);
@@ -29,21 +28,21 @@ inline float compute_toplesets(TriMesh&                           mesh,
     rxmesh::CPUTimer timer;
     timer.start();
 
-    toplesets.reset(INVALID32, rxmesh::HOST);
+    toplesets.resize(mesh.n_vertices(), INVALID32);
     uint32_t level = 0;
     uint32_t p     = 0;
     for (const uint32_t& s : h_seeds) {
         sorted_index[p] = s;
         p++;
-        if (toplesets(s) == INVALID32) {
-            toplesets(s) = level;
+        if (toplesets[s] == INVALID32) {
+            toplesets[s] = level;
         }
     }
 
     limits.push_back(0);
     for (uint32_t i = 0; i < p; i++) {
         const uint32_t v = sorted_index[i];
-        if (toplesets(v) > level) {
+        if (toplesets[v] > level) {
             level++;
             limits.push_back(i);
         }
@@ -53,8 +52,8 @@ inline float compute_toplesets(TriMesh&                           mesh,
              vv_iter.is_valid();
              ++vv_iter) {
             int vv = (*vv_iter).idx();
-            if (toplesets(vv) == INVALID32) {
-                toplesets(vv)   = toplesets(v) + 1;
+            if (toplesets[vv] == INVALID32) {
+                toplesets[vv]   = toplesets[v] + 1;
                 sorted_index[p] = vv;
                 p++;
             }
@@ -76,11 +75,11 @@ inline float compute_toplesets(TriMesh&                           mesh,
 }
 
 template <typename T>
-inline T update_step(TriMesh&                    mesh,
-                     const uint32_t              v0,
-                     const uint32_t              v1,
-                     const uint32_t              v2,
-                     rxmesh::RXMeshAttribute<T>& geo_distance)
+inline T update_step(TriMesh&        mesh,
+                     const uint32_t  v0,
+                     const uint32_t  v1,
+                     const uint32_t  v2,
+                     std::vector<T>& geo_distance)
 {
     TriMesh::VertexIter v0_it = mesh.vertices_begin() + v0;
     TriMesh::VertexIter v1_it = mesh.vertices_begin() + v1;
@@ -91,8 +90,8 @@ inline T update_step(TriMesh&                    mesh,
 
 
     T t[2];
-    t[0] = geo_distance(v1);
-    t[1] = geo_distance(v2);
+    t[0] = geo_distance[v1];
+    t[1] = geo_distance[v2];
 
     T q[2][2];
     q[0][0] = (X0 | X0);  // X0 dot_product X0
@@ -139,8 +138,8 @@ inline T update_step(TriMesh&                    mesh,
         t[1] == std::numeric_limits<T>::infinity() || dis < 0 || c[0] >= 0 ||
         c[1] >= 0) {
         T dp[2];
-        dp[0] = geo_distance(v1) + X0.norm();
-        dp[1] = geo_distance(v2) + X1.norm();
+        dp[0] = geo_distance[v1] + X0.norm();
+        dp[1] = geo_distance[v2] + X1.norm();
 
         p = dp[dp[1] < dp[0]];
     }
@@ -152,16 +151,12 @@ inline float toplesets_propagation(TriMesh&                     mesh,
                                    const std::vector<uint32_t>& h_seeds,
                                    const std::vector<uint32_t>& limits,
                                    const std::vector<uint32_t>& sorted_index,
-                                   rxmesh::RXMeshAttribute<T>&  geo_distance,
+                                   std::vector<T>&              geo_distance,
                                    uint32_t&                    iter)
 {
     // second buffer for geodesic distance
-    rxmesh::RXMeshAttribute<T> geo_distance_2;
-    geo_distance_2.init(mesh.n_vertices(), 1u, rxmesh::HOST);
-    geo_distance_2.reset(std::numeric_limits<T>::infinity(), rxmesh::HOST);
-    geo_distance.reset(std::numeric_limits<T>::infinity(), rxmesh::HOST);
-    rxmesh::RXMeshAttribute<T>* double_buffer[2] = {&geo_distance,
-                                                    &geo_distance_2};
+    std::vector<T>  geo_distance_2(geo_distance);
+    std::vector<T>* double_buffer[2] = {&geo_distance, &geo_distance_2};
     // error buffer
     std::vector<T> error(mesh.n_vertices(), 0);
 
@@ -170,8 +165,8 @@ inline float toplesets_propagation(TriMesh&                     mesh,
 
     // source distance
     for (auto v : h_seeds) {
-        geo_distance(v)   = 0;
-        geo_distance_2(v) = 0;
+        geo_distance[v]   = 0;
+        geo_distance_2[v] = 0;
     }
 
     uint32_t d = 0;
@@ -193,7 +188,7 @@ inline float toplesets_propagation(TriMesh&                     mesh,
             const uint32_t      v      = sorted_index[vi];
             TriMesh::VertexIter v_iter = mesh.vertices_begin() + v;
 
-            double_buffer[!d]->operator()(v) = double_buffer[d]->operator()(v);
+            (*double_buffer[!d])[v] = (*double_buffer[d])[v];
 
 
             // The last vertex in v one ring
@@ -214,8 +209,8 @@ inline float toplesets_propagation(TriMesh&                     mesh,
 
                 // working on triangle v,vv_id, p_id
                 T dist = update_step(mesh, v, p_id, vv_id, *double_buffer[d]);
-                if (dist < double_buffer[!d]->operator()(v)) {
-                    double_buffer[!d]->operator()(v) = dist;
+                if (dist < (*double_buffer[!d])[v]) {
+                    (*double_buffer[!d])[v] = dist;
                 }
 
 
@@ -227,9 +222,9 @@ inline float toplesets_propagation(TriMesh&                     mesh,
         // calc error
         for (uint32_t vi = start; vi < start + n_cond; vi++) {
             const uint32_t v = sorted_index[vi];
-            error[vi]        = std::abs(double_buffer[!d]->operator()(v) -
-                                 double_buffer[d]-> operator()(v)) /
-                        double_buffer[d]->operator()(v);
+            error[vi] =
+                std::abs((*double_buffer[!d])[v] - (*double_buffer[d])[v]) /
+                (*double_buffer[d])[v];
         }
 
         uint32_t count = 0;
@@ -249,22 +244,21 @@ inline float toplesets_propagation(TriMesh&                     mesh,
     timer.stop();
 
     // copy most updated results (if needed)
-    if (geo_distance.operator->() != double_buffer[!d]->operator->()) {
-        geo_distance.copy(*(double_buffer[!d]), rxmesh::HOST, rxmesh::HOST);
+    if (&geo_distance != double_buffer[!d]) {
+        for (size_t i = 0; i < geo_distance.size(); ++i) {
+            geo_distance[i] = geo_distance_2[i];
+        }
     }
-
-    geo_distance_2.release();
 
     return timer.elapsed_millis();
 }
 
 template <typename T>
-void geodesic_ptp_openmesh(TriMesh&                           input_mesh,
-                           const std::vector<uint32_t>&       h_seeds,
-                           rxmesh::RXMeshAttribute<T>&        geo_distance,
-                           std::vector<uint32_t>&             sorted_index,
-                           std::vector<uint32_t>&             limits,
-                           rxmesh::RXMeshAttribute<uint32_t>& toplesets)
+void geodesic_ptp_openmesh(TriMesh&                     input_mesh,
+                           const std::vector<uint32_t>& h_seeds,
+                           std::vector<uint32_t>&       sorted_index,
+                           std::vector<uint32_t>&       limits,
+                           std::vector<uint32_t>&       toplesets)
 {
     // Report
     OpenMeshReport report("Geodesic_OpenMesh");
@@ -273,12 +267,10 @@ void geodesic_ptp_openmesh(TriMesh&                           input_mesh,
     report.model_data(Arg.obj_file_name, input_mesh);
     report.add_member("seeds", h_seeds);
     std::string method = "OpenMeshSingleCore";
-    report.add_member("method", method);    
-    
-    // Geodesic distance attribute for all vertices
-    geo_distance.set_name("GeodesicDistance");
-    geo_distance.init(input_mesh.n_vertices(), 1u, rxmesh::HOST);
-    geo_distance.reset(std::numeric_limits<T>::infinity(), rxmesh::HOST);
+    report.add_member("method", method);
+
+    std::vector<T> geo_distance(input_mesh.n_vertices(),
+                                std::numeric_limits<T>::infinity());
 
     // sorted indices for toplesets
     sorted_index.clear();
@@ -289,8 +281,10 @@ void geodesic_ptp_openmesh(TriMesh&                           input_mesh,
     // compute toplesets
     float compute_toplesets_time =
         compute_toplesets(input_mesh, sorted_index, limits, toplesets, h_seeds);
+
     RXMESH_TRACE("OpenMesh: Computing toplesets took {} (ms)",
                  compute_toplesets_time);
+
     report.add_member("compute_toplesets_time", compute_toplesets_time);
 
     // compute geodesic distance

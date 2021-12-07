@@ -42,11 +42,11 @@ TEST(App, GEODESIC)
     std::vector<std::vector<uint32_t>> Faces;
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
-    RXMeshStatic rxmesh_static(Faces, false);
-    ASSERT_TRUE(rxmesh_static.is_closed())
+    RXMeshStatic rxmesh(Faces, false);
+    ASSERT_TRUE(rxmesh.is_closed())
         << "Geodesic only works on watertight/closed manifold mesh without "
            "boundaries";
-    ASSERT_TRUE(rxmesh_static.is_edge_manifold())
+    ASSERT_TRUE(rxmesh.is_edge_manifold())
         << "Geodesic only works on watertight/closed manifold mesh without "
            "boundaries";
 
@@ -59,56 +59,35 @@ TEST(App, GEODESIC)
     std::random_device    dev;
     std::mt19937          rng(dev());
     std::uniform_int_distribution<std::mt19937::result_type> dist(
-        0, rxmesh_static.get_num_vertices());
+        0, rxmesh.get_num_vertices());
     for (auto& s : h_seeds) {
         s = dist(rng);
         // s = 0;
     }
 
 
-    // OpenMesh Impl
-    RXMeshAttribute<dataT> ground_truth;
-
     // Save a map from vertex id to topleset (number of hops from
     // (closest?) source). It's used by OpenMesh to help construct
     // sorted_index and limit. We keep it for RXMesh because it is
     // used to quickly determine whether or not a vertex is within
     // the "update band".
-    RXMeshAttribute<uint32_t> toplesets("toplesets");
-    toplesets.init(Verts.size(),
-                   1u,
-                   rxmesh::HOST);  // will move() to DEVICE later
-
-
+    std::vector<uint32_t> toplesets(Verts.size(), 1u);
     std::vector<uint32_t> sorted_index;
     std::vector<uint32_t> limits;
-    geodesic_ptp_openmesh(
-        input_mesh, h_seeds, ground_truth, sorted_index, limits, toplesets);
+    geodesic_ptp_openmesh<dataT>(
+        input_mesh, h_seeds, sorted_index, limits, toplesets);
 
-    // export_attribute_VTK("geo_openmesh.vtk", Faces, Verts, false,
-    //                     ground_truth.operator->(),
-    //                     ground_truth.operator->());
-
-    // Now that OpenMesh has calculated the toplesets,
-    // move to DEVICE -- it's needed by RXMesh version
-    toplesets.move(rxmesh::HOST, rxmesh::DEVICE);
+    // export_attribute_VTK("geo_openmesh.vtk",
+    //                     Faces,
+    //                     Verts,
+    //                     false,
+    //                     geo_distance.data(),
+    //                     geo_distance.data());
 
 
     // RXMesh Impl
-    EXPECT_TRUE(geodesic_rxmesh(rxmesh_static,
-                                Faces,
-                                Verts,
-                                h_seeds,
-                                ground_truth,
-                                sorted_index,
-                                limits,
-                                toplesets))
-        << "RXMesh failed!!";
-
-
-    // Release allocation
-    ground_truth.release();
-    toplesets.release();
+    geodesic_rxmesh(
+        rxmesh, Faces, Verts, h_seeds, sorted_index, limits, toplesets);
 }
 
 int main(int argc, char** argv)

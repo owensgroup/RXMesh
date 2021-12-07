@@ -7,14 +7,13 @@
 constexpr float EPS = 10e-6;
 
 template <typename T>
-inline bool geodesic_rxmesh(rxmesh::RXMeshStatic&               rxmesh_static,
+inline void geodesic_rxmesh(rxmesh::RXMeshStatic&               rxmesh,
                             std::vector<std::vector<uint32_t>>& Faces,
                             std::vector<std::vector<T>>&        Verts,
                             const std::vector<uint32_t>&        h_seeds,
-                            const rxmesh::RXMeshAttribute<T>&   ground_truth,
                             const std::vector<uint32_t>&        h_sorted_index,
                             const std::vector<uint32_t>&        h_limits,
-                            const rxmesh::RXMeshAttribute<uint32_t>& toplesets)
+                            const std::vector<uint32_t>&        toplesets)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -24,30 +23,26 @@ inline bool geodesic_rxmesh(rxmesh::RXMeshStatic&               rxmesh_static,
     report.command_line(Arg.argc, Arg.argv);
     report.device();
     report.system();
-    report.model_data(Arg.obj_file_name, rxmesh_static);
+    report.model_data(Arg.obj_file_name, rxmesh);
     report.add_member("seeds", h_seeds);
     report.add_member("method", std::string("RXMesh"));
 
     // input coords
-    rxmesh::RXMeshAttribute<T> input_coord;
-    input_coord.set_name("coord");
-    input_coord.init(Verts.size(), 3u, rxmesh::LOCATION_ALL);
-    for (uint32_t i = 0; i < Verts.size(); ++i) {
-        for (uint32_t j = 0; j < Verts[i].size(); ++j) {
-            input_coord(i, j) = Verts[i][j];
-        }
-    }    
-    input_coord.move(rxmesh::HOST, rxmesh::DEVICE);
+    auto input_coord = rxmesh.add_vertex_attribute(Verts, "coord");
+
+    //TODO copy toplesets
+    auto d_toplesets = rxmesh.add_vertex_attribute<uint32_t>("topleset", 1);
+
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh_static.prepare_launch_box(rxmesh::Op::VV, launch_box, false, true);
+    rxmesh.prepare_launch_box(rxmesh::Op::VV, launch_box, false, true);
 
 
     // Geodesic distance attribute for all vertices (seeds set to zero
     // and infinity otherwise)
     RXMeshAttribute<T> rxmesh_geo;
-    rxmesh_geo.init(rxmesh_static.get_num_vertices(), 1u, rxmesh::LOCATION_ALL);
+    rxmesh_geo.init(rxmesh.get_num_vertices(), 1u, rxmesh::LOCATION_ALL);
     rxmesh_geo.reset(std::numeric_limits<T>::infinity(), rxmesh::HOST);
     for (uint32_t v : h_seeds) {
         rxmesh_geo(v) = 0;
@@ -56,7 +51,7 @@ inline bool geodesic_rxmesh(rxmesh::RXMeshStatic&               rxmesh_static,
 
     // second buffer for geodesic distance for double buffering
     RXMeshAttribute<T> rxmesh_geo_2;
-    rxmesh_geo_2.init(rxmesh_static.get_num_vertices(), 1u, rxmesh::DEVICE);
+    rxmesh_geo_2.init(rxmesh.get_num_vertices(), 1u, rxmesh::DEVICE);
     rxmesh_geo_2.copy(rxmesh_geo, rxmesh::DEVICE, rxmesh::DEVICE);
 
 
@@ -85,11 +80,11 @@ inline bool geodesic_rxmesh(rxmesh::RXMeshStatic&               rxmesh_static,
         // compute new geodesic
         relax_ptp_rxmesh<T, blockThreads>
             <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-                rxmesh_static.get_context(),
-                input_coord,
+                rxmesh.get_context(),
+                *input_coord,
                 *double_buffer[!d],
                 *double_buffer[d],
-                toplesets,
+                *d_toplesets,
                 i,
                 j,
                 d_error,
@@ -121,17 +116,10 @@ inline bool geodesic_rxmesh(rxmesh::RXMeshStatic&               rxmesh_static,
     // verify
     rxmesh_geo.copy(*double_buffer[d], rxmesh::DEVICE, rxmesh::HOST);
     T err = 0;
-    for (uint32_t i = 0; i < ground_truth.get_num_mesh_elements(); ++i) {
-        if (ground_truth(i) > EPS) {
-            err += std::abs(rxmesh_geo(i) - ground_truth(i)) / ground_truth(i);
-        }
-    }
-    err /= T(ground_truth.get_num_mesh_elements());
-    bool is_passed = (err < 10E-2);
 
-    RXMESH_TRACE("Geodesic_RXMesh took {} (ms) -- err= {} -- #iter= {}",
+
+    RXMESH_TRACE("Geodesic_RXMesh took {} (ms) -- #iter= {}",
                  timer.elapsed_millis(),
-                 err,
                  iter);
 
     // export_attribute_VTK("geo_rxmesh.vtk", Faces, Verts, false,
@@ -140,7 +128,6 @@ inline bool geodesic_rxmesh(rxmesh::RXMeshStatic&               rxmesh_static,
     // Release allocation
     rxmesh_geo.release();
     rxmesh_geo_2.release();
-    input_coord.release();
     GPU_FREE(d_error);
 
     // Finalize report
@@ -148,10 +135,7 @@ inline bool geodesic_rxmesh(rxmesh::RXMeshStatic&               rxmesh_static,
     TestData td;
     td.test_name = "Geodesic";
     td.time_ms.push_back(timer.elapsed_millis());
-    td.passed.push_back(is_passed);
     report.add_test(td);
     report.write(Arg.output_folder + "/rxmesh",
                  "Geodesic_RXMesh_" + extract_file_name(Arg.obj_file_name));
-
-    return is_passed;
 }
