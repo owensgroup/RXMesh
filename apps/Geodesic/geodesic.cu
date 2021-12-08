@@ -6,17 +6,17 @@
 #include <cuda_profiler_api.h>
 #include <random>
 
-#include "../common/openmesh_trimesh.h"
 #include "gtest/gtest.h"
-#include "rxmesh/rxmesh_attribute.h"
+
+#include "../common/openmesh_trimesh.h"
+
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/cuda_query.h"
-#include "rxmesh/util/export_tools.h"
 #include "rxmesh/util/import_obj.h"
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "dragon.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     uint32_t    device_id     = 0;
     char**      argv;
@@ -50,16 +50,13 @@ TEST(App, GEODESIC)
         << "Geodesic only works on watertight/closed manifold mesh without "
            "boundaries";
 
-    TriMesh input_mesh;
-    ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
-
 
     // Generate Seeds
     std::vector<uint32_t> h_seeds(Arg.num_seeds);
     std::random_device    dev;
     std::mt19937          rng(dev());
-    std::uniform_int_distribution<std::mt19937::result_type> dist(
-        0, rxmesh.get_num_vertices());
+    std::uniform_int_distribution<std::mt19937::result_type> dist(0,
+                                                                  Verts.size());
     for (auto& s : h_seeds) {
         s = dist(rng);
         // s = 0;
@@ -74,16 +71,8 @@ TEST(App, GEODESIC)
     std::vector<uint32_t> toplesets(Verts.size(), 1u);
     std::vector<uint32_t> sorted_index;
     std::vector<uint32_t> limits;
-    geodesic_ptp_openmesh<dataT>(
-        input_mesh, h_seeds, sorted_index, limits, toplesets);
-
-    // export_attribute_VTK("geo_openmesh.vtk",
-    //                     Faces,
-    //                     Verts,
-    //                     false,
-    //                     geo_distance.data(),
-    //                     geo_distance.data());
-
+    geodesic_ptp_openmesh(
+        Faces, Verts, h_seeds, sorted_index, limits, toplesets);
 
     // RXMesh Impl
     geodesic_rxmesh(

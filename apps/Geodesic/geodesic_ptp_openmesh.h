@@ -9,6 +9,7 @@
 #include "../common/openmesh_report.h"
 #include "../common/openmesh_trimesh.h"
 #include "gtest/gtest.h"
+#include "rxmesh/util/export_tools.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh/util/timer.h"
 
@@ -28,6 +29,7 @@ inline float compute_toplesets(TriMesh&                     mesh,
     rxmesh::CPUTimer timer;
     timer.start();
 
+    toplesets.clear();
     toplesets.resize(mesh.n_vertices(), INVALID32);
     uint32_t level = 0;
     uint32_t p     = 0;
@@ -254,12 +256,16 @@ inline float toplesets_propagation(TriMesh&                     mesh,
 }
 
 template <typename T>
-void geodesic_ptp_openmesh(TriMesh&                     input_mesh,
-                           const std::vector<uint32_t>& h_seeds,
-                           std::vector<uint32_t>&       sorted_index,
-                           std::vector<uint32_t>&       limits,
-                           std::vector<uint32_t>&       toplesets)
+void geodesic_ptp_openmesh(const std::vector<std::vector<uint32_t>>& Faces,
+                           const std::vector<std::vector<T>>&        Verts,
+                           const std::vector<uint32_t>&              h_seeds,
+                           std::vector<uint32_t>& sorted_index,
+                           std::vector<uint32_t>& limits,
+                           std::vector<uint32_t>& toplesets)
 {
+    TriMesh input_mesh;
+    ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
+
     // Report
     OpenMeshReport report("Geodesic_OpenMesh");
     report.command_line(Arg.argc, Arg.argv);
@@ -268,6 +274,10 @@ void geodesic_ptp_openmesh(TriMesh&                     input_mesh,
     report.add_member("seeds", h_seeds);
     std::string method = "OpenMeshSingleCore";
     report.add_member("method", method);
+
+    ASSERT_TRUE(Faces.size() == input_mesh.n_faces());
+    ASSERT_TRUE(Verts.size() == input_mesh.n_vertices());
+
 
     std::vector<T> geo_distance(input_mesh.n_vertices(),
                                 std::numeric_limits<T>::infinity());
@@ -293,6 +303,12 @@ void geodesic_ptp_openmesh(TriMesh&                     input_mesh,
         input_mesh, h_seeds, limits, sorted_index, geo_distance, iter);
     RXMESH_TRACE("geodesic_ptp_openmesh() took {} (ms)", processing_time);
 
+    //export_attribute_VTK("geo_openmesh.vtk",
+    //                     Faces,
+    //                     Verts,
+    //                     false,
+    //                     geo_distance.data(),
+    //                     geo_distance.data());
 
     // Finalize report
     report.add_member("num_iter_taken", iter);
