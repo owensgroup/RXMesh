@@ -58,8 +58,8 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
     // second buffer for geodesic distance for double buffering
     auto rxmesh_geo_2 =
         rxmesh.add_vertex_attribute<T>("geo2", 1u, rxmesh::DEVICE);
-    // TODO
-    // rxmesh_geo_2->copy_v1(*rxmesh_geo, rxmesh::DEVICE, rxmesh::DEVICE);
+    
+    rxmesh_geo_2->copy_from(*rxmesh_geo, rxmesh::DEVICE, rxmesh::DEVICE);
 
 
     // Error
@@ -121,8 +121,7 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
     CUDA_ERROR(cudaGetLastError());
     CUDA_ERROR(cudaProfilerStop());
 
-    // TODO
-    // rxmesh_geo->copy_v1(*double_buffer[d], rxmesh::DEVICE, rxmesh::HOST);
+    rxmesh_geo->copy_from(*double_buffer[d], rxmesh::DEVICE, rxmesh::HOST);
 
     RXMESH_TRACE("Geodesic_RXMesh took {} (ms) -- #iter= {}",
                  timer.elapsed_millis(),

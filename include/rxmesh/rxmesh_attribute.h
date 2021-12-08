@@ -166,7 +166,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
     {
         return ((m_allocated & HOST) == HOST);
     }
-      
+
 
     void reset(const T value, locationT location, cudaStream_t stream = NULL)
     {
@@ -527,6 +527,146 @@ class RXMeshAttribute : public RXMeshAttributeBase
         }
     }
 
+
+    void copy_from(RXMeshAttribute<T>& source,
+                   locationT           source_flag,
+                   locationT           location_flag,
+                   cudaStream_t        stream = NULL)
+    {
+        // Deep copy from source. The source_flag defines where we will copy
+        // from. The location_flag defines where we will copy to.
+
+        // if source_flag and location_flag are both set to LOCATION_ALL, then
+        // we copy what is on host to host, and what on location to location
+
+        // If sourc_flag is set to HOST (or DEVICE) and location_flag is set to
+        // LOCATION_ALL, then we copy source's HOST (or DEVICE) to both HOST
+        // and DEVICE in location
+
+        // Setting source_flag to LOCATION_ALL while location_flag is Not set to
+        // LOCATION_ALL is invalid because we don't know which source to copy
+        // from
+
+        if (source.m_layout != m_layout) {
+            RXMESH_ERROR(
+                "RXMeshAttribute::copy_v1() does not support copy from source "
+                "of "
+                "different layout!");
+        }
+
+        if ((source_flag & LOCATION_ALL) == LOCATION_ALL &&
+            (location_flag & LOCATION_ALL) != LOCATION_ALL) {
+            RXMESH_ERROR("RXMeshAttribute::copy() Invalid configuration!");
+        }
+
+        if (source.get_num_mesh_elements() != m_num_mesh_elements) {
+            RXMESH_ERROR(
+                "RXMeshAttribute::copy() source has different size than "
+                "location!");
+        }
+
+        if (this->is_empty() || this->m_num_patches == 0) {
+            return;
+        }
+
+        // 1) copy from HOST to HOST
+        if ((source_flag & HOST) == HOST && (location_flag & HOST) == HOST) {
+            if ((source_flag & source.m_allocated) != source_flag) {
+                RXMESH_ERROR(
+                    "RXMeshAttribute::copy() copying source is not valid"
+                    " because it was not allocated on host");
+            }
+            if ((location_flag & m_allocated) != location_flag) {
+                RXMESH_ERROR(
+                    "RXMeshAttribute::copy() copying source is not valid"
+                    " because location (this) was not allocated on host");
+            }
+
+            for (uint32_t p = 0; p < m_num_patches; ++p) {
+                std::memcpy(
+                    m_h_ptr_on_device[p],
+                    source.m_h_ptr_on_device[p],
+                    sizeof(T) * m_h_element_per_patch[p] * m_num_attributes);
+            }
+        }
+
+
+        // 2) copy from DEVICE to DEVICE
+        if ((source_flag & DEVICE) == DEVICE &&
+            (location_flag & DEVICE) == DEVICE) {
+            if ((source_flag & source.m_allocated) != source_flag) {
+                RXMESH_ERROR(
+                    "RXMeshAttribute::copy() copying source is not valid"
+                    " because it was not allocated on device");
+            }
+            if ((location_flag & m_allocated) != location_flag) {
+                RXMESH_ERROR(
+                    "RXMeshAttribute::copy() copying source is not valid"
+                    " because location (this) was not allocated on device");
+            }
+
+            for (uint32_t p = 0; p < m_num_patches; ++p) {
+                CUDA_ERROR(cudaMemcpyAsync(
+                    m_h_ptr_on_device[p],
+                    source.m_h_ptr_on_device[p],
+                    sizeof(T) * m_h_element_per_patch[p] * m_num_attributes,
+                    cudaMemcpyDeviceToDevice,
+                    stream));
+            }
+        }
+
+
+        // 3) copy from DEVICE to HOST
+        if ((source_flag & DEVICE) == DEVICE &&
+            (location_flag & HOST) == HOST) {
+            if ((source_flag & source.m_allocated) != source_flag) {
+                RXMESH_ERROR(
+                    "RXMeshAttribute::copy() copying source is not valid"
+                    " because it was not allocated on host");
+            }
+            if ((location_flag & m_allocated) != location_flag) {
+                RXMESH_ERROR(
+                    "RXMeshAttribute::copy() copying source is not valid"
+                    " because location (this) was not allocated on device");
+            }
+
+
+            for (uint32_t p = 0; p < m_num_patches; ++p) {
+                CUDA_ERROR(cudaMemcpyAsync(
+                    m_h_attr_v1[p],
+                    source.m_h_ptr_on_device[p],
+                    sizeof(T) * m_h_element_per_patch[p] * m_num_attributes,
+                    cudaMemcpyDeviceToDevice,
+                    stream));
+            }
+        }
+
+
+        // 4) copy from HOST to DEVICE
+        if ((source_flag & HOST) == HOST &&
+            (location_flag & DEVICE) == DEVICE) {
+            if ((source_flag & source.m_allocated) != source_flag) {
+                RXMESH_ERROR(
+                    "RXMeshAttribute::copy() copying source is not valid"
+                    " because it was not allocated on device");
+            }
+            if ((location_flag & m_allocated) != location_flag) {
+                RXMESH_ERROR(
+                    "RXMeshAttribute::copy() copying source is not valid"
+                    " because location (this) was not allocated on host");
+            }
+
+
+            for (uint32_t p = 0; p < m_num_patches; ++p) {
+                CUDA_ERROR(cudaMemcpyAsync(
+                    m_h_ptr_on_device[p],
+                    source.m_h_attr_v1[p],
+                    sizeof(T) * m_h_element_per_patch[p] * m_num_attributes,
+                    cudaMemcpyDeviceToDevice,
+                    stream));
+            }
+        }
+    }
 
     // TODO remove
     __host__ __device__ __forceinline__ T& operator()(const uint32_t idx,
