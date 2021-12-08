@@ -203,7 +203,7 @@ class RXMeshStatic : public RXMesh
      * names
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
-     * @param layout as SoA or AoS     
+     * @param layout as SoA or AoS
      * operations
      * @return shared pointer to the created attribute
      */
@@ -211,15 +211,15 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshFaceAttribute<T>> add_face_attribute(
         const std::string& name,
         uint32_t           num_attributes,
-        locationT          location          = LOCATION_ALL,
-        layoutT            layout            = SoA)
+        locationT          location = LOCATION_ALL,
+        layoutT            layout   = SoA)
     {
         return m_attr_container->template add<RXMeshFaceAttribute<T>>(
             name.c_str(),
             this->m_h_num_owned_f,
             num_attributes,
             location,
-            layout,            
+            layout,
             this->m_h_patches_info,
             this->m_d_patches_info);
     }
@@ -232,7 +232,7 @@ class RXMeshStatic : public RXMesh
      * @tparam T type of the attribute
      * @param name of the attribute. Should not collide with other attributes
      * names
-     * @param layout as SoA or AoS     
+     * @param layout as SoA or AoS
      * operations
      * @return shared pointer to the created attribute
      * TODO implement this
@@ -241,7 +241,28 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshVertexAttribute<T>> add_face_attribute(
         const std::vector<std::vector<T>>& f_attributes,
         const std::string&                 name,
-        layoutT                            layout            = SoA)
+        layoutT                            layout = SoA)
+    {
+    }
+
+    /**
+     * @brief Adding a new face attribute by reading values from a host buffer
+     * f_attributes where the order of faces is the same as the order of
+     * faces given to the constructor.The attributes are populated on device
+     * and host
+     * @tparam T type of the attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param layout as SoA or AoS
+     * operations
+     * @return shared pointer to the created attribute
+     * TODO implement this
+     */
+    template <class T>
+    std::shared_ptr<RXMeshVertexAttribute<T>> add_face_attribute(
+        const std::vector<T>& f_attributes,
+        const std::string&    name,
+        layoutT               layout = SoA)
     {
     }
 
@@ -252,7 +273,7 @@ class RXMeshStatic : public RXMesh
      * names
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
-     * @param layout as SoA or AoS     
+     * @param layout as SoA or AoS
      * operations
      * @return shared pointer to the created attribute
      */
@@ -260,15 +281,15 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshEdgeAttribute<T>> add_edge_attribute(
         const std::string& name,
         uint32_t           num_attributes,
-        locationT          location          = LOCATION_ALL,
-        layoutT            layout            = SoA)
+        locationT          location = LOCATION_ALL,
+        layoutT            layout   = SoA)
     {
         return m_attr_container->template add<RXMeshEdgeAttribute<T>>(
             name.c_str(),
             this->m_h_num_owned_e,
             num_attributes,
             location,
-            layout,            
+            layout,
             this->m_h_patches_info,
             this->m_d_patches_info);
     }
@@ -280,7 +301,7 @@ class RXMeshStatic : public RXMesh
      * names
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
-     * @param layout as SoA or AoS     
+     * @param layout as SoA or AoS
      * operations
      * @return shared pointer to the created attribute
      */
@@ -288,15 +309,15 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
         const std::string& name,
         uint32_t           num_attributes,
-        locationT          location          = LOCATION_ALL,
-        layoutT            layout            = SoA)
+        locationT          location = LOCATION_ALL,
+        layoutT            layout   = SoA)
     {
         return m_attr_container->template add<RXMeshVertexAttribute<T>>(
             name.c_str(),
             this->m_h_num_owned_v,
             num_attributes,
             location,
-            layout,            
+            layout,
             this->m_h_patches_info,
             this->m_d_patches_info);
     }
@@ -310,7 +331,7 @@ class RXMeshStatic : public RXMesh
      * @param v_attributes attributes to read
      * @param name of the attribute. Should not collide with other attributes
      * names
-     * @param layout as SoA or AoS     
+     * @param layout as SoA or AoS
      * operations
      * @return shared pointer to the created attribute
      */
@@ -318,7 +339,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
         const std::vector<std::vector<T>>& v_attributes,
         const std::string&                 name,
-        layoutT                            layout            = SoA)
+        layoutT                            layout = SoA)
     {
         if (v_attributes.empty()) {
             RXMESH_ERROR(
@@ -342,7 +363,7 @@ class RXMeshStatic : public RXMesh
             this->m_h_num_owned_v,
             num_attributes,
             LOCATION_ALL,
-            layout,            
+            layout,
             this->m_h_patches_info,
             this->m_d_patches_info);
 
@@ -359,6 +380,70 @@ class RXMeshStatic : public RXMesh
                 for (uint32_t a = 0; a < num_attributes; ++a) {
                     (*ret)(v_handle, a) = v_attributes[global_v][a];
                 }
+            }
+        }
+
+        // move to device
+        ret->move_v1(rxmesh::HOST, rxmesh::DEVICE);
+        return ret;
+    }
+
+    /**
+     * @brief Adding a new vertex attribute by reading values from a host buffer
+     * v_attributes where the order of vertices is the same as the order of
+     * vertices given to the constructor. The attributes are populated on device
+     * and host
+     * @tparam T type of the attribute
+     * @param v_attributes attributes to read
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param layout as SoA or AoS
+     * operations
+     * @return shared pointer to the created attribute
+     */
+    template <class T>
+    std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
+        const std::vector<T>& v_attributes,
+        const std::string&    name,
+        layoutT               layout = SoA)
+    {
+        if (v_attributes.empty()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::add_vertex_attribute() input attribute is "
+                "empty");
+        }
+
+        if (v_attributes.size() != get_num_vertices()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::add_vertex_attribute() input attribute size "
+                "({}) is not the same as number of vertices in the input mesh "
+                "({})",
+                v_attributes.size(),
+                get_num_vertices());
+        }
+
+        uint32_t num_attributes = 1;
+
+        auto ret = m_attr_container->template add<RXMeshVertexAttribute<T>>(
+            name.c_str(),
+            this->m_h_num_owned_v,
+            num_attributes,
+            LOCATION_ALL,
+            layout,
+            this->m_h_patches_info,
+            this->m_d_patches_info);
+
+        // populate the attribute before returning it
+        const int num_patches = this->get_num_patches();
+#pragma omp parallel for
+        for (int p = 0; p < num_patches; ++p) {
+            for (uint16_t v = 0; v < this->m_h_num_owned_v[p]; ++v) {
+
+                const VertexHandle v_handle(static_cast<uint32_t>(p), v);
+
+                uint32_t global_v = m_h_patches_ltog_v[p][v];
+
+                (*ret)(v_handle, 0) = v_attributes[global_v];
             }
         }
 
