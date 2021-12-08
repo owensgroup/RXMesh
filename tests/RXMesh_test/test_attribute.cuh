@@ -162,8 +162,7 @@ TEST(RXMeshAttribute, Copy)
 {
     using namespace rxmesh;
     uint32_t                       num_mesh_elements = 2048;
-    rxmesh::RXMeshAttribute<float> rxmesh_attr;
-    rxmesh_attr.set_name("float_attr");
+    rxmesh::RXMeshAttribute<float> rxmesh_attr;    
     rxmesh_attr.init(num_mesh_elements, 1, rxmesh::LOCATION_ALL, rxmesh::AoS);
 
     for (uint32_t i = 0; i < num_mesh_elements; ++i) {

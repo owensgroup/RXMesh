@@ -37,7 +37,7 @@ void filtering_rxmesh(rxmesh::RXMeshStatic&             rxmesh_static,
 
     // input coords
     RXMeshAttribute<T> coords;
-    coords.set_name("coords");
+    //coords.set_name("coords");
     coords.init(rxmesh_static.get_num_vertices(), 3u, rxmesh::LOCATION_ALL);
     for (uint32_t i = 0; i < Verts.size(); ++i) {
         for (uint32_t j = 0; j < Verts[i].size(); ++j) {
@@ -48,14 +48,14 @@ void filtering_rxmesh(rxmesh::RXMeshStatic&             rxmesh_static,
 
     // Vertex normals (only on device)
     RXMeshAttribute<T> vertex_normal;
-    vertex_normal.set_name("vertex_normal");
+    //vertex_normal.set_name("vertex_normal");
     vertex_normal.init(rxmesh_static.get_num_vertices(), 3u, rxmesh::DEVICE);
     vertex_normal.reset(0.0, rxmesh::DEVICE);
 
 
     // Filtered coordinates
     RXMeshAttribute<T> filtered_coord;
-    filtered_coord.set_name("filtered_coord");
+    //filtered_coord.set_name("filtered_coord");
     filtered_coord.init(
         rxmesh_static.get_num_vertices(), 3u, rxmesh::LOCATION_ALL);
     filtered_coord.reset(0.0, rxmesh::LOCATION_ALL);

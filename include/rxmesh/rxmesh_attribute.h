@@ -137,13 +137,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
     virtual ~RXMeshAttribute() = default;
 
 
-    void set_name(std::string name)
-    {
-        free(this->m_name);
-        this->m_name = (char*)malloc(sizeof(char) * name.length() + 1);
-        strcpy(this->m_name, name.c_str());
-    }
-
     const char* get_name() const
     {
         return m_name;
@@ -173,18 +166,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
     {
         return ((m_allocated & HOST) == HOST);
     }
-
-    __host__ __device__ __forceinline__ T* get_pointer(locationT location) const
-    {
-
-        if (location == DEVICE) {
-            return m_d_attr;
-        }
-        if (location == HOST) {
-            return m_h_attr;
-        }
-        return nullptr;
-    }
+      
 
     void reset(const T value, locationT location, cudaStream_t stream = NULL)
     {
@@ -638,16 +620,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
         const uint32_t pitch_y =
             (m_layout == AoS) ? 1 : m_h_element_per_patch[patch_id];
         return m_h_attr_v1[patch_id][local_id * pitch_x + attr * pitch_y];
-#endif
-    }
-
-    // TODO remove
-    __host__ __device__ __forceinline__ T* operator->() const
-    {
-#ifdef __CUDA_ARCH__
-        return m_d_attr;
-#else
-        return m_h_attr;
 #endif
     }
 
