@@ -636,7 +636,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
                     m_h_attr_v1[p],
                     source.m_h_ptr_on_device[p],
                     sizeof(T) * m_h_element_per_patch[p] * m_num_attributes,
-                    cudaMemcpyDeviceToDevice,
+                    cudaMemcpyDeviceToHost,
                     stream));
             }
         }
@@ -662,7 +662,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
                     m_h_ptr_on_device[p],
                     source.m_h_attr_v1[p],
                     sizeof(T) * m_h_element_per_patch[p] * m_num_attributes,
-                    cudaMemcpyDeviceToDevice,
+                    cudaMemcpyHostToDevice,
                     stream));
             }
         }
@@ -766,13 +766,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
     __host__ __device__ __forceinline__ bool is_empty() const
     {
-#ifdef __CUDA_ARCH__
-
-        return (m_d_attr_v1 == nullptr) ? true : false;
-#else
-        return (m_h_attr_v1 == nullptr) ? true : false;
-
-#endif
+        return m_num_patches == 0;
     }
 
 

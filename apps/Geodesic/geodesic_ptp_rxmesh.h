@@ -58,7 +58,7 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
     // second buffer for geodesic distance for double buffering
     auto rxmesh_geo_2 =
         rxmesh.add_vertex_attribute<T>("geo2", 1u, rxmesh::DEVICE);
-    
+
     rxmesh_geo_2->copy_from(*rxmesh_geo, rxmesh::DEVICE, rxmesh::DEVICE);
 
 
@@ -127,13 +127,13 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
                  timer.elapsed_millis(),
                  iter);
 
-    std::vector<T> geo(rxmesh.get_num_vertices());
-    rxmesh.for_each_vertex(rxmesh::HOST, [&](const VertexHandle vh) {
-        uint32_t v_id = rxmesh.map_to_global(vh);
-        geo[v_id]     = (*rxmesh_geo)(vh);
-    });
-    export_attribute_VTK(
-        "geo_rxmesh.vtk", Faces, Verts, false, geo.data(), geo.data());
+    // std::vector<T> geo(rxmesh.get_num_vertices());
+    // rxmesh.for_each_vertex(rxmesh::HOST, [&](const VertexHandle vh) {
+    //    uint32_t v_id = rxmesh.map_to_global(vh);
+    //    geo[v_id]     = (*rxmesh_geo)(vh);
+    //});
+    // export_attribute_VTK(
+    //    "geo_rxmesh.vtk", Faces, Verts, false, geo.data(), geo.data());
 
     GPU_FREE(d_error);
 

@@ -303,7 +303,7 @@ void geodesic_ptp_openmesh(const std::vector<std::vector<uint32_t>>& Faces,
         input_mesh, h_seeds, limits, sorted_index, geo_distance, iter);
     RXMESH_TRACE("geodesic_ptp_openmesh() took {} (ms)", processing_time);
 
-    //export_attribute_VTK("geo_openmesh.vtk",
+    // export_attribute_VTK("geo_openmesh.vtk",
     //                     Faces,
     //                     Verts,
     //                     false,
