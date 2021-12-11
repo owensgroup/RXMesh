@@ -23,32 +23,28 @@ __launch_bounds__(blockThreads, 6) __global__
                                       rxmesh::RXMeshVertexAttribute<T> normals)
 {
     using namespace rxmesh;
-    auto vn_lambda = [&](uint32_t face_id, RXMeshIterator& iter) {
+    auto vn_lambda = [&](FaceHandle face_id, RXMeshVertexIterator& fv) {
         // this face's three vertices
-        uint32_t v0(iter[0]), v1(iter[1]), v2(iter[2]);
+        VertexHandle v0(fv[0]), v1(fv[1]), v2(fv[2]);
+
+        // get the face's three vertices coordinates
+        Vector<3, T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
+        Vector<3, T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
+        Vector<3, T> c2(coords(fv[2], 0), coords(fv[2], 1), coords(fv[2], 2));
 
         // compute the face normal
-        const Vector<3, T> v0c(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-        const Vector<3, T> v1c(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-        const Vector<3, T> v2c(coords(v2, 0), coords(v2, 1), coords(v2, 2));
-        Vector<3, T>       n = cross(v1c - v0c, v2c - v0c);
+        Vector<3, T> n = cross(c1 - c0, c2 - c0);
         n.normalize();
 
         // add the face's normal to its vertices
-        atomicAdd(&normals(v0, 0), n[0]);
-        atomicAdd(&normals(v0, 1), n[1]);
-        atomicAdd(&normals(v0, 2), n[2]);
-
-        atomicAdd(&normals(v1, 0), n[0]);
-        atomicAdd(&normals(v1, 1), n[1]);
-        atomicAdd(&normals(v1, 2), n[2]);
-
-        atomicAdd(&normals(v2, 0), n[0]);
-        atomicAdd(&normals(v2, 1), n[1]);
-        atomicAdd(&normals(v2, 2), n[2]);
+        for (uint32_t v = 0; v < 3; ++v) {      // for every vertex in this face
+            for (uint32_t i = 0; i < 3; ++i) {  // for the vertex 3 coordinates
+                atomicAdd(&normals(fv[v], i), n[i]);
+            }
+        }
     };
 
-    query_block_dispatcher<Op::FV, blockThreads>(context, vn_lambda);
+    query_block_dispatcher_v1<Op::FV, blockThreads>(context, vn_lambda);
 }
 
 
@@ -57,17 +53,16 @@ __launch_bounds__(blockThreads, 6) __global__
  */
 template <typename T>
 __device__ __inline__ void compute_new_coordinates(
-    const uint32_t                    v_id,
-    const uint32_t                    vv[],
-    const uint8_t                     num_vv,
-    rxmesh::Vector<3, T>&             v,
-    const rxmesh::Vector<3, T>&       n,
-    const T                           sigma_c_sq,
-    const rxmesh::RXMeshAttribute<T>& input_coords,
-    rxmesh::RXMeshVertexAttribute<T>& filtered_coords)
+    const rxmesh::VertexHandle&             v_id,
+    const rxmesh::VertexHandle              vv[],
+    const uint8_t                           num_vv,
+    rxmesh::Vector<3, T>&                   v,
+    const rxmesh::Vector<3, T>&             n,
+    const T                                 sigma_c_sq,
+    const rxmesh::RXMeshVertexAttribute<T>& input_coords,
+    rxmesh::RXMeshVertexAttribute<T>&       filtered_coords)
 {
-    T sigma_s_sq =
-        compute_sigma_s_sq(v_id, vv, num_vv, v_id, v, n, input_coords);
+    T sigma_s_sq = compute_sigma_s_sq(v_id, vv, num_vv, v, n, input_coords);
 
     T sum        = 0;
     T normalizer = 0;
@@ -92,9 +87,10 @@ __device__ __inline__ void compute_new_coordinates(
 }
 
 /**
- * bilateral_filtering()
+ * bilateral_filtering_low_level_API()
+ * TODO refactor this to use handles
  */
-template <typename T, uint32_t blockThreads, uint32_t maxVVSize>
+/*template <typename T, uint32_t blockThreads, uint32_t maxVVSize>
 __launch_bounds__(blockThreads) __global__
     static void bilateral_filtering_low_level_API(
         const rxmesh::RXMeshContext context,
@@ -425,29 +421,29 @@ __launch_bounds__(blockThreads) __global__
                                 input_coords,
                                 filtered_coords);
     }
-}
+}*/
 
 
 /**
  * bilateral_filtering2()
  */
 template <typename T, uint32_t blockThreads, uint32_t maxVVSize>
-__launch_bounds__(blockThreads) __global__
-    static void bilateral_filtering(const rxmesh::RXMeshContext context,
-                                    rxmesh::RXMeshAttribute<T>  input_coords,
-                                    rxmesh::RXMeshAttribute<T>  filtered_coords,
-                                    rxmesh::RXMeshAttribute<T>  vertex_normals)
+__launch_bounds__(blockThreads) __global__ static void bilateral_filtering(
+    const rxmesh::RXMeshContext      context,
+    rxmesh::RXMeshVertexAttribute<T> input_coords,
+    rxmesh::RXMeshVertexAttribute<T> filtered_coords,
+    rxmesh::RXMeshVertexAttribute<T> vertex_normals)
 {
     using namespace rxmesh;
-    uint32_t vv[maxVVSize];
+    VertexHandle vv[maxVVSize];
 
     uint8_t      num_vv     = 0;
     T            sigma_c_sq = 0;
     T            radius     = 0;
     Vector<3, T> vertex, normal;
-    uint32_t     v_id = INVALID32;
+    VertexHandle v_id;
 
-    auto first_ring = [&](uint32_t p_id, RXMeshIterator& iter) {
+    auto first_ring = [&](VertexHandle& p_id, RXMeshVertexIterator& iter) {
         v_id      = p_id;
         vertex[0] = input_coords(v_id, 0);
         vertex[1] = input_coords(v_id, 1);
@@ -465,7 +461,7 @@ __launch_bounds__(blockThreads) __global__
         sigma_c_sq = 1e10;
 
         for (uint32_t v = 0; v < iter.size(); ++v) {
-            const uint32_t     vv_id = iter[v];
+            const VertexHandle vv_id = iter[v];
             const Vector<3, T> q(input_coords(vv_id, 0),
                                  input_coords(vv_id, 1),
                                  input_coords(vv_id, 2));
@@ -480,7 +476,7 @@ __launch_bounds__(blockThreads) __global__
 
         // add 1-ring if it is within the radius
         for (uint32_t v = 0; v < iter.size(); ++v) {
-            uint32_t vv_id = iter[v];
+            const VertexHandle vv_id = iter[v];
 
             const Vector<3, T> vvc(input_coords(vv_id, 0),
                                    input_coords(vv_id, 1),
@@ -496,22 +492,22 @@ __launch_bounds__(blockThreads) __global__
         }
     };
 
-    query_block_dispatcher<Op::VV, blockThreads>(context, first_ring);
+    query_block_dispatcher_v1<Op::VV, blockThreads>(context, first_ring);
     __syncthreads();
 
 
     uint32_t next_id = 1;
     while (true) {
 
-        uint32_t next_vertex = INVALID32;
-        if (v_id != INVALID32 && next_id < num_vv) {
+        VertexHandle next_vertex;
+        if (v_id.is_valid() && next_id < num_vv) {
             next_vertex = vv[next_id];
         }
-        auto n_rings = [&](uint32_t id, RXMeshIterator& iter) {
+        auto n_rings = [&](VertexHandle& id, RXMeshVertexIterator& iter) {
             assert(id == next_vertex);
 
             for (uint32_t i = 0; i < iter.size(); ++i) {
-                uint32_t vvv_id = iter[i];
+                VertexHandle vvv_id = iter[i];
 
                 if (vvv_id != v_id) {
                     // make sure that we don't store duplicate outputs
@@ -533,17 +529,17 @@ __launch_bounds__(blockThreads) __global__
         };
 
 
-        query_block_dispatcher<Op::VV, blockThreads>(
-            context, next_vertex, n_rings);
+        // query_block_dispatcher_v1<Op::VV, blockThreads>(
+        //    context, next_vertex, n_rings);
 
-        bool is_done = (next_id > num_vv - 1) || (v_id == INVALID32);
+        bool is_done = (next_id > num_vv - 1) || !v_id.is_valid();
         if (__syncthreads_and(is_done)) {
             break;
         }
         next_id++;
     }
 
-    if (v_id != INVALID32) {
+    if (v_id.is_valid()) {
         compute_new_coordinates(v_id,
                                 vv,
                                 num_vv,

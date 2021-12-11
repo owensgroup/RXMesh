@@ -60,7 +60,8 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
     rxmesh.prepare_launch_box(rxmesh::Op::VV, filter_launch_box, true);
 
     // double buffer
-    RXMeshAttribute<T>* double_buffer[2] = {coords.get(), filtered_coord.get()};
+    RXMeshVertexAttribute<T>* double_buffer[2] = {coords.get(),
+                                                  filtered_coord.get()};
 
     CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
@@ -75,7 +76,7 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
             <<<vn_launch_box.blocks,
                vn_block_threads,
                vn_launch_box.smem_bytes_dyn>>>(
-                rxmesh.get_context(), *double_buffer[d], vertex_normal);
+                rxmesh.get_context(), *double_buffer[d], *vertex_normal);
 
         bilateral_filtering<T, filter_block_threads, maxVVSize>
             <<<filter_launch_box.blocks,
@@ -83,7 +84,7 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
                filter_launch_box.smem_bytes_dyn>>>(rxmesh.get_context(),
                                                    *double_buffer[d],
                                                    *double_buffer[!d],
-                                                   vertex_normal);
+                                                   *vertex_normal);
 
         d = !d;
         CUDA_ERROR(cudaDeviceSynchronize());

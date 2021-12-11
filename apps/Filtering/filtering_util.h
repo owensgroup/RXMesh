@@ -5,10 +5,10 @@
  */
 template <typename T>
 __device__ __inline__ T compute_sigma_c_sq(
-    const uint32_t                    vv[],
-    const uint8_t                     num_vv,
-    const rxmesh::Vector<3, T>&       v,
-    const rxmesh::RXMeshAttribute<T>& input_coords)
+    const rxmesh::VertexHandle              vv[],
+    const uint8_t                           num_vv,
+    const rxmesh::Vector<3, T>&             v,
+    const rxmesh::RXMeshVertexAttribute<T>& input_coords)
 {
 
     T sigma_c = 1e10;
@@ -30,13 +30,12 @@ __device__ __inline__ T compute_sigma_c_sq(
  */
 template <typename T>
 __device__ __inline__ T compute_sigma_s_sq(
-    const uint32_t                    v_id,
-    const uint32_t                    vv[],
-    const uint8_t                     num_vv,
-    uint32_t                          thread_vertex,
-    const rxmesh::Vector<3, T>&       v,
-    const rxmesh::Vector<3, T>&       n,
-    const rxmesh::RXMeshAttribute<T>& input_coords)
+    const rxmesh::VertexHandle&             v_id,
+    const rxmesh::VertexHandle              vv[],
+    const uint8_t                           num_vv,
+    const rxmesh::Vector<3, T>&             v,
+    const rxmesh::Vector<3, T>&             n,
+    const rxmesh::RXMeshVertexAttribute<T>& input_coords)
 {
 
     T sum     = 0;
