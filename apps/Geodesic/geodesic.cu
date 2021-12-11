@@ -28,7 +28,7 @@ struct arg
 #include "geodesic_ptp_openmesh.h"
 #include "geodesic_ptp_rxmesh.h"
 
-TEST(App, GEODESIC)
+TEST(App, Geodesic)
 {
     using namespace rxmesh;
     using dataT = float;

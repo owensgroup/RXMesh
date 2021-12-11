@@ -4,7 +4,6 @@
 #include <queue>
 #include "../common/openmesh_report.h"
 #include "../common/openmesh_trimesh.h"
-#include "rxmesh/rxmesh_attribute.h"
 
 /**
  *computeSigma_s()
@@ -72,10 +71,10 @@ void getAdaptiveVertexNeighbor(
 }
 
 template <typename T>
-void filtering_openmesh(const int                   num_omp_threads,
-                        TriMesh&                    input_mesh,
-                        rxmesh::RXMeshAttribute<T>& filtered_coord,
-                        size_t&                     max_neighbour_size)
+void filtering_openmesh(const int                    num_omp_threads,
+                        TriMesh&                     input_mesh,
+                        std::vector<std::vector<T>>& filtered_coord,
+                        size_t&                      max_neighbour_size)
 {
     // Report
     OpenMeshReport report("Filtering_OpenMesh");
@@ -84,12 +83,9 @@ void filtering_openmesh(const int                   num_omp_threads,
     report.model_data(Arg.obj_file_name, input_mesh);
     std::string method =
         "OpenMesh " + std::to_string(num_omp_threads) + " Core";
-    report.add_member("method", method);    
+    report.add_member("method", method);
     report.add_member("num_filter_iter", Arg.num_filter_iter);
 
-    // Allocate space for the filtered output coordinates
-    filtered_coord.init(input_mesh.n_vertices(), 3u, rxmesh::HOST);
-    filtered_coord.reset(0.0, rxmesh::HOST);
 
     // this where each thread will store its neighbour vertices
     // we allocate enough space such that each thread can store as much
@@ -160,9 +156,9 @@ void filtering_openmesh(const int                   num_omp_threads,
                 normalizer += wc * ws;
             }
             auto updated_point      = pi + ni * (sum / normalizer);
-            filtered_coord(vert, 0) = updated_point[0];
-            filtered_coord(vert, 1) = updated_point[1];
-            filtered_coord(vert, 2) = updated_point[2];
+            filtered_coord[vert][0] = updated_point[0];
+            filtered_coord[vert][1] = updated_point[1];
+            filtered_coord[vert][2] = updated_point[2];
         }
 
         // update the mesh for the next iterations (needed to update the
@@ -171,9 +167,9 @@ void filtering_openmesh(const int                   num_omp_threads,
         for (int vert = 0; vert < num_vertrices; vert++) {
             TriMesh::VertexIter v_it = input_mesh.vertices_begin() + vert;
             TriMesh::Point      p;
-            p[0] = filtered_coord(vert, 0);
-            p[1] = filtered_coord(vert, 1);
-            p[2] = filtered_coord(vert, 2);
+            p[0] = filtered_coord[vert][0];
+            p[1] = filtered_coord[vert][1];
+            p[2] = filtered_coord[vert][2];
             input_mesh.set_point(*v_it, p);
         }
     }

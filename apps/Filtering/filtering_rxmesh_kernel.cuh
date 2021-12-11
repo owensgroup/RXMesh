@@ -18,9 +18,9 @@ constexpr float EPS = 10e-6;
  */
 template <typename T, uint32_t blockThreads>
 __launch_bounds__(blockThreads, 6) __global__
-    static void compute_vertex_normal(const rxmesh::RXMeshContext context,
-                                      rxmesh::RXMeshAttribute<T>  coords,
-                                      rxmesh::RXMeshAttribute<T>  normals)
+    static void compute_vertex_normal(const rxmesh::RXMeshContext      context,
+                                      rxmesh::RXMeshVertexAttribute<T> coords,
+                                      rxmesh::RXMeshVertexAttribute<T> normals)
 {
     using namespace rxmesh;
     auto vn_lambda = [&](uint32_t face_id, RXMeshIterator& iter) {
@@ -64,7 +64,7 @@ __device__ __inline__ void compute_new_coordinates(
     const rxmesh::Vector<3, T>&       n,
     const T                           sigma_c_sq,
     const rxmesh::RXMeshAttribute<T>& input_coords,
-    rxmesh::RXMeshAttribute<T>&       filtered_coords)
+    rxmesh::RXMeshVertexAttribute<T>& filtered_coords)
 {
     T sigma_s_sq =
         compute_sigma_s_sq(v_id, vv, num_vv, v_id, v, n, input_coords);

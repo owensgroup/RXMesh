@@ -38,24 +38,22 @@ TEST(App, Filtering)
     std::vector<std::vector<dataT>>    Verts;
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
-    RXMeshStatic rxmesh_static(Faces, false);
 
     TriMesh input_mesh;
     ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
 
+    ASSERT_EQ(input_mesh.n_vertices(), Verts.size());
 
     // OpenMesh Impl
-    rxmesh::RXMeshAttribute<dataT> ground_truth;
-    size_t                         max_neighbour_size = 0;
+    std::vector<std::vector<dataT>> ground_truth(Verts);
+    size_t                          max_neighbour_size = 0;
     filtering_openmesh(
         omp_get_max_threads(), input_mesh, ground_truth, max_neighbour_size);
 
 
     // RXMesh Impl
-    filtering_rxmesh(rxmesh_static, Verts, ground_truth, max_neighbour_size);
+    filtering_rxmesh(Faces, Verts, ground_truth, max_neighbour_size);
 
-    // Release allocation
-    ground_truth.release();
 }
 
 int main(int argc, char** argv)
