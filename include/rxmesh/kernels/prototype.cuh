@@ -4,59 +4,69 @@ namespace rxmesh {
 namespace detail {
 
 /**
- * query_prototype() represents the minimal user function for op query.
+ * @brief represents the minimal user function for op query.
  * This function is only used in order to calculate the static shared memory and
- * registers used
+ * registers used given a certain query operation and block size
  */
-template <Op op, uint32_t blockThreads>
+template <Op       op,
+          uint32_t blockThreads,
+          typename InputHandleT,
+          typename OutputHandleT>
 __launch_bounds__(blockThreads) __global__
     static void query_prototype(const RXMeshContext context,
                                 const bool          oriented = false)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
-    auto user_lambda = [&](uint32_t id, RXMeshIterator& iter) {
+    auto user_lambda = [&](InputHandleT&                    id,
+                           RXMeshIteratorV1<OutputHandleT>& iter) {
         printf("\n iter.size() = %u", iter.size());
         for (uint32_t i = 0; i < iter.size(); ++i) {
-            printf("\n iter[%u] = %u", i, iter[i]);
+            printf("\n iter[%u] = %lu", i, iter[i].unique_id());
         }
     };
-
     query_block_dispatcher<op, blockThreads>(context, user_lambda, oriented);
 }
 
 /**
- * higher_query_prototype() represents the minimal user function for higeher
- * queries. Higher we assume that all query of similar type. This function is
- * only used in order to calculate the static shared memory and registers used/
+ * @brief  represents the minimal user function for higher
+ * queries. Here we assume that all query of similar type. This function is
+ * only used in order to calculate the static shared memory and registers used
  */
-template <Op op, uint32_t blockThreads>
+template <Op       op,
+          uint32_t blockThreads,
+          typename InputHandleT,
+          typename OutputHandleT>
 __launch_bounds__(blockThreads) __global__
     static void higher_query_prototype(const RXMeshContext context,
                                        const bool          oriented = false)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
-    uint32_t thread_element;
-    auto     first_ring = [&](uint32_t id, RXMeshIterator& iter) {
+    InputHandleT thread_element;
+    auto         first_ring = [&](InputHandleT                     id,
+                          RXMeshIteratorV1<OutputHandleT>& iter) {
         thread_element = id;
         printf("\n iter.size() = %u", iter.size());
         for (uint32_t i = 0; i < iter.size(); ++i) {
-            printf("\n iter[%u] = %u", i, iter[i]);
+            printf("\n iter[%u] = %lu", i, iter[i].unique_id());
         }
     };
 
-    query_block_dispatcher<op, blockThreads>(context, first_ring, oriented);
+    // TODO enable this when higher query are implemented using handle
+    // query_block_dispatcher<op, blockThreads>(context, first_ring,
+    // oriented);
 
-    auto n_ring = [&](uint32_t id, RXMeshIterator& iter) {
+    auto n_ring = [&](InputHandleT id, RXMeshIteratorV1<OutputHandleT>& iter) {
         printf("\n iter.size() = %u", iter.size());
         for (uint32_t i = 0; i < iter.size(); ++i) {
-            printf("\n iter[%u] = %u", i, iter[i]);
+            printf("\n iter[%u] = %lu", i, iter[i].unique_id());
         }
     };
 
-    query_block_dispatcher<op, blockThreads>(
-        context, thread_element, n_ring, oriented);
+    // TODO enable this when higher query are implemented using handle
+    // query_block_dispatcher<op, blockThreads>(
+    //    context, thread_element, n_ring, oriented);
 }
 
 }  // namespace detail

@@ -44,7 +44,7 @@ __launch_bounds__(blockThreads, 6) __global__
         }
     };
 
-    query_block_dispatcher_v1<Op::FV, blockThreads>(context, vn_lambda);
+    query_block_dispatcher<Op::FV, blockThreads>(context, vn_lambda);
 }
 
 
@@ -492,7 +492,7 @@ __launch_bounds__(blockThreads) __global__ static void bilateral_filtering(
         }
     };
 
-    query_block_dispatcher_v1<Op::VV, blockThreads>(context, first_ring);
+    query_block_dispatcher<Op::VV, blockThreads>(context, first_ring);
     __syncthreads();
 
 
@@ -529,7 +529,7 @@ __launch_bounds__(blockThreads) __global__ static void bilateral_filtering(
         };
 
 
-        // query_block_dispatcher_v1<Op::VV, blockThreads>(
+        // query_block_dispatcher<Op::VV, blockThreads>(
         //    context, next_vertex, n_rings);
 
         bool is_done = (next_id > num_vv - 1) || !v_id.is_valid();

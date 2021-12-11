@@ -37,6 +37,6 @@ __launch_bounds__(blockThreads) __global__
         }
     };
 
-    query_block_dispatcher_v1<op, blockThreads>(
+    query_block_dispatcher<op, blockThreads>(
         context, store_lambda, oriented);
 }

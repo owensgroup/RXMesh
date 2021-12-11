@@ -35,5 +35,5 @@ __launch_bounds__(blockThreads, 6) __global__
         }
     };
 
-    query_block_dispatcher_v1<Op::FV, blockThreads>(context, vn_lambda);
+    query_block_dispatcher<Op::FV, blockThreads>(context, vn_lambda);
 }

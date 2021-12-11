@@ -98,7 +98,7 @@ __launch_bounds__(blockThreads) __global__
 
     // With uniform Laplacian, we just need the valence, thus we
     // call query_block_dispatcher and set oriented to false
-    query_block_dispatcher_v1<Op::VV, blockThreads>(
+    query_block_dispatcher<Op::VV, blockThreads>(
         context, init_lambda, !use_uniform_laplace);
 }
 
@@ -195,6 +195,6 @@ __launch_bounds__(blockThreads) __global__
 
     // With uniform Laplacian, we just need the valence, thus we
     // call query_block_dispatcher and set oriented to false
-    query_block_dispatcher_v1<Op::VV, blockThreads>(
+    query_block_dispatcher<Op::VV, blockThreads>(
         context, matvec_lambda, !use_uniform_laplace);
 }

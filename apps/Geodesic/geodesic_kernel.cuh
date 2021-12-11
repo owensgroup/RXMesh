@@ -127,6 +127,6 @@ __launch_bounds__(blockThreads) __global__ static void relax_ptp_rxmesh(
     };
 
 
-    query_block_dispatcher_v1<Op::VV, blockThreads>(
+    query_block_dispatcher<Op::VV, blockThreads>(
         context, geo_lambda, in_active_set, true);
 }

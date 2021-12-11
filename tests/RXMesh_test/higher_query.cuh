@@ -45,7 +45,7 @@ __launch_bounds__(blockThreads) __global__ static void higher_query(
         }
     };
 
-    query_block_dispatcher_v1<op, blockThreads>(context, first_level_lambda);
+    query_block_dispatcher<op, blockThreads>(context, first_level_lambda);
 
     uint32_t next_id = 0;
     while (true) {
@@ -78,7 +78,7 @@ __launch_bounds__(blockThreads) __global__ static void higher_query(
             }
         };
 
-        //query_block_dispatcher_v1<op, blockThreads>(
+        // query_block_dispatcher<op, blockThreads>(
         //    context, next_vertex, second_level_lambda);
 
         bool is_done =

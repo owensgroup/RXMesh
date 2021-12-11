@@ -16,7 +16,7 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "dragon.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     uint32_t    device_id     = 0;
     char**      argv;

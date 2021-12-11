@@ -716,10 +716,17 @@ class RXMeshStatic : public RXMesh
                 if (is_higher_query) {
                     CUDA_ERROR(cudaFuncGetAttributes(
                         &func_attr,
-                        detail::higher_query_prototype<Op::VV, threads>));
+                        detail::higher_query_prototype<Op::VV,
+                                                       threads,
+                                                       VertexHandle,
+                                                       VertexHandle>));
                 } else {
                     CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr, detail::query_prototype<Op::VV, threads>));
+                        &func_attr,
+                        detail::query_prototype<Op::VV,
+                                                threads,
+                                                VertexHandle,
+                                                VertexHandle>));
                 }
 
                 break;
@@ -728,10 +735,17 @@ class RXMeshStatic : public RXMesh
                 if (is_higher_query) {
                     CUDA_ERROR(cudaFuncGetAttributes(
                         &func_attr,
-                        detail::higher_query_prototype<Op::VE, threads>));
+                        detail::higher_query_prototype<Op::VE,
+                                                       threads,
+                                                       VertexHandle,
+                                                       EdgeHandle>));
                 } else {
                     CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr, detail::query_prototype<Op::VE, threads>));
+                        &func_attr,
+                        detail::query_prototype<Op::VE,
+                                                threads,
+                                                VertexHandle,
+                                                EdgeHandle>));
                 }
                 break;
             }
@@ -739,10 +753,17 @@ class RXMeshStatic : public RXMesh
                 if (is_higher_query) {
                     CUDA_ERROR(cudaFuncGetAttributes(
                         &func_attr,
-                        detail::higher_query_prototype<Op::VF, threads>));
+                        detail::higher_query_prototype<Op::VF,
+                                                       threads,
+                                                       VertexHandle,
+                                                       FaceHandle>));
                 } else {
                     CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr, detail::query_prototype<Op::VF, threads>));
+                        &func_attr,
+                        detail::query_prototype<Op::VF,
+                                                threads,
+                                                VertexHandle,
+                                                FaceHandle>));
                 }
                 break;
             }
@@ -750,10 +771,17 @@ class RXMeshStatic : public RXMesh
                 if (is_higher_query) {
                     CUDA_ERROR(cudaFuncGetAttributes(
                         &func_attr,
-                        detail::higher_query_prototype<Op::EV, threads>));
+                        detail::higher_query_prototype<Op::EV,
+                                                       threads,
+                                                       EdgeHandle,
+                                                       VertexHandle>));
                 } else {
                     CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr, detail::query_prototype<Op::EV, threads>));
+                        &func_attr,
+                        detail::query_prototype<Op::EV,
+                                                threads,
+                                                EdgeHandle,
+                                                VertexHandle>));
                 }
                 break;
             }
@@ -764,10 +792,17 @@ class RXMeshStatic : public RXMesh
                 if (is_higher_query) {
                     CUDA_ERROR(cudaFuncGetAttributes(
                         &func_attr,
-                        detail::higher_query_prototype<Op::EF, threads>));
+                        detail::higher_query_prototype<Op::EF,
+                                                       threads,
+                                                       EdgeHandle,
+                                                       FaceHandle>));
                 } else {
                     CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr, detail::query_prototype<Op::EF, threads>));
+                        &func_attr,
+                        detail::query_prototype<Op::EF,
+                                                threads,
+                                                EdgeHandle,
+                                                FaceHandle>));
                 }
                 break;
             }
@@ -775,10 +810,17 @@ class RXMeshStatic : public RXMesh
                 if (is_higher_query) {
                     CUDA_ERROR(cudaFuncGetAttributes(
                         &func_attr,
-                        detail::higher_query_prototype<Op::FV, threads>));
+                        detail::higher_query_prototype<Op::FV,
+                                                       threads,
+                                                       FaceHandle,
+                                                       VertexHandle>));
                 } else {
                     CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr, detail::query_prototype<Op::FV, threads>));
+                        &func_attr,
+                        detail::query_prototype<Op::FV,
+                                                threads,
+                                                FaceHandle,
+                                                VertexHandle>));
                 }
                 break;
             }
@@ -786,10 +828,17 @@ class RXMeshStatic : public RXMesh
                 if (is_higher_query) {
                     CUDA_ERROR(cudaFuncGetAttributes(
                         &func_attr,
-                        detail::higher_query_prototype<Op::FE, threads>));
+                        detail::higher_query_prototype<Op::FE,
+                                                       threads,
+                                                       FaceHandle,
+                                                       EdgeHandle>));
                 } else {
                     CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr, detail::query_prototype<Op::FE, threads>));
+                        &func_attr,
+                        detail::query_prototype<Op::FE,
+                                                threads,
+                                                FaceHandle,
+                                                EdgeHandle>));
                 }
                 break;
             }
@@ -797,10 +846,17 @@ class RXMeshStatic : public RXMesh
                 if (is_higher_query) {
                     CUDA_ERROR(cudaFuncGetAttributes(
                         &func_attr,
-                        detail::higher_query_prototype<Op::FF, threads>));
+                        detail::higher_query_prototype<Op::FF,
+                                                       threads,
+                                                       FaceHandle,
+                                                       FaceHandle>));
                 } else {
                     CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr, detail::query_prototype<Op::FF, threads>));
+                        &func_attr,
+                        detail::query_prototype<Op::FF,
+                                                threads,
+                                                FaceHandle,
+                                                FaceHandle>));
                 }
                 break;
             }
@@ -815,8 +871,7 @@ class RXMeshStatic : public RXMesh
 
         if (!this->m_quite) {
             RXMESH_TRACE(
-                "RXMeshStatic::check_shared_memory() query_prototype with "
-                "{} "
+                "RXMeshStatic::check_shared_memory() query_prototype with {} "
                 "required shared memory = {} (dynamic) +  {} (static) = {} "
                 "(bytes) and {} registers",
                 op_to_string(op),
