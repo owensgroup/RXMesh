@@ -8,7 +8,7 @@
 #include <numeric>
 #include <queue>
 #include "patcher/patcher.h"
-#include "rxmesh/rxmesh_context.h"
+#include "rxmesh/context.h"
 #include "rxmesh/util/export_tools.h"
 #include "rxmesh/util/math.h"
 #include "rxmesh/util/util.h"
@@ -107,7 +107,7 @@ RXMesh::~RXMesh()
     GPU_FREE(m_d_ad_size_ltog_v);
     GPU_FREE(m_d_ad_size_ltog_e);
     GPU_FREE(m_d_ad_size_ltog_f);
-    GPU_FREE(m_d_ad_size);    
+    GPU_FREE(m_d_ad_size);
     for (uint32_t p = 0; p < m_num_patches; ++p) {
         free(m_h_patches_info[p].not_owned_patch_v);
         free(m_h_patches_info[p].not_owned_patch_e);
@@ -601,64 +601,64 @@ void RXMesh::build_device()
 
         // copy not-owned mesh elements to device
 
-        auto populate_not_owned = [p](const std::vector<std::vector<uint32_t>>&
-                                          ltog,
-                                      const std::vector<uint32_t>&
-                                          element_patch,
-                                      const std::vector<uint16_t>& num_owned,
-                                      auto*&     d_not_owned_id,
-                                      uint32_t*& d_not_owned_patch,
-                                      auto*&     h_not_owned_id,
-                                      uint32_t*& h_not_owned_patch) {
-            using LocalT =
-                typename std::remove_reference<decltype(*d_not_owned_id)>::type;
+        auto populate_not_owned =
+            [p](const std::vector<std::vector<uint32_t>>& ltog,
+                const std::vector<uint32_t>&              element_patch,
+                const std::vector<uint16_t>&              num_owned,
+                auto*&                                    d_not_owned_id,
+                uint32_t*&                                d_not_owned_patch,
+                auto*&                                    h_not_owned_id,
+                uint32_t*&                                h_not_owned_patch) {
+                using LocalT = typename std::remove_reference<decltype(
+                    *d_not_owned_id)>::type;
 
-            const uint16_t num_not_owned = ltog[p].size() - num_owned[p];
+                const uint16_t num_not_owned = ltog[p].size() - num_owned[p];
 
-            h_not_owned_id = (LocalT*)malloc(num_not_owned * sizeof(LocalT));
-            h_not_owned_patch =
-                (uint32_t*)malloc(num_not_owned * sizeof(uint32_t));
+                h_not_owned_id =
+                    (LocalT*)malloc(num_not_owned * sizeof(LocalT));
+                h_not_owned_patch =
+                    (uint32_t*)malloc(num_not_owned * sizeof(uint32_t));
 
-            for (uint16_t i = 0; i < num_not_owned; ++i) {
-                uint16_t local_id     = i + num_owned[p];
-                uint32_t global_id    = ltog[p][local_id];
-                uint32_t owning_patch = element_patch[global_id];
-                h_not_owned_patch[i]  = owning_patch;
+                for (uint16_t i = 0; i < num_not_owned; ++i) {
+                    uint16_t local_id     = i + num_owned[p];
+                    uint32_t global_id    = ltog[p][local_id];
+                    uint32_t owning_patch = element_patch[global_id];
+                    h_not_owned_patch[i]  = owning_patch;
 
-                auto it = std::lower_bound(
-                    ltog[owning_patch].begin(),
-                    ltog[owning_patch].begin() + num_owned[owning_patch],
-                    global_id);
+                    auto it = std::lower_bound(
+                        ltog[owning_patch].begin(),
+                        ltog[owning_patch].begin() + num_owned[owning_patch],
+                        global_id);
 
-                if (it ==
-                    ltog[owning_patch].begin() + num_owned[owning_patch]) {
-                    RXMESH_ERROR(
-                        "rxmesh::build_device can not find the local id of "
-                        "{} in patch {}. Maybe this patch does not own "
-                        "this mesh element.",
-                        global_id,
-                        owning_patch);
-                } else {
-                    h_not_owned_id[i].id =
-                        static_cast<uint16_t>(it - ltog[owning_patch].begin());
+                    if (it ==
+                        ltog[owning_patch].begin() + num_owned[owning_patch]) {
+                        RXMESH_ERROR(
+                            "rxmesh::build_device can not find the local id of "
+                            "{} in patch {}. Maybe this patch does not own "
+                            "this mesh element.",
+                            global_id,
+                            owning_patch);
+                    } else {
+                        h_not_owned_id[i].id = static_cast<uint16_t>(
+                            it - ltog[owning_patch].begin());
+                    }
                 }
-            }
 
-            // Copy to device
-            CUDA_ERROR(cudaMalloc((void**)&d_not_owned_id,
-                                  sizeof(LocalT) * num_not_owned));
-            CUDA_ERROR(cudaMemcpy(d_not_owned_id,
-                                  h_not_owned_id,
-                                  sizeof(LocalT) * num_not_owned,
-                                  cudaMemcpyHostToDevice));
+                // Copy to device
+                CUDA_ERROR(cudaMalloc((void**)&d_not_owned_id,
+                                      sizeof(LocalT) * num_not_owned));
+                CUDA_ERROR(cudaMemcpy(d_not_owned_id,
+                                      h_not_owned_id,
+                                      sizeof(LocalT) * num_not_owned,
+                                      cudaMemcpyHostToDevice));
 
-            CUDA_ERROR(cudaMalloc((void**)&d_not_owned_patch,
-                                  sizeof(uint32_t) * num_not_owned));
-            CUDA_ERROR(cudaMemcpy(d_not_owned_patch,
-                                  h_not_owned_patch,
-                                  sizeof(uint32_t) * num_not_owned,
-                                  cudaMemcpyHostToDevice));
-        };
+                CUDA_ERROR(cudaMalloc((void**)&d_not_owned_patch,
+                                      sizeof(uint32_t) * num_not_owned));
+                CUDA_ERROR(cudaMemcpy(d_not_owned_patch,
+                                      h_not_owned_patch,
+                                      sizeof(uint32_t) * num_not_owned,
+                                      cudaMemcpyHostToDevice));
+            };
 
 
         populate_not_owned(m_h_patches_ltog_f,

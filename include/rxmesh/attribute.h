@@ -3,11 +3,11 @@
 #include <assert.h>
 #include <utility>
 
+#include "rxmesh/kernels/attribute.cuh"
 #include "rxmesh/kernels/collective.cuh"
-#include "rxmesh/kernels/rxmesh_attribute.cuh"
 #include "rxmesh/kernels/util.cuh"
 #include "rxmesh/patch_info.h"
-#include "rxmesh/rxmesh_types.h"
+#include "rxmesh/types.h"
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/util.h"
@@ -18,56 +18,23 @@ class RXMeshTest;
 
 namespace rxmesh {
 
-// Flags for where the attributes array resides
-using locationT = uint32_t;
-enum : locationT
-{
-    LOCATION_NONE = 0x00,
-    HOST          = 0x01,
-    DEVICE        = 0x02,
-    LOCATION_ALL  = 0x0F,
-};
-
-// The memory layout
-using layoutT = uint32_t;
-enum : layoutT
-{
-    AoS = 0x00,
-    SoA = 0x01,
-};
-
-static std::string location_to_string(locationT location)
-{
-    std::string str = "";
-    if ((location & HOST) == HOST) {
-        str = (str == "" ? "" : " ") + std::string("HOST");
-    }
-    if ((location & DEVICE) == DEVICE) {
-        str = (str == "" ? "" : " ") + std::string("DEVICE");
-    }
-    if (str == "") {
-        str = "NONE";
-    }
-    return str;
-}
-
 
 /**
  * @brief Base untyped attributes used as an interface for attribute container
  */
-class RXMeshAttributeBase
+class AttributeBase
 {
     // our friend tester class
     friend class ::RXMeshTest;
 
    public:
-    RXMeshAttributeBase() = default;
+    AttributeBase() = default;
 
     virtual const char* get_name() const = 0;
 
     virtual void release(locationT location = LOCATION_ALL) = 0;
 
-    virtual ~RXMeshAttributeBase() = default;
+    virtual ~AttributeBase() = default;
 };
 
 /**
@@ -75,19 +42,19 @@ class RXMeshAttributeBase
  * attached to mesh element (e.g., vertices, edges, or faces).
  * largely inspired by
  * https://github.com/gunrock/gunrock/blob/master/gunrock/util/array_utils.cuh
- * It is discouraged to use RXMeshAttribute directly in favor of using
+ * It is discouraged to use Attribute directly in favor of using
  * add_X_attributes() from RXMeshStatic.
  * @tparam T type of the attribute
  */
 template <class T>
-class RXMeshAttribute : public RXMeshAttributeBase
+class Attribute : public AttributeBase
 {
     template <typename S>
     friend class ReduceHandle;
 
    public:
-    RXMeshAttribute()
-        : RXMeshAttributeBase(),
+    Attribute()
+        : AttributeBase(),
           m_name(nullptr),
           m_num_attributes(0),
           m_allocated(LOCATION_NONE),
@@ -104,12 +71,12 @@ class RXMeshAttribute : public RXMeshAttributeBase
         this->m_name[0] = '\0';
     }
 
-    RXMeshAttribute(const char* name)
-        : RXMeshAttributeBase(),
+    Attribute(const char* name)
+        : AttributeBase(),
           m_name(nullptr),
           m_num_attributes(0),
           m_allocated(LOCATION_NONE),
-          m_h_attr(nullptr),          
+          m_h_attr(nullptr),
           m_h_ptr_on_device(nullptr),
           m_d_attr(nullptr),
           m_num_patches(0),
@@ -123,9 +90,9 @@ class RXMeshAttribute : public RXMeshAttributeBase
         }
     }
 
-    RXMeshAttribute(const RXMeshAttribute& rhs) = default;
+    Attribute(const Attribute& rhs) = default;
 
-    virtual ~RXMeshAttribute() = default;
+    virtual ~Attribute() = default;
 
 
     const char* get_name() const
@@ -204,7 +171,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
     {
         if (source == target) {
             RXMESH_WARN(
-                "RXMeshAttribute::move() source ({}) and target ({}) "
+                "Attribute::move() source ({}) and target ({}) "
                 "are the same.",
                 location_to_string(source),
                 location_to_string(target));
@@ -214,7 +181,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
         if ((source == HOST || source == DEVICE) &&
             ((source & m_allocated) != source)) {
             RXMESH_ERROR(
-                "RXMeshAttribute::move() moving source is not valid"
+                "Attribute::move() moving source is not valid"
                 " because it was not allocated on source i.e., {}",
                 location_to_string(source));
         }
@@ -222,7 +189,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
         if (((target & HOST) == HOST || (target & DEVICE) == DEVICE) &&
             ((target & m_allocated) != target)) {
             RXMESH_WARN(
-                "RXMeshAttribute::move() allocating target before moving to {}",
+                "Attribute::move() allocating target before moving to {}",
                 location_to_string(target));
             allocate(m_h_element_per_patch, target);
         }
@@ -278,10 +245,10 @@ class RXMeshAttribute : public RXMeshAttributeBase
     }
 
 
-    void copy_from(RXMeshAttribute<T>& source,
-                   locationT           source_flag,
-                   locationT           location_flag,
-                   cudaStream_t        stream = NULL)
+    void copy_from(Attribute<T>& source,
+                   locationT     source_flag,
+                   locationT     location_flag,
+                   cudaStream_t  stream = NULL)
     {
         // Deep copy from source. The source_flag defines where we will copy
         // from. The location_flag defines where we will copy to.
@@ -299,18 +266,18 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
         if (source.m_layout != m_layout) {
             RXMESH_ERROR(
-                "RXMeshAttribute::copy_from() does not support copy from "
+                "Attribute::copy_from() does not support copy from "
                 "source of different layout!");
         }
 
         if ((source_flag & LOCATION_ALL) == LOCATION_ALL &&
             (location_flag & LOCATION_ALL) != LOCATION_ALL) {
-            RXMESH_ERROR("RXMeshAttribute::copy_from() Invalid configuration!");
+            RXMESH_ERROR("Attribute::copy_from() Invalid configuration!");
         }
 
         if (m_num_attributes != source.get_num_attributes()) {
             RXMESH_ERROR(
-                "RXMeshAttribute::copy_from() number of attributes is "
+                "Attribute::copy_from() number of attributes is "
                 "different!");
         }
 
@@ -322,12 +289,12 @@ class RXMeshAttribute : public RXMeshAttributeBase
         if ((source_flag & HOST) == HOST && (location_flag & HOST) == HOST) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
+                    "Attribute::copy() copying source is not valid"
                     " because it was not allocated on host");
             }
             if ((location_flag & m_allocated) != location_flag) {
                 RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
+                    "Attribute::copy() copying source is not valid"
                     " because location (this) was not allocated on host");
             }
 
@@ -347,12 +314,12 @@ class RXMeshAttribute : public RXMeshAttributeBase
             (location_flag & DEVICE) == DEVICE) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
+                    "Attribute::copy() copying source is not valid"
                     " because it was not allocated on device");
             }
             if ((location_flag & m_allocated) != location_flag) {
                 RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
+                    "Attribute::copy() copying source is not valid"
                     " because location (this) was not allocated on device");
             }
 
@@ -374,12 +341,12 @@ class RXMeshAttribute : public RXMeshAttributeBase
             (location_flag & HOST) == HOST) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
+                    "Attribute::copy() copying source is not valid"
                     " because it was not allocated on host");
             }
             if ((location_flag & m_allocated) != location_flag) {
                 RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
+                    "Attribute::copy() copying source is not valid"
                     " because location (this) was not allocated on device");
             }
 
@@ -402,12 +369,12 @@ class RXMeshAttribute : public RXMeshAttributeBase
             (location_flag & DEVICE) == DEVICE) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
+                    "Attribute::copy() copying source is not valid"
                     " because it was not allocated on device");
             }
             if ((location_flag & m_allocated) != location_flag) {
                 RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
+                    "Attribute::copy() copying source is not valid"
                     " because location (this) was not allocated on host");
             }
 
@@ -553,19 +520,19 @@ class RXMeshAttribute : public RXMeshAttributeBase
  * @tparam T the attribute type
  */
 template <class T>
-class RXMeshFaceAttribute : public RXMeshAttribute<T>
+class FaceAttribute : public Attribute<T>
 {
    public:
-    RXMeshFaceAttribute() = default;
+    FaceAttribute() = default;
 
-    RXMeshFaceAttribute(const char*                  name,
-                        const std::vector<uint16_t>& face_per_patch,
-                        const uint32_t               num_attributes,
-                        locationT                    location,
-                        const layoutT                layout,
-                        const PatchInfo*             h_patches_info,
-                        const PatchInfo*             d_patches_info)
-        : RXMeshAttribute<T>(name),
+    FaceAttribute(const char*                  name,
+                  const std::vector<uint16_t>& face_per_patch,
+                  const uint32_t               num_attributes,
+                  locationT                    location,
+                  const layoutT                layout,
+                  const PatchInfo*             h_patches_info,
+                  const PatchInfo*             d_patches_info)
+        : Attribute<T>(name),
           m_h_patches_info(h_patches_info),
           m_d_patches_info(d_patches_info)
     {
@@ -582,7 +549,7 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
         auto pl = m_h_patches_info[f_handle.m_patch_id].get_patch_and_local_id(
             f_handle);
 #endif
-        return RXMeshAttribute<T>::operator()(pl.first, pl.second, attr);
+        return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(
@@ -601,7 +568,7 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
         auto pl = m_h_patches_info[f_handle.m_patch_id].get_patch_and_local_id(
             f_handle);
 #endif
-        return RXMeshAttribute<T>::operator()(pl.first, pl.second, attr);
+        return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle)
@@ -620,19 +587,19 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
  * @tparam T the attribute type
  */
 template <class T>
-class RXMeshEdgeAttribute : public RXMeshAttribute<T>
+class EdgeAttribute : public Attribute<T>
 {
    public:
-    RXMeshEdgeAttribute() = default;
+    EdgeAttribute() = default;
 
-    RXMeshEdgeAttribute(const char*                  name,
-                        const std::vector<uint16_t>& edge_per_patch,
-                        const uint32_t               num_attributes,
-                        locationT                    location,
-                        const layoutT                layout,
-                        const PatchInfo*             h_patches_info,
-                        const PatchInfo*             d_patches_info)
-        : RXMeshAttribute<T>(name),
+    EdgeAttribute(const char*                  name,
+                  const std::vector<uint16_t>& edge_per_patch,
+                  const uint32_t               num_attributes,
+                  locationT                    location,
+                  const layoutT                layout,
+                  const PatchInfo*             h_patches_info,
+                  const PatchInfo*             d_patches_info)
+        : Attribute<T>(name),
           m_h_patches_info(h_patches_info),
           m_d_patches_info(d_patches_info)
     {
@@ -649,7 +616,7 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
         auto pl = m_h_patches_info[e_handle.m_patch_id].get_patch_and_local_id(
             e_handle);
 #endif
-        return RXMeshAttribute<T>::operator()(pl.first, pl.second, attr);
+        return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(
@@ -668,7 +635,7 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
         auto pl = m_h_patches_info[e_handle.m_patch_id].get_patch_and_local_id(
             e_handle);
 #endif
-        return RXMeshAttribute<T>::operator()(pl.first, pl.second, attr);
+        return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle)
@@ -687,19 +654,19 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
  * @tparam T the attribute type
  */
 template <class T>
-class RXMeshVertexAttribute : public RXMeshAttribute<T>
+class VertexAttribute : public Attribute<T>
 {
    public:
-    RXMeshVertexAttribute() = default;
+    VertexAttribute() = default;
 
-    RXMeshVertexAttribute(const char*                  name,
-                          const std::vector<uint16_t>& vertex_per_patch,
-                          const uint32_t               num_attributes,
-                          locationT                    location,
-                          const layoutT                layout,
-                          const PatchInfo*             h_patches_info,
-                          const PatchInfo*             d_patches_info)
-        : RXMeshAttribute<T>(name),
+    VertexAttribute(const char*                  name,
+                    const std::vector<uint16_t>& vertex_per_patch,
+                    const uint32_t               num_attributes,
+                    locationT                    location,
+                    const layoutT                layout,
+                    const PatchInfo*             h_patches_info,
+                    const PatchInfo*             d_patches_info)
+        : Attribute<T>(name),
           m_h_patches_info(h_patches_info),
           m_d_patches_info(d_patches_info)
     {
@@ -718,7 +685,7 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
         auto pl = m_h_patches_info[v_handle.m_patch_id].get_patch_and_local_id(
             v_handle);
 #endif
-        return RXMeshAttribute<T>::operator()(pl.first, pl.second, attr);
+        return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(
@@ -738,7 +705,7 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
         auto pl = m_h_patches_info[v_handle.m_patch_id].get_patch_and_local_id(
             v_handle);
 #endif
-        return RXMeshAttribute<T>::operator()(pl.first, pl.second, attr);
+        return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
     __host__ __device__ __forceinline__ T& operator()(
@@ -755,12 +722,12 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
 /**
  * @brief Attribute container used to managing attributes from RXMeshStatic
  */
-class RXMeshAttributeContainer
+class AttributeContainer
 {
    public:
-    RXMeshAttributeContainer() = default;
+    AttributeContainer() = default;
 
-    virtual ~RXMeshAttributeContainer()
+    virtual ~AttributeContainer()
     {
         while (!m_attr_container.empty()) {
             m_attr_container.back()->release();
@@ -793,7 +760,7 @@ class RXMeshAttributeContainer
     {
         if (does_exist(name)) {
             RXMESH_WARN(
-                "RXMeshAttributeContainer::add() adding an attribute with "
+                "AttributeContainer::add() adding an attribute with "
                 "name {} already exists!",
                 std::string(name));
         }
@@ -806,7 +773,7 @@ class RXMeshAttributeContainer
                                                 h_patches_info,
                                                 d_patches_info);
         m_attr_container.push_back(
-            std::dynamic_pointer_cast<RXMeshAttributeBase>(new_attr));
+            std::dynamic_pointer_cast<AttributeBase>(new_attr));
 
         return new_attr;
     }
@@ -835,7 +802,7 @@ class RXMeshAttributeContainer
     }
 
    private:
-    std::vector<std::shared_ptr<RXMeshAttributeBase>> m_attr_container;
+    std::vector<std::shared_ptr<AttributeBase>> m_attr_container;
 };
 
 }  // namespace rxmesh

@@ -1,16 +1,14 @@
 #pragma once
 
-
-#include "rxmesh/rxmesh_attribute.h"
-
-#include "rxmesh/kernels/rxmesh_attribute.cuh"
+#include "rxmesh/attribute.h"
+#include "rxmesh/kernels/attribute.cuh"
 
 namespace rxmesh {
 
 /**
  * @brief This class is used to compute different reduction operations on
- * RXMeshAttribute. To create a new ReduceHandle, use create_reduce_handle()
- * from RXMeshAttribute
+ * Attribute. To create a new ReduceHandle, use create_reduce_handle()
+ * from Attribute
  * @tparam T The type of the attribute
  */
 template <typename T>
@@ -24,11 +22,10 @@ class ReduceHandle
     /**
      * @brief Constructor which allocates internal memory used in all reduce
      * operations
-     * @param attr one of RXMeshAttribute used for subsequent reduction
+     * @param attr one of Attribute used for subsequent reduction
      * operations
      */
-    ReduceHandle(const RXMeshAttribute<T>& attr)
-        : m_num_patches(attr.m_num_patches)
+    ReduceHandle(const Attribute<T>& attr) : m_num_patches(attr.m_num_patches)
     {
         CUDA_ERROR(
             cudaMalloc(&m_d_reduce_1st_stage, m_num_patches * sizeof(T)));
@@ -62,9 +59,9 @@ class ReduceHandle
      * @param stream stream to run the computation on
      * @return the output of dot product on the host
      */
-    T dot(const RXMeshAttribute<T>& attr1,
-          const RXMeshAttribute<T>& attr2,
-          cudaStream_t              stream = NULL)
+    T dot(const Attribute<T>& attr1,
+          const Attribute<T>& attr2,
+          cudaStream_t        stream = NULL)
     {
         if ((attr1.get_allocated() & DEVICE) != DEVICE ||
             (attr2.get_allocated() & DEVICE) != DEVICE) {
@@ -92,7 +89,7 @@ class ReduceHandle
      * @param stream stream to run the computation on
      * @return the output of L2 norm on the host
      */
-    T norm2(const RXMeshAttribute<T>& attr, cudaStream_t stream = NULL)
+    T norm2(const Attribute<T>& attr, cudaStream_t stream = NULL)
     {
         if ((attr.get_allocated() & DEVICE) != DEVICE) {
             RXMESH_ERROR(

@@ -2,12 +2,12 @@
 #include <assert.h>
 #include <cuda_profiler_api.h>
 #include <memory>
+#include "rxmesh/attribute.h"
 #include "rxmesh/kernels/for_each.cuh"
 #include "rxmesh/kernels/prototype.cuh"
 #include "rxmesh/launch_box.h"
 #include "rxmesh/rxmesh.h"
-#include "rxmesh/rxmesh_attribute.h"
-#include "rxmesh/rxmesh_types.h"
+#include "rxmesh/types.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/timer.h"
 
@@ -27,7 +27,7 @@ class RXMeshStatic : public RXMesh
                  const bool                          quite = true)
         : RXMesh(fv, quite)
     {
-        m_attr_container = std::make_shared<RXMeshAttributeContainer>();
+        m_attr_container = std::make_shared<AttributeContainer>();
     };
 
     virtual ~RXMeshStatic()
@@ -208,13 +208,13 @@ class RXMeshStatic : public RXMesh
      * @return shared pointer to the created attribute
      */
     template <class T>
-    std::shared_ptr<RXMeshFaceAttribute<T>> add_face_attribute(
+    std::shared_ptr<FaceAttribute<T>> add_face_attribute(
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location = LOCATION_ALL,
         layoutT            layout   = SoA)
     {
-        return m_attr_container->template add<RXMeshFaceAttribute<T>>(
+        return m_attr_container->template add<FaceAttribute<T>>(
             name.c_str(),
             this->m_h_num_owned_f,
             num_attributes,
@@ -238,7 +238,7 @@ class RXMeshStatic : public RXMesh
      * TODO implement this
      */
     template <class T>
-    std::shared_ptr<RXMeshVertexAttribute<T>> add_face_attribute(
+    std::shared_ptr<VertexAttribute<T>> add_face_attribute(
         const std::vector<std::vector<T>>& f_attributes,
         const std::string&                 name,
         layoutT                            layout = SoA)
@@ -259,7 +259,7 @@ class RXMeshStatic : public RXMesh
      * TODO implement this
      */
     template <class T>
-    std::shared_ptr<RXMeshVertexAttribute<T>> add_face_attribute(
+    std::shared_ptr<VertexAttribute<T>> add_face_attribute(
         const std::vector<T>& f_attributes,
         const std::string&    name,
         layoutT               layout = SoA)
@@ -278,13 +278,13 @@ class RXMeshStatic : public RXMesh
      * @return shared pointer to the created attribute
      */
     template <class T>
-    std::shared_ptr<RXMeshEdgeAttribute<T>> add_edge_attribute(
+    std::shared_ptr<EdgeAttribute<T>> add_edge_attribute(
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location = LOCATION_ALL,
         layoutT            layout   = SoA)
     {
-        return m_attr_container->template add<RXMeshEdgeAttribute<T>>(
+        return m_attr_container->template add<EdgeAttribute<T>>(
             name.c_str(),
             this->m_h_num_owned_e,
             num_attributes,
@@ -306,13 +306,13 @@ class RXMeshStatic : public RXMesh
      * @return shared pointer to the created attribute
      */
     template <class T>
-    std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
+    std::shared_ptr<VertexAttribute<T>> add_vertex_attribute(
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location = LOCATION_ALL,
         layoutT            layout   = SoA)
     {
-        return m_attr_container->template add<RXMeshVertexAttribute<T>>(
+        return m_attr_container->template add<VertexAttribute<T>>(
             name.c_str(),
             this->m_h_num_owned_v,
             num_attributes,
@@ -336,7 +336,7 @@ class RXMeshStatic : public RXMesh
      * @return shared pointer to the created attribute
      */
     template <class T>
-    std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
+    std::shared_ptr<VertexAttribute<T>> add_vertex_attribute(
         const std::vector<std::vector<T>>& v_attributes,
         const std::string&                 name,
         layoutT                            layout = SoA)
@@ -358,7 +358,7 @@ class RXMeshStatic : public RXMesh
 
         uint32_t num_attributes = v_attributes[0].size();
 
-        auto ret = m_attr_container->template add<RXMeshVertexAttribute<T>>(
+        auto ret = m_attr_container->template add<VertexAttribute<T>>(
             name.c_str(),
             this->m_h_num_owned_v,
             num_attributes,
@@ -402,7 +402,7 @@ class RXMeshStatic : public RXMesh
      * @return shared pointer to the created attribute
      */
     template <class T>
-    std::shared_ptr<RXMeshVertexAttribute<T>> add_vertex_attribute(
+    std::shared_ptr<VertexAttribute<T>> add_vertex_attribute(
         const std::vector<T>& v_attributes,
         const std::string&    name,
         layoutT               layout = SoA)
@@ -424,7 +424,7 @@ class RXMeshStatic : public RXMesh
 
         uint32_t num_attributes = 1;
 
-        auto ret = m_attr_container->template add<RXMeshVertexAttribute<T>>(
+        auto ret = m_attr_container->template add<VertexAttribute<T>>(
             name.c_str(),
             this->m_h_num_owned_v,
             num_attributes,
@@ -519,8 +519,8 @@ class RXMeshStatic : public RXMesh
      * @param coords vertices coordinates
      */
     template <typename T>
-    void export_obj(const std::string&              filename,
-                    const RXMeshVertexAttribute<T>& coords)
+    void export_obj(const std::string&        filename,
+                    const VertexAttribute<T>& coords)
     {
         std::string  fn = filename;
         std::fstream file(fn, std::ios::out);
@@ -548,7 +548,7 @@ class RXMeshStatic : public RXMesh
                 for (uint32_t e = 0; e < 3; ++e) {
                     uint16_t edge = this->m_h_patches_info[p].fe[3 * f + e].id;
                     flag_t   dir(0);
-                    RXMeshContext::unpack_edge_dir(edge, edge, dir);
+                    Context::unpack_edge_dir(edge, edge, dir);
                     uint16_t e_id = (2 * edge) + dir;
                     uint16_t v    = this->m_h_patches_info[p].ev[e_id].id;
                     file << v + num_v + 1 << " ";
@@ -900,6 +900,6 @@ class RXMeshStatic : public RXMesh
     }
 
 
-    std::shared_ptr<RXMeshAttributeContainer> m_attr_container;
+    std::shared_ptr<AttributeContainer> m_attr_container;
 };
 }  // namespace rxmesh

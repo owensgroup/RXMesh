@@ -4,7 +4,7 @@
 
 #include <cuda_profiler_api.h>
 #include "gtest/gtest.h"
-#include "rxmesh/rxmesh_attribute.h"
+#include "rxmesh/attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/report.h"

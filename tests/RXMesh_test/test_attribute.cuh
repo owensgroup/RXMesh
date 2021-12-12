@@ -1,12 +1,12 @@
 #include "gtest/gtest.h"
+#include "rxmesh/attribute.h"
 #include "rxmesh/reduce_handle.h"
-#include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/util/macros.h"
 
 template <typename T>
-void populate(rxmesh::RXMeshStatic&             rxmesh,
-              rxmesh::RXMeshVertexAttribute<T>& v,
-              T                                 val)
+void populate(rxmesh::RXMeshStatic&       rxmesh,
+              rxmesh::VertexAttribute<T>& v,
+              T                           val)
 {
     rxmesh.for_each_vertex(
         rxmesh::DEVICE,
@@ -17,9 +17,7 @@ void populate(rxmesh::RXMeshStatic&             rxmesh,
 
 
 template <typename T>
-void populate(rxmesh::RXMeshStatic&           rxmesh,
-              rxmesh::RXMeshFaceAttribute<T>& f,
-              T                               val)
+void populate(rxmesh::RXMeshStatic& rxmesh, rxmesh::FaceAttribute<T>& f, T val)
 {
     rxmesh.for_each_face(
         rxmesh::DEVICE,
@@ -29,11 +27,11 @@ void populate(rxmesh::RXMeshStatic&           rxmesh,
 }
 
 template <typename T>
-void populate(rxmesh::RXMeshStatic&             rxmesh,
-              rxmesh::RXMeshVertexAttribute<T>& v1,
-              rxmesh::RXMeshVertexAttribute<T>& v2,
-              T                                 v1_val,
-              T                                 v2_val)
+void populate(rxmesh::RXMeshStatic&       rxmesh,
+              rxmesh::VertexAttribute<T>& v1,
+              rxmesh::VertexAttribute<T>& v2,
+              T                           v1_val,
+              T                           v2_val)
 {
     rxmesh.for_each_vertex(
         rxmesh::DEVICE,
@@ -44,7 +42,7 @@ void populate(rxmesh::RXMeshStatic&             rxmesh,
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 }
 
-TEST(RXMeshAttribute, Norm2)
+TEST(Attribute, Norm2)
 {
     using namespace rxmesh;
 
@@ -78,7 +76,7 @@ TEST(RXMeshAttribute, Norm2)
 }
 
 
-TEST(RXMeshAttribute, Dot)
+TEST(Attribute, Dot)
 {
     using namespace rxmesh;
 
@@ -110,7 +108,7 @@ TEST(RXMeshAttribute, Dot)
 }
 
 
-TEST(RXMeshAttribute, CopyFrom)
+TEST(Attribute, CopyFrom)
 {
     using namespace rxmesh;
 
@@ -139,7 +137,7 @@ TEST(RXMeshAttribute, CopyFrom)
         HOST, [&](const FaceHandle fh) { EXPECT_EQ((*f_host)(fh), val); });
 }
 
-TEST(RXMeshAttribute, AddingAndRemoving)
+TEST(Attribute, AddingAndRemoving)
 {
     using namespace rxmesh;
 

@@ -3,11 +3,11 @@
 #include <assert.h>
 #include <stdint.h>
 
+#include "rxmesh/attribute.h"
+#include "rxmesh/context.h"
 #include "rxmesh/iterator.cuh"
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
-#include "rxmesh/rxmesh_attribute.h"
-#include "rxmesh/rxmesh_context.h"
-#include "rxmesh/rxmesh_types.h"
+#include "rxmesh/types.h"
 
 
 /**
@@ -21,10 +21,10 @@ template <uint32_t   blockThreads,
           typename InputAttributeT,
           typename OutputAttributeT>
 __launch_bounds__(blockThreads) __global__
-    static void query_kernel(const rxmesh::RXMeshContext context,
-                             InputAttributeT             input,
-                             OutputAttributeT            output,
-                             const bool                  oriented = false)
+    static void query_kernel(const rxmesh::Context context,
+                             InputAttributeT       input,
+                             OutputAttributeT      output,
+                             const bool            oriented = false)
 {
     using namespace rxmesh;
 

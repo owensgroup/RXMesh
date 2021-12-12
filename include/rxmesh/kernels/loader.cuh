@@ -3,8 +3,8 @@
 #include <assert.h>
 #include <stdint.h>
 
-#include "rxmesh/rxmesh_context.h"
-#include "rxmesh/rxmesh_types.h"
+#include "rxmesh/context.h"
+#include "rxmesh/types.h"
 
 namespace rxmesh {
 /**
@@ -18,9 +18,9 @@ namespace rxmesh {
  * @return
  * TODO remove
  */
-__device__ __forceinline__ void load_patch_ad_size(const RXMeshContext& context,
-                                                   const uint32_t       p_id,
-                                                   uint4&               ad_size,
+__device__ __forceinline__ void load_patch_ad_size(const Context& context,
+                                                   const uint32_t p_id,
+                                                   uint4&         ad_size,
                                                    uint2& ad_size_ltog_v,
                                                    uint2& ad_size_ltog_e,
                                                    uint2& ad_size_ltog_f)
@@ -44,11 +44,11 @@ __device__ __forceinline__ void load_patch_ad_size(const RXMeshContext& context,
  * @param patch_edges
  * @param ad_sz
  * @return
- * TODO remove 
+ * TODO remove
  */
-__device__ __forceinline__ void load_patch_edges(const RXMeshContext& context,
-                                                 uint16_t*    patch_edges,
-                                                 const uint4& ad_sz)
+__device__ __forceinline__ void load_patch_edges(const Context& context,
+                                                 uint16_t*      patch_edges,
+                                                 const uint4&   ad_sz)
 {
 
     // whole block should be calling this
@@ -73,9 +73,9 @@ __device__ __forceinline__ void load_patch_edges(const RXMeshContext& context,
  * @param ad_sz
  * @return
  */
-__device__ __forceinline__ void load_patch_faces(const RXMeshContext& context,
-                                                 uint16_t*    patch_faces,
-                                                 const uint4& ad_sz)
+__device__ __forceinline__ void load_patch_faces(const Context& context,
+                                                 uint16_t*      patch_faces,
+                                                 const uint4&   ad_sz)
 {
 
     // whole block should be calling this
@@ -111,10 +111,10 @@ __device__ __forceinline__ void load_patch_faces(const RXMeshContext& context,
  * @return
  * TODO remove
  */
-__device__ __forceinline__ void load_mapping(const RXMeshContext& context,
-                                             const ELEMENT        ele,
-                                             const uint2& s_ad_size_ltog,
-                                             uint32_t*    mapping)
+__device__ __forceinline__ void load_mapping(const Context& context,
+                                             const ELEMENT  ele,
+                                             const uint2&   s_ad_size_ltog,
+                                             uint32_t*      mapping)
 {
     // whole block should be calling this
     for (uint32_t i = threadIdx.x, start = s_ad_size_ltog.x;
@@ -150,12 +150,12 @@ __device__ __forceinline__ void load_mapping(const RXMeshContext& context,
  * @return
  * TODO remove
  */
-__device__ __forceinline__ void load_mesh(const RXMeshContext& context,
-                                          const bool           load_edges,
-                                          const bool           load_faces,
-                                          uint16_t*&           s_patch_edges,
-                                          uint16_t*&           s_patch_faces,
-                                          const uint4&         ad_size)
+__device__ __forceinline__ void load_mesh(const Context& context,
+                                          const bool     load_edges,
+                                          const bool     load_faces,
+                                          uint16_t*&     s_patch_edges,
+                                          uint16_t*&     s_patch_faces,
+                                          const uint4&   ad_size)
 {
 
     if (load_edges) {
@@ -211,7 +211,7 @@ template <uint32_t blockThreads>
 __device__ __forceinline__ void load_patch_EV(const PatchInfo& patch_info,
                                               LocalVertexT*    ev)
 {
-    const uint32_t        num_edges = patch_info.num_edges;
+    const uint32_t  num_edges = patch_info.num_edges;
     const uint32_t* input_ev32 =
         reinterpret_cast<const uint32_t*>(patch_info.ev);
     uint32_t* output_ev32 = reinterpret_cast<uint32_t*>(ev);

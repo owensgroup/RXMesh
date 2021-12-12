@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include "rxmesh/rxmesh_types.h"
+#include "rxmesh/types.h"
 
 namespace rxmesh {
 

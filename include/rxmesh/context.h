@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 #include "rxmesh/patch_info.h"
-#include "rxmesh/rxmesh_types.h"
+#include "rxmesh/types.h"
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
@@ -11,11 +11,11 @@ namespace rxmesh {
 // on rxmesh. this class is meant to be a vehicle to copy various parameters
 // to the device kernels.
 // TODO make sure that __align__(16) is the right one
-class __align__(16) RXMeshContext
+class __align__(16) Context
 {
 
    public:
-    RXMeshContext()
+    Context()
         : m_num_edges(0),
           m_num_faces(0),
           m_num_vertices(0),
@@ -90,7 +90,7 @@ class __align__(16) RXMeshContext
         m_d_num_owned_e           = d_num_owned_e;
         m_d_num_owned_v           = d_num_owned_v;
         m_patches_info            = patches;
-    }   
+    }
 
     __device__ __forceinline__ uint32_t get_num_edges() const
     {

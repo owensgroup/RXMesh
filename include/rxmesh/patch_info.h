@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string>
 #include <utility>
-#include "rxmesh/rxmesh_types.h"
+#include "rxmesh/types.h"
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
@@ -49,7 +49,7 @@ struct ALIGN(16) PatchInfo
 
         if (l >= num_owned_vertices) {
             p = not_owned_patch_v[l - num_owned_vertices];
-            l = not_owned_id_v[l - num_owned_vertices].id;            
+            l = not_owned_id_v[l - num_owned_vertices].id;
         }
 
         return std::make_pair(p, l);

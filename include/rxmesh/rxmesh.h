@@ -4,10 +4,10 @@
 #include <memory>
 #include <unordered_map>
 #include <vector>
+#include "rxmesh/context.h"
 #include "rxmesh/patch_info.h"
 #include "rxmesh/patcher/patcher.h"
-#include "rxmesh/rxmesh_context.h"
-#include "rxmesh/rxmesh_types.h"
+#include "rxmesh/types.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
@@ -47,7 +47,7 @@ class RXMesh
         return m_max_face_adjacent_faces;
     }
 
-    const RXMeshContext& get_context() const
+    const Context& get_context() const
     {
         return m_rxmesh_context;
     }
@@ -171,7 +171,7 @@ class RXMesh
         const std::vector<std::vector<uint32_t>>& fv,
         const uint32_t                            patch_id);
 
-    
+
     void build_device();
 
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
@@ -180,7 +180,7 @@ class RXMesh
     // our friend tester class
     friend class ::RXMeshTest;
 
-    RXMeshContext m_rxmesh_context;
+    Context m_rxmesh_context;
 
     uint32_t m_num_edges, m_num_faces, m_num_vertices, m_max_valence,
         m_max_edge_incident_faces, m_max_face_adjacent_faces;

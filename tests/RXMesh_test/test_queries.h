@@ -4,7 +4,6 @@
 
 #include "gtest/gtest.h"
 
-#include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/math.h"

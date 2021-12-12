@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 #include "higher_query.cuh"
-#include "rxmesh/rxmesh_attribute.h"
+#include "rxmesh/attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh_test.h"

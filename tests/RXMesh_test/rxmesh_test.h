@@ -3,8 +3,8 @@
 #include <assert.h>
 #include <iomanip>
 #include <vector>
-#include "rxmesh/rxmesh_attribute.h"
-#include "rxmesh/rxmesh_context.h"
+#include "rxmesh/attribute.h"
+#include "rxmesh/context.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/util.h"
 
@@ -65,12 +65,11 @@ class RXMeshTest
      * @brief verify VV query. If is_higher_query is true, it verifies 2-ring
      * queries
      */
-    bool run_test(
-        const rxmesh::RXMeshStatic&                                rxmesh,
-        const std::vector<std::vector<uint32_t>>&                  fv,
-        const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& input,
-        const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& output,
-        const bool is_higher_query = false)
+    bool run_test(const rxmesh::RXMeshStatic&                          rxmesh,
+                  const std::vector<std::vector<uint32_t>>&            fv,
+                  const rxmesh::VertexAttribute<rxmesh::VertexHandle>& input,
+                  const rxmesh::VertexAttribute<rxmesh::VertexHandle>& output,
+                  const bool is_higher_query = false)
     {
         std::vector<std::vector<uint32_t>> v_v(rxmesh.get_num_vertices(),
                                                std::vector<uint32_t>(0));
@@ -137,11 +136,10 @@ class RXMeshTest
     /**
      * @brief verify VE query
      */
-    bool run_test(
-        const rxmesh::RXMeshStatic&                                rxmesh,
-        const std::vector<std::vector<uint32_t>>&                  fv,
-        const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& input,
-        const rxmesh::RXMeshVertexAttribute<rxmesh::EdgeHandle>&   output)
+    bool run_test(const rxmesh::RXMeshStatic&                          rxmesh,
+                  const std::vector<std::vector<uint32_t>>&            fv,
+                  const rxmesh::VertexAttribute<rxmesh::VertexHandle>& input,
+                  const rxmesh::VertexAttribute<rxmesh::EdgeHandle>&   output)
     {
         std::vector<std::vector<uint32_t>> v_e(rxmesh.m_num_vertices,
                                                std::vector<uint32_t>(0));
@@ -169,11 +167,10 @@ class RXMeshTest
     /**
      * @brief verify VF query
      */
-    bool run_test(
-        const rxmesh::RXMeshStatic&                                rxmesh,
-        const std::vector<std::vector<uint32_t>>&                  fv,
-        const rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle>& input,
-        const rxmesh::RXMeshVertexAttribute<rxmesh::FaceHandle>&   output)
+    bool run_test(const rxmesh::RXMeshStatic&                          rxmesh,
+                  const std::vector<std::vector<uint32_t>>&            fv,
+                  const rxmesh::VertexAttribute<rxmesh::VertexHandle>& input,
+                  const rxmesh::VertexAttribute<rxmesh::FaceHandle>&   output)
     {
 
         if (rxmesh.m_num_faces != fv.size()) {
@@ -202,11 +199,10 @@ class RXMeshTest
     /**
      * @brief verify EV query
      */
-    bool run_test(
-        const rxmesh::RXMeshStatic&                              rxmesh,
-        const std::vector<std::vector<uint32_t>>&                fv,
-        const rxmesh::RXMeshEdgeAttribute<rxmesh::EdgeHandle>&   input,
-        const rxmesh::RXMeshEdgeAttribute<rxmesh::VertexHandle>& output)
+    bool run_test(const rxmesh::RXMeshStatic&                        rxmesh,
+                  const std::vector<std::vector<uint32_t>>&          fv,
+                  const rxmesh::EdgeAttribute<rxmesh::EdgeHandle>&   input,
+                  const rxmesh::EdgeAttribute<rxmesh::VertexHandle>& output)
     {
 
         std::vector<std::vector<uint32_t>> e_v(rxmesh.m_num_edges,
@@ -232,10 +228,10 @@ class RXMeshTest
     /**
      * @brief verify EF query
      */
-    bool run_test(const rxmesh::RXMeshStatic&                            rxmesh,
-                  const std::vector<std::vector<uint32_t>>&              fv,
-                  const rxmesh::RXMeshEdgeAttribute<rxmesh::EdgeHandle>& input,
-                  const rxmesh::RXMeshEdgeAttribute<rxmesh::FaceHandle>& output)
+    bool run_test(const rxmesh::RXMeshStatic&                      rxmesh,
+                  const std::vector<std::vector<uint32_t>>&        fv,
+                  const rxmesh::EdgeAttribute<rxmesh::EdgeHandle>& input,
+                  const rxmesh::EdgeAttribute<rxmesh::FaceHandle>& output)
     {
         std::vector<std::vector<uint32_t>> e_f(rxmesh.m_num_edges,
                                                std::vector<uint32_t>(0));
@@ -260,11 +256,10 @@ class RXMeshTest
     /**
      * @brief verify FV query
      */
-    bool run_test(
-        const rxmesh::RXMeshStatic&                              rxmesh,
-        const std::vector<std::vector<uint32_t>>&                fv,
-        const rxmesh::RXMeshFaceAttribute<rxmesh::FaceHandle>&   input,
-        const rxmesh::RXMeshFaceAttribute<rxmesh::VertexHandle>& output)
+    bool run_test(const rxmesh::RXMeshStatic&                        rxmesh,
+                  const std::vector<std::vector<uint32_t>>&          fv,
+                  const rxmesh::FaceAttribute<rxmesh::FaceHandle>&   input,
+                  const rxmesh::FaceAttribute<rxmesh::VertexHandle>& output)
     {
         return verifier<rxmesh::FaceHandle, rxmesh::VertexHandle>(
             fv,
@@ -279,10 +274,10 @@ class RXMeshTest
     /**
      * @brief verify FE query
      */
-    bool run_test(const rxmesh::RXMeshStatic&                            rxmesh,
-                  const std::vector<std::vector<uint32_t>>&              fv,
-                  const rxmesh::RXMeshFaceAttribute<rxmesh::FaceHandle>& input,
-                  const rxmesh::RXMeshFaceAttribute<rxmesh::EdgeHandle>& output)
+    bool run_test(const rxmesh::RXMeshStatic&                      rxmesh,
+                  const std::vector<std::vector<uint32_t>>&        fv,
+                  const rxmesh::FaceAttribute<rxmesh::FaceHandle>& input,
+                  const rxmesh::FaceAttribute<rxmesh::EdgeHandle>& output)
     {
         return verifier<rxmesh::FaceHandle, rxmesh::EdgeHandle>(
             m_h_FE,
@@ -297,10 +292,10 @@ class RXMeshTest
     /**
      * @brief verify FF query
      */
-    bool run_test(const rxmesh::RXMeshStatic&                            rxmesh,
-                  const std::vector<std::vector<uint32_t>>&              fv,
-                  const rxmesh::RXMeshFaceAttribute<rxmesh::FaceHandle>& input,
-                  const rxmesh::RXMeshFaceAttribute<rxmesh::FaceHandle>& output)
+    bool run_test(const rxmesh::RXMeshStatic&                      rxmesh,
+                  const std::vector<std::vector<uint32_t>>&        fv,
+                  const rxmesh::FaceAttribute<rxmesh::FaceHandle>& input,
+                  const rxmesh::FaceAttribute<rxmesh::FaceHandle>& output)
     {
         std::vector<std::vector<uint32_t>> f_f(rxmesh.m_num_faces,
                                                std::vector<uint32_t>(0));
@@ -566,7 +561,7 @@ class RXMeshTest
                 // shift right because the first bit is reserved for edge
                 // direction
                 flag_t dir(0);
-                RXMeshContext::unpack_edge_dir(e_l[i], e_l[i], dir);
+                Context::unpack_edge_dir(e_l[i], e_l[i], dir);
             }
 
             // 3)

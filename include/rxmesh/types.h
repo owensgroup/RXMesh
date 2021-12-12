@@ -4,6 +4,64 @@
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
+/**
+ * @brief Flags for where data resides. Used with Attributes
+ */
+using locationT = uint32_t;
+enum : locationT
+{
+    LOCATION_NONE = 0x00,
+    HOST          = 0x01,
+    DEVICE        = 0x02,
+    LOCATION_ALL  = 0x0F,
+};
+
+/**
+ * @brief convert locationT to string
+ */
+static std::string location_to_string(const locationT location)
+{
+    switch (location) {
+        case LOCATION_NONE:
+            return "NONE";
+        case HOST:
+            return "HOST";
+        case DEVICE:
+            return "DEVICE";
+        case LOCATION_ALL:
+            return "ALL";
+        default: {
+            RXMESH_ERROR("to_string() unknown location");
+            return "";
+        }
+    }
+}
+
+/**
+ * @brief Memory layout
+ */
+using layoutT = uint32_t;
+enum : layoutT
+{
+    AoS = 0x00,
+    SoA = 0x01,
+};
+/**
+ * @brief convert locationT to string
+ */
+static std::string layout_to_string(const layoutT layout)
+{
+    switch (layout) {
+        case AoS:
+            return "AoS";
+        case SoA:
+            return "SoA";
+        default: {
+            RXMESH_ERROR("to_string() unknown layout");
+            return "";
+        }
+    }
+}
 
 /**
  * @brief ELEMENT represents the three types of mesh elements
@@ -36,7 +94,7 @@ enum class Op
  * @param op a query operation
  * @return name of the query operation as a string
  */
-inline std::string op_to_string(const Op& op)
+static std::string op_to_string(const Op& op)
 {
     switch (op) {
         case Op::VV:
@@ -58,7 +116,7 @@ inline std::string op_to_string(const Op& op)
         case Op::EE:
             return "EE";
         default: {
-            RXMESH_ERROR("op_to_string() unknown input operation");
+            RXMESH_ERROR("to_string() unknown input operation");
             return "";
         }
     }
@@ -161,7 +219,7 @@ struct ALIGN(8) VertexHandle
     using LocalT = LocalVertexT;
 
     template <typename T>
-    friend class RXMeshVertexAttribute;
+    friend class VertexAttribute;
     friend class RXMeshStatic;
     friend class PatchInfo;
 
@@ -218,7 +276,7 @@ struct ALIGN(8) EdgeHandle
     using LocalT = LocalEdgeT;
 
     template <typename T>
-    friend class RXMeshEdgeAttribute;
+    friend class EdgeAttribute;
     friend class RXMeshStatic;
     friend class PatchInfo;
 
@@ -272,7 +330,7 @@ struct ALIGN(8) FaceHandle
     using LocalT = LocalFaceT;
 
     template <typename T>
-    friend class RXMeshFaceAttribute;
+    friend class FaceAttribute;
     friend class RXMeshStatic;
     friend class PatchInfo;
 

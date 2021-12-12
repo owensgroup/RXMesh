@@ -3,11 +3,11 @@
 #include <assert.h>
 #include <stdint.h>
 
+#include "rxmesh/attribute.h"
+#include "rxmesh/context.h"
 #include "rxmesh/iterator.cuh"
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
-#include "rxmesh/rxmesh_attribute.h"
-#include "rxmesh/rxmesh_context.h"
-#include "rxmesh/rxmesh_types.h"
+#include "rxmesh/types.h"
 
 
 /**
@@ -15,9 +15,9 @@
  */
 template <uint32_t blockThreads, rxmesh::Op op>
 __launch_bounds__(blockThreads) __global__ static void higher_query(
-    const rxmesh::RXMeshContext                         context,
-    rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle> input,
-    rxmesh::RXMeshVertexAttribute<rxmesh::VertexHandle> output)
+    const rxmesh::Context                         context,
+    rxmesh::VertexAttribute<rxmesh::VertexHandle> input,
+    rxmesh::VertexAttribute<rxmesh::VertexHandle> output)
 {
     using namespace rxmesh;
 

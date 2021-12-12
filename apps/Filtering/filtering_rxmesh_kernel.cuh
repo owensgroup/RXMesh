@@ -4,9 +4,9 @@
 #include <cub/block/block_radix_sort.cuh>
 
 #include "filtering_util.h"
+#include "rxmesh/attribute.h"
+#include "rxmesh/context.h"
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
-#include "rxmesh/rxmesh_attribute.h"
-#include "rxmesh/rxmesh_context.h"
 #include "rxmesh/util/math.h"
 #include "rxmesh/util/vector.h"
 
@@ -18,9 +18,9 @@ constexpr float EPS = 10e-6;
  */
 template <typename T, uint32_t blockThreads>
 __launch_bounds__(blockThreads, 6) __global__
-    static void compute_vertex_normal(const rxmesh::RXMeshContext      context,
-                                      rxmesh::RXMeshVertexAttribute<T> coords,
-                                      rxmesh::RXMeshVertexAttribute<T> normals)
+    static void compute_vertex_normal(const rxmesh::Context      context,
+                                      rxmesh::VertexAttribute<T> coords,
+                                      rxmesh::VertexAttribute<T> normals)
 {
     using namespace rxmesh;
     auto vn_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
@@ -53,14 +53,14 @@ __launch_bounds__(blockThreads, 6) __global__
  */
 template <typename T>
 __device__ __inline__ void compute_new_coordinates(
-    const rxmesh::VertexHandle&             v_id,
-    const rxmesh::VertexHandle              vv[],
-    const uint8_t                           num_vv,
-    rxmesh::Vector<3, T>&                   v,
-    const rxmesh::Vector<3, T>&             n,
-    const T                                 sigma_c_sq,
-    const rxmesh::RXMeshVertexAttribute<T>& input_coords,
-    rxmesh::RXMeshVertexAttribute<T>&       filtered_coords)
+    const rxmesh::VertexHandle&       v_id,
+    const rxmesh::VertexHandle        vv[],
+    const uint8_t                     num_vv,
+    rxmesh::Vector<3, T>&             v,
+    const rxmesh::Vector<3, T>&       n,
+    const T                           sigma_c_sq,
+    const rxmesh::VertexAttribute<T>& input_coords,
+    rxmesh::VertexAttribute<T>&       filtered_coords)
 {
     T sigma_s_sq = compute_sigma_s_sq(v_id, vv, num_vv, v, n, input_coords);
 
@@ -93,10 +93,10 @@ __device__ __inline__ void compute_new_coordinates(
 /*template <typename T, uint32_t blockThreads, uint32_t maxVVSize>
 __launch_bounds__(blockThreads) __global__
     static void bilateral_filtering_low_level_API(
-        const rxmesh::RXMeshContext context,
-        rxmesh::RXMeshAttribute<T>  input_coords,
-        rxmesh::RXMeshAttribute<T>  filtered_coords,
-        rxmesh::RXMeshAttribute<T>  vertex_normals)
+        const rxmesh::Context context,
+        rxmesh::Attribute<T>  input_coords,
+        rxmesh::Attribute<T>  filtered_coords,
+        rxmesh::Attribute<T>  vertex_normals)
 {
     using namespace rxmesh;
     uint32_t vv[maxVVSize];
@@ -428,11 +428,11 @@ __launch_bounds__(blockThreads) __global__
  * bilateral_filtering2()
  */
 template <typename T, uint32_t blockThreads, uint32_t maxVVSize>
-__launch_bounds__(blockThreads) __global__ static void bilateral_filtering(
-    const rxmesh::RXMeshContext      context,
-    rxmesh::RXMeshVertexAttribute<T> input_coords,
-    rxmesh::RXMeshVertexAttribute<T> filtered_coords,
-    rxmesh::RXMeshVertexAttribute<T> vertex_normals)
+__launch_bounds__(blockThreads) __global__
+    static void bilateral_filtering(const rxmesh::Context      context,
+                                    rxmesh::VertexAttribute<T> input_coords,
+                                    rxmesh::VertexAttribute<T> filtered_coords,
+                                    rxmesh::VertexAttribute<T> vertex_normals)
 {
     using namespace rxmesh;
     VertexHandle vv[maxVVSize];

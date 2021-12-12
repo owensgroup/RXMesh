@@ -3,7 +3,7 @@
 #include <cuda_profiler_api.h>
 
 #include "filtering_rxmesh_kernel.cuh"
-#include "rxmesh/rxmesh_attribute.h"
+#include "rxmesh/attribute.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh/util/timer.h"
 
@@ -60,8 +60,7 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
     rxmesh.prepare_launch_box(rxmesh::Op::VV, filter_launch_box, true);
 
     // double buffer
-    RXMeshVertexAttribute<T>* double_buffer[2] = {coords.get(),
-                                                  filtered_coord.get()};
+    VertexAttribute<T>* double_buffer[2] = {coords.get(), filtered_coord.get()};
 
     CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;

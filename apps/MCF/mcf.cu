@@ -6,7 +6,7 @@
 
 #include "../common/openmesh_trimesh.h"
 #include "gtest/gtest.h"
-#include "rxmesh/rxmesh_attribute.h"
+#include "rxmesh/attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/export_tools.h"

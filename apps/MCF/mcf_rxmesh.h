@@ -2,20 +2,20 @@
 
 #include <cuda_profiler_api.h>
 #include "mcf_rxmesh_kernel.cuh"
+#include "rxmesh/attribute.h"
 #include "rxmesh/reduce_handle.h"
-#include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh/util/timer.h"
 #include "rxmesh/util/vector.h"
 
 template <typename T>
-void axpy(rxmesh::RXMeshStatic&                   rxmesh,
-          rxmesh::RXMeshVertexAttribute<T>&       y,
-          const rxmesh::RXMeshVertexAttribute<T>& x,
-          const T                                 alpha,
-          const T                                 beta,
-          cudaStream_t                            stream = NULL)
+void axpy(rxmesh::RXMeshStatic&             rxmesh,
+          rxmesh::VertexAttribute<T>&       y,
+          const rxmesh::VertexAttribute<T>& x,
+          const T                           alpha,
+          const T                           beta,
+          cudaStream_t                      stream = NULL)
 {
     // Y = alpha*X + beta*Y
     rxmesh.for_each_vertex(
@@ -28,11 +28,11 @@ void axpy(rxmesh::RXMeshStatic&                   rxmesh,
 }
 
 template <typename T>
-void init_PR(rxmesh::RXMeshStatic&                   rxmesh,
-             const rxmesh::RXMeshVertexAttribute<T>& B,
-             const rxmesh::RXMeshVertexAttribute<T>& S,
-             rxmesh::RXMeshVertexAttribute<T>&       R,
-             rxmesh::RXMeshVertexAttribute<T>&       P)
+void init_PR(rxmesh::RXMeshStatic&             rxmesh,
+             const rxmesh::VertexAttribute<T>& B,
+             const rxmesh::VertexAttribute<T>& S,
+             rxmesh::VertexAttribute<T>&       R,
+             rxmesh::VertexAttribute<T>&       P)
 {
     rxmesh.for_each_vertex(
         rxmesh::DEVICE, [B, S, R, P] __device__(const rxmesh::VertexHandle vh) {

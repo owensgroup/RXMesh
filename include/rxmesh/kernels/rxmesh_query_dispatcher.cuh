@@ -3,13 +3,13 @@
 #include <stdint.h>
 #include <cub/block/block_discontinuity.cuh>
 
+#include "rxmesh/context.h"
 #include "rxmesh/iterator.cuh"
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/debug.cuh"
-#include "rxmesh/kernels/rxmesh_loader.cuh"
+#include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/rxmesh_queries.cuh"
-#include "rxmesh/rxmesh_context.h"
-#include "rxmesh/rxmesh_types.h"
+#include "rxmesh/types.h"
 #include "rxmesh/util/meta.h"
 
 namespace rxmesh {
@@ -119,9 +119,9 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
  * query_block_dispatcher()
  */
 template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
-__device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
-                                                  const uint32_t       patch_id,
-                                                  computeT   compute_op,
+__device__ __inline__ void query_block_dispatcher(const Context& context,
+                                                  const uint32_t patch_id,
+                                                  computeT       compute_op,
                                                   activeSetT compute_active_set,
                                                   const bool oriented = false)
 {
@@ -207,8 +207,8 @@ __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
  * query_block_dispatcher()
  */
 template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
-__device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
-                                                  computeT   compute_op,
+__device__ __inline__ void query_block_dispatcher(const Context& context,
+                                                  computeT       compute_op,
                                                   activeSetT compute_active_set,
                                                   const bool oriented = false)
 {
@@ -225,8 +225,8 @@ __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
  * query_block_dispatcher()
  */
 template <Op op, uint32_t blockThreads, typename computeT>
-__device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
-                                                  computeT   compute_op,
+__device__ __inline__ void query_block_dispatcher(const Context& context,
+                                                  computeT       compute_op,
                                                   const bool oriented = false)
 {
     // Extract the type of the first input parameters of the compute lambda
@@ -249,7 +249,7 @@ __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
  */
 #if 0
 template <Op op, uint32_t blockThreads, typename computeT>
-__device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
+__device__ __inline__ void query_block_dispatcher(const Context& context,
                                                   const uint32_t element_id,
                                                   computeT       compute_op,
                                                   const bool oriented = false)

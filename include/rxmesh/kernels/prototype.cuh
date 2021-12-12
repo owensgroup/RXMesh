@@ -13,8 +13,8 @@ template <Op       op,
           typename InputHandleT,
           typename OutputHandleT>
 __launch_bounds__(blockThreads) __global__
-    static void query_prototype(const RXMeshContext context,
-                                const bool          oriented = false)
+    static void query_prototype(const Context context,
+                                const bool    oriented = false)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
@@ -37,8 +37,8 @@ template <Op       op,
           typename InputHandleT,
           typename OutputHandleT>
 __launch_bounds__(blockThreads) __global__
-    static void higher_query_prototype(const RXMeshContext context,
-                                       const bool          oriented = false)
+    static void higher_query_prototype(const Context context,
+                                       const bool    oriented = false)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 

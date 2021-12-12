@@ -1,8 +1,8 @@
 #pragma once
 
+#include "rxmesh/attribute.h"
+#include "rxmesh/context.h"
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
-#include "rxmesh/rxmesh_attribute.h"
-#include "rxmesh/rxmesh_context.h"
 #include "rxmesh/util/math.h"
 #include "rxmesh/util/vector.h"
 /**
@@ -10,9 +10,9 @@
  */
 template <typename T, uint32_t blockThreads>
 __launch_bounds__(blockThreads, 6) __global__
-    static void compute_vertex_normal(const rxmesh::RXMeshContext      context,
-                                      rxmesh::RXMeshVertexAttribute<T> coords,
-                                      rxmesh::RXMeshVertexAttribute<T> normals)
+    static void compute_vertex_normal(const rxmesh::Context      context,
+                                      rxmesh::VertexAttribute<T> coords,
+                                      rxmesh::VertexAttribute<T> normals)
 {
     using namespace rxmesh;
     auto vn_lambda = [&](FaceHandle face_id, VertexIterator& fv) {

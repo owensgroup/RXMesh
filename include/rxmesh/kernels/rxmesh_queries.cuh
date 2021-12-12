@@ -3,11 +3,11 @@
 #include <assert.h>
 #include <stdint.h>
 
+#include "rxmesh/context.h"
 #include "rxmesh/kernels/collective.cuh"
-#include "rxmesh/kernels/rxmesh_loader.cuh"
+#include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/util.cuh"
-#include "rxmesh/rxmesh_context.h"
-#include "rxmesh/rxmesh_types.h"
+#include "rxmesh/types.h"
 
 namespace rxmesh {
 template <uint32_t rowOffset,
@@ -311,7 +311,7 @@ __device__ __forceinline__ void f_v(const uint16_t  num_edges,
         for (uint32_t i = 0; i < 3; i++) {
             uint16_t e = d_faces[f_id + i];
             flag_t   e_dir(0);
-            RXMeshContext::unpack_edge_dir(e, e, e_dir);
+            Context::unpack_edge_dir(e, e, e_dir);
             // if the direction is flipped, we take the second vertex
             uint16_t e_id = (2 * e) + (1 * e_dir);
             assert(e_id < 2 * num_edges);

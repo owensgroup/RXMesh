@@ -1,9 +1,9 @@
 #pragma once
 
 #include "mcf_util.h"
+#include "rxmesh/attribute.h"
+#include "rxmesh/context.h"
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
-#include "rxmesh/rxmesh_attribute.h"
-#include "rxmesh/rxmesh_context.h"
 #include "rxmesh/util/math.h"
 #include "rxmesh/util/vector.h"
 
@@ -12,11 +12,11 @@
  */
 template <typename T>
 __device__ __forceinline__ T
-edge_cotan_weight(const rxmesh::VertexHandle&             p_id,
-                  const rxmesh::VertexHandle&             r_id,
-                  const rxmesh::VertexHandle&             q_id,
-                  const rxmesh::VertexHandle&             s_id,
-                  const rxmesh::RXMeshVertexAttribute<T>& X)
+edge_cotan_weight(const rxmesh::VertexHandle&       p_id,
+                  const rxmesh::VertexHandle&       r_id,
+                  const rxmesh::VertexHandle&       q_id,
+                  const rxmesh::VertexHandle&       s_id,
+                  const rxmesh::VertexAttribute<T>& X)
 {
     // Get the edge weight between the two vertices p-r where
     // q and s composes the diamond around p-r
@@ -35,10 +35,10 @@ edge_cotan_weight(const rxmesh::VertexHandle&             p_id,
  */
 template <typename T>
 __device__ __forceinline__ T
-partial_voronoi_area(const rxmesh::VertexHandle& p_id,  // center
-                     const rxmesh::VertexHandle& q_id,  // before center
-                     const rxmesh::VertexHandle& r_id,  // after center
-                     const rxmesh::RXMeshVertexAttribute<T>& X)
+partial_voronoi_area(const rxmesh::VertexHandle&       p_id,  // center
+                     const rxmesh::VertexHandle&       q_id,  // before center
+                     const rxmesh::VertexHandle&       r_id,  // after center
+                     const rxmesh::VertexAttribute<T>& X)
 {
     // compute partial Voronoi area of the center vertex that is associated with
     // the triangle p->q->r (oriented ccw)
@@ -56,10 +56,10 @@ partial_voronoi_area(const rxmesh::VertexHandle& p_id,  // center
  */
 template <typename T, uint32_t blockThreads>
 __launch_bounds__(blockThreads) __global__
-    static void init_B(const rxmesh::RXMeshContext            context,
-                       const rxmesh::RXMeshVertexAttribute<T> X,
-                       rxmesh::RXMeshVertexAttribute<T>       B,
-                       const bool use_uniform_laplace)
+    static void init_B(const rxmesh::Context            context,
+                       const rxmesh::VertexAttribute<T> X,
+                       rxmesh::VertexAttribute<T>       B,
+                       const bool                       use_uniform_laplace)
 {
     using namespace rxmesh;
 
@@ -106,12 +106,12 @@ __launch_bounds__(blockThreads) __global__
  */
 template <typename T, uint32_t blockThreads>
 __launch_bounds__(blockThreads) __global__
-    static void mcf_matvec(const rxmesh::RXMeshContext            context,
-                           const rxmesh::RXMeshVertexAttribute<T> coords,
-                           const rxmesh::RXMeshVertexAttribute<T> in,
-                           rxmesh::RXMeshVertexAttribute<T>       out,
-                           const bool use_uniform_laplace,
-                           const T    time_step)
+    static void mcf_matvec(const rxmesh::Context            context,
+                           const rxmesh::VertexAttribute<T> coords,
+                           const rxmesh::VertexAttribute<T> in,
+                           rxmesh::VertexAttribute<T>       out,
+                           const bool                       use_uniform_laplace,
+                           const T                          time_step)
 {
 
     // To compute the vertex cotan weight, we use the following configuration

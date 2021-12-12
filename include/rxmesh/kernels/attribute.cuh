@@ -6,7 +6,7 @@
 namespace rxmesh {
 
 template <typename T>
-class RXMeshAttribute;
+class Attribute;
 
 namespace detail {
 
@@ -24,11 +24,11 @@ __device__ __forceinline__ void cub_block_sum(const T thread_val,
 
 template <class T, uint32_t blockSize>
 __launch_bounds__(blockSize) __global__
-    void norm2_kernel(const RXMeshAttribute<T> X,
-                      const uint16_t*          d_element_per_patch,
-                      const uint32_t           num_patches,
-                      const uint32_t           num_attributes,
-                      T*                       d_block_output)
+    void norm2_kernel(const Attribute<T> X,
+                      const uint16_t*    d_element_per_patch,
+                      const uint32_t     num_patches,
+                      const uint32_t     num_attributes,
+                      T*                 d_block_output)
 {
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
@@ -48,12 +48,12 @@ __launch_bounds__(blockSize) __global__
 
 template <typename T, uint32_t blockSize>
 __launch_bounds__(blockSize) __global__
-    void dot_kernel(const RXMeshAttribute<T> X,
-                    const RXMeshAttribute<T> Y,
-                    const uint16_t*          d_element_per_patch,
-                    const uint32_t           num_patches,
-                    const uint32_t           num_attributes,
-                    T*                       d_block_output)
+    void dot_kernel(const Attribute<T> X,
+                    const Attribute<T> Y,
+                    const uint16_t*    d_element_per_patch,
+                    const uint32_t     num_patches,
+                    const uint32_t     num_attributes,
+                    T*                 d_block_output)
 {
     assert(X.get_num_attributes() == Y.get_num_attributes());
 
@@ -72,11 +72,11 @@ __launch_bounds__(blockSize) __global__
 }
 
 template <typename T>
-__global__ void memset_attribute(const RXMeshAttribute<T> attr,
-                                 const T                  value,
-                                 const uint16_t*          d_element_per_patch,
-                                 const uint32_t           num_patches,
-                                 const uint32_t           num_attributes)
+__global__ void memset_attribute(const Attribute<T> attr,
+                                 const T            value,
+                                 const uint16_t*    d_element_per_patch,
+                                 const uint32_t     num_patches,
+                                 const uint32_t     num_attributes)
 {
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {

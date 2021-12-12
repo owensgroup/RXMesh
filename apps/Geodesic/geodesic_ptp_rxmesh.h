@@ -1,6 +1,5 @@
 #pragma once
 #include "geodesic_kernel.cuh"
-#include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh/util/timer.h"
@@ -67,8 +66,8 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
     CUDA_ERROR(cudaMalloc((void**)&d_error, sizeof(uint32_t)));
 
     // double buffer
-    RXMeshVertexAttribute<T>* double_buffer[2] = {rxmesh_geo.get(),
-                                                  rxmesh_geo_2.get()};
+    VertexAttribute<T>* double_buffer[2] = {rxmesh_geo.get(),
+                                            rxmesh_geo_2.get()};
 
     // start time
     GPUTimer timer;
