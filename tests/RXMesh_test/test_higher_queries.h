@@ -38,8 +38,8 @@ TEST(RXMeshStatic, DISABLED_HigherQueries)
         }
     });
 
-    output->move_v1(rxmesh::HOST, rxmesh::DEVICE);
-    input->move_v1(rxmesh::HOST, rxmesh::DEVICE);
+    output->move(rxmesh::HOST, rxmesh::DEVICE);
+    input->move(rxmesh::HOST, rxmesh::DEVICE);
 
     // launch box
     constexpr uint32_t      blockThreads = 512;
@@ -57,8 +57,8 @@ TEST(RXMeshStatic, DISABLED_HigherQueries)
     CUDA_ERROR(cudaDeviceSynchronize());
 
     // move containers to the CPU for testing
-    output->move_v1(rxmesh::DEVICE, rxmesh::HOST);
-    input->move_v1(rxmesh::DEVICE, rxmesh::HOST);
+    output->move(rxmesh::DEVICE, rxmesh::HOST);
+    input->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // verify
     EXPECT_TRUE(tester.run_test(rxmesh, Faces, *input, *output, true));

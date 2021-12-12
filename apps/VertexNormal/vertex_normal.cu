@@ -58,7 +58,7 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
     float vn_time = 0;
     for (uint32_t itr = 0; itr < Arg.num_run; ++itr) {
-        v_normals->reset_v1(0, rxmesh::DEVICE);
+        v_normals->reset(0, rxmesh::DEVICE);
         GPUTimer timer;
         timer.start();
 
@@ -78,7 +78,7 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
                  vn_time / Arg.num_run);
 
     // Verify
-    v_normals->move_v1(rxmesh::DEVICE, rxmesh::HOST);
+    v_normals->move(rxmesh::DEVICE, rxmesh::HOST);
 
     rxmesh.for_each_vertex(HOST, [&](const VertexHandle& vh) {
         uint32_t v_id = rxmesh.map_to_global(vh);

@@ -28,10 +28,27 @@ void populate(rxmesh::RXMeshStatic&           rxmesh,
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 }
 
+template <typename T>
+void populate(rxmesh::RXMeshStatic&             rxmesh,
+              rxmesh::RXMeshVertexAttribute<T>& v1,
+              rxmesh::RXMeshVertexAttribute<T>& v2,
+              T                                 v1_val,
+              T                                 v2_val)
+{
+    rxmesh.for_each_vertex(
+        rxmesh::DEVICE,
+        [v1, v2, v1_val, v2_val] __device__(const rxmesh::VertexHandle vh) {
+            v1(vh) = v1_val;
+            v2(vh) = v2_val;
+        });
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+}
+
 TEST(RXMeshAttribute, Norm2)
 {
-
     using namespace rxmesh;
+
+    CUDA_ERROR(cudaDeviceReset());
 
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
@@ -49,6 +66,8 @@ TEST(RXMeshAttribute, Norm2)
 
     populate<float>(rxmesh, *attr, val);
 
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
     ReduceHandle reduce(*attr);
 
     float output = reduce.norm2(*attr);
@@ -58,21 +77,7 @@ TEST(RXMeshAttribute, Norm2)
     EXPECT_FLOAT_EQ(output, std::sqrt(val * val * rxmesh.get_num_vertices()));
 }
 
-template <typename T>
-void populate(rxmesh::RXMeshStatic&             rxmesh,
-              rxmesh::RXMeshVertexAttribute<T>& v1,
-              rxmesh::RXMeshVertexAttribute<T>& v2,
-              T                                 v1_val,
-              T                                 v2_val)
-{
-    rxmesh.for_each_vertex(
-        rxmesh::DEVICE,
-        [v1, v2, v1_val, v2_val] __device__(const rxmesh::VertexHandle vh) {
-            v1(vh) = v1_val;
-            v2(vh) = v2_val;
-        });
-    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
-}
+
 TEST(RXMeshAttribute, Dot)
 {
     using namespace rxmesh;
@@ -157,7 +162,7 @@ TEST(RXMeshAttribute, AddingAndRemoving)
     EXPECT_TRUE(rxmesh.does_attribute_exist(attr_name));
 
 
-    vertex_attr->move_v1(rxmesh::HOST, rxmesh::DEVICE);
+    vertex_attr->move(rxmesh::HOST, rxmesh::DEVICE);
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 

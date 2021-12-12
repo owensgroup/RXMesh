@@ -384,7 +384,7 @@ class RXMeshStatic : public RXMesh
         }
 
         // move to device
-        ret->move_v1(rxmesh::HOST, rxmesh::DEVICE);
+        ret->move(rxmesh::HOST, rxmesh::DEVICE);
         return ret;
     }
 
@@ -448,7 +448,7 @@ class RXMeshStatic : public RXMesh
         }
 
         // move to device
-        ret->move_v1(rxmesh::HOST, rxmesh::DEVICE);
+        ret->move(rxmesh::HOST, rxmesh::DEVICE);
         return ret;
     }
 

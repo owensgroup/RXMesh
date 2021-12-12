@@ -43,7 +43,7 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
     // Geodesic distance attribute for all vertices (seeds set to zero
     // and infinity otherwise)
     auto rxmesh_geo = rxmesh.add_vertex_attribute<T>("geo", 1u);
-    rxmesh_geo->reset_v1(std::numeric_limits<T>::infinity(), rxmesh::HOST);
+    rxmesh_geo->reset(std::numeric_limits<T>::infinity(), rxmesh::HOST);
     rxmesh.for_each_vertex(rxmesh::HOST, [&](const VertexHandle vh) {
         uint32_t v_id = rxmesh.map_to_global(vh);
         for (uint32_t s : h_seeds) {
@@ -53,7 +53,7 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
             }
         }
     });
-    rxmesh_geo->move_v1(rxmesh::HOST, rxmesh::DEVICE);
+    rxmesh_geo->move(rxmesh::HOST, rxmesh::DEVICE);
 
     // second buffer for geodesic distance for double buffering
     auto rxmesh_geo_2 =

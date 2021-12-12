@@ -77,22 +77,22 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     // S in CG
     auto S =
         rxmesh.add_vertex_attribute<T>("S", 3, rxmesh::DEVICE, rxmesh::SoA);
-    S->reset_v1(0.0, rxmesh::DEVICE);
+    S->reset(0.0, rxmesh::DEVICE);
 
     // P in CG
     auto P =
         rxmesh.add_vertex_attribute<T>("P", 3, rxmesh::DEVICE, rxmesh::SoA);
-    P->reset_v1(0.0, rxmesh::DEVICE);
+    P->reset(0.0, rxmesh::DEVICE);
 
     // R in CG
     auto R =
         rxmesh.add_vertex_attribute<T>("R", 3, rxmesh::DEVICE, rxmesh::SoA);
-    R->reset_v1(0.0, rxmesh::DEVICE);
+    R->reset(0.0, rxmesh::DEVICE);
 
     // B in CG
     auto B =
         rxmesh.add_vertex_attribute<T>("B", 3, rxmesh::DEVICE, rxmesh::SoA);
-    B->reset_v1(0.0, rxmesh::DEVICE);
+    B->reset(0.0, rxmesh::DEVICE);
 
     // X in CG (the output)
     auto X = rxmesh.add_vertex_attribute<T>(Verts, "X", rxmesh::LOCATION_ALL);
@@ -211,7 +211,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
         matvec_time / float(num_cg_iter_taken));
 
     // move output to host
-    X->move_v1(rxmesh::DEVICE, rxmesh::HOST);
+    X->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // output to obj
     // rxmesh.export_obj("mcf_rxmesh.obj", *X);

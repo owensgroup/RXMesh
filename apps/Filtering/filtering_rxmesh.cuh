@@ -42,12 +42,12 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
 
     // Vertex normals (only on device)
     auto vertex_normal = rxmesh.add_vertex_attribute<T>("vn", 3, DEVICE);
-    vertex_normal->reset_v1(0, DEVICE);
+    vertex_normal->reset(0, DEVICE);
 
 
     // Filtered coordinates
     auto filtered_coord = rxmesh.add_vertex_attribute<T>("vn", 3, LOCATION_ALL);
-    filtered_coord->reset_v1(0, LOCATION_ALL);
+    filtered_coord->reset(0, LOCATION_ALL);
 
     // vertex normal launch box
     constexpr uint32_t          vn_block_threads = 256;
@@ -69,7 +69,7 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
     uint32_t d = 0;
 
     for (uint32_t itr = 0; itr < Arg.num_filter_iter; ++itr) {
-        vertex_normal->reset_v1(0, rxmesh::DEVICE);
+        vertex_normal->reset(0, rxmesh::DEVICE);
 
         // update vertex normal before filtering
         compute_vertex_normal<T, vn_block_threads>

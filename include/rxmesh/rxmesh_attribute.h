@@ -63,13 +63,9 @@ class RXMeshAttributeBase
    public:
     RXMeshAttributeBase() = default;
 
-    // virtual RXMeshAttributeBase* clone() const = 0;
-
     virtual const char* get_name() const = 0;
 
-    virtual void release(locationT target) = 0;
-
-    virtual void release_v1(locationT location = LOCATION_ALL) = 0;
+    virtual void release(locationT location = LOCATION_ALL) = 0;
 
     virtual ~RXMeshAttributeBase() = default;
 };
@@ -93,14 +89,11 @@ class RXMeshAttribute : public RXMeshAttributeBase
     RXMeshAttribute()
         : RXMeshAttributeBase(),
           m_name(nullptr),
-          m_num_mesh_elements(0),
           m_num_attributes(0),
           m_allocated(LOCATION_NONE),
           m_h_attr(nullptr),
-          m_d_attr(nullptr),
-          m_h_attr_v1(nullptr),
-          m_d_attr_v1(nullptr),
           m_h_ptr_on_device(nullptr),
+          m_d_attr(nullptr),
           m_num_patches(0),
           m_d_element_per_patch(nullptr),
           m_h_element_per_patch(nullptr),
@@ -112,15 +105,13 @@ class RXMeshAttribute : public RXMeshAttributeBase
     }
 
     RXMeshAttribute(const char* name)
-        : m_name(nullptr),
-          m_num_mesh_elements(0),
+        : RXMeshAttributeBase(),
+          m_name(nullptr),
           m_num_attributes(0),
           m_allocated(LOCATION_NONE),
-          m_h_attr(nullptr),
-          m_d_attr(nullptr),
-          m_h_attr_v1(nullptr),
-          m_d_attr_v1(nullptr),
+          m_h_attr(nullptr),          
           m_h_ptr_on_device(nullptr),
+          m_d_attr(nullptr),
           m_num_patches(0),
           m_d_element_per_patch(nullptr),
           m_h_element_per_patch(nullptr),
@@ -140,11 +131,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
     const char* get_name() const
     {
         return m_name;
-    }
-
-    __host__ __device__ __forceinline__ uint32_t get_num_mesh_elements() const
-    {
-        return this->m_num_mesh_elements;
     }
 
     __host__ __device__ __forceinline__ uint32_t get_num_attributes() const
@@ -170,31 +156,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
     void reset(const T value, locationT location, cudaStream_t stream = NULL)
     {
-
-        if ((location & DEVICE) == DEVICE) {
-
-            assert((m_allocated & DEVICE) == DEVICE);
-
-            const int      threads = 256;
-            const uint32_t total   = m_num_attributes * m_num_mesh_elements;
-            memset<T><<<(total + threads - 1) / threads, threads, 0, stream>>>(
-                m_d_attr, value, total);
-            CUDA_ERROR(cudaDeviceSynchronize());
-            CUDA_ERROR(cudaGetLastError());
-        }
-
-
-        if ((location & HOST) == HOST) {
-            assert((m_allocated & HOST) == HOST);
-            for (uint32_t i = 0; i < m_num_mesh_elements * m_num_attributes;
-                 ++i) {
-                m_h_attr[i] = value;
-            }
-        }
-    }
-
-    void reset_v1(const T value, locationT location, cudaStream_t stream = NULL)
-    {
         if ((location & DEVICE) == DEVICE) {
 
             assert((m_allocated & DEVICE) == DEVICE);
@@ -214,39 +175,19 @@ class RXMeshAttribute : public RXMeshAttributeBase
 #pragma omp parallel for
             for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
                 for (int e = 0; e < m_h_element_per_patch[p]; ++e) {
-                    m_h_attr_v1[p][e] = value;
+                    m_h_attr[p][e] = value;
                 }
             }
         }
     }
 
-    void init(uint32_t   num_elements,
-              uint32_t   num_attributes,
-              locationT  location        = DEVICE,
-              layoutT    layout          = AoS,
-              const bool with_axpy_alloc = true)
+
+    void init(const std::vector<uint16_t>& element_per_patch,
+              const uint32_t               num_attributes,
+              locationT                    location = LOCATION_ALL,
+              const layoutT                layout   = AoS)
     {
         release();
-        m_allocated               = LOCATION_NONE;
-        this->m_num_mesh_elements = num_elements;
-        this->m_num_attributes    = num_attributes;
-        if (num_elements == 0) {
-            return;
-        }
-        allocate(location);
-        m_layout = layout;
-
-        // if (!m_is_reduce_allocated && with_reduce_alloc) {
-        //    allocate_reduce_temp_storage(0);
-        //}
-    }
-
-    void init_v1(const std::vector<uint16_t>& element_per_patch,
-                 const uint32_t               num_attributes,
-                 locationT                    location = LOCATION_ALL,
-                 const layoutT                layout   = AoS)
-    {
-        release_v1();
         m_num_patches    = element_per_patch.size();
         m_num_attributes = num_attributes;
         m_layout         = layout;
@@ -255,55 +196,15 @@ class RXMeshAttribute : public RXMeshAttributeBase
             return;
         }
 
-        allocate_v1(element_per_patch.data(), location);
+        allocate(element_per_patch.data(), location);
     }
 
-    void move(locationT source, locationT target)
-    {
-        if (source == target) {
-            return;
-        }
 
-        if ((source == HOST || source == DEVICE) &&
-            ((source & m_allocated) != source)) {
-            RXMESH_ERROR(
-                "RXMeshAttribute::move() moving source is not valid"
-                " because it was not allocated on source");
-        }
-
-        if (((target & HOST) == HOST || (target & DEVICE) == DEVICE) &&
-            ((target & m_allocated) != target)) {
-            RXMESH_WARN(
-                "RXMeshAttribute::move() allocating target before moving to {}",
-                location_to_string(target));
-            allocate(target);
-        }
-
-        if (this->m_num_mesh_elements == 0) {
-            return;
-        }
-
-        if (source == HOST && target == DEVICE) {
-            CUDA_ERROR(
-                cudaMemcpy(m_d_attr,
-                           m_h_attr,
-                           sizeof(T) * m_num_mesh_elements * m_num_attributes,
-                           cudaMemcpyHostToDevice));
-
-        } else if (source == DEVICE && target == HOST) {
-            CUDA_ERROR(
-                cudaMemcpy(m_h_attr,
-                           m_d_attr,
-                           sizeof(T) * m_num_mesh_elements * m_num_attributes,
-                           cudaMemcpyDeviceToHost));
-        }
-    }
-
-    void move_v1(locationT source, locationT target, cudaStream_t stream = NULL)
+    void move(locationT source, locationT target, cudaStream_t stream = NULL)
     {
         if (source == target) {
             RXMESH_WARN(
-                "RXMeshAttribute::move_v1() source ({}) and target ({}) "
+                "RXMeshAttribute::move() source ({}) and target ({}) "
                 "are the same.",
                 location_to_string(source),
                 location_to_string(target));
@@ -313,7 +214,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
         if ((source == HOST || source == DEVICE) &&
             ((source & m_allocated) != source)) {
             RXMESH_ERROR(
-                "RXMeshAttribute::move_v1() moving source is not valid"
+                "RXMeshAttribute::move() moving source is not valid"
                 " because it was not allocated on source i.e., {}",
                 location_to_string(source));
         }
@@ -323,7 +224,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
             RXMESH_WARN(
                 "RXMeshAttribute::move() allocating target before moving to {}",
                 location_to_string(target));
-            allocate_v1(m_h_element_per_patch, target);
+            allocate(m_h_element_per_patch, target);
         }
 
         if (this->m_num_patches == 0) {
@@ -334,7 +235,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
             for (uint32_t p = 0; p < m_num_patches; ++p) {
                 CUDA_ERROR(cudaMemcpyAsync(
                     m_h_ptr_on_device[p],
-                    m_h_attr_v1[p],
+                    m_h_attr[p],
                     sizeof(T) * m_h_element_per_patch[p] * m_num_attributes,
                     cudaMemcpyHostToDevice,
                     stream));
@@ -342,7 +243,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
         } else if (source == DEVICE && target == HOST) {
             for (uint32_t p = 0; p < m_num_patches; ++p) {
                 CUDA_ERROR(cudaMemcpyAsync(
-                    m_h_attr_v1[p],
+                    m_h_attr[p],
                     m_h_ptr_on_device[p],
                     sizeof(T) * m_h_element_per_patch[p] * m_num_attributes,
                     cudaMemcpyDeviceToHost,
@@ -351,46 +252,15 @@ class RXMeshAttribute : public RXMeshAttributeBase
         }
     }
 
+
     void release(locationT location = LOCATION_ALL)
-    {
-
-        if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
-            free(m_h_attr);
-            m_h_attr    = nullptr;
-            m_allocated = m_allocated & (~HOST);
-        }
-
-        if (((location & DEVICE) == DEVICE) &&
-            ((m_allocated & DEVICE) == DEVICE)) {
-            GPU_FREE(m_d_attr);
-            m_allocated = m_allocated & (~DEVICE);
-        }
-
-        /*if (location == LOCATION_ALL || m_allocated == 0) {
-            if (m_is_reduce_allocated) {
-                for (uint32_t i = 0; i < m_num_attributes; ++i) {
-                    GPU_FREE(m_d_reduce_temp_storage[i]);
-                    GPU_FREE(m_norm2_temp_buffer[i]);
-                    GPU_FREE(m_d_reduce_output[i]);
-                    CUDA_ERROR(cudaStreamDestroy(m_reduce_streams[i]));
-                }
-                m_is_reduce_allocated = false;
-                free(m_reduce_streams);
-                free(m_d_reduce_output);
-                free(m_norm2_temp_buffer);
-                free(m_d_reduce_temp_storage);
-            }
-        }*/
-    }
-
-    void release_v1(locationT location = LOCATION_ALL)
     {
         if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
             for (uint32_t p = 0; p < m_num_patches; ++p) {
-                free(m_h_attr_v1[p]);
+                free(m_h_attr[p]);
             }
-            free(m_h_attr_v1);
-            m_h_attr_v1 = nullptr;
+            free(m_h_attr);
+            m_h_attr = nullptr;
             free(m_h_element_per_patch);
             m_h_element_per_patch = nullptr;
             m_allocated           = m_allocated & (~HOST);
@@ -401,129 +271,9 @@ class RXMeshAttribute : public RXMeshAttributeBase
             for (uint32_t p = 0; p < m_num_patches; ++p) {
                 GPU_FREE(m_h_ptr_on_device[p]);
             }
-            GPU_FREE(m_d_attr_v1);
+            GPU_FREE(m_d_attr);
             GPU_FREE(m_d_element_per_patch);
             m_allocated = m_allocated & (~DEVICE);
-        }
-    }
-
-    void copy(RXMeshAttribute<T>& source,
-              locationT           source_flag,
-              locationT           location_flag)
-    {
-        // Deep copy from source. The source_flag defines where we will copy
-        // from. The location_flag defines where we will copy to.
-
-        // if source_flag and location_flag are both set to LOCATION_ALL, then
-        // we copy what is on host to host, and what on location to location
-
-        // If sourc_flag is set to HOST (or DEVICE) and location_flag is set to
-        // LOCATION_ALL, then we copy source's HOST (or DEVICE) to both HOST
-        // and DEVICE in location
-
-        // Setting source_flag to LOCATION_ALL while location_flag is Not set to
-        // LOCATION_ALL is invalid because we don't know which source to copy
-        // from
-
-        if (source.m_layout != m_layout) {
-            RXMESH_ERROR(
-                "RXMeshAttribute::copy() does not support copy from source of "
-                "different layout!");
-        }
-
-        if ((source_flag & LOCATION_ALL) == LOCATION_ALL &&
-            (location_flag & LOCATION_ALL) != LOCATION_ALL) {
-            RXMESH_ERROR("RXMeshAttribute::copy() Invalid configuration!");
-        }
-
-        if (source.get_num_mesh_elements() != m_num_mesh_elements) {
-            RXMESH_ERROR(
-                "RXMeshAttribute::copy() source has different size than "
-                "location!");
-        }
-
-        // 1) copy from HOST to HOST
-        if ((source_flag & HOST) == HOST && (location_flag & HOST) == HOST) {
-            if ((source_flag & source.m_allocated) != source_flag) {
-                RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
-                    " because it was not allocated on host");
-            }
-            if ((location_flag & m_allocated) != location_flag) {
-                RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
-                    " because location (this) was not allocated on host");
-            }
-
-            std::memcpy((void*)m_h_attr,
-                        source.m_h_attr,
-                        m_num_mesh_elements * m_num_attributes * sizeof(T));
-        }
-
-
-        // 2) copy from DEVICE to DEVICE
-        if ((source_flag & DEVICE) == DEVICE &&
-            (location_flag & DEVICE) == DEVICE) {
-            if ((source_flag & source.m_allocated) != source_flag) {
-                RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
-                    " because it was not allocated on device");
-            }
-            if ((location_flag & m_allocated) != location_flag) {
-                RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
-                    " because location (this) was not allocated on device");
-            }
-
-            CUDA_ERROR(
-                cudaMemcpy(m_d_attr,
-                           source.m_d_attr,
-                           m_num_mesh_elements * m_num_attributes * sizeof(T),
-                           cudaMemcpyDeviceToDevice));
-        }
-
-
-        // 3) copy from DEVICE to HOST
-        if ((source_flag & DEVICE) == DEVICE &&
-            (location_flag & HOST) == HOST) {
-            if ((source_flag & source.m_allocated) != source_flag) {
-                RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
-                    " because it was not allocated on host");
-            }
-            if ((location_flag & m_allocated) != location_flag) {
-                RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
-                    " because location (this) was not allocated on device");
-            }
-
-            CUDA_ERROR(
-                cudaMemcpy(m_h_attr,
-                           source.m_d_attr,
-                           m_num_mesh_elements * m_num_attributes * sizeof(T),
-                           cudaMemcpyDeviceToHost));
-        }
-
-
-        // 4) copy from HOST to DEVICE
-        if ((source_flag & HOST) == HOST &&
-            (location_flag & DEVICE) == DEVICE) {
-            if ((source_flag & source.m_allocated) != source_flag) {
-                RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
-                    " because it was not allocated on device");
-            }
-            if ((location_flag & m_allocated) != location_flag) {
-                RXMESH_ERROR(
-                    "RXMeshAttribute::copy() copying source is not valid"
-                    " because location (this) was not allocated on host");
-            }
-
-            CUDA_ERROR(
-                cudaMemcpy(m_d_attr,
-                           source.m_h_attr,
-                           m_num_mesh_elements * m_num_attributes * sizeof(T),
-                           cudaMemcpyHostToDevice));
         }
     }
 
@@ -549,20 +299,19 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
         if (source.m_layout != m_layout) {
             RXMESH_ERROR(
-                "RXMeshAttribute::copy_v1() does not support copy from source "
-                "of "
-                "different layout!");
+                "RXMeshAttribute::copy_from() does not support copy from "
+                "source of different layout!");
         }
 
         if ((source_flag & LOCATION_ALL) == LOCATION_ALL &&
             (location_flag & LOCATION_ALL) != LOCATION_ALL) {
-            RXMESH_ERROR("RXMeshAttribute::copy() Invalid configuration!");
+            RXMESH_ERROR("RXMeshAttribute::copy_from() Invalid configuration!");
         }
 
-        if (source.get_num_mesh_elements() != m_num_mesh_elements) {
+        if (m_num_attributes != source.get_num_attributes()) {
             RXMESH_ERROR(
-                "RXMeshAttribute::copy() source has different size than "
-                "location!");
+                "RXMeshAttribute::copy_from() number of attributes is "
+                "different!");
         }
 
         if (this->is_empty() || this->m_num_patches == 0) {
@@ -583,6 +332,8 @@ class RXMeshAttribute : public RXMeshAttributeBase
             }
 
             for (uint32_t p = 0; p < m_num_patches; ++p) {
+                assert(m_h_element_per_patch[p] ==
+                       source.m_h_element_per_patch[p]);
                 std::memcpy(
                     m_h_ptr_on_device[p],
                     source.m_h_ptr_on_device[p],
@@ -606,6 +357,8 @@ class RXMeshAttribute : public RXMeshAttributeBase
             }
 
             for (uint32_t p = 0; p < m_num_patches; ++p) {
+                assert(m_h_element_per_patch[p] ==
+                       source.m_h_element_per_patch[p]);
                 CUDA_ERROR(cudaMemcpyAsync(
                     m_h_ptr_on_device[p],
                     source.m_h_ptr_on_device[p],
@@ -632,8 +385,10 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
 
             for (uint32_t p = 0; p < m_num_patches; ++p) {
+                assert(m_h_element_per_patch[p] ==
+                       source.m_h_element_per_patch[p]);
                 CUDA_ERROR(cudaMemcpyAsync(
-                    m_h_attr_v1[p],
+                    m_h_attr[p],
                     source.m_h_ptr_on_device[p],
                     sizeof(T) * m_h_element_per_patch[p] * m_num_attributes,
                     cudaMemcpyDeviceToHost,
@@ -658,9 +413,11 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
 
             for (uint32_t p = 0; p < m_num_patches; ++p) {
+                assert(m_h_element_per_patch[p] ==
+                       source.m_h_element_per_patch[p]);
                 CUDA_ERROR(cudaMemcpyAsync(
                     m_h_ptr_on_device[p],
-                    source.m_h_attr_v1[p],
+                    source.m_h_attr[p],
                     sizeof(T) * m_h_element_per_patch[p] * m_num_attributes,
                     cudaMemcpyHostToDevice,
                     stream));
@@ -668,63 +425,6 @@ class RXMeshAttribute : public RXMeshAttributeBase
         }
     }
 
-    // TODO remove
-    __host__ __device__ __forceinline__ T& operator()(const uint32_t idx,
-                                                      const uint32_t attr)
-    {
-
-        assert(attr < m_num_attributes);
-        assert(idx < m_num_mesh_elements);
-
-        const uint32_t pitch_x = (m_layout == AoS) ? m_num_attributes : 1;
-        const uint32_t pitch_y = (m_layout == AoS) ? 1 : m_num_mesh_elements;
-
-#ifdef __CUDA_ARCH__
-        return m_d_attr[idx * pitch_x + attr * pitch_y];
-
-#else
-        return m_h_attr[idx * pitch_x + attr * pitch_y];
-#endif
-    }
-
-    // TODO remove
-    __host__ __device__ __forceinline__ T& operator()(const uint32_t idx)
-    {
-        // for m_num_attributes =1
-        assert(m_num_attributes == 1);
-        assert(idx < m_num_mesh_elements);
-        return (*this)(idx, 0);
-    }
-
-    // TODO remove
-    __host__ __device__ __forceinline__ T& operator()(const uint32_t idx,
-                                                      const uint32_t attr) const
-    {
-
-        assert(attr < m_num_attributes);
-        assert(idx < m_num_mesh_elements);
-
-        const uint32_t pitch_x = (m_layout == AoS) ? m_num_attributes : 1;
-        const uint32_t pitch_y = (m_layout == AoS) ? 1 : m_num_mesh_elements;
-
-#ifdef __CUDA_ARCH__
-        return m_d_attr[idx * pitch_x + attr * pitch_y];
-
-#else
-        return m_h_attr[idx * pitch_x + attr * pitch_y];
-#endif
-    }
-
-    // TODO remove
-    __host__ __device__ __forceinline__ T& operator()(const uint32_t idx) const
-    {
-        // for m_num_attributes =1
-        assert(m_num_attributes == 1);
-        assert(idx < m_num_mesh_elements);
-        return (*this)(idx, 0);
-    }
-
-
     __host__ __device__ __forceinline__ T& operator()(const uint32_t patch_id,
                                                       const uint16_t local_id,
                                                       const uint32_t attr) const
@@ -736,11 +436,11 @@ class RXMeshAttribute : public RXMeshAttributeBase
 #ifdef __CUDA_ARCH__
         const uint32_t pitch_y =
             (m_layout == AoS) ? 1 : m_d_element_per_patch[patch_id];
-        return m_d_attr_v1[patch_id][local_id * pitch_x + attr * pitch_y];
+        return m_d_attr[patch_id][local_id * pitch_x + attr * pitch_y];
 #else
         const uint32_t pitch_y =
             (m_layout == AoS) ? 1 : m_h_element_per_patch[patch_id];
-        return m_h_attr_v1[patch_id][local_id * pitch_x + attr * pitch_y];
+        return m_h_attr[patch_id][local_id * pitch_x + attr * pitch_y];
 #endif
     }
 
@@ -755,11 +455,11 @@ class RXMeshAttribute : public RXMeshAttributeBase
 #ifdef __CUDA_ARCH__
         const uint32_t pitch_y =
             (m_layout == AoS) ? 1 : m_d_element_per_patch[patch_id];
-        return m_d_attr_v1[patch_id][local_id * pitch_x + attr * pitch_y];
+        return m_d_attr[patch_id][local_id * pitch_x + attr * pitch_y];
 #else
         const uint32_t pitch_y =
             (m_layout == AoS) ? 1 : m_h_element_per_patch[patch_id];
-        return m_h_attr_v1[patch_id][local_id * pitch_x + attr * pitch_y];
+        return m_h_attr[patch_id][local_id * pitch_x + attr * pitch_y];
 #endif
     }
 
@@ -771,58 +471,24 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
 
    private:
-    void allocate(locationT location)
-    {
-
-        if ((location & HOST) == HOST) {
-            release(HOST);
-            if (m_num_mesh_elements != 0) {
-                m_h_attr = (T*)malloc(sizeof(T) * m_num_mesh_elements *
-                                      m_num_attributes);
-                if (!m_h_attr) {
-                    RXMESH_ERROR(
-                        " RXMeshAttribute::allocate() allocation on {} failed "
-                        "with #mesh_elemnts = {} and #attributes per element = "
-                        "{}" +
-                            location_to_string(HOST),
-                        m_num_mesh_elements,
-                        m_num_attributes);
-                }
-            }
-            m_allocated = m_allocated | HOST;
-        }
-
-
-        if ((location & DEVICE) == DEVICE) {
-            release(DEVICE);
-            if (m_num_mesh_elements != 0) {
-                CUDA_ERROR(cudaMalloc(
-                    (void**)&(m_d_attr),
-                    sizeof(T) * m_num_mesh_elements * m_num_attributes));
-            }
-            m_allocated = m_allocated | DEVICE;
-        }
-    }
-
-    void allocate_v1(const uint16_t* element_per_patch, locationT location)
+    void allocate(const uint16_t* element_per_patch, locationT location)
     {
 
         if (m_num_patches != 0) {
 
             if ((location & HOST) == HOST) {
-                release_v1(HOST);
+                release(HOST);
                 m_h_element_per_patch = static_cast<uint16_t*>(
                     malloc(sizeof(uint16_t) * m_num_patches));
 
-                m_h_attr_v1 =
-                    static_cast<T**>(malloc(sizeof(T*) * m_num_patches));
+                m_h_attr = static_cast<T**>(malloc(sizeof(T*) * m_num_patches));
 
                 std::memcpy(m_h_element_per_patch,
                             element_per_patch,
                             sizeof(uint16_t) * m_num_patches);
 
                 for (uint32_t p = 0; p < m_num_patches; ++p) {
-                    m_h_attr_v1[p] = static_cast<T*>(malloc(
+                    m_h_attr[p] = static_cast<T*>(malloc(
                         sizeof(T) * element_per_patch[p] * m_num_attributes));
                 }
 
@@ -830,7 +496,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
             }
 
             if ((location & DEVICE) == DEVICE) {
-                release_v1(DEVICE);
+                release(DEVICE);
 
                 m_h_element_per_patch = static_cast<uint16_t*>(
                     malloc(sizeof(uint16_t) * m_num_patches));
@@ -843,7 +509,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
                                       sizeof(uint16_t) * m_num_patches));
 
 
-                CUDA_ERROR(cudaMalloc((void**)&(m_d_attr_v1),
+                CUDA_ERROR(cudaMalloc((void**)&(m_d_attr),
                                       sizeof(T*) * m_num_patches));
                 m_h_ptr_on_device =
                     static_cast<T**>(malloc(sizeof(T*) * m_num_patches));
@@ -858,7 +524,7 @@ class RXMeshAttribute : public RXMeshAttributeBase
                                           sizeof(T) * m_h_element_per_patch[p] *
                                               m_num_attributes));
                 }
-                CUDA_ERROR(cudaMemcpy(m_d_attr_v1,
+                CUDA_ERROR(cudaMemcpy(m_d_attr,
                                       m_h_ptr_on_device,
                                       sizeof(T*) * m_num_patches,
                                       cudaMemcpyHostToDevice));
@@ -869,14 +535,11 @@ class RXMeshAttribute : public RXMeshAttributeBase
 
 
     char*     m_name;
-    uint32_t  m_num_mesh_elements;
     uint32_t  m_num_attributes;
     locationT m_allocated;
-    T*        m_h_attr;
-    T*        m_d_attr;
-    T**       m_h_attr_v1;
+    T**       m_h_attr;
     T**       m_h_ptr_on_device;
-    T**       m_d_attr_v1;
+    T**       m_d_attr;
     uint32_t  m_num_patches;
     uint16_t* m_d_element_per_patch;
     uint16_t* m_h_element_per_patch;
@@ -906,7 +569,7 @@ class RXMeshFaceAttribute : public RXMeshAttribute<T>
           m_h_patches_info(h_patches_info),
           m_d_patches_info(d_patches_info)
     {
-        this->init_v1(face_per_patch, num_attributes, location, layout);
+        this->init(face_per_patch, num_attributes, location, layout);
     }
 
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
@@ -973,7 +636,7 @@ class RXMeshEdgeAttribute : public RXMeshAttribute<T>
           m_h_patches_info(h_patches_info),
           m_d_patches_info(d_patches_info)
     {
-        this->init_v1(edge_per_patch, num_attributes, location, layout);
+        this->init(edge_per_patch, num_attributes, location, layout);
     }
 
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
@@ -1040,22 +703,9 @@ class RXMeshVertexAttribute : public RXMeshAttribute<T>
           m_h_patches_info(h_patches_info),
           m_d_patches_info(d_patches_info)
     {
-        this->init_v1(vertex_per_patch, num_attributes, location, layout);
+        this->init(vertex_per_patch, num_attributes, location, layout);
     }
 
-    // TODO remove
-    __host__ __device__ __forceinline__ T& operator()(const uint32_t idx,
-                                                      const uint32_t attr) const
-    {
-        return (*this)(idx, attr);
-    }
-
-    // TODO remove
-    __host__ __device__ __forceinline__ T& operator()(const uint32_t idx,
-                                                      const uint32_t attr)
-    {
-        return (*this)(idx, attr);
-    }
 
     __host__ __device__ __forceinline__ T& operator()(
         const VertexHandle v_handle,
@@ -1113,7 +763,7 @@ class RXMeshAttributeContainer
     virtual ~RXMeshAttributeContainer()
     {
         while (!m_attr_container.empty()) {
-            m_attr_container.back()->release_v1();
+            m_attr_container.back()->release();
             m_attr_container.pop_back();
         }
     }
