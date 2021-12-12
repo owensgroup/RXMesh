@@ -5,7 +5,6 @@
 #include "gtest/gtest.h"
 
 #include "rxmesh/rxmesh_attribute.h"
-#include "rxmesh/rxmesh_iterator.cuh"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/math.h"
@@ -136,7 +135,7 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
     td.static_smem = launch_box.smem_bytes_static;
 
     float total_time = 0;
-    
+
     GPUTimer timer;
 
     for (uint32_t itr = 0; itr < rxmesh_args.num_run; itr++) {

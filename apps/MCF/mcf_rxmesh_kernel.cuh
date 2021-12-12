@@ -63,8 +63,7 @@ __launch_bounds__(blockThreads) __global__
 {
     using namespace rxmesh;
 
-    auto init_lambda = [&](VertexHandle&               p_id,
-                           const RXMeshVertexIterator& iter) {
+    auto init_lambda = [&](VertexHandle& p_id, const VertexIterator& iter) {
         if (use_uniform_laplace) {
             const T valence = static_cast<T>(iter.size());
             B(p_id, 0)      = X(p_id, 0) * valence;
@@ -129,8 +128,7 @@ __launch_bounds__(blockThreads) __global__
     */
     using namespace rxmesh;
 
-    auto matvec_lambda = [&](VertexHandle&               p_id,
-                             const RXMeshVertexIterator& iter) {
+    auto matvec_lambda = [&](VertexHandle& p_id, const VertexIterator& iter) {
         T sum_e_weight(0);
 
         Vector<3, T> x(T(0));

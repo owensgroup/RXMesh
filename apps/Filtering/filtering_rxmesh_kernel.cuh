@@ -23,7 +23,7 @@ __launch_bounds__(blockThreads, 6) __global__
                                       rxmesh::RXMeshVertexAttribute<T> normals)
 {
     using namespace rxmesh;
-    auto vn_lambda = [&](FaceHandle face_id, RXMeshVertexIterator& fv) {
+    auto vn_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
         // this face's three vertices
         VertexHandle v0(fv[0]), v1(fv[1]), v2(fv[2]);
 
@@ -125,7 +125,7 @@ __launch_bounds__(blockThreads) __global__
     // processed are within the same patch (patch_id). If a vertex within the
     // k-ring is not in the patch, it will be added to s_block_patches so the
     // whole block would process this patch later.
-    auto compute_vv_1st_level = [&](uint32_t p_id, RXMeshIterator& iter) {
+    auto compute_vv_1st_level = [&](uint32_t p_id, Iterator& iter) {
         v_id      = p_id;
         vertex[0] = input_coords(v_id, 0);
         vertex[1] = input_coords(v_id, 1);
@@ -198,7 +198,7 @@ __launch_bounds__(blockThreads) __global__
                     // to indicate that it's processed
                     vv_patch[v] = INVALID32;
 
-                    RXMeshIterator vv_iter(iter);
+                    Iterator vv_iter(iter);
                     vv_iter.set(vv_local[v], 0);
 
                     for (uint32_t i = 0; i < vv_iter.size(); ++i) {
@@ -340,12 +340,12 @@ __launch_bounds__(blockThreads) __global__
                         // so that we don't process it again
                         vv_patch[v] = INVALID32;
 
-                        RXMeshIterator vv_iter(vv_local_id,
-                                               output_all_patches,
-                                               offset_all_patches,
-                                               output_mapping,
-                                               0,
-                                               num_src_in_patch);
+                        Iterator vv_iter(vv_local_id,
+                                         output_all_patches,
+                                         offset_all_patches,
+                                         output_mapping,
+                                         0,
+                                         num_src_in_patch);
 
                         for (uint32_t i = 0; i < vv_iter.size(); ++i) {
                             uint32_t vvv_id = vv_iter[i];
@@ -443,7 +443,7 @@ __launch_bounds__(blockThreads) __global__ static void bilateral_filtering(
     Vector<3, T> vertex, normal;
     VertexHandle v_id;
 
-    auto first_ring = [&](VertexHandle& p_id, RXMeshVertexIterator& iter) {
+    auto first_ring = [&](VertexHandle& p_id, VertexIterator& iter) {
         v_id      = p_id;
         vertex[0] = input_coords(v_id, 0);
         vertex[1] = input_coords(v_id, 1);
@@ -503,7 +503,7 @@ __launch_bounds__(blockThreads) __global__ static void bilateral_filtering(
         if (v_id.is_valid() && next_id < num_vv) {
             next_vertex = vv[next_id];
         }
-        auto n_rings = [&](VertexHandle& id, RXMeshVertexIterator& iter) {
+        auto n_rings = [&](VertexHandle& id, VertexIterator& iter) {
             assert(id == next_vertex);
 
             for (uint32_t i = 0; i < iter.size(); ++i) {

@@ -3,10 +3,10 @@
 #include <assert.h>
 #include <stdint.h>
 
+#include "rxmesh/iterator.cuh"
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
 #include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_context.h"
-#include "rxmesh/rxmesh_iterator.cuh"
 #include "rxmesh/rxmesh_types.h"
 
 
@@ -28,8 +28,7 @@ __launch_bounds__(blockThreads) __global__
 {
     using namespace rxmesh;
 
-    auto store_lambda = [&](InputHandleT&                    id,
-                            RXMeshIteratorV1<OutputHandleT>& iter) {
+    auto store_lambda = [&](InputHandleT& id, Iterator<OutputHandleT>& iter) {
         input(id) = id;
 
         for (uint32_t i = 0; i < iter.size(); ++i) {
@@ -37,6 +36,5 @@ __launch_bounds__(blockThreads) __global__
         }
     };
 
-    query_block_dispatcher<op, blockThreads>(
-        context, store_lambda, oriented);
+    query_block_dispatcher<op, blockThreads>(context, store_lambda, oriented);
 }

@@ -35,22 +35,22 @@ class ReduceHandle
 
         CUDA_ERROR(cudaMalloc(&m_d_reduce_2nd_stage, sizeof(T)));
 
-        m_d_reduce_temp_storage_v1 = NULL;
-        cub::DeviceReduce::Sum(m_d_reduce_temp_storage_v1,
+        m_d_reduce_temp_storage = NULL;
+        cub::DeviceReduce::Sum(m_d_reduce_temp_storage,
                                m_reduce_temp_storage_bytes,
                                m_d_reduce_1st_stage,
                                m_d_reduce_2nd_stage,
                                m_num_patches);
 
-        CUDA_ERROR(cudaMalloc(&m_d_reduce_temp_storage_v1,
-                              m_reduce_temp_storage_bytes));
+        CUDA_ERROR(
+            cudaMalloc(&m_d_reduce_temp_storage, m_reduce_temp_storage_bytes));
     }
 
     ~ReduceHandle()
     {
         GPU_FREE(m_d_reduce_1st_stage);
         GPU_FREE(m_d_reduce_2nd_stage);
-        GPU_FREE(m_d_reduce_temp_storage_v1);
+        GPU_FREE(m_d_reduce_temp_storage);
         m_reduce_temp_storage_bytes = 0;
     }
 
@@ -117,7 +117,7 @@ class ReduceHandle
     {
         T h_output = 0;
 
-        cub::DeviceReduce::Sum(m_d_reduce_temp_storage_v1,
+        cub::DeviceReduce::Sum(m_d_reduce_temp_storage,
                                m_reduce_temp_storage_bytes,
                                m_d_reduce_1st_stage,
                                m_d_reduce_2nd_stage,
@@ -137,7 +137,7 @@ class ReduceHandle
     size_t   m_reduce_temp_storage_bytes;
     T*       m_d_reduce_1st_stage;
     T*       m_d_reduce_2nd_stage;
-    void*    m_d_reduce_temp_storage_v1;
+    void*    m_d_reduce_temp_storage;
     uint32_t m_num_patches;
 };
 }  // namespace rxmesh

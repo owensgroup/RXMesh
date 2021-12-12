@@ -15,7 +15,7 @@ __launch_bounds__(blockThreads, 6) __global__
                                       rxmesh::RXMeshVertexAttribute<T> normals)
 {
     using namespace rxmesh;
-    auto vn_lambda = [&](FaceHandle face_id, RXMeshVertexIterator& fv) {
+    auto vn_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
         // get the face's three vertices coordinates
         Vector<3, T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
         Vector<3, T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));

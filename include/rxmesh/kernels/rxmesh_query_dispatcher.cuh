@@ -3,12 +3,12 @@
 #include <stdint.h>
 #include <cub/block/block_discontinuity.cuh>
 
+#include "rxmesh/iterator.cuh"
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/debug.cuh"
 #include "rxmesh/kernels/rxmesh_loader.cuh"
 #include "rxmesh/kernels/rxmesh_queries.cuh"
 #include "rxmesh/rxmesh_context.h"
-#include "rxmesh/rxmesh_iterator.cuh"
 #include "rxmesh/rxmesh_types.h"
 #include "rxmesh/util/meta.h"
 
@@ -242,11 +242,12 @@ __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
         context, compute_op, [](ComputeHandleT) { return true; }, oriented);
 }
 
-#if 0
+
 /**
  * query_block_dispatcher() for higher queries
- * TODO update to use handles 
+ * TODO update to use handles
  */
+#if 0
 template <Op op, uint32_t blockThreads, typename computeT>
 __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
                                                   const uint32_t element_id,
@@ -366,13 +367,13 @@ __device__ __inline__ void query_block_dispatcher(const RXMeshContext& context,
                  (op == Op::FV || op == Op::FE) ? 3 :
                                                   0);
 
-            RXMeshIterator iter(local_id,
-                                s_output_value,
-                                s_output_offset,
-                                s_output_mapping,
-                                fixed_offset,
-                                num_src_in_patch,
-                                int(op == Op::FE));
+            Iterator iter(local_id,
+                          s_output_value,
+                          s_output_offset,
+                          s_output_mapping,
+                          fixed_offset,
+                          num_src_in_patch,
+                          int(op == Op::FE));
 
             compute_op(element_id, iter);
         }

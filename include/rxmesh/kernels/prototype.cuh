@@ -18,8 +18,7 @@ __launch_bounds__(blockThreads) __global__
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
-    auto user_lambda = [&](InputHandleT&                    id,
-                           RXMeshIteratorV1<OutputHandleT>& iter) {
+    auto user_lambda = [&](InputHandleT& id, Iterator<OutputHandleT>& iter) {
         printf("\n iter.size() = %u", iter.size());
         for (uint32_t i = 0; i < iter.size(); ++i) {
             printf("\n iter[%u] = %lu", i, iter[i].unique_id());
@@ -44,8 +43,7 @@ __launch_bounds__(blockThreads) __global__
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
     InputHandleT thread_element;
-    auto         first_ring = [&](InputHandleT                     id,
-                          RXMeshIteratorV1<OutputHandleT>& iter) {
+    auto first_ring = [&](InputHandleT id, Iterator<OutputHandleT>& iter) {
         thread_element = id;
         printf("\n iter.size() = %u", iter.size());
         for (uint32_t i = 0; i < iter.size(); ++i) {
@@ -57,7 +55,7 @@ __launch_bounds__(blockThreads) __global__
     // query_block_dispatcher<op, blockThreads>(context, first_ring,
     // oriented);
 
-    auto n_ring = [&](InputHandleT id, RXMeshIteratorV1<OutputHandleT>& iter) {
+    auto n_ring = [&](InputHandleT id, Iterator<OutputHandleT>& iter) {
         printf("\n iter.size() = %u", iter.size());
         for (uint32_t i = 0; i < iter.size(); ++i) {
             printf("\n iter[%u] = %lu", i, iter[i].unique_id());

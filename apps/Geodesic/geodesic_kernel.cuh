@@ -93,8 +93,7 @@ __launch_bounds__(blockThreads) __global__ static void relax_ptp_rxmesh(
         return my_band >= band_start && my_band < band_end;
     };
 
-    auto geo_lambda = [&](VertexHandle&               p_id,
-                          const RXMeshVertexIterator& iter) {
+    auto geo_lambda = [&](VertexHandle& p_id, const VertexIterator& iter) {
         // this vertex (p_id) update_band
         uint32_t my_band = toplesets(p_id);
 

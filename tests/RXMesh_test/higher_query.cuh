@@ -3,10 +3,10 @@
 #include <assert.h>
 #include <stdint.h>
 
+#include "rxmesh/iterator.cuh"
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
 #include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/rxmesh_context.h"
-#include "rxmesh/rxmesh_iterator.cuh"
 #include "rxmesh/rxmesh_types.h"
 
 
@@ -29,8 +29,8 @@ __launch_bounds__(blockThreads) __global__ static void higher_query(
 
     // computation done on the first ring/level
     // this is similar to the lambda function for query_block_dispatcher()
-    auto first_level_lambda = [&](VertexHandle                    id,
-                                  RXMeshIteratorV1<VertexHandle>& iter) {
+    auto first_level_lambda = [&](VertexHandle            id,
+                                  Iterator<VertexHandle>& iter) {
         assert(iter.size() < output.get_num_attributes());
 
         num_vv_1st_ring = iter.size();
@@ -55,8 +55,8 @@ __launch_bounds__(blockThreads) __global__ static void higher_query(
             next_vertex = output(thread_vertex, next_id);
         }
 
-        auto second_level_lambda = [&](VertexHandle                   id,
-                                       RXMeshIteratorV1<VertexHandle> iter) {
+        auto second_level_lambda = [&](VertexHandle           id,
+                                       Iterator<VertexHandle> iter) {
             assert(id == next_vertex);
 
             for (uint32_t i = 0; i < iter.size(); ++i) {
