@@ -1,6 +1,4 @@
 #pragma once
-
-#include <fstream>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -122,7 +120,18 @@ class RXMesh
     };
 
    protected:
-    virtual ~RXMesh();
+    virtual ~RXMesh()
+    {        
+        for (uint32_t p = 0; p < m_num_patches; ++p) {
+            free(m_h_patches_info[p].not_owned_patch_v);
+            free(m_h_patches_info[p].not_owned_patch_e);
+            free(m_h_patches_info[p].not_owned_patch_f);
+            free(m_h_patches_info[p].not_owned_id_v);
+            free(m_h_patches_info[p].not_owned_id_e);
+            free(m_h_patches_info[p].not_owned_id_f);
+        }
+        free(m_h_patches_info);        
+    }
 
     RXMesh(const RXMesh&) = delete;
 
@@ -185,13 +194,16 @@ class RXMesh
     uint32_t m_num_edges, m_num_faces, m_num_vertices, m_max_valence,
         m_max_edge_incident_faces, m_max_face_adjacent_faces;
 
-    // patches
+    uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
+        m_max_faces_per_patch;
+
     uint32_t       m_num_patches;
     const uint32_t m_patch_size;
     bool           m_is_input_edge_manifold;
     bool           m_is_input_closed;
     bool           m_quite;
 
+    // Edge hash map that takes two vertices and return their edge id
     std::unordered_map<std::pair<uint32_t, uint32_t>,
                        uint32_t,
                        detail::edge_key_hash>
@@ -201,57 +213,18 @@ class RXMesh
     // patching the mesh into small pieces
     std::unique_ptr<patcher::Patcher> m_patcher;
 
-
-    // Patch sub-matrices
-
-    // Host
-    uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
-        m_max_faces_per_patch;
-
     //** main incident relations
     std::vector<std::vector<uint16_t>> m_h_patches_ev;
     std::vector<std::vector<uint16_t>> m_h_patches_fe;
-    //.x edge address
-    //.y edge size
-    //.z face address
-    //.w face size
-    // TODO delete
-    std::vector<uint4> m_h_ad_size;
 
     // the number of owned mesh elements per patch
     std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;
 
-    //** mappings
+    // mappings
     // local to global map for (v)ertices (e)dges and (f)aces
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_v;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_e;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
-
-    // storing the start id(x) and element count(y)
-    // TODO delete
-    std::vector<uint2> m_h_ad_size_ltog_v, m_h_ad_size_ltog_e,
-        m_h_ad_size_ltog_f;
-
-    // mapping
-    // TODO remove
-    uint32_t *m_d_patches_ltog_v, *m_d_patches_ltog_e, *m_d_patches_ltog_f;
-    uint2 *   m_d_ad_size_ltog_v, *m_d_ad_size_ltog_e, *m_d_ad_size_ltog_f;
-
-    // incidence
-    // TODO remove
-    uint16_t *m_d_patches_edges, *m_d_patches_faces;
-
-
-    //.x edge address
-    //.y edge size
-    //.z face address
-    //.w face size
-    // TODO remove
-    uint4* m_d_ad_size;
-
-    // the number of owned mesh elements per patch
-    // TODO remove
-    uint16_t *m_d_num_owned_f, *m_d_num_owned_e, *m_d_num_owned_v;
 
 
     PatchInfo *m_d_patches_info, *m_h_patches_info;

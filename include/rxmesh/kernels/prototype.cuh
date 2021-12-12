@@ -21,7 +21,7 @@ __launch_bounds__(blockThreads) __global__
     auto user_lambda = [&](InputHandleT& id, Iterator<OutputHandleT>& iter) {
         printf("\n iter.size() = %u", iter.size());
         for (uint32_t i = 0; i < iter.size(); ++i) {
-            printf("\n iter[%u] = %lu", i, iter[i].unique_id());
+            printf("\n iter[%u] = %llu", i, iter[i].unique_id());
         }
     };
     query_block_dispatcher<op, blockThreads>(context, user_lambda, oriented);
@@ -47,7 +47,7 @@ __launch_bounds__(blockThreads) __global__
         thread_element = id;
         printf("\n iter.size() = %u", iter.size());
         for (uint32_t i = 0; i < iter.size(); ++i) {
-            printf("\n iter[%u] = %lu", i, iter[i].unique_id());
+            printf("\n iter[%u] = %llu", i, iter[i].unique_id());
         }
     };
 
@@ -58,7 +58,7 @@ __launch_bounds__(blockThreads) __global__
     auto n_ring = [&](InputHandleT id, Iterator<OutputHandleT>& iter) {
         printf("\n iter.size() = %u", iter.size());
         for (uint32_t i = 0; i < iter.size(); ++i) {
-            printf("\n iter[%u] = %lu", i, iter[i].unique_id());
+            printf("\n iter[%u] = %llu", i, iter[i].unique_id());
         }
     };
 

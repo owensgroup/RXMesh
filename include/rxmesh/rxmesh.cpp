@@ -1,21 +1,19 @@
-
-#include "rxmesh/rxmesh.h"
 #include <assert.h>
 #include <omp.h>
-#include <exception>
 #include <iostream>
 #include <memory>
 #include <numeric>
 #include <queue>
+
 #include "patcher/patcher.h"
 #include "rxmesh/context.h"
+#include "rxmesh/rxmesh.h"
 #include "rxmesh/util/export_tools.h"
 #include "rxmesh/util/math.h"
 #include "rxmesh/util/util.h"
 
 namespace rxmesh {
-RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
-               const bool                                quite /*= true*/)
+RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv, const bool quite)
     : m_num_edges(0),
       m_num_faces(0),
       m_num_vertices(0),
@@ -30,15 +28,6 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
       m_max_vertices_per_patch(0),
       m_max_edges_per_patch(0),
       m_max_faces_per_patch(0),
-      m_d_patches_ltog_v(nullptr),
-      m_d_patches_ltog_e(nullptr),
-      m_d_patches_ltog_f(nullptr),
-      m_d_ad_size_ltog_v(nullptr),
-      m_d_ad_size_ltog_e(nullptr),
-      m_d_ad_size_ltog_f(nullptr),
-      m_d_patches_edges(nullptr),
-      m_d_patches_faces(nullptr),
-      m_d_ad_size(nullptr),
       m_d_patches_info(nullptr),
       m_h_patches_info(nullptr)
 {
@@ -47,7 +36,6 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
         RXMESH_ERROR(
             "RXMesh::RXMesh input fv is empty. Can not be build RXMesh "
             "properly");
-        exit(EXIT_FAILURE);
     }
     build(fv);
     build_device();
@@ -56,25 +44,7 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
     m_rxmesh_context.init(m_num_edges,
                           m_num_faces,
                           m_num_vertices,
-                          m_max_valence,
-                          m_max_edge_incident_faces,
-                          m_max_face_adjacent_faces,
                           m_num_patches,
-                          m_patcher->get_device_face_patch(),
-                          m_patcher->get_device_edge_patch(),
-                          m_patcher->get_device_vertex_patch(),
-                          m_d_patches_ltog_v,
-                          m_d_patches_ltog_e,
-                          m_d_patches_ltog_f,
-                          m_d_ad_size_ltog_v,
-                          m_d_ad_size_ltog_e,
-                          m_d_ad_size_ltog_f,
-                          m_d_patches_edges,
-                          m_d_patches_faces,
-                          m_d_ad_size,
-                          m_d_num_owned_f,
-                          m_d_num_owned_e,
-                          m_d_num_owned_v,
                           m_d_patches_info);
 
     if (!m_quite) {
@@ -96,29 +66,6 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv,
                      m_max_vertices_per_patch);
     }
 }
-
-RXMesh::~RXMesh()
-{
-    GPU_FREE(m_d_patches_ltog_v);
-    GPU_FREE(m_d_patches_ltog_e);
-    GPU_FREE(m_d_patches_ltog_f);
-    GPU_FREE(m_d_patches_edges);
-    GPU_FREE(m_d_patches_faces);
-    GPU_FREE(m_d_ad_size_ltog_v);
-    GPU_FREE(m_d_ad_size_ltog_e);
-    GPU_FREE(m_d_ad_size_ltog_f);
-    GPU_FREE(m_d_ad_size);
-    for (uint32_t p = 0; p < m_num_patches; ++p) {
-        free(m_h_patches_info[p].not_owned_patch_v);
-        free(m_h_patches_info[p].not_owned_patch_e);
-        free(m_h_patches_info[p].not_owned_patch_f);
-        free(m_h_patches_info[p].not_owned_id_v);
-        free(m_h_patches_info[p].not_owned_id_e);
-        free(m_h_patches_info[p].not_owned_id_f);
-    }
-    free(m_h_patches_info);
-    GPU_FREE(m_d_patches_info);
-};
 
 void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
 {
@@ -538,7 +485,7 @@ uint32_t RXMesh::get_edge_id(const uint32_t v0, const uint32_t v1) const
 
 uint32_t RXMesh::get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const
 {
-    uint32_t edge_id = -1;
+    uint32_t edge_id = INVALID32;
     try {
         edge_id = m_edges_map.at(edge);
     } catch (const std::out_of_range&) {
