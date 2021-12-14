@@ -20,14 +20,14 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv, const bool quite)
       m_max_valence(0),
       m_max_edge_incident_faces(0),
       m_max_face_adjacent_faces(0),
+      m_max_vertices_per_patch(0),
+      m_max_edges_per_patch(0),
+      m_max_faces_per_patch(0),
       m_num_patches(0),
       m_patch_size(512),
       m_is_input_edge_manifold(true),
       m_is_input_closed(true),
-      m_quite(quite),
-      m_max_vertices_per_patch(0),
-      m_max_edges_per_patch(0),
-      m_max_faces_per_patch(0),
+      m_quite(quite),      
       m_d_patches_info(nullptr),
       m_h_patches_info(nullptr)
 {
