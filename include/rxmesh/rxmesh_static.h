@@ -503,7 +503,8 @@ class RXMeshStatic : public RXMesh
      */
     uint32_t map_to_global(const VertexHandle vh) const
     {
-        return m_h_patches_ltog_v[vh.m_patch_id][vh.m_v.id];
+        auto pl = vh.unpack();
+        return m_h_patches_ltog_v[pl.first][pl.second];
     }
 
     /**
@@ -513,7 +514,8 @@ class RXMeshStatic : public RXMesh
      */
     uint32_t map_to_global(const EdgeHandle eh) const
     {
-        return m_h_patches_ltog_e[eh.m_patch_id][eh.m_e.id];
+        auto pl = eh.unpack();
+        return m_h_patches_ltog_e[pl.first][pl.second];
     }
 
     /**
@@ -524,7 +526,8 @@ class RXMeshStatic : public RXMesh
      */
     uint32_t map_to_global(const FaceHandle fh) const
     {
-        return m_h_patches_ltog_f[fh.m_patch_id][fh.m_f.id];
+        auto pl = fh.unpack();
+        return m_h_patches_ltog_f[pl.first][pl.second];
     }
 
     /**
@@ -548,7 +551,6 @@ class RXMeshStatic : public RXMesh
                 this->m_h_patches_info[p].num_vertices;
 
             for (uint16_t v = 0; v < p_num_vertices; ++v) {
-                // LocalVertexT lv(v);
                 VertexHandle vh(p, {v});
                 file << "v " << coords(vh, 0) << " " << coords(vh, 1) << " "
                      << coords(vh, 2) << std::endl;

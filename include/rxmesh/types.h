@@ -209,34 +209,46 @@ uint64_t __device__ __host__ __forceinline__ unique_id(const uint16_t local_id,
     ret |= local_id;
     return ret;
 }
+
+/**
+ * @brief unpack a 64 uint its high and low 32 bits. The low 32 bit are casted
+ * to 16 bit. This is unused to convert the unique id to its local id (16 low
+ * bit) and patch id (high 32 bit)
+ * @param uid unique id
+ * @return a std::pair storing the patch id and local id
+ */
+std::pair<uint32_t, uint16_t> __device__ __host__ __forceinline__
+unpack(uint64_t uid)
+{
+    uint16_t local_id = uid & ((1 << 16) - 1);
+    uint32_t patch_id = uid >> 32;
+    return std::make_pair(patch_id, local_id);
+}
+
 }  // namespace detail
 
 /**
  * @brief vertices identifier
  */
-struct ALIGN(8) VertexHandle
+struct VertexHandle
 {
     using LocalT = LocalVertexT;
 
-    template <typename T>
-    friend class VertexAttribute;
-    friend class RXMeshStatic;
-    friend class PatchInfo;
 
-    __device__ __host__ VertexHandle() : m_patch_id(INVALID32), m_v({INVALID16})
+    __device__ __host__ VertexHandle() : m_handle(INVALID64)
     {
     }
 
     __device__ __host__ VertexHandle(uint32_t     patch_id,
                                      LocalVertexT vertex_local_id)
-        : m_patch_id(patch_id), m_v(vertex_local_id)
+        : m_handle(detail::unique_id(vertex_local_id.id, patch_id))
     {
     }
 
     bool __device__ __host__ __inline__ operator==(
         const VertexHandle& rhs) const
     {
-        return m_v.id == rhs.m_v.id && m_patch_id == rhs.m_patch_id;
+        return m_handle == rhs.m_handle;
     }
 
     bool __device__ __host__ __inline__ operator!=(
@@ -247,17 +259,21 @@ struct ALIGN(8) VertexHandle
 
     bool __device__ __host__ __inline__ is_valid() const
     {
-        return m_patch_id != INVALID32 && m_v.id != INVALID16;
+        return m_handle != INVALID64;
     }
 
     uint64_t __device__ __host__ __inline__ unique_id() const
     {
-        return detail::unique_id(m_v.id, m_patch_id);
+        return m_handle;
+    }
+
+    std::pair<uint32_t, uint16_t> __device__ __host__ __inline__ unpack() const
+    {
+        return detail::unpack(m_handle);
     }
 
    private:
-    uint32_t     m_patch_id;
-    LocalVertexT m_v;
+    uint64_t m_handle;
 };
 
 /**
@@ -271,27 +287,23 @@ inline std::ostream& operator<<(std::ostream& os, VertexHandle v_handle)
 /**
  * @brief edges identifier
  */
-struct ALIGN(8) EdgeHandle
+struct EdgeHandle
 {
     using LocalT = LocalEdgeT;
 
-    template <typename T>
-    friend class EdgeAttribute;
-    friend class RXMeshStatic;
-    friend class PatchInfo;
 
-    __device__ __host__ EdgeHandle() : m_patch_id(INVALID32), m_e({INVALID16})
+    __device__ __host__ EdgeHandle() : m_handle(INVALID64)
     {
     }
 
     __device__ __host__ EdgeHandle(uint32_t patch_id, LocalEdgeT edge_local_id)
-        : m_patch_id(patch_id), m_e(edge_local_id)
+        : m_handle(detail::unique_id(edge_local_id.id, patch_id))
     {
     }
 
     bool __device__ __host__ __inline__ operator==(const EdgeHandle& rhs) const
     {
-        return m_e.id == rhs.m_e.id && m_patch_id == rhs.m_patch_id;
+        return m_handle == rhs.m_handle;
     }
 
     bool __device__ __host__ __inline__ operator!=(const EdgeHandle& rhs) const
@@ -301,17 +313,21 @@ struct ALIGN(8) EdgeHandle
 
     bool __device__ __host__ __inline__ is_valid() const
     {
-        return m_patch_id != INVALID32 && m_e.id != INVALID16;
+        return m_handle != INVALID64;
     }
 
     uint64_t __device__ __host__ __inline__ unique_id() const
     {
-        return detail::unique_id(m_e.id, m_patch_id);
+        return m_handle;
+    }
+
+    std::pair<uint32_t, uint16_t> __device__ __host__ __inline__ unpack() const
+    {
+        return detail::unpack(m_handle);
     }
 
    private:
-    uint32_t   m_patch_id;
-    LocalEdgeT m_e;
+    uint64_t m_handle;
 };
 
 /**
@@ -325,27 +341,22 @@ inline std::ostream& operator<<(std::ostream& os, EdgeHandle e_handle)
 /**
  * @brief faces identifier
  */
-struct ALIGN(8) FaceHandle
+struct FaceHandle
 {
     using LocalT = LocalFaceT;
 
-    template <typename T>
-    friend class FaceAttribute;
-    friend class RXMeshStatic;
-    friend class PatchInfo;
-
-    __device__ __host__ FaceHandle() : m_patch_id(INVALID32), m_f({INVALID16})
+    __device__ __host__ FaceHandle() : m_handle(INVALID64)
     {
     }
 
     __device__ __host__ FaceHandle(uint32_t patch_id, LocalFaceT face_local_id)
-        : m_patch_id(patch_id), m_f(face_local_id)
+        : m_handle(detail::unique_id(face_local_id.id, patch_id))
     {
     }
 
     bool __device__ __host__ __inline__ operator==(const FaceHandle& rhs) const
     {
-        return m_f.id == rhs.m_f.id && m_patch_id == rhs.m_patch_id;
+        return m_handle == rhs.m_handle;
     }
 
     bool __device__ __host__ __inline__ operator!=(const FaceHandle& rhs) const
@@ -355,17 +366,21 @@ struct ALIGN(8) FaceHandle
 
     bool __device__ __host__ __inline__ is_valid() const
     {
-        return m_patch_id != INVALID32 && m_f.id != INVALID16;
+        return m_handle != INVALID64;
     }
 
     uint64_t __device__ __host__ __inline__ unique_id() const
     {
-        return detail::unique_id(m_f.id, m_patch_id);
+        return m_handle;
+    }
+
+    std::pair<uint32_t, uint16_t> __device__ __host__ __inline__ unpack() const
+    {
+        return detail::unpack(m_handle);
     }
 
    private:
-    uint32_t   m_patch_id;
-    LocalFaceT m_f;
+    uint64_t m_handle;
 };
 
 /**

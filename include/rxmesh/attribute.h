@@ -542,12 +542,13 @@ class FaceAttribute : public Attribute<T>
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
                                                       const uint32_t attr) const
     {
+        auto unpack = f_handle.unpack();
 #ifdef __CUDA_ARCH__
-        auto pl = m_d_patches_info[f_handle.m_patch_id].get_patch_and_local_id(
-            f_handle);
+        auto pl =
+            m_d_patches_info[unpack.first].get_patch_and_local_id(f_handle);
 #else
-        auto pl = m_h_patches_info[f_handle.m_patch_id].get_patch_and_local_id(
-            f_handle);
+        auto pl =
+            m_h_patches_info[unpack.first].get_patch_and_local_id(f_handle);
 #endif
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
@@ -561,12 +562,13 @@ class FaceAttribute : public Attribute<T>
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
                                                       const uint32_t   attr)
     {
+        auto unpack = f_handle.unpack();
 #ifdef __CUDA_ARCH__
-        auto pl = m_d_patches_info[f_handle.m_patch_id].get_patch_and_local_id(
-            f_handle);
+        auto pl =
+            m_d_patches_info[unpack.first].get_patch_and_local_id(f_handle);
 #else
-        auto pl = m_h_patches_info[f_handle.m_patch_id].get_patch_and_local_id(
-            f_handle);
+        auto pl =
+            m_h_patches_info[unpack.first].get_patch_and_local_id(f_handle);
 #endif
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
@@ -609,12 +611,13 @@ class EdgeAttribute : public Attribute<T>
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
                                                       const uint32_t attr) const
     {
+        auto unpack = e_handle.unpack();
 #ifdef __CUDA_ARCH__
-        auto pl = m_d_patches_info[e_handle.m_patch_id].get_patch_and_local_id(
-            e_handle);
+        auto pl =
+            m_d_patches_info[unpack.first].get_patch_and_local_id(e_handle);
 #else
-        auto pl = m_h_patches_info[e_handle.m_patch_id].get_patch_and_local_id(
-            e_handle);
+        auto pl =
+            m_h_patches_info[unpack.first].get_patch_and_local_id(e_handle);
 #endif
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
@@ -628,12 +631,13 @@ class EdgeAttribute : public Attribute<T>
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
                                                       const uint32_t   attr)
     {
+        auto unpack = e_handle.unpack();
 #ifdef __CUDA_ARCH__
-        auto pl = m_d_patches_info[e_handle.m_patch_id].get_patch_and_local_id(
-            e_handle);
+        auto pl =
+            m_d_patches_info[unpack.first].get_patch_and_local_id(e_handle);
 #else
-        auto pl = m_h_patches_info[e_handle.m_patch_id].get_patch_and_local_id(
-            e_handle);
+        auto pl =
+            m_h_patches_info[unpack.first].get_patch_and_local_id(e_handle);
 #endif
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
@@ -678,12 +682,13 @@ class VertexAttribute : public Attribute<T>
         const VertexHandle v_handle,
         const uint32_t     attr) const
     {
+        auto unpack = v_handle.unpack();
 #ifdef __CUDA_ARCH__
-        auto pl = m_d_patches_info[v_handle.m_patch_id].get_patch_and_local_id(
-            v_handle);
+        auto pl =
+            m_d_patches_info[unpack.first].get_patch_and_local_id(v_handle);
 #else
-        auto pl = m_h_patches_info[v_handle.m_patch_id].get_patch_and_local_id(
-            v_handle);
+        auto pl =
+            m_h_patches_info[unpack.first].get_patch_and_local_id(v_handle);
 #endif
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
@@ -698,12 +703,13 @@ class VertexAttribute : public Attribute<T>
         const VertexHandle v_handle,
         const uint32_t     attr)
     {
+        auto unpack = v_handle.unpack();
 #ifdef __CUDA_ARCH__
-        auto pl = m_d_patches_info[v_handle.m_patch_id].get_patch_and_local_id(
-            v_handle);
+        auto pl =
+            m_d_patches_info[unpack.first].get_patch_and_local_id(v_handle);
 #else
-        auto pl = m_h_patches_info[v_handle.m_patch_id].get_patch_and_local_id(
-            v_handle);
+        auto pl =
+            m_h_patches_info[unpack.first].get_patch_and_local_id(v_handle);
 #endif
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }

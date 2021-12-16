@@ -8,7 +8,6 @@
 #include "patcher/patcher.h"
 #include "rxmesh/context.h"
 #include "rxmesh/rxmesh.h"
-#include "rxmesh/util/export_tools.h"
 #include "rxmesh/util/math.h"
 #include "rxmesh/util/util.h"
 

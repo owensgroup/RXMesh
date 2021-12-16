@@ -42,17 +42,17 @@ struct ALIGN(16) PatchInfo
     get_patch_and_local_id(const VertexHandle& vh) const
     {
         assert(vh.is_valid());
-        assert(patch_id == vh.m_patch_id);
+        
+        auto ret = vh.unpack();
 
-        uint32_t p = patch_id;
-        uint16_t l = vh.m_v.id;
+        assert(patch_id == ret.first);
 
-        if (l >= num_owned_vertices) {
-            p = not_owned_patch_v[l - num_owned_vertices];
-            l = not_owned_id_v[l - num_owned_vertices].id;
+        if (ret.second >= num_owned_vertices) {
+            ret.first  = not_owned_patch_v[ret.second - num_owned_vertices];
+            ret.second = not_owned_id_v[ret.second - num_owned_vertices].id;
         }
 
-        return std::make_pair(p, l);
+        return ret;
     }
 
 
@@ -60,34 +60,34 @@ struct ALIGN(16) PatchInfo
     get_patch_and_local_id(const EdgeHandle& eh) const
     {
         assert(eh.is_valid());
-        assert(patch_id == eh.m_patch_id);
+        
+        auto ret = eh.unpack();
 
-        uint32_t p = patch_id;
-        uint16_t l = eh.m_e.id;
+        assert(patch_id == ret.first);
 
-        if (l >= num_owned_edges) {
-            p = not_owned_patch_e[l - num_owned_edges];
-            l = not_owned_id_e[l - num_owned_edges].id;
+        if (ret.second >= num_owned_edges) {
+            ret.first  = not_owned_patch_e[ret.second - num_owned_edges];
+            ret.second = not_owned_id_e[ret.second - num_owned_edges].id;
         }
 
-        return std::make_pair(p, l);
+        return ret;
     }
 
     __host__ __device__ __forceinline__ std::pair<uint32_t, uint16_t>
     get_patch_and_local_id(const FaceHandle& fh) const
     {
-        assert(fh.is_valid());
-        assert(patch_id == fh.m_patch_id);
+        assert(fh.is_valid());        
 
-        uint32_t p = patch_id;
-        uint16_t l = fh.m_f.id;
+        auto ret = fh.unpack();
 
-        if (l >= num_owned_faces) {
-            p = not_owned_patch_f[l - num_owned_faces];
-            l = not_owned_id_f[l - num_owned_faces].id;
+        assert(patch_id == ret.first);
+
+        if (ret.second >= num_owned_faces) {
+            ret.first  = not_owned_patch_f[ret.second - num_owned_faces];
+            ret.second = not_owned_id_f[ret.second - num_owned_faces].id;
         }
 
-        return std::make_pair(p, l);
+        return ret;
     }
 };
 
