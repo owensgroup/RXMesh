@@ -40,7 +40,7 @@ struct Iterator
 
     __device__ HandleT operator*() const
     {
-        assert(m_patch_output);        
+        assert(m_patch_output);
         return ((*this)[m_current]);
     }
 
@@ -60,7 +60,7 @@ struct Iterator
         m_current = (m_current + 1) % size();
         return *this;
     }
-    __device__ const Iterator operator++(int)
+    __device__ Iterator operator++(int)
     {
         // post
         Iterator pre(*this);
@@ -75,7 +75,7 @@ struct Iterator
         return *this;
     }
 
-    __device__ const Iterator operator--(int)
+    __device__ Iterator operator--(int)
     {
         // post
         Iterator pre(*this);
@@ -85,7 +85,8 @@ struct Iterator
 
     __device__ bool operator==(const Iterator& rhs) const
     {
-        return rhs.m_local_id == m_local_id && rhs.m_current == m_current;
+        return rhs.m_local_id == m_local_id && rhs.m_patch_id == m_patch_id &&
+               rhs.m_current == m_current;
     }
 
     __device__ bool operator!=(const Iterator& rhs) const
