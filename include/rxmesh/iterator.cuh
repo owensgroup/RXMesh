@@ -40,8 +40,7 @@ struct Iterator
 
     __device__ HandleT operator*() const
     {
-        assert(m_patch_output);
-        assert(m_output_ltog_map);
+        assert(m_patch_output);        
         return ((*this)[m_current]);
     }
 
