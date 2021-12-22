@@ -5,10 +5,9 @@
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh_test.h"
 
-TEST(RXMeshStatic, DISABLED_HigherQueries)
+TEST(RXMeshStatic, HigherQueries)
 {
     using namespace rxmesh;
-
 
     // Select device
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
@@ -24,16 +23,13 @@ TEST(RXMeshStatic, DISABLED_HigherQueries)
 
     // input/output container
     auto input = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
-    input.reset(VertexHandle(), rxmesh::DEVICE);
+    input->reset(VertexHandle(), rxmesh::DEVICE);
 
     // we assume that every vertex could store up to num_vertices as its
     // neighbor vertices which is a bit excessive
     auto output = rxmesh.add_vertex_attribute<VertexHandle>(
         "output", rxmesh.get_num_vertices());
-    output.reset(VertexHandle(), rxmesh::DEVICE);
-
-    output->move(rxmesh::HOST, rxmesh::DEVICE);
-    input->move(rxmesh::HOST, rxmesh::DEVICE);
+    output->reset(VertexHandle(), rxmesh::DEVICE);
 
     // launch box
     constexpr uint32_t      blockThreads = 512;

@@ -53,10 +53,10 @@ __launch_bounds__(blockThreads) __global__ static void higher_query(
 
         if (thread_vertex.is_valid() && next_id < num_vv_1st_ring) {
             next_vertex = output(thread_vertex, next_id);
-        }
+        }        
 
-        auto higher_rings_lambda = [&](VertexHandle           id,
-                                       Iterator<VertexHandle> iter) {
+        auto higher_rings_lambda = [&](const VertexHandle&   id,
+                                       const VertexIterator& iter) {
             assert(id == next_vertex);
 
             for (uint32_t i = 0; i < iter.size(); ++i) {
@@ -78,7 +78,7 @@ __launch_bounds__(blockThreads) __global__ static void higher_query(
             }
         };
 
-        query_block_dispatcher<op, blockThreads>(
+        higher_query_block_dispatcher<op, blockThreads>(
             context, next_vertex, higher_rings_lambda);
 
         bool is_done =

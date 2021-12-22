@@ -41,10 +41,11 @@ struct ALIGN(16) PatchInfo
     __host__ __device__ __forceinline__ std::pair<uint32_t, uint16_t>
     get_patch_and_local_id(const VertexHandle& vh) const
     {
-        assert(vh.is_valid());
-        
         auto ret = vh.unpack();
 
+        if (!vh.is_valid()) {
+            return ret;
+        }
         assert(patch_id == ret.first);
 
         if (ret.second >= num_owned_vertices) {
@@ -59,9 +60,12 @@ struct ALIGN(16) PatchInfo
     __host__ __device__ __forceinline__ std::pair<uint32_t, uint16_t>
     get_patch_and_local_id(const EdgeHandle& eh) const
     {
-        assert(eh.is_valid());
-        
+
         auto ret = eh.unpack();
+
+        if (!eh.is_valid()) {
+            return ret;
+        }
 
         assert(patch_id == ret.first);
 
@@ -76,9 +80,11 @@ struct ALIGN(16) PatchInfo
     __host__ __device__ __forceinline__ std::pair<uint32_t, uint16_t>
     get_patch_and_local_id(const FaceHandle& fh) const
     {
-        assert(fh.is_valid());        
-
         auto ret = fh.unpack();
+
+        if (!fh.is_valid()) {
+            return ret;
+        }
 
         assert(patch_id == ret.first);
 

@@ -19,13 +19,13 @@ namespace detail {
 /**
  * query_block_dispatcher()
  */
-template <Op op, typename T, uint32_t blockThreads, typename activeSetT>
+template <Op op, uint32_t blockThreads, typename activeSetT>
 __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
                                                   activeSetT compute_active_set,
                                                   const bool oriented,
                                                   uint32_t&  num_src_in_patch,
                                                   uint16_t*& s_output_offset,
-                                                  T*&        s_output_value)
+                                                  uint16_t*& s_output_value)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
@@ -91,23 +91,19 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     if (oriented) {
         assert(op == Op::VV);
         if constexpr (op == Op::VV) {
-            uint16_t* temp_output;
             v_v_oreinted<blockThreads>(patch_info,
                                        s_output_offset,
-                                       temp_output,
+                                       s_output_value,
                                        reinterpret_cast<uint16_t*>(s_ev));
-            s_output_value = reinterpret_cast<T*>(temp_output);
         }
     } else {
-        uint16_t* temp_output;
         query<blockThreads, op>(s_output_offset,
-                                temp_output,
+                                s_output_value,
                                 reinterpret_cast<uint16_t*>(s_ev),
                                 reinterpret_cast<uint16_t*>(s_fe),
                                 patch_info.num_vertices,
                                 patch_info.num_edges,
                                 patch_info.num_faces);
-        s_output_value = reinterpret_cast<T*>(temp_output);
     }
 
     __syncthreads();
@@ -129,27 +125,16 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     // The first parameter should be Vertex/Edge/FaceHandle and second parameter
     // should be RXMeshVertex/Edge/FaceIterator
 
-    using ComputeTraits = detail::FunctionTraits<computeT>;
-    using Compute0Arg   = typename ComputeTraits::template arg<0>::type;
-    using Compute1Arg   = typename ComputeTraits::template arg<1>::type;
-    using ComputeHandleT =
-        std::conditional_t<std::is_reference_v<Compute0Arg>,
-                           std::remove_reference_t<Compute0Arg>,
-                           Compute0Arg>;
-    using ComputeIteratorT =
-        std::conditional_t<std::is_reference_v<Compute1Arg>,
-                           std::remove_reference_t<Compute1Arg>,
-                           Compute1Arg>;
-    using LocalT = typename ComputeIteratorT::LocalT;
+    using ComputeTraits    = detail::FunctionTraits<computeT>;
+    using ComputeHandleT   = typename ComputeTraits::template arg<0>::type;
+    using ComputeIteratorT = typename ComputeTraits::template arg<1>::type;
+    using LocalT           = typename ComputeIteratorT::LocalT;
+
     // Extract the type of the single input parameter of the active_set lambda
     // function. It should be Vertex/Edge/FaceHandle and it should match the
     // first parameter of the compute lambda function
-    using ActiveSetTraits = detail::FunctionTraits<activeSetT>;
-    using ActiveSet0Arg   = typename ActiveSetTraits::template arg<0>::type;
-    using ActiveSetHandleT =
-        std::conditional_t<std::is_reference_v<ActiveSet0Arg>,
-                           std::remove_reference_t<ActiveSet0Arg>,
-                           ActiveSet0Arg>;
+    using ActiveSetTraits  = detail::FunctionTraits<activeSetT>;
+    using ActiveSetHandleT = typename ActiveSetTraits::template arg<0>::type;
     static_assert(
         std::is_same_v<ActiveSetHandleT, ComputeHandleT>,
         "First argument of compute_op lambda function should match the first "
@@ -162,9 +147,9 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
 
     uint32_t  num_src_in_patch = 0;
     uint16_t* s_output_offset(nullptr);
-    LocalT*   s_output_value(nullptr);
+    uint16_t* s_output_value(nullptr);
 
-    detail::template query_block_dispatcher<op, LocalT, blockThreads>(
+    detail::template query_block_dispatcher<op, blockThreads>(
         context.get_patches_info()[patch_id],
         compute_active_set,
         oriented,
@@ -190,7 +175,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
 
             ComputeHandleT   handle(patch_id, local_id);
             ComputeIteratorT iter(local_id,
-                                  s_output_value,
+                                  reinterpret_cast<LocalT*>(s_output_value),
                                   s_output_offset,
                                   fixed_offset,
                                   patch_id,
@@ -231,12 +216,8 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
 {
     // Extract the type of the first input parameters of the compute lambda
     // function. It should be Vertex/Edge/FaceHandle
-    using ComputeTraits = detail::FunctionTraits<computeT>;
-    using Compute0Arg   = typename ComputeTraits::template arg<0>::type;
-    using ComputeHandleT =
-        std::conditional_t<std::is_reference_v<Compute0Arg>,
-                           std::remove_reference_t<Compute0Arg>,
-                           Compute0Arg>;
+    using ComputeTraits  = detail::FunctionTraits<computeT>;
+    using ComputeHandleT = typename ComputeTraits::template arg<0>::type;
 
     query_block_dispatcher<op, blockThreads>(
         context, compute_op, [](ComputeHandleT) { return true; }, oriented);
@@ -245,20 +226,31 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
 
 /**
  * query_block_dispatcher() for higher queries
- * TODO update to use handles
  */
 template <Op op, uint32_t blockThreads, typename computeT, typename HandleT>
-__device__ __inline__ void query_block_dispatcher(const Context& context,
-                                                  const HandleT  src_id,
-                                                  computeT       compute_op,
-                                                  const bool oriented = false)
-{
+__device__ __inline__ void higher_query_block_dispatcher(
+    const Context& context,
+    const HandleT  src_id,
+    computeT       compute_op,
+    const bool     oriented = false)
+{    
+    using ComputeTraits    = detail::FunctionTraits<computeT>;
+    using ComputeIteratorT = typename ComputeTraits::template arg<1>::type;
+
     // The whole block should be calling this function. If one thread is not
     // participating, its src_id should be INVALID32
 
-    auto compute_active_set          = [](HandleT) { return true; };
-    std::pair<uint32_t, uint16_t> pl = detail::unpack(src_id.unique_id());
+    auto compute_active_set = [](HandleT) { return true; };
 
+    // the source and local id of the source mesh element
+    std::pair<uint32_t, uint16_t> pl_not_owning =
+        detail::unpack(src_id.unique_id());
+    // which could be on a ribbon and so performing query on that patch is
+    // meaningless so we grab the patch that owns this source mesh elements and
+    // find it local id in there as well
+    std::pair<uint32_t, uint16_t> pl_owning =
+        context.get_patches_info()[pl_not_owning.first].get_patch_and_local_id(
+            src_id);
 
     // Here, we want to identify the set of unique patches for this thread
     // block. We do this by first sorting the patches, compute discontinuity
@@ -279,7 +271,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     };
     __shared__ TempStorage all_temp_storage;
     uint32_t               thread_data[1], thread_head_flags[1];
-    thread_data[0]       = pl.first;
+    thread_data[0]       = pl_owning.first;
     thread_head_flags[0] = 0;
     BlockRadixSort(all_temp_storage.sort_storage).Sort(thread_data);
     BlockDiscontinuity(all_temp_storage.discont_storage)
@@ -311,45 +303,37 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
 
         assert(patch_id < context.get_num_patches());
 
-        uint32_t  num_src_in_patch = 0;        
+        uint32_t  num_src_in_patch = 0;
         uint16_t *s_output_offset(nullptr), *s_output_value(nullptr);
 
         detail::template query_block_dispatcher<op, blockThreads>(
-            context.get_patches_info()[patch_id],            
+            context.get_patches_info()[patch_id],
             compute_active_set,
-            oriented,            
-            num_src_in_patch,            
-            s_output_mapping,
+            oriented,
+            num_src_in_patch,
             s_output_offset,
             s_output_value);
 
 
-        if (pl.first == patch_id) {
-
-            uint16_t local_id = INVALID16;
-
-            for (uint16_t j = 0; j < num_src_in_patch; ++j) {
-                if (src_id == s_output_mapping[j]) {
-                    local_id = j;
-                    break;
-                }
-            }
+        if (pl_owning.first == patch_id) {
 
             constexpr uint32_t fixed_offset =
                 ((op == Op::EV)                 ? 2 :
                  (op == Op::FV || op == Op::FE) ? 3 :
                                                   0);
 
-            Iterator iter(local_id,
-                          s_output_value,
-                          s_output_offset,
-                          s_output_mapping,
-                          fixed_offset,
-                          num_src_in_patch,
-                          int(op == Op::FE));
+            ComputeIteratorT iter(
+                pl_owning.second,
+                reinterpret_cast<typename ComputeIteratorT::LocalT*>(
+                    s_output_value),
+                s_output_offset,
+                fixed_offset,
+                patch_id,
+                int(op == Op::FE));
 
             compute_op(src_id, iter);
         }
+        __syncthreads();
     }
 }
 

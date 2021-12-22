@@ -36,7 +36,14 @@ struct FunctionTraits<ReturnType (ClassType::*)(Args...) const>
     template <size_t i>
     struct arg
     {
-        typedef typename std::tuple_element<i, std::tuple<Args...>>::type type;
+        using type_rc =
+            typename std::tuple_element<i, std::tuple<Args...>>::type;
+        using type_c = std::conditional_t<std::is_reference_v<type_rc>,
+                                          std::remove_reference_t<type_rc>,
+                                          type_rc>;
+        using type   = std::conditional_t<std::is_const_v<type_c>,
+                                        std::remove_const_t<type_c>,
+                                        type_c>;
     };
 };
 
