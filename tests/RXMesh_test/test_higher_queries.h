@@ -21,22 +21,16 @@ TEST(RXMeshStatic, DISABLED_HigherQueries)
     // RXMesh
     RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
 
-    uint32_t input_size = rxmesh.get_num_vertices();
 
     // input/output container
     auto input = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
+    input.reset(VertexHandle(), rxmesh::DEVICE);
 
     // we assume that every vertex could store up to num_vertices as its
     // neighbor vertices which is a bit excessive
-    auto output =
-        rxmesh.add_vertex_attribute<VertexHandle>("output", input_size);
-
-    rxmesh.for_each_vertex(HOST, [&](const VertexHandle& handle) {
-        (*input)(handle) = VertexHandle();
-        for (uint32_t j = 0; j < (*output).get_num_attributes(); ++j) {
-            (*output)(handle, j) = VertexHandle();
-        }
-    });
+    auto output = rxmesh.add_vertex_attribute<VertexHandle>(
+        "output", rxmesh.get_num_vertices());
+    output.reset(VertexHandle(), rxmesh::DEVICE);
 
     output->move(rxmesh::HOST, rxmesh::DEVICE);
     input->move(rxmesh::HOST, rxmesh::DEVICE);

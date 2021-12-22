@@ -247,38 +247,18 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
  * query_block_dispatcher() for higher queries
  * TODO update to use handles
  */
-#if 0
-template <Op op, uint32_t blockThreads, typename computeT>
+template <Op op, uint32_t blockThreads, typename computeT, typename HandleT>
 __device__ __inline__ void query_block_dispatcher(const Context& context,
-                                                  const uint32_t element_id,
+                                                  const HandleT  src_id,
                                                   computeT       compute_op,
                                                   const bool oriented = false)
 {
     // The whole block should be calling this function. If one thread is not
-    // participating, its element_id should be INVALID32
+    // participating, its src_id should be INVALID32
 
-    auto compute_active_set = [](uint32_t) { return true; };
+    auto compute_active_set          = [](HandleT) { return true; };
+    std::pair<uint32_t, uint16_t> pl = detail::unpack(src_id.unique_id());
 
-    uint32_t element_patch = INVALID32;
-    if (element_id != INVALID32) {
-        switch (op) {
-            case Op::VV:
-            case Op::VE:
-            case Op::VF:
-                element_patch = context.get_vertex_patch()[element_id];
-                break;
-            case Op::FV:
-            case Op::FE:
-            case Op::FF:
-                element_patch = context.get_face_patch()[element_id];
-                break;
-            case Op::EV:
-            case Op::EE:
-            case Op::EF:
-                element_patch = context.get_edge_patch()[element_id];
-                break;
-        }
-    }
 
     // Here, we want to identify the set of unique patches for this thread
     // block. We do this by first sorting the patches, compute discontinuity
@@ -299,7 +279,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     };
     __shared__ TempStorage all_temp_storage;
     uint32_t               thread_data[1], thread_head_flags[1];
-    thread_data[0]       = element_patch;
+    thread_data[0]       = pl.first;
     thread_head_flags[0] = 0;
     BlockRadixSort(all_temp_storage.sort_storage).Sort(thread_data);
     BlockDiscontinuity(all_temp_storage.discont_storage)
@@ -331,32 +311,25 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
 
         assert(patch_id < context.get_num_patches());
 
-        uint32_t  num_src_in_patch = 0;
-        uint32_t *input_mapping(nullptr), *s_output_mapping(nullptr);
+        uint32_t  num_src_in_patch = 0;        
         uint16_t *s_output_offset(nullptr), *s_output_value(nullptr);
 
         detail::template query_block_dispatcher<op, blockThreads>(
-            context,
-            patch_id,
+            context.get_patches_info()[patch_id],            
             compute_active_set,
-            oriented,
-            true,
-            num_src_in_patch,
-            input_mapping,
+            oriented,            
+            num_src_in_patch,            
             s_output_mapping,
             s_output_offset,
             s_output_value);
 
-        assert(input_mapping);
-        assert(s_output_value);
 
-
-        if (element_patch == patch_id) {
+        if (pl.first == patch_id) {
 
             uint16_t local_id = INVALID16;
 
             for (uint16_t j = 0; j < num_src_in_patch; ++j) {
-                if (element_id == s_output_mapping[j]) {
+                if (src_id == s_output_mapping[j]) {
                     local_id = j;
                     break;
                 }
@@ -375,10 +348,10 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
                           num_src_in_patch,
                           int(op == Op::FE));
 
-            compute_op(element_id, iter);
+            compute_op(src_id, iter);
         }
     }
 }
-#endif
+
 
 }  // namespace rxmesh

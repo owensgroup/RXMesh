@@ -29,8 +29,8 @@ __launch_bounds__(blockThreads) __global__ static void higher_query(
 
     // computation done on the first ring/level
     // this is similar to the lambda function for query_block_dispatcher()
-    auto first_level_lambda = [&](VertexHandle            id,
-                                  Iterator<VertexHandle>& iter) {
+    auto first_ring_lambda = [&](VertexHandle            id,
+                                 Iterator<VertexHandle>& iter) {
         assert(iter.size() < output.get_num_attributes());
 
         num_vv_1st_ring = iter.size();
@@ -45,7 +45,7 @@ __launch_bounds__(blockThreads) __global__ static void higher_query(
         }
     };
 
-    query_block_dispatcher<op, blockThreads>(context, first_level_lambda);
+    query_block_dispatcher<op, blockThreads>(context, first_ring_lambda);
 
     uint32_t next_id = 0;
     while (true) {
@@ -55,7 +55,7 @@ __launch_bounds__(blockThreads) __global__ static void higher_query(
             next_vertex = output(thread_vertex, next_id);
         }
 
-        auto second_level_lambda = [&](VertexHandle           id,
+        auto higher_rings_lambda = [&](VertexHandle           id,
                                        Iterator<VertexHandle> iter) {
             assert(id == next_vertex);
 
@@ -78,8 +78,8 @@ __launch_bounds__(blockThreads) __global__ static void higher_query(
             }
         };
 
-        // query_block_dispatcher<op, blockThreads>(
-        //    context, next_vertex, second_level_lambda);
+        query_block_dispatcher<op, blockThreads>(
+            context, next_vertex, higher_rings_lambda);
 
         bool is_done =
             (next_id >= num_vv_1st_ring) || !thread_vertex.is_valid();
