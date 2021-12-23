@@ -355,6 +355,14 @@ class RXMeshTest
                   const InputAttributeT&                    input,
                   const OutputAttributeT&                   output)
     {
+        auto global_id_from_handle = [&](OutputHandleT xxh) -> uint32_t {
+            auto unpack = xxh.unpack();
+            auto pl =
+                rxmesh.m_h_patches_info[unpack.first].get_patch_and_local_id(
+                    xxh);
+            return output_ltog[pl.first][pl.second];
+        };
+
         for (uint32_t p = 0; p < rxmesh.get_num_patches(); ++p) {
             for (uint32_t e = 0; e < num_owned_input_elements[p]; ++e) {
                 InputHandleT eh(p, e);
@@ -373,9 +381,7 @@ class RXMeshTest
                         num_xx++;
 
                         // extract local id from xxh's unique id
-                        uint64_t uid       = xxh.unique_id();
-                        uint16_t lid       = uid & ((1 << 16) - 1);
-                        uint32_t xx_global = output_ltog[p][lid];
+                        uint32_t xx_global = global_id_from_handle(xxh);
 
                         uint32_t id =
                             rxmesh::find_index(xx_global, gt[e_global]);
@@ -399,9 +405,7 @@ class RXMeshTest
                     for (uint32_t j = 0; j < output.get_num_attributes(); ++j) {
                         OutputHandleT xxh = output(eh, j);
                         if (xxh.is_valid()) {
-                            uint64_t uid       = xxh.unique_id();
-                            uint16_t lid       = uid & ((1 << 16) - 1);
-                            uint32_t xx_global = output_ltog[p][lid];
+                            uint32_t xx_global = global_id_from_handle(xxh);
                             if (xx_global == xx) {
                                 found = true;
                                 break;
