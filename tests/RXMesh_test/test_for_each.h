@@ -1,6 +1,5 @@
 #include "gtest/gtest.h"
 
-#include "rxmesh/types.h"
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/import_obj.h"
 

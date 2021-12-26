@@ -6,6 +6,7 @@
 #include <cuda_profiler_api.h>
 
 #include "rxmesh/attribute.h"
+#include "rxmesh/handle.h"
 #include "rxmesh/kernels/for_each.cuh"
 #include "rxmesh/kernels/prototype.cuh"
 #include "rxmesh/kernels/rxmesh.cuh"

@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string>
 #include <utility>
-#include "rxmesh/types.h"
+#include "rxmesh/handle.h"
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {

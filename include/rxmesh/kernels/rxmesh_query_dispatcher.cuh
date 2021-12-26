@@ -4,6 +4,7 @@
 #include <cub/block/block_discontinuity.cuh>
 
 #include "rxmesh/context.h"
+#include "rxmesh/handle.h"
 #include "rxmesh/iterator.cuh"
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/debug.cuh"
@@ -233,7 +234,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
     const HandleT  src_id,
     computeT       compute_op,
     const bool     oriented = false)
-{    
+{
     using ComputeTraits    = detail::FunctionTraits<computeT>;
     using ComputeIteratorT = typename ComputeTraits::template arg<1>::type;
 

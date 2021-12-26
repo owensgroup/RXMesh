@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <utility>
 
+#include "rxmesh/handle.h"
 #include "rxmesh/kernels/attribute.cuh"
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/util.cuh"

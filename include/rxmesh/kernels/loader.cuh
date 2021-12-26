@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include "rxmesh/context.h"
-#include "rxmesh/types.h"
+#include "rxmesh/local.h"
 
 namespace rxmesh {
 
