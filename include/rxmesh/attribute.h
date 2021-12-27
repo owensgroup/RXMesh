@@ -543,13 +543,11 @@ class FaceAttribute : public Attribute<T>
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
                                                       const uint32_t attr) const
     {
-        auto unpack = f_handle.unpack();
+
 #ifdef __CUDA_ARCH__
-        auto pl =
-            m_d_patches_info[unpack.first].get_patch_and_local_id(f_handle);
+        auto pl = f_handle.unpack(m_d_patches_info);
 #else
-        auto pl =
-            m_h_patches_info[unpack.first].get_patch_and_local_id(f_handle);
+        auto pl = f_handle.unpack(m_h_patches_info);
 #endif
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
@@ -563,13 +561,11 @@ class FaceAttribute : public Attribute<T>
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
                                                       const uint32_t   attr)
     {
-        auto unpack = f_handle.unpack();
+
 #ifdef __CUDA_ARCH__
-        auto pl =
-            m_d_patches_info[unpack.first].get_patch_and_local_id(f_handle);
+        auto pl = f_handle.unpack(m_d_patches_info);
 #else
-        auto pl =
-            m_h_patches_info[unpack.first].get_patch_and_local_id(f_handle);
+        auto pl = f_handle.unpack(m_h_patches_info);
 #endif
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
@@ -612,13 +608,10 @@ class EdgeAttribute : public Attribute<T>
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
                                                       const uint32_t attr) const
     {
-        auto unpack = e_handle.unpack();
 #ifdef __CUDA_ARCH__
-        auto pl =
-            m_d_patches_info[unpack.first].get_patch_and_local_id(e_handle);
+        auto pl = e_handle.unpack(m_d_patches_info);
 #else
-        auto pl =
-            m_h_patches_info[unpack.first].get_patch_and_local_id(e_handle);
+        auto pl = e_handle.unpack(m_h_patches_info);
 #endif
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
@@ -632,13 +625,10 @@ class EdgeAttribute : public Attribute<T>
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
                                                       const uint32_t   attr)
     {
-        auto unpack = e_handle.unpack();
 #ifdef __CUDA_ARCH__
-        auto pl =
-            m_d_patches_info[unpack.first].get_patch_and_local_id(e_handle);
+        auto pl = e_handle.unpack(m_d_patches_info);
 #else
-        auto pl =
-            m_h_patches_info[unpack.first].get_patch_and_local_id(e_handle);
+        auto pl = e_handle.unpack(m_h_patches_info);
 #endif
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
@@ -683,13 +673,10 @@ class VertexAttribute : public Attribute<T>
         const VertexHandle v_handle,
         const uint32_t     attr) const
     {
-        auto unpack = v_handle.unpack();
 #ifdef __CUDA_ARCH__
-        auto pl =
-            m_d_patches_info[unpack.first].get_patch_and_local_id(v_handle);
+        auto pl = v_handle.unpack(m_d_patches_info);
 #else
-        auto pl =
-            m_h_patches_info[unpack.first].get_patch_and_local_id(v_handle);
+        auto pl = v_handle.unpack(m_h_patches_info);
 #endif
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
@@ -704,13 +691,10 @@ class VertexAttribute : public Attribute<T>
         const VertexHandle v_handle,
         const uint32_t     attr)
     {
-        auto unpack = v_handle.unpack();
 #ifdef __CUDA_ARCH__
-        auto pl =
-            m_d_patches_info[unpack.first].get_patch_and_local_id(v_handle);
+        auto pl = v_handle.unpack(m_d_patches_info);
 #else
-        auto pl =
-            m_h_patches_info[unpack.first].get_patch_and_local_id(v_handle);
+        auto pl = v_handle.unpack(m_h_patches_info);
 #endif
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }

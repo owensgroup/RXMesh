@@ -244,14 +244,8 @@ __device__ __inline__ void higher_query_block_dispatcher(
     auto compute_active_set = [](HandleT) { return true; };
 
     // the source and local id of the source mesh element
-    std::pair<uint32_t, uint16_t> pl_not_owning =
-        detail::unpack(src_id.unique_id());
-    // which could be on a ribbon and so performing query on that patch is
-    // meaningless so we grab the patch that owns this source mesh elements and
-    // find it local id in there as well
-    std::pair<uint32_t, uint16_t> pl_owning =
-        context.get_patches_info()[pl_not_owning.first].get_patch_and_local_id(
-            src_id);
+    std::pair<uint32_t, uint16_t> pl =
+        src_id.unpack(context.get_patches_info());
 
     // Here, we want to identify the set of unique patches for this thread
     // block. We do this by first sorting the patches, compute discontinuity
@@ -272,7 +266,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
     };
     __shared__ TempStorage all_temp_storage;
     uint32_t               thread_data[1], thread_head_flags[1];
-    thread_data[0]       = pl_owning.first;
+    thread_data[0]       = pl.first;
     thread_head_flags[0] = 0;
     BlockRadixSort(all_temp_storage.sort_storage).Sort(thread_data);
     BlockDiscontinuity(all_temp_storage.discont_storage)
@@ -316,7 +310,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
             s_output_value);
 
 
-        if (pl_owning.first == patch_id) {
+        if (pl.first == patch_id) {
 
             constexpr uint32_t fixed_offset =
                 ((op == Op::EV)                 ? 2 :
@@ -324,7 +318,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
                                                   0);
 
             ComputeIteratorT iter(
-                pl_owning.second,
+                pl.second,
                 reinterpret_cast<typename ComputeIteratorT::LocalT*>(
                     s_output_value),
                 s_output_offset,

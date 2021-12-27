@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string>
 #include "rxmesh/local.h"
+#include "rxmesh/patch_info.h"
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
@@ -49,24 +50,16 @@ struct VertexHandle
     using LocalT = LocalVertexT;
 
 
-    __device__ __host__ VertexHandle()
-        : m_handle(INVALID64)/*, m_patch_info(nullptr)*/
+    __device__ __host__ VertexHandle() : m_handle(INVALID64)
     {
     }
-
-    /*__device__ __host__ VertexHandle(const PatchInfo* patch_info,
-                                     LocalVertexT     vertex_local_id)
-        : m_handle(detail::unique_id(vertex_local_id.id, patch_info->patch_id)),
-          m_patch_info(patch_info)
-    {
-    }*/
 
     __device__ __host__ VertexHandle(uint32_t     patch_id,
                                      LocalVertexT vertex_local_id)
-        : m_handle(detail::unique_id(vertex_local_id.id, patch_id))/*,
-          m_patch_info(nullptr)*/
+        : m_handle(detail::unique_id(vertex_local_id.id, patch_id))
     {
     }
+
 
     bool __device__ __host__ __inline__ operator==(
         const VertexHandle& rhs) const
@@ -95,9 +88,30 @@ struct VertexHandle
         return detail::unpack(m_handle);
     }
 
+    std::pair<uint32_t, uint16_t> __device__
+        __host__ __inline__ unpack(const PatchInfo* patch_info_base) const
+    {
+        auto ret = unpack();
+
+        if (!is_valid()) {
+            return ret;
+        }
+
+        const uint16_t num_owned_v =
+            patch_info_base[ret.first].num_owned_vertices;
+        if (ret.second >= num_owned_v) {
+            const uint32_t p = ret.first;
+            ret.first =
+                patch_info_base[p].not_owned_patch_v[ret.second - num_owned_v];
+            ret.second =
+                patch_info_base[p].not_owned_id_v[ret.second - num_owned_v].id;
+        }
+
+        return ret;
+    }
+
    private:
-    uint64_t         m_handle;
-    //const PatchInfo* m_patch_info;
+    uint64_t m_handle;
 };
 
 /**
@@ -116,23 +130,15 @@ struct EdgeHandle
     using LocalT = LocalEdgeT;
 
 
-    __device__ __host__ EdgeHandle()
-        : m_handle(INVALID64)//, m_patch_info(nullptr)
+    __device__ __host__ EdgeHandle() : m_handle(INVALID64)
     {
     }
-
-    /*__device__ __host__ EdgeHandle(const PatchInfo* patch_info,
-                                   LocalEdgeT       edge_local_id)
-        : m_handle(
-              detail::unique_id(edge_local_id.id, patch_info->patch_id)),
-          m_patch_info(patch_info)
-    {
-    }*/
 
     __device__ __host__ EdgeHandle(uint32_t patch_id, LocalEdgeT edge_local_id)
         : m_handle(detail::unique_id(edge_local_id.id, patch_id))
     {
     }
+
 
     bool __device__ __host__ __inline__ operator==(const EdgeHandle& rhs) const
     {
@@ -159,9 +165,28 @@ struct EdgeHandle
         return detail::unpack(m_handle);
     }
 
+    std::pair<uint32_t, uint16_t> __device__
+        __host__ __inline__ unpack(const PatchInfo* patch_info_base) const
+    {
+        auto ret = unpack();
+
+        if (!is_valid()) {
+            return ret;
+        }
+
+        const uint16_t num_owned_e = patch_info_base[ret.first].num_owned_edges;
+        if (ret.second >= num_owned_e) {
+            const uint32_t p = ret.first;
+            ret.first =
+                patch_info_base[p].not_owned_patch_e[ret.second - num_owned_e];
+            ret.second =
+                patch_info_base[p].not_owned_id_e[ret.second - num_owned_e].id;
+        }
+        return ret;
+    }
+
    private:
-    uint64_t         m_handle;
-    //const PatchInfo* m_patch_info;
+    uint64_t m_handle;
 };
 
 /**
@@ -179,23 +204,15 @@ struct FaceHandle
 {
     using LocalT = LocalFaceT;
 
-    __device__ __host__ FaceHandle()
-        : m_handle(INVALID64)//, m_patch_info(nullptr)
+    __device__ __host__ FaceHandle() : m_handle(INVALID64)
     {
     }
-
-    /*__device__ __host__ FaceHandle(const PatchInfo* patch_info,
-                                   LocalFaceT       face_local_id)
-        : m_handle(
-              detail::unique_id(face_local_id.id, patch_info->patch_id)),
-          m_patch_info(patch_info)
-    {
-    }*/
 
     __device__ __host__ FaceHandle(uint32_t patch_id, LocalFaceT face_local_id)
         : m_handle(detail::unique_id(face_local_id.id, patch_id))
     {
     }
+
 
     bool __device__ __host__ __inline__ operator==(const FaceHandle& rhs) const
     {
@@ -222,9 +239,29 @@ struct FaceHandle
         return detail::unpack(m_handle);
     }
 
+    std::pair<uint32_t, uint16_t> __device__
+        __host__ __inline__ unpack(const PatchInfo* patch_info_base) const
+    {
+        auto ret = unpack();
+
+        if (!is_valid()) {
+            return ret;
+        }
+
+        const uint16_t num_owned_f = patch_info_base[ret.first].num_owned_faces;
+        if (ret.second >= num_owned_f) {
+            const uint32_t p = ret.first;
+            ret.first =
+                patch_info_base[p].not_owned_patch_f[ret.second - num_owned_f];
+            ret.second =
+                patch_info_base[p].not_owned_id_f[ret.second - num_owned_f].id;
+        }
+
+        return ret;
+    }
+
    private:
-    uint64_t         m_handle;
-    //const PatchInfo* m_patch_info;
+    uint64_t m_handle;
 };
 
 /**

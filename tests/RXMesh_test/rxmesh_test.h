@@ -355,11 +355,8 @@ class RXMeshTest
                   const InputAttributeT&                    input,
                   const OutputAttributeT&                   output)
     {
-        auto global_id_from_handle = [&](OutputHandleT xxh) -> uint32_t {
-            auto unpack = xxh.unpack();
-            auto pl =
-                rxmesh.m_h_patches_info[unpack.first].get_patch_and_local_id(
-                    xxh);
+        auto global_id_from_handle = [&](OutputHandleT xxh) -> uint32_t {            
+            auto pl     = xxh.unpack(rxmesh.m_h_patches_info);            
             return output_ltog[pl.first][pl.second];
         };
 
