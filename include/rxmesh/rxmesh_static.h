@@ -651,10 +651,20 @@ class RXMeshStatic : public RXMesh
             // nnz of a matrix the same before/after transpose
             launch_box.smem_bytes_dyn =
                 (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
-        } else if (op == Op::EF || op == Op::VF) {
+        } else if (op == Op::EF) {
             // same as above but with faces
             launch_box.smem_bytes_dyn =
                 (2 * 3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
+                sizeof(uint16_t);
+        } else if (op == Op::VF) {
+            // load edges and faces simultaneously. changes faces to FV using
+            // edges. Then transpose FV in place and use edges to store the
+            // values. Thus, edges should be max(3*faces, 2*edges)
+            launch_box.smem_bytes_dyn =
+                3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
+                std::max(3 * this->m_max_faces_per_patch,
+                         2 * this->m_max_edges_per_patch) *
+                    sizeof(uint16_t) +
                 sizeof(uint16_t);
         } else if (op == Op::VV) {
             // similar to VE but we also need to store the edges (EV) even after
