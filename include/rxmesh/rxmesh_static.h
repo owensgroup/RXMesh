@@ -688,25 +688,7 @@ class RXMeshStatic : public RXMesh
                                           3 * this->m_max_faces_per_patch) *
                                          sizeof(uint16_t);
         }
-
-        // to store output ltog map without the need to overlap it with
-        // where we store mesh edges/faces
-        // The +1 is for padding
-        if (op == Op::EV || op == Op::FV /*|| op == Op::VV*/) {
-            // For VV, we overwrite the extra storage we used above
-            // to store the mapping which is more than enough to store the
-            // vertices ltog
-            launch_box.smem_bytes_dyn +=
-                (this->m_max_vertices_per_patch + 1) * sizeof(uint32_t);
-
-        } else if (op == Op::FE || op == Op::VE || op == Op::EE) {
-            launch_box.smem_bytes_dyn +=
-                (this->m_max_edges_per_patch + 1) * sizeof(uint32_t);
-        } else if (op == Op::VF || op == Op::EF /*|| op == Op::FF*/) {
-            launch_box.smem_bytes_dyn +=
-                (this->m_max_faces_per_patch + 1) * sizeof(uint32_t);
-        }
-
+                
 
         launch_box.smem_bytes_static = check_shared_memory<blockThreads>(
             op, launch_box.smem_bytes_dyn, is_higher_query);
