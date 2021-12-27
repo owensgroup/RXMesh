@@ -7,6 +7,7 @@
 
 #include "patcher/patcher.h"
 #include "rxmesh/context.h"
+#include "rxmesh/kernels/rxmesh_cleanup.cuh"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/util/math.h"
 #include "rxmesh/util/util.h"
@@ -26,7 +27,7 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv, const bool quite)
       m_patch_size(512),
       m_is_input_edge_manifold(true),
       m_is_input_closed(true),
-      m_quite(quite),      
+      m_quite(quite),
       m_d_patches_info(nullptr),
       m_h_patches_info(nullptr)
 {
@@ -64,6 +65,26 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv, const bool quite)
         RXMESH_TRACE("per-patch maximum vertex count = {}",
                      m_max_vertices_per_patch);
     }
+}
+
+RXMesh::~RXMesh()
+{
+    uint32_t threads = 256;
+    uint32_t blocks  = DIVIDE_UP(m_num_patches, threads);
+    detail::free_patch_info<<<blocks, threads>>>(m_num_patches,
+                                                 m_d_patches_info);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+    GPU_FREE(m_d_patches_info);
+    for (uint32_t p = 0; p < m_num_patches; ++p) {
+        free(m_h_patches_info[p].not_owned_patch_v);
+        free(m_h_patches_info[p].not_owned_patch_e);
+        free(m_h_patches_info[p].not_owned_patch_f);
+        free(m_h_patches_info[p].not_owned_id_v);
+        free(m_h_patches_info[p].not_owned_id_e);
+        free(m_h_patches_info[p].not_owned_id_f);
+    }
+    free(m_h_patches_info);
 }
 
 void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)

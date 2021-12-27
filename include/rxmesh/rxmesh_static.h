@@ -9,7 +9,6 @@
 #include "rxmesh/handle.h"
 #include "rxmesh/kernels/for_each.cuh"
 #include "rxmesh/kernels/prototype.cuh"
-#include "rxmesh/kernels/rxmesh.cuh"
 #include "rxmesh/launch_box.h"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/types.h"
@@ -37,17 +36,6 @@ class RXMeshStatic : public RXMesh
 
     virtual ~RXMeshStatic()
     {
-        // This should be placed at ~RXMesh() but for some reason, I get
-        // compilation error when calling a kernel from there
-
-        // since m_d_patches_info is a pointer to a pointer on the device, we
-        // can not reference if on the host. So, we launch a kernel to free
-        // everything before freeing m_d_patches_info
-        uint32_t block_size = 256;
-        uint32_t grid_size  = DIVIDE_UP(m_num_patches, block_size);
-        detail::free_patch_info<<<grid_size, block_size>>>(m_num_patches,
-                                                           m_d_patches_info);
-        GPU_FREE(m_d_patches_info);
     }
 
 
@@ -698,7 +686,7 @@ class RXMeshStatic : public RXMesh
                                           3 * this->m_max_faces_per_patch) *
                                          sizeof(uint16_t);
         }
-                
+
 
         launch_box.smem_bytes_static = check_shared_memory<blockThreads>(
             op, launch_box.smem_bytes_dyn, is_higher_query);

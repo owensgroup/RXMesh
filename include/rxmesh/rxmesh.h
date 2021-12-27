@@ -120,18 +120,7 @@ class RXMesh
     };
 
    protected:
-    virtual ~RXMesh()
-    {        
-        for (uint32_t p = 0; p < m_num_patches; ++p) {
-            free(m_h_patches_info[p].not_owned_patch_v);
-            free(m_h_patches_info[p].not_owned_patch_e);
-            free(m_h_patches_info[p].not_owned_patch_f);
-            free(m_h_patches_info[p].not_owned_id_v);
-            free(m_h_patches_info[p].not_owned_id_e);
-            free(m_h_patches_info[p].not_owned_id_f);
-        }
-        free(m_h_patches_info);        
-    }
+    virtual ~RXMesh();
 
     RXMesh(const RXMesh&) = delete;
 
