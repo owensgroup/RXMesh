@@ -62,6 +62,8 @@ int main() {
 		endif()  
 	endif()	
 	message(STATUS "CUDA_ARCHS= " ${CUDA_ARCHS})	
+	#https://gitlab.kitware.com/cmake/cmake/-/issues/18265	
+	list(APPEND CMAKE_CUDA_FLAGS ${CUDA_ARCHS})	
 endif()
 ###################################################################################
 

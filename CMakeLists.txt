@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 
 if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
   cmake_policy(SET CMP0104 OLD)
@@ -95,6 +95,7 @@ set(cuda_flags
     #177-D "function XXX was declared but never referenced"
     -Xcudafe "--display_error_number --diag_suppress=177"
     ${CUDA_ARCHS}
+    -rdc=true
 	-lineinfo	
 	--expt-extended-lambda	
 	-use_fast_math	
@@ -110,7 +111,6 @@ target_compile_options(developer_flags INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:${cxx_flags}>
     $<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>
 )
-
 
 target_link_libraries(RXMesh_header_lib INTERFACE $<BUILD_INTERFACE:developer_flags>)
 

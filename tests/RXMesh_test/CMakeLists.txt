@@ -21,7 +21,7 @@ target_sources( RXMesh_test
 
 set_target_properties( RXMesh_test PROPERTIES FOLDER "tests")
 
-#set_property(TARGET RXMesh_test PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+set_property(TARGET RXMesh_test PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "RXMesh_test" FILES ${SOURCE_LIST})
 

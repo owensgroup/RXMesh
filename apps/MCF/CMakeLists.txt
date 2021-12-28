@@ -27,6 +27,8 @@ endif()
 
 set_target_properties( MCF PROPERTIES FOLDER "apps")
 
+set_property(TARGET MCF PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "MCF" FILES ${SOURCE_LIST})
 
 
