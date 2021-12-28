@@ -158,6 +158,8 @@ class RXMesh
     void calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
                          const std::vector<std::vector<uint32_t>>& ef);
 
+    void calc_max_not_owned_elements();
+
     void build(const std::vector<std::vector<uint32_t>>& fv);
     void build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
                             const uint32_t                            patch_id);
@@ -185,6 +187,9 @@ class RXMesh
 
     uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
         m_max_faces_per_patch;
+
+    uint32_t m_max_not_owned_vertices, m_max_not_owned_edges,
+        m_max_not_owned_faces;
 
     uint32_t       m_num_patches;
     const uint32_t m_patch_size;
