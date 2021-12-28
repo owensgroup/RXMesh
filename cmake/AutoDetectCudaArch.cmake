@@ -48,16 +48,16 @@ int main() {
 		if(CUDA_RETURN_CODE EQUAL 0)			
 			set(CUDA_ARCHS ${fprintf_output} CACHE STRING "CUDA Arch")			
 		else()
-			message(STATUS "GPU architectures auto-detect failed. Will build for all possible architectures.")      
-			set(CUDA_ARCHS "--generate-code=arch=compute_35,code=sm_35;"
-						   "--generate-code=arch=compute_37,code=sm_37;"
-			               "--generate-code=arch=compute_50,code=sm_50;"
-			               "--generate-code=arch=compute_52,code=sm_52;"
-			               "--generate-code=arch=compute_60,code=sm_60;"
-			               "--generate-code=arch=compute_61,code=sm_61;"
+			message(STATUS "GPU architectures auto-detect failed. Will build for sm_70.")      
+			set(CUDA_ARCHS #"--generate-code=arch=compute_35,code=sm_35;"
+						   #"--generate-code=arch=compute_37,code=sm_37;"
+			               #"--generate-code=arch=compute_50,code=sm_50;"
+			               #"--generate-code=arch=compute_52,code=sm_52;"
+			               #"--generate-code=arch=compute_60,code=sm_60;"
+			               #"--generate-code=arch=compute_61,code=sm_61;"
 			               "--generate-code=arch=compute_70,code=sm_70;"
-			               "--generate-code=arch=compute_72,code=sm_72;"
-			               "--generate-code=arch=compute_75,code=sm_75;"
+			               #"--generate-code=arch=compute_72,code=sm_72;"
+			               #"--generate-code=arch=compute_75,code=sm_75;"
 						   CACHE STRING "CUDA Arch")			
 		endif()  
 	endif()	
