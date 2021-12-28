@@ -55,7 +55,7 @@ int main() {
 			               #"--generate-code=arch=compute_52,code=sm_52;"
 			               #"--generate-code=arch=compute_60,code=sm_60;"
 			               #"--generate-code=arch=compute_61,code=sm_61;"
-			               "--generate-code=arch=compute_70,code=sm_70;"
+			               --generate-code=arch=compute_70,code=sm_70;
 			               #"--generate-code=arch=compute_72,code=sm_72;"
 			               #"--generate-code=arch=compute_75,code=sm_75;"
 						   CACHE STRING "CUDA Arch")			
