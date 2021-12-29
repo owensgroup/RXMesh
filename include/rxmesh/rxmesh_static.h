@@ -619,8 +619,10 @@ class RXMeshStatic : public RXMesh
             launch_box.smem_bytes_dyn =
                 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
             // to load not-owned edges local and patch id
-            launch_box.smem_bytes_dyn += this->m_max_not_owned_edges *
-                                         (sizeof(uint16_t) + sizeof(uint32_t));
+            launch_box.smem_bytes_dyn +=
+                this->m_max_not_owned_edges *
+                    (sizeof(uint16_t) + sizeof(uint32_t)) +
+                sizeof(uint16_t);
         } else if (op == Op::EV) {
             // only EV will be loaded
             launch_box.smem_bytes_dyn =
@@ -635,8 +637,18 @@ class RXMeshStatic : public RXMesh
             launch_box.smem_bytes_dyn =
                 3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
                 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
-            // no need for extra memory to load not-owned local and patch id.
-            // We load them and overwrite EV
+            // no need for extra memory to load not-owned vertices local and
+            // patch id. We load them and overwrite EV.
+            const uint32_t not_owned_v_bytes =
+                this->m_max_not_owned_vertices *
+                (sizeof(uint16_t) + sizeof(uint32_t));
+            const uint32_t edges_bytes =
+                2 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            if (not_owned_v_bytes > edges_bytes) {
+                //launch_box.smem_bytes_dyn += not_owned_v_bytes - edges_bytes;
+                RXMESH_ERROR(
+                    "RXMeshStatic::calc_shared_memory() FV query might fail!");
+            }
         } else if (op == Op::VE) {
             // load EV and then transpose it in place
             // The transpose needs two buffer; one for prefix sum and another

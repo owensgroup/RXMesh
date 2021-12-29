@@ -169,7 +169,12 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
         case Op::FV:
             num_not_owned =
                 patch_info.num_vertices - patch_info.num_owned_vertices;
-            not_owned_patch = not_owned_patch + 3 * patch_info.num_faces;
+            assert(2 * patch_info.num_edges >= (1 + 2) * num_not_owned);
+            // should be 3*patch_info.num_faces but FV is stored as uint16_t and
+            // not_owned_patch is uint32_t* so we need to shift the pointer only
+            // by half this amount
+            // not_owned_patch =
+            //    not_owned_patch + DIVIDE_UP(3 * patch_info.num_faces, 2);
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
             load_not_owned_patch<blockThreads>(
@@ -180,8 +185,13 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_v));
             break;
         case Op::FE:
-            num_not_owned   = patch_info.num_edges - patch_info.num_owned_edges;
-            not_owned_patch = not_owned_patch + 3 * patch_info.num_faces;
+            num_not_owned = patch_info.num_edges - patch_info.num_owned_edges;
+
+            // should be 3*patch_info.num_faces but FE is stored as uint16_t and
+            // not_owned_patch is uint32_t* so we need to shift the pointer only
+            // by half this amount
+            not_owned_patch =
+                not_owned_patch + DIVIDE_UP(3 * patch_info.num_faces, 2);
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
             load_not_owned_patch<blockThreads>(
@@ -196,7 +206,11 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
         case Op::EV:
             num_not_owned =
                 patch_info.num_vertices - patch_info.num_owned_vertices;
-            not_owned_patch = not_owned_patch + 2 * patch_info.num_edges;
+
+            // should be 2*patch_info.num_edges but EV is stored as uint16_t and
+            // not_owned_patch is uint32_t* so we need to shift the pointer only
+            // by num_edges
+            not_owned_patch = not_owned_patch + patch_info.num_edges;
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
             load_not_owned_patch<blockThreads>(
