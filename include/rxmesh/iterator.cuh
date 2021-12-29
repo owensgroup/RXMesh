@@ -14,10 +14,16 @@ struct Iterator
                         const uint16_t* patch_offset,
                         const uint32_t  offset_size,
                         const uint32_t  patch_id,
+                        const uint32_t  num_owned,
+                        const uint32_t* not_owned_patch,
+                        const uint16_t* not_owned_local_id,
                         int             shift = 0)
         : m_patch_output(patch_output),
           m_patch_offset(patch_offset),
           m_patch_id(patch_id),
+          m_num_owned(num_owned),
+          m_not_owned_patch(not_owned_patch),
+          m_not_owned_local_id(not_owned_local_id),
           m_shift(shift)
     {
         set(local_id, offset_size);
@@ -35,7 +41,13 @@ struct Iterator
     {
         assert(m_patch_output);
         assert(i + m_begin < m_end);
-        return {m_patch_id, ((m_patch_output[m_begin + i].id) >> m_shift)};
+        uint16_t out_id = (m_patch_output[m_begin + i].id) >> m_shift;
+        if (out_id < m_num_owned) {
+            return {m_patch_id, out_id};
+        } else {
+            uint16_t l = out_id - m_num_owned;
+            return {m_not_owned_patch[l], m_not_owned_local_id[l]};
+        }
     }
 
     __device__ HandleT operator*() const
@@ -99,6 +111,9 @@ struct Iterator
     const LocalT*   m_patch_output;
     const uint16_t* m_patch_offset;
     const uint32_t  m_patch_id;
+    const uint32_t* m_not_owned_patch;
+    const uint16_t* m_not_owned_local_id;
+    uint16_t        m_num_owned;
     uint16_t        m_local_id;
     uint16_t        m_begin;
     uint16_t        m_end;

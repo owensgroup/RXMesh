@@ -10,8 +10,8 @@ __global__ static void test_iterator(uint32_t*       suceess,
                                      const uint32_t  patch_id)
 {
     using namespace rxmesh;
-    uint16_t local_id = threadIdx.x;
-    const HandleT  truth(patch_id, {local_id});
+    uint16_t      local_id = threadIdx.x;
+    const HandleT truth(patch_id, {local_id});
 
     if (local_id >= num_elements) {
 
@@ -20,7 +20,10 @@ __global__ static void test_iterator(uint32_t*       suceess,
             reinterpret_cast<const typename HandleT::LocalT*>(patch_output),
             nullptr,
             offset_size,
-            patch_id);
+            patch_id,
+            num_elements,
+            nullptr,
+            nullptr);
 
         if (iter.size() != offset_size) {
             atomicAdd(suceess, 1u);
