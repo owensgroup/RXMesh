@@ -715,6 +715,8 @@ class RXMeshStatic : public RXMesh
                  4 * this->m_max_faces_per_patch          // FF
                  ) *
                 sizeof(uint16_t);
+            // no need for extra memory to load not-owned faces local and
+            // patch id. We load them and overwrite FE.
         }
 
         if (op == Op::VV && oriented) {

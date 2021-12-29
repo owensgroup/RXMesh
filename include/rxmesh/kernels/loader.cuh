@@ -127,7 +127,7 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                                                uint16_t&  num_not_owned)
 {
     switch (op) {
-        case Op::VV:
+        case Op::VV: {
             num_not_owned =
                 patch_info.num_vertices - patch_info.num_owned_vertices;
 
@@ -144,7 +144,9 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_v));
             break;
-        case Op::VE:
+        }
+        case Op::VE: {
+
             num_not_owned = patch_info.num_edges - patch_info.num_owned_edges;
 
             // should be 4*patch_info.num_edges but VE (offset and values) are
@@ -160,9 +162,10 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_e));
             break;
-        case Op::VF:
-            num_not_owned  = patch_info.num_faces - patch_info.num_owned_faces;
-            
+        }
+        case Op::VF: {
+            num_not_owned = patch_info.num_faces - patch_info.num_owned_faces;
+
             uint32_t shift = DIVIDE_UP(
                 3 * patch_info.num_faces + std::max(3 * patch_info.num_faces,
                                                     2 * patch_info.num_edges),
@@ -177,15 +180,11 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_f));
             break;
-        case Op::FV:
+        }
+        case Op::FV: {
             num_not_owned =
                 patch_info.num_vertices - patch_info.num_owned_vertices;
             assert(2 * patch_info.num_edges >= (1 + 2) * num_not_owned);
-            // should be 3*patch_info.num_faces but FV is stored as uint16_t and
-            // not_owned_patch is uint32_t* so we need to shift the pointer only
-            // by half this amount
-            // not_owned_patch =
-            //    not_owned_patch + DIVIDE_UP(3 * patch_info.num_faces, 2);
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
             load_not_owned_patch<blockThreads>(
@@ -195,7 +194,8 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_v));
             break;
-        case Op::FE:
+        }
+        case Op::FE: {
             num_not_owned = patch_info.num_edges - patch_info.num_owned_edges;
 
             // should be 3*patch_info.num_faces but FE is stored as uint16_t and
@@ -212,9 +212,20 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_e));
             break;
-        case Op::FF:
+        }
+        case Op::FF: {
+            num_not_owned = patch_info.num_faces - patch_info.num_owned_faces;
+            not_owned_local_id =
+                reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
+            load_not_owned_patch<blockThreads>(
+                num_not_owned, not_owned_patch, patch_info.not_owned_patch_f);
+            load_not_owned_local_id<blockThreads>(
+                num_not_owned,
+                not_owned_local_id,
+                reinterpret_cast<uint16_t*>(patch_info.not_owned_id_f));
             break;
-        case Op::EV:
+        }
+        case Op::EV: {
             num_not_owned =
                 patch_info.num_vertices - patch_info.num_owned_vertices;
 
@@ -231,7 +242,8 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_v));
             break;
-        case Op::EF:
+        }
+        case Op::EF: {
             num_not_owned = patch_info.num_faces - patch_info.num_owned_faces;
 
             // should be 6*patch_info.num_faces but EF (offset and values) are
@@ -247,9 +259,11 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_f));
             break;
-        default:
+        }
+        default: {
             assert(1 != 1);
             break;
+        }
     }
 }
 

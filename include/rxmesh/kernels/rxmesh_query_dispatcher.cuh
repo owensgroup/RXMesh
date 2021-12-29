@@ -110,7 +110,7 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
                                 patch_info.num_faces);
 
         // load not-owned local and patch id
-        if constexpr (op == Op::VV || op == Op::FV) {
+        if constexpr (op == Op::VV || op == Op::FV || op == Op::FF) {
             // need to sync since we will overwrite things that are used in
             // query
             __syncthreads();
