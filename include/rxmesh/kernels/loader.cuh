@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "rxmesh/context.h"
 #include "rxmesh/local.h"
+#include "rxmesh/types.h"
 
 namespace rxmesh {
 
@@ -88,4 +89,132 @@ __device__ __forceinline__ void load_mesh(const PatchInfo& patch_info,
         load_patch_FE<blockThreads>(patch_info, s_fe);
     }
 }
+
+__device__ __forceinline__ void load_not_owned_local_id(
+    const uint16_t  num_not_owned,
+    uint16_t*       output_not_owned_local_id,
+    const uint16_t* input_not_owned_local_id)
+{
+}
+
+__device__ __forceinline__ void load_not_owned_patch(
+    const uint16_t  num_not_owned,
+    uint32_t*       output_not_owned_patch,
+    const uint32_t* input_not_owned_patch)
+{
+    
+}
+
+/**
+ * @brief Load local id and patch of the not-owned verteices, edges, or faces
+ * based on query op.
+ * @param patch_info input patch info
+ * @param not_owned_local_id output local id
+ * @param not_owned_patch output patch id
+ * @param num_not_owned number of not-owned mesh elements
+ */
+template <Op op, uint32_t blockThreads>
+__device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
+                                               uint16_t*& not_owned_local_id,
+                                               uint32_t*& not_owned_patch,
+                                               uint16_t&  num_not_owned)
+{
+    switch (op) {
+        case Op::VV:
+            num_not_owned =
+                patch_info.num_vertices - patch_info.num_owned_vertices;
+            not_owned_patch = not_owned_patch + 4 * patch_info.num_edges;
+            not_owned_local_id =
+                reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
+            load_not_owned_patch(
+                num_not_owned, not_owned_patch, patch_info.not_owned_patch_v);
+            load_not_owned_local_id(
+                num_not_owned,
+                not_owned_local_id,
+                reinterpret_cast<uint16_t*>(patch_info.not_owned_id_v));
+            break;
+        case Op::VE:
+            num_not_owned   = patch_info.num_edges - patch_info.num_owned_edges;
+            not_owned_patch = not_owned_patch + 4 * patch_info.num_edges;
+            not_owned_local_id =
+                reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
+            load_not_owned_patch(
+                num_not_owned, not_owned_patch, patch_info.not_owned_patch_e);
+            load_not_owned_local_id(
+                num_not_owned,
+                not_owned_local_id,
+                reinterpret_cast<uint16_t*>(patch_info.not_owned_id_e));
+            break;
+        case Op::VF:
+            num_not_owned = patch_info.num_faces - patch_info.num_owned_faces;
+            not_owned_patch =
+                not_owned_patch + 3 * patch_info.num_faces +
+                std::max(3 * patch_info.num_faces, 2 * patch_info.num_edges);
+            not_owned_local_id =
+                reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
+            load_not_owned_patch(
+                num_not_owned, not_owned_patch, patch_info.not_owned_patch_f);
+            load_not_owned_local_id(
+                num_not_owned,
+                not_owned_local_id,
+                reinterpret_cast<uint16_t*>(patch_info.not_owned_id_f));
+            break;
+        case Op::FV:
+            num_not_owned =
+                patch_info.num_vertices - patch_info.num_owned_vertices;
+            not_owned_patch = not_owned_patch + 3 * patch_info.num_faces;
+            not_owned_local_id =
+                reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
+            load_not_owned_patch(
+                num_not_owned, not_owned_patch, patch_info.not_owned_patch_v);
+            load_not_owned_local_id(
+                num_not_owned,
+                not_owned_local_id,
+                reinterpret_cast<uint16_t*>(patch_info.not_owned_id_v));
+            break;
+        case Op::FE:
+            num_not_owned   = patch_info.num_edges - patch_info.num_owned_edges;
+            not_owned_patch = not_owned_patch + 3 * patch_info.num_faces;
+            not_owned_local_id =
+                reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
+            load_not_owned_patch(
+                num_not_owned, not_owned_patch, patch_info.not_owned_patch_e);
+            load_not_owned_local_id(
+                num_not_owned,
+                not_owned_local_id,
+                reinterpret_cast<uint16_t*>(patch_info.not_owned_id_e));
+            break;
+        case Op::FF:
+            break;
+        case Op::EV:
+            num_not_owned =
+                patch_info.num_vertices - patch_info.num_owned_vertices;
+            not_owned_patch = not_owned_patch + 2 * patch_info.num_edges;
+            not_owned_local_id =
+                reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
+            load_not_owned_patch(
+                num_not_owned, not_owned_patch, patch_info.not_owned_patch_v);
+            load_not_owned_local_id(
+                num_not_owned,
+                not_owned_local_id,
+                reinterpret_cast<uint16_t*>(patch_info.not_owned_id_v));
+            break;
+        case Op::EF:
+            num_not_owned   = patch_info.num_faces - patch_info.num_owned_faces;
+            not_owned_patch = not_owned_patch + 6 * patch_info.num_faces;
+            not_owned_local_id =
+                reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
+            load_not_owned_patch(
+                num_not_owned, not_owned_patch, patch_info.not_owned_patch_f);
+            load_not_owned_local_id(
+                num_not_owned,
+                not_owned_local_id,
+                reinterpret_cast<uint16_t*>(patch_info.not_owned_id_f));
+            break;
+        default:
+            assert(1 != 1);
+            break;
+    }
+}
+
 }  // namespace rxmesh
