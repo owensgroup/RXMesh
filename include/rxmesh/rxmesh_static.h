@@ -645,7 +645,7 @@ class RXMeshStatic : public RXMesh
             const uint32_t edges_bytes =
                 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
             if (not_owned_v_bytes > edges_bytes) {
-                //launch_box.smem_bytes_dyn += not_owned_v_bytes - edges_bytes;
+                // launch_box.smem_bytes_dyn += not_owned_v_bytes - edges_bytes;
                 RXMESH_ERROR(
                     "RXMeshStatic::calc_shared_memory() FV query might fail!");
             }
@@ -665,7 +665,7 @@ class RXMeshStatic : public RXMesh
             launch_box.smem_bytes_dyn += this->m_max_not_owned_edges *
                                          (sizeof(uint16_t) + sizeof(uint32_t));
         } else if (op == Op::EF) {
-            // same as above but with faces
+            // same as Op::VE but with faces
             launch_box.smem_bytes_dyn =
                 (2 * 3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
                 sizeof(uint16_t) + sizeof(uint16_t);
@@ -695,6 +695,12 @@ class RXMeshStatic : public RXMesh
                 (3 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
             // no need for extra memory to load not-owned local and patch id.
             // We load them and overwrite the extra EV
+            if (this->m_max_not_owned_vertices *
+                    (sizeof(uint16_t) + sizeof(uint32_t)) >
+                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t)) {
+                RXMESH_ERROR(
+                    "RXMeshStatic::calc_shared_memory() VV query might fail!");
+            }
         } else if (op == Op::FF) {
             // FF needs to store FE and EF along side with the output itself
             // FE needs 3*max_num_faces

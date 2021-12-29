@@ -130,7 +130,11 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
         case Op::VV:
             num_not_owned =
                 patch_info.num_vertices - patch_info.num_owned_vertices;
-            not_owned_patch = not_owned_patch + 4 * patch_info.num_edges;
+
+            // should be 4*patch_info.num_edges but VV (offset and values) are
+            // stored as uint16_t and not_owned_patch is uint32_t* so we need to
+            // shift the pointer only by half this amount
+            not_owned_patch = not_owned_patch + 2 * patch_info.num_edges;
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
             load_not_owned_patch<blockThreads>(
@@ -141,8 +145,12 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_v));
             break;
         case Op::VE:
-            num_not_owned   = patch_info.num_edges - patch_info.num_owned_edges;
-            not_owned_patch = not_owned_patch + 4 * patch_info.num_edges;
+            num_not_owned = patch_info.num_edges - patch_info.num_owned_edges;
+
+            // should be 4*patch_info.num_edges but VE (offset and values) are
+            // stored as uint16_t and not_owned_patch is uint32_t* so we need to
+            // shift the pointer only by half this amount
+            not_owned_patch = not_owned_patch + 2 * patch_info.num_edges;
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
             load_not_owned_patch<blockThreads>(
@@ -153,10 +161,13 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_e));
             break;
         case Op::VF:
-            num_not_owned = patch_info.num_faces - patch_info.num_owned_faces;
-            not_owned_patch =
-                not_owned_patch + 3 * patch_info.num_faces +
-                std::max(3 * patch_info.num_faces, 2 * patch_info.num_edges);
+            num_not_owned  = patch_info.num_faces - patch_info.num_owned_faces;
+            
+            uint32_t shift = DIVIDE_UP(
+                3 * patch_info.num_faces + std::max(3 * patch_info.num_faces,
+                                                    2 * patch_info.num_edges),
+                2);
+            not_owned_patch = not_owned_patch + shift;
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
             load_not_owned_patch<blockThreads>(
@@ -221,8 +232,12 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_v));
             break;
         case Op::EF:
-            num_not_owned   = patch_info.num_faces - patch_info.num_owned_faces;
-            not_owned_patch = not_owned_patch + 6 * patch_info.num_faces;
+            num_not_owned = patch_info.num_faces - patch_info.num_owned_faces;
+
+            // should be 6*patch_info.num_faces but EF (offset and values) are
+            // stored as uint16_t and not_owned_patch is uint32_t* so we need to
+            // shift the pointer only by half this amount
+            not_owned_patch = not_owned_patch + 3 * patch_info.num_faces;
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
             load_not_owned_patch<blockThreads>(
