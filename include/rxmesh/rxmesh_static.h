@@ -615,50 +615,74 @@ class RXMeshStatic : public RXMesh
         launch_box.smem_bytes_dyn = 0;
 
         if (op == Op::FE) {
-            // only faces will be loaded and no extra shared memory is needed
+            // only FE will be loaded
             launch_box.smem_bytes_dyn =
                 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
+            // to load not-owned edges local and patch id
+            launch_box.smem_bytes_dyn += this->m_max_not_owned_edges *
+                                         (sizeof(uint16_t) + sizeof(uint32_t));
         } else if (op == Op::EV) {
-            // only edges will be loaded and no extra shared memory is needed
+            // only EV will be loaded
             launch_box.smem_bytes_dyn =
                 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            // to load not-owned vertices local and patch id
+            launch_box.smem_bytes_dyn += this->m_max_not_owned_vertices *
+                                         (sizeof(uint16_t) + sizeof(uint32_t));
         } else if (op == Op::FV) {
-            // We load both faces and edges. We don't change edges.
-            // faces are updated to contain FV instead of FE by reading from
-            // edges
+            // We load both FE and EV. We don't change EV.
+            // FE are updated to contain FV instead of FE by reading from
+            // EV
             launch_box.smem_bytes_dyn =
                 3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
                 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            // no need for extra memory to load not-owned local and patch id.
+            // We load them and overwrite EV
         } else if (op == Op::VE) {
-            // load edges and then transpose it in place
+            // load EV and then transpose it in place
             // The transpose needs two buffer; one for prefix sum and another
             // for the actual output
-            // The prefix sum will be stored in place (where edges are loaded)
+            // The prefix sum will be stored in place (where EV are loaded)
             // The output will be stored in another buffer with size equal to
-            // the edges since this output buffer will stored the nnz and the
-            // nnz of a matrix the same before/after transpose
+            // the EV (i.e., 2*#edges) since this output buffer will stored the
+            // nnz and the nnz of a matrix the same before/after transpose
             launch_box.smem_bytes_dyn =
-                (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+                (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t) +
+                sizeof(uint16_t);
+
+            // to load the not-owned edges local and patch id
+            launch_box.smem_bytes_dyn += this->m_max_not_owned_edges *
+                                         (sizeof(uint16_t) + sizeof(uint32_t));
         } else if (op == Op::EF) {
             // same as above but with faces
             launch_box.smem_bytes_dyn =
                 (2 * 3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
-                sizeof(uint16_t);
+                sizeof(uint16_t) + sizeof(uint16_t);
+
+            // to load the not-owned faces local and patch id
+            launch_box.smem_bytes_dyn += this->m_max_not_owned_faces *
+                                         (sizeof(uint16_t) + sizeof(uint32_t));
         } else if (op == Op::VF) {
-            // load edges and faces simultaneously. changes faces to FV using
-            // edges. Then transpose FV in place and use edges to store the
-            // values. Thus, edges should be max(3*faces, 2*edges)
+            // load EV and FE simultaneously. changes FE to FV using EV. Then
+            // transpose FV in place and use EV to store the values/output while
+            // using FV to store the prefix sum. Thus, the space used to store
+            // EV should be max(3*#faces, 2*#edges)
             launch_box.smem_bytes_dyn =
                 3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
                 std::max(3 * this->m_max_faces_per_patch,
                          2 * this->m_max_edges_per_patch) *
                     sizeof(uint16_t) +
                 sizeof(uint16_t);
+
+            // to load the not-owned faces local and patch id
+            launch_box.smem_bytes_dyn += this->m_max_not_owned_faces *
+                                         (sizeof(uint16_t) + sizeof(uint32_t));
         } else if (op == Op::VV) {
-            // similar to VE but we also need to store the edges (EV) even after
-            // we do the transpose.
+            // similar to VE but we also need to store the EV even after
+            // we do the transpose
             launch_box.smem_bytes_dyn =
                 (3 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            // no need for extra memory to load not-owned local and patch id.
+            // We load them and overwrite the extra EV
         } else if (op == Op::FF) {
             // FF needs to store FE and EF along side with the output itself
             // FE needs 3*max_num_faces

@@ -293,7 +293,7 @@ void RXMesh::calc_max_not_owned_elements()
     m_max_not_owned_vertices = 0;
     m_max_not_owned_edges    = 0;
     m_max_not_owned_faces    = 0;
-    //#pragma omp parallel for
+
     for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
         m_max_not_owned_vertices =
             std::max(m_max_not_owned_vertices,
