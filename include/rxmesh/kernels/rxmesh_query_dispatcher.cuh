@@ -108,19 +108,19 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
                                 patch_info.num_vertices,
                                 patch_info.num_edges,
                                 patch_info.num_faces);
-
-        // load not-owned local and patch id
-        if constexpr (op == Op::VV || op == Op::FV || op == Op::FF) {
-            // need to sync since we will overwrite things that are used in
-            // query
-            __syncthreads();
-        }
-        not_owned_local_id = reinterpret_cast<uint16_t*>(shrd_mem);
-        not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
-        num_not_owned      = 0;
-        load_not_owned<op, blockThreads>(
-            patch_info, not_owned_local_id, not_owned_patch, num_not_owned);
     }
+
+    // load not-owned local and patch id
+    if constexpr (op == Op::VV || op == Op::FV || op == Op::FF) {
+        // need to sync since we will overwrite things that are used in
+        // query
+        __syncthreads();
+    }
+    not_owned_local_id = reinterpret_cast<uint16_t*>(shrd_mem);
+    not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
+    num_not_owned      = 0;
+    load_not_owned<op, blockThreads>(
+        patch_info, not_owned_local_id, not_owned_patch, num_not_owned);
 
     __syncthreads();
 }
