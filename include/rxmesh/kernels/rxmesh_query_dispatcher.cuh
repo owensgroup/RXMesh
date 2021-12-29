@@ -26,7 +26,10 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
                                                   const bool oriented,
                                                   uint32_t&  num_src_in_patch,
                                                   uint16_t*& s_output_offset,
-                                                  uint16_t*& s_output_value)
+                                                  uint16_t*& s_output_value,
+                                                  uint16_t&  num_not_owned,
+                                                  uint16_t*& not_owned_local_id,
+                                                  uint32_t*& not_owned_patch)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
@@ -112,9 +115,9 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
             // query
             __syncthreads();
         }
-        uint16_t* not_owned_local_id = reinterpret_cast<uint16_t*>(shrd_mem);
-        uint32_t* not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
-        uint16_t  num_not_owned      = 0;
+        not_owned_local_id = reinterpret_cast<uint16_t*>(shrd_mem);
+        not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
+        num_not_owned      = 0;
         load_not_owned<op, blockThreads>(
             patch_info, not_owned_local_id, not_owned_patch, num_not_owned);
     }
@@ -161,6 +164,9 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     uint32_t  num_src_in_patch = 0;
     uint16_t* s_output_offset(nullptr);
     uint16_t* s_output_value(nullptr);
+    uint16_t  num_not_owned;
+    uint16_t* not_owned_local_id(nullptr);
+    uint32_t* not_owned_patch(nullptr);
 
     detail::template query_block_dispatcher<op, blockThreads>(
         context.get_patches_info()[patch_id],
@@ -168,7 +174,10 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
         oriented,
         num_src_in_patch,
         s_output_offset,
-        s_output_value);
+        s_output_value,
+        num_not_owned,
+        not_owned_local_id,
+        not_owned_patch);
 
     assert(s_output_offset);
     assert(s_output_value);
@@ -312,6 +321,9 @@ __device__ __inline__ void higher_query_block_dispatcher(
 
         uint32_t  num_src_in_patch = 0;
         uint16_t *s_output_offset(nullptr), *s_output_value(nullptr);
+        uint16_t  num_not_owned;
+        uint16_t* not_owned_local_id(nullptr);
+        uint32_t* not_owned_patch(nullptr);
 
         detail::template query_block_dispatcher<op, blockThreads>(
             context.get_patches_info()[patch_id],
@@ -319,7 +331,10 @@ __device__ __inline__ void higher_query_block_dispatcher(
             oriented,
             num_src_in_patch,
             s_output_offset,
-            s_output_value);
+            s_output_value,
+            num_not_owned,
+            not_owned_local_id,
+            not_owned_patch);
 
 
         if (pl.first == patch_id) {

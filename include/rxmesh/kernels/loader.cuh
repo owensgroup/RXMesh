@@ -90,19 +90,26 @@ __device__ __forceinline__ void load_mesh(const PatchInfo& patch_info,
     }
 }
 
+template <uint32_t blockThreads>
 __device__ __forceinline__ void load_not_owned_local_id(
     const uint16_t  num_not_owned,
     uint16_t*       output_not_owned_local_id,
     const uint16_t* input_not_owned_local_id)
 {
+    for (uint32_t i = threadIdx.x; i < num_not_owned; i += blockThreads) {
+        output_not_owned_local_id[i] = input_not_owned_local_id[i];
+    }
 }
 
+template <uint32_t blockThreads>
 __device__ __forceinline__ void load_not_owned_patch(
     const uint16_t  num_not_owned,
     uint32_t*       output_not_owned_patch,
     const uint32_t* input_not_owned_patch)
 {
-    
+    for (uint32_t i = threadIdx.x; i < num_not_owned; i += blockThreads) {
+        output_not_owned_patch[i] = input_not_owned_patch[i];
+    }
 }
 
 /**
@@ -126,9 +133,9 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
             not_owned_patch = not_owned_patch + 4 * patch_info.num_edges;
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
-            load_not_owned_patch(
+            load_not_owned_patch<blockThreads>(
                 num_not_owned, not_owned_patch, patch_info.not_owned_patch_v);
-            load_not_owned_local_id(
+            load_not_owned_local_id<blockThreads>(
                 num_not_owned,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_v));
@@ -138,9 +145,9 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
             not_owned_patch = not_owned_patch + 4 * patch_info.num_edges;
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
-            load_not_owned_patch(
+            load_not_owned_patch<blockThreads>(
                 num_not_owned, not_owned_patch, patch_info.not_owned_patch_e);
-            load_not_owned_local_id(
+            load_not_owned_local_id<blockThreads>(
                 num_not_owned,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_e));
@@ -152,9 +159,9 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
                 std::max(3 * patch_info.num_faces, 2 * patch_info.num_edges);
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
-            load_not_owned_patch(
+            load_not_owned_patch<blockThreads>(
                 num_not_owned, not_owned_patch, patch_info.not_owned_patch_f);
-            load_not_owned_local_id(
+            load_not_owned_local_id<blockThreads>(
                 num_not_owned,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_f));
@@ -165,9 +172,9 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
             not_owned_patch = not_owned_patch + 3 * patch_info.num_faces;
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
-            load_not_owned_patch(
+            load_not_owned_patch<blockThreads>(
                 num_not_owned, not_owned_patch, patch_info.not_owned_patch_v);
-            load_not_owned_local_id(
+            load_not_owned_local_id<blockThreads>(
                 num_not_owned,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_v));
@@ -177,9 +184,9 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
             not_owned_patch = not_owned_patch + 3 * patch_info.num_faces;
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
-            load_not_owned_patch(
+            load_not_owned_patch<blockThreads>(
                 num_not_owned, not_owned_patch, patch_info.not_owned_patch_e);
-            load_not_owned_local_id(
+            load_not_owned_local_id<blockThreads>(
                 num_not_owned,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_e));
@@ -192,9 +199,9 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
             not_owned_patch = not_owned_patch + 2 * patch_info.num_edges;
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
-            load_not_owned_patch(
+            load_not_owned_patch<blockThreads>(
                 num_not_owned, not_owned_patch, patch_info.not_owned_patch_v);
-            load_not_owned_local_id(
+            load_not_owned_local_id<blockThreads>(
                 num_not_owned,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_v));
@@ -204,9 +211,9 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
             not_owned_patch = not_owned_patch + 6 * patch_info.num_faces;
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);
-            load_not_owned_patch(
+            load_not_owned_patch<blockThreads>(
                 num_not_owned, not_owned_patch, patch_info.not_owned_patch_f);
-            load_not_owned_local_id(
+            load_not_owned_local_id<blockThreads>(
                 num_not_owned,
                 not_owned_local_id,
                 reinterpret_cast<uint16_t*>(patch_info.not_owned_id_f));
