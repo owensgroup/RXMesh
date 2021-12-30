@@ -27,7 +27,7 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
                                                   uint32_t&  num_src_in_patch,
                                                   uint16_t*& s_output_offset,
                                                   uint16_t*& s_output_value,
-                                                  uint16_t&  num_not_owned,
+                                                  uint16_t&  num_owned,
                                                   uint32_t*& not_owned_patch,
                                                   uint16_t*& not_owned_local_id)
 {
@@ -118,9 +118,9 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     }
     not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
     not_owned_local_id = reinterpret_cast<uint16_t*>(shrd_mem);
-    num_not_owned      = 0;
+    num_owned          = 0;
     load_not_owned<op, blockThreads>(
-        patch_info, not_owned_local_id, not_owned_patch, num_not_owned);
+        patch_info, not_owned_local_id, not_owned_patch, num_owned);
 
     __syncthreads();
 }
@@ -164,7 +164,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     uint32_t  num_src_in_patch = 0;
     uint16_t* s_output_offset(nullptr);
     uint16_t* s_output_value(nullptr);
-    uint16_t  num_not_owned;
+    uint16_t  num_owned;
     uint32_t* not_owned_patch(nullptr);
     uint16_t* not_owned_local_id(nullptr);
 
@@ -175,7 +175,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
         num_src_in_patch,
         s_output_offset,
         s_output_value,
-        num_not_owned,
+        num_owned,
         not_owned_patch,
         not_owned_local_id);
 
@@ -201,7 +201,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
                                   s_output_offset,
                                   fixed_offset,
                                   patch_id,
-                                  num_not_owned,
+                                  num_owned,
                                   not_owned_patch,
                                   not_owned_local_id,
                                   int(op == Op::FE));
@@ -324,7 +324,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
 
         uint32_t  num_src_in_patch = 0;
         uint16_t *s_output_offset(nullptr), *s_output_value(nullptr);
-        uint16_t  num_not_owned;
+        uint16_t  num_owned = 0;
         uint16_t* not_owned_local_id(nullptr);
         uint32_t* not_owned_patch(nullptr);
 
@@ -335,7 +335,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
             num_src_in_patch,
             s_output_offset,
             s_output_value,
-            num_not_owned,
+            num_owned,
             not_owned_patch,
             not_owned_local_id);
 
@@ -354,7 +354,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
                 s_output_offset,
                 fixed_offset,
                 patch_id,
-                num_not_owned,
+                num_owned,
                 not_owned_patch,
                 not_owned_local_id,
                 int(op == Op::FE));

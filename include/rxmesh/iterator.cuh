@@ -41,12 +41,12 @@ struct Iterator
     {
         assert(m_patch_output);
         assert(i + m_begin < m_end);
-        uint16_t out_id = (m_patch_output[m_begin + i].id) >> m_shift;
-        if (out_id < m_num_owned) {
-            return {m_patch_id, out_id};
+        uint16_t lid = (m_patch_output[m_begin + i].id) >> m_shift;
+        if (lid < m_num_owned) {
+            return {m_patch_id, lid};
         } else {
-            uint16_t l = out_id - m_num_owned;
-            return {m_not_owned_patch[l], m_not_owned_local_id[l]};
+            lid -= m_num_owned;            
+            return {m_not_owned_patch[lid], m_not_owned_local_id[lid]};
         }
     }
 
