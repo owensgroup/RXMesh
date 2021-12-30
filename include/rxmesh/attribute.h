@@ -543,12 +543,7 @@ class FaceAttribute : public Attribute<T>
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
                                                       const uint32_t attr) const
     {
-
-#ifdef __CUDA_ARCH__
-        auto pl = f_handle.unpack(m_d_patches_info);
-#else
-        auto pl = f_handle.unpack(m_h_patches_info);
-#endif
+        auto                 pl = f_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
@@ -561,12 +556,7 @@ class FaceAttribute : public Attribute<T>
     __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
                                                       const uint32_t   attr)
     {
-
-#ifdef __CUDA_ARCH__
-        auto pl = f_handle.unpack(m_d_patches_info);
-#else
-        auto pl = f_handle.unpack(m_h_patches_info);
-#endif
+        auto                 pl = f_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
@@ -608,11 +598,7 @@ class EdgeAttribute : public Attribute<T>
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
                                                       const uint32_t attr) const
     {
-#ifdef __CUDA_ARCH__
-        auto pl = e_handle.unpack(m_d_patches_info);
-#else
-        auto pl = e_handle.unpack(m_h_patches_info);
-#endif
+        auto                 pl = e_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
@@ -625,11 +611,7 @@ class EdgeAttribute : public Attribute<T>
     __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
                                                       const uint32_t   attr)
     {
-#ifdef __CUDA_ARCH__
-        auto pl = e_handle.unpack(m_d_patches_info);
-#else
-        auto pl = e_handle.unpack(m_h_patches_info);
-#endif
+        auto                 pl = e_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
@@ -673,11 +655,7 @@ class VertexAttribute : public Attribute<T>
         const VertexHandle v_handle,
         const uint32_t     attr) const
     {
-#ifdef __CUDA_ARCH__
-        auto pl = v_handle.unpack(m_d_patches_info);
-#else
-        auto pl = v_handle.unpack(m_h_patches_info);
-#endif
+        auto pl = v_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
@@ -691,11 +669,7 @@ class VertexAttribute : public Attribute<T>
         const VertexHandle v_handle,
         const uint32_t     attr)
     {
-#ifdef __CUDA_ARCH__
-        auto pl = v_handle.unpack(m_d_patches_info);
-#else
-        auto pl = v_handle.unpack(m_h_patches_info);
-#endif
+        auto pl = v_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 

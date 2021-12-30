@@ -268,8 +268,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
     auto compute_active_set = [](HandleT) { return true; };
 
     // the source and local id of the source mesh element
-    std::pair<uint32_t, uint16_t> pl =
-        src_id.unpack(context.get_patches_info());
+    std::pair<uint32_t, uint16_t> pl = src_id.unpack();
 
     // Here, we want to identify the set of unique patches for this thread
     // block. We do this by first sorting the patches, compute discontinuity
