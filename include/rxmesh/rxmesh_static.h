@@ -540,7 +540,15 @@ class RXMeshStatic : public RXMesh
                 this->m_h_patches_info[p].num_vertices;
 
             for (uint16_t v = 0; v < p_num_vertices; ++v) {
-                VertexHandle vh(p, {v});
+                uint16_t v_id = v;
+                uint32_t p_id = p;
+                if (v >= this->m_h_patches_info[p].num_owned_vertices) {
+                    uint16_t l =
+                        v - this->m_h_patches_info[p].num_owned_vertices;
+                    v_id = this->m_h_patches_info[p].not_owned_id_v[l].id;
+                    p_id = this->m_h_patches_info[p].not_owned_patch_v[l];
+                }
+                VertexHandle vh(p_id, {v_id});
                 file << "v " << coords(vh, 0) << " " << coords(vh, 1) << " "
                      << coords(vh, 2) << std::endl;
             }
