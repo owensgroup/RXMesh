@@ -46,7 +46,8 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
 
 
     // Filtered coordinates
-    auto filtered_coord = rxmesh.add_vertex_attribute<T>("vn", 3, LOCATION_ALL);
+    auto filtered_coord =
+        rxmesh.add_vertex_attribute<T>("filtered", 3, LOCATION_ALL);
     filtered_coord->reset(0, LOCATION_ALL);
 
     // vertex normal launch box
@@ -100,9 +101,9 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
     coords->copy_from(*double_buffer[d], rxmesh::DEVICE, rxmesh::HOST);
 
     // output to obj
-    // rxmesh.export_obj(
-    //   "output_rxmesh" + std::to_string(Arg.num_filter_iter) + ".obj",
-    //   [&](uint32_t i, uint32_t j) { return coords(i, j); });
+    // rxmesh.export_obj(STRINGIFY(OUTPUT_DIR) "output_rxmesh" +
+    //                      std::to_string(Arg.num_filter_iter) + ".obj",
+    //                  *coords);
 
 
     // Verify

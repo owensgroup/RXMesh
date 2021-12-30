@@ -437,7 +437,7 @@ __launch_bounds__(blockThreads) __global__
     using namespace rxmesh;
     VertexHandle vv[maxVVSize];
 
-    uint8_t      num_vv     = 0;
+    uint32_t     num_vv     = 0;
     T            sigma_c_sq = 0;
     T            radius     = 0;
     Vector<3, T> vertex, normal;
@@ -503,7 +503,7 @@ __launch_bounds__(blockThreads) __global__
         if (v_id.is_valid() && next_id < num_vv) {
             next_vertex = vv[next_id];
         }
-        auto n_rings = [&](VertexHandle& id, VertexIterator& iter) {
+        auto n_rings = [&](const VertexHandle& id, const VertexIterator& iter) {
             assert(id == next_vertex);
 
             for (uint32_t i = 0; i < iter.size(); ++i) {
@@ -519,7 +519,7 @@ __launch_bounds__(blockThreads) __global__
 
                         T dist = dist2(vvv, vertex);
                         if (dist <= radius) {
-                            uint8_t id = num_vv++;
+                            uint32_t id = num_vv++;
                             assert(id < maxVVSize);
                             vv[id] = vvv_id;
                         }
@@ -529,10 +529,10 @@ __launch_bounds__(blockThreads) __global__
         };
 
 
-        // query_block_dispatcher<Op::VV, blockThreads>(
-        //    context, next_vertex, n_rings);
+        higher_query_block_dispatcher<Op::VV, blockThreads>(
+            context, next_vertex, n_rings);
 
-        bool is_done = (next_id > num_vv - 1) || !v_id.is_valid();
+        bool is_done = (next_id >= num_vv) || !v_id.is_valid();
         if (__syncthreads_and(is_done)) {
             break;
         }
