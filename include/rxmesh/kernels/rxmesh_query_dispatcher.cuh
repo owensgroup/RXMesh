@@ -44,6 +44,9 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
 
     LocalVertexT* s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
     LocalEdgeT*   s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
+    not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
+    not_owned_local_id = reinterpret_cast<uint16_t*>(shrd_mem);
+    num_owned          = 0;
 
     constexpr bool load_fe  = (op == Op::VF || op == Op::EE || op == Op::EF ||
                               op == Op::FV || op == Op::FE || op == Op::FF);
@@ -101,6 +104,10 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
                                        reinterpret_cast<uint16_t*>(s_ev));
         }
     } else {
+        if constexpr (!(op == Op::VV || op == Op::FV || op == Op::FF)) {
+            load_not_owned<op, blockThreads>(
+                patch_info, not_owned_local_id, not_owned_patch, num_owned);
+        }
         query<blockThreads, op>(s_output_offset,
                                 s_output_value,
                                 reinterpret_cast<uint16_t*>(s_ev),
@@ -115,12 +122,10 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
         // need to sync since we will overwrite things that are used in
         // query
         __syncthreads();
+        load_not_owned<op, blockThreads>(
+            patch_info, not_owned_local_id, not_owned_patch, num_owned);
     }
-    not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
-    not_owned_local_id = reinterpret_cast<uint16_t*>(shrd_mem);
-    num_owned          = 0;
-    load_not_owned<op, blockThreads>(
-        patch_info, not_owned_local_id, not_owned_patch, num_owned);
+
 
     __syncthreads();
 }

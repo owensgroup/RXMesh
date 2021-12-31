@@ -8,6 +8,29 @@
 
 namespace rxmesh {
 
+template <uint32_t blockThreads>
+__device__ __forceinline__ void load_uint16(const uint16_t* in,
+                                            const uint16_t  size,
+                                            uint16_t*       out)
+{
+    const uint32_t  size32   = size / 2;
+    const uint32_t  reminder = size % 2;
+    const uint32_t* in32     = reinterpret_cast<const uint32_t*>(in);
+    uint32_t*       out32    = reinterpret_cast<uint32_t*>(out);
+
+    for (uint32_t i = threadIdx.x; i < size32; i += blockThreads) {
+        uint32_t a = in32[i];
+        out32[i]   = a;
+    }
+
+    if (reminder != 0) {
+        if (threadIdx.x == 0) {
+            out[size - 1] = in[size - 1];
+        }
+    }
+}
+
+
 /**
  * @brief load the patch FE
  * @param patch_info input patch info
@@ -18,23 +41,9 @@ template <uint32_t blockThreads>
 __device__ __forceinline__ void load_patch_FE(const PatchInfo& patch_info,
                                               LocalEdgeT*      fe)
 {
-    const uint32_t  size     = patch_info.num_faces * 3;
-    const uint32_t  size32   = size / 2;
-    const uint32_t  reminder = size % 2;
-    const uint32_t* input_fe32 =
-        reinterpret_cast<const uint32_t*>(patch_info.fe);
-    uint32_t* output_fe32 = reinterpret_cast<uint32_t*>(fe);
-    //#pragma unroll 3
-    for (uint32_t i = threadIdx.x; i < size32; i += blockThreads) {
-        uint32_t a     = input_fe32[i];
-        output_fe32[i] = a;
-    }
-
-    if (reminder != 0) {
-        if (threadIdx.x == 0) {
-            fe[size - 1] = patch_info.fe[size - 1];
-        }
-    }
+    load_uint16<blockThreads>(reinterpret_cast<const uint16_t*>(patch_info.fe),
+                              patch_info.num_faces * 3,
+                              reinterpret_cast<uint16_t*>(fe));
 }
 
 /**
@@ -96,9 +105,8 @@ __device__ __forceinline__ void load_not_owned_local_id(
     uint16_t*       output_not_owned_local_id,
     const uint16_t* input_not_owned_local_id)
 {
-    for (uint32_t i = threadIdx.x; i < num_not_owned; i += blockThreads) {
-        output_not_owned_local_id[i] = input_not_owned_local_id[i];
-    }
+    load_uint16<blockThreads>(
+        input_not_owned_local_id, num_not_owned, output_not_owned_local_id);
 }
 
 template <uint32_t blockThreads>
@@ -184,7 +192,7 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
             break;
         }
         case Op::FV: {
-            num_owned = patch_info.num_owned_vertices;
+            num_owned     = patch_info.num_owned_vertices;
             num_not_owned = patch_info.num_vertices - num_owned;
 
             assert(2 * patch_info.num_edges >= (1 + 2) * num_not_owned);
@@ -232,7 +240,7 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
             break;
         }
         case Op::EV: {
-            num_owned = patch_info.num_owned_vertices;
+            num_owned     = patch_info.num_owned_vertices;
             num_not_owned = patch_info.num_vertices - num_owned;
 
             // should be 2*patch_info.num_edges but EV is stored as uint16_t and
