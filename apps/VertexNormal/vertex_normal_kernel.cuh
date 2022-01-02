@@ -9,10 +9,9 @@
  * vertex_normal()
  */
 template <typename T, uint32_t blockThreads>
-__launch_bounds__(blockThreads, 6) __global__
-    static void compute_vertex_normal(const rxmesh::Context      context,
-                                      rxmesh::VertexAttribute<T> coords,
-                                      rxmesh::VertexAttribute<T> normals)
+__global__ static void compute_vertex_normal(const rxmesh::Context      context,
+                                             rxmesh::VertexAttribute<T> coords,
+                                             rxmesh::VertexAttribute<T> normals)
 {
     using namespace rxmesh;
     auto vn_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
