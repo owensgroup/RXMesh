@@ -33,21 +33,6 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
-
-    ELEMENT src_element, output_element;
-    io_elements(op, src_element, output_element);
-
-    extern __shared__ uint16_t shrd_mem[];
-
-    s_output_offset = shrd_mem;
-
-
-    LocalVertexT* s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
-    LocalEdgeT*   s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
-    not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
-    not_owned_local_id = reinterpret_cast<uint16_t*>(shrd_mem);
-    num_owned          = 0;
-
     constexpr bool load_fe  = (op == Op::VF || op == Op::EE || op == Op::EF ||
                               op == Op::FV || op == Op::FE || op == Op::FF);
     constexpr bool loead_ev = (op == Op::VV || op == Op::VE || op == Op::VF ||
@@ -55,35 +40,25 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     static_assert(loead_ev || load_fe,
                   "At least faces or edges needs to be loaded");
 
-    constexpr bool is_fixed_offset =
-        (op == Op::EV || op == Op::FV || op == Op::FE);
-
-
     // Check if any of the mesh elements are in the active set
     // input mapping does not need to be stored in shared memory since it will
     // be read coalesced, we can rely on L1 cache here
     num_src_in_patch = 0;
-    switch (src_element) {
-        case ELEMENT::VERTEX: {
-            num_src_in_patch = patch_info.num_owned_vertices;
-            break;
-        }
-        case ELEMENT::EDGE: {
-            num_src_in_patch = patch_info.num_owned_edges;
-            break;
-        }
-        case ELEMENT::FACE: {
-            num_src_in_patch = patch_info.num_owned_faces;
-            break;
-        }
+    if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
+        num_src_in_patch = patch_info.num_owned_vertices;
     }
-
+    if constexpr (op == Op::EV || op == Op::EF) {
+        num_src_in_patch = patch_info.num_owned_edges;
+    }
+    if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
+        num_src_in_patch = patch_info.num_owned_faces;
+    }
 
     bool     is_active = false;
     uint16_t local_id  = threadIdx.x;
     while (local_id < num_src_in_patch) {
         is_active =
-            local_id || compute_active_set({patch_info.patch_id, local_id});
+            is_active || compute_active_set({patch_info.patch_id, local_id});
         local_id += blockThreads;
     }
 
@@ -92,12 +67,19 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     }
 
     // 2) Load the patch info
+    extern __shared__ uint16_t shrd_mem[];
+    LocalVertexT*              s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
+    LocalEdgeT*                s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
     load_mesh<blockThreads>(patch_info, loead_ev, load_fe, s_ev, s_fe);
-    __syncthreads();
+
+    not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
+    not_owned_local_id = shrd_mem;
+    num_owned          = 0;    
     // 3)Perform the query operation
     if (oriented) {
         assert(op == Op::VV);
         if constexpr (op == Op::VV) {
+            __syncthreads();
             v_v_oreinted<blockThreads>(patch_info,
                                        s_output_offset,
                                        s_output_value,
@@ -108,6 +90,7 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
             load_not_owned<op, blockThreads>(
                 patch_info, not_owned_local_id, not_owned_patch, num_owned);
         }
+        __syncthreads();
         query<blockThreads, op>(s_output_offset,
                                 s_output_value,
                                 reinterpret_cast<uint16_t*>(s_ev),
