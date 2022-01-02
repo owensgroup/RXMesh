@@ -217,17 +217,21 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     // rxmesh.export_obj("mcf_rxmesh.obj", *X);
 
     // Verify
-    const T tol = 0.001;
+    const T tol    = 0.001;
+    bool    passed = true;
     rxmesh.for_each_vertex(HOST, [&](const VertexHandle& vh) {
         uint32_t v_id = rxmesh.map_to_global(vh);
 
         for (uint32_t i = 0; i < 3; ++i) {
-            EXPECT_LT(std::abs(((*X)(vh, i) - ground_truth[v_id][i]) /
-                               ground_truth[v_id][i]),
-                      tol);
-        }
+            if (std::abs(((*X)(vh, i) - ground_truth[v_id][i]) /
+                         ground_truth[v_id][i]) > tol) {
+                passed = false;
+                break;
+            }
+        }       
     });
 
+    EXPECT_TRUE(passed);
 
     // Finalize report
     report.add_member("start_residual", delta_0);
@@ -237,6 +241,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     report.add_member("matvec_time (ms)", matvec_time);
     TestData td;
     td.test_name = "MCF";
+    td.passed.push_back(passed);
     td.time_ms.push_back(timer.elapsed_millis() / float(num_cg_iter_taken));
     report.add_test(td);
     report.write(Arg.output_folder + "/rxmesh",
