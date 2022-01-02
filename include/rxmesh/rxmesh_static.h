@@ -760,7 +760,7 @@ class RXMeshStatic : public RXMesh
     {
         // check if total shared memory (static + dynamic) consumed by
         // k_base_query are less than the max shared per block
-        cudaFuncAttributes func_attr;
+        cudaFuncAttributes func_attr = cudaFuncAttributes();
         switch (op) {
             case Op::VV: {
                 if (is_higher_query) {
