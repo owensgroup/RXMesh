@@ -746,7 +746,8 @@ class RXMeshStatic : public RXMesh
 
         if (!this->m_quite) {
             RXMESH_TRACE(
-                "RXMeshStatic::calc_shared_memory() launching {} blocks with {} "
+                "RXMeshStatic::calc_shared_memory() launching {} blocks with "
+                "{} "
                 "threads on the device",
                 launch_box.blocks,
                 blockThreads);
@@ -921,7 +922,6 @@ class RXMeshStatic : public RXMesh
 
         if (!this->m_quite) {
             RXMESH_TRACE(
-                "RXMeshStatic::check_shared_memory() query_prototype with {} "
                 "RXMeshStatic::check_shared_memory() {} with {} required "
                 "shared memory = {} (dynamic) + {} (static) = {} (bytes) and "
                 "{} registers",
