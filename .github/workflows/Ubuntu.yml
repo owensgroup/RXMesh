@@ -1,5 +1,5 @@
 name: Ubuntu
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 jobs:
   UbuntuRun:
     runs-on: ubuntu-latest
