@@ -13,7 +13,7 @@
  * @brief perform 2-ring VV query
  */
 template <uint32_t blockThreads, rxmesh::Op op>
-__launch_bounds__(blockThreads) __global__ static void higher_query(
+__global__ static void higher_query(
     const rxmesh::Context                         context,
     rxmesh::VertexAttribute<rxmesh::VertexHandle> input,
     rxmesh::VertexAttribute<rxmesh::VertexHandle> output)
@@ -52,7 +52,7 @@ __launch_bounds__(blockThreads) __global__ static void higher_query(
 
         if (thread_vertex.is_valid() && next_id < num_vv_1st_ring) {
             next_vertex = output(thread_vertex, next_id);
-        }        
+        }
 
         auto higher_rings_lambda = [&](const VertexHandle&   id,
                                        const VertexIterator& iter) {

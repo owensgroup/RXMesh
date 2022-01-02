@@ -19,11 +19,10 @@ template <uint32_t   blockThreads,
           typename OutputHandleT,
           typename InputAttributeT,
           typename OutputAttributeT>
-__launch_bounds__(blockThreads) __global__
-    static void query_kernel(const rxmesh::Context context,
-                             InputAttributeT       input,
-                             OutputAttributeT      output,
-                             const bool            oriented = false)
+__global__ static void query_kernel(const rxmesh::Context context,
+                                    InputAttributeT       input,
+                                    OutputAttributeT      output,
+                                    const bool            oriented = false)
 {
     using namespace rxmesh;
 

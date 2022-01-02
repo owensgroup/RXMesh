@@ -12,9 +12,8 @@ template <Op       op,
           uint32_t blockThreads,
           typename InputHandleT,
           typename OutputHandleT>
-__launch_bounds__(blockThreads) __global__
-    static void query_prototype(const Context context,
-                                const bool    oriented = false)
+__global__ static void query_prototype(const Context context,
+                                       const bool    oriented = false)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
@@ -36,9 +35,8 @@ template <Op       op,
           uint32_t blockThreads,
           typename InputHandleT,
           typename OutputHandleT>
-__launch_bounds__(blockThreads) __global__
-    static void higher_query_prototype(const Context context,
-                                       const bool    oriented = false)
+__global__ static void higher_query_prototype(const Context context,
+                                              const bool    oriented = false)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
@@ -51,9 +49,7 @@ __launch_bounds__(blockThreads) __global__
         }
     };
 
-    // TODO enable this when higher query are implemented using handle
-    // query_block_dispatcher<op, blockThreads>(context, first_ring,
-    // oriented);
+    query_block_dispatcher<op, blockThreads>(context, first_ring, oriented);
 
     auto n_ring = [&](InputHandleT id, Iterator<OutputHandleT>& iter) {
         printf("\n iter.size() = %u", iter.size());
@@ -62,9 +58,8 @@ __launch_bounds__(blockThreads) __global__
         }
     };
 
-    // TODO enable this when higher query are implemented using handle
-    // query_block_dispatcher<op, blockThreads>(
-    //    context, thread_element, n_ring, oriented);
+    higher_query_block_dispatcher<op, blockThreads>(
+        context, thread_element, n_ring, oriented);
 }
 
 }  // namespace detail

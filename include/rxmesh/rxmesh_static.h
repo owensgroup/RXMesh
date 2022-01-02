@@ -922,8 +922,11 @@ class RXMeshStatic : public RXMesh
         if (!this->m_quite) {
             RXMESH_TRACE(
                 "RXMeshStatic::check_shared_memory() query_prototype with {} "
-                "required shared memory = {} (dynamic) +  {} (static) = {} "
-                "(bytes) and {} registers",
+                "RXMeshStatic::check_shared_memory() {} with {} required "
+                "shared memory = {} (dynamic) + {} (static) = {} (bytes) and "
+                "{} registers",
+                (is_higher_query ? "higher_query_prototype" :
+                                   "query_prototype"),
                 op_to_string(op),
                 smem_bytes_dyn,
                 smem_bytes_static,
