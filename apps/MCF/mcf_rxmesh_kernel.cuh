@@ -55,11 +55,10 @@ partial_voronoi_area(const rxmesh::VertexHandle&       p_id,  // center
  * init_B()
  */
 template <typename T, uint32_t blockThreads>
-__launch_bounds__(blockThreads) __global__
-    static void init_B(const rxmesh::Context            context,
-                       const rxmesh::VertexAttribute<T> X,
-                       rxmesh::VertexAttribute<T>       B,
-                       const bool                       use_uniform_laplace)
+__global__ static void init_B(const rxmesh::Context            context,
+                              const rxmesh::VertexAttribute<T> X,
+                              rxmesh::VertexAttribute<T>       B,
+                              const bool use_uniform_laplace)
 {
     using namespace rxmesh;
 
@@ -105,13 +104,12 @@ __launch_bounds__(blockThreads) __global__
  * mcf_matvec()
  */
 template <typename T, uint32_t blockThreads>
-__launch_bounds__(blockThreads) __global__
-    static void mcf_matvec(const rxmesh::Context            context,
-                           const rxmesh::VertexAttribute<T> coords,
-                           const rxmesh::VertexAttribute<T> in,
-                           rxmesh::VertexAttribute<T>       out,
-                           const bool                       use_uniform_laplace,
-                           const T                          time_step)
+__global__ static void mcf_matvec(const rxmesh::Context            context,
+                                  const rxmesh::VertexAttribute<T> coords,
+                                  const rxmesh::VertexAttribute<T> in,
+                                  rxmesh::VertexAttribute<T>       out,
+                                  const bool use_uniform_laplace,
+                                  const T    time_step)
 {
 
     // To compute the vertex cotan weight, we use the following configuration

@@ -74,7 +74,7 @@ __device__ __inline__ T update_step(
 
 
 template <typename T, uint32_t blockThreads>
-__launch_bounds__(blockThreads) __global__ static void relax_ptp_rxmesh(
+__global__ static void relax_ptp_rxmesh(
     const rxmesh::Context                   context,
     const rxmesh::VertexAttribute<T>        coords,
     rxmesh::VertexAttribute<T>              new_geo_dist,

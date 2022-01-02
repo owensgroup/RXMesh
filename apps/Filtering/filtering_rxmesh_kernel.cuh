@@ -17,10 +17,9 @@ constexpr float EPS = 10e-6;
  * compute_vertex_normal()
  */
 template <typename T, uint32_t blockThreads>
-__launch_bounds__(blockThreads, 6) __global__
-    static void compute_vertex_normal(const rxmesh::Context      context,
-                                      rxmesh::VertexAttribute<T> coords,
-                                      rxmesh::VertexAttribute<T> normals)
+__global__ static void compute_vertex_normal(const rxmesh::Context      context,
+                                             rxmesh::VertexAttribute<T> coords,
+                                             rxmesh::VertexAttribute<T> normals)
 {
     using namespace rxmesh;
     auto vn_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
@@ -428,11 +427,11 @@ __launch_bounds__(blockThreads) __global__
  * bilateral_filtering2()
  */
 template <typename T, uint32_t blockThreads, uint32_t maxVVSize>
-__launch_bounds__(blockThreads) __global__
-    static void bilateral_filtering(const rxmesh::Context      context,
-                                    rxmesh::VertexAttribute<T> input_coords,
-                                    rxmesh::VertexAttribute<T> filtered_coords,
-                                    rxmesh::VertexAttribute<T> vertex_normals)
+__global__ static void bilateral_filtering(
+    const rxmesh::Context      context,
+    rxmesh::VertexAttribute<T> input_coords,
+    rxmesh::VertexAttribute<T> filtered_coords,
+    rxmesh::VertexAttribute<T> vertex_normals)
 {
     using namespace rxmesh;
     VertexHandle vv[maxVVSize];
