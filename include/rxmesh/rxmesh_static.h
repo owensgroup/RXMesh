@@ -747,8 +747,7 @@ class RXMeshStatic : public RXMesh
         if (!this->m_quite) {
             RXMESH_TRACE(
                 "RXMeshStatic::calc_shared_memory() launching {} blocks with "
-                "{} "
-                "threads on the device",
+                "{} threads on the device",
                 launch_box.blocks,
                 blockThreads);
         }
