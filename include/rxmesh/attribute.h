@@ -44,7 +44,10 @@ class AttributeBase
  * largely inspired by
  * https://github.com/gunrock/gunrock/blob/master/gunrock/util/array_utils.cuh
  * It is discouraged to use Attribute directly in favor of using
- * add_X_attributes() from RXMeshStatic.
+ * add_X_attributes() from RXMeshStatic where X is vertex, edge, or face. This
+ * way, the user does not have to specify the number of mesh elements or
+ * deallocate/release the Attribute (attribute garbage collection is managed by
+ * RXMeshStatic)
  * @tparam T type of the attribute
  */
 template <class T>
@@ -54,6 +57,9 @@ class Attribute : public AttributeBase
     friend class ReduceHandle;
 
    public:
+    /**
+     * @brief Default constructor which initializes all pointers to nullptr
+     */
     Attribute()
         : AttributeBase(),
           m_name(nullptr),
@@ -72,6 +78,10 @@ class Attribute : public AttributeBase
         this->m_name[0] = '\0';
     }
 
+    /**
+     * @brief Main constructor
+     * @param name attribute name
+     */
     Attribute(const char* name)
         : AttributeBase(),
           m_name(nullptr),
@@ -95,33 +105,54 @@ class Attribute : public AttributeBase
 
     virtual ~Attribute() = default;
 
-
+    /**
+     * @brief Get the name of the attribute
+     */
     const char* get_name() const
     {
         return m_name;
     }
 
+    /**
+     * @brief get the number of attributes per mesh element
+     */
     __host__ __device__ __forceinline__ uint32_t get_num_attributes() const
     {
         return this->m_num_attributes;
     }
 
+    /**
+     * @brief Flag that indicates where the memory is allocated
+     */
     __host__ __device__ __forceinline__ locationT get_allocated() const
     {
         return this->m_allocated;
     }
 
+    /**
+     * @brief Check if attribute is allocated on device
+     */
     __host__ __device__ __forceinline__ bool is_device_allocated() const
     {
         return ((m_allocated & DEVICE) == DEVICE);
     }
 
+    /**
+     * @brief Check if attribute is allocated on host
+     */
     __host__ __device__ __forceinline__ bool is_host_allocated() const
     {
         return ((m_allocated & HOST) == HOST);
     }
 
-
+    /**
+     * @brief Reset attribute to certain value
+     * @param value to be set
+     * @param location which location (device, host, or both) where attribute
+     * will be set
+     * @param stream in case of DEVICE, this is the stream that will be used to
+     * launch the reset kernel
+     */
     void reset(const T value, locationT location, cudaStream_t stream = NULL)
     {
         if ((location & DEVICE) == DEVICE) {
@@ -149,7 +180,15 @@ class Attribute : public AttributeBase
         }
     }
 
-
+    /**
+     * @brief Allocate memory for attribute. This is meant to be used by
+     * RXMeshStatic
+     * @param element_per_patch indicate the number of mesh element owned by
+     * each patch
+     * @param num_attributes number of attribute per mesh element
+     * @param location where the memory should reside (host, device, or both)
+     * @param layout memory layout in case num_attributes>1
+     */
     void init(const std::vector<uint16_t>& element_per_patch,
               const uint32_t               num_attributes,
               locationT                    location = LOCATION_ALL,
@@ -167,7 +206,16 @@ class Attribute : public AttributeBase
         allocate(element_per_patch.data(), location);
     }
 
-
+    /**
+     * @brief Copy memory from one location to another. If target is not
+     * allocated, it will be allocated first before copying the memory.
+     * @param source the source location
+     * @param target the destination location
+     * @param stream to be used to launch the kernel
+     * TODO it is better to launch a kernel that do the memcpy than relying on
+     * the host API from CUDA since all these small memcpy will be enqueued in
+     * the same stream and so serialized
+     */
     void move(locationT source, locationT target, cudaStream_t stream = NULL)
     {
         if (source == target) {
@@ -220,7 +268,10 @@ class Attribute : public AttributeBase
         }
     }
 
-
+    /**
+     * @brief Release allocated memory in certain location
+     * @param location where memory will be released
+     */
     void release(locationT location = LOCATION_ALL)
     {
         if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
@@ -245,25 +296,25 @@ class Attribute : public AttributeBase
         }
     }
 
-
+    /**
+     * @brief Deep copy from a source attribute. If source_flag and dst_flag are
+     * both set to LOCATION_ALL, then we copy what is on host to host, and what
+     * on device to device. If sourc_flag is set to HOST (or DEVICE) and
+     * dst_flag is set to LOCATION_ALL, then we copy source's HOST (or
+     * DEVICE) to both HOST and DEVICE. Setting source_flag to
+     * LOCATION_ALL while dst_flag is NOT set to LOCATION_ALL is invalid
+     * because we don't know which source to copy from
+     * @param source attribute to copy from
+     * @param source_flag defines where we will copy from
+     * @param dst_flag defines where we will copy to
+     * @param stream used to launch kernel/memcpy
+     */
     void copy_from(Attribute<T>& source,
                    locationT     source_flag,
-                   locationT     location_flag,
+                   locationT     dst_flag,
                    cudaStream_t  stream = NULL)
     {
-        // Deep copy from source. The source_flag defines where we will copy
-        // from. The location_flag defines where we will copy to.
 
-        // if source_flag and location_flag are both set to LOCATION_ALL, then
-        // we copy what is on host to host, and what on location to location
-
-        // If sourc_flag is set to HOST (or DEVICE) and location_flag is set to
-        // LOCATION_ALL, then we copy source's HOST (or DEVICE) to both HOST
-        // and DEVICE in location
-
-        // Setting source_flag to LOCATION_ALL while location_flag is Not set to
-        // LOCATION_ALL is invalid because we don't know which source to copy
-        // from
 
         if (source.m_layout != m_layout) {
             RXMESH_ERROR(
@@ -272,7 +323,7 @@ class Attribute : public AttributeBase
         }
 
         if ((source_flag & LOCATION_ALL) == LOCATION_ALL &&
-            (location_flag & LOCATION_ALL) != LOCATION_ALL) {
+            (dst_flag & LOCATION_ALL) != LOCATION_ALL) {
             RXMESH_ERROR("Attribute::copy_from() Invalid configuration!");
         }
 
@@ -287,13 +338,13 @@ class Attribute : public AttributeBase
         }
 
         // 1) copy from HOST to HOST
-        if ((source_flag & HOST) == HOST && (location_flag & HOST) == HOST) {
+        if ((source_flag & HOST) == HOST && (dst_flag & HOST) == HOST) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
                     "Attribute::copy() copying source is not valid"
                     " because it was not allocated on host");
             }
-            if ((location_flag & m_allocated) != location_flag) {
+            if ((dst_flag & m_allocated) != dst_flag) {
                 RXMESH_ERROR(
                     "Attribute::copy() copying source is not valid"
                     " because location (this) was not allocated on host");
@@ -311,14 +362,13 @@ class Attribute : public AttributeBase
 
 
         // 2) copy from DEVICE to DEVICE
-        if ((source_flag & DEVICE) == DEVICE &&
-            (location_flag & DEVICE) == DEVICE) {
+        if ((source_flag & DEVICE) == DEVICE && (dst_flag & DEVICE) == DEVICE) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
                     "Attribute::copy() copying source is not valid"
                     " because it was not allocated on device");
             }
-            if ((location_flag & m_allocated) != location_flag) {
+            if ((dst_flag & m_allocated) != dst_flag) {
                 RXMESH_ERROR(
                     "Attribute::copy() copying source is not valid"
                     " because location (this) was not allocated on device");
@@ -338,14 +388,13 @@ class Attribute : public AttributeBase
 
 
         // 3) copy from DEVICE to HOST
-        if ((source_flag & DEVICE) == DEVICE &&
-            (location_flag & HOST) == HOST) {
+        if ((source_flag & DEVICE) == DEVICE && (dst_flag & HOST) == HOST) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
                     "Attribute::copy() copying source is not valid"
                     " because it was not allocated on host");
             }
-            if ((location_flag & m_allocated) != location_flag) {
+            if ((dst_flag & m_allocated) != dst_flag) {
                 RXMESH_ERROR(
                     "Attribute::copy() copying source is not valid"
                     " because location (this) was not allocated on device");
@@ -366,14 +415,13 @@ class Attribute : public AttributeBase
 
 
         // 4) copy from HOST to DEVICE
-        if ((source_flag & HOST) == HOST &&
-            (location_flag & DEVICE) == DEVICE) {
+        if ((source_flag & HOST) == HOST && (dst_flag & DEVICE) == DEVICE) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
                     "Attribute::copy() copying source is not valid"
                     " because it was not allocated on device");
             }
-            if ((location_flag & m_allocated) != location_flag) {
+            if ((dst_flag & m_allocated) != dst_flag) {
                 RXMESH_ERROR(
                     "Attribute::copy() copying source is not valid"
                     " because location (this) was not allocated on host");
@@ -393,6 +441,14 @@ class Attribute : public AttributeBase
         }
     }
 
+    /**
+     * @brief Access the attribute value using patch and local index in the
+     * patch. This is meant to be used by XXAttribute not directly by the user
+     * @param patch_id patch to be accessed
+     * @param local_id the local id in the patch
+     * @param attr the attribute id
+     * @return const reference to the attribute
+     */
     __host__ __device__ __forceinline__ T& operator()(const uint32_t patch_id,
                                                       const uint16_t local_id,
                                                       const uint32_t attr) const
@@ -412,6 +468,14 @@ class Attribute : public AttributeBase
 #endif
     }
 
+    /**
+     * @brief Access the attribute value using patch and local index in the
+     * patch. This is meant to be used by XXAttribute not directly by the user
+     * @param patch_id patch to be accessed
+     * @param local_id the local id in the patch
+     * @param attr the attribute id
+     * @return non-const reference to the attribute
+     */
     __host__ __device__ __forceinline__ T& operator()(const uint32_t patch_id,
                                                       const uint16_t local_id,
                                                       const uint32_t attr)
@@ -431,7 +495,9 @@ class Attribute : public AttributeBase
 #endif
     }
 
-
+    /**
+     * @brief Check if the attribute is empty
+     */
     __host__ __device__ __forceinline__ bool is_empty() const
     {
         return m_num_patches == 0;
@@ -439,6 +505,9 @@ class Attribute : public AttributeBase
 
 
    private:
+    /**
+     * @brief allocate internal memory
+     */
     void allocate(const uint16_t* element_per_patch, locationT location)
     {
 
@@ -524,50 +593,57 @@ template <class T>
 class FaceAttribute : public Attribute<T>
 {
    public:
+    /**
+     * @brief Default constructor
+     */
     FaceAttribute() = default;
 
+    /**
+     * @brief Main constructor to be used by RXMeshStatic not directly by the
+     * user
+     * @param name of the attribute
+     * @param face_per_patch number of faces owned per patch
+     * @param num_attributes number of attribute per face
+     * @param location where the attribute to be allocated
+     * @param layout memory layout in case of num_attributes>1
+     */
     FaceAttribute(const char*                  name,
                   const std::vector<uint16_t>& face_per_patch,
                   const uint32_t               num_attributes,
                   locationT                    location,
-                  const layoutT                layout,
-                  const PatchInfo*             h_patches_info,
-                  const PatchInfo*             d_patches_info)
-        : Attribute<T>(name),
-          m_h_patches_info(h_patches_info),
-          m_d_patches_info(d_patches_info)
+                  const layoutT                layout)
+        : Attribute<T>(name)
     {
         this->init(face_per_patch, num_attributes, location, layout);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
-                                                      const uint32_t attr) const
-    {
-        auto                 pl = f_handle.unpack();
-        return Attribute<T>::operator()(pl.first, pl.second, attr);
-    }
-
+    /**
+     * @brief Accessing face attribute using FaceHandle
+     * @param f_handle input face handle
+     * @param attr the attribute id
+     * @return const reference to the attribute
+     */
     __host__ __device__ __forceinline__ T& operator()(
-        const FaceHandle f_handle) const
-    {
-        return (*this)(f_handle, 0);
-    }
-
-    __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
-                                                      const uint32_t   attr)
+        const FaceHandle f_handle,
+        const uint32_t   attr = 0) const
     {
         auto                 pl = f_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle)
-    {
-        return (*this)(f_handle, 0);
-    }
 
-   private:
-    const PatchInfo* m_h_patches_info;
-    const PatchInfo* m_d_patches_info;
+    /**
+     * @brief Accessing face attribute using FaceHandle
+     * @param f_handle input face handle
+     * @param attr the attribute id
+     * @return non-const reference to the attribute
+     */
+    __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
+                                                      const uint32_t   attr = 0)
+    {
+        auto                 pl = f_handle.unpack();
+        return Attribute<T>::operator()(pl.first, pl.second, attr);
+    }
 };
 
 
@@ -579,50 +655,56 @@ template <class T>
 class EdgeAttribute : public Attribute<T>
 {
    public:
+    /**
+     * @brief Default constructor
+     */
     EdgeAttribute() = default;
 
+    /**
+     * @brief Main constructor to be used by RXMeshStatic not directly by the
+     * user
+     * @param name of the attribute
+     * @param edge_per_patch number of edges owned per patch
+     * @param num_attributes number of attribute per edge
+     * @param location where the attribute to be allocated
+     * @param layout memory layout in case of num_attributes>1
+     */
     EdgeAttribute(const char*                  name,
                   const std::vector<uint16_t>& edge_per_patch,
                   const uint32_t               num_attributes,
                   locationT                    location,
-                  const layoutT                layout,
-                  const PatchInfo*             h_patches_info,
-                  const PatchInfo*             d_patches_info)
-        : Attribute<T>(name),
-          m_h_patches_info(h_patches_info),
-          m_d_patches_info(d_patches_info)
+                  const layoutT                layout)
+        : Attribute<T>(name)
     {
         this->init(edge_per_patch, num_attributes, location, layout);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
-                                                      const uint32_t attr) const
-    {
-        auto                 pl = e_handle.unpack();
-        return Attribute<T>::operator()(pl.first, pl.second, attr);
-    }
-
+    /**
+     * @brief Accessing edge attribute using EdgeHandle
+     * @param e_handle input edge handle
+     * @param attr the attribute id
+     * @return const reference to the attribute
+     */
     __host__ __device__ __forceinline__ T& operator()(
-        const EdgeHandle e_handle) const
-    {
-        return (*this)(e_handle, 0);
-    }
-
-    __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
-                                                      const uint32_t   attr)
+        const EdgeHandle e_handle,
+        const uint32_t   attr = 0) const
     {
         auto                 pl = e_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle)
+    /**
+     * @brief Accessing edge attribute using EdgeHandle
+     * @param e_handle input edge handle
+     * @param attr the attribute id
+     * @return non-const reference to the attribute
+     */
+    __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
+                                                      const uint32_t   attr = 0)
     {
-        return (*this)(e_handle, 0);
+        auto                 pl = e_handle.unpack();
+        return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
-
-   private:
-    const PatchInfo* m_h_patches_info;
-    const PatchInfo* m_d_patches_info;
 };
 
 
@@ -634,64 +716,75 @@ template <class T>
 class VertexAttribute : public Attribute<T>
 {
    public:
+    /**
+     * @brief Default constructor
+     */
     VertexAttribute() = default;
 
+    /**
+     * @brief Main constructor to be used by RXMeshStatic not directly by the
+     * user
+     * @param name of the attribute
+     * @param vertex_per_patch number of vertices owned per patch
+     * @param num_attributes number of attribute per vertex
+     * @param location where the attribute to be allocated
+     * @param layout memory layout in case of num_attributes > 1
+     */
     VertexAttribute(const char*                  name,
                     const std::vector<uint16_t>& vertex_per_patch,
                     const uint32_t               num_attributes,
                     locationT                    location,
-                    const layoutT                layout,
-                    const PatchInfo*             h_patches_info,
-                    const PatchInfo*             d_patches_info)
-        : Attribute<T>(name),
-          m_h_patches_info(h_patches_info),
-          m_d_patches_info(d_patches_info)
+                    const layoutT                layout)
+        : Attribute<T>(name)
     {
         this->init(vertex_per_patch, num_attributes, location, layout);
     }
 
 
+    /**
+     * @brief Accessing vertex attribute using VertexHandle
+     * @param v_handle input face handle
+     * @param attr the attribute id
+     * @return const reference to the attribute
+     */
     __host__ __device__ __forceinline__ T& operator()(
         const VertexHandle v_handle,
-        const uint32_t     attr) const
+        const uint32_t     attr = 0) const
     {
-        auto pl = v_handle.unpack();
+        auto                 pl = v_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
 
-    __host__ __device__ __forceinline__ T& operator()(
-        const VertexHandle v_handle) const
-    {
-        return (*this)(v_handle, 0);
-    }
-
+    /**
+     * @brief Accessing vertex attribute using VertexHandle
+     * @param v_handle input face handle
+     * @param attr the attribute id
+     * @return non-const reference to the attribute
+     */
     __host__ __device__ __forceinline__ T& operator()(
         const VertexHandle v_handle,
-        const uint32_t     attr)
+        const uint32_t     attr = 0)
     {
-        auto pl = v_handle.unpack();
+        auto                 pl = v_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
-
-    __host__ __device__ __forceinline__ T& operator()(
-        const VertexHandle v_handle)
-    {
-        return (*this)(v_handle, 0);
-    }
-
-   private:
-    const PatchInfo* m_h_patches_info;
-    const PatchInfo* m_d_patches_info;
 };
 
 /**
- * @brief Attribute container used to managing attributes from RXMeshStatic
+ * @brief Attribute container used to manage a collection of attributes by
+ * RXMeshStatic
  */
 class AttributeContainer
 {
    public:
+    /**
+     * @brief Default constructor
+     */
     AttributeContainer() = default;
 
+    /**
+     * @brief Destructor which releases all attribute managed by this container
+     */
     virtual ~AttributeContainer()
     {
         while (!m_attr_container.empty()) {
@@ -700,11 +793,18 @@ class AttributeContainer
         }
     }
 
+    /**
+     * @brief Number of attribute managed by this container
+     */
     size_t size()
     {
         return m_attr_container.size();
     }
 
+    /**
+     * @brief get a list of name of the attributes managed by this container
+     * @return
+     */
     std::vector<std::string> get_attribute_names() const
     {
         std::vector<std::string> names;
@@ -714,14 +814,22 @@ class AttributeContainer
         return names;
     }
 
+    /**
+     * @brief add a new attribute to be managed by this container
+     * @tparam AttrT attribute type
+     * @param name unique name given to the attribute
+     * @param element_per_patch number of mesh element owned by each patch
+     * @param num_attributes number of attributes per mesh element
+     * @param location where the attributes will be allocated
+     * @param layout memory layout in case of num_attributes > 1
+     * @return a shared pointer to the attribute
+     */
     template <typename AttrT>
     std::shared_ptr<AttrT> add(const char*            name,
                                std::vector<uint16_t>& element_per_patch,
                                uint32_t               num_attributes,
                                locationT              location,
-                               layoutT                layout,
-                               const PatchInfo*       h_patches_info,
-                               const PatchInfo*       d_patches_info)
+                               layoutT                layout)
     {
         if (does_exist(name)) {
             RXMESH_WARN(
@@ -730,19 +838,18 @@ class AttributeContainer
                 std::string(name));
         }
 
-        auto new_attr = std::make_shared<AttrT>(name,
-                                                element_per_patch,
-                                                num_attributes,
-                                                location,
-                                                layout,
-                                                h_patches_info,
-                                                d_patches_info);
+        auto new_attr = std::make_shared<AttrT>(
+            name, element_per_patch, num_attributes, location, layout);
         m_attr_container.push_back(
             std::dynamic_pointer_cast<AttributeBase>(new_attr));
 
         return new_attr;
     }
 
+    /**
+     * @brief Check if an attribute exists
+     * @param name of the attribute
+     */
     bool does_exist(const char* name)
     {
         for (size_t i = 0; i < m_attr_container.size(); ++i) {
@@ -753,6 +860,10 @@ class AttributeContainer
         return false;
     }
 
+    /**
+     * @brief remove an attribute and release its memory
+     * @param name of the attribute
+     */
     void remove(const char* name)
     {
         for (auto it = m_attr_container.begin(); it != m_attr_container.end();
