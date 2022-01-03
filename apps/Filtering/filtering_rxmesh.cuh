@@ -53,12 +53,17 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
     // vertex normal launch box
     constexpr uint32_t          vn_block_threads = 256;
     LaunchBox<vn_block_threads> vn_launch_box;
-    rxmesh.prepare_launch_box(rxmesh::Op::FV, vn_launch_box);
+    rxmesh.prepare_launch_box(rxmesh::Op::FV,
+                              vn_launch_box,
+                              compute_vertex_normal<T, vn_block_threads>);
 
     // filter launch box
     constexpr uint32_t              filter_block_threads = 512;
     LaunchBox<filter_block_threads> filter_launch_box;
-    rxmesh.prepare_launch_box(rxmesh::Op::VV, filter_launch_box, true);
+    rxmesh.prepare_launch_box(
+        rxmesh::Op::VV,
+        filter_launch_box,
+        bilateral_filtering<T, filter_block_threads, maxVVSize>);
 
     // double buffer
     VertexAttribute<T>* double_buffer[2] = {coords.get(), filtered_coord.get()};

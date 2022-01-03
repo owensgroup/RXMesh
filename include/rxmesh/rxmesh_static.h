@@ -8,7 +8,6 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/handle.h"
 #include "rxmesh/kernels/for_each.cuh"
-#include "rxmesh/kernels/prototype.cuh"
 #include "rxmesh/launch_box.h"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/types.h"
@@ -181,7 +180,7 @@ class RXMeshStatic : public RXMesh
     template <uint32_t blockThreads>
     void prepare_launch_box(const Op                 op,
                             LaunchBox<blockThreads>& launch_box,
-                            const bool               is_higher_query = false,
+                            const void*              kernel,
                             const bool               oriented = false) const
     {
         static_assert(
@@ -192,11 +191,8 @@ class RXMeshStatic : public RXMesh
 
         launch_box.blocks = this->m_num_patches;
 
-        const uint32_t output_fixed_offset =
-            (op == Op::EV) ? 2 : ((op == Op::FV || op == Op::FE) ? 3 : 0);
-
         this->template calc_shared_memory<blockThreads>(
-            op, launch_box, is_higher_query, oriented);
+            op, launch_box, kernel, oriented);
     }
 
 
@@ -578,7 +574,7 @@ class RXMeshStatic : public RXMesh
     template <uint32_t blockThreads>
     void calc_shared_memory(const Op                 op,
                             LaunchBox<blockThreads>& launch_box,
-                            const bool               is_higher_query,
+                            const void*              kernel,
                             const bool               oriented = false) const
     {
         // Operations that uses matrix transpose needs a template parameter
@@ -734,14 +730,16 @@ class RXMeshStatic : public RXMesh
             // Since oriented is only done on manifold, EF needs only
             // 2*max_num_edges since every edge is neighbor to maximum of two
             // faces (which we write on the same place as the extra EV)
-            launch_box.smem_bytes_dyn += (/*2 * this->m_max_edges_per_patch +*/
-                                          3 * this->m_max_faces_per_patch) *
-                                         sizeof(uint16_t);
+            launch_box.smem_bytes_dyn +=
+                (3 * this->m_max_faces_per_patch) * sizeof(uint16_t);
         }
 
 
-        launch_box.smem_bytes_static = check_shared_memory<blockThreads>(
-            op, launch_box.smem_bytes_dyn, is_higher_query);
+        check_shared_memory<blockThreads>(op,
+                                          launch_box.smem_bytes_dyn,
+                                          launch_box.smem_bytes_static,
+                                          launch_box.num_registers_per_thread,
+                                          kernel);
 
 
         if (!this->m_quite) {
@@ -754,183 +752,34 @@ class RXMeshStatic : public RXMesh
     }
 
     template <uint32_t threads>
-    uint32_t check_shared_memory(const Op       op,
-                                 const uint32_t smem_bytes_dyn,
-                                 bool           is_higher_query) const
+    void check_shared_memory(const Op       op,
+                             const uint32_t smem_bytes_dyn,
+                             size_t&        smem_bytes_static,
+                             uint32_t&      num_reg_per_thread,
+                             const void*    kernel) const
     {
         // check if total shared memory (static + dynamic) consumed by
         // k_base_query are less than the max shared per block
         cudaFuncAttributes func_attr = cudaFuncAttributes();
-        switch (op) {
-            case Op::VV: {
-                if (is_higher_query) {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::higher_query_prototype<Op::VV,
-                                                       threads,
-                                                       VertexHandle,
-                                                       VertexHandle>));
-                } else {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::query_prototype<Op::VV,
-                                                threads,
-                                                VertexHandle,
-                                                VertexHandle>));
-                }
+        CUDA_ERROR(cudaFuncGetAttributes(&func_attr, kernel));
 
-                break;
-            }
-            case Op::VE: {
-                if (is_higher_query) {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::higher_query_prototype<Op::VE,
-                                                       threads,
-                                                       VertexHandle,
-                                                       EdgeHandle>));
-                } else {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::query_prototype<Op::VE,
-                                                threads,
-                                                VertexHandle,
-                                                EdgeHandle>));
-                }
-                break;
-            }
-            case Op::VF: {
-                if (is_higher_query) {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::higher_query_prototype<Op::VF,
-                                                       threads,
-                                                       VertexHandle,
-                                                       FaceHandle>));
-                } else {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::query_prototype<Op::VF,
-                                                threads,
-                                                VertexHandle,
-                                                FaceHandle>));
-                }
-                break;
-            }
-            case Op::EV: {
-                if (is_higher_query) {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::higher_query_prototype<Op::EV,
-                                                       threads,
-                                                       EdgeHandle,
-                                                       VertexHandle>));
-                } else {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::query_prototype<Op::EV,
-                                                threads,
-                                                EdgeHandle,
-                                                VertexHandle>));
-                }
-                break;
-            }
-            case Op::EE: {
-                break;
-            }
-            case Op::EF: {
-                if (is_higher_query) {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::higher_query_prototype<Op::EF,
-                                                       threads,
-                                                       EdgeHandle,
-                                                       FaceHandle>));
-                } else {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::query_prototype<Op::EF,
-                                                threads,
-                                                EdgeHandle,
-                                                FaceHandle>));
-                }
-                break;
-            }
-            case Op::FV: {
-                if (is_higher_query) {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::higher_query_prototype<Op::FV,
-                                                       threads,
-                                                       FaceHandle,
-                                                       VertexHandle>));
-                } else {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::query_prototype<Op::FV,
-                                                threads,
-                                                FaceHandle,
-                                                VertexHandle>));
-                }
-                break;
-            }
-            case Op::FE: {
-                if (is_higher_query) {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::higher_query_prototype<Op::FE,
-                                                       threads,
-                                                       FaceHandle,
-                                                       EdgeHandle>));
-                } else {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::query_prototype<Op::FE,
-                                                threads,
-                                                FaceHandle,
-                                                EdgeHandle>));
-                }
-                break;
-            }
-            case Op::FF: {
-                if (is_higher_query) {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::higher_query_prototype<Op::FF,
-                                                       threads,
-                                                       FaceHandle,
-                                                       FaceHandle>));
-                } else {
-                    CUDA_ERROR(cudaFuncGetAttributes(
-                        &func_attr,
-                        detail::query_prototype<Op::FF,
-                                                threads,
-                                                FaceHandle,
-                                                FaceHandle>));
-                }
-                break;
-            }
-        }
-
-        uint32_t smem_bytes_static = func_attr.sharedSizeBytes;
-        uint32_t num_regs          = func_attr.numRegs;
-        int      device_id;
+        smem_bytes_static  = func_attr.sharedSizeBytes;
+        num_reg_per_thread = static_cast<uint32_t>(func_attr.numRegs);
+        int device_id;
         CUDA_ERROR(cudaGetDevice(&device_id));
         cudaDeviceProp devProp;
         CUDA_ERROR(cudaGetDeviceProperties(&devProp, device_id));
 
         if (!this->m_quite) {
             RXMESH_TRACE(
-                "RXMeshStatic::check_shared_memory() {} with {} required "
-                "shared memory = {} (dynamic) + {} (static) = {} (bytes) and "
-                "{} registers",
-                (is_higher_query ? "higher_query_prototype" :
-                                   "query_prototype"),
+                "RXMeshStatic::check_shared_memory() user function with {} "
+                "requires shared memory = {} (dynamic) + {} (static) = {} "
+                "(bytes) and {} registers per thread",
                 op_to_string(op),
                 smem_bytes_dyn,
                 smem_bytes_static,
                 smem_bytes_dyn + smem_bytes_static,
-                num_regs);
+                num_reg_per_thread);
 
             RXMESH_TRACE(
                 "RXMeshStatic::check_shared_memory() available total shared "
@@ -942,13 +791,12 @@ class RXMeshStatic : public RXMesh
         if (smem_bytes_static + smem_bytes_dyn > devProp.sharedMemPerBlock) {
             RXMESH_ERROR(
                 " RXMeshStatic::check_shared_memory() shared memory needed for"
-                " query_prototype ({} bytes) exceeds the max shared memory "
+                " input function ({} bytes) exceeds the max shared memory "
                 "per block on the current device ({} bytes)",
                 smem_bytes_static + smem_bytes_dyn,
                 devProp.sharedMemPerBlock);
             exit(EXIT_FAILURE);
         }
-        return static_cast<uint32_t>(smem_bytes_static);
     }
 
 

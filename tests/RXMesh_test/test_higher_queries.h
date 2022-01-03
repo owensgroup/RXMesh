@@ -34,7 +34,8 @@ TEST(RXMeshStatic, HigherQueries)
     // launch box
     constexpr uint32_t      blockThreads = 512;
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(Op::VV, launch_box, true, false);
+    rxmesh.prepare_launch_box(
+        Op::VV, launch_box, higher_query<blockThreads, Op::VV>, false);
 
 
     RXMeshTest tester(rxmesh, Faces, true);

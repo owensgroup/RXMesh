@@ -50,7 +50,8 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
     // launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(rxmesh::Op::FV, launch_box);
+    rxmesh.prepare_launch_box(
+        rxmesh::Op::FV, launch_box, compute_vertex_normal<T, blockThreads>);
 
 
     TestData td;
@@ -62,9 +63,10 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
         GPUTimer timer;
         timer.start();
 
-        compute_vertex_normal<T, blockThreads>
-            <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-                rxmesh.get_context(), *coords, *v_normals);
+        compute_vertex_normal<T, blockThreads><<<launch_box.blocks,
+                                                 launch_box.num_threads,
+                                                 launch_box.smem_bytes_dyn>>>(
+            rxmesh.get_context(), *coords, *v_normals);
 
         timer.stop();
         CUDA_ERROR(cudaDeviceSynchronize());

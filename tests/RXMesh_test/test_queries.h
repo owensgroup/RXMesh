@@ -44,7 +44,16 @@ TEST(RXMeshStatic, Oriented_VV)
     // launch box
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(Op::VV, launch_box, false, true);
+    rxmesh.prepare_launch_box(
+        Op::VV,
+        launch_box,
+        query_kernel<blockThreads,
+                     Op::VV,
+                     VertexHandle,
+                     VertexHandle,
+                     typename VertexAttribute<VertexHandle>,
+                     typename VertexAttribute<VertexHandle>>,
+        true);
 
     // query
     query_kernel<blockThreads, Op::VV, VertexHandle, VertexHandle>
@@ -123,7 +132,15 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
     // launch box
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(op, launch_box, false, oriented);
+    rxmesh.prepare_launch_box(op,
+                              launch_box,
+                              query_kernel<blockThreads,
+                                           op,
+                                           InputHandleT,
+                                           OutputHandleT,
+                                           InputAttributeT,
+                                           OutputAttributeT>,
+                              oriented);
 
     // test data
     TestData td;

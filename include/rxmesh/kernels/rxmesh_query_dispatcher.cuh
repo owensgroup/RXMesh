@@ -63,6 +63,9 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     }
 
     if (__syncthreads_or(is_active) == 0) {
+        // reset num_src_in_patch to zero to indicate that this block/patch has
+        // no work to do
+        num_src_in_patch = 0;
         return;
     }
 
@@ -74,7 +77,7 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
 
     not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
     not_owned_local_id = shrd_mem;
-    num_owned          = 0;    
+    num_owned          = 0;
     // 3)Perform the query operation
     if (oriented) {
         assert(op == Op::VV);
@@ -167,14 +170,13 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
         not_owned_patch,
         not_owned_local_id);
 
-    assert(s_output_offset);
-    assert(s_output_value);
-
     // Call compute on the output in shared memory by looping over all
     // source elements in this patch.
 
     uint16_t local_id = threadIdx.x;
     while (local_id < num_src_in_patch) {
+
+        assert(s_output_value);
 
         if (compute_active_set({patch_id, local_id})) {
             constexpr uint32_t fixed_offset =

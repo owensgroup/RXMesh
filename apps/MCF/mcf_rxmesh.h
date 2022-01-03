@@ -100,14 +100,21 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     ReduceHandle<T> reduce_handle(*X);
 
     // RXMesh launch box
-    LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(rxmesh::Op::VV, launch_box, false, true);
+    LaunchBox<blockThreads> launch_box_init_B;
+    LaunchBox<blockThreads> launch_box_matvec;
+    rxmesh.prepare_launch_box(
+        rxmesh::Op::VV, launch_box_init_B, init_B<T, blockThreads>, true);
+    rxmesh.prepare_launch_box(rxmesh::Op::VV,
+                              launch_box_matvec,
+                              rxmesh_matvec<T, blockThreads>,
+                              true);
 
 
     // init kernel to initialize RHS (B)
-    init_B<T, blockThreads>
-        <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh.get_context(), *X, *B, Arg.use_uniform_laplace);
+    init_B<T, blockThreads><<<launch_box_init_B.blocks,
+                              launch_box_init_B.num_threads,
+                              launch_box_init_B.smem_bytes_dyn>>>(
+        rxmesh.get_context(), *X, *B, Arg.use_uniform_laplace);
 
     // CG scalars
     T alpha(0), beta(0), delta_new(0), delta_old(0);
@@ -116,14 +123,15 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     timer.start();
 
     // s = Ax
-    mcf_matvec<T, blockThreads>
-        <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh.get_context(),
-            *input_coord,
-            *X,
-            *S,
-            Arg.use_uniform_laplace,
-            Arg.time_step);
+    rxmesh_matvec<T, blockThreads>
+        <<<launch_box_matvec.blocks,
+           launch_box_matvec.num_threads,
+           launch_box_matvec.smem_bytes_dyn>>>(rxmesh.get_context(),
+                                               *input_coord,
+                                               *X,
+                                               *S,
+                                               Arg.use_uniform_laplace,
+                                               Arg.time_step);
 
     // r = b - s = b - Ax
     // p=rk
@@ -145,14 +153,15 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     while (num_cg_iter_taken < Arg.max_num_cg_iter) {
         // s = Ap
         matvec_timer.start();
-        mcf_matvec<T, blockThreads>
-            <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-                rxmesh.get_context(),
-                *input_coord,
-                *P,
-                *S,
-                Arg.use_uniform_laplace,
-                Arg.time_step);
+        rxmesh_matvec<T, blockThreads>
+            <<<launch_box_matvec.blocks,
+               launch_box_matvec.num_threads,
+               launch_box_matvec.smem_bytes_dyn>>>(rxmesh.get_context(),
+                                                   *input_coord,
+                                                   *P,
+                                                   *S,
+                                                   Arg.use_uniform_laplace,
+                                                   Arg.time_step);
         matvec_timer.stop();
         matvec_time += matvec_timer.elapsed_millis();
 
@@ -228,7 +237,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
                 passed = false;
                 break;
             }
-        }       
+        }
     });
 
     EXPECT_TRUE(passed);
