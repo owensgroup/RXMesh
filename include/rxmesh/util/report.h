@@ -40,8 +40,9 @@ struct TestData
     int32_t            num_threads = -1;
     std::vector<bool>  passed;
     std::string        test_name   = "";
-    float              dyn_smem    = -1;
-    float              static_smem = -1;
+    int32_t            dyn_smem    = -1;
+    int32_t            static_smem = -1;
+    int32_t            num_reg     = -1;
 };
 
 struct Report
@@ -298,7 +299,7 @@ struct Report
             "per_patch_max_edges", rxmesh.get_per_patch_max_edges(), subdoc);
         add_member(
             "per_patch_max_faces", rxmesh.get_per_patch_max_faces(), subdoc);
-        add_member("ribbon_overhead (%)", rxmesh.get_ribbon_overhead(), subdoc);        
+        add_member("ribbon_overhead (%)", rxmesh.get_ribbon_overhead(), subdoc);
         m_doc.AddMember("Model", subdoc, m_doc.GetAllocator());
     }
 
@@ -323,6 +324,10 @@ struct Report
         if (test_data.static_smem != -1) {
             add_member(
                 "static_shared_memory (b)", test_data.static_smem, subdoc);
+        }
+
+        if (test_data.num_reg != -1) {
+            add_member("num_register_per_thread", test_data.num_reg, subdoc);
         }
 
         if (!test_data.passed.empty()) {
