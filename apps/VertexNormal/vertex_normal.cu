@@ -55,7 +55,12 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
 
     TestData td;
-    td.test_name = "VertexNormal";
+    td.test_name   = "VertexNormal";
+    td.num_threads = launch_box.num_threads;
+    td.num_blocks  = launch_box.blocks;
+    td.dyn_smem    = launch_box.smem_bytes_dyn;
+    td.static_smem = launch_box.smem_bytes_static;
+    td.num_reg     = launch_box.num_registers_per_thread;
 
     float vn_time = 0;
     for (uint32_t itr = 0; itr < Arg.num_run; ++itr) {

@@ -149,6 +149,7 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
     td.num_blocks  = launch_box.blocks;
     td.dyn_smem    = launch_box.smem_bytes_dyn;
     td.static_smem = launch_box.smem_bytes_static;
+    td.num_reg     = launch_box.num_registers_per_thread;
 
     float total_time = 0;
 

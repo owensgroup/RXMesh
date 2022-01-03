@@ -249,7 +249,12 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     report.add_member("total_time (ms)", timer.elapsed_millis());
     report.add_member("matvec_time (ms)", matvec_time);
     TestData td;
-    td.test_name = "MCF";
+    td.test_name   = "MCF";
+    td.num_threads = launch_box_matvec.num_threads;
+    td.num_blocks  = launch_box_matvec.blocks;
+    td.dyn_smem    = launch_box_matvec.smem_bytes_dyn;
+    td.static_smem = launch_box_matvec.smem_bytes_static;
+    td.num_reg     = launch_box_matvec.num_registers_per_thread;
     td.passed.push_back(passed);
     td.time_ms.push_back(timer.elapsed_millis() / float(num_cg_iter_taken));
     report.add_test(td);

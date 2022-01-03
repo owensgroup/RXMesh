@@ -140,7 +140,12 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
     // Finalize report
     report.add_member("num_iter_taken", iter);
     TestData td;
-    td.test_name = "Geodesic";
+    td.test_name   = "Geodesic";
+    td.num_threads = launch_box.num_threads;
+    td.num_blocks  = launch_box.blocks;
+    td.dyn_smem    = launch_box.smem_bytes_dyn;
+    td.static_smem = launch_box.smem_bytes_static;
+    td.num_reg     = launch_box.num_registers_per_thread;
     td.time_ms.push_back(timer.elapsed_millis());
     report.add_test(td);
     report.write(Arg.output_folder + "/rxmesh",

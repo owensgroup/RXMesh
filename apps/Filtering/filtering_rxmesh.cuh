@@ -128,7 +128,12 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
 
     // Finalize report
     TestData td;
-    td.test_name = "Filtering";
+    td.test_name   = "Filtering";
+    td.num_threads = filter_launch_box.num_threads;
+    td.num_blocks  = filter_launch_box.blocks;
+    td.dyn_smem    = filter_launch_box.smem_bytes_dyn;
+    td.static_smem = filter_launch_box.smem_bytes_static;
+    td.num_reg     = filter_launch_box.num_registers_per_thread;
     td.time_ms.push_back(timer.elapsed_millis());
     report.add_test(td);
     report.write(Arg.output_folder + "/rxmesh",
