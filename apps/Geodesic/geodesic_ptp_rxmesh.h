@@ -36,8 +36,10 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(
-        rxmesh::Op::VV, launch_box, relax_ptp_rxmesh<T, blockThreads>, true);
+    rxmesh.prepare_launch_box(rxmesh::Op::VV,
+                              launch_box,
+                              (void*)relax_ptp_rxmesh<T, blockThreads>,
+                              true);
 
 
     // Geodesic distance attribute for all vertices (seeds set to zero

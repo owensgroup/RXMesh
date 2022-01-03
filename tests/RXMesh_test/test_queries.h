@@ -47,12 +47,12 @@ TEST(RXMeshStatic, Oriented_VV)
     rxmesh.prepare_launch_box(
         Op::VV,
         launch_box,
-        query_kernel<blockThreads,
-                     Op::VV,
-                     VertexHandle,
-                     VertexHandle,
-                     typename VertexAttribute<VertexHandle>,
-                     typename VertexAttribute<VertexHandle>>,
+        (void*)query_kernel<blockThreads,
+                            Op::VV,
+                            VertexHandle,
+                            VertexHandle,
+                            VertexAttribute<VertexHandle>,
+                            VertexAttribute<VertexHandle>>,
         true);
 
     // query
@@ -134,12 +134,12 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
     LaunchBox<blockThreads> launch_box;
     rxmesh.prepare_launch_box(op,
                               launch_box,
-                              query_kernel<blockThreads,
-                                           op,
-                                           InputHandleT,
-                                           OutputHandleT,
-                                           InputAttributeT,
-                                           OutputAttributeT>,
+                              (void*)query_kernel<blockThreads,
+                                                  op,
+                                                  InputHandleT,
+                                                  OutputHandleT,
+                                                  InputAttributeT,
+                                                  OutputAttributeT>,
                               oriented);
 
     // test data
@@ -155,7 +155,6 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
 
 
     for (uint32_t itr = 0; itr < rxmesh_args.num_run; itr++) {
-
         // Reset input/output
         input.reset(InputHandleT(), rxmesh::DEVICE);
         output.reset(OutputHandleT(), rxmesh::DEVICE);

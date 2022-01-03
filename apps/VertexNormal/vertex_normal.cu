@@ -51,7 +51,7 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     // launch box
     LaunchBox<blockThreads> launch_box;
     rxmesh.prepare_launch_box(
-        rxmesh::Op::FV, launch_box, compute_vertex_normal<T, blockThreads>);
+        rxmesh::Op::FV, launch_box, (void*)compute_vertex_normal<T, blockThreads>);
 
 
     TestData td;
