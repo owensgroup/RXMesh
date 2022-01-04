@@ -7,7 +7,6 @@
 
 #include "patcher/patcher.h"
 #include "rxmesh/context.h"
-#include "rxmesh/kernels/rxmesh_cleanup.cuh"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/util/util.h"
 
@@ -78,13 +77,6 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv, const bool quite)
 
 RXMesh::~RXMesh()
 {
-    uint32_t threads = 256;
-    uint32_t blocks  = DIVIDE_UP(m_num_patches, threads);
-    detail::free_patch_info<<<blocks, threads>>>(m_num_patches,
-                                                 m_d_patches_info);
-
-    CUDA_ERROR(cudaDeviceSynchronize());
-    GPU_FREE(m_d_patches_info);
     for (uint32_t p = 0; p < m_num_patches; ++p) {
         free(m_h_patches_info[p].not_owned_patch_v);
         free(m_h_patches_info[p].not_owned_patch_e);
@@ -93,6 +85,26 @@ RXMesh::~RXMesh()
         free(m_h_patches_info[p].not_owned_id_e);
         free(m_h_patches_info[p].not_owned_id_f);
     }
+
+    // m_d_patches_info is a pointer to pointer(s) which we can not dereference
+    // on the host so we copy these pointers to the host by re-using
+    // m_h_patches_info and then free the memory these pointers are pointing to.
+    // Finally, we free the parent pointer memory
+
+    CUDA_ERROR(cudaMemcpy(m_h_patches_info,
+                          m_d_patches_info,
+                          m_num_patches * sizeof(PatchInfo),
+                          cudaMemcpyDeviceToHost));
+
+    for (uint32_t p = 0; p < m_num_patches; ++p) {
+        GPU_FREE(m_h_patches_info[p].not_owned_patch_v);
+        GPU_FREE(m_h_patches_info[p].not_owned_patch_e);
+        GPU_FREE(m_h_patches_info[p].not_owned_patch_f);
+        GPU_FREE(m_h_patches_info[p].not_owned_id_v);
+        GPU_FREE(m_h_patches_info[p].not_owned_id_e);
+        GPU_FREE(m_h_patches_info[p].not_owned_id_f);
+    }
+    GPU_FREE(m_d_patches_info);
     free(m_h_patches_info);
 }
 
