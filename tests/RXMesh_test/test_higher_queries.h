@@ -32,7 +32,7 @@ TEST(RXMeshStatic, HigherQueries)
     output->reset(VertexHandle(), rxmesh::DEVICE);
 
     // launch box
-    constexpr uint32_t      blockThreads = 512;
+    constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
     rxmesh.prepare_launch_box(
         Op::VV, launch_box, (void*)higher_query<blockThreads, Op::VV>, false);
@@ -45,6 +45,7 @@ TEST(RXMeshStatic, HigherQueries)
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
             rxmesh.get_context(), *input, *output);
 
+    CUDA_ERROR(cudaGetLastError());
     CUDA_ERROR(cudaDeviceSynchronize());
 
     // move containers to the CPU for testing
