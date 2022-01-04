@@ -3,7 +3,6 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
-#include "rxmesh/util/math.h"
 #include "rxmesh/util/vector.h"
 /**
  * vertex_normal()

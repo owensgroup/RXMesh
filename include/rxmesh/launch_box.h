@@ -3,6 +3,11 @@
 
 namespace rxmesh {
 
+/**
+ * @brief Stores different parameters needed to launch kernels i.e., number of
+ * CUDA blocks and threads, dynamic shared memory. These parameters are meant to
+ * be calculated by RXMeshStatic and then used by the user to launch kernels
+ */
 template <uint32_t blockThreads>
 struct LaunchBox
 {

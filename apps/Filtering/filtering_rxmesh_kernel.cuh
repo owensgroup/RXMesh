@@ -7,7 +7,6 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
-#include "rxmesh/util/math.h"
 #include "rxmesh/util/vector.h"
 
 constexpr float EPS = 10e-6;
@@ -97,6 +96,8 @@ __launch_bounds__(blockThreads) __global__
         rxmesh::Attribute<T>  filtered_coords,
         rxmesh::Attribute<T>  vertex_normals)
 {
+    constexpr uint32_t special = 0xFFFFFFFE;
+
     using namespace rxmesh;
     uint32_t vv[maxVVSize];
     uint32_t vv_patch[maxVVSize];
@@ -172,7 +173,7 @@ __launch_bounds__(blockThreads) __global__
                 assert(id < maxVVSize);
                 vv[id]       = vv_id;
                 vv_local[id] = iter.neighbour_local_id(v);
-                vv_patch[id] = SPECIAL;
+                vv_patch[id] = special;
             }
         }
 
@@ -191,7 +192,7 @@ __launch_bounds__(blockThreads) __global__
                 // results
                 if (vv_local[v] < iter.m_num_src_in_patch) {
 
-                    assert(vv_patch[v] == SPECIAL);
+                    assert(vv_patch[v] == special);
                     assert(context.get_vertex_patch()[vv[v]] == patch_id);
 
                     // to indicate that it's processed
@@ -218,7 +219,7 @@ __launch_bounds__(blockThreads) __global__
                                 assert(id < maxVVSize);
                                 vv[id]       = vvv_id;
                                 vv_local[id] = vvv_local_id;
-                                vv_patch[id] = SPECIAL;
+                                vv_patch[id] = special;
                             }
                         }
                     }
@@ -420,12 +421,13 @@ __launch_bounds__(blockThreads) __global__
                                 input_coords,
                                 filtered_coords);
     }
-}*/
+}
+* /
 
 
-/**
- * bilateral_filtering2()
- */
+    /**
+     * bilateral_filtering2()
+     */
 template <typename T, uint32_t blockThreads, uint32_t maxVVSize>
 __global__ static void bilateral_filtering(
     const rxmesh::Context      context,

@@ -6,7 +6,6 @@
 
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
-#include "rxmesh/util/math.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh_test.h"
 

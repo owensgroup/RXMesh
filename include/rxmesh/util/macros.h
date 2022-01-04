@@ -14,9 +14,6 @@ constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 11;
 // used for integer rounding
 #define DIVIDE_UP(num, divisor) (num + divisor - 1) / (divisor)
 
-// assuming a 32-bit index
-#define FULL_MASK 0xffffffff
-
 // unsigned 64-bit
 #define INVALID64 0xFFFFFFFFFFFFFFFFu
 
@@ -28,12 +25,6 @@ constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 11;
 
 // unsigned 8-bit
 #define INVALID8 0xFFu
-
-// assuming a 32-bit index
-#define SPECIAL 0xFFFFFFFE
-
-// 32
-#define WARPSIZE 32u
 
 
 // http://www.decompile.com/cpp/faq/file_and_line_error_string.htm

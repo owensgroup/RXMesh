@@ -9,7 +9,6 @@
 #include "rxmesh/context.h"
 #include "rxmesh/kernels/rxmesh_cleanup.cuh"
 #include "rxmesh/rxmesh.h"
-#include "rxmesh/util/math.h"
 #include "rxmesh/util/util.h"
 
 namespace rxmesh {
