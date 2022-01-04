@@ -103,6 +103,8 @@ RXMesh::~RXMesh()
         GPU_FREE(m_h_patches_info[p].not_owned_id_v);
         GPU_FREE(m_h_patches_info[p].not_owned_id_e);
         GPU_FREE(m_h_patches_info[p].not_owned_id_f);
+        GPU_FREE(m_h_patches_info[p].ev);
+        GPU_FREE(m_h_patches_info[p].fe);
     }
     GPU_FREE(m_d_patches_info);
     free(m_h_patches_info);
