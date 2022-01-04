@@ -10,11 +10,13 @@ namespace rxmesh {
  * @brief context for the mesh parameters and pointers. Everything is allocated
  * on and managed by RXMesh. This class is meant to be a vehicle to copy various
  * parameters to the device kernels.
- * TODO make sure that __align__(16) is the right one
  */
-class __align__(16) Context
+class Context
 {
    public:
+    /**
+     * @brief Default constructor
+     */
     Context()
         : m_num_edges(0),
           m_num_faces(0),
@@ -24,6 +26,15 @@ class __align__(16) Context
     {
     }
 
+    /**
+     * @brief initialize various members
+     * @param num_edges total number of edges in the mesh
+     * @param num_faces total number of faces in the mesh
+     * @param num_vertices total number of vertices in the mesh
+     * @param num_patches number of patches
+     * @param patches pointer to PatchInfo that contains different info about
+     * the patches
+     */
     void init(const uint32_t num_edges,
               const uint32_t num_faces,
               const uint32_t num_vertices,
@@ -86,8 +97,8 @@ class __align__(16) Context
      * @param edge The unpacked edge ID
      * @param dir The unpacked edge direction
      */
-    static __device__ __host__ __forceinline__ void unpack_edge_dir(
-        const uint16_t edge_dir, uint16_t& edge, flag_t& dir)
+    static __device__ __host__ __forceinline__ void
+    unpack_edge_dir(const uint16_t edge_dir, uint16_t& edge, flag_t& dir)
     {
         dir  = (edge_dir & 1) != 0;
         edge = edge_dir >> 1;
