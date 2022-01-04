@@ -2,58 +2,58 @@
 
 #include <string>
 #include <vector>
-
 #include "rxmesh/util/log.h"
 
-#ifndef MAX_LINE_LENGTH
-#define MAX_LINE_LENGTH 2048
-#endif
-
-
-// Read and input mesh from obj file format
-// Input: path to the obj file
-// Output: Verts = 3d vertices (Num vertices X 3)
-//        Faces = faces index to the Vert array (Num facex X 3)
-//        Tex = Tex coordinates (Num texture coordinates X 2)
-//        Faces = faces index to the Tex array (Num facex X 3)
-//        Normals = faces index to the Tex array (Num normals X 3)
-//        Faces = faces index to the Normals array (Num facex X 3)
-
-template <typename DATA_T, typename INDEX_T>
-bool import_obj(const std::string                  fileName,
-                std::vector<std::vector<DATA_T>>&  Verts,
-                std::vector<std::vector<INDEX_T>>& Faces,
-                std::vector<std::vector<DATA_T>>&  Tex,
-                std::vector<std::vector<INDEX_T>>& FacesTex,
-                std::vector<std::vector<DATA_T>>&  Normal,
-                std::vector<std::vector<INDEX_T>>& FacesNormal,
-                bool                               quite = false)
+/**
+ * @brief Read an input mesh from obj file format
+ * @tparam DataT coordinates type (float/double)
+ * @tparam IndexT indices type
+ * @param file_name path to the obj file
+ * @param vertices 3d vertices (3*#vertices)
+ * @param faces face index to the Vert array (3*#faces)
+ * @param tex texture coordinates (2*#texture coordinates)
+ * @param face_tex faces index to the tex array (3*#faces)
+ * @param normals face normal coordinates (3*#normal)
+ * @param face_normal faces index to the Normals array (3*faces)
+ * @param quite run in quite mode
+ * @return true if reading the file is successful
+ */
+template <typename DataT, typename IndexT>
+bool import_obj(const std::string                 file_name,
+                std::vector<std::vector<DataT>>&  vertices,
+                std::vector<std::vector<IndexT>>& faces,
+                std::vector<std::vector<DataT>>&  tex,
+                std::vector<std::vector<IndexT>>& face_tex,
+                std::vector<std::vector<DataT>>&  normals,
+                std::vector<std::vector<IndexT>>& face_normal,
+                bool                              quite = false)
 {
 
-    FILE* Objfile = fopen(fileName.c_str(), "r");
+    FILE* Objfile = fopen(file_name.c_str(), "r");
     if (NULL == Objfile) {
-        RXMESH_ERROR("importOBJ() can not open {}", fileName);
+        RXMESH_ERROR("importOBJ() can not open {}", file_name);
         return false;
     } else {
         if (!quite) {
-            RXMESH_TRACE("Reading {}", fileName);
+            RXMESH_TRACE("Reading {}", file_name);
         }
     }
 
 
     // make sure everything is clean
-    Verts.clear();
-    Faces.clear();
-    Tex.clear();
-    FacesTex.clear();
-    Normal.clear();
-    FacesNormal.clear();
+    vertices.clear();
+    faces.clear();
+    tex.clear();
+    face_tex.clear();
+    normals.clear();
+    face_normal.clear();
 
-    char     line[MAX_LINE_LENGTH];
-    uint32_t lineNum = 1;
-    while (fgets(line, MAX_LINE_LENGTH, Objfile) != NULL) {
+    constexpr uint32_t max_line_length = 2048;
+    char               line[max_line_length];
+    uint32_t           lineNum = 1;
+    while (fgets(line, max_line_length, Objfile) != NULL) {
 
-        char type[MAX_LINE_LENGTH];
+        char type[max_line_length];
 
         if (sscanf(line, "%s", type) == 1) {
             // read only the first letter of the line
@@ -61,9 +61,9 @@ bool import_obj(const std::string                  fileName,
             char* l = &line[strlen(type)];  // next thing after the type
             if (strcmp(type, "v") == 0) {
                 // vertex
-                std::istringstream  ls(&line[1]);
-                std::vector<DATA_T> vert{std::istream_iterator<DATA_T>(ls),
-                                         std::istream_iterator<DATA_T>()};
+                std::istringstream ls(&line[1]);
+                std::vector<DataT> vert{std::istream_iterator<DataT>(ls),
+                                        std::istream_iterator<DataT>()};
                 if (vert.size() < 3) {
                     // vertex has less than coordinates
                     RXMESH_ERROR(
@@ -73,28 +73,28 @@ bool import_obj(const std::string                  fileName,
                     fclose(Objfile);
                     return false;
                 }
-                Verts.push_back(vert);
+                vertices.push_back(vert);
             } else if (strcmp(type, "vn") == 0) {
                 // normal
-                DATA_T   x[3];
+                DataT    x[3];
                 uint32_t count = sscanf(l, "%f %f %f\n", &x[0], &x[1], &x[2]);
 
                 if (count != 3) {
                     RXMESH_ERROR(
-                        "importOBJ() normal has less than 3 "
-                        "coordinates Line[{}]\n",
+                        "importOBJ() normals does not have 3 coordinates "
+                        "Line[{}]\n",
                         lineNum);
                     fclose(Objfile);
                     return false;
                 }
-                std::vector<DATA_T> normal_v(3);
+                std::vector<DataT> normal_v(3);
                 normal_v[0] = x[0];
                 normal_v[1] = x[1];
                 normal_v[2] = x[2];
-                Normal.push_back(normal_v);
+                normals.push_back(normal_v);
             } else if (strcmp(type, "vt") == 0) {
                 // texture
-                DATA_T   x[3];
+                DataT    x[3];
                 uint32_t count = sscanf(l, "%f %f %f\n", &x[0], &x[1], &x[2]);
 
                 if (count != 2 && count != 3) {
@@ -105,40 +105,40 @@ bool import_obj(const std::string                  fileName,
                     fclose(Objfile);
                     return false;
                 }
-                std::vector<DATA_T> tex(count);
+                std::vector<DataT> tx(count);
                 for (uint32_t i = 0; i < count; i++) {
-                    tex[i] = x[i];
+                    tx[i] = x[i];
                 }
-                Tex.push_back(tex);
+                tex.push_back(tx);
             } else if (strcmp(type, "f") == 0) {
                 // face (read vert id, norm id, tex id)
 
-                // const auto & shift = [&Verts](const int i)->int{return i<0 ?
-                // i+Verts.size():i-1;}; const auto & shift_t = [&Tex](const int
-                // i)->int{return i<0 ? i+Tex.size():i-1;}; const auto & shift_n
-                // = [&Normal](const int i)->int{return i<0 ?
-                // i+Normal.size():i-1;};
+                // const auto & shift = [&vertices](const int i)->int{return i<0
+                // ? i+vertices.size():i-1;}; const auto & shift_t =
+                // [&Tex](const int i)->int{return i<0 ? i+Tex.size():i-1;};
+                // const auto & shift_n = [&normals ](const int i)->int{return
+                // i<0 ? i+normals .size():i-1;};
 
-                std::vector<INDEX_T> f;
-                std::vector<INDEX_T> ft;
-                std::vector<INDEX_T> fn;
-                char                 word[MAX_LINE_LENGTH];
-                uint32_t             offset;
+                std::vector<IndexT> f;
+                std::vector<IndexT> ft;
+                std::vector<IndexT> fn;
+                char                word[max_line_length];
+                uint32_t            offset;
                 while (sscanf(l, "%s%n", word, &offset) == 1) {
                     l += offset;
                     long int i, it, in;
                     if (sscanf(word, "%ld/%ld/%ld", &i, &it, &in) == 3) {
                         // face, norm, tex
-                        f.push_back(i < 0 ? i + Verts.size() : i - 1);
-                        ft.push_back(i < 0 ? i + Tex.size() : i - 1);
-                        fn.push_back(i < 0 ? i + Normal.size() : i - 1);
+                        f.push_back(i < 0 ? i + vertices.size() : i - 1);
+                        ft.push_back(i < 0 ? i + tex.size() : i - 1);
+                        fn.push_back(i < 0 ? i + normals.size() : i - 1);
                     } else if (sscanf(word, "%ld/%ld", &i, &it) == 2) {
                         // face, tex
-                        f.push_back(i < 0 ? i + Verts.size() : i - 1);
-                        ft.push_back(i < 0 ? i + Tex.size() : i - 1);
+                        f.push_back(i < 0 ? i + vertices.size() : i - 1);
+                        ft.push_back(i < 0 ? i + tex.size() : i - 1);
                     } else if (sscanf(word, "%ld", &i) == 1) {
                         // face
-                        f.push_back(i < 0 ? i + Verts.size() : i - 1);
+                        f.push_back(i < 0 ? i + vertices.size() : i - 1);
                     } else {
                         RXMESH_ERROR(
                             "importOBJ() face has wrong format Line[{}]",
@@ -153,9 +153,9 @@ bool import_obj(const std::string                  fileName,
                     (f.size() > 0 && fn.size() == f.size() &&
                      ft.size() == f.size())) {
 
-                    Faces.push_back(f);
-                    FacesTex.push_back(ft);
-                    FacesNormal.push_back(fn);
+                    faces.push_back(f);
+                    face_tex.push_back(ft);
+                    face_normal.push_back(fn);
                 } else {
                     RXMESH_ERROR("importOBJ() face has wrong format Line[{}]",
                                  lineNum);
@@ -184,29 +184,38 @@ bool import_obj(const std::string                  fileName,
     fclose(Objfile);
 
     if (!quite) {
-        RXMESH_TRACE("import_obj() #Verts= {} ", Verts.size());
-        RXMESH_TRACE("import_obj() #Faces= {} ", Faces.size());
-        RXMESH_TRACE("import_obj() #Tex= {} ", Tex.size());
-        RXMESH_TRACE("import_obj() #FacesTex= {} ", FacesTex.size());
-        RXMESH_TRACE("import_obj() #Normal= {} ", Normal.size());
-        RXMESH_TRACE("import_obj() #FacesNormal= {} ", FacesNormal.size());
+        RXMESH_TRACE("import_obj() #vertices= {} ", vertices.size());
+        RXMESH_TRACE("import_obj() #faces= {} ", faces.size());
+        RXMESH_TRACE("import_obj() #tex= {} ", tex.size());
+        RXMESH_TRACE("import_obj() #face_tex= {} ", face_tex.size());
+        RXMESH_TRACE("import_obj() #normals = {} ", normals.size());
+        RXMESH_TRACE("import_obj() #face_normal= {} ", face_normal.size());
     }
     return true;
 }
 
-
-template <typename DATA_T, typename INDEX_T>
-bool import_obj(const std::string                  fileName,
-                std::vector<std::vector<DATA_T>>&  Verts,
-                std::vector<std::vector<INDEX_T>>& Faces,
-                bool                               quite = false)
+/**
+ * @brief Read an input mesh from obj file format
+ * @tparam DataT coordinates type (float/double)
+ * @tparam IndexT indices type
+ * @param file_name path to the obj file
+ * @param vertices 3d vertices (3*#vertices)
+ * @param faces face index to the Vert array (3*#faces)
+ * @param quite run in quite mode
+ * @return true if reading the file is successful
+ */
+template <typename DataT, typename IndexT>
+bool import_obj(const std::string                 file_name,
+                std::vector<std::vector<DataT>>&  vertices,
+                std::vector<std::vector<IndexT>>& faces,
+                bool                              quite = false)
 {
 
-    std::vector<std::vector<DATA_T>>  Tex;
-    std::vector<std::vector<INDEX_T>> FacesTex;
-    std::vector<std::vector<DATA_T>>  Normal;
-    std::vector<std::vector<INDEX_T>> FacesNormal;
+    std::vector<std::vector<DataT>>  tex;
+    std::vector<std::vector<IndexT>> face_tex;
+    std::vector<std::vector<DataT>>  normals;
+    std::vector<std::vector<IndexT>> face_normal;
 
     return import_obj(
-        fileName, Verts, Faces, Tex, FacesTex, Normal, FacesNormal, quite);
+        file_name, vertices, faces, tex, face_tex, normals, face_normal, quite);
 }
