@@ -116,7 +116,6 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     __syncthreads();
 }
 
-}  // namespace detail
 
 /**
  * query_block_dispatcher()
@@ -203,8 +202,31 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     }
 }
 
+}  // namespace detail
 /**
- * query_block_dispatcher()
+ * @brief The main query function to be called by the whole block. In this
+ * function, threads will be assigned to mesh elements which will be accessible
+ * through the input computation lambda function (compute_op). This function
+ * also provides a predicate to specify the active set i.e., the set on which
+ * the query operations should be done. This is mainly used to skip query on
+ * a subset of the input mesh elements which may lead to better performance
+ * @tparam Op the type of query operation
+ * @tparam blockThreads the number of CUDA threads in the block
+ * @tparam computeT the type of compute lambda function (inferred)
+ * @tparam activeSetT the type of active set lambda function (inferred)
+ * @param context which store various parameters needed for the query
+ * operation. The context can be obtained from RXMeshStatic
+ * @param compute_op the computation lambda function that will be executed by
+ * each thread in the block. This lambda function takes two input parameters:
+ * 1. Handle to the mesh element assigned to the thread. The handle type matches
+ * the source of the query (e.g., VertexHandle for VE query) 2. an iterator to
+ * the query output. The iterator type matches the type of the mesh element
+ * "iterated" on (e.g., EdgeIterator for VE query)
+ * @param compute_active_set a predicate used to specify the active set. This
+ * lambda function take a single parameter which is a handle of the type similar
+ * to the input of the query operation (e.g., VertexHandle for VE query)
+ * @param oriented specifies if the query are oriented. Currently only VV query
+ * is supported for oriented queries. FV, FE and EV is oriented by default
  */
 template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
 __device__ __inline__ void query_block_dispatcher(const Context& context,
@@ -216,13 +238,28 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
         return;
     }
 
-    query_block_dispatcher<op, blockThreads>(
+    detail::query_block_dispatcher<op, blockThreads>(
         context, blockIdx.x, compute_op, compute_active_set, oriented);
 }
 
 
 /**
- * query_block_dispatcher()
+ * @brief The main query function to be called by the whole block. In this
+ * function, threads will be assigned to mesh elements which will be accessible
+ * through the input computation lambda function (compute_op).
+ * @tparam Op the type of query operation
+ * @tparam blockThreads the number of CUDA threads in the block
+ * @tparam computeT the type of compute lambda function (inferred)
+ * @param context which store various parameters needed for the query
+ * operation. The context can be obtained from RXMeshStatic
+ * @param compute_op the computation lambda function that will be executed by
+ * each thread in the block. This lambda function takes two input parameters:
+ * 1. Handle to the mesh element assigned to the thread. The handle type matches
+ * the source of the query (e.g., VertexHandle for VE query) 2. an iterator to
+ * the query output. The iterator type matches the type of the mesh element
+ * "iterated" on (e.g., EdgeIterator for VE query)
+ * @param oriented specifies if the query are oriented. Currently only VV query
+ * is supported for oriented queries. FV, FE and EV is oriented by default
  */
 template <Op op, uint32_t blockThreads, typename computeT>
 __device__ __inline__ void query_block_dispatcher(const Context& context,
@@ -240,7 +277,27 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
 
 
 /**
- * query_block_dispatcher() for higher queries
+ * @brief This function is used to perform a query operation on a specific mesh
+ * element. This is only needed for higher query (e.g., 2-ring query) where the
+ * first query is done using query_block_dispatcher in which each thread is
+ * assigned to a mesh element. Subsequent queries should be handled by this
+ * function. This function should be called by the whole CUDA block.
+ * @tparam Op the type of query operation
+ * @tparam blockThreads the number of CUDA threads in the block
+ * @tparam computeT the type of compute lambda function (inferred)
+ * @tparam HandleT the type of input handle (inferred) which should match the
+ * input of the query operations (e.g., VertexHandle for VE query)
+ * @param context which store various parameters needed for the query
+ * operation. The context can be obtained from RXMeshStatic
+ * @param src_id the input mesh element to the query. Inactive threads can
+ * simply pass HandleT() in which case they are skipped
+ * @param compute_op the computation lambda function that will be executed by
+ * the thread. This lambda function takes two input parameters:
+ * 1. HandleT which is the same as src_id 2. an iterator to the query output.
+ * The iterator type matches the type of the mesh element "iterated" on (e.g.,
+ * EdgeIterator for VE query)
+ * @param oriented specifies if the query are oriented. Currently only VV query
+ * is supported for oriented queries. FV, FE and EV is oriented by default
  */
 template <Op op, uint32_t blockThreads, typename computeT, typename HandleT>
 __device__ __inline__ void higher_query_block_dispatcher(

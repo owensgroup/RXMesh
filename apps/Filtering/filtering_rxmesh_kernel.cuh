@@ -6,7 +6,7 @@
 #include "filtering_util.h"
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
-#include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
+#include "rxmesh/kernels/query_dispatcher.cuh"
 #include "rxmesh/util/vector.h"
 
 constexpr float EPS = 10e-6;
