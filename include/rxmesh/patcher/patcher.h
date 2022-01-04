@@ -9,6 +9,10 @@ namespace rxmesh {
 
 namespace patcher {
 
+/**
+ * @brief Takes an input mesh and partition it to patches using Lloyd algorithm
+ * on the gpu
+ */
 class Patcher
 {
    public:

@@ -8,7 +8,7 @@
 namespace rxmesh {
 
 /**
- * get_cmd_option()
+ * @brief Parse for an option. Maninly used to parse user input from CMD
  */
 inline char* get_cmd_option(char** begin, char** end, const std::string& option)
 {
@@ -19,8 +19,10 @@ inline char* get_cmd_option(char** begin, char** end, const std::string& option)
     }
     return 0;
 }
+
 /**
- * cmd_option_exists()
+ * @brief Check if an input string exists. Mainly used to check if input option
+ * exists in CMD
  */
 inline bool cmd_option_exists(char**             begin,
                               char**             end,
@@ -31,7 +33,7 @@ inline bool cmd_option_exists(char**             begin,
 }
 
 /**
- * print_device_memory_usage()
+ * @brief Print current GPU memory usage
  */
 inline void print_device_memory_usage()
 {
@@ -47,16 +49,22 @@ inline void print_device_memory_usage()
     RXMESH_TRACE(" device memory mem used: {} (MB)", used_m);
 }
 
+
 /**
- * find_index()
+ * @brief Find the index of an entry in a vector
+ * @tparam T type of the entry and vector elements
+ * @param entry to search for
+ * @param vect input vector to search in
+ * @return return the index of the entry or std::numeric_limits<uint32_t>::max()
+ * if it is not found
  */
 template <typename T>
-inline uint32_t find_index(const T entery, const std::vector<T>& vect)
+inline uint32_t find_index(const T entry, const std::vector<T>& vect)
 {
     // get index of entry in vector
 
     typename std::vector<T>::const_iterator it =
-        std::find(vect.begin(), vect.end(), entery);
+        std::find(vect.begin(), vect.end(), entry);
     if (it == vect.end()) {
         return std::numeric_limits<uint32_t>::max();
     }
@@ -64,15 +72,21 @@ inline uint32_t find_index(const T entery, const std::vector<T>& vect)
 }
 
 /**
- * find_index()
+ * @brief Find the index of an entry an array given its size
+ * @tparam T type of the entry and array elements
+ * @param entry to search for
+ * @param arr input array to search in
+ * @param arr_size size of the input array (arr)
+ * @return return the index of the entry or std::numeric_limits<uint32_t>::max()
+ * if it is not found
  */
 template <typename T>
-inline T find_index(const T* arr, const T arr_size, const T val)
+inline T find_index(const T* arr, const T arr_size, const T entry)
 {
     // get index of entry in array
     const T* begin = arr;
     const T* end   = arr + arr_size;
-    const T* it    = std::find(begin, end, val);
+    const T* it    = std::find(begin, end, entry);
     if (it == end) {
         return std::numeric_limits<T>::max();
     }
@@ -80,7 +94,7 @@ inline T find_index(const T* arr, const T arr_size, const T val)
 }
 
 /**
- * random_shuffle()
+ * @brief Shuffle the content of an input array randomly
  */
 template <typename T>
 inline void random_shuffle(T*             d_in,
@@ -93,7 +107,7 @@ inline void random_shuffle(T*             d_in,
 }
 
 /**
- * fill_with_sequential_numbers()
+ * @brief Fill in an array with sequential numbers
  */
 template <typename T>
 inline void fill_with_sequential_numbers(T*             arr,
@@ -103,8 +117,9 @@ inline void fill_with_sequential_numbers(T*             arr,
     std::iota(arr, arr + size, start);
 }
 
+
 /**
- * compare()
+ * @brief Compare the content of two input arrays
  */
 template <typename T, typename dataT>
 bool compare(const dataT* gold,
@@ -133,7 +148,7 @@ bool compare(const dataT* gold,
 }
 
 /**
- * copy()
+ * @brief Copy the content of one vector to another
  */
 template <typename T>
 void copy(const std::vector<T>& src, std::vector<T>& tar, int tar_start = 0)
@@ -141,8 +156,9 @@ void copy(const std::vector<T>& src, std::vector<T>& tar, int tar_start = 0)
     std::copy(src.begin(), src.end(), tar.data() + tar_start);
 }
 
+
 /**
- * compute_avg_stddev()
+ * @brief Compute the average and standard deviation of an input array
  */
 template <typename T>
 inline void compute_avg_stddev(const T* arr,
@@ -172,9 +188,8 @@ inline void compute_avg_stddev(const T* arr,
     return;
 }
 /**
- * compute_avg_stddev_max_min_rs()
- * computes the average and stddev where the input is running sum (output of
- * exclusive sum) the input size is actually size + 1
+ * @brief computes the average and stddev where the input is running sum (output
+ * of exclusive sum) the input size is actually size + 1
  */
 template <typename T>
 inline void compute_avg_stddev_max_min_rs(const T* arr_rs,
@@ -202,7 +217,7 @@ inline void compute_avg_stddev_max_min_rs(const T* arr_rs,
 }
 
 /**
- * binary_search()
+ * @brief binary search in a vector (has to be sorted --- not checked)
  */
 template <typename T>
 inline size_t binary_search(const std::vector<T>& list,
@@ -237,8 +252,7 @@ inline size_t binary_search(const std::vector<T>& list,
 
 
 /**
- * inplace_remove_duplicates_sorted()
- * in-place remove duplicates from sorted vector
+ * @brief in-place remove duplicates from sorted vector
  * requires one pass over all elements in sort_vec
  * it also resize sort_vec to contain only the unique values
  */
@@ -264,7 +278,8 @@ inline void inplace_remove_duplicates_sorted(std::vector<T>& sort_vec)
 }
 
 /**
- * shuffle_obj()
+ * @brief Given the vertex coordinates and face indices, shuffle the input mesh
+ * randomly --- both vertices and face indices
  */
 template <typename T>
 inline void shuffle_obj(std::vector<std::vector<uint32_t>>& Faces,
@@ -308,7 +323,7 @@ inline void shuffle_obj(std::vector<std::vector<uint32_t>>& Faces,
 
 
 /**
- * remove_extension()
+ * @brief Remove the extension of an input file path
  */
 inline std::string remove_extension(const std::string& filename)
 {  // https://stackoverflow.com/a/6417908/1608232
@@ -319,7 +334,7 @@ inline std::string remove_extension(const std::string& filename)
 }
 
 /**
- * extract_file_name()
+ * @brief Extract file path given its full path
  */
 inline std::string extract_file_name(const std::string& full_path)
 {
@@ -328,36 +343,6 @@ inline std::string extract_file_name(const std::string& full_path)
     size_t      lastslash = filename.find_last_of("/\\");
 
     return filename.substr(lastslash + 1);
-}
-
-/**
- * in_place_matrix_transpose()
- */
-template <class RandomIterator>
-void in_place_matrix_transpose(RandomIterator first,
-                               RandomIterator last,
-                               uint64_t       m)
-{
-    // in-place matrix transpose represented as row-major format with m
-    // number for columns
-    // https://stackoverflow.com/a/9320349/1608232
-    const uint64_t mn1 = (last - first - 1);
-    const uint64_t n   = (last - first) / m;
-
-    std::vector<bool> visited(last - first, false);
-
-    RandomIterator cycle = first;
-    while (++cycle != last) {
-        if (visited[cycle - first]) {
-            continue;
-        }
-        uint64_t a = cycle - first;
-        do {
-            a = (a == mn1) ? mn1 : (n * a) % mn1;
-            std::swap(*(first + a), *cycle);
-            visited[a] = true;
-        } while ((first + a) != cycle);
-    }
 }
 
 namespace detail {
@@ -378,9 +363,6 @@ struct edge_key_hash
 
 /**
  * @brief return consistent edge key given two vertices
- * @param v0 
- * @param v1
- * @return
  */
 inline std::pair<uint32_t, uint32_t> edge_key(const uint32_t v0,
                                               const uint32_t v1)

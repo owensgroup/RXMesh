@@ -308,7 +308,7 @@ TEST(RXMeshStatic, Queries)
         // FF
         auto input  = rxmesh.add_face_attribute<FaceHandle>("input", 1);
         auto output = rxmesh.add_face_attribute<FaceHandle>(
-            "output", rxmesh.get_max_edge_adjacent_faces() + 2);
+            "output", rxmesh.get_max_face_adjacent_faces() + 2);
         launcher<Op::FF, FaceHandle, FaceHandle>(
             Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");

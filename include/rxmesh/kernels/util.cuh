@@ -4,9 +4,6 @@
 
 namespace rxmesh {
 
-/**
- * memcpy()
- */
 template <typename attrT>
 __global__ void memcpy(attrT* d_dest, const attrT* d_src, const uint32_t length)
 {
@@ -18,9 +15,7 @@ __global__ void memcpy(attrT* d_dest, const attrT* d_src, const uint32_t length)
     }
 }
 
-/**
- * memset()
- */
+
 template <typename attrT>
 __global__ void memset(attrT* d_dest, const attrT val, const uint32_t length)
 {
@@ -32,9 +27,6 @@ __global__ void memset(attrT* d_dest, const attrT val, const uint32_t length)
     }
 }
 
-/**
- * atomicAdd() on uint16_t
- */
 __device__ __forceinline__ uint16_t atomicAdd(uint16_t* address, uint16_t val)
 {
     // Taken from
@@ -60,9 +52,7 @@ __device__ __forceinline__ uint16_t atomicAdd(uint16_t* address, uint16_t val)
     return (is_32_align) ? uint16_t(old >> 16) : uint16_t(old & 0xffff);
 }
 
-/**
- * atomicAdd() on uint8_t
- */
+
 __device__ __forceinline__ uint8_t atomicAdd(uint8_t* address, uint8_t val)
 {
     // Taken from
@@ -140,9 +130,7 @@ __device__ __forceinline__ unsigned short int atomicCAS(
 #endif
 }
 
-/**
- * dynamic_smem_size()
- */
+
 __device__ __forceinline__ unsigned dynamic_smem_size()
 {
     unsigned ret;

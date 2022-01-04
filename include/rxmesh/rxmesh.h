@@ -14,67 +14,116 @@ class RXMeshTest;
 
 namespace rxmesh {
 
+/**
+ * @brief The main class for creating RXMesh data structure. It takes an input
+ * mesh on the host, computes the patches, and creates the data structure on the
+ * GPU. It is not mean to be used directly by the user. Users should use
+ * RXMeshStatic instead
+ */
 class RXMesh
 {
    public:
+    /**
+     * @brief Total number of vertices in the mesh
+     */
     uint32_t get_num_vertices() const
     {
         return m_num_vertices;
     }
+
+    /**
+     * @brief Total number of edges in the mesh
+     */
     uint32_t get_num_edges() const
     {
         return m_num_edges;
     }
+
+    /**
+     * @brief Total number of faces in the mesh
+     */
     uint32_t get_num_faces() const
     {
         return m_num_faces;
     }
 
+    /**
+     * @brief Maximum valence in the input mesh
+     */
     uint32_t get_max_valence() const
     {
         return m_max_valence;
     }
 
+    /**
+     * @brief Maximum number of incident faces to an edge in the input mesh
+     */
     uint32_t get_max_edge_incident_faces() const
     {
         return m_max_edge_incident_faces;
     }
 
-    uint32_t get_max_edge_adjacent_faces() const
+    /**
+     * @brief Maximum number of adjacent faces to a face in the input mesh
+     */
+    uint32_t get_max_face_adjacent_faces() const
     {
         return m_max_face_adjacent_faces;
     }
 
+    /**
+     * @brief Return a context that store various information about the mesh on
+     * the GPU
+     */
     const Context& get_context() const
     {
         return m_rxmesh_context;
     }
 
+    /**
+     * @brief returns true if the input mesh is manifold
+     */
     bool is_edge_manifold() const
     {
         return m_is_input_edge_manifold;
     }
 
+    /**
+     * @brief returns true if the input mesh is closed
+     */
     bool is_closed() const
     {
         return m_is_input_closed;
     }
 
+    /**
+     * @brief returns the patch size used during partitioning the input mesh
+     */
     uint32_t get_patch_size() const
     {
         return m_patch_size;
     }
 
+    /**
+     * @brief Total number of patches of the input mesh
+     */
     uint32_t get_num_patches() const
     {
         return m_num_patches;
     }
 
+    /**
+     * @brief Returns the number of disconnected component the input mesh is
+     * composed of
+     */
     uint32_t get_num_components() const
     {
         return m_patcher->get_num_components();
     }
 
+    /**
+     * @brief Return the max, min, and average patch size of the input mesh
+     */
     void get_max_min_avg_patch_size(uint32_t& min_p,
                                     uint32_t& max_p,
                                     uint32_t& avg_p) const
@@ -82,42 +131,62 @@ class RXMesh
         return m_patcher->get_max_min_avg_patch_size(min_p, max_p, avg_p);
     }
 
+    /**
+     * @brief Return (approximate) overhead due to ribbons
+     */
     double get_ribbon_overhead() const
     {
         return m_patcher->get_ribbon_overhead();
     }
 
+    /**
+     * @brief Maximum number of vertices in a patch
+     */
     uint32_t get_per_patch_max_vertices() const
     {
         return m_max_vertices_per_patch;
     }
 
+    /**
+     * @brief Maximum number of edges in a patch
+     */
     uint32_t get_per_patch_max_edges() const
     {
         return m_max_edges_per_patch;
     }
 
+    /**
+     * @brief Maximum number of faces in a patch
+     */
     uint32_t get_per_patch_max_faces() const
     {
         return m_max_faces_per_patch;
     }
 
+    /**
+     * @brief The time used to construct the patches on the GPU
+     */
     float get_patching_time() const
     {
         return m_patcher->get_patching_time();
     }
 
+    /**
+     * @brief The number of Lloyd iterations run to partition the mesh into
+     * patches
+     */
     uint32_t get_num_lloyd_run() const
     {
         return m_patcher->get_num_lloyd_run();
     }
 
+    /**
+     * @brief Return the edge id given two vertices. Edges are undirected.
+     * @param v0 first input vertex
+     * @param v1 second input vertex
+     * @return edge id composed by v0-v1 (same as edge id for v1-v0)
+     */
     uint32_t get_edge_id(const uint32_t v0, const uint32_t v1) const;
-
-    const std::unique_ptr<patcher::Patcher>& get_patcher() const
-    {
-        return m_patcher;
-    };
 
    protected:
     virtual ~RXMesh();
@@ -125,7 +194,7 @@ class RXMesh
     RXMesh(const RXMesh&) = delete;
 
     RXMesh(const std::vector<std::vector<uint32_t>>& fv,
-           const bool                                quite = true);
+           const bool                                quite = false);
 
     /**
      * @brief build different supporting data structure used to build RXMesh

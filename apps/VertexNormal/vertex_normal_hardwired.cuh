@@ -1,7 +1,6 @@
 #pragma once
 #include <vector>
 #include "rxmesh/util/log.h"
-#include "rxmesh/util/math.h"
 #include "rxmesh/util/report.h"
 
 template <typename T>

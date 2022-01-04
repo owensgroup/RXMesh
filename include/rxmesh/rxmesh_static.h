@@ -26,8 +26,13 @@ class RXMeshStatic : public RXMesh
    public:
     RXMeshStatic(const RXMeshStatic&) = delete;
 
+    /**
+     * @brief Main constructor used to initialize internal member variables
+     * @param fv Face incident vertices as read from an obj file
+     * @param quite run in quite mode
+     */
     RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
-                 const bool                          quite = true)
+                 const bool                          quite = false)
         : RXMesh(fv, quite)
     {
         m_attr_container = std::make_shared<AttributeContainer>();

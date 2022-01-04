@@ -32,6 +32,8 @@ struct ALIGN(16) PatchInfo
 
     // Number of mesh elements in the patch
     uint16_t num_vertices, num_edges, num_faces;
+
+    // Number of mesh elements owned by this patch
     uint16_t num_owned_vertices, num_owned_edges, num_owned_faces;
 
     // The index of this patch (relative to all other patches)
