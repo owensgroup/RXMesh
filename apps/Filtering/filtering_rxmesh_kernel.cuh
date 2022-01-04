@@ -421,13 +421,8 @@ __launch_bounds__(blockThreads) __global__
                                 input_coords,
                                 filtered_coords);
     }
-}
-* /
+}*/
 
-
-    /**
-     * bilateral_filtering2()
-     */
 template <typename T, uint32_t blockThreads, uint32_t maxVVSize>
 __global__ static void bilateral_filtering(
     const rxmesh::Context      context,
