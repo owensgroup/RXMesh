@@ -1,10 +1,9 @@
 #!/bin/bash
-#echo "Please make sure to first compile the source code and then enter the input OBJ files directory."
-#read -p "OBJ files directory (no trailing slash): " input_dir
+echo "Please make sure to first compile the source code and then enter the input OBJ files directory."
+read -p "OBJ files directory (no trailing slash): " input_dir
 
-#echo "Input directory= $input_dir"
+echo "Input directory= $input_dir"
 exe="../../build/bin/RXMesh_test"
-input_dir="/data/ahdhn/SI"
 
 if [ ! -f $exe ]; then 
 	echo "The code has not been compiled. Please compile RXMesh_test and retry!"
