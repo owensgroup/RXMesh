@@ -5,10 +5,10 @@
 #include <random>
 #include "rxmesh/util/macros.h"
 
-namespace RXMESH {
+namespace rxmesh {
 
 /**
- * get_cmd_option()
+ * @brief Parse for an option. Maninly used to parse user input from CMD
  */
 inline char* get_cmd_option(char** begin, char** end, const std::string& option)
 {
@@ -19,8 +19,10 @@ inline char* get_cmd_option(char** begin, char** end, const std::string& option)
     }
     return 0;
 }
+
 /**
- * cmd_option_exists()
+ * @brief Check if an input string exists. Mainly used to check if input option
+ * exists in CMD
  */
 inline bool cmd_option_exists(char**             begin,
                               char**             end,
@@ -31,32 +33,38 @@ inline bool cmd_option_exists(char**             begin,
 }
 
 /**
- * print_device_memory_usage()
+ * @brief Print current GPU memory usage
  */
 inline void print_device_memory_usage()
 {
     // print how much memory is available, used and free on the current device
     size_t free_t, total_t;
     CUDA_ERROR(cudaMemGetInfo(&free_t, &total_t));
-    double free_m = (double)free_t / (double)1048576.0;
+    double free_m  = (double)free_t / (double)1048576.0;
     double total_m = (double)total_t / (double)1048576.0;
-    double used_m = total_m - free_m;
-    RXMESH_TRACE(" device memory mem total = {} (B) [{} (MB)]", total_t,
-                 total_m);
+    double used_m  = total_m - free_m;
+    RXMESH_TRACE(
+        " device memory mem total = {} (B) [{} (MB)]", total_t, total_m);
     RXMESH_TRACE(" device memory free: {} (B) [{} (MB)]", free_t, free_m);
     RXMESH_TRACE(" device memory mem used: {} (MB)", used_m);
 }
 
+
 /**
- * find_index()
+ * @brief Find the index of an entry in a vector
+ * @tparam T type of the entry and vector elements
+ * @param entry to search for
+ * @param vect input vector to search in
+ * @return return the index of the entry or std::numeric_limits<uint32_t>::max()
+ * if it is not found
  */
 template <typename T>
-inline uint32_t find_index(const T entery, const std::vector<T>& vect)
+inline uint32_t find_index(const T entry, const std::vector<T>& vect)
 {
     // get index of entry in vector
 
     typename std::vector<T>::const_iterator it =
-        std::find(vect.begin(), vect.end(), entery);
+        std::find(vect.begin(), vect.end(), entry);
     if (it == vect.end()) {
         return std::numeric_limits<uint32_t>::max();
     }
@@ -64,15 +72,21 @@ inline uint32_t find_index(const T entery, const std::vector<T>& vect)
 }
 
 /**
- * find_index()
+ * @brief Find the index of an entry an array given its size
+ * @tparam T type of the entry and array elements
+ * @param entry to search for
+ * @param arr input array to search in
+ * @param arr_size size of the input array (arr)
+ * @return return the index of the entry or std::numeric_limits<uint32_t>::max()
+ * if it is not found
  */
 template <typename T>
-inline T find_index(const T* arr, const T arr_size, const T val)
+inline T find_index(const T* arr, const T arr_size, const T entry)
 {
     // get index of entry in array
     const T* begin = arr;
-    const T* end = arr + arr_size;
-    const T* it = std::find(begin, end, val);
+    const T* end   = arr + arr_size;
+    const T* it    = std::find(begin, end, entry);
     if (it == end) {
         return std::numeric_limits<T>::max();
     }
@@ -80,7 +94,7 @@ inline T find_index(const T* arr, const T arr_size, const T val)
 }
 
 /**
- * random_shuffle()
+ * @brief Shuffle the content of an input array randomly
  */
 template <typename T>
 inline void random_shuffle(T*             d_in,
@@ -93,7 +107,7 @@ inline void random_shuffle(T*             d_in,
 }
 
 /**
- * fill_with_sequential_numbers()
+ * @brief Fill in an array with sequential numbers
  */
 template <typename T>
 inline void fill_with_sequential_numbers(T*             arr,
@@ -103,23 +117,26 @@ inline void fill_with_sequential_numbers(T*             arr,
     std::iota(arr, arr + size, start);
 }
 
+
 /**
- * compare()
+ * @brief Compare the content of two input arrays
  */
 template <typename T, typename dataT>
 bool compare(const dataT* gold,
              const dataT* arr,
              const T      size,
              const bool   verbose = false,
-             const dataT  tol = 10E-5)
+             const dataT  tol     = 10E-5)
 {
 
     bool result = true;
     for (T i = 0; i < size; i++) {
         if (std::abs(double(gold[i]) - double(arr[i])) > tol) {
             if (verbose) {
-                RXMESH_WARN("compare() mismatch at {} gold = {} arr = {} ", i,
-                            gold[i], arr[i]);
+                RXMESH_WARN("compare() mismatch at {} gold = {} arr = {} ",
+                            i,
+                            gold[i],
+                            arr[i]);
                 result = false;
             } else {
                 // it is not verbose, don't bother running through all entires
@@ -131,7 +148,7 @@ bool compare(const dataT* gold,
 }
 
 /**
- * copy()
+ * @brief Copy the content of one vector to another
  */
 template <typename T>
 void copy(const std::vector<T>& src, std::vector<T>& tar, int tar_start = 0)
@@ -139,8 +156,9 @@ void copy(const std::vector<T>& src, std::vector<T>& tar, int tar_start = 0)
     std::copy(src.begin(), src.end(), tar.data() + tar_start);
 }
 
+
 /**
- * compute_avg_stddev()
+ * @brief Compute the average and standard deviation of an input array
  */
 template <typename T>
 inline void compute_avg_stddev(const T* arr,
@@ -149,7 +167,7 @@ inline void compute_avg_stddev(const T* arr,
                                double&  stddev)
 {
     if (size == 1) {
-        avg = arr[0];
+        avg    = arr[0];
         stddev = 0;
         return;
     }
@@ -170,9 +188,8 @@ inline void compute_avg_stddev(const T* arr,
     return;
 }
 /**
- * compute_avg_stddev_max_min_rs()
- * computes the average and stddev where the input is running sum (output of
- * exclusive sum) the input size is actually size + 1
+ * @brief computes the average and stddev where the input is running sum (output
+ * of exclusive sum) the input size is actually size + 1
  */
 template <typename T>
 inline void compute_avg_stddev_max_min_rs(const T* arr_rs,
@@ -183,15 +200,15 @@ inline void compute_avg_stddev_max_min_rs(const T* arr_rs,
                                           T&       min)
 {
     uint32_t* arr = (uint32_t*)malloc(size * sizeof(uint32_t));
-    max = std::numeric_limits<T>::min();
-    min = std::numeric_limits<T>::max();
+    max           = std::numeric_limits<T>::min();
+    min           = std::numeric_limits<T>::max();
     for (uint32_t i = 0; i < size; i++) {
         // arr[i] = arr_rs[i + 1] - arr_rs[i];
         uint32_t start = (i == 0) ? 0 : arr_rs[i - 1];
-        uint32_t end = arr_rs[i];
-        arr[i] = end - start;
-        max = std::max(max, arr[i]);
-        min = std::min(min, arr[i]);
+        uint32_t end   = arr_rs[i];
+        arr[i]         = end - start;
+        max            = std::max(max, arr[i]);
+        min            = std::min(min, arr[i]);
     }
 
     compute_avg_stddev(arr, size, avg, stddev);
@@ -200,7 +217,7 @@ inline void compute_avg_stddev_max_min_rs(const T* arr_rs,
 }
 
 /**
- * binary_search()
+ * @brief binary search in a vector (has to be sorted --- not checked)
  */
 template <typename T>
 inline size_t binary_search(const std::vector<T>& list,
@@ -235,8 +252,7 @@ inline size_t binary_search(const std::vector<T>& list,
 
 
 /**
- * inplace_remove_duplicates_sorted()
- * in-place remove duplicates from sorted vector
+ * @brief in-place remove duplicates from sorted vector
  * requires one pass over all elements in sort_vec
  * it also resize sort_vec to contain only the unique values
  */
@@ -249,12 +265,12 @@ inline void inplace_remove_duplicates_sorted(std::vector<T>& sort_vec)
 
     // leave the first value
     uint32_t next_unique_id = 1;
-    T        prev_value = sort_vec.front();
+    T        prev_value     = sort_vec.front();
     for (uint32_t i = 1; i < sort_vec.size(); ++i) {
         T curr_val = sort_vec[i];
         if (curr_val != prev_value) {
             sort_vec[next_unique_id++] = curr_val;
-            prev_value = curr_val;
+            prev_value                 = curr_val;
         }
     }
 
@@ -262,7 +278,8 @@ inline void inplace_remove_duplicates_sorted(std::vector<T>& sort_vec)
 }
 
 /**
- * shuffle_obj()
+ * @brief Given the vertex coordinates and face indices, shuffle the input mesh
+ * randomly --- both vertices and face indices
  */
 template <typename T>
 inline void shuffle_obj(std::vector<std::vector<uint32_t>>& Faces,
@@ -306,7 +323,7 @@ inline void shuffle_obj(std::vector<std::vector<uint32_t>>& Faces,
 
 
 /**
- * remove_extension()
+ * @brief Remove the extension of an input file path
  */
 inline std::string remove_extension(const std::string& filename)
 {  // https://stackoverflow.com/a/6417908/1608232
@@ -317,44 +334,42 @@ inline std::string remove_extension(const std::string& filename)
 }
 
 /**
- * extract_file_name()
+ * @brief Extract file path given its full path
  */
 inline std::string extract_file_name(const std::string& full_path)
 {
     // given full path, we extract the file name without extension
-    std::string filename = remove_extension(full_path);
+    std::string filename  = remove_extension(full_path);
     size_t      lastslash = filename.find_last_of("/\\");
 
     return filename.substr(lastslash + 1);
 }
 
+namespace detail {
+
 /**
- * in_place_matrix_transpose()
+ * @brief hash function that takes a pair of vertices and returns a unique
+ * values. Used for storing vertex-edge relation in std map
  */
-template <class RandomIterator>
-void in_place_matrix_transpose(RandomIterator first,
-                               RandomIterator last,
-                               uint64_t       m)
+struct edge_key_hash
 {
-    // in-place matrix transpose represented as row-major format with m
-    // number for columns
-    // https://stackoverflow.com/a/9320349/1608232
-    const uint64_t mn1 = (last - first - 1);
-    const uint64_t n = (last - first) / m;
-
-    std::vector<bool> visited(last - first, false);
-
-    RandomIterator cycle = first;
-    while (++cycle != last) {
-        if (visited[cycle - first]) {
-            continue;
-        }
-        uint64_t a = cycle - first;
-        do {
-            a = (a == mn1) ? mn1 : (n * a) % mn1;
-            std::swap(*(first + a), *cycle);
-            visited[a] = true;
-        } while ((first + a) != cycle);
+    // www.techiedelight.com/use-std-pair-key-std-unordered_map-cpp/
+    template <class T>
+    inline std::size_t operator()(const std::pair<T, T>& e_key) const
+    {
+        return std::hash<T>()(e_key.first * 8191 + e_key.second * 11003);
     }
+};
+
+/**
+ * @brief return consistent edge key given two vertices
+ */
+inline std::pair<uint32_t, uint32_t> edge_key(const uint32_t v0,
+                                              const uint32_t v1)
+{
+    uint32_t i = std::max(v0, v1);
+    uint32_t j = std::min(v0, v1);
+    return std::make_pair(i, j);
 }
-}  // namespace RXMESH
+}  // namespace detail
+}  // namespace rxmesh

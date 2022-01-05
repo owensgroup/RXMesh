@@ -3,7 +3,7 @@
 #include <chrono>
 #include "rxmesh/util/macros.h"
 
-namespace RXMESH {
+namespace rxmesh {
 
 struct GPUTimer
 {
@@ -65,4 +65,4 @@ struct CPUTimer
     std::chrono::high_resolution_clock::time_point m_start;
     std::chrono::high_resolution_clock::time_point m_stop;
 };
-}  // namespace RXMESH
+}  // namespace rxmesh

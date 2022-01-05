@@ -4,10 +4,9 @@
 #include <stdint.h>
 #include "rxmesh/util/log.h"
 
-namespace RXMESH {
+namespace rxmesh {
 
-typedef uint8_t    flag_t;
-constexpr uint32_t PATCH_SIZE = 512;
+typedef uint8_t flag_t;
 
 // TRANSPOSE_ITEM_PER_THREAD
 constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 11;
@@ -15,8 +14,8 @@ constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 11;
 // used for integer rounding
 #define DIVIDE_UP(num, divisor) (num + divisor - 1) / (divisor)
 
-// assuming a 32-bit index
-#define FULL_MASK 0xffffffff
+// unsigned 64-bit
+#define INVALID64 0xFFFFFFFFFFFFFFFFu
 
 // unsigned 32-bit
 #define INVALID32 0xFFFFFFFFu
@@ -26,12 +25,6 @@ constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 11;
 
 // unsigned 8-bit
 #define INVALID8 0xFFu
-
-// assuming a 32-bit index
-#define SPECIAL 0xFFFFFFFE
-
-// 32
-#define WARPSIZE 32u
 
 
 // http://www.decompile.com/cpp/faq/file_and_line_error_string.htm
@@ -61,5 +54,20 @@ inline void HandleError(cudaError_t err, const char* file, int line)
         ptr = nullptr;             \
     }
 
+// Taken from https://stackoverflow.com/a/12779757/1608232
+#if defined(__CUDACC__)  // NVCC
+#define ALIGN(n) __align__(n)
+#elif defined(__GNUC__)  // GCC
+#define ALIGN(n) __attribute__((aligned(n)))
+#elif defined(_MSC_VER)  // MSVC
+#define ALIGN(n) __declspec(align(n))
+#else
+#error "Please provide a definition for MY_ALIGN macro for your host compiler!"
+#endif
 
-}  // namespace RXMESH
+
+//Taken from https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#extended-lambda-traits
+#define IS_D_LAMBDA(X) __nv_is_extended_device_lambda_closure_type(X)
+#define IS_HD_LAMBDA(X) __nv_is_extended_host_device_lambda_closure_type(X)
+
+}  // namespace rxmesh

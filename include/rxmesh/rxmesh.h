@@ -1,166 +1,129 @@
 #pragma once
-
-#include <fstream>
 #include <memory>
 #include <unordered_map>
 #include <vector>
+#include "rxmesh/context.h"
+#include "rxmesh/patch_info.h"
 #include "rxmesh/patcher/patcher.h"
-#include "rxmesh/rxmesh_context.h"
+#include "rxmesh/types.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/macros.h"
+#include "rxmesh/util/util.h"
 
 class RXMeshTest;
 
-namespace RXMESH {
-using coordT = float;
+namespace rxmesh {
 
-// This class is responsible for building the data structure of representing
-// the mesh a matrix (small sub-matrices). It should/can not be instantiated.
-// In order to use it, use RXMeshStatic
-
-enum class Op
-{
-    // Vertex
-    VV = 0,
-    VE = 1,
-    VF = 2,
-
-    // Face
-    FV = 3,
-    FE = 4,
-    FF = 5,
-
-    // Edge
-    EV = 6,
-    EE = 7,
-    EF = 8,
-};
-
-inline std::string op_to_string(const Op& op)
-{
-    switch (op) {
-        case RXMESH::Op::VV:
-            return "VV";
-        case RXMESH::Op::VE:
-            return "VE";
-        case RXMESH::Op::VF:
-            return "VF";
-        case RXMESH::Op::FV:
-            return "FV";
-        case RXMESH::Op::FE:
-            return "FE";
-        case RXMESH::Op::FF:
-            return "FF";
-        case RXMESH::Op::EV:
-            return "EV";
-        case RXMESH::Op::EF:
-            return "EF";
-        case RXMESH::Op::EE:
-            return "EE";
-        default:
-            return "";
-    }
-}
-
-enum class ELEMENT
-{
-    VERTEX = 0,
-    EDGE = 1,
-    FACE = 2
-};
-
-template <uint32_t patchSize = PATCH_SIZE>
+/**
+ * @brief The main class for creating RXMesh data structure. It takes an input
+ * mesh on the host, computes the patches, and creates the data structure on the
+ * GPU. It is not mean to be used directly by the user. Users should use
+ * RXMeshStatic instead
+ */
 class RXMesh
 {
    public:
-    // Exporter
-    template <typename VertT>
-    void exportOBJ(const std::string& filename, VertT getCoords)
-    {
-        std::string  fn = STRINGIFY(OUTPUT_DIR) + filename;
-        std::fstream file(fn, std::ios::out);
-        file.precision(30);
-
-        // write vertices
-        for (uint32_t v = 0; v < m_num_vertices; ++v) {
-            uint32_t v_id = v;
-
-            file << "v  ";
-            for (uint32_t i = 0; i < 3; ++i) {
-                file << getCoords(v_id, i) << "  ";
-            }
-            file << std::endl;
-        }
-        // write connectivity
-        write_connectivity(file);
-        file.close();
-    }
-
-
-    // getter
+    /**
+     * @brief Total number of vertices in the mesh
+     */
     uint32_t get_num_vertices() const
     {
         return m_num_vertices;
     }
+
+    /**
+     * @brief Total number of edges in the mesh
+     */
     uint32_t get_num_edges() const
     {
         return m_num_edges;
     }
+
+    /**
+     * @brief Total number of faces in the mesh
+     */
     uint32_t get_num_faces() const
     {
         return m_num_faces;
     }
 
+    /**
+     * @brief Maximum valence in the input mesh
+     */
     uint32_t get_max_valence() const
     {
         return m_max_valence;
     }
 
+    /**
+     * @brief Maximum number of incident faces to an edge in the input mesh
+     */
     uint32_t get_max_edge_incident_faces() const
     {
         return m_max_edge_incident_faces;
     }
 
-    uint32_t get_max_edge_adjacent_faces() const
+    /**
+     * @brief Maximum number of adjacent faces to a face in the input mesh
+     */
+    uint32_t get_max_face_adjacent_faces() const
     {
         return m_max_face_adjacent_faces;
     }
-    uint32_t get_face_degree() const
-    {
-        return m_face_degree;
-    }
 
-    const RXMeshContext& get_context() const
+    /**
+     * @brief Return a context that store various information about the mesh on
+     * the GPU
+     */
+    const Context& get_context() const
     {
         return m_rxmesh_context;
     }
 
+    /**
+     * @brief returns true if the input mesh is manifold
+     */
     bool is_edge_manifold() const
     {
         return m_is_input_edge_manifold;
     }
 
+    /**
+     * @brief returns true if the input mesh is closed
+     */
     bool is_closed() const
     {
         return m_is_input_closed;
     }
 
+    /**
+     * @brief returns the patch size used during partitioning the input mesh
+     */
     uint32_t get_patch_size() const
     {
-        return patchSize;
+        return m_patch_size;
     }
 
+    /**
+     * @brief Total number of patches of the input mesh
+     */
     uint32_t get_num_patches() const
     {
         return m_num_patches;
     }
 
+    /**
+     * @brief Returns the number of disconnected component the input mesh is
+     * composed of
+     */
     uint32_t get_num_components() const
     {
         return m_patcher->get_num_components();
     }
 
-
+    /**
+     * @brief Return the max, min, and average patch size of the input mesh
+     */
     void get_max_min_avg_patch_size(uint32_t& min_p,
                                     uint32_t& max_p,
                                     uint32_t& avg_p) const
@@ -168,267 +131,165 @@ class RXMesh
         return m_patcher->get_max_min_avg_patch_size(min_p, max_p, avg_p);
     }
 
+    /**
+     * @brief Return (approximate) overhead due to ribbons
+     */
     double get_ribbon_overhead() const
     {
         return m_patcher->get_ribbon_overhead();
     }
 
+    /**
+     * @brief Maximum number of vertices in a patch
+     */
     uint32_t get_per_patch_max_vertices() const
     {
         return m_max_vertices_per_patch;
     }
 
+    /**
+     * @brief Maximum number of edges in a patch
+     */
     uint32_t get_per_patch_max_edges() const
     {
         return m_max_edges_per_patch;
     }
 
+    /**
+     * @brief Maximum number of faces in a patch
+     */
     uint32_t get_per_patch_max_faces() const
     {
         return m_max_faces_per_patch;
     }
 
-    uint32_t get_per_patch_max_owned_vertices() const
-    {
-        return m_max_owned_vertices_per_patch;
-    }
-
-    uint32_t get_per_patch_max_owned_edges() const
-    {
-        return m_max_owned_edges_per_patch;
-    }
-
-    uint32_t get_per_patch_max_owned_faces() const
-    {
-        return m_max_owned_faces_per_patch;
-    }
-
+    /**
+     * @brief The time used to construct the patches on the GPU
+     */
     float get_patching_time() const
     {
         return m_patcher->get_patching_time();
     }
 
+    /**
+     * @brief The number of Lloyd iterations run to partition the mesh into
+     * patches
+     */
     uint32_t get_num_lloyd_run() const
     {
         return m_patcher->get_num_lloyd_run();
     }
 
+    /**
+     * @brief Return the edge id given two vertices. Edges are undirected.
+     * @param v0 first input vertex
+     * @param v1 second input vertex
+     * @return edge id composed by v0-v1 (same as edge id for v1-v0)
+     */
     uint32_t get_edge_id(const uint32_t v0, const uint32_t v1) const;
-
-    double get_gpu_storage_mb() const
-    {
-        return m_total_gpu_storage_mb;
-    }
-
-    const std::unique_ptr<PATCHER::Patcher>& get_patcher() const
-    {
-        return m_patcher;
-    };
 
    protected:
     virtual ~RXMesh();
 
-    RXMeshContext m_rxmesh_context;
-
     RXMesh(const RXMesh&) = delete;
 
-    virtual void write_connectivity(std::fstream& file) const;
+    RXMesh(const std::vector<std::vector<uint32_t>>& fv,
+           const bool                                quite = false);
 
-    // build everything from scratch including patches (use this)
-    RXMesh(std::vector<std::vector<uint32_t>>& fv,
-           std::vector<std::vector<coordT>>&   coordinates,
-           const bool                          sort = false,
-           const bool                          quite = true);
+    /**
+     * @brief build different supporting data structure used to build RXMesh
+     *
+     * Set the number of vertices, edges, and faces, populate edge_map (which
+     * takes two connected vertices and returns their edge id), build
+     * face-incident-faces data structure (used to in creating patches). This is
+     * done using a single pass over FV
+     *
+     * @param fv input face incident vertices
+     * @param ef output edge incident faces
+     * @param ef output face adjacent faces
+     */
+    void build_supporting_structures(
+        const std::vector<std::vector<uint32_t>>& fv,
+        std::vector<std::vector<uint32_t>>&       ef,
+        std::vector<uint32_t>&                    ff_offset,
+        std::vector<uint32_t>&                    ff_values);
+
+    /**
+     * @brief Calculate various statistics for the input mesh
+     *
+     * Calculate max valence, max edge incident faces, max face adjacent faces,
+     * if the input is closed, if the input is edge manifold, and max number of
+     * vertices/edges/faces per patch
+     *
+     * @param fv input face incident vertices
+     * @param ef input edge incident faces
+     */
+    void calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
+                         const std::vector<std::vector<uint32_t>>& ef);
+
+    void calc_max_not_owned_elements();
+
+    void build(const std::vector<std::vector<uint32_t>>& fv);
+    void build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
+                            const uint32_t                            patch_id);
+
+    void build_single_patch_ltog(const std::vector<std::vector<uint32_t>>& fv,
+                                 const uint32_t patch_id);
+
+    void build_single_patch_topology(
+        const std::vector<std::vector<uint32_t>>& fv,
+        const uint32_t                            patch_id);
+
+
+    void build_device();
 
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
-    void     build_local(std::vector<std::vector<uint32_t>>& fv,
-                         std::vector<std::vector<coordT>>&   coordinates);
-    void     build_patch_locally(const uint32_t patch_id);
-    void     populate_edge_map(const std::vector<std::vector<uint32_t>>& fv);
-    uint16_t create_new_local_face(const uint32_t               patch_id,
-                                   const uint32_t               global_f,
-                                   const std::vector<uint32_t>& fv,
-                                   uint16_t&                    faces_count,
-                                   uint16_t&      edges_owned_count,
-                                   uint16_t&      edges_not_owned_count,
-                                   uint16_t&      vertices_owned_count,
-                                   uint16_t&      vertices_not_owned_count,
-                                   const uint16_t num_edges_owned,
-                                   const uint16_t num_vertices_owned,
-                                   std::vector<uint32_t>& f_ltog,
-                                   std::vector<uint32_t>& e_ltog,
-                                   std::vector<uint32_t>& v_ltog,
-                                   std::vector<uint16_t>& fp,
-                                   std::vector<uint16_t>& ep);
-    void     set_num_vertices(const std::vector<std::vector<uint32_t>>& fv);
-    void     edge_incident_faces(const std::vector<std::vector<uint32_t>>& fv,
-                                 std::vector<std::vector<uint32_t>>&       ef);
-
-    inline std::pair<uint32_t, uint32_t> edge_key(const uint32_t v0,
-                                                  const uint32_t v1) const
-    {
-        uint32_t i = std::max(v0, v1);
-        uint32_t j = std::min(v0, v1);
-        return std::make_pair(i, j);
-    }
-
-    template <typename pt_T>
-    void host_malloc(pt_T*& arr, uint32_t count)
-    {
-        arr = (pt_T*)malloc(count * sizeof(pt_T));
-        if (arr == NULL) {
-            RXMESH_ERROR(
-                "RXMesh::host_malloc() malloc failed with count = {} and total "
-                "size = {}",
-                count, count * sizeof(pt_T));
-        }
-    }
-
-    void device_alloc_local();
-
-    template <typename Tin, typename Tst>
-    void get_starting_ids(const std::vector<std::vector<Tin>>& input,
-                          std::vector<Tst>&                    starting_id);
-
-    template <typename T>
-    void padding_to_multiple(std::vector<std::vector<T>>& input,
-                             const uint32_t               multiple,
-                             const T                      init_val);
-
-    template <typename Tin, typename Tad>
-    void get_size(const std::vector<std::vector<Tin>>& input,
-                  std::vector<Tad>&                    ad);
-
-    void sort(std::vector<std::vector<uint32_t>>& fv,
-              std::vector<std::vector<coordT>>&   coordinates);
-
-
-    // www.techiedelight.com/use-std-pair-key-std-unordered_map-cpp/
-    struct edge_key_hash
-    {
-        template <class T>
-        inline std::size_t operator()(const std::pair<T, T>& e_key) const
-        {
-            return std::hash<T>()(e_key.first * 8191 + e_key.second * 11003);
-        }
-    };
-
-    // variables
 
     // our friend tester class
     friend class ::RXMeshTest;
 
-    // var
-    uint32_t m_num_edges, m_num_faces, m_num_vertices, m_max_ele_count,
-        m_max_valence, m_max_valence_vertex_id, m_max_edge_incident_faces,
-        m_max_face_adjacent_faces;
-    const uint32_t m_face_degree;
+    Context m_rxmesh_context;
 
-    // patches
-    uint32_t m_num_patches;
+    uint32_t m_num_edges, m_num_faces, m_num_vertices, m_max_valence,
+        m_max_edge_incident_faces, m_max_face_adjacent_faces;
 
-    bool m_is_input_edge_manifold;
-    bool m_is_input_closed;
-    bool m_is_sort;
-    bool m_quite;
+    uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
+        m_max_faces_per_patch;
 
-    std::unordered_map<std::pair<uint32_t, uint32_t>, uint32_t, edge_key_hash>
+    uint32_t m_max_not_owned_vertices, m_max_not_owned_edges,
+        m_max_not_owned_faces;
+
+    uint32_t       m_num_patches;
+    const uint32_t m_patch_size;
+    bool           m_is_input_edge_manifold;
+    bool           m_is_input_closed;
+    bool           m_quite;
+
+    // Edge hash map that takes two vertices and return their edge id
+    std::unordered_map<std::pair<uint32_t, uint32_t>,
+                       uint32_t,
+                       detail::edge_key_hash>
         m_edges_map;
-
-    // store a copy of face incident vertices along with the neighbor
-    // faces of that face
-    std::vector<std::vector<uint32_t>> m_fvn;
 
     // pointer to the patcher class responsible for everything related to
     // patching the mesh into small pieces
-    std::unique_ptr<PATCHER::Patcher> m_patcher;
+    std::unique_ptr<patcher::Patcher> m_patcher;
 
-
-    //*************** Patch sub-matrices
-
-    //****** Host
-    uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
-        m_max_faces_per_patch;
-    uint32_t m_max_owned_vertices_per_patch, m_max_owned_edges_per_patch,
-        m_max_owned_faces_per_patch;
     //** main incident relations
-    std::vector<std::vector<uint16_t>> m_h_patches_edges;
-    std::vector<std::vector<uint16_t>> m_h_patches_faces;
-    //.x edge address
-    //.y edge size
-    //.z face address
-    //.w face size
-    std::vector<uint4> m_h_ad_size;
+    std::vector<std::vector<uint16_t>> m_h_patches_ev;
+    std::vector<std::vector<uint16_t>> m_h_patches_fe;
 
-    // the size of owned mesh elements per patch
-    //.x faces
-    //.y edges
-    //.z vertex
-    std::vector<uint4> m_h_owned_size;
+    // the number of owned mesh elements per patch
+    std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;
 
-    uint2 m_max_size;  // max number of edges(*2) and faces(*face_degree)
-                       // in a patch
-                       // this counts the size of edges and faces arrays
-                       // rounded up to multiple of 32
-
-    //** mappings
+    // mappings
     // local to global map for (v)ertices (e)dges and (f)aces
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_v;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_e;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
 
-    // storing the start id(x) and element count(y)
-    std::vector<uint2> m_h_ad_size_ltog_v, m_h_ad_size_ltog_e,
-        m_h_ad_size_ltog_f;
 
-
-    //****** Device
-    // Each device pointer points to a long array that holds specific data
-    // separated by patch id
-    //       ____________ _____________ ____________
-    //      |____________|_____________|____________|
-    //           ^^            ^^            ^^
-    //      patch 1 data  patch 2 data   patch 3 data
-
-    // We store the starting id and the size of mesh elements for each patch
-    // in m_d_ad_size_ltog_MESHELE (ad for address) where MESHELE could be
-    // v,e, or f. This is for the mapping pointers
-    // For incidence pointers, we only need store the starting id
-
-    //** face/vertex/edge patch (indexed by in global space)
-    uint32_t *m_d_face_patch, *m_d_vertex_patch, *m_d_edge_patch;
-
-    //** mapping
-    uint32_t *m_d_patches_ltog_v, *m_d_patches_ltog_e, *m_d_patches_ltog_f;
-    uint2 *   m_d_ad_size_ltog_v, *m_d_ad_size_ltog_e, *m_d_ad_size_ltog_f;
-
-    //** incidence
-    uint16_t *m_d_patches_edges, *m_d_patches_faces;
-
-    //*** Scanned histogram of the number of mesh elements per patch
-    std::vector<uint32_t> m_h_patch_distribution_v, m_h_patch_distribution_e,
-        m_h_patch_distribution_f;
-    uint32_t *m_d_patch_distribution_v, *m_d_patch_distribution_e,
-        *m_d_patch_distribution_f;
-
-    //.x edge address
-    //.y edge size
-    //.z face address
-    //.w face size
-    uint4* m_d_ad_size;
-
-    // the size of owned mesh elements per patch
-    //.x faces
-    //.y edges
-    //.z vertex
-    uint4* m_d_owned_size;
-
-    // neighbour patches
-    uint32_t *m_d_neighbour_patches, *m_d_neighbour_patches_offset;
-
-    double m_total_gpu_storage_mb;
+    PatchInfo *m_d_patches_info, *m_h_patches_info;
 };
-
-extern template class RXMesh<PATCH_SIZE>;
-}  // namespace RXMESH
+}  // namespace rxmesh

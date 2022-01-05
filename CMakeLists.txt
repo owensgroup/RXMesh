@@ -1,11 +1,11 @@
-cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 
 if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
   cmake_policy(SET CMP0104 OLD)
 endif()
 
 project(RXMesh 
-        VERSION 0.1.0 
+        VERSION 0.2.0 
         LANGUAGES C CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -86,15 +86,16 @@ target_sources(RXMesh_header_lib
 
 # CUDA and C++ compiler flags
 set(cxx_flags 
-	$<$<CXX_COMPILER_ID:MSVC>:-D_SCL_SECURE_NO_WARNINGS /openmp /std:c++17> #Add MSVC-specific compiler flags here
-	$<$<CXX_COMPILER_ID:GNU>:-Wall -m64 -fopenmp -O3 -std=c++17>            #Add GCC/Clang-specific compiler flags here
+	$<$<CXX_COMPILER_ID:MSVC>:-D_SCL_SECURE_NO_WARNINGS /openmp /std:c++17>           #Add MSVC-specific compiler flags here
+	$<$<CXX_COMPILER_ID:GNU>:-Wall -m64 -fopenmp -O3 -std=c++17 -Wno-unused-function> #Add GCC/Clang-specific compiler flags here
 	)
 set(cuda_flags
-    -Xcompiler=$<$<CXX_COMPILER_ID:GNU>:-Wall -fopenmp -O3>
+    -Xcompiler=$<$<CXX_COMPILER_ID:GNU>:-Wall -fopenmp -O3 -Wno-unused-function>
     #Disables warning
     #177-D "function XXX was declared but never referenced"
     -Xcudafe "--display_error_number --diag_suppress=177"
     ${CUDA_ARCHS}
+    -rdc=true
 	-lineinfo	
 	--expt-extended-lambda	
 	-use_fast_math	
@@ -110,7 +111,6 @@ target_compile_options(developer_flags INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:${cxx_flags}>
     $<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>
 )
-
 
 target_link_libraries(RXMesh_header_lib INTERFACE $<BUILD_INTERFACE:developer_flags>)
 

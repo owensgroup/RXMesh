@@ -2,7 +2,6 @@
 #include "../common/openmesh_report.h"
 #include "../common/openmesh_trimesh.h"
 #include "mcf_util.h"
-#include "rxmesh/rxmesh_attribute.h"
 #include "rxmesh/util/timer.h"
 #include "rxmesh/util/vector.h"
 
@@ -10,24 +9,24 @@
  * axpy3()
  */
 template <typename T>
-void axpy3(const RXMESH::RXMeshAttribute<T>& X,
-           RXMESH::Vector<3, T>              alpha,
-           RXMESH::Vector<3, T>              beta,
-           RXMESH::RXMeshAttribute<T>&       Y,
-           const int                         num_omp_threads)
+void axpy3(const std::vector<std::vector<T>>& X,
+           const T                            alpha,
+           const T                            beta,
+           std::vector<std::vector<T>>&       Y,
+           const int                          num_omp_threads)
 {
     // Y = beta*Y + alpha*X
 
-    int size = static_cast<int>(X.get_num_mesh_elements());
+    int size = static_cast<int>(X.size());
 #pragma omp parallel for schedule(static) num_threads(num_omp_threads)
     for (int i = 0; i < size; ++i) {
-        Y(i, 0) *= beta[0];
-        Y(i, 1) *= beta[1];
-        Y(i, 2) *= beta[2];
+        Y[i][0] *= beta;
+        Y[i][1] *= beta;
+        Y[i][2] *= beta;
 
-        Y(i, 0) += alpha[0] * X(i, 0);
-        Y(i, 1) += alpha[1] * X(i, 1);
-        Y(i, 2) += alpha[2] * X(i, 2);
+        Y[i][0] += alpha * X[i][0];
+        Y[i][1] += alpha * X[i][1];
+        Y[i][2] += alpha * X[i][2];
     }
 }
 
@@ -35,26 +34,23 @@ void axpy3(const RXMESH::RXMeshAttribute<T>& X,
  * dot3()
  */
 template <typename T>
-void dot3(const RXMESH::RXMeshAttribute<T>& A,
-          const RXMESH::RXMeshAttribute<T>& B,
-          RXMESH::Vector<3, T>&             res,
-          const int                         num_omp_threads)
+T dot3(const std::vector<std::vector<T>>& A,
+       const std::vector<std::vector<T>>& B,
+       const int                          num_omp_threads)
 {
-    // creating temp variables because variable in 'reduction' clause/directive
-    // cannot have reference type
 
-    T   x_sum(0), y_sum(0), z_sum(0);
-    int size = static_cast<int>(A.get_num_mesh_elements());
-#pragma omp parallel for schedule(static) num_threads(num_omp_threads) reduction(+ : x_sum,y_sum,z_sum)
+    T   ret  = 0;
+    int size = static_cast<int>(A.size());
+#pragma omp parallel for schedule(static) num_threads(num_omp_threads) reduction(+ : ret)
     for (int i = 0; i < size; ++i) {
-        x_sum += A(i, 0) * B(i, 0);
-        y_sum += A(i, 1) * B(i, 1);
-        z_sum += A(i, 2) * B(i, 2);
+        T partial = 0;
+        for (size_t j = 0; j < A[i].size(); ++j) {
+            partial += A[i][j] * B[i][j];
+        }
+        ret += partial;
     }
 
-    res[0] = x_sum;
-    res[1] = y_sum;
-    res[2] = z_sum;
+    return ret;
 }
 
 /**
@@ -77,12 +73,12 @@ T partial_voronoi_area(const int      p_id,  // center
     assert((*q_it).idx() == q_id);
     assert((*r_it).idx() == r_id);
 
-    const RXMESH::Vector<3, T> p(mesh.point(*p_it)[0], mesh.point(*p_it)[1],
-                                 mesh.point(*p_it)[2]);
-    const RXMESH::Vector<3, T> q(mesh.point(*q_it)[0], mesh.point(*q_it)[1],
-                                 mesh.point(*q_it)[2]);
-    const RXMESH::Vector<3, T> r(mesh.point(*r_it)[0], mesh.point(*r_it)[1],
-                                 mesh.point(*r_it)[2]);
+    const rxmesh::Vector<3, T> p(
+        mesh.point(*p_it)[0], mesh.point(*p_it)[1], mesh.point(*p_it)[2]);
+    const rxmesh::Vector<3, T> q(
+        mesh.point(*q_it)[0], mesh.point(*q_it)[1], mesh.point(*q_it)[2]);
+    const rxmesh::Vector<3, T> r(
+        mesh.point(*r_it)[0], mesh.point(*r_it)[1], mesh.point(*r_it)[2]);
 
     return partial_voronoi_area(p, q, r);
 }
@@ -106,24 +102,24 @@ T edge_cotan_weight(const int      p_id,
     TriMesh::VertexIter q_it = mesh.vertices_begin() + q_id;
     TriMesh::VertexIter s_it = mesh.vertices_begin() + s_id;
 
-    const RXMESH::Vector<3, T> p(mesh.point(*p_it)[0], mesh.point(*p_it)[1],
-                                 mesh.point(*p_it)[2]);
-    const RXMESH::Vector<3, T> r(mesh.point(*r_it)[0], mesh.point(*r_it)[1],
-                                 mesh.point(*r_it)[2]);
-    const RXMESH::Vector<3, T> q(mesh.point(*q_it)[0], mesh.point(*q_it)[1],
-                                 mesh.point(*q_it)[2]);
-    const RXMESH::Vector<3, T> s(mesh.point(*s_it)[0], mesh.point(*s_it)[1],
-                                 mesh.point(*s_it)[2]);
+    const rxmesh::Vector<3, T> p(
+        mesh.point(*p_it)[0], mesh.point(*p_it)[1], mesh.point(*p_it)[2]);
+    const rxmesh::Vector<3, T> r(
+        mesh.point(*r_it)[0], mesh.point(*r_it)[1], mesh.point(*r_it)[2]);
+    const rxmesh::Vector<3, T> q(
+        mesh.point(*q_it)[0], mesh.point(*q_it)[1], mesh.point(*q_it)[2]);
+    const rxmesh::Vector<3, T> s(
+        mesh.point(*s_it)[0], mesh.point(*s_it)[1], mesh.point(*s_it)[2]);
 
     return edge_cotan_weight(p, r, q, s);
 }
 
 
 template <typename T>
-void mcf_matvec(TriMesh&                          mesh,
-                const RXMESH::RXMeshAttribute<T>& in,
-                RXMESH::RXMeshAttribute<T>&       out,
-                const int                         num_omp_threads)
+void mcf_matvec(TriMesh&                           mesh,
+                const std::vector<std::vector<T>>& in,
+                std::vector<std::vector<T>>&       out,
+                const int                          num_omp_threads)
 {
     // Matrix vector multiplication operation based on uniform Laplacian weight
     // defined in Equation 7 in Implicit Fairing of Irregular Meshes using
@@ -153,7 +149,7 @@ void mcf_matvec(TriMesh&                          mesh,
         TriMesh::VertexIter p_iter = mesh.vertices_begin() + p_id;
 
         // Off-diagonal entries
-        RXMESH::Vector<3, T> x(T(0));
+        rxmesh::Vector<3, T> x(T(0));
         T                    sum_e_weight(0);
 
         // vertex weight
@@ -170,7 +166,8 @@ void mcf_matvec(TriMesh&                          mesh,
         assert(s_iter.is_valid());
 
         for (TriMesh::VertexVertexIter r_iter = mesh.vv_iter(*p_iter);
-             r_iter.is_valid(); ++r_iter) {
+             r_iter.is_valid();
+             ++r_iter) {
 
             int r_id = (*r_iter).idx();
 
@@ -180,17 +177,18 @@ void mcf_matvec(TriMesh&                          mesh,
                 e_weight = 1;
             } else {
                 e_weight = std::max(
-                    T(0.0), edge_cotan_weight<T>(p_id, r_id, (*q_iter).idx(),
-                                                 (*s_iter).idx(), mesh));
+                    T(0.0),
+                    edge_cotan_weight<T>(
+                        p_id, r_id, (*q_iter).idx(), (*s_iter).idx(), mesh));
                 ++s_iter;
             }
 
             e_weight *= static_cast<T>(Arg.time_step);
             sum_e_weight += e_weight;
 
-            x[0] -= e_weight * in(r_id, 0);
-            x[1] -= e_weight * in(r_id, 1);
-            x[2] -= e_weight * in(r_id, 2);
+            x[0] -= e_weight * in[r_id][0];
+            x[1] -= e_weight * in[r_id][1];
+            x[2] -= e_weight * in[r_id][2];
 
             if (Arg.use_uniform_laplace) {
                 ++v_weight;
@@ -215,10 +213,10 @@ void mcf_matvec(TriMesh&                          mesh,
         assert(!std::isnan(v_weight));
         assert(!std::isinf(v_weight));
 
-        T diag = ((1.0 / v_weight) + sum_e_weight);
-        out(p_id, 0) = x[0] + diag * in(p_id, 0);
-        out(p_id, 1) = x[1] + diag * in(p_id, 1);
-        out(p_id, 2) = x[2] + diag * in(p_id, 2);
+        T diag       = ((1.0 / v_weight) + sum_e_weight);
+        out[p_id][0] = x[0] + diag * in[p_id][0];
+        out[p_id][1] = x[1] + diag * in[p_id][1];
+        out[p_id][2] = x[2] + diag * in[p_id][2];
     }
 }
 
@@ -227,16 +225,16 @@ void mcf_matvec(TriMesh&                          mesh,
  * cg()
  */
 template <typename T>
-void cg(TriMesh&                    mesh,
-        RXMESH::RXMeshAttribute<T>& X,
-        RXMESH::RXMeshAttribute<T>& B,
-        RXMESH::RXMeshAttribute<T>& R,
-        RXMESH::RXMeshAttribute<T>& P,
-        RXMESH::RXMeshAttribute<T>& S,
-        uint32_t&                   num_cg_iter_taken,
-        RXMESH::Vector<3, T>&       start_residual,
-        RXMESH::Vector<3, T>&       stop_residual,
-        const int                   num_omp_threads)
+void cg(TriMesh&                     mesh,
+        std::vector<std::vector<T>>& X,
+        std::vector<std::vector<T>>& B,
+        std::vector<std::vector<T>>& R,
+        std::vector<std::vector<T>>& P,
+        std::vector<std::vector<T>>& S,
+        uint32_t&                    num_cg_iter_taken,
+        T&                           start_residual,
+        T&                           stop_residual,
+        const int                    num_omp_threads)
 {
     // CG solver. Solve for the three coordinates simultaneously
 
@@ -248,112 +246,93 @@ void cg(TriMesh&                    mesh,
     // p = r
 #pragma omp parallel for schedule(static) num_threads(num_omp_threads)
     for (int i = 0; i < int(mesh.n_vertices()); ++i) {
-        R(i, 0) = B(i, 0) - S(i, 0);
-        R(i, 1) = B(i, 1) - S(i, 1);
-        R(i, 2) = B(i, 2) - S(i, 2);
+        R[i][0] = B[i][0] - S[i][0];
+        R[i][1] = B[i][1] - S[i][1];
+        R[i][2] = B[i][2] - S[i][2];
 
-        P(i, 0) = R(i, 0);
-        P(i, 1) = R(i, 1);
-        P(i, 2) = R(i, 2);
+        P[i][0] = R[i][0];
+        P[i][1] = R[i][1];
+        P[i][2] = R[i][2];
     }
 
     // delta_new = <r,r>
-    RXMESH::Vector<3, T> delta_new;
-    dot3(R, R, delta_new, num_omp_threads);
+    T delta_new = dot3(R, R, num_omp_threads);
 
     // delta_0 = delta_new
-    const RXMESH::Vector<3, T> delta_0(delta_new);
+    const T delta_0(delta_new);
 
     start_residual = delta_0;
-    const RXMESH::Vector<3, T> ones(1);
-    uint32_t                   iter = 0;
+    uint32_t iter  = 0;
     while (iter < Arg.max_num_cg_iter) {
         // s = Ap
         mcf_matvec(mesh, P, S, num_omp_threads);
 
         // alpha = delta_new / <s,p>
-        RXMESH::Vector<3, T> alpha;
-        dot3(S, P, alpha, num_omp_threads);
-        alpha = delta_new / alpha;
+        T alpha = dot3(S, P, num_omp_threads);
+        alpha   = delta_new / alpha;
 
 
         // x =  x + alpha*p
-        axpy3(P, alpha, ones, X, num_omp_threads);
+        axpy3(P, alpha, T(1), X, num_omp_threads);
 
         // r = r - alpha*s
-        axpy3(S, -alpha, ones, R, num_omp_threads);
+        axpy3(S, -alpha, T(1), R, num_omp_threads);
 
         // delta_old = delta_new
-        RXMESH::Vector<3, T> delta_old(delta_new);
+        T delta_old(delta_new);
 
         // delta_new = <r,r>
-        dot3(R, R, delta_new, num_omp_threads);
+        delta_new = dot3(R, R, num_omp_threads);
 
         // beta = delta_new/delta_old
-        RXMESH::Vector<3, T> beta(delta_new / delta_old);
+        T beta(delta_new / delta_old);
 
         // exit if error is getting too low across three coordinates
-        if (delta_new[0] < Arg.cg_tolerance * Arg.cg_tolerance * delta_0[0] &&
-            delta_new[1] < Arg.cg_tolerance * Arg.cg_tolerance * delta_0[1] &&
-            delta_new[2] < Arg.cg_tolerance * Arg.cg_tolerance * delta_0[2]) {
+        if (delta_new < Arg.cg_tolerance * Arg.cg_tolerance * delta_0) {
             break;
         }
 
         // p = beta*p + r
-        axpy3(R, ones, beta, P, num_omp_threads);
+        axpy3(R, T(1), beta, P, num_omp_threads);
 
         ++iter;
     }
     num_cg_iter_taken = iter;
-    stop_residual = delta_new;
+    stop_residual     = delta_new;
 }
 
 /**
  * implicit_smoothing()
  */
 template <typename T>
-void implicit_smoothing(TriMesh&                    mesh,
-                        RXMESH::RXMeshAttribute<T>& X,
-                        uint32_t&                   num_cg_iter_taken,
-                        float&                      time,
-                        RXMESH::Vector<3, T>&       start_residual,
-                        RXMESH::Vector<3, T>&       stop_residual,
-                        const int                   num_omp_threads)
+void implicit_smoothing(TriMesh&                     mesh,
+                        std::vector<std::vector<T>>& X,
+                        uint32_t&                    num_cg_iter_taken,
+                        float&                       time,
+                        T&                           start_residual,
+                        T&                           stop_residual,
+                        const int                    num_omp_threads)
 {
 
     for (TriMesh::VertexIter v_it = mesh.vertices_begin();
-         v_it != mesh.vertices_end(); ++v_it) {
+         v_it != mesh.vertices_end();
+         ++v_it) {
         ASSERT_FALSE(mesh.is_boundary(*v_it))
             << "OpenMesh MCF only takes watertight/closed mesh without "
                "boundaries";
     }
 
     // CG containers
-    RXMESH::RXMeshAttribute<T> B, R, P, S;
-
-    X.init(mesh.n_vertices(), 3u, RXMESH::HOST);
-    X.reset(0.0, RXMESH::HOST);
-
-    S.init(mesh.n_vertices(), 3u, RXMESH::HOST);
-    S.reset(0.0, RXMESH::HOST);
-
-    P.init(mesh.n_vertices(), 3u, RXMESH::HOST);
-    P.reset(0.0, RXMESH::HOST);
-
-    R.init(mesh.n_vertices(), 3u, RXMESH::HOST);
-    R.reset(0.0, RXMESH::HOST);
-
-    B.init(mesh.n_vertices(), 3u, RXMESH::HOST);
-    B.reset(0.0, RXMESH::HOST);
+    std::vector<std::vector<T>> B(X), R(X), P(X), S(X);
 
 #pragma omp parallel for
     for (uint32_t v_id = 0; v_id < mesh.n_vertices(); ++v_id) {
         TriMesh::VertexIter v_iter = mesh.vertices_begin() + v_id;
 
         // LHS
-        X(v_id, 0) = mesh.point(*v_iter)[0];
-        X(v_id, 1) = mesh.point(*v_iter)[1];
-        X(v_id, 2) = mesh.point(*v_iter)[2];
+        X[v_id][0] = mesh.point(*v_iter)[0];
+        X[v_id][1] = mesh.point(*v_iter)[1];
+        X[v_id][2] = mesh.point(*v_iter)[2];
 
         // RHS
         T v_weight = 1;
@@ -363,9 +342,9 @@ void implicit_smoothing(TriMesh&                    mesh,
         }
         // will fix it later for cotan weight
 
-        B(v_id, 0) = X(v_id, 0) * v_weight;
-        B(v_id, 1) = X(v_id, 1) * v_weight;
-        B(v_id, 2) = X(v_id, 2) * v_weight;
+        B[v_id][0] = X[v_id][0] * v_weight;
+        B[v_id][1] = X[v_id][1] * v_weight;
+        B[v_id][2] = X[v_id][2] * v_weight;
     }
 
     if (!Arg.use_uniform_laplace) {
@@ -381,30 +360,39 @@ void implicit_smoothing(TriMesh&                    mesh,
             assert(q_iter.is_valid());
 
             for (TriMesh::VertexVertexIter vv_iter = mesh.vv_iter(*v_iter);
-                 vv_iter.is_valid(); ++vv_iter) {
+                 vv_iter.is_valid();
+                 ++vv_iter) {
 
-                T tri_area = partial_voronoi_area<T>(v_id, (*q_iter).idx(),
-                                                     (*vv_iter).idx(), mesh);
+                T tri_area = partial_voronoi_area<T>(
+                    v_id, (*q_iter).idx(), (*vv_iter).idx(), mesh);
 
                 v_weight += (tri_area > 0) ? tri_area : 0;
 
                 q_iter++;
                 assert(q_iter == vv_iter);
             }
-            v_weight = 0.5 / v_weight;
-            B(v_id, 0) = X(v_id, 0) / v_weight;
-            B(v_id, 1) = X(v_id, 1) / v_weight;
-            B(v_id, 2) = X(v_id, 2) / v_weight;
+            v_weight   = 0.5 / v_weight;
+            B[v_id][0] = X[v_id][0] / v_weight;
+            B[v_id][1] = X[v_id][1] / v_weight;
+            B[v_id][2] = X[v_id][2] / v_weight;
         }
     }
 
     num_cg_iter_taken = 0;
 
     // solve
-    RXMESH::CPUTimer timer;
+    rxmesh::CPUTimer timer;
     timer.start();
 
-    cg(mesh, X, B, R, P, S, num_cg_iter_taken, start_residual, stop_residual,
+    cg(mesh,
+       X,
+       B,
+       R,
+       P,
+       S,
+       num_cg_iter_taken,
+       start_residual,
+       stop_residual,
        num_omp_threads);
 
     timer.stop();
@@ -412,9 +400,9 @@ void implicit_smoothing(TriMesh&                    mesh,
 }
 
 template <typename T>
-void mcf_openmesh(const int                   num_omp_threads,
-                  TriMesh&                    input_mesh,
-                  RXMESH::RXMeshAttribute<T>& smoothed_coord)
+void mcf_openmesh(const int                    num_omp_threads,
+                  TriMesh&                     input_mesh,
+                  std::vector<std::vector<T>>& smoothed_coord)
 {
     // Report
     OpenMeshReport report("MCF_OpenMesh");
@@ -424,13 +412,6 @@ void mcf_openmesh(const int                   num_omp_threads,
     std::string method =
         "OpenMesh " + std::to_string(num_omp_threads) + " Core";
     report.add_member("method", method);
-    std::string order = "default";
-    if (Arg.shuffle) {
-        order = "shuffle";
-    } else if (Arg.sort) {
-        order = "sorted";
-    }
-    report.add_member("input_order", order);
     report.add_member("time_step", Arg.time_step);
     report.add_member("cg_tolerance", Arg.cg_tolerance);
     report.add_member("use_uniform_laplace", Arg.use_uniform_laplace);
@@ -438,26 +419,33 @@ void mcf_openmesh(const int                   num_omp_threads,
 
 
     // implicit smoothing
-    uint32_t             num_cg_iter_taken = 0;
-    float                time = 0;
-    RXMESH::Vector<3, T> start_residual;
-    RXMESH::Vector<3, T> stop_residual;
+    uint32_t num_cg_iter_taken = 0;
+    float    time              = 0;
+    T        start_residual;
+    T        stop_residual;
 
-    implicit_smoothing(input_mesh, smoothed_coord, num_cg_iter_taken, time,
-                       start_residual, stop_residual, num_omp_threads);
+    implicit_smoothing(input_mesh,
+                       smoothed_coord,
+                       num_cg_iter_taken,
+                       time,
+                       start_residual,
+                       stop_residual,
+                       num_omp_threads);
 
     RXMESH_TRACE(
         "mcf_openmesh() took {} (ms) and {} iterations (i.e., {} ms/iter) ",
-        time, num_cg_iter_taken, time / float(num_cg_iter_taken));
+        time,
+        num_cg_iter_taken,
+        time / float(num_cg_iter_taken));
 
 
     // write output
     //#pragma omp parallel for
     //    for (int v_id = 0; v_id < int(input_mesh.n_vertices()); ++v_id) {
     //        TriMesh::VertexIter v_iter = input_mesh.vertices_begin() + v_id;
-    //        input_mesh.point(*v_iter)[0] = smoothed_coord(v_id, 0);
-    //        input_mesh.point(*v_iter)[1] = smoothed_coord(v_id, 1);
-    //        input_mesh.point(*v_iter)[2] = smoothed_coord(v_id, 2);
+    //        input_mesh.point(*v_iter)[0] = smoothed_coord[v_id][0];
+    //        input_mesh.point(*v_iter)[1] = smoothed_coord[v_id][1];
+    //        input_mesh.point(*v_iter)[2] = smoothed_coord[v_id][2];
     //    }
     //    std::string fn = STRINGIFY(OUTPUT_DIR) "mcf_openmesh.obj";
     //    if (!OpenMesh::IO::write_mesh(input_mesh, fn)) {
@@ -465,17 +453,17 @@ void mcf_openmesh(const int                   num_omp_threads,
     //    }
 
     // Finalize report
-    report.add_member("start_residual", to_string(start_residual));
-    report.add_member("end_residual", to_string(stop_residual));
+    report.add_member("start_residual", start_residual);
+    report.add_member("end_residual", stop_residual);
     report.add_member("num_cg_iter_taken", num_cg_iter_taken);
     report.add_member("total_time (ms)", time);
-    RXMESH::TestData td;
-    td.test_name = "MCF";
+    rxmesh::TestData td;
+    td.test_name   = "MCF";
     td.num_threads = num_omp_threads;
     td.time_ms.push_back(time / float(num_cg_iter_taken));
     td.passed.push_back(true);
     report.add_test(td);
     report.write(
         Arg.output_folder + "/openmesh",
-        "MCF_OpenMesh_" + RXMESH::extract_file_name(Arg.obj_file_name));
+        "MCF_OpenMesh_" + rxmesh::extract_file_name(Arg.obj_file_name));
 }

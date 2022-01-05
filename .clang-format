@@ -4,14 +4,16 @@ BasedOnStyle:  Chromium
 TabWidth: 4
 UseTab: Never
 
+AlignConsecutiveAssignments: true
 AllowShortFunctionsOnASingleLine: false
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 AlwaysBreakTemplateDeclarations: true
 AlignTrailingComments: true
+BinPackArguments: false
 BinPackParameters: false
 BreakBeforeTernaryOperators: false
-ConstructorInitializerAllOnOneLineOrOnePerLine: false
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
 Cpp11BracedListStyle: true
 IndentCaseLabels: true
 IndentWidth:     4

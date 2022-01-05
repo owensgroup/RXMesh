@@ -4,9 +4,9 @@
 #include <cub/cub.cuh>
 #include "rxmesh/util/macros.h"
 
-namespace RXMESH {
+namespace rxmesh {
 /**
- * cub_block_exclusive_sum()
+ * @brief Compute block-wide exclusive sum using CUB
  */
 template <typename T, uint32_t blockThreads>
 __device__ __forceinline__ void cub_block_exclusive_sum(T*             data,
@@ -94,4 +94,4 @@ __device__ __forceinline__ void cub_block_exclusive_sum(T*             data,
     }*/
 }
 
-}  // namespace RXMESH
+}  // namespace rxmesh

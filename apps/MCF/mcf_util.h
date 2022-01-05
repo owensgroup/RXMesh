@@ -10,7 +10,7 @@ __host__ __device__ __forceinline__ void clamp_cot(T& v)
     // clamp cotangent values as if angles are in[1, 179]
 
     const T bound = 19.1;  // 3 degrees
-    v = (v < -bound) ? -bound : ((v > bound) ? bound : v);
+    v             = (v < -bound) ? -bound : ((v > bound) ? bound : v);
 }
 
 /**
@@ -18,14 +18,14 @@ __host__ __device__ __forceinline__ void clamp_cot(T& v)
  */
 template <typename T>
 __host__ __device__ __forceinline__ T
-partial_voronoi_area(const RXMESH::Vector<3, T>& p,  // center
-                     const RXMESH::Vector<3, T>& q,  // before center
-                     const RXMESH::Vector<3, T>& r)  // after center
+partial_voronoi_area(const rxmesh::Vector<3, T>& p,  // center
+                     const rxmesh::Vector<3, T>& q,  // before center
+                     const rxmesh::Vector<3, T>& r)  // after center
 
 {
     // compute partial Voronoi area of the center vertex that is associated with
     // the triangle p->q->r (oriented ccw)
-    using namespace RXMESH;
+    using namespace rxmesh;
 
     // Edge vector p->q
     const Vector<3, T> pq = q - p;
@@ -78,14 +78,14 @@ partial_voronoi_area(const RXMESH::Vector<3, T>& p,  // center
  */
 template <typename T>
 __host__ __device__ __forceinline__ T
-edge_cotan_weight(const RXMESH::Vector<3, T>& p,
-                  const RXMESH::Vector<3, T>& r,
-                  const RXMESH::Vector<3, T>& q,
-                  const RXMESH::Vector<3, T>& s)
+edge_cotan_weight(const rxmesh::Vector<3, T>& p,
+                  const rxmesh::Vector<3, T>& r,
+                  const rxmesh::Vector<3, T>& q,
+                  const rxmesh::Vector<3, T>& s)
 {
     // Get the edge weight between the two vertices p-r where
     // q and s composes the diamond around p-r
-    using namespace RXMESH;
+    using namespace rxmesh;
 
     auto partial_weight = [&](const Vector<3, T>& v) -> T {
         const Vector<3, T> d0 = p - v;

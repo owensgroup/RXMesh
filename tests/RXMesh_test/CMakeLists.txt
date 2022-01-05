@@ -3,7 +3,7 @@ add_executable( RXMesh_test )
 set( SOURCE_LIST
     rxmesh_test_main.cu
 	rxmesh_test.h
-    test_attribute.cu
+    test_attribute.cuh
 	test_vector.cu
     test_util.cu        
 	test_iterator.cu
@@ -11,6 +11,7 @@ set( SOURCE_LIST
 	test_higher_queries.h
 	query.cuh	
 	higher_query.cuh
+	test_for_each.h
 )
 
 target_sources( RXMesh_test 
@@ -20,7 +21,7 @@ target_sources( RXMesh_test
 
 set_target_properties( RXMesh_test PROPERTIES FOLDER "tests")
 
-#set_property(TARGET RXMesh_test PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+set_property(TARGET RXMesh_test PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "RXMesh_test" FILES ${SOURCE_LIST})
 

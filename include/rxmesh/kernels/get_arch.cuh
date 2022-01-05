@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 #include "rxmesh/util/macros.h"
 
-namespace RXMESH {
+namespace rxmesh {
 __global__ static void get_cude_arch_k(int* d_arch)
 {
 
@@ -24,4 +24,4 @@ inline int cuda_arch()
     cudaFree(d_arch);
     return h_arch;
 }
-}  // namespace RXMESH
+}  // namespace rxmesh

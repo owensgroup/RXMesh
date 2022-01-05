@@ -1,9 +1,9 @@
 #include "gtest/gtest.h"
 #include "rxmesh/util/vector.h"
 
-TEST(RXMESH, Vector)
+TEST(RXMesh, Vector)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
 
     // constrctors
     Vector3f v0(0.5f);

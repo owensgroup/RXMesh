@@ -4,7 +4,7 @@
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/macros.h"
 
-namespace RXMESH {
+namespace rxmesh {
 inline int convert_SMV_to_cores(int major, int minor)
 {
     // Taken from Nvidia helper_cuda.h to get the number of SM and cuda cores
@@ -29,7 +29,11 @@ inline int convert_SMV_to_cores(int major, int minor)
         {0x61, 128},  // Pascal Generation (SM 6.1) GP10x class
         {0x62, 128},  // Pascal Generation (SM 6.2) GP10x class
         {0x70, 64},   // Volta Generation (SM 7.0) GV100 class
-        {0x72, 64},  {0x75, 64}, {0x80, 64}, {0x86, 128}, {-1, -1}};
+        {0x72, 64},
+        {0x75, 64},
+        {0x80, 64},
+        {0x86, 128},
+        {-1, -1}};
 
     int index = 0;
 
@@ -44,7 +48,9 @@ inline int convert_SMV_to_cores(int major, int minor)
     // properly
     printf(
         "MapSMtoCores for SM %d.%d is undefined.  Default to use %d Cores/SM\n",
-        major, minor, nGpuArchCoresPerSM[index - 1].Cores);
+        major,
+        minor,
+        nGpuArchCoresPerSM[index - 1].Cores);
     return nGpuArchCoresPerSM[index - 1].Cores;
 }
 
@@ -61,37 +67,48 @@ cudaDeviceProp cuda_query(const int dev, bool quite = false)
             " a CUDA-supported GPU!!!");
     }
 
-    cudaSetDevice(dev);
-    cudaDeviceProp devProp;
+    CUDA_ERROR(cudaSetDevice(dev));
+    cudaDeviceProp dev_prop;
 
-    CUDA_ERROR(cudaGetDeviceProperties(&devProp, dev));
+    CUDA_ERROR(cudaGetDeviceProperties(&dev_prop, dev));
 
     if (!quite) {
 
         RXMESH_TRACE("Total number of device: {}", deviceCount);
         RXMESH_TRACE("Using device Number: {}", dev);
-        RXMESH_TRACE("Device name: {}", devProp.name);
-        RXMESH_TRACE("Compute Capability: {}.{}", (int)devProp.major,
-                     (int)devProp.minor);
+
+        RXMESH_TRACE("Device name: {}", dev_prop.name);
+        RXMESH_TRACE("Compute Capability: {}.{}",
+                     (int)dev_prop.major,
+                     (int)dev_prop.minor);
         RXMESH_TRACE("Total amount of global memory (MB): {0:.1f}",
-                     (float)devProp.totalGlobalMem / 1048576.0f);
+                     (float)dev_prop.totalGlobalMem / 1048576.0f);
         RXMESH_TRACE("{} Multiprocessors, {} CUDA Cores/MP: {} CUDA Cores",
-                     devProp.multiProcessorCount,
-                     convert_SMV_to_cores(devProp.major, devProp.minor),
-                     convert_SMV_to_cores(devProp.major, devProp.minor) *
-                         devProp.multiProcessorCount);
+                     dev_prop.multiProcessorCount,
+                     convert_SMV_to_cores(dev_prop.major, dev_prop.minor),
+                     convert_SMV_to_cores(dev_prop.major, dev_prop.minor) *
+                         dev_prop.multiProcessorCount);
+        RXMESH_TRACE("ECC support: {}",
+                     (dev_prop.ECCEnabled ? "Enabled" : "Disabled"));
         RXMESH_TRACE("GPU Max Clock rate: {0:.1f} MHz ({1:.2f} GHz)",
-                     devProp.clockRate * 1e-3f, devProp.clockRate * 1e-6f);
+                     dev_prop.clockRate * 1e-3f,
+                     dev_prop.clockRate * 1e-6f);
         RXMESH_TRACE("Memory Clock rate: {0:.1f} Mhz",
-                     devProp.memoryClockRate * 1e-3f);
-        RXMESH_TRACE("Memory Bus Width:  {}-bit", devProp.memoryBusWidth);
-        const double maxBW = 2.0 * devProp.memoryClockRate *
-                             (devProp.memoryBusWidth / 8.0) / 1.0E6;
+                     dev_prop.memoryClockRate * 1e-3f);
+        RXMESH_TRACE("Memory Bus Width:  {}-bit", dev_prop.memoryBusWidth);
+        const double maxBW = 2.0 * dev_prop.memoryClockRate *
+                             (dev_prop.memoryBusWidth / 8.0) / 1.0E6;
         RXMESH_TRACE("Peak Memory Bandwidth: {0:f}(GB/s)", maxBW);
         RXMESH_TRACE("Kernels compiled for compute capability: {}",
                      cuda_arch());
     }
 
-    return devProp;
+    if (!dev_prop.managedMemory) {
+        RXMESH_ERROR(
+            "The selected device does not support CUDA unified memory");
+        exit(EXIT_FAILURE);
+    }
+
+    return dev_prop;
 }
-}  // namespace RXMESH
+}  // namespace rxmesh

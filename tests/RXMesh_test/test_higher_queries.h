@@ -1,63 +1,57 @@
 #include "gtest/gtest.h"
 #include "higher_query.cuh"
-#include "rxmesh/rxmesh_attribute.h"
+#include "rxmesh/attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh_test.h"
 
-using namespace RXMESH;
-
-TEST(RXMesh, HigherQueries)
+TEST(RXMeshStatic, HigherQueries)
 {
+    using namespace rxmesh;
+
     // Select device
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
+    std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
-    if (!import_obj(rxmesh_args.obj_file_name, Verts, Faces,
-                    rxmesh_args.quite)) {
-        exit(EXIT_FAILURE);
-    }
+    ASSERT_TRUE(import_obj(
+        STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, rxmesh_args.quite));
 
     // RXMesh
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, Verts, false,
-                                           rxmesh_args.quite);
+    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
 
-    uint32_t input_size = rxmesh_static.get_num_vertices();
 
     // input/output container
-    RXMeshAttribute<uint32_t> input_container;
-    input_container.init(input_size, 1u, RXMESH::DEVICE, RXMESH::AoS, false,
-                         false);
+    auto input = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
+    input->reset(VertexHandle(), rxmesh::DEVICE);
 
-    RXMeshAttribute<uint32_t> output_container;
-    output_container.init(input_size,
-                          input_size,  // that is a bit excessive
-                          RXMESH::DEVICE, RXMESH::SoA, false, false);
+    // we assume that every vertex could store up to num_vertices as its
+    // neighbor vertices which is a bit excessive
+    auto output = rxmesh.add_vertex_attribute<VertexHandle>(
+        "output", rxmesh.get_num_vertices());
+    output->reset(VertexHandle(), rxmesh::DEVICE);
 
     // launch box
-    constexpr uint32_t      blockThreads = 512;
+    constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
-    rxmesh_static.prepare_launch_box(Op::VV, launch_box, true, false);
+    rxmesh.prepare_launch_box(
+        Op::VV, launch_box, (void*)higher_query<blockThreads, Op::VV>, false);
 
-    output_container.reset(INVALID32, RXMESH::DEVICE);
-    input_container.reset(INVALID32, RXMESH::DEVICE);
 
-    ::RXMeshTest tester(true);
+    RXMeshTest tester(rxmesh, Faces, true);
 
     // launch
-    higher_query<Op::VV, blockThreads>
+    higher_query<blockThreads, Op::VV>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh_static.get_context(), input_container, output_container);
+            rxmesh.get_context(), *input, *output);
+
+    CUDA_ERROR(cudaGetLastError());
+    CUDA_ERROR(cudaDeviceSynchronize());
 
     // move containers to the CPU for testing
-    output_container.move(RXMESH::DEVICE, RXMESH::HOST);
-    input_container.move(RXMESH::DEVICE, RXMESH::HOST);
+    output->move(rxmesh::DEVICE, rxmesh::HOST);
+    input->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // verify
-    EXPECT_TRUE(tester.run_higher_query_verifier(rxmesh_static, input_container,
-                                                 output_container));
-
-
-    input_container.release();
-    output_container.release();
+    EXPECT_TRUE(tester.run_test(rxmesh, Faces, *input, *output, true));
 }

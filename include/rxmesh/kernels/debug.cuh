@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include "cuda_runtime.h"
 
-namespace RXMESH {
+namespace rxmesh {
 
 /**
  * print_arr_uint()
@@ -11,7 +11,7 @@ template <typename T>
 __device__ void print_arr_uint(char     msg[],
                                uint32_t size,
                                T*       arr,
-                               uint32_t block_id = 0,
+                               uint32_t block_id  = 0,
                                uint32_t thread_id = 0)
 {
     if (blockIdx.x == block_id && threadIdx.x == thread_id) {
@@ -59,4 +59,4 @@ __device__ __forceinline__ unsigned total_smem_size()
     asm volatile("mov.u32 %0, %total_smem_size;" : "=r"(ret));
     return ret;
 }
-}  // namespace RXMESH
+}  // namespace rxmesh

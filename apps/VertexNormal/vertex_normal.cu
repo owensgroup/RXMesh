@@ -4,7 +4,7 @@
 
 #include <cuda_profiler_api.h>
 #include "gtest/gtest.h"
-#include "rxmesh/rxmesh_attribute.h"
+#include "rxmesh/attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/report.h"
@@ -16,22 +16,20 @@ struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    num_run = 1;
-    uint32_t    device_id = 0;
+    uint32_t    num_run       = 1;
+    uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
-    bool        shuffle = false;
-    bool        sort = false;
 } Arg;
 
 #include "vertex_normal_hardwired.cuh"
 
-template <typename T, uint32_t patchSize>
-void vertex_normal_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
+template <typename T>
+void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
                           const std::vector<std::vector<T>>& Verts,
                           const std::vector<T>&              vertex_normal_gold)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
     // Report
@@ -39,53 +37,41 @@ void vertex_normal_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
     report.command_line(Arg.argc, Arg.argv);
     report.device();
     report.system();
-    report.model_data(Arg.obj_file_name, rxmesh_static);
+    report.model_data(Arg.obj_file_name, rxmesh);
     report.add_member("method", std::string("RXMesh"));
-    std::string order = "default";
-    if (Arg.shuffle) {
-        order = "shuffle";
-    } else if (Arg.sort) {
-        order = "sorted";
-    }
-    report.add_member("input_order", order);
     report.add_member("blockThreads", blockThreads);
 
-    RXMeshAttribute<T> coords;
-    coords.set_name("coord");
-    coords.init(Verts.size(), 3u, RXMESH::LOCATION_ALL);
-    // fill in the coordinates
-    for (uint32_t i = 0; i < Verts.size(); ++i) {
-        for (uint32_t j = 0; j < Verts[i].size(); ++j) {
-            coords(i, j) = Verts[i][j];
-        }
-    }
-    // move the coordinates to device
-    coords.move(RXMESH::HOST, RXMESH::DEVICE);
+    auto coords = rxmesh.add_vertex_attribute<T>(Verts, "coordinates");
 
 
     // normals
-    RXMeshAttribute<T> rxmesh_normal;
-    rxmesh_normal.set_name("normal");
-    rxmesh_normal.init(coords.get_num_mesh_elements(), 3u,
-                       RXMESH::LOCATION_ALL);
+    auto v_normals =
+        rxmesh.add_vertex_attribute<T>("v_normals", 3, rxmesh::LOCATION_ALL);
 
     // launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh_static.prepare_launch_box(RXMESH::Op::FV, launch_box);
+    rxmesh.prepare_launch_box(
+        rxmesh::Op::FV, launch_box, (void*)compute_vertex_normal<T, blockThreads>);
 
 
     TestData td;
-    td.test_name = "VertexNormal";
+    td.test_name   = "VertexNormal";
+    td.num_threads = launch_box.num_threads;
+    td.num_blocks  = launch_box.blocks;
+    td.dyn_smem    = launch_box.smem_bytes_dyn;
+    td.static_smem = launch_box.smem_bytes_static;
+    td.num_reg     = launch_box.num_registers_per_thread;
 
     float vn_time = 0;
     for (uint32_t itr = 0; itr < Arg.num_run; ++itr) {
-        rxmesh_normal.reset(0, RXMESH::DEVICE);
+        v_normals->reset(0, rxmesh::DEVICE);
         GPUTimer timer;
         timer.start();
 
-        compute_vertex_normal<T, blockThreads>
-            <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-                rxmesh_static.get_context(), coords, rxmesh_normal);
+        compute_vertex_normal<T, blockThreads><<<launch_box.blocks,
+                                                 launch_box.num_threads,
+                                                 launch_box.smem_bytes_dyn>>>(
+            rxmesh.get_context(), *coords, *v_normals);
 
         timer.stop();
         CUDA_ERROR(cudaDeviceSynchronize());
@@ -99,17 +85,17 @@ void vertex_normal_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
                  vn_time / Arg.num_run);
 
     // Verify
-    rxmesh_normal.move(RXMESH::DEVICE, RXMESH::HOST);
+    v_normals->move(rxmesh::DEVICE, rxmesh::HOST);
 
-    bool passed = compare(vertex_normal_gold.data(),
-                          rxmesh_normal.get_pointer(RXMESH::HOST),
-                          coords.get_num_mesh_elements() * 3, false);
-    td.passed.push_back(passed);
-    EXPECT_TRUE(passed) << " RXMesh Validation failed \n";
+    rxmesh.for_each_vertex(HOST, [&](const VertexHandle& vh) {
+        uint32_t v_id = rxmesh.map_to_global(vh);
 
-    // Release allocation
-    rxmesh_normal.release();
-    coords.release();
+        for (uint32_t i = 0; i < 3; ++i) {
+            EXPECT_NEAR(std::abs(vertex_normal_gold[v_id * 3 + i]),
+                        std::abs((*v_normals)(vh, i)),
+                        0.0001);
+        }
+    });
 
     // Finalize report
     report.add_test(td);
@@ -119,16 +105,8 @@ void vertex_normal_rxmesh(RXMESH::RXMeshStatic<patchSize>&   rxmesh_static,
 
 TEST(Apps, VertexNormal)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     using dataT = float;
-
-    if (Arg.shuffle) {
-        ASSERT_FALSE(Arg.sort) << " cannot shuffle and sort at the same time!";
-    }
-    if (Arg.sort) {
-        ASSERT_FALSE(Arg.shuffle)
-            << " cannot shuffle and sort at the same time!";
-    }
 
     // Select device
     cuda_query(Arg.device_id);
@@ -139,28 +117,23 @@ TEST(Apps, VertexNormal)
 
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
-    if (Arg.shuffle) {
-        shuffle_obj(Faces, Verts);
-    }
 
-    // Create RXMeshStatic instance. If Arg.sort is true, Faces and Verts will
-    // be sorted based on the patching happening inside RXMesh
-    RXMeshStatic<PATCH_SIZE> rxmesh_static(Faces, Verts, Arg.sort, false);
+    RXMeshStatic rxmesh(Faces, false);
 
-    //*** Serial reference
+    // Serial reference
     std::vector<dataT> vertex_normal_gold(3 * Verts.size());
     vertex_normal_ref(Faces, Verts, vertex_normal_gold);
 
-    //*** RXMesh Impl
-    vertex_normal_rxmesh(rxmesh_static, Verts, vertex_normal_gold);
+    // RXMesh Impl
+    vertex_normal_rxmesh(rxmesh, Verts, vertex_normal_gold);
 
-    //*** Hardwired Impl
+    // Hardwired Impl
     vertex_normal_hardwired(Faces, Verts, vertex_normal_gold);
 }
 
 int main(int argc, char** argv)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
     Log::init();
 
     ::testing::InitGoogleTest(&argc, argv);
@@ -177,8 +150,6 @@ int main(int argc, char** argv)
                         "              Hint: Only accepts OBJ files\n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -num_run:    Number of iterations for performance testing. Default is {} \n"                        
-                        " -s:          Shuffle input. Default is false.\n"
-                        " -p:          Sort input using patching output. Default is false.\n"
                         " -device_id:  GPU device ID. Default is {}",
             Arg.obj_file_name, Arg.output_folder, Arg.num_run, Arg.device_id);
             // clang-format on
@@ -200,12 +171,6 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-device_id")) {
             Arg.device_id =
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-s")) {
-            Arg.shuffle = true;
-        }
-        if (cmd_option_exists(argv, argc + argv, "-p")) {
-            Arg.sort = true;
         }
     }
 

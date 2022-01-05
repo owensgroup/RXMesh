@@ -3,47 +3,34 @@
 #include <assert.h>
 #include <stdint.h>
 
-#include "rxmesh/kernels/rxmesh_iterator.cuh"
-#include "rxmesh/kernels/rxmesh_query_dispatcher.cuh"
-#include "rxmesh/rxmesh.h"
-#include "rxmesh/rxmesh_attribute.h"
-#include "rxmesh/rxmesh_context.h"
+#include "rxmesh/attribute.h"
+#include "rxmesh/context.h"
+#include "rxmesh/iterator.cuh"
+#include "rxmesh/kernels/query_dispatcher.cuh"
+
 
 /**
- * query()
+ * @brief perform query of type of and store the output as well as the
+ * corresponding input
  */
-template <RXMESH::Op op, uint32_t blockThreads>
-__launch_bounds__(blockThreads) __global__
-    static void query(const RXMESH::RXMeshContext       context,
-                      RXMESH::RXMeshAttribute<uint32_t> d_src,
-                      RXMESH::RXMeshAttribute<uint32_t> output_container,
-                      const bool                        oriented = false)
+template <uint32_t   blockThreads,
+          rxmesh::Op op,
+          typename InputHandleT,
+          typename OutputHandleT,
+          typename InputAttributeT,
+          typename OutputAttributeT>
+__global__ static void query_kernel(const rxmesh::Context context,
+                                    InputAttributeT       input,
+                                    OutputAttributeT      output,
+                                    const bool            oriented = false)
 {
-    using namespace RXMESH;
+    using namespace rxmesh;
 
-    static_assert(op != Op::EE, "Op::EE is not supported!");
-
-    assert(output_container.is_device_allocated());
-
-    uint32_t block_offset = 0;
-    if constexpr (op == Op::EV || op == Op::EF) {
-        block_offset = context.get_edge_distribution()[blockIdx.x];
-    } else if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
-        block_offset = context.get_face_distribution()[blockIdx.x];
-    } else if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
-        block_offset = context.get_vertex_distribution()[blockIdx.x];
-    }
-
-    auto store_lambda = [&](uint32_t id, RXMeshIterator& iter) {
-        assert(iter.size() < output_container.get_num_attribute_per_element());
-
-        uint32_t id_offset = block_offset + iter.local_id();
-        d_src(id_offset) = id;
-
-        output_container(id_offset, 0) = iter.size();
+    auto store_lambda = [&](InputHandleT& id, Iterator<OutputHandleT>& iter) {
+        input(id) = id;
 
         for (uint32_t i = 0; i < iter.size(); ++i) {
-            output_container(id_offset, i + 1) = iter[i];
+            output(id, i) = iter[i];
         }
     };
 
