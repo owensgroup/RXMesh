@@ -5,7 +5,7 @@ if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
 endif()
 
 project(RXMesh 
-        VERSION 0.1.0 
+        VERSION 0.2.0 
         LANGUAGES C CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
