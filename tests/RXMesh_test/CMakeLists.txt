@@ -12,6 +12,8 @@ set( SOURCE_LIST
 	query.cuh	
 	higher_query.cuh
 	test_for_each.h
+	test_edge_flip.h
+	edge_flip.cuh
 )
 
 target_sources( RXMesh_test 
