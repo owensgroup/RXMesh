@@ -174,30 +174,43 @@ class RXMeshStatic : public RXMesh
     /**
      * @brief populate the launch_box with grid size and dynamic shared memory
      * needed for kernel launch
-     * TODO provide variadic version of this function that can accept multiple
-     * ops
-     * @param op Query operation done inside this the kernel
+     * @param op List of query operations done inside this the kernel
      * @param launch_box input launch box to be populated
-     * @param is_higher_query if the query done will be a higher ordered e.g.,
-     * k-ring
      * @param oriented if the query is oriented. Valid only for Op::VV queries
      */
     template <uint32_t blockThreads>
-    void prepare_launch_box(const Op                 op,
+    void prepare_launch_box(const std::vector<Op>    op,
                             LaunchBox<blockThreads>& launch_box,
                             const void*              kernel,
                             const bool               oriented = false) const
     {
         static_assert(
             blockThreads && ((blockThreads & (blockThreads - 1)) == 0),
-            " RXMeshStatic::prepare_launch_box() CUDA block size "
-            "should be of power "
-            "2. ");
+            " RXMeshStatic::prepare_launch_box() CUDA block size should be of "
+            "power 2");
 
-        launch_box.blocks = this->m_num_patches;
+        launch_box.blocks         = this->m_num_patches;
+        launch_box.smem_bytes_dyn = 0;
 
-        this->template calc_shared_memory<blockThreads>(
-            op, launch_box, kernel, oriented);
+        for (auto o : op) {
+            launch_box.smem_bytes_dyn =
+                std::max(launch_box.smem_bytes_dyn,
+                         this->template calc_shared_memory<blockThreads>(
+                             o, kernel, oriented));
+        }
+
+        if (!this->m_quite) {
+            RXMESH_TRACE(
+                "RXMeshStatic::calc_shared_memory() launching {} blocks with "
+                "{} threads on the device",
+                launch_box.blocks,
+                blockThreads);
+        }
+
+        check_shared_memory(launch_box.smem_bytes_dyn,
+                            launch_box.smem_bytes_static,
+                            launch_box.num_registers_per_thread,
+                            kernel);
     }
 
 
@@ -238,14 +251,54 @@ class RXMeshStatic : public RXMesh
      * @param layout as SoA or AoS
      * operations
      * @return shared pointer to the created attribute
-     * TODO implement this
      */
     template <class T>
-    std::shared_ptr<VertexAttribute<T>> add_face_attribute(
+    std::shared_ptr<FaceAttribute<T>> add_face_attribute(
         const std::vector<std::vector<T>>& f_attributes,
         const std::string&                 name,
         layoutT                            layout = SoA)
     {
+        if (f_attributes.empty()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::add_face_attribute() input attribute is empty");
+        }
+
+        if (f_attributes.size() != get_num_faces()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::add_face_attribute() input attribute size ({}) "
+                "is not the same as number of faces in the input mesh ({})",
+                f_attributes.size(),
+                get_num_faces());
+        }
+
+        uint32_t num_attributes = f_attributes[0].size();
+
+        auto ret = m_attr_container->template add<FaceAttribute<T>>(
+            name.c_str(),
+            this->m_h_num_owned_f,
+            num_attributes,
+            LOCATION_ALL,
+            layout);
+
+        // populate the attribute before returning it
+        const int num_patches = this->get_num_patches();
+#pragma omp parallel for
+        for (int p = 0; p < num_patches; ++p) {
+            for (uint16_t f = 0; f < this->m_h_num_owned_f[p]; ++f) {
+
+                const FaceHandle f_handle(static_cast<uint32_t>(p), f);
+
+                uint32_t global_f = m_h_patches_ltog_f[p][f];
+
+                for (uint32_t a = 0; a < num_attributes; ++a) {
+                    (*ret)(f_handle, a) = f_attributes[global_f][a];
+                }
+            }
+        }
+
+        // move to device
+        ret->move(rxmesh::HOST, rxmesh::DEVICE);
+        return ret;
     }
 
     /**
@@ -259,14 +312,52 @@ class RXMeshStatic : public RXMesh
      * @param layout as SoA or AoS
      * operations
      * @return shared pointer to the created attribute
-     * TODO implement this
      */
     template <class T>
-    std::shared_ptr<VertexAttribute<T>> add_face_attribute(
+    std::shared_ptr<FaceAttribute<T>> add_face_attribute(
         const std::vector<T>& f_attributes,
         const std::string&    name,
         layoutT               layout = SoA)
     {
+        if (f_attributes.empty()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::add_face_attribute() input attribute is empty");
+        }
+
+        if (f_attributes.size() != get_num_faces()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::add_face_attribute() input attribute size ({}) "
+                "is not the same as number of faces in the input mesh ({})",
+                f_attributes.size(),
+                get_num_faces());
+        }
+
+        uint32_t num_attributes = 1;
+
+        auto ret = m_attr_container->template add<FaceAttribute<T>>(
+            name.c_str(),
+            this->m_h_num_owned_f,
+            num_attributes,
+            LOCATION_ALL,
+            layout);
+
+        // populate the attribute before returning it
+        const int num_patches = this->get_num_patches();
+#pragma omp parallel for
+        for (int p = 0; p < num_patches; ++p) {
+            for (uint16_t f = 0; f < this->m_h_num_owned_f[p]; ++f) {
+
+                const FaceHandle f_handle(static_cast<uint32_t>(p), f);
+
+                uint32_t global_f = m_h_patches_ltog_f[p][f];
+
+                (*ret)(f_handle, 0) = f_attributes[global_f];
+            }
+        }
+
+        // move to device
+        ret->move(rxmesh::HOST, rxmesh::DEVICE);
+        return ret;
     }
 
     /**
@@ -567,10 +658,9 @@ class RXMeshStatic : public RXMesh
 
    protected:
     template <uint32_t blockThreads>
-    void calc_shared_memory(const Op                 op,
-                            LaunchBox<blockThreads>& launch_box,
-                            const void*              kernel,
-                            const bool               oriented = false) const
+    size_t calc_shared_memory(const Op    op,
+                              const void* kernel,
+                              const bool  oriented = false) const
     {
         // Operations that uses matrix transpose needs a template parameter
         // that is by default TRANSPOSE_ITEM_PER_THREAD. Here we check if
@@ -611,31 +701,27 @@ class RXMeshStatic : public RXMesh
                 "output (VV) for input with boundaries");
         }
 
-        launch_box.smem_bytes_dyn = 0;
+        size_t dynamic_smem = 0;
 
         if (op == Op::FE) {
             // only FE will be loaded
-            launch_box.smem_bytes_dyn =
-                3 * this->m_max_faces_per_patch * sizeof(uint16_t);
+            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
             // to load not-owned edges local and patch id
-            launch_box.smem_bytes_dyn +=
-                this->m_max_not_owned_edges *
-                    (sizeof(uint16_t) + sizeof(uint32_t)) +
-                sizeof(uint16_t);
+            dynamic_smem += this->m_max_not_owned_edges *
+                                (sizeof(uint16_t) + sizeof(uint32_t)) +
+                            sizeof(uint16_t);
         } else if (op == Op::EV) {
             // only EV will be loaded
-            launch_box.smem_bytes_dyn =
-                2 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            dynamic_smem = 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
             // to load not-owned vertices local and patch id
-            launch_box.smem_bytes_dyn += this->m_max_not_owned_vertices *
-                                         (sizeof(uint16_t) + sizeof(uint32_t));
+            dynamic_smem += this->m_max_not_owned_vertices *
+                            (sizeof(uint16_t) + sizeof(uint32_t));
         } else if (op == Op::FV) {
             // We load both FE and EV. We don't change EV.
             // FE are updated to contain FV instead of FE by reading from
             // EV
-            launch_box.smem_bytes_dyn =
-                3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
-                2 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
+                           2 * this->m_max_edges_per_patch * sizeof(uint16_t);
             // no need for extra memory to load not-owned vertices local and
             // patch id. We load them and overwrite EV.
             const uint32_t not_owned_v_bytes =
@@ -644,7 +730,7 @@ class RXMeshStatic : public RXMesh
             const uint32_t edges_bytes =
                 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
             if (not_owned_v_bytes > edges_bytes) {
-                // launch_box.smem_bytes_dyn += not_owned_v_bytes - edges_bytes;
+                // dynamic_smem += not_owned_v_bytes - edges_bytes;
                 RXMESH_ERROR(
                     "RXMeshStatic::calc_shared_memory() FV query might fail!");
             }
@@ -656,41 +742,40 @@ class RXMeshStatic : public RXMesh
             // The output will be stored in another buffer with size equal to
             // the EV (i.e., 2*#edges) since this output buffer will stored the
             // nnz and the nnz of a matrix the same before/after transpose
-            launch_box.smem_bytes_dyn =
+            dynamic_smem =
                 (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t) +
                 sizeof(uint16_t);
 
             // to load the not-owned edges local and patch id
-            launch_box.smem_bytes_dyn += this->m_max_not_owned_edges *
-                                         (sizeof(uint16_t) + sizeof(uint32_t));
+            dynamic_smem += this->m_max_not_owned_edges *
+                            (sizeof(uint16_t) + sizeof(uint32_t));
         } else if (op == Op::EF) {
             // same as Op::VE but with faces
-            launch_box.smem_bytes_dyn =
+            dynamic_smem =
                 (2 * 3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
                 sizeof(uint16_t) + sizeof(uint16_t);
 
             // to load the not-owned faces local and patch id
-            launch_box.smem_bytes_dyn += this->m_max_not_owned_faces *
-                                         (sizeof(uint16_t) + sizeof(uint32_t));
+            dynamic_smem += this->m_max_not_owned_faces *
+                            (sizeof(uint16_t) + sizeof(uint32_t));
         } else if (op == Op::VF) {
             // load EV and FE simultaneously. changes FE to FV using EV. Then
             // transpose FV in place and use EV to store the values/output while
             // using FV to store the prefix sum. Thus, the space used to store
             // EV should be max(3*#faces, 2*#edges)
-            launch_box.smem_bytes_dyn =
-                3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
-                std::max(3 * this->m_max_faces_per_patch,
-                         2 * this->m_max_edges_per_patch) *
-                    sizeof(uint16_t) +
-                sizeof(uint16_t);
+            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
+                           std::max(3 * this->m_max_faces_per_patch,
+                                    2 * this->m_max_edges_per_patch) *
+                               sizeof(uint16_t) +
+                           sizeof(uint16_t);
 
             // to load the not-owned faces local and patch id
-            launch_box.smem_bytes_dyn += this->m_max_not_owned_faces *
-                                         (sizeof(uint16_t) + sizeof(uint32_t));
+            dynamic_smem += this->m_max_not_owned_faces *
+                            (sizeof(uint16_t) + sizeof(uint32_t));
         } else if (op == Op::VV) {
             // similar to VE but we also need to store the EV even after
             // we do the transpose
-            launch_box.smem_bytes_dyn =
+            dynamic_smem =
                 (3 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
             // no need for extra memory to load not-owned local and patch id.
             // We load them and overwrite the extra EV
@@ -708,12 +793,10 @@ class RXMeshStatic : public RXMesh
             // Since we have so many boundary faces (due to ribbons), they will
             // make up this averaging
 
-            launch_box.smem_bytes_dyn =
-                (3 * this->m_max_faces_per_patch +        // FE
-                 2 * (3 * this->m_max_faces_per_patch) +  // EF
-                 4 * this->m_max_faces_per_patch          // FF
-                 ) *
-                sizeof(uint16_t);
+            dynamic_smem = (3 * this->m_max_faces_per_patch +        // FE
+                            2 * (3 * this->m_max_faces_per_patch) +  // EF
+                            4 * this->m_max_faces_per_patch) *       // FF
+                           sizeof(uint16_t);
             // no need for extra memory to load not-owned faces local and
             // patch id. We load them and overwrite FE.
         }
@@ -725,30 +808,14 @@ class RXMeshStatic : public RXMesh
             // Since oriented is only done on manifold, EF needs only
             // 2*max_num_edges since every edge is neighbor to maximum of two
             // faces (which we write on the same place as the extra EV)
-            launch_box.smem_bytes_dyn +=
+            dynamic_smem +=
                 (3 * this->m_max_faces_per_patch) * sizeof(uint16_t);
         }
 
-
-        check_shared_memory<blockThreads>(op,
-                                          launch_box.smem_bytes_dyn,
-                                          launch_box.smem_bytes_static,
-                                          launch_box.num_registers_per_thread,
-                                          kernel);
-
-
-        if (!this->m_quite) {
-            RXMESH_TRACE(
-                "RXMeshStatic::calc_shared_memory() launching {} blocks with "
-                "{} threads on the device",
-                launch_box.blocks,
-                blockThreads);
-        }
+        return dynamic_smem;
     }
 
-    template <uint32_t threads>
-    void check_shared_memory(const Op       op,
-                             const uint32_t smem_bytes_dyn,
+    void check_shared_memory(const uint32_t smem_bytes_dyn,
                              size_t&        smem_bytes_static,
                              uint32_t&      num_reg_per_thread,
                              const void*    kernel) const
@@ -767,10 +834,9 @@ class RXMeshStatic : public RXMesh
 
         if (!this->m_quite) {
             RXMESH_TRACE(
-                "RXMeshStatic::check_shared_memory() user function with {} "
-                "requires shared memory = {} (dynamic) + {} (static) = {} "
-                "(bytes) and {} registers per thread",
-                op_to_string(op),
+                "RXMeshStatic::check_shared_memory() user function requires "
+                "shared memory = {} (dynamic) + {} (static) = {} (bytes) and "
+                "{} registers per thread",
                 smem_bytes_dyn,
                 smem_bytes_static,
                 smem_bytes_dyn + smem_bytes_static,
