@@ -238,14 +238,54 @@ class RXMeshStatic : public RXMesh
      * @param layout as SoA or AoS
      * operations
      * @return shared pointer to the created attribute
-     * TODO implement this
      */
     template <class T>
-    std::shared_ptr<VertexAttribute<T>> add_face_attribute(
+    std::shared_ptr<FaceAttribute<T>> add_face_attribute(
         const std::vector<std::vector<T>>& f_attributes,
         const std::string&                 name,
         layoutT                            layout = SoA)
     {
+        if (f_attributes.empty()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::add_face_attribute() input attribute is empty");
+        }
+
+        if (f_attributes.size() != get_num_faces()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::add_face_attribute() input attribute size ({}) "
+                "is not the same as number of faces in the input mesh ({})",
+                f_attributes.size(),
+                get_num_faces());
+        }
+
+        uint32_t num_attributes = f_attributes[0].size();
+
+        auto ret = m_attr_container->template add<FaceAttribute<T>>(
+            name.c_str(),
+            this->m_h_num_owned_f,
+            num_attributes,
+            LOCATION_ALL,
+            layout);
+
+        // populate the attribute before returning it
+        const int num_patches = this->get_num_patches();
+#pragma omp parallel for
+        for (int p = 0; p < num_patches; ++p) {
+            for (uint16_t f = 0; f < this->m_h_num_owned_f[p]; ++f) {
+
+                const FaceHandle f_handle(static_cast<uint32_t>(p), f);
+
+                uint32_t global_f = m_h_patches_ltog_f[p][f];
+
+                for (uint32_t a = 0; a < num_attributes; ++a) {
+                    (*ret)(f_handle, a) = f_attributes[global_f][a];
+                }
+            }
+        }
+
+        // move to device
+        ret->move(rxmesh::HOST, rxmesh::DEVICE);
+        return ret;
     }
 
     /**
@@ -259,14 +299,52 @@ class RXMeshStatic : public RXMesh
      * @param layout as SoA or AoS
      * operations
      * @return shared pointer to the created attribute
-     * TODO implement this
      */
     template <class T>
-    std::shared_ptr<VertexAttribute<T>> add_face_attribute(
+    std::shared_ptr<FaceAttribute<T>> add_face_attribute(
         const std::vector<T>& f_attributes,
         const std::string&    name,
         layoutT               layout = SoA)
     {
+        if (f_attributes.empty()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::add_face_attribute() input attribute is empty");
+        }
+
+        if (f_attributes.size() != get_num_faces()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::add_face_attribute() input attribute size ({}) "
+                "is not the same as number of faces in the input mesh ({})",
+                f_attributes.size(),
+                get_num_faces());
+        }
+
+        uint32_t num_attributes = 1;
+
+        auto ret = m_attr_container->template add<FaceAttribute<T>>(
+            name.c_str(),
+            this->m_h_num_owned_f,
+            num_attributes,
+            LOCATION_ALL,
+            layout);
+
+        // populate the attribute before returning it
+        const int num_patches = this->get_num_patches();
+#pragma omp parallel for
+        for (int p = 0; p < num_patches; ++p) {
+            for (uint16_t f = 0; f < this->m_h_num_owned_f[p]; ++f) {
+
+                const FaceHandle f_handle(static_cast<uint32_t>(p), f);
+
+                uint32_t global_f = m_h_patches_ltog_f[p][f];
+
+                (*ret)(f_handle, 0) = f_attributes[global_f];
+            }
+        }
+
+        // move to device
+        ret->move(rxmesh::HOST, rxmesh::DEVICE);
+        return ret;
     }
 
     /**
