@@ -36,7 +36,7 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(rxmesh::Op::VV,
+    rxmesh.prepare_launch_box({rxmesh::Op::VV},
                               launch_box,
                               (void*)relax_ptp_rxmesh<T, blockThreads>,
                               true);

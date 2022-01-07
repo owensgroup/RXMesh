@@ -102,11 +102,11 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box_init_B;
     LaunchBox<blockThreads> launch_box_matvec;
-    rxmesh.prepare_launch_box(rxmesh::Op::VV,
+    rxmesh.prepare_launch_box({rxmesh::Op::VV},
                               launch_box_init_B,
                               (void*)init_B<T, blockThreads>,
                               true);
-    rxmesh.prepare_launch_box(rxmesh::Op::VV,
+    rxmesh.prepare_launch_box({rxmesh::Op::VV},
                               launch_box_matvec,
                               (void*)rxmesh_matvec<T, blockThreads>,
                               true);
