@@ -44,7 +44,7 @@ TEST(RXMeshStatic, Oriented_VV)
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
     rxmesh.prepare_launch_box(
-        Op::VV,
+        {Op::VV},
         launch_box,
         (void*)query_kernel<blockThreads,
                             Op::VV,
@@ -131,7 +131,7 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
     // launch box
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(op,
+    rxmesh.prepare_launch_box({op},
                               launch_box,
                               (void*)query_kernel<blockThreads,
                                                   op,
