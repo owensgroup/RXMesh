@@ -16,5 +16,8 @@ TEST(RXMeshDynamic, EdgeFlip)
 
     RXMeshDynamic rxmesh(Faces, rxmesh_args.quite);
 
+    constexpr uint32_t blockThreads = 256;
 
+    edge_flip<blockThreads>
+        <<<rxmesh.get_num_patches(), blockThreads>>>(rxmesh.get_context());
 }

@@ -7,4 +7,15 @@ template <uint32_t blockThreads>
 __global__ static void edge_flip(rxmesh::Context context)
 {
     using namespace rxmesh;
+
+    // flip one edge (the edge assigned to thread 0) in each patch
+    auto should_flip = [&](const EdgeHandle& edge) -> bool {
+        if (threadIdx.x == 0) {
+            return true;
+        } else {
+            return false;
+        }
+    };
+
+    edge_flip_block_dispatcher<blockThreads>(context, should_flip);
 }

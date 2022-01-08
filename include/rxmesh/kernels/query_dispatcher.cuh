@@ -158,7 +158,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     uint32_t* not_owned_patch(nullptr);
     uint16_t* not_owned_local_id(nullptr);
 
-    detail::template query_block_dispatcher<op, blockThreads>(
+    query_block_dispatcher<op, blockThreads>(
         context.get_patches_info()[patch_id],
         compute_active_set,
         oriented,
