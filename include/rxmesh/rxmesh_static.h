@@ -193,10 +193,9 @@ class RXMeshStatic : public RXMesh
         launch_box.smem_bytes_dyn = 0;
 
         for (auto o : op) {
-            launch_box.smem_bytes_dyn =
-                std::max(launch_box.smem_bytes_dyn,
-                         this->template calc_shared_memory<blockThreads>(
-                             o, kernel, oriented));
+            launch_box.smem_bytes_dyn = std::max(
+                launch_box.smem_bytes_dyn,
+                this->template calc_shared_memory<blockThreads>(o, oriented));
         }
 
         if (!this->m_quite) {
@@ -658,9 +657,7 @@ class RXMeshStatic : public RXMesh
 
    protected:
     template <uint32_t blockThreads>
-    size_t calc_shared_memory(const Op    op,
-                              const void* kernel,
-                              const bool  oriented = false) const
+    size_t calc_shared_memory(const Op op, const bool oriented = false) const
     {
         // Operations that uses matrix transpose needs a template parameter
         // that is by default TRANSPOSE_ITEM_PER_THREAD. Here we check if

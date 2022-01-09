@@ -22,6 +22,7 @@ class RXMeshDynamic : public RXMeshStatic
 
     template <uint32_t blockThreads>
     void prepare_launch_box(const std::vector<Op>    op,
+                            const std::vector<DynOp> dyn_op,
                             LaunchBox<blockThreads>& launch_box,
                             const void*              kernel,
                             const bool               oriented = false) const
@@ -32,18 +33,19 @@ class RXMeshDynamic : public RXMeshStatic
 
         launch_box.blocks         = this->m_num_patches;
         launch_box.smem_bytes_dyn = 0;
-
-        if (op.empty()) {
-            // load FE and EV
+        for (auto o : dyn_op) {
             launch_box.smem_bytes_dyn =
-                3 * this->m_max_faces_per_patch * sizeof(uint16_t);
-            launch_box.smem_bytes_dyn +=
-                2 * this->m_max_edges_per_patch * sizeof(uint16_t);
-        } else {
-            RXMESH_ERROR(
-                "RXMeshDynamic::prepare_launch_box() doing query with updates "
-                "is not supported yet!");
+                std::max(launch_box.smem_bytes_dyn,
+                         this->template calc_shared_memory<blockThreads>(o));
         }
+
+        for (auto o : op) {
+            launch_box.smem_bytes_dyn = std::max(
+                launch_box.smem_bytes_dyn,
+                this->template RXMeshStatic::calc_shared_memory<blockThreads>(
+                    o, oriented));
+        }
+
 
         if (!this->m_quite) {
             RXMESH_TRACE(
@@ -60,5 +62,28 @@ class RXMeshDynamic : public RXMeshStatic
     }
 
     virtual ~RXMeshDynamic() = default;
+
+   private:
+    template <uint32_t blockThreads>
+    size_t calc_shared_memory(const DynOp op) const
+    {
+        if (op == DynOp::EdgeFlip && !this->is_edge_manifold()) {
+            RXMESH_ERROR(
+                "RXMeshDynamic::calc_shared_memory() edge flips is only "
+                "supported on manifold mesh.");
+        }
+
+        size_t dynamic_smem = 0;
+        if (op == DynOp::EdgeFlip) {
+            // load FE, than transpose it into EF, then update FE. Thus, we need
+            // to have both in memory at one point. Then, load EV and update it
+            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
+            dynamic_smem +=
+                std::max(2 * this->m_max_edges_per_patch * sizeof(uint16_t),
+                         3 * this->m_max_faces_per_patch * sizeof(uint16_t));
+        }
+
+        return dynamic_smem;
+    }
 };
 }  // namespace rxmesh

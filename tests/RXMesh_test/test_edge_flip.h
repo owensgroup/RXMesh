@@ -16,9 +16,12 @@ TEST(RXMeshDynamic, EdgeFlip)
 
     RXMeshDynamic rxmesh(Faces, rxmesh_args.quite);
 
+    ASSERT_TRUE(rxmesh.is_edge_manifold());
+
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box({}, launch_box, (void*)edge_flip<blockThreads>);
+    rxmesh.prepare_launch_box(
+        {}, {DynOp::EdgeFlip}, launch_box, (void*)edge_flip<blockThreads>);
 
     edge_flip<blockThreads>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(

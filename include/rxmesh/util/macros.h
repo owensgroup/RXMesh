@@ -8,6 +8,9 @@ namespace rxmesh {
 
 typedef uint8_t flag_t;
 
+// number of edges assigned to a thread for edge flip dispatcher
+constexpr uint32_t EDGE_FLIP_PER_THREAD = 3;
+
 // TRANSPOSE_ITEM_PER_THREAD
 constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 11;
 
@@ -66,7 +69,8 @@ inline void HandleError(cudaError_t err, const char* file, int line)
 #endif
 
 
-//Taken from https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#extended-lambda-traits
+// Taken from
+// https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#extended-lambda-traits
 #define IS_D_LAMBDA(X) __nv_is_extended_device_lambda_closure_type(X)
 #define IS_HD_LAMBDA(X) __nv_is_extended_host_device_lambda_closure_type(X)
 
