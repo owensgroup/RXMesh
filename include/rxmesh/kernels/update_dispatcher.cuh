@@ -51,9 +51,10 @@ __device__ __inline__ void edge_flip_block_dispatcher(PatchInfo&  patch_info,
     uint16_t*                  s_fe = shrd_mem;
     uint16_t* s_ef = &shrd_mem[3 * num_faces + (3 * num_faces) % 2];
 
-    // TODO fix bank conflicts
-    for (uint16_t i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
-        s_ef[i] = INVALID16;
+    // to fix the bank conflicts
+    uint32_t* s_ef32 = reinterpret_cast<uint32_t*>(s_ef);
+    for (uint16_t i = threadIdx.x; i < num_edges; i += blockThreads) {
+        s_ef32[i] = INVALID32;
     }
 
     load_patch_FE<blockThreads>(patch_info,
@@ -62,9 +63,11 @@ __device__ __inline__ void edge_flip_block_dispatcher(PatchInfo&  patch_info,
     // need a sync here so s_fe and s_ef are initialized before accessing them
     __syncthreads();
 
+    
     // Transpose FE into EF so we obtain the two incident triangles to the
     // flipped edges. We use the version that is optimized for manifolds
     e_f_manifold<blockThreads>(num_edges, num_faces, s_fe, s_ef);
+    __syncthreads();
 
     local_id = threadIdx.x;
     e        = 0;
@@ -73,37 +76,44 @@ __device__ __inline__ void edge_flip_block_dispatcher(PatchInfo&  patch_info,
 
             const uint16_t f0 = s_ef[2 * local_id];
             const uint16_t f1 = s_ef[2 * local_id + 1];
+            if (f0 != INVALID16 && f1 != INVALID16) {
 
-            uint16_t f0_e[3];
-            f0_e[0] = s_fe[3 * f0];
-            f0_e[1] = s_fe[3 * f0 + 1];
-            f0_e[2] = s_fe[3 * f0 + 2];
+                uint16_t f0_e[3];
+                f0_e[0] = s_fe[3 * f0];
+                f0_e[1] = s_fe[3 * f0 + 1];
+                f0_e[2] = s_fe[3 * f0 + 2];
 
-            const uint16_t l0 = ((f0_e[0] >> 1) == local_id) ?
-                                    0 :
-                                    (((f0_e[1] >> 1) == local_id) ? 1 : 2);
+                const uint16_t l0 = ((f0_e[0] >> 1) == local_id) ?
+                                        0 :
+                                        (((f0_e[1] >> 1) == local_id) ? 1 : 2);
 
-            uint16_t f1_e[3];
-            f1_e[0] = s_fe[3 * f1];
-            f1_e[1] = s_fe[3 * f1 + 1];
-            f1_e[2] = s_fe[3 * f1 + 2];
+                uint16_t f1_e[3];
+                f1_e[0] = s_fe[3 * f1];
+                f1_e[1] = s_fe[3 * f1 + 1];
+                f1_e[2] = s_fe[3 * f1 + 2];
 
-            const uint16_t l1 = ((f1_e[0] >> 1) == local_id) ?
-                                    0 :
-                                    (((f1_e[1] >> 1) == local_id) ? 1 : 2);
+                const uint16_t l1 = ((f1_e[0] >> 1) == local_id) ?
+                                        0 :
+                                        (((f1_e[1] >> 1) == local_id) ? 1 : 2);
 
-            const uint16_t f0_shift = (f0 / 3) * 3;
-            const uint16_t f1_shift = (f1 / 3) * 3;
+                const uint16_t f0_shift = 3 * f0;
+                const uint16_t f1_shift = 3 * f1;
 
-            s_fe[f0_shift + ((l0 + 1) % 3)] = f0_e[l0];
-            s_fe[f1_shift + ((l1 + 1) % 3)] = f1_e[l1];
 
-            s_fe[f1_shift + l0] = f0_e[(l0 + 1) % 3];
-            s_fe[f0_shift + l1] = f1_e[(l1 + 1) % 3];
+                s_fe[f0_shift + ((l0 + 1) % 3)] = f0_e[l0];
+                s_fe[f1_shift + ((l1 + 1) % 3)] = f1_e[l1];
+
+                s_fe[f1_shift + l1] = f0_e[(l0 + 1) % 3];
+                s_fe[f0_shift + l0] = f1_e[(l1 + 1) % 3];
+            }
         }
         local_id += blockThreads;
         e++;
     }
+
+    __syncthreads();
+    load_uint16<blockThreads>(
+        s_fe, 3 * num_faces, reinterpret_cast<uint16_t*>(patch_info.fe));
 }
 }  // namespace detail
 
