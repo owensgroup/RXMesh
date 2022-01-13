@@ -93,6 +93,26 @@ __device__ __forceinline__ void block_mat_transpose(const uint32_t num_rows,
 }
 
 template <uint32_t blockThreads>
+__device__ __forceinline__ void e_f_manifold(const uint16_t  num_edges,
+                                             const uint16_t  num_faces,
+                                             const uint16_t* s_fe,
+                                             uint16_t*       s_ef)
+{
+    // s_ef should be filled with INVALID16 before calling this function
+
+    for (uint16_t e = threadIdx.x; e < 3 * num_faces; e += blockThreads) {
+        uint16_t edge    = s_fe[e] >> 1;
+        uint16_t face_id = e / 3;
+
+        auto ret = atomicCAS(s_ef + 2 * edge, INVALID16, face_id);
+        if (ret != INVALID16) {
+            ret = atomicCAS(s_ef + 2 * edge + 1, INVALID16, face_id);
+            assert(ret == INVALID16);
+        }
+    }
+}
+
+template <uint32_t blockThreads>
 __device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
                                              uint16_t*&       s_output_offset,
                                              uint16_t*&       s_output_value,
@@ -133,17 +153,7 @@ __device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
     // We need to sync here to make sure that s_fe is loaded but there is
     // a sync in block_mat_transpose that takes care of this
 
-
-    for (uint16_t e = threadIdx.x; e < 3 * num_faces; e += blockThreads) {
-        uint16_t edge    = s_fe[e] >> 1;
-        uint16_t face_id = e / 3;
-
-        auto ret = atomicCAS(s_ef + 2 * edge, INVALID16, face_id);
-        if (ret != INVALID16) {
-            ret = atomicCAS(s_ef + 2 * edge + 1, INVALID16, face_id);
-            assert(ret == INVALID16);
-        }
-    }
+    e_f_manifold<blockThreads>(num_edges, num_faces, s_fe, s_ef);
 
     // To orient, we pin the first edge and check all the subsequent edges
     // For each edge, we search for the two faces containing it (should be
@@ -293,6 +303,7 @@ __device__ __forceinline__ void v_v(const uint16_t num_vertices,
     }
 }
 
+template <uint32_t blockThreads>
 __device__ __forceinline__ void f_v(const uint16_t  num_edges,
                                     const uint16_t* d_edges,
                                     const uint16_t  num_faces,
@@ -304,7 +315,7 @@ __device__ __forceinline__ void f_v(const uint16_t  num_edges,
     // face in d_faces (i.e., three items), then this thread
     // can safely over-write what is in d_faces.
 
-    for (uint32_t f = threadIdx.x; f < num_faces; f += blockDim.x) {
+    for (uint32_t f = threadIdx.x; f < num_faces; f += blockThreads) {
         uint16_t f_v[3];
         uint32_t f_id = 3 * f;
         // TODO use vector load and store instead of looping
@@ -340,7 +351,7 @@ __device__ __forceinline__ void v_f(const uint16_t num_faces,
     // Second, the transpose happens in place i.e., d_faces will hold the
     // offset and d_edges will hold the value (row id)
 
-    f_v(num_edges, d_edges, num_faces, d_faces);
+    f_v<blockThreads>(num_edges, d_edges, num_faces, d_faces);
     __syncthreads();
 
     block_mat_transpose<3u, blockThreads>(
@@ -493,7 +504,7 @@ __device__ __forceinline__ void query(uint16_t*&     s_output_offset,
         }
         case Op::FV: {
             s_output_value = s_fe;
-            f_v(num_edges, s_ev, num_faces, s_fe);
+            f_v<blockThreads>(num_edges, s_ev, num_faces, s_fe);
             break;
         }
         case Op::FE: {

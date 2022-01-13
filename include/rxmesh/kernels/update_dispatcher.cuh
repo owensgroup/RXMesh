@@ -16,20 +16,24 @@ template <uint32_t blockThreads, typename flipT>
 __device__ __inline__ void edge_flip_block_dispatcher(PatchInfo&  patch_info,
                                                       const flipT flip)
 {
+    const uint16_t num_faces       = patch_info.num_faces;
+    const uint16_t num_edges       = patch_info.num_edges;
+    const uint16_t num_owned_edges = patch_info.num_owned_edges;
+
     bool do_flip[EDGE_FLIP_PER_THREAD];
 
     for (uint32_t i = 0; i < EDGE_FLIP_PER_THREAD; ++i) {
         do_flip[i] = false;
     }
 
-    assert(EDGE_FLIP_PER_THREAD * blockThreads >= patch_info.num_owned_edges);
+    assert(EDGE_FLIP_PER_THREAD * blockThreads >= num_owned_edges);
 
     // compute the predicate for each edge assigned to this thread and cache
     // the results in do_flip.
     bool     any_flip = false;
     uint16_t local_id = threadIdx.x;
     uint32_t e        = 0;
-    while (local_id < patch_info.num_owned_edges) {
+    while (local_id < num_owned_edges) {
         do_flip[e] = flip({patch_info.patch_id, local_id});
         any_flip   = any_flip || do_flip[e];
 
@@ -41,34 +45,54 @@ __device__ __inline__ void edge_flip_block_dispatcher(PatchInfo&  patch_info,
         return;
     }
 
-    // we have at least on edge to flip in this patch
+    // we have at least one edge to flip in this patch
     extern __shared__ uint16_t shrd_mem[];
     LocalVertexT*              s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
-    LocalEdgeT*                s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
-    uint16_t*                  s_ef = reinterpret_cast<uint16_t*>(
-        &shrd_mem[3 * patch_info.num_faces + (3 * patch_info.num_faces) % 2]);
+    uint16_t*                  s_fe = shrd_mem;
+    uint16_t* s_ef = &shrd_mem[3 * num_faces + (3 * num_faces) % 2];
 
-    // first load and update
-    load_patch_FE<blockThreads>(patch_info, s_fe);
-
-    // 1. transpose FE into EF so we obtain the two incident triangles to the
-    // flipped edges. We can optimize this for manifold mesh
-    for (uint16_t e = threadIdx.x; e < 3 * patch_info.num_faces;
-         e += blockThreads) {
-        uint16_t edge    = s_fe[e].id >> 1;
-        uint16_t face_id = e / 3;
-
-        auto ret = atomicCAS(s_ef + 2 * edge, INVALID16, face_id);
-        if (ret != INVALID16) {
-            ret = atomicCAS(s_ef + 2 * edge + 1, INVALID16, face_id);
-            assert(ret == INVALID16);
-        }
+    // TODO fix bank conflicts
+    for (uint16_t i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
+        s_ef[i] = INVALID16;
     }
+
+    load_patch_FE<blockThreads>(patch_info,
+                                reinterpret_cast<LocalEdgeT*>(s_fe));
+
+    // need a sync here so s_fe and s_ef are initialized before accessing them
+    __syncthreads();
+
+    // Transpose FE into EF so we obtain the two incident triangles to the
+    // flipped edges. We use the version that is optimized for manifolds
+    e_f_manifold<blockThreads>(num_edges, num_faces, s_fe, s_ef);
 
     local_id = threadIdx.x;
     e        = 0;
-    while (local_id < patch_info.num_owned_edges) {
+    while (local_id < num_owned_edges) {
         if (do_flip[e]) {
+
+            const uint16_t f0 = s_ef[2 * local_id];
+            const uint16_t f1 = s_ef[2 * local_id + 1];
+
+            const uint16_t f0_e0 = s_fe[3 * f0];
+            const uint16_t f0_e1 = s_fe[3 * f0 + 1];
+            const uint16_t f0_e2 = s_fe[3 * f0 + 2];
+
+            const uint16_t l0 = ((f0_e0 >> 1) == local_id) ?
+                                    0 :
+                                    (((f0_e1 >> 1) == local_id) ? 1 : 2);
+
+            const uint16_t f1_e0 = s_fe[3 * f1];
+            const uint16_t f1_e1 = s_fe[3 * f1 + 1];
+            const uint16_t f1_e2 = s_fe[3 * f1 + 2];
+
+            const uint16_t l1 = ((f1_e0 >> 1) == local_id) ?
+                                    0 :
+                                    (((f1_e1 >> 1) == local_id) ? 1 : 2);
+
+            const uint16_t shift = (local_id / 3) * 3;
+
+            //s_fe[shift + ((l0 +1)%3)] = 
         }
         local_id += blockThreads;
         e++;
