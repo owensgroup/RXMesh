@@ -74,25 +74,32 @@ __device__ __inline__ void edge_flip_block_dispatcher(PatchInfo&  patch_info,
             const uint16_t f0 = s_ef[2 * local_id];
             const uint16_t f1 = s_ef[2 * local_id + 1];
 
-            const uint16_t f0_e0 = s_fe[3 * f0];
-            const uint16_t f0_e1 = s_fe[3 * f0 + 1];
-            const uint16_t f0_e2 = s_fe[3 * f0 + 2];
+            uint16_t f0_e[3];
+            f0_e[0] = s_fe[3 * f0];
+            f0_e[1] = s_fe[3 * f0 + 1];
+            f0_e[2] = s_fe[3 * f0 + 2];
 
-            const uint16_t l0 = ((f0_e0 >> 1) == local_id) ?
+            const uint16_t l0 = ((f0_e[0] >> 1) == local_id) ?
                                     0 :
-                                    (((f0_e1 >> 1) == local_id) ? 1 : 2);
+                                    (((f0_e[1] >> 1) == local_id) ? 1 : 2);
 
-            const uint16_t f1_e0 = s_fe[3 * f1];
-            const uint16_t f1_e1 = s_fe[3 * f1 + 1];
-            const uint16_t f1_e2 = s_fe[3 * f1 + 2];
+            uint16_t f1_e[3];
+            f1_e[0] = s_fe[3 * f1];
+            f1_e[1] = s_fe[3 * f1 + 1];
+            f1_e[2] = s_fe[3 * f1 + 2];
 
-            const uint16_t l1 = ((f1_e0 >> 1) == local_id) ?
+            const uint16_t l1 = ((f1_e[0] >> 1) == local_id) ?
                                     0 :
-                                    (((f1_e1 >> 1) == local_id) ? 1 : 2);
+                                    (((f1_e[1] >> 1) == local_id) ? 1 : 2);
 
-            const uint16_t shift = (local_id / 3) * 3;
+            const uint16_t f0_shift = (f0 / 3) * 3;
+            const uint16_t f1_shift = (f1 / 3) * 3;
 
-            //s_fe[shift + ((l0 +1)%3)] = 
+            s_fe[f0_shift + ((l0 + 1) % 3)] = f0_e[l0];
+            s_fe[f1_shift + ((l1 + 1) % 3)] = f1_e[l1];
+
+            s_fe[f1_shift + l0] = f0_e[(l0 + 1) % 3];
+            s_fe[f0_shift + l1] = f1_e[(l1 + 1) % 3];
         }
         local_id += blockThreads;
         e++;
