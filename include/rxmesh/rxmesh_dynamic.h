@@ -75,12 +75,14 @@ class RXMeshDynamic : public RXMeshStatic
 
         size_t dynamic_smem = 0;
         if (op == DynOp::EdgeFlip) {
-            // load FE, than transpose it into EF, then update FE. Thus, we need
+            // load FE, then transpose it into EF, then update FE. Thus, we need
             // to have both in memory at one point. Then, load EV and update it
             dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
-            dynamic_smem +=
-                std::max(2 * this->m_max_edges_per_patch * sizeof(uint16_t),
-                         3 * this->m_max_faces_per_patch * sizeof(uint16_t));
+            dynamic_smem += 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            dynamic_smem += DIVIDE_UP(this->m_max_faces_per_patch -
+                                          this->m_max_not_owned_faces,
+                                      2) *
+                            2 * sizeof(uint16_t);
         }
 
         return dynamic_smem;

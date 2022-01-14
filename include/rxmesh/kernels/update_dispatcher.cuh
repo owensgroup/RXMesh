@@ -1,4 +1,4 @@
-#pragma
+#pragma once
 
 #include "rxmesh/context.h"
 #include "rxmesh/handle.h"
@@ -16,16 +16,21 @@ template <uint32_t blockThreads, typename flipT>
 __device__ __inline__ void edge_flip_block_dispatcher(PatchInfo&  patch_info,
                                                       const flipT flip)
 {
-    const uint16_t num_faces       = patch_info.num_faces;
-    const uint16_t num_edges       = patch_info.num_edges;
-    const uint16_t num_owned_edges = patch_info.num_owned_edges;
+    __shared__ uint16_t s_num_flipped_edges;
+    const uint16_t      num_faces       = patch_info.num_faces;
+    const uint16_t      num_edges       = patch_info.num_edges;
+    const uint16_t      num_owned_edges = patch_info.num_owned_edges;
 
     // load the patch
     extern __shared__ uint16_t shrd_mem[];
-    LocalVertexT*              s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
     uint16_t*                  s_fe = shrd_mem;
-    uint16_t* s_ef = &shrd_mem[3 * num_faces + (3 * num_faces) % 2];
+    uint16_t* s_ef      = &shrd_mem[3 * num_faces + (3 * num_faces) % 2];
+    uint16_t* s_ev      = s_ef;
+    uint16_t* s_flipped = &s_ef[2 * num_edges];
 
+    if (threadIdx.x == 0) {
+        s_num_flipped_edges = 0;
+    }
     // to fix the bank conflicts
     uint32_t* s_ef32 = reinterpret_cast<uint32_t*>(s_ef);
     for (uint16_t i = threadIdx.x; i < num_edges; i += blockThreads) {
@@ -49,6 +54,11 @@ __device__ __inline__ void edge_flip_block_dispatcher(PatchInfo&  patch_info,
             const uint16_t f0 = s_ef[2 * local_id];
             const uint16_t f1 = s_ef[2 * local_id + 1];
             if (f0 != INVALID16 && f1 != INVALID16) {
+
+                const uint16_t flipped_id = atomicAdd(&s_num_flipped_edges, 1);
+
+                s_flipped[2 * flipped_id]     = local_id;
+                s_flipped[2 * flipped_id + 1] = f0;
 
                 uint16_t f0_e[3];
                 f0_e[0] = s_fe[3 * f0];
@@ -86,6 +96,53 @@ __device__ __inline__ void edge_flip_block_dispatcher(PatchInfo&  patch_info,
     __syncthreads();
     load_uint16<blockThreads>(
         s_fe, 3 * num_faces, reinterpret_cast<uint16_t*>(patch_info.fe));
+
+    if (s_num_flipped_edges > 0) {
+        load_patch_EV<blockThreads>(patch_info,
+                                    reinterpret_cast<LocalVertexT*>(s_ev));
+        __syncthreads();
+    }
+    for (uint32_t e = threadIdx.x; e < s_num_flipped_edges; e += blockThreads) {
+        const uint16_t edge = s_flipped[2 * e];
+        const uint16_t face = s_flipped[2 * e + 1];
+
+        uint16_t fe[3];
+        fe[0] = s_fe[3 * face];
+        fe[1] = s_fe[3 * face + 1];
+        fe[2] = s_fe[3 * face + 2];
+
+        const uint16_t l =
+            ((fe[0] >> 1) == edge) ? 0 : (((fe[1] >> 1) == edge) ? 1 : 2);
+
+        const uint16_t next_edge = fe[(l + 1) % 3];
+        const uint16_t prev_edge = fe[(l + 2) % 3];
+
+        uint16_t next_edge_v[2];
+        next_edge_v[0] = s_ev[2 * (next_edge >> 1)];
+        next_edge_v[1] = s_ev[2 * (next_edge >> 1) + 1];
+
+        uint16_t prev_edge_v[2];
+        prev_edge_v[0] = s_ev[2 * (prev_edge >> 1)];
+        prev_edge_v[1] = s_ev[2 * (prev_edge >> 1) + 1];
+
+        const uint16_t n = (next_edge_v[0] == prev_edge_v[0] ||
+                            next_edge_v[0] == prev_edge_v[1]) ?
+                               next_edge_v[1] :
+                               next_edge_v[0];
+
+        const uint16_t p = (prev_edge_v[0] == next_edge_v[0] ||
+                            prev_edge_v[0] == next_edge_v[1]) ?
+                               prev_edge_v[1] :
+                               prev_edge_v[0];
+
+        s_ev[2 * e]     = n;
+        s_ev[2 * e + 1] = p;
+    }
+
+    __syncthreads();
+
+    load_uint16<blockThreads>(
+        s_ev, num_edges * 2, reinterpret_cast<uint16_t*>(patch_info.ev));
 }
 }  // namespace detail
 
