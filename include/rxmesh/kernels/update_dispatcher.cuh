@@ -20,32 +20,7 @@ __device__ __inline__ void edge_flip_block_dispatcher(PatchInfo&  patch_info,
     const uint16_t num_edges       = patch_info.num_edges;
     const uint16_t num_owned_edges = patch_info.num_owned_edges;
 
-    bool do_flip[EDGE_FLIP_PER_THREAD];
-
-    for (uint32_t i = 0; i < EDGE_FLIP_PER_THREAD; ++i) {
-        do_flip[i] = false;
-    }
-
-    assert(EDGE_FLIP_PER_THREAD * blockThreads >= num_owned_edges);
-
-    // compute the predicate for each edge assigned to this thread and cache
-    // the results in do_flip.
-    bool     any_flip = false;
-    uint16_t local_id = threadIdx.x;
-    uint32_t e        = 0;
-    while (local_id < num_owned_edges) {
-        do_flip[e] = flip({patch_info.patch_id, local_id});
-        any_flip   = any_flip || do_flip[e];
-
-        local_id += blockThreads;
-        e++;
-    }
-
-    if (__syncthreads_or(any_flip) == 0) {
-        return;
-    }
-
-    // we have at least one edge to flip in this patch
+    // load the patch
     extern __shared__ uint16_t shrd_mem[];
     LocalVertexT*              s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
     uint16_t*                  s_fe = shrd_mem;
@@ -56,24 +31,21 @@ __device__ __inline__ void edge_flip_block_dispatcher(PatchInfo&  patch_info,
     for (uint16_t i = threadIdx.x; i < num_edges; i += blockThreads) {
         s_ef32[i] = INVALID32;
     }
-
     load_patch_FE<blockThreads>(patch_info,
                                 reinterpret_cast<LocalEdgeT*>(s_fe));
-
-    // need a sync here so s_fe and s_ef are initialized before accessing them
     __syncthreads();
 
-    
-    // Transpose FE into EF so we obtain the two incident triangles to the
-    // flipped edges. We use the version that is optimized for manifolds
+    // Transpose FE into EF so we obtain the two incident triangles to
+    // the flipped edges. We use the version that is optimized for
+    // manifolds
     e_f_manifold<blockThreads>(num_edges, num_faces, s_fe, s_ef);
     __syncthreads();
 
-    local_id = threadIdx.x;
-    e        = 0;
-    while (local_id < num_owned_edges) {
-        if (do_flip[e]) {
 
+    uint16_t local_id = threadIdx.x;
+    while (local_id < num_owned_edges) {
+
+        if (flip({patch_info.patch_id, local_id})) {
             const uint16_t f0 = s_ef[2 * local_id];
             const uint16_t f1 = s_ef[2 * local_id + 1];
             if (f0 != INVALID16 && f1 != INVALID16) {
@@ -108,8 +80,8 @@ __device__ __inline__ void edge_flip_block_dispatcher(PatchInfo&  patch_info,
             }
         }
         local_id += blockThreads;
-        e++;
     }
+
 
     __syncthreads();
     load_uint16<blockThreads>(

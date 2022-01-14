@@ -8,9 +8,6 @@ namespace rxmesh {
 
 typedef uint8_t flag_t;
 
-// number of edges assigned to a thread for edge flip dispatcher
-constexpr uint32_t EDGE_FLIP_PER_THREAD = 3;
-
 // TRANSPOSE_ITEM_PER_THREAD
 constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 11;
 
