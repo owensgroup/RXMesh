@@ -12,14 +12,14 @@ __global__ static void k_test_block_mat_transpose(uint16_t*      d_src,
                                                   uint16_t*      d_output)
 {
 
-    rxmesh::block_mat_transpose<rowOffset, blockThreads, itemPerThread>(
+    rxmesh::detail::block_mat_transpose<rowOffset, blockThreads, itemPerThread>(
         num_rows, num_cols, d_src, d_output);
 }
 
 template <typename T, uint32_t blockThreads>
 __global__ static void k_test_block_exclusive_sum(T* d_src, const uint32_t size)
 {
-    rxmesh::cub_block_exclusive_sum<T, blockThreads>(d_src, size);
+    rxmesh::detail::cub_block_exclusive_sum<T, blockThreads>(d_src, size);
 }
 
 template <typename T>

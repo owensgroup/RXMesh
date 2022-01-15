@@ -7,6 +7,7 @@
 #include "rxmesh/types.h"
 
 namespace rxmesh {
+namespace detail {
 
 template <uint32_t blockThreads>
 __device__ __forceinline__ void load_uint16(const uint16_t* in,
@@ -275,5 +276,5 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
         }
     }
 }
-
+}  // namespace detail
 }  // namespace rxmesh

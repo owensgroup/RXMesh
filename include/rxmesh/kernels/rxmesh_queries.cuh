@@ -10,6 +10,8 @@
 #include "rxmesh/types.h"
 
 namespace rxmesh {
+namespace detail {
+
 template <uint32_t rowOffset,
           uint32_t blockThreads,
           uint32_t itemPerThread = TRANSPOSE_ITEM_PER_THREAD>
@@ -526,5 +528,5 @@ __device__ __forceinline__ void query(uint16_t*&     s_output_offset,
             break;
     }
 }
-
+}  // namespace detail
 }  // namespace rxmesh

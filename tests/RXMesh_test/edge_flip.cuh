@@ -17,5 +17,6 @@ __global__ static void edge_flip(rxmesh::Context context)
         }
     };
 
-    edge_flip_block_dispatcher<blockThreads>(context, should_flip);
+    update_block_dispatcher<DynOp::EdgeFlip, blockThreads>(context,
+                                                           should_flip);
 }
