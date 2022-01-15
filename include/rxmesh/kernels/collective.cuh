@@ -5,6 +5,7 @@
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
+namespace detail {
 /**
  * @brief Compute block-wide exclusive sum using CUB
  */
@@ -93,5 +94,5 @@ __device__ __forceinline__ void cub_block_exclusive_sum(T*             data,
         data[size] = s_prv_run_aggregate;
     }*/
 }
-
+}  // namespace detail
 }  // namespace rxmesh

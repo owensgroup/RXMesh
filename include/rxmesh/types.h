@@ -75,7 +75,7 @@ enum class ELEMENT
 };
 
 /**
- * @brief Various query operations supported in RXMesh
+ * @brief Various query operations supported in RXMeshStatic
  */
 enum class Op
 {
@@ -90,6 +90,14 @@ enum class Op
     EF = 8,
 };
 
+
+/**
+ * @brief different dynaimc operators supported in RXMeshDynamic
+ */
+enum class DynOp
+{
+    EdgeFlip = 0,
+};
 /**
  * @brief Convert an operation to string
  * @param op a query operation

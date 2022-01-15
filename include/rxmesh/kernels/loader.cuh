@@ -7,6 +7,7 @@
 #include "rxmesh/types.h"
 
 namespace rxmesh {
+namespace detail {
 
 template <uint32_t blockThreads>
 __device__ __forceinline__ void load_uint16(const uint16_t* in,
@@ -56,15 +57,9 @@ template <uint32_t blockThreads>
 __device__ __forceinline__ void load_patch_EV(const PatchInfo& patch_info,
                                               LocalVertexT*    ev)
 {
-    const uint32_t  num_edges = patch_info.num_edges;
-    const uint32_t* input_ev32 =
-        reinterpret_cast<const uint32_t*>(patch_info.ev);
-    uint32_t* output_ev32 = reinterpret_cast<uint32_t*>(ev);
-#pragma unroll 2
-    for (uint32_t i = threadIdx.x; i < num_edges; i += blockThreads) {
-        uint32_t a     = input_ev32[i];
-        output_ev32[i] = a;
-    }
+    load_uint16<blockThreads>(reinterpret_cast<const uint16_t*>(patch_info.ev),
+                              patch_info.num_edges * 2,
+                              reinterpret_cast<uint16_t*>(ev));
 }
 
 /**
@@ -281,5 +276,5 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
         }
     }
 }
-
+}  // namespace detail
 }  // namespace rxmesh
