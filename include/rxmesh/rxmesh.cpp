@@ -108,6 +108,7 @@ RXMesh::~RXMesh()
     }
     GPU_FREE(m_d_patches_info);
     free(m_h_patches_info);
+    m_rxmesh_context.release();
 }
 
 void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)

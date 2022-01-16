@@ -176,6 +176,7 @@ class RXMeshStatic : public RXMesh
      * needed for kernel launch
      * @param op List of query operations done inside this the kernel
      * @param launch_box input launch box to be populated
+     * @param kernel The kernel to be launched 
      * @param oriented if the query is oriented. Valid only for Op::VV queries
      */
     template <uint32_t blockThreads>
