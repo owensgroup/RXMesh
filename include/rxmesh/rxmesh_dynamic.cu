@@ -35,11 +35,11 @@ bool RXMeshDynamic::validate()
     auto check_num_mesh_elements = [&]() -> bool {
         uint32_t *d_sum_num_vertices, *d_sum_num_edges, *d_sum_num_faces;
         CUDA_ERROR(cudaMalloc((void**)&d_sum_num_vertices, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMalloc((void**)&d_sum_num_vertices, sizeof(uint32_t)));
+        CUDA_ERROR(cudaMalloc((void**)&d_sum_num_edges, sizeof(uint32_t)));
         CUDA_ERROR(cudaMalloc((void**)&d_sum_num_faces, sizeof(uint32_t)));
 
         CUDA_ERROR(cudaMemset(d_sum_num_vertices, 0, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMemset(d_sum_num_vertices, 0, sizeof(uint32_t)));
+        CUDA_ERROR(cudaMemset(d_sum_num_edges, 0, sizeof(uint32_t)));
         CUDA_ERROR(cudaMemset(d_sum_num_faces, 0, sizeof(uint32_t)));
 
 
