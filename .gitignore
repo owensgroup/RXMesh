@@ -1,5 +1,6 @@
 output/
-input/
+input/*
+!input/dragon.obj
 build/
 include/rxmesh/util/git_sha1.cpp
 .vscode/
