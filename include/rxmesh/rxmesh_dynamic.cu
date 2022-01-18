@@ -85,6 +85,75 @@ __global__ static void check_uniqueness(const Context context,
     }
 }
 
+
+template <uint32_t blockThreads>
+__global__ static void check_not_owned(const Context context, uint32_t* d_check)
+{
+    const uint32_t patch_id = blockIdx.x;
+    if (patch_id < context.get_num_patches()) {
+
+        PatchInfo patch_info = context.get_patches_info()[patch_id];
+
+        extern __shared__ uint16_t shrd_mem[];
+        LocalVertexT* s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
+        LocalEdgeT*   s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
+        load_mesh<blockThreads>(patch_info, true, true, s_ev, s_fe);
+        __syncthreads();
+
+        // for every not-owned face, check that its three edges (possibly
+        // not-owned) are the same as those in the face's owner patch
+        for (uint16_t f = threadIdx.x + patch_info.num_owned_faces;
+             f < patch_info.num_faces;
+             f += blockThreads) {
+
+            uint16_t e0, e1, e2;
+            flag_t   d0(0), d1(0), d2(0);
+            uint32_t p0(patch_id), p1(patch_id), p2(patch_id);
+            Context::unpack_edge_dir(s_fe[3 * f + 0].id, e0, d0);
+            Context::unpack_edge_dir(s_fe[3 * f + 1].id, e1, d1);
+            Context::unpack_edge_dir(s_fe[3 * f + 2].id, e2, d2);
+
+            // if the edge is not owned, grab its local index in the owner patch
+            auto get_owned_e =
+                [&](uint16_t& e, uint32_t& p, const PatchInfo pi) {
+                    e -= pi.num_owned_edges;
+                    p = pi.not_owned_patch_e[e];
+                    e = pi.not_owned_id_e[e].id;
+                };
+            get_owned_e(e0, p0, patch_info);
+            get_owned_e(e1, p1, patch_info);
+            get_owned_e(e2, p2, patch_info);
+
+            // get f's three edges from its owner patch
+            uint16_t f_owned = f - patch_info.num_owned_faces;
+            uint32_t f_patch = patch_info.not_owned_patch_f[f_owned];
+            f_owned          = patch_info.not_owned_id_f[f_owned].id;
+
+            // TODO this is a scatter read from global that could be improved
+            // by using shared memory
+            uint16_t  ew0, ew1, ew2;
+            flag_t    dw0(0), dw1(0), dw2(0);
+            uint32_t  pw0(f_patch), pw1(f_patch), pw2(f_patch);
+            PatchInfo owner_patch_info = context.get_patches_info()[f_patch];
+            Context::unpack_edge_dir(
+                owner_patch_info.fe[3 * f_owned + 0].id, ew0, dw0);
+            Context::unpack_edge_dir(
+                owner_patch_info.fe[3 * f_owned + 1].id, ew1, dw1);
+            Context::unpack_edge_dir(
+                owner_patch_info.fe[3 * f_owned + 2].id, ew2, dw2);
+
+            get_owned_e(ew0, pw0, owner_patch_info);
+            get_owned_e(ew1, pw1, owner_patch_info);
+            get_owned_e(ew2, pw2, owner_patch_info);
+
+            if (e0 != ew0 || d0 != dw0 || p0 == pw0 || e1 != ew1 || d1 != dw1 ||
+                p1 == pw1 || e2 != ew2 || d2 != dw2 || p2 == pw2) {
+                ::atomicAdd(d_check, uint32_t(1));
+            }
+        }
+    }
+}
+
 }  // namespace detail
 
 bool RXMeshDynamic::validate()
@@ -92,8 +161,7 @@ bool RXMeshDynamic::validate()
     CUDA_ERROR(cudaDeviceSynchronize());
 
     // check that the sum of owned vertices, edges, and faces per patch is equal
-    // to the number of vertices, edges, and faces respectively.
-
+    // to the number of vertices, edges, and faces respectively
     auto check_num_mesh_elements = [&]() -> bool {
         uint32_t *d_sum_num_vertices, *d_sum_num_edges, *d_sum_num_faces;
         CUDA_ERROR(cudaMalloc((void**)&d_sum_num_vertices, sizeof(uint32_t)));
@@ -159,7 +227,7 @@ bool RXMeshDynamic::validate()
     };
 
     // check that each edge is composed of two unique vertices and each face is
-    // composed of three unique edges
+    // composed of three unique edges that give three unique vertices
     auto check_uniqueness = [&]() -> bool {
         uint32_t num_patches;
         CUDA_ERROR(cudaMemcpy(&num_patches,
@@ -193,11 +261,51 @@ bool RXMeshDynamic::validate()
         }
     };
 
+    // check that every not-owned mesh elements' connectivity (faces and
+    // edges) is equivalent to their connectivity in their owner patch
+    auto check_not_owned = [&]() -> bool {
+        uint32_t num_patches;
+        CUDA_ERROR(cudaMemcpy(&num_patches,
+                              m_rxmesh_context.m_num_patches,
+                              sizeof(uint32_t),
+                              cudaMemcpyDeviceToHost));
+
+        uint32_t* d_check;
+        CUDA_ERROR(cudaMalloc((void**)&d_check, sizeof(uint32_t)));
+        CUDA_ERROR(cudaMemset(d_check, 0, sizeof(uint32_t)));
+
+        const uint32_t block_size   = 256;
+        const uint32_t grid_size    = num_patches;
+        const uint32_t dynamic_smem = (3 * this->m_max_faces_per_patch + 1 +
+                                       2 * this->m_max_edges_per_patch) *
+                                      sizeof(uint16_t);
+
+        detail::check_not_owned<256><<<grid_size, block_size, dynamic_smem>>>(
+            m_rxmesh_context, d_check);
+
+        uint32_t h_check;
+        CUDA_ERROR(cudaMemcpy(
+            &h_check, d_check, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+
+        CUDA_ERROR(cudaFree(d_check));
+
+        if (h_check != 0) {
+            return false;
+        } else {
+            return true;
+        }
+    };
+
+
     if (!check_num_mesh_elements()) {
         return false;
     }
 
     if (!check_uniqueness()) {
+        return false;
+    }
+
+    if (!check_not_owned()) {
         return false;
     }
 
