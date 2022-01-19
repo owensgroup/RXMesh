@@ -116,25 +116,27 @@ __global__ static void check_not_owned(const Context context, uint32_t* d_check)
             // if the edge is not owned, grab its local index in the owner patch
             auto get_owned_e =
                 [&](uint16_t& e, uint32_t& p, const PatchInfo pi) {
-                    e -= pi.num_owned_edges;
-                    p = pi.not_owned_patch_e[e];
-                    e = pi.not_owned_id_e[e].id;
+                    if (e >= pi.num_owned_edges) {
+                        e -= pi.num_owned_edges;
+                        p = pi.not_owned_patch_e[e];
+                        e = pi.not_owned_id_e[e].id;
+                    }
                 };
             get_owned_e(e0, p0, patch_info);
             get_owned_e(e1, p1, patch_info);
             get_owned_e(e2, p2, patch_info);
 
             // get f's three edges from its owner patch
-            uint16_t f_owned = f - patch_info.num_owned_faces;
-            uint32_t f_patch = patch_info.not_owned_patch_f[f_owned];
-            f_owned          = patch_info.not_owned_id_f[f_owned].id;
+            uint16_t f_owned           = f - patch_info.num_owned_faces;
+            uint32_t f_patch           = patch_info.not_owned_patch_f[f_owned];
+            f_owned                    = patch_info.not_owned_id_f[f_owned].id;
+            PatchInfo owner_patch_info = context.get_patches_info()[f_patch];
 
             // TODO this is a scatter read from global that could be improved
             // by using shared memory
-            uint16_t  ew0, ew1, ew2;
-            flag_t    dw0(0), dw1(0), dw2(0);
-            uint32_t  pw0(f_patch), pw1(f_patch), pw2(f_patch);
-            PatchInfo owner_patch_info = context.get_patches_info()[f_patch];
+            uint16_t ew0, ew1, ew2;
+            flag_t   dw0(0), dw1(0), dw2(0);
+            uint32_t pw0(f_patch), pw1(f_patch), pw2(f_patch);
             Context::unpack_edge_dir(
                 owner_patch_info.fe[3 * f_owned + 0].id, ew0, dw0);
             Context::unpack_edge_dir(
@@ -146,8 +148,8 @@ __global__ static void check_not_owned(const Context context, uint32_t* d_check)
             get_owned_e(ew1, pw1, owner_patch_info);
             get_owned_e(ew2, pw2, owner_patch_info);
 
-            if (e0 != ew0 || d0 != dw0 || p0 == pw0 || e1 != ew1 || d1 != dw1 ||
-                p1 == pw1 || e2 != ew2 || d2 != dw2 || p2 == pw2) {
+            if (e0 != ew0 || d0 != dw0 || p0 != pw0 || e1 != ew1 || d1 != dw1 ||
+                p1 != pw1 || e2 != ew2 || d2 != dw2 || p2 != pw2) {
                 ::atomicAdd(d_check, uint32_t(1));
             }
         }
