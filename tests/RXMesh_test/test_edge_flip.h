@@ -12,11 +12,13 @@ TEST(RXMeshDynamic, EdgeFlip)
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
     ASSERT_TRUE(import_obj(
-        STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, rxmesh_args.quite));
+        STRINGIFY(INPUT_DIR) "diamond.obj", Verts, Faces, rxmesh_args.quite));
 
     RXMeshDynamic rxmesh(Faces, rxmesh_args.quite);
 
     ASSERT_TRUE(rxmesh.is_edge_manifold());
+
+    EXPECT_TRUE(rxmesh.validate());
 
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
@@ -26,4 +28,8 @@ TEST(RXMeshDynamic, EdgeFlip)
     edge_flip<blockThreads>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
             rxmesh.get_context());
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+    EXPECT_TRUE(rxmesh.validate());
 }
