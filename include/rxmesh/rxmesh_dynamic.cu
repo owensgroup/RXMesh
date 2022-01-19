@@ -29,7 +29,7 @@ __global__ static void calc_num_elements(const Context context,
 
 template <uint32_t blockThreads>
 __global__ static void check_uniqueness(const Context context,
-                                        uint32_t*     d_check)
+                                        uint64_t*     d_check)
 {
     const uint32_t patch_id = blockIdx.x;
     if (patch_id < context.get_num_patches()) {
@@ -50,7 +50,7 @@ __global__ static void check_uniqueness(const Context context,
 
             if (v0 >= patch_info.num_vertices ||
                 v1 >= patch_info.num_vertices || v0 == v1) {
-                ::atomicAdd(d_check, uint32_t(1));
+                ::atomicAdd(d_check, uint64_t(1));
             }
         }
 
@@ -67,7 +67,7 @@ __global__ static void check_uniqueness(const Context context,
             if (e0 >= patch_info.num_edges || e1 >= patch_info.num_edges ||
                 e2 >= patch_info.num_edges || e0 == e1 || e0 == e2 ||
                 e1 == e2) {
-                ::atomicAdd(d_check, uint32_t(1));
+                ::atomicAdd(d_check, uint64_t(1));
             }
 
             uint16_t v0, v1, v2;
@@ -79,7 +79,7 @@ __global__ static void check_uniqueness(const Context context,
                 v1 >= patch_info.num_vertices ||
                 v2 >= patch_info.num_vertices || v0 == v1 || v0 == v2 ||
                 v1 == v2) {
-                ::atomicAdd(d_check, uint32_t(1));
+                ::atomicAdd(d_check, uint64_t(1));
             }
         }
     }
@@ -87,9 +87,11 @@ __global__ static void check_uniqueness(const Context context,
 
 
 template <uint32_t blockThreads>
-__global__ static void check_not_owned(const Context context, uint32_t* d_check)
+__global__ static void check_not_owned(const Context context, uint64_t* d_check)
 {
+
     const uint32_t patch_id = blockIdx.x;
+
     if (patch_id < context.get_num_patches()) {
 
         PatchInfo patch_info = context.get_patches_info()[patch_id];
@@ -150,7 +152,48 @@ __global__ static void check_not_owned(const Context context, uint32_t* d_check)
 
             if (e0 != ew0 || d0 != dw0 || p0 != pw0 || e1 != ew1 || d1 != dw1 ||
                 p1 != pw1 || e2 != ew2 || d2 != dw2 || p2 != pw2) {
-                ::atomicAdd(d_check, uint32_t(1));
+                ::atomicAdd(d_check, uint64_t(1));
+            }
+        }
+
+        // for every not-owned edge, check its two vertices (possibly not-owned)
+        // are the same as those in the edge's owner patch
+        for (uint16_t e = threadIdx.x + patch_info.num_owned_edges;
+             e < patch_info.num_edges;
+             e += blockThreads) {
+
+            uint16_t v0 = s_ev[2 * e + 0].id;
+            uint16_t v1 = s_ev[2 * e + 1].id;
+            uint32_t p0(patch_id), p1(patch_id);
+
+            auto get_owned_v =
+                [&](uint16_t& v, uint32_t& p, const PatchInfo pi) {
+                    if (v >= pi.num_owned_vertices) {
+                        v -= pi.num_owned_vertices;
+                        p = pi.not_owned_patch_v[v];
+                        v = pi.not_owned_id_v[v].id;
+                    }
+                };
+            get_owned_v(v0, p0, patch_info);
+            get_owned_v(v1, p1, patch_info);
+
+            // get e's two vertices from its owner patch
+            uint16_t e_owned           = e - patch_info.num_owned_edges;
+            uint32_t e_patch           = patch_info.not_owned_patch_e[e_owned];
+            e_owned                    = patch_info.not_owned_id_e[e_owned].id;
+            PatchInfo owner_patch_info = context.get_patches_info()[e_patch];
+
+            // TODO this is a scatter read from global that could be improved
+            // by using shared memory
+            uint16_t vw0 = owner_patch_info.ev[2 * e_owned + 0].id;
+            uint16_t vw1 = owner_patch_info.ev[2 * e_owned + 1].id;
+            uint32_t pw0(e_patch), pw1(e_patch);
+
+            get_owned_v(vw0, pw0, owner_patch_info);
+            get_owned_v(vw1, pw1, owner_patch_info);
+
+            if (v0 != vw0 || p0 != pw0 || v1 != vw1 || p1 != pw1) {
+                ::atomicAdd(d_check, uint64_t(1));
             }
         }
     }
@@ -237,9 +280,9 @@ bool RXMeshDynamic::validate()
                               sizeof(uint32_t),
                               cudaMemcpyDeviceToHost));
 
-        uint32_t* d_check;
-        CUDA_ERROR(cudaMalloc((void**)&d_check, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMemset(d_check, 0, sizeof(uint32_t)));
+        uint64_t* d_check;
+        CUDA_ERROR(cudaMalloc((void**)&d_check, sizeof(uint64_t)));
+        CUDA_ERROR(cudaMemset(d_check, 0, sizeof(uint64_t)));
 
         const uint32_t block_size   = 256;
         const uint32_t grid_size    = num_patches;
@@ -250,9 +293,9 @@ bool RXMeshDynamic::validate()
         detail::check_uniqueness<256><<<grid_size, block_size, dynamic_smem>>>(
             m_rxmesh_context, d_check);
 
-        uint32_t h_check;
+        uint64_t h_check(0);
         CUDA_ERROR(cudaMemcpy(
-            &h_check, d_check, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+            &h_check, d_check, sizeof(uint64_t), cudaMemcpyDeviceToHost));
 
         CUDA_ERROR(cudaFree(d_check));
 
@@ -272,9 +315,9 @@ bool RXMeshDynamic::validate()
                               sizeof(uint32_t),
                               cudaMemcpyDeviceToHost));
 
-        uint32_t* d_check;
-        CUDA_ERROR(cudaMalloc((void**)&d_check, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMemset(d_check, 0, sizeof(uint32_t)));
+        uint64_t* d_check;
+        CUDA_ERROR(cudaMalloc((void**)&d_check, sizeof(uint64_t)));
+        CUDA_ERROR(cudaMemset(d_check, 0, sizeof(uint64_t)));
 
         const uint32_t block_size   = 256;
         const uint32_t grid_size    = num_patches;
@@ -285,9 +328,9 @@ bool RXMeshDynamic::validate()
         detail::check_not_owned<256><<<grid_size, block_size, dynamic_smem>>>(
             m_rxmesh_context, d_check);
 
-        uint32_t h_check;
+        uint64_t h_check(0);
         CUDA_ERROR(cudaMemcpy(
-            &h_check, d_check, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+            &h_check, d_check, sizeof(uint64_t), cudaMemcpyDeviceToHost));
 
         CUDA_ERROR(cudaFree(d_check));
 
