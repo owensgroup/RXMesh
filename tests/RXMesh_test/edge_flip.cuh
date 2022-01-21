@@ -10,7 +10,7 @@ __global__ static void edge_flip(rxmesh::Context context)
 
     // flip one edge (the edge assigned to thread 0) in each patch
     auto should_flip = [&](const EdgeHandle& edge) -> bool {
-        if (threadIdx.x == 0) {
+        if (threadIdx.x == 1) {
             return true;
         } else {
             return false;

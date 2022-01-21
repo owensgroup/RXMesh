@@ -19,7 +19,15 @@ class RXMeshDynamic : public RXMeshStatic
     {
     }
 
-
+    /**
+     * @brief populate the launch_box with grid size and dynamic shared memory
+     * needed for a kernel that may use dynamic and query operations
+     * @param op List of query operations done inside the kernel
+     * @param dyn_op List of dynamic update done inside the kernel
+     * @param launch_box input launch box to be populated
+     * @param kernel The kernel to be launched
+     * @param oriented if the query is oriented. Valid only for Op::VV queries
+     */
     template <uint32_t blockThreads>
     void prepare_launch_box(const std::vector<Op>    op,
                             const std::vector<DynOp> dyn_op,
@@ -27,9 +35,11 @@ class RXMeshDynamic : public RXMeshStatic
                             const void*              kernel,
                             const bool               oriented = false) const
     {
-        // If there is no query operations, we at least need to load the patch
-        // EV and FE. Otherwise, we need to make sure that we at least can load
-        // EV and FE after performing the queries (TODO)
+        static_assert(
+            blockThreads && ((blockThreads & (blockThreads - 1)) == 0),
+            " RXMeshDynamic::prepare_launch_box() CUDA block size should be of "
+            "power 2");
+
 
         launch_box.blocks         = this->m_num_patches;
         launch_box.smem_bytes_dyn = 0;
@@ -40,10 +50,10 @@ class RXMeshDynamic : public RXMeshStatic
         }
 
         for (auto o : op) {
-            launch_box.smem_bytes_dyn = std::max(
-                launch_box.smem_bytes_dyn,
-                this->template RXMeshStatic::calc_shared_memory<blockThreads>(
-                    o, oriented));
+            launch_box.smem_bytes_dyn =
+                std::max(launch_box.smem_bytes_dyn,
+                         this->RXMeshStatic::calc_shared_memory<blockThreads>(
+                             o, oriented));
         }
 
 
@@ -62,6 +72,14 @@ class RXMeshDynamic : public RXMeshStatic
     }
 
     virtual ~RXMeshDynamic() = default;
+
+    /**
+     * @brief Validate the topology information stored in RXMesh. All checks are
+     * done on the information stored on the GPU memory and thus all checks are
+     * done on the GPU
+     * @return true in case all information stored are valid
+     */
+    bool validate();
 
    private:
     template <uint32_t blockThreads>

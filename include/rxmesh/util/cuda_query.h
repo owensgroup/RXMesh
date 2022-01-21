@@ -54,7 +54,7 @@ inline int convert_SMV_to_cores(int major, int minor)
     return nGpuArchCoresPerSM[index - 1].Cores;
 }
 
-cudaDeviceProp cuda_query(const int dev, bool quite = false)
+inline cudaDeviceProp cuda_query(const int dev, bool quite = false)
 {
 
     // Various query about the device we are using

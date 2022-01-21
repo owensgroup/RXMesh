@@ -22,6 +22,7 @@ struct RXMeshTestArg
 #include "test_attribute.cuh"
 #include "test_for_each.h"
 #include "test_edge_flip.h"
+#include "test_validate.h"
 
 int main(int argc, char** argv)
 {
