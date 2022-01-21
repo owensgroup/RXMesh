@@ -168,11 +168,11 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
             // The flipped edge connects p and n vertices. The order depends on
             // the edge direction
             if ((fe[l] & 1)) {
-                s_ev[2 * e]     = n;
-                s_ev[2 * e + 1] = p;
+                s_ev[2 * edge]     = n;
+                s_ev[2 * edge + 1] = p;
             } else {
-                s_ev[2 * e]     = p;
-                s_ev[2 * e + 1] = n;
+                s_ev[2 * edge]     = p;
+                s_ev[2 * edge + 1] = n;
             }
         }
 
