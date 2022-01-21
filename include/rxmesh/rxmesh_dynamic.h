@@ -50,10 +50,10 @@ class RXMeshDynamic : public RXMeshStatic
         }
 
         for (auto o : op) {
-            launch_box.smem_bytes_dyn = std::max(
-                launch_box.smem_bytes_dyn,
-                this->template RXMeshStatic::calc_shared_memory<blockThreads>(
-                    o, oriented));
+            launch_box.smem_bytes_dyn =
+                std::max(launch_box.smem_bytes_dyn,
+                         this->RXMeshStatic::calc_shared_memory<blockThreads>(
+                             o, oriented));
         }
 
 
@@ -76,7 +76,7 @@ class RXMeshDynamic : public RXMeshStatic
     /**
      * @brief Validate the topology information stored in RXMesh. All checks are
      * done on the information stored on the GPU memory and thus all checks are
-     * done on the GPU     
+     * done on the GPU
      * @return true in case all information stored are valid
      */
     bool validate();

@@ -28,8 +28,8 @@ __global__ static void calc_num_elements(const Context context,
 }
 
 template <uint32_t blockThreads>
-__global__ static void check_uniqueness(const Context context,
-                                        uint64_t*     d_check)
+__global__ static void check_uniqueness(const Context           context,
+                                        unsigned long long int* d_check)
 {
     const uint32_t patch_id = blockIdx.x;
     if (patch_id < context.get_num_patches()) {
@@ -50,7 +50,7 @@ __global__ static void check_uniqueness(const Context context,
 
             if (v0 >= patch_info.num_vertices ||
                 v1 >= patch_info.num_vertices || v0 == v1) {
-                ::atomicAdd(d_check, uint64_t(1));
+                ::atomicAdd(d_check, 1);
             }
         }
 
@@ -67,7 +67,7 @@ __global__ static void check_uniqueness(const Context context,
             if (e0 >= patch_info.num_edges || e1 >= patch_info.num_edges ||
                 e2 >= patch_info.num_edges || e0 == e1 || e0 == e2 ||
                 e1 == e2) {
-                ::atomicAdd(d_check, uint64_t(1));
+                ::atomicAdd(d_check, 1);
             }
 
             uint16_t v0, v1, v2;
@@ -79,7 +79,7 @@ __global__ static void check_uniqueness(const Context context,
                 v1 >= patch_info.num_vertices ||
                 v2 >= patch_info.num_vertices || v0 == v1 || v0 == v2 ||
                 v1 == v2) {
-                ::atomicAdd(d_check, uint64_t(1));
+                ::atomicAdd(d_check, 1);
             }
         }
     }
@@ -87,7 +87,8 @@ __global__ static void check_uniqueness(const Context context,
 
 
 template <uint32_t blockThreads>
-__global__ static void check_not_owned(const Context context, uint64_t* d_check)
+__global__ static void check_not_owned(const Context           context,
+                                       unsigned long long int* d_check)
 {
 
     const uint32_t patch_id = blockIdx.x;
@@ -152,7 +153,7 @@ __global__ static void check_not_owned(const Context context, uint64_t* d_check)
 
             if (e0 != ew0 || d0 != dw0 || p0 != pw0 || e1 != ew1 || d1 != dw1 ||
                 p1 != pw1 || e2 != ew2 || d2 != dw2 || p2 != pw2) {
-                ::atomicAdd(d_check, uint64_t(1));
+                ::atomicAdd(d_check, 1);
             }
         }
 
@@ -193,7 +194,7 @@ __global__ static void check_not_owned(const Context context, uint64_t* d_check)
             get_owned_v(vw1, pw1, owner_patch_info);
 
             if (v0 != vw0 || p0 != pw0 || v1 != vw1 || p1 != pw1) {
-                ::atomicAdd(d_check, uint64_t(1));
+                ::atomicAdd(d_check, 1);
             }
         }
     }
@@ -280,9 +281,10 @@ bool RXMeshDynamic::validate()
                               sizeof(uint32_t),
                               cudaMemcpyDeviceToHost));
 
-        uint64_t* d_check;
-        CUDA_ERROR(cudaMalloc((void**)&d_check, sizeof(uint64_t)));
-        CUDA_ERROR(cudaMemset(d_check, 0, sizeof(uint64_t)));
+        unsigned long long int* d_check;
+        CUDA_ERROR(
+            cudaMalloc((void**)&d_check, sizeof(unsigned long long int)));
+        CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
 
         const uint32_t block_size   = 256;
         const uint32_t grid_size    = num_patches;
@@ -293,9 +295,11 @@ bool RXMeshDynamic::validate()
         detail::check_uniqueness<256><<<grid_size, block_size, dynamic_smem>>>(
             m_rxmesh_context, d_check);
 
-        uint64_t h_check(0);
-        CUDA_ERROR(cudaMemcpy(
-            &h_check, d_check, sizeof(uint64_t), cudaMemcpyDeviceToHost));
+        unsigned long long int h_check(0);
+        CUDA_ERROR(cudaMemcpy(&h_check,
+                              d_check,
+                              sizeof(unsigned long long int),
+                              cudaMemcpyDeviceToHost));
 
         CUDA_ERROR(cudaFree(d_check));
 
@@ -315,9 +319,10 @@ bool RXMeshDynamic::validate()
                               sizeof(uint32_t),
                               cudaMemcpyDeviceToHost));
 
-        uint64_t* d_check;
-        CUDA_ERROR(cudaMalloc((void**)&d_check, sizeof(uint64_t)));
-        CUDA_ERROR(cudaMemset(d_check, 0, sizeof(uint64_t)));
+        unsigned long long int* d_check;
+        CUDA_ERROR(
+            cudaMalloc((void**)&d_check, sizeof(unsigned long long int)));
+        CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
 
         const uint32_t block_size   = 256;
         const uint32_t grid_size    = num_patches;
@@ -328,9 +333,11 @@ bool RXMeshDynamic::validate()
         detail::check_not_owned<256><<<grid_size, block_size, dynamic_smem>>>(
             m_rxmesh_context, d_check);
 
-        uint64_t h_check(0);
-        CUDA_ERROR(cudaMemcpy(
-            &h_check, d_check, sizeof(uint64_t), cudaMemcpyDeviceToHost));
+        unsigned long long int h_check(0);
+        CUDA_ERROR(cudaMemcpy(&h_check,
+                              d_check,
+                              sizeof(unsigned long long int),
+                              cudaMemcpyDeviceToHost));
 
         CUDA_ERROR(cudaFree(d_check));
 
