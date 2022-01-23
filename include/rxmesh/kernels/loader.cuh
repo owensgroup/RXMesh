@@ -2,12 +2,38 @@
 
 #include <assert.h>
 #include <stdint.h>
+
+#include <cooperative_groups.h>
+#include <cooperative_groups/memcpy_async.h>
+#include <cuda/barrier>//for cuda::aligned_size_t
+
 #include "rxmesh/context.h"
 #include "rxmesh/local.h"
 #include "rxmesh/types.h"
+#include "rxmesh/util/util.h"
 
 namespace rxmesh {
 namespace detail {
+
+template <typename T, typename SizeT>
+__device__ __inline__ void load_async(const T*    in,
+                                      const SizeT size,
+                                      T*          out,
+                                      bool        with_wait)
+{
+    namespace cg       = cooperative_groups;
+    cg::thread_block g = cg::this_thread_block();
+
+    cg::memcpy_async(
+        block,
+        out,
+        in,
+        cuda::aligned_size_t<128>(expand_to_align(sizeof(T) * size)));
+
+    if (with_wait) {
+        cg::wait(block);
+    }
+}
 
 template <uint32_t blockThreads>
 __device__ __forceinline__ void load_uint16(const uint16_t* in,
@@ -91,6 +117,46 @@ __device__ __forceinline__ void load_mesh(const PatchInfo& patch_info,
                 reinterpret_cast<LocalEdgeT*>(&s_ev[patch_info.num_edges * 2]);
         }
         load_patch_FE<blockThreads>(patch_info, s_fe);
+    }
+}
+
+template <Op op, uint32_t blockThreads>
+__device__ __forceinline__ void load_mesh(const PatchInfo& patch_info,
+                                          uint16_t*&       s_ev,
+                                          uint16_t*&       s_fe,
+                                          bool             with_wait)
+{
+    // assert(s_ev == s_fe);
+
+    switch (op) {
+        case Op::VV: {
+            break;
+        }
+        case Op::VE: {
+            break;
+        }
+        case Op::VF: {
+            break;
+        }
+        case Op::FV: {
+            break;
+        }
+        case Op::FE: {
+            break;
+        }
+        case Op::FF: {
+            break;
+        }
+        case Op::EV: {
+            break;
+        }
+        case Op::EF: {
+            break;
+        }
+        default: {
+            assert(1 != 1);
+            break;
+        }
     }
 }
 

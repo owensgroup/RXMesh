@@ -349,7 +349,9 @@ inline std::string extract_file_name(const std::string& full_path)
  * @brief given an initial number of bytes, increase this number such that it
  * multiple of alignment
  */
-inline uint32_t expand_to_align(uint32_t init_bytes, uint32_t alignment = 128)
+__device__ __host__ __inline__ uint32_t expand_to_align(
+    uint32_t init_bytes,
+    uint32_t alignment = 128)
 {
     uint32_t remainder = init_bytes % alignment;
     if (remainder == 0) {
