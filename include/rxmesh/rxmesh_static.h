@@ -701,16 +701,7 @@ class RXMeshStatic : public RXMesh
 
         size_t dynamic_smem = 0;
 
-        // given an initial number of bytes, increase this number such that it
-        // multiple of alignment
-        auto expand_to_align = [](uint32_t init_bytes,
-                                  uint32_t alignment = 128) -> uint32_t {
-            int remainder = init_bytes % alignment;
-            if (remainder == 0) {
-                return init_bytes;
-            }
-            return init_bytes + alignment - remainder;
-        };
+        
 
         // Let a "segment" mean an array that will be loaded from global memory
         // to shared memory. Since we use memcpy_async API, every segment should
