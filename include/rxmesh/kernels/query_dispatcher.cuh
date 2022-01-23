@@ -33,11 +33,11 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
-    constexpr bool load_fe  = (op == Op::VF || op == Op::EE || op == Op::EF ||
+    constexpr bool load_fe = (op == Op::VF || op == Op::EE || op == Op::EF ||
                               op == Op::FV || op == Op::FE || op == Op::FF);
-    constexpr bool loead_ev = (op == Op::VV || op == Op::VE || op == Op::VF ||
-                               op == Op::EV || op == Op::FV);
-    static_assert(loead_ev || load_fe,
+    constexpr bool loed_ev = (op == Op::VV || op == Op::VE || op == Op::VF ||
+                              op == Op::EV || op == Op::FV);
+    static_assert(loed_ev || load_fe,
                   "At least faces or edges needs to be loaded");
 
     // Check if any of the mesh elements are in the active set
@@ -73,7 +73,7 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     extern __shared__ uint16_t shrd_mem[];
     LocalVertexT*              s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
     LocalEdgeT*                s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
-    load_mesh<blockThreads>(patch_info, loead_ev, load_fe, s_ev, s_fe);
+    load_mesh<blockThreads>(patch_info, loed_ev, load_fe, s_ev, s_fe);
 
     not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
     not_owned_local_id = shrd_mem;

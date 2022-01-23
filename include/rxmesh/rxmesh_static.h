@@ -176,7 +176,7 @@ class RXMeshStatic : public RXMesh
      * needed for kernel launch
      * @param op List of query operations done inside this the kernel
      * @param launch_box input launch box to be populated
-     * @param kernel The kernel to be launched 
+     * @param kernel The kernel to be launched
      * @param oriented if the query is oriented. Valid only for Op::VV queries
      */
     template <uint32_t blockThreads>
@@ -701,25 +701,47 @@ class RXMeshStatic : public RXMesh
 
         size_t dynamic_smem = 0;
 
+        // given an initial number of bytes, increase this number such that it
+        // multiple of alignment
+        auto expand_to_align = [](uint32_t init_bytes,
+                                  uint32_t alignment = 128) -> uint32_t {
+            int remainder = init_bytes % alignment;
+            if (remainder == 0) {
+                return init_bytes;
+            }
+            return init_bytes + alignment - remainder;
+        };
+
+        // Let a "segment" mean an array that will be loaded from global memory
+        // to shared memory. Since we use memcpy_async API, every segment should
+        // be aligned to 128 bytes for achieving best performance. Here we
+        // calculate the size of each segment and then pad it to be multiple of
+        // 128 bytes. We do this to avoid seg faults (out-of-bound accesses)
+        // since all these segments are eventually just a single array in shared
+        // memory
         if (op == Op::FE) {
             // only FE will be loaded
-            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
+            dynamic_smem = expand_to_align(3 * this->m_max_faces_per_patch *
+                                           sizeof(uint16_t));
             // to load not-owned edges local and patch id
-            dynamic_smem += this->m_max_not_owned_edges *
-                                (sizeof(uint16_t) + sizeof(uint32_t)) +
-                            sizeof(uint16_t);
+            dynamic_smem +=
+                expand_to_align(this->m_max_not_owned_edges * sizeof(uint32_t));
+            dynamic_smem += this->m_max_not_owned_edges * sizeof(uint16_t);
         } else if (op == Op::EV) {
             // only EV will be loaded
-            dynamic_smem = 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            dynamic_smem = expand_to_align(2 * this->m_max_edges_per_patch *
+                                           sizeof(uint16_t));
             // to load not-owned vertices local and patch id
-            dynamic_smem += this->m_max_not_owned_vertices *
-                            (sizeof(uint16_t) + sizeof(uint32_t));
+            dynamic_smem += expand_to_align(this->m_max_not_owned_vertices *
+                                            sizeof(uint32_t));
+            dynamic_smem += this->m_max_not_owned_vertices * sizeof(uint16_t);
         } else if (op == Op::FV) {
             // We load both FE and EV. We don't change EV.
             // FE are updated to contain FV instead of FE by reading from
             // EV
-            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
-                           2 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            dynamic_smem = expand_to_align(2 * this->m_max_edges_per_patch *
+                                           sizeof(uint16_t));
+            dynamic_smem += 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
             // no need for extra memory to load not-owned vertices local and
             // patch id. We load them and overwrite EV.
             const uint32_t not_owned_v_bytes =
@@ -740,41 +762,47 @@ class RXMeshStatic : public RXMesh
             // The output will be stored in another buffer with size equal to
             // the EV (i.e., 2*#edges) since this output buffer will stored the
             // nnz and the nnz of a matrix the same before/after transpose
-            dynamic_smem =
-                (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t) +
-                sizeof(uint16_t);
+            dynamic_smem = expand_to_align(
+                (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t));
 
             // to load the not-owned edges local and patch id
-            dynamic_smem += this->m_max_not_owned_edges *
-                            (sizeof(uint16_t) + sizeof(uint32_t));
+            dynamic_smem +=
+                expand_to_align(this->m_max_not_owned_edges * sizeof(uint32_t));
+            dynamic_smem += this->m_max_not_owned_edges * sizeof(uint16_t);
         } else if (op == Op::EF) {
             // same as Op::VE but with faces
-            dynamic_smem =
+            dynamic_smem = expand_to_align(
                 (2 * 3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
-                sizeof(uint16_t) + sizeof(uint16_t);
+                sizeof(uint16_t) + sizeof(uint16_t));
 
             // to load the not-owned faces local and patch id
-            dynamic_smem += this->m_max_not_owned_faces *
-                            (sizeof(uint16_t) + sizeof(uint32_t));
+            dynamic_smem +=
+                expand_to_align(this->m_max_not_owned_faces * sizeof(uint32_t));
+            dynamic_smem += this->m_max_not_owned_faces * sizeof(uint16_t);
         } else if (op == Op::VF) {
             // load EV and FE simultaneously. changes FE to FV using EV. Then
             // transpose FV in place and use EV to store the values/output while
             // using FV to store the prefix sum. Thus, the space used to store
             // EV should be max(3*#faces, 2*#edges)
-            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
-                           std::max(3 * this->m_max_faces_per_patch,
-                                    2 * this->m_max_edges_per_patch) *
-                               sizeof(uint16_t) +
-                           sizeof(uint16_t);
+            dynamic_smem = expand_to_align(3 * this->m_max_faces_per_patch *
+                                           sizeof(uint16_t));
+            dynamic_smem +=
+                expand_to_align(std::max(3 * this->m_max_faces_per_patch,
+                                         2 * this->m_max_edges_per_patch) *
+                                    sizeof(uint16_t) +
+                                sizeof(uint16_t));
 
             // to load the not-owned faces local and patch id
-            dynamic_smem += this->m_max_not_owned_faces *
-                            (sizeof(uint16_t) + sizeof(uint32_t));
+            dynamic_smem +=
+                expand_to_align(this->m_max_not_owned_faces * sizeof(uint32_t));
+            dynamic_smem += this->m_max_not_owned_faces * sizeof(uint16_t);
         } else if (op == Op::VV) {
             // similar to VE but we also need to store the EV even after
             // we do the transpose
-            dynamic_smem =
-                (3 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            dynamic_smem = expand_to_align(
+                (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t));
+            dynamic_smem += expand_to_align((2 * this->m_max_edges_per_patch) *
+                                            sizeof(uint16_t));
             // no need for extra memory to load not-owned local and patch id.
             // We load them and overwrite the extra EV
             if (this->m_max_not_owned_vertices *
