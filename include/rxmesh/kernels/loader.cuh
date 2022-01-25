@@ -5,7 +5,7 @@
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/memcpy_async.h>
-#include <cuda/barrier>//for cuda::aligned_size_t
+#include <cuda/barrier>  //for cuda::aligned_size_t
 
 #include "rxmesh/context.h"
 #include "rxmesh/local.h"
@@ -21,8 +21,8 @@ __device__ __inline__ void load_async(const T*    in,
                                       T*          out,
                                       bool        with_wait)
 {
-    namespace cg       = cooperative_groups;
-    cg::thread_block g = cg::this_thread_block();
+    namespace cg           = cooperative_groups;
+    cg::thread_block block = cg::this_thread_block();
 
     cg::memcpy_async(
         block,
@@ -120,37 +120,83 @@ __device__ __forceinline__ void load_mesh(const PatchInfo& patch_info,
     }
 }
 
-template <Op op, uint32_t blockThreads>
-__device__ __forceinline__ void load_mesh(const PatchInfo& patch_info,
-                                          uint16_t*&       s_ev,
-                                          uint16_t*&       s_fe,
-                                          bool             with_wait)
+template <Op op>
+__device__ __forceinline__ void load_mesh_async(const PatchInfo& patch_info,
+                                                uint16_t*&       s_ev,
+                                                uint16_t*&       s_fe,
+                                                bool             with_wait)
 {
-    // assert(s_ev == s_fe);
+    assert(s_ev == s_fe);
 
     switch (op) {
         case Op::VV: {
+            load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
+                       2 * patch_info.num_edges,
+                       s_ev,
+                       with_wait);
             break;
         }
         case Op::VE: {
+            assert(2 * patch_info.num_edges > patch_info.num_vertices);
+            load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
+                       2 * patch_info.num_edges,
+                       s_ev,
+                       with_wait);
             break;
         }
         case Op::VF: {
+            assert(3 * patch_info.num_faces > patch_info.num_vertices);
+            s_ev = s_fe + expand_to_align(3 * patch_info.num_faces);
+            load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
+                       3 * patch_info.num_faces,
+                       s_fe,
+                       with_wait);
+            load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
+                       2 * patch_info.num_edges,
+                       s_ev,
+                       with_wait);
             break;
         }
         case Op::FV: {
+            s_fe = s_ev + expand_to_align(2 * patch_info.num_edges);
+            load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
+                       2 * patch_info.num_edges,
+                       s_ev,
+                       with_wait);
+
+            load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
+                       3 * patch_info.num_faces,
+                       s_fe,
+                       with_wait);
             break;
         }
         case Op::FE: {
+            load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
+                       3 * patch_info.num_faces,
+                       s_fe,
+                       with_wait);
             break;
         }
         case Op::FF: {
+            load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
+                       3 * patch_info.num_faces,
+                       s_fe,
+                       with_wait);
             break;
         }
         case Op::EV: {
+            load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
+                       2 * patch_info.num_edges,
+                       s_ev,
+                       with_wait);
             break;
         }
         case Op::EF: {
+            assert(3 * patch_info.num_faces > patch_info.num_edges);
+            load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
+                       3 * patch_info.num_faces,
+                       s_fe,
+                       with_wait);
             break;
         }
         default: {
