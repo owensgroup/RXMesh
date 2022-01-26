@@ -72,11 +72,8 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     // 2) Load the patch info
     // TODO need shift shrd_mem to be aligned to 128-byte boundary
     extern __shared__ uint16_t shrd_mem[];
-    // LocalVertexT* s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
-    // LocalEdgeT*   s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
-    // load_mesh<blockThreads>(patch_info, loed_ev, load_fe, s_ev, s_fe);
-    uint16_t* s_ev = shrd_mem;
-    uint16_t* s_fe = shrd_mem;
+    uint16_t*                  s_ev = shrd_mem;
+    uint16_t*                  s_fe = shrd_mem;
     load_mesh_async<op>(patch_info, s_ev, s_fe, true);
 
     not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
