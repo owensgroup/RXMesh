@@ -28,7 +28,9 @@ __device__ __inline__ void load_async(const T*    in,
         block,
         out,
         in,
-        cuda::aligned_size_t<128>(expand_to_align(sizeof(T) * size)));
+        // TODO need to revisit this
+        // cuda::aligned_size_t<128>(expand_to_align(sizeof(T) * size)));
+        sizeof(T) * size);
 
     if (with_wait) {
         cg::wait(block);
@@ -146,23 +148,25 @@ __device__ __forceinline__ void load_mesh_async(const PatchInfo& patch_info,
         }
         case Op::VF: {
             assert(3 * patch_info.num_faces > patch_info.num_vertices);
+            //TODO need to revisit this
             s_ev = s_fe + expand_to_align(3 * patch_info.num_faces);
             load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
                        3 * patch_info.num_faces,
                        s_fe,
-                       with_wait);
+                       false);
             load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
                        2 * patch_info.num_edges,
                        s_ev,
-                       with_wait);
+                       with_wait);            
             break;
         }
         case Op::FV: {
+            // TODO need to revisit this
             s_fe = s_ev + expand_to_align(2 * patch_info.num_edges);
             load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
                        2 * patch_info.num_edges,
                        s_ev,
-                       with_wait);
+                       false);
 
             load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
                        3 * patch_info.num_faces,
@@ -283,10 +287,11 @@ __device__ __forceinline__ void load_not_owned(const PatchInfo& patch_info,
             num_owned     = patch_info.num_owned_faces;
             num_not_owned = patch_info.num_faces - num_owned;
 
-            uint32_t shift = DIVIDE_UP(
-                3 * patch_info.num_faces + std::max(3 * patch_info.num_faces,
-                                                    2 * patch_info.num_edges),
-                2);
+            uint32_t shift =
+                DIVIDE_UP(expand_to_align(3 * patch_info.num_faces) +
+                              std::max(3 * patch_info.num_faces,
+                                       2 * patch_info.num_edges),
+                          2);
             not_owned_patch = not_owned_patch + shift;
             not_owned_local_id =
                 reinterpret_cast<uint16_t*>(not_owned_patch + num_not_owned);

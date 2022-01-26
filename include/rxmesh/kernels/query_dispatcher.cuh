@@ -70,6 +70,7 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     }
 
     // 2) Load the patch info
+    // TODO need shift shrd_mem to be aligned to 128-byte boundary
     extern __shared__ uint16_t shrd_mem[];
     // LocalVertexT* s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
     // LocalEdgeT*   s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
