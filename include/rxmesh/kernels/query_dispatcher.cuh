@@ -79,20 +79,25 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
     not_owned_local_id = shrd_mem;
     num_owned          = 0;
+
+    __syncthreads();
+
     // 3)Perform the query operation
     if (oriented) {
         assert(op == Op::VV);
-        if constexpr (op == Op::VV) {
-            __syncthreads();
+        if constexpr (op == Op::VV) {        
             v_v_oreinted<blockThreads>(
                 patch_info, s_output_offset, s_output_value, s_ev);
         }
     } else {
         if constexpr (!(op == Op::VV || op == Op::FV || op == Op::FF)) {
-            load_not_owned<op, blockThreads>(
-                patch_info, not_owned_local_id, not_owned_patch, num_owned);
+            load_not_owned_async<op>(patch_info,
+                                     not_owned_local_id,
+                                     not_owned_patch,
+                                     num_owned,
+                                     true);
         }
-        __syncthreads();
+        
         query<blockThreads, op>(s_output_offset,
                                 s_output_value,
                                 s_ev,
@@ -107,8 +112,8 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
         // need to sync since we will overwrite things that are used in
         // query
         __syncthreads();
-        load_not_owned<op, blockThreads>(
-            patch_info, not_owned_local_id, not_owned_patch, num_owned);
+        load_not_owned_async<op>(
+            patch_info, not_owned_local_id, not_owned_patch, num_owned, true);
     }
 
 
