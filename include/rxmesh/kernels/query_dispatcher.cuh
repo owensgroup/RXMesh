@@ -33,13 +33,6 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
-    constexpr bool load_fe = (op == Op::VF || op == Op::EE || op == Op::EF ||
-                              op == Op::FV || op == Op::FE || op == Op::FF);
-    constexpr bool loed_ev = (op == Op::VV || op == Op::VE || op == Op::VF ||
-                              op == Op::EV || op == Op::FV);
-    static_assert(loed_ev || load_fe,
-                  "At least faces or edges needs to be loaded");
-
     // Check if any of the mesh elements are in the active set
     // input mapping does not need to be stored in shared memory since it will
     // be read coalesced, we can rely on L1 cache here
