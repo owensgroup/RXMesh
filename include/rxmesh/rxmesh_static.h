@@ -185,11 +185,7 @@ class RXMeshStatic : public RXMesh
                             const void*              kernel,
                             const bool               oriented = false) const
     {
-        static_assert(
-            blockThreads && ((blockThreads & (blockThreads - 1)) == 0),
-            " RXMeshStatic::prepare_launch_box() CUDA block size should be of "
-            "power 2");
-
+        
         launch_box.blocks         = this->m_num_patches;
         launch_box.smem_bytes_dyn = 0;
 
