@@ -61,67 +61,14 @@ __device__ __forceinline__ void load_uint16(const uint16_t* in,
 
 
 /**
- * @brief load the patch FE
- * @param patch_info input patch info
- * @param patch_faces output FE
- * @return
- */
-template <uint32_t blockThreads>
-__device__ __forceinline__ void load_patch_FE(const PatchInfo& patch_info,
-                                              LocalEdgeT*      fe)
-{
-    load_uint16<blockThreads>(reinterpret_cast<const uint16_t*>(patch_info.fe),
-                              patch_info.num_faces * 3,
-                              reinterpret_cast<uint16_t*>(fe));
-}
-
-/**
- * @brief load the patch EV
- * @param patch_info input patch info
- * @param ev output EV
- * @return
- */
-template <uint32_t blockThreads>
-__device__ __forceinline__ void load_patch_EV(const PatchInfo& patch_info,
-                                              LocalVertexT*    ev)
-{
-    load_uint16<blockThreads>(reinterpret_cast<const uint16_t*>(patch_info.ev),
-                              patch_info.num_edges * 2,
-                              reinterpret_cast<uint16_t*>(ev));
-}
-
-/**
- * @brief load the patch topology i.e., EV and FE
- * @param patch_info input patch info
- * @param load_ev input indicates if we should load EV
- * @param load_fe input indicates if we should load FE
+ * @brief load the patch topology based on the requirements of a query operation
+ * @tparam op the query operation 
+ * @param patch_info input patch info 
  * @param s_ev where EV will be loaded
  * @param s_fe where FE will be loaded
+ * @param with_wait wither to add a sync at the end 
  * @return
  */
-template <uint32_t blockThreads>
-__device__ __forceinline__ void load_mesh(const PatchInfo& patch_info,
-                                          const bool       load_ev,
-                                          const bool       load_fe,
-                                          LocalVertexT*&   s_ev,
-                                          LocalEdgeT*&     s_fe)
-{
-
-    if (load_ev) {
-        load_patch_EV<blockThreads>(patch_info, s_ev);
-    }
-    // load patch faces
-    if (load_fe) {
-        if (load_ev) {
-            // if we loaded the edges, then we need to move where
-            // s_fe is pointing at to avoid overwrite
-            s_fe =
-                reinterpret_cast<LocalEdgeT*>(&s_ev[patch_info.num_edges * 2]);
-        }
-        load_patch_FE<blockThreads>(patch_info, s_fe);
-    }
-}
-
 template <Op op>
 __device__ __forceinline__ void load_mesh_async(const PatchInfo& patch_info,
                                                 uint16_t*&       s_ev,
