@@ -37,16 +37,18 @@ __global__ static void check_uniqueness(const Context           context,
         PatchInfo patch_info = context.get_patches_info()[patch_id];
 
         extern __shared__ uint16_t shrd_mem[];
-        LocalVertexT* s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
-        LocalEdgeT*   s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
-        load_mesh<blockThreads>(patch_info, true, true, s_ev, s_fe);
+        uint16_t*                  s_ev = shrd_mem;
+        uint16_t*                  s_fe = shrd_mem;
+
+        // FV since it loads both FE and EV
+        load_mesh_async<Op::FV>(patch_info, s_ev, s_fe, true);
         __syncthreads();
 
         // make sure an edge is connecting two unique vertices
         for (uint16_t e = threadIdx.x; e < patch_info.num_edges;
              e += blockThreads) {
-            uint16_t v0 = s_ev[2 * e + 0].id;
-            uint16_t v1 = s_ev[2 * e + 1].id;
+            uint16_t v0 = s_ev[2 * e + 0];
+            uint16_t v1 = s_ev[2 * e + 1];
 
             if (v0 >= patch_info.num_vertices ||
                 v1 >= patch_info.num_vertices || v0 == v1) {
@@ -60,9 +62,9 @@ __global__ static void check_uniqueness(const Context           context,
              f += blockThreads) {
             uint16_t e0, e1, e2;
             flag_t   d0(0), d1(0), d2(0);
-            Context::unpack_edge_dir(s_fe[3 * f + 0].id, e0, d0);
-            Context::unpack_edge_dir(s_fe[3 * f + 1].id, e1, d1);
-            Context::unpack_edge_dir(s_fe[3 * f + 2].id, e2, d2);
+            Context::unpack_edge_dir(s_fe[3 * f + 0], e0, d0);
+            Context::unpack_edge_dir(s_fe[3 * f + 1], e1, d1);
+            Context::unpack_edge_dir(s_fe[3 * f + 2], e2, d2);
 
             if (e0 >= patch_info.num_edges || e1 >= patch_info.num_edges ||
                 e2 >= patch_info.num_edges || e0 == e1 || e0 == e2 ||
@@ -71,9 +73,9 @@ __global__ static void check_uniqueness(const Context           context,
             }
 
             uint16_t v0, v1, v2;
-            v0 = s_ev[(2 * e0) + (1 * d0)].id;
-            v1 = s_ev[(2 * e1) + (1 * d1)].id;
-            v2 = s_ev[(2 * e2) + (1 * d2)].id;
+            v0 = s_ev[(2 * e0) + (1 * d0)];
+            v1 = s_ev[(2 * e1) + (1 * d1)];
+            v2 = s_ev[(2 * e2) + (1 * d2)];
 
             if (v0 >= patch_info.num_vertices ||
                 v1 >= patch_info.num_vertices ||
@@ -98,9 +100,11 @@ __global__ static void check_not_owned(const Context           context,
         PatchInfo patch_info = context.get_patches_info()[patch_id];
 
         extern __shared__ uint16_t shrd_mem[];
-        LocalVertexT* s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
-        LocalEdgeT*   s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
-        load_mesh<blockThreads>(patch_info, true, true, s_ev, s_fe);
+        uint16_t*                  s_ev = shrd_mem;
+        uint16_t*                  s_fe = shrd_mem;
+
+        // FV since it loads both FE and EV
+        load_mesh_async<Op::FV>(patch_info, s_ev, s_fe, true);
         __syncthreads();
 
         // for every not-owned face, check that its three edges (possibly
@@ -112,9 +116,9 @@ __global__ static void check_not_owned(const Context           context,
             uint16_t e0, e1, e2;
             flag_t   d0(0), d1(0), d2(0);
             uint32_t p0(patch_id), p1(patch_id), p2(patch_id);
-            Context::unpack_edge_dir(s_fe[3 * f + 0].id, e0, d0);
-            Context::unpack_edge_dir(s_fe[3 * f + 1].id, e1, d1);
-            Context::unpack_edge_dir(s_fe[3 * f + 2].id, e2, d2);
+            Context::unpack_edge_dir(s_fe[3 * f + 0], e0, d0);
+            Context::unpack_edge_dir(s_fe[3 * f + 1], e1, d1);
+            Context::unpack_edge_dir(s_fe[3 * f + 2], e2, d2);
 
             // if the edge is not owned, grab its local index in the owner patch
             auto get_owned_e =
@@ -163,8 +167,8 @@ __global__ static void check_not_owned(const Context           context,
              e < patch_info.num_edges;
              e += blockThreads) {
 
-            uint16_t v0 = s_ev[2 * e + 0].id;
-            uint16_t v1 = s_ev[2 * e + 1].id;
+            uint16_t v0 = s_ev[2 * e + 0];
+            uint16_t v1 = s_ev[2 * e + 1];
             uint32_t p0(patch_id), p1(patch_id);
 
             auto get_owned_v =

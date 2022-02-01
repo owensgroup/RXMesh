@@ -33,13 +33,6 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
-    constexpr bool load_fe  = (op == Op::VF || op == Op::EE || op == Op::EF ||
-                              op == Op::FV || op == Op::FE || op == Op::FF);
-    constexpr bool loead_ev = (op == Op::VV || op == Op::VE || op == Op::VF ||
-                               op == Op::EV || op == Op::FV);
-    static_assert(loead_ev || load_fe,
-                  "At least faces or edges needs to be loaded");
-
     // Check if any of the mesh elements are in the active set
     // input mapping does not need to be stored in shared memory since it will
     // be read coalesced, we can rely on L1 cache here
@@ -70,34 +63,38 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     }
 
     // 2) Load the patch info
+    // TODO need shift shrd_mem to be aligned to 128-byte boundary
     extern __shared__ uint16_t shrd_mem[];
-    LocalVertexT*              s_ev = reinterpret_cast<LocalVertexT*>(shrd_mem);
-    LocalEdgeT*                s_fe = reinterpret_cast<LocalEdgeT*>(shrd_mem);
-    load_mesh<blockThreads>(patch_info, loead_ev, load_fe, s_ev, s_fe);
+    uint16_t*                  s_ev = shrd_mem;
+    uint16_t*                  s_fe = shrd_mem;
+    load_mesh_async<op>(patch_info, s_ev, s_fe, true);
 
     not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
     not_owned_local_id = shrd_mem;
     num_owned          = 0;
+
+    __syncthreads();
+
     // 3)Perform the query operation
     if (oriented) {
         assert(op == Op::VV);
-        if constexpr (op == Op::VV) {
-            __syncthreads();
-            v_v_oreinted<blockThreads>(patch_info,
-                                       s_output_offset,
-                                       s_output_value,
-                                       reinterpret_cast<uint16_t*>(s_ev));
+        if constexpr (op == Op::VV) {        
+            v_v_oreinted<blockThreads>(
+                patch_info, s_output_offset, s_output_value, s_ev);
         }
     } else {
         if constexpr (!(op == Op::VV || op == Op::FV || op == Op::FF)) {
-            load_not_owned<op, blockThreads>(
-                patch_info, not_owned_local_id, not_owned_patch, num_owned);
+            load_not_owned_async<op>(patch_info,
+                                     not_owned_local_id,
+                                     not_owned_patch,
+                                     num_owned,
+                                     true);
         }
-        __syncthreads();
+        
         query<blockThreads, op>(s_output_offset,
                                 s_output_value,
-                                reinterpret_cast<uint16_t*>(s_ev),
-                                reinterpret_cast<uint16_t*>(s_fe),
+                                s_ev,
+                                s_fe,
                                 patch_info.num_vertices,
                                 patch_info.num_edges,
                                 patch_info.num_faces);
@@ -108,8 +105,8 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
         // need to sync since we will overwrite things that are used in
         // query
         __syncthreads();
-        load_not_owned<op, blockThreads>(
-            patch_info, not_owned_local_id, not_owned_patch, num_owned);
+        load_not_owned_async<op>(
+            patch_info, not_owned_local_id, not_owned_patch, num_owned, true);
     }
 
 

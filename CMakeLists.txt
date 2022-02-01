@@ -111,7 +111,8 @@ set(cuda_flags
 	-use_fast_math	
     $<$<CXX_COMPILER_ID:GNU>:-O3>
 	--expt-relaxed-constexpr	
-    #-Xptxas -warn-spills -res-usage    
+    -Xptxas -warn-spills -res-usage   
+	--ptxas-options=-v	
     #-G    
 )
 

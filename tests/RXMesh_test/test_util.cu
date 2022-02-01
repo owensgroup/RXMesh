@@ -99,6 +99,29 @@ TEST(Util, AtomicAdd)
     EXPECT_TRUE(test_atomicAdd<uint8_t>()) << "uint8_t failed";
 }
 
+
+TEST(Util, Align)
+{
+    using Type             = float;
+    const size_t num_bytes = sizeof(Type) * 1024;
+    const size_t alignment = 128;
+
+    Type* ptr = (Type*)malloc(num_bytes);
+
+    char* ptr_mis_aligned = reinterpret_cast<char*>(ptr) + 1;
+
+    Type* ptr_aligned    = reinterpret_cast<Type*>(ptr_mis_aligned);
+    void* ptr_aligned_gt = ptr_aligned;
+    rxmesh::detail::align(alignment, ptr_aligned);
+
+    std::size_t spc;
+    void*       ret = std::align(alignment, sizeof(Type), ptr_aligned_gt, spc);
+
+    free(ptr);
+
+    EXPECT_EQ(ptr_aligned, ptr_aligned_gt);
+}
+
 TEST(Util, BlockMatrixTranspose)
 {
     constexpr uint32_t numRows   = 542;

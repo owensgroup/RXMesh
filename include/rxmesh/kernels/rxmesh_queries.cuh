@@ -134,8 +134,10 @@ __device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
     uint16_t*   s_fe    = &s_output_value[2 * num_edges];
     uint16_t*   s_ef    = &s_fe[3 * num_faces + (3 * num_faces) % 2];
     LocalEdgeT* temp_fe = reinterpret_cast<LocalEdgeT*>(s_fe);
-    load_patch_FE<blockThreads>(patch_info, temp_fe);
-
+    load_async(reinterpret_cast<const uint16_t*>(patch_info.fe),
+               num_faces * 3,
+               reinterpret_cast<uint16_t*>(temp_fe),
+               true);
 
     for (uint32_t i = threadIdx.x; i < num_edges * 2; i += blockThreads) {
         s_ef[i] = INVALID16;
@@ -221,7 +223,10 @@ __device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
     // Load EV into s_ef since both has the same size (2*#E)
     s_ev                  = s_ef;
     LocalVertexT* temp_ev = reinterpret_cast<LocalVertexT*>(s_ef);
-    load_patch_EV<blockThreads>(patch_info, temp_ev);
+    load_async(reinterpret_cast<const uint16_t*>(patch_info.ev),
+               num_edges * 2,
+               reinterpret_cast<uint16_t*>(temp_ev),
+               true);
 
     __syncthreads();
 
