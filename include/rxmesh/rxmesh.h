@@ -246,8 +246,14 @@ class RXMesh
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
 
-    // our friend tester class
     friend class ::RXMeshTest;
+
+    template <typename T>
+    friend class VertexAttribute;
+    template <typename T>
+    friend class EdgeAttribute;
+    template <typename T>
+    friend class FaceAttribute;
 
     Context m_rxmesh_context;
 

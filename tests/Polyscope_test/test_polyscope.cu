@@ -17,7 +17,7 @@ int main(int argc, char** argv)
     std::vector<std::vector<float>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
-    import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces);
+    import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces);
 
     rxmesh::RXMeshStatic rxmesh(Faces);
 

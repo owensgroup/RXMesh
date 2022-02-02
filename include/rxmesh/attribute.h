@@ -8,6 +8,7 @@
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/util.cuh"
 #include "rxmesh/patch_info.h"
+#include "rxmesh/rxmesh.h"
 #include "rxmesh/types.h"
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/log.h"
@@ -611,16 +612,26 @@ class FaceAttribute : public Attribute<T>
                   const std::vector<uint16_t>& face_per_patch,
                   const uint32_t               num_attributes,
                   locationT                    location,
-                  const layoutT                layout)
-        : Attribute<T>(name)
+                  const layoutT                layout,
+                  const RXMesh*                rxmesh)
+        : Attribute<T>(name), m_rxmesh(rxmesh)
     {
         this->init(face_per_patch, num_attributes, location, layout);
     }
 
-#ifdef USE_POLYSCOPE    
-    T operator()(size_t i, size_t j) const
+#ifdef USE_POLYSCOPE
+    T operator()(size_t i, size_t j = 0) const
     {
-        return 0;
+        uint32_t   p   = m_rxmesh->m_patcher->get_face_patch_id(i);
+        const auto end = m_rxmesh->m_h_patches_ltog_f[p].begin() +
+                         m_rxmesh->m_h_num_owned_f[p];
+        const auto lid =
+            std::lower_bound(m_rxmesh->m_h_patches_ltog_f[p].begin(), end, i);
+        if (lid == end) {
+            RXMESH_ERROR(
+                "FaceAttribute operator(i,j) can not find the local id");
+        }
+        return Attribute<T>::operator()(p, *lid, j);
     }
     size_t rows() const
     {
@@ -630,15 +641,15 @@ class FaceAttribute : public Attribute<T>
     {
         return this->get_num_attributes();
     }
-#endif
 
     /**
      * @brief returns the size of the attributes i.e., number of faces
      */
     uint32_t size() const
     {
-        return 0;
+        return m_rxmesh->get_num_faces();
     }
+#endif
 
     /**
      * @brief Accessing face attribute using FaceHandle
@@ -667,6 +678,9 @@ class FaceAttribute : public Attribute<T>
         auto                 pl = f_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
+
+   private:
+    const RXMesh* m_rxmesh;
 };
 
 
@@ -696,16 +710,26 @@ class EdgeAttribute : public Attribute<T>
                   const std::vector<uint16_t>& edge_per_patch,
                   const uint32_t               num_attributes,
                   locationT                    location,
-                  const layoutT                layout)
-        : Attribute<T>(name)
+                  const layoutT                layout,
+                  const RXMesh*                rxmesh)
+        : Attribute<T>(name), m_rxmesh(rxmesh)
     {
         this->init(edge_per_patch, num_attributes, location, layout);
     }
 
-#ifdef USE_POLYSCOPE    
+#ifdef USE_POLYSCOPE
     T operator()(size_t i, size_t j = 0) const
     {
-        return 0;
+        uint32_t   p   = m_rxmesh->m_patcher->get_edge_patch_id(i);
+        const auto end = m_rxmesh->m_h_patches_ltog_e[p].begin() +
+                         m_rxmesh->m_h_num_owned_e[p];
+        const auto lid =
+            std::lower_bound(m_rxmesh->m_h_patches_ltog_e[p].begin(), end, i);
+        if (lid == end) {
+            RXMESH_ERROR(
+                "EdgeAttribute operator(i,j) can not find the local id");
+        }
+        return Attribute<T>::operator()(p, *lid, j);
     }
     size_t rows() const
     {
@@ -715,15 +739,15 @@ class EdgeAttribute : public Attribute<T>
     {
         return this->get_num_attributes();
     }
-#endif
 
     /**
      * @brief returns the size of the attributes i.e., number of edges
      */
     uint32_t size() const
     {
-        return 0;
+        return m_rxmesh->get_num_edges();
     }
+#endif
 
     /**
      * @brief Accessing edge attribute using EdgeHandle
@@ -751,6 +775,9 @@ class EdgeAttribute : public Attribute<T>
         auto                 pl = e_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
+
+   private:
+    const RXMesh* m_rxmesh;
 };
 
 
@@ -780,16 +807,27 @@ class VertexAttribute : public Attribute<T>
                     const std::vector<uint16_t>& vertex_per_patch,
                     const uint32_t               num_attributes,
                     locationT                    location,
-                    const layoutT                layout)
-        : Attribute<T>(name)
+                    const layoutT                layout,
+                    const RXMesh*                rxmesh)
+        : Attribute<T>(name), m_rxmesh(rxmesh)
     {
         this->init(vertex_per_patch, num_attributes, location, layout);
     }
 
-#ifdef USE_POLYSCOPE    
+
+#ifdef USE_POLYSCOPE
     T operator()(size_t i, size_t j = 0) const
     {
-        return 0;
+        uint32_t   p   = m_rxmesh->m_patcher->get_vertex_patch_id(i);
+        const auto end = m_rxmesh->m_h_patches_ltog_v[p].begin() +
+                         m_rxmesh->m_h_num_owned_v[p];
+        const auto lid =
+            std::lower_bound(m_rxmesh->m_h_patches_ltog_v[p].begin(), end, i);
+        if (lid == end) {
+            RXMESH_ERROR(
+                "VertexAttribute operator(i,j) can not find the local id");
+        }
+        return Attribute<T>::operator()(p, *lid, j);
     }
     size_t rows() const
     {
@@ -799,15 +837,15 @@ class VertexAttribute : public Attribute<T>
     {
         return this->get_num_attributes();
     }
-#endif
 
     /**
      * @brief returns the size of the attributes i.e., number of vertices
      */
     uint32_t size() const
     {
-        return 0;
+        return m_rxmesh->get_num_vertices();
     }
+#endif
 
     /**
      * @brief Accessing vertex attribute using VertexHandle
@@ -836,6 +874,9 @@ class VertexAttribute : public Attribute<T>
         auto                 pl = v_handle.unpack();
         return Attribute<T>::operator()(pl.first, pl.second, attr);
     }
+
+   private:
+    const RXMesh* m_rxmesh;
 };
 
 /**
@@ -897,7 +938,8 @@ class AttributeContainer
                                std::vector<uint16_t>& element_per_patch,
                                uint32_t               num_attributes,
                                locationT              location,
-                               layoutT                layout)
+                               layoutT                layout,
+                               const RXMesh*          rxmesh)
     {
         if (does_exist(name)) {
             RXMESH_WARN(
@@ -907,7 +949,7 @@ class AttributeContainer
         }
 
         auto new_attr = std::make_shared<AttrT>(
-            name, element_per_patch, num_attributes, location, layout);
+            name, element_per_patch, num_attributes, location, layout, rxmesh);
         m_attr_container.push_back(
             std::dynamic_pointer_cast<AttributeBase>(new_attr));
 

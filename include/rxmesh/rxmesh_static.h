@@ -233,7 +233,8 @@ class RXMeshStatic : public RXMesh
             this->m_h_num_owned_f,
             num_attributes,
             location,
-            layout);
+            layout,
+            this);
     }
 
     /**
@@ -274,7 +275,8 @@ class RXMeshStatic : public RXMesh
             this->m_h_num_owned_f,
             num_attributes,
             LOCATION_ALL,
-            layout);
+            layout,
+            this);
 
         // populate the attribute before returning it
         const int num_patches = this->get_num_patches();
@@ -335,7 +337,8 @@ class RXMeshStatic : public RXMesh
             this->m_h_num_owned_f,
             num_attributes,
             LOCATION_ALL,
-            layout);
+            layout,
+            this);
 
         // populate the attribute before returning it
         const int num_patches = this->get_num_patches();
@@ -379,7 +382,8 @@ class RXMeshStatic : public RXMesh
             this->m_h_num_owned_e,
             num_attributes,
             location,
-            layout);
+            layout,
+            this);
     }
 
     /**
@@ -405,7 +409,8 @@ class RXMeshStatic : public RXMesh
             this->m_h_num_owned_v,
             num_attributes,
             location,
-            layout);
+            layout,
+            this);
     }
 
     /**
@@ -449,7 +454,8 @@ class RXMeshStatic : public RXMesh
             this->m_h_num_owned_v,
             num_attributes,
             LOCATION_ALL,
-            layout);
+            layout,
+            this);
 
         // populate the attribute before returning it
         const int num_patches = this->get_num_patches();
@@ -513,7 +519,8 @@ class RXMeshStatic : public RXMesh
             this->m_h_num_owned_v,
             num_attributes,
             LOCATION_ALL,
-            layout);
+            layout,
+            this);
 
         // populate the attribute before returning it
         const int num_patches = this->get_num_patches();
