@@ -617,6 +617,29 @@ class FaceAttribute : public Attribute<T>
         this->init(face_per_patch, num_attributes, location, layout);
     }
 
+#ifdef USE_POLYSCOPE    
+    T operator()(size_t i, size_t j) const
+    {
+        return 0;
+    }
+    size_t rows() const
+    {
+        return size();
+    }
+    size_t cols() const
+    {
+        return this->get_num_attributes();
+    }
+#endif
+
+    /**
+     * @brief returns the size of the attributes i.e., number of faces
+     */
+    uint32_t size() const
+    {
+        return 0;
+    }
+
     /**
      * @brief Accessing face attribute using FaceHandle
      * @param f_handle input face handle
@@ -677,6 +700,29 @@ class EdgeAttribute : public Attribute<T>
         : Attribute<T>(name)
     {
         this->init(edge_per_patch, num_attributes, location, layout);
+    }
+
+#ifdef USE_POLYSCOPE    
+    T operator()(size_t i, size_t j = 0) const
+    {
+        return 0;
+    }
+    size_t rows() const
+    {
+        return size();
+    }
+    size_t cols() const
+    {
+        return this->get_num_attributes();
+    }
+#endif
+
+    /**
+     * @brief returns the size of the attributes i.e., number of edges
+     */
+    uint32_t size() const
+    {
+        return 0;
     }
 
     /**
@@ -740,6 +786,28 @@ class VertexAttribute : public Attribute<T>
         this->init(vertex_per_patch, num_attributes, location, layout);
     }
 
+#ifdef USE_POLYSCOPE    
+    T operator()(size_t i, size_t j = 0) const
+    {
+        return 0;
+    }
+    size_t rows() const
+    {
+        return size();
+    }
+    size_t cols() const
+    {
+        return this->get_num_attributes();
+    }
+#endif
+
+    /**
+     * @brief returns the size of the attributes i.e., number of vertices
+     */
+    uint32_t size() const
+    {
+        return 0;
+    }
 
     /**
      * @brief Accessing vertex attribute using VertexHandle

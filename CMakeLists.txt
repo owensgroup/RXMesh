@@ -83,6 +83,9 @@ target_compile_definitions(RXMesh_header_lib
     INTERFACE INPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/input/
     INTERFACE OUTPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/output/
 )
+if (USE_POLYSCOPE)
+	target_compile_definitions(RXMesh_header_lib INTERFACE USE_POLYSCOPE)
+endif()
 target_include_directories( RXMesh_header_lib 
     INTERFACE "include"
 	INTERFACE "${rapidjson_SOURCE_DIR}/include"
@@ -124,6 +127,10 @@ target_compile_options(developer_flags INTERFACE
 )
 
 target_link_libraries(RXMesh_header_lib INTERFACE $<BUILD_INTERFACE:developer_flags>)
+
+if (USE_POLYSCOPE)
+	target_link_libraries(RXMesh_header_lib INTERFACE polyscope)	
+endif()
 
 #OpenMP
 find_package(OpenMP)
