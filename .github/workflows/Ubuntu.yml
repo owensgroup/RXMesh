@@ -8,7 +8,8 @@ jobs:
         id: cuda-toolkit
         with:
           cuda: '11.2.2'
-          linux-local-args: '["--toolkit"]'      
+          linux-local-args: '["--toolkit"]'   
+      - run: apt-get install xorg-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev
       - run: nvcc -V      
       - name: Checkout
         uses: actions/checkout@v2            
