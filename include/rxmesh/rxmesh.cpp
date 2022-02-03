@@ -11,7 +11,7 @@
 #include "rxmesh/util/util.h"
 
 namespace rxmesh {
-RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv, const bool quite)
+RXMesh::RXMesh()
     : m_num_edges(0),
       m_num_faces(0),
       m_num_vertices(0),
@@ -28,15 +28,21 @@ RXMesh::RXMesh(const std::vector<std::vector<uint32_t>>& fv, const bool quite)
       m_patch_size(512),
       m_is_input_edge_manifold(true),
       m_is_input_closed(true),
-      m_quite(quite),
+      m_quite(false),
       m_d_patches_info(nullptr),
       m_h_patches_info(nullptr)
 {
+}
+
+void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
+                  const bool                                quite)
+{
+    m_quite = quite;
+
     // Build everything from scratch including patches
     if (fv.empty()) {
         RXMESH_ERROR(
-            "RXMesh::RXMesh input fv is empty. Can not be build RXMesh "
-            "properly");
+            "RXMesh::init input fv is empty. Can not be build RXMesh properly");
     }
     build(fv);
     build_device();

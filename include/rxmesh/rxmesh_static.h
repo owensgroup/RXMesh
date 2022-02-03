@@ -11,6 +11,7 @@
 #include "rxmesh/launch_box.h"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/types.h"
+#include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/timer.h"
 
@@ -27,14 +28,37 @@ class RXMeshStatic : public RXMesh
     RXMeshStatic(const RXMeshStatic&) = delete;
 
     /**
-     * @brief Main constructor used to initialize internal member variables
+     * @brief Constructor using path to obj file
+     * @param file_path path to an obj file
+     * @param quite run in quite mode
+     */
+    RXMeshStatic(const std::string file_path, const bool quite = false)
+        : RXMesh()
+    {
+        std::vector<std::vector<uint32_t>> fv;
+        std::vector<std::vector<float>>    vertices;
+        import_obj(file_path, vertices, fv);
+
+        this->init(fv, quite);
+
+        m_attr_container = std::make_shared<AttributeContainer>();
+
+        m_input_vertex_coordinates =
+            this->add_vertex_attribute<float>(vertices, "RX:vertices");
+
+        m_input_fv = this->add_face_attribute<uint32_t>(fv, "RX:fv");
+    };
+
+    /**
+     * @brief Constructor using triangles and vertices
      * @param fv Face incident vertices as read from an obj file
      * @param quite run in quite mode
      */
     RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
                  const bool                          quite = false)
-        : RXMesh(fv, quite)
+        : RXMesh(), m_input_vertex_coordinates(nullptr), m_input_fv(nullptr)
     {
+        this->init(fv, quite);
         m_attr_container = std::make_shared<AttributeContainer>();
     };
 
@@ -185,7 +209,7 @@ class RXMeshStatic : public RXMesh
                             const void*              kernel,
                             const bool               oriented = false) const
     {
-        
+
         launch_box.blocks         = this->m_num_patches;
         launch_box.smem_bytes_dyn = 0;
 
@@ -570,6 +594,37 @@ class RXMeshStatic : public RXMesh
 
 
     /**
+     * @brief return a shared pointer the input vertex position
+     */
+    std::shared_ptr<VertexAttribute<float>> get_input_vertex_coordinates()
+    {
+        if (!m_input_vertex_coordinates) {
+            RXMESH_ERROR(
+                "RXMeshStatic::get_input_vertex_coordinates input vertex was "
+                "not initialized. Call RXMeshStatic with constructor to the "
+                "obj file path");
+            exit(EXIT_FAILURE);
+        }
+        return m_input_vertex_coordinates;
+    }
+
+    /**
+     * @brief return a shared pointer to the face indices (FV)  which is used as
+     * an input to polyscope
+     */
+    std::shared_ptr<FaceAttribute<uint32_t>> get_input_face_indices()
+    {
+        if (!m_input_vertex_coordinates) {
+            RXMESH_ERROR(
+                "RXMeshStatic::get_input_face_indices input FV was "
+                "not initialized. Call RXMeshStatic with constructor to the "
+                "obj file path");
+            exit(EXIT_FAILURE);
+        }
+        return m_input_fv;
+    }
+
+    /**
      * @brief Map a vertex handle into a global index as seen in the input
      * to RXMeshStatic
      * @param vh input vertex handle
@@ -704,7 +759,6 @@ class RXMeshStatic : public RXMesh
 
         size_t dynamic_smem = 0;
 
-        
 
         // Let a "segment" mean an array that will be loaded from global memory
         // to shared memory. Since we use memcpy_async API, every segment should
@@ -880,7 +934,8 @@ class RXMeshStatic : public RXMesh
         }
     }
 
-
-    std::shared_ptr<AttributeContainer> m_attr_container;
+    std::shared_ptr<AttributeContainer>      m_attr_container;
+    std::shared_ptr<VertexAttribute<float>>  m_input_vertex_coordinates;
+    std::shared_ptr<FaceAttribute<uint32_t>> m_input_fv;
 };
 }  // namespace rxmesh

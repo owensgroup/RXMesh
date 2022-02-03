@@ -193,8 +193,10 @@ class RXMesh
 
     RXMesh(const RXMesh&) = delete;
 
-    RXMesh(const std::vector<std::vector<uint32_t>>& fv,
-           const bool                                quite = false);
+    RXMesh();
+
+    void init(const std::vector<std::vector<uint32_t>>& fv,
+              const bool                                quite = false);
 
     /**
      * @brief build different supporting data structure used to build RXMesh

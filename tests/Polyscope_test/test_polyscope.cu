@@ -1,5 +1,5 @@
 #include <vector>
-#define POLYSCOPE_NO_STANDARDIZE_FALLTHROUGH
+
 #include "polyscope/polyscope.h"
 #include "polyscope/surface_mesh.h"
 #include "rxmesh/rxmesh_static.h"
@@ -14,19 +14,12 @@ int main(int argc, char** argv)
 
     polyscope::init();
 
-    std::vector<std::vector<float>>    Verts;
-    std::vector<std::vector<uint32_t>> Faces;
+    rxmesh::RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "cube.obj");
 
-    import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces);
+    auto psMesh = polyscope::registerSurfaceMesh("RXMesh",
+                                       *rxmesh.get_input_vertex_coordinates(),
+                                       *rxmesh.get_input_face_indices());
 
-    rxmesh::RXMeshStatic rxmesh(Faces);
-
-    auto coords = rxmesh.add_vertex_attribute<float>(Verts, "coordinates");
-    auto indices = rxmesh.add_face_attribute<uint32_t>(Faces, "indices");
-
-    auto psMesh = polyscope::registerSurfaceMesh("RXMesh", *coords, *indices);
-
-    
     polyscope::show();
 
     return 0;
