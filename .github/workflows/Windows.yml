@@ -18,7 +18,7 @@ jobs:
         working-directory: ${{github.workspace}}/build
         run: cmake ../
       - name: Run VS
-        run: cmake --build ${{github.workspace}}/build --clean-first --config Release -j 99         
+        run: cmake --build ${{github.workspace}}/build --clean-first --config Release -j 4
       #- name: Run Test
       #  working-directory: ${{github.workspace}}/build
       #  run: ctest --no-compress-output -T Test -C Release --output-on-failure
