@@ -20,7 +20,7 @@ jobs:
         run: cmake ../
       - name: Run make
         working-directory: ${{github.workspace}}/build
-        run: make -j 99          
+        run: make -j 4
       #- name: Run Test
       #  working-directory: ${{github.workspace}}/build
       #  run: ctest --no-compress-output -T Test -C Release --output-on-failure
