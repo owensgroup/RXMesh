@@ -37,7 +37,12 @@ class RXMeshStatic : public RXMesh
     {
         std::vector<std::vector<uint32_t>> fv;
         std::vector<std::vector<float>>    vertices;
-        import_obj(file_path, vertices, fv);
+        if (!import_obj(file_path, vertices, fv)) {
+            RXMESH_ERROR(
+                "RXMeshStatic::RXMeshStatic could not read the input file {}",
+                file_path);
+            exit(EXIT_FAILURE);
+        }
 
         this->init(fv, quite);
 

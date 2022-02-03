@@ -9,14 +9,8 @@ TEST(RXMeshStatic, ForEach)
 
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    std::vector<std::vector<dataT>>    Verts;
-    std::vector<std::vector<uint32_t>> Faces;
-
-    ASSERT_TRUE(
-        import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces, true));
-
-
-    RXMeshStatic rxmesh_static(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh_static(STRINGIFY(INPUT_DIR) "cube.obj",
+                               rxmesh_args.quite);
 
     std::atomic_uint32_t num_v = 0;
     std::atomic_uint32_t num_e = 0;

@@ -9,12 +9,7 @@ TEST(RXMeshDynamic, EdgeFlip)
 
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    std::vector<std::vector<dataT>>    Verts;
-    std::vector<std::vector<uint32_t>> Faces;
-    ASSERT_TRUE(import_obj(
-        STRINGIFY(INPUT_DIR) "diamond.obj", Verts, Faces, rxmesh_args.quite));
-
-    RXMeshDynamic rxmesh(Faces, rxmesh_args.quite);
+    RXMeshDynamic rxmesh(STRINGIFY(INPUT_DIR) "diamond.obj", rxmesh_args.quite);
 
     ASSERT_TRUE(rxmesh.is_edge_manifold());
 

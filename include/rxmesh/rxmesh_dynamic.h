@@ -9,7 +9,17 @@ class RXMeshDynamic : public RXMeshStatic
     RXMeshDynamic(const RXMeshDynamic&) = delete;
 
     /**
-     * @brief Main constructor used to initialize internal member variables
+     * @brief Constructor using path to obj file
+     * @param file_path path to an obj file
+     * @param quite run in quite mode
+     */
+    RXMeshDynamic(const std::string file_path, const bool quite = false)
+        : RXMeshStatic(file_path, quite)
+    {
+    }
+
+    /**
+     * @brief Constructor using triangles and vertices
      * @param fv Face incident vertices as read from an obj file
      * @param quite run in quite mode
      */
