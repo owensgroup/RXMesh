@@ -51,10 +51,11 @@ FetchContent_Declare(spdlog
 )
 FetchContent_Populate(spdlog)
 
+# polyscope
 if(USE_POLYSCOPE)
 FetchContent_Declare(polyscope
-    GIT_REPOSITORY https://github.com/nmwsharp/polyscope.git
-    GIT_TAG        v1.3.0
+    GIT_REPOSITORY https://github.com/Ahdhn/polyscope.git
+    GIT_TAG        glm_patch #v1.3.0 with patch for glm 
 )
 FetchContent_MakeAvailable(polyscope)
 endif()
