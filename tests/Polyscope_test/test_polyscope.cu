@@ -14,9 +14,10 @@ int main(int argc, char** argv)
 
     polyscope::init();
 
-    rxmesh::RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "cube.obj");
+    rxmesh::RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    auto psMesh = polyscope::registerSurfaceMesh("RXMesh",
+    auto psMesh =
+        polyscope::registerSurfaceMesh("RXMesh",
                                        *rxmesh.get_input_vertex_coordinates(),
                                        *rxmesh.get_input_face_indices());
 

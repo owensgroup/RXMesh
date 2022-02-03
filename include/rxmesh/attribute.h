@@ -631,7 +631,8 @@ class FaceAttribute : public Attribute<T>
             RXMESH_ERROR(
                 "FaceAttribute operator(i,j) can not find the local id");
         }
-        return Attribute<T>::operator()(p, *lid, j);
+        return Attribute<T>::operator()(
+            p, lid - m_rxmesh->m_h_patches_ltog_f[p].begin(), j);
     }
     size_t rows() const
     {
@@ -729,7 +730,8 @@ class EdgeAttribute : public Attribute<T>
             RXMESH_ERROR(
                 "EdgeAttribute operator(i,j) can not find the local id");
         }
-        return Attribute<T>::operator()(p, *lid, j);
+        return Attribute<T>::operator()(
+            p, lid - m_rxmesh->m_h_patches_ltog_e[p].begin(), j);
     }
     size_t rows() const
     {
@@ -827,7 +829,8 @@ class VertexAttribute : public Attribute<T>
             RXMESH_ERROR(
                 "VertexAttribute operator(i,j) can not find the local id");
         }
-        return Attribute<T>::operator()(p, *lid, j);
+        return Attribute<T>::operator()(
+            p, lid - m_rxmesh->m_h_patches_ltog_v[p].begin(), j);
     }
     size_t rows() const
     {
