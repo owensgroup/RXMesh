@@ -4,7 +4,6 @@
 #include "polyscope/surface_mesh.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/cuda_query.h"
-#include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/log.h"
 
 int main(int argc, char** argv)
