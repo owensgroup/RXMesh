@@ -11,16 +11,15 @@ int main(int argc, char** argv)
     rxmesh::Log::init();
     rxmesh::cuda_query(0);
 
+    polyscope::view::upDir = polyscope::UpDir::ZUp;
+
     polyscope::init();
 
     rxmesh::RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
-    std::string p_name = "RXMesh";
-
-    auto polyscope_mesh =
-        polyscope::registerSurfaceMesh(p_name,
-                                       *rx.get_input_vertex_coordinates(),
-                                       *rx.get_input_face_indices());
+    auto polyscope_mesh = rx.get_polyscope_mesh();
+        
+    polyscope_mesh->setEdgeWidth(1.0);
 
     auto vertex_pos   = *rx.get_input_vertex_coordinates();
     auto vertex_color = *rx.add_vertex_attribute<float>("vColor", 3);

@@ -15,6 +15,10 @@
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/timer.h"
 
+#if USE_POLYSCOPE
+#include "polyscope/surface_mesh.h"
+#endif
+
 namespace rxmesh {
 
 /**
@@ -51,7 +55,12 @@ class RXMeshStatic : public RXMesh
         m_input_vertex_coordinates =
             this->add_vertex_attribute<float>(vertices, "RX:vertices");
 
-        m_input_fv = this->add_face_attribute<uint32_t>(fv, "RX:fv");
+#if USE_POLYSCOPE
+        m_polyscope_mesh = polyscope::registerSurfaceMesh(
+            polyscope::guessNiceNameFromPath(file_path),
+            *m_input_vertex_coordinates,
+            fv);
+#endif
     };
 
     /**
@@ -61,7 +70,7 @@ class RXMeshStatic : public RXMesh
      */
     RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
                  const bool                          quite = false)
-        : RXMesh(), m_input_vertex_coordinates(nullptr), m_input_fv(nullptr)
+        : RXMesh(), m_input_vertex_coordinates(nullptr)
     {
         this->init(fv, quite);
         m_attr_container = std::make_shared<AttributeContainer>();
@@ -71,6 +80,16 @@ class RXMeshStatic : public RXMesh
     {
     }
 
+#if USE_POLYSCOPE
+    /**
+     * @brief return a pointer to polyscope surface which has been registered
+     * with this instance     
+     */
+    polyscope::SurfaceMesh* get_polyscope_mesh()
+    {
+        return m_polyscope_mesh;
+    }
+#endif
 
     /**
      * @brief Apply a lambda function on all vertices in the mesh
@@ -614,22 +633,6 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
-     * @brief return a shared pointer to the face indices (FV)  which is used as
-     * an input to polyscope
-     */
-    std::shared_ptr<FaceAttribute<uint32_t>> get_input_face_indices()
-    {
-        if (!m_input_vertex_coordinates) {
-            RXMESH_ERROR(
-                "RXMeshStatic::get_input_face_indices input FV was "
-                "not initialized. Call RXMeshStatic with constructor to the "
-                "obj file path");
-            exit(EXIT_FAILURE);
-        }
-        return m_input_fv;
-    }
-
-    /**
      * @brief Map a vertex handle into a global index as seen in the input
      * to RXMeshStatic
      * @param vh input vertex handle
@@ -939,8 +942,10 @@ class RXMeshStatic : public RXMesh
         }
     }
 
-    std::shared_ptr<AttributeContainer>      m_attr_container;
-    std::shared_ptr<VertexAttribute<float>>  m_input_vertex_coordinates;
-    std::shared_ptr<FaceAttribute<uint32_t>> m_input_fv;
+    std::shared_ptr<AttributeContainer>     m_attr_container;
+    std::shared_ptr<VertexAttribute<float>> m_input_vertex_coordinates;
+#if USE_POLYSCOPE
+    polyscope::SurfaceMesh* m_polyscope_mesh;
+#endif
 };
 }  // namespace rxmesh
