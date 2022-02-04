@@ -13,12 +13,30 @@ int main(int argc, char** argv)
 
     polyscope::init();
 
-    rxmesh::RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    rxmesh::RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
-    auto psMesh =
-        polyscope::registerSurfaceMesh("RXMesh",
-                                       *rxmesh.get_input_vertex_coordinates(),
-                                       *rxmesh.get_input_face_indices());
+    std::string p_name = "RXMesh";
+
+    auto polyscope_mesh =
+        polyscope::registerSurfaceMesh(p_name,
+                                       *rx.get_input_vertex_coordinates(),
+                                       *rx.get_input_face_indices());
+
+    auto vertex_pos   = *rx.get_input_vertex_coordinates();
+    auto vertex_color = *rx.add_vertex_attribute<float>("vColor", 3);
+
+    rx.for_each_vertex(
+        rxmesh::DEVICE,
+        [vertex_color, vertex_pos] __device__(const rxmesh::VertexHandle vh) {
+            vertex_color(vh, 0) = 0.9;
+            vertex_color(vh, 1) = vertex_pos(vh, 1);
+            vertex_color(vh, 2) = 0.9;
+        });
+
+    vertex_color.move(rxmesh::DEVICE, rxmesh::HOST);
+
+
+    polyscope_mesh->addVertexColorQuantity("vColor", vertex_color);
 
     polyscope::show();
 
