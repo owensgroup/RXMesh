@@ -18,7 +18,7 @@ int main(int argc, char** argv)
     rxmesh::RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
     auto polyscope_mesh = rx.get_polyscope_mesh();
-        
+
     polyscope_mesh->setEdgeWidth(1.0);
 
     auto vertex_pos   = *rx.get_input_vertex_coordinates();
@@ -36,6 +36,12 @@ int main(int argc, char** argv)
 
 
     polyscope_mesh->addVertexColorQuantity("vColor", vertex_color);
+
+    rx.polyscope_render_face_patch();
+
+    rx.polyscope_render_vertex_patch();
+
+    rx.polyscope_render_edge_patch();
 
     polyscope::show();
 

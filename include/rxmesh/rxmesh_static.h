@@ -83,11 +83,44 @@ class RXMeshStatic : public RXMesh
 #if USE_POLYSCOPE
     /**
      * @brief return a pointer to polyscope surface which has been registered
-     * with this instance     
+     * with this instance
      */
     polyscope::SurfaceMesh* get_polyscope_mesh()
     {
         return m_polyscope_mesh;
+    }
+
+    /**
+     * @brief add the face's patch scalar quantity to the polyscope instance
+     * associated RXMeshStatic
+     * @return pointer to polyscope's face scalar quantity
+     */
+    polyscope::SurfaceFaceScalarQuantity* polyscope_render_face_patch()
+    {
+        return m_polyscope_mesh->addFaceScalarQuantity(
+            "rx:FPatch", this->m_patcher->get_face_patch());
+    }
+
+    /**
+     * @brief add the vertex's patch scalar quantity to the polyscope instance
+     * associated RXMeshStatic
+     * @return pointer to polyscope's vertex scalar quantity
+     */
+    polyscope::SurfaceVertexScalarQuantity* polyscope_render_vertex_patch()
+    {
+        return m_polyscope_mesh->addVertexScalarQuantity(
+            "rx:VPatch", this->m_patcher->get_vertex_patch());
+    }
+
+    /**
+     * @brief add the edge's patch scalar quantity to the polyscope instance
+     * associated RXMeshStatic
+     * @return pointer to polyscope's edge scalar quantity
+     */
+    polyscope::SurfaceEdgeScalarQuantity* polyscope_render_edge_patch()
+    {
+        m_polyscope_mesh->addEdgeScalarQuantity(
+            "rx:EPatch", this->m_patcher->get_edge_patch());
     }
 #endif
 
