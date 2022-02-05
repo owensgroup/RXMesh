@@ -6,6 +6,38 @@
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/log.h"
 
+#include "rxmesh/kernels/query_dispatcher.cuh"
+
+template <typename T, uint32_t blockThreads>
+__global__ static void compute_vertex_normal(const rxmesh::Context      context,
+                                             rxmesh::VertexAttribute<T> coords,
+                                             rxmesh::VertexAttribute<T> normals)
+{
+    using namespace rxmesh;
+
+    auto vn_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
+        // get the face's three vertices coordinates
+        Vector<3, T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
+        Vector<3, T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
+        Vector<3, T> c2(coords(fv[2], 0), coords(fv[2], 1), coords(fv[2], 2));
+
+        // compute the face normal
+        Vector<3, T> n = cross(c1 - c0, c2 - c0);
+
+        // the three edges length
+        Vector<3, T> l(dist2(c0, c1), dist2(c1, c2), dist2(c2, c0));
+
+        // add the face's normal to its vertices
+        for (uint32_t v = 0; v < 3; ++v) {      // for every vertex in this face
+            for (uint32_t i = 0; i < 3; ++i) {  // for the vertex 3 coordinates
+                atomicAdd(&normals(fv[v], i), n[i] / (l[v] + l[(v + 2) % 3]));
+            }
+        }
+    };
+
+    query_block_dispatcher<Op::FV, blockThreads>(context, vn_lambda);
+}
+
 int main(int argc, char** argv)
 {
     rxmesh::Log::init();
@@ -21,9 +53,9 @@ int main(int argc, char** argv)
 
     polyscope_mesh->setEdgeWidth(1.0);
 
+    //Vertex Color 
     auto vertex_pos   = *rx.get_input_vertex_coordinates();
     auto vertex_color = *rx.add_vertex_attribute<float>("vColor", 3);
-
     rx.for_each_vertex(
         rxmesh::DEVICE,
         [vertex_color, vertex_pos] __device__(const rxmesh::VertexHandle vh) {
@@ -34,14 +66,29 @@ int main(int argc, char** argv)
 
     vertex_color.move(rxmesh::DEVICE, rxmesh::HOST);
 
-
     polyscope_mesh->addVertexColorQuantity("vColor", vertex_color);
 
-    rx.polyscope_render_face_patch();
+    // rx.polyscope_render_face_patch();
+    // rx.polyscope_render_vertex_patch();
+    // rx.polyscope_render_edge_patch();
 
-    rx.polyscope_render_vertex_patch();
+    //Vertex Normal  
+    auto vertex_normals = rx.add_vertex_attribute<float>("vNormals", 3);
+    vertex_normals->reset(0, rxmesh::LOCATION_ALL);
 
-    rx.polyscope_render_edge_patch();
+    constexpr uint32_t               CUDABlockSize = 256;
+    rxmesh::LaunchBox<CUDABlockSize> launch_box;
+    rx.prepare_launch_box({rxmesh::Op::FV},
+                          launch_box,
+                          (void*)compute_vertex_normal<float, CUDABlockSize>);
+    compute_vertex_normal<float, CUDABlockSize><<<launch_box.blocks,
+                                                  launch_box.num_threads,
+                                                  launch_box.smem_bytes_dyn>>>(
+        rx.get_context(), vertex_pos, *vertex_normals);
+
+    vertex_normals->move(rxmesh::DEVICE, rxmesh::HOST);
+
+    polyscope_mesh->addVertexVectorQuantity("vNormal", *vertex_normals);
 
     polyscope::show();
 
