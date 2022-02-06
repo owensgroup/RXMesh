@@ -256,12 +256,10 @@ inline float toplesets_propagation(TriMesh&                     mesh,
 }
 
 template <typename T>
-void geodesic_ptp_openmesh(const std::vector<std::vector<uint32_t>>& Faces,
-                           const std::vector<std::vector<T>>&        Verts,
-                           const std::vector<uint32_t>&              h_seeds,
-                           std::vector<uint32_t>& sorted_index,
-                           std::vector<uint32_t>& limits,
-                           std::vector<uint32_t>& toplesets)
+void geodesic_ptp_openmesh(const std::vector<uint32_t>& h_seeds,
+                           std::vector<uint32_t>&       sorted_index,
+                           std::vector<uint32_t>&       limits,
+                           std::vector<uint32_t>&       toplesets)
 {
     TriMesh input_mesh;
     ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
@@ -274,9 +272,6 @@ void geodesic_ptp_openmesh(const std::vector<std::vector<uint32_t>>& Faces,
     report.add_member("seeds", h_seeds);
     std::string method = "OpenMeshSingleCore";
     report.add_member("method", method);
-
-    ASSERT_TRUE(Faces.size() == input_mesh.n_faces());
-    ASSERT_TRUE(Verts.size() == input_mesh.n_vertices());
 
 
     std::vector<T> geo_distance(input_mesh.n_vertices(),
@@ -302,13 +297,6 @@ void geodesic_ptp_openmesh(const std::vector<std::vector<uint32_t>>& Faces,
     float    processing_time = toplesets_propagation(
         input_mesh, h_seeds, limits, sorted_index, geo_distance, iter);
     RXMESH_TRACE("geodesic_ptp_openmesh() took {} (ms)", processing_time);
-
-    // export_attribute_VTK("geo_openmesh.vtk",
-    //                     Faces,
-    //                     Verts,
-    //                     false,
-    //                     geo_distance.data(),
-    //                     geo_distance.data());
 
     // Finalize report
     report.add_member("num_iter_taken", iter);
