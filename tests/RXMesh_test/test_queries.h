@@ -41,7 +41,7 @@ TEST(RXMeshStatic, Oriented_VV)
     output->reset(VertexHandle(), rxmesh::DEVICE);
 
     // launch box
-    constexpr uint32_t      blockThreads = 256;
+    constexpr uint32_t      blockThreads = 320;
     LaunchBox<blockThreads> launch_box;
     rxmesh.prepare_launch_box(
         {Op::VV},
@@ -129,7 +129,7 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
     using namespace rxmesh;
 
     // launch box
-    constexpr uint32_t      blockThreads = 256;
+    constexpr uint32_t      blockThreads = 320;
     LaunchBox<blockThreads> launch_box;
     rxmesh.prepare_launch_box({op},
                               launch_box,

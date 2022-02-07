@@ -19,14 +19,13 @@ struct Iterator
                         const uint16_t* not_owned_local_id,
                         int             shift = 0)
         : m_patch_output(patch_output),
-          m_patch_offset(patch_offset),
           m_patch_id(patch_id),
           m_num_owned(num_owned),
           m_not_owned_patch(not_owned_patch),
           m_not_owned_local_id(not_owned_local_id),
           m_shift(shift)
     {
-        set(local_id, offset_size);
+        set(local_id, offset_size, patch_offset);
     }
 
     Iterator(const Iterator& orig) = default;
@@ -45,7 +44,7 @@ struct Iterator
         if (lid < m_num_owned) {
             return {m_patch_id, lid};
         } else {
-            lid -= m_num_owned;            
+            lid -= m_num_owned;
             return {m_not_owned_patch[lid], m_not_owned_local_id[lid]};
         }
     }
@@ -109,7 +108,6 @@ struct Iterator
 
    private:
     const LocalT*   m_patch_output;
-    const uint16_t* m_patch_offset;
     const uint32_t  m_patch_id;
     const uint32_t* m_not_owned_patch;
     const uint16_t* m_not_owned_local_id;
@@ -120,13 +118,15 @@ struct Iterator
     uint16_t        m_current;
     int             m_shift;
 
-    __device__ void set(const uint16_t local_id, const uint32_t offset_size)
+    __device__ void set(const uint16_t  local_id,
+                        const uint32_t  offset_size,
+                        const uint16_t* patch_offset)
     {
         m_current  = 0;
         m_local_id = local_id;
         if (offset_size == 0) {
-            m_begin = m_patch_offset[m_local_id];
-            m_end   = m_patch_offset[m_local_id + 1];
+            m_begin = patch_offset[m_local_id];
+            m_end   = patch_offset[m_local_id + 1];
         } else {
             m_begin = m_local_id * offset_size;
             m_end   = (m_local_id + 1) * offset_size;
