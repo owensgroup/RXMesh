@@ -5,7 +5,7 @@
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/memcpy_async.h>
-#include <cuda/barrier>  //for cuda::aligned_size_t
+//#include <cuda/barrier>  //for cuda::aligned_size_t
 
 #include "rxmesh/context.h"
 #include "rxmesh/local.h"

@@ -8,6 +8,8 @@ project(RXMesh
         VERSION 0.2.0 
         LANGUAGES C CXX CUDA)
 
+set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
@@ -49,6 +51,15 @@ FetchContent_Declare(spdlog
 )
 FetchContent_Populate(spdlog)
 
+# polyscope
+if(USE_POLYSCOPE)
+FetchContent_Declare(polyscope
+    GIT_REPOSITORY https://github.com/Ahdhn/polyscope.git
+    GIT_TAG        glm_patch #v1.3.0 with patch for glm 
+)
+FetchContent_MakeAvailable(polyscope)
+endif()
+
 # Auto-detect GPU architecture, sets ${CUDA_ARCHS}
 include("cmake/AutoDetectCudaArch.cmake")
 
@@ -73,6 +84,9 @@ target_compile_definitions(RXMesh_header_lib
     INTERFACE INPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/input/
     INTERFACE OUTPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/output/
 )
+if (USE_POLYSCOPE)
+	target_compile_definitions(RXMesh_header_lib INTERFACE USE_POLYSCOPE)
+endif()
 target_include_directories( RXMesh_header_lib 
     INTERFACE "include"
 	INTERFACE "${rapidjson_SOURCE_DIR}/include"
@@ -114,6 +128,10 @@ target_compile_options(developer_flags INTERFACE
 )
 
 target_link_libraries(RXMesh_header_lib INTERFACE $<BUILD_INTERFACE:developer_flags>)
+
+if (USE_POLYSCOPE)
+	target_link_libraries(RXMesh_header_lib INTERFACE polyscope)	
+endif()
 
 #OpenMP
 find_package(OpenMP)

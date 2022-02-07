@@ -33,27 +33,22 @@ TEST(App, Filtering)
     cuda_query(Arg.device_id);
 
 
-    // Load mesh
-    std::vector<std::vector<uint32_t>> Faces;
-    std::vector<std::vector<dataT>>    Verts;
-    ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
-
-
     TriMesh input_mesh;
     ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
 
-    ASSERT_EQ(input_mesh.n_vertices(), Verts.size());
-
     // OpenMesh Impl
-    std::vector<std::vector<dataT>> ground_truth(Verts);
+    std::vector<std::vector<dataT>> ground_truth(input_mesh.n_vertices());
+    for (auto& g : ground_truth) {
+        g.resize(3);
+    }
     size_t                          max_neighbour_size = 0;
-    filtering_openmesh(
+    filtering_openmesh<dataT>(
         omp_get_max_threads(), input_mesh, ground_truth, max_neighbour_size);
 
 
     // RXMesh Impl
-    filtering_rxmesh(Faces, Verts, ground_truth, max_neighbour_size);
-
+    filtering_rxmesh<dataT>(
+        Arg.obj_file_name, ground_truth, max_neighbour_size);
 }
 
 int main(int argc, char** argv)
