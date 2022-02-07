@@ -71,6 +71,50 @@ __launch_bounds__(blockSize) __global__
     }
 }
 
+
+template <class T, uint32_t blockSize, typename ReductionOp>
+__launch_bounds__(blockSize) __global__
+    void generic_reduce(const Attribute<T> X,
+                        const uint16_t*    d_element_per_patch,
+                        const uint32_t     num_patches,
+                        const uint32_t     num_attributes,
+                        T*                 d_block_output,
+                        ReductionOp        reduction_op,
+                        T                  init,
+                        uint32_t           attribute_id)
+{
+    uint32_t           p_id                      = blockIdx.x;
+    constexpr uint32_t assumed_element_per_patch = 3000;
+    constexpr uint32_t itemPerThread =
+        DIVIDE_UP(blockSize, assumed_element_per_patch);
+
+    if (p_id < num_patches) {
+        const uint16_t element_per_patch = d_element_per_patch[p_id];
+        assert(assumed_element_per_patch >= element_per_patch);
+
+        T thread_val[itemPerThread];
+
+        for (uint32_t i = 0; i < itemPerThread; ++i) {
+            uint32_t element_id = itemPerThread * threadIdx.x + i;
+
+            if (element_id < element_per_patch) {
+                thread_val[i] = X(p_id, element_id, attribute_id);
+            } else {
+                thread_val[i] = init;
+            }
+        }
+        typedef cub::BlockReduce<T, blockSize>       BlockReduce;
+        __shared__ typename BlockReduce::TempStorage temp_storage;
+
+        T block_aggregate =
+            BlockReduce(temp_storage).Reduce(thread_val, reduction_op);
+        if (threadIdx.x == 0) {
+            d_block_output[blockIdx.x] = block_aggregate;
+        }
+    }
+}
+
+
 template <typename T>
 __global__ void memset_attribute(const Attribute<T> attr,
                                  const T            value,

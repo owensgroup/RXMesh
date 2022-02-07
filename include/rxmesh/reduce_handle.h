@@ -79,7 +79,7 @@ class ReduceHandle
                 attr1.get_num_attributes(),
                 m_d_reduce_1st_stage);
 
-        return reduce_2nd_stage(stream);
+        return reduce_2nd_stage(stream, cub::Sum(), 0);
     }
 
     /**
@@ -105,21 +105,50 @@ class ReduceHandle
                 attr.get_num_attributes(),
                 m_d_reduce_1st_stage);
 
-        return std::sqrt(reduce_2nd_stage(stream));
+        return std::sqrt(reduce_2nd_stage(stream, cub::Sum(), 0));
     }
 
+    template <typename ReductionOp>
+    T reduce(const Attribute<T>& attr,
+             ReductionOp         reduction_op,
+             T                   init,
+             uint32_t            attribute_id = 0,
+             cudaStream_t        stream       = NULL)
+    {
+        if ((attr.get_allocated() & DEVICE) != DEVICE) {
+            RXMESH_ERROR(
+                "ReduceHandle::reduce() input attribute to should be "
+                "allocated on the device");
+        }
+
+        detail::generic_reduce<T, attr.m_block_size>
+            <<<m_num_patches, attr.m_block_size, 0, stream>>>(
+                attr,
+                attr.m_d_element_per_patch,
+                m_num_patches,
+                attr.get_num_attributes(),
+                m_d_reduce_1st_stage,
+                reduction_op,
+                init,
+                attribute_id);
+
+        return reduce_2nd_stage(stream, reduction_op, init);
+    }
 
    private:
-    T reduce_2nd_stage(cudaStream_t stream)
+    template <typename ReductionOp>
+    T reduce_2nd_stage(cudaStream_t stream, ReductionOp reduction_op, T init)
     {
         T h_output = 0;
 
-        cub::DeviceReduce::Sum(m_d_reduce_temp_storage,
-                               m_reduce_temp_storage_bytes,
-                               m_d_reduce_1st_stage,
-                               m_d_reduce_2nd_stage,
-                               m_num_patches,
-                               stream);
+        cub::DeviceReduce::Reduce(m_d_reduce_temp_storage,
+                                  m_reduce_temp_storage_bytes,
+                                  m_d_reduce_1st_stage,
+                                  m_d_reduce_2nd_stage,
+                                  m_num_patches,
+                                  reduction_op,
+                                  init,
+                                  stream);
 
         CUDA_ERROR(cudaMemcpyAsync(&h_output,
                                    m_d_reduce_2nd_stage,
