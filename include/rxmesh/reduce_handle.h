@@ -56,12 +56,15 @@ class ReduceHandle
      * output on the host
      * @param attr1 first input attribute
      * @param attr2 second input attribute
+     * @param attribute_id specific attribute ID to compute its dot product.
+     * Default is INVALID32 which compute dot product for all attributes
      * @param stream stream to run the computation on
      * @return the output of dot product on the host
      */
     T dot(const Attribute<T>& attr1,
           const Attribute<T>& attr2,
-          cudaStream_t        stream = NULL)
+          uint32_t            attribute_id = INVALID32,
+          cudaStream_t        stream       = NULL)
     {
         if ((attr1.get_allocated() & DEVICE) != DEVICE ||
             (attr2.get_allocated() & DEVICE) != DEVICE) {
@@ -77,7 +80,8 @@ class ReduceHandle
                 attr1.m_d_element_per_patch,
                 m_num_patches,
                 attr1.get_num_attributes(),
-                m_d_reduce_1st_stage);
+                m_d_reduce_1st_stage,
+                attribute_id);
 
         return reduce_2nd_stage(stream, cub::Sum(), 0);
     }
@@ -86,10 +90,14 @@ class ReduceHandle
      * @brief compute L2 norm between two input attributes and return the output
      * on the host
      * @param attr input attribute
+     * @param attribute_id specific attribute ID to compute its norm2. Default
+     * is INVALID32 which compute norm2 for all attributes
      * @param stream stream to run the computation on
      * @return the output of L2 norm on the host
      */
-    T norm2(const Attribute<T>& attr, cudaStream_t stream = NULL)
+    T norm2(const Attribute<T>& attr,
+            uint32_t            attribute_id = INVALID32,
+            cudaStream_t        stream       = NULL)
     {
         if ((attr.get_allocated() & DEVICE) != DEVICE) {
             RXMESH_ERROR(
@@ -103,7 +111,8 @@ class ReduceHandle
                 attr.m_d_element_per_patch,
                 m_num_patches,
                 attr.get_num_attributes(),
-                m_d_reduce_1st_stage);
+                m_d_reduce_1st_stage,
+                attribute_id);
 
         return std::sqrt(reduce_2nd_stage(stream, cub::Sum(), 0));
     }

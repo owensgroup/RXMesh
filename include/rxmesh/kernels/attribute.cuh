@@ -28,16 +28,22 @@ __launch_bounds__(blockSize) __global__
                       const uint16_t*    d_element_per_patch,
                       const uint32_t     num_patches,
                       const uint32_t     num_attributes,
-                      T*                 d_block_output)
+                      T*                 d_block_output,
+                      uint32_t           attribute_id)
 {
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
         const uint16_t element_per_patch = d_element_per_patch[p_id];
         T              thread_val        = 0;
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
-            for (uint32_t j = 0; j < num_attributes; ++j) {
-                const T val = X(p_id, i, j);
+            if (attribute_id != INVALID32) {
+                const T val = X(p_id, i, attribute_id);
                 thread_val += val * val;
+            } else {
+                for (uint32_t j = 0; j < num_attributes; ++j) {
+                    const T val = X(p_id, i, j);
+                    thread_val += val * val;
+                }
             }
         }
 
@@ -53,7 +59,8 @@ __launch_bounds__(blockSize) __global__
                     const uint16_t*    d_element_per_patch,
                     const uint32_t     num_patches,
                     const uint32_t     num_attributes,
-                    T*                 d_block_output)
+                    T*                 d_block_output,
+                    uint32_t           attribute_id)
 {
     assert(X.get_num_attributes() == Y.get_num_attributes());
 
@@ -62,8 +69,13 @@ __launch_bounds__(blockSize) __global__
         const uint16_t element_per_patch = d_element_per_patch[p_id];
         T              thread_val        = 0;
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
-            for (uint32_t j = 0; j < num_attributes; ++j) {
-                thread_val += X(p_id, i, j) * Y(p_id, i, j);
+            if (attribute_id != INVALID32) {
+                thread_val +=
+                    X(p_id, i, attribute_id) * Y(p_id, i, attribute_id);
+            } else {
+                for (uint32_t j = 0; j < num_attributes; ++j) {
+                    thread_val += X(p_id, i, j) * Y(p_id, i, j);
+                }
             }
         }
 
