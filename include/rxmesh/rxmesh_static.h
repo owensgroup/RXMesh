@@ -119,7 +119,7 @@ class RXMeshStatic : public RXMesh
      */
     polyscope::SurfaceEdgeScalarQuantity* polyscope_render_edge_patch()
     {
-        m_polyscope_mesh->addEdgeScalarQuantity(
+        return m_polyscope_mesh->addEdgeScalarQuantity(
             "rx:EPatch", this->m_patcher->get_edge_patch());
     }
 #endif
