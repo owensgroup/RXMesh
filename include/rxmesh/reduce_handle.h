@@ -117,6 +117,34 @@ class ReduceHandle
         return std::sqrt(reduce_2nd_stage(stream, cub::Sum(), 0));
     }
 
+    /**
+     * @brief performn generic reduction operations on an input attribute
+     * @tparam ReductionOp type of the binary reduction functor having member T
+     * operator()(const T &a, const T &b)
+     * @param attr input attribute
+     * @param reduction_op the binary reduction functor. It is possible to use
+     * CUB built-in reduction functor like cub::Max(), cub::Sum(). An example of
+     * user-defined:
+     *
+     * struct CustomMin
+     * {
+     *     template <typename T>
+     *     __device__ __forceinline__ T operator()(const T& a, const T& b) const
+     *     {
+     *         return (b < a) ? b : a;
+     *     }
+     * };
+     * Read more about reduction from CUB doc
+     * https://nvlabs.github.io/cub/structcub_1_1_device_reduce.html
+     * @param init initial value for reduction. This should be the "neutral"
+     * value for the reduction operations e.g., 0 for sum, 1 for multiplication,
+     * 0 for max on uint32_t
+     * @param attribute_id specific attribute ID to compute its reduction.
+     * Default is INVALID32 which compute reduction for all attributes
+     * @param stream stream to run the computation on
+     * @return the reduced output on the host
+     */
+
     template <typename ReductionOp>
     T reduce(const Attribute<T>& attr,
              ReductionOp         reduction_op,
