@@ -83,24 +83,19 @@ __launch_bounds__(blockSize) __global__
                         T                  init,
                         uint32_t           attribute_id)
 {
-    uint32_t           p_id                      = blockIdx.x;
-    constexpr uint32_t assumed_element_per_patch = 3000;
-    constexpr uint32_t itemPerThread =
-        DIVIDE_UP(blockSize, assumed_element_per_patch);
-
+    uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
         const uint16_t element_per_patch = d_element_per_patch[p_id];
-        assert(assumed_element_per_patch >= element_per_patch);
-
-        T thread_val[itemPerThread];
-
-        for (uint32_t i = 0; i < itemPerThread; ++i) {
-            uint32_t element_id = itemPerThread * threadIdx.x + i;
-
-            if (element_id < element_per_patch) {
-                thread_val[i] = X(p_id, element_id, attribute_id);
+        T              thread_val        = init;
+        for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
+            if (attribute_id != INVALID32) {
+                const T val = X(p_id, i, attribute_id);
+                thread_val  = reduction_op(thread_val, val);
             } else {
-                thread_val[i] = init;
+                for (uint32_t j = 0; j < num_attributes; ++j) {
+                    const T val = X(p_id, i, j);
+                    thread_val  = reduction_op(thread_val, val);
+                }
             }
         }
         typedef cub::BlockReduce<T, blockSize>       BlockReduce;

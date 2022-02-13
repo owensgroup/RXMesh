@@ -112,7 +112,7 @@ class ReduceHandle
     T reduce(const Attribute<T>& attr,
              ReductionOp         reduction_op,
              T                   init,
-             uint32_t            attribute_id = 0,
+             uint32_t            attribute_id = INVALID32,
              cudaStream_t        stream       = NULL)
     {
         if ((attr.get_allocated() & DEVICE) != DEVICE) {
