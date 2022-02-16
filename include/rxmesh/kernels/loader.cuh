@@ -5,8 +5,6 @@
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/memcpy_async.h>
-//#include <cuda/barrier>  //for cuda::aligned_size_t
-
 #include "rxmesh/context.h"
 #include "rxmesh/local.h"
 #include "rxmesh/types.h"
@@ -27,9 +25,7 @@ __device__ __inline__ void load_async(const T*    in,
     cg::memcpy_async(
         block,
         out,
-        in,
-        // TODO need to revisit this
-        // cuda::aligned_size_t<128>(expand_to_align(sizeof(T) * size)));
+        in,        
         sizeof(T) * size);
 
     if (with_wait) {

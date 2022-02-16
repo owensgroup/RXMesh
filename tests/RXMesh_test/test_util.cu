@@ -111,14 +111,14 @@ TEST(Util, Align)
     char* ptr_mis_aligned = reinterpret_cast<char*>(ptr) + 1;
 
     Type* ptr_aligned    = reinterpret_cast<Type*>(ptr_mis_aligned);
-    void* ptr_aligned_gt = ptr_aligned;
     rxmesh::detail::align(alignment, ptr_aligned);
-
-    std::size_t spc;
-    void*       ret = std::align(alignment, sizeof(Type), ptr_aligned_gt, spc);
-
+    
+    void* ptr_aligned_gt = reinterpret_cast<void*>(ptr_mis_aligned);
+    std::size_t spc = num_bytes;
+    void*       ret = std::align(alignment, sizeof(char), ptr_aligned_gt, spc);
+    
     free(ptr);
-
+    EXPECT_NE(ret, nullptr);
     EXPECT_EQ(ptr_aligned, ptr_aligned_gt);
 }
 
