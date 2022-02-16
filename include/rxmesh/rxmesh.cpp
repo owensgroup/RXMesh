@@ -602,9 +602,8 @@ void RXMesh::build_device()
 
 
         // allocate and copy patch topology to the device
-        CUDA_ERROR(cudaMalloc(
-            (void**)&d_patch.ev,
-            expand_to_align(d_patch.num_edges * 2 * sizeof(LocalVertexT))));
+        CUDA_ERROR(cudaMalloc((void**)&d_patch.ev,
+                              d_patch.num_edges * 2 * sizeof(LocalVertexT)));
         CUDA_ERROR(cudaMemcpy(d_patch.ev,
                               m_h_patches_ev[p].data(),
                               d_patch.num_edges * 2 * sizeof(LocalVertexT),
@@ -612,9 +611,8 @@ void RXMesh::build_device()
         m_h_patches_info[p].ev =
             reinterpret_cast<LocalVertexT*>(m_h_patches_ev[p].data());
 
-        CUDA_ERROR(cudaMalloc(
-            (void**)&d_patch.fe,
-            expand_to_align(d_patch.num_faces * 3 * sizeof(LocalEdgeT))));
+        CUDA_ERROR(cudaMalloc((void**)&d_patch.fe,
+                              d_patch.num_faces * 3 * sizeof(LocalEdgeT)));
         CUDA_ERROR(cudaMemcpy(d_patch.fe,
                               m_h_patches_fe[p].data(),
                               d_patch.num_faces * 3 * sizeof(LocalEdgeT),
@@ -668,17 +666,15 @@ void RXMesh::build_device()
                 }
 
                 // Copy to device
-                CUDA_ERROR(cudaMalloc(
-                    (void**)&d_not_owned_id,
-                    expand_to_align(sizeof(LocalT) * num_not_owned)));
+                CUDA_ERROR(cudaMalloc((void**)&d_not_owned_id,
+                                      sizeof(LocalT) * num_not_owned));
                 CUDA_ERROR(cudaMemcpy(d_not_owned_id,
                                       h_not_owned_id,
                                       sizeof(LocalT) * num_not_owned,
                                       cudaMemcpyHostToDevice));
 
-                CUDA_ERROR(cudaMalloc(
-                    (void**)&d_not_owned_patch,
-                    expand_to_align(sizeof(uint32_t) * num_not_owned)));
+                CUDA_ERROR(cudaMalloc((void**)&d_not_owned_patch,
+                                      sizeof(uint32_t) * num_not_owned));
                 CUDA_ERROR(cudaMemcpy(d_not_owned_patch,
                                       h_not_owned_patch,
                                       sizeof(uint32_t) * num_not_owned,
