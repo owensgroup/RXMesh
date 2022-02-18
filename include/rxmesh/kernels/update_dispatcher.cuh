@@ -41,6 +41,11 @@ __device__ __inline__ void update_block_dispatcher(const Context&   context,
         detail::edge_flip<blockThreads>(context.get_patches_info()[patch_id],
                                         predicate);
     }
+
+    if constexpr (op == DynOp::DeleteEdge) {
+        detail::delete_edge<blockThreads>(context.get_patches_info()[patch_id],
+                                          predicate);
+    }
 }
 
 }  // namespace rxmesh

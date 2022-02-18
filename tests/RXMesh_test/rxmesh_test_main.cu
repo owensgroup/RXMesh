@@ -22,8 +22,9 @@ struct RXMeshTestArg
 #include "test_queries.h"
 #include "test_attribute.cuh"
 #include "test_for_each.h"
-#include "test_edge_flip.h"
+#include "test_edge_flip.cuh"
 #include "test_validate.h"
+#include "test_deletion.cuh"
 // clang-format on
 
 int main(int argc, char** argv)
