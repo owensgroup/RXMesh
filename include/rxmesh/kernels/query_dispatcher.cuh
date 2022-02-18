@@ -8,6 +8,7 @@
 #include "rxmesh/iterator.cuh"
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/debug.cuh"
+#include "rxmesh/kernels/is_deleted.cuh"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/rxmesh_queries.cuh"
 #include "rxmesh/types.h"
@@ -29,7 +30,8 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
                                                   uint16_t*& s_output_value,
                                                   uint16_t&  num_owned,
                                                   uint32_t*& not_owned_patch,
-                                                  uint16_t*& not_owned_local_id)
+                                                  uint16_t*& not_owned_local_id,
+                                                  uint64_t*& input_mask)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
@@ -39,20 +41,25 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     num_src_in_patch = 0;
     if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
         num_src_in_patch = patch_info.num_owned_vertices;
+        input_mask       = patch_info.mask_v;
     }
     if constexpr (op == Op::EV || op == Op::EF) {
         num_src_in_patch = patch_info.num_owned_edges;
+        input_mask       = patch_info.mask_e;
     }
     if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
         num_src_in_patch = patch_info.num_owned_faces;
+        input_mask       = patch_info.mask_f;
     }
 
     bool     is_active = false;
     uint16_t local_id  = threadIdx.x;
     while (local_id < num_src_in_patch) {
-        is_active =
-            is_active || compute_active_set({patch_info.patch_id, local_id});
-        local_id += blockThreads;
+        if (!is_deleted(local_id, input_mask)) {
+            is_active = is_active ||
+                        compute_active_set({patch_info.patch_id, local_id});
+            local_id += blockThreads;
+        }
     }
 
     if (__syncthreads_or(is_active) == 0) {
@@ -78,7 +85,7 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     // 3)Perform the query operation
     if (oriented) {
         assert(op == Op::VV);
-        if constexpr (op == Op::VV) {        
+        if constexpr (op == Op::VV) {
             v_v_oreinted<blockThreads>(
                 patch_info, s_output_offset, s_output_value, s_ev);
         }
@@ -90,7 +97,7 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
                                      num_owned,
                                      true);
         }
-        
+
         query<blockThreads, op>(s_output_offset,
                                 s_output_value,
                                 s_ev,
@@ -154,6 +161,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     uint16_t  num_owned;
     uint32_t* not_owned_patch(nullptr);
     uint16_t* not_owned_local_id(nullptr);
+    uint64_t* input_mask(nullptr);
 
     query_block_dispatcher<op, blockThreads>(
         context.get_patches_info()[patch_id],
@@ -164,7 +172,8 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
         s_output_value,
         num_owned,
         not_owned_patch,
-        not_owned_local_id);
+        not_owned_local_id,
+        input_mask);
 
     // Call compute on the output in shared memory by looping over all
     // source elements in this patch.
@@ -173,8 +182,8 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     while (local_id < num_src_in_patch) {
 
         assert(s_output_value);
-
-        if (compute_active_set({patch_id, local_id})) {
+        if (!is_deleted(local_id, input_mask) &&
+            compute_active_set({patch_id, local_id})) {
             constexpr uint32_t fixed_offset =
                 ((op == Op::EV)                 ? 2 :
                  (op == Op::FV || op == Op::FE) ? 3 :
@@ -370,6 +379,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
         uint16_t  num_owned = 0;
         uint16_t* not_owned_local_id(nullptr);
         uint32_t* not_owned_patch(nullptr);
+        uint64_t* input_mask(nullptr);
 
         detail::template query_block_dispatcher<op, blockThreads>(
             context.get_patches_info()[patch_id],
@@ -380,7 +390,8 @@ __device__ __inline__ void higher_query_block_dispatcher(
             s_output_value,
             num_owned,
             not_owned_patch,
-            not_owned_local_id);
+            not_owned_local_id,
+            input_mask);
 
 
         if (pl.first == patch_id) {
