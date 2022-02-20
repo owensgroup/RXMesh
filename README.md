@@ -4,6 +4,17 @@
     <img src="./assets/david_pacthes.png" width="80%"><br>
 </p>
 
+## **Table of Content**
+- [**About**](#--about--)
+- [**Organization**](#--organization--)
+- [**Compilation**](#--compilation--)
+  * [**Dependencies**](#--dependencies--)
+- [**Programming Model**](#--programming-model--)
+  * [**Computation**](#--computation---)
+  * [**Structures**](#--structures--)
+- [**Replicability**](#--replicability--)
+- [**Bibtex**](#--bibtex--)
+
 ## **About**
 RXMesh is a surface triangle mesh data structure and programming model for processing static meshes on the GPU. RXMesh aims at provides a high-performance, generic, and compact data structure that can handle meshes regardless of their quality (e.g., non-manifold). The programming model helps to hide the complexity of the data structure and provides an intuitive access model for different use cases. For more details, please check out our paper:
 
@@ -13,7 +24,7 @@ RXMesh is a surface triangle mesh data structure and programming model for proce
 
 This repository provides 1) source code to reproduce the results presented in the paper (git tag [`v0.1.0`](https://github.com/owensgroup/RXMesh/tree/v0.1.0)) and 2) ongoing development of RXMesh. For 1), all input models used in the paper can be found [here](https://ucdavis365-my.sharepoint.com/:f:/g/personal/ahmahmoud_ucdavis_edu/En-vEpIdSGBHqvCIa-MVXRQBg5g7GfM3P3RwZBHL4Hby3w?e=2EVnJd). Models were collected from [Thingi10K](https://ten-thousand-models.appspot.com/) and [Smithsonian 3D](https://3d.si.edu/explore) repository. 
 
-## **A Quick Glance**
+## **Organization**
 RXMesh is a CUDA/C++ header-only library. All unit tests are under `tests/` folder. This includes the unit test for some basic functionalities along with the unit test for the query operations. All applications are under `apps/` folder.
 
 ## **Compilation**
@@ -36,6 +47,24 @@ All the dependencies are installed automatically! To compile the code:
 ```
 Depending on the system, this will generate either a `.sln` project on Windows or a `make` file for a Linux system.
 
+## **Programming Model**
+The goal of defining a programing model is to make it easy to write applications using RXMesh with getting into the nuances of the data structure. Here, we first discuss the high-level building blocks that the user could use to compute their applications. Then, we discuss some (data) structure that the user would have to interact with in order to use RXMesh. 
+
+### **Computation**
+- `for_each`
+
+- Queries 
+
+- Reduction 
+
+### **Structures**
+- Handles
+
+- Attributes
+
+- Iterators
+
+
 ## **Replicability**
 This repo was awarded the [replicability stamp](http://www.replicabilitystamp.org#https-github-com-owensgroup-rxmesh) by the Graphics Replicability Stamp Initiative (GRSI).
 
@@ -47,8 +76,6 @@ The scripts used to generate the data shown in the paper can be found under
 * [Figure 8 (d)](https://github.com/owensgroup/RXMesh/blob/main/apps/VertexNormal/benchmark.sh)
 
 Each script should be run from the script's containing directory after compiling the code in `build/` directory. The only input parameter needed is the path to the input OBJ files. The resulting JSON files will be written to `output/` directory. 
-
-
 
 ## **Bibtex**
 ```
