@@ -242,9 +242,7 @@ Starting v0.2.1, RXMesh integrates [Polyscope](https://polyscope.run) as a mesh 
 By default, the parameter is set to True on Windows and False on Linux machines. RXMesh implements the necessary functionalities to pass attributes to Polyscope—thanks to its [data adaptors](https://polyscope.run/data_adaptors/). However, this needs attributes to be moved to the host first before passing it to Polyscope. For more information about Polyscope different visualization options, please Polyscope's [Surface Mesh documentation](https://polyscope.run/structures/surface_mesh/basics/).
 
   - Example: [render vertex color](./tests/Polyscope_test/test_polyscope.cu)
-    <img src="./assets/polyscope_dragon.png"
-     alt="Polyscope_test" width="50%"
-     style="float: right; margin-right: 0px; margin-top: 120px;" />  
+      
     ```cpp
     //initialize polyscope 
     polyscope::init();
@@ -271,6 +269,7 @@ By default, the parameter is set to True on Windows and False on Linux machines.
     //render 
     polyscope::show();
     ```
+    ![](./assets/polyscope_dragon.PNG)
 
 
 ## **Replicability**
