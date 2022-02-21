@@ -201,7 +201,6 @@ The goal of defining a programing model is to make it easy to write applications
 Reduction operations require allocation of temporary buffers which we abstract away using `ReduceHandle`. 
 
   - Example: dot product, L2 norm, user-defined reduction 
-
     ```cpp 
     RXMeshStatic rx("input.obj");
     auto vertex_attr1 = rx.add_vertex_attribute<float>("v_attr1", 3, DEVICE);
@@ -241,8 +240,7 @@ Starting v0.2.1, RXMesh integrates [Polyscope](https://polyscope.run) as a mesh 
 ``` 
 By default, the parameter is set to True on Windows and False on Linux machines. RXMesh implements the necessary functionalities to pass attributes to Polyscope—thanks to its [data adaptors](https://polyscope.run/data_adaptors/). However, this needs attributes to be moved to the host first before passing it to Polyscope. For more information about Polyscope different visualization options, please Polyscope's [Surface Mesh documentation](https://polyscope.run/structures/surface_mesh/basics/).
 
-  - Example: [render vertex color](./tests/Polyscope_test/test_polyscope.cu)
-      
+  - Example: [render vertex color](./tests/Polyscope_test/test_polyscope.cu)      
     ```cpp
     //initialize polyscope 
     polyscope::init();
@@ -253,8 +251,7 @@ By default, the parameter is set to True on Windows and False on Linux machines.
     auto polyscope_mesh = rx.get_polyscope_mesh();
     
     //vertex color attribute 
-    auto vertex_color =
-           rx.add_vertex_attribute<float>("vColor", 3);
+    auto vertex_color = rx.add_vertex_attribute<float>("vColor", 3);
 
     //Populate vertex color on the device
     //....
@@ -263,13 +260,14 @@ By default, the parameter is set to True on Windows and False on Linux machines.
     vertex_color.move(DEVICE, HOST);
 
     //pass vertex color to polyscope 
-    polyscope_mesh->addVertexColorQuantity("vColor", 
-                                           vertex_color);
+    polyscope_mesh->addVertexColorQuantity("vColor", vertex_color);
 
     //render 
     polyscope::show();
     ```
-    ![](./assets/polyscope_dragon.PNG)
+    <p align="center">
+    	<img src="./assets/polyscope_dragon.PNG" width="80%"><br>
+    </p>    
 
 
 ## **Replicability**
