@@ -9,9 +9,9 @@
 - [**Compilation**](#compilation)
   * [**Dependencies**](#dependencies)
 - [**Organization**](#organization)
-- [**Programming Model**](#programming-model)
-  * [**Computation**](#computation)
+- [**Programming Model**](#programming-model)  
   * [**Structures**](#structures)
+  * [**Computation**](#computation)
   * [**Viewer**](#viewer)
 - [**Replicability**](#replicability)
 - [**Bibtex**](#bibtex)
@@ -52,7 +52,7 @@ RXMesh is a CUDA/C++ header-only library. All unit tests are under the `tests/` 
 The goal of defining a programming  model is to make it easy to write applications using RXMesh without getting into the nuances of the data structure. Applications written using RXMesh are composed of one or more of the high-level building blocks defined under [**Computation**](#computation). To use these building blocks, the user would have to interact with data structures specific to RXMesh discussed under [**Structures**](#structures). Finally, RXMesh integrates [Polyscope](https://polyscope.run) as a mesh [**Viewer**](#viewer) which the user can use to render their final results or for debugging purposes. 
 
 ### **Structures**
-- **Attributes** are the metadata (geometry information) attached to vertices, edges, or faces. Allocation of the attributes is per-patch basis and managed internally by RXMesh. The allocation could be done on the host, device, or both. Allocating attributes on the host is only beneficial for I/O operations of initializing attributes and then eventually moving them to the device. 
+- **Attributes** are the metadata (geometry information) attached to vertices, edges, or faces. Allocation of the attributes is per-patch basis and managed internally by RXMesh. The allocation could be done on the host, device, or both. Allocating attributes on the host is only beneficial for I/O operations or initializing attributes and then eventually moving them to the device. 
   - Example: allocation
     ```c++
     RXMeshStatic rx("input.obj");
@@ -84,17 +84,17 @@ The goal of defining a programming  model is to make it easy to write applicatio
     //Move attributes from host to device 
     edge_attr.move(HOST, DEVICE);
 
-    //Reset all entries in an attribute to zero
+    //Reset all entries to zero
     edge_attr.reset(0, DEVICE);
 
     auto edge_attr_1 = rx.add_edge_attribute<float>("eAttr1", 1);  
 
     //Copy from another attribute. 
-    //Here, what on the host of edge_attr will be copied into the device side of edge_attr_1
+    //Here, what is on the host sde of edge_attr will be copied into the device side of edge_attr_1
     edge_attr_1.copy_from(edge_attr, HOST, DEVICE);
     ```
 
-- **Handles** are the unique identifier for vertices, edges, and faces. They are usually internally populated by RXMesh (by concatenating the patch ID and mesh element index within the patch). Handles can be used to access attributes, `for_each` operations, and query operations. 
+- **Handles** are the unique identifiers for vertices, edges, and faces. They are usually internally populated by RXMesh (by concatenating the patch ID and mesh element index within the patch). Handles can be used to access attributes, `for_each` operations, and query operations. 
 
   - Example: Setting vertex attribute using vertex handle 
     ```c++  
@@ -107,7 +107,7 @@ The goal of defining a programming  model is to make it easy to write applicatio
     vertex_color(vh, 2) = 0.6;
     ```
 
-- **Iterators** are used during query operations to iterate over the output mesh element. The type of iterator defines the type of mesh element iterated on e.g., `VertexIterator` iterates over vertices which is the output of `VV`, `EV`, or `FV` query operations. Since query operations are only supported on the device, iterators can be only used inside the kernel. Iterators are usually populated internally. 
+- **Iterators** are used during query operations to iterate over the output of the query operation. The type of iterator defines the type of mesh element iterated on e.g., `VertexIterator` iterates over vertices which is the output of `VV`, `EV`, or `FV` query operations. Since query operations are only supported on the device, iterators can be only used inside the kernel. Iterators are usually populated internally. 
 
   - Example: Iterating over faces 
       ```c++  
@@ -157,11 +157,11 @@ The goal of defining a programming  model is to make it easy to write applicatio
   - Example: [vertex normal computation](./apps/VertexNormal/vertex_normal_kernel.cuh)
     ```cpp
     template<uint32_t blockSize>
-    __global__ void vertex_normal (Context context){
+    __global__ void vertex_normal (Context context){      
 	    auto compute_vn = [&](FaceHandle face_id, VertexIterator& fv) {
-          //This thread is assigned to face_id
+        	//This thread is assigned to face_id
 
-      	  // get the face's three vertices coordinates
+        	// get the face's three vertices coordinates
         	Vector<3, T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
         	Vector<3, T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
 	        Vector<3, T> c2(coords(fv[2], 0), coords(fv[2], 1), coords(fv[2], 2));
@@ -173,8 +173,11 @@ The goal of defining a programming  model is to make it easy to write applicatio
         		for (uint32_t v = 0; v < 3; ++v)     // for every vertex in this face
 	            for (uint32_t i = 0; i < 3; ++i)   // for the vertex 3 coordinates
         		        atomicAdd(&normals(fv[v], i), n[i]);          
-	  };
+	    };
 
+	    //Query dispatcher must be called by all threads in the block. 
+	    //Dispatcher will first perform the query, store the results in shared memory, then 
+	    //run the user-defined computation i.e., compute_vn
 	    query_block_dispatcher<Op::FV, blockSize>(context, compute_vn);
     } 
     ```
@@ -192,13 +195,11 @@ The goal of defining a programming  model is to make it easy to write applicatio
         // ....         
 	    };
 
-	    query_block_dispatcher<Op::VV, blockSize>(context, computation, active_set);
+	    query_block_dispatcher<Op::FV, blockSize>(context, computation, active_set);
     } 
     ```
 
-- **Reduction** operations apply a binary associative operation on the input attributes. RXMesh provides dot products between two attributes (need to be of the same type), L2 norm of an input attribute, and user-defined reduction operation on an input attribute. For user-defined reduction operation, the user needs to pass a binary reduction functor with member `__device__ T operator()(const T &a, const T &b)` or use on of [CUB's thread operators](https://github.com/NVIDIA/cub/blob/main/cub/thread/thread_operators.cuh) e.g., `CUB::Max()`.
-
-Reduction operations require allocation of temporary buffers which we abstract away using `ReduceHandle`. 
+- **Reduction** operations apply a binary associative operation on the input attributes. RXMesh provides dot products between two attributes (of the same type), L2 norm of an input attribute, and user-defined reduction operation on an input attribute. For user-defined reduction operation, the user needs to pass a binary reduction functor with member `__device__ T operator()(const T &a, const T &b)` or use on of [CUB's thread operators](https://github.com/NVIDIA/cub/blob/main/cub/thread/thread_operators.cuh) e.g., `cub::Max()`. Reduction operations require allocation of temporary buffers which we abstract away using `ReduceHandle`. 
 
   - Example: dot product, L2 norm, user-defined reduction 
     ```cpp 
@@ -212,7 +213,7 @@ Reduction operations require allocation of temporary buffers which we abstract a
     //Reduction handle 
     ReduceHandle reduce(v1_attr);
 
-    //Dot product between two attribute. Results are returned on the host 
+    //Dot product between two attributes. Results are returned on the host 
     float dot_product = reduce.dot(v1_attr, v2_attr);
 
     cudaStream_t stream; 
@@ -238,7 +239,7 @@ Starting v0.2.1, RXMesh integrates [Polyscope](https://polyscope.run) as a mesh 
 > cd build 
 > cmake -DUSE_POLYSCOPE=True ../
 ``` 
-By default, the parameter is set to True on Windows and False on Linux machines. RXMesh implements the necessary functionalities to pass attributes to Polyscope—thanks to its [data adaptors](https://polyscope.run/data_adaptors/). However, this needs attributes to be moved to the host first before passing it to Polyscope. For more information about Polyscope's different visualization options, please Polyscope's [Surface Mesh documentation](https://polyscope.run/structures/surface_mesh/basics/).
+By default, the parameter is set to True on Windows and False on Linux machines. RXMesh implements the necessary functionalities to pass attributes to Polyscope—thanks to its [data adaptors](https://polyscope.run/data_adaptors/). However, this needs attributes to be moved to the host first before passing it to Polyscope. For more information about Polyscope's different visualization options, please checkout Polyscope's [Surface Mesh documentation](https://polyscope.run/structures/surface_mesh/basics/).
 
   - Example: [render vertex color](./tests/Polyscope_test/test_polyscope.cu)      
     ```cpp
@@ -247,9 +248,6 @@ By default, the parameter is set to True on Windows and False on Linux machines.
     
     RXMeshStatic rx("dragon.obj");
 
-    //polyscope instance associated with rx 
-    auto polyscope_mesh = rx.get_polyscope_mesh();
-    
     //vertex color attribute 
     auto vertex_color = rx.add_vertex_attribute<float>("vColor", 3);
 
@@ -259,6 +257,9 @@ By default, the parameter is set to True on Windows and False on Linux machines.
     //Move vertex color to the host 
     vertex_color.move(DEVICE, HOST);
 
+    //polyscope instance associated with rx 
+    auto polyscope_mesh = rx.get_polyscope_mesh();
+    
     //pass vertex color to polyscope 
     polyscope_mesh->addVertexColorQuantity("vColor", vertex_color);
 
