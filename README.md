@@ -181,9 +181,9 @@ The goal of defining a programming  model is to make it easy to write applicatio
 	    query_block_dispatcher<Op::FV, blockSize>(context, compute_vn);
     } 
     ```
-     To save computation, `query_block_dispatcher` could be run on a subset of the input mesh element i.e., _active set_. The user can define the active set using a lambda function that returns true if the input mesh element is in the active set. 
+  To save computation, `query_block_dispatcher` could be run on a subset of the input mesh element i.e., _active set_. The user can define the active set using a lambda function that returns true if the input mesh element is in the active set. 
 
-    - Example: defining active set
+  - Example: defining active set
     ```cpp
     template<uint32_t blockSize>
     __global__ void active_set_query (Context context){
@@ -259,7 +259,7 @@ By default, the parameter is set to True on Windows and False on Linux machines.
 
     //polyscope instance associated with rx 
     auto polyscope_mesh = rx.get_polyscope_mesh();
-    
+
     //pass vertex color to polyscope 
     polyscope_mesh->addVertexColorQuantity("vColor", vertex_color);
 
