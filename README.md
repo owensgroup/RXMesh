@@ -46,13 +46,13 @@ All the dependencies are installed automatically! To compile the code:
 Depending on the system, this will generate either a `.sln` project on Windows or a `make` file for a Linux system.
 
 ## **Organization**
-RXMesh is a CUDA/C++ header-only library. All unit tests are under `tests/` folder. This includes the unit test for some basic functionalities along with the unit test for the query operations. All applications are under `apps/` folder.
+RXMesh is a CUDA/C++ header-only library. All unit tests are under the `tests/` folder. This includes the unit test for some basic functionalities along with the unit test for the query operations. All applications are under the `apps/` folder.
 
 ## **Programming Model**
-The goal of defining a programing model is to make it easy to write applications using RXMesh without getting into the nuances of the data structure. Applications written using RXMesh are composed of one or more of the high-level building blocks defined under [**Computation**](#computation). In order to use these building blocks, the user would have to interact with data structures specific to RXMesh discussed under [**Structures**](#structures). Finally, RXMesh integrate [Polyscope](https://polyscope.run) as a mesh [**Viewer**](#viewer) which the user can use to render their final results or for debugging purposes. 
+The goal of defining a programming  model is to make it easy to write applications using RXMesh without getting into the nuances of the data structure. Applications written using RXMesh are composed of one or more of the high-level building blocks defined under [**Computation**](#computation). To use these building blocks, the user would have to interact with data structures specific to RXMesh discussed under [**Structures**](#structures). Finally, RXMesh integrates [Polyscope](https://polyscope.run) as a mesh [**Viewer**](#viewer) which the user can use to render their final results or for debugging purposes. 
 
 ### **Structures**
-- **Attributes** are the metadata (geometry information) attached to vertices, edges, or faces. Allocation of the attributes is per-patch basis and managed internally by RXMesh. Allocation could be done on host, device, or both. Allocating attributes on the host is only beneficial for I/O operations of initializing attribute and then eventually moving it to the device. 
+- **Attributes** are the metadata (geometry information) attached to vertices, edges, or faces. Allocation of the attributes is per-patch basis and managed internally by RXMesh. The allocation could be done on the host, device, or both. Allocating attributes on the host is only beneficial for I/O operations of initializing attributes and then eventually moving them to the device. 
   - Example: allocation
     ```c++
     RXMeshStatic rx("input.obj");
@@ -94,7 +94,7 @@ The goal of defining a programing model is to make it easy to write applications
     edge_attr_1.copy_from(edge_attr, HOST, DEVICE);
     ```
 
-- **Handles** are unique identifier for vertices, edges, and faces. They are usually internally populated by RXMesh (by concatenating the patch ID and mesh element index within the patch). Handles can be used to access attributes, `for_each` operations, and query operations. 
+- **Handles** are the unique identifier for vertices, edges, and faces. They are usually internally populated by RXMesh (by concatenating the patch ID and mesh element index within the patch). Handles can be used to access attributes, `for_each` operations, and query operations. 
 
   - Example: Setting vertex attribute using vertex handle 
     ```c++  
@@ -196,7 +196,7 @@ The goal of defining a programing model is to make it easy to write applications
     } 
     ```
 
-- **Reduction** operations apply a binary associative operations on the input attributes. RXMesh provides dot products between two attributes (need to be of the same type), L2 norm of an input attribute, and use-defined reduction operation on an input attribute. For user-defined reduction operation, the user needs to pass a binary reduction functor with member `__device__ T operator()(const T &a, const T &b)` or use on of [CUB's thread operators](https://github.com/NVIDIA/cub/blob/main/cub/thread/thread_operators.cuh) e.g., `CUB::Max()`.
+- **Reduction** operations apply a binary associative operation on the input attributes. RXMesh provides dot products between two attributes (need to be of the same type), L2 norm of an input attribute, and user-defined reduction operation on an input attribute. For user-defined reduction operation, the user needs to pass a binary reduction functor with member `__device__ T operator()(const T &a, const T &b)` or use on of [CUB's thread operators](https://github.com/NVIDIA/cub/blob/main/cub/thread/thread_operators.cuh) e.g., `CUB::Max()`.
 
 Reduction operations require allocation of temporary buffers which we abstract away using `ReduceHandle`. 
 
@@ -232,13 +232,13 @@ Reduction operations require allocation of temporary buffers which we abstract a
     ```
 
 ### **Viewer**
-Starting v0.2.1, RXMesh integrates [Polyscope](https://polyscope.run) as a mesh viewer. In order to use it, make sure to run CMake with `USE_POLYSCOPE` parameter i.e., 
+Starting v0.2.1, RXMesh integrates [Polyscope](https://polyscope.run) as a mesh viewer. To use it, make sure to turn on the CMake parameter `USE_POLYSCOPE` i.e., 
 
 ```
 > cd build 
 > cmake -DUSE_POLYSCOPE=True ../
 ``` 
-By default, the parameter is set to True on Windows and False on Linux machines. RXMesh implements the necessary functionalities to pass attributes to Polyscope—thanks to its [data adaptors](https://polyscope.run/data_adaptors/). However, this needs attributes to be moved to the host first before passing it to Polyscope. For more information about Polyscope different visualization options, please Polyscope's [Surface Mesh documentation](https://polyscope.run/structures/surface_mesh/basics/).
+By default, the parameter is set to True on Windows and False on Linux machines. RXMesh implements the necessary functionalities to pass attributes to Polyscope—thanks to its [data adaptors](https://polyscope.run/data_adaptors/). However, this needs attributes to be moved to the host first before passing it to Polyscope. For more information about Polyscope's different visualization options, please Polyscope's [Surface Mesh documentation](https://polyscope.run/structures/surface_mesh/basics/).
 
   - Example: [render vertex color](./tests/Polyscope_test/test_polyscope.cu)      
     ```cpp
@@ -280,7 +280,7 @@ The scripts used to generate the data shown in the paper can be found under
 * [Figure 8 (c)](https://github.com/owensgroup/RXMesh/blob/main/apps/Filtering/benchmark.sh)
 * [Figure 8 (d)](https://github.com/owensgroup/RXMesh/blob/main/apps/VertexNormal/benchmark.sh)
 
-Each script should be run from the script's containing directory after compiling the code in `build/` directory. The only input parameter needed is the path to the input OBJ files. The resulting JSON files will be written to `output/` directory. 
+Each script should be run from the script's containing directory after compiling the code in the `build/` directory. The only input parameter needed is the path to the input OBJ files. The resulting JSON files will be written to the `output/` directory. 
 
 ## **Bibtex**
 ```
