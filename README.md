@@ -4,7 +4,7 @@
     <img src="./assets/david_pacthes.png" width="80%"><br>
 </p>
 
-## **Table of Content**
+## **Contents**
 - [**About**](#about)
 - [**Compilation**](#compilation)
   * [**Dependencies**](#dependencies)
@@ -52,7 +52,7 @@ RXMesh is a CUDA/C++ header-only library. All unit tests are under `tests/` fold
 The goal of defining a programing model is to make it easy to write applications using RXMesh without getting into the nuances of the data structure. Applications written using RXMesh are composed of one or more of the high-level building blocks defined under [**Computation**](#computation). In order to use these building blocks, the user would have to interact with data structures specific to RXMesh discussed under [**Structures**](#structures). Finally, RXMesh integrate [Polyscope](https://polyscope.run) as a mesh [**Viewer**](#viewer) which the user can use to render their final results or for debugging purposes. 
 
 ### **Structures**
-- Attributes are the metadata (geometry information) attached to vertices, edges, or faces. Allocation of the attributes is per-patch basis and managed internally by RXMesh. Allocation could be done on host, device, or both. Allocating attributes on the host is only beneficial for I/O operations of initializing attribute and then eventually moving it to the device. 
+- **Attributes** are the metadata (geometry information) attached to vertices, edges, or faces. Allocation of the attributes is per-patch basis and managed internally by RXMesh. Allocation could be done on host, device, or both. Allocating attributes on the host is only beneficial for I/O operations of initializing attribute and then eventually moving it to the device. 
   - Example: allocation
     ```c++
     RXMeshStatic rx("input.obj");
@@ -94,7 +94,7 @@ The goal of defining a programing model is to make it easy to write applications
     edge_attr_1.copy_from(edge_attr, HOST, DEVICE);
     ```
 
-- Handles are unique identifier for vertices, edges, and faces. They are usually internally populated by RXMesh (by concatenating the patch ID and mesh element index within the patch). Handles can be used to access attributes, `for_each` operations, and query operations. 
+- **Handles** are unique identifier for vertices, edges, and faces. They are usually internally populated by RXMesh (by concatenating the patch ID and mesh element index within the patch). Handles can be used to access attributes, `for_each` operations, and query operations. 
 
   - Example: Setting vertex attribute using vertex handle 
     ```c++  
@@ -107,7 +107,7 @@ The goal of defining a programing model is to make it easy to write applications
     vertex_color(vh, 2) = 0.6;
     ```
 
-- Iterators are used during query operations to iterate over the output mesh element. The type of iterator defines the type of mesh element iterated on e.g., `VertexIterator` iterates over vertices which is the output of `VV`, `EV`, or `FV` query operations. Since query operations are only supported on the device, iterators can be only used inside the kernel. Iterators are usually populated internally. 
+- **Iterators** are used during query operations to iterate over the output mesh element. The type of iterator defines the type of mesh element iterated on e.g., `VertexIterator` iterates over vertices which is the output of `VV`, `EV`, or `FV` query operations. Since query operations are only supported on the device, iterators can be only used inside the kernel. Iterators are usually populated internally. 
 
   - Example: Iterating over faces 
       ```c++  
@@ -122,7 +122,7 @@ The goal of defining a programing model is to make it easy to write applications
 
 
 ### **Computation**
-- `for_each` runs a computation over all vertices, edges, or faces _without_ requiring information from neighbor mesh elements. The computation run on each mesh element is defined as a lambda function that takes a handle as an input. The lambda function could run either on the host, device, or both. On the host, we parallelize the computation using OpenMP. Care must be taken for lambda function on the device since it needs to be annotated using `__device__` and it can only capture by value. More about lambda function in CUDA can be found [here](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#extended-lambda)
+- **`for_each`** runs a computation over all vertices, edges, or faces _without_ requiring information from neighbor mesh elements. The computation run on each mesh element is defined as a lambda function that takes a handle as an input. The lambda function could run either on the host, device, or both. On the host, we parallelize the computation using OpenMP. Care must be taken for lambda function on the device since it needs to be annotated using `__device__` and it can only capture by value. More about lambda function in CUDA can be found [here](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#extended-lambda)
   - Example: using `for_each` to initialize attributes 
     ```cpp
     RXMeshStatic rx("input.obj");
@@ -139,7 +139,7 @@ The goal of defining a programing model is to make it easy to write applications
         });
     ```
 
-- Queries operations supported by RXMesh with description are listed below 
+- **Queries** operations supported by RXMesh with description are listed below 
 
   | Query |  Description                               |
   |-------|:-------------------------------------------|
@@ -196,10 +196,81 @@ The goal of defining a programing model is to make it easy to write applications
     } 
     ```
 
-- Reduction 
+- **Reduction** operations apply a binary associative operations on the input attributes. RXMesh provides dot products between two attributes (need to be of the same type), L2 norm of an input attribute, and use-defined reduction operation on an input attribute. For user-defined reduction operation, the user needs to pass a binary reduction functor with member `__device__ T operator()(const T &a, const T &b)` or use on of [CUB's thread operators](https://github.com/NVIDIA/cub/blob/main/cub/thread/thread_operators.cuh) e.g., `CUB::Max()`.
+
+Reduction operations require allocation of temporary buffers which we abstract away using `ReduceHandle`. 
+
+  - Example: dot product, L2 norm, user-defined reduction 
+
+    ```cpp 
+    RXMeshStatic rx("input.obj");
+    auto vertex_attr1 = rx.add_vertex_attribute<float>("v_attr1", 3, DEVICE);
+    auto vertex_attr2 = rx.add_vertex_attribute<float>("v_attr2", 3, DEVICE);
+
+    // Populate vertex_attr1 and vertex_attr2 
+    //....
+
+    //Reduction handle 
+    ReduceHandle reduce(v1_attr);
+
+    //Dot product between two attribute. Results are returned on the host 
+    float dot_product = reduce.dot(v1_attr, v2_attr);
+
+    cudaStream_t stream; 
+    //init stream 
+    //...
+
+    //Reduction operation could be performed on specific attribute and using specific stream 
+    float l2_norm = reduce.norm2(v1_attr, //input attribute 
+                                 1,       //attribute ID. If not specified, reduction is run on all attributes 
+                                 stream); //stream used for reduction. 
+    
+
+    //User-defined reduction operation 
+    float l2_norm = reduce.reduce(v1_attr,                               //input attribute 
+                                  cub::Max(),                            //binary reduction functor 
+                                  std::numeric_limits<float>::lowest()); //initial value 
+    ```
 
 ### **Viewer**
+Starting v0.2.1, RXMesh integrates [Polyscope](https://polyscope.run) as a mesh viewer. In order to use it, make sure to run CMake with `USE_POLYSCOPE` parameter i.e., 
 
+```
+> cd build 
+> cmake -DUSE_POLYSCOPE=True ../
+``` 
+By default, the parameter is set to True on Windows and False on Linux machines. RXMesh implements the necessary functionalities to pass attributes to Polyscope—thanks to its [data adaptors](https://polyscope.run/data_adaptors/). However, this needs attributes to be moved to the host first before passing it to Polyscope. For more information about Polyscope different visualization options, please Polyscope's [Surface Mesh documentation](https://polyscope.run/structures/surface_mesh/basics/).
+
+  - Example: [render vertex color](./tests/Polyscope_test/test_polyscope.cu)
+    <img src="./assets/polyscope_dragon.png"
+     alt="Polyscope_test" width="50%"
+     style="float: right; margin-right: 0px; margin-top: 120px;" />  
+    ```cpp
+    //initialize polyscope 
+    polyscope::init();
+    
+    RXMeshStatic rx("dragon.obj");
+
+    //polyscope instance associated with rx 
+    auto polyscope_mesh = rx.get_polyscope_mesh();
+    
+    //vertex color attribute 
+    auto vertex_color =
+           rx.add_vertex_attribute<float>("vColor", 3);
+
+    //Populate vertex color on the device
+    //....
+    
+    //Move vertex color to the host 
+    vertex_color.move(DEVICE, HOST);
+
+    //pass vertex color to polyscope 
+    polyscope_mesh->addVertexColorQuantity("vColor", 
+                                           vertex_color);
+
+    //render 
+    polyscope::show();
+    ```
 
 
 ## **Replicability**
