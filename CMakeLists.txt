@@ -5,7 +5,7 @@ if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
 endif()
 
 project(RXMesh 
-        VERSION 0.2.0 
+        VERSION 0.2.1 
         LANGUAGES C CXX CUDA)
 
 if (WIN32)
