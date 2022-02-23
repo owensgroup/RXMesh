@@ -27,6 +27,18 @@ void populate(rxmesh::RXMeshStatic& rxmesh, rxmesh::FaceAttribute<T>& f, T val)
 }
 
 template <typename T>
+void populate(rxmesh::RXMeshStatic& rxmesh, rxmesh::EdgeAttribute<T>& e, T val)
+{
+    rxmesh.for_each_edge(rxmesh::DEVICE,
+                         [e, val] __device__(const rxmesh::EdgeHandle eh) {
+                             auto pl = eh.unpack();
+                             e(eh)   = pl.first * pl.second;
+                         });
+
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+}
+
+template <typename T>
 void populate(rxmesh::RXMeshStatic&       rxmesh,
               rxmesh::VertexAttribute<T>& v1,
               rxmesh::VertexAttribute<T>& v2,
@@ -50,13 +62,7 @@ TEST(Attribute, Norm2)
 
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    std::vector<std::vector<dataT>>    Verts;
-    std::vector<std::vector<uint32_t>> Faces;
-
-    ASSERT_TRUE(
-        import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, true));
-
-    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
 
     auto attr = rxmesh.add_vertex_attribute<float>("v", 3, rxmesh::DEVICE);
 
@@ -66,9 +72,9 @@ TEST(Attribute, Norm2)
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
-    ReduceHandle reduce(*attr);
+    ReduceHandle reduce_handle(*attr);
 
-    float output = reduce.norm2(*attr);
+    float output = reduce_handle.norm2(*attr);
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
@@ -82,13 +88,7 @@ TEST(Attribute, Dot)
 
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    std::vector<std::vector<dataT>>    Verts;
-    std::vector<std::vector<uint32_t>> Faces;
-
-    ASSERT_TRUE(
-        import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, true));
-
-    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
 
     auto v1_attr = rxmesh.add_vertex_attribute<float>("v1", 3, rxmesh::DEVICE);
     auto v2_attr = rxmesh.add_vertex_attribute<float>("v2", 3, rxmesh::DEVICE);
@@ -98,13 +98,46 @@ TEST(Attribute, Dot)
 
     populate<float>(rxmesh, *v1_attr, *v2_attr, v1_val, v2_val);
 
-    ReduceHandle reduce(*v1_attr);
+    ReduceHandle reduce_handle(*v1_attr);
 
-    float output = reduce.dot(*v1_attr, *v2_attr);
+    float output = reduce_handle.dot(*v1_attr, *v2_attr);
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
     EXPECT_FLOAT_EQ(output, v1_val * v2_val * rxmesh.get_num_vertices());
+}
+
+TEST(Attribute, Reduce)
+{
+    using namespace rxmesh;
+
+    CUDA_ERROR(cudaDeviceReset());
+
+    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+
+    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+
+    auto attr = rxmesh.add_edge_attribute<uint32_t>("e", 3, rxmesh::DEVICE);
+
+    const uint32_t val(2.0);
+
+    populate<uint32_t>(rxmesh, *attr, val);
+
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    ReduceHandle reduce_handle(*attr);
+
+    uint32_t output = reduce_handle.reduce(*attr, cub::Max(), 0);
+
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    uint32_t result = 0;
+    rxmesh.for_each_edge(rxmesh::HOST, [&](const rxmesh::EdgeHandle eh) {
+        auto pl = eh.unpack();
+        result  = std::max(result, pl.first * pl.second);
+    });
+
+    EXPECT_EQ(output, result);
 }
 
 
@@ -114,14 +147,7 @@ TEST(Attribute, CopyFrom)
 
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    std::vector<std::vector<dataT>>    Verts;
-    std::vector<std::vector<uint32_t>> Faces;
-
-    ASSERT_TRUE(
-        import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, true));
-
-
-    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
 
     auto f_device = rxmesh.add_face_attribute<uint32_t>("d", 3, DEVICE);
 
@@ -143,14 +169,7 @@ TEST(Attribute, AddingAndRemoving)
 
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    std::vector<std::vector<dataT>>    Verts;
-    std::vector<std::vector<uint32_t>> Faces;
-
-    ASSERT_TRUE(
-        import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, true));
-
-
-    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
 
     std::string attr_name = "v_attr";
 

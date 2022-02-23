@@ -8,7 +8,9 @@ jobs:
         id: cuda-toolkit
         with:
           cuda: '11.2.2'
-          linux-local-args: '["--toolkit"]'      
+          linux-local-args: '["--toolkit"]'   
+      - run: sudo apt-get update 
+      - run: sudo apt-get install -y xorg-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev
       - run: nvcc -V      
       - name: Checkout
         uses: actions/checkout@v2            
@@ -19,12 +21,7 @@ jobs:
         run: cmake ../
       - name: Run make
         working-directory: ${{github.workspace}}/build
-        run: | 
-          make RXMesh_test -j 99
-          make Geodesic -j 99
-          make MCF -j 99
-          make VertexNormal -j 99
-      #   make Filtering -j 99
+        run: make -j 4
       #- name: Run Test
       #  working-directory: ${{github.workspace}}/build
       #  run: ctest --no-compress-output -T Test -C Release --output-on-failure

@@ -38,26 +38,21 @@ TEST(App, MCF)
     // Select device
     cuda_query(Arg.device_id);
 
-
-    // Load mesh
-    std::vector<std::vector<dataT>>    Verts;
-    std::vector<std::vector<uint32_t>> Faces;
-
-    ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
-
-
-    RXMeshStatic rxmesh(Faces, false);
+    RXMeshStatic rxmesh(Arg.obj_file_name, false);
 
     TriMesh input_mesh;
     ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
 
 
     // OpenMesh Impl
-    std::vector<std::vector<dataT>> ground_truth(Verts);
+    std::vector<std::vector<dataT>> ground_truth(rxmesh.get_num_vertices());
+    for (auto& g : ground_truth) {
+        g.resize(3);
+    }
     mcf_openmesh(omp_get_max_threads(), input_mesh, ground_truth);
 
     // RXMesh Impl
-    mcf_rxmesh(rxmesh, Verts, ground_truth);
+    mcf_rxmesh(rxmesh, ground_truth);
 }
 
 int main(int argc, char** argv)

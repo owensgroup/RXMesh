@@ -12,14 +12,14 @@ __global__ static void k_test_block_mat_transpose(uint16_t*      d_src,
                                                   uint16_t*      d_output)
 {
 
-    rxmesh::block_mat_transpose<rowOffset, blockThreads, itemPerThread>(
+    rxmesh::detail::block_mat_transpose<rowOffset, blockThreads, itemPerThread>(
         num_rows, num_cols, d_src, d_output);
 }
 
 template <typename T, uint32_t blockThreads>
 __global__ static void k_test_block_exclusive_sum(T* d_src, const uint32_t size)
 {
-    rxmesh::cub_block_exclusive_sum<T, blockThreads>(d_src, size);
+    rxmesh::detail::cub_block_exclusive_sum<T, blockThreads>(d_src, size);
 }
 
 template <typename T>
@@ -97,6 +97,29 @@ TEST(Util, AtomicAdd)
 {
     EXPECT_TRUE(test_atomicAdd<uint16_t>()) << "uint16_t failed";
     EXPECT_TRUE(test_atomicAdd<uint8_t>()) << "uint8_t failed";
+}
+
+
+TEST(Util, Align)
+{
+    using Type             = float;
+    const size_t num_bytes = sizeof(Type) * 1024;
+    const size_t alignment = 128;
+
+    Type* ptr = (Type*)malloc(num_bytes);
+
+    char* ptr_mis_aligned = reinterpret_cast<char*>(ptr) + 1;
+
+    Type* ptr_aligned    = reinterpret_cast<Type*>(ptr_mis_aligned);
+    rxmesh::detail::align(alignment, ptr_aligned);
+    
+    void* ptr_aligned_gt = reinterpret_cast<void*>(ptr_mis_aligned);
+    std::size_t spc = num_bytes;
+    void*       ret = std::align(alignment, sizeof(char), ptr_aligned_gt, spc);
+    
+    free(ptr);
+    EXPECT_NE(ret, nullptr);
+    EXPECT_EQ(ptr_aligned, ptr_aligned_gt);
 }
 
 TEST(Util, BlockMatrixTranspose)

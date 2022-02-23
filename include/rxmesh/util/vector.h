@@ -1,7 +1,7 @@
 #pragma once
 #include <assert.h>
 #include <stdint.h>
-
+#include <sstream>
 namespace rxmesh {
 
 template <uint32_t N, typename T>

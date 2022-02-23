@@ -2,7 +2,7 @@ name: Windows
 on: [push, pull_request, workflow_dispatch]
 jobs:
   WindowsRun:
-    runs-on: windows-latest
+    runs-on: windows-2019
     steps:
       - uses: Jimver/cuda-toolkit@v0.2.4
         id: cuda-toolkit
@@ -18,12 +18,7 @@ jobs:
         working-directory: ${{github.workspace}}/build
         run: cmake ../
       - name: Run VS
-        run: |
-         cmake --build ${{github.workspace}}/build --target RXMesh_test --config Release -j 99
-         cmake --build ${{github.workspace}}/build --target Geodesic --config Release -j 99
-         cmake --build ${{github.workspace}}/build --target MCF --config Release -j 99
-         cmake --build ${{github.workspace}}/build --target VertexNormal --config Release -j 99
-      #  cmake --build ${{github.workspace}}/build --target Filtering --config Release -j 99
+        run: cmake --build ${{github.workspace}}/build --clean-first --config Release -j 4
       #- name: Run Test
       #  working-directory: ${{github.workspace}}/build
       #  run: ctest --no-compress-output -T Test -C Release --output-on-failure

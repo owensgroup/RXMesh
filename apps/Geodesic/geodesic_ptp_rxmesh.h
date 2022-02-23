@@ -7,10 +7,8 @@
 constexpr float EPS = 10e-6;
 
 template <typename T>
-inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
-                            const std::vector<std::vector<uint32_t>>& Faces,
-                            const std::vector<std::vector<T>>&        Verts,
-                            const std::vector<uint32_t>&              h_seeds,
+inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rxmesh,
+                            const std::vector<uint32_t>& h_seeds,
                             const std::vector<uint32_t>& h_sorted_index,
                             const std::vector<uint32_t>& h_limits,
                             const std::vector<uint32_t>& toplesets)
@@ -28,7 +26,7 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
     report.add_member("method", std::string("RXMesh"));
 
     // input coords
-    auto input_coord = rxmesh.add_vertex_attribute(Verts, "coord");
+    auto input_coord = rxmesh.get_input_vertex_coordinates();
 
     // toplesets
     auto d_toplesets = rxmesh.add_vertex_attribute(toplesets, "topleset");
@@ -36,7 +34,7 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(rxmesh::Op::VV,
+    rxmesh.prepare_launch_box({rxmesh::Op::VV},
                               launch_box,
                               (void*)relax_ptp_rxmesh<T, blockThreads>,
                               true);
@@ -134,8 +132,7 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&                     rxmesh,
     //    uint32_t v_id = rxmesh.map_to_global(vh);
     //    geo[v_id]     = (*rxmesh_geo)(vh);
     //});
-    // export_attribute_VTK(
-    //    "geo_rxmesh.vtk", Faces, Verts, false, geo.data(), geo.data());
+
 
     GPU_FREE(d_error);
 

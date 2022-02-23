@@ -11,10 +11,9 @@
  * filtering_rxmesh()
  */
 template <typename T>
-void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
-                      const std::vector<std::vector<T>>&  Verts,
-                      const std::vector<std::vector<T>>&  ground_truth,
-                      const size_t                        max_neighbour_size)
+void filtering_rxmesh(const std::string                  file_path,
+                      const std::vector<std::vector<T>>& ground_truth,
+                      const size_t                       max_neighbour_size)
 {
     using namespace rxmesh;
 
@@ -25,7 +24,7 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
            "greater than maxVVSize. Should increase maxVVSize to "
         << max_neighbour_size << " to avoid illegal memory access";
 
-    RXMeshStatic rxmesh(Faces, false);
+    RXMeshStatic rxmesh(file_path, false);
 
     // Report
     Report report("Filtering_RXMesh");
@@ -38,7 +37,7 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
 
 
     // input coords
-    auto coords = rxmesh.add_vertex_attribute(Verts, "coords");
+    auto coords = rxmesh.get_input_vertex_coordinates();
 
     // Vertex normals (only on device)
     auto vertex_normal = rxmesh.add_vertex_attribute<T>("vn", 3, DEVICE);
@@ -53,15 +52,16 @@ void filtering_rxmesh(std::vector<std::vector<uint32_t>>& Faces,
     // vertex normal launch box
     constexpr uint32_t          vn_block_threads = 256;
     LaunchBox<vn_block_threads> vn_launch_box;
-    rxmesh.prepare_launch_box(rxmesh::Op::FV,
-                              vn_launch_box,
-                              (void*)compute_vertex_normal<T, vn_block_threads>);
+    rxmesh.prepare_launch_box(
+        {rxmesh::Op::FV},
+        vn_launch_box,
+        (void*)compute_vertex_normal<T, vn_block_threads>);
 
     // filter launch box
-    constexpr uint32_t              filter_block_threads = 512;
+    constexpr uint32_t              filter_block_threads = 256;
     LaunchBox<filter_block_threads> filter_launch_box;
     rxmesh.prepare_launch_box(
-        rxmesh::Op::VV,
+        {rxmesh::Op::VV},
         filter_launch_box,
         (void*)bilateral_filtering<T, filter_block_threads, maxVVSize>);
 

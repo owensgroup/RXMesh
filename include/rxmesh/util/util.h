@@ -345,6 +345,21 @@ inline std::string extract_file_name(const std::string& full_path)
     return filename.substr(lastslash + 1);
 }
 
+/**
+ * @brief given an initial number of bytes, increase this number such that it
+ * multiple of alignment
+ */
+__device__ __host__ __inline__ uint32_t expand_to_align(
+    uint32_t init_bytes,
+    uint32_t alignment = 128)
+{
+    uint32_t remainder = init_bytes % alignment;
+    if (remainder == 0) {
+        return init_bytes;
+    }
+    return init_bytes + alignment - remainder;
+};
+
 namespace detail {
 
 /**
@@ -371,5 +386,29 @@ inline std::pair<uint32_t, uint32_t> edge_key(const uint32_t v0,
     uint32_t j = std::min(v0, v1);
     return std::make_pair(i, j);
 }
+
+/**
+ * @brief given a pointer, this function returns a pointer to the first location
+ * at the boundary of a given alignment size. This what std:align does but it
+ * does not work with CUDA so this a stripped down version of it.
+ * @tparam T type of the pointer
+ * @param byte_alignment number of bytes to get the pointer to be aligned to
+ * @param ptr input/output pointer pointing at first usable location. On return,
+ * it will be properly aligned to the beginning of the first element that is
+ * aligned to alignment
+ */
+template <typename T>
+__device__ __host__ __inline__ void align(const std::size_t byte_alignment,
+                                          T*&               ptr) noexcept
+{
+    const uint64_t intptr    = reinterpret_cast<uint64_t>(ptr);
+    const uint64_t remainder = intptr % byte_alignment;
+    if (remainder == 0) {
+        return;
+    }
+    const uint64_t aligned = intptr + byte_alignment - remainder;
+    ptr                    = reinterpret_cast<T*>(aligned);
+}
+
 }  // namespace detail
 }  // namespace rxmesh

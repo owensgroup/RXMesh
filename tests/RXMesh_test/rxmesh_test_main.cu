@@ -17,10 +17,14 @@ struct RXMeshTestArg
     char**      argv          = argv;
 } rxmesh_args;
 
+// clang-format off
 #include "test_higher_queries.h"
 #include "test_queries.h"
 #include "test_attribute.cuh"
 #include "test_for_each.h"
+#include "test_edge_flip.h"
+#include "test_validate.h"
+// clang-format on
 
 int main(int argc, char** argv)
 {

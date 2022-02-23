@@ -48,7 +48,6 @@ void init_PR(rxmesh::RXMeshStatic&             rxmesh,
 
 template <typename T>
 void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
-                const std::vector<std::vector<T>>& Verts,
                 const std::vector<std::vector<T>>& ground_truth)
 {
     using namespace rxmesh;
@@ -71,8 +70,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
         << "mcf_rxmesh only takes watertight/closed mesh without boundaries";
 
     // Different attributes used throughout the application
-    auto input_coord =
-        rxmesh.add_vertex_attribute<T>(Verts, "coord", rxmesh::LOCATION_ALL);
+    auto input_coord = rxmesh.get_input_vertex_coordinates();
 
     // S in CG
     auto S =
@@ -95,18 +93,19 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     B->reset(0.0, rxmesh::DEVICE);
 
     // X in CG (the output)
-    auto X = rxmesh.add_vertex_attribute<T>(Verts, "X", rxmesh::LOCATION_ALL);
+    auto X = rxmesh.add_vertex_attribute<T>("X", 3, rxmesh::LOCATION_ALL);
+    X->copy_from(*input_coord, rxmesh::DEVICE, rxmesh::DEVICE);
 
     ReduceHandle<T> reduce_handle(*X);
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box_init_B;
     LaunchBox<blockThreads> launch_box_matvec;
-    rxmesh.prepare_launch_box(rxmesh::Op::VV,
+    rxmesh.prepare_launch_box({rxmesh::Op::VV},
                               launch_box_init_B,
                               (void*)init_B<T, blockThreads>,
                               true);
-    rxmesh.prepare_launch_box(rxmesh::Op::VV,
+    rxmesh.prepare_launch_box({rxmesh::Op::VV},
                               launch_box_matvec,
                               (void*)rxmesh_matvec<T, blockThreads>,
                               true);

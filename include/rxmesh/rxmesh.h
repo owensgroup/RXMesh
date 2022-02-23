@@ -193,8 +193,10 @@ class RXMesh
 
     RXMesh(const RXMesh&) = delete;
 
-    RXMesh(const std::vector<std::vector<uint32_t>>& fv,
-           const bool                                quite = false);
+    RXMesh();
+
+    void init(const std::vector<std::vector<uint32_t>>& fv,
+              const bool                                quite = false);
 
     /**
      * @brief build different supporting data structure used to build RXMesh
@@ -246,8 +248,14 @@ class RXMesh
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
 
-    // our friend tester class
     friend class ::RXMeshTest;
+
+    template <typename T>
+    friend class VertexAttribute;
+    template <typename T>
+    friend class EdgeAttribute;
+    template <typename T>
+    friend class FaceAttribute;
 
     Context m_rxmesh_context;
 
