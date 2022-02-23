@@ -52,6 +52,8 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
         input_mask       = patch_info.mask_f;
     }
 
+    // TODO we could cache the result of is_active if we can guarantee that a
+    // thread process a fixed number of input mesh elements
     bool     is_active = false;
     uint16_t local_id  = threadIdx.x;
     while (local_id < num_src_in_patch) {

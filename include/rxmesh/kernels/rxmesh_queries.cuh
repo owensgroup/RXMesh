@@ -26,31 +26,31 @@ __device__ __forceinline__ void block_mat_transpose(const uint32_t num_rows,
     uint16_t local_offset[itemPerThread];
     uint32_t nnz = num_rows * rowOffset;
 
-    for (uint32_t i = 0; i < itemPerThread; ++i) {
-        uint32_t index = itemPerThread * threadIdx.x + i;
-        // TODO
-        // int      pred = int(index < nnz);
-        // thread_data[i] = pred * (mat[index] >> shift) + (1 - pred) *
-        // INVALID16;
+    for (uint16_t i = 0; i < itemPerThread; ++i) {
+        uint16_t index = itemPerThread * threadIdx.x + i;
+        // avoid reading out-of-bound from mat
         if (index < nnz) {
-            thread_data[i] = mat[index] >> shift;
+            // skip tombstones in mat
+            const uint16_t val  = mat[index];
+            int            pred = int(val != INVALID16);
+            thread_data[i] = pred * (val >> shift) + (1 - pred) * INVALID16;
             mat[index]     = 0;
         } else {
             thread_data[i] = INVALID16;
         }
     }
 
-    /*if (num_cols > nnz) {
+    if (num_cols > nnz) {
         // zero-ing the rest of mat
         for (uint32_t i = threadIdx.x + nnz; i < num_cols; i += blockThreads) {
             mat[i] = 0;
         }
-    }*/
-    uint32_t m = max(nnz, num_cols);
+    }
+    /*uint32_t m = max(nnz, num_cols);
     __syncthreads();
     for (uint32_t i = threadIdx.x; i < m; i += blockThreads) {
         mat[i] = 0;
-    }
+    }*/
     __syncthreads();
 
 #if __CUDA_ARCH__ >= 700
@@ -70,8 +70,6 @@ __device__ __forceinline__ void block_mat_transpose(const uint32_t num_rows,
     for (uint32_t i = 0; i < itemPerThread; ++i) {
         if (thread_data[i] != INVALID16) {
             local_offset[i] = atomicAdd(&mat[thread_data[i]], 1u);
-        } else {
-            break;
         }
     }
     __syncthreads();
@@ -88,8 +86,6 @@ __device__ __forceinline__ void block_mat_transpose(const uint32_t num_rows,
             uint16_t offset = mat[item] + local_offset[i];
             uint16_t row    = (itemPerThread * threadIdx.x + i) / rowOffset;
             output[offset]  = row;
-        } else {
-            break;
         }
     }
 }
@@ -294,6 +290,7 @@ __device__ __forceinline__ void v_v(const uint16_t num_vertices,
 
     __syncthreads();
 
+    // TODO we can load-balance this better than this
     for (uint32_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
         uint32_t start = d_edges[v];
         uint32_t end   = d_edges[v + 1];
@@ -303,6 +300,7 @@ __device__ __forceinline__ void v_v(const uint16_t num_vertices,
             uint16_t v0   = s_edges_duplicate[2 * edge];
             uint16_t v1   = s_edges_duplicate[2 * edge + 1];
 
+            assert(v0 != INVALID16 && v1 != INVALID16);
             assert(v0 == v || v1 == v);
             // d_output[e] = (v0 == v) ? v1 : v0;
             d_output[e] = (v0 == v) * v1 + (v1 == v) * v0;
@@ -328,7 +326,11 @@ __device__ __forceinline__ void f_v(const uint16_t  num_edges,
         // TODO use vector load and store instead of looping
         for (uint32_t i = 0; i < 3; i++) {
             uint16_t e = d_faces[f_id + i];
-            flag_t   e_dir(0);
+            if (e == INVALID16) {
+                f_v[i] = INVALID16;
+                continue;
+            }
+            flag_t e_dir(0);
             Context::unpack_edge_dir(e, e, e_dir);
             // if the direction is flipped, we take the second vertex
             uint16_t e_id = (2 * e) + (1 * e_dir);
