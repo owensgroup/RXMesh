@@ -622,9 +622,9 @@ void RXMesh::build_device()
 
         // allocate and set bitmask
         auto alloc_bitmask =
-            [](uint64_t*& d_mask, uint64_t*& h_mask, uint32_t size) {
-                size_t num_bytes = DIVIDE_UP(size, 64) * sizeof(uint64_t);
-                h_mask           = (uint64_t*)malloc(num_bytes);
+            [](uint32_t*& d_mask, uint32_t*& h_mask, uint32_t size) {
+                size_t num_bytes = DIVIDE_UP(size, 32) * sizeof(uint32_t);
+                h_mask           = (uint32_t*)malloc(num_bytes);
                 std::memset(h_mask, 0xFF, num_bytes);
                 CUDA_ERROR(cudaMalloc((void**)&d_mask, num_bytes));
                 CUDA_ERROR(cudaMemset(d_mask, 0xFF, num_bytes));

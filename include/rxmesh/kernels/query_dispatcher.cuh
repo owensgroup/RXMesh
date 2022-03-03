@@ -31,7 +31,7 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
                                                   uint16_t&  num_owned,
                                                   uint32_t*& not_owned_patch,
                                                   uint16_t*& not_owned_local_id,
-                                                  uint64_t*& input_mask)
+                                                  uint32_t*& input_mask)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
@@ -163,7 +163,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     uint16_t  num_owned;
     uint32_t* not_owned_patch(nullptr);
     uint16_t* not_owned_local_id(nullptr);
-    uint64_t* input_mask(nullptr);
+    uint32_t* input_mask(nullptr);
 
     query_block_dispatcher<op, blockThreads>(
         context.get_patches_info()[patch_id],
@@ -381,7 +381,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
         uint16_t  num_owned = 0;
         uint16_t* not_owned_local_id(nullptr);
         uint32_t* not_owned_patch(nullptr);
-        uint64_t* input_mask(nullptr);
+        uint32_t* input_mask(nullptr);
 
         detail::template query_block_dispatcher<op, blockThreads>(
             context.get_patches_info()[patch_id],

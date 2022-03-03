@@ -3,6 +3,7 @@ namespace rxmesh {
 namespace detail {
 /**
  * @brief edge flip
+ * TODO check first if the edge is deleted
  */
 template <uint32_t blockThreads, typename predicateT>
 __device__ __inline__ void edge_flip(PatchInfo&       patch_info,

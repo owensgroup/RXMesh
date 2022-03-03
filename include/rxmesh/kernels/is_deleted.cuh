@@ -15,13 +15,13 @@ namespace detail {
  * @return true if the mesh element bit is set to zero
  */
 __device__ __host__ __forceinline__ bool is_deleted(const uint16_t& local_id,
-                                                    const uint64_t* bitmask)
+                                                    const uint32_t* bitmask)
 {
 
-    const uint16_t     idx  = local_id / 64;
-    const uint64_t     bit  = local_id % 64;
-    const uint64_t     mask = bitmask[idx];
-    constexpr uint64_t one  = 1;
+    const uint16_t     idx  = local_id / 32;
+    const uint32_t     bit  = local_id % 32;
+    const uint32_t     mask = bitmask[idx];
+    constexpr uint32_t one  = 1;
     return !(mask & (one << bit));
 }
 
