@@ -2,6 +2,9 @@
 
 #include "rxmesh/context.h"
 #include "rxmesh/handle.h"
+#include "rxmesh/kernels/delete_edge.cuh"
+#include "rxmesh/kernels/delete_face.cuh"
+#include "rxmesh/kernels/delete_vertex.cuh"
 #include "rxmesh/kernels/edge_flip.cuh"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/patch_info.h"
@@ -42,9 +45,19 @@ __device__ __inline__ void update_block_dispatcher(const Context&   context,
                                         predicate);
     }
 
+    if constexpr (op == DynOp::DeleteFace) {
+        detail::delete_face<blockThreads>(context.get_patches_info()[patch_id],
+                                          predicate);
+    }
+
     if constexpr (op == DynOp::DeleteEdge) {
         detail::delete_edge<blockThreads>(context.get_patches_info()[patch_id],
                                           predicate);
+    }
+
+    if constexpr (op == DynOp::DeleteVertex) {
+        detail::delete_vertex<blockThreads>(
+            context.get_patches_info()[patch_id], predicate);
     }
 }
 

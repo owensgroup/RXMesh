@@ -113,6 +113,23 @@ class RXMeshDynamic : public RXMeshStatic
                             2 * sizeof(uint16_t);
         }
 
+        if (op == DynOp::DeleteFace) {
+            // load faces' bitmask and FE
+            // set the deleted faces bitmake to zero and it's three edges to
+            // INVALID16
+            dynamic_smem =
+                DIVIDE_UP(this->m_max_faces_per_patch, 64) * sizeof(uint64_t);
+            dynamic_smem += 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
+        }
+
+        if (op == DynOp::DeleteEdge) {
+            RXMESH_WARN("Deleted Edge calc_shared_memory WIP");
+        }
+
+        if (op == DynOp::DeleteVertex) {
+            RXMESH_WARN("Deleted vertex calc_shared_memory WIP");
+        }
+
         return dynamic_smem;
     }
 };

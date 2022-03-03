@@ -186,21 +186,5 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
             s_ev, num_edges * 2, reinterpret_cast<uint16_t*>(patch_info.ev));
     }
 }
-
-
-/**
- * @brief delete edge
- */
-template <uint32_t blockThreads, typename predicateT>
-__device__ __inline__ void delete_edge(PatchInfo&       patch_info,
-                                       const predicateT predicate)
-{
-    // Extract the argument in the predicate lambda function
-    using PredicateTTraits = detail::FunctionTraits<predicateT>;
-    using HandleT          = typename PredicateTTraits::template arg<0>::type;
-    static_assert(
-        std::is_same_v<HandleT, EdgeHandle>,
-        "First argument in predicate lambda function should be EdgeHandle");
-}
 }  // namespace detail
 }  // namespace rxmesh
