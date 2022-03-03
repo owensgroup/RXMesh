@@ -133,7 +133,7 @@ __device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
     load_async(reinterpret_cast<const uint16_t*>(patch_info.fe),
                num_faces * 3,
                reinterpret_cast<uint16_t*>(temp_fe),
-               true);
+               false);
 
     for (uint32_t i = threadIdx.x; i < num_edges * 2; i += blockThreads) {
         s_ef[i] = INVALID16;
@@ -222,7 +222,7 @@ __device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
     load_async(reinterpret_cast<const uint16_t*>(patch_info.ev),
                num_edges * 2,
                reinterpret_cast<uint16_t*>(temp_ev),
-               true);
+               false);
 
     __syncthreads();
 
