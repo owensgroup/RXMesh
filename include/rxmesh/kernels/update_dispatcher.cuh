@@ -33,6 +33,9 @@ template <DynOp op, uint32_t blockThreads, typename predicateT>
 __device__ __inline__ void update_block_dispatcher(Context&         context,
                                                    const predicateT predicate)
 {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        *(context.get_dirty()) = 1;
+    }
 
     const uint32_t patch_id = blockIdx.x;
 

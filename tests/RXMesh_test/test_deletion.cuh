@@ -64,7 +64,7 @@ __global__ static void delete_edge(rxmesh::Context context)
 }
 
 
-TEST(RXMeshDynamic, DISABLED_DeleteEdge)
+TEST(RXMeshDynamic, DeleteEdge)
 {
     using namespace rxmesh;
 
@@ -106,7 +106,7 @@ __global__ static void delete_vertex(rxmesh::Context context)
                                                                should_delete);
 }
 
-TEST(RXMeshDynamic, DISABLED_DeleteVertex)
+TEST(RXMeshDynamic, DeleteVertex)
 {
     using namespace rxmesh;
 

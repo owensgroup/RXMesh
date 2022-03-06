@@ -42,7 +42,7 @@ __global__ static void check_uniqueness(const Context           context,
         uint16_t*                  s_fe = shrd_mem;
 
         // FV since it loads both FE and EV
-        load_mesh_async<Op::FV>(patch_info, s_ev, s_fe, true);
+        load_mesh_async<Op::FV>(patch_info, s_ev, s_fe, false);
         __syncthreads();
 
         // make sure an edge is connecting two unique vertices
@@ -53,12 +53,20 @@ __global__ static void check_uniqueness(const Context           context,
 
             if (is_deleted(e, patch_info.mask_e)) {
                 if (v0 != INVALID16 || v1 != INVALID16) {
+                    // printf("\n  p= %u, del e= %u, v0= %u, v1= %u",
+                    //       patch_id,
+                    //       e,
+                    //       v0,
+                    //       v1);
                     ::atomicAdd(d_check, 1);
                 }
             } else {
 
                 if (v0 >= patch_info.num_vertices ||
                     v1 >= patch_info.num_vertices || v0 == v1) {
+                    // printf(
+                    //    "\n p= %u, e= %u, v0= %u, v1= %u", patch_id, e, v0,
+                    //    v1);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -75,6 +83,12 @@ __global__ static void check_uniqueness(const Context           context,
                 e1 = s_fe[3 * f + 1];
                 e2 = s_fe[3 * f + 2];
                 if (e0 != INVALID16 || e1 != INVALID16 || e2 != INVALID16) {
+                    // printf("\n p= %u, del f= %u, e0= %u, e1= %u, e2= %u",
+                    //       patch_id,
+                    //       f,
+                    //       e0,
+                    //       e1,
+                    //       e2);
                     ::atomicAdd(d_check, 1);
                 }
             } else {
@@ -88,6 +102,12 @@ __global__ static void check_uniqueness(const Context           context,
                 if (e0 >= patch_info.num_edges || e1 >= patch_info.num_edges ||
                     e2 >= patch_info.num_edges || e0 == e1 || e0 == e2 ||
                     e1 == e2) {
+                    // printf("\n p= %u, f= %u, e0= %u, e1= %u, e2= %u",
+                    //       patch_id,
+                    //       f,
+                    //       e0,
+                    //       e1,
+                    //       e2);
                     ::atomicAdd(d_check, 1);
                 }
 
@@ -100,6 +120,18 @@ __global__ static void check_uniqueness(const Context           context,
                     v1 >= patch_info.num_vertices ||
                     v2 >= patch_info.num_vertices || v0 == v1 || v0 == v2 ||
                     v1 == v2) {
+                    // printf(
+                    //    "\n p= %u, f= %u, e0= %u, e1= %u, e2= %u, v0= %u, v1=
+                    //    "
+                    //    "%u, v2= %u",
+                    //    patch_id,
+                    //    f,
+                    //    e0,
+                    //    e1,
+                    //    e2,
+                    //    v0,
+                    //    v1,
+                    //    v2);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -124,7 +156,7 @@ __global__ static void check_not_owned(const Context           context,
         uint16_t*                  s_fe = shrd_mem;
 
         // FV since it loads both FE and EV
-        load_mesh_async<Op::FV>(patch_info, s_ev, s_fe, true);
+        load_mesh_async<Op::FV>(patch_info, s_ev, s_fe, false);
         __syncthreads();
 
         // for every not-owned face, check that its three edges (possibly
@@ -382,14 +414,17 @@ bool RXMeshDynamic::validate()
 
 
     if (!check_num_mesh_elements()) {
+        RXMESH_WARN("RXMeshDynamic::validate() check_num_mesh_elements failed");
         return false;
     }
 
     if (!check_uniqueness()) {
+        RXMESH_WARN("RXMeshDynamic::validate() check_uniqueness failed");        
         return false;
     }
 
     if (!check_not_owned()) {
+        RXMESH_WARN("RXMeshDynamic::validate() check_not_owned failed");        
         return false;
     }
 
