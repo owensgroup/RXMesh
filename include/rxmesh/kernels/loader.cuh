@@ -22,11 +22,7 @@ __device__ __inline__ void load_async(const T*    in,
     namespace cg           = cooperative_groups;
     cg::thread_block block = cg::this_thread_block();
 
-    cg::memcpy_async(
-        block,
-        out,
-        in,        
-        sizeof(T) * size);
+    cg::memcpy_async(block, out, in, sizeof(T) * size);
 
     if (with_wait) {
         cg::wait(block);
@@ -58,11 +54,11 @@ __device__ __forceinline__ void load_uint16(const uint16_t* in,
 
 /**
  * @brief load the patch topology based on the requirements of a query operation
- * @tparam op the query operation 
- * @param patch_info input patch info 
+ * @tparam op the query operation
+ * @param patch_info input patch info
  * @param s_ev where EV will be loaded
  * @param s_fe where FE will be loaded
- * @param with_wait wither to add a sync at the end 
+ * @param with_wait wither to add a sync at the end
  * @return
  */
 template <Op op>

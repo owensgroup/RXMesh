@@ -30,7 +30,7 @@ namespace rxmesh {
  * the update operation should be done on the give mesh element
  */
 template <DynOp op, uint32_t blockThreads, typename predicateT>
-__device__ __inline__ void update_block_dispatcher(const Context&   context,
+__device__ __inline__ void update_block_dispatcher(Context&         context,
                                                    const predicateT predicate)
 {
 

@@ -27,7 +27,7 @@ TEST(RXMeshDynamic, DeleteFace)
 
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    RXMeshDynamic rxmesh(STRINGIFY(INPUT_DIR) "diamond.obj", rxmesh_args.quite);
+    RXMeshDynamic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
 
     EXPECT_TRUE(rxmesh.validate());
 

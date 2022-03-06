@@ -34,25 +34,25 @@ class Context
     /**
      * @brief Total number of edges in mesh
      */
-    __device__ __forceinline__ uint32_t get_num_edges() const
+    __device__ __forceinline__ uint32_t* get_num_edges()
     {
-        return *m_num_edges;
+        return m_num_edges;
     }
 
     /**
      * @brief Total number of faces in mesh
      */
-    __device__ __forceinline__ uint32_t get_num_faces() const
+    __device__ __forceinline__ uint32_t* get_num_faces()
     {
-        return *m_num_faces;
+        return m_num_faces;
     }
 
     /**
      * @brief Total number of vertices in mesh
      */
-    __device__ __forceinline__ uint32_t get_num_vertices() const
+    __device__ __forceinline__ uint32_t* get_num_vertices()
     {
-        return *m_num_vertices;
+        return m_num_vertices;
     }
 
     /**
