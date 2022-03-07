@@ -1,8 +1,9 @@
-namespace rxmesh {
+#include "rxmesh/kernels/warp_update_mask.cuh"
 
+namespace rxmesh {
 namespace detail {
 /**
- * @brief delete edge
+ * @brief delete face
  */
 template <uint32_t blockThreads, typename predicateT>
 __device__ __inline__ void delete_face(PatchInfo&       patch_info,
@@ -18,63 +19,46 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
     // patch basic info
     const uint16_t num_owned_faces = patch_info.num_owned_faces;
 
-    // shared memory used to store FE    
+    // shared memory used to store FE
     extern __shared__ uint16_t shrd_mem[];
     uint16_t*                  s_fe = shrd_mem;
-    
+
     // load FE and make sure to sync before
     load_mesh_async<Op::FE>(patch_info, s_fe, s_fe, false);
     __syncthreads();
 
-    // load over all edges---one thread per edge
+    // load over all face-one thread per face
     uint16_t local_id = threadIdx.x;
 
     // we need to make sure that the whole warp go into the loop
-    // Round to next multiple of 32
-    // https://codegolf.stackexchange.com/a/17852
-    uint16_t len = num_owned_faces;
-    if (len % 32 != 0) {
-        len = (num_owned_faces | 31) + 1;
-    }
-    while (local_id < len) {
+    uint16_t len = round_to_next_multiple_32(num_owned_faces);
 
+    while (local_id < len) {
+        // check if face with local_id should be deleted and make sure we only
+        // check owned faces
         bool to_delete = false;
         if (local_id < num_owned_faces) {
             to_delete = predicate({patch_info.patch_id, local_id});
         }
 
+        // reset the connectivity of deleted face
         if (to_delete) {
             s_fe[3 * local_id + 0] = INVALID16;
             s_fe[3 * local_id + 1] = INVALID16;
             s_fe[3 * local_id + 2] = INVALID16;
         }
 
-        // if thread in the N-th lane has deleted its edge, then warp_maks N-th
-        // bit will be 1
-        __syncwarp();
-        uint32_t warp_mask = __ballot_sync(__activemask(), to_delete);
-        // let the thread in first lane writes the new bit mask
-        uint32_t lane_id = threadIdx.x % 32;  // 32 = warp size
-        if (lane_id == 0) {
-            // here we first need to bitwise invert the warp_mask and then AND
-            // it with the bitmask stored in global memory
-            // Example for 4 threads/faces where the first face
-            // has been deleted before and the second face is deleted now
-            // Bitmask stored in global memory is: 0 1 1 1
-            // Bitmask in warp_mask:               0 1 0 0
-            // The result we want to store:        0 0 1 1
-            uint32_t mask_id           = local_id / 32;
-            uint32_t old_mask          = patch_info.mask_f[mask_id];
-            patch_info.mask_f[mask_id] = ((~warp_mask) & old_mask);            
-        }
+        // update the face's bit mask. This function should be called by the
+        // whole warp
+        warp_update_mask(to_delete, local_id, patch_info.mask_f);
+
         local_id += blockThreads;
     }
-        
+
     __syncthreads();
-    load_uint16<blockThreads>(
-        s_fe,
-        patch_info.num_faces * 3,
-        reinterpret_cast<uint16_t*>(patch_info.fe));
+    load_uint16<blockThreads>(s_fe,
+                              patch_info.num_faces * 3,
+                              reinterpret_cast<uint16_t*>(patch_info.fe));
 }
 }  // namespace detail
 }  // namespace rxmesh
