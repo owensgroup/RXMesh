@@ -75,19 +75,28 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
     // delete faces incident to deleted edges
     // we only delete faces owned by the patch
     local_id = 0;
-    while (local_id < num_owned_faces) {
+    // we need to make sure that the whole warp go into the loop
+    len = round_to_next_multiple_32(num_owned_faces);
+    while (local_id < len) {
         uint16_t e0, e1, e2;
         flag_t   d0(0), d1(0), d2(0);
         Context::unpack_edge_dir(s_fe[3 * local_id + 0], e0, d0);
         Context::unpack_edge_dir(s_fe[3 * local_id + 1], e1, d1);
         Context::unpack_edge_dir(s_fe[3 * local_id + 2], e2, d2);
 
-        if (is_deleted(e0, s_mask_e) || is_deleted(e1, s_mask_e) ||
-            is_deleted(e2, s_mask_e)) {
+        bool to_delete = is_deleted(e0, s_mask_e) || is_deleted(e1, s_mask_e) ||
+                         is_deleted(e2, s_mask_e);
+
+        if (to_delete) {
             s_fe[3 * local_id + 0] = INVALID16;
             s_fe[3 * local_id + 1] = INVALID16;
             s_fe[3 * local_id + 2] = INVALID16;
         }
+
+        // update the face's bit mask. This function should be called by the
+        // whole warp
+        warp_update_mask(to_delete, local_id, patch_info.mask_f);
+
         local_id += blockThreads;
     }
     __syncthreads();
