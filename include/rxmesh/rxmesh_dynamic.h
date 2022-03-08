@@ -119,8 +119,9 @@ class RXMeshDynamic : public RXMeshStatic
         }
 
         if (op == DynOp::DeleteEdge) {
-            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
-            dynamic_smem += 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
+                                    2 * this->m_max_edges_per_patch) *
+                           sizeof(uint16_t);            
             dynamic_smem +=
                 DIVIDE_UP(this->m_max_edges_per_patch, 32) * sizeof(uint32_t);
         }
