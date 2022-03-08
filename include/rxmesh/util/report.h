@@ -72,6 +72,13 @@ struct Report
                 str_status.c_str(), str_status.length(), m_doc.GetAllocator()),
             m_doc.GetAllocator());
 
+        std::string str_refspec = g_GIT_REFSPEC;
+        m_doc.AddMember("git_refspec",
+                        rapidjson::Value().SetString(str_refspec.c_str(),
+                                                     str_refspec.length(),
+                                                     m_doc.GetAllocator()),
+                        m_doc.GetAllocator());
+
         // Time
         auto t  = std::time(nullptr);
         auto tm = *std::localtime(&t);
