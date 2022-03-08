@@ -1,3 +1,4 @@
+#include "rxmesh/kernels/is_deleted.cuh"
 #include "rxmesh/kernels/warp_update_mask.cuh"
 
 namespace rxmesh {
@@ -17,21 +18,22 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
         "First argument in predicate lambda function should be EdgeHandle");
 
     // patch basic info
+    const uint16_t num_owned_faces = patch_info.num_owned_faces;
     const uint16_t num_owned_edges = patch_info.num_owned_edges;
     const uint16_t num_edges       = patch_info.num_edges;
 
     // shared memory used to store EV and FE
-    const uint32_t             mask_size = DIVIDE_UP(num_edges, 32);
+    const uint16_t             mask_size = DIVIDE_UP(num_edges, 32);
     extern __shared__ uint32_t shrd_mem32[];
     extern __shared__ uint16_t shrd_mem[];
     uint32_t*                  s_mask_e = shrd_mem32;
     uint16_t*                  s_ev     = &shrd_mem[2 * mask_size];
     uint16_t*                  s_fe     = s_ev;
 
-    // load Fe and EV and edges mask into shared memory
+    // load FE and EV and edges mask into shared memory
     load_async(patch_info.mask_e, mask_size, s_mask_e, false);
 
-    //TODO we only need to load s_ev, operate on it, then load s_fe. 
+    // TODO we only need to load s_ev, operate on it, then load s_fe.
     load_mesh_async<Op::FV>(patch_info, s_ev, s_fe, false);
     __syncthreads();
 
@@ -63,6 +65,41 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
 
         local_id += blockThreads;
     }
+
+    // we can now store EV to global memory
+    __syncthreads();
+    store<blockThreads>(s_ev,
+                        patch_info.num_edges * 2,
+                        reinterpret_cast<uint16_t*>(patch_info.ev));
+
+    // delete faces incident to deleted edges
+    // we only delete faces owned by the patch
+    local_id = 0;
+    while (local_id < num_owned_faces) {
+        uint16_t e0, e1, e2;
+        flag_t   d0(0), d1(0), d2(0);
+        Context::unpack_edge_dir(s_fe[3 * local_id + 0], e0, d0);
+        Context::unpack_edge_dir(s_fe[3 * local_id + 1], e1, d1);
+        Context::unpack_edge_dir(s_fe[3 * local_id + 2], e2, d2);
+
+        if (is_deleted(e0, s_mask_e) || is_deleted(e1, s_mask_e) ||
+            is_deleted(e2, s_mask_e)) {
+            s_fe[3 * local_id + 0] = INVALID16;
+            s_fe[3 * local_id + 1] = INVALID16;
+            s_fe[3 * local_id + 2] = INVALID16;
+        }
+        local_id += blockThreads;
+    }
+    __syncthreads();
+
+    // store edge mask into global memory
+    store<blockThreads>(s_mask_e, mask_size, patch_info.mask_e);
+
+    // store FE in global memory
+    store<blockThreads>(s_fe,
+                        patch_info.num_faces * 3,
+                        reinterpret_cast<uint16_t*>(patch_info.fe));
+    __syncthreads();
 }
 }  // namespace detail
 }  // namespace rxmesh

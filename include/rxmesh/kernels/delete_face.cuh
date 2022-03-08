@@ -56,9 +56,9 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
     }
 
     __syncthreads();
-    load_uint16<blockThreads>(s_fe,
-                              patch_info.num_faces * 3,
-                              reinterpret_cast<uint16_t*>(patch_info.fe));
+    store<blockThreads>(s_fe,
+                        patch_info.num_faces * 3,
+                        reinterpret_cast<uint16_t*>(patch_info.fe));
 }
 }  // namespace detail
 }  // namespace rxmesh

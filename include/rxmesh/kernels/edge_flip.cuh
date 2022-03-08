@@ -113,7 +113,7 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
     // If flipped at least one edge
     if (s_num_flipped_edges > 0) {
         // we store the changes we made to FE in global memory
-        load_uint16<blockThreads>(
+        store<blockThreads>(
             s_fe, 3 * num_faces, reinterpret_cast<uint16_t*>(patch_info.fe));
 
         // load EV in the same place that was used to store EF
@@ -183,7 +183,7 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
 
         // We store the changes in EV to global memory
         __syncthreads();
-        load_uint16<blockThreads>(
+        store<blockThreads>(
             s_ev, num_edges * 2, reinterpret_cast<uint16_t*>(patch_info.ev));
     }
 }
