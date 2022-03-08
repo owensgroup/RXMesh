@@ -30,7 +30,7 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
     uint16_t*                  s_ev     = &shrd_mem[2 * mask_size];
     uint16_t*                  s_fe     = s_ev;
 
-    // load FE and EV and edges mask into shared memory
+    // load edges mask into shared memory
     load_async(patch_info.mask_e, mask_size, s_mask_e, false);
 
     // we only need to load s_ev, operate on it, then load s_fe
@@ -59,7 +59,7 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
             s_ev[2 * local_id + 1] = INVALID16;
         }
 
-        // update the face's bit mask. This function should be called by the
+        // update the edge's bit mask. This function should be called by the
         // whole warp
         warp_update_mask(to_delete, local_id, s_mask_e);
 
