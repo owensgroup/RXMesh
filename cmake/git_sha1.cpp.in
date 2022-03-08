@@ -1,3 +1,5 @@
 //https://stackoverflow.com/a/4318642/1608232
 #define GIT_SHA1 "@GIT_SHA1@"
+#define GIT_LOCAL_CHANGES_STATUS "@GIT_LOCAL_CHANGES_STATUS@"
 extern const char g_GIT_SHA1[] = GIT_SHA1;
+extern const char g_GIT_LOCAL_CHANGES_STATUS[] = GIT_LOCAL_CHANGES_STATUS;

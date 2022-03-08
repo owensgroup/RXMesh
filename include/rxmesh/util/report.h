@@ -65,6 +65,13 @@ struct Report
                             str.c_str(), str.length(), m_doc.GetAllocator()),
                         m_doc.GetAllocator());
 
+        std::string str_status = g_GIT_LOCAL_CHANGES_STATUS;
+        m_doc.AddMember(
+            "git_local_changes_status",
+            rapidjson::Value().SetString(
+                str_status.c_str(), str_status.length(), m_doc.GetAllocator()),
+            m_doc.GetAllocator());
+
         // Time
         auto t  = std::time(nullptr);
         auto tm = *std::localtime(&t);
