@@ -78,11 +78,9 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
     // we need to make sure that the whole warp go into the loop
     len = round_to_next_multiple_32(num_owned_faces);
     while (local_id < len) {
-        uint16_t e0, e1, e2;
-        flag_t   d0(0), d1(0), d2(0);
-        Context::unpack_edge_dir(s_fe[3 * local_id + 0], e0, d0);
-        Context::unpack_edge_dir(s_fe[3 * local_id + 1], e1, d1);
-        Context::unpack_edge_dir(s_fe[3 * local_id + 2], e2, d2);
+        uint16_t e0 = s_fe[3 * local_id + 0] >> 1;
+        uint16_t e1 = s_fe[3 * local_id + 1] >> 1;
+        uint16_t e2 = s_fe[3 * local_id + 2] >> 1;
 
         bool to_delete = is_deleted(e0, s_mask_e) || is_deleted(e1, s_mask_e) ||
                          is_deleted(e2, s_mask_e);
