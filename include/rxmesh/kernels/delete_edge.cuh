@@ -72,25 +72,30 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
                         patch_info.num_edges * 2,
                         reinterpret_cast<uint16_t*>(patch_info.ev));
 
-    //load FE and make sure we don't overwrite EV
+    // load FE and make sure we don't overwrite EV
     __syncthreads();
     load_mesh_async<Op::FE>(patch_info, s_ev, s_fe, false);
     __syncthreads();
 
+    // store edge mask into global memory
+    store<blockThreads>(s_mask_e, mask_size, patch_info.mask_e);
 
     // delete faces incident to deleted edges
     // we only delete faces owned by the patch
-    local_id = 0;
+    local_id = threadIdx.x;
     // we need to make sure that the whole warp go into the loop
     len = round_to_next_multiple_32(num_owned_faces);
     while (local_id < len) {
-        uint16_t e0 = s_fe[3 * local_id + 0] >> 1;
-        uint16_t e1 = s_fe[3 * local_id + 1] >> 1;
-        uint16_t e2 = s_fe[3 * local_id + 2] >> 1;
+        bool to_delete = false;
 
-        bool to_delete = is_deleted(e0, s_mask_e) || is_deleted(e1, s_mask_e) ||
-                         is_deleted(e2, s_mask_e);
+        if (local_id < num_owned_faces) {
+            const uint16_t e0 = s_fe[3 * local_id + 0] >> 1;
+            const uint16_t e1 = s_fe[3 * local_id + 1] >> 1;
+            const uint16_t e2 = s_fe[3 * local_id + 2] >> 1;
 
+            to_delete = is_deleted(e0, s_mask_e) || is_deleted(e1, s_mask_e) ||
+                        is_deleted(e2, s_mask_e);
+        }
         if (to_delete) {
             s_fe[3 * local_id + 0] = INVALID16;
             s_fe[3 * local_id + 1] = INVALID16;
@@ -104,9 +109,6 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
         local_id += blockThreads;
     }
     __syncthreads();
-
-    // store edge mask into global memory
-    store<blockThreads>(s_mask_e, mask_size, patch_info.mask_e);
 
     // store FE in global memory
     store<blockThreads>(s_fe,
