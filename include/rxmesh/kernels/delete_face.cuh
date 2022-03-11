@@ -24,8 +24,8 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
     uint16_t*                  s_fe = shrd_mem;
 
     // load FE and make sure to sync before
-    load_mesh_async<Op::FE>(patch_info, s_fe, s_fe, false);
-    __syncthreads();
+    load_mesh_async<Op::FE>(patch_info, s_fe, s_fe, true);
+    //__syncthreads();
 
     // load over all face-one thread per face
     uint16_t local_id = threadIdx.x;
@@ -42,7 +42,7 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
         }
 
         // reset the connectivity of deleted face
-        if (to_delete) {
+        if (to_delete) {            
             s_fe[3 * local_id + 0] = INVALID16;
             s_fe[3 * local_id + 1] = INVALID16;
             s_fe[3 * local_id + 2] = INVALID16;
@@ -59,6 +59,9 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
     store<blockThreads>(s_fe,
                         patch_info.num_faces * 3,
                         reinterpret_cast<uint16_t*>(patch_info.fe));
+
+    __syncthreads();
+    
 }
 }  // namespace detail
 }  // namespace rxmesh

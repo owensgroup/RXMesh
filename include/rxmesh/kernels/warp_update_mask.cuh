@@ -13,7 +13,7 @@ __device__ __forceinline__ void warp_update_mask(const bool thread_predicate,
     // if thread's thread_predicate in the N-th lane is true, then warp_maks
     // N-th bit will be 1
     __syncwarp();
-    uint32_t warp_mask = __ballot_sync(__activemask(), thread_predicate);
+    uint32_t warp_mask = __ballot_sync(0xFFFFFFFF, thread_predicate);
 
     // let the thread in first lane writes the new bit mask
     uint32_t lane_id = threadIdx.x % 32;  // 32 = warp size

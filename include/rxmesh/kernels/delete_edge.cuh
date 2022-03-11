@@ -35,7 +35,7 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
 
     // we only need to load s_ev, operate on it, then load s_fe
     load_mesh_async<Op::EV>(patch_info, s_ev, s_fe, true);
-    __syncthreads();
+    //__syncthreads();
 
     // load over all edges---one thread per edge
     uint16_t local_id = threadIdx.x;
@@ -74,8 +74,8 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
 
     // load FE and make sure we don't overwrite EV
     __syncthreads();
-    load_mesh_async<Op::FE>(patch_info, s_ev, s_fe, false);
-    __syncthreads();
+    load_mesh_async<Op::FE>(patch_info, s_ev, s_fe, true);
+    //__syncthreads();
 
     // store edge mask into global memory
     store<blockThreads>(s_mask_e, mask_size, patch_info.mask_e);

@@ -54,8 +54,7 @@ __global__ static void check_uniqueness(const Context           context,
             if (is_deleted(e, patch_info.mask_e)) {
                 if (v0 != INVALID16 || v1 != INVALID16) {
                     // printf(
-                    //    "\n edge loop: del edge p= %u, del e= %u, v0= %u, v1=
-                    //    "
+                    //    "\n edge loop: del edge p= %u, del e= %u, v0= %u, v1="
                     //    "%u",
                     //    patch_id,
                     //    e,
@@ -66,12 +65,13 @@ __global__ static void check_uniqueness(const Context           context,
             } else {
                 if (v0 >= patch_info.num_vertices ||
                     v1 >= patch_info.num_vertices || v0 == v1) {
-                    // printf("\n edge loop: vertex check p= %u, e= %u, v0= %u,
-                    // v1= %u",
-                    //       patch_id,
-                    //       e,
-                    //       v0,
-                    //       v1);
+                    // printf(
+                    //    "\n edge loop: vertex check p= %u, e= %u, v0= %u,"
+                    //    " v1= %u",
+                    //    patch_id,
+                    //    e,
+                    //    v0,
+                    //    v1);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -89,8 +89,7 @@ __global__ static void check_uniqueness(const Context           context,
                 e2 = s_fe[3 * f + 2];
                 if (e0 != INVALID16 || e1 != INVALID16 || e2 != INVALID16) {
                     // printf(
-                    //    "\n face loop: del face p= %u, del f= %u, e0= %u, e1=
-                    //    "
+                    //    "\n face loop: del face p= %u, del f= %u, e0= %u, e1="
                     //    "%u, e2= %u",
                     //    patch_id,
                     //    f,
@@ -106,6 +105,16 @@ __global__ static void check_uniqueness(const Context           context,
                 Context::unpack_edge_dir(s_fe[3 * f + 1], e1, d1);
                 Context::unpack_edge_dir(s_fe[3 * f + 2], e2, d2);
 
+                // TODO we should fix this when we are able to apply changes
+                // across ribbons. If an edge is deleted, it should delete all
+                // faces incident to it. For now, we skip this for ribbon faces
+                if (f >= patch_info.num_owned_faces) {
+                    if (is_deleted(e0, patch_info.mask_e) ||
+                        is_deleted(e1, patch_info.mask_e) ||
+                        is_deleted(e2, patch_info.mask_e)) {
+                        continue;
+                    }
+                }
 
                 if (e0 >= patch_info.num_edges || e1 >= patch_info.num_edges ||
                     e2 >= patch_info.num_edges || e0 == e1 || e0 == e2 ||

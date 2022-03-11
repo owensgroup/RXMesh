@@ -11,7 +11,7 @@ __global__ static void delete_face(rxmesh::Context context)
     using namespace rxmesh;
 
     auto should_delete = [&](const FaceHandle& face) -> bool {
-        if (threadIdx.x == 1) {
+        if (face.unpack().second == 2) {
             return true;
         } else {
             return false;
@@ -27,7 +27,7 @@ TEST(RXMeshDynamic, DeleteFace)
 
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    RXMeshDynamic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+    RXMeshDynamic rxmesh(rxmesh_args.obj_file_name, rxmesh_args.quite);
 
     EXPECT_TRUE(rxmesh.validate());
 
@@ -52,7 +52,7 @@ __global__ static void delete_edge(rxmesh::Context context)
     using namespace rxmesh;
 
     auto should_delete = [&](const EdgeHandle& edge) -> bool {
-        if (threadIdx.x == 1) {
+        if (edge.unpack().second == 1) {
             return true;
         } else {
             return false;
@@ -70,7 +70,7 @@ TEST(RXMeshDynamic, DeleteEdge)
 
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    RXMeshDynamic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+    RXMeshDynamic rxmesh(rxmesh_args.obj_file_name, rxmesh_args.quite);
 
     EXPECT_TRUE(rxmesh.validate());
 
@@ -95,7 +95,7 @@ __global__ static void delete_vertex(rxmesh::Context context)
     using namespace rxmesh;
 
     auto should_delete = [&](const VertexHandle& vertex) -> bool {
-        if (threadIdx.x == 1) {
+        if (vertex.unpack().second == 1) {
             return true;
         } else {
             return false;
