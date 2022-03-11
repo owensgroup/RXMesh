@@ -43,7 +43,7 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
     load_async(reinterpret_cast<const uint16_t*>(patch_info.fe),
                num_faces * 3,
                reinterpret_cast<uint16_t*>(s_fe),
-               false);
+               true);
     __syncthreads();
 
     // Transpose FE into EF so we obtain the two incident triangles to
@@ -120,7 +120,7 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
         load_async(reinterpret_cast<const uint16_t*>(patch_info.ev),
                    num_edges * 2,
                    reinterpret_cast<uint16_t*>(s_ev),
-                   false);
+                   true);
         __syncthreads();
 
         // Now, we go over all edge that has been flipped

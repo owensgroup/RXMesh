@@ -34,7 +34,7 @@ __device__ __inline__ void delete_vertex(PatchInfo&       patch_info,
     uint16_t* s_fe = s_ev;
 
     // load edges mask into shared memory
-    load_async(patch_info.mask_v, mask_size_v, s_mask_v, false);
+    load_async(patch_info.mask_v, mask_size_v, s_mask_v, true);
     __syncthreads();
 
     // we only need to load s_ev, operate on it, then load s_fe
@@ -98,13 +98,13 @@ __device__ __inline__ void delete_vertex(PatchInfo&       patch_info,
     // wait so all threads has written edges mask
     __syncthreads();
 
-    // load edges mask into shared memory
-    load_async(patch_info.mask_e, mask_size_e, s_mask_e, false);
-
     // store EV to global memory and vertices mask and load edges mask
     store<blockThreads>(s_ev,
                         patch_info.num_edges * 2,
                         reinterpret_cast<uint16_t*>(patch_info.ev));
+
+    // load edges mask into shared memory
+    load_async(patch_info.mask_e, mask_size_e, s_mask_e, true);
 
     // wait so we don't overwrite s_ev
     __syncthreads();

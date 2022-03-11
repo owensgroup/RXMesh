@@ -222,7 +222,7 @@ __device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
     load_async(reinterpret_cast<const uint16_t*>(patch_info.ev),
                num_edges * 2,
                reinterpret_cast<uint16_t*>(temp_ev),
-               false);
+               true);
 
     __syncthreads();
 
