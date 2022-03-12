@@ -63,10 +63,33 @@ __global__ static void check_uniqueness(const Context           context,
                     ::atomicAdd(d_check, 1);
                 }
             } else {
+
+                // TODO we should fix this when we are able to apply changes
+                // across ribbons. If an vertex is deleted, it should delete all
+                // edges incident to it. For now, we skip this for ribbon edges
+                if (e >= patch_info.num_owned_edges) {
+                    if (is_deleted(v0, patch_info.mask_v) ||
+                        is_deleted(v1, patch_info.mask_v)) {
+                        continue;
+                    }
+                }
+
+
                 if (v0 >= patch_info.num_vertices ||
                     v1 >= patch_info.num_vertices || v0 == v1) {
                     // printf(
                     //    "\n edge loop: vertex check p= %u, e= %u, v0= %u,"
+                    //    " v1= %u",
+                    //    patch_id,
+                    //    e,
+                    //    v0,
+                    //    v1);
+                    ::atomicAdd(d_check, 1);
+                }
+                if (is_deleted(v0, patch_info.mask_v) ||
+                    is_deleted(v1, patch_info.mask_v)) {
+                    // printf(
+                    //    "\n edge loop: del vertex check p= %u, e= %u, v0= %u,"
                     //    " v1= %u",
                     //    patch_id,
                     //    e,
@@ -130,10 +153,35 @@ __global__ static void check_uniqueness(const Context           context,
                     ::atomicAdd(d_check, 1);
                 }
 
+                if (is_deleted(e0, patch_info.mask_e) ||
+                    is_deleted(e1, patch_info.mask_e) ||
+                    is_deleted(e2, patch_info.mask_e)) {
+                    // printf(
+                    //    "\n face loop: del edge check p= %u, f= %u, e0= %u, "
+                    //    "e1= %u, e2= %u",
+                    //    patch_id,
+                    //    f,
+                    //    e0,
+                    //    e1,
+                    //    e2);
+                    ::atomicAdd(d_check, 1);
+                }
+
                 uint16_t v0, v1, v2;
                 v0 = s_ev[(2 * e0) + (1 * d0)];
                 v1 = s_ev[(2 * e1) + (1 * d1)];
                 v2 = s_ev[(2 * e2) + (1 * d2)];
+
+                // TODO we should fix this when we are able to apply changes
+                // across ribbons. If an vertex is deleted, it should delete all
+                // faces incident to it. For now, we skip this for ribbon faces
+                if (f >= patch_info.num_owned_faces) {
+                    if (is_deleted(v0, patch_info.mask_v) ||
+                        is_deleted(v1, patch_info.mask_v) ||
+                        is_deleted(v2, patch_info.mask_v)) {
+                        continue;
+                    }
+                }
 
                 if (v0 >= patch_info.num_vertices ||
                     v1 >= patch_info.num_vertices ||
@@ -150,6 +198,20 @@ __global__ static void check_uniqueness(const Context           context,
                     //    v0,
                     //    v1,
                     //    v2);
+                    ::atomicAdd(d_check, 1);
+                }
+
+                if (is_deleted(v0, patch_info.mask_v) ||
+                    is_deleted(v1, patch_info.mask_v) ||
+                    is_deleted(v2, patch_info.mask_v)) {
+                    // printf(
+                    //   "\n face loop: del vertex check p= %u, f= %u, v0= %u, "
+                    //   "v1= %u, v2= %u",
+                    //   patch_id,
+                    //   f,
+                    //   v0,
+                    //   v1,
+                    //   v2);
                     ::atomicAdd(d_check, 1);
                 }
             }

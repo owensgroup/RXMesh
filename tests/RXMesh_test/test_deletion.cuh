@@ -11,7 +11,7 @@ __global__ static void delete_face(rxmesh::Context context)
     using namespace rxmesh;
 
     auto should_delete = [&](const FaceHandle& face) -> bool {
-        if (face.unpack().second == 2) {
+        if (face.unpack().second == 1) {
             return true;
         } else {
             return false;
@@ -112,7 +112,7 @@ TEST(RXMeshDynamic, DeleteVertex)
 
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    RXMeshDynamic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+    RXMeshDynamic rxmesh(rxmesh_args.obj_file_name, rxmesh_args.quite);
 
     EXPECT_TRUE(rxmesh.validate());
 

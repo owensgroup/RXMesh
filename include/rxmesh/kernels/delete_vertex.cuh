@@ -34,12 +34,10 @@ __device__ __inline__ void delete_vertex(PatchInfo&       patch_info,
     uint16_t* s_fe = s_ev;
 
     // load edges mask into shared memory
-    load_async(patch_info.mask_v, mask_size_v, s_mask_v, true);
-    __syncthreads();
+    load_async(patch_info.mask_v, mask_size_v, s_mask_v, false);
 
     // we only need to load s_ev, operate on it, then load s_fe
-    // we don't wait here
-    load_mesh_async<Op::EV>(patch_info, s_ev, s_fe, false);
+    load_mesh_async<Op::EV>(patch_info, s_ev, s_fe, true);
 
     // load over all vertices---one thread per vertex
     uint16_t local_id = threadIdx.x;
@@ -54,7 +52,7 @@ __device__ __inline__ void delete_vertex(PatchInfo&       patch_info,
 
         if (local_id < num_owned_vertices) {
             to_delete = predicate({patch_info.patch_id, local_id});
-        }        
+        }
         // update the vertex's bit mask. This function should be called by the
         // whole warp
         warp_update_mask(to_delete, local_id, s_mask_v);
@@ -62,9 +60,9 @@ __device__ __inline__ void delete_vertex(PatchInfo&       patch_info,
         local_id += blockThreads;
     }
 
-    // wait till all s_mask_v has been written by all threads and also EV
-    // has been loaded into shared memory
+    // wait till all s_mask_v has been written by all threads
     __syncthreads();
+
 
     // store vertices mask but don't wait
     store<blockThreads>(s_mask_v, mask_size_v, patch_info.mask_v);
@@ -81,11 +79,10 @@ __device__ __inline__ void delete_vertex(PatchInfo&       patch_info,
             const uint16_t v0 = s_ev[2 * local_id + 0];
             const uint16_t v1 = s_ev[2 * local_id + 1];
             to_delete = is_deleted(v0, s_mask_v) || is_deleted(v1, s_mask_v);
-        }
-
-        if (to_delete) {            
-            s_ev[2 * local_id + 0] = INVALID16;
-            s_ev[2 * local_id + 1] = INVALID16;
+            if (to_delete) {
+                s_ev[2 * local_id + 0] = INVALID16;
+                s_ev[2 * local_id + 1] = INVALID16;
+            }
         }
 
         // update the face's bit mask. This function should be called by the
@@ -104,13 +101,11 @@ __device__ __inline__ void delete_vertex(PatchInfo&       patch_info,
                         reinterpret_cast<uint16_t*>(patch_info.ev));
 
     // load edges mask into shared memory
+    // we sync here so we don't overwrite s_ev before storing it
     load_async(patch_info.mask_e, mask_size_e, s_mask_e, true);
 
-    // wait so we don't overwrite s_ev
-    __syncthreads();
-
     // load FE (and overwrite EV)
-    load_mesh_async<Op::FE>(patch_info, s_ev, s_fe, false);
+    load_mesh_async<Op::FE>(patch_info, s_ev, s_fe, true);
     __syncthreads();
 
     // now we loop over FE and deleted faces incident to deleted edges
@@ -126,13 +121,14 @@ __device__ __inline__ void delete_vertex(PatchInfo&       patch_info,
 
             to_delete = is_deleted(e0, s_mask_e) || is_deleted(e1, s_mask_e) ||
                         is_deleted(e2, s_mask_e);
+
+            if (to_delete) {
+                s_fe[3 * local_id + 0] = INVALID16;
+                s_fe[3 * local_id + 1] = INVALID16;
+                s_fe[3 * local_id + 2] = INVALID16;
+            }
         }
 
-        if (to_delete) {            
-            s_fe[3 * local_id + 0] = INVALID16;
-            s_fe[3 * local_id + 1] = INVALID16;
-            s_fe[3 * local_id + 2] = INVALID16;
-        }
 
         // update the face's bit mask. This function should be called by the
         // whole warp
