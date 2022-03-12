@@ -360,6 +360,19 @@ __device__ __host__ __inline__ uint32_t expand_to_align(
     return init_bytes + alignment - remainder;
 };
 
+/**
+ * @brief find the next multiple of 32 
+ * https://codegolf.stackexchange.com/a/17852
+ */
+__device__ __host__ __inline__ uint16_t round_to_next_multiple_32(uint16_t num)
+{
+    if (num % 32 != 0) {
+        return (num | 31) + 1;
+    } else {
+        return num;
+    }
+}
+
 namespace detail {
 
 /**

@@ -620,6 +620,26 @@ void RXMesh::build_device()
         m_h_patches_info[p].fe =
             reinterpret_cast<LocalEdgeT*>(m_h_patches_fe[p].data());
 
+        // allocate and set bitmask
+        auto alloc_bitmask =
+            [](uint32_t*& d_mask, uint32_t*& h_mask, uint32_t size) {
+                size_t num_bytes = DIVIDE_UP(size, 32) * sizeof(uint32_t);
+                h_mask           = (uint32_t*)malloc(num_bytes);
+                std::memset(h_mask, 0xFF, num_bytes);
+                CUDA_ERROR(cudaMalloc((void**)&d_mask, num_bytes));
+                CUDA_ERROR(cudaMemset(d_mask, 0xFF, num_bytes));
+            };
+
+        alloc_bitmask(d_patch.mask_v,
+                      m_h_patches_info[p].mask_v,
+                      m_h_patches_info[p].num_vertices);
+        alloc_bitmask(d_patch.mask_e,
+                      m_h_patches_info[p].mask_e,
+                      m_h_patches_info[p].num_edges);
+        alloc_bitmask(d_patch.mask_f,
+                      m_h_patches_info[p].mask_f,
+                      m_h_patches_info[p].num_faces);
+
         // copy not-owned mesh elements to device
 
         auto populate_not_owned =

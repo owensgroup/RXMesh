@@ -25,6 +25,7 @@ class Context
           m_num_faces(nullptr),
           m_num_vertices(nullptr),
           m_num_patches(nullptr),
+          m_dirty(nullptr),
           m_patches_info(nullptr)
     {
     }
@@ -34,25 +35,25 @@ class Context
     /**
      * @brief Total number of edges in mesh
      */
-    __device__ __forceinline__ uint32_t get_num_edges() const
+    __device__ __forceinline__ uint32_t* get_num_edges()
     {
-        return *m_num_edges;
+        return m_num_edges;
     }
 
     /**
      * @brief Total number of faces in mesh
      */
-    __device__ __forceinline__ uint32_t get_num_faces() const
+    __device__ __forceinline__ uint32_t* get_num_faces()
     {
-        return *m_num_faces;
+        return m_num_faces;
     }
 
     /**
      * @brief Total number of vertices in mesh
      */
-    __device__ __forceinline__ uint32_t get_num_vertices() const
+    __device__ __forceinline__ uint32_t* get_num_vertices()
     {
-        return *m_num_vertices;
+        return m_num_vertices;
     }
 
     /**
@@ -63,6 +64,16 @@ class Context
         return *m_num_patches;
     }
 
+
+    /**
+     * @brief return the dirty pointer
+     */
+    __device__ __forceinline__ uint32_t* get_dirty() const
+    {
+        return m_dirty;
+    }
+
+
     /**
      * @brief A pointer to device PatchInfo used to store various information
      * about the patches
@@ -71,6 +82,7 @@ class Context
     {
         return m_patches_info;
     }
+
 
     /**
      * @brief Unpack an edge to its edge ID and direction
@@ -106,6 +118,7 @@ class Context
         CUDA_ERROR(cudaMalloc((void**)&m_num_edges, sizeof(uint32_t)));
         CUDA_ERROR(cudaMalloc((void**)&m_num_faces, sizeof(uint32_t)));
         CUDA_ERROR(cudaMalloc((void**)&m_num_patches, sizeof(uint32_t)));
+        CUDA_ERROR(cudaMalloc((void**)&m_dirty, sizeof(uint32_t)));
 
         CUDA_ERROR(cudaMemcpy(m_num_vertices,
                               &num_vertices,
@@ -119,6 +132,7 @@ class Context
                               &num_patches,
                               sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
+        CUDA_ERROR(cudaMemset(m_dirty, 0, sizeof(uint32_t)));
         m_patches_info = patches;
     }
 
@@ -128,10 +142,12 @@ class Context
         CUDA_ERROR(cudaFree(m_num_faces));
         CUDA_ERROR(cudaFree(m_num_vertices));
         CUDA_ERROR(cudaFree(m_num_patches));
+        CUDA_ERROR(cudaFree(m_dirty));
     }
 
 
     uint32_t * m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;
+    uint32_t*  m_dirty;
     PatchInfo* m_patches_info;
 };
 }  // namespace rxmesh

@@ -2,14 +2,15 @@ namespace rxmesh {
 
 namespace detail {
 /**
- * @brief
+ * @brief edge flip
+ * TODO check first if the edge is deleted
  */
 template <uint32_t blockThreads, typename predicateT>
 __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
                                      const predicateT predicate)
 {
     // Extract the argument in the predicate lambda function
-    using PredicateTTraits = detail::FunctionTraits<predicateT>;
+    using PredicateTTraits = FunctionTraits<predicateT>;
     using HandleT          = typename PredicateTTraits::template arg<0>::type;
     static_assert(
         std::is_same_v<HandleT, EdgeHandle>,
@@ -38,7 +39,7 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
         s_ef32[i] = INVALID32;
     }
 
-    // load FE into shared memory    
+    // load FE into shared memory
     load_async(reinterpret_cast<const uint16_t*>(patch_info.fe),
                num_faces * 3,
                reinterpret_cast<uint16_t*>(s_fe),
@@ -112,7 +113,7 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
     // If flipped at least one edge
     if (s_num_flipped_edges > 0) {
         // we store the changes we made to FE in global memory
-        detail::load_uint16<blockThreads>(
+        store<blockThreads>(
             s_fe, 3 * num_faces, reinterpret_cast<uint16_t*>(patch_info.fe));
 
         // load EV in the same place that was used to store EF
@@ -182,7 +183,7 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
 
         // We store the changes in EV to global memory
         __syncthreads();
-        detail::load_uint16<blockThreads>(
+        store<blockThreads>(
             s_ev, num_edges * 2, reinterpret_cast<uint16_t*>(patch_info.ev));
     }
 }

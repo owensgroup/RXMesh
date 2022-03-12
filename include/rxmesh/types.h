@@ -96,7 +96,10 @@ enum class Op
  */
 enum class DynOp
 {
-    EdgeFlip = 0,
+    EdgeFlip     = 0,
+    DeleteVertex = 1,
+    DeleteEdge   = 2,
+    DeleteFace   = 3,
 };
 /**
  * @brief Convert an operation to string

@@ -2,6 +2,9 @@
 
 #include "rxmesh/context.h"
 #include "rxmesh/handle.h"
+#include "rxmesh/kernels/delete_edge.cuh"
+#include "rxmesh/kernels/delete_face.cuh"
+#include "rxmesh/kernels/delete_vertex.cuh"
 #include "rxmesh/kernels/edge_flip.cuh"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/patch_info.h"
@@ -27,9 +30,12 @@ namespace rxmesh {
  * the update operation should be done on the give mesh element
  */
 template <DynOp op, uint32_t blockThreads, typename predicateT>
-__device__ __inline__ void update_block_dispatcher(const Context&   context,
+__device__ __inline__ void update_block_dispatcher(Context&         context,
                                                    const predicateT predicate)
 {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        *(context.get_dirty()) = 1;
+    }
 
     const uint32_t patch_id = blockIdx.x;
 
@@ -40,6 +46,21 @@ __device__ __inline__ void update_block_dispatcher(const Context&   context,
     if constexpr (op == DynOp::EdgeFlip) {
         detail::edge_flip<blockThreads>(context.get_patches_info()[patch_id],
                                         predicate);
+    }
+
+    if constexpr (op == DynOp::DeleteFace) {
+        detail::delete_face<blockThreads>(context.get_patches_info()[patch_id],
+                                          predicate);
+    }
+
+    if constexpr (op == DynOp::DeleteEdge) {
+        detail::delete_edge<blockThreads>(context.get_patches_info()[patch_id],
+                                          predicate);
+    }
+
+    if constexpr (op == DynOp::DeleteVertex) {
+        detail::delete_vertex<blockThreads>(
+            context.get_patches_info()[patch_id], predicate);
     }
 }
 

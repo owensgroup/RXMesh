@@ -22,35 +22,45 @@ __device__ __inline__ void load_async(const T*    in,
     namespace cg           = cooperative_groups;
     cg::thread_block block = cg::this_thread_block();
 
-    cg::memcpy_async(
-        block,
-        out,
-        in,        
-        sizeof(T) * size);
+    cg::memcpy_async(block, out, in, sizeof(T) * size);
 
     if (with_wait) {
         cg::wait(block);
     }
 }
 
-template <uint32_t blockThreads>
-__device__ __forceinline__ void load_uint16(const uint16_t* in,
-                                            const uint16_t  size,
-                                            uint16_t*       out)
+/**
+ * @brief store shared memory into global memory. Optimized for uint16_t but
+ * also works okay with uint32_t
+ */
+template <uint32_t blockThreads, typename T, typename SizeT>
+__device__ __forceinline__ void store(const T* in, const SizeT size, T* out)
 {
-    const uint32_t  size32   = size / 2;
-    const uint32_t  reminder = size % 2;
-    const uint32_t* in32     = reinterpret_cast<const uint32_t*>(in);
-    uint32_t*       out32    = reinterpret_cast<uint32_t*>(out);
+    static_assert(std::is_same_v<T, uint16_t> || std::is_same_v<T, uint32_t>,
+                  "store() only works for uint16_t and uint32_t");
 
-    for (uint32_t i = threadIdx.x; i < size32; i += blockThreads) {
-        uint32_t a = in32[i];
-        out32[i]   = a;
+    if constexpr (std::is_same_v<T, uint16_t>) {
+        const uint32_t  size32   = size / 2;
+        const uint32_t  reminder = size % 2;
+        const uint32_t* in32     = reinterpret_cast<const uint32_t*>(in);
+        uint32_t*       out32    = reinterpret_cast<uint32_t*>(out);
+
+        for (uint32_t i = threadIdx.x; i < size32; i += blockThreads) {
+            uint32_t a = in32[i];
+            out32[i]   = a;
+        }
+
+        if (reminder != 0) {
+            if (threadIdx.x == 0) {
+                out[size - 1] = in[size - 1];
+            }
+        }
     }
 
-    if (reminder != 0) {
-        if (threadIdx.x == 0) {
-            out[size - 1] = in[size - 1];
+    if constexpr (std::is_same_v<T, uint32_t>) {
+        for (uint32_t i = threadIdx.x; i < size; i += blockThreads) {
+            uint32_t a = in[i];
+            out[i]     = a;
         }
     }
 }
@@ -58,11 +68,11 @@ __device__ __forceinline__ void load_uint16(const uint16_t* in,
 
 /**
  * @brief load the patch topology based on the requirements of a query operation
- * @tparam op the query operation 
- * @param patch_info input patch info 
+ * @tparam op the query operation
+ * @param patch_info input patch info
  * @param s_ev where EV will be loaded
  * @param s_fe where FE will be loaded
- * @param with_wait wither to add a sync at the end 
+ * @param with_wait wither to add a sync at the end
  * @return
  */
 template <Op op>
