@@ -136,6 +136,11 @@ class RXMeshDynamic : public RXMeshStatic
                 sizeof(uint32_t);
         }
 
+        if (op == DynOp::EdgeCollapse) {
+            dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
+                                    2 * this->m_max_edges_per_patch) *
+                           sizeof(uint16_t);
+        }
         return dynamic_smem;
     }
 };

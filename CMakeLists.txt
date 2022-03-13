@@ -9,11 +9,15 @@ project(RXMesh
         LANGUAGES C CXX CUDA)
 
 if (WIN32)
-    set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
-    message(STATUS "Polyscope is enabled")
+    set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")    
 else()
-    set(USE_POLYSCOPE "OFF" CACHE BOOL "Enable Ployscope for visualization")
-    message(STATUS "Polyscope is disabled")
+    set(USE_POLYSCOPE "OFF" CACHE BOOL "Enable Ployscope for visualization")    
+endif()
+
+if(${USE_POLYSCOPE})
+	message(STATUS "Polyscope is enabled")
+else()
+	message(STATUS "Polyscope is disabled")
 endif()
 
 set(CMAKE_CXX_STANDARD 17)

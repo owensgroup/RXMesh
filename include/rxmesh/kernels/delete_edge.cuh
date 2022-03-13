@@ -1,3 +1,5 @@
+#pragma once
+
 #include "rxmesh/kernels/is_deleted.cuh"
 #include "rxmesh/kernels/warp_update_mask.cuh"
 
