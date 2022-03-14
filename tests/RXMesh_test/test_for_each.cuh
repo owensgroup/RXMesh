@@ -65,7 +65,7 @@ TEST(RXMeshStatic, ForEachOnDevice)
     for_each_kernel<blockThreads, Op::V, VertexHandle>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
             rx.get_context());
-    EXPECT_EQ(cudaDeviceSynchronize() == cudaSuccess);
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
     rx.prepare_launch_box(
         {Op::E},
@@ -74,7 +74,7 @@ TEST(RXMeshStatic, ForEachOnDevice)
     for_each_kernel<blockThreads, Op::E, EdgeHandle>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
             rx.get_context());
-    EXPECT_EQ(cudaDeviceSynchronize() == cudaSuccess);
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
 
     rx.prepare_launch_box(
@@ -83,6 +83,6 @@ TEST(RXMeshStatic, ForEachOnDevice)
         (void*)for_each_kernel<blockThreads, Op::F, FaceHandle>);
     for_each_kernel<blockThreads, Op::F, FaceHandle>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rx.get_context());        
-    EXPECT_EQ(cudaDeviceSynchronize() == cudaSuccess);
+            rx.get_context());
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 }
