@@ -21,7 +21,7 @@ struct RXMeshTestArg
 #include "test_higher_queries.h"
 #include "test_queries.h"
 #include "test_attribute.cuh"
-#include "test_for_each.h"
+#include "test_for_each.cuh"
 #include "test_edge_flip.cuh"
 #include "test_validate.h"
 #include "test_deletion.cuh"
