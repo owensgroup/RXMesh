@@ -79,15 +79,18 @@ enum class ELEMENT
  */
 enum class Op
 {
-    VV = 0,
-    VE = 1,
-    VF = 2,
-    FV = 3,
-    FE = 4,
-    FF = 5,
-    EV = 6,
-    EE = 7,
-    EF = 8,
+    V  = 0,
+    E  = 1,
+    F  = 2,
+    VV = 3,
+    VE = 4,
+    VF = 5,
+    FV = 6,
+    FE = 7,
+    FF = 8,
+    EV = 9,
+    EE = 10,
+    EF = 11,
 };
 
 

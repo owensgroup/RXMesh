@@ -124,7 +124,7 @@ The goal of defining a programming  model is to make it easy to write applicatio
 
 
 ### **Computation**
-- **`for_each`** runs a computation over all vertices, edges, or faces _without_ requiring information from neighbor mesh elements. The computation run on each mesh element is defined as a lambda function that takes a handle as an input. The lambda function could run either on the host, device, or both. On the host, we parallelize the computation using OpenMP. Care must be taken for lambda function on the device since it needs to be annotated using `__device__` and it can only capture by value. More about lambda function in CUDA can be found [here](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#extended-lambda)
+- **`for_each`** runs a computation over all vertices, edges, or faces _without_ requiring information from neighbor mesh elements. The computation that runs on each mesh element is defined as a lambda function that takes a handle as an input. The lambda function could run either on the host, device, or both. On the host, we parallelize the computation using OpenMP. Care must be taken for lambda function on the device since it needs to be annotated using `__device__` and it can only capture by value. More about lambda function in CUDA can be found [here](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#extended-lambda)
   - Example: using `for_each` to initialize attributes 
     ```cpp
     RXMeshStatic rx("input.obj");
@@ -140,6 +140,7 @@ The goal of defining a programming  model is to make it easy to write applicatio
             vertex_color(vh, 2) = 0.9;
         });
     ```
+  Alternatively, `for_each` operations could be written the same way as Queries operations (see below) using `for_each_dispatcher()`. This might be useful if the user would like to combine a `for_each` with queries operations in the same kernel. For more examples, checkout [`ForEach`](/tests/RXMesh_test/test_for_each.cuh) unit test. 
 
 - **Queries** operations supported by RXMesh with description are listed below 
 
