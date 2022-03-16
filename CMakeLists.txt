@@ -24,6 +24,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
     set(CMAKE_BUILD_TYPE Release)
@@ -90,7 +91,6 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # RXMesh: could think of this as just the header library, so name RXMesh_header_lib
 add_library(RXMesh_header_lib INTERFACE) 
 target_compile_features(RXMesh_header_lib INTERFACE cxx_std_17)
-set(CMAKE_CXX_EXTENSIONS OFF)
 target_compile_definitions(RXMesh_header_lib
     INTERFACE INPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/input/
     INTERFACE OUTPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/output/
