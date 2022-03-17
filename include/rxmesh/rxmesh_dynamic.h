@@ -140,6 +140,14 @@ class RXMeshDynamic : public RXMeshStatic
             dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
                                     2 * this->m_max_edges_per_patch) *
                            sizeof(uint16_t);
+            dynamic_smem += (1 + std::max(this->m_max_vertices_per_patch,
+                                          this->m_max_edges_per_patch)) *
+                            sizeof(uint16_t);
+
+            //dynamic_smem +=
+            //    std::max(DIVIDE_UP(this->m_max_vertices_per_patch, 32),
+            //             DIVIDE_UP(this->m_max_edges_per_patch, 32)) *
+            //    sizeof(uint32_t);
         }
         return dynamic_smem;
     }

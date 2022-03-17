@@ -17,7 +17,7 @@ __device__ __forceinline__ void warp_update_mask(const bool thread_predicate,
 
     // let the thread in first lane writes the new bit mask
     uint32_t lane_id = threadIdx.x % 32;  // 32 = warp size
-    if (lane_id == 0) {
+    if (lane_id == 0 && warp_mask != 0) {
         // here we first need to bitwise invert the warp_mask and then AND
         // it with the bitmask stored in global memory
         // Example for 4 threads/faces where the first face/edge/vertex
