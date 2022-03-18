@@ -35,8 +35,10 @@ TEST(RXMeshDynamic, EdgeCollpase)
 
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(
-        {}, {DynOp::EdgeFlip}, launch_box, (void*)edge_collpase<blockThreads>);
+    rxmesh.prepare_launch_box({},
+                              {DynOp::EdgeCollapse},
+                              launch_box,
+                              (void*)edge_collpase<blockThreads>);
 
     edge_collpase<blockThreads>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
