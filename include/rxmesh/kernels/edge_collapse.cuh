@@ -33,17 +33,21 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     extern __shared__ uint16_t shrd_mem[];
     uint32_t*                  s_mask_e = shrd_mem32;
     uint16_t* s_edge_source_vertex      = &shrd_mem[2 * mask_size_e];
-    uint16_t* s_vertex_glue = &s_edge_source_vertex[num_owned_edges];
-    uint16_t* s_edge_glue   = s_vertex_glue;
-    uint16_t* s_ev          = &shrd_mem[std::max(num_vertices, num_edges)];
-    uint16_t* s_fe          = s_ev;
+    uint16_t* s_vertex_glue =
+        &s_edge_source_vertex[num_owned_edges + (num_owned_edges % 2)];
+    uint16_t* s_edge_glue = s_vertex_glue;
+    uint16_t  m           = std::max(num_vertices, num_edges);
+    uint16_t* s_ev        = &s_edge_glue[m + (m % 2)];
+    uint16_t* s_fe        = s_ev;
 
     // set the glued vertices to itself
-    // no need to sync here. will rely on syn from the call to load_mesh_async
+    // no need to sync here. will rely on sync from the call to load_mesh_async
     for (uint16_t v = threadIdx.x; v < num_owned_vertices; v += blockThreads) {
         s_vertex_glue[v] = v;
     }
 
+    // set the mask bit for all edges to indicate that all edges are not
+    // collapsed
     for (uint16_t e = threadIdx.x; e < num_owned_edges; e += blockThreads) {
         s_mask_e[e] = INVALID32;
     }
@@ -60,7 +64,6 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     // 1. mark the edge as collapsed in s_mask_e (set its bit to zero)
     // 2. for the two end vertices of an edge (v0,v1), add v1 as the vertex to
     // glue to in s_vertex_glue[v0]
-    // 3. Mark the collapsed edge vertices as INVALID16 in s_ev
     uint16_t local_id = threadIdx.x;
     while (local_id < len) {
 
@@ -76,9 +79,6 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
 
             // we will mark v0 as deleted later
             s_vertex_glue[v0] = v1;
-
-            s_ev[2 * local_id]     = INVALID16;
-            s_ev[2 * local_id + 1] = INVALID16;
         }
 
         warp_update_mask(to_collapse, local_id, s_mask_e);
@@ -94,10 +94,12 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     // not be glued
     local_id = threadIdx.x;
     while (local_id < num_owned_edges) {
-        s_ev[2 * local_id]     = s_vertex_glue[s_ev[2 * local_id]];
+        uint16_t src_v     = s_vertex_glue[s_ev[2 * local_id]];
+        s_ev[2 * local_id] = src_v;
+
         s_ev[2 * local_id + 1] = s_vertex_glue[s_ev[2 * local_id + 1]];
 
-        s_edge_source_vertex[local_id] = s_ev[2 * local_id];
+        s_edge_source_vertex[local_id] = src_v;
 
         local_id += blockThreads;
     }
@@ -109,12 +111,19 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
                         patch_info.num_edges * 2,
                         reinterpret_cast<uint16_t*>(patch_info.ev));
 
+
     // We mark glued vertices as deleted in their bitmask in global memory
     // by checking on which vertex it has been glued to. If it glued to itself,
     // then it has not be deleted
+    len      = round_to_next_multiple_32(num_owned_vertices);
     local_id = threadIdx.x;
-    while (local_id < num_owned_vertices) {
-        bool is_deleted_v = (s_vertex_glue[local_id] != local_id);
+    while (local_id < len) {
+
+        bool is_deleted_v= false;
+
+        if (local_id < num_owned_vertices) {
+            is_deleted_v = (s_vertex_glue[local_id] != local_id);
+        }
 
         warp_update_mask(is_deleted_v, local_id, patch_info.mask_v);
         local_id += blockThreads;
@@ -134,38 +143,38 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     // 2. if an edge is collapsed, then the next edge in the face should be
     // glued to the previous one
     // 3. if an edge is collapsed, then the face should be deleted
+    len      = round_to_next_multiple_32(num_owned_faces);
     local_id = threadIdx.x;
-    while (local_id < num_owned_faces) {
-        uint16_t e[3];
-        uint8_t  d[3];
-        Context::unpack_edge_dir(s_fe[3 * local_id + 0], e[0], d[0]);
-        Context::unpack_edge_dir(s_fe[3 * local_id + 1], e[1], d[1]);
-        Context::unpack_edge_dir(s_fe[3 * local_id + 2], e[2], d[2]);
+    while (local_id < len) {
+        bool delete_face = false;
 
-        bool is_collapsed[3];
-        is_collapsed[0] = is_deleted(e[0], s_mask_e);
-        is_collapsed[1] = is_deleted(e[1], s_mask_e);
-        is_collapsed[2] = is_deleted(e[2], s_mask_e);
+        if (local_id < num_owned_faces) {
 
-        if (is_collapsed[0]) {
-            s_edge_glue[e[1]] = e[2];
-        }
+            uint16_t e[3];
 
-        if (is_collapsed[1]) {
-            s_edge_glue[e[2]] = e[0];
-        }
+            e[0] = s_fe[3 * local_id + 0] >> 1;
+            e[1] = s_fe[3 * local_id + 1] >> 1;
+            e[2] = s_fe[3 * local_id + 2] >> 1;
 
-        if (is_collapsed[2]) {
-            s_edge_glue[e[0]] = e[1];
-        }
+            bool is_collapsed[3];
+            is_collapsed[0] = is_deleted(e[0], s_mask_e);
+            is_collapsed[1] = is_deleted(e[1], s_mask_e);
+            is_collapsed[2] = is_deleted(e[2], s_mask_e);
 
-        bool delete_face =
-            (is_collapsed[0] || is_collapsed[1] || is_collapsed[2]);
+            if (is_collapsed[0]) {
+                s_edge_glue[e[1]] = e[2];
+            }
 
-        if (delete_face) {
-            s_fe[3 * local_id + 0] = INVALID16;
-            s_fe[3 * local_id + 1] = INVALID16;
-            s_fe[3 * local_id + 2] = INVALID16;
+            if (is_collapsed[1]) {
+                s_edge_glue[e[2]] = e[0];
+            }
+
+            if (is_collapsed[2]) {
+                s_edge_glue[e[0]] = e[1];
+            }
+
+            delete_face =
+                (is_collapsed[0] || is_collapsed[1] || is_collapsed[2]);
         }
 
         warp_update_mask(delete_face, local_id, patch_info.mask_f);
@@ -205,8 +214,11 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
                         patch_info.num_faces * 3,
                         reinterpret_cast<uint16_t*>(patch_info.fe));
 
-    // Store edge mask
-    store<blockThreads>(s_mask_e, mask_size_e, patch_info.mask_e);
+    // Store edge mask by AND'ing the mask in shared memory with that in
+    // global memory
+    for (uint16_t e = threadIdx.x; e < mask_size_e; e += blockThreads) {
+        patch_info.mask_e[e] &= ~s_mask_e[e];
+    }
 
     __syncthreads();
 }

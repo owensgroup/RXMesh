@@ -149,7 +149,7 @@ class RXMeshDynamic : public RXMeshStatic
 
             // to store the source vertex for all edges (to check on if we need
             // to flip glued edges)
-            dynamic_smem += this->m_max_edges_per_patch * sizeof(uint16_t);
+            dynamic_smem += 1 + this->m_max_edges_per_patch * sizeof(uint16_t);
 
             // to store the mask for collapsed edges
             dynamic_smem +=
