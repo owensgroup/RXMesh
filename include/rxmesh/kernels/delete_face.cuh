@@ -43,13 +43,6 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
             to_delete = predicate({patch_info.patch_id, local_id});
         }
 
-        // reset the connectivity of deleted face
-        if (to_delete) {            
-            s_fe[3 * local_id + 0] = INVALID16;
-            s_fe[3 * local_id + 1] = INVALID16;
-            s_fe[3 * local_id + 2] = INVALID16;
-        }
-
         // update the face's bit mask. This function should be called by the
         // whole warp
         warp_update_mask(to_delete, local_id, patch_info.mask_f);

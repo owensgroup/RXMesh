@@ -55,12 +55,6 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
             to_delete = predicate({patch_info.patch_id, local_id});
         }
 
-        // reset the connectivity of deleted edge
-        if (to_delete) {
-            s_ev[2 * local_id + 0] = INVALID16;
-            s_ev[2 * local_id + 1] = INVALID16;
-        }
-
         // update the edge's bit mask. This function should be called by the
         // whole warp
         warp_update_mask(to_delete, local_id, s_mask_e);
@@ -98,12 +92,7 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
             to_delete = is_deleted(e0, s_mask_e) || is_deleted(e1, s_mask_e) ||
                         is_deleted(e2, s_mask_e);
         }
-        if (to_delete) {
-            s_fe[3 * local_id + 0] = INVALID16;
-            s_fe[3 * local_id + 1] = INVALID16;
-            s_fe[3 * local_id + 2] = INVALID16;
-        }
-
+        
         // update the face's bit mask. This function should be called by the
         // whole warp
         warp_update_mask(to_delete, local_id, patch_info.mask_f);

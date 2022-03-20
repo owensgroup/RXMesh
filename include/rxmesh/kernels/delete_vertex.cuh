@@ -81,10 +81,6 @@ __device__ __inline__ void delete_vertex(PatchInfo&       patch_info,
             const uint16_t v0 = s_ev[2 * local_id + 0];
             const uint16_t v1 = s_ev[2 * local_id + 1];
             to_delete = is_deleted(v0, s_mask_v) || is_deleted(v1, s_mask_v);
-            if (to_delete) {
-                s_ev[2 * local_id + 0] = INVALID16;
-                s_ev[2 * local_id + 1] = INVALID16;
-            }
         }
 
         // update the face's bit mask. This function should be called by the
@@ -123,12 +119,6 @@ __device__ __inline__ void delete_vertex(PatchInfo&       patch_info,
 
             to_delete = is_deleted(e0, s_mask_e) || is_deleted(e1, s_mask_e) ||
                         is_deleted(e2, s_mask_e);
-
-            if (to_delete) {
-                s_fe[3 * local_id + 0] = INVALID16;
-                s_fe[3 * local_id + 1] = INVALID16;
-                s_fe[3 * local_id + 2] = INVALID16;
-            }
         }
 
 
