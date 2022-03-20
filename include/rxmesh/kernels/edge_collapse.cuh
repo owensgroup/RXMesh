@@ -13,7 +13,7 @@ namespace detail {
 template <uint32_t blockThreads, typename predicateT>
 __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
                                          const predicateT predicate)
-{
+{    
     // Extract the argument in the predicate lambda function
     using PredicateTTraits = detail::FunctionTraits<predicateT>;
     using HandleT          = typename PredicateTTraits::template arg<0>::type;
@@ -34,21 +34,22 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     uint32_t*                  s_mask_e = shrd_mem32;
     uint16_t* s_edge_source_vertex      = &shrd_mem[2 * mask_size_e];
     uint16_t* s_vertex_glue =
-        &s_edge_source_vertex[num_owned_edges + (num_owned_edges % 2)];
+        &s_edge_source_vertex[num_edges + (num_edges % 2)];
     uint16_t* s_edge_glue = s_vertex_glue;
     uint16_t  m           = std::max(num_vertices, num_edges);
     uint16_t* s_ev        = &s_edge_glue[m + (m % 2)];
     uint16_t* s_fe        = s_ev;
 
+    
     // set the glued vertices to itself
     // no need to sync here. will rely on sync from the call to load_mesh_async
-    for (uint16_t v = threadIdx.x; v < num_owned_vertices; v += blockThreads) {
+    for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
         s_vertex_glue[v] = v;
     }
 
     // set the mask bit for all edges to indicate that all edges are not
     // collapsed
-    for (uint16_t e = threadIdx.x; e < num_owned_edges; e += blockThreads) {
+    for (uint16_t e = threadIdx.x; e < mask_size_e; e += blockThreads) {
         s_mask_e[e] = INVALID32;
     }
 
@@ -88,12 +89,13 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
 
     __syncthreads();
 
+    
     // we loop again over s_ev, and start glue vertices i.e., replace an edge's
     // vertex with its entry in s_vertex_glue. Note that we initialized
     // s_vertex_glue sequentially so no change happens for vertices that should
     // not be glued
     local_id = threadIdx.x;
-    while (local_id < num_owned_edges) {
+    while (local_id < num_edges) {
         uint16_t src_v     = s_vertex_glue[s_ev[2 * local_id]];
         s_ev[2 * local_id] = src_v;
 
@@ -105,6 +107,7 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     }
 
     __syncthreads();
+
 
     // we are done with s_ev so we store it in global memory
     store<blockThreads>(s_ev,
@@ -119,7 +122,7 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     local_id = threadIdx.x;
     while (local_id < len) {
 
-        bool is_deleted_v= false;
+        bool is_deleted_v = false;
 
         if (local_id < num_owned_vertices) {
             is_deleted_v = (s_vertex_glue[local_id] != local_id);
@@ -132,7 +135,7 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     // sync so s_ev is not overwritten
     __syncthreads();
 
-    for (uint16_t e = threadIdx.x; e < num_owned_edges; e += blockThreads) {
+    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
         s_edge_glue[e] = e;
     }
     // load s_fe where s_ev was stored
@@ -184,6 +187,20 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
 
     __syncthreads();
 
+    // glued edges should update it edge mask to indicate that they are deleted
+    len      = round_to_next_multiple_32(num_edges);
+    local_id = threadIdx.x;
+    while (local_id < len) {
+        bool is_glued = false;
+        if (local_id < num_edges) {
+            is_glued = (s_edge_glue[local_id] != local_id);
+        }
+
+        warp_update_mask(is_glued, local_id, s_mask_e);
+
+        local_id += blockThreads;
+    }
+
     // we loop over s_fe again, and start glue edges i.e., replace a face's
     // edge with its entry in s_edge_glue. Note that we initialized s_edge_glue
     // sequentially so no change happens for edges that should not be glued
@@ -199,7 +216,7 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
                 if (s_edge_source_vertex[e] != s_edge_source_vertex[e_glue]) {
                     d ^= 1;
                 }
-                e = e << 1;
+                e = e_glue << 1;
                 e |= d;
                 s_fe[3 * local_id + i] = e;
             }
@@ -217,7 +234,7 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     // Store edge mask by AND'ing the mask in shared memory with that in
     // global memory
     for (uint16_t e = threadIdx.x; e < mask_size_e; e += blockThreads) {
-        patch_info.mask_e[e] &= ~s_mask_e[e];
+        patch_info.mask_e[e] &= s_mask_e[e];              
     }
 
     __syncthreads();
