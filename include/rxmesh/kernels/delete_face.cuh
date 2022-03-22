@@ -1,3 +1,5 @@
+#pragma once
+
 #include "rxmesh/kernels/warp_update_mask.cuh"
 
 namespace rxmesh {
@@ -39,13 +41,6 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
         bool to_delete = false;
         if (local_id < num_owned_faces) {
             to_delete = predicate({patch_info.patch_id, local_id});
-        }
-
-        // reset the connectivity of deleted face
-        if (to_delete) {            
-            s_fe[3 * local_id + 0] = INVALID16;
-            s_fe[3 * local_id + 1] = INVALID16;
-            s_fe[3 * local_id + 2] = INVALID16;
         }
 
         // update the face's bit mask. This function should be called by the

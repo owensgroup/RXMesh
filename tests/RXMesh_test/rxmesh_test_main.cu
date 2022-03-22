@@ -25,6 +25,7 @@ struct RXMeshTestArg
 #include "test_edge_flip.cuh"
 #include "test_validate.h"
 #include "test_deletion.cuh"
+#include "test_edge_collapse.cuh"
 // clang-format on
 
 int main(int argc, char** argv)

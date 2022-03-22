@@ -103,6 +103,7 @@ enum class DynOp
     DeleteVertex = 1,
     DeleteEdge   = 2,
     DeleteFace   = 3,
+    EdgeCollapse = 4,
 };
 /**
  * @brief Convert an operation to string

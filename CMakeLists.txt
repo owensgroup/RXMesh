@@ -9,17 +9,22 @@ project(RXMesh
         LANGUAGES C CXX CUDA)
 
 if (WIN32)
-    set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
-    message(STATUS "Polyscope is enabled")
+    set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")    
 else()
-    set(USE_POLYSCOPE "OFF" CACHE BOOL "Enable Ployscope for visualization")
-    message(STATUS "Polyscope is disabled")
+    set(USE_POLYSCOPE "OFF" CACHE BOOL "Enable Ployscope for visualization")    
+endif()
+
+if(${USE_POLYSCOPE})
+	message(STATUS "Polyscope is enabled")
+else()
+	message(STATUS "Polyscope is disabled")
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
     set(CMAKE_BUILD_TYPE Release)
@@ -86,7 +91,6 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # RXMesh: could think of this as just the header library, so name RXMesh_header_lib
 add_library(RXMesh_header_lib INTERFACE) 
 target_compile_features(RXMesh_header_lib INTERFACE cxx_std_17)
-set(CMAKE_CXX_EXTENSIONS OFF)
 target_compile_definitions(RXMesh_header_lib
     INTERFACE INPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/input/
     INTERFACE OUTPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/output/

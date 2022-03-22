@@ -51,18 +51,7 @@ __global__ static void check_uniqueness(const Context           context,
             uint16_t v0 = s_ev[2 * e + 0];
             uint16_t v1 = s_ev[2 * e + 1];
 
-            if (is_deleted(e, patch_info.mask_e)) {
-                if (v0 != INVALID16 || v1 != INVALID16) {
-                    // printf(
-                    //    "\n edge loop: del edge p= %u, del e= %u, v0= %u, v1="
-                    //    "%u",
-                    //    patch_id,
-                    //    e,
-                    //    v0,
-                    //    v1);
-                    ::atomicAdd(d_check, 1);
-                }
-            } else {
+            if (!is_deleted(e, patch_info.mask_e)) {
 
                 // TODO we should fix this when we are able to apply changes
                 // across ribbons. If an vertex is deleted, it should delete all
@@ -105,23 +94,7 @@ __global__ static void check_uniqueness(const Context           context,
         for (uint16_t f = threadIdx.x; f < patch_info.num_faces;
              f += blockThreads) {
 
-            if (is_deleted(f, patch_info.mask_f)) {
-                uint16_t e0, e1, e2;
-                e0 = s_fe[3 * f + 0];
-                e1 = s_fe[3 * f + 1];
-                e2 = s_fe[3 * f + 2];
-                if (e0 != INVALID16 || e1 != INVALID16 || e2 != INVALID16) {
-                    // printf(
-                    //    "\n face loop: del face p= %u, del f= %u, e0= %u, e1="
-                    //    "%u, e2= %u",
-                    //    patch_id,
-                    //    f,
-                    //    e0,
-                    //    e1,
-                    //    e2);
-                    ::atomicAdd(d_check, 1);
-                }
-            } else {
+            if (!is_deleted(f, patch_info.mask_f)) {
                 uint16_t e0, e1, e2;
                 flag_t   d0(0), d1(0), d2(0);
                 Context::unpack_edge_dir(s_fe[3 * f + 0], e0, d0);
@@ -205,13 +178,8 @@ __global__ static void check_uniqueness(const Context           context,
                     is_deleted(v1, patch_info.mask_v) ||
                     is_deleted(v2, patch_info.mask_v)) {
                     // printf(
-                    //   "\n face loop: del vertex check p= %u, f= %u, v0= %u, "
-                    //   "v1= %u, v2= %u",
-                    //   patch_id,
-                    //   f,
-                    //   v0,
-                    //   v1,
-                    //   v2);
+                    //    "\n face loop: del vertex check p= %u, f= %u, v0= %u,
+                    //    " "v1= %u, v2= %u", patch_id, f, v0, v1, v2);
                     ::atomicAdd(d_check, 1);
                 }
             }

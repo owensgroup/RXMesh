@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdint.h>
 #include <stdio.h>
 #include "cuda_runtime.h"
@@ -8,11 +10,11 @@ namespace rxmesh {
  * print_arr_uint()
  */
 template <typename T>
-__device__ void print_arr_uint(char     msg[],
-                               uint32_t size,
-                               T*       arr,
-                               uint32_t block_id  = 0,
-                               uint32_t thread_id = 0)
+__device__ __inline__ void print_arr_uint(char     msg[],
+                                          uint32_t size,
+                                          T*       arr,
+                                          uint32_t block_id  = 0,
+                                          uint32_t thread_id = 0)
 {
     if (blockIdx.x == block_id && threadIdx.x == thread_id) {
         printf("\n %s \n", msg);
@@ -27,7 +29,7 @@ __device__ void print_arr_uint(char     msg[],
  * print_arr_float()
  */
 template <typename T>
-__device__ void print_arr_float(T size, float* arr)
+__device__ __inline__ void print_arr_float(T size, float* arr)
 {
     if (blockIdx.x == 0 && threadIdx.x == 0) {
         for (uint32_t i = 0; i < size; i++) {
