@@ -196,7 +196,8 @@ class RXMesh
     RXMesh();
 
     void init(const std::vector<std::vector<uint32_t>>& fv,
-              const bool                                quite = false);
+              const bool                                quite           = false,
+              const float                               capacity_factor = 1.2);
 
     /**
      * @brief build different supporting data structure used to build RXMesh
@@ -243,7 +244,7 @@ class RXMesh
         const uint32_t                            patch_id);
 
 
-    void build_device();
+    void build_device(const float capacity_factor);
 
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 

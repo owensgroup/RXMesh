@@ -30,11 +30,15 @@ struct ALIGN(16) PatchInfo
     LocalEdgeT*   not_owned_id_e;
     LocalFaceT*   not_owned_id_f;
 
+
     // bitmask for existing "owned" mesh elements
     uint32_t *mask_v, *mask_e, *mask_f;
 
     // Number of mesh elements in the patch
     uint16_t num_vertices, num_edges, num_faces;
+
+    //Capacity of v/e/f. This controls the allocations of ev, fe, mask_v/e/f
+    uint16_t vertices_capacity, edges_capacity, faces_capacity;
 
     // Number of mesh elements owned by this patch
     uint16_t num_owned_vertices, num_owned_edges, num_owned_faces;

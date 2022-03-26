@@ -34,8 +34,9 @@ RXMesh::RXMesh()
 {
 }
 
-void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
-                  const bool                                quite)
+void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,                  
+                  const bool                                quite,
+                  const float                               capacity_factor)
 {
     m_quite = quite;
 
@@ -45,7 +46,7 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
             "RXMesh::init input fv is empty. Can not be build RXMesh properly");
     }
     build(fv);
-    build_device();
+    build_device(capacity_factor);
     calc_max_not_owned_elements();
 
     // Allocate and copy the context to the gpu
@@ -574,14 +575,14 @@ uint32_t RXMesh::get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const
     return edge_id;
 }
 
-void RXMesh::build_device()
+void RXMesh::build_device(const float capacity_factor)
 {
     CUDA_ERROR(cudaMalloc((void**)&m_d_patches_info,
                           m_num_patches * sizeof(PatchInfo)));
 
     m_h_patches_info = (PatchInfo*)malloc(m_num_patches * sizeof(PatchInfo));
 
-#pragma omp parallel for
+//#pragma omp parallel for
     for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
         PatchInfo d_patch;
         d_patch.num_faces          = m_h_patches_ltog_f[p].size();
@@ -590,7 +591,13 @@ void RXMesh::build_device()
         d_patch.num_owned_faces    = m_h_num_owned_f[p];
         d_patch.num_owned_edges    = m_h_num_owned_e[p];
         d_patch.num_owned_vertices = m_h_num_owned_v[p];
-        d_patch.patch_id           = p;
+        d_patch.vertices_capacity  = static_cast<uint16_t>(
+            capacity_factor * static_cast<float>(d_patch.num_vertices));
+        d_patch.edges_capacity = static_cast<uint16_t>(
+            capacity_factor * static_cast<float>(d_patch.num_edges));
+        d_patch.faces_capacity = static_cast<uint16_t>(
+            capacity_factor * static_cast<float>(d_patch.num_faces));
+        d_patch.patch_id = p;
 
         m_h_patches_info[p].num_faces          = m_h_patches_ltog_f[p].size();
         m_h_patches_info[p].num_edges          = m_h_patches_ltog_e[p].size();
@@ -602,8 +609,9 @@ void RXMesh::build_device()
 
 
         // allocate and copy patch topology to the device
-        CUDA_ERROR(cudaMalloc((void**)&d_patch.ev,
-                              d_patch.num_edges * 2 * sizeof(LocalVertexT)));
+        CUDA_ERROR(
+            cudaMalloc((void**)&d_patch.ev,
+                       d_patch.edges_capacity * 2 * sizeof(LocalVertexT)));
         CUDA_ERROR(cudaMemcpy(d_patch.ev,
                               m_h_patches_ev[p].data(),
                               d_patch.num_edges * 2 * sizeof(LocalVertexT),
@@ -612,7 +620,7 @@ void RXMesh::build_device()
             reinterpret_cast<LocalVertexT*>(m_h_patches_ev[p].data());
 
         CUDA_ERROR(cudaMalloc((void**)&d_patch.fe,
-                              d_patch.num_faces * 3 * sizeof(LocalEdgeT)));
+                              d_patch.faces_capacity * 3 * sizeof(LocalEdgeT)));
         CUDA_ERROR(cudaMemcpy(d_patch.fe,
                               m_h_patches_fe[p].data(),
                               d_patch.num_faces * 3 * sizeof(LocalEdgeT),
@@ -632,13 +640,13 @@ void RXMesh::build_device()
 
         alloc_bitmask(d_patch.mask_v,
                       m_h_patches_info[p].mask_v,
-                      m_h_patches_info[p].num_vertices);
+                      m_h_patches_info[p].vertices_capacity);
         alloc_bitmask(d_patch.mask_e,
                       m_h_patches_info[p].mask_e,
-                      m_h_patches_info[p].num_edges);
+                      m_h_patches_info[p].edges_capacity);
         alloc_bitmask(d_patch.mask_f,
                       m_h_patches_info[p].mask_f,
-                      m_h_patches_info[p].num_faces);
+                      m_h_patches_info[p].faces_capacity);
 
         // copy not-owned mesh elements to device
 

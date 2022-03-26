@@ -104,6 +104,7 @@ enum class DynOp
     DeleteEdge   = 2,
     DeleteFace   = 3,
     EdgeCollapse = 4,
+    EdgeSplit    = 5,
 };
 /**
  * @brief Convert an operation to string

@@ -155,6 +155,10 @@ class RXMeshDynamic : public RXMeshStatic
             dynamic_smem +=
                 DIVIDE_UP(this->m_max_edges_per_patch, 32) * sizeof(uint32_t);
         }
+
+        if (op == DynOp::EdgeSplit) {
+
+        }
         return dynamic_smem;
     }
 };

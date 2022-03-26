@@ -7,6 +7,7 @@
 #include "rxmesh/kernels/delete_vertex.cuh"
 #include "rxmesh/kernels/edge_collapse.cuh"
 #include "rxmesh/kernels/edge_flip.cuh"
+#include "rxmesh/kernels/edge_split.cuh"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/patch_info.h"
 #include "rxmesh/util/meta.h"
@@ -67,6 +68,11 @@ __device__ __inline__ void update_block_dispatcher(Context&         context,
     if constexpr (op == DynOp::EdgeCollapse) {
         detail::edge_collapse<blockThreads>(
             context.get_patches_info()[patch_id], predicate);
+    }
+
+    if constexpr (op == DynOp::EdgeSplit) {
+        detail::edge_split<blockThreads>(context.get_patches_info()[patch_id],
+                                         predicate);
     }
 }
 
