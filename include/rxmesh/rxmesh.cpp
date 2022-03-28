@@ -39,14 +39,14 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                   const float                               capacity_factor)
 {
     m_quite = quite;
-
+    m_capacity_factor = capacity_factor;
     // Build everything from scratch including patches
     if (fv.empty()) {
         RXMESH_ERROR(
             "RXMesh::init input fv is empty. Can not be build RXMesh properly");
     }
     build(fv);
-    build_device(capacity_factor);
+    build_device();
     calc_max_not_owned_elements();
 
     // Allocate and copy the context to the gpu
@@ -575,14 +575,14 @@ uint32_t RXMesh::get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const
     return edge_id;
 }
 
-void RXMesh::build_device(const float capacity_factor)
+void RXMesh::build_device()
 {
     CUDA_ERROR(cudaMalloc((void**)&m_d_patches_info,
                           m_num_patches * sizeof(PatchInfo)));
 
     m_h_patches_info = (PatchInfo*)malloc(m_num_patches * sizeof(PatchInfo));
 
-//#pragma omp parallel for
+#pragma omp parallel for
     for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
         PatchInfo d_patch;
         d_patch.num_faces          = m_h_patches_ltog_f[p].size();
@@ -592,11 +592,11 @@ void RXMesh::build_device(const float capacity_factor)
         d_patch.num_owned_edges    = m_h_num_owned_e[p];
         d_patch.num_owned_vertices = m_h_num_owned_v[p];
         d_patch.vertices_capacity  = static_cast<uint16_t>(
-            capacity_factor * static_cast<float>(d_patch.num_vertices));
+            m_capacity_factor * static_cast<float>(d_patch.num_vertices));
         d_patch.edges_capacity = static_cast<uint16_t>(
-            capacity_factor * static_cast<float>(d_patch.num_edges));
+            m_capacity_factor * static_cast<float>(d_patch.num_edges));
         d_patch.faces_capacity = static_cast<uint16_t>(
-            capacity_factor * static_cast<float>(d_patch.num_faces));
+            m_capacity_factor * static_cast<float>(d_patch.num_faces));
         d_patch.patch_id = p;
 
         m_h_patches_info[p].num_faces          = m_h_patches_ltog_f[p].size();

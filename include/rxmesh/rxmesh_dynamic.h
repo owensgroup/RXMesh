@@ -157,7 +157,22 @@ class RXMeshDynamic : public RXMeshStatic
         }
 
         if (op == DynOp::EdgeSplit) {
+            // to load FE and then EV. Only need one of them at a time
+            dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
+                                    2 * this->m_max_edges_per_patch) *
+                           sizeof(uint16_t);
 
+            // to store the mask for split edges. this will not be stored
+            // anywhere in global memory
+            dynamic_smem +=
+                DIVIDE_UP(this->m_max_edges_per_patch, 32) * sizeof(uint32_t);
+
+            // to store the id of the first added edge due to splitting
+            // and the added vertex for this added edge.
+            // we have an entry for all edges, even those that are not split,
+            // which is a bit excessive
+            dynamic_smem += m_capacity_factor * this->m_max_edges_per_patch *
+                            sizeof(uint16_t);
         }
         return dynamic_smem;
     }

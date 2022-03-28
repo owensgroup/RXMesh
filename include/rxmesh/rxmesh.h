@@ -244,7 +244,7 @@ class RXMesh
         const uint32_t                            patch_id);
 
 
-    void build_device(const float capacity_factor);
+    void build_device();
 
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
@@ -300,5 +300,7 @@ class RXMesh
 
 
     PatchInfo *m_d_patches_info, *m_h_patches_info;
+
+    float m_capacity_factor;
 };
 }  // namespace rxmesh
