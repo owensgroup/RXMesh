@@ -14,7 +14,7 @@ namespace detail {
  * by 64 (rounded up)
  * @return true if the mesh element bit is set to zero
  */
-__device__ __host__ __forceinline__ bool is_deleted(const uint16_t& local_id,
+__device__ __host__ __forceinline__ bool is_deleted(const uint16_t  local_id,
                                                     const uint32_t* bitmask)
 {
 

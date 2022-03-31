@@ -51,7 +51,8 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
     // Transpose FE into EF so we obtain the two incident triangles to
     // to-be-flipped edges. We use the version that is optimized for
     // manifolds (we don't flip non-manifold edges)
-    e_f_manifold<blockThreads>(num_edges, num_faces, s_fe, s_ef);
+    e_f_manifold<blockThreads>(
+        num_edges, num_faces, s_fe, s_ef, patch_info.mask_e);
     __syncthreads();
 
     // load over all edges---one thread per edge

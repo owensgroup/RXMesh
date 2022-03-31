@@ -88,8 +88,12 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
     if (oriented) {
         assert(op == Op::VV);
         if constexpr (op == Op::VV) {
-            v_v_oreinted<blockThreads>(
-                patch_info, s_output_offset, s_output_value, s_ev);
+            v_v_oreinted<blockThreads>(patch_info,
+                                       s_output_offset,
+                                       s_output_value,
+                                       s_ev,
+                                       patch_info.mask_e,
+                                       patch_info.mask_v);
         }
     } else {
         if constexpr (!(op == Op::VV || op == Op::FV || op == Op::FF)) {
@@ -106,7 +110,10 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
                                 s_fe,
                                 patch_info.num_vertices,
                                 patch_info.num_edges,
-                                patch_info.num_faces);
+                                patch_info.num_faces,
+                                patch_info.mask_v,
+                                patch_info.mask_e,
+                                patch_info.mask_f);
     }
 
     // load not-owned local and patch id

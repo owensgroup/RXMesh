@@ -9,11 +9,12 @@ template <uint32_t rowOffset, uint32_t blockThreads, uint32_t itemPerThread>
 __global__ static void k_test_block_mat_transpose(uint16_t*      d_src,
                                                   const uint32_t num_rows,
                                                   const uint32_t num_cols,
-                                                  uint16_t*      d_output)
+                                                  uint16_t*      d_output,
+                                                  uint32_t*      d_row_bitmask)
 {
 
     rxmesh::detail::block_mat_transpose<rowOffset, blockThreads, itemPerThread>(
-        num_rows, num_cols, d_src, d_output);
+        num_rows, num_cols, d_src, d_output, d_row_bitmask, 0);
 }
 
 template <typename T, uint32_t blockThreads>
@@ -110,13 +111,13 @@ TEST(Util, Align)
 
     char* ptr_mis_aligned = reinterpret_cast<char*>(ptr) + 1;
 
-    Type* ptr_aligned    = reinterpret_cast<Type*>(ptr_mis_aligned);
+    Type* ptr_aligned = reinterpret_cast<Type*>(ptr_mis_aligned);
     rxmesh::detail::align(alignment, ptr_aligned);
-    
-    void* ptr_aligned_gt = reinterpret_cast<void*>(ptr_mis_aligned);
-    std::size_t spc = num_bytes;
+
+    void*       ptr_aligned_gt = reinterpret_cast<void*>(ptr_mis_aligned);
+    std::size_t spc            = num_bytes;
     void*       ret = std::align(alignment, sizeof(char), ptr_aligned_gt, spc);
-    
+
     free(ptr);
     EXPECT_NE(ret, nullptr);
     EXPECT_EQ(ptr_aligned, ptr_aligned_gt);
@@ -169,6 +170,11 @@ TEST(Util, BlockMatrixTranspose)
         }
     }
 
+    uint32_t* d_bitmask    = nullptr;
+    uint32_t  bitmask_size = DIVIDE_UP(numRows * rowOffset, 32);
+    CUDA_ERROR(cudaMalloc((void**)&d_bitmask, bitmask_size * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(d_bitmask, 0xFF, bitmask_size * sizeof(uint32_t)));
+
     uint16_t *d_src, *d_offset;
     CUDA_ERROR(cudaMalloc((void**)&d_src, h_src.size() * sizeof(uint16_t)));
     CUDA_ERROR(cudaMalloc((void**)&d_offset, h_src.size() * sizeof(uint16_t)));
@@ -180,7 +186,7 @@ TEST(Util, BlockMatrixTranspose)
 
     k_test_block_mat_transpose<rowOffset, threads, item_per_thread>
         <<<blocks, threads, numRows * rowOffset * sizeof(uint32_t)>>>(
-            d_src, numRows, numCols, d_offset);
+            d_src, numRows, numCols, d_offset, d_bitmask);
 
     CUDA_ERROR(cudaDeviceSynchronize());
     CUDA_ERROR(cudaGetLastError());
@@ -249,6 +255,7 @@ TEST(Util, BlockMatrixTranspose)
 
     GPU_FREE(d_src);
     GPU_FREE(d_offset);
+    GPU_FREE(d_bitmask);
 
     EXPECT_TRUE(passed);
 }
