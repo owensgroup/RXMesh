@@ -245,17 +245,15 @@ TEST(Util, BlockMatrixTranspose)
 
 
     // compare
-    bool passed = true;
-    if (!compare<uint16_t, uint16_t>(
-            h_res.data(), gold_res.data(), arr_size, false) ||
-        !compare<uint16_t, uint16_t>(
-            h_res_offset.data(), gold_res_offset.data(), numCols, false)) {
-        passed = false;
-    }
+    bool is_offset_okay = compare<uint16_t, uint16_t>(
+        h_res_offset.data(), gold_res_offset.data(), numCols, false);
+    bool is_value_okay = compare<uint16_t, uint16_t>(
+        h_res.data(), gold_res.data(), arr_size, false);
 
     GPU_FREE(d_src);
     GPU_FREE(d_offset);
     GPU_FREE(d_bitmask);
 
-    EXPECT_TRUE(passed);
+    EXPECT_TRUE(is_offset_okay);
+    EXPECT_TRUE(is_value_okay);
 }

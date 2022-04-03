@@ -21,25 +21,28 @@ __device__ __forceinline__ void block_mat_transpose(const uint32_t  num_rows,
                                                     uint16_t*       mat,
                                                     uint16_t*       output,
                                                     const uint32_t* row_mask,
-                                                    int             shift = 0)
+                                                    int             shift)
 {
     // 1) Load mat into registers and zero out mat
     uint16_t thread_data[itemPerThread];
     uint16_t local_offset[itemPerThread];
     uint32_t nnz = num_rows * rowOffset;
 
-    for (uint16_t i = 0; i < itemPerThread; ++i) {
-        // uint16_t index = itemPerThread * threadIdx.x + i;
+    auto index = [&](uint16_t i) {
+        // return itemPerThread * threadIdx.x + i;
+        return threadIdx.x + blockThreads * i;
+    };
 
-        uint16_t index = threadIdx.x + blockThreads * i;
+    for (uint16_t i = 0; i < itemPerThread; ++i) {
+        uint16_t id = index(i);
         // avoid reading out-of-bound from mat
-        if (index < nnz) {
+        if (id < nnz) {
             // skip tombstones in mat
-            const bool     deleted = is_deleted(index, row_mask);
-            const uint16_t val     = mat[index];
+            const bool     deleted = is_deleted(id, row_mask);
+            const uint16_t val     = mat[id];
             int            pred    = int(val != INVALID16 && !deleted);
             thread_data[i] = pred * (val >> shift) + (1 - pred) * INVALID16;
-            mat[index]     = 0;
+            mat[id]        = 0;
         } else {
             thread_data[i] = INVALID16;
         }
@@ -89,7 +92,7 @@ __device__ __forceinline__ void block_mat_transpose(const uint32_t  num_rows,
         uint16_t item = thread_data[i];
         if (item != INVALID16) {
             uint16_t offset = mat[item] + local_offset[i];
-            uint16_t row    = (itemPerThread * threadIdx.x + i) / rowOffset;
+            uint16_t row    = index(i) / rowOffset;
             output[offset]  = row;
         }
     }
