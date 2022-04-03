@@ -34,11 +34,11 @@ RXMesh::RXMesh()
 {
 }
 
-void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,                  
+void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                   const bool                                quite,
                   const float                               capacity_factor)
 {
-    m_quite = quite;
+    m_quite           = quite;
     m_capacity_factor = capacity_factor;
     // Build everything from scratch including patches
     if (fv.empty()) {
@@ -602,6 +602,9 @@ void RXMesh::build_device()
         m_h_patches_info[p].num_faces          = m_h_patches_ltog_f[p].size();
         m_h_patches_info[p].num_edges          = m_h_patches_ltog_e[p].size();
         m_h_patches_info[p].num_vertices       = m_h_patches_ltog_v[p].size();
+        m_h_patches_info[p].faces_capacity     = d_patch.faces_capacity;
+        m_h_patches_info[p].edges_capacity     = d_patch.edges_capacity;
+        m_h_patches_info[p].vertices_capacity  = d_patch.vertices_capacity;
         m_h_patches_info[p].num_owned_faces    = m_h_num_owned_f[p];
         m_h_patches_info[p].num_owned_edges    = m_h_num_owned_e[p];
         m_h_patches_info[p].num_owned_vertices = m_h_num_owned_v[p];
