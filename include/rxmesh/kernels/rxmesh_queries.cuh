@@ -38,7 +38,8 @@ __device__ __forceinline__ void block_mat_transpose(const uint32_t  num_rows,
         // avoid reading out-of-bound from mat
         if (id < nnz) {
             // skip tombstones in mat
-            const bool     deleted = is_deleted(id, row_mask);
+            const uint16_t row     = id / rowOffset;
+            const bool     deleted = is_deleted(row, row_mask);
             const uint16_t val     = mat[id];
             int            pred    = int(val != INVALID16 && !deleted);
             thread_data[i] = pred * (val >> shift) + (1 - pred) * INVALID16;
