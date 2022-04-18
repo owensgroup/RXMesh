@@ -480,19 +480,6 @@ __device__ __forceinline__ void f_f(const uint16_t  num_edges,
         }
         assert(offset == s_FF_offset[f + 1]);
     }
-
-    /*{
-        if (threadIdx.x == 0) {
-            printf("\n s_EF_output");
-            for (uint16_t f = 0; f < num_faces; ++f) {
-                printf("\n face = %u>>", f);
-                for (uint16_t ff = s_FF_offset[f]; ff < s_FF_offset[f + 1];
-                     ++ff) {
-                    printf(" %u ", s_FF_output[ff]);
-                }
-            }
-        }
-    }*/
 }
 
 template <uint32_t blockThreads, Op op>
