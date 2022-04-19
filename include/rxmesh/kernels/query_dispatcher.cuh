@@ -86,9 +86,18 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
 
     // 3)Perform the query operation
     if (oriented) {
-        assert(op == Op::VV);
+        assert(op == Op::VV || op == Op::VE);
         if constexpr (op == Op::VV) {
             v_v_oreinted<blockThreads>(patch_info,
+                                       s_output_offset,
+                                       s_output_value,
+                                       s_ev,
+                                       patch_info.mask_e,
+                                       patch_info.mask_v);
+        }
+
+        if constexpr (op == Op::VE) {
+            v_e_oreinted<blockThreads>(patch_info,
                                        s_output_offset,
                                        s_output_value,
                                        s_ev,

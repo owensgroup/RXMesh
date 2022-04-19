@@ -121,14 +121,13 @@ __device__ __forceinline__ void e_f_manifold(const uint16_t  num_edges,
 }
 
 template <uint32_t blockThreads>
-__device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
+__device__ __forceinline__ void v_e_oreinted(const PatchInfo& patch_info,
                                              uint16_t*&       s_output_offset,
                                              uint16_t*&       s_output_value,
                                              uint16_t*        s_ev,
                                              const uint32_t*  e_mask,
                                              const uint32_t*  v_mask)
 {
-
     const uint16_t num_edges          = patch_info.num_edges;
     const uint16_t num_faces          = patch_info.num_faces;
     const uint16_t num_vertices       = patch_info.num_vertices;
@@ -140,11 +139,10 @@ __device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
     // start by loading the faces while also doing transposing EV (might
     // increase ILP)
     uint16_t*   s_fe    = &s_output_value[2 * num_edges];
-    uint16_t*   s_ef    = &s_fe[3 * num_faces + (3 * num_faces) % 2];
-    LocalEdgeT* temp_fe = reinterpret_cast<LocalEdgeT*>(s_fe);
+    uint16_t*   s_ef    = &s_fe[3 * num_faces + (3 * num_faces) % 2];    
     load_async(reinterpret_cast<const uint16_t*>(patch_info.fe),
                num_faces * 3,
-               reinterpret_cast<uint16_t*>(temp_fe),
+               reinterpret_cast<uint16_t*>(s_fe),
                false);
 
     for (uint32_t i = threadIdx.x; i < num_edges * 2; i += blockThreads) {
@@ -226,15 +224,32 @@ __device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
             }
         }
     }
+}
+
+template <uint32_t blockThreads>
+__device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
+                                             uint16_t*&       s_output_offset,
+                                             uint16_t*&       s_output_value,
+                                             uint16_t*        s_ev,
+                                             const uint32_t*  e_mask,
+                                             const uint32_t*  v_mask)
+{
+
+    const uint16_t num_edges    = patch_info.num_edges;
+    const uint16_t num_vertices = patch_info.num_vertices;
+
+    v_e_oreinted<blockThreads>(
+        patch_info, s_output_offset, s_output_value, s_ev, e_mask, v_mask);
 
     __syncthreads();
 
-    // Load EV into s_ef since both has the same size (2*#E)
-    s_ev                  = s_ef;
-    LocalVertexT* temp_ev = reinterpret_cast<LocalVertexT*>(s_ef);
+    // Re-load EV (since it is been overwritten) right after the output
+    // the output size is 2*#E since this is number of non-zero elements in EV
+    // matrix
+    s_ev = &s_output_value[2 * num_edges];
     load_async(reinterpret_cast<const uint16_t*>(patch_info.ev),
                num_edges * 2,
-               reinterpret_cast<uint16_t*>(temp_ev),
+               reinterpret_cast<uint16_t*>(s_ev),
                true);
 
     __syncthreads();

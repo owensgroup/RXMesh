@@ -21,7 +21,7 @@ __global__ static void edge_split(rxmesh::Context context)
                                                             should_split);
 }
 
-TEST(RXMeshDynamic, EdgeSplit)
+TEST(RXMeshDynamic, DISABLED_EdgeSplit)
 {
     using namespace rxmesh;
 

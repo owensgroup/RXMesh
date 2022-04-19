@@ -258,7 +258,8 @@ class RXMeshStatic : public RXMesh
      * @param op List of query operations done inside this the kernel
      * @param launch_box input launch box to be populated
      * @param kernel The kernel to be launched
-     * @param oriented if the query is oriented. Valid only for Op::VV queries
+     * @param oriented if the query is oriented. Valid only for Op::VV and
+     * Op::VE queries
      */
     template <uint32_t blockThreads>
     void prepare_launch_box(const std::vector<Op>    op,
@@ -757,7 +758,7 @@ class RXMeshStatic : public RXMesh
 
    protected:
     template <uint32_t blockThreads>
-    size_t calc_shared_memory(const Op op, const bool oriented = false) const
+    size_t calc_shared_memory(const Op op, const bool oriented) const
     {
         // Operations that uses matrix transpose needs a template parameter
         // that is by default TRANSPOSE_ITEM_PER_THREAD. Here we check if
@@ -785,21 +786,21 @@ class RXMeshStatic : public RXMesh
         }
 
 
-        if (oriented && op != Op::VV) {
+        if (oriented && !(op == Op::VV || op == Op::VE)) {
             RXMESH_ERROR(
                 "RXMeshStatic::calc_shared_memory() Oriented is only "
-                "allowed on VV. The input op is {}",
+                "allowed on VV and VE. The input op is {}",
                 op_to_string(op));
         }
 
-        if (oriented && op == Op::VV && !this->m_is_input_closed) {
+        if (oriented && !this->m_is_input_closed) {
             RXMESH_ERROR(
                 "RXMeshStatic::calc_shared_memory() Can't generate oriented "
-                "output (VV) for input with boundaries");
+                "output (VV or VE) for input with boundaries");
         }
 
         size_t dynamic_smem = 0;
-                
+
         if (op == Op::FE) {
             // only FE will be loaded
             dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
@@ -898,13 +899,20 @@ class RXMeshStatic : public RXMesh
             // patch id. We load them and overwrite FE.
         }
 
-        if (op == Op::VV && oriented) {
-            // For oriented VV, we additionally need to store FE and EF along
-            // with the (transposed) VE
-            // FE needs 3*max_num_faces
-            // Since oriented is only done on manifold, EF needs only
-            // 2*max_num_edges since every edge is neighbor to maximum of two
-            // faces (which we write on the same place as the extra EV)
+        if (oriented) {
+            if (op == Op::VE) {
+                // For VE, we need to add the extra memory we needed for VV that
+                // load EV beside the VE
+                dynamic_smem +=
+                    (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            }
+            // For oriented VV or VE, we additionally need to store FE and EF
+            // along with the (transposed) VE. FE needs 3*max_num_faces. Since
+            // oriented is only done on manifold, EF needs only 2*max_num_edges
+            // since every edge is neighbor to maximum of two faces (which we
+            // write on the same place as the extra EV). With VV, we need
+            // to reload EV again (since it is overwritten) but we don't need to
+            // do this for VE
             dynamic_smem +=
                 (3 * this->m_max_faces_per_patch) * sizeof(uint16_t);
         }
