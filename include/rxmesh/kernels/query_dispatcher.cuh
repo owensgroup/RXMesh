@@ -103,6 +103,12 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
                                        s_ev,
                                        patch_info.mask_e,
                                        patch_info.mask_v);
+            __syncthreads();
+            load_not_owned_async<op>(patch_info,
+                                     not_owned_local_id,
+                                     not_owned_patch,
+                                     num_owned,
+                                     true);
         }
     } else {
         if constexpr (!(op == Op::VV || op == Op::FV || op == Op::FF)) {
@@ -206,8 +212,6 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
                 ((op == Op::EV)                 ? 2 :
                  (op == Op::FV || op == Op::FE) ? 3 :
                                                   0);
-
-
             ComputeHandleT   handle(patch_id, local_id);
             ComputeIteratorT iter(local_id,
                                   reinterpret_cast<LocalT*>(s_output_value),

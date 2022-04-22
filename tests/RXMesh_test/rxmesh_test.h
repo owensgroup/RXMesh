@@ -357,6 +357,7 @@ class RXMeshTest
     {
         auto global_id_from_handle = [&](OutputHandleT xxh) -> uint32_t {
             auto pl = xxh.unpack();
+            assert(pl.first < rxmesh.get_num_patches());
             return output_ltog[pl.first][pl.second];
         };
 

@@ -842,9 +842,14 @@ class RXMeshStatic : public RXMesh
             dynamic_smem =
                 (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
-            // to load the not-owned edges local and patch id
-            dynamic_smem += this->m_max_not_owned_edges * sizeof(uint32_t);
-            dynamic_smem += this->m_max_not_owned_edges * sizeof(uint16_t);
+            if (!oriented) {
+                // to load the not-owned edges local and patch id
+                // we only need this extra memory for non-oriented computation
+                // since oriented computation requires extra memory that we
+                // could then overwrite by the not-owned info
+                dynamic_smem += this->m_max_not_owned_edges * sizeof(uint32_t);
+                dynamic_smem += this->m_max_not_owned_edges * sizeof(uint16_t);
+            }
         } else if (op == Op::EF) {
             // same as Op::VE but with faces
             dynamic_smem =
