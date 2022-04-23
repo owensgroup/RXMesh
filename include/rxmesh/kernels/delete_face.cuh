@@ -21,14 +21,6 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
     // patch basic info
     const uint16_t num_owned_faces = patch_info.num_owned_faces;
 
-    // shared memory used to store FE
-    extern __shared__ uint16_t shrd_mem[];
-    uint16_t*                  s_fe = shrd_mem;
-
-    // load FE and make sure to sync before
-    load_mesh_async<Op::FE>(patch_info, s_fe, s_fe, true);
-    //__syncthreads();
-
     // load over all face-one thread per face
     uint16_t local_id = threadIdx.x;
 
@@ -51,12 +43,6 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
     }
 
     __syncthreads();
-    store<blockThreads>(s_fe,
-                        patch_info.num_faces * 3,
-                        reinterpret_cast<uint16_t*>(patch_info.fe));
-
-    __syncthreads();
-    
 }
 }  // namespace detail
 }  // namespace rxmesh

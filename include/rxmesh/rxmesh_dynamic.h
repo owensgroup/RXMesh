@@ -114,8 +114,8 @@ class RXMeshDynamic : public RXMeshStatic
         }
 
         if (op == DynOp::DeleteFace) {
-            // load FE only
-            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
+            // we don't need to load anything here. We just mark the face as
+            // deleted in its bitmask which is read from global memory directly
         }
 
         if (op == DynOp::DeleteEdge) {
