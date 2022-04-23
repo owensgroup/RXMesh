@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/warp_update_mask.cuh"
 
 namespace rxmesh {
@@ -20,28 +21,25 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
 
     // patch basic info
     const uint16_t num_owned_faces = patch_info.num_owned_faces;
+    const uint16_t num_faces       = patch_info.num_faces;
 
-    // load over all face-one thread per face
-    uint16_t local_id = threadIdx.x;
+    // load face's bitmask to shared memory
+    const uint16_t             mask_size = DIVIDE_UP(num_faces, 32);
+    extern __shared__ uint32_t shrd_mem32[];
+    uint32_t*                  s_mask_f = shrd_mem32;
 
-    // we need to make sure that the whole warp go into the loop
-    uint16_t len = round_to_next_multiple_32(num_owned_faces);
+    load_async(patch_info.mask_f, mask_size, s_mask_f, true);
+    __syncthreads();
 
-    while (local_id < len) {
-        // check if face with local_id should be deleted and make sure we only
-        // check owned faces
-        bool to_delete = false;
-        if (local_id < num_owned_faces) {
-            to_delete = predicate({patch_info.patch_id, local_id});
-        }
+    // update the bitmask based on user-defined predicate
+    update_bitmask<blockThreads>(
+        num_owned_faces, s_mask_f, [&](const uint16_t local_f) {
+            return predicate({patch_info.patch_id, local_f});
+        });
+    __syncthreads();
 
-        // update the face's bit mask. This function should be called by the
-        // whole warp
-        warp_update_mask(to_delete, local_id, patch_info.mask_f);
-
-        local_id += blockThreads;
-    }
-
+    // store the bitmask back to global memory
+    store<blockThreads>(s_mask_f, mask_size, patch_info.mask_f);
     __syncthreads();
 }
 }  // namespace detail

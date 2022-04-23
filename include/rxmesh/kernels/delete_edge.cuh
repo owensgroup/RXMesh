@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/is_deleted.cuh"
 #include "rxmesh/kernels/warp_update_mask.cuh"
 
@@ -29,82 +30,42 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
     extern __shared__ uint32_t shrd_mem32[];
     extern __shared__ uint16_t shrd_mem[];
     uint32_t*                  s_mask_e = shrd_mem32;
-    uint16_t*                  s_ev     = &shrd_mem[2 * mask_size];
-    uint16_t*                  s_fe     = s_ev;
+    uint16_t*                  s_fe     = &shrd_mem[2 * mask_size];
 
     // load edges mask into shared memory
-    load_async(patch_info.mask_e, mask_size, s_mask_e, false);
-
-    // we only need to load s_ev, operate on it, then load s_fe
-    load_mesh_async<Op::EV>(patch_info, s_ev, s_fe, true);
-    //__syncthreads();
-
-    // load over all edges---one thread per edge
-    uint16_t local_id = threadIdx.x;
-
-    // we need to make sure that the whole warp go into the loop
-    uint16_t len = round_to_next_multiple_32(num_owned_edges);
-
-    while (local_id < len) {
-
-        // check if edge with local_id should be deleted and make sure we only
-        // check owned edges
-        bool to_delete = false;
-
-        if (local_id < num_owned_edges) {
-            to_delete = predicate({patch_info.patch_id, local_id});
-        }
-
-        // update the edge's bit mask. This function should be called by the
-        // whole warp
-        warp_update_mask(to_delete, local_id, s_mask_e);
-
-        local_id += blockThreads;
-    }
-
-    // we can now store EV to global memory
+    load_async(patch_info.mask_e, mask_size, s_mask_e, true);
     __syncthreads();
-    store<blockThreads>(s_ev,
-                        patch_info.num_edges * 2,
-                        reinterpret_cast<uint16_t*>(patch_info.ev));
 
-    // load FE and make sure we don't overwrite EV
+    // start loading FE without sync
+    load_mesh_async<Op::FE>(patch_info, s_fe, s_fe, false);
+
+    // update the bitmask based on user-defined predicate
+    update_bitmask<blockThreads>(
+        num_owned_edges, s_mask_e, [&](const uint16_t local_e) {
+            return predicate({patch_info.patch_id, local_e});
+        });
     __syncthreads();
-    load_mesh_async<Op::FE>(patch_info, s_ev, s_fe, true);
-    //__syncthreads();
 
     // store edge mask into global memory
     store<blockThreads>(s_mask_e, mask_size, patch_info.mask_e);
 
     // delete faces incident to deleted edges
     // we only delete faces owned by the patch
-    local_id = threadIdx.x;
-    // we need to make sure that the whole warp go into the loop
-    len = round_to_next_multiple_32(num_owned_faces);
-    while (local_id < len) {
-        bool to_delete = false;
+    // we need to make sure that the whole warp go into this loop
+    // TODO here we read the face bitmask from global memory to check if the
+    // face is already deleted and then update the mask to the global memory.
+    // While the memory access is coalesced, the whole warp read only 4 bytes.
+    // We may (or may not) get better performance if we read the bitmask into
+    // shared memory, operate on it, then store it to global memory
+    update_bitmask<blockThreads>(
+        num_owned_faces, patch_info.mask_f, [&](const uint16_t local_f) {
+            const uint16_t e0 = s_fe[3 * local_f + 0] >> 1;
+            const uint16_t e1 = s_fe[3 * local_f + 1] >> 1;
+            const uint16_t e2 = s_fe[3 * local_f + 2] >> 1;
 
-        if (local_id < num_owned_faces) {
-            const uint16_t e0 = s_fe[3 * local_id + 0] >> 1;
-            const uint16_t e1 = s_fe[3 * local_id + 1] >> 1;
-            const uint16_t e2 = s_fe[3 * local_id + 2] >> 1;
-
-            to_delete = is_deleted(e0, s_mask_e) || is_deleted(e1, s_mask_e) ||
-                        is_deleted(e2, s_mask_e);
-        }
-        
-        // update the face's bit mask. This function should be called by the
-        // whole warp
-        warp_update_mask(to_delete, local_id, patch_info.mask_f);
-
-        local_id += blockThreads;
-    }
-    __syncthreads();
-
-    // store FE in global memory
-    store<blockThreads>(s_fe,
-                        patch_info.num_faces * 3,
-                        reinterpret_cast<uint16_t*>(patch_info.fe));
+            return is_deleted(e0, s_mask_e) || is_deleted(e1, s_mask_e) ||
+                   is_deleted(e2, s_mask_e);
+        });
     __syncthreads();
 }
 }  // namespace detail
