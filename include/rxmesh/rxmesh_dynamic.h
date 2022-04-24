@@ -78,6 +78,7 @@ class RXMeshDynamic : public RXMeshStatic
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,
                             launch_box.num_registers_per_thread,
+                            blockThreads,
                             kernel);
     }
 

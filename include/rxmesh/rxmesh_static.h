@@ -288,6 +288,7 @@ class RXMeshStatic : public RXMesh
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,
                             launch_box.num_registers_per_thread,
+                            blockThreads,
                             kernel);
     }
 
@@ -928,6 +929,7 @@ class RXMeshStatic : public RXMesh
     void check_shared_memory(const uint32_t smem_bytes_dyn,
                              size_t&        smem_bytes_static,
                              uint32_t&      num_reg_per_thread,
+                             const uint32_t num_threads_per_block,
                              const void*    kernel) const
     {
         // check if total shared memory (static + dynamic) consumed by
@@ -943,14 +945,22 @@ class RXMeshStatic : public RXMesh
         CUDA_ERROR(cudaGetDeviceProperties(&devProp, device_id));
 
         if (!this->m_quite) {
+            int num_blocks_per_sm = 0;
+            CUDA_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+                &num_blocks_per_sm,
+                kernel,
+                num_threads_per_block,
+                smem_bytes_dyn));
+
             RXMESH_TRACE(
                 "RXMeshStatic::check_shared_memory() user function requires "
                 "shared memory = {} (dynamic) + {} (static) = {} (bytes) and "
-                "{} registers per thread",
+                "{} registers per thread with occupancy of {} blocks/SM",
                 smem_bytes_dyn,
                 smem_bytes_static,
                 smem_bytes_dyn + smem_bytes_static,
-                num_reg_per_thread);
+                num_reg_per_thread,
+                num_blocks_per_sm);
 
             RXMESH_TRACE(
                 "RXMeshStatic::check_shared_memory() available total shared "
