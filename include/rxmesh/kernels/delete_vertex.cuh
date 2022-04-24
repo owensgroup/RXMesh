@@ -19,6 +19,7 @@ __device__ __inline__ void delete_vertex(PatchInfo&       patch_info,
 
 
     // patch basic info
+    const uint32_t patch_id           = patch_info.patch_id;
     const uint16_t num_owned_faces    = patch_info.num_owned_faces;
     const uint16_t num_owned_edges    = patch_info.num_owned_edges;
     const uint16_t num_owned_vertices = patch_info.num_owned_vertices;
@@ -49,7 +50,7 @@ __device__ __inline__ void delete_vertex(PatchInfo&       patch_info,
     // update the bitmask based on user-defined predicate
     update_bitmask<blockThreads>(
         num_owned_vertices, s_mask_v, [&](const uint16_t local_v) {
-            return predicate({patch_info.patch_id, local_v});
+            return predicate({patch_id, local_v});
         });
     __syncthreads();
 

@@ -19,6 +19,7 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
         "First argument in predicate lambda function should be FaceHandle");
 
     // patch basic info
+    const uint32_t patch_id        = patch_info.patch_id;
     const uint16_t num_owned_faces = patch_info.num_owned_faces;
     const uint16_t num_faces       = patch_info.num_faces;
 
@@ -33,7 +34,7 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
     // update the bitmask based on user-defined predicate
     update_bitmask<blockThreads>(
         num_owned_faces, s_mask_f, [&](const uint16_t local_f) {
-            return predicate({patch_info.patch_id, local_f});
+            return predicate({patch_id, local_f});
         });
     __syncthreads();
 

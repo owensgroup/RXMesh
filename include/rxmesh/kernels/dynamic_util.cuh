@@ -80,7 +80,8 @@ __device__ __forceinline__ void warp_update_mask(const bool thread_predicate,
 template <uint32_t blockThreads, typename predicateT>
 __device__ __inline__ void update_bitmask(uint16_t   num_owned,
                                           uint32_t*  bitmask,
-                                          predicateT predicate)
+                                          predicateT predicate,
+                                          bool check_if_already_deleted = true)
 {
     // load over all owned elements -- one thread per element
     // we need to make sure that the whole warp go into the loop
@@ -90,7 +91,10 @@ __device__ __inline__ void update_bitmask(uint16_t   num_owned,
             // sure we only check on num_owned
             bool to_delete = false;
             if (local_id < num_owned) {
-                bool already_deleted = is_deleted(local_id, bitmask);
+                bool already_deleted = false;
+                if (check_if_already_deleted) {
+                    already_deleted = is_deleted(local_id, bitmask);
+                }
                 if (!already_deleted) {
                     if (predicate(local_id)) {
                         to_delete = true;

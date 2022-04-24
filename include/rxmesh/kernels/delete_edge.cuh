@@ -19,6 +19,7 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
         "First argument in predicate lambda function should be EdgeHandle");
 
     // patch basic info
+    const uint32_t patch_id        = patch_info.patch_id;
     const uint16_t num_owned_faces = patch_info.num_owned_faces;
     const uint16_t num_owned_edges = patch_info.num_owned_edges;
     const uint16_t num_edges       = patch_info.num_edges;
@@ -40,7 +41,7 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
     // update the bitmask based on user-defined predicate
     update_bitmask<blockThreads>(
         num_owned_edges, s_mask_e, [&](const uint16_t local_e) {
-            return predicate({patch_info.patch_id, local_e});
+            return predicate({patch_id, local_e});
         });
     __syncthreads();
 

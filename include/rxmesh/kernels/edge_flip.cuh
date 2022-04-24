@@ -19,6 +19,7 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
         "First argument in predicate lambda function should be EdgeHandle");
 
     // patch basic info
+    const uint32_t patch_id        = patch_info.patch_id;
     const uint16_t num_faces       = patch_info.num_faces;
     const uint16_t num_edges       = patch_info.num_edges;
     const uint16_t num_owned_edges = patch_info.num_owned_edges;
@@ -60,7 +61,7 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
 
                 // check if we should flip this edge based on the user-supplied
                 // predicate
-                if (predicate({patch_info.patch_id, local_e})) {
+                if (predicate({patch_id, local_e})) {
 
                     // read the two faces incident to this edge
                     const uint16_t f0 = s_ef[2 * local_e];
