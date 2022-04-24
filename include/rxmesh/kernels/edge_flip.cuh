@@ -42,96 +42,90 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
     }
 
     // load FE into shared memory
-    load_async(reinterpret_cast<const uint16_t*>(patch_info.fe),
-               num_faces * 3,
-               reinterpret_cast<uint16_t*>(s_fe),
-               true);
+    load_mesh_async<Op::FE>(patch_info, s_ev, s_fe, true);
     __syncthreads();
 
-    // Transpose FE into EF so we obtain the two incident triangles to
+    // Transpose FE into EF so we obtain the two incident faces to
     // to-be-flipped edges. We use the version that is optimized for
     // manifolds (we don't flip non-manifold edges)
     e_f_manifold<blockThreads>(
         num_edges, num_faces, s_fe, s_ef, patch_info.mask_e);
     __syncthreads();
 
-    // load over all edges---one thread per edge
-    uint16_t local_id = threadIdx.x;
-    while (local_id < num_owned_edges) {
+    // load over all edges--one thread per edge
+    block_loop<uint16_t, blockThreads, false>(
+        num_owned_edges, [&](const uint16_t local_e) {
+            // Do nothing if this edge is deleted
+            if (!is_deleted(local_e, patch_info.mask_e)) {
 
-        // Do nothing if this edge is deleted
-        if (!is_deleted(local_id, patch_info.mask_e)) {
+                // check if we should flip this edge based on the user-supplied
+                // predicate
+                if (predicate({patch_info.patch_id, local_e})) {
 
-            // check if we should flip this edge based on the user-supplied
-            // predicate
-            if (predicate({patch_info.patch_id, local_id})) {
+                    // read the two faces incident to this edge
+                    const uint16_t f0 = s_ef[2 * local_e];
+                    const uint16_t f1 = s_ef[2 * local_e + 1];
 
-                // read the two faces incident to this edge
-                const uint16_t f0 = s_ef[2 * local_id];
-                const uint16_t f1 = s_ef[2 * local_id + 1];
+                    // if the edge is boundary (i.e., only incident to one
+                    // face), then we don't flip
+                    if (f0 != INVALID16 && f1 != INVALID16) {
+                        const uint16_t flipped_id =
+                            atomicAdd(&s_num_flipped_edges, 1);
 
-                // if the edge is boundary (i.e., only incident to one face),
-                // then we don't flip
-                if (f0 != INVALID16 && f1 != INVALID16) {
-                    const uint16_t flipped_id =
-                        atomicAdd(&s_num_flipped_edges, 1);
+                        // for each flipped edge, we add it to shared memory
+                        // buffer along with one of its incident faces
+                        s_flipped[2 * flipped_id]     = local_e;
+                        s_flipped[2 * flipped_id + 1] = f0;
 
-                    // for each flipped edge, we add it to shared memory buffer
-                    // along with one of its incident faces
-                    s_flipped[2 * flipped_id]     = local_id;
-                    s_flipped[2 * flipped_id + 1] = f0;
+                        // the three edges incident to the first face
+                        uint16_t f0_e[3];
+                        f0_e[0] = s_fe[3 * f0];
+                        f0_e[1] = s_fe[3 * f0 + 1];
+                        f0_e[2] = s_fe[3 * f0 + 2];
 
-                    // the three edges incident to the first face
-                    uint16_t f0_e[3];
-                    f0_e[0] = s_fe[3 * f0];
-                    f0_e[1] = s_fe[3 * f0 + 1];
-                    f0_e[2] = s_fe[3 * f0 + 2];
+                        // the flipped edge position in first face
+                        const uint16_t l0 =
+                            ((f0_e[0] >> 1) == local_e) ?
+                                0 :
+                                (((f0_e[1] >> 1) == local_e) ? 1 : 2);
 
-                    // the flipped edge position in first face
-                    const uint16_t l0 =
-                        ((f0_e[0] >> 1) == local_id) ?
-                            0 :
-                            (((f0_e[1] >> 1) == local_id) ? 1 : 2);
+                        // the three edges incident to the second face
+                        uint16_t f1_e[3];
+                        f1_e[0] = s_fe[3 * f1];
+                        f1_e[1] = s_fe[3 * f1 + 1];
+                        f1_e[2] = s_fe[3 * f1 + 2];
 
-                    // the three edges incident to the second face
-                    uint16_t f1_e[3];
-                    f1_e[0] = s_fe[3 * f1];
-                    f1_e[1] = s_fe[3 * f1 + 1];
-                    f1_e[2] = s_fe[3 * f1 + 2];
+                        // the flipped edge position in second face
+                        const uint16_t l1 =
+                            ((f1_e[0] >> 1) == local_e) ?
+                                0 :
+                                (((f1_e[1] >> 1) == local_e) ? 1 : 2);
 
-                    // the flipped edge position in second face
-                    const uint16_t l1 =
-                        ((f1_e[0] >> 1) == local_id) ?
-                            0 :
-                            (((f1_e[1] >> 1) == local_id) ? 1 : 2);
+                        const uint16_t f0_shift = 3 * f0;
+                        const uint16_t f1_shift = 3 * f1;
 
-                    const uint16_t f0_shift = 3 * f0;
-                    const uint16_t f1_shift = 3 * f1;
+                        s_fe[f0_shift + ((l0 + 1) % 3)] = f0_e[l0];
+                        s_fe[f1_shift + ((l1 + 1) % 3)] = f1_e[l1];
 
-                    s_fe[f0_shift + ((l0 + 1) % 3)] = f0_e[l0];
-                    s_fe[f1_shift + ((l1 + 1) % 3)] = f1_e[l1];
-
-                    s_fe[f1_shift + l1] = f0_e[(l0 + 1) % 3];
-                    s_fe[f0_shift + l0] = f1_e[(l1 + 1) % 3];
+                        s_fe[f1_shift + l1] = f0_e[(l0 + 1) % 3];
+                        s_fe[f0_shift + l0] = f1_e[(l1 + 1) % 3];
+                    }
                 }
             }
-        }
-        local_id += blockThreads;
-    }
+        });
+
     __syncthreads();
 
-    // If flipped at least one edge
+    // If we have flipped at least one edge
     if (s_num_flipped_edges > 0) {
-        // we store the changes we made to FE in global memory
-        store<blockThreads>(
-            s_fe, 3 * num_faces, reinterpret_cast<uint16_t*>(patch_info.fe));
 
         // load EV in the same place that was used to store EF
-        load_async(reinterpret_cast<const uint16_t*>(patch_info.ev),
-                   num_edges * 2,
-                   reinterpret_cast<uint16_t*>(s_ev),
-                   true);
+        load_mesh_async<Op::EV>(patch_info, s_ev, s_fe, true);
         __syncthreads();
+
+        // we store the changes we made to FE in global memory (no need to wait)
+        store<blockThreads>(
+            s_fe, 3 * num_faces, reinterpret_cast<uint16_t*>(patch_info.fe));
 
         // Now, we go over all edge that has been flipped
         for (uint32_t e = threadIdx.x; e < s_num_flipped_edges;

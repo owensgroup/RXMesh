@@ -107,10 +107,13 @@ class RXMeshDynamic : public RXMeshStatic
             // to have both in memory at one point. Then, load EV and update it
             dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
             dynamic_smem += 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
-            dynamic_smem += DIVIDE_UP(this->m_max_faces_per_patch -
-                                          this->m_max_not_owned_faces,
-                                      2) *
-                            2 * sizeof(uint16_t);
+            // we store the flipped edges along with one of the faces its
+            // incident to. Since we can only flip one edge per face in parallel
+            // (actually less than that), we allocate the shared memory such
+            // that we store this info (flipped edge and it face) with size
+            // equal to half the number of faces in the patch
+            dynamic_smem += DIVIDE_UP(this->m_max_faces_per_patch, 2) * 2 *
+                            sizeof(uint16_t);
         }
 
         if (op == DynOp::DeleteFace) {

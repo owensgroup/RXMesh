@@ -81,8 +81,6 @@ __device__ __forceinline__ void load_mesh_async(const PatchInfo& patch_info,
                                                 uint16_t*&       s_fe,
                                                 bool             with_wait)
 {
-    assert(s_ev == s_fe);
-
     switch (op) {
         case Op::VV: {
             load_async(reinterpret_cast<uint16_t*>(patch_info.ev),

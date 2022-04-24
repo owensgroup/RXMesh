@@ -78,7 +78,7 @@ Patcher::Patcher(uint32_t                                        patch_size,
         for (uint32_t i = 0; i < m_num_faces; ++i) {
             m_face_patch[i]  = 0;
             m_patches_val[i] = i;
-        }        
+        }
         allocate_device_memory(ff_offset, ff_values);
         assign_patch(fv, edges_map);
     } else {
@@ -224,7 +224,9 @@ void Patcher::print_statistics()
         "Patcher: Parallel patches construction time = {} (ms) and {} "
         "(ms/lloyd_run)",
         m_patching_time_ms,
-        m_patching_time_ms / float(m_num_lloyd_run));
+        ((m_patching_time_ms == 0) ?
+             0 :
+             m_patching_time_ms / float(m_num_lloyd_run)));
 
     // max-min patch size
     uint32_t max_patch_size(0), min_patch_size(m_num_faces), avg_patch_size(0);
@@ -391,8 +393,7 @@ void Patcher::postprocess(const std::vector<std::vector<uint32_t>>& fv,
                           const std::vector<uint32_t>&              ff_offset,
                           const std::vector<uint32_t>&              ff_values)
 {
-    // Post process the patches by extracting the ribbons 
-    //
+    // Post process the patches by extracting the ribbons
     // For patch P, we start first by identifying boundary faces; faces that has
     // an edge on P's boundary. These faces are captured by querying the
     // adjacent faces for each face in P. If any of these adjacent faces are not
@@ -578,7 +579,7 @@ void Patcher::run_lloyd()
 {
     std::vector<uint32_t> h_queue_ptr{0, m_num_patches, m_num_patches};
 
-    //CUDA_ERROR(cudaProfilerStart());
+    // CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
     timer.start();
 
@@ -691,7 +692,7 @@ void Patcher::run_lloyd()
     CUDA_ERROR(cudaDeviceSynchronize());
     CUDA_ERROR(cudaGetLastError());
     m_patching_time_ms = timer.elapsed_millis();
-    //CUDA_ERROR(cudaProfilerStop());
+    // CUDA_ERROR(cudaProfilerStop());
 
 
     // move data to host
