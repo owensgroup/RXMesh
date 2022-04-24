@@ -1,8 +1,6 @@
 #pragma once
 
 #include "rxmesh/kernels/dynamic_util.cuh"
-#include "rxmesh/kernels/is_deleted.cuh"
-#include "rxmesh/kernels/warp_update_mask.cuh"
 
 namespace rxmesh {
 namespace detail {

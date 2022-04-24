@@ -1,4 +1,4 @@
-#include "rxmesh/kernels/is_deleted.cuh"
+#include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 

@@ -8,7 +8,7 @@
 #include "rxmesh/iterator.cuh"
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/debug.cuh"
-#include "rxmesh/kernels/is_deleted.cuh"
+#include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/rxmesh_queries.cuh"
 #include "rxmesh/types.h"

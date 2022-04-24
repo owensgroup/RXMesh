@@ -1,8 +1,7 @@
 #pragma once
 
-#include "rxmesh/kernels/is_deleted.cuh"
+#include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/loader.cuh"
-#include "rxmesh/kernels/warp_update_mask.cuh"
 
 namespace rxmesh {
 namespace detail {
@@ -13,7 +12,7 @@ namespace detail {
 template <uint32_t blockThreads, typename predicateT>
 __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
                                          const predicateT predicate)
-{    
+{
     // Extract the argument in the predicate lambda function
     using PredicateTTraits = detail::FunctionTraits<predicateT>;
     using HandleT          = typename PredicateTTraits::template arg<0>::type;
@@ -40,7 +39,7 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     uint16_t* s_ev        = &s_edge_glue[m + (m % 2)];
     uint16_t* s_fe        = s_ev;
 
-    
+
     // set the glued vertices to itself
     // no need to sync here. will rely on sync from the call to load_mesh_async
     for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
@@ -89,7 +88,7 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
 
     __syncthreads();
 
-    
+
     // we loop again over s_ev, and start glue vertices i.e., replace an edge's
     // vertex with its entry in s_vertex_glue. Note that we initialized
     // s_vertex_glue sequentially so no change happens for vertices that should
@@ -234,7 +233,7 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     // Store edge mask by AND'ing the mask in shared memory with that in
     // global memory
     for (uint16_t e = threadIdx.x; e < mask_size_e; e += blockThreads) {
-        patch_info.mask_e[e] &= s_mask_e[e];              
+        patch_info.mask_e[e] &= s_mask_e[e];
     }
 
     __syncthreads();

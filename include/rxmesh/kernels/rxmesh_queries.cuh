@@ -5,7 +5,7 @@
 
 #include "rxmesh/context.h"
 #include "rxmesh/kernels/collective.cuh"
-#include "rxmesh/kernels/is_deleted.cuh"
+#include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/util.cuh"
 #include "rxmesh/types.h"
@@ -138,8 +138,8 @@ __device__ __forceinline__ void v_e_oreinted(const PatchInfo& patch_info,
 
     // start by loading the faces while also doing transposing EV (might
     // increase ILP)
-    uint16_t*   s_fe    = &s_output_value[2 * num_edges];
-    uint16_t*   s_ef    = &s_fe[3 * num_faces + (3 * num_faces) % 2];    
+    uint16_t* s_fe = &s_output_value[2 * num_edges];
+    uint16_t* s_ef = &s_fe[3 * num_faces + (3 * num_faces) % 2];
     load_async(reinterpret_cast<const uint16_t*>(patch_info.fe),
                num_faces * 3,
                reinterpret_cast<uint16_t*>(s_fe),
