@@ -156,5 +156,91 @@ __device__ __inline__ void edge_split(PatchInfo&       patch_info,
     load_mesh_async<Op::EV>(patch_info, s_ev, s_fe, true);
 }
 
+/**
+ * @brief edge split
+ */
+template <uint32_t blockThreads, typename predicateT>
+__device__ __inline__ void edge_split_2(PatchInfo&       patch_info,
+                                        const predicateT predicate)
+{
+    using PredicateTTraits = detail::FunctionTraits<predicateT>;
+    using HandleT          = typename PredicateTTraits::template arg<0>::type;
+    static_assert(
+        std::is_same_v<HandleT, EdgeHandle>,
+        "First argument in predicate lambda function should be EdgeHandle");
+
+    // patch basic info
+    const uint32_t patch_id        = patch_info.patch_id;
+    const uint16_t num_faces       = patch_info.num_faces;
+    const uint16_t num_edges       = patch_info.num_edges;
+    const uint16_t num_vertices    = patch_info.num_vertices;
+    const uint16_t num_owned_edges = patch_info.num_owned_edges;
+
+
+    // shared memory used to store EF, EV, FE, and info about the split edge
+    __shared__ uint16_t        s_num_split_edges;
+    extern __shared__ uint16_t shrd_mem[];
+    uint16_t*                  s_fe = shrd_mem;
+    uint16_t* s_ef    = &shrd_mem[3 * num_faces + (3 * num_faces) % 2];
+    uint16_t* s_ev    = s_ef;
+    uint16_t* s_split = &s_ef[2 * num_edges];
+
+    if (threadIdx.x == 0) {
+        s_num_split_edges = 0;
+    }
+
+    // Initialize EF to invalid values
+    // Cast EF into 32-but to fix the bank conflicts
+    uint32_t* s_ef32 = reinterpret_cast<uint32_t*>(s_ef);
+    for (uint16_t i = threadIdx.x; i < num_edges; i += blockThreads) {
+        s_ef32[i] = INVALID32;
+    }
+
+    // load FE into shared memory
+    load_mesh_async<Op::FE>(patch_info, s_ev, s_fe, true);
+    __syncthreads();
+
+
+    // Transpose FE into EF so we obtain the two incident faces to
+    // to-be-flipped edges. We use the version that is optimized for
+    // manifolds (we don't flip non-manifold edges)
+    e_f_manifold<blockThreads>(
+        num_edges, num_faces, s_fe, s_ef, patch_info.mask_e);
+    __syncthreads();
+
+
+    // loop over all edge
+    block_loop<uint16_t, blockThreads, false>(
+        num_owned_edges, [&](const uint16_t local_e) {
+            // Do nothing if this edge is deleted
+            if (!is_deleted(local_e, patch_info.mask_e)) {
+                // check if we should split this edge based on the user-supplied
+                // predicate
+                if (predicate({patch_id, local_e})) {
+                    const uint16_t split_id = atomicAdd(&s_num_split_edges, 1);
+                    s_split[split_id]       = local_e;
+
+                    // Added vertex id -> num_vertices + split_id
+                    // The three added edges ids -> num_edges + 3*split_id + 0
+                    //                             num_edges + 3*split_id + 1
+                    //                             num_edges + 3*split_id + 2
+                    // The two added faces ids -> num_faces + 2*split_id + 0
+                    //                           num_faces + 2*split_id + 1
+                }
+            }
+        });
+
+
+    //TODO Set the active mask for added vertices, edges, and faces
+    
+    // Increment number of vertices, edges, and faces
+    if (threadIdx.x == 0) {
+        uint16_t num_split_edges = s_num_split_edges;
+        patch_info.num_vertices += num_split_edges;
+        patch_info.num_edges += 3 * num_split_edges;
+        patch_info.num_faces += 2 * num_split_edges;
+    }
+}
+
 }  // namespace detail
 }  // namespace rxmesh

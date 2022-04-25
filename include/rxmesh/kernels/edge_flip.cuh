@@ -53,7 +53,7 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
         num_edges, num_faces, s_fe, s_ef, patch_info.mask_e);
     __syncthreads();
 
-    // load over all edges--one thread per edge
+    // loop over all edges--one thread per edge
     block_loop<uint16_t, blockThreads, false>(
         num_owned_edges, [&](const uint16_t local_e) {
             // Do nothing if this edge is deleted
