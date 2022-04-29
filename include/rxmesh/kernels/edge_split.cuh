@@ -230,33 +230,79 @@ __device__ __inline__ void edge_split_2(PatchInfo&       patch_info,
                     //                         num_faces + 2*split_num + 0 (Fa)
                     //                         num_faces + 2*split_num + 1 (Fb)
                     //
-                    // Fa will be adjacent to s_ef[2*local_e + 0]
-                    // Fb will be adjacent to s_ef[2*local_e + 1]
+                    // Fa will be adjacent to s_ef[2 * local_e + 0]
+                    // Fb will be adjacent to s_ef[2 * local_e + 1]
+                    //
+                    // TODO in case of boundary split edge, we still add 3 edges
+                    // and 2 faces but we mark the extra ones as inactive
+
+
+                    const uint16_t Ea = num_edges + split_id + 0;
 
                     // Assign edges for Fa and Fb and update faces incident to
                     // local_e
-                    const uint16_t fa = num_faces + 2 * split_num + 0;
-                    const uint16_t fb = num_faces + 2 * split_num + 1;
                     for (uint16_t i = 0; i < 2; ++i) {
+                        const uint16_t f = s_ef[2 * local_e + i];
 
-                        const uint16_t f  = s_ef[2 * local_e + i];
-                        const uint16_t fx = s_ef[num_faces + 2 * split_num + i];
-
-                        for (uint16_t j = 0; j < 3; ++j) {
-                            const uint16_t e = s_fe[3 * f + j];
-                            s_fe[3 * fx + j] = e;
-                            if ((e >> 1) == local_e) {
-                                uint16_t temp   = (num_edges + split_id) << 1;
-                                s_fe[3 * f + j] = temp | (e & 1);
-                            }
-                            // TODO we still need to change edge in f and fx
-                            // that they both share
+                        if (f == INVALID16) {
+                            // TODO make sure to mark the extra face and edge
+                            // that is added for this boundary edge is marked as
+                            // inactive
+                            continue;
                         }
+
+                        const uint16_t fx = num_faces + 2 * split_num + i;
+
+                        const uint16_t ex = num_edges + split_id + i + 1;
+
+                        // copy the connectivity of f into fx
+                        // f is one of the faces incident to local_e
+                        // fx is the face that will be adjacent to f along Ea
+
+                        uint16_t fe[3];
+                        fe[0] = s_fe[3 * f];
+                        fe[1] = s_fe[3 * f + 1];
+                        fe[2] = s_fe[3 * f + 2];
+
+                        s_fe[3 * fx + 0] = fe[0];
+                        s_fe[3 * fx + 1] = fe[1];
+                        s_fe[3 * fx + 2] = fe[2];
+
+
+                        // find local_e index within f's incident edges
+                        const uint16_t l =
+                            ((fe[0] >> 1) == local_e) ?
+                                0 :
+                                (((fe[1] >> 1) == local_e) ? 1 : 2);
+
+                        // f's l-th edge stays the same
+                        // but fx's l-th changes to Ea with same direction
+                        s_fe[3 * fx + l] = (Ea << 1) | (fe[l] & 1);
+
+                        // index with fe of next and previous edge to local_e
+                        const uint16_t n = (l + 1) % 3;
+                        const uint16_t p = (l + 2) % 3;
+
+                        // f's next edge after local_e becomes Ex
+                        // and preserve the direction of the original f's next
+                        // edge
+                        s_fe[3 * f + n] = (ex << 1) | (fe[n] & 1);
+
+                        // fx's previous edge before local_e Ex
+                        // and its in the opposite direction as f's next edge
+                        // after local_e
+                        s_fe[3 * fx + p] = (ex << 1) | (fe[n] ^ 1);
                     }
                 }
             }
         });
 
+    __syncthreads();
+
+    store<blockThreads>(
+        s_fe,
+        3 * (num_faces + 2 * num_split_edges),  // new # faces after all splits
+        reinterpret_cast<uint16_t*>(patch_info.fe));
 
     // TODO Set the active mask for added vertices, edges, and faces
 

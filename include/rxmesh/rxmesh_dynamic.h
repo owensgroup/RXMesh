@@ -54,6 +54,11 @@ class RXMeshDynamic : public RXMeshStatic
         launch_box.blocks         = this->m_num_patches;
         launch_box.smem_bytes_dyn = 0;
         for (auto o : dyn_op) {
+            if (o == DynOp::EdgeSplit && !is_closed()) {
+                RXMESH_ERROR(
+                    "RXMeshDynamic::prepare_launch_box Edge split only works "
+                    "on closed meshes!");
+            }
             launch_box.smem_bytes_dyn =
                 std::max(launch_box.smem_bytes_dyn,
                          this->template calc_shared_memory<blockThreads>(o));
