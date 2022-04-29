@@ -217,22 +217,49 @@ __device__ __inline__ void edge_split_2(PatchInfo&       patch_info,
                 // check if we should split this edge based on the user-supplied
                 // predicate
                 if (predicate({patch_id, local_e})) {
-                    const uint16_t split_id = atomicAdd(&s_num_split_edges, 1);
-                    s_split[split_id]       = local_e;
+                    const uint16_t split_id  = atomicAdd(&s_num_split_edges, 3);
+                    s_split[split_id]        = local_e;
+                    const uint16_t split_num = (split_id - num_edges) / 3;
 
-                    // Added vertex id -> num_vertices + split_id
-                    // The three added edges ids -> num_edges + 3*split_id + 0
-                    //                             num_edges + 3*split_id + 1
-                    //                             num_edges + 3*split_id + 2
-                    // The two added faces ids -> num_faces + 2*split_id + 0
-                    //                           num_faces + 2*split_id + 1
+                    // Added vertex id           -> num_vertices + split_num (V)
+                    // The three added edges ids ->
+                    //                            num_edges + split_id + 0 (Ea)
+                    //                            num_edges + split_id + 1 (Eb)
+                    //                            num_edges + split_id + 2 (Ec)
+                    // The two added faces ids ->
+                    //                         num_faces + 2*split_num + 0 (Fa)
+                    //                         num_faces + 2*split_num + 1 (Fb)
+                    //
+                    // Fa will be adjacent to s_ef[2*local_e + 0]
+                    // Fb will be adjacent to s_ef[2*local_e + 1]
+
+                    // Assign edges for Fa and Fb and update faces incident to
+                    // local_e
+                    const uint16_t fa = num_faces + 2 * split_num + 0;
+                    const uint16_t fb = num_faces + 2 * split_num + 1;
+                    for (uint16_t i = 0; i < 2; ++i) {
+
+                        const uint16_t f  = s_ef[2 * local_e + i];
+                        const uint16_t fx = s_ef[num_faces + 2 * split_num + i];
+
+                        for (uint16_t j = 0; j < 3; ++j) {
+                            const uint16_t e = s_fe[3 * f + j];
+                            s_fe[3 * fx + j] = e;
+                            if ((e >> 1) == local_e) {
+                                uint16_t temp   = (num_edges + split_id) << 1;
+                                s_fe[3 * f + j] = temp | (e & 1);
+                            }
+                            // TODO we still need to change edge in f and fx
+                            // that they both share
+                        }
+                    }
                 }
             }
         });
 
 
-    //TODO Set the active mask for added vertices, edges, and faces
-    
+    // TODO Set the active mask for added vertices, edges, and faces
+
     // Increment number of vertices, edges, and faces
     if (threadIdx.x == 0) {
         uint16_t num_split_edges = s_num_split_edges;
