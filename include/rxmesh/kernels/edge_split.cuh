@@ -178,7 +178,7 @@ __device__ __inline__ void edge_split_2(PatchInfo&       patch_info,
 
 
     // shared memory used to store EF, EV, FE, and info about the split edge
-    __shared__ uint16_t        s_num_split_edges;
+    __shared__ uint32_t        s_num_split_edges;
     extern __shared__ uint16_t shrd_mem[];
     uint16_t*                  s_fe = shrd_mem;
     uint16_t* s_ef    = &shrd_mem[3 * num_faces + (3 * num_faces) % 2];
@@ -217,7 +217,8 @@ __device__ __inline__ void edge_split_2(PatchInfo&       patch_info,
                 // check if we should split this edge based on the user-supplied
                 // predicate
                 if (predicate({patch_id, local_e})) {
-                    const uint16_t split_id  = atomicAdd(&s_num_split_edges, 3);
+                    const uint16_t split_id = static_cast<uint16_t>(
+                        ::atomicAdd(&s_num_split_edges, 3));
                     s_split[split_id]        = local_e;
                     const uint16_t split_num = (split_id - num_edges) / 3;
 
@@ -299,12 +300,29 @@ __device__ __inline__ void edge_split_2(PatchInfo&       patch_info,
 
     __syncthreads();
 
+    // load EV into shared memory and overwrite EF
+    load_mesh_async<Op::EV>(patch_info, s_ev, s_fe, true);
+    __syncthreads();
+
+    // store FE
     store<blockThreads>(
         s_fe,
         3 * (num_faces + 2 * num_split_edges),  // new # faces after all splits
         reinterpret_cast<uint16_t*>(patch_info.fe));
 
+    block_loop<uint16_t, blockThreads, false>(
+        s_num_split_edges, [&](const uint16_t split_id) {
+            const uint16_t split_num = (split_id - num_edges) / 3;
+            const uint16_t local_e   = s_split[split_id];
+            const uint16_t ea        = num_edges + split_id + 0;
+            const uint16_t v         = num_vertices + split_num;
+
+            s_ev[2 * ea + 0] = s_ev[2 * local_e + 0];
+            s_ev[2 * ea + 1] = s_ev[2 * local_e + 1];
+        });
+
     // TODO Set the active mask for added vertices, edges, and faces
+
 
     // Increment number of vertices, edges, and faces
     if (threadIdx.x == 0) {
