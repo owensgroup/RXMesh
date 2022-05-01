@@ -169,24 +169,6 @@ class RXMeshDynamic : public RXMeshStatic
         }
 
         if (op == DynOp::EdgeSplit) {
-            // to load FE and then EV. Only need one of them at a time
-            /*dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
-                                    2 * this->m_max_edges_per_patch) *
-                           sizeof(uint16_t);
-
-            // to store the mask for split edges. this will not be stored
-            // anywhere in global memory
-            dynamic_smem +=
-                DIVIDE_UP(this->m_max_edges_per_patch, 32) * sizeof(uint32_t);
-
-            // to store the id of the first added edge due to splitting
-            // and the added vertex for this added edge.
-            // we have an entry for all edges, even those that are not split,
-            // which is a bit excessive
-            dynamic_smem += m_capacity_factor * this->m_max_edges_per_patch *
-                            sizeof(uint16_t);*/
-
-
             // load FE, then transpose it into EF, then update FE. Thus, we need
             // to have both in memory at one point. We only work on manifold
             // mesh and thus each edge is incident to two face at most
@@ -194,13 +176,15 @@ class RXMeshDynamic : public RXMeshStatic
                             2 * this->m_max_edges_per_patch) *
                            sizeof(uint16_t);
 
-            // we store the split edges.
-            // Since we can only split one edge per face in parallel
-            // (actually less than that), we allocate the shared memory such
-            // that we store this info (split edges) with size equal to half the
-            // number of faces in the patch
-            dynamic_smem +=
-                DIVIDE_UP(this->m_max_faces_per_patch, 2) * sizeof(uint16_t);
+            // we store the split edges and two other edges that share vertex
+            // with the split edge—one from each face the split edge is incident
+            // to.
+            // Since we can only split one edge per face in
+            // parallel (actually less than that), we allocate the shared memory
+            // such that we store this info (split edges) with size equal to
+            // half the number of faces in the patch
+            dynamic_smem += 3 * (DIVIDE_UP(this->m_max_faces_per_patch, 2) *
+                                 sizeof(uint16_t));
         }
         return dynamic_smem;
     }
