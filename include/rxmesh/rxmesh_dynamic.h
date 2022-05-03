@@ -97,6 +97,16 @@ class RXMeshDynamic : public RXMeshStatic
      */
     bool validate();
 
+    /**
+     * @brief update the host side. Use this function to update the host side
+     * after performing (dynamic) updates on the GPU. This function may
+     * re-allocates the host side memory buffers in case it is not enough (e.g.,
+     * after performing mesh refinement on the GPU)
+     * @param stream is the stream on which all memcpy and kernels will be
+     * enqueued
+     */
+    void update_host(cudaStream_t stream = NULL);
+
    private:
     template <uint32_t blockThreads>
     size_t calc_shared_memory(const DynOp op) const

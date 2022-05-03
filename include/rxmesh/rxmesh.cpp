@@ -15,9 +15,9 @@ RXMesh::RXMesh()
     : m_num_edges(0),
       m_num_faces(0),
       m_num_vertices(0),
-      m_max_valence(0),
-      m_max_edge_incident_faces(0),
-      m_max_face_adjacent_faces(0),
+      m_input_max_valence(0),
+      m_input_max_edge_incident_faces(0),
+      m_input_max_face_adjacent_faces(0),
       m_max_vertices_per_patch(0),
       m_max_edges_per_patch(0),
       m_max_faces_per_patch(0),
@@ -64,9 +64,11 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
         RXMESH_TRACE("Input is {} edge manifold",
                      ((m_is_input_edge_manifold) ? "" : " Not"));
         RXMESH_TRACE("Input is {} closed", ((m_is_input_closed) ? "" : " Not"));
-        RXMESH_TRACE("max valence = {}", m_max_valence);
-        RXMESH_TRACE("max edge incident faces = {}", m_max_edge_incident_faces);
-        RXMESH_TRACE("max face adjacent faces = {}", m_max_face_adjacent_faces);
+        RXMESH_TRACE("Input max valence = {}", m_input_max_valence);
+        RXMESH_TRACE("max edge incident faces = {}",
+                     m_input_max_edge_incident_faces);
+        RXMESH_TRACE("max face adjacent faces = {}",
+                     m_input_max_face_adjacent_faces);
         RXMESH_TRACE("per-patch maximum face count = {}",
                      m_max_faces_per_patch);
         RXMESH_TRACE("per-patch maximum edge count = {}",
@@ -123,6 +125,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
     std::vector<uint32_t>              ff_values;
     std::vector<uint32_t>              ff_offset;
     std::vector<std::vector<uint32_t>> ef;
+
     build_supporting_structures(fv, ef, ff_offset, ff_values);
 
     m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
@@ -136,14 +139,13 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
 
     m_num_patches = m_patcher->get_num_patches();
 
+    m_h_patches_info = (PatchInfo*)malloc(m_num_patches * sizeof(PatchInfo));
     m_h_patches_ltog_f.resize(m_num_patches);
     m_h_patches_ltog_e.resize(m_num_patches);
     m_h_patches_ltog_v.resize(m_num_patches);
     m_h_num_owned_f.resize(m_num_patches);
     m_h_num_owned_v.resize(m_num_patches);
     m_h_num_owned_e.resize(m_num_patches);
-    m_h_patches_fe.resize(m_num_patches);
-    m_h_patches_ev.resize(m_num_patches);
 
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
@@ -254,24 +256,24 @@ void RXMesh::calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
     }
 
     // calc max valence, max ef, is input closed, and is input manifold
-    m_max_edge_incident_faces = 0;
-    m_max_valence             = 0;
+    m_input_max_edge_incident_faces = 0;
+    m_input_max_valence             = 0;
     std::vector<uint32_t> vv_count(m_num_vertices, 0);
     m_is_input_closed        = true;
     m_is_input_edge_manifold = true;
-    for (auto& e_iter : m_edges_map) {
+    for (const auto& e_iter : m_edges_map) {
         uint32_t v0 = e_iter.first.first;
         uint32_t v1 = e_iter.first.second;
 
         vv_count[v0]++;
         vv_count[v1]++;
 
-        m_max_valence = std::max(m_max_valence, vv_count[v0]);
-        m_max_valence = std::max(m_max_valence, vv_count[v1]);
+        m_input_max_valence = std::max(m_input_max_valence, vv_count[v0]);
+        m_input_max_valence = std::max(m_input_max_valence, vv_count[v1]);
 
-        uint32_t edge_id = e_iter.second;
-        m_max_edge_incident_faces =
-            std::max(m_max_edge_incident_faces, uint32_t(ef[edge_id].size()));
+        uint32_t edge_id                = e_iter.second;
+        m_input_max_edge_incident_faces = std::max(
+            m_input_max_edge_incident_faces, uint32_t(ef[edge_id].size()));
 
         if (ef[edge_id].size() < 2) {
             m_is_input_closed = false;
@@ -282,7 +284,7 @@ void RXMesh::calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
     }
 
     // calc max ff
-    m_max_face_adjacent_faces = 0;
+    m_input_max_face_adjacent_faces = 0;
     for (uint32_t f = 0; f < fv.size(); ++f) {
         uint32_t ff_count = 0;
         for (uint32_t v = 0; v < fv[f].size(); ++v) {
@@ -291,8 +293,8 @@ void RXMesh::calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
             uint32_t edge_num = get_edge_id(v0, v1);
             ff_count += ef[edge_num].size() - 1;
         }
-        m_max_face_adjacent_faces =
-            std::max(ff_count, m_max_face_adjacent_faces);
+        m_input_max_face_adjacent_faces =
+            std::max(ff_count, m_input_max_face_adjacent_faces);
     }
 
     // max number of vertices/edges/faces per patch
@@ -442,8 +444,10 @@ void RXMesh::build_single_patch_topology(
     const uint16_t patch_num_edges = m_h_patches_ltog_e[patch_id].size();
     const uint16_t patch_num_faces = m_h_patches_ltog_f[patch_id].size();
 
-    m_h_patches_ev[patch_id].resize(patch_num_edges * 2);
-    m_h_patches_fe[patch_id].resize(patch_num_faces * 3);
+    m_h_patches_info[patch_id].ev =
+        (LocalVertexT*)malloc(patch_num_edges * 2 * sizeof(LocalVertexT));
+    m_h_patches_info[patch_id].fe =
+        (LocalEdgeT*)malloc(patch_num_faces * 3 * sizeof(LocalEdgeT));
 
     std::vector<bool> is_added_edge(patch_num_edges, false);
 
@@ -520,15 +524,17 @@ void RXMesh::build_single_patch_topology(
 
                 assert(local_v0 != INVALID16 && local_v1 != INVALID16);
 
-                m_h_patches_ev[patch_id][local_edge_id * 2]     = local_v0;
-                m_h_patches_ev[patch_id][local_edge_id * 2 + 1] = local_v1;
+                m_h_patches_info[patch_id].ev[local_edge_id * 2].id = local_v0;
+                m_h_patches_info[patch_id].ev[local_edge_id * 2 + 1].id =
+                    local_v1;
             }
 
             // shift local_e to left
             // set the first bit to 1 if (dir ==1)
             local_edge_id = local_edge_id << 1;
             local_edge_id = local_edge_id | (dir & 1);
-            m_h_patches_fe[patch_id][local_face_id * 3 + v] = local_edge_id;
+            m_h_patches_info[patch_id].fe[local_face_id * 3 + v].id =
+                local_edge_id;
         }
     };
 
@@ -580,7 +586,7 @@ void RXMesh::build_device()
     CUDA_ERROR(cudaMalloc((void**)&m_d_patches_info,
                           m_num_patches * sizeof(PatchInfo)));
 
-    m_h_patches_info = (PatchInfo*)malloc(m_num_patches * sizeof(PatchInfo));
+    // m_h_patches_info = (PatchInfo*)malloc(m_num_patches * sizeof(PatchInfo));
 
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
@@ -616,20 +622,16 @@ void RXMesh::build_device()
             cudaMalloc((void**)&d_patch.ev,
                        d_patch.edges_capacity * 2 * sizeof(LocalVertexT)));
         CUDA_ERROR(cudaMemcpy(d_patch.ev,
-                              m_h_patches_ev[p].data(),
+                              m_h_patches_info[p].ev,
                               d_patch.num_edges * 2 * sizeof(LocalVertexT),
                               cudaMemcpyHostToDevice));
-        m_h_patches_info[p].ev =
-            reinterpret_cast<LocalVertexT*>(m_h_patches_ev[p].data());
 
         CUDA_ERROR(cudaMalloc((void**)&d_patch.fe,
                               d_patch.faces_capacity * 3 * sizeof(LocalEdgeT)));
         CUDA_ERROR(cudaMemcpy(d_patch.fe,
-                              m_h_patches_fe[p].data(),
+                              m_h_patches_info[p].fe,
                               d_patch.num_faces * 3 * sizeof(LocalEdgeT),
                               cudaMemcpyHostToDevice));
-        m_h_patches_info[p].fe =
-            reinterpret_cast<LocalEdgeT*>(m_h_patches_fe[p].data());
 
         // allocate and set bitmask
         auto alloc_bitmask =

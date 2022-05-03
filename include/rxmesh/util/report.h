@@ -292,7 +292,7 @@ struct Report
         add_member("num_vertices", rxmesh.get_num_vertices(), subdoc);
         add_member("num_edges", rxmesh.get_num_edges(), subdoc);
         add_member("num_faces", rxmesh.get_num_faces(), subdoc);
-        add_member("max_valence", rxmesh.get_max_valence(), subdoc);
+        add_member("max_valence", rxmesh.get_input_max_valence(), subdoc);
         add_member("is_edge_manifold", rxmesh.is_edge_manifold(), subdoc);
         add_member("is_closed", rxmesh.is_closed(), subdoc);
         add_member("patch_size", rxmesh.get_patch_size(), subdoc);

@@ -50,25 +50,25 @@ class RXMesh
     /**
      * @brief Maximum valence in the input mesh
      */
-    uint32_t get_max_valence() const
+    uint32_t get_input_max_valence() const
     {
-        return m_max_valence;
+        return m_input_max_valence;
     }
 
     /**
      * @brief Maximum number of incident faces to an edge in the input mesh
      */
-    uint32_t get_max_edge_incident_faces() const
+    uint32_t get_input_max_edge_incident_faces() const
     {
-        return m_max_edge_incident_faces;
+        return m_input_max_edge_incident_faces;
     }
 
     /**
      * @brief Maximum number of adjacent faces to a face in the input mesh
      */
-    uint32_t get_max_face_adjacent_faces() const
+    uint32_t get_input_max_face_adjacent_faces() const
     {
-        return m_max_face_adjacent_faces;
+        return m_input_max_face_adjacent_faces;
     }
 
     /**
@@ -189,6 +189,11 @@ class RXMesh
     uint32_t get_edge_id(const uint32_t v0, const uint32_t v1) const;
 
    protected:
+    // Edge hash map that takes two vertices and return their edge id
+    using EdgeMapT = std::unordered_map<std::pair<uint32_t, uint32_t>,
+                                        uint32_t,
+                                        detail::edge_key_hash>;
+
     virtual ~RXMesh();
 
     RXMesh(const RXMesh&) = delete;
@@ -258,47 +263,45 @@ class RXMesh
     template <typename T>
     friend class FaceAttribute;
 
-    Context m_rxmesh_context;
+    Context  m_rxmesh_context;
+    EdgeMapT m_edges_map;
 
-    uint32_t m_num_edges, m_num_faces, m_num_vertices, m_max_valence,
-        m_max_edge_incident_faces, m_max_face_adjacent_faces;
+    // Should be updated with update_host
+    uint32_t m_num_edges, m_num_faces, m_num_vertices;
 
+    bool     m_quite;
+    uint32_t m_input_max_valence, m_input_max_edge_incident_faces,
+        m_input_max_face_adjacent_faces;
+    bool m_is_input_edge_manifold;
+    bool m_is_input_closed;
+
+    // Should be updated with update_host
     uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
         m_max_faces_per_patch;
-
+    // Should be updated with update_host
     uint32_t m_max_not_owned_vertices, m_max_not_owned_edges,
         m_max_not_owned_faces;
 
+    // May need to be updated with update_host
     uint32_t       m_num_patches;
     const uint32_t m_patch_size;
-    bool           m_is_input_edge_manifold;
-    bool           m_is_input_closed;
-    bool           m_quite;
-
-    // Edge hash map that takes two vertices and return their edge id
-    std::unordered_map<std::pair<uint32_t, uint32_t>,
-                       uint32_t,
-                       detail::edge_key_hash>
-        m_edges_map;
 
     // pointer to the patcher class responsible for everything related to
     // patching the mesh into small pieces
     std::unique_ptr<patcher::Patcher> m_patcher;
 
-    //** main incident relations
-    std::vector<std::vector<uint16_t>> m_h_patches_ev;
-    std::vector<std::vector<uint16_t>> m_h_patches_fe;
-
     // the number of owned mesh elements per patch
+    // Should be updated with update_host
     std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;
 
     // mappings
     // local to global map for (v)ertices (e)dges and (f)aces
+    // Should be invalidated with update_host
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_v;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_e;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
 
-
+    // Should be updated with update_host
     PatchInfo *m_d_patches_info, *m_h_patches_info;
 
     float m_capacity_factor;

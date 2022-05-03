@@ -478,4 +478,10 @@ bool RXMeshDynamic::validate()
 
     return true;
 }
+
+
+void RXMeshDynamic::update_host(cudaStream_t stream)
+{
+
+}
 }  // namespace rxmesh

@@ -35,7 +35,7 @@ TEST(RXMeshStatic, Oriented_VV)
     // input/output container
     auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
     auto output = rxmesh.add_vertex_attribute<VertexHandle>(
-        "output", rxmesh.get_max_valence());
+        "output", rxmesh.get_input_max_valence());
 
     input->reset(VertexHandle(), rxmesh::DEVICE);
     output->reset(VertexHandle(), rxmesh::DEVICE);
@@ -232,7 +232,7 @@ TEST(RXMeshStatic, Queries)
         // VV
         auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
         auto output = rxmesh.add_vertex_attribute<VertexHandle>(
-            "output", rxmesh.get_max_valence());
+            "output", rxmesh.get_input_max_valence());
         launcher<Op::VV, VertexHandle, VertexHandle>(
             Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
@@ -244,7 +244,7 @@ TEST(RXMeshStatic, Queries)
         // VE
         auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
         auto output = rxmesh.add_vertex_attribute<EdgeHandle>(
-            "output", rxmesh.get_max_valence());
+            "output", rxmesh.get_input_max_valence());
         launcher<Op::VE, VertexHandle, EdgeHandle>(
             Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
@@ -255,7 +255,7 @@ TEST(RXMeshStatic, Queries)
         // VF
         auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
         auto output = rxmesh.add_vertex_attribute<FaceHandle>(
-            "output", rxmesh.get_max_valence());
+            "output", rxmesh.get_input_max_valence());
         launcher<Op::VF, VertexHandle, FaceHandle>(
             Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
@@ -277,7 +277,7 @@ TEST(RXMeshStatic, Queries)
         // EF
         auto input  = rxmesh.add_edge_attribute<EdgeHandle>("input", 1);
         auto output = rxmesh.add_edge_attribute<FaceHandle>(
-            "output", rxmesh.get_max_edge_incident_faces());
+            "output", rxmesh.get_input_max_edge_incident_faces());
         launcher<Op::EF, EdgeHandle, FaceHandle>(
             Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
@@ -308,7 +308,7 @@ TEST(RXMeshStatic, Queries)
         // FF
         auto input  = rxmesh.add_face_attribute<FaceHandle>("input", 1);
         auto output = rxmesh.add_face_attribute<FaceHandle>(
-            "output", rxmesh.get_max_face_adjacent_faces() + 2);
+            "output", rxmesh.get_input_max_face_adjacent_faces() + 2);
         launcher<Op::FF, FaceHandle, FaceHandle>(
             Faces, rxmesh, *input, *output, tester, report, oriented);
         rxmesh.remove_attribute("input");
