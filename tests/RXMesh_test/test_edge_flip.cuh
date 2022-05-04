@@ -28,22 +28,26 @@ TEST(RXMeshDynamic, EdgeFlip)
 
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    RXMeshDynamic rxmesh(STRINGIFY(INPUT_DIR) "diamond.obj", rxmesh_args.quite);
+    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "diamond.obj", rxmesh_args.quite);
 
-    ASSERT_TRUE(rxmesh.is_edge_manifold());
+    ASSERT_TRUE(rx.is_edge_manifold());
 
-    EXPECT_TRUE(rxmesh.validate());
+    EXPECT_TRUE(rx.validate());
 
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(
+    rx.prepare_launch_box(
         {}, {DynOp::EdgeFlip}, launch_box, (void*)edge_flip<blockThreads>);
 
     edge_flip<blockThreads>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh.get_context());
+            rx.get_context());
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
-    EXPECT_TRUE(rxmesh.validate());
+    rx.update_host();
+
+    //rx.export_obj("flipped.obj", *(rx.get_input_vertex_coordinates()));
+
+    EXPECT_TRUE(rx.validate());
 }
