@@ -112,7 +112,7 @@ TEST(Util, Align)
     char* ptr_mis_aligned = reinterpret_cast<char*>(ptr) + 1;
 
     Type* ptr_aligned = reinterpret_cast<Type*>(ptr_mis_aligned);
-    rxmesh::detail::align(alignment, ptr_aligned);
+    rxmesh::align(alignment, ptr_aligned);
 
     void*       ptr_aligned_gt = reinterpret_cast<void*>(ptr_mis_aligned);
     std::size_t spc            = num_bytes;

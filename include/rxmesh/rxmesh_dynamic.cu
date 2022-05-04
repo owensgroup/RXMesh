@@ -1,6 +1,8 @@
 #include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
+#include "rxmesh/util/macros.h"
+#include "rxmesh/util/util.h"
 
 namespace rxmesh {
 
@@ -480,8 +482,149 @@ bool RXMeshDynamic::validate()
 }
 
 
-void RXMeshDynamic::update_host(cudaStream_t stream)
+void RXMeshDynamic::update_host()
 {
+    auto resize_not_owned = [&](const uint16_t in_num_elements,
+                                const uint16_t in_num_owned_elements,
+                                uint16_t&      out_num_elements,
+                                uint16_t&      out_num_owned_elements,
+                                uint32_t*&     not_owned_patch,
+                                auto*&         not_owned_id) {
+        const uint16_t num_not_owned = in_num_elements - in_num_owned_elements;
 
+        using T = std::remove_pointer_t<
+            std::remove_reference_t<decltype(not_owned_id)>>;
+
+        if (num_not_owned > (out_num_elements - out_num_owned_elements)) {
+            free(not_owned_id);
+            free(not_owned_patch);
+            not_owned_id = (T*)malloc(num_not_owned * sizeof(T));
+            not_owned_patch =
+                (uint32_t*)malloc(num_not_owned * sizeof(uint32_t));
+        }
+        out_num_owned_elements = in_num_owned_elements;
+        out_num_elements       = in_num_elements;
+    };
+
+    auto resize_mask = [&](uint16_t size, uint16_t& capacity, uint32_t*& mask) {
+        if (size > capacity) {
+            capacity = size;
+            free(mask);
+            mask = (uint32_t*)malloc(mask_num_bytes(size));
+        }
+    };
+
+    for (uint32_t p = 0; p < m_num_patches; ++p) {
+        PatchInfo d_patch;
+        CUDA_ERROR(cudaMemcpy(&d_patch,
+                              m_d_patches_info + p,
+                              sizeof(PatchInfo),
+                              cudaMemcpyDeviceToHost));
+
+        assert(d_patch.patch_id == p);
+
+        // resize topology
+        if (d_patch.num_edges > m_h_patches_info[p].edges_capacity) {
+            free(m_h_patches_info[p].ev);
+            m_h_patches_info[p].ev = (LocalVertexT*)malloc(
+                d_patch.num_edges * 2 * sizeof(LocalVertexT));
+        }
+
+        if (d_patch.num_faces > m_h_patches_info[p].faces_capacity) {
+            free(m_h_patches_info[p].fe);
+            m_h_patches_info[p].fe =
+                (LocalEdgeT*)malloc(d_patch.num_faces * 3 * sizeof(LocalEdgeT));
+        }
+
+        // resize not-owned patch and local id (update num_owned_X, num_X)
+        resize_not_owned(d_patch.num_vertices,
+                         d_patch.num_owned_vertices,
+                         m_h_patches_info[p].num_vertices,
+                         m_h_patches_info[p].num_owned_vertices,
+                         m_h_patches_info[p].not_owned_patch_v,
+                         m_h_patches_info[p].not_owned_id_v);
+        resize_not_owned(d_patch.num_edges,
+                         d_patch.num_owned_edges,
+                         m_h_patches_info[p].num_edges,
+                         m_h_patches_info[p].num_owned_edges,
+                         m_h_patches_info[p].not_owned_patch_e,
+                         m_h_patches_info[p].not_owned_id_e);
+        resize_not_owned(d_patch.num_faces,
+                         d_patch.num_owned_faces,
+                         m_h_patches_info[p].num_faces,
+                         m_h_patches_info[p].num_owned_faces,
+                         m_h_patches_info[p].not_owned_patch_f,
+                         m_h_patches_info[p].not_owned_id_f);
+
+        // resize mask (update capacity)
+        resize_mask(d_patch.num_vertices,
+                    m_h_patches_info[p].vertices_capacity,
+                    m_h_patches_info[p].mask_v);
+        resize_mask(d_patch.num_edges,
+                    m_h_patches_info[p].edges_capacity,
+                    m_h_patches_info[p].mask_e);
+        resize_mask(d_patch.num_faces,
+                    m_h_patches_info[p].faces_capacity,
+                    m_h_patches_info[p].mask_f);
+
+        // copy topology
+        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].ev,
+                              d_patch.ev,
+                              2 * d_patch.num_edges * sizeof(LocalVertexT),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].fe,
+                              d_patch.fe,
+                              3 * d_patch.num_faces * sizeof(LocalEdgeT),
+                              cudaMemcpyDeviceToHost));
+        // not owned patch
+        CUDA_ERROR(
+            cudaMemcpy(m_h_patches_info[p].not_owned_patch_v,
+                       d_patch.not_owned_patch_v,
+                       (d_patch.num_vertices - d_patch.num_owned_vertices) *
+                           sizeof(uint32_t),
+                       cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(
+            m_h_patches_info[p].not_owned_patch_e,
+            d_patch.not_owned_patch_e,
+            (d_patch.num_edges - d_patch.num_owned_edges) * sizeof(uint32_t),
+            cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(
+            m_h_patches_info[p].not_owned_patch_f,
+            d_patch.not_owned_patch_f,
+            (d_patch.num_faces - d_patch.num_owned_faces) * sizeof(uint32_t),
+            cudaMemcpyDeviceToHost));
+
+        // not owned local id
+        CUDA_ERROR(
+            cudaMemcpy(m_h_patches_info[p].not_owned_id_v,
+                       d_patch.not_owned_id_v,
+                       (d_patch.num_vertices - d_patch.num_owned_vertices) *
+                           sizeof(LocalVertexT),
+                       cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(
+            m_h_patches_info[p].not_owned_id_e,
+            d_patch.not_owned_id_e,
+            (d_patch.num_edges - d_patch.num_owned_edges) * sizeof(LocalEdgeT),
+            cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(
+            m_h_patches_info[p].not_owned_id_f,
+            d_patch.not_owned_id_f,
+            (d_patch.num_faces - d_patch.num_owned_faces) * sizeof(LocalFaceT),
+            cudaMemcpyDeviceToHost));
+
+        // mask
+        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].mask_v,
+                              d_patch.mask_v,
+                              mask_num_bytes(d_patch.num_vertices),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].mask_e,
+                              d_patch.mask_e,
+                              mask_num_bytes(d_patch.num_edges),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].mask_f,
+                              d_patch.mask_f,
+                              mask_num_bytes(d_patch.num_faces),
+                              cudaMemcpyDeviceToHost));
+    }
 }
 }  // namespace rxmesh

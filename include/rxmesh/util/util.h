@@ -361,7 +361,7 @@ __device__ __host__ __inline__ uint32_t expand_to_align(
 };
 
 /**
- * @brief find the next multiple of 32 
+ * @brief find the next multiple of 32
  * https://codegolf.stackexchange.com/a/17852
  */
 __device__ __host__ __inline__ uint16_t round_to_next_multiple_32(uint16_t num)
@@ -399,6 +399,7 @@ inline std::pair<uint32_t, uint32_t> edge_key(const uint32_t v0,
     uint32_t j = std::min(v0, v1);
     return std::make_pair(i, j);
 }
+}  // namespace detail
 
 /**
  * @brief given a pointer, this function returns a pointer to the first location
@@ -422,6 +423,4 @@ __device__ __host__ __inline__ void align(const std::size_t byte_alignment,
     const uint64_t aligned = intptr + byte_alignment - remainder;
     ptr                    = reinterpret_cast<T*>(aligned);
 }
-
-}  // namespace detail
 }  // namespace rxmesh
