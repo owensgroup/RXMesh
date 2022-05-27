@@ -794,12 +794,6 @@ class RXMeshStatic : public RXMesh
                 op_to_string(op));
         }
 
-        if (oriented && !this->m_is_input_closed) {
-            RXMESH_ERROR(
-                "RXMeshStatic::calc_shared_memory() Can't generate oriented "
-                "output (VV or VE) for input with boundaries");
-        }
-
         size_t dynamic_smem = 0;
 
         if (op == Op::FE) {

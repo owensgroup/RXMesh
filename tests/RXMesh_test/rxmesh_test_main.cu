@@ -20,6 +20,7 @@ struct RXMeshTestArg
 // clang-format off
 #include "test_higher_queries.h"
 #include "test_queries.h"
+#include "test_queries_oriented.h"
 #include "test_attribute.cuh"
 #include "test_for_each.cuh"
 #include "test_edge_flip.cuh"

@@ -8,6 +8,7 @@ set( SOURCE_LIST
     test_util.cu        
 	test_iterator.cu
     test_queries.h
+	test_queries_oriented.h
 	test_higher_queries.h
 	query.cuh	
 	higher_query.cuh

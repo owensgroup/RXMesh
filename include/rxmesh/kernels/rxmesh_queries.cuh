@@ -180,36 +180,52 @@ __device__ __forceinline__ void v_e_oreinted(const PatchInfo& patch_info,
         uint16_t end   = s_output_offset[v + 1];
 
 
-        for (uint16_t e_id = start; e_id < end - 1; ++e_id) {
+        assert(end >= start);
+        uint16_t start_id = start;
+
+        // if the mesh is not closed, pick a boundary edge as starting point
+        // TODO we may eliminate this in case of closed mesh
+        for (uint16_t e_id = start; e_id < end; ++e_id) {
+            uint16_t e_0 = s_output_value[e_id];
+            uint16_t f0(s_ef[2 * e_0]), f1(s_ef[2 * e_0 + 1]);
+            if (f0 == INVALID16 || f1 == INVALID16) {
+                start_id = e_id;
+                break;
+            }
+        }
+
+        uint16_t e_id        = start_id;
+        uint16_t edges_count = 0;
+        while (true) {
+
             uint16_t e_0 = s_output_value[e_id];
             uint16_t f0(s_ef[2 * e_0]), f1(s_ef[2 * e_0 + 1]);
 
-            // we don't do it for boundary faces
-            assert(f0 != INVALID16 && f1 != INVALID16 && f0 < num_faces &&
-                   f1 < num_faces);
-
-
             // candidate next edge (only one of them will win)
-            uint16_t e_candid_0, e_candid_1;
+            uint16_t e_candid_0(INVALID16), e_candid_1(INVALID16);
 
-            if ((s_fe[3 * f0 + 0] >> 1) == e_0) {
-                e_candid_0 = s_fe[3 * f0 + 2] >> 1;
-            }
-            if ((s_fe[3 * f0 + 1] >> 1) == e_0) {
-                e_candid_0 = s_fe[3 * f0 + 0] >> 1;
-            }
-            if ((s_fe[3 * f0 + 2] >> 1) == e_0) {
-                e_candid_0 = s_fe[3 * f0 + 1] >> 1;
+            if (f0 != INVALID16) {
+                if ((s_fe[3 * f0 + 0] >> 1) == e_0) {
+                    e_candid_0 = s_fe[3 * f0 + 2] >> 1;
+                }
+                if ((s_fe[3 * f0 + 1] >> 1) == e_0) {
+                    e_candid_0 = s_fe[3 * f0 + 0] >> 1;
+                }
+                if ((s_fe[3 * f0 + 2] >> 1) == e_0) {
+                    e_candid_0 = s_fe[3 * f0 + 1] >> 1;
+                }
             }
 
-            if ((s_fe[3 * f1 + 0] >> 1) == e_0) {
-                e_candid_1 = s_fe[3 * f1 + 2] >> 1;
-            }
-            if ((s_fe[3 * f1 + 1] >> 1) == e_0) {
-                e_candid_1 = s_fe[3 * f1 + 0] >> 1;
-            }
-            if ((s_fe[3 * f1 + 2] >> 1) == e_0) {
-                e_candid_1 = s_fe[3 * f1 + 1] >> 1;
+            if (f1 != INVALID16) {
+                if ((s_fe[3 * f1 + 0] >> 1) == e_0) {
+                    e_candid_1 = s_fe[3 * f1 + 2] >> 1;
+                }
+                if ((s_fe[3 * f1 + 1] >> 1) == e_0) {
+                    e_candid_1 = s_fe[3 * f1 + 0] >> 1;
+                }
+                if ((s_fe[3 * f1 + 2] >> 1) == e_0) {
+                    e_candid_1 = s_fe[3 * f1 + 1] >> 1;
+                }
             }
 
             for (uint16_t vn = e_id + 1; vn < end; ++vn) {
@@ -222,6 +238,12 @@ __device__ __forceinline__ void v_e_oreinted(const PatchInfo& patch_info,
                     break;
                 }
             }
+
+            edges_count++;
+            if (edges_count > end - start - 1) {
+                break;
+            }
+            e_id = ((e_id - start + 1) % (end - start)) + start;
         }
     }
 }
