@@ -21,6 +21,19 @@ TEST(RXMeshStatic, Oriented_VV_Open)
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
+    // This is how the plane.obj looks like
+    // 6------7------8
+    // | \    |    / |
+    // |  \   |   /  |
+    // |   \  |  /   |
+    // 3------4------5
+    // |    / | \    |
+    // |   /  |  \   |
+    // |  /   |   \  |
+    // 0------1------2
+    //
+
+
     ASSERT_TRUE(
         import_obj(STRINGIFY(INPUT_DIR) "plane.obj", Verts, Faces, true));
 
