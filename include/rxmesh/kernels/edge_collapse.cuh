@@ -28,11 +28,11 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     const uint16_t num_vertices       = patch_info.num_vertices;
     const uint16_t num_edges          = patch_info.num_edges;
 
-    const uint16_t             mask_size_e = DIVIDE_UP(num_edges, 32);
+    const uint16_t             active_mask_e_size = DIVIDE_UP(num_edges, 32);
     extern __shared__ uint32_t shrd_mem32[];
     extern __shared__ uint16_t shrd_mem[];
-    uint32_t*                  s_mask_e = shrd_mem32;
-    uint16_t* s_edge_source_vertex      = &shrd_mem[2 * mask_size_e];
+    uint32_t*                  s_active_mask_e = shrd_mem32;
+    uint16_t* s_edge_source_vertex = &shrd_mem[2 * active_mask_e_size];
     uint16_t* s_vertex_glue =
         &s_edge_source_vertex[num_edges + (num_edges % 2)];
     uint16_t* s_edge_glue = s_vertex_glue;
@@ -49,8 +49,8 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
 
     // set the mask bit for all edges to indicate that all edges are not
     // collapsed
-    for (uint16_t e = threadIdx.x; e < mask_size_e; e += blockThreads) {
-        s_mask_e[e] = INVALID32;
+    for (uint16_t e = threadIdx.x; e < active_mask_e_size; e += blockThreads) {
+        s_active_mask_e[e] = INVALID32;
     }
 
 
@@ -59,17 +59,17 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
 
 
     // loop over all owned edges. if an edge should be collapsed do:
-    // 1. mark the edge as collapsed in s_mask_e (set its bit to zero)
+    // 1. mark the edge as collapsed in s_active_mask_e (set its bit to zero)
     // 2. for the two end vertices of an edge (v0,v1), add v1 as the vertex to
     // glue to in s_vertex_glue[v0]
     // We only do this for existing edges i.e., we need to check if the edge has
-    // be previously deleted. This info is not what is stored in s_mask_e but
-    // instead in the bitmask in global memory
+    // be previously deleted. This info is not what is stored in s_active_mask_e
+    // but instead in the bitmask in global memory
     update_bitmask<blockThreads>(
         num_owned_edges,
-        s_mask_e,
+        s_active_mask_e,
         [&](const uint16_t local_e) {
-            if (is_deleted(local_e, patch_info.mask_e)) {
+            if (is_deleted(local_e, patch_info.active_mask_e)) {
                 return false;
             } else {
                 bool to_collapse = predicate({patch_id, local_e});
@@ -112,10 +112,11 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     // We mark glued vertices as deleted in their bitmask in global memory
     // by checking on which vertex it has been glued to. If it was glued to
     // itself, then it has not be deleted
-    update_bitmask<blockThreads>(
-        num_owned_vertices, patch_info.mask_v, [&](const uint16_t local_v) {
-            return s_vertex_glue[local_v] != local_v;
-        });
+    update_bitmask<blockThreads>(num_owned_vertices,
+                                 patch_info.active_mask_v,
+                                 [&](const uint16_t local_v) {
+                                     return s_vertex_glue[local_v] != local_v;
+                                 });
     // sync so s_ev (or s_vertex_glue) is not overwritten
     __syncthreads();
 
@@ -131,7 +132,7 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
     // glued to the previous one
     // 3. if an edge is collapsed, then the face should be deleted
     update_bitmask<blockThreads>(
-        num_owned_faces, patch_info.mask_f, [&](const uint16_t local_f) {
+        num_owned_faces, patch_info.active_mask_f, [&](const uint16_t local_f) {
             uint16_t e[3];
 
             e[0] = s_fe[3 * local_f + 0] >> 1;
@@ -139,9 +140,9 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
             e[2] = s_fe[3 * local_f + 2] >> 1;
 
             bool is_collapsed[3];
-            is_collapsed[0] = is_deleted(e[0], s_mask_e);
-            is_collapsed[1] = is_deleted(e[1], s_mask_e);
-            is_collapsed[2] = is_deleted(e[2], s_mask_e);
+            is_collapsed[0] = is_deleted(e[0], s_active_mask_e);
+            is_collapsed[1] = is_deleted(e[1], s_active_mask_e);
+            is_collapsed[2] = is_deleted(e[2], s_active_mask_e);
 
             if (is_collapsed[0]) {
                 s_edge_glue[e[1]] = e[2];
@@ -162,7 +163,7 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
 
     // glued edges should update it edge mask to indicate that they are deleted
     update_bitmask<blockThreads>(
-        num_edges, s_mask_e, [&](const uint16_t local_e) {
+        num_edges, s_active_mask_e, [&](const uint16_t local_e) {
             return (s_edge_glue[local_e] != local_e);
         });
 
@@ -198,8 +199,8 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
 
     // Store edge mask by AND'ing the mask in shared memory with that in
     // global memory
-    for (uint16_t e = threadIdx.x; e < mask_size_e; e += blockThreads) {
-        patch_info.mask_e[e] &= s_mask_e[e];
+    for (uint16_t e = threadIdx.x; e < active_mask_e_size; e += blockThreads) {
+        patch_info.active_mask_e[e] &= s_active_mask_e[e];
     }
 
     __syncthreads();

@@ -958,7 +958,7 @@ class RXMeshStatic : public RXMesh
 
             RXMESH_TRACE(
                 "RXMeshStatic::check_shared_memory() available total shared "
-                "memory per block = {} (bytes) = {} (Kb)",
+                "memory per block = {} (bytes) = {} (Kb)\n",
                 devProp.sharedMemPerBlock,
                 float(devProp.sharedMemPerBlock) / 1024.0f);
         }

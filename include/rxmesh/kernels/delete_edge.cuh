@@ -25,14 +25,15 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
     const uint16_t num_edges       = patch_info.num_edges;
 
     // shared memory used to store EV and FE
-    const uint16_t             mask_size = DIVIDE_UP(num_edges, 32);
+    const uint16_t             active_mask_e_size = DIVIDE_UP(num_edges, 32);
     extern __shared__ uint32_t shrd_mem32[];
     extern __shared__ uint16_t shrd_mem[];
-    uint32_t*                  s_mask_e = shrd_mem32;
-    uint16_t*                  s_fe     = &shrd_mem[2 * mask_size];
+    uint32_t*                  s_active_mask_e = shrd_mem32;
+    uint16_t*                  s_fe     = &shrd_mem[2 * active_mask_e_size];
 
     // load edges mask into shared memory
-    load_async(patch_info.mask_e, mask_size, s_mask_e, true);
+    load_async(
+        patch_info.active_mask_e, active_mask_e_size, s_active_mask_e, true);
     __syncthreads();
 
     // start loading FE without sync
@@ -40,13 +41,14 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
 
     // update the bitmask based on user-defined predicate
     update_bitmask<blockThreads>(
-        num_owned_edges, s_mask_e, [&](const uint16_t local_e) {
+        num_owned_edges, s_active_mask_e, [&](const uint16_t local_e) {
             return predicate({patch_id, local_e});
         });
     __syncthreads();
 
     // store edge mask into global memory
-    store<blockThreads>(s_mask_e, mask_size, patch_info.mask_e);
+    store<blockThreads>(
+        s_active_mask_e, active_mask_e_size, patch_info.active_mask_e);
 
     // delete faces incident to deleted edges
     // we only delete faces owned by the patch
@@ -57,13 +59,14 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
     // We may (or may not) get better performance if we read the bitmask into
     // shared memory, operate on it, then store it to global memory
     update_bitmask<blockThreads>(
-        num_owned_faces, patch_info.mask_f, [&](const uint16_t local_f) {
+        num_owned_faces, patch_info.active_mask_f, [&](const uint16_t local_f) {
             const uint16_t e0 = s_fe[3 * local_f + 0] >> 1;
             const uint16_t e1 = s_fe[3 * local_f + 1] >> 1;
             const uint16_t e2 = s_fe[3 * local_f + 2] >> 1;
 
-            return is_deleted(e0, s_mask_e) || is_deleted(e1, s_mask_e) ||
-                   is_deleted(e2, s_mask_e);
+            return is_deleted(e0, s_active_mask_e) ||
+                   is_deleted(e1, s_active_mask_e) ||
+                   is_deleted(e2, s_active_mask_e);
         });
     __syncthreads();
 }

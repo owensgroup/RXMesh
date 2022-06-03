@@ -24,22 +24,24 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
     const uint16_t num_faces       = patch_info.num_faces;
 
     // load face's bitmask to shared memory
-    const uint16_t             mask_size = DIVIDE_UP(num_faces, 32);
+    const uint16_t             active_mask_f_size = DIVIDE_UP(num_faces, 32);
     extern __shared__ uint32_t shrd_mem32[];
-    uint32_t*                  s_mask_f = shrd_mem32;
+    uint32_t*                  s_active_mask_f = shrd_mem32;
 
-    load_async(patch_info.mask_f, mask_size, s_mask_f, true);
+    load_async(
+        patch_info.active_mask_f, active_mask_f_size, s_active_mask_f, true);
     __syncthreads();
 
     // update the bitmask based on user-defined predicate
     update_bitmask<blockThreads>(
-        num_owned_faces, s_mask_f, [&](const uint16_t local_f) {
+        num_owned_faces, s_active_mask_f, [&](const uint16_t local_f) {
             return predicate({patch_id, local_f});
         });
     __syncthreads();
 
     // store the bitmask back to global memory
-    store<blockThreads>(s_mask_f, mask_size, patch_info.mask_f);
+    store<blockThreads>(
+        s_active_mask_f, active_mask_f_size, patch_info.active_mask_f);
     __syncthreads();
 }
 }  // namespace detail

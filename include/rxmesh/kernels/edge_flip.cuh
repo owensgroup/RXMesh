@@ -50,14 +50,14 @@ __device__ __inline__ void edge_flip(PatchInfo&       patch_info,
     // to-be-flipped edges. We use the version that is optimized for
     // manifolds (we don't flip non-manifold edges)
     e_f_manifold<blockThreads>(
-        num_edges, num_faces, s_fe, s_ef, patch_info.mask_e);
+        num_edges, num_faces, s_fe, s_ef, patch_info.active_mask_e);
     __syncthreads();
 
     // loop over all edges--one thread per edge
     block_loop<uint16_t, blockThreads, false>(
         num_owned_edges, [&](const uint16_t local_e) {
             // Do nothing if this edge is deleted
-            if (!is_deleted(local_e, patch_info.mask_e)) {
+            if (!is_deleted(local_e, patch_info.active_mask_e)) {
 
                 // check if we should flip this edge based on the user-supplied
                 // predicate

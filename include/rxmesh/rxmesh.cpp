@@ -591,8 +591,6 @@ void RXMesh::build_device()
     CUDA_ERROR(cudaMalloc((void**)&m_d_patches_info,
                           m_num_patches * sizeof(PatchInfo)));
 
-    // m_h_patches_info = (PatchInfo*)malloc(m_num_patches * sizeof(PatchInfo));
-
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
         PatchInfo d_patch;
@@ -639,7 +637,7 @@ void RXMesh::build_device()
                               cudaMemcpyHostToDevice));
 
         // allocate and set bitmask
-        auto alloc_bitmask =
+        auto alloc_active_bitmask =
             [&](uint32_t*& d_mask, uint32_t*& h_mask, uint32_t size) {
                 size_t num_bytes = mask_num_bytes(size);
                 h_mask           = (uint32_t*)malloc(num_bytes);
@@ -648,15 +646,15 @@ void RXMesh::build_device()
                 CUDA_ERROR(cudaMemset(d_mask, 0xFF, num_bytes));
             };
 
-        alloc_bitmask(d_patch.mask_v,
-                      m_h_patches_info[p].mask_v,
-                      m_h_patches_info[p].vertices_capacity);
-        alloc_bitmask(d_patch.mask_e,
-                      m_h_patches_info[p].mask_e,
-                      m_h_patches_info[p].edges_capacity);
-        alloc_bitmask(d_patch.mask_f,
-                      m_h_patches_info[p].mask_f,
-                      m_h_patches_info[p].faces_capacity);
+        alloc_active_bitmask(d_patch.active_mask_v,
+                             m_h_patches_info[p].active_mask_v,
+                             m_h_patches_info[p].vertices_capacity);
+        alloc_active_bitmask(d_patch.active_mask_e,
+                             m_h_patches_info[p].active_mask_e,
+                             m_h_patches_info[p].edges_capacity);
+        alloc_active_bitmask(d_patch.active_mask_f,
+                             m_h_patches_info[p].active_mask_f,
+                             m_h_patches_info[p].faces_capacity);
 
         // copy not-owned mesh elements to device
 

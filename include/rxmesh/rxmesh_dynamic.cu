@@ -53,14 +53,14 @@ __global__ static void check_uniqueness(const Context           context,
             uint16_t v0 = s_ev[2 * e + 0];
             uint16_t v1 = s_ev[2 * e + 1];
 
-            if (!is_deleted(e, patch_info.mask_e)) {
+            if (!is_deleted(e, patch_info.active_mask_e)) {
 
                 // TODO we should fix this when we are able to apply changes
                 // across ribbons. If an vertex is deleted, it should delete all
                 // edges incident to it. For now, we skip this for ribbon edges
                 if (e >= patch_info.num_owned_edges) {
-                    if (is_deleted(v0, patch_info.mask_v) ||
-                        is_deleted(v1, patch_info.mask_v)) {
+                    if (is_deleted(v0, patch_info.active_mask_v) ||
+                        is_deleted(v1, patch_info.active_mask_v)) {
                         continue;
                     }
                 }
@@ -77,8 +77,8 @@ __global__ static void check_uniqueness(const Context           context,
                     //    v1);
                     ::atomicAdd(d_check, 1);
                 }
-                if (is_deleted(v0, patch_info.mask_v) ||
-                    is_deleted(v1, patch_info.mask_v)) {
+                if (is_deleted(v0, patch_info.active_mask_v) ||
+                    is_deleted(v1, patch_info.active_mask_v)) {
                     // printf(
                     //    "\n edge loop: del vertex check p= %u, e= %u, v0= %u,"
                     //    " v1= %u",
@@ -96,7 +96,7 @@ __global__ static void check_uniqueness(const Context           context,
         for (uint16_t f = threadIdx.x; f < patch_info.num_faces;
              f += blockThreads) {
 
-            if (!is_deleted(f, patch_info.mask_f)) {
+            if (!is_deleted(f, patch_info.active_mask_f)) {
                 uint16_t e0, e1, e2;
                 flag_t   d0(0), d1(0), d2(0);
                 Context::unpack_edge_dir(s_fe[3 * f + 0], e0, d0);
@@ -107,9 +107,9 @@ __global__ static void check_uniqueness(const Context           context,
                 // across ribbons. If an edge is deleted, it should delete all
                 // faces incident to it. For now, we skip this for ribbon faces
                 if (f >= patch_info.num_owned_faces) {
-                    if (is_deleted(e0, patch_info.mask_e) ||
-                        is_deleted(e1, patch_info.mask_e) ||
-                        is_deleted(e2, patch_info.mask_e)) {
+                    if (is_deleted(e0, patch_info.active_mask_e) ||
+                        is_deleted(e1, patch_info.active_mask_e) ||
+                        is_deleted(e2, patch_info.active_mask_e)) {
                         continue;
                     }
                 }
@@ -128,9 +128,9 @@ __global__ static void check_uniqueness(const Context           context,
                     ::atomicAdd(d_check, 1);
                 }
 
-                if (is_deleted(e0, patch_info.mask_e) ||
-                    is_deleted(e1, patch_info.mask_e) ||
-                    is_deleted(e2, patch_info.mask_e)) {
+                if (is_deleted(e0, patch_info.active_mask_e) ||
+                    is_deleted(e1, patch_info.active_mask_e) ||
+                    is_deleted(e2, patch_info.active_mask_e)) {
                     // printf(
                     //    "\n face loop: del edge check p= %u, f= %u, e0= %u, "
                     //    "e1= %u, e2= %u",
@@ -151,9 +151,9 @@ __global__ static void check_uniqueness(const Context           context,
                 // across ribbons. If an vertex is deleted, it should delete all
                 // faces incident to it. For now, we skip this for ribbon faces
                 if (f >= patch_info.num_owned_faces) {
-                    if (is_deleted(v0, patch_info.mask_v) ||
-                        is_deleted(v1, patch_info.mask_v) ||
-                        is_deleted(v2, patch_info.mask_v)) {
+                    if (is_deleted(v0, patch_info.active_mask_v) ||
+                        is_deleted(v1, patch_info.active_mask_v) ||
+                        is_deleted(v2, patch_info.active_mask_v)) {
                         continue;
                     }
                 }
@@ -176,9 +176,9 @@ __global__ static void check_uniqueness(const Context           context,
                     ::atomicAdd(d_check, 1);
                 }
 
-                if (is_deleted(v0, patch_info.mask_v) ||
-                    is_deleted(v1, patch_info.mask_v) ||
-                    is_deleted(v2, patch_info.mask_v)) {
+                if (is_deleted(v0, patch_info.active_mask_v) ||
+                    is_deleted(v1, patch_info.active_mask_v) ||
+                    is_deleted(v2, patch_info.active_mask_v)) {
                     // printf(
                     //    "\n face loop: del vertex check p= %u, f= %u, v0= %u,
                     //    " "v1= %u, v2= %u", patch_id, f, v0, v1, v2);
@@ -241,7 +241,7 @@ __global__ static void check_not_owned(const Context           context,
             f_owned                    = patch_info.not_owned_id_f[f_owned].id;
             PatchInfo owner_patch_info = context.get_patches_info()[f_patch];
 
-            if (!is_deleted(f_owned, owner_patch_info.mask_f)) {
+            if (!is_deleted(f_owned, owner_patch_info.active_mask_f)) {
                 // TODO this is a scatter read from global that could be
                 // improved by using shared memory
                 uint16_t ew0, ew1, ew2;
@@ -293,7 +293,7 @@ __global__ static void check_not_owned(const Context           context,
             e_owned                    = patch_info.not_owned_id_e[e_owned].id;
             PatchInfo owner_patch_info = context.get_patches_info()[e_patch];
 
-            if (!is_deleted(e_owned, owner_patch_info.mask_e)) {
+            if (!is_deleted(e_owned, owner_patch_info.active_mask_e)) {
                 // TODO this is a scatter read from global that could be
                 // improved by using shared memory
                 uint16_t vw0 = owner_patch_info.ev[2 * e_owned + 0].id;
@@ -506,13 +506,14 @@ void RXMeshDynamic::update_host()
         out_num_elements       = in_num_elements;
     };
 
-    auto resize_mask = [&](uint16_t size, uint16_t& capacity, uint32_t*& mask) {
-        if (size > capacity) {
-            capacity = size;
-            free(mask);
-            mask = (uint32_t*)malloc(mask_num_bytes(size));
-        }
-    };
+    auto resize_active_mask =
+        [&](uint16_t size, uint16_t& capacity, uint32_t*& mask) {
+            if (size > capacity) {
+                capacity = size;
+                free(mask);
+                mask = (uint32_t*)malloc(mask_num_bytes(size));
+            }
+        };
 
     for (uint32_t p = 0; p < m_num_patches; ++p) {
         PatchInfo d_patch;
@@ -557,15 +558,15 @@ void RXMeshDynamic::update_host()
                          m_h_patches_info[p].not_owned_id_f);
 
         // resize mask (update capacity)
-        resize_mask(d_patch.num_vertices,
-                    m_h_patches_info[p].vertices_capacity,
-                    m_h_patches_info[p].mask_v);
-        resize_mask(d_patch.num_edges,
-                    m_h_patches_info[p].edges_capacity,
-                    m_h_patches_info[p].mask_e);
-        resize_mask(d_patch.num_faces,
-                    m_h_patches_info[p].faces_capacity,
-                    m_h_patches_info[p].mask_f);
+        resize_active_mask(d_patch.num_vertices,
+                           m_h_patches_info[p].vertices_capacity,
+                           m_h_patches_info[p].active_mask_v);
+        resize_active_mask(d_patch.num_edges,
+                           m_h_patches_info[p].edges_capacity,
+                           m_h_patches_info[p].active_mask_e);
+        resize_active_mask(d_patch.num_faces,
+                           m_h_patches_info[p].faces_capacity,
+                           m_h_patches_info[p].active_mask_f);
 
         // copy topology
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].ev,
@@ -613,16 +614,16 @@ void RXMeshDynamic::update_host()
             cudaMemcpyDeviceToHost));
 
         // mask
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].mask_v,
-                              d_patch.mask_v,
+        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_v,
+                              d_patch.active_mask_v,
                               mask_num_bytes(d_patch.num_vertices),
                               cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].mask_e,
-                              d_patch.mask_e,
+        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_e,
+                              d_patch.active_mask_e,
                               mask_num_bytes(d_patch.num_edges),
                               cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].mask_f,
-                              d_patch.mask_f,
+        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_f,
+                              d_patch.active_mask_f,
                               mask_num_bytes(d_patch.num_faces),
                               cudaMemcpyDeviceToHost));
     }
