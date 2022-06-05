@@ -1,9 +1,5 @@
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 
-if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
-  cmake_policy(SET CMP0104 OLD)
-endif()
-
 project(RXMesh 
         VERSION 0.2.1 
         LANGUAGES C CXX CUDA)
@@ -71,7 +67,7 @@ FetchContent_Declare(polyscope
 FetchContent_MakeAvailable(polyscope)
 endif()
 
-# Auto-detect GPU architecture, sets ${CUDA_ARCHS}
+# Auto-detect GPU architecture
 include("cmake/AutoDetectCudaArch.cmake")
 
 # Direct all output to /bin directory
@@ -118,8 +114,7 @@ set(cuda_flags
     -Xcompiler=$<$<CXX_COMPILER_ID:GNU>:-Wall -fopenmp -O3 -Wno-unused-function>
     #Disables warning
     #177-D "function XXX was declared but never referenced"
-    -Xcudafe "--display_error_number --diag_suppress=177"
-    ${CUDA_ARCHS}
+    -Xcudafe "--display_error_number --diag_suppress=177"    
     -rdc=true
 	-lineinfo	
 	--expt-extended-lambda	

@@ -29,7 +29,7 @@ int main() {
 				else { return -1; }
 			}
 			if (is_unique) {
-				fprintf(stderr, "--generate-code=arch=compute_%d%d,code=sm_%d%d;", prop.major, prop.minor, prop.major, prop.minor);
+				fprintf(stderr, "%d%d", prop.major, prop.minor);
 			}
 		}
 		else { return -1; }
@@ -46,26 +46,13 @@ int main() {
 						OUTPUT_STRIP_TRAILING_WHITESPACE)							
 		
 		if(CUDA_RETURN_CODE EQUAL 0)			
-			set(CUDA_ARCHS ${fprintf_output} CACHE STRING "CUDA Arch")			
+			set(CMAKE_CUDA_ARCHITECTURES ${fprintf_output})
 		else()
 			message(STATUS "GPU architectures auto-detect failed. Will build for sm_70.")      
-			set(CUDA_ARCHS #"--generate-code=arch=compute_35,code=sm_35;"
-						   #"--generate-code=arch=compute_37,code=sm_37;"
-			               #"--generate-code=arch=compute_50,code=sm_50;"
-			               #"--generate-code=arch=compute_52,code=sm_52;"
-			               #"--generate-code=arch=compute_60,code=sm_60;"
-			               #"--generate-code=arch=compute_61,code=sm_61;"
-			               --generate-code=arch=compute_70,code=sm_70;
-			               #"--generate-code=arch=compute_72,code=sm_72;"
-			               #"--generate-code=arch=compute_75,code=sm_75;"
-						   CACHE STRING "CUDA Arch")			
+			set(CMAKE_CUDA_ARCHITECTURES 70)		
 		endif()  
 	endif()	
-	message(STATUS "CUDA_ARCHS= " ${CUDA_ARCHS})	
-	if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-		#https://gitlab.kitware.com/cmake/cmake/-/issues/18265	
-		list(APPEND CMAKE_CUDA_FLAGS "${CUDA_ARCHS}")	
-	endif ()	
+	message(STATUS "CUDA architectures= " ${CMAKE_CUDA_ARCHITECTURES})	
 endif()
 ###################################################################################
 
