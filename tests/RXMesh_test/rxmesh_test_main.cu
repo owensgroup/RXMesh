@@ -28,6 +28,7 @@ struct RXMeshTestArg
 #include "test_deletion.cuh"
 #include "test_edge_collapse.cuh"
 #include "test_edge_split.cuh"
+#include "test_lp_pair.h"
 // clang-format on
 
 int main(int argc, char** argv)

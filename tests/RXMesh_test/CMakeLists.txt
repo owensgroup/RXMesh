@@ -18,6 +18,7 @@ set( SOURCE_LIST
 	test_deletion.cuh
 	test_edge_collapse.cuh
 	test_edge_split.cuh
+	test_lp_pair.h
 )
 
 target_sources( RXMesh_test 
