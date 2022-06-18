@@ -1,9 +1,9 @@
 #pragma once
-#include <cuda_runtime_api.h>
 #include <stdint.h>
-#include <string>
-#include <utility>
+
 #include "rxmesh/local.h"
+#include "rxmesh/lp_hashtable.cuh"
+#include "rxmesh/patch_stash.cuh"
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
@@ -48,4 +48,42 @@ struct ALIGN(16) PatchInfo
     uint32_t patch_id;
 };
 
+
+/**
+ * @brief PatchInfo stores the information needed for query operations in a
+ * patch
+ */
+struct ALIGN(16) PatchInfoV2
+{
+    // The topology information: edge incident vertices and face incident edges
+    LocalVertexT* ev;
+    LocalEdgeT*   fe;
+
+
+    // Active bitmask where 1 indicates active/existing mesh element and 0
+    // if the mesh element is deleted
+    uint32_t *active_mask_v, *active_mask_e, *active_mask_f;
+
+    // Owned bitmask where 1 indicates that the mesh element is owned by this
+    // patch
+    uint32_t *owned_mask_v, *owned_mask_e, *owned_mask_f;
+
+    // Number of mesh elements in the patch
+    uint16_t num_vertices, num_edges, num_faces;
+
+    // Capacity of v/e/f. This controls the allocations of ev, fe,
+    // active_mask_v/e/f, owned_mask_v/e/f
+    uint16_t vertices_capacity, edges_capacity, faces_capacity;
+
+    // The index of this patch (relative to all other patches)
+    uint32_t patch_id;
+
+    // neighbor patches stash
+    PatchStash patch_stash;
+
+    // Hash table storing the mapping from local indices of ribbon (not-owned)
+    // mesh elements to their owner patch and their local indices in their owner
+    // patch
+    LPHashTable lp_v, lp_e, lp_f;
+};
 }  // namespace rxmesh
