@@ -1,3 +1,4 @@
+#pragma once
 #include <assert.h>
 #include <cuda_runtime.h>
 #include <stdint.h>
@@ -69,6 +70,15 @@ struct LPPair
     {
         // get the high 16 bits by shift right
         return m_pair >> (LIDOwnerNumBits + PatchStashNumBits);
+    }
+
+    /**
+     * @brief the key used for hashing
+     */
+    __device__ __host__ __inline__ uint16_t key() const
+    {
+        // get the high 16 bits by shift right
+        return local_id();
     }
 
     /**
