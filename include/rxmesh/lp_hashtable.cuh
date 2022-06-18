@@ -16,6 +16,7 @@
  */
 
 #pragma once
+#include <algorithm>
 #include <random>
 
 #include "rxmesh/hash_functions.cuh"
@@ -23,7 +24,6 @@
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
-
 /**
  * @brief Hash table storing a patch's ribbon (not-owned) mesh elements where
  * the key is the local index within the patch and the value is the local index
@@ -131,6 +131,79 @@ struct LPHashTable
         m_hasher2 = initialize_hf<universal_hash<LPPair>>(rng);
         m_hasher3 = initialize_hf<universal_hash<LPPair>>(rng);
     }
+
+    /**
+     * @brief Load the memory used for the hash table into a shared memory
+     * buffer
+     */
+    template <uint32_t blockSize>
+    __device__ __inline__ void load_in_shared_memory(LPPair* s_table) const
+    {
+        for (int i = threadIdx.x; i < m_capacity; i += blockSize) {
+            s_table[i] = m_table[i];
+        }
+    }
+
+    /**
+     * @brief write the content of the hash table from (likely shared memory)
+     * buffer
+     */
+    template <uint32_t blockSize>
+    __device__ __inline__ void write_to_global_memory(const LPPair* s_table)
+    {
+        for (int i = threadIdx.x; i < m_capacity; i += blockSize) {
+            m_table[i] = s_table[i];
+        }
+    }
+
+    /**
+     * @brief Insert new key in the table. This function can be called from host
+     * (not thread safe) or from the device (by a single thread). The table
+     * itself is part of the input in case it was loaded in shared memory.
+     * Otherwise, this function can be called as
+     *  LPHashTable map;
+     *  map.insert(key, map.get_table());
+     *
+     * @param key to be inserted in the hash table
+     * @param table pointer to the hash table (could shared memory on the
+     * device)
+     * @return true if the insertion succeeded and false otherwise
+     */
+    __host__ __device__ __inline__ bool insert(LPPair           key,
+                                               volatile LPPair* table)
+    {
+
+        auto     bucket_id      = m_hasher0(key) % m_capacity;
+        uint16_t cuckoo_counter = 0;
+
+        do {
+#ifdef __CUDA_ARCH__
+            key.m_pair = ::atomicExch((uint32_t*)table + bucket_id, key.m_pair);
+#else
+
+            std::swap(key.m_pair, uint32_t(table[bucket_id].m_pair));
+#endif
+
+            if (key.m_pair == INVALID32) {
+                return true;
+            } else {
+                auto bucket0 = m_hasher0(key) % m_capacity;
+                auto bucket1 = m_hasher1(key) % m_capacity;
+                auto bucket2 = m_hasher2(key) % m_capacity;
+                auto bucket3 = m_hasher3(key) % m_capacity;
+
+                auto new_bucket_id = bucket0;
+                new_bucket_id = bucket_id == bucket2 ? bucket3 : new_bucket_id;
+                new_bucket_id = bucket_id == bucket1 ? bucket2 : new_bucket_id;
+                new_bucket_id = bucket_id == bucket0 ? bucket1 : new_bucket_id;
+
+                bucket_id = new_bucket_id;
+            }
+            cuckoo_counter++;
+        } while (cuckoo_counter < m_max_cuckoo_chains);
+        return false;
+    }
+
 
    private:
     LPPair*                m_table;

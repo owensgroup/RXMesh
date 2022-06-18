@@ -10,7 +10,7 @@ namespace rxmesh {
  */
 struct PatchStash
 {
-    const uint32_t get_patch(uint8_t id) const
+    uint32_t get_patch(uint8_t id) const
     {
         return m_stash[id];
     }

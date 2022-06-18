@@ -31,6 +31,8 @@ struct LPPair
     // Number of bits reserved for the owner patch ID in the PatchStash
     constexpr static uint32_t PatchStashNumBits = 4;
 
+    using KeyT   = uint16_t;
+    using ValueT = uint16_t;
 
     /**
      * @brief Constructor using the local ID, local id with the owner patch,
@@ -75,7 +77,7 @@ struct LPPair
     /**
      * @brief the key used for hashing
      */
-    __device__ __host__ __inline__ uint16_t key() const
+    __device__ __host__ __inline__ KeyT key() const
     {
         // get the high 16 bits by shift right
         return local_id();
