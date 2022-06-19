@@ -34,7 +34,6 @@ struct mars_rng_32
     }
 };
 
-template <typename KeyT>
 struct universal_hash
 {
     __host__ __device__ constexpr universal_hash(uint32_t hash_x,
@@ -44,9 +43,9 @@ struct universal_hash
     }
 
     constexpr uint32_t __host__ __device__ __inline__ operator()(
-        const KeyT k) const
+        const uint16_t k) const
     {
-        return (((m_hash_x ^ k.key()) + m_hash_y) % prime_divisor);
+        return (((m_hash_x ^ k) + m_hash_y) % prime_divisor);
     }
 
     universal_hash(const universal_hash&) = default;

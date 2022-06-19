@@ -126,10 +126,10 @@ struct LPHashTable
     template <typename RNG>
     void randomize_hash_functions(RNG& rng)
     {
-        m_hasher0 = initialize_hf<universal_hash<LPPair>>(rng);
-        m_hasher1 = initialize_hf<universal_hash<LPPair>>(rng);
-        m_hasher2 = initialize_hf<universal_hash<LPPair>>(rng);
-        m_hasher3 = initialize_hf<universal_hash<LPPair>>(rng);
+        m_hasher0 = initialize_hf<universal_hash>(rng);
+        m_hasher1 = initialize_hf<universal_hash>(rng);
+        m_hasher2 = initialize_hf<universal_hash>(rng);
+        m_hasher3 = initialize_hf<universal_hash>(rng);
     }
 
     /**
@@ -173,7 +173,7 @@ struct LPHashTable
                                                volatile LPPair* table)
     {
 
-        auto     bucket_id      = m_hasher0(key) % m_capacity;
+        auto     bucket_id      = m_hasher0(key.key()) % m_capacity;
         uint16_t cuckoo_counter = 0;
 
         do {
@@ -187,10 +187,10 @@ struct LPHashTable
             if (key.m_pair == INVALID32) {
                 return true;
             } else {
-                auto bucket0 = m_hasher0(key) % m_capacity;
-                auto bucket1 = m_hasher1(key) % m_capacity;
-                auto bucket2 = m_hasher2(key) % m_capacity;
-                auto bucket3 = m_hasher3(key) % m_capacity;
+                auto bucket0 = m_hasher0(key.key()) % m_capacity;
+                auto bucket1 = m_hasher1(key.key()) % m_capacity;
+                auto bucket2 = m_hasher2(key.key()) % m_capacity;
+                auto bucket3 = m_hasher3(key.key()) % m_capacity;
 
                 auto new_bucket_id = bucket0;
                 new_bucket_id = bucket_id == bucket2 ? bucket3 : new_bucket_id;
@@ -204,15 +204,48 @@ struct LPHashTable
         return false;
     }
 
+    /**
+     * @brief Find a pair in the hash table given its key.
+     * @param key input key
+     * @param table pointer to the hash table (could shared memory on the
+     * device)
+     * @return a LPPair pair that contains the key and its associated value
+     */
+    __host__ __device__ __inline__ LPPair find(const typename LPPair::KeyT key,
+                                               const LPPair* table)
+    {
+
+        constexpr int num_hfs   = 4;
+        auto          bucket_id = m_hasher0(key) % m_capacity;
+        for (int hf = 0; hf < num_hfs; ++hf) {
+
+            LPPair found = table[bucket_id];
+
+            if (found.key() == key) {
+                return found;
+            } else if (found.m_pair == INVALID32) {
+                return found;
+            } else {
+                if (hf == 0) {
+                    bucket_id = m_hasher1(key) % m_capacity;
+                } else if (hf == 1) {
+                    bucket_id = m_hasher2(key) % m_capacity;
+                } else {
+                    bucket_id = m_hasher3(key) % m_capacity;
+                }
+            }
+        }
+        return LPPair::sentinel_pair();
+    }
 
    private:
-    LPPair*                m_table;
-    universal_hash<LPPair> m_hasher0;
-    universal_hash<LPPair> m_hasher1;
-    universal_hash<LPPair> m_hasher2;
-    universal_hash<LPPair> m_hasher3;
-    uint16_t               m_capacity;
-    uint16_t               m_max_cuckoo_chains;
-    bool                   m_is_on_device;
+    LPPair*        m_table;
+    universal_hash m_hasher0;
+    universal_hash m_hasher1;
+    universal_hash m_hasher2;
+    universal_hash m_hasher3;
+    uint16_t       m_capacity;
+    uint16_t       m_max_cuckoo_chains;
+    bool           m_is_on_device;
 };
 }  // namespace rxmesh
