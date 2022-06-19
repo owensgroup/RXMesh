@@ -50,9 +50,10 @@ struct LPPair
             "The sum of LIDNumBits, LIDOwnerNumBits, and PatchStashNumBits "
             "should be 32");
 
-
-        assert(local_id_in_owner_patch < (1 << LIDOwnerNumBits));
-        assert(owner_patch < (1 << PatchStashNumBits));
+        assert(local_id_in_owner_patch == INVALID16 ||
+               local_id_in_owner_patch <= (1 << LIDOwnerNumBits));
+        assert(owner_patch == INVALID8 ||
+               owner_patch <= (1 << PatchStashNumBits));
 
         uint32_t pv  = local_id_in_owner_patch;
         uint16_t p16 = static_cast<uint16_t>(owner_patch);
@@ -62,6 +63,22 @@ struct LPPair
         m_pair = local_id;
         m_pair = m_pair << 16;
         m_pair |= pv;
+    }
+
+    /**
+     * @brief Construct and return a tombstone pair
+     */
+    static LPPair sentinel_pair()
+    {
+        return LPPair(INVALID16, INVALID16, INVALID8);
+    }
+
+    /**
+     * @brief Check if a pair is a tombstone
+     */
+    bool is_sentinel() const
+    {
+        return m_pair == INVALID32;
     }
 
     /**

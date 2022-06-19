@@ -13,4 +13,7 @@ TEST(RXMesh, LP_Pair)
     EXPECT_EQ(pair.local_id(), local_id);
     EXPECT_EQ(pair.local_id_in_owner_patch(), local_id_owner_patch);
     EXPECT_EQ(pair.patch_stash_id(), patch);
+
+    LPPair tombstone = LPPair::sentinel_pair();
+    EXPECT_TRUE(tombstone.is_sentinel());
 }
