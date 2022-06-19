@@ -41,9 +41,9 @@ struct LPPair
      * @param local_id_in_owner_patch the local index within the owner patch
      * @param owner_patch the owner patch id within the PatchStash
      */
-    explicit LPPair(uint16_t local_id,
-                    uint16_t local_id_in_owner_patch,
-                    uint8_t  owner_patch)
+    __host__ __device__ explicit LPPair(uint16_t local_id,
+                                        uint16_t local_id_in_owner_patch,
+                                        uint8_t  owner_patch)
     {
         static_assert(
             LIDNumBits + LIDOwnerNumBits + PatchStashNumBits == 32,
@@ -65,10 +65,17 @@ struct LPPair
         m_pair |= pv;
     }
 
+    LPPair()                    = default;
+    LPPair(const LPPair& other) = default;
+    LPPair(LPPair&&)            = default;
+    LPPair& operator=(const LPPair&) = default;
+    LPPair& operator=(LPPair&&) = default;
+    virtual ~LPPair()           = default;
+
     /**
      * @brief Construct and return a tombstone pair
      */
-    static LPPair sentinel_pair()
+    __host__ __device__ static LPPair sentinel_pair()
     {
         return LPPair(INVALID16, INVALID16, INVALID8);
     }

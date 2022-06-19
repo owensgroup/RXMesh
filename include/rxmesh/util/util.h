@@ -119,6 +119,17 @@ inline void fill_with_sequential_numbers(T*             arr,
 
 
 /**
+ * @brief Fill in an array with random numbers
+ */
+template <typename T>
+inline void fill_with_random_numbers(T* arr, const uint32_t size)
+{
+    fill_with_sequential_numbers(arr, size);
+    random_shuffle(arr, size);
+}
+
+
+/**
  * @brief Compare the content of two input arrays
  */
 template <typename T, typename dataT>
