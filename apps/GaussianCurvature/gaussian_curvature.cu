@@ -119,10 +119,10 @@ TEST(Apps, VertexNormal)
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
 
-    RXMeshStatic rxmesh(Faces, false);
+    RXMeshStatic rxmesh(Faces, false); // FV initialize
 
     // Serial reference
-    std::vector<dataT> gaussian_curvature_gold(3 * Verts.size());
+    std::vector<dataT> gaussian_curvature_gold(Verts.size());
     gaussian_curvature_ref(Faces, Verts, gaussian_curvature_gold);
 
     // RXMesh Impl

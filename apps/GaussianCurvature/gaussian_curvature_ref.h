@@ -2,6 +2,8 @@
 #include <vector>
 #include "rxmesh/util/report.h"
 
+const double PI = 3.1415926535897932384626433832795028841971693993751058209;
+
 template <typename T>
 inline void gaussian_curvature_ref(const std::vector<std::vector<uint32_t>>& Faces,
                               const std::vector<std::vector<T>>&        Verts,
@@ -10,7 +12,7 @@ inline void gaussian_curvature_ref(const std::vector<std::vector<uint32_t>>& Fac
     uint32_t num_vertices = Verts.size();
     uint32_t num_faces    = Faces.size();
 
-    memset((void*)gaussian_curvature.data(), 2 * 3.141593, gaussian_curvature.size() * sizeof(T));
+    memset((void*)gaussian_curvature.data(), 2 * PI, gaussian_curvature.size() * sizeof(T));
 
     T        edge_len[3];
     uint32_t v[3];
@@ -73,9 +75,7 @@ inline void gaussian_curvature_ref(const std::vector<std::vector<uint32_t>>& Fac
                         Verts[v[k2]][2] - Verts[v[i]][2],
                         c);
 
-            for (uint32_t l = 0; l < 3; ++l) {
-                gaussian_curvature[base + l] -= atan2(s,c);
-            }
+            gaussian_curvature[base + l] -= atan2(s,c);
         }
     } 
 }

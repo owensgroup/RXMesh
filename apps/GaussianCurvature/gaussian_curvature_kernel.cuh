@@ -5,10 +5,10 @@
 #include "rxmesh/kernels/query_dispatcher.cuh"
 #include "rxmesh/util/vector.h"
 /**
- * vertex_normal()
+ * gaussian_curvature()
  */
 template <typename T, uint32_t blockThreads>
-__global__ static void compute_vertex_normal(const rxmesh::Context      context,
+__global__ static void compute_gaussian_curvature(const rxmesh::Context      context,
                                              rxmesh::VertexAttribute<T> coords,
                                              rxmesh::VertexAttribute<T> normals)
 {
