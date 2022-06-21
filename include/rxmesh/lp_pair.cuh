@@ -120,10 +120,10 @@ struct LPPair
      * @brief returns the id within the patch stash where the owner patch ID is
      * stored
      */
-    __device__ __host__ __inline__ uint16_t patch_stash_id() const
+    __device__ __host__ __inline__ uint8_t patch_stash_id() const
     {
         const uint16_t temp = m_pair >> (LIDOwnerNumBits);
-        return temp & ((1 << PatchStashNumBits) - 1);
+        return static_cast<uint8_t>(temp & ((1 << PatchStashNumBits) - 1));
     }
 
     uint32_t m_pair;
