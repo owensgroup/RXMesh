@@ -55,6 +55,13 @@ struct ALIGN(16) PatchInfo
  */
 struct ALIGN(16) PatchInfoV2
 {
+    PatchInfoV2()                         = default;
+    PatchInfoV2(const PatchInfoV2& other) = default;
+    PatchInfoV2(PatchInfoV2&&)            = default;
+    PatchInfoV2& operator=(const PatchInfoV2&) = default;
+    PatchInfoV2& operator=(PatchInfoV2&&) = default;
+    virtual ~PatchInfoV2()                = default;
+
     // The topology information: edge incident vertices and face incident edges
     LocalVertexT* ev;
     LocalEdgeT*   fe;

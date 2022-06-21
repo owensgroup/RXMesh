@@ -32,6 +32,13 @@ namespace rxmesh {
  */
 struct LPHashTable
 {
+    LPHashTable()                         = default;
+    LPHashTable(const LPHashTable& other) = default;
+    LPHashTable(LPHashTable&&)            = default;
+    LPHashTable& operator=(const LPHashTable&) = default;
+    LPHashTable& operator=(LPHashTable&&) = default;
+    virtual ~LPHashTable()                = default;
+
     /**
      * @brief Constructor using the hash table capacity.This is used as
      * allocation size
