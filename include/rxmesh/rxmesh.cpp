@@ -50,6 +50,7 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     }
     build(fv);
     build_device();
+    //build_device_v2();
     calc_max_not_owned_elements();
 
     // Allocate and copy the context to the gpu
@@ -833,28 +834,69 @@ void RXMesh::build_device_v2()
                 }
             }
 
-            CUDA_ERROR(cudaMemcpy(d_mask, h_mask, mask_num_bytes(size)));
+            CUDA_ERROR(cudaMemcpy(
+                d_mask, h_mask, mask_num_bytes(size), cudaMemcpyHostToDevice));
         };
 
+        // vertices active mask
         alloc_bitmask(d_patch.active_mask_v,
                       m_h_patches_info_v2[p].active_mask_v,
                       m_h_patches_info_v2[p].vertices_capacity);
+        update_then_copy_bitmask(
+            d_patch.active_mask_v,
+            m_h_patches_info_v2[p].active_mask_v,
+            m_h_patches_info_v2[p].vertices_capacity,
+            [&](uint16_t v) { return v < d_patch.num_vertices; });
+
+        // edges active mask
         alloc_bitmask(d_patch.active_mask_e,
                       m_h_patches_info_v2[p].active_mask_e,
                       m_h_patches_info_v2[p].edges_capacity);
+        update_then_copy_bitmask(
+            d_patch.active_mask_e,
+            m_h_patches_info_v2[p].active_mask_e,
+            m_h_patches_info_v2[p].edges_capacity,
+            [&](uint16_t e) { return e < d_patch.num_edges; });
+
+        // faces active mask
         alloc_bitmask(d_patch.active_mask_f,
                       m_h_patches_info_v2[p].active_mask_f,
                       m_h_patches_info_v2[p].faces_capacity);
+        update_then_copy_bitmask(
+            d_patch.active_mask_f,
+            m_h_patches_info_v2[p].active_mask_f,
+            m_h_patches_info_v2[p].faces_capacity,
+            [&](uint16_t f) { return f < d_patch.num_faces; });
 
+        // vertices owned mask
         alloc_bitmask(d_patch.owned_mask_v,
                       m_h_patches_info_v2[p].owned_mask_v,
                       m_h_patches_info_v2[p].vertices_capacity);
+        update_then_copy_bitmask(
+            d_patch.owned_mask_v,
+            m_h_patches_info_v2[p].owned_mask_v,
+            m_h_patches_info_v2[p].vertices_capacity,
+            [&](uint16_t v) { return v < m_h_num_owned_v[p]; });
+
+        // edges owned mask
         alloc_bitmask(d_patch.owned_mask_e,
                       m_h_patches_info_v2[p].owned_mask_e,
                       m_h_patches_info_v2[p].edges_capacity);
+        update_then_copy_bitmask(
+            d_patch.owned_mask_e,
+            m_h_patches_info_v2[p].owned_mask_e,
+            m_h_patches_info_v2[p].edges_capacity,
+            [&](uint16_t e) { return e < m_h_num_owned_e[p]; });
+
+        // faces owned mask
         alloc_bitmask(d_patch.owned_mask_f,
                       m_h_patches_info_v2[p].owned_mask_f,
                       m_h_patches_info_v2[p].faces_capacity);
+        update_then_copy_bitmask(
+            d_patch.owned_mask_f,
+            m_h_patches_info_v2[p].owned_mask_f,
+            m_h_patches_info_v2[p].faces_capacity,
+            [&](uint16_t f) { return f < m_h_num_owned_f[p]; });
 
         // copy not-owned mesh elements to device
 

@@ -55,7 +55,23 @@ struct ALIGN(16) PatchInfo
  */
 struct ALIGN(16) PatchInfoV2
 {
-    PatchInfoV2()                         = default;
+    PatchInfoV2()
+        : ev(nullptr),
+          fe(nullptr),
+          active_mask_v(nullptr),
+          active_mask_e(nullptr),
+          active_mask_f(nullptr),
+          owned_mask_v(nullptr),
+          owned_mask_e(nullptr),
+          owned_mask_f(nullptr),
+          num_vertices(0),
+          num_edges(0),
+          num_faces(0),
+          vertices_capacity(0),
+          edges_capacity(0),
+          faces_capacity(0),
+          patch_id(INVALID32){};
+
     PatchInfoV2(const PatchInfoV2& other) = default;
     PatchInfoV2(PatchInfoV2&&)            = default;
     PatchInfoV2& operator=(const PatchInfoV2&) = default;
