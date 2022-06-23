@@ -10,7 +10,15 @@ namespace rxmesh {
  */
 struct PatchStash
 {
-    PatchStash()                        = default;
+    static constexpr uint8_t stash_size = (1 << LPPair::PatchStashNumBits);
+
+    PatchStash()
+    {
+        for (uint8_t i = 0; i < stash_size; ++i) {
+            m_stash[i] = INVALID32;
+        }
+    }
+
     PatchStash(const PatchStash& other) = default;
     PatchStash(PatchStash&&)            = default;
     PatchStash& operator=(const PatchStash&) = default;
@@ -37,6 +45,31 @@ struct PatchStash
         return get_patch(p.patch_stash_id());
     }
 
-    uint32_t m_stash[1 << LPPair::PatchStashNumBits];
+    void insert_patch(uint32_t patch)
+    {
+        for (uint8_t i = 0; i < stash_size; ++i) {
+            if (m_stash[i] == patch) {
+                // prevent redundancy
+                return;
+            }
+            if (m_stash[i] == INVALID32) {
+                m_stash[i] = patch;
+                return;
+            }
+        }
+        assert(1 != 1);
+    }
+
+    uint8_t find_patch_index(uint32_t patch) const
+    {
+        for (uint8_t i = 0; i < stash_size; ++i) {
+            if (m_stash[i] == patch) {
+                return i;
+            }
+        }
+        return INVALID8;
+    }
+
+    uint32_t m_stash[stash_size];
 };
 }  // namespace rxmesh

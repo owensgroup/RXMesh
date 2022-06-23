@@ -26,7 +26,8 @@ class Context
           m_num_vertices(nullptr),
           m_num_patches(nullptr),
           m_dirty(nullptr),
-          m_patches_info(nullptr)
+          m_patches_info(nullptr),
+          m_patches_info_v2(nullptr)
     {
     }
 
@@ -83,6 +84,15 @@ class Context
         return m_patches_info;
     }
 
+    /**
+     * @brief A pointer to device PatchInfo used to store various information
+     * about the patches
+     */
+    __device__ __forceinline__ PatchInfoV2* get_patches_info_v2() const
+    {
+        return m_patches_info_v2;
+    }
+
 
     /**
      * @brief Unpack an edge to its edge ID and direction
@@ -112,7 +122,8 @@ class Context
               const uint32_t num_faces,
               const uint32_t num_vertices,
               const uint32_t num_patches,
-              PatchInfo*     patches)
+              PatchInfo*     patches,
+              PatchInfoV2*   patches_v2)
     {
         CUDA_ERROR(cudaMalloc((void**)&m_num_vertices, sizeof(uint32_t)));
         CUDA_ERROR(cudaMalloc((void**)&m_num_edges, sizeof(uint32_t)));
@@ -133,7 +144,8 @@ class Context
                               sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
         CUDA_ERROR(cudaMemset(m_dirty, 0, sizeof(uint32_t)));
-        m_patches_info = patches;
+        m_patches_info    = patches;
+        m_patches_info_v2 = patches_v2;
     }
 
     void release()
@@ -146,8 +158,9 @@ class Context
     }
 
 
-    uint32_t * m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;
-    uint32_t*  m_dirty;
-    PatchInfo* m_patches_info;
+    uint32_t *   m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;
+    uint32_t*    m_dirty;
+    PatchInfo*   m_patches_info;
+    PatchInfoV2* m_patches_info_v2;
 };
 }  // namespace rxmesh

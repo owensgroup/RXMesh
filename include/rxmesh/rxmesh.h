@@ -202,7 +202,8 @@ class RXMesh
 
     void init(const std::vector<std::vector<uint32_t>>& fv,
               const bool                                quite           = false,
-              const float                               capacity_factor = 1.2);
+              const float                               capacity_factor = 1.2,
+              const float lp_hashtable_load_factor                      = 0.6);
 
     /**
      * @brief build different supporting data structure used to build RXMesh
@@ -308,6 +309,6 @@ class RXMesh
 
     PatchInfoV2 *m_d_patches_info_v2, *m_h_patches_info_v2;
 
-    float m_capacity_factor;
+    float m_capacity_factor, m_lp_hashtable_load_factor;
 };
 }  // namespace rxmesh

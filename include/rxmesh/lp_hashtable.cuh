@@ -29,10 +29,25 @@ namespace rxmesh {
  * the key is the local index within the patch and the value is the local index
  * within the owner patch along with an index in the PatchStash. The key and
  * value are combined in a single 32-bit using LBPair.
+ * TODO in order to support deletion, we must distinguish between empty keys and
+ * tombstone. Empty key is a slot that has not been touched before while
+ * tombstone is a slot that has been inserted into before but it is now deleted.
+ * We should then initialize the table with empty keys, then build. During
+ * deletion, we first try to find the key and then replace it with tombstone. If
+ * another key is trying to find its slot in order to delete itself, it may
+ * encounter a tombstone during the cuckoo chain which only means that this
+ * place used to have a pair that has been deleted. In which case, this key
+ * should continue its chain until it find its pair.
  */
 struct LPHashTable
 {
-    LPHashTable()                         = default;
+    LPHashTable()
+        : m_table(nullptr),
+          m_capacity(0),
+          m_max_cuckoo_chains(0),
+          m_is_on_device(false)
+    {
+    }
     LPHashTable(const LPHashTable& other) = default;
     LPHashTable(LPHashTable&&)            = default;
     LPHashTable& operator=(const LPHashTable&) = default;
