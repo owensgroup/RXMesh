@@ -10,7 +10,7 @@
 template <typename T, uint32_t blockThreads>
 __global__ static void compute_gaussian_curvature(const rxmesh::Context      context,
                                              rxmesh::VertexAttribute<T> coords,
-                                             rxmesh::VertexAttribute<T> normals)
+                                             rxmesh::VertexAttribute<T> gcs)
 {
     using namespace rxmesh;
     auto vn_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
@@ -31,9 +31,7 @@ __global__ static void compute_gaussian_curvature(const rxmesh::Context      con
 
         // add the face's normal to its vertices
         for (uint32_t v = 0; v < 3; ++v) {      // for every vertex in this face
-            for (uint32_t i = 0; i < 3; ++i) {  // for the vertex 3 coordinates
-                atomicAdd(&normals(fv[v], i), n[i] / (l[v] + l[(v + 2) % 3]));
-            }
+            atomicAdd(&gcs(fv[v],), n[i] / (l[v] + l[(v + 2) % 3]));
         }
     };
 

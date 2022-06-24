@@ -45,8 +45,8 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
 
     // normals
-    auto v_normals =
-        rxmesh.add_vertex_attribute<T>("v_normals", 3, rxmesh::LOCATION_ALL);
+    auto v_gc =
+        rxmesh.add_vertex_attribute<T>("v_gc", 3, rxmesh::LOCATION_ALL);
 
     // launch box
     LaunchBox<blockThreads> launch_box;
@@ -56,7 +56,7 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
 
     TestData td;
-    td.test_name   = "VertexNormal";
+    td.test_name   = "GaussianCurvature";
     td.num_threads = launch_box.num_threads;
     td.num_blocks  = launch_box.blocks;
     td.dyn_smem    = launch_box.smem_bytes_dyn;
@@ -65,14 +65,14 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
     float vn_time = 0;
     for (uint32_t itr = 0; itr < Arg.num_run; ++itr) {
-        v_normals->reset(0, rxmesh::DEVICE);
+        v_gc->reset(2 * PI, rxmesh::DEVICE);
         GPUTimer timer;
         timer.start();
 
         compute_gaussian_curvature<T, blockThreads><<<launch_box.blocks,
                                                  launch_box.num_threads,
                                                  launch_box.smem_bytes_dyn>>>(
-            rxmesh.get_context(), *coords, *v_normals);
+            rxmesh.get_context(), *coords, *v_gc);
 
         timer.stop();
         CUDA_ERROR(cudaDeviceSynchronize());
@@ -86,14 +86,14 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
                  vn_time / Arg.num_run);
 
     // Verify
-    v_normals->move(rxmesh::DEVICE, rxmesh::HOST);
+    v_gc->move(rxmesh::DEVICE, rxmesh::HOST);
 
     rxmesh.for_each_vertex(HOST, [&](const VertexHandle& vh) {
         uint32_t v_id = rxmesh.map_to_global(vh);
 
         for (uint32_t i = 0; i < 3; ++i) {
             EXPECT_NEAR(std::abs(gaussian_curvature_gold[v_id * 3 + i]),
-                        std::abs((*v_normals)(vh, i)),
+                        std::abs((*v_gc)(vh, i)),
                         0.0001);
         }
     });
