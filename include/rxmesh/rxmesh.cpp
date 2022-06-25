@@ -953,7 +953,7 @@ void RXMesh::build_device_v2()
                     if (!h_hashtable.insert(pair, h_hashtable.get_table())) {
                         RXMESH_ERROR(
                             "rxmesh::build_device_v2 failed to insert in the "
-                            "hashtable. Retry with bigger load factor. Load "
+                            "hashtable. Retry with smaller load factor. Load "
                             "factor used = {}",
                             m_lp_hashtable_load_factor);
                     }

@@ -41,6 +41,8 @@ namespace rxmesh {
  */
 struct LPHashTable
 {
+    using HashT = universal_hash;
+
     LPHashTable()
         : m_table(nullptr),
           m_capacity(0),
@@ -59,7 +61,8 @@ struct LPHashTable
      * allocation size
      */
     explicit LPHashTable(const uint16_t capacity, bool is_on_device)
-        : m_capacity(std::max(capacity, uint16_t(1))),
+        : m_max_probe(0),
+          m_capacity(std::max(capacity, uint16_t(1))),
           m_is_on_device(is_on_device)
     {
         if (m_is_on_device) {
@@ -148,10 +151,10 @@ struct LPHashTable
     template <typename RNG>
     void randomize_hash_functions(RNG& rng)
     {
-        m_hasher0 = initialize_hf<universal_hash>(rng);
-        m_hasher1 = initialize_hf<universal_hash>(rng);
-        m_hasher2 = initialize_hf<universal_hash>(rng);
-        m_hasher3 = initialize_hf<universal_hash>(rng);
+        m_hasher0 = initialize_hf<HashT>(rng);
+        m_hasher1 = initialize_hf<HashT>(rng);
+        m_hasher2 = initialize_hf<HashT>(rng);
+        m_hasher3 = initialize_hf<HashT>(rng);
     }
 
     /**
@@ -261,13 +264,13 @@ struct LPHashTable
     }
 
    private:
-    LPPair*        m_table;
-    universal_hash m_hasher0;
-    universal_hash m_hasher1;
-    universal_hash m_hasher2;
-    universal_hash m_hasher3;
-    uint16_t       m_capacity;
-    uint16_t       m_max_cuckoo_chains;
-    bool           m_is_on_device;
+    LPPair*  m_table;
+    HashT    m_hasher0;
+    HashT    m_hasher1;
+    HashT    m_hasher2;
+    HashT    m_hasher3;
+    uint16_t m_capacity;
+    uint16_t m_max_cuckoo_chains;
+    bool     m_is_on_device;
 };
 }  // namespace rxmesh
