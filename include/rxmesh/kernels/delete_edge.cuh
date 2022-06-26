@@ -11,7 +11,8 @@ template <uint32_t blockThreads, typename predicateT>
 __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
                                        const predicateT predicate)
 {
-    // Extract the argument in the predicate lambda function
+    // TODO
+    /*// Extract the argument in the predicate lambda function
     using PredicateTTraits = detail::FunctionTraits<predicateT>;
     using HandleT          = typename PredicateTTraits::template arg<0>::type;
     static_assert(
@@ -68,7 +69,7 @@ __device__ __inline__ void delete_edge(PatchInfo&       patch_info,
                    is_deleted(e1, s_active_mask_e) ||
                    is_deleted(e2, s_active_mask_e);
         });
-    __syncthreads();
+    __syncthreads();*/
 }
 }  // namespace detail
 }  // namespace rxmesh

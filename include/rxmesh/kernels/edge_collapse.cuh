@@ -13,6 +13,8 @@ template <uint32_t blockThreads, typename predicateT>
 __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
                                          const predicateT predicate)
 {
+    //TODO
+    /*
     // Extract the argument in the predicate lambda function
     using PredicateTTraits = detail::FunctionTraits<predicateT>;
     using HandleT          = typename PredicateTTraits::template arg<0>::type;
@@ -203,7 +205,7 @@ __device__ __inline__ void edge_collapse(PatchInfo&       patch_info,
         patch_info.active_mask_e[e] &= s_active_mask_e[e];
     }
 
-    __syncthreads();
+    __syncthreads();*/
 }
 }  // namespace detail
 }  // namespace rxmesh

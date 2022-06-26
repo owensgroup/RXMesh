@@ -613,11 +613,6 @@ uint32_t RXMesh::get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const
     return edge_id;
 }
 
-uint32_t RXMesh::mask_num_bytes(const uint32_t size)
-{
-    return DIVIDE_UP(size, 32) * sizeof(uint32_t);
-}
-
 void RXMesh::build_device()
 {
     CUDA_ERROR(cudaMalloc((void**)&m_d_patches_info,
@@ -671,7 +666,7 @@ void RXMesh::build_device()
         // allocate and set bitmask
         auto alloc_active_bitmask =
             [&](uint32_t*& d_mask, uint32_t*& h_mask, uint32_t size) {
-                size_t num_bytes = mask_num_bytes(size);
+                size_t num_bytes = detail::mask_num_bytes(size);
                 h_mask           = (uint32_t*)malloc(num_bytes);
                 std::memset(h_mask, 0xFF, num_bytes);
                 CUDA_ERROR(cudaMalloc((void**)&d_mask, num_bytes));
@@ -831,7 +826,7 @@ void RXMesh::build_device_v2()
                            uint32_t*& h_mask,
                            uint32_t   size,
                            auto       predicate) {
-            size_t num_bytes = mask_num_bytes(size);
+            size_t num_bytes = detail::mask_num_bytes(size);
             h_mask           = (uint32_t*)malloc(num_bytes);
             CUDA_ERROR(cudaMalloc((void**)&d_mask, num_bytes));
 

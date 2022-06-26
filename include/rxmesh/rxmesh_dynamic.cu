@@ -1,6 +1,8 @@
 #include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/loader.cuh"
+#include "rxmesh/kernels/shmem_allocator.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
+#include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
 
@@ -13,7 +15,8 @@ __global__ static void calc_num_elements(const Context context,
                                          uint32_t*     sum_num_edges,
                                          uint32_t*     sum_num_faces)
 {
-    uint32_t thread_id = threadIdx.x + blockIdx.x * blockDim.x;
+    // TODO
+    /*uint32_t thread_id = threadIdx.x + blockIdx.x * blockDim.x;
 
     if (thread_id < context.get_num_patches()) {
         ::atomicAdd(
@@ -27,24 +30,23 @@ __global__ static void calc_num_elements(const Context context,
         ::atomicAdd(
             sum_num_faces,
             uint32_t(context.get_patches_info()[thread_id].num_owned_faces));
-    }
+    }*/
 }
 
 template <uint32_t blockThreads>
 __global__ static void check_uniqueness(const Context           context,
                                         unsigned long long int* d_check)
 {
-    const uint32_t patch_id = blockIdx.x;
+    // TODO
+    /*const uint32_t patch_id = blockIdx.x;
     if (patch_id < context.get_num_patches()) {
 
-        PatchInfo patch_info = context.get_patches_info()[patch_id];
+        PatchInfoV2 patch_info = context.get_patches_info_v2()[patch_id];
 
-        extern __shared__ uint16_t shrd_mem[];
-        uint16_t*                  s_ev = shrd_mem;
-        uint16_t*                  s_fe = shrd_mem;
-
+        ShmemAllocator shrd_alloc;
+        uint16_t *     s_ev, *s_fe;
         // FV since it loads both FE and EV
-        load_mesh_async<Op::FV>(patch_info, s_ev, s_fe, true);
+        load_mesh_async<Op::FV>(patch_info, shrd_alloc, s_ev, s_fe, true);
         //__syncthreads();
 
         // make sure an edge is connecting two unique vertices
@@ -186,7 +188,7 @@ __global__ static void check_uniqueness(const Context           context,
                 }
             }
         }
-    }
+    }*/
 }
 
 
@@ -194,19 +196,17 @@ template <uint32_t blockThreads>
 __global__ static void check_not_owned(const Context           context,
                                        unsigned long long int* d_check)
 {
-
-    const uint32_t patch_id = blockIdx.x;
+    // TODO
+    /*const uint32_t patch_id = blockIdx.x;
 
     if (patch_id < context.get_num_patches()) {
 
-        PatchInfo patch_info = context.get_patches_info()[patch_id];
+        PatchInfoV2 patch_info = context.get_patches_info_v2()[patch_id];
 
-        extern __shared__ uint16_t shrd_mem[];
-        uint16_t*                  s_ev = shrd_mem;
-        uint16_t*                  s_fe = shrd_mem;
-
+        ShmemAllocator shrd_alloc;
+        uint16_t *     s_ev, *s_fe;
         // FV since it loads both FE and EV
-        load_mesh_async<Op::FV>(patch_info, s_ev, s_fe, true);
+        load_mesh_async<Op::FV>(patch_info, shrd_alloc, s_ev, s_fe, true);
         //__syncthreads();
 
         // for every not-owned face, check that its three edges (possibly
@@ -308,7 +308,7 @@ __global__ static void check_not_owned(const Context           context,
                 }
             }
         }
-    }
+    }*/
 }
 
 }  // namespace detail
@@ -511,7 +511,7 @@ void RXMeshDynamic::update_host()
             if (size > capacity) {
                 capacity = size;
                 free(mask);
-                mask = (uint32_t*)malloc(mask_num_bytes(size));
+                mask = (uint32_t*)malloc(detail::mask_num_bytes(size));
             }
         };
 
@@ -616,15 +616,15 @@ void RXMeshDynamic::update_host()
         // mask
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_v,
                               d_patch.active_mask_v,
-                              mask_num_bytes(d_patch.num_vertices),
+                              detail::mask_num_bytes(d_patch.num_vertices),
                               cudaMemcpyDeviceToHost));
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_e,
                               d_patch.active_mask_e,
-                              mask_num_bytes(d_patch.num_edges),
+                              detail::mask_num_bytes(d_patch.num_edges),
                               cudaMemcpyDeviceToHost));
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_f,
                               d_patch.active_mask_f,
-                              mask_num_bytes(d_patch.num_faces),
+                              detail::mask_num_bytes(d_patch.num_faces),
                               cudaMemcpyDeviceToHost));
     }
 }

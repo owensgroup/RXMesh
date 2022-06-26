@@ -6,6 +6,7 @@
 #include <cooperative_groups.h>
 #include <cooperative_groups/memcpy_async.h>
 #include "rxmesh/context.h"
+#include "rxmesh/kernels/shmem_allocator.cuh"
 #include "rxmesh/local.h"
 #include "rxmesh/types.h"
 #include "rxmesh/util/util.h"
@@ -76,13 +77,16 @@ __device__ __forceinline__ void store(const T* in, const SizeT size, T* out)
  * @return
  */
 template <Op op>
-__device__ __forceinline__ void load_mesh_async(const PatchInfo& patch_info,
-                                                uint16_t*&       s_ev,
-                                                uint16_t*&       s_fe,
-                                                bool             with_wait)
+__device__ __forceinline__ void load_mesh_async(const PatchInfoV2& patch_info,
+                                                ShmemAllocator&    shrd_alloc,
+                                                uint16_t*&         s_ev,
+                                                uint16_t*&         s_fe,
+                                                bool               with_wait)
 {
     switch (op) {
         case Op::VV: {
+            s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges *
+                                              sizeof(uint16_t));
             load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
                        2 * patch_info.num_edges,
                        s_ev,
@@ -91,6 +95,8 @@ __device__ __forceinline__ void load_mesh_async(const PatchInfo& patch_info,
         }
         case Op::VE: {
             assert(2 * patch_info.num_edges > patch_info.num_vertices);
+            s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges *
+                                              sizeof(uint16_t));
             load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
                        2 * patch_info.num_edges,
                        s_ev,
@@ -99,8 +105,10 @@ __device__ __forceinline__ void load_mesh_async(const PatchInfo& patch_info,
         }
         case Op::VF: {
             assert(3 * patch_info.num_faces > patch_info.num_vertices);
-            // TODO need to revisit this
-            s_ev = s_fe + 3 * patch_info.num_faces;
+            s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces *
+                                              sizeof(uint16_t));
+            s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges *
+                                              sizeof(uint16_t));
             load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
                        3 * patch_info.num_faces,
                        s_fe,
@@ -113,7 +121,10 @@ __device__ __forceinline__ void load_mesh_async(const PatchInfo& patch_info,
         }
         case Op::FV: {
             // TODO need to revisit this
-            s_fe = s_ev + 2 * patch_info.num_edges;
+            s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges *
+                                              sizeof(uint16_t));
+            s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces *
+                                              sizeof(uint16_t));
             load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
                        2 * patch_info.num_edges,
                        s_ev,
@@ -126,6 +137,8 @@ __device__ __forceinline__ void load_mesh_async(const PatchInfo& patch_info,
             break;
         }
         case Op::FE: {
+            s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces *
+                                              sizeof(uint16_t));
             load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
                        3 * patch_info.num_faces,
                        s_fe,
@@ -133,6 +146,8 @@ __device__ __forceinline__ void load_mesh_async(const PatchInfo& patch_info,
             break;
         }
         case Op::FF: {
+            s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces *
+                                              sizeof(uint16_t));
             load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
                        3 * patch_info.num_faces,
                        s_fe,
@@ -140,6 +155,8 @@ __device__ __forceinline__ void load_mesh_async(const PatchInfo& patch_info,
             break;
         }
         case Op::EV: {
+            s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges *
+                                              sizeof(uint16_t));
             load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
                        2 * patch_info.num_edges,
                        s_ev,
@@ -148,6 +165,8 @@ __device__ __forceinline__ void load_mesh_async(const PatchInfo& patch_info,
         }
         case Op::EF: {
             assert(3 * patch_info.num_faces > patch_info.num_edges);
+            s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces *
+                                              sizeof(uint16_t));
             load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
                        3 * patch_info.num_faces,
                        s_fe,

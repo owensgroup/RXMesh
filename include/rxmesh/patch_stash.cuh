@@ -12,7 +12,7 @@ struct PatchStash
 {
     static constexpr uint8_t stash_size = (1 << LPPair::PatchStashNumBits);
 
-    PatchStash()
+    __host__ __device__ PatchStash()
     {
         for (uint8_t i = 0; i < stash_size; ++i) {
             m_stash[i] = INVALID32;

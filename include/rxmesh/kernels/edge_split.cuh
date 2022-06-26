@@ -12,7 +12,8 @@ template <uint32_t blockThreads, typename predicateT>
 __device__ __inline__ void edge_split(PatchInfo&       patch_info,
                                       const predicateT predicate)
 {
-    using PredicateTTraits = detail::FunctionTraits<predicateT>;
+    //TODO
+    /*using PredicateTTraits = detail::FunctionTraits<predicateT>;
     using HandleT          = typename PredicateTTraits::template arg<0>::type;
     static_assert(
         std::is_same_v<HandleT, EdgeHandle>,
@@ -209,7 +210,7 @@ __device__ __inline__ void edge_split(PatchInfo&       patch_info,
         patch_info.num_vertices += num_split_edges;
         patch_info.num_edges += 3 * num_split_edges;
         patch_info.num_faces += 2 * num_split_edges;
-    }
+    }*/
 }
 
 }  // namespace detail

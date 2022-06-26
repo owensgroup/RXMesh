@@ -61,7 +61,7 @@ __device__ __forceinline__ void warp_update_mask(const bool thread_predicate,
  * mesh element is already deleted by checking on the input bitmask
  */
 template <uint32_t blockThreads, typename predicateT>
-__device__ __inline__ void update_bitmask(uint16_t   num_owned,
+__device__ __inline__ void update_bitmask(uint16_t   range,
                                           uint32_t*  bitmask,
                                           predicateT predicate,
                                           bool check_if_already_deleted = true)
@@ -69,11 +69,11 @@ __device__ __inline__ void update_bitmask(uint16_t   num_owned,
     // load over all owned elements -- one thread per element
     // we need to make sure that the whole warp go into the loop
     block_loop<uint16_t, blockThreads, true>(
-        num_owned, [&](const uint16_t local_id) {
+        range, [&](const uint16_t local_id) {
             // check if mesh element with local_id should be deleted and make
-            // sure we only check on num_owned
+            // sure we only check on range
             bool to_delete = false;
-            if (local_id < num_owned) {
+            if (local_id < range) {
                 bool already_deleted = false;
                 if (check_if_already_deleted) {
                     already_deleted = is_deleted(local_id, bitmask);

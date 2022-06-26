@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include "rxmesh/handle.h"
+#include "rxmesh/util/bitmask_util.h"
 
 namespace rxmesh {
 
@@ -9,20 +10,22 @@ struct Iterator
 {
     using LocalT = typename HandleT::LocalT;
 
-    __device__ Iterator(const uint16_t  local_id,
-                        const LocalT*   patch_output,
-                        const uint16_t* patch_offset,
-                        const uint32_t  offset_size,
-                        const uint32_t  patch_id,
-                        const uint32_t  num_owned,
-                        const uint32_t* not_owned_patch,
-                        const uint16_t* not_owned_local_id,
-                        int             shift = 0)
+    __device__ Iterator(const uint16_t     local_id,
+                        const LocalT*      patch_output,
+                        const uint16_t*    patch_offset,
+                        const uint32_t     offset_size,
+                        const uint32_t     patch_id,
+                        const uint32_t*    output_owned_bitmask,
+                        const LPHashTable& output_lp_hashtable,
+                        const LPPair*      s_table,
+                        const PatchStash   patch_stash,
+                        int                shift = 0)
         : m_patch_output(patch_output),
           m_patch_id(patch_id),
-          m_num_owned(num_owned),
-          m_not_owned_patch(not_owned_patch),
-          m_not_owned_local_id(not_owned_local_id),
+          m_output_owned_bitmask(output_owned_bitmask),
+          m_output_lp_hashtable(output_lp_hashtable),
+          m_s_table(s_table),
+          m_patch_stash(patch_stash),
           m_shift(shift)
     {
         set(local_id, offset_size, patch_offset);
@@ -41,11 +44,11 @@ struct Iterator
         assert(m_patch_output);
         assert(i + m_begin < m_end);
         uint16_t lid = (m_patch_output[m_begin + i].id) >> m_shift;
-        if (lid < m_num_owned) {
+        if (detail::is_owned(lid, m_output_owned_bitmask)) {
             return {m_patch_id, lid};
         } else {
-            lid -= m_num_owned;
-            return {m_not_owned_patch[lid], m_not_owned_local_id[lid]};
+            LPPair lp = m_output_lp_hashtable.find(lid, m_s_table);
+            return {m_patch_stash.get_patch(lp), lp.local_id_in_owner_patch()};
         }
     }
 
@@ -107,16 +110,17 @@ struct Iterator
 
 
    private:
-    const LocalT*   m_patch_output;
-    const uint32_t  m_patch_id;
-    const uint32_t* m_not_owned_patch;
-    const uint16_t* m_not_owned_local_id;
-    uint16_t        m_num_owned;
-    uint16_t        m_local_id;
-    uint16_t        m_begin;
-    uint16_t        m_end;
-    uint16_t        m_current;
-    int             m_shift;
+    uint16_t          m_local_id;
+    const LocalT*     m_patch_output;
+    const uint32_t    m_patch_id;
+    const uint32_t*   m_output_owned_bitmask;
+    const LPHashTable m_output_lp_hashtable;
+    const LPPair*     m_s_table;
+    PatchStash        m_patch_stash;
+    uint16_t          m_begin;
+    uint16_t          m_end;
+    uint16_t          m_current;
+    int               m_shift;
 
     __device__ void set(const uint16_t  local_id,
                         const uint32_t  offset_size,

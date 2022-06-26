@@ -255,8 +255,6 @@ class RXMesh
 
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
-    uint32_t mask_num_bytes(const uint32_t size);
-
     friend class ::RXMeshTest;
 
     template <typename T>

@@ -43,7 +43,7 @@ struct LPHashTable
 {
     using HashT = universal_hash;
 
-    LPHashTable()
+    __device__ __host__ LPHashTable()
         : m_table(nullptr),
           m_capacity(0),
           m_max_cuckoo_chains(0),
@@ -236,7 +236,7 @@ struct LPHashTable
      * @return a LPPair pair that contains the key and its associated value
      */
     __host__ __device__ __inline__ LPPair find(const typename LPPair::KeyT key,
-                                               const LPPair* table)
+                                               const LPPair* table) const
     {
 
         constexpr int num_hfs   = 4;
