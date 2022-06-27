@@ -118,10 +118,12 @@ struct LPHashTable
     template <uint32_t blockThreads>
     __device__ __inline__ void clear()
     {
+#ifdef __CUDA_ARCH__
         assert(m_is_on_device);
         for (uint32_t i = threadIdx.x; i < m_capacity; i += blockThreads) {
             m_table[i].m_pair = INVALID32;
         }
+#endif
     }
 
     /**
@@ -163,9 +165,11 @@ struct LPHashTable
     template <uint32_t blockSize>
     __device__ __inline__ void load_in_shared_memory(LPPair* s_table) const
     {
+#ifdef __CUDA_ARCH__
         for (int i = threadIdx.x; i < m_capacity; i += blockSize) {
             s_table[i] = m_table[i];
         }
+#endif
     }
 
     /**
@@ -175,9 +179,11 @@ struct LPHashTable
     template <uint32_t blockSize>
     __device__ __inline__ void write_to_global_memory(const LPPair* s_table)
     {
+#ifdef __CUDA_ARCH__
         for (int i = threadIdx.x; i < m_capacity; i += blockSize) {
             m_table[i] = s_table[i];
         }
+#endif
     }
 
     /**
@@ -204,8 +210,9 @@ struct LPHashTable
 #ifdef __CUDA_ARCH__
             key.m_pair = ::atomicExch((uint32_t*)table + bucket_id, key.m_pair);
 #else
-
-            std::swap(key.m_pair, uint32_t(table[bucket_id].m_pair));
+            uint32_t temp = key.m_pair;
+            key.m_pair = table[bucket_id].m_pair;
+            table[bucket_id].m_pair = temp;            
 #endif
 
             if (key.m_pair == INVALID32) {
