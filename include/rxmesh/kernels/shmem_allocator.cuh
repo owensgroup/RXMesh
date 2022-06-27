@@ -20,6 +20,28 @@ struct ShmemAllocator
     }
 
     /**
+     * @brief deallocate by subtracting number of bytes from the base pointer
+     * This is NOT true deallocation. This can only be used by deallocating the
+     * last allocated num_bytes to avoid segmentation and overlap
+     * @param num_bytes number of bytes to be deallocated
+     */
+    __device__ __forceinline__ void dealloc(size_t num_bytes)
+    {
+        m_ptr = m_ptr - num_bytes;
+        assert(m_ptr - SHMEM_START > 0);
+    }
+
+    /**
+     * @brief Typed deallocation
+     * @param count number of elements to be deallocated
+     */
+    template <typename T>
+    __device__ __forceinline__ void dealloc(size_t count)
+    {
+        dealloc(count * sizeof(T));
+    }
+
+    /**
      * @brief Allocate num_bytes and return a pointer to the start of the
      * allocation. The returned pointer is aligned to bytes_alignment.
      * This function could be called by all threads if ShmemAllocator is in the
