@@ -40,9 +40,6 @@ __device__ __inline__ void query_block_dispatcher(
 
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
-    // Check if any of the mesh elements are in the active set
-    // input mapping does not need to be stored in shared memory since it will
-    // be read coalesced, we can rely on L1 cache here
     num_src_in_patch              = 0;
     uint16_t  num_output_in_patch = 0;
     uint32_t *input_active_mask, *input_owned_mask;
@@ -65,29 +62,44 @@ __device__ __inline__ void query_block_dispatcher(
     s_participant_bitmask = reinterpret_cast<uint32_t*>(
         shrd_alloc.alloc(mask_num_bytes(num_src_in_patch)));
 
+    // load table async
+    s_table =
+        shrd_alloc.template alloc<LPPair>(output_lp_hashtable.get_capacity());
+    load_async(output_lp_hashtable.get_table(),
+               output_lp_hashtable.get_capacity(),
+               s_table,
+               false);
+
+    // load owned mask async
     if constexpr (op == Op::VV || op == Op::EV || op == Op::FV) {
-        s_output_owned_bitmask = reinterpret_cast<uint32_t*>(
-            shrd_alloc.alloc(mask_num_bytes(patch_info.num_vertices)));
+        const uint32_t mask_size = mask_num_bytes(patch_info.num_vertices);
+        s_output_owned_bitmask =
+            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
         load_async(reinterpret_cast<char*>(patch_info.owned_mask_v),
-                   mask_num_bytes(patch_info.num_vertices),
+                   mask_size,
                    reinterpret_cast<char*>(s_output_owned_bitmask),
                    false);
+        output_lp_hashtable = patch_info.lp_v;
     }
     if constexpr (op == Op::VE || op == Op::EE || op == Op::FE) {
-        s_output_owned_bitmask = reinterpret_cast<uint32_t*>(
-            shrd_alloc.alloc(mask_num_bytes(patch_info.num_edges)));
+        const uint32_t mask_size = mask_num_bytes(patch_info.num_edges);
+        s_output_owned_bitmask =
+            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
         load_async(reinterpret_cast<char*>(patch_info.owned_mask_e),
-                   mask_num_bytes(patch_info.num_edges),
+                   mask_size,
                    reinterpret_cast<char*>(s_output_owned_bitmask),
                    false);
+        output_lp_hashtable = patch_info.lp_e;
     }
     if constexpr (op == Op::VF || op == Op::EF || op == Op::FF) {
-        s_output_owned_bitmask = reinterpret_cast<uint32_t*>(
-            shrd_alloc.alloc(mask_num_bytes(patch_info.num_faces)));
+        const uint32_t mask_size = mask_num_bytes(patch_info.num_faces);
+        s_output_owned_bitmask =
+            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
         load_async(reinterpret_cast<char*>(patch_info.owned_mask_f),
-                   mask_num_bytes(patch_info.num_faces),
+                   mask_size,
                    reinterpret_cast<char*>(s_output_owned_bitmask),
                    false);
+        output_lp_hashtable = patch_info.lp_f;
     }
 
 
@@ -126,7 +138,7 @@ __device__ __inline__ void query_block_dispatcher(
     if (oriented) {
         assert(op == Op::VV || op == Op::VE);
         if constexpr (op == Op::VV) {
-            //TODO
+            // TODO
             /*v_v_oreinted<blockThreads>(patch_info,
                                        s_output_offset,
                                        s_output_value,
@@ -144,23 +156,8 @@ __device__ __inline__ void query_block_dispatcher(
                                        patch_info.active_mask_e,
                                        patch_info.active_mask_v);*/
             __syncthreads();
-            // TODO
-            /*load_not_owned_async<op>(patch_info,
-                                     not_owned_local_id,
-                                     not_owned_patch,
-                                     num_owned,
-                                     true);*/
         }
     } else {
-        if constexpr (!(op == Op::VV || op == Op::FV || op == Op::FF)) {
-            // TODO
-            /*load_not_owned_async<op>(patch_info,
-                                     not_owned_local_id,
-                                     not_owned_patch,
-                                     num_owned,
-                                     true);*/
-        }
-
         query<blockThreads, op>(s_output_offset,
                                 s_output_value,
                                 s_ev,
@@ -172,17 +169,6 @@ __device__ __inline__ void query_block_dispatcher(
                                 patch_info.active_mask_e,
                                 patch_info.active_mask_f);
     }
-
-    // load not-owned local and patch id
-    if constexpr (op == Op::VV || op == Op::FV || op == Op::FF) {
-        // need to sync since we will overwrite things that are used in
-        // query
-        __syncthreads();
-        // TODO
-        /*load_not_owned_async<op>(
-            patch_info, not_owned_local_id, not_owned_patch, num_owned, true);*/
-    }
-
 
     __syncthreads();
 }
