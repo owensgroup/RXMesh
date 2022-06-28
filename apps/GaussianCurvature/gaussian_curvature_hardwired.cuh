@@ -5,11 +5,11 @@
 
 template <typename T>
 static void __global__
-vertex_normal_hardwired_kernel(const uint32_t  num_faces,
+gaussian_curvature_hardwired_kernel(const uint32_t  num_faces,
                                const uint32_t  num_vertices,
                                const uint32_t* d_faces,
                                const T*        d_vertex_coord,
-                               T*              d_vertex_normal)
+                               T*              d_gaussian_curvature)
 {
     uint32_t f_id = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -63,25 +63,25 @@ vertex_normal_hardwired_kernel(const uint32_t  num_faces,
         T l1 = l2_norm_sq(v1x, v1y, v1z, v2x, v2y, v2z);  // v1-v2
         T l2 = l2_norm_sq(v2x, v2y, v2z, v0x, v0y, v0z);  // v2-v0
 
-        atomicAdd(&d_vertex_normal[v0 * 3 + 0], nx / (l0 + l2));
-        atomicAdd(&d_vertex_normal[v0 * 3 + 1], ny / (l0 + l2));
-        atomicAdd(&d_vertex_normal[v0 * 3 + 2], nz / (l0 + l2));
+        atomicAdd(&d_gaussian_curvature[v0 * 3 + 0], nx / (l0 + l2));
+        atomicAdd(&d_gaussian_curvature[v0 * 3 + 1], ny / (l0 + l2));
+        atomicAdd(&d_gaussian_curvature[v0 * 3 + 2], nz / (l0 + l2));
 
-        atomicAdd(&d_vertex_normal[v1 * 3 + 0], nx / (l1 + l0));
-        atomicAdd(&d_vertex_normal[v1 * 3 + 1], ny / (l1 + l0));
-        atomicAdd(&d_vertex_normal[v1 * 3 + 2], nz / (l1 + l0));
+        atomicAdd(&d_gaussian_curvature[v1 * 3 + 0], nx / (l1 + l0));
+        atomicAdd(&d_gaussian_curvature[v1 * 3 + 1], ny / (l1 + l0));
+        atomicAdd(&d_gaussian_curvature[v1 * 3 + 2], nz / (l1 + l0));
 
-        atomicAdd(&d_vertex_normal[v2 * 3 + 0], nx / (l2 + l1));
-        atomicAdd(&d_vertex_normal[v2 * 3 + 1], ny / (l2 + l1));
-        atomicAdd(&d_vertex_normal[v2 * 3 + 2], nz / (l2 + l1));
+        atomicAdd(&d_gaussian_curvature[v2 * 3 + 0], nx / (l2 + l1));
+        atomicAdd(&d_gaussian_curvature[v2 * 3 + 1], ny / (l2 + l1));
+        atomicAdd(&d_gaussian_curvature[v2 * 3 + 2], nz / (l2 + l1));
     }
 }
 
 template <typename T>
-inline void vertex_normal_hardwired(
+inline void gaussian_curvature_hardwired(
     const std::vector<std::vector<uint32_t>>& Faces,
     const std::vector<std::vector<T>>&        Verts,
-    const std::vector<T>&                     vertex_normal_gold)
+    const std::vector<T>&                     gaussian_curvature_gold)
 {
     using namespace rxmesh;
     uint32_t num_vertices = Verts.size();
@@ -136,7 +136,7 @@ inline void vertex_normal_hardwired(
         GPUTimer timer;
         timer.start();
 
-        vertex_normal_hardwired_kernel<<<blocks, threads>>>(
+        gaussian_curvature_hardwired_kernel<<<blocks, threads>>>(
             num_faces, num_vertices, d_face, d_verts, d_normals);
 
         timer.stop();
@@ -160,10 +160,10 @@ inline void vertex_normal_hardwired(
     GPU_FREE(d_face);
 
 
-    RXMESH_TRACE("vertex_normal_hardwired() vertex normal kernel took {} (ms)",
+    RXMESH_TRACE("gaussian_curvature_hardwired() vertex normal kernel took {} (ms)",
                  vn_time);
 
-    bool passed = compare(vertex_normal_gold.data(),
+    bool passed = compare(gaussian_curvature_gold.data(),
                           verts_normal_hardwired,
                           Verts.size() * 3,
                           false);

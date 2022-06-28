@@ -42,7 +42,7 @@ inline void gaussian_curvature_ref(const std::vector<std::vector<uint32_t>>& Fac
             xx = yv1 * zv2 - zv1 * yv2;
             yy = zv1 * xv2 - xv1 * zv2;
             zz = xv1 * yv2 - yv1 * xv2;
-            return sqrt(xx * xx + yy * yy + zz * zz);
+            return xx + yy + zz; // l1 norm
         };
 
     auto dot_product = 
@@ -54,6 +54,7 @@ inline void gaussian_curvature_ref(const std::vector<std::vector<uint32_t>>& Fac
         v[0] = Faces[f][0];
         v[1] = Faces[f][1];
         v[2] = Faces[f][2];
+        bool is_ob = false;
 
         for (uint32_t i = 0; i < 3; ++i) {
             uint32_t i1    = (i + 1) % 3;
@@ -71,22 +72,35 @@ inline void gaussian_curvature_ref(const std::vector<std::vector<uint32_t>>& Fac
                                        Verts[v[i2]][1] - Verts[v[i]][1],
                                        Verts[v[i2]][2] - Verts[v[i]][2]);
             edge_len_sq[i] = l2_norm_sq(Verts[v[i]][0],
-                                  Verts[v[i]][1],
-                                  Verts[v[i]][2],
-                                  Verts[v[i1]][0],
-                                  Verts[v[i1]][1],
-                                  Verts[v[i1]][2]);
+                                        Verts[v[i]][1],
+                                        Verts[v[i]][2],
+                                        Verts[v[i1]][0],
+                                        Verts[v[i1]][1],
+                                        Verts[v[i1]][2]);
+            T rad = atan2(angle_sin[i], angle_cos[i]);
+            if (rad > PI * 0.5) is_ob = true;
         }
+
+
 
         for (uint32_t i = 0; i < 3; ++i) {
             uint32_t i1    = (i + 1) % 3;
             uint32_t i2    = (i + 2) % 3;
-            
-            // veronoi region calculation
-            region_mixed[v[i]] += 0.125 * ( (edge_len_sq[i2]) * (angle_cos[i1] / angle_sin[i1]) 
-                                            + (edge_len_sq[i]) * (angle_cos[i2] / angle_sin[i2]) );
 
-            gaussian_curvature[v[i]] -= atan2(angle_sin[i], angle_cos[i]);
+            T rad = atan2(angle_sin[i], angle_cos[i]);
+            if (is_ob) {
+                if (rad > PI * 0.5) {
+                    region_mixed[v[i]] += 0.25 * angle_sin[i];
+                } else {
+                    region_mixed[v[i]] += 0.125 * angle_sin[i];
+                }
+            } else {
+                // veronoi region calculation
+                region_mixed[v[i]] += 0.125 * ( (edge_len_sq[i2]) * (angle_cos[i1] / angle_sin[i1]) 
+                                            + (edge_len_sq[i]) * (angle_cos[i2] / angle_sin[i2]) );
+            }
+
+            gaussian_curvature[v[i]] -= rad;
         }
     }
 
