@@ -203,7 +203,7 @@ class RXMesh
     void init(const std::vector<std::vector<uint32_t>>& fv,
               const bool                                quite           = false,
               const float                               capacity_factor = 1.2,
-              const float lp_hashtable_load_factor                      = 0.6);
+              const float lp_hashtable_load_factor                      = 0.8);
 
     /**
      * @brief build different supporting data structure used to build RXMesh

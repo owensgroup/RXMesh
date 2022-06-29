@@ -810,6 +810,23 @@ class RXMeshStatic : public RXMesh
             }
         };
 
+        auto lp_hashtable_size = [&](ELEMENT ele) {
+            switch (ele) {
+                case rxmesh::ELEMENT::VERTEX:
+                    return static_cast<uint16_t>(
+                        static_cast<float>(m_max_not_owned_vertices) /
+                        m_lp_hashtable_load_factor);
+                case rxmesh::ELEMENT::EDGE:
+                    return static_cast<uint16_t>(
+                        static_cast<float>(m_max_not_owned_edges) /
+                        m_lp_hashtable_load_factor);
+                case rxmesh::ELEMENT::FACE:
+                    return static_cast<uint16_t>(
+                        static_cast<float>(m_max_not_owned_faces) /
+                        m_lp_hashtable_load_factor);
+            }
+        };
+
         if (op == Op::FE) {
             // only FE will be loaded
             dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
@@ -820,7 +837,8 @@ class RXMeshStatic : public RXMesh
             // store not-owned bitmask
             dynamic_smem += bitmask_size(ELEMENT::EDGE);
 
-            // TODO stores edges LP hashtable
+            // stores edges LP hashtable
+            dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::EDGE);
 
         } else if (op == Op::EV) {
             // only EV will be loaded
@@ -832,7 +850,8 @@ class RXMeshStatic : public RXMesh
             // store not-owned bitmask
             dynamic_smem += bitmask_size(ELEMENT::VERTEX);
 
-            // TODO stores vertex LP hashtable
+            // stores vertex LP hashtable
+            dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::VERTEX);
 
         } else if (op == Op::FV) {
             // We load both FE and EV. We don't change EV.
@@ -848,11 +867,10 @@ class RXMeshStatic : public RXMesh
             dynamic_smem += bitmask_size(ELEMENT::VERTEX);
 
             // TODO stores vertex LP hashtable
+            dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::VERTEX);
 
             // TODO no need for extra memory to load not-owned vertices local
             // and patch id. We load them and overwrite EV.
-
-
         } else if (op == Op::VE) {
             // load EV and then transpose it in place
             // The transpose needs two buffer; one for prefix sum and another
@@ -870,7 +888,8 @@ class RXMeshStatic : public RXMesh
             // store not-owned bitmask
             dynamic_smem += bitmask_size(ELEMENT::EDGE);
 
-            // TODO stores edge LP hashtable
+            // stores edge LP hashtable
+            dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::EDGE);
 
             // TODO
             /*if (!oriented) {
@@ -893,7 +912,8 @@ class RXMeshStatic : public RXMesh
             // store not-owned bitmask
             dynamic_smem += bitmask_size(ELEMENT::FACE);
 
-            // TODO stores the face LP hashtable
+            // stores the face LP hashtable
+            dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::FACE);
 
         } else if (op == Op::VF) {
             // load EV and FE simultaneously. changes FE to FV using EV. Then
@@ -912,7 +932,8 @@ class RXMeshStatic : public RXMesh
             // store not-owned bitmask
             dynamic_smem += bitmask_size(ELEMENT::FACE);
 
-            // TODO stores the face LP hashtable
+            // stores the face LP hashtable
+            dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::FACE);
 
         } else if (op == Op::VV) {
             // similar to VE but we also need to store the EV even after
@@ -928,7 +949,8 @@ class RXMeshStatic : public RXMesh
             // store not-owned bitmask
             dynamic_smem += bitmask_size(ELEMENT::VERTEX);
 
-            // TODO stores the vertex LP hashtable
+            // stores the vertex LP hashtable
+            dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::VERTEX);
 
         } else if (op == Op::FF) {
             // TODO
