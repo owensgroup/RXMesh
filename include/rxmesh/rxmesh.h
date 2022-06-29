@@ -233,10 +233,15 @@ class RXMesh
      * @param fv input face incident vertices
      * @param ef input edge incident faces
      */
-    void calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
-                         const std::vector<std::vector<uint32_t>>& ef);
+    void calc_input_statistics(const std::vector<std::vector<uint32_t>>& fv,
+                               const std::vector<std::vector<uint32_t>>& ef);
 
-    void calc_max_not_owned_elements();
+    /**
+     * @brief count the max number of vertices/edges/faces per patch and
+     * the max number of not-owned vertices/edges/faces per patch
+     * @param on_device either do the computation on device or host
+     */
+    void calc_max_elements();
 
     void build(const std::vector<std::vector<uint32_t>>& fv);
     void build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
@@ -276,13 +281,6 @@ class RXMesh
     bool m_is_input_edge_manifold;
     bool m_is_input_closed;
 
-    // Should be updated with update_host
-    uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
-        m_max_faces_per_patch;
-    // Should be updated with update_host
-    uint32_t m_max_not_owned_vertices, m_max_not_owned_edges,
-        m_max_not_owned_faces;
-
     // May need to be updated with update_host
     uint32_t       m_num_patches;
     const uint32_t m_patch_size;
@@ -294,6 +292,13 @@ class RXMesh
     // the number of owned mesh elements per patch
     // Should be updated with update_host
     std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;
+
+    // Should be updated with update_host
+    uint32_t m_max_not_owned_vertices, m_max_not_owned_edges,
+        m_max_not_owned_faces;
+    // Should be updated with update_host
+    uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
+        m_max_faces_per_patch;
 
     // mappings
     // local to global map for (v)ertices (e)dges and (f)aces

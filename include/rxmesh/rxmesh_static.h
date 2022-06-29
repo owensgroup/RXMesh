@@ -11,6 +11,7 @@
 #include "rxmesh/launch_box.h"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/types.h"
+#include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/timer.h"
@@ -757,6 +758,7 @@ class RXMeshStatic : public RXMesh
         }
     }
 
+
    protected:
     template <uint32_t blockThreads>
     size_t calc_shared_memory(const Op op, const bool oriented) const
@@ -796,36 +798,61 @@ class RXMeshStatic : public RXMesh
 
         size_t dynamic_smem = 0;
 
+        auto bitmask_size = [&](ELEMENT ele) {
+            switch (ele) {
+                case rxmesh::ELEMENT::VERTEX:
+                    return detail::mask_num_bytes(
+                        this->m_max_vertices_per_patch);
+                case rxmesh::ELEMENT::EDGE:
+                    return detail::mask_num_bytes(this->m_max_edges_per_patch);
+                case rxmesh::ELEMENT::FACE:
+                    return detail::mask_num_bytes(this->m_max_faces_per_patch);
+            }
+        };
+
         if (op == Op::FE) {
             // only FE will be loaded
             dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
-            // to load not-owned edges local and patch id
-            dynamic_smem += this->m_max_not_owned_edges * sizeof(uint32_t);
-            dynamic_smem += this->m_max_not_owned_edges * sizeof(uint16_t);
+
+            // store participant bitmask
+            dynamic_smem += bitmask_size(ELEMENT::FACE);
+
+            // store not-owned bitmask
+            dynamic_smem += bitmask_size(ELEMENT::EDGE);
+
+            // TODO stores edges LP hashtable
+
         } else if (op == Op::EV) {
             // only EV will be loaded
             dynamic_smem = 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
-            // to load not-owned vertices local and patch id
-            dynamic_smem += this->m_max_not_owned_vertices * sizeof(uint32_t);
-            dynamic_smem += this->m_max_not_owned_vertices * sizeof(uint16_t);
+
+            // store participant bitmask
+            dynamic_smem += bitmask_size(ELEMENT::EDGE);
+
+            // store not-owned bitmask
+            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+
+            // TODO stores vertex LP hashtable
+
         } else if (op == Op::FV) {
             // We load both FE and EV. We don't change EV.
             // FE are updated to contain FV instead of FE by reading from
             // EV
             dynamic_smem = 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
             dynamic_smem += 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
-            // no need for extra memory to load not-owned vertices local and
-            // patch id. We load them and overwrite EV.
-            const uint32_t not_owned_v_bytes =
-                this->m_max_not_owned_vertices *
-                (sizeof(uint16_t) + sizeof(uint32_t));
-            const uint32_t edges_bytes =
-                2 * this->m_max_edges_per_patch * sizeof(uint16_t);
-            if (not_owned_v_bytes > edges_bytes) {
-                // dynamic_smem += not_owned_v_bytes - edges_bytes;
-                RXMESH_ERROR(
-                    "RXMeshStatic::calc_shared_memory() FV query might fail!");
-            }
+
+            // store participant bitmask
+            dynamic_smem += bitmask_size(ELEMENT::FACE);
+
+            // store not-owned bitmask
+            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+
+            // TODO stores vertex LP hashtable
+
+            // TODO no need for extra memory to load not-owned vertices local
+            // and patch id. We load them and overwrite EV.
+
+
         } else if (op == Op::VE) {
             // load EV and then transpose it in place
             // The transpose needs two buffer; one for prefix sum and another
@@ -837,23 +864,37 @@ class RXMeshStatic : public RXMesh
             dynamic_smem =
                 (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
-            if (!oriented) {
+            // store participant bitmask
+            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+
+            // store not-owned bitmask
+            dynamic_smem += bitmask_size(ELEMENT::EDGE);
+
+            // TODO stores edge LP hashtable
+
+            // TODO
+            /*if (!oriented) {
                 // to load the not-owned edges local and patch id
                 // we only need this extra memory for non-oriented computation
                 // since oriented computation requires extra memory that we
                 // could then overwrite by the not-owned info
                 dynamic_smem += this->m_max_not_owned_edges * sizeof(uint32_t);
                 dynamic_smem += this->m_max_not_owned_edges * sizeof(uint16_t);
-            }
+            }*/
         } else if (op == Op::EF) {
             // same as Op::VE but with faces
             dynamic_smem =
                 (2 * 3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
                 sizeof(uint16_t) + sizeof(uint16_t);
 
-            // to load the not-owned faces local and patch id
-            dynamic_smem += this->m_max_not_owned_faces * sizeof(uint32_t);
-            dynamic_smem += this->m_max_not_owned_faces * sizeof(uint16_t);
+            // store participant bitmask
+            dynamic_smem += bitmask_size(ELEMENT::EDGE);
+
+            // store not-owned bitmask
+            dynamic_smem += bitmask_size(ELEMENT::FACE);
+
+            // TODO stores the face LP hashtable
+
         } else if (op == Op::VF) {
             // load EV and FE simultaneously. changes FE to FV using EV. Then
             // transpose FV in place and use EV to store the values/output while
@@ -865,9 +906,14 @@ class RXMeshStatic : public RXMesh
                                 sizeof(uint16_t) +
                             sizeof(uint16_t);
 
-            // to load the not-owned faces local and patch id
-            dynamic_smem += this->m_max_not_owned_faces * sizeof(uint32_t);
-            dynamic_smem += this->m_max_not_owned_faces * sizeof(uint16_t);
+            // store participant bitmask
+            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+
+            // store not-owned bitmask
+            dynamic_smem += bitmask_size(ELEMENT::FACE);
+
+            // TODO stores the face LP hashtable
+
         } else if (op == Op::VV) {
             // similar to VE but we also need to store the EV even after
             // we do the transpose
@@ -875,15 +921,17 @@ class RXMeshStatic : public RXMesh
                 (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
             dynamic_smem +=
                 (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
-            // no need for extra memory to load not-owned local and patch id.
-            // We load them and overwrite the extra EV
-            if (this->m_max_not_owned_vertices *
-                    (sizeof(uint16_t) + sizeof(uint32_t)) >
-                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t)) {
-                RXMESH_ERROR(
-                    "RXMeshStatic::calc_shared_memory() VV query might fail!");
-            }
+
+            // store participant bitmask
+            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+
+            // store not-owned bitmask
+            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+
+            // TODO stores the vertex LP hashtable
+
         } else if (op == Op::FF) {
+            // TODO
             // FF needs to store FE and EF along side with the output itself
             // FE needs 3*max_num_faces
             // EF is FE transpose
@@ -900,6 +948,7 @@ class RXMeshStatic : public RXMesh
         }
 
         if (oriented) {
+            // TODO
             if (op == Op::VE) {
                 // For VE, we need to add the extra memory we needed for VV that
                 // load EV beside the VE
@@ -974,8 +1023,10 @@ class RXMeshStatic : public RXMesh
         }
     }
 
+
     std::shared_ptr<AttributeContainer>     m_attr_container;
     std::shared_ptr<VertexAttribute<float>> m_input_vertex_coordinates;
+
 #if USE_POLYSCOPE
     polyscope::SurfaceMesh* m_polyscope_mesh;
 #endif

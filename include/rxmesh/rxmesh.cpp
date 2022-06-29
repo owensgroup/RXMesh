@@ -19,12 +19,6 @@ RXMesh::RXMesh()
       m_input_max_valence(0),
       m_input_max_edge_incident_faces(0),
       m_input_max_face_adjacent_faces(0),
-      m_max_vertices_per_patch(0),
-      m_max_edges_per_patch(0),
-      m_max_faces_per_patch(0),
-      m_max_not_owned_vertices(0),
-      m_max_not_owned_edges(0),
-      m_max_not_owned_faces(0),
       m_num_patches(0),
       m_patch_size(512),
       m_is_input_edge_manifold(true),
@@ -64,7 +58,6 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     build(fv);
     build_device();
     build_device_v2();
-    calc_max_not_owned_elements();
 
     // Allocate and copy the context to the gpu
     m_rxmesh_context.init(m_num_edges,
@@ -74,6 +67,7 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                           m_d_patches_info,
                           m_d_patches_info_v2);
 
+    calc_max_elements();
     if (!m_quite) {
         RXMESH_TRACE("#Vertices = {}, #Faces= {}, #Edges= {}",
                      m_num_vertices,
@@ -172,7 +166,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
         build_single_patch(fv, p);
     }
 
-    calc_statistics(fv, ef);
+    calc_input_statistics(fv, ef);
 }
 
 void RXMesh::build_supporting_structures(
@@ -265,8 +259,8 @@ void RXMesh::build_supporting_structures(
     }
 }
 
-void RXMesh::calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
-                             const std::vector<std::vector<uint32_t>>& ef)
+void RXMesh::calc_input_statistics(const std::vector<std::vector<uint32_t>>& fv,
+                                   const std::vector<std::vector<uint32_t>>& ef)
 {
     if (m_num_vertices == 0 || m_num_faces == 0 || m_num_edges == 0 ||
         fv.size() == 0 || ef.size() == 0) {
@@ -316,42 +310,44 @@ void RXMesh::calc_statistics(const std::vector<std::vector<uint32_t>>& fv,
         m_input_max_face_adjacent_faces =
             std::max(ff_count, m_input_max_face_adjacent_faces);
     }
-
-    // max number of vertices/edges/faces per patch
-    m_max_vertices_per_patch = 0;
-    m_max_edges_per_patch    = 0;
-    m_max_faces_per_patch    = 0;
-    for (uint32_t p = 0; p < m_num_patches; ++p) {
-        m_max_vertices_per_patch = std::max(
-            m_max_vertices_per_patch, uint32_t(m_h_patches_ltog_v[p].size()));
-        m_max_edges_per_patch = std::max(
-            m_max_edges_per_patch, uint32_t(m_h_patches_ltog_e[p].size()));
-        m_max_faces_per_patch = std::max(
-            m_max_faces_per_patch, uint32_t(m_h_patches_ltog_f[p].size()));
-    }
 }
 
-void RXMesh::calc_max_not_owned_elements()
+void RXMesh::calc_max_elements()
 {
     m_max_not_owned_vertices = 0;
     m_max_not_owned_edges    = 0;
     m_max_not_owned_faces    = 0;
+    m_max_vertices_per_patch = 0;
+    m_max_edges_per_patch    = 0;
+    m_max_faces_per_patch    = 0;
 
-    for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
-        m_max_not_owned_vertices =
-            std::max(m_max_not_owned_vertices,
-                     uint32_t(m_h_patches_info[p].num_vertices -
-                              m_h_patches_info[p].num_owned_vertices));
 
-        m_max_not_owned_edges =
-            std::max(m_max_not_owned_edges,
-                     uint32_t(m_h_patches_info[p].num_edges -
-                              m_h_patches_info[p].num_owned_edges));
+    for (uint32_t p = 0; p < this->m_num_patches; ++p) {
+        m_max_vertices_per_patch =
+            std::max(m_max_vertices_per_patch,
+                     uint32_t(m_h_patches_info_v2[p].num_vertices));
 
-        m_max_not_owned_faces =
-            std::max(m_max_not_owned_faces,
-                     uint32_t(m_h_patches_info[p].num_faces -
-                              m_h_patches_info[p].num_owned_faces));
+        m_max_edges_per_patch = std::max(
+            m_max_edges_per_patch, uint32_t(m_h_patches_info_v2[p].num_edges));
+
+        m_max_faces_per_patch = std::max(
+            m_max_faces_per_patch, uint32_t(m_h_patches_info_v2[p].num_faces));
+
+
+        m_max_not_owned_vertices = std::max(
+            m_max_not_owned_vertices,
+            detail::count_set_bits(m_h_patches_info_v2[p].num_vertices,
+                                   m_h_patches_info_v2[p].owned_mask_v));
+
+        m_max_not_owned_edges = std::max(
+            m_max_not_owned_edges,
+            detail::count_set_bits(m_h_patches_info_v2[p].num_edges,
+                                   m_h_patches_info_v2[p].owned_mask_e));
+
+        m_max_not_owned_faces = std::max(
+            m_max_not_owned_faces,
+            detail::count_set_bits(m_h_patches_info_v2[p].num_faces,
+                                   m_h_patches_info_v2[p].owned_mask_f));
     }
 }
 
