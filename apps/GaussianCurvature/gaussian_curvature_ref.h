@@ -39,16 +39,16 @@ inline void gaussian_curvature_ref(const std::vector<std::vector<uint32_t>>& Fac
 
     auto cross_product_norm =
         [](T xv1, T yv1, T zv1, T xv2, T yv2, T zv2) {
-            xx = yv1 * zv2 - zv1 * yv2;
-            yy = zv1 * xv2 - xv1 * zv2;
-            zz = xv1 * yv2 - yv1 * xv2;
+            T xx = yv1 * zv2 - zv1 * yv2;
+            T yy = zv1 * xv2 - xv1 * zv2;
+            T zz = xv1 * yv2 - yv1 * xv2;
             return xx + yy + zz; // l1 norm
         };
 
     auto dot_product = 
         [](T xv1, T yv1, T zv1, T xv2, T yv2, T zv2) {
             return xv1 * xv2 + yv1 * yv2 + zv1 * zv2;
-        }
+        };
 
     for (uint32_t f = 0; f < num_faces; ++f) {
         v[0] = Faces[f][0];

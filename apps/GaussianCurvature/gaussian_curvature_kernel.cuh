@@ -31,7 +31,7 @@ __global__ static void compute_gaussian_curvature(const rxmesh::Context      con
 
         // add the face's normal to its vertices
         for (uint32_t v = 0; v < 3; ++v) {      // for every vertex in this face
-            atomicAdd(&gcs(fv[v],), n[i] / (l[v] + l[(v + 2) % 3]));
+            // atomicAdd(&gcs(fv[v],), n[i] / (l[v] + l[(v + 2) % 3]));
         }
     };
 

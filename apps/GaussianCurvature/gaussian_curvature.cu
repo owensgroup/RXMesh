@@ -22,8 +22,6 @@ struct arg
     int         argc;
 } Arg;
 
-#include "gaussian_curvature_hardwired.cuh"
-
 template <typename T>
 void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
                           const std::vector<std::vector<T>>& Verts,
@@ -127,9 +125,6 @@ TEST(Apps, VertexNormal)
 
     // RXMesh Impl
     gaussian_curvature_rxmesh(rxmesh, Verts, gaussian_curvature_gold);
-
-    // Hardwired Impl
-    gaussian_curvature_hardwired(Faces, Verts, gaussian_curvature_gold);
 }
 
 int main(int argc, char** argv)

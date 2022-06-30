@@ -4,7 +4,6 @@ set(SOURCE_LIST
     gaussian_curvature.cu 
     gaussian_curvature_ref.h
     gaussian_curvature_kernel.cuh
-	gaussian_curvature_hardwired.cuh
 )
 
 target_sources(GaussianCurvature 
