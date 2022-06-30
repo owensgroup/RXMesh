@@ -40,9 +40,10 @@ __device__ __inline__ void query_block_dispatcher(
 
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
-    num_src_in_patch              = 0;
-    uint16_t  num_output_in_patch = 0;
-    uint32_t *input_active_mask, *input_owned_mask;
+    num_src_in_patch                = 0;
+    uint16_t    num_output_in_patch = 0;
+    uint32_t *  input_active_mask, *input_owned_mask;
+    LPHashTable hashtable;
     if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
         num_src_in_patch  = patch_info.num_vertices;
         input_active_mask = patch_info.active_mask_v;
@@ -59,18 +60,13 @@ __device__ __inline__ void query_block_dispatcher(
         input_owned_mask  = patch_info.owned_mask_f;
     }
 
+    // alloc participant bitmask
     s_participant_bitmask = reinterpret_cast<uint32_t*>(
         shrd_alloc.alloc(mask_num_bytes(num_src_in_patch)));
 
-    // load table async
-    s_table =
-        shrd_alloc.template alloc<LPPair>(output_lp_hashtable.get_capacity());
-    load_async(output_lp_hashtable.get_table(),
-               output_lp_hashtable.get_capacity(),
-               s_table,
-               false);
 
-    // load owned mask async
+    // alloc and load owned mask async
+    // select lp hashtable
     if constexpr (op == Op::VV || op == Op::EV || op == Op::FV) {
         const uint32_t mask_size = mask_num_bytes(patch_info.num_vertices);
         s_output_owned_bitmask =
@@ -101,6 +97,15 @@ __device__ __inline__ void query_block_dispatcher(
                    false);
         output_lp_hashtable = patch_info.lp_f;
     }
+
+
+    // load table async
+    s_table =
+        shrd_alloc.template alloc<LPPair>(output_lp_hashtable.get_capacity());
+    load_async(output_lp_hashtable.get_table(),
+               output_lp_hashtable.get_capacity(),
+               s_table,
+               false);
 
 
     // we  cache the result of (is_active && is_owned && is_compute_set) in
