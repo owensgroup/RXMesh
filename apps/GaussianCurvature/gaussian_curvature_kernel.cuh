@@ -15,7 +15,7 @@ __global__ static void compute_gaussian_curvature(const rxmesh::Context      con
 {
     using namespace rxmesh;
     const double PI = 3.1415926535897932384626433832795028841971693993751058209;
-    auto vn_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
+    auto gc_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
         // get the face's three vertices coordinates
         Vector<3, T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
         Vector<3, T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
@@ -36,7 +36,6 @@ __global__ static void compute_gaussian_curvature(const rxmesh::Context      con
             if (rads[i] > PI * 0.5) is_ob = true;
         }
 
-        // add the face's normal to its vertices
         for (uint32_t v = 0; v < 3; ++v) {      // for every vertex in this face
             uint32_t v1    = (v + 1) % 3;
             uint32_t v2    = (v + 2) % 3;
@@ -49,13 +48,13 @@ __global__ static void compute_gaussian_curvature(const rxmesh::Context      con
                 }
             } else {
                 // veronoi region calculation
-                atomicAdd(&amix(fv[v]), 0.125 * ( (l[v2]) * (c[v1] / s) 
-                                                 + (l[v]) * (c[v2] / s)));
+                atomicAdd(&amix(fv[v]), 0.125 * ( (l[v2] * l[v2]) * (c[v1] / s) 
+                                                 + (l[v] * l[v]) * (c[v2] / s)));
             }
             
             atomicAdd(&gcs(fv[v]), -rads[v]);
         }
     };
 
-    query_block_dispatcher<Op::FV, blockThreads>(context, vn_lambda);
+    query_block_dispatcher<Op::FV, blockThreads>(context, gc_lambda);
 }

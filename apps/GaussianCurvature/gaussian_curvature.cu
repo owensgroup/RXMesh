@@ -82,7 +82,7 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&         rxmesh,
         rxmesh.for_each_vertex(
             DEVICE,
             [v_gc_val, v_amix_val] __device__(const VertexHandle vh) {
-                v_gc_val(vh, 0) = v_gc_val(vh, 0), v_amix_val(vh, 0);
+                v_gc_val(vh, 0) = v_gc_val(vh, 0) / v_amix_val(vh, 0);
             });
 
         timer.stop();
@@ -101,12 +101,9 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&         rxmesh,
 
     rxmesh.for_each_vertex(HOST, [&](const VertexHandle& vh) {
         uint32_t v_id = rxmesh.map_to_global(vh);
-
-        for (uint32_t i = 0; i < 3; ++i) {
-            EXPECT_NEAR(std::abs(gaussian_curvature_gold[v_id * 3 + i]),
-                        std::abs((*v_gc)(vh, i)),
-                        0.0001);
-        }
+        EXPECT_NEAR(std::abs(gaussian_curvature_gold[v_id]),
+                    std::abs((*v_gc)(vh, 0)),
+                    0.0001);
     });
 
     // Finalize report
