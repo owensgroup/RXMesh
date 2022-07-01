@@ -81,8 +81,6 @@ inline void gaussian_curvature_ref(const std::vector<std::vector<uint32_t>>& Fac
             if (rad > PI * 0.5) is_ob = true;
         }
 
-
-
         for (uint32_t i = 0; i < 3; ++i) {
             uint32_t i1    = (i + 1) % 3;
             uint32_t i2    = (i + 2) % 3;

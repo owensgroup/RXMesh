@@ -23,7 +23,7 @@ struct arg
 } Arg;
 
 template <typename T>
-void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
+void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&         rxmesh,
                           const std::vector<std::vector<T>>& Verts,
                           const std::vector<T>&              gaussian_curvature_gold)
 {
@@ -41,10 +41,13 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
     auto coords = rxmesh.add_vertex_attribute<T>(Verts, "coordinates");
 
-
-    // normals
+    // gaussian curvatures
     auto v_gc =
-        rxmesh.add_vertex_attribute<T>("v_gc", 3, rxmesh::LOCATION_ALL);
+        rxmesh.add_vertex_attribute<T>("v_gc", 1, rxmesh::LOCATION_ALL);
+
+    // mixed area for integration
+    auto v_amix =
+        rxmesh.add_vertex_attribute<T>("v_amix", 1, rxmesh::LOCATION_ALL);
 
     // launch box
     LaunchBox<blockThreads> launch_box;
@@ -64,13 +67,23 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     float vn_time = 0;
     for (uint32_t itr = 0; itr < Arg.num_run; ++itr) {
         v_gc->reset(2 * PI, rxmesh::DEVICE);
+        v_amix->reset(0, rxmesh::DEVICE);
         GPUTimer timer;
         timer.start();
 
         compute_gaussian_curvature<T, blockThreads><<<launch_box.blocks,
                                                  launch_box.num_threads,
                                                  launch_box.smem_bytes_dyn>>>(
-            rxmesh.get_context(), *coords, *v_gc);
+            rxmesh.get_context(), *coords, *v_gc, *v_amix);
+
+        auto v_gc_val = *v_gc;
+        auto v_amix_val = *v_amix;
+        
+        rxmesh.for_each_vertex(
+            DEVICE,
+            [v_gc_val, v_amix_val] __device__(const VertexHandle vh) {
+                v_gc_val(vh, 0) = v_gc_val(vh, 0), v_amix_val(vh, 0);
+            });
 
         timer.stop();
         CUDA_ERROR(cudaDeviceSynchronize());
