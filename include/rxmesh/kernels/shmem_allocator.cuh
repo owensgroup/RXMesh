@@ -15,6 +15,8 @@ extern __shared__ char SHMEM_START[];
  */
 struct ShmemAllocator
 {
+    static constexpr uint32_t default_alignment = 8;
+
     __device__ ShmemAllocator() : m_ptr(SHMEM_START)
     {
     }
@@ -25,7 +27,7 @@ struct ShmemAllocator
      * last allocated num_bytes to avoid segmentation and overlap
      * @param num_bytes number of bytes to be deallocated
      */
-    __device__ __forceinline__ void dealloc(size_t num_bytes)
+    __device__ __forceinline__ void dealloc(const uint32_t num_bytes)
     {
         m_ptr = m_ptr - num_bytes;
         assert(m_ptr - SHMEM_START > 0);
@@ -36,7 +38,7 @@ struct ShmemAllocator
      * @param count number of elements to be deallocated
      */
     template <typename T>
-    __device__ __forceinline__ void dealloc(size_t count)
+    __device__ __forceinline__ void dealloc(uint32_t count)
     {
         dealloc(count * sizeof(T));
     }
@@ -50,17 +52,14 @@ struct ShmemAllocator
      * @param num_bytes to allocate
      * @param byte_alignment alignment size
      */
-    __device__ __forceinline__ char* alloc(size_t num_bytes,
-                                           size_t byte_alignment = 8)
+    __device__ __forceinline__ char* alloc(
+        uint32_t num_bytes,
+        uint32_t byte_alignment = default_alignment)
     {
         align(byte_alignment, m_ptr);
-
         char* ret = m_ptr;
-
-        m_ptr = m_ptr + num_bytes;
-
+        m_ptr     = m_ptr + num_bytes;
         assert(get_allocated_size_bytes() <= get_max_size_bytes());
-
         return ret;
     }
 
@@ -72,10 +71,13 @@ struct ShmemAllocator
      * @param byte_alignment alignment size
      */
     template <typename T>
-    __device__ __forceinline__ T* alloc(size_t count,
-                                        size_t byte_alignment = sizeof(T))
+    __device__ __forceinline__ T* alloc(uint32_t count)
     {
-        return reinterpret_cast<T*>(alloc(count * sizeof(T), byte_alignment));
+        static_assert(sizeof(T) <= default_alignment,
+                      "default_alignment is less than the alignment boundary "
+                      "of the input type");
+        return reinterpret_cast<T*>(
+            alloc(count * sizeof(T), default_alignment));
     }
 
     /**
@@ -110,8 +112,8 @@ struct ShmemAllocator
      * that is aligned to alignment
      */
     template <typename T>
-    __device__ __host__ __inline__ void align(const std::size_t byte_alignment,
-                                              T*&               ptr) noexcept
+    __device__ __host__ __inline__ void align(const uint32_t byte_alignment,
+                                              T*&            ptr) noexcept
     {
         const uint64_t intptr    = reinterpret_cast<uint64_t>(ptr);
         const uint64_t remainder = intptr % byte_alignment;

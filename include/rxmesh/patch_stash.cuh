@@ -23,7 +23,7 @@ struct PatchStash
     PatchStash(PatchStash&&)            = default;
     PatchStash& operator=(const PatchStash&) = default;
     PatchStash& operator=(PatchStash&&) = default;
-    virtual ~PatchStash()               = default;
+    ~PatchStash()                       = default;
 
     __host__ __device__ __inline__ uint32_t get_patch(uint8_t id) const
     {

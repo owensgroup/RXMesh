@@ -22,6 +22,9 @@ namespace rxmesh {
  */
 struct LPPair
 {
+    using KeyT   = uint16_t;
+    using ValueT = uint16_t;
+
     // Local index (high) number of bits within the patch
     constexpr static uint32_t LIDNumBits = 16;
 
@@ -30,9 +33,6 @@ struct LPPair
 
     // Number of bits reserved for the owner patch ID in the PatchStash
     constexpr static uint32_t PatchStashNumBits = 4;
-
-    using KeyT   = uint16_t;
-    using ValueT = uint16_t;
 
     /**
      * @brief Constructor using the local ID, local id with the owner patch,
@@ -70,7 +70,7 @@ struct LPPair
     LPPair(LPPair&&)            = default;
     LPPair& operator=(const LPPair&) = default;
     LPPair& operator=(LPPair&&) = default;
-    virtual ~LPPair()           = default;
+    ~LPPair()                   = default;
 
     /**
      * @brief Construct and return a tombstone pair

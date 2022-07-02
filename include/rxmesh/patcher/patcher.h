@@ -29,7 +29,7 @@ class Patcher
             const uint32_t num_edges,
             const bool     quite);
 
-    virtual ~Patcher();
+    ~Patcher();
 
     void print_statistics();
 

@@ -44,12 +44,12 @@ struct universal_hash
 
     constexpr uint32_t __host__ __device__ __inline__ operator()(
         const uint16_t k) const
-    {        
+    {
         return (((m_hash_x ^ k) + m_hash_y) % prime_divisor);
     }
 
     universal_hash(const universal_hash&) = default;
-    universal_hash() : m_hash_x(0u), m_hash_y(0u){};
+    __host__ __device__ universal_hash() : m_hash_x(0u), m_hash_y(0u){};
     universal_hash(universal_hash&&) = default;
     universal_hash& operator=(universal_hash const&) = default;
     universal_hash& operator=(universal_hash&&) = default;

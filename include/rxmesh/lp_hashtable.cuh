@@ -54,7 +54,7 @@ struct LPHashTable
     LPHashTable(LPHashTable&&)            = default;
     LPHashTable& operator=(const LPHashTable&) = default;
     LPHashTable& operator=(LPHashTable&&) = default;
-    virtual ~LPHashTable()                = default;
+    ~LPHashTable()                        = default;
 
     /**
      * @brief Constructor using the hash table capacity.This is used as
@@ -210,9 +210,9 @@ struct LPHashTable
 #ifdef __CUDA_ARCH__
             key.m_pair = ::atomicExch((uint32_t*)table + bucket_id, key.m_pair);
 #else
-            uint32_t temp = key.m_pair;
-            key.m_pair = table[bucket_id].m_pair;
-            table[bucket_id].m_pair = temp;            
+            uint32_t temp           = key.m_pair;
+            key.m_pair              = table[bucket_id].m_pair;
+            table[bucket_id].m_pair = temp;
 #endif
 
             if (key.m_pair == INVALID32) {

@@ -840,6 +840,10 @@ class RXMeshStatic : public RXMesh
             // stores edges LP hashtable
             dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::EDGE);
 
+            // for possible padding for alignment
+            dynamic_smem +=
+                rxmesh::detail::ShmemAllocator::default_alignment * 4;
+
         } else if (op == Op::EV) {
             // only EV will be loaded
             dynamic_smem = 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
@@ -852,6 +856,10 @@ class RXMeshStatic : public RXMesh
 
             // stores vertex LP hashtable
             dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::VERTEX);
+
+            // for possible padding for alignment
+            dynamic_smem +=
+                rxmesh::detail::ShmemAllocator::default_alignment * 4;
 
         } else if (op == Op::FV) {
             // We load both FE and EV. We don't change EV.

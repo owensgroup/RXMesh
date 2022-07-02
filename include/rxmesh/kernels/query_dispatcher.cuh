@@ -64,6 +64,11 @@ __device__ __inline__ void query_block_dispatcher(
     s_participant_bitmask = reinterpret_cast<uint32_t*>(
         shrd_alloc.alloc(mask_num_bytes(num_src_in_patch)));
 
+    for (uint32_t i = threadIdx.x; i < DIVIDE_UP(num_src_in_patch, 32);
+         i += blockThreads) {
+        s_participant_bitmask[i] = 0;
+    }
+    __syncthreads();
 
     // alloc and load owned mask async
     // select lp hashtable
@@ -111,18 +116,24 @@ __device__ __inline__ void query_block_dispatcher(
     // we  cache the result of (is_active && is_owned && is_compute_set) in
     // shared memory to check on it later
     bool is_participant = false;
-    update_bitmask<blockThreads>(
-        num_src_in_patch,
-        s_participant_bitmask,
-        [&](const uint16_t local_id) {
+    block_loop<uint16_t,
+               blockThreads,
+               true>(num_src_in_patch, [&](const uint16_t local_id) {
+        bool is_par = false;
+        if (local_id < num_src_in_patch) {
             bool is_del = is_deleted(local_id, input_active_mask);
             bool is_own = is_owned(local_id, input_owned_mask);
             bool is_act = compute_active_set({patch_info.patch_id, local_id});
-            bool is_par = !is_del && is_own && is_act;
-            is_participant = is_participant || is_par;
-            return is_par;
-        },
-        false);
+            is_par      = !is_del && is_own && is_act;
+        }
+        is_participant     = is_participant || is_par;
+        uint32_t warp_mask = __ballot_sync(0xFFFFFFFF, is_par);
+        uint32_t lane_id   = threadIdx.x % 32;
+        if (lane_id == 0) {
+            uint32_t mask_id               = local_id / 32;
+            s_participant_bitmask[mask_id] = warp_mask;
+        }
+    });
 
 
     if (__syncthreads_or(is_participant) == 0) {
