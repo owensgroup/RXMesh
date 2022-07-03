@@ -26,16 +26,16 @@ namespace detail {
  */
 template <Op op, uint32_t blockThreads, typename activeSetT>
 __device__ __inline__ void query_block_dispatcher(
-    const PatchInfoV2& patch_info,
-    activeSetT         compute_active_set,
-    const bool         oriented,
-    uint32_t&          num_src_in_patch,
-    uint16_t*&         s_output_offset,
-    uint16_t*&         s_output_value,
-    uint32_t*&         s_participant_bitmask,
-    uint32_t*&         s_output_owned_bitmask,
-    LPHashTable&       output_lp_hashtable,
-    LPPair*&           s_table)
+    const PatchInfo& patch_info,
+    activeSetT       compute_active_set,
+    const bool       oriented,
+    uint32_t&        num_src_in_patch,
+    uint16_t*&       s_output_offset,
+    uint16_t*&       s_output_value,
+    uint32_t*&       s_participant_bitmask,
+    uint32_t*&       s_output_owned_bitmask,
+    LPHashTable&     output_lp_hashtable,
+    LPPair*&         s_table)
 {
     namespace cg           = cooperative_groups;
     cg::thread_block block = cg::this_thread_block();
@@ -233,7 +233,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     LPPair*     s_table;
 
     query_block_dispatcher<op, blockThreads>(
-        context.get_patches_info_v2()[patch_id],
+        context.get_patches_info()[patch_id],
         compute_active_set,
         oriented,
         num_src_in_patch,
@@ -267,7 +267,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
                 s_output_owned_bitmask,
                 output_lp_hashtable,
                 s_table,
-                context.get_patches_info_v2()[patch_id].patch_stash,
+                context.get_patches_info()[patch_id].patch_stash,
                 int(op == Op::FE));
 
             compute_op(handle, iter);
@@ -450,7 +450,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
         LPPair*     s_table;
 
         detail::template query_block_dispatcher<op, blockThreads>(
-            context.get_patches_info_v2()[patch_id],
+            context.get_patches_info()[patch_id],
             compute_active_set,
             oriented,
             num_src_in_patch,
@@ -479,7 +479,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
                 s_output_owned_bitmask,
                 output_lp_hashtable,
                 s_table,
-                context.get_patches_info_v2()[patch_id].patch_stash,
+                context.get_patches_info()[patch_id].patch_stash,
                 int(op == Op::FE));
 
             compute_op(src_id, iter);

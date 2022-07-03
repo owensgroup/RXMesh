@@ -129,10 +129,9 @@ __device__ __forceinline__ void v_e_oreinted(const PatchInfo& patch_info,
                                              const uint32_t*  active_mask_e,
                                              const uint32_t*  active_mask_v)
 {
-    const uint16_t num_edges          = patch_info.num_edges;
-    const uint16_t num_faces          = patch_info.num_faces;
-    const uint16_t num_vertices       = patch_info.num_vertices;
-    const uint16_t num_owned_vertices = patch_info.num_owned_vertices;
+    const uint16_t num_edges    = patch_info.num_edges;
+    const uint16_t num_faces    = patch_info.num_faces;
+    const uint16_t num_vertices = patch_info.num_vertices;
 
     s_output_offset = &s_ev[0];
     s_output_value  = &s_ev[num_vertices + 1 + (num_vertices + 1) % 2];
@@ -176,7 +175,8 @@ __device__ __forceinline__ void v_e_oreinted(const PatchInfo& patch_info,
     __syncthreads();
 
     // TODO check active_mask_v
-    for (uint32_t v = threadIdx.x; v < num_owned_vertices; v += blockDim.x) {
+    // for (uint32_t v = threadIdx.x; v < num_owned_vertices; v += blockDim.x) {
+    for (uint32_t v = threadIdx.x; v < num_vertices; v += blockDim.x) {
 
         // if the vertex is not owned by this patch, then there is no reason
         // to orient its edges because no serious computation is done on it
@@ -525,10 +525,10 @@ __device__ __forceinline__ void f_f(const uint16_t  num_edges,
 
 template <uint32_t blockThreads, Op op>
 __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
-                                      const PatchInfoV2& patch_info,
-                                      ShmemAllocator&    shrd_alloc,
-                                      uint16_t*&         s_output_offset,
-                                      uint16_t*&         s_output_value)
+                                      const PatchInfo& patch_info,
+                                      ShmemAllocator&  shrd_alloc,
+                                      uint16_t*&       s_output_offset,
+                                      uint16_t*&       s_output_value)
 {
 
     if constexpr (op == Op::VV) {
@@ -664,10 +664,6 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
         assert(patch_info.num_edges <= 3 * patch_info.num_faces);
         s_output_offset = shrd_alloc.alloc<uint16_t>(4 * patch_info.num_faces);
         s_output_value  = &s_output_offset[patch_info.num_faces + 1];
-
-        // s_output_offset=
-        // &s_fe[3 * patch_info.num_faces + 2 * 3 * patch_info.num_faces];
-        //                        ^^^^FE             ^^^^^EF
 
         uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
         uint16_t* s_ef =

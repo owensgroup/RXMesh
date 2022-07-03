@@ -11,8 +11,9 @@ template <uint32_t blockThreads, typename predicateT>
 __device__ __inline__ void delete_face(PatchInfo&       patch_info,
                                        const predicateT predicate)
 {
+    // TODO
     // Extract the argument in the predicate lambda function
-    using PredicateTTraits = detail::FunctionTraits<predicateT>;
+    /*using PredicateTTraits = detail::FunctionTraits<predicateT>;
     using HandleT          = typename PredicateTTraits::template arg<0>::type;
     static_assert(
         std::is_same_v<HandleT, FaceHandle>,
@@ -42,7 +43,7 @@ __device__ __inline__ void delete_face(PatchInfo&       patch_info,
     // store the bitmask back to global memory
     store<blockThreads>(
         s_active_mask_f, active_mask_f_size, patch_info.active_mask_f);
-    __syncthreads();
+    __syncthreads();*/
 }
 }  // namespace detail
 }  // namespace rxmesh

@@ -41,7 +41,7 @@ __global__ static void check_uniqueness(const Context           context,
     /*const uint32_t patch_id = blockIdx.x;
     if (patch_id < context.get_num_patches()) {
 
-        PatchInfoV2 patch_info = context.get_patches_info_v2()[patch_id];
+        PatchInfo patch_info = context.get_patches_info()[patch_id];
 
         ShmemAllocator shrd_alloc;
         uint16_t *     s_ev, *s_fe;
@@ -201,7 +201,7 @@ __global__ static void check_not_owned(const Context           context,
 
     if (patch_id < context.get_num_patches()) {
 
-        PatchInfoV2 patch_info = context.get_patches_info_v2()[patch_id];
+        PatchInfo patch_info = context.get_patches_info_v2()[patch_id];
 
         ShmemAllocator shrd_alloc;
         uint16_t *     s_ev, *s_fe;
@@ -538,7 +538,8 @@ void RXMeshDynamic::update_host()
         }
 
         // resize not-owned patch and local id (update num_owned_X, num_X)
-        resize_not_owned(d_patch.num_vertices,
+        // TODO
+        /*resize_not_owned(d_patch.num_vertices,
                          d_patch.num_owned_vertices,
                          m_h_patches_info[p].num_vertices,
                          m_h_patches_info[p].num_owned_vertices,
@@ -625,7 +626,7 @@ void RXMeshDynamic::update_host()
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_f,
                               d_patch.active_mask_f,
                               detail::mask_num_bytes(d_patch.num_faces),
-                              cudaMemcpyDeviceToHost));
+                              cudaMemcpyDeviceToHost));*/
     }
 }
 }  // namespace rxmesh

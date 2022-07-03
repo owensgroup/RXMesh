@@ -8,6 +8,7 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/handle.h"
 #include "rxmesh/kernels/for_each.cuh"
+#include "rxmesh/kernels/shmem_allocator.cuh"
 #include "rxmesh/launch_box.h"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/types.h"
@@ -15,7 +16,6 @@
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/timer.h"
-
 #if USE_POLYSCOPE
 #include "polyscope/surface_mesh.h"
 #endif
@@ -143,11 +143,18 @@ class RXMeshStatic : public RXMesh
             const int num_patches = this->get_num_patches();
 #pragma omp parallel for
             for (int p = 0; p < num_patches; ++p) {
-                for (uint16_t v = 0;
-                     v < this->m_h_patches_info[p].num_owned_vertices;
+                for (uint16_t v = 0; v < this->m_h_patches_info[p].num_vertices;
                      ++v) {
-                    const VertexHandle v_handle(static_cast<uint32_t>(p), v);
-                    apply(v_handle);
+
+                    if (detail::is_owned(v,
+                                         m_h_patches_info[p].active_mask_v) &&
+                        !detail::is_deleted(
+                            v, m_h_patches_info[p].active_mask_v)) {
+
+                        const VertexHandle v_handle(static_cast<uint32_t>(p),
+                                                    v);
+                        apply(v_handle);
+                    }
                 }
             }
         }
@@ -186,11 +193,17 @@ class RXMeshStatic : public RXMesh
             const int num_patches = this->get_num_patches();
 #pragma omp parallel for
             for (int p = 0; p < num_patches; ++p) {
-                for (uint16_t e = 0;
-                     e < this->m_h_patches_info[p].num_owned_edges;
+                for (uint16_t e = 0; e < this->m_h_patches_info[p].num_edges;
                      ++e) {
-                    const EdgeHandle e_handle(static_cast<uint32_t>(p), e);
-                    apply(e_handle);
+
+                    if (detail::is_owned(e,
+                                         m_h_patches_info[p].active_mask_e) &&
+                        !detail::is_deleted(
+                            e, m_h_patches_info[p].active_mask_e)) {
+
+                        const EdgeHandle e_handle(static_cast<uint32_t>(p), e);
+                        apply(e_handle);
+                    }
                 }
             }
         }
@@ -229,10 +242,15 @@ class RXMeshStatic : public RXMesh
             const int num_patches = this->get_num_patches();
 #pragma omp parallel for
             for (int p = 0; p < num_patches; ++p) {
-                for (int f = 0; f < this->m_h_patches_info[p].num_owned_faces;
-                     ++f) {
-                    const FaceHandle f_handle(static_cast<uint32_t>(p), f);
-                    apply(f_handle);
+                for (int f = 0; f < this->m_h_patches_info[p].num_faces; ++f) {
+
+                    if (detail::is_owned(f,
+                                         m_h_patches_info[p].active_mask_f) &&
+                        !detail::is_deleted(
+                            f, m_h_patches_info[p].active_mask_f)) {
+                        const FaceHandle f_handle(static_cast<uint32_t>(p), f);
+                        apply(f_handle);
+                    }
                 }
             }
         }
@@ -713,7 +731,8 @@ class RXMeshStatic : public RXMesh
     void export_obj(const std::string&        filename,
                     const VertexAttribute<T>& coords)
     {
-        std::string  fn = filename;
+        // TODO
+        /*std::string  fn = filename;
         std::fstream file(fn, std::ios::out);
         file.precision(30);
 
@@ -755,7 +774,7 @@ class RXMeshStatic : public RXMesh
             }
 
             num_v += p_num_vertices;
-        }
+        }*/
     }
 
 

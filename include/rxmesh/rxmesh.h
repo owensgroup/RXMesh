@@ -256,8 +256,7 @@ class RXMesh
 
 
     void build_device();
-    void build_device_v2();
-
+    
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
     friend class ::RXMeshTest;
@@ -308,9 +307,7 @@ class RXMesh
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
 
     // Should be updated with update_host
-    PatchInfo *m_d_patches_info, *m_h_patches_info;
-
-    PatchInfoV2 *m_d_patches_info_v2, *m_h_patches_info_v2;
+    PatchInfo *m_d_patches_info, *m_h_patches_info;    
 
     float m_capacity_factor, m_lp_hashtable_load_factor;
 };
