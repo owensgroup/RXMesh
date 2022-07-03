@@ -56,7 +56,7 @@ struct ShmemAllocator
         uint32_t num_bytes,
         uint32_t byte_alignment = default_alignment)
     {
-        align(byte_alignment, m_ptr);
+        this->align(byte_alignment);
         char* ret = m_ptr;
         m_ptr     = m_ptr + num_bytes;
         assert(get_allocated_size_bytes() <= get_max_size_bytes());
@@ -84,7 +84,7 @@ struct ShmemAllocator
      * @brief return the maximum allocation size which is the same as the number
      * of bytes passed during the kernel launch
      */
-    __device__ __forceinline__ uint32_t get_max_size_bytes()
+    __device__ __forceinline__ uint32_t get_max_size_bytes() const
     {
         uint32_t ret;
         asm("mov.u32 %0, %dynamic_smem_size;" : "=r"(ret));
@@ -94,34 +94,28 @@ struct ShmemAllocator
     /**
      * @brief return the number of bytes that has been allocated
      */
-    __device__ __forceinline__ uint32_t get_allocated_size_bytes()
+    __device__ __forceinline__ uint32_t get_allocated_size_bytes() const
     {
         return m_ptr - SHMEM_START;
     }
 
    private:
     /**
-     * @brief given a pointer, this function returns a pointer to the first
-     * location at the boundary of a given alignment size. This what std:align
-     * does but it does not work with CUDA so this a stripped down version of
-     * it.
-     * @tparam T type of the pointer
+     * @brief This function aligns m_ptr to the first location at the
+     * boundary of a given alignment size. This what std:align does but it does
+     * not work with CUDA so this a stripped down version of it.
      * @param byte_alignment number of bytes to get the pointer to be aligned to
-     * @param ptr input/output pointer pointing at first usable location. On
-     * return, it will be properly aligned to the beginning of the first element
-     * that is aligned to alignment
      */
-    template <typename T>
-    __device__ __host__ __inline__ void align(const uint32_t byte_alignment,
-                                              T*&            ptr) noexcept
+    __device__ __host__ __inline__ void align(
+        const uint32_t byte_alignment) noexcept
     {
-        const uint64_t intptr    = reinterpret_cast<uint64_t>(ptr);
+        const uint64_t intptr    = reinterpret_cast<uint64_t>(m_ptr);
         const uint64_t remainder = intptr % byte_alignment;
         if (remainder == 0) {
             return;
         }
         const uint64_t aligned = intptr + byte_alignment - remainder;
-        ptr                    = reinterpret_cast<T*>(aligned);
+        m_ptr                  = reinterpret_cast<char*>(aligned);
     }
     char* m_ptr;
 };

@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include <assert.h>
+#include <cooperative_groups.h>
 #include <stdint.h>
 #include <cub/block/block_discontinuity.cuh>
 
@@ -36,6 +37,9 @@ __device__ __inline__ void query_block_dispatcher(
     LPHashTable&       output_lp_hashtable,
     LPPair*&           s_table)
 {
+    namespace cg           = cooperative_groups;
+    cg::thread_block block = cg::this_thread_block();
+
     ShmemAllocator shrd_alloc;
 
     static_assert(op != Op::EE, "Op::EE is not supported!");
@@ -105,12 +109,19 @@ __device__ __inline__ void query_block_dispatcher(
 
 
     // load table async
-    s_table =
-        shrd_alloc.template alloc<LPPair>(output_lp_hashtable.get_capacity());
-    load_async(output_lp_hashtable.get_table(),
-               output_lp_hashtable.get_capacity(),
-               s_table,
-               false);
+    auto alloc_then_load_table = [&](bool with_wait) {
+        s_table = shrd_alloc.template alloc<LPPair>(
+            output_lp_hashtable.get_capacity());
+        load_async(block,
+                   output_lp_hashtable.get_table(),
+                   output_lp_hashtable.get_capacity(),
+                   s_table,
+                   with_wait);
+    };
+
+    if constexpr (op != Op::FV && op != Op::VV && op != Op::FF) {
+        alloc_then_load_table(false);
+    }
 
 
     // we  cache the result of (is_active && is_owned && is_compute_set) in
@@ -143,14 +154,8 @@ __device__ __inline__ void query_block_dispatcher(
         return;
     }
 
-    // 2) Load the patch info
-    uint16_t* s_ev;
-    uint16_t* s_fe;
-    load_mesh_async<op>(patch_info, shrd_alloc, s_ev, s_fe, true);
 
-    __syncthreads();
-
-    // 3)Perform the query operation
+    // Perform the query operation
     if (oriented) {
         assert(op == Op::VV || op == Op::VE);
         if constexpr (op == Op::VV) {
@@ -162,7 +167,6 @@ __device__ __inline__ void query_block_dispatcher(
                                        patch_info.active_mask_e,
                                        patch_info.active_mask_v);*/
         }
-
         if constexpr (op == Op::VE) {
             // TODO
             /*v_e_oreinted<blockThreads>(patch_info,
@@ -171,22 +175,17 @@ __device__ __inline__ void query_block_dispatcher(
                                        s_ev,
                                        patch_info.active_mask_e,
                                        patch_info.active_mask_v);*/
-            __syncthreads();
+            block.sync();
         }
     } else {
-        query<blockThreads, op>(s_output_offset,
-                                s_output_value,
-                                s_ev,
-                                s_fe,
-                                patch_info.num_vertices,
-                                patch_info.num_edges,
-                                patch_info.num_faces,
-                                patch_info.active_mask_v,
-                                patch_info.active_mask_e,
-                                patch_info.active_mask_f);
+        query<blockThreads, op>(
+            block, patch_info, shrd_alloc, s_output_offset, s_output_value);
     }
 
-    __syncthreads();
+    if constexpr (op == Op::FV || op == Op::VV || op == Op::FF) {
+        alloc_then_load_table(true);
+    }
+    block.sync();
 }
 
 

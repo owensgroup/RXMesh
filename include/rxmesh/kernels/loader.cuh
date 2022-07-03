@@ -15,6 +15,21 @@ namespace rxmesh {
 namespace detail {
 
 template <typename T, typename SizeT>
+__device__ __inline__ void load_async(cooperative_groups::thread_block& block,
+                                      const T*                          in,
+                                      const SizeT                       size,
+                                      T*                                out,
+                                      bool with_wait)
+{
+    cooperative_groups::memcpy_async(block, out, in, sizeof(T) * size);
+
+    if (with_wait) {
+        cooperative_groups::wait(block);
+    }
+}
+
+
+template <typename T, typename SizeT>
 __device__ __inline__ void load_async(const T*    in,
                                       const SizeT size,
                                       T*          out,
@@ -66,109 +81,6 @@ __device__ __forceinline__ void store(const T* in, const SizeT size, T* out)
     }
 }
 
-
-/**
- * @brief load the patch topology based on the requirements of a query operation
- * @tparam op the query operation
- * @param patch_info input patch info
- * @param s_ev where EV will be loaded
- * @param s_fe where FE will be loaded
- * @param with_wait wither to add a sync at the end
- * @return
- */
-template <Op op>
-__device__ __forceinline__ void load_mesh_async(const PatchInfoV2& patch_info,
-                                                ShmemAllocator&    shrd_alloc,
-                                                uint16_t*&         s_ev,
-                                                uint16_t*&         s_fe,
-                                                bool               with_wait)
-{
-    switch (op) {
-        case Op::VV: {
-            s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
-            load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
-                       2 * patch_info.num_edges,
-                       s_ev,
-                       with_wait);
-            break;
-        }
-        case Op::VE: {
-            assert(2 * patch_info.num_edges > patch_info.num_vertices);
-            s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
-            load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
-                       2 * patch_info.num_edges,
-                       s_ev,
-                       with_wait);
-            break;
-        }
-        case Op::VF: {
-            assert(3 * patch_info.num_faces > patch_info.num_vertices);
-            s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
-            s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
-            load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
-                       3 * patch_info.num_faces,
-                       s_fe,
-                       false);
-            load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
-                       2 * patch_info.num_edges,
-                       s_ev,
-                       with_wait);
-            break;
-        }
-        case Op::FV: {
-            // TODO need to revisit this
-            s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
-            s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
-            load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
-                       2 * patch_info.num_edges,
-                       s_ev,
-                       false);
-
-            load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
-                       3 * patch_info.num_faces,
-                       s_fe,
-                       with_wait);
-            break;
-        }
-        case Op::FE: {
-            s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
-            load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
-                       3 * patch_info.num_faces,
-                       s_fe,
-                       with_wait);
-            break;
-        }
-        case Op::FF: {
-            s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
-            load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
-                       3 * patch_info.num_faces,
-                       s_fe,
-                       with_wait);
-            break;
-        }
-        case Op::EV: {
-            s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
-            load_async(reinterpret_cast<uint16_t*>(patch_info.ev),
-                       2 * patch_info.num_edges,
-                       s_ev,
-                       with_wait);
-            break;
-        }
-        case Op::EF: {
-            assert(3 * patch_info.num_faces > patch_info.num_edges);
-            s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
-            load_async(reinterpret_cast<uint16_t*>(patch_info.fe),
-                       3 * patch_info.num_faces,
-                       s_fe,
-                       with_wait);
-            break;
-        }
-        default: {
-            assert(1 != 1);
-            break;
-        }
-    }
-}
 
 }  // namespace detail
 }  // namespace rxmesh
