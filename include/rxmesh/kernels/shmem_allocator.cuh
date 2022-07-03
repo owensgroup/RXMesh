@@ -30,7 +30,7 @@ struct ShmemAllocator
     __device__ __forceinline__ void dealloc(const uint32_t num_bytes)
     {
         m_ptr = m_ptr - num_bytes;
-        assert(m_ptr - SHMEM_START > 0);
+        assert(m_ptr >= SHMEM_START);
     }
 
     /**

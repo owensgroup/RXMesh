@@ -183,6 +183,7 @@ __device__ __inline__ void query_block_dispatcher(
     }
 
     if constexpr (op == Op::FV || op == Op::VV || op == Op::FF) {
+        block.sync();
         alloc_then_load_table(true);
     }
     block.sync();

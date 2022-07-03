@@ -1014,10 +1014,10 @@ class RXMeshStatic : public RXMesh
                            sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += bitmask_size(ELEMENT::FACE);
 
             // store not-owned bitmask
-            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += bitmask_size(ELEMENT::FACE);
 
             // for possible padding for alignment
             // 6 since there are 6 calls for ShmemAllocator.alloc

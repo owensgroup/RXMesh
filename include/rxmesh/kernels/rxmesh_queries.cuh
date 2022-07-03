@@ -460,14 +460,13 @@ template <uint32_t blockThreads>
 __device__ __forceinline__ void f_f(const uint16_t  num_edges,
                                     const uint16_t  num_faces,
                                     uint16_t*       s_FE,
+                                    uint16_t*       s_EF_offset,
                                     uint16_t*       s_FF_offset,
                                     uint16_t*       s_FF_output,
                                     const uint32_t* active_mask_e,
                                     const uint32_t* active_mask_f)
 {
     // First construct M_EF in shared memory
-
-    uint16_t* s_EF_offset = &s_FE[num_faces * 3];
     uint16_t* s_EF_output = &s_EF_offset[num_edges + 1];
 
     // copy FE in to EF_offset so we can do the transpose in place without
@@ -495,8 +494,6 @@ __device__ __forceinline__ void f_f(const uint16_t  num_edges,
         uint16_t num_neighbour_faces = 0;
         for (uint16_t e = 0; e < 3; ++e) {
             uint16_t edge = s_FE[3 * f + e];
-            // printf("\n t= %u f= %u, e= %u, b0= %u, b1= %u ", threadIdx.x, f,
-            //       edge, s_EF_offset[edge], s_EF_offset[edge + 1]);
 
             assert(s_EF_offset[edge + 1] >= s_EF_offset[edge]);
 
@@ -676,16 +673,23 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
         uint16_t* s_ef =
             shrd_alloc.alloc<uint16_t>(2 * 3 * patch_info.num_faces);
 
+        load_async(block,
+                   reinterpret_cast<uint16_t*>(patch_info.fe),
+                   3 * patch_info.num_faces,
+                   s_fe,
+                   true);
+
         f_f<blockThreads>(patch_info.num_edges,
                           patch_info.num_faces,
                           s_fe,
+                          s_ef,
                           s_output_offset,
                           s_output_value,
                           patch_info.active_mask_e,
                           patch_info.active_mask_f);
 
-        shrd_alloc.dealloc<uint16_t>(3 * patch_info.num_edges);
-        shrd_alloc.dealloc<uint16_t>(2 * 3 * patch_info.num_edges);
+        shrd_alloc.dealloc<uint16_t>(2 * 3 * patch_info.num_faces);
+        shrd_alloc.dealloc<uint16_t>(3 * patch_info.num_faces);
     }
 }
 }  // namespace detail
