@@ -1,4 +1,5 @@
 #include "rxmesh/kernels/dynamic_util.cuh"
+#include "rxmesh/kernels/for_each_dispatcher.cuh"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/shmem_allocator.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
@@ -6,31 +7,30 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
 
+#include <thrust/copy.h>
+#include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
+
 namespace rxmesh {
 
 namespace detail {
 
+template <uint32_t blockThreads>
 __global__ static void calc_num_elements(const Context context,
                                          uint32_t*     sum_num_vertices,
                                          uint32_t*     sum_num_edges,
                                          uint32_t*     sum_num_faces)
 {
-    // TODO
-    /*uint32_t thread_id = threadIdx.x + blockIdx.x * blockDim.x;
+    auto sum_v = [&](VertexHandle& v_id) { ::atomicAdd(sum_num_vertices, 1u); };
+    for_each_dispatcher<Op::V, blockThreads>(context, sum_v);
 
-    if (thread_id < context.get_num_patches()) {
-        ::atomicAdd(
-            sum_num_vertices,
-            uint32_t(context.get_patches_info()[thread_id].num_owned_vertices));
 
-        ::atomicAdd(
-            sum_num_edges,
-            uint32_t(context.get_patches_info()[thread_id].num_owned_edges));
+    auto sum_e = [&](EdgeHandle& e_id) { ::atomicAdd(sum_num_edges, 1u); };
+    for_each_dispatcher<Op::E, blockThreads>(context, sum_e);
 
-        ::atomicAdd(
-            sum_num_faces,
-            uint32_t(context.get_patches_info()[thread_id].num_owned_faces));
-    }*/
+
+    auto sum_f = [&](FaceHandle& f_id) { ::atomicAdd(sum_num_faces, 1u); };
+    for_each_dispatcher<Op::F, blockThreads>(context, sum_f);
 }
 
 template <uint32_t blockThreads>
@@ -321,14 +321,9 @@ bool RXMeshDynamic::validate()
     // to the number of vertices, edges, and faces respectively
     auto check_num_mesh_elements = [&]() -> bool {
         uint32_t *d_sum_num_vertices, *d_sum_num_edges, *d_sum_num_faces;
-        CUDA_ERROR(cudaMalloc((void**)&d_sum_num_vertices, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMalloc((void**)&d_sum_num_edges, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMalloc((void**)&d_sum_num_faces, sizeof(uint32_t)));
-
-        CUDA_ERROR(cudaMemset(d_sum_num_vertices, 0, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMemset(d_sum_num_edges, 0, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMemset(d_sum_num_faces, 0, sizeof(uint32_t)));
-
+        thrust::device_vector<uint32_t> d_sum_vertices(1, 0);
+        thrust::device_vector<uint32_t> d_sum_edges(1, 0);
+        thrust::device_vector<uint32_t> d_sum_faces(1, 0);
 
         uint32_t num_patches;
         CUDA_ERROR(cudaMemcpy(&num_patches,
@@ -336,13 +331,14 @@ bool RXMeshDynamic::validate()
                               sizeof(uint32_t),
                               cudaMemcpyDeviceToHost));
 
-        const uint32_t block_size = 256;
-        const uint32_t grid_size  = DIVIDE_UP(num_patches, block_size);
+        constexpr uint32_t block_size = 256;
+        const uint32_t     grid_size  = num_patches;
 
-        detail::calc_num_elements<<<grid_size, block_size>>>(m_rxmesh_context,
-                                                             d_sum_num_vertices,
-                                                             d_sum_num_edges,
-                                                             d_sum_num_faces);
+        detail::calc_num_elements<block_size>
+            <<<grid_size, block_size>>>(m_rxmesh_context,
+                                        d_sum_vertices.data().get(),
+                                        d_sum_edges.data().get(),
+                                        d_sum_faces.data().get());
 
         uint32_t num_vertices, num_edges, num_faces;
         CUDA_ERROR(cudaMemcpy(&num_vertices,
@@ -358,22 +354,10 @@ bool RXMeshDynamic::validate()
                               sizeof(uint32_t),
                               cudaMemcpyDeviceToHost));
         uint32_t sum_num_vertices, sum_num_edges, sum_num_faces;
-
-        CUDA_ERROR(cudaMemcpy(&sum_num_vertices,
-                              d_sum_num_vertices,
-                              sizeof(uint32_t),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(&sum_num_edges,
-                              d_sum_num_edges,
-                              sizeof(uint32_t),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(&sum_num_faces,
-                              d_sum_num_faces,
-                              sizeof(uint32_t),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaFree(d_sum_num_vertices));
-        CUDA_ERROR(cudaFree(d_sum_num_edges));
-        CUDA_ERROR(cudaFree(d_sum_num_faces));
+        thrust::copy(
+            d_sum_vertices.begin(), d_sum_vertices.end(), &sum_num_vertices);
+        thrust::copy(d_sum_edges.begin(), d_sum_edges.end(), &sum_num_edges);
+        thrust::copy(d_sum_faces.begin(), d_sum_faces.end(), &sum_num_faces);
 
         if (num_vertices != sum_num_vertices || num_edges != sum_num_edges ||
             num_faces != sum_num_faces) {
