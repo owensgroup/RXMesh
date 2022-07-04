@@ -146,8 +146,7 @@ class RXMeshStatic : public RXMesh
                 for (uint16_t v = 0; v < this->m_h_patches_info[p].num_vertices;
                      ++v) {
 
-                    if (detail::is_owned(v,
-                                         m_h_patches_info[p].active_mask_v) &&
+                    if (detail::is_owned(v, m_h_patches_info[p].owned_mask_v) &&
                         !detail::is_deleted(
                             v, m_h_patches_info[p].active_mask_v)) {
 
@@ -196,8 +195,7 @@ class RXMeshStatic : public RXMesh
                 for (uint16_t e = 0; e < this->m_h_patches_info[p].num_edges;
                      ++e) {
 
-                    if (detail::is_owned(e,
-                                         m_h_patches_info[p].active_mask_e) &&
+                    if (detail::is_owned(e, m_h_patches_info[p].owned_mask_e) &&
                         !detail::is_deleted(
                             e, m_h_patches_info[p].active_mask_e)) {
 
@@ -244,8 +242,7 @@ class RXMeshStatic : public RXMesh
             for (int p = 0; p < num_patches; ++p) {
                 for (int f = 0; f < this->m_h_patches_info[p].num_faces; ++f) {
 
-                    if (detail::is_owned(f,
-                                         m_h_patches_info[p].active_mask_f) &&
+                    if (detail::is_owned(f, m_h_patches_info[p].owned_mask_f) &&
                         !detail::is_deleted(
                             f, m_h_patches_info[p].active_mask_f)) {
                         const FaceHandle f_handle(static_cast<uint32_t>(p), f);

@@ -1,3 +1,5 @@
+#include <cooperative_groups.h>
+
 #include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/for_each_dispatcher.cuh"
 #include "rxmesh/kernels/loader.cuh"
@@ -37,17 +39,34 @@ template <uint32_t blockThreads>
 __global__ static void check_uniqueness(const Context           context,
                                         unsigned long long int* d_check)
 {
-    // TODO
-    /*const uint32_t patch_id = blockIdx.x;
+    namespace cg           = cooperative_groups;
+    cg::thread_block block = cg::this_thread_block();
+
+    const uint32_t patch_id = blockIdx.x;
+
     if (patch_id < context.get_num_patches()) {
 
         PatchInfo patch_info = context.get_patches_info()[patch_id];
 
         ShmemAllocator shrd_alloc;
-        uint16_t *     s_ev, *s_fe;
-        // FV since it loads both FE and EV
-        load_mesh_async<Op::FV>(patch_info, shrd_alloc, s_ev, s_fe, true);
-        //__syncthreads();
+
+        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
+        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
+
+        load_async(block,
+                   reinterpret_cast<uint16_t*>(patch_info.ev),
+                   2 * patch_info.num_edges,
+                   s_ev,
+                   false);
+
+        load_async(block,
+                   reinterpret_cast<uint16_t*>(patch_info.fe),
+                   3 * patch_info.num_faces,
+                   s_fe,
+                   true);
+        block.sync();
+
+        __syncthreads();
 
         // make sure an edge is connecting two unique vertices
         for (uint16_t e = threadIdx.x; e < patch_info.num_edges;
@@ -57,37 +76,12 @@ __global__ static void check_uniqueness(const Context           context,
 
             if (!is_deleted(e, patch_info.active_mask_e)) {
 
-                // TODO we should fix this when we are able to apply changes
-                // across ribbons. If an vertex is deleted, it should delete all
-                // edges incident to it. For now, we skip this for ribbon edges
-                if (e >= patch_info.num_owned_edges) {
-                    if (is_deleted(v0, patch_info.active_mask_v) ||
-                        is_deleted(v1, patch_info.active_mask_v)) {
-                        continue;
-                    }
-                }
-
-
                 if (v0 >= patch_info.num_vertices ||
                     v1 >= patch_info.num_vertices || v0 == v1) {
-                    // printf(
-                    //    "\n edge loop: vertex check p= %u, e= %u, v0= %u,"
-                    //    " v1= %u",
-                    //    patch_id,
-                    //    e,
-                    //    v0,
-                    //    v1);
                     ::atomicAdd(d_check, 1);
                 }
                 if (is_deleted(v0, patch_info.active_mask_v) ||
                     is_deleted(v1, patch_info.active_mask_v)) {
-                    // printf(
-                    //    "\n edge loop: del vertex check p= %u, e= %u, v0= %u,"
-                    //    " v1= %u",
-                    //    patch_id,
-                    //    e,
-                    //    v0,
-                    //    v1);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -105,42 +99,15 @@ __global__ static void check_uniqueness(const Context           context,
                 Context::unpack_edge_dir(s_fe[3 * f + 1], e1, d1);
                 Context::unpack_edge_dir(s_fe[3 * f + 2], e2, d2);
 
-                // TODO we should fix this when we are able to apply changes
-                // across ribbons. If an edge is deleted, it should delete all
-                // faces incident to it. For now, we skip this for ribbon faces
-                if (f >= patch_info.num_owned_faces) {
-                    if (is_deleted(e0, patch_info.active_mask_e) ||
-                        is_deleted(e1, patch_info.active_mask_e) ||
-                        is_deleted(e2, patch_info.active_mask_e)) {
-                        continue;
-                    }
-                }
-
                 if (e0 >= patch_info.num_edges || e1 >= patch_info.num_edges ||
                     e2 >= patch_info.num_edges || e0 == e1 || e0 == e2 ||
                     e1 == e2) {
-                    // printf(
-                    //    "\n face loop: edge check p= %u, f= %u, e0= %u, e1= "
-                    //    "%u, e2= %u",
-                    //    patch_id,
-                    //    f,
-                    //    e0,
-                    //    e1,
-                    //    e2);
                     ::atomicAdd(d_check, 1);
                 }
 
                 if (is_deleted(e0, patch_info.active_mask_e) ||
                     is_deleted(e1, patch_info.active_mask_e) ||
                     is_deleted(e2, patch_info.active_mask_e)) {
-                    // printf(
-                    //    "\n face loop: del edge check p= %u, f= %u, e0= %u, "
-                    //    "e1= %u, e2= %u",
-                    //    patch_id,
-                    //    f,
-                    //    e0,
-                    //    e1,
-                    //    e2);
                     ::atomicAdd(d_check, 1);
                 }
 
@@ -149,46 +116,22 @@ __global__ static void check_uniqueness(const Context           context,
                 v1 = s_ev[(2 * e1) + (1 * d1)];
                 v2 = s_ev[(2 * e2) + (1 * d2)];
 
-                // TODO we should fix this when we are able to apply changes
-                // across ribbons. If an vertex is deleted, it should delete all
-                // faces incident to it. For now, we skip this for ribbon faces
-                if (f >= patch_info.num_owned_faces) {
-                    if (is_deleted(v0, patch_info.active_mask_v) ||
-                        is_deleted(v1, patch_info.active_mask_v) ||
-                        is_deleted(v2, patch_info.active_mask_v)) {
-                        continue;
-                    }
-                }
 
                 if (v0 >= patch_info.num_vertices ||
                     v1 >= patch_info.num_vertices ||
                     v2 >= patch_info.num_vertices || v0 == v1 || v0 == v2 ||
                     v1 == v2) {
-                    // printf(
-                    //    "\n face loop: vertex check p= %u, f= %u, e0= %u, e1="
-                    //    "%u, e2= %u, v0= %u, v1= %u, v2= %u",
-                    //    patch_id,
-                    //    f,
-                    //    e0,
-                    //    e1,
-                    //    e2,
-                    //    v0,
-                    //    v1,
-                    //    v2);
                     ::atomicAdd(d_check, 1);
                 }
 
                 if (is_deleted(v0, patch_info.active_mask_v) ||
                     is_deleted(v1, patch_info.active_mask_v) ||
                     is_deleted(v2, patch_info.active_mask_v)) {
-                    // printf(
-                    //    "\n face loop: del vertex check p= %u, f= %u, v0= %u,
-                    //    " "v1= %u, v2= %u", patch_id, f, v0, v1, v2);
                     ::atomicAdd(d_check, 1);
                 }
             }
         }
-    }*/
+    }
 }
 
 
@@ -369,8 +312,6 @@ bool RXMeshDynamic::validate()
 
     // check that each edge is composed of two unique vertices and each face is
     // composed of three unique edges that give three unique vertices.
-    // if a face or edge is deleted, check that their connectivity is set to
-    // INVALID16
     auto check_uniqueness = [&]() -> bool {
         uint32_t num_patches;
         CUDA_ERROR(cudaMemcpy(&num_patches,
@@ -383,14 +324,16 @@ bool RXMeshDynamic::validate()
             cudaMalloc((void**)&d_check, sizeof(unsigned long long int)));
         CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
 
-        const uint32_t block_size   = 256;
-        const uint32_t grid_size    = num_patches;
-        const uint32_t dynamic_smem = (3 * this->m_max_faces_per_patch + 1 +
-                                       2 * this->m_max_edges_per_patch) *
-                                      sizeof(uint16_t);
+        constexpr uint32_t block_size = 256;
+        const uint32_t     grid_size  = num_patches;
+        const uint32_t     dynamic_smem =
+            rxmesh::detail::ShmemAllocator::default_alignment * 2 +
+            (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
+            (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
-        detail::check_uniqueness<256><<<grid_size, block_size, dynamic_smem>>>(
-            m_rxmesh_context, d_check);
+        detail::check_uniqueness<block_size>
+            <<<grid_size, block_size, dynamic_smem>>>(m_rxmesh_context,
+                                                      d_check);
 
         unsigned long long int h_check(0);
         CUDA_ERROR(cudaMemcpy(&h_check,
