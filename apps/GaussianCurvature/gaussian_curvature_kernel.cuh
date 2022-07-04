@@ -52,6 +52,7 @@ __global__ static void compute_gaussian_curvature(const rxmesh::Context      con
                                                  + (l[v] * l[v]) * (c[v2] / s)));
             }
             
+            printf("cuda rads: %d \n", fv[v]);
             atomicAdd(&gcs(fv[v]), -rads[v]);
         }
     };

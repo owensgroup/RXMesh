@@ -14,7 +14,7 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "one-face.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     uint32_t    num_run       = 1;
     uint32_t    device_id     = 0;
@@ -82,6 +82,7 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&         rxmesh,
         rxmesh.for_each_vertex(
             DEVICE,
             [v_gc_val, v_amix_val] __device__(const VertexHandle vh) {
+                printf("CUDA: %f %f \n", v_gc_val(vh, 0), v_amix_val(vh, 0));
                 v_gc_val(vh, 0) = v_gc_val(vh, 0) / v_amix_val(vh, 0);
             });
 

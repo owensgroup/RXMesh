@@ -14,8 +14,8 @@ inline void gaussian_curvature_ref(const std::vector<std::vector<uint32_t>>& Fac
 
     std::vector<T> region_mixed(gaussian_curvature.size());
 
-    memset((void*)gaussian_curvature.data(), 2 * PI, gaussian_curvature.size() * sizeof(T));
-    memset((void*)region_mixed.data(), 0, region_mixed.size() * sizeof(T));
+    std::fill(gaussian_curvature.begin(), gaussian_curvature.end(), 2 * PI);
+    std::fill(region_mixed.begin(), region_mixed.end(), 0);
 
     T        edge_len_sq[3];
     T        angle_sin;
@@ -99,11 +99,13 @@ inline void gaussian_curvature_ref(const std::vector<std::vector<uint32_t>>& Fac
                                             + (edge_len_sq[i]) * (angle_cos[i2] / angle_sin) );
             }
 
+            printf("ref rads: %d \n", v[i]);
             gaussian_curvature[v[i]] -= rads[i];
         }
     }
 
     for (uint32_t n = 0; n < num_vertices; ++n)  {
+        printf("ref: %f %f \n", gaussian_curvature[n], region_mixed[n]);
         gaussian_curvature[n] = gaussian_curvature[n] / region_mixed[n];
     }
 }
