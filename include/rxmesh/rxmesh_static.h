@@ -731,8 +731,7 @@ class RXMeshStatic : public RXMesh
     void export_obj(const std::string&        filename,
                     const VertexAttribute<T>& coords)
     {
-        // TODO
-        /*std::string  fn = filename;
+        std::string  fn = filename;
         std::fstream file(fn, std::ios::out);
         file.precision(30);
 
@@ -745,36 +744,45 @@ class RXMeshStatic : public RXMesh
             for (uint16_t v = 0; v < p_num_vertices; ++v) {
                 uint16_t v_id = v;
                 uint32_t p_id = p;
-                if (v >= this->m_h_patches_info[p].num_owned_vertices) {
-                    uint16_t l =
-                        v - this->m_h_patches_info[p].num_owned_vertices;
-                    v_id = this->m_h_patches_info[p].not_owned_id_v[l].id;
-                    p_id = this->m_h_patches_info[p].not_owned_patch_v[l];
+
+                if (!detail::is_owned(v_id,
+                                      this->m_h_patches_info[p].owned_mask_v)) {
+
+                    LPPair lp = this->m_h_patches_info[p].lp_v.find(
+                        v_id, this->m_h_patches_info[p].lp_v.get_table());
+
+                    v_id = lp.local_id_in_owner_patch();
+                    p_id = this->m_h_patches_info[p].patch_stash.get_patch(lp);
                 }
+
                 VertexHandle vh(p_id, {v_id});
                 file << "v " << coords(vh, 0) << " " << coords(vh, 1) << " "
                      << coords(vh, 2) << std::endl;
             }
 
-            const uint32_t p_num_faces =
-                this->m_h_patches_info[p].num_owned_faces;
+            const uint32_t p_num_faces = this->m_h_patches_info[p].num_faces;
 
             for (uint32_t f = 0; f < p_num_faces; ++f) {
-
-                file << "f ";
-                for (uint32_t e = 0; e < 3; ++e) {
-                    uint16_t edge = this->m_h_patches_info[p].fe[3 * f + e].id;
-                    flag_t   dir(0);
-                    Context::unpack_edge_dir(edge, edge, dir);
-                    uint16_t e_id = (2 * edge) + dir;
-                    uint16_t v    = this->m_h_patches_info[p].ev[e_id].id;
-                    file << v + num_v + 1 << " ";
+                if (!detail::is_deleted(
+                        f, this->m_h_patches_info[p].active_mask_f) &&
+                    detail::is_owned(f,
+                                     this->m_h_patches_info[p].owned_mask_f)) {
+                    file << "f ";
+                    for (uint32_t e = 0; e < 3; ++e) {
+                        uint16_t edge =
+                            this->m_h_patches_info[p].fe[3 * f + e].id;
+                        flag_t dir(0);
+                        Context::unpack_edge_dir(edge, edge, dir);
+                        uint16_t e_id = (2 * edge) + dir;
+                        uint16_t v    = this->m_h_patches_info[p].ev[e_id].id;
+                        file << v + num_v + 1 << " ";
+                    }
+                    file << std::endl;
                 }
-                file << std::endl;
             }
 
             num_v += p_num_vertices;
-        }*/
+        }
     }
 
 
