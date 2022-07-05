@@ -23,7 +23,6 @@ __global__ static void compute_gaussian_curvature(const rxmesh::Context      con
 
         // the three edges length 
         Vector<3, T> l(dist2(c0, c1), dist2(c1, c2), dist2(c2, c0));
-        printf("cuda lens: %f \n", dist2(c0, c1));
         T s = cross(c1 - c0, c2 - c0).norm();
         Vector<3, T> c(dot(c1 - c0, c2 - c0), 
                        dot(c2 - c1, c0 - c1), 
