@@ -14,7 +14,7 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "one-face.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     uint32_t    num_run       = 1;
     uint32_t    device_id     = 0;
