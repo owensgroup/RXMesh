@@ -99,13 +99,11 @@ inline void gaussian_curvature_ref(const std::vector<std::vector<uint32_t>>& Fac
                                             + (edge_len_sq[i]) * (angle_cos[i2] / angle_sin) );
             }
 
-            printf("ref rads: %d \n", v[i]);
             gaussian_curvature[v[i]] -= rads[i];
         }
     }
 
     for (uint32_t n = 0; n < num_vertices; ++n)  {
-        printf("ref: %f %f \n", gaussian_curvature[n], region_mixed[n]);
         gaussian_curvature[n] = gaussian_curvature[n] / region_mixed[n];
     }
 }

@@ -21,7 +21,7 @@ __global__ static void compute_gaussian_curvature(const rxmesh::Context      con
         Vector<3, T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
         Vector<3, T> c2(coords(fv[2], 0), coords(fv[2], 1), coords(fv[2], 2));
 
-        // the three edges length
+        // the three edges length 
         Vector<3, T> l(dist2(c0, c1), dist2(c1, c2), dist2(c2, c0));
         T s = cross(c1 - c0, c2 - c0).norm();
         Vector<3, T> c(dot(c1 - c0, c2 - c0), 
@@ -48,11 +48,10 @@ __global__ static void compute_gaussian_curvature(const rxmesh::Context      con
                 }
             } else {
                 // veronoi region calculation
-                atomicAdd(&amix(fv[v]), 0.125 * ( (l[v2] * l[v2]) * (c[v1] / s) 
-                                                 + (l[v] * l[v]) * (c[v2] / s)));
+                atomicAdd(&amix(fv[v]), 0.125 * ( (l[v2]) * (c[v1] / s) 
+                                                 + (l[v]) * (c[v2] / s)));
             }
             
-            printf("cuda rads: %d \n", fv[v]);
             atomicAdd(&gcs(fv[v]), -rads[v]);
         }
     };
