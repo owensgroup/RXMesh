@@ -1,16 +1,17 @@
-// Compute the vertex normal according to
-// Max, Nelson. "Weights for computing vertex normals from facet normals."
-// Journal of Graphics Tools 4, no. 2 (1999): 1-6.
+// Compute the gaussian curvature according to
+// Mark Meyer, Mathieu Desbrun, Peter Schroder, and Alan H. Barr. "Discrete
+// Differential-Geometry Operators for Triangulated 2-Manifolds"
+// International Workshop on Visualization and Mathematics
 
 #include <cuda_profiler_api.h>
+#include "gaussian_curvature_kernel.cuh"
+#include "gaussian_curvature_ref.h"
 #include "gtest/gtest.h"
 #include "rxmesh/attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh/util/timer.h"
-#include "gaussian_curvature_kernel.cuh"
-#include "gaussian_curvature_ref.h"
 
 struct arg
 {
@@ -23,15 +24,15 @@ struct arg
 } Arg;
 
 template <typename T>
-void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&         rxmesh,
-                          const std::vector<std::vector<T>>& Verts,
-                          const std::vector<T>&              gaussian_curvature_gold)
+void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
+                               const std::vector<std::vector<T>>& Verts,
+                               const std::vector<T>& gaussian_curvature_gold)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
     // Report
-    Report report("VertexNormal_RXMesh");
+    Report report("GaussianCurvature_RXMesh");
     report.command_line(Arg.argc, Arg.argv);
     report.device();
     report.system();
@@ -42,8 +43,7 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&         rxmesh,
     auto coords = rxmesh.add_vertex_attribute<T>(Verts, "coordinates");
 
     // gaussian curvatures
-    auto v_gc =
-        rxmesh.add_vertex_attribute<T>("v_gc", 1, rxmesh::LOCATION_ALL);
+    auto v_gc = rxmesh.add_vertex_attribute<T>("v_gc", 1, rxmesh::LOCATION_ALL);
 
     // mixed area for integration
     auto v_amix =
@@ -51,9 +51,10 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&         rxmesh,
 
     // launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box({rxmesh::Op::FV},
-                              launch_box,
-                              (void*)compute_gaussian_curvature<T, blockThreads>);
+    rxmesh.prepare_launch_box(
+        {rxmesh::Op::FV},
+        launch_box,
+        (void*)compute_gaussian_curvature<T, blockThreads>);
 
 
     TestData td;
@@ -71,17 +72,17 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&         rxmesh,
         GPUTimer timer;
         timer.start();
 
-        compute_gaussian_curvature<T, blockThreads><<<launch_box.blocks,
-                                                 launch_box.num_threads,
-                                                 launch_box.smem_bytes_dyn>>>(
-            rxmesh.get_context(), *coords, *v_gc, *v_amix);
+        compute_gaussian_curvature<T, blockThreads>
+            <<<launch_box.blocks,
+               launch_box.num_threads,
+               launch_box.smem_bytes_dyn>>>(
+                rxmesh.get_context(), *coords, *v_gc, *v_amix);
 
-        auto v_gc_val = *v_gc;
+        auto v_gc_val   = *v_gc;
         auto v_amix_val = *v_amix;
-        
+
         rxmesh.for_each_vertex(
-            DEVICE,
-            [v_gc_val, v_amix_val] __device__(const VertexHandle vh) {
+            DEVICE, [v_gc_val, v_amix_val] __device__(const VertexHandle vh) {
                 // printf("CUDA: %f %f \n", v_gc_val(vh, 0), v_amix_val(vh, 0));
                 v_gc_val(vh, 0) = v_gc_val(vh, 0) / v_amix_val(vh, 0);
             });
@@ -94,8 +95,9 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&         rxmesh,
         vn_time += timer.elapsed_millis();
     }
 
-    RXMESH_TRACE("gaussian_curvature_rxmesh() vertex normal kernel took {} (ms)",
-                 vn_time / Arg.num_run);
+    RXMESH_TRACE(
+        "gaussian_curvature_rxmesh() gaussian curvature kernel took {} (ms)",
+        vn_time / Arg.num_run);
 
     // Verify
     v_gc->move(rxmesh::DEVICE, rxmesh::HOST);
@@ -110,10 +112,10 @@ void gaussian_curvature_rxmesh(rxmesh::RXMeshStatic&         rxmesh,
     // Finalize report
     report.add_test(td);
     report.write(Arg.output_folder + "/rxmesh",
-                 "VertexNormal_RXMesh_" + extract_file_name(Arg.obj_file_name));
+                 "GaussianCurvature_RXMesh_" + extract_file_name(Arg.obj_file_name));
 }
 
-TEST(Apps, VertexNormal)
+TEST(Apps, GaussianCurvature)
 {
     using namespace rxmesh;
     using dataT = float;
@@ -128,7 +130,7 @@ TEST(Apps, VertexNormal)
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
 
-    RXMeshStatic rxmesh(Faces, false); // FV initialize
+    RXMeshStatic rxmesh(Faces, false);  // FV initialize
 
     // Serial reference
     std::vector<dataT> gaussian_curvature_gold(Verts.size());
@@ -150,7 +152,7 @@ int main(int argc, char** argv)
     if (argc > 1) {
         if (cmd_option_exists(argv, argc + argv, "-h")) {
             // clang-format off
-            RXMESH_INFO("\nUsage: VertexNormal.exe < -option X>\n"
+            RXMESH_INFO("\nUsage: GaussianCurvature.exe < -option X>\n"
                         " -h:          Display this massage and exits\n"
                         " -input:      Input file. Input file should under the input/ subdirectory\n"
                         "              Default is {} \n"
