@@ -190,17 +190,13 @@ struct LPHashTable
      * @brief Insert new key in the table. This function can be called from host
      * (not thread safe) or from the device (by a single thread). The table
      * itself is part of the input in case it was loaded in shared memory.
-     * Otherwise, this function can be called as
-     *  LPHashTable map;
-     *  map.insert(key, map.get_table());
-     *
      * @param key to be inserted in the hash table
      * @param table pointer to the hash table (could shared memory on the
      * device)
      * @return true if the insertion succeeded and false otherwise
      */
     __host__ __device__ __inline__ bool insert(LPPair           key,
-                                               volatile LPPair* table)
+                                               volatile LPPair* table = nullptr)
     {
 
         auto     bucket_id      = m_hasher0(key.key()) % m_capacity;
@@ -208,11 +204,22 @@ struct LPHashTable
 
         do {
 #ifdef __CUDA_ARCH__
-            key.m_pair = ::atomicExch((uint32_t*)table + bucket_id, key.m_pair);
+            if (table != nullptr) {
+                key.m_pair =
+                    ::atomicExch((uint32_t*)table + bucket_id, key.m_pair);
+            } else {
+                key.m_pair =
+                    ::atomicExch((uint32_t*)m_table + bucket_id, key.m_pair);
+            }
 #else
-            uint32_t temp           = key.m_pair;
-            key.m_pair              = table[bucket_id].m_pair;
-            table[bucket_id].m_pair = temp;
+            uint32_t temp = key.m_pair;
+            if (table != nullptr) {
+                key.m_pair              = table[bucket_id].m_pair;
+                table[bucket_id].m_pair = temp;
+            } else {
+                key.m_pair                = m_table[bucket_id].m_pair;
+                m_table[bucket_id].m_pair = temp;
+            }
 #endif
 
             if (key.m_pair == INVALID32) {
@@ -242,15 +249,22 @@ struct LPHashTable
      * device)
      * @return a LPPair pair that contains the key and its associated value
      */
-    __host__ __device__ __inline__ LPPair find(const typename LPPair::KeyT key,
-                                               const LPPair* table) const
+    __host__ __device__ __inline__ LPPair find(
+        const typename LPPair::KeyT key,
+        const LPPair*               table = nullptr) const
     {
 
         constexpr int num_hfs   = 4;
         auto          bucket_id = m_hasher0(key) % m_capacity;
         for (int hf = 0; hf < num_hfs; ++hf) {
 
-            LPPair found = table[bucket_id];
+
+            LPPair found;
+            if (table != nullptr) {
+                found = table[bucket_id];
+            } else {
+                found = m_table[bucket_id];
+            }
 
             if (found.key() == key) {
                 return found;

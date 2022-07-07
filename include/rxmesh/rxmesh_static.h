@@ -745,8 +745,7 @@ class RXMeshStatic : public RXMesh
                 if (!detail::is_owned(v_id,
                                       this->m_h_patches_info[p].owned_mask_v)) {
 
-                    LPPair lp = this->m_h_patches_info[p].lp_v.find(
-                        v_id, this->m_h_patches_info[p].lp_v.get_table());
+                    LPPair lp = this->m_h_patches_info[p].lp_v.find(v_id);
 
                     v_id = lp.local_id_in_owner_patch();
                     p_id = this->m_h_patches_info[p].patch_stash.get_patch(lp);

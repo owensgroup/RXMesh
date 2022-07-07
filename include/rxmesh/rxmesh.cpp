@@ -104,7 +104,6 @@ RXMesh::~RXMesh()
         m_h_patches_info[p].lp_v.free();
         m_h_patches_info[p].lp_e.free();
         m_h_patches_info[p].lp_f.free();
-
     }
 
     // m_d_patches_info is a pointer to pointer(s) which we can not dereference
@@ -770,7 +769,7 @@ void RXMesh::build_device()
                     uint8_t patch_id = stash.find_patch_index(owner_patch);
 
                     LPPair pair(local_id, local_id_in_owner_patch, patch_id);
-                    if (!h_hashtable.insert(pair, h_hashtable.get_table())) {
+                    if (!h_hashtable.insert(pair)) {
                         RXMESH_ERROR(
                             "rxmesh::build_device failed to insert in the "
                             "hashtable. Retry with smaller load factor. Load "

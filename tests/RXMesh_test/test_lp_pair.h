@@ -53,11 +53,11 @@ TEST(RXMesh, LPHashTable)
         static_cast<uint16_t>(static_cast<float>(size) / load_factor), false);
 
     for (auto& p : pairs) {
-        EXPECT_TRUE(table.insert(p, table.get_table()));
+        EXPECT_TRUE(table.insert(p));
     }
 
     for (uint32_t i = 0; i < size; ++i) {
-        auto p = table.find(local_id[i], table.get_table());
+        auto p = table.find(local_id[i]);
         EXPECT_NE(p.m_pair, LPPair::sentinel_pair().m_pair);
         EXPECT_EQ(p.local_id_in_owner_patch(), owner_local_id[i]);
         EXPECT_EQ(p.patch_stash_id(), patch_id[i]);
