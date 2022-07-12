@@ -3,6 +3,7 @@ input/*
 !input/dragon.obj
 !input/diamond.obj
 !input/plane.obj
+!input/bumpy-cube.obj
 build/
 include/rxmesh/util/git_sha1.cpp
 .vscode/

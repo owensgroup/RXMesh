@@ -4,11 +4,9 @@ project(RXMesh
         VERSION 0.2.1 
         LANGUAGES C CXX CUDA)
 
-if (WIN32)
-    set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")    
-else()
-    set(USE_POLYSCOPE "OFF" CACHE BOOL "Enable Ployscope for visualization")    
-endif()
+
+set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")    
+
 
 if(${USE_POLYSCOPE})
 	message(STATUS "Polyscope is enabled")
