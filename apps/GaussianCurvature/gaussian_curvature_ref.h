@@ -2,14 +2,13 @@
 #include <vector>
 #include "rxmesh/util/report.h"
 
-const double PI = 3.1415926535897932384626433832795028841971693993751058209;
 
 template <typename T>
 inline void gaussian_curvature_ref(
     const std::vector<std::vector<uint32_t>>& Faces,
     const std::vector<std::vector<T>>&        Verts,
     std::vector<T>&                           gaussian_curvature)
-{
+{    
     uint32_t num_vertices = Verts.size();
     uint32_t num_faces    = Faces.size();
 

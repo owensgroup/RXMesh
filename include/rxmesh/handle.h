@@ -119,10 +119,10 @@ struct VertexHandle
 /**
  * @brief print vertex unique_id to ostream
  */
-inline std::ostream& operator<<(std::ostream& os, VertexHandle v_handle)
+/*inline std::ostream& operator<<(std::ostream& os, VertexHandle v_handle)
 {
     return (os << 'v' << v_handle.unique_id());
-}
+}*/
 
 /**
  * @brief edge identifier. It is a unique handle for each edge equipped with
@@ -198,10 +198,10 @@ struct EdgeHandle
 /**
  * @brief print edge unique_id to ostream
  */
-inline std::ostream& operator<<(std::ostream& os, EdgeHandle e_handle)
+/*inline std::ostream& operator<<(std::ostream& os, EdgeHandle e_handle)
 {
     return (os << 'e' << e_handle.unique_id());
-}
+}*/
 
 /**
  * @brief face identifier. It is a unique handle for each face equipped with
@@ -277,8 +277,8 @@ struct FaceHandle
 /**
  * @brief print face unique_id to ostream
  */
-inline std::ostream& operator<<(std::ostream& os, FaceHandle f_handle)
+/*inline std::ostream& operator<<(std::ostream& os, FaceHandle f_handle)
 {
     return (os << 'f' << f_handle.unique_id());
-}
+}*/
 }  // namespace rxmesh

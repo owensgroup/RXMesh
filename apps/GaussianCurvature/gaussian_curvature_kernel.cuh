@@ -14,8 +14,8 @@ __global__ static void compute_gaussian_curvature(
     rxmesh::VertexAttribute<T> amix)
 {
     using namespace rxmesh;
-    const double PI = 3.1415926535897932384626433832795028841971693993751058209;
-    auto         gc_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
+    
+    auto gc_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
         // get the face's three vertices coordinates
         Vector<3, T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
         Vector<3, T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
