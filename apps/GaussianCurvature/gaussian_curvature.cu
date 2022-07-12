@@ -14,7 +14,7 @@ constexpr double PI = 3.1415926535897932384626433832795028841971693993751058209;
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "bumpy-cube.obj";
     uint32_t    device_id     = 0;
 } Arg;
 
@@ -66,8 +66,17 @@ void gaussian_curvature_rxmesh(const std::vector<T>& gaussian_curvature_gold)
         uint32_t v_id = rx.map_to_global(vh);
         EXPECT_NEAR(std::abs(gaussian_curvature_gold[v_id]),
                     std::abs(v_gc(vh, 0)),
-                    0.0001);
+                    0.001);
     });
+
+
+    // visualize
+    polyscope::view::upDir = polyscope::UpDir::ZUp;
+    polyscope::init();
+    auto polyscope_mesh = rx.get_polyscope_mesh();
+    polyscope_mesh->setEdgeWidth(1.0);
+    polyscope_mesh->addVertexScalarQuantity("vGaussianCurv", v_gc);
+    polyscope::show();
 }
 
 TEST(Apps, GaussianCurvature)
