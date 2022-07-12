@@ -2,6 +2,7 @@ output/
 input/*
 !input/dragon.obj
 !input/diamond.obj
+!input/bumpy-cube.obj
 build/
 include/rxmesh/util/git_sha1.cpp
 .vscode/
