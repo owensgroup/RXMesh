@@ -81,6 +81,15 @@ class RXMesh
     }
 
     /**
+     * @brief Return pointer to patches info that stores the patches info on the
+     * host
+     */
+    const PatchInfo* get_patches_info() const
+    {
+        return m_h_patches_info;
+    }
+
+    /**
      * @brief returns true if the input mesh is manifold
      */
     bool is_edge_manifold() const
