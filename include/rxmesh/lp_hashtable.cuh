@@ -22,6 +22,7 @@
 #include "rxmesh/hash_functions.cuh"
 #include "rxmesh/lp_pair.cuh"
 #include "rxmesh/util/macros.h"
+#include "rxmesh/util/prime_numbers.h"
 
 namespace rxmesh {
 /**
@@ -41,7 +42,8 @@ namespace rxmesh {
  */
 struct LPHashTable
 {
-    using HashT = universal_hash;
+    // using HashT = universal_hash;
+    using HashT = MurmurHash3_32;
 
     __device__ __host__ LPHashTable()
         : m_table(nullptr),
@@ -64,6 +66,7 @@ struct LPHashTable
         : m_capacity(std::max(capacity, uint16_t(1))),
           m_is_on_device(is_on_device)
     {
+        m_capacity = find_next_prime_number(m_capacity);
         if (m_is_on_device) {
             CUDA_ERROR(cudaMalloc((void**)&m_table, num_bytes()));
         } else {
@@ -71,14 +74,15 @@ struct LPHashTable
         }
 
         clear();
-
         // maximum number of cuckoo chains
         double lg_input_size = (float)(log((double)m_capacity) / log(2.0));
         const unsigned max_iter_const = 7;
         m_max_cuckoo_chains =
             static_cast<uint16_t>(max_iter_const * lg_input_size);
 
-        std::mt19937 rng(2);
+
+        // std::mt19937 rng(2);
+        MarsRng32 rng;
         randomize_hash_functions(rng);
     }
 
@@ -187,48 +191,49 @@ struct LPHashTable
     }
 
     /**
-     * @brief Insert new key in the table. This function can be called from host
-     * (not thread safe) or from the device (by a single thread). The table
+     * @brief Insert new pair in the table. This function can be called from
+     * host (not thread safe) or from the device (by a single thread). The table
      * itself is part of the input in case it was loaded in shared memory.
-     * @param key to be inserted in the hash table
+     * @param pair to be inserted in the hash table
      * @param table pointer to the hash table (could shared memory on the
      * device)
      * @return true if the insertion succeeded and false otherwise
      */
-    __host__ __device__ __inline__ bool insert(LPPair           key,
-                                               volatile LPPair* table = nullptr)
+    __host__ __device__ bool insert(LPPair           pair,
+                                    volatile LPPair* table = nullptr)
     {
 
-        auto     bucket_id      = m_hasher0(key.key()) % m_capacity;
+        auto     bucket_id      = m_hasher0(pair.key()) % m_capacity;
         uint16_t cuckoo_counter = 0;
 
         do {
 #ifdef __CUDA_ARCH__
             if (table != nullptr) {
-                key.m_pair =
-                    ::atomicExch((uint32_t*)table + bucket_id, key.m_pair);
+                pair.m_pair =
+                    ::atomicExch((uint32_t*)table + bucket_id, pair.m_pair);
             } else {
-                key.m_pair =
-                    ::atomicExch((uint32_t*)m_table + bucket_id, key.m_pair);
+                pair.m_pair =
+                    ::atomicExch((uint32_t*)m_table + bucket_id, pair.m_pair);
             }
 #else
-            uint32_t temp = key.m_pair;
+            uint32_t temp = pair.m_pair;
             if (table != nullptr) {
-                key.m_pair              = table[bucket_id].m_pair;
+                pair.m_pair             = table[bucket_id].m_pair;
                 table[bucket_id].m_pair = temp;
             } else {
-                key.m_pair                = m_table[bucket_id].m_pair;
+                pair.m_pair               = m_table[bucket_id].m_pair;
                 m_table[bucket_id].m_pair = temp;
             }
 #endif
 
-            if (key.m_pair == INVALID32) {
+            if (pair.m_pair == INVALID32) {
                 return true;
             } else {
-                auto bucket0 = m_hasher0(key.key()) % m_capacity;
-                auto bucket1 = m_hasher1(key.key()) % m_capacity;
-                auto bucket2 = m_hasher2(key.key()) % m_capacity;
-                auto bucket3 = m_hasher3(key.key()) % m_capacity;
+                auto bucket0 = m_hasher0(pair.key()) % m_capacity;
+                auto bucket1 = m_hasher1(pair.key()) % m_capacity;
+                auto bucket2 = m_hasher2(pair.key()) % m_capacity;
+                auto bucket3 = m_hasher3(pair.key()) % m_capacity;
+
 
                 auto new_bucket_id = bucket0;
                 new_bucket_id = bucket_id == bucket2 ? bucket3 : new_bucket_id;

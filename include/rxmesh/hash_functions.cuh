@@ -20,10 +20,10 @@
 #include <stdint.h>
 
 namespace rxmesh {
-struct mars_rng_32
+struct MarsRng32
 {
     uint32_t y;
-    __host__ __device__ constexpr mars_rng_32() : y(2463534242)
+    __host__ __device__ constexpr MarsRng32() : y(2463534242)
     {
     }
     constexpr uint32_t __host__ __device__ operator()()
