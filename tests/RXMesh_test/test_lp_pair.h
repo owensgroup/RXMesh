@@ -71,10 +71,10 @@ TEST(RXMesh, DISABLED_BenchmarkLPHashTable)
     using namespace rxmesh;
 
     std::cout << "size, cap, num_failed\n";
-    const float    load_factor = 0.8;
+    const float    load_factor = 0.9;
     const uint32_t low_size    = 128;
     const uint32_t high_size   = 2048;
-    const int      num_run     = 2E6;
+    const int      num_run     = 1E6;
 
     auto random_with_bounds = [&](auto& vec, uint32_t high_val, uint32_t size) {
         for (uint32_t i = 0; i < size; ++i) {
@@ -123,6 +123,15 @@ TEST(RXMesh, DISABLED_BenchmarkLPHashTable)
             }
 
             cap = table.get_capacity();
+
+            if (!fail) {
+                for (uint32_t i = 0; i < size; ++i) {
+                    auto p = table.find(local_id[i]);
+                    EXPECT_NE(p.m_pair, LPPair::sentinel_pair().m_pair);
+                    EXPECT_EQ(p.local_id_in_owner_patch(), owner_local_id[i]);
+                    EXPECT_EQ(p.patch_stash_id(), patch_id[i]);
+                }
+            }
             table.free();
         }
         std::cout << size << ", " << cap << ", " << num_failed << "\n";

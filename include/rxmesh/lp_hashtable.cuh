@@ -45,6 +45,8 @@ struct LPHashTable
     // using HashT = universal_hash;
     using HashT = MurmurHash3_32;
 
+    static constexpr uint8_t stash_size = 32;
+
     __device__ __host__ LPHashTable()
         : m_table(nullptr),
           m_capacity(0),
@@ -84,6 +86,10 @@ struct LPHashTable
         // std::mt19937 rng(2);
         MarsRng32 rng;
         randomize_hash_functions(rng);
+
+        for (uint8_t i = 0; i < stash_size; ++i) {
+            m_stash[i] = LPPair::sentinel_pair();
+        }
     }
 
     /**
@@ -236,14 +242,26 @@ struct LPHashTable
 
 
                 auto new_bucket_id = bucket0;
-                new_bucket_id = bucket_id == bucket2 ? bucket3 : new_bucket_id;
-                new_bucket_id = bucket_id == bucket1 ? bucket2 : new_bucket_id;
-                new_bucket_id = bucket_id == bucket0 ? bucket1 : new_bucket_id;
+                if (bucket_id == bucket2) {
+                    new_bucket_id = bucket3;
+                } else if (bucket_id == bucket1) {
+                    new_bucket_id = bucket2;
+                } else if (bucket_id == bucket0) {
+                    new_bucket_id = bucket1;
+                }
 
                 bucket_id = new_bucket_id;
             }
             cuckoo_counter++;
         } while (cuckoo_counter < m_max_cuckoo_chains);
+
+        for (uint8_t i = 0; i < stash_size; ++i) {
+            if (m_stash[i].is_sentinel()) {
+                m_stash[i] = pair;
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -254,9 +272,8 @@ struct LPHashTable
      * device)
      * @return a LPPair pair that contains the key and its associated value
      */
-    __host__ __device__ __inline__ LPPair find(
-        const typename LPPair::KeyT key,
-        const LPPair*               table = nullptr) const
+    __host__ __device__ LPPair find(const typename LPPair::KeyT key,
+                                    const LPPair* table = nullptr) const
     {
 
         constexpr int num_hfs   = 4;
@@ -273,16 +290,24 @@ struct LPHashTable
 
             if (found.key() == key) {
                 return found;
-            } else if (found.m_pair == INVALID32) {
-                return found;
+                // since we only look for pairs that we know that they exist in
+                // the table, we skip this since the pair could be in the stash 
+                //  } else if (found.m_pair == INVALID32) {
+                //    return found;
             } else {
                 if (hf == 0) {
                     bucket_id = m_hasher1(key) % m_capacity;
                 } else if (hf == 1) {
                     bucket_id = m_hasher2(key) % m_capacity;
-                } else {
+                } else if (hf == 2) {
                     bucket_id = m_hasher3(key) % m_capacity;
                 }
+            }
+        }
+
+        for (uint8_t i = 0; i < stash_size; ++i) {
+            if (m_stash[i].key() == key) {
+                return m_stash[i];
             }
         }
         return LPPair::sentinel_pair();
@@ -290,6 +315,7 @@ struct LPHashTable
 
    private:
     LPPair*  m_table;
+    LPPair   m_stash[stash_size];
     HashT    m_hasher0;
     HashT    m_hasher1;
     HashT    m_hasher2;
