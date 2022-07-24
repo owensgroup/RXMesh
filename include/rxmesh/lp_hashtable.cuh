@@ -65,7 +65,7 @@ struct LPHashTable
      * allocation size
      */
     explicit LPHashTable(const uint16_t capacity, bool is_on_device)
-        : m_capacity(std::max(capacity, uint16_t(1))),
+        : m_capacity(std::max(capacity, uint16_t(2))),
           m_is_on_device(is_on_device)
     {
         m_capacity = find_next_prime_number(m_capacity);
