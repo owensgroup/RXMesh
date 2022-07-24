@@ -71,8 +71,20 @@ struct LPHashTable
         m_capacity = find_next_prime_number(m_capacity);
         if (m_is_on_device) {
             CUDA_ERROR(cudaMalloc((void**)&m_table, num_bytes()));
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_stash, stash_size * sizeof(LPPair)));
+
+            std::vector<LPPair> temp(stash_size, LPPair::sentinel_pair());
+            CUDA_ERROR(cudaMemcpy(m_stash,
+                                  temp.data(),
+                                  stash_size * sizeof(LPPair),
+                                  cudaMemcpyHostToDevice));
         } else {
             m_table = (LPPair*)malloc(num_bytes());
+            m_stash = (LPPair*)malloc(stash_size * sizeof(LPPair));
+            for (uint8_t i = 0; i < stash_size; ++i) {
+                m_stash[i] = LPPair::sentinel_pair();
+            }
         }
 
         clear();
@@ -86,10 +98,8 @@ struct LPHashTable
         // std::mt19937 rng(2);
         MarsRng32 rng;
         randomize_hash_functions(rng);
-
-        for (uint8_t i = 0; i < stash_size; ++i) {
-            m_stash[i] = LPPair::sentinel_pair();
-        }
+        
+        
     }
 
     /**
@@ -143,8 +153,10 @@ struct LPHashTable
     {
         if (m_is_on_device) {
             GPU_FREE(m_table);
+            GPU_FREE(m_stash);
         } else {
             ::free(m_table);
+            ::free(m_stash);
         }
     }
 
@@ -205,8 +217,8 @@ struct LPHashTable
      * device)
      * @return true if the insertion succeeded and false otherwise
      */
-    __host__ __device__ bool insert(LPPair           pair,
-                                    volatile LPPair* table = nullptr)
+    __host__ __device__ __inline__ bool insert(LPPair           pair,
+                                               volatile LPPair* table = nullptr)
     {
 
         auto     bucket_id      = m_hasher0(pair.key()) % m_capacity;
@@ -272,8 +284,9 @@ struct LPHashTable
      * device)
      * @return a LPPair pair that contains the key and its associated value
      */
-    __host__ __device__ LPPair find(const typename LPPair::KeyT key,
-                                    const LPPair* table = nullptr) const
+    __host__ __device__ __inline__ LPPair find(
+        const typename LPPair::KeyT key,
+        const LPPair*               table = nullptr) const
     {
 
         constexpr int num_hfs   = 4;
@@ -291,7 +304,7 @@ struct LPHashTable
             if (found.key() == key) {
                 return found;
                 // since we only look for pairs that we know that they exist in
-                // the table, we skip this since the pair could be in the stash 
+                // the table, we skip this since the pair could be in the stash
                 //  } else if (found.m_pair == INVALID32) {
                 //    return found;
             } else {
@@ -315,7 +328,7 @@ struct LPHashTable
 
    private:
     LPPair*  m_table;
-    LPPair   m_stash[stash_size];
+    LPPair*  m_stash;
     HashT    m_hasher0;
     HashT    m_hasher1;
     HashT    m_hasher2;
