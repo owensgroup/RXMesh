@@ -98,8 +98,6 @@ struct LPHashTable
         // std::mt19937 rng(2);
         MarsRng32 rng;
         randomize_hash_functions(rng);
-        
-        
     }
 
     /**
@@ -108,6 +106,14 @@ struct LPHashTable
     __host__ __device__ __inline__ LPPair* get_table()
     {
         return m_table;
+    }
+
+    /**
+     * @brief return a pointer to the stash
+     */
+    __host__ __device__ __inline__ LPPair* get_stash()
+    {
+        return m_stash;
     }
 
     /**
