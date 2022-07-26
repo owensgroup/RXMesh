@@ -12,13 +12,22 @@ struct PatchStash
 {
     static constexpr uint8_t stash_size = (1 << LPPair::PatchStashNumBits);
 
-    __host__ __device__ PatchStash()
+    __host__ __device__ PatchStash(bool on_device) : m_is_on_device(on_device)
     {
-        for (uint8_t i = 0; i < stash_size; ++i) {
-            m_stash[i] = INVALID32;
+        if (m_is_on_device) {
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_stash, stash_size * sizeof(uint32_t)));
+            CUDA_ERROR(
+                cudaMemset(m_stash, INVALID8, stash_size * sizeof(uint32_t)));
+        } else {
+            m_stash = (uint32_t*)malloc(stash_size * sizeof(uint32_t));
+            for (uint8_t i = 0; i < stash_size; ++i) {
+                m_stash[i] = INVALID32;
+            }
         }
     }
 
+    PatchStash()                        = default;
     PatchStash(const PatchStash& other) = default;
     PatchStash(PatchStash&&)            = default;
     PatchStash& operator=(const PatchStash&) = default;
@@ -45,7 +54,7 @@ struct PatchStash
         return get_patch(p.patch_stash_id());
     }
 
-    void insert_patch(uint32_t patch)
+    __host__ __device__ __inline__ void insert_patch(uint32_t patch)
     {
         for (uint8_t i = 0; i < stash_size; ++i) {
             if (m_stash[i] == patch) {
@@ -60,7 +69,8 @@ struct PatchStash
         assert(1 != 1);
     }
 
-    uint8_t find_patch_index(uint32_t patch) const
+    __host__ __device__ __inline__ uint8_t find_patch_index(
+        uint32_t patch) const
     {
         for (uint8_t i = 0; i < stash_size; ++i) {
             if (m_stash[i] == patch) {
@@ -70,6 +80,17 @@ struct PatchStash
         return INVALID8;
     }
 
-    uint32_t m_stash[stash_size];
+
+    __host__ void free()
+    {
+        if (m_is_on_device) {
+            GPU_FREE(m_stash);
+        } else {
+            ::free(m_stash);
+        }
+    }
+
+    uint32_t* m_stash;
+    bool      m_is_on_device;
 };
 }  // namespace rxmesh

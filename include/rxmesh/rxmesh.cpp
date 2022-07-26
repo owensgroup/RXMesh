@@ -104,6 +104,7 @@ RXMesh::~RXMesh()
         m_h_patches_info[p].lp_v.free();
         m_h_patches_info[p].lp_e.free();
         m_h_patches_info[p].lp_f.free();
+        m_h_patches_info[p].patch_stash.free();
     }
 
     // m_d_patches_info is a pointer to pointer(s) which we can not dereference
@@ -128,6 +129,7 @@ RXMesh::~RXMesh()
         m_h_patches_info[p].lp_v.free();
         m_h_patches_info[p].lp_e.free();
         m_h_patches_info[p].lp_f.free();
+        m_h_patches_info[p].patch_stash.free();
     }
     GPU_FREE(m_d_patches_info);
     free(m_h_patches_info);
@@ -618,7 +620,8 @@ void RXMesh::build_device()
             m_capacity_factor * static_cast<float>(d_patch.num_edges));
         d_patch.faces_capacity = static_cast<uint16_t>(
             m_capacity_factor * static_cast<float>(d_patch.num_faces));
-        d_patch.patch_id = p;
+        d_patch.patch_id    = p;
+        d_patch.patch_stash = PatchStash(true);
 
         m_h_patches_info[p].num_faces         = m_h_patches_ltog_f[p].size();
         m_h_patches_info[p].num_edges         = m_h_patches_ltog_e[p].size();
@@ -627,7 +630,7 @@ void RXMesh::build_device()
         m_h_patches_info[p].edges_capacity    = d_patch.edges_capacity;
         m_h_patches_info[p].vertices_capacity = d_patch.vertices_capacity;
         m_h_patches_info[p].patch_id          = p;
-        m_h_patches_info[p].patch_stash       = PatchStash();
+        m_h_patches_info[p].patch_stash       = PatchStash(false);
 
 
         // allocate and copy patch topology to the device
@@ -718,7 +721,6 @@ void RXMesh::build_device()
                     uint32_t owner_patch = element_patch[global_id];
 
                     m_h_patches_info[p].patch_stash.insert_patch(owner_patch);
-                    d_patch.patch_stash.insert_patch(owner_patch);
                 }
             };
 
@@ -728,6 +730,11 @@ void RXMesh::build_device()
             m_h_patches_ltog_e, m_patcher->get_edge_patch(), m_h_num_owned_e);
         populate_patch_stash(
             m_h_patches_ltog_v, m_patcher->get_vertex_patch(), m_h_num_owned_v);
+
+        CUDA_ERROR(cudaMemcpy(d_patch.patch_stash.m_stash,
+                              m_h_patches_info[p].patch_stash.m_stash,
+                              PatchStash::stash_size * sizeof(uint32_t),
+                              cudaMemcpyHostToDevice));
 
 
         // build LPHashtable

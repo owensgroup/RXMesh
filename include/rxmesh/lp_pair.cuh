@@ -83,7 +83,7 @@ struct LPPair
     /**
      * @brief Check if a pair is a tombstone
      */
-    bool is_sentinel() const
+    __device__ __host__ __inline__ bool is_sentinel() const
     {
         return m_pair == INVALID32;
     }
