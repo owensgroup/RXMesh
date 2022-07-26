@@ -6,8 +6,8 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/rxmesh_static.h"
+#include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/util.h"
-
 
 class RXMeshTest
 {
@@ -361,6 +361,23 @@ class RXMeshTest
             return output_ltog[pl.first][pl.second];
         };
 
+        auto check_if_owned = [&](OutputHandleT xxh) -> bool {
+            auto pl = xxh.unpack();
+            assert(pl.first < rxmesh.get_num_patches());
+            if constexpr (std::is_same_v<OutputHandleT, rxmesh::VertexHandle>) {
+                return rxmesh::detail::is_owned(
+                    pl.second, rxmesh.m_h_patches_info[pl.first].owned_mask_v);
+            }
+            if constexpr (std::is_same_v<OutputHandleT, rxmesh::EdgeHandle>) {
+                return rxmesh::detail::is_owned(
+                    pl.second, rxmesh.m_h_patches_info[pl.first].owned_mask_e);
+            }
+            if constexpr (std::is_same_v<OutputHandleT, rxmesh::FaceHandle>) {
+                return rxmesh::detail::is_owned(
+                    pl.second, rxmesh.m_h_patches_info[pl.first].owned_mask_f);
+            }
+        };
+
         for (uint32_t p = 0; p < rxmesh.get_num_patches(); ++p) {
             for (uint32_t e = 0; e < num_owned_input_elements[p]; ++e) {
                 InputHandleT eh(p, e);
@@ -377,6 +394,10 @@ class RXMeshTest
                     OutputHandleT xxh = output(eh, i);
                     if (xxh.is_valid()) {
                         num_xx++;
+
+                        if (!check_if_owned(xxh)) {
+                            return false;
+                        }
 
                         // extract local id from xxh's unique id
                         uint32_t xx_global = global_id_from_handle(xxh);
