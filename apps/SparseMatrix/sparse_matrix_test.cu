@@ -36,7 +36,7 @@ TEST(Apps, SparseMatrix)
 
     // TODO: fillin the spmat test
 
-    SparseMatInfo spmat(rxmesh);
+    SparseMatInfo<int> spmat(rxmesh);
 }
 
 int main(int argc, char** argv)
