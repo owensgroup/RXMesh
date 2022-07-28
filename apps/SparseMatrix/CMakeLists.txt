@@ -2,8 +2,7 @@ add_executable(SparseMatrix)
 
 set(SOURCE_LIST
     sparse_matrix.cuh
-    sparse_matrix.cu
-    sparse_matrix_test.cuh
+    sparse_matrix_test.cu
 )
 
 target_sources(SparseMatrix 
