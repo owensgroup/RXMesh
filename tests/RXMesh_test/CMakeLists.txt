@@ -5,19 +5,15 @@ set( SOURCE_LIST
 	rxmesh_test.h
     test_attribute.cuh
 	test_vector.cu
-    test_util.cu        
+    test_util.cu
 	test_iterator.cu
     test_queries.h
 	test_queries_oriented.h
 	test_higher_queries.h
-	query.cuh	
+	query.cuh
 	higher_query.cuh
 	test_for_each.cuh
-	test_edge_flip.cuh	
 	test_validate.h
-	test_deletion.cuh
-	test_edge_collapse.cuh
-	test_edge_split.cuh
 	test_lp_pair.h
 )
 

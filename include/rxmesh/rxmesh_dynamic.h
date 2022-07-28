@@ -109,91 +109,9 @@ class RXMeshDynamic : public RXMeshStatic
     template <uint32_t blockThreads>
     size_t calc_shared_memory(const DynOp op) const
     {
-        if (op == DynOp::EdgeFlip && !this->is_edge_manifold()) {
-            RXMESH_ERROR(
-                "RXMeshDynamic::calc_shared_memory() edge flips is only "
-                "supported on manifold mesh.");
-        }
 
         size_t dynamic_smem = 0;
-        if (op == DynOp::EdgeFlip) {
-            // load FE, then transpose it into EF, then update FE. Thus, we need
-            // to have both in memory at one point. Then, load EV and update it
-            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
-            dynamic_smem += 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
-            // we store the flipped edges along with one of the faces its
-            // incident to. Since we can only flip one edge per face in parallel
-            // (actually less than that), we allocate the shared memory such
-            // that we store this info (flipped edge and it face) with size
-            // equal to half the number of faces in the patch
-            dynamic_smem += DIVIDE_UP(this->m_max_faces_per_patch, 2) * 2 *
-                            sizeof(uint16_t);
-        }
 
-        if (op == DynOp::DeleteFace) {
-            // we only need to load the bitmask, read it (to check on deleted
-            // faces), update it (for deleted faces), then store it to global
-            // memory
-            dynamic_smem +=
-                DIVIDE_UP(this->m_max_faces_per_patch, 32) * sizeof(uint32_t);
-        }
-
-        if (op == DynOp::DeleteEdge) {
-            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
-            dynamic_smem +=
-                DIVIDE_UP(this->m_max_edges_per_patch, 32) * sizeof(uint32_t);
-        }
-
-        if (op == DynOp::DeleteVertex) {
-            dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
-                                    2 * this->m_max_edges_per_patch) *
-                           sizeof(uint16_t);
-
-            dynamic_smem +=
-                DIVIDE_UP(this->m_max_edges_per_patch, 32) * sizeof(uint32_t);
-
-            dynamic_smem += DIVIDE_UP(this->m_max_vertices_per_patch, 32) *
-                            sizeof(uint32_t);
-        }
-
-        if (op == DynOp::EdgeCollapse) {
-            // to load EV and then FE. Only need one of them at a time
-            dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
-                                    2 * this->m_max_edges_per_patch) *
-                           sizeof(uint16_t);
-
-            // to store the vertex/edge glue. Only need one of them at a time
-            dynamic_smem += (1 + std::max(this->m_max_vertices_per_patch,
-                                          this->m_max_edges_per_patch)) *
-                            sizeof(uint16_t);
-
-            // to store the source vertex for all edges (to check on if we need
-            // to flip glued edges)
-            dynamic_smem += 1 + this->m_max_edges_per_patch * sizeof(uint16_t);
-
-            // to store the mask for collapsed edges
-            dynamic_smem +=
-                DIVIDE_UP(this->m_max_edges_per_patch, 32) * sizeof(uint32_t);
-        }
-
-        if (op == DynOp::EdgeSplit) {
-            // load FE, then transpose it into EF, then update FE. Thus, we need
-            // to have both in memory at one point. We only work on manifold
-            // mesh and thus each edge is incident to two face at most
-            dynamic_smem = (3 * this->m_max_faces_per_patch,
-                            2 * this->m_max_edges_per_patch) *
-                           sizeof(uint16_t);
-
-            // we store the split edges and two other edges that share vertex
-            // with the split edge—one from each face the split edge is incident
-            // to.
-            // Since we can only split one edge per face in
-            // parallel (actually less than that), we allocate the shared memory
-            // such that we store this info (split edges) with size equal to
-            // half the number of faces in the patch
-            dynamic_smem += 3 * (DIVIDE_UP(this->m_max_faces_per_patch, 2) *
-                                 sizeof(uint16_t));
-        }
         return dynamic_smem;
     }
 };
