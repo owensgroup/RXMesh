@@ -24,8 +24,6 @@ __global__ static void sparse_mat_scan(const rxmesh::Context context,
         row_ptr[patch_ptr_v[patch_id] + local_id] = iter.size();
     };
 
-    // With uniform Laplacian, we just need the valence, thus we
-    // call query_block_dispatcher and set oriented to false
     query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
 }
 
