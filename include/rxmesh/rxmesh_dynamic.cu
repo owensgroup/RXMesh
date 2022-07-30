@@ -197,11 +197,20 @@ __global__ static void check_not_owned(const Context           context,
                 PatchInfo owner_patch_info =
                     context.get_patches_info()[f_patch];
 
-                // TODO do we really need this check? If a face is deleted,
-                // it should also be deleted in the other patches that have it
-                // as not-owned
-                if (!is_deleted(f_owned, owner_patch_info.active_mask_f)) {
-                    // TODO this is a scatter read from global that could be
+                // the owner patch should have indicate that the owned face is
+                // owned by it
+                if (!is_owned(f_owned, owner_patch_info.owned_mask_f)) {
+                    ::atomicAdd(d_check, 1);
+                }
+
+                // If a face is deleted, it should also be deleted in the other
+                // patches that have it as not-owned
+                bool is_del =
+                    is_deleted(f_owned, owner_patch_info.active_mask_f);
+                if (is_del) {
+                    ::atomicAdd(d_check, 1);
+                } else {
+                    // TODO this is a scattered read from global that could be
                     // improved by using shared memory
                     uint16_t ew0, ew1, ew2;
                     flag_t   dw0(0), dw1(0), dw2(0);
@@ -226,8 +235,8 @@ __global__ static void check_not_owned(const Context           context,
             }
         }
 
-        // for every not-owned edge, check its two vertices (possibly not-owned)
-        // are the same as those in the edge's owner patch
+        // for every not-owned edge, check its two vertices (possibly
+        // not-owned) are the same as those in the edge's owner patch
         for (uint16_t e = threadIdx.x; e < patch_info.num_edges;
              e += blockThreads) {
 
@@ -256,10 +265,19 @@ __global__ static void check_not_owned(const Context           context,
                 PatchInfo owner_patch_info =
                     context.get_patches_info()[e_patch];
 
-                // TODO do we really need this check? If an edge is deleted,
-                // it should also be deleted in the other patches that have it
-                // as not-owned
-                if (!is_deleted(e_owned, owner_patch_info.active_mask_e)) {
+                // the owner patch should have indicate that the owned face is
+                // owned by it
+                if (!is_owned(e_owned, owner_patch_info.owned_mask_e)) {
+                    ::atomicAdd(d_check, 1);
+                }
+
+                // If an edge is deleted, it should also be deleted in the other
+                // patches that have it as not-owned
+                bool is_del =
+                    is_deleted(e_owned, owner_patch_info.active_mask_e);
+                if (is_del) {
+                    ::atomicAdd(d_check, 1);
+                } else {
                     // TODO this is a scatter read from global that could be
                     // improved by using shared memory
                     uint16_t vw0 = owner_patch_info.ev[2 * e_owned + 0].id;
@@ -278,11 +296,102 @@ __global__ static void check_not_owned(const Context           context,
     }
 }
 
+
+template <uint32_t blockThreads>
+__global__ static void check_ribbon(const Context           context,
+                                    unsigned long long int* d_check)
+{
+    auto block = cooperative_groups::this_thread_block();
+
+    const uint32_t patch_id = blockIdx.x;
+
+    if (patch_id < context.get_num_patches()) {
+        PatchInfo patch_info = context.get_patches_info()[patch_id];
+
+        ShmemAllocator shrd_alloc;
+        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
+        load_async(block,
+                   reinterpret_cast<uint16_t*>(patch_info.fe),
+                   3 * patch_info.num_faces,
+                   s_fe,
+                   true);
+        uint16_t* s_mark_edges =
+            shrd_alloc.alloc<uint16_t>(patch_info.num_edges);
+
+        for (uint16_t e = threadIdx.x; e < patch_info.num_edges;
+             e += blockThreads) {
+            s_mark_edges[e] = 0;
+        }
+
+        block.sync();
+
+        // Check that each owned edge is incident to at least one owned
+        // not-deleted face. We do that by iterating over faces, each face
+        // (atomically) mark its incident edges only if they are owned. Then we
+        // check the marked edges where we expect all owned edges to be marked.
+        // If there is an edge that is owned but not marked, then this edge is
+        // not incident to any owned faces
+        for (uint16_t f = threadIdx.x; f < patch_info.num_faces;
+             f += blockThreads) {
+
+            if (!is_deleted(f, patch_info.active_mask_f) &&
+                is_owned(f, patch_info.owned_mask_f)) {
+
+                uint16_t e0 = s_fe[3 * f + 0] >> 1;
+                uint16_t e1 = s_fe[3 * f + 1] >> 1;
+                uint16_t e2 = s_fe[3 * f + 2] >> 1;
+
+                auto mark_if_owned = [&](uint16_t edge) {
+                    if (is_owned(edge, patch_info.owned_mask_e)) {
+                        ::rxmesh::atomicAdd(s_mark_edges + edge, uint16_t(1));
+                    }
+                };
+
+                mark_if_owned(e0);
+                mark_if_owned(e1);
+                mark_if_owned(e2);
+            }
+        }
+        block.sync();
+        for (uint16_t e = threadIdx.x; e < patch_info.num_edges;
+             e += blockThreads) {
+            if (is_owned(e, patch_info.owned_mask_e)) {
+                if (s_mark_edges[e] == 0) {
+                    ::atomicAdd(d_check, 1);
+                }
+            }
+        }
+        block.sync();
+
+        shrd_alloc.dealloc<uint16_t>(patch_info.num_edges);
+    }
+}
 }  // namespace detail
 
 bool RXMeshDynamic::validate()
 {
     CUDA_ERROR(cudaDeviceSynchronize());
+
+    uint32_t num_patches;
+    CUDA_ERROR(cudaMemcpy(&num_patches,
+                          m_rxmesh_context.m_num_patches,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+    unsigned long long int* d_check;
+    CUDA_ERROR(cudaMalloc((void**)&d_check, sizeof(unsigned long long int)));
+
+    auto is_okay = [&]() {
+        unsigned long long int h_check(0);
+        CUDA_ERROR(cudaMemcpy(&h_check,
+                              d_check,
+                              sizeof(unsigned long long int),
+                              cudaMemcpyDeviceToHost));
+        if (h_check != 0) {
+            return false;
+        } else {
+            return true;
+        }
+    };
 
     // check that the sum of owned vertices, edges, and faces per patch is equal
     // to the number of vertices, edges, and faces respectively
@@ -291,12 +400,6 @@ bool RXMeshDynamic::validate()
         thrust::device_vector<uint32_t> d_sum_vertices(1, 0);
         thrust::device_vector<uint32_t> d_sum_edges(1, 0);
         thrust::device_vector<uint32_t> d_sum_faces(1, 0);
-
-        uint32_t num_patches;
-        CUDA_ERROR(cudaMemcpy(&num_patches,
-                              m_rxmesh_context.m_num_patches,
-                              sizeof(uint32_t),
-                              cudaMemcpyDeviceToHost));
 
         constexpr uint32_t block_size = 256;
         const uint32_t     grid_size  = num_patches;
@@ -337,17 +440,7 @@ bool RXMeshDynamic::validate()
     // check that each edge is composed of two unique vertices and each face is
     // composed of three unique edges that give three unique vertices.
     auto check_uniqueness = [&]() -> bool {
-        uint32_t num_patches;
-        CUDA_ERROR(cudaMemcpy(&num_patches,
-                              m_rxmesh_context.m_num_patches,
-                              sizeof(uint32_t),
-                              cudaMemcpyDeviceToHost));
-
-        unsigned long long int* d_check;
-        CUDA_ERROR(
-            cudaMalloc((void**)&d_check, sizeof(unsigned long long int)));
         CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
-
         constexpr uint32_t block_size = 256;
         const uint32_t     grid_size  = num_patches;
         const uint32_t     dynamic_smem =
@@ -359,78 +452,72 @@ bool RXMeshDynamic::validate()
             <<<grid_size, block_size, dynamic_smem>>>(m_rxmesh_context,
                                                       d_check);
 
-        unsigned long long int h_check(0);
-        CUDA_ERROR(cudaMemcpy(&h_check,
-                              d_check,
-                              sizeof(unsigned long long int),
-                              cudaMemcpyDeviceToHost));
-
-        CUDA_ERROR(cudaFree(d_check));
-
-        if (h_check != 0) {
-            return false;
-        } else {
-            return true;
-        }
+        return is_okay();
     };
 
     // check that every not-owned mesh elements' connectivity (faces and
     // edges) is equivalent to their connectivity in their owner patch.
     // if the mesh element is deleted in the owner patch, no check is done
     auto check_not_owned = [&]() -> bool {
-        uint32_t num_patches;
-        CUDA_ERROR(cudaMemcpy(&num_patches,
-                              m_rxmesh_context.m_num_patches,
-                              sizeof(uint32_t),
-                              cudaMemcpyDeviceToHost));
-
-        unsigned long long int* d_check;
-        CUDA_ERROR(
-            cudaMalloc((void**)&d_check, sizeof(unsigned long long int)));
+        CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
         CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
 
-        const uint32_t block_size = 256;
-        const uint32_t grid_size  = num_patches;
-        const uint32_t dynamic_smem =
+        constexpr uint32_t block_size = 256;
+        const uint32_t     grid_size  = num_patches;
+        const uint32_t     dynamic_smem =
             rxmesh::detail::ShmemAllocator::default_alignment * 2 +
             (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
             (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
-        detail::check_not_owned<256><<<grid_size, block_size, dynamic_smem>>>(
-            m_rxmesh_context, d_check);
-
-        unsigned long long int h_check(0);
-        CUDA_ERROR(cudaMemcpy(&h_check,
-                              d_check,
-                              sizeof(unsigned long long int),
-                              cudaMemcpyDeviceToHost));
-
-        CUDA_ERROR(cudaFree(d_check));
-
-        if (h_check != 0) {
-            return false;
-        } else {
-            return true;
-        }
+        detail::check_not_owned<block_size>
+            <<<grid_size, block_size, dynamic_smem>>>(m_rxmesh_context,
+                                                      d_check);
+        return is_okay();
     };
 
+    // check if the ribbon construction is complete i.e., 1) each owned edge is
+    // incident to an owned face, and 2) VF of the three vertices of an owned
+    // face is inside the patch
+    auto check_ribbon = [&]() {
+        CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
+        constexpr uint32_t block_size = 256;
+        const uint32_t     grid_size  = num_patches;
+        const uint32_t     dynamic_smem =
+            rxmesh::detail::ShmemAllocator::default_alignment * 2 +
+            (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
+            (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
+        detail::check_ribbon<block_size>
+            <<<grid_size, block_size, dynamic_smem>>>(m_rxmesh_context,
+                                                      d_check);
+
+        return is_okay();
+    };
+
+    bool success = true;
     if (!check_num_mesh_elements()) {
         RXMESH_WARN("RXMeshDynamic::validate() check_num_mesh_elements failed");
-        return false;
+        success = false;
     }
 
     if (!check_uniqueness()) {
         RXMESH_WARN("RXMeshDynamic::validate() check_uniqueness failed");
-        return false;
+        success = false;
     }
 
     if (!check_not_owned()) {
         RXMESH_WARN("RXMeshDynamic::validate() check_not_owned failed");
-        return false;
+        success = false;
     }
 
-    return true;
+    if (!check_ribbon()) {
+        RXMESH_WARN("RXMeshDynamic::validate() check_ribbon failed");
+        success = false;
+    }
+
+    CUDA_ERROR(cudaFree(d_check));
+
+    return success;
 }
 
 
