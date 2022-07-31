@@ -63,6 +63,15 @@ TEST(RXMesh, LPHashTable)
         EXPECT_EQ(p.patch_stash_id(), patch_id[i]);
     }
 
+    for (uint32_t i = 0; i < size; ++i) {
+        table.remove(local_id[i]);
+        auto p = table.find(local_id[i]);
+        EXPECT_EQ(p.m_pair, LPPair::sentinel_pair().m_pair);        
+    }
+
+   
+
+
     table.free();
 }
 

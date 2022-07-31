@@ -42,8 +42,8 @@ namespace rxmesh {
  */
 struct LPHashTable
 {
-    // using HashT = universal_hash;
-    using HashT = MurmurHash3_32;
+    using HashT = universal_hash;
+    // using HashT = MurmurHash3_32;
 
     static constexpr uint8_t stash_size = 32;
 
@@ -294,9 +294,73 @@ struct LPHashTable
         const typename LPPair::KeyT key,
         const LPPair*               table = nullptr) const
     {
+        uint32_t bucket_id(0);
+        bool     in_stash(false);
+        return find(key, bucket_id, in_stash, table);
+    }
 
-        constexpr int num_hfs   = 4;
-        auto          bucket_id = m_hasher0(key) % m_capacity;
+    /**
+     * @brief remove item from the hash table i.e., replace it with
+     * sentinel_pair
+     * @param key key to the item to remove
+     * @param table pointer to the hash table (could shared memory on the
+     * device)
+     */
+    __host__ __device__ __inline__ void remove(const typename LPPair::KeyT key,
+                                               LPPair* table = nullptr)
+    {
+        uint32_t bucket_id(0);
+        bool     in_stash(false);
+        find(key, bucket_id, in_stash, table);
+
+        // TODO not sure if we need to do this atomically on the GPU. But if we
+        // do, here is the implementation
+        //#ifdef __CUDA_ARCH__
+        //        if (table != nullptr) {
+        //            ::atomicExch((uint32_t*)table + bucket_id, INVALID32);
+        //        } else {
+        //            ::atomicExch((uint32_t*)m_table + bucket_id, INVALID32);
+        //        }
+        //#else
+        //        if (table != nullptr) {
+        //            table[bucket_id].m_pair = INVALID32;
+        //        } else {
+        //            m_table[bucket_id].m_pair = INVALID32;
+        //        }
+        //#endif
+
+
+        if (!in_stash) {
+            if (table != nullptr) {
+                table[bucket_id].m_pair = INVALID32;
+            } else {
+                m_table[bucket_id].m_pair = INVALID32;
+            }
+        } else {
+            m_stash[bucket_id].m_pair = INVALID32;
+        }
+    }
+
+
+   private:
+    /**
+     * @brief Find a pair in the hash table given its key.
+     * @param key input key
+     * @param bucket_id returned bucket ID of the found LPPair
+     * @param table pointer to the hash table (could shared memory on the
+     * device)
+     * @return a LPPair pair that contains the key and its associated value
+     */
+    __host__ __device__ __inline__ LPPair find(
+        const typename LPPair::KeyT key,
+        uint32_t&                   bucket_id,
+        bool&                       in_stash,
+        const LPPair*               table = nullptr) const
+    {
+
+        constexpr int num_hfs = 4;
+        in_stash              = false;
+        bucket_id             = m_hasher0(key) % m_capacity;
         for (int hf = 0; hf < num_hfs; ++hf) {
 
 
@@ -324,15 +388,16 @@ struct LPHashTable
             }
         }
 
-        for (uint8_t i = 0; i < stash_size; ++i) {
-            if (m_stash[i].key() == key) {
-                return m_stash[i];
+        for (bucket_id = 0; bucket_id < stash_size; ++bucket_id) {
+            if (m_stash[bucket_id].key() == key) {
+                in_stash = true;
+                return m_stash[bucket_id];
             }
         }
         return LPPair::sentinel_pair();
     }
 
-   private:
+
     LPPair*  m_table;
     LPPair*  m_stash;
     HashT    m_hasher0;

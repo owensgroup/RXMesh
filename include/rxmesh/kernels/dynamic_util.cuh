@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rxmesh/util/bitmask_util.h"
+#include "rxmesh/util/util.h"
 
 namespace rxmesh {
 namespace detail {
