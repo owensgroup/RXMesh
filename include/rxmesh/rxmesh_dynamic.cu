@@ -3,6 +3,7 @@
 #include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/for_each_dispatcher.cuh"
 #include "rxmesh/kernels/loader.cuh"
+#include "rxmesh/kernels/query_dispatcher.cuh"
 #include "rxmesh/kernels/shmem_allocator.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 #include "rxmesh/util/bitmask_util.h"
@@ -298,8 +299,8 @@ __global__ static void check_not_owned(const Context           context,
 
 
 template <uint32_t blockThreads>
-__global__ static void check_ribbon(const Context           context,
-                                    unsigned long long int* d_check)
+__global__ static void check_ribbon_edges(const Context           context,
+                                          unsigned long long int* d_check)
 {
     auto block = cooperative_groups::this_thread_block();
 
@@ -343,7 +344,7 @@ __global__ static void check_ribbon(const Context           context,
 
                 auto mark_if_owned = [&](uint16_t edge) {
                     if (is_owned(edge, patch_info.owned_mask_e)) {
-                        ::rxmesh::atomicAdd(s_mark_edges + edge, uint16_t(1));
+                        atomicAdd(s_mark_edges + edge, uint16_t(1));
                     }
                 };
 
@@ -361,11 +362,146 @@ __global__ static void check_ribbon(const Context           context,
                 }
             }
         }
-        block.sync();
-
-        shrd_alloc.dealloc<uint16_t>(patch_info.num_edges);
     }
 }
+
+
+template <uint32_t blockThreads>
+__global__ static void compute_vf(const Context               context,
+                                  VertexAttribute<FaceHandle> output)
+{
+    using namespace rxmesh;
+
+    auto store_lambda = [&](VertexHandle& v_id, FaceIterator& iter) {
+        for (uint32_t i = 0; i < iter.size(); ++i) {
+            output(v_id, i) = iter[i];
+        }
+    };
+
+    query_block_dispatcher<Op::VF, blockThreads>(context, store_lambda);
+}
+
+
+template <uint32_t blockThreads>
+__global__ static void check_ribbon_faces(const Context               context,
+                                          VertexAttribute<FaceHandle> global_vf,
+                                          VertexAttribute<uint32_t>   v_color,
+                                          FaceAttribute<uint32_t>     f_color,
+                                          unsigned long long int*     d_check)
+{
+    auto block = cooperative_groups::this_thread_block();
+
+    const uint32_t patch_id = blockIdx.x;
+
+    if (patch_id < context.get_num_patches()) {
+        PatchInfo patch_info = context.get_patches_info()[patch_id];
+
+        ShmemAllocator shrd_alloc;
+        uint16_t* s_fv = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
+        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
+        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
+        load_async(block,
+                   reinterpret_cast<uint16_t*>(patch_info.ev),
+                   2 * patch_info.num_edges,
+                   s_ev,
+                   false);
+        load_async(block,
+                   reinterpret_cast<uint16_t*>(patch_info.fe),
+                   3 * patch_info.num_faces,
+                   s_fv,
+                   true);
+        block.sync();
+
+
+        // compute FV
+        f_v<blockThreads>(patch_info.num_edges,
+                          s_ev,
+                          patch_info.num_faces,
+                          s_fv,
+                          patch_info.active_mask_f);
+        block.sync();
+
+        // copy FV
+        for (uint16_t i = threadIdx.x; i < 3 * patch_info.num_faces;
+             i += blockThreads) {
+            s_fe[i] = s_fv[i];
+        }
+        block.sync();
+
+        // compute (local) VF by transposing FV
+        uint16_t* s_vf_offset = &s_fe[0];
+        uint16_t* s_vf_value  = &s_ev[0];
+        block_mat_transpose<3u, blockThreads>(patch_info.num_faces,
+                                              patch_info.num_vertices,
+                                              s_fe,
+                                              s_ev,
+                                              patch_info.active_mask_f,
+                                              0);
+
+        // For every incident vertex V to an owned face, check if VF of V
+        // using global_VF can be retrieved from local_VF
+        for (uint16_t f = threadIdx.x; f < patch_info.num_faces;
+             f += blockThreads) {
+
+            // Only if the face is owned, we do the check
+            if (is_owned(f, patch_info.owned_mask_f)) {
+
+                // for the three vertices incidet to this face
+                for (uint16_t k = 0; k < 3; ++k) {
+                    uint16_t v_id = s_fv[3 * f + k];
+
+                    // get the vertex handle so we can index the attributes
+                    uint16_t lid = v_id;
+                    uint32_t pid = patch_id;
+                    if (!is_owned(v_id, patch_info.owned_mask_v)) {
+                        auto lp = patch_info.lp_v.find(lid);
+                        lid     = lp.local_id_in_owner_patch();
+                        pid     = patch_info.patch_stash.get_patch(lp);
+                    }
+                    VertexHandle vh(pid, lid);
+
+                    // for every incident face to this vertex
+                    for (uint16_t i = 0; i < global_vf.get_num_attributes();
+                         ++i) {
+                        if (global_vf(vh, i).is_valid()) {
+
+                            // look for the face incident to the vertex in local
+                            // VF
+                            bool found = false;
+                            for (uint16_t j = s_vf_offset[v_id];
+                                 j < s_vf_offset[v_id + 1];
+                                 ++j) {
+
+                                uint16_t f_lid = s_vf_value[j];
+                                uint32_t f_pid = patch_id;
+
+                                if (!is_owned(f_lid, patch_info.owned_mask_f)) {
+                                    auto lp = patch_info.lp_f.find(f_lid);
+                                    f_lid   = lp.local_id_in_owner_patch();
+                                    f_pid =
+                                        patch_info.patch_stash.get_patch(lp);
+                                }
+                                FaceHandle fh(f_pid, f_lid);
+
+                                if (global_vf(vh, i) == fh) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+
+                            if (!found) {
+                                f_color({patch_id, f}) = 1;
+                                ::atomicAdd(d_check, 1);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 }  // namespace detail
 
 bool RXMeshDynamic::validate()
@@ -482,14 +618,42 @@ bool RXMeshDynamic::validate()
         CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
         constexpr uint32_t block_size = 256;
         const uint32_t     grid_size  = num_patches;
-        const uint32_t     dynamic_smem =
-            rxmesh::detail::ShmemAllocator::default_alignment * 2 +
+        uint32_t           dynamic_smem =
+            rxmesh::detail::ShmemAllocator::default_alignment * 3 +
             (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
-            (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            this->m_max_edges_per_patch * sizeof(uint16_t);
 
-        detail::check_ribbon<block_size>
+        detail::check_ribbon_edges<block_size>
             <<<grid_size, block_size, dynamic_smem>>>(m_rxmesh_context,
                                                       d_check);
+
+        if (!is_okay()) {
+            return false;
+        }
+
+        auto vf_global = this->add_vertex_attribute<FaceHandle>(
+            "vf", this->get_input_max_valence(), rxmesh::DEVICE);
+        vf_global->reset(FaceHandle(), rxmesh::DEVICE);
+
+        LaunchBox<block_size> launch_box;
+        RXMeshStatic::prepare_launch_box(
+            {Op::VF}, launch_box, (void*)detail::compute_vf<block_size>);
+
+        detail::compute_vf<block_size>
+            <<<launch_box.blocks, block_size, launch_box.smem_bytes_dyn>>>(
+                m_rxmesh_context, *vf_global);
+
+
+        dynamic_smem =
+            rxmesh::detail::ShmemAllocator::default_alignment * 3 +
+            2 * (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
+            std::max(3 * this->m_max_faces_per_patch,
+                     2 * this->m_max_edges_per_patch) *
+                sizeof(uint16_t);
+
+        detail::check_ribbon_faces<block_size>
+            <<<grid_size, block_size, dynamic_smem>>>(
+                m_rxmesh_context, *vf_global, d_check);
 
         return is_okay();
     };
