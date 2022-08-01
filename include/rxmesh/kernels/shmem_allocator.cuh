@@ -5,7 +5,6 @@
 #include <cstdio>
 
 namespace rxmesh {
-namespace detail {
 
 extern __shared__ char SHMEM_START[];
 
@@ -119,5 +118,5 @@ struct ShmemAllocator
     }
     char* m_ptr;
 };
-}  // namespace detail
+
 }  // namespace rxmesh

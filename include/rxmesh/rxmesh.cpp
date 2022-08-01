@@ -352,6 +352,44 @@ void RXMesh::calc_max_elements()
     }
 }
 
+uint32_t RXMesh::max_bitmask_size(ELEMENT ele) const
+{
+    switch (ele) {
+        case rxmesh::ELEMENT::VERTEX:
+            return detail::mask_num_bytes(this->m_max_vertices_per_patch);
+        case rxmesh::ELEMENT::EDGE:
+            return detail::mask_num_bytes(this->m_max_edges_per_patch);
+        case rxmesh::ELEMENT::FACE:
+            return detail::mask_num_bytes(this->m_max_faces_per_patch);
+        default:
+            RXMESH_ERROR(
+                "RXMesh::max_bitmask_size() unknown mesh element type");
+            return 0;
+    }
+}
+
+uint32_t RXMesh::max_lp_hashtable_size(ELEMENT ele) const
+{
+    switch (ele) {
+        case rxmesh::ELEMENT::VERTEX:
+            return static_cast<uint16_t>(
+                static_cast<float>(m_max_not_owned_vertices) /
+                m_lp_hashtable_load_factor);
+        case rxmesh::ELEMENT::EDGE:
+            return static_cast<uint16_t>(
+                static_cast<float>(m_max_not_owned_edges) /
+                m_lp_hashtable_load_factor);
+        case rxmesh::ELEMENT::FACE:
+            return static_cast<uint16_t>(
+                static_cast<float>(m_max_not_owned_faces) /
+                m_lp_hashtable_load_factor);
+        default:
+            RXMESH_ERROR(
+                "RXMesh::max_lp_hashtable_size() unknown mesh element type");
+            return 0;
+    }
+}
+
 void RXMesh::build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
                                 const uint32_t patch_id)
 {

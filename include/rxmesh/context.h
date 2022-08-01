@@ -24,8 +24,7 @@ class Context
         : m_num_edges(nullptr),
           m_num_faces(nullptr),
           m_num_vertices(nullptr),
-          m_num_patches(nullptr),
-          m_dirty(nullptr),
+          m_num_patches(nullptr),          
           m_patches_info(nullptr)
     {
     }
@@ -62,15 +61,6 @@ class Context
     __device__ __forceinline__ uint32_t get_num_patches() const
     {
         return *m_num_patches;
-    }
-
-
-    /**
-     * @brief return the dirty pointer
-     */
-    __device__ __forceinline__ uint32_t* get_dirty() const
-    {
-        return m_dirty;
     }
 
 
@@ -117,8 +107,7 @@ class Context
         CUDA_ERROR(cudaMalloc((void**)&m_num_vertices, sizeof(uint32_t)));
         CUDA_ERROR(cudaMalloc((void**)&m_num_edges, sizeof(uint32_t)));
         CUDA_ERROR(cudaMalloc((void**)&m_num_faces, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMalloc((void**)&m_num_patches, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMalloc((void**)&m_dirty, sizeof(uint32_t)));
+        CUDA_ERROR(cudaMalloc((void**)&m_num_patches, sizeof(uint32_t)));        
 
         CUDA_ERROR(cudaMemcpy(m_num_vertices,
                               &num_vertices,
@@ -131,8 +120,7 @@ class Context
         CUDA_ERROR(cudaMemcpy(m_num_patches,
                               &num_patches,
                               sizeof(uint32_t),
-                              cudaMemcpyHostToDevice));
-        CUDA_ERROR(cudaMemset(m_dirty, 0, sizeof(uint32_t)));
+                              cudaMemcpyHostToDevice));        
         m_patches_info = patches;
     }
 
@@ -141,13 +129,11 @@ class Context
         CUDA_ERROR(cudaFree(m_num_edges));
         CUDA_ERROR(cudaFree(m_num_faces));
         CUDA_ERROR(cudaFree(m_num_vertices));
-        CUDA_ERROR(cudaFree(m_num_patches));
-        CUDA_ERROR(cudaFree(m_dirty));
+        CUDA_ERROR(cudaFree(m_num_patches));        
     }
 
 
-    uint32_t * m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;
-    uint32_t*  m_dirty;
+    uint32_t * m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;    
     PatchInfo* m_patches_info;
 };
 }  // namespace rxmesh

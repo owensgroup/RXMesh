@@ -33,44 +33,40 @@ class RXMeshDynamic : public RXMeshStatic
      * @brief populate the launch_box with grid size and dynamic shared memory
      * needed for a kernel that may use dynamic and query operations
      * @param op List of query operations done inside the kernel
-     * @param dyn_op List of dynamic update done inside the kernel
      * @param launch_box input launch box to be populated
      * @param kernel The kernel to be launched
      * @param oriented if the query is oriented. Valid only for Op::VV queries
      */
     template <uint32_t blockThreads>
     void prepare_launch_box(const std::vector<Op>    op,
-                            const std::vector<DynOp> dyn_op,
                             LaunchBox<blockThreads>& launch_box,
                             const void*              kernel,
                             const bool               oriented = false) const
     {
-        static_assert(
-            blockThreads && ((blockThreads & (blockThreads - 1)) == 0),
-            " RXMeshDynamic::prepare_launch_box() CUDA block size should be of "
-            "power 2");
-
 
         launch_box.blocks         = this->m_num_patches;
         launch_box.smem_bytes_dyn = 0;
-        for (auto o : dyn_op) {
-            if (o == DynOp::EdgeSplit && !is_closed()) {
-                RXMESH_ERROR(
-                    "RXMeshDynamic::prepare_launch_box Edge split only works "
-                    "on closed meshes!");
-            }
-            launch_box.smem_bytes_dyn =
-                std::max(launch_box.smem_bytes_dyn,
-                         this->template calc_shared_memory<blockThreads>(o));
-        }
+
 
         for (auto o : op) {
             launch_box.smem_bytes_dyn =
                 std::max(launch_box.smem_bytes_dyn,
-                         this->RXMeshStatic::calc_shared_memory<blockThreads>(
-                             o, oriented));
+                         this->calc_shared_memory<blockThreads>(o, oriented));
         }
 
+        // For dynamic changes we load EV and FE
+        launch_box.smem_bytes_dyn =
+            std::max(launch_box.smem_bytes_dyn,
+                     3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
+                         2 * this->m_max_edges_per_patch * sizeof(uint16_t) +
+                         2 * ShmemAllocator::default_alignment);
+
+        // cavity ID of fake deleted elements
+        launch_box.smem_bytes_dyn +=
+            this->m_max_vertices_per_patch * sizeof(uint16_t) +
+            this->m_max_edges_per_patch * sizeof(uint16_t) +
+            this->m_max_faces_per_patch * sizeof(uint16_t) +
+            3 * ShmemAllocator::default_alignment;
 
         if (!this->m_quite) {
             RXMESH_TRACE(
@@ -104,15 +100,5 @@ class RXMeshDynamic : public RXMeshStatic
      * after performing mesh refinement on the GPU)
      */
     void update_host();
-
-   private:
-    template <uint32_t blockThreads>
-    size_t calc_shared_memory(const DynOp op) const
-    {
-
-        size_t dynamic_smem = 0;
-
-        return dynamic_smem;
-    }
 };
 }  // namespace rxmesh

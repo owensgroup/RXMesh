@@ -821,70 +821,42 @@ class RXMeshStatic : public RXMesh
 
         size_t dynamic_smem = 0;
 
-        auto bitmask_size = [&](ELEMENT ele) {
-            switch (ele) {
-                case rxmesh::ELEMENT::VERTEX:
-                    return detail::mask_num_bytes(
-                        this->m_max_vertices_per_patch);
-                case rxmesh::ELEMENT::EDGE:
-                    return detail::mask_num_bytes(this->m_max_edges_per_patch);
-                case rxmesh::ELEMENT::FACE:
-                    return detail::mask_num_bytes(this->m_max_faces_per_patch);
-            }
-        };
-
-        auto lp_hashtable_size = [&](ELEMENT ele) {
-            switch (ele) {
-                case rxmesh::ELEMENT::VERTEX:
-                    return static_cast<uint16_t>(
-                        static_cast<float>(m_max_not_owned_vertices) /
-                        m_lp_hashtable_load_factor);
-                case rxmesh::ELEMENT::EDGE:
-                    return static_cast<uint16_t>(
-                        static_cast<float>(m_max_not_owned_edges) /
-                        m_lp_hashtable_load_factor);
-                case rxmesh::ELEMENT::FACE:
-                    return static_cast<uint16_t>(
-                        static_cast<float>(m_max_not_owned_faces) /
-                        m_lp_hashtable_load_factor);
-            }
-        };
 
         if (op == Op::FE) {
             // only FE will be loaded
             dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += bitmask_size(ELEMENT::FACE);
+            dynamic_smem += max_bitmask_size(ELEMENT::FACE);
 
             // store not-owned bitmask
-            dynamic_smem += bitmask_size(ELEMENT::EDGE);
+            dynamic_smem += max_bitmask_size(ELEMENT::EDGE);
 
             // stores edges LP hashtable
-            dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::EDGE);
+            dynamic_smem +=
+                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::EDGE);
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
-            dynamic_smem +=
-                rxmesh::detail::ShmemAllocator::default_alignment * 4;
+            dynamic_smem += ShmemAllocator::default_alignment * 4;
 
         } else if (op == Op::EV) {
             // only EV will be loaded
             dynamic_smem = 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += bitmask_size(ELEMENT::EDGE);
+            dynamic_smem += max_bitmask_size(ELEMENT::EDGE);
 
             // store not-owned bitmask
-            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
 
             // stores vertex LP hashtable
-            dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::VERTEX);
+            dynamic_smem +=
+                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::VERTEX);
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
-            dynamic_smem +=
-                rxmesh::detail::ShmemAllocator::default_alignment * 4;
+            dynamic_smem += ShmemAllocator::default_alignment * 4;
 
         } else if (op == Op::FV) {
             // We load both FE and EV. We don't change EV.
@@ -894,14 +866,14 @@ class RXMeshStatic : public RXMesh
             dynamic_smem += 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += bitmask_size(ELEMENT::FACE);
+            dynamic_smem += max_bitmask_size(ELEMENT::FACE);
 
             // store not-owned bitmask
-            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
 
             //  stores vertex LP hashtable
             uint32_t table_bytes =
-                sizeof(LPPair) * lp_hashtable_size(ELEMENT::VERTEX);
+                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::VERTEX);
             if (table_bytes >
                 2 * this->m_max_edges_per_patch * sizeof(uint16_t)) {
 
@@ -910,8 +882,7 @@ class RXMeshStatic : public RXMesh
             }
             // for possible padding for alignment
             // 5 since there are 5 calls for ShmemAllocator.alloc
-            dynamic_smem +=
-                rxmesh::detail::ShmemAllocator::default_alignment * 5;
+            dynamic_smem += ShmemAllocator::default_alignment * 5;
             // TODO no need for extra memory to load not-owned vertices local
             // and patch id. We load them and overwrite EV.
         } else if (op == Op::VE) {
@@ -926,18 +897,18 @@ class RXMeshStatic : public RXMesh
                 (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
 
             // store not-owned bitmask
-            dynamic_smem += bitmask_size(ELEMENT::EDGE);
+            dynamic_smem += max_bitmask_size(ELEMENT::EDGE);
 
             // stores edge LP hashtable
-            dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::EDGE);
+            dynamic_smem +=
+                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::EDGE);
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
-            dynamic_smem +=
-                rxmesh::detail::ShmemAllocator::default_alignment * 4;
+            dynamic_smem += ShmemAllocator::default_alignment * 4;
 
             // TODO
             /*if (!oriented) {
@@ -955,18 +926,18 @@ class RXMeshStatic : public RXMesh
                 sizeof(uint16_t) + sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += bitmask_size(ELEMENT::EDGE);
+            dynamic_smem += max_bitmask_size(ELEMENT::EDGE);
 
             // store not-owned bitmask
-            dynamic_smem += bitmask_size(ELEMENT::FACE);
+            dynamic_smem += max_bitmask_size(ELEMENT::FACE);
 
             // stores the face LP hashtable
-            dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::FACE);
+            dynamic_smem +=
+                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::FACE);
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
-            dynamic_smem +=
-                rxmesh::detail::ShmemAllocator::default_alignment * 4;
+            dynamic_smem += ShmemAllocator::default_alignment * 4;
 
         } else if (op == Op::VF) {
             // load EV and FE simultaneously. changes FE to FV using EV. Then
@@ -980,18 +951,18 @@ class RXMeshStatic : public RXMesh
                             sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
 
             // store not-owned bitmask
-            dynamic_smem += bitmask_size(ELEMENT::FACE);
+            dynamic_smem += max_bitmask_size(ELEMENT::FACE);
 
             // stores the face LP hashtable
-            dynamic_smem += sizeof(LPPair) * lp_hashtable_size(ELEMENT::FACE);
+            dynamic_smem +=
+                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::FACE);
 
             // for possible padding for alignment
             // 5 since there are 5 calls for ShmemAllocator.alloc
-            dynamic_smem +=
-                rxmesh::detail::ShmemAllocator::default_alignment * 5;
+            dynamic_smem += ShmemAllocator::default_alignment * 5;
 
         } else if (op == Op::VV) {
             // similar to VE but we also need to store the EV even after
@@ -1003,14 +974,14 @@ class RXMeshStatic : public RXMesh
                 (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
 
             // store not-owned bitmask
-            dynamic_smem += bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
 
             // stores the vertex LP hashtable
             uint32_t table_bytes =
-                sizeof(LPPair) * lp_hashtable_size(ELEMENT::VERTEX);
+                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::VERTEX);
             if (table_bytes >
                 2 * this->m_max_edges_per_patch * sizeof(uint16_t)) {
 
@@ -1020,8 +991,7 @@ class RXMeshStatic : public RXMesh
 
             // for possible padding for alignment
             // 5 since there are 5 calls for ShmemAllocator.alloc
-            dynamic_smem +=
-                rxmesh::detail::ShmemAllocator::default_alignment * 5;
+            dynamic_smem += ShmemAllocator::default_alignment * 5;
 
         } else if (op == Op::FF) {
             // FF needs to store FE and EF along side with the output itself
@@ -1037,15 +1007,14 @@ class RXMeshStatic : public RXMesh
                            sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += bitmask_size(ELEMENT::FACE);
+            dynamic_smem += max_bitmask_size(ELEMENT::FACE);
 
             // store not-owned bitmask
-            dynamic_smem += bitmask_size(ELEMENT::FACE);
+            dynamic_smem += max_bitmask_size(ELEMENT::FACE);
 
             // for possible padding for alignment
             // 6 since there are 6 calls for ShmemAllocator.alloc
-            dynamic_smem +=
-                rxmesh::detail::ShmemAllocator::default_alignment * 6;
+            dynamic_smem += ShmemAllocator::default_alignment * 6;
         }
 
         if (oriented) {

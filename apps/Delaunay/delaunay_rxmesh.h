@@ -7,8 +7,7 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
     constexpr uint32_t blockThreads = 256;
 
     LaunchBox<blockThreads> launch_box;
-    rx.prepare_launch_box({rxmesh::Op::VV},
-                          {rxmesh::DynOp::EdgeFlip},
+    rx.prepare_launch_box({Op::VV},
                           launch_box,
                           (void*)delaunay_edge_flip<float, blockThreads>,
                           true);

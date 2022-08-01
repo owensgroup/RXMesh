@@ -12,7 +12,7 @@ struct PatchStash
 {
     static constexpr uint8_t stash_size = (1 << LPPair::PatchStashNumBits);
 
-    __host__ __device__ PatchStash(bool on_device) : m_is_on_device(on_device)
+    __host__ PatchStash(bool on_device) : m_is_on_device(on_device)
     {
         if (m_is_on_device) {
             CUDA_ERROR(

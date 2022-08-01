@@ -26,22 +26,19 @@ namespace detail {
  */
 template <Op op, uint32_t blockThreads, typename activeSetT>
 __device__ __inline__ void query_block_dispatcher(
-    const PatchInfo& patch_info,
-    activeSetT       compute_active_set,
-    const bool       oriented,
-    uint32_t&        num_src_in_patch,
-    uint16_t*&       s_output_offset,
-    uint16_t*&       s_output_value,
-    uint32_t*&       s_participant_bitmask,
-    uint32_t*&       s_output_owned_bitmask,
-    LPHashTable&     output_lp_hashtable,
-    LPPair*&         s_table)
+    cooperative_groups::thread_block& block,
+    ShmemAllocator&                   shrd_alloc,
+    const PatchInfo&                  patch_info,
+    activeSetT                        compute_active_set,
+    const bool                        oriented,
+    uint32_t&                         num_src_in_patch,
+    uint16_t*&                        s_output_offset,
+    uint16_t*&                        s_output_value,
+    uint32_t*&                        s_participant_bitmask,
+    uint32_t*&                        s_output_owned_bitmask,
+    LPHashTable&                      output_lp_hashtable,
+    LPPair*&                          s_table)
 {
-    namespace cg           = cooperative_groups;
-    cg::thread_block block = cg::this_thread_block();
-
-    ShmemAllocator shrd_alloc;
-
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
     num_src_in_patch                = 0;
@@ -194,16 +191,18 @@ __device__ __inline__ void query_block_dispatcher(
  * query_block_dispatcher()
  */
 template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
-__device__ __inline__ void query_block_dispatcher(const Context& context,
-                                                  const uint32_t patch_id,
-                                                  computeT       compute_op,
-                                                  activeSetT compute_active_set,
-                                                  const bool oriented = false)
+__device__ __inline__ void query_block_dispatcher(
+    cooperative_groups::thread_block& block,
+    ShmemAllocator&                   shrd_alloc,
+    const Context&                    context,
+    const uint32_t                    patch_id,
+    computeT                          compute_op,
+    activeSetT                        compute_active_set,
+    const bool                        oriented = false)
 {
     // Extract the type of the input parameters of the compute lambda function.
     // The first parameter should be Vertex/Edge/FaceHandle and second parameter
     // should be RXMeshVertex/Edge/FaceIterator
-
     using ComputeTraits    = detail::FunctionTraits<computeT>;
     using ComputeHandleT   = typename ComputeTraits::template arg<0>::type;
     using ComputeIteratorT = typename ComputeTraits::template arg<1>::type;
@@ -224,6 +223,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
 
     assert(patch_id < context.get_num_patches());
 
+
     uint32_t    num_src_in_patch = 0;
     uint16_t*   s_output_offset(nullptr);
     uint16_t*   s_output_value(nullptr);
@@ -233,6 +233,8 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     LPPair*     s_table;
 
     query_block_dispatcher<op, blockThreads>(
+        block,
+        shrd_alloc,
         context.get_patches_info()[patch_id],
         compute_active_set,
         oriented,
@@ -275,6 +277,30 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     }
 }
 
+
+/**
+ * query_block_dispatcher()
+ */
+template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
+__device__ __inline__ void query_block_dispatcher(const Context& context,
+                                                  const uint32_t patch_id,
+                                                  computeT       compute_op,
+                                                  activeSetT compute_active_set,
+                                                  const bool oriented = false)
+{
+    namespace cg           = cooperative_groups;
+    cg::thread_block block = cg::this_thread_block();
+    ShmemAllocator   shrd_alloc;
+
+    query_block_dispatcher<op, blockThreads>(block,
+                                             shrd_alloc,
+                                             context,
+                                             patch_id,
+                                             compute_op,
+                                             compute_active_set,
+                                             oriented);
+}
+
 }  // namespace detail
 /**
  * @brief The main query function to be called by the whole block. In this
@@ -287,6 +313,8 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
  * @tparam blockThreads the number of CUDA threads in the block
  * @tparam computeT the type of compute lambda function (inferred)
  * @tparam activeSetT the type of active set lambda function (inferred)
+ * @param block cooperative group block
+ * @param shrd_alloc dynamic shared memory allocator
  * @param context which store various parameters needed for the query
  * operation. The context can be obtained from RXMeshStatic
  * @param compute_op the computation lambda function that will be executed by
@@ -300,6 +328,32 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
  * to the input of the query operation (e.g., VertexHandle for VE query)
  * @param oriented specifies if the query are oriented. Currently only VV query
  * is supported for oriented queries. FV, FE and EV is oriented by default
+ */
+template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
+__device__ __inline__ void query_block_dispatcher(
+    cooperative_groups::thread_block& block,
+    ShmemAllocator&                   shrd_alloc,
+    const Context&                    context,
+    computeT                          compute_op,
+    activeSetT                        compute_active_set,
+    const bool                        oriented = false)
+{
+    if (blockIdx.x >= context.get_num_patches()) {
+        return;
+    }
+
+    detail::query_block_dispatcher<op, blockThreads>(block,
+                                                     shrd_alloc,
+                                                     context,
+                                                     blockIdx.x,
+                                                     compute_op,
+                                                     compute_active_set,
+                                                     oriented);
+}
+
+/**
+ * @brief same as the above function but no cooperative group or shared memory
+ * allocator needed
  */
 template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
 __device__ __inline__ void query_block_dispatcher(const Context& context,
@@ -323,6 +377,8 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
  * @tparam Op the type of query operation
  * @tparam blockThreads the number of CUDA threads in the block
  * @tparam computeT the type of compute lambda function (inferred)
+ * @param block cooperative group block
+ * @param shrd_alloc dynamic shared memory allocator
  * @param context which store various parameters needed for the query
  * operation. The context can be obtained from RXMeshStatic
  * @param compute_op the computation lambda function that will be executed by
@@ -333,6 +389,32 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
  * "iterated" on (e.g., EdgeIterator for VE query)
  * @param oriented specifies if the query are oriented. Currently only VV query
  * is supported for oriented queries. FV, FE and EV is oriented by default
+ */
+template <Op op, uint32_t blockThreads, typename computeT>
+__device__ __inline__ void query_block_dispatcher(
+    cooperative_groups::thread_block& block,
+    ShmemAllocator&                   shrd_alloc,
+    const Context&                    context,
+    computeT                          compute_op,
+    const bool                        oriented = false)
+{
+    // Extract the type of the first input parameters of the compute lambda
+    // function. It should be Vertex/Edge/FaceHandle
+    using ComputeTraits  = detail::FunctionTraits<computeT>;
+    using ComputeHandleT = typename ComputeTraits::template arg<0>::type;
+
+    query_block_dispatcher<op, blockThreads>(
+        block,
+        shrd_alloc,
+        context,
+        compute_op,
+        [](ComputeHandleT) { return true; },
+        oriented);
+}
+
+/**
+ * @brief same as the above function but no cooperative group or shared memory
+ * allocator needed
  */
 template <Op op, uint32_t blockThreads, typename computeT>
 __device__ __inline__ void query_block_dispatcher(const Context& context,
@@ -434,6 +516,9 @@ __device__ __inline__ void higher_query_block_dispatcher(
     }*/
     __syncthreads();
 
+    namespace cg           = cooperative_groups;
+    cg::thread_block block = cg::this_thread_block();
+    ShmemAllocator   shrd_alloc;
 
     for (uint32_t p = 0; p < s_num_patches; ++p) {
 
@@ -450,6 +535,8 @@ __device__ __inline__ void higher_query_block_dispatcher(
         LPPair*     s_table;
 
         detail::template query_block_dispatcher<op, blockThreads>(
+            block,
+            shrd_alloc,
             context.get_patches_info()[patch_id],
             compute_active_set,
             oriented,

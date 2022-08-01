@@ -243,6 +243,10 @@ class RXMesh
      */
     void calc_max_elements();
 
+    uint32_t max_bitmask_size(ELEMENT ele) const;
+
+    uint32_t max_lp_hashtable_size(ELEMENT ele) const;
+
     void build(const std::vector<std::vector<uint32_t>>& fv);
     void build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
                             const uint32_t                            patch_id);
@@ -256,7 +260,7 @@ class RXMesh
 
 
     void build_device();
-    
+
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
     friend class ::RXMeshTest;
@@ -307,7 +311,7 @@ class RXMesh
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
 
     // Should be updated with update_host
-    PatchInfo *m_d_patches_info, *m_h_patches_info;    
+    PatchInfo *m_d_patches_info, *m_h_patches_info;
 
     float m_capacity_factor, m_lp_hashtable_load_factor;
 };

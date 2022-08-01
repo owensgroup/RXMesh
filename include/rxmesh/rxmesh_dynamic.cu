@@ -577,7 +577,7 @@ bool RXMeshDynamic::validate()
         constexpr uint32_t block_size = 256;
         const uint32_t     grid_size  = num_patches;
         const uint32_t     dynamic_smem =
-            rxmesh::detail::ShmemAllocator::default_alignment * 2 +
+            rxmesh::ShmemAllocator::default_alignment * 2 +
             (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
             (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
@@ -598,7 +598,7 @@ bool RXMeshDynamic::validate()
         constexpr uint32_t block_size = 256;
         const uint32_t     grid_size  = num_patches;
         const uint32_t     dynamic_smem =
-            rxmesh::detail::ShmemAllocator::default_alignment * 2 +
+            ShmemAllocator::default_alignment * 2 +
             (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
             (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
@@ -616,7 +616,7 @@ bool RXMeshDynamic::validate()
         constexpr uint32_t block_size = 256;
         const uint32_t     grid_size  = num_patches;
         uint32_t           dynamic_smem =
-            rxmesh::detail::ShmemAllocator::default_alignment * 3 +
+            ShmemAllocator::default_alignment * 3 +
             (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
             this->m_max_edges_per_patch * sizeof(uint16_t);
 
@@ -642,7 +642,7 @@ bool RXMeshDynamic::validate()
 
 
         dynamic_smem =
-            rxmesh::detail::ShmemAllocator::default_alignment * 3 +
+            ShmemAllocator::default_alignment * 3 +
             2 * (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
             std::max(3 * this->m_max_faces_per_patch,
                      2 * this->m_max_edges_per_patch) *
