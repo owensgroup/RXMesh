@@ -65,6 +65,13 @@ FetchContent_Declare(polyscope
 FetchContent_MakeAvailable(polyscope)
 endif()
 
+# cereal
+FetchContent_Declare(cereal
+    GIT_REPOSITORY https://github.com/USCiLab/cereal.git
+    GIT_TAG        v1.3.2
+)
+FetchContent_Populate(cereal)
+
 # Auto-detect GPU architecture
 include("cmake/AutoDetectCudaArch.cmake")
 
@@ -96,6 +103,7 @@ target_include_directories( RXMesh_header_lib
     INTERFACE "include"
 	INTERFACE "${rapidjson_SOURCE_DIR}/include"
 	INTERFACE "${spdlog_SOURCE_DIR}/include"
+	INTERFACE "${cereal_SOURCE_DIR}/include"
     INTERFACE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
 )
 
