@@ -188,6 +188,15 @@ class RXMesh
      */
     uint32_t get_edge_id(const uint32_t v0, const uint32_t v1) const;
 
+    /**
+     * @brief save/seralize the patcher info to a file
+     * @param filename
+     */
+    void save(std::string filename)
+    {
+        m_patcher->save(filename);
+    }
+
    protected:
     // Edge hash map that takes two vertices and return their edge id
     using EdgeMapT = std::unordered_map<std::pair<uint32_t, uint32_t>,
@@ -201,6 +210,7 @@ class RXMesh
     RXMesh();
 
     void init(const std::vector<std::vector<uint32_t>>& fv,
+              const std::string                         patcher_file    = "",
               const bool                                quite           = false,
               const float                               capacity_factor = 1.2,
               const float lp_hashtable_load_factor                      = 0.9);
@@ -247,7 +257,8 @@ class RXMesh
 
     uint32_t max_lp_hashtable_size(ELEMENT ele) const;
 
-    void build(const std::vector<std::vector<uint32_t>>& fv);
+    void build(const std::vector<std::vector<uint32_t>>& fv,
+               const std::string                         patcher_file);
     void build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
                             const uint32_t                            patch_id);
 

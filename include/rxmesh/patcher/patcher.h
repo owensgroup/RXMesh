@@ -1,9 +1,18 @@
 #pragma once
 
 #include <stdint.h>
+#include <fstream>
 #include <functional>
+#include <string>
 #include <unordered_map>
+
 #include "rxmesh/util/util.h"
+
+#define CEREAL_RAPIDJSON_NAMESPACE CerealRapidjson
+
+#include "cereal/archives/portable_binary.hpp"
+#include "cereal/cereal.hpp"
+#include "cereal/types/vector.hpp"
 
 namespace rxmesh {
 
@@ -28,6 +37,8 @@ class Patcher
             const uint32_t num_vertices,
             const uint32_t num_edges,
             const bool     quite);
+
+    Patcher(std::string filename);
 
     ~Patcher();
 
@@ -133,6 +144,36 @@ class Patcher
     uint32_t get_num_lloyd_run() const
     {
         return m_num_lloyd_run;
+    }
+
+    void save(std::string filename)
+    {
+        std::ofstream                       ss(filename, std::ios::binary);
+        cereal::PortableBinaryOutputArchive archive(ss);
+        archive(*this);
+    }
+
+
+    template <class Archive>
+    void serialize(Archive& archive)
+    {
+        archive(CEREAL_NVP(m_patch_size),
+                CEREAL_NVP(m_num_patches),
+                CEREAL_NVP(m_num_vertices),
+                CEREAL_NVP(m_num_edges),
+                CEREAL_NVP(m_num_faces),
+                CEREAL_NVP(m_num_seeds),
+                CEREAL_NVP(m_max_num_patches),
+                CEREAL_NVP(m_num_components),
+                CEREAL_NVP(m_num_lloyd_run),
+                CEREAL_NVP(m_face_patch),
+                CEREAL_NVP(m_vertex_patch),
+                CEREAL_NVP(m_edge_patch),
+                CEREAL_NVP(m_patches_val),
+                CEREAL_NVP(m_patches_offset),
+                CEREAL_NVP(m_ribbon_ext_val),
+                CEREAL_NVP(m_ribbon_ext_offset),
+                CEREAL_NVP(m_patching_time_ms));
     }
 
    private:

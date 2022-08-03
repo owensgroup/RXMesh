@@ -13,8 +13,10 @@ class RXMeshDynamic : public RXMeshStatic
      * @param file_path path to an obj file
      * @param quite run in quite mode
      */
-    RXMeshDynamic(const std::string file_path, const bool quite = false)
-        : RXMeshStatic(file_path, quite)
+    RXMeshDynamic(const std::string file_path,
+                  const bool        quite        = false,
+                  const std::string patcher_file = "")
+        : RXMeshStatic(file_path, quite, patcher_file)
     {
     }
 
@@ -24,8 +26,9 @@ class RXMeshDynamic : public RXMeshStatic
      * @param quite run in quite mode
      */
     RXMeshDynamic(std::vector<std::vector<uint32_t>>& fv,
-                  const bool                          quite = false)
-        : RXMeshStatic(fv, quite)
+                  const bool                          quite        = false,
+                  const std::string                   patcher_file = "")
+        : RXMeshStatic(fv, quite, patcher_file)
     {
     }
 

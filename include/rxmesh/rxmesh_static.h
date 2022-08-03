@@ -37,7 +37,9 @@ class RXMeshStatic : public RXMesh
      * @param file_path path to an obj file
      * @param quite run in quite mode
      */
-    RXMeshStatic(const std::string file_path, const bool quite = false)
+    RXMeshStatic(const std::string file_path,
+                 const bool        quite        = false,
+                 const std::string patcher_file = "")
         : RXMesh()
     {
         std::vector<std::vector<uint32_t>> fv;
@@ -49,7 +51,7 @@ class RXMeshStatic : public RXMesh
             exit(EXIT_FAILURE);
         }
 
-        this->init(fv, quite);
+        this->init(fv, patcher_file, quite);
 
         m_attr_container = std::make_shared<AttributeContainer>();
 
@@ -70,10 +72,11 @@ class RXMeshStatic : public RXMesh
      * @param quite run in quite mode
      */
     RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
-                 const bool                          quite = false)
+                 const bool                          quite        = false,
+                 const std::string                   patcher_file = "")
         : RXMesh(), m_input_vertex_coordinates(nullptr)
     {
-        this->init(fv, quite);
+        this->init(fv, patcher_file, quite);
         m_attr_container = std::make_shared<AttributeContainer>();
     };
 

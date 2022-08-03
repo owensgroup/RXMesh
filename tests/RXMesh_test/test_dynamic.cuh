@@ -37,8 +37,15 @@ TEST(RXMeshDynamic, Cavity)
     using namespace rxmesh;
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "dragon.obj", rxmesh_args.quite);
-    auto          coords = rx.get_input_vertex_coordinates();
+    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+    rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patcher");
+
+    // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
+    //                 rxmesh_args.quite,
+    //                 STRINGIFY(OUTPUT_DIR) "sphere3_patcher");
+
+    auto coords = rx.get_input_vertex_coordinates();
+
 
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;

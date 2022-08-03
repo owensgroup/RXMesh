@@ -32,6 +32,7 @@ RXMesh::RXMesh()
 }
 
 void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
+                  const std::string                         patcher_file,
                   const bool                                quite,
                   const float                               capacity_factor,
                   const float lp_hashtable_load_factor)
@@ -53,7 +54,7 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
             "RXMesh::init hashtable load factor should be less than 1");
     }
 
-    build(fv);
+    build(fv, patcher_file);
     build_device();
 
     // Allocate and copy the context to the gpu
@@ -136,7 +137,8 @@ RXMesh::~RXMesh()
     m_rxmesh_context.release();
 }
 
-void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
+void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
+                   const std::string                         patcher_file)
 {
     std::vector<uint32_t>              ff_values;
     std::vector<uint32_t>              ff_offset;
@@ -144,14 +146,19 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv)
 
     build_supporting_structures(fv, ef, ff_offset, ff_values);
 
-    m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
-                                                   ff_offset,
-                                                   ff_values,
-                                                   fv,
-                                                   m_edges_map,
-                                                   m_num_vertices,
-                                                   m_num_edges,
-                                                   m_quite);
+    if (!patcher_file.empty()) {
+        m_patcher = std::make_unique<patcher::Patcher>(patcher_file);
+    } else {
+        m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
+                                                       ff_offset,
+                                                       ff_values,
+                                                       fv,
+                                                       m_edges_map,
+                                                       m_num_vertices,
+                                                       m_num_edges,
+                                                       m_quite);
+    }
+
 
     m_num_patches    = m_patcher->get_num_patches();
     m_h_patches_info = (PatchInfo*)malloc(m_num_patches * sizeof(PatchInfo));
