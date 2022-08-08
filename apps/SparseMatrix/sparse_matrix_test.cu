@@ -56,12 +56,16 @@ TEST(Apps, SparseMatrix)
 
     std::vector<uint32_t> init_tmp_arr(num_vertices, 1);
 
-    SparseMatInfo<int> spmat(rxmesh);
-    CUDA_ERROR(cudaMalloc((void**)&arr_ones, (num_vertices) * sizeof(int)));
-    CUDA_ERROR(cudaMemcpy(arr_ones,
-                          init_tmp_arr.data(),
-                          num_vertices * sizeof(int),
-                          cudaMemcpyHostToDevice));
+    // SparseMatInfo<int> spmat(rxmesh);
+    PatchPtr ptch_ptr(rxmesh);
+
+    printf("%d\n", ptch_ptr.get_pointer(ELEMENT::VERTEX)[1]);
+
+    // CUDA_ERROR(cudaMalloc((void**)&arr_ones, (num_vertices) * sizeof(int)));
+    // CUDA_ERROR(cudaMemcpy(arr_ones,
+    //                       init_tmp_arr.data(),
+    //                       num_vertices * sizeof(int),
+    //                       cudaMemcpyHostToDevice));
 }
 
 int main(int argc, char** argv)
