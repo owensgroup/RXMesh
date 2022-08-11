@@ -17,22 +17,6 @@ struct arg
     int         argc;
 } Arg;
 
-__global__ void matrixMulGPU(uint32_t*      row_ptr,
-                             uint32_t*      col_idx,
-                             int*           val,
-                             int*           src,
-                             int*           dst,
-                             const uint32_t size)
-{
-    uint32_t tid = threadIdx.x + blockIdx.x * blockDim.x;
-    float    sum = 0;
-    if (tid < size) {
-        for (int i = 0; i < row_ptr[tid]; i++)
-            // sum += src[i] *   [(i * size) + tid];
-        dst[tid] = sum;
-    }
-}
-
 TEST(Apps, SparseMatrix)
 {
     using namespace rxmesh;
@@ -51,15 +35,13 @@ TEST(Apps, SparseMatrix)
     RXMeshStatic rxmesh(Faces, false);
 
     // TODO: fillin the spmat test
-    int*     arr_ones;
-    uint32_t num_vertices = rxmesh.get_num_vertices();
+    // int*     arr_ones;
+    // uint32_t num_vertices = rxmesh.get_num_vertices();
+    // std::vector<uint32_t> init_tmp_arr(num_vertices, 1);
 
-    std::vector<uint32_t> init_tmp_arr(num_vertices, 1);
+    SparseMatInfo<int> spmat(rxmesh);
 
-    // SparseMatInfo<int> spmat(rxmesh);
-    PatchPtr ptch_ptr(rxmesh);
-
-    printf("%d\n", ptch_ptr.get_pointer(ELEMENT::VERTEX)[1]);
+    
 
     // CUDA_ERROR(cudaMalloc((void**)&arr_ones, (num_vertices) * sizeof(int)));
     // CUDA_ERROR(cudaMemcpy(arr_ones,
