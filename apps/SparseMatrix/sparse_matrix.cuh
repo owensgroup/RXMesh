@@ -11,16 +11,20 @@ namespace rxmesh {
 template <uint32_t blockThreads>
 __global__ static void sparse_mat_test(const rxmesh::Context context,
                                        uint32_t*             patch_ptr_v,
-                                       uint32_t*             row_ptr)
+                                       uint32_t*             vet_degree)
 {
     using namespace rxmesh;
 
     auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
-        printf(" %" PRIu32 " - %" PRIu32 " - %" PRIu32 " - %" PRIu32 " \n",
-               row_ptr[0],
-               row_ptr[1],
-               row_ptr[2],
-               row_ptr[3]);
+        // printf(" %" PRIu32 " - %" PRIu32 " - %" PRIu32 " - %" PRIu32 " \n",
+        //        row_ptr[0],
+        //        row_ptr[1],
+        //        row_ptr[2],
+        //        row_ptr[3]);
+        auto     ids                              = v_id.unpack();
+        uint32_t patch_id                         = ids.first;
+        uint16_t local_id                         = ids.second;
+        vet_degree[patch_ptr_v[patch_id] + local_id] = iter.size() + 1;
     };
 
     query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
@@ -125,7 +129,7 @@ void sparse_mat_init(RXMeshStatic& rx,
                           sizeof(uint32_t),
                           cudaMemcpyDeviceToHost));
 
-    entry_size = entry_size + last_ele;
+    entry_size += last_ele;
 
     CUDA_ERROR(cudaMemcpy((row_ptr + num_vertices),
                           &entry_size,
@@ -190,7 +194,7 @@ struct SparseMatInfo
     uint32_t* row_ptr;
     uint32_t* col_idx;
     uint32_t  entry_size;
-    T*        val;
+    T*        val; 
 };
 
 }  // namespace rxmesh

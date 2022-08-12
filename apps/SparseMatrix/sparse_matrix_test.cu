@@ -17,6 +17,22 @@ struct arg
     int         argc;
 } Arg;
 
+__global__ void spmat_multi_hardwired_kernel(int*      vec,
+                                             uint32_t* row_ptr,
+                                             uint32_t* col_idx,
+                                             int*      val,
+                                             int*      out,
+                                             const int N)
+{
+    int   tid = threadIdx.x + blockIdx.x * blockDim.x;
+    float sum = 0;
+    if (tid < N) {
+        for (int i = 0; i < row_ptr[tid + 1] - row_ptr[tid]; i++)
+            sum += vec[col_idx[tid + i]] * val[tid + i];
+        out[tid] = sum;
+    }
+}
+
 TEST(Apps, SparseMatrix)
 {
     using namespace rxmesh;
@@ -35,19 +51,61 @@ TEST(Apps, SparseMatrix)
     RXMeshStatic rxmesh(Faces, false);
 
     // TODO: fillin the spmat test
-    // int*     arr_ones;
-    // uint32_t num_vertices = rxmesh.get_num_vertices();
-    // std::vector<uint32_t> init_tmp_arr(num_vertices, 1);
+    uint32_t num_vertices = rxmesh.get_num_vertices();
+
+    const uint32_t threads = 256;
+    const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
+
+    int* arr_ones;
+    int* result;
+
+    std::vector<uint32_t> init_tmp_arr(num_vertices, 1);
+    CUDA_ERROR(cudaMalloc((void**)&arr_ones, (num_vertices) * sizeof(int)));
+    CUDA_ERROR(cudaMemcpy(arr_ones,
+                          init_tmp_arr.data(),
+                          num_vertices * sizeof(int),
+                          cudaMemcpyHostToDevice));
+
+    CUDA_ERROR(cudaMalloc((void**)&result, (num_vertices) * sizeof(int)));
 
     SparseMatInfo<int> spmat(rxmesh);
+    spmat.set_ones();
 
+    spmat_multi_hardwired_kernel<<<blocks, threads>>>(arr_ones,
+                                                      spmat.row_ptr,
+                                                      spmat.col_idx,
+                                                      spmat.val,
+                                                      result,
+                                                      num_vertices);
     
+    std::vector<uint32_t> h_result(num_vertices);
+    CUDA_ERROR(cudaMemcpy(h_result.data(),
+                          result,
+                          num_vertices,
+                          cudaMemcpyDeviceToHost));
 
-    // CUDA_ERROR(cudaMalloc((void**)&arr_ones, (num_vertices) * sizeof(int)));
-    // CUDA_ERROR(cudaMemcpy(arr_ones,
-    //                       init_tmp_arr.data(),
-    //                       num_vertices * sizeof(int),
-    //                       cudaMemcpyHostToDevice));
+    // get reference result
+    uint32_t*             vet_degree;
+    CUDA_ERROR(cudaMalloc((void**)&vet_degree, (num_vertices) * sizeof(uint32_t)));
+
+    LaunchBox<threads> launch_box;
+    rxmesh.prepare_launch_box(
+        {Op::VV}, launch_box, (void*)sparse_mat_test<threads>);
+
+    sparse_mat_test<threads>
+        <<<launch_box.blocks,
+           launch_box.num_threads,
+           launch_box.smem_bytes_dyn>>>(rxmesh.get_context(), spmat.m_patch_ptr_v, vet_degree);
+
+    std::vector<uint32_t> h_vet_degree(num_vertices);
+    CUDA_ERROR(cudaMemcpy(h_vet_degree.data(),
+                          vet_degree,
+                          num_vertices,
+                          cudaMemcpyDeviceToHost));
+
+    for (uint32_t i = 0; i < num_vertices; ++i) {
+        EXPECT_EQ(h_result[i], h_vet_degree[i]);
+    }
 }
 
 int main(int argc, char** argv)
