@@ -77,31 +77,28 @@ TEST(Apps, SparseMatrix)
                                                       spmat.val,
                                                       result,
                                                       num_vertices);
-    
+
     std::vector<uint32_t> h_result(num_vertices);
-    CUDA_ERROR(cudaMemcpy(h_result.data(),
-                          result,
-                          num_vertices,
-                          cudaMemcpyDeviceToHost));
+    CUDA_ERROR(cudaMemcpy(
+        h_result.data(), result, num_vertices, cudaMemcpyDeviceToHost));
 
     // get reference result
-    uint32_t*             vet_degree;
-    CUDA_ERROR(cudaMalloc((void**)&vet_degree, (num_vertices) * sizeof(uint32_t)));
+    uint32_t* vet_degree;
+    CUDA_ERROR(
+        cudaMalloc((void**)&vet_degree, (num_vertices) * sizeof(uint32_t)));
 
     LaunchBox<threads> launch_box;
     rxmesh.prepare_launch_box(
         {Op::VV}, launch_box, (void*)sparse_mat_test<threads>);
 
-    sparse_mat_test<threads>
-        <<<launch_box.blocks,
-           launch_box.num_threads,
-           launch_box.smem_bytes_dyn>>>(rxmesh.get_context(), spmat.m_patch_ptr_v, vet_degree);
+    sparse_mat_test<threads><<<launch_box.blocks,
+                               launch_box.num_threads,
+                               launch_box.smem_bytes_dyn>>>(
+        rxmesh.get_context(), spmat.m_patch_ptr_v, vet_degree);
 
     std::vector<uint32_t> h_vet_degree(num_vertices);
-    CUDA_ERROR(cudaMemcpy(h_vet_degree.data(),
-                          vet_degree,
-                          num_vertices,
-                          cudaMemcpyDeviceToHost));
+    CUDA_ERROR(cudaMemcpy(
+        h_vet_degree.data(), vet_degree, num_vertices, cudaMemcpyDeviceToHost));
 
     for (uint32_t i = 0; i < num_vertices; ++i) {
         EXPECT_EQ(h_result[i], h_vet_degree[i]);

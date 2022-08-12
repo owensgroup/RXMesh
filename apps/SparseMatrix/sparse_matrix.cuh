@@ -21,9 +21,9 @@ __global__ static void sparse_mat_test(const rxmesh::Context context,
         //        row_ptr[1],
         //        row_ptr[2],
         //        row_ptr[3]);
-        auto     ids                              = v_id.unpack();
-        uint32_t patch_id                         = ids.first;
-        uint16_t local_id                         = ids.second;
+        auto     ids                                 = v_id.unpack();
+        uint32_t patch_id                            = ids.first;
+        uint16_t local_id                            = ids.second;
         vet_degree[patch_ptr_v[patch_id] + local_id] = iter.size() + 1;
     };
 
@@ -194,7 +194,7 @@ struct SparseMatInfo
     uint32_t* row_ptr;
     uint32_t* col_idx;
     uint32_t  entry_size;
-    T*        val; 
+    T*        val;
 };
 
 }  // namespace rxmesh
