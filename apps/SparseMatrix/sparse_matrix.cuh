@@ -105,36 +105,25 @@ void sparse_mat_init(RXMeshStatic& rx,
            launch_box.num_threads,
            launch_box.smem_bytes_dyn>>>(rx.get_context(), patch_ptr_v, row_ptr);
 
-    uint32_t last_ele = 0;
-    CUDA_ERROR(cudaMemcpy(&last_ele,
-                          (row_ptr + num_vertices - 1),
-                          sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
-
-    // prefix sum
+    // prefix sum using CUB. 
     void*  d_cub_temp_storage = nullptr;
     size_t temp_storage_bytes = 0;
     cub::DeviceScan::ExclusiveSum(
-        d_cub_temp_storage, temp_storage_bytes, row_ptr, row_ptr, num_vertices);
+        d_cub_temp_storage, temp_storage_bytes, row_ptr, row_ptr, num_vertices + 1);
     CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage, temp_storage_bytes));
 
     cub::DeviceScan::ExclusiveSum(
-        d_cub_temp_storage, temp_storage_bytes, row_ptr, row_ptr, num_vertices);
+        d_cub_temp_storage, temp_storage_bytes, row_ptr, row_ptr, num_vertices + 1);
 
     CUDA_ERROR(cudaFree(d_cub_temp_storage));
 
-    // get index size
+    // get entry size
     CUDA_ERROR(cudaMemcpy(&entry_size,
-                          (row_ptr + num_vertices - 1),
+                          (row_ptr + num_vertices),
                           sizeof(uint32_t),
                           cudaMemcpyDeviceToHost));
 
-    entry_size += last_ele;
-
-    CUDA_ERROR(cudaMemcpy((row_ptr + num_vertices),
-                          &entry_size,
-                          sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
+    // printf("%" PRIu32 " - %" PRIu32 " \n", entry_size, 2 * num_edges + num_vertices);
 
     // column index allocation and init
     CUDA_ERROR(cudaMalloc((void**)&col_idx, entry_size * sizeof(uint32_t)));
@@ -146,7 +135,7 @@ void sparse_mat_init(RXMeshStatic& rx,
                                         launch_box.smem_bytes_dyn>>>(
         rx.get_context(), patch_ptr_v, row_ptr, col_idx);
 
-    // value allocation but init should be done in another function.
+    // val pointer allocation, actual value init should be in another function
     CUDA_ERROR(cudaMalloc((void**)&val, entry_size * sizeof(uint32_t)));
 }
 
