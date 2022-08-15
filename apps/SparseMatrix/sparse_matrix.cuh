@@ -95,6 +95,8 @@ void sparse_mat_init(RXMeshStatic& rx,
     // row pointer allocation and init with prefix sum for CRS
     CUDA_ERROR(
         cudaMalloc((void**)&row_ptr, (num_vertices + 1) * sizeof(uint32_t)));
+    
+    CUDA_ERROR(cudaMemset(row_ptr, 0, (num_vertices + 1) * sizeof(uint32_t)));
 
     LaunchBox<blockThreads> launch_box;
     rx.prepare_launch_box(

@@ -22,6 +22,10 @@ void init(RXMeshStatic& rx,
     CUDA_ERROR(
         cudaMalloc((void**)&d_face, (num_patches + 1) * sizeof(uint32_t)));
 
+    CUDA_ERROR(cudaMemset(d_vertex, 0, (num_patches + 1) * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(d_edge, 0, (num_patches + 1) * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(d_face, 0, (num_patches + 1) * sizeof(uint32_t)));
+
     Context context = rx.get_context();
 
     // We kind "hack" for_each_vertex to store the owned vertex/edge/face
