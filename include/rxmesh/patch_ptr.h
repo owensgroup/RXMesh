@@ -45,48 +45,38 @@ void init(RXMeshStatic& rx,
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
-    // Exclusive perfix sum computation
+    // Exclusive perfix sum computation. Increase the size by 1 so that we dont
+    // need to stick in the total number of owned vertices/edges/faces at the
+    // end of manually
     void*  d_cub_temp_storage = nullptr;
     size_t temp_storage_bytes = 0;
     cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
                                   temp_storage_bytes,
                                   d_vertex,
                                   d_vertex,
-                                  num_patches);
+                                  num_patches + 1);
     CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage, temp_storage_bytes));
 
     cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
                                   temp_storage_bytes,
                                   d_vertex,
                                   d_vertex,
-                                  num_patches);
+                                  num_patches + 1);
     CUDA_ERROR(cudaMemset(d_cub_temp_storage, 0, temp_storage_bytes));
 
-    cub::DeviceScan::ExclusiveSum(
-        d_cub_temp_storage, temp_storage_bytes, d_edge, d_edge, num_patches);
+    cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
+                                  temp_storage_bytes,
+                                  d_edge,
+                                  d_edge,
+                                  num_patches + 1);
     CUDA_ERROR(cudaMemset(d_cub_temp_storage, 0, temp_storage_bytes));
 
 
-    cub::DeviceScan::ExclusiveSum(
-        d_cub_temp_storage, temp_storage_bytes, d_face, d_face, num_patches);
-
-    // stick in the total number of owned vertices/edges/faces at the end of
-    uint32_t num_vertices = rx.get_num_vertices();
-    uint32_t num_edges    = rx.get_num_edges();
-    uint32_t num_faces    = rx.get_num_faces();
-
-    CUDA_ERROR(cudaMemcpy((d_vertex + num_patches),
-                          &num_vertices,
-                          sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-    CUDA_ERROR(cudaMemcpy((d_edge + num_patches),
-                          &num_edges,
-                          sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-    CUDA_ERROR(cudaMemcpy((d_face + num_patches),
-                          &num_faces,
-                          sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
+    cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
+                                  temp_storage_bytes,
+                                  d_face,
+                                  d_face,
+                                  num_patches + 1);
 
     CUDA_ERROR(cudaFree(d_cub_temp_storage));
 }

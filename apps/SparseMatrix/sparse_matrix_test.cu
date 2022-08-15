@@ -18,7 +18,7 @@ struct arg
 } Arg;
 
 __global__ void spmat_multi_hardwired_kernel(int*      vec,
-                                             SparseMatInfo sparse_mat
+                                             rxmesh::SparseMatInfo<int> sparse_mat,
                                              int*      out,
                                              const int N)
 {
