@@ -18,17 +18,15 @@ struct arg
 } Arg;
 
 __global__ void spmat_multi_hardwired_kernel(int*      vec,
-                                             uint32_t* row_ptr,
-                                             uint32_t* col_idx,
-                                             int*      val,
+                                             SparseMatInfo sparse_mat
                                              int*      out,
                                              const int N)
 {
     int   tid = threadIdx.x + blockIdx.x * blockDim.x;
     float sum = 0;
     if (tid < N) {
-        for (int i = 0; i < row_ptr[tid + 1] - row_ptr[tid]; i++)
-            sum += vec[col_idx[tid + i]] * val[tid + i];
+        for (int i = 0; i < sparse_mat.row_ptr[tid + 1] - sparse_mat.row_ptr[tid]; i++)
+            sum += vec[sparse_mat.col_idx[tid + i]] * sparse_mat.val[tid + i];
         out[tid] = sum;
     }
 }
@@ -50,7 +48,6 @@ TEST(Apps, SparseMatrix)
 
     RXMeshStatic rxmesh(Faces, false);
 
-    // TODO: fillin the spmat test
     uint32_t num_vertices = rxmesh.get_num_vertices();
 
     const uint32_t threads = 256;
@@ -72,9 +69,7 @@ TEST(Apps, SparseMatrix)
     spmat.set_ones();
 
     spmat_multi_hardwired_kernel<<<blocks, threads>>>(arr_ones,
-                                                      spmat.row_ptr,
-                                                      spmat.col_idx,
-                                                      spmat.val,
+                                                      spmat,
                                                       result,
                                                       num_vertices);
 
