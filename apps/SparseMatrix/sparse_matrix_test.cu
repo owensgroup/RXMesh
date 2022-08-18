@@ -7,28 +7,99 @@
 #include "rxmesh/util/timer.h"
 #include "sparse_matrix.cuh"
 
-struct arg
+template <uint32_t blockThreads>
+__global__ static void sparse_mat_test(const rxmesh::Context context,
+                                       uint32_t*             patch_ptr_v,
+                                       uint32_t*             vet_degree)
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
-    std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    num_run       = 1;
-    uint32_t    device_id     = 0;
-    char**      argv;
-    int         argc;
-} Arg;
+    using namespace rxmesh;
 
-__global__ void spmat_multi_hardwired_kernel(int*      vec,
-                                             rxmesh::SparseMatInfo<int> sparse_mat,
-                                             int*      out,
-                                             const int N)
+    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
+        // printf(" %" PRIu32 " - %" PRIu32 " - %" PRIu32 " - %" PRIu32 " \n",
+        //        row_ptr[0],
+        //        row_ptr[1],
+        //        row_ptr[2],
+        //        row_ptr[3]);
+        auto     ids                                 = v_id.unpack();
+        uint32_t patch_id                            = ids.first;
+        uint16_t local_id                            = ids.second;
+        vet_degree[patch_ptr_v[patch_id] + local_id] = iter.size() + 1;
+    };
+
+    query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
+}
+
+__global__ void spmat_multi_hardwired_kernel(
+    int*                       vec,
+    rxmesh::SparseMatInfo<int> sparse_mat,
+    int*                       out,
+    const int                  N)
 {
     int   tid = threadIdx.x + blockIdx.x * blockDim.x;
     float sum = 0;
     if (tid < N) {
-        for (int i = 0; i < sparse_mat.row_ptr[tid + 1] - sparse_mat.row_ptr[tid]; i++)
-            sum += vec[sparse_mat.col_idx[tid + i]] * sparse_mat.val[tid + i];
+        for (int i = 0;
+             i < sparse_mat.m_d_row_ptr[tid + 1] - sparse_mat.m_d_row_ptr[tid];
+             i++)
+            sum += vec[sparse_mat.m_d_col_idx[tid + i]] *
+                   sparse_mat.m_d_val[tid + i];
         out[tid] = sum;
     }
+}
+
+TEST(Apps, PatchPointer)
+{
+    using namespace rxmesh;
+
+    cuda_query(0);
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
+
+    // move the patch ptr to the host so we can test it
+    std::vector<uint32_t> h_ptchptr(rx.get_num_patches() + 1);
+
+    SparseMatInfo<int> spmat(rx);
+
+    // vertices
+    CUDA_ERROR(cudaMemcpy(h_ptchptr.data(),
+                          spmat.m_d_patch_ptr_v,
+                          h_ptchptr.size() * sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+    EXPECT_EQ(h_ptchptr.back(), rx.get_num_vertices());
+
+    for (uint32_t i = 0; i < rx.get_num_patches(); ++i) {
+        EXPECT_EQ(h_ptchptr[i + 1] - h_ptchptr[i],
+                  rx.get_patches_info()[i].num_owned_vertices);
+    }
+
+
+    // edges
+    CUDA_ERROR(cudaMemcpy(h_ptchptr.data(),
+                          spmat.m_d_patch_ptr_e,
+                          h_ptchptr.size() * sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+    EXPECT_EQ(h_ptchptr.back(), rx.get_num_edges());
+
+    for (uint32_t i = 0; i < rx.get_num_patches(); ++i) {
+        EXPECT_EQ(h_ptchptr[i + 1] - h_ptchptr[i],
+                  rx.get_patches_info()[i].num_owned_edges);
+    }
+
+
+    // faces
+    CUDA_ERROR(cudaMemcpy(h_ptchptr.data(),
+                          spmat.m_d_patch_ptr_f,
+                          h_ptchptr.size() * sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+    EXPECT_EQ(h_ptchptr.back(), rx.get_num_faces());
+
+    for (uint32_t i = 0; i < rx.get_num_patches(); ++i) {
+        EXPECT_EQ(h_ptchptr[i + 1] - h_ptchptr[i],
+                  rx.get_patches_info()[i].num_owned_faces);
+    }
+
+
+    spmat.free();
 }
 
 TEST(Apps, SparseMatrix)
@@ -37,45 +108,38 @@ TEST(Apps, SparseMatrix)
     using dataT = float;
 
     // Select device
-    cuda_query(Arg.device_id);
+    cuda_query(0);
 
-    // Load mesh
-    std::vector<std::vector<dataT>>    Verts;
-    std::vector<std::vector<uint32_t>> Faces;
-
-    ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
-
-
-    RXMeshStatic rxmesh(Faces, false);
+    // generate rxmesh obj
+    std::string  obj_path = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    RXMeshStatic rxmesh(obj_path);
 
     uint32_t num_vertices = rxmesh.get_num_vertices();
 
     const uint32_t threads = 256;
     const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
 
-    int* arr_ones;
-    int* result;
+    int* d_arr_ones;
+    int* d_result;
 
     std::vector<uint32_t> init_tmp_arr(num_vertices, 1);
-    CUDA_ERROR(cudaMalloc((void**)&arr_ones, (num_vertices) * sizeof(int)));
-    CUDA_ERROR(cudaMemcpy(arr_ones,
+    CUDA_ERROR(cudaMalloc((void**)&d_arr_ones, (num_vertices) * sizeof(int)));
+    CUDA_ERROR(cudaMemcpy(d_arr_ones,
                           init_tmp_arr.data(),
                           num_vertices * sizeof(int),
                           cudaMemcpyHostToDevice));
 
-    CUDA_ERROR(cudaMalloc((void**)&result, (num_vertices) * sizeof(int)));
+    CUDA_ERROR(cudaMalloc((void**)&d_result, (num_vertices) * sizeof(int)));
 
     SparseMatInfo<int> spmat(rxmesh);
     spmat.set_ones();
 
-    spmat_multi_hardwired_kernel<<<blocks, threads>>>(arr_ones,
-                                                      spmat,
-                                                      result,
-                                                      num_vertices);
+    spmat_multi_hardwired_kernel<<<blocks, threads>>>(
+        d_arr_ones, spmat, d_result, num_vertices);
 
     std::vector<uint32_t> h_result(num_vertices);
     CUDA_ERROR(cudaMemcpy(
-        h_result.data(), result, num_vertices, cudaMemcpyDeviceToHost));
+        h_result.data(), d_result, num_vertices, cudaMemcpyDeviceToHost));
 
     // get reference result
     uint32_t* vet_degree;
@@ -89,7 +153,7 @@ TEST(Apps, SparseMatrix)
     sparse_mat_test<threads><<<launch_box.blocks,
                                launch_box.num_threads,
                                launch_box.smem_bytes_dyn>>>(
-        rxmesh.get_context(), spmat.m_patch_ptr_v, vet_degree);
+        rxmesh.get_context(), spmat.m_d_patch_ptr_v, vet_degree);
 
     std::vector<uint32_t> h_vet_degree(num_vertices);
     CUDA_ERROR(cudaMemcpy(
@@ -98,6 +162,8 @@ TEST(Apps, SparseMatrix)
     for (uint32_t i = 0; i < num_vertices; ++i) {
         EXPECT_EQ(h_result[i], h_vet_degree[i]);
     }
+
+    spmat.free();
 }
 
 int main(int argc, char** argv)
@@ -106,47 +172,6 @@ int main(int argc, char** argv)
     Log::init();
 
     ::testing::InitGoogleTest(&argc, argv);
-    Arg.argv = argv;
-    Arg.argc = argc;
-
-    if (argc > 1) {
-        if (cmd_option_exists(argv, argc + argv, "-h")) {
-            // clang-format off
-            RXMESH_INFO("\nUsage: SparseMatrix.exe < -option X>\n"
-                        " -h:          Display this massage and exit\n"
-                        " -input:      Input file. Input file should be under the input/ subdirectory\n"
-                        "              Default is {} \n"
-                        "              Hint: Only accept OBJ files\n"
-                        " -o:          JSON file output folder. Default is {} \n"
-                        " -num_run:    Number of iterations for performance testing. Default is {} \n"                        
-                        " -device_id:  GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.output_folder, Arg.num_run, Arg.device_id);
-            // clang-format on
-            exit(EXIT_SUCCESS);
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-num_run")) {
-            Arg.num_run = atoi(get_cmd_option(argv, argv + argc, "-num_run"));
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-input")) {
-            Arg.obj_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-input"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-o")) {
-            Arg.output_folder =
-                std::string(get_cmd_option(argv, argv + argc, "-o"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
-            Arg.device_id =
-                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
-    }
-
-    RXMESH_TRACE("input= {}", Arg.obj_file_name);
-    RXMESH_TRACE("output_folder= {}", Arg.output_folder);
-    RXMESH_TRACE("num_run= {}", Arg.num_run);
-    RXMESH_TRACE("device_id= {}", Arg.device_id);
 
     return RUN_ALL_TESTS();
 }

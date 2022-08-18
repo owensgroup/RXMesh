@@ -3,31 +3,87 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/kernels/query_dispatcher.cuh"
-#include "rxmesh/patch_ptr.h"
 #include "rxmesh/types.h"
 
 namespace rxmesh {
 
-template <uint32_t blockThreads>
-__global__ static void sparse_mat_test(const rxmesh::Context context,
-                                       uint32_t*             patch_ptr_v,
-                                       uint32_t*             vet_degree)
+namespace detail {
+void patch_ptr_init(RXMeshStatic& rx,
+                    uint32_t*&    d_vertex,
+                    uint32_t*&    d_edge,
+                    uint32_t*&    d_face)
 {
-    using namespace rxmesh;
 
-    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
-        // printf(" %" PRIu32 " - %" PRIu32 " - %" PRIu32 " - %" PRIu32 " \n",
-        //        row_ptr[0],
-        //        row_ptr[1],
-        //        row_ptr[2],
-        //        row_ptr[3]);
-        auto     ids                                 = v_id.unpack();
-        uint32_t patch_id                            = ids.first;
-        uint16_t local_id                            = ids.second;
-        vet_degree[patch_ptr_v[patch_id] + local_id] = iter.size() + 1;
-    };
+    uint32_t num_patches = rx.get_num_patches();
 
-    query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
+    CUDA_ERROR(
+        cudaMalloc((void**)&d_vertex, (num_patches + 1) * sizeof(uint32_t)));
+    CUDA_ERROR(
+        cudaMalloc((void**)&d_edge, (num_patches + 1) * sizeof(uint32_t)));
+    CUDA_ERROR(
+        cudaMalloc((void**)&d_face, (num_patches + 1) * sizeof(uint32_t)));
+
+    CUDA_ERROR(cudaMemset(d_vertex, 0, (num_patches + 1) * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(d_edge, 0, (num_patches + 1) * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(d_face, 0, (num_patches + 1) * sizeof(uint32_t)));
+
+    Context context = rx.get_context();
+
+    // We kind "hack" for_each_vertex to store the owned vertex/edge/face
+    // count in d_vertex/edge/face. Since in for_each_vertex we lunch
+    // one block per patch, then blockIdx.x correspond to the patch id. We
+    // then use only one thread from the block to write the owned
+    // vertex/edge/face count
+    rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle vh) {
+        if (threadIdx.x == 0) {
+            uint32_t patch_id = blockIdx.x;
+            d_vertex[patch_id] =
+                context.get_patches_info()[patch_id].num_owned_vertices;
+
+            d_edge[patch_id] =
+                context.get_patches_info()[patch_id].num_owned_edges;
+
+            d_face[patch_id] =
+                context.get_patches_info()[patch_id].num_owned_faces;
+        }
+    });
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+    // Exclusive perfix sum computation. Increase the size by 1 so that we dont
+    // need to stick in the total number of owned vertices/edges/faces at the
+    // end of manually
+    void*  d_cub_temp_storage = nullptr;
+    size_t temp_storage_bytes = 0;
+    cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
+                                  temp_storage_bytes,
+                                  d_vertex,
+                                  d_vertex,
+                                  num_patches + 1);
+    CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage, temp_storage_bytes));
+
+    cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
+                                  temp_storage_bytes,
+                                  d_vertex,
+                                  d_vertex,
+                                  num_patches + 1);
+    CUDA_ERROR(cudaMemset(d_cub_temp_storage, 0, temp_storage_bytes));
+
+    cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
+                                  temp_storage_bytes,
+                                  d_edge,
+                                  d_edge,
+                                  num_patches + 1);
+    CUDA_ERROR(cudaMemset(d_cub_temp_storage, 0, temp_storage_bytes));
+
+
+    cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
+                                  temp_storage_bytes,
+                                  d_face,
+                                  d_face,
+                                  num_patches + 1);
+
+    CUDA_ERROR(cudaFree(d_cub_temp_storage));
 }
 
 // this is the function for the CSR calculation
@@ -95,7 +151,7 @@ void sparse_mat_init(RXMeshStatic& rx,
     // row pointer allocation and init with prefix sum for CRS
     CUDA_ERROR(
         cudaMalloc((void**)&row_ptr, (num_vertices + 1) * sizeof(uint32_t)));
-    
+
     CUDA_ERROR(cudaMemset(row_ptr, 0, (num_vertices + 1) * sizeof(uint32_t)));
 
     LaunchBox<blockThreads> launch_box;
@@ -107,15 +163,21 @@ void sparse_mat_init(RXMeshStatic& rx,
            launch_box.num_threads,
            launch_box.smem_bytes_dyn>>>(rx.get_context(), patch_ptr_v, row_ptr);
 
-    // prefix sum using CUB. 
+    // prefix sum using CUB.
     void*  d_cub_temp_storage = nullptr;
     size_t temp_storage_bytes = 0;
-    cub::DeviceScan::ExclusiveSum(
-        d_cub_temp_storage, temp_storage_bytes, row_ptr, row_ptr, num_vertices + 1);
+    cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
+                                  temp_storage_bytes,
+                                  row_ptr,
+                                  row_ptr,
+                                  num_vertices + 1);
     CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage, temp_storage_bytes));
 
-    cub::DeviceScan::ExclusiveSum(
-        d_cub_temp_storage, temp_storage_bytes, row_ptr, row_ptr, num_vertices + 1);
+    cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
+                                  temp_storage_bytes,
+                                  row_ptr,
+                                  row_ptr,
+                                  num_vertices + 1);
 
     CUDA_ERROR(cudaFree(d_cub_temp_storage));
 
@@ -125,7 +187,8 @@ void sparse_mat_init(RXMeshStatic& rx,
                           sizeof(uint32_t),
                           cudaMemcpyDeviceToHost));
 
-    // printf("%" PRIu32 " - %" PRIu32 " \n", entry_size, 2 * num_edges + num_vertices);
+    // printf("%" PRIu32 " - %" PRIu32 " \n", entry_size, 2 * num_edges +
+    // num_vertices);
 
     // column index allocation and init
     CUDA_ERROR(cudaMalloc((void**)&col_idx, entry_size * sizeof(uint32_t)));
@@ -140,6 +203,7 @@ void sparse_mat_init(RXMeshStatic& rx,
     // val pointer allocation, actual value init should be in another function
     CUDA_ERROR(cudaMalloc((void**)&val, entry_size * sizeof(uint32_t)));
 }
+}  // namespace detail
 
 
 // TODO: add compatibility for EE, FF, VE......
@@ -147,45 +211,50 @@ template <typename T>
 struct SparseMatInfo
 {
     SparseMatInfo(RXMeshStatic& rx)
-        : m_patch_ptr_v(nullptr),
-          m_patch_ptr_e(nullptr),
-          m_patch_ptr_f(nullptr),
-          row_ptr(nullptr),
-          col_idx(nullptr),
-          entry_size(0),
-          val(nullptr)
+        : m_d_patch_ptr_v(nullptr),
+          m_d_patch_ptr_e(nullptr),
+          m_d_patch_ptr_f(nullptr),
+          m_d_row_ptr(nullptr),
+          m_d_col_idx(nullptr),
+          m_d_val(nullptr),
+          m_nnz_entry_size(0)
     {
-        detail::init(rx,
-                     m_patch_ptr_v,
-                     m_patch_ptr_e,
-                     m_patch_ptr_f);  // patch pointer init
-        sparse_mat_init(rx, m_patch_ptr_v, row_ptr, col_idx, entry_size, val);
+        detail::patch_ptr_init(rx,
+                               m_d_patch_ptr_v,
+                               m_d_patch_ptr_e,
+                               m_d_patch_ptr_f);  // patch pointer init
+        detail::sparse_mat_init(rx,
+                                m_d_patch_ptr_v,
+                                m_d_row_ptr,
+                                m_d_col_idx,
+                                m_nnz_entry_size,
+                                m_d_val);
     }
 
     void set_ones()
     {
-        std::vector<T> init_tmp_arr(entry_size, 1);
-        CUDA_ERROR(cudaMemcpy(val,
+        std::vector<T> init_tmp_arr(m_nnz_entry_size, 1);
+        CUDA_ERROR(cudaMemcpy(m_d_val,
                               init_tmp_arr.data(),
-                              entry_size * sizeof(T),
+                              m_nnz_entry_size * sizeof(T),
                               cudaMemcpyHostToDevice));
     }
 
     void free()
     {
-        CUDA_ERROR(cudaFree(m_patch_ptr_v));
-        CUDA_ERROR(cudaFree(m_patch_ptr_e));
-        CUDA_ERROR(cudaFree(m_patch_ptr_f));
-        CUDA_ERROR(cudaFree(row_ptr));
-        CUDA_ERROR(cudaFree(col_idx));
-        CUDA_ERROR(cudaFree(val));
+        CUDA_ERROR(cudaFree(m_d_patch_ptr_v));
+        CUDA_ERROR(cudaFree(m_d_patch_ptr_e));
+        CUDA_ERROR(cudaFree(m_d_patch_ptr_f));
+        CUDA_ERROR(cudaFree(m_d_row_ptr));
+        CUDA_ERROR(cudaFree(m_d_col_idx));
+        CUDA_ERROR(cudaFree(m_d_val));
     }
 
-    uint32_t *m_patch_ptr_v, *m_patch_ptr_e, *m_patch_ptr_f;
-    uint32_t* row_ptr;
-    uint32_t* col_idx;
-    uint32_t  entry_size;
-    T*        val;
+    uint32_t *m_d_patch_ptr_v, *m_d_patch_ptr_e, *m_d_patch_ptr_f;
+    uint32_t* m_d_row_ptr;
+    uint32_t* m_d_col_idx;
+    T*        m_d_val;
+    uint32_t  m_nnz_entry_size;
 };
 
 }  // namespace rxmesh
