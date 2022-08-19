@@ -16,7 +16,6 @@ set( SOURCE_LIST
 	test_validate.h
 	test_deletion.cuh
 	test_edge_collapse.cuh
-	test_patch_ptr.h
 )
 
 target_sources( RXMesh_test 

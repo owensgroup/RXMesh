@@ -11,7 +11,6 @@ project(RXMesh
 
 set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")    
 
-
 if(${USE_POLYSCOPE})
 	message(STATUS "Polyscope is enabled")
 else()
