@@ -6,43 +6,35 @@
 template <uint32_t blockThreads>
 __global__ static void dynamic_kernel(rxmesh::Context context)
 {
-
     using namespace rxmesh;
     namespace cg           = cooperative_groups;
     cg::thread_block block = cg::this_thread_block();
     ShmemAllocator   shrd_alloc;
+    PatchInfo        patch_info = context.get_patches_info()[blockIdx.x];
+    Cavity<blockThreads, CavityOp::E> cavity(block, shrd_alloc, patch_info);
 
-    PatchInfo patch_info = context.get_patches_info()[blockIdx.x];
-
-    uint16_t* s_del_v = shrd_alloc.alloc<uint16_t>(patch_info.num_vertices);
-    uint16_t* s_del_e = shrd_alloc.alloc<uint16_t>(patch_info.num_edges);
-    uint16_t* s_del_f = shrd_alloc.alloc<uint16_t>(patch_info.num_faces);
-
-
-    auto should_flip = [&](EdgeHandle eh) {
-        if (eh.unpack().first == 10) {
-            return true;
-        } else {
-            return false;
+    for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
+        // TODO user-defined condition
+        if (eh.unpack().second == 10) {
+            cavity.add(eh);
         }
-    };
+    });
 
-    fake_delete_block_dispatcher<blockThreads>(
-        block, shrd_alloc, patch_info, s_del_v, s_del_e, s_del_f, should_flip);
+    cavity.process(block, shrd_alloc, patch_info);
+
 }
-
 
 TEST(RXMeshDynamic, Cavity)
 {
     using namespace rxmesh;
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
-    rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patcher");
+    // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+    // rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patcher");
 
-    // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
-    //                 rxmesh_args.quite,
-    //                 STRINGIFY(OUTPUT_DIR) "sphere3_patcher");
+    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
+                     rxmesh_args.quite,
+                     STRINGIFY(OUTPUT_DIR) "sphere3_patcher");
 
     auto coords = rx.get_input_vertex_coordinates();
 

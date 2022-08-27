@@ -93,6 +93,28 @@ enum class Op
     EF = 11,
 };
 
+/**
+ * @brief defines how we create a cavity. The first element is the source and
+ * the second is the target e.g., VE means removing a vertex and edges connected
+ * to this vertex, FV means removing a face and vertices incident to this face.
+ * Some operations are topologically redundant e.g., since removing a vertex
+ * removes all its incident edges and faces, V and VE are equivalent.
+ */
+enum class CavityOp
+{
+    V  = 0,
+    E  = 1,
+    F  = 2,
+    VV = 3,
+    VE = V,  // same as removing a vertex
+    VF = V,  // invalid since it leaves wire-frames edges so we fall back to V
+    FV = 4,
+    FE = 5,
+    FF = FE,  // invalid since it leaves wire-frames edges so we fall back to FE
+    EV = 6,
+    EE = 7,
+    EF = E,  // same as removing an edge
+};
 
 /**
  * @brief Convert an operation to string
@@ -102,6 +124,12 @@ enum class Op
 static std::string op_to_string(const Op& op)
 {
     switch (op) {
+        case Op::V:
+            return "V";
+        case Op::E:
+            return "E";
+        case Op::F:
+            return "F";
         case Op::VV:
             return "VV";
         case Op::VE:
