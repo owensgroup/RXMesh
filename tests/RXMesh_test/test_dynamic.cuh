@@ -22,6 +22,15 @@ __global__ static void dynamic_kernel(rxmesh::Context context)
 
     cavity.process(block, shrd_alloc, patch_info);
 
+    cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+
+        for (uint16_t i = 0; i < size; ++i) {
+            cavity(patch_info, c, i);
+            auto v0 = cavity.add_vertex(patch_info);
+            auto v1 = cavity.add_vertex(patch_info);
+            auto e  = cavity.add_edge(patch_info, v0, v1);
+        }
+    });
 }
 
 TEST(RXMeshDynamic, Cavity)

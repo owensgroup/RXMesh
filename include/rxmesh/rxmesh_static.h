@@ -146,7 +146,8 @@ class RXMeshStatic : public RXMesh
             const int num_patches = this->get_num_patches();
 #pragma omp parallel for
             for (int p = 0; p < num_patches; ++p) {
-                for (uint16_t v = 0; v < this->m_h_patches_info[p].num_vertices;
+                for (uint16_t v = 0;
+                     v < this->m_h_patches_info[p].num_vertices[0];
                      ++v) {
 
                     if (detail::is_owned(v, m_h_patches_info[p].owned_mask_v) &&
@@ -195,7 +196,7 @@ class RXMeshStatic : public RXMesh
             const int num_patches = this->get_num_patches();
 #pragma omp parallel for
             for (int p = 0; p < num_patches; ++p) {
-                for (uint16_t e = 0; e < this->m_h_patches_info[p].num_edges;
+                for (uint16_t e = 0; e < this->m_h_patches_info[p].num_edges[0];
                      ++e) {
 
                     if (detail::is_owned(e, m_h_patches_info[p].owned_mask_e) &&
@@ -243,7 +244,8 @@ class RXMeshStatic : public RXMesh
             const int num_patches = this->get_num_patches();
 #pragma omp parallel for
             for (int p = 0; p < num_patches; ++p) {
-                for (int f = 0; f < this->m_h_patches_info[p].num_faces; ++f) {
+                for (int f = 0; f < this->m_h_patches_info[p].num_faces[0];
+                     ++f) {
 
                     if (detail::is_owned(f, m_h_patches_info[p].owned_mask_f) &&
                         !detail::is_deleted(
@@ -739,7 +741,7 @@ class RXMeshStatic : public RXMesh
         for (uint32_t p = 0; p < this->m_num_patches; ++p) {
 
             const uint32_t p_num_vertices =
-                this->m_h_patches_info[p].num_vertices;
+                this->m_h_patches_info[p].num_vertices[0];
 
             for (uint16_t v = 0; v < p_num_vertices; ++v) {
                 uint16_t v_id = v;
@@ -759,7 +761,7 @@ class RXMeshStatic : public RXMesh
                      << coords(vh, 2) << std::endl;
             }
 
-            const uint32_t p_num_faces = this->m_h_patches_info[p].num_faces;
+            const uint32_t p_num_faces = this->m_h_patches_info[p].num_faces[0];
 
             for (uint32_t f = 0; f < p_num_faces; ++f) {
                 if (!detail::is_deleted(

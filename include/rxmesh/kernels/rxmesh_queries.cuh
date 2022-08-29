@@ -129,9 +129,9 @@ __device__ __forceinline__ void v_e_oreinted(const PatchInfo& patch_info,
                                              const uint32_t*  active_mask_e,
                                              const uint32_t*  active_mask_v)
 {
-    const uint16_t num_edges    = patch_info.num_edges;
-    const uint16_t num_faces    = patch_info.num_faces;
-    const uint16_t num_vertices = patch_info.num_vertices;
+    const uint16_t num_edges    = patch_info.num_edges[0];
+    const uint16_t num_faces    = patch_info.num_faces[0];
+    const uint16_t num_vertices = patch_info.num_vertices[0];
 
     s_output_offset = &s_ev[0];
     s_output_value  = &s_ev[num_vertices + 1 + (num_vertices + 1) % 2];
@@ -262,8 +262,8 @@ __device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
                                              const uint32_t*  active_mask_v)
 {
 
-    const uint16_t num_edges    = patch_info.num_edges;
-    const uint16_t num_vertices = patch_info.num_vertices;
+    const uint16_t num_edges    = patch_info.num_edges[0];
+    const uint16_t num_vertices = patch_info.num_vertices[0];
 
     v_e_oreinted<blockThreads>(patch_info,
                                s_output_offset,
@@ -532,41 +532,41 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
 {
 
     if constexpr (op == Op::VV) {
-        assert(patch_info.num_vertices <= 2 * patch_info.num_edges);
+        assert(patch_info.num_vertices <= 2 * patch_info.num_edges[0]);
         uint16_t* s_ev =
-            shrd_alloc.alloc<uint16_t>(2 * 2 * patch_info.num_edges);
+            shrd_alloc.alloc<uint16_t>(2 * 2 * patch_info.num_edges[0]);
         uint16_t* s_ev_duplicate =
-            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
+            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
-                   2 * patch_info.num_edges,
+                   2 * patch_info.num_edges[0],
                    s_ev,
                    true);
         s_output_offset = &s_ev[0];
-        s_output_value  = &s_ev[patch_info.num_vertices + 1];
-        v_v<blockThreads>(patch_info.num_vertices,
-                          patch_info.num_edges,
+        s_output_value  = &s_ev[patch_info.num_vertices[0] + 1];
+        v_v<blockThreads>(patch_info.num_vertices[0],
+                          patch_info.num_edges[0],
                           s_ev,
                           s_ev_duplicate,
                           s_output_value,
                           patch_info.active_mask_e,
                           patch_info.active_mask_v);
-        shrd_alloc.dealloc<uint16_t>(2 * patch_info.num_edges);
+        shrd_alloc.dealloc<uint16_t>(2 * patch_info.num_edges[0]);
     }
 
     if constexpr (op == Op::VE) {
-        assert(patch_info.num_vertices <= 2 * patch_info.num_edges);
+        assert(patch_info.num_vertices <= 2 * patch_info.num_edges[0]);
         uint16_t* s_ev =
-            shrd_alloc.alloc<uint16_t>(2 * 2 * patch_info.num_edges);
+            shrd_alloc.alloc<uint16_t>(2 * 2 * patch_info.num_edges[0]);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
-                   2 * patch_info.num_edges,
+                   2 * patch_info.num_edges[0],
                    s_ev,
                    true);
         s_output_offset = s_ev;
-        s_output_value  = &s_ev[patch_info.num_vertices + 1];
-        v_e<blockThreads>(patch_info.num_vertices,
-                          patch_info.num_edges,
+        s_output_value  = &s_ev[patch_info.num_vertices[0] + 1];
+        v_e<blockThreads>(patch_info.num_vertices[0],
+                          patch_info.num_edges[0],
                           s_ev,
                           s_output_value,
                           patch_info.active_mask_e);
@@ -574,50 +574,53 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
 
     if constexpr (op == Op::VF) {
         assert(patch_info.num_vertices <= 2 * patch_info.num_edges);
-        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
-        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
+        uint16_t* s_fe =
+            shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
+        uint16_t* s_ev =
+            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.fe),
-                   3 * patch_info.num_faces,
+                   3 * patch_info.num_faces[0],
                    s_fe,
                    false);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
-                   2 * patch_info.num_edges,
+                   2 * patch_info.num_edges[0],
                    s_ev,
                    true);
         s_output_offset = &s_fe[0];
         s_output_value  = &s_ev[0];
-        v_f<blockThreads>(patch_info.num_faces,
-                          patch_info.num_edges,
-                          patch_info.num_vertices,
+        v_f<blockThreads>(patch_info.num_faces[0],
+                          patch_info.num_edges[0],
+                          patch_info.num_vertices[0],
                           s_ev,
                           s_fe,
                           patch_info.active_mask_f);
     }
 
     if constexpr (op == Op::EV) {
-        s_output_value = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
+        s_output_value =
+            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
-                   2 * patch_info.num_edges,
+                   2 * patch_info.num_edges[0],
                    s_output_value,
                    true);
     }
 
     if constexpr (op == Op::EF) {
-        assert(patch_info.num_edges <= 3 * patch_info.num_faces);
+        assert(patch_info.num_edges <= 3 * patch_info.num_faces[0]);
         uint16_t* s_fe =
-            shrd_alloc.alloc<uint16_t>(2 * 3 * patch_info.num_faces);
+            shrd_alloc.alloc<uint16_t>(2 * 3 * patch_info.num_faces[0]);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.fe),
-                   3 * patch_info.num_faces,
+                   3 * patch_info.num_faces[0],
                    s_fe,
                    true);
         s_output_offset = &s_fe[0];
-        s_output_value  = &s_fe[patch_info.num_edges + 1];
-        e_f<blockThreads>(patch_info.num_edges,
-                          patch_info.num_faces,
+        s_output_value  = &s_fe[patch_info.num_edges[0] + 1];
+        e_f<blockThreads>(patch_info.num_edges[0],
+                          patch_info.num_faces[0],
                           s_fe,
                           s_output_value,
                           patch_info.active_mask_e,
@@ -627,56 +630,61 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
     if constexpr (op == Op::FV) {
         // alloc and load FE and EV, operate on FE to convert it to FV
         // then dealloc EV
-        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
-        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
+        uint16_t* s_fe =
+            shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
+        uint16_t* s_ev =
+            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
         s_output_value = s_fe;
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
-                   2 * patch_info.num_edges,
+                   2 * patch_info.num_edges[0],
                    s_ev,
                    false);
 
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.fe),
-                   3 * patch_info.num_faces,
+                   3 * patch_info.num_faces[0],
                    s_fe,
                    true);
 
-        f_v<blockThreads>(patch_info.num_edges,
+        f_v<blockThreads>(patch_info.num_edges[0],
                           s_ev,
-                          patch_info.num_faces,
+                          patch_info.num_faces[0],
                           s_fe,
                           patch_info.active_mask_f);
 
-        shrd_alloc.dealloc<uint16_t>(2 * patch_info.num_edges);
+        shrd_alloc.dealloc<uint16_t>(2 * patch_info.num_edges[0]);
     }
 
     if constexpr (op == Op::FE) {
-        s_output_value = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
+        s_output_value =
+            shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.fe),
-                   3 * patch_info.num_faces,
+                   3 * patch_info.num_faces[0],
                    s_output_value,
                    true);
     }
 
     if constexpr (op == Op::FF) {
-        assert(patch_info.num_edges <= 3 * patch_info.num_faces);
-        s_output_offset = shrd_alloc.alloc<uint16_t>(4 * patch_info.num_faces);
-        s_output_value  = &s_output_offset[patch_info.num_faces + 1];
+        assert(patch_info.num_edges <= 3 * patch_info.num_faces[0]);
+        s_output_offset =
+            shrd_alloc.alloc<uint16_t>(4 * patch_info.num_faces[0]);
+        s_output_value = &s_output_offset[patch_info.num_faces[0] + 1];
 
-        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
+        uint16_t* s_fe =
+            shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
         uint16_t* s_ef =
-            shrd_alloc.alloc<uint16_t>(2 * 3 * patch_info.num_faces);
+            shrd_alloc.alloc<uint16_t>(2 * 3 * patch_info.num_faces[0]);
 
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.fe),
-                   3 * patch_info.num_faces,
+                   3 * patch_info.num_faces[0],
                    s_fe,
                    true);
 
-        f_f<blockThreads>(patch_info.num_edges,
-                          patch_info.num_faces,
+        f_f<blockThreads>(patch_info.num_edges[0],
+                          patch_info.num_faces[0],
                           s_fe,
                           s_ef,
                           s_output_offset,
@@ -684,8 +692,8 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
                           patch_info.active_mask_e,
                           patch_info.active_mask_f);
 
-        shrd_alloc.dealloc<uint16_t>(2 * 3 * patch_info.num_faces);
-        shrd_alloc.dealloc<uint16_t>(3 * patch_info.num_faces);
+        shrd_alloc.dealloc<uint16_t>(2 * 3 * patch_info.num_faces[0]);
+        shrd_alloc.dealloc<uint16_t>(3 * patch_info.num_faces[0]);
     }
 }
 }  // namespace detail

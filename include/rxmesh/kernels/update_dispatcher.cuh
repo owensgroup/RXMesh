@@ -9,14 +9,13 @@
 #include "rxmesh/patch_info.h"
 #include "rxmesh/util/meta.h"
 
-
 namespace rxmesh {
 
 template <uint32_t blockThreads, CavityOp cop>
 struct Cavity
 {
     __device__ __inline__ Cavity()
-        : m_num_cavities(nullptr),
+        : m_s_num_cavities(nullptr),
           m_cavity_id_v(nullptr),
           m_cavity_id_e(nullptr),
           m_cavity_id_f(nullptr),
@@ -30,28 +29,29 @@ struct Cavity
                                  ShmemAllocator&                   shrd_alloc,
                                  const PatchInfo&                  patch_info)
     {
-        m_num_cavities = shrd_alloc.alloc<int>(1);
-        m_cavity_id_v  = shrd_alloc.alloc<uint16_t>(patch_info.num_vertices);
-        m_cavity_id_e  = shrd_alloc.alloc<uint16_t>(patch_info.num_edges);
-        m_cavity_id_f  = shrd_alloc.alloc<uint16_t>(patch_info.num_faces);
-        m_cavity_edge_loop = shrd_alloc.alloc<uint16_t>(patch_info.num_edges);
+        m_s_num_cavities = shrd_alloc.alloc<int>(1);
+        m_cavity_id_v = shrd_alloc.alloc<uint16_t>(patch_info.num_vertices[0]);
+        m_cavity_id_e = shrd_alloc.alloc<uint16_t>(patch_info.num_edges[0]);
+        m_cavity_id_f = shrd_alloc.alloc<uint16_t>(patch_info.num_faces[0]);
+        m_cavity_edge_loop =
+            shrd_alloc.alloc<uint16_t>(patch_info.num_edges[0]);
 
         if (threadIdx.x == 0) {
-            m_num_cavities[0] = 0;
+            m_s_num_cavities[0] = 0;
         }
 
         // TODO fix the bank conflict
-        for (uint16_t v = threadIdx.x; v < patch_info.num_vertices;
+        for (uint16_t v = threadIdx.x; v < patch_info.num_vertices[0];
              v += blockThreads) {
             m_cavity_id_v[v] = INVALID16;
         }
 
-        for (uint16_t e = threadIdx.x; e < patch_info.num_edges;
+        for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0];
              e += blockThreads) {
             m_cavity_id_e[e] = INVALID16;
         }
 
-        for (uint16_t f = threadIdx.x; f < patch_info.num_faces;
+        for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0];
              f += blockThreads) {
             m_cavity_id_f[f] = INVALID16;
         }
@@ -89,7 +89,7 @@ struct Cavity
                           "get_handle() should take FaceHandle as an input");
         }
 
-        int id = ::atomicAdd(m_num_cavities, 1);
+        int id = ::atomicAdd(m_s_num_cavities, 1);
         if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
                       cop == CavityOp::EE || cop == CavityOp::EF) {
             // TODO EV may also mark its vertices immediately
@@ -117,29 +117,29 @@ struct Cavity
                                        ShmemAllocator& shrd_alloc,
                                        PatchInfo&      patch_info)
     {
+        // Load mesh info
+        m_s_cavity_size = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
 
-        m_s_cavity_size = shrd_alloc.alloc<int>(m_num_cavities[0] + 1);
-
-        for (uint16_t i = threadIdx.x; i < m_num_cavities[0] + 1;
+        for (uint16_t i = threadIdx.x; i < m_s_num_cavities[0] + 1;
              i += blockThreads) {
             m_s_cavity_size[i] = 0;
         }
 
-        m_s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
+        m_s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
         detail::load_async(block,
                            reinterpret_cast<uint16_t*>(patch_info.ev),
-                           2 * patch_info.num_edges,
+                           2 * patch_info.num_edges[0],
                            m_s_ev,
                            false);
-        m_s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
+        m_s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
         detail::load_async(block,
                            reinterpret_cast<uint16_t*>(patch_info.fe),
-                           3 * patch_info.num_faces,
+                           3 * patch_info.num_faces[0],
                            m_s_fe,
                            true);
         block.sync();
 
-
+        // Expand cavities
         if constexpr (cop == CavityOp::V) {
             mark_edges_through_vertices(patch_info);
             block.sync();
@@ -151,6 +151,11 @@ struct Cavity
             mark_faces_through_edges(patch_info);
             block.sync();
         }
+
+        // construct cavity boundary loop
+        construct_cavities_edge_loop(block, patch_info);
+
+        // TODO sort each cavity edge loop
     }
 
 
@@ -160,7 +165,7 @@ struct Cavity
     __device__ __inline__ void mark_edges_through_vertices(
         PatchInfo& patch_info)
     {
-        for (uint16_t e = threadIdx.x; e < patch_info.num_edges; ++e) {
+        for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0]; ++e) {
             if (!detail::is_deleted(e, patch_info.active_mask_e)) {
                 // vertices tag
                 const uint16_t v0 = m_cavity_id_v[m_s_ev[2 * e]];
@@ -185,7 +190,7 @@ struct Cavity
      */
     __device__ __inline__ void mark_faces_through_edges(PatchInfo& patch_info)
     {
-        for (uint16_t f = threadIdx.x; f < patch_info.num_faces; ++f) {
+        for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0]; ++f) {
             if (!detail::is_deleted(f, patch_info.active_mask_f)) {
 
                 // edges tag
@@ -273,7 +278,7 @@ struct Cavity
         block.sync();
         // scan
         detail::cub_block_exclusive_sum<int, blockThreads>(m_s_cavity_size,
-                                                           m_num_cavities);
+                                                           m_s_num_cavities[0]);
 
         for (uint16_t i = 0; i < itemPerThread; ++i) {
             if (local_offset[i] != INVALID16) {
@@ -309,9 +314,88 @@ struct Cavity
         }
     }
 
-        
 
-    int*      m_num_cavities;
+    template <typename FillInT>
+    __device__ __inline__ void for_each_cavity(
+        cooperative_groups::thread_block& block,
+        FillInT                           FillInFunc)
+    {
+        // TODO it should be one warp per cavity or the whole block process the
+        // cavity
+        for (uint16_t c = threadIdx.x; c < m_s_num_cavities[0];
+             c += blockThreads) {
+
+            FillInFunc(c, m_s_cavity_size[c + 1] - m_s_cavity_size[c]);
+        }
+    }
+
+    __device__ __inline__ int get_num_cavities() const
+    {
+        return m_s_num_cavities[0];
+    }
+
+    /**
+     * @brief get an edge handle to the e-th edges in the c-th cavity
+     */
+    __device__ __inline__ EdgeHandle operator()(PatchInfo& patch_info,
+                                                uint16_t   c,
+                                                uint16_t   e)
+    {
+        assert(c < m_s_num_cavities[0]);
+        assert(e < m_s_cavity_size[c + 1] - m_s_cavity_size[c]);
+        return EdgeHandle(patch_info.patch_id,
+                          m_cavity_edge_loop[m_s_cavity_size[c] + e]);
+    }
+
+
+    /**
+     * @brief should be called by a single thread
+     */
+    __device__ __inline__ VertexHandle add_vertex(PatchInfo& patch_info)
+    {
+        // TODO set v_id active mask and owned mask
+        uint16_t v_id = atomicAdd(patch_info.num_vertices, 1);
+        return {patch_info.patch_id, v_id};
+    }
+
+
+    /**
+     * @brief should be called by a single thread
+     */
+    __device__ __inline__ EdgeHandle add_edge(PatchInfo&         patch_info,
+                                              const VertexHandle src,
+                                              const VertexHandle dest)
+    {
+        // TODO set e_id active mask and owned mask
+        assert(src.unpack().first == patch_info.patch_id);
+        assert(dest.unpack().first == patch_info.patch_id);
+        uint16_t e_id        = atomicAdd(patch_info.num_edges, 1);
+        m_s_ev[2 * e_id]     = src.unpack().second;
+        m_s_ev[2 * e_id + 1] = dest.unpack().second;
+        return {patch_info.patch_id, e_id};
+    }
+
+
+    /**
+     * @brief should be called by a single thread
+     */
+    __device__ __inline__ FaceHandle add_face(PatchInfo&       patch_info,
+                                              const EdgeHandle e0,
+                                              const EdgeHandle e1,
+                                              const EdgeHandle e2)
+    {
+        // TODO set f_id active mask and owned mask
+        assert(e0.unpack().first == patch_info.patch_id);
+        assert(e1.unpack().first == patch_info.patch_id);
+        assert(e2.unpack().first == patch_info.patch_id);
+        uint16_t f_id        = atomicAdd(patch_info.num_faces, 1);
+        m_s_fe[3 * f_id]     = e0.unpack().second;
+        m_s_fe[3 * f_id + 1] = e1.unpack().second;
+        m_s_fe[3 * f_id + 2] = e2.unpack().second;
+        return {patch_info.patch_id, f_id};
+    }
+
+    int*      m_s_num_cavities;
     uint16_t *m_cavity_id_v, *m_cavity_id_e, *m_cavity_id_f;
     uint16_t* m_cavity_edge_loop;
     uint16_t *m_s_ev, *m_s_fe;

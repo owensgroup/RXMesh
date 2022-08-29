@@ -51,11 +51,11 @@ struct ALIGN(16) PatchInfo
     uint32_t *owned_mask_v, *owned_mask_e, *owned_mask_f;
 
     // Number of mesh elements in the patch
-    uint16_t num_vertices, num_edges, num_faces;
+    uint16_t *num_vertices, *num_edges, *num_faces;
 
     // Capacity of v/e/f. This controls the allocations of ev, fe,
     // active_mask_v/e/f, owned_mask_v/e/f
-    uint16_t vertices_capacity, edges_capacity, faces_capacity;
+    uint16_t *vertices_capacity, *edges_capacity, *faces_capacity;
 
     // The index of this patch (relative to all other patches)
     uint32_t patch_id;

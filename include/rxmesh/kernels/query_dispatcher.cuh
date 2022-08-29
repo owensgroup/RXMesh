@@ -46,17 +46,17 @@ __device__ __inline__ void query_block_dispatcher(
     uint32_t *  input_active_mask, *input_owned_mask;
     LPHashTable hashtable;
     if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
-        num_src_in_patch  = patch_info.num_vertices;
+        num_src_in_patch  = patch_info.num_vertices[0];
         input_active_mask = patch_info.active_mask_v;
         input_owned_mask  = patch_info.owned_mask_v;
     }
     if constexpr (op == Op::EV || op == Op::EF) {
-        num_src_in_patch  = patch_info.num_edges;
+        num_src_in_patch  = patch_info.num_edges[0];
         input_active_mask = patch_info.active_mask_e;
         input_owned_mask  = patch_info.owned_mask_e;
     }
     if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
-        num_src_in_patch  = patch_info.num_faces;
+        num_src_in_patch  = patch_info.num_faces[0];
         input_active_mask = patch_info.active_mask_f;
         input_owned_mask  = patch_info.owned_mask_f;
     }
@@ -74,7 +74,7 @@ __device__ __inline__ void query_block_dispatcher(
     // alloc and load owned mask async
     // select lp hashtable
     if constexpr (op == Op::VV || op == Op::EV || op == Op::FV) {
-        const uint32_t mask_size = mask_num_bytes(patch_info.num_vertices);
+        const uint32_t mask_size = mask_num_bytes(patch_info.num_vertices[0]);
         s_output_owned_bitmask =
             reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
         load_async(reinterpret_cast<char*>(patch_info.owned_mask_v),
@@ -84,7 +84,7 @@ __device__ __inline__ void query_block_dispatcher(
         output_lp_hashtable = patch_info.lp_v;
     }
     if constexpr (op == Op::VE || op == Op::EE || op == Op::FE) {
-        const uint32_t mask_size = mask_num_bytes(patch_info.num_edges);
+        const uint32_t mask_size = mask_num_bytes(patch_info.num_edges[0]);
         s_output_owned_bitmask =
             reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
         load_async(reinterpret_cast<char*>(patch_info.owned_mask_e),
@@ -94,7 +94,7 @@ __device__ __inline__ void query_block_dispatcher(
         output_lp_hashtable = patch_info.lp_e;
     }
     if constexpr (op == Op::VF || op == Op::EF || op == Op::FF) {
-        const uint32_t mask_size = mask_num_bytes(patch_info.num_faces);
+        const uint32_t mask_size = mask_num_bytes(patch_info.num_faces[0]);
         s_output_owned_bitmask =
             reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
         load_async(reinterpret_cast<char*>(patch_info.owned_mask_f),

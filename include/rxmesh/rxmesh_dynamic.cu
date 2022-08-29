@@ -50,32 +50,34 @@ __global__ static void check_uniqueness(const Context           context,
 
         ShmemAllocator shrd_alloc;
 
-        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
-        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
+        uint16_t* s_fe =
+            shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
+        uint16_t* s_ev =
+            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
 
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
-                   2 * patch_info.num_edges,
+                   2 * patch_info.num_edges[0],
                    s_ev,
                    false);
 
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.fe),
-                   3 * patch_info.num_faces,
+                   3 * patch_info.num_faces[0],
                    s_fe,
                    true);
         block.sync();
 
         // make sure an edge is connecting two unique vertices
-        for (uint16_t e = threadIdx.x; e < patch_info.num_edges;
+        for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0];
              e += blockThreads) {
             uint16_t v0 = s_ev[2 * e + 0];
             uint16_t v1 = s_ev[2 * e + 1];
 
             if (!is_deleted(e, patch_info.active_mask_e)) {
 
-                if (v0 >= patch_info.num_vertices ||
-                    v1 >= patch_info.num_vertices || v0 == v1) {
+                if (v0 >= patch_info.num_vertices[0] ||
+                    v1 >= patch_info.num_vertices[0] || v0 == v1) {
                     ::atomicAdd(d_check, 1);
                 }
                 if (is_deleted(v0, patch_info.active_mask_v) ||
@@ -87,7 +89,7 @@ __global__ static void check_uniqueness(const Context           context,
 
         // make sure a face is formed by three unique edges and these edges
         // gives three unique vertices
-        for (uint16_t f = threadIdx.x; f < patch_info.num_faces;
+        for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0];
              f += blockThreads) {
 
             if (!is_deleted(f, patch_info.active_mask_f)) {
@@ -97,8 +99,9 @@ __global__ static void check_uniqueness(const Context           context,
                 Context::unpack_edge_dir(s_fe[3 * f + 1], e1, d1);
                 Context::unpack_edge_dir(s_fe[3 * f + 2], e2, d2);
 
-                if (e0 >= patch_info.num_edges || e1 >= patch_info.num_edges ||
-                    e2 >= patch_info.num_edges || e0 == e1 || e0 == e2 ||
+                if (e0 >= patch_info.num_edges[0] ||
+                    e1 >= patch_info.num_edges[0] ||
+                    e2 >= patch_info.num_edges[0] || e0 == e1 || e0 == e2 ||
                     e1 == e2) {
                     ::atomicAdd(d_check, 1);
                 }
@@ -115,9 +118,9 @@ __global__ static void check_uniqueness(const Context           context,
                 v2 = s_ev[(2 * e2) + (1 * d2)];
 
 
-                if (v0 >= patch_info.num_vertices ||
-                    v1 >= patch_info.num_vertices ||
-                    v2 >= patch_info.num_vertices || v0 == v1 || v0 == v2 ||
+                if (v0 >= patch_info.num_vertices[0] ||
+                    v1 >= patch_info.num_vertices[0] ||
+                    v2 >= patch_info.num_vertices[0] || v0 == v1 || v0 == v2 ||
                     v1 == v2) {
                     ::atomicAdd(d_check, 1);
                 }
@@ -146,17 +149,19 @@ __global__ static void check_not_owned(const Context           context,
         PatchInfo patch_info = context.get_patches_info()[patch_id];
 
         ShmemAllocator shrd_alloc;
-        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
-        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
+        uint16_t*      s_fe =
+            shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
+        uint16_t* s_ev =
+            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
-                   2 * patch_info.num_edges,
+                   2 * patch_info.num_edges[0],
                    s_ev,
                    false);
 
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.fe),
-                   3 * patch_info.num_faces,
+                   3 * patch_info.num_faces[0],
                    s_fe,
                    true);
         block.sync();
@@ -164,7 +169,7 @@ __global__ static void check_not_owned(const Context           context,
 
         // for every not-owned face, check that its three edges (possibly
         // not-owned) are the same as those in the face's owner patch
-        for (uint16_t f = threadIdx.x; f < patch_info.num_faces;
+        for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0];
              f += blockThreads) {
 
             if (!is_deleted(f, patch_info.active_mask_f) &&
@@ -238,7 +243,7 @@ __global__ static void check_not_owned(const Context           context,
 
         // for every not-owned edge, check its two vertices (possibly
         // not-owned) are the same as those in the edge's owner patch
-        for (uint16_t e = threadIdx.x; e < patch_info.num_edges;
+        for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0];
              e += blockThreads) {
 
             if (!is_deleted(e, patch_info.active_mask_e) &&
@@ -310,16 +315,17 @@ __global__ static void check_ribbon_edges(const Context           context,
         PatchInfo patch_info = context.get_patches_info()[patch_id];
 
         ShmemAllocator shrd_alloc;
-        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
+        uint16_t*      s_fe =
+            shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.fe),
-                   3 * patch_info.num_faces,
+                   3 * patch_info.num_faces[0],
                    s_fe,
                    true);
         uint16_t* s_mark_edges =
-            shrd_alloc.alloc<uint16_t>(patch_info.num_edges);
+            shrd_alloc.alloc<uint16_t>(patch_info.num_edges[0]);
 
-        for (uint16_t e = threadIdx.x; e < patch_info.num_edges;
+        for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0];
              e += blockThreads) {
             s_mark_edges[e] = 0;
         }
@@ -332,7 +338,7 @@ __global__ static void check_ribbon_edges(const Context           context,
         // check the marked edges where we expect all owned edges to be marked.
         // If there is an edge that is owned but not marked, then this edge is
         // not incident to any owned faces
-        for (uint16_t f = threadIdx.x; f < patch_info.num_faces;
+        for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0];
              f += blockThreads) {
 
             if (!is_deleted(f, patch_info.active_mask_f) &&
@@ -354,7 +360,7 @@ __global__ static void check_ribbon_edges(const Context           context,
             }
         }
         block.sync();
-        for (uint16_t e = threadIdx.x; e < patch_info.num_edges;
+        for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0];
              e += blockThreads) {
             if (is_owned(e, patch_info.owned_mask_e)) {
                 if (s_mark_edges[e] == 0) {
@@ -395,32 +401,35 @@ __global__ static void check_ribbon_faces(const Context               context,
         PatchInfo patch_info = context.get_patches_info()[patch_id];
 
         ShmemAllocator shrd_alloc;
-        uint16_t* s_fv = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
-        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces);
-        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges);
+        uint16_t*      s_fv =
+            shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
+        uint16_t* s_fe =
+            shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
+        uint16_t* s_ev =
+            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
-                   2 * patch_info.num_edges,
+                   2 * patch_info.num_edges[0],
                    s_ev,
                    false);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.fe),
-                   3 * patch_info.num_faces,
+                   3 * patch_info.num_faces[0],
                    s_fv,
                    true);
         block.sync();
 
 
         // compute FV
-        f_v<blockThreads>(patch_info.num_edges,
+        f_v<blockThreads>(patch_info.num_edges[0],
                           s_ev,
-                          patch_info.num_faces,
+                          patch_info.num_faces[0],
                           s_fv,
                           patch_info.active_mask_f);
         block.sync();
 
         // copy FV
-        for (uint16_t i = threadIdx.x; i < 3 * patch_info.num_faces;
+        for (uint16_t i = threadIdx.x; i < 3 * patch_info.num_faces[0];
              i += blockThreads) {
             s_fe[i] = s_fv[i];
         }
@@ -429,8 +438,8 @@ __global__ static void check_ribbon_faces(const Context               context,
         // compute (local) VF by transposing FV
         uint16_t* s_vf_offset = &s_fe[0];
         uint16_t* s_vf_value  = &s_ev[0];
-        block_mat_transpose<3u, blockThreads>(patch_info.num_faces,
-                                              patch_info.num_vertices,
+        block_mat_transpose<3u, blockThreads>(patch_info.num_faces[0],
+                                              patch_info.num_vertices[0],
                                               s_fe,
                                               s_ev,
                                               patch_info.active_mask_f,
@@ -438,7 +447,7 @@ __global__ static void check_ribbon_faces(const Context               context,
 
         // For every incident vertex V to an owned face, check if VF of V
         // using global_VF can be retrieved from local_VF
-        for (uint16_t f = threadIdx.x; f < patch_info.num_faces;
+        for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0];
              f += blockThreads) {
 
             // Only if the face is owned, we do the check
@@ -710,66 +719,66 @@ void RXMeshDynamic::update_host()
         if (d_patch.num_edges > m_h_patches_info[p].edges_capacity) {
             free(m_h_patches_info[p].ev);
             m_h_patches_info[p].ev = (LocalVertexT*)malloc(
-                d_patch.num_edges * 2 * sizeof(LocalVertexT));
+                d_patch.num_edges[0] * 2 * sizeof(LocalVertexT));
         }
 
         if (d_patch.num_faces > m_h_patches_info[p].faces_capacity) {
             free(m_h_patches_info[p].fe);
-            m_h_patches_info[p].fe =
-                (LocalEdgeT*)malloc(d_patch.num_faces * 3 * sizeof(LocalEdgeT));
+            m_h_patches_info[p].fe = (LocalEdgeT*)malloc(
+                d_patch.num_faces[0] * 3 * sizeof(LocalEdgeT));
         }
 
         // copy topology
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].ev,
                               d_patch.ev,
-                              2 * d_patch.num_edges * sizeof(LocalVertexT),
+                              2 * d_patch.num_edges[0] * sizeof(LocalVertexT),
                               cudaMemcpyDeviceToHost));
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].fe,
                               d_patch.fe,
-                              3 * d_patch.num_faces * sizeof(LocalEdgeT),
+                              3 * d_patch.num_faces[0] * sizeof(LocalEdgeT),
                               cudaMemcpyDeviceToHost));
 
         // resize mask (update capacity)
-        resize_masks(d_patch.num_vertices,
-                     m_h_patches_info[p].vertices_capacity,
+        resize_masks(d_patch.num_vertices[0],
+                     m_h_patches_info[p].vertices_capacity[0],
                      m_h_patches_info[p].active_mask_v,
                      m_h_patches_info[p].owned_mask_v);
-        resize_masks(d_patch.num_edges,
-                     m_h_patches_info[p].edges_capacity,
+        resize_masks(d_patch.num_edges[0],
+                     m_h_patches_info[p].edges_capacity[0],
                      m_h_patches_info[p].active_mask_e,
                      m_h_patches_info[p].owned_mask_e);
-        resize_masks(d_patch.num_faces,
-                     m_h_patches_info[p].faces_capacity,
+        resize_masks(d_patch.num_faces[0],
+                     m_h_patches_info[p].faces_capacity[0],
                      m_h_patches_info[p].active_mask_f,
                      m_h_patches_info[p].owned_mask_f);
 
         // copy masks
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_v,
                               d_patch.active_mask_v,
-                              detail::mask_num_bytes(d_patch.num_vertices),
+                              detail::mask_num_bytes(d_patch.num_vertices[0]),
                               cudaMemcpyDeviceToHost));
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].owned_mask_v,
                               d_patch.owned_mask_v,
-                              detail::mask_num_bytes(d_patch.num_vertices),
+                              detail::mask_num_bytes(d_patch.num_vertices[0]),
                               cudaMemcpyDeviceToHost));
 
 
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_e,
                               d_patch.active_mask_e,
-                              detail::mask_num_bytes(d_patch.num_edges),
+                              detail::mask_num_bytes(d_patch.num_edges[0]),
                               cudaMemcpyDeviceToHost));
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].owned_mask_e,
                               d_patch.owned_mask_e,
-                              detail::mask_num_bytes(d_patch.num_edges),
+                              detail::mask_num_bytes(d_patch.num_edges[0]),
                               cudaMemcpyDeviceToHost));
 
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_f,
                               d_patch.active_mask_f,
-                              detail::mask_num_bytes(d_patch.num_faces),
+                              detail::mask_num_bytes(d_patch.num_faces[0]),
                               cudaMemcpyDeviceToHost));
         CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].owned_mask_f,
                               d_patch.owned_mask_f,
-                              detail::mask_num_bytes(d_patch.num_faces),
+                              detail::mask_num_bytes(d_patch.num_faces[0]),
                               cudaMemcpyDeviceToHost));
 
 

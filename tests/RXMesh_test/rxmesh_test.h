@@ -452,8 +452,8 @@ class RXMeshTest
         // global gives the same results as from global to local
 
         // Number of edges and faces in this patch
-        uint32_t num_p_edges = rxmesh.m_h_patches_info[patch_id].num_edges;
-        uint32_t num_p_faces = rxmesh.m_h_patches_info[patch_id].num_faces;
+        uint32_t num_p_edges = rxmesh.m_h_patches_info[patch_id].num_edges[0];
+        uint32_t num_p_faces = rxmesh.m_h_patches_info[patch_id].num_faces[0];
 
         assert(num_p_edges <= std::numeric_limits<uint16_t>::max());
         assert(num_p_faces <= std::numeric_limits<uint16_t>::max());
