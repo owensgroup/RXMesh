@@ -532,7 +532,7 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
 {
 
     if constexpr (op == Op::VV) {
-        assert(patch_info.num_vertices <= 2 * patch_info.num_edges[0]);
+        assert(patch_info.num_vertices[0] <= 2 * patch_info.num_edges[0]);
         uint16_t* s_ev =
             shrd_alloc.alloc<uint16_t>(2 * 2 * patch_info.num_edges[0]);
         uint16_t* s_ev_duplicate =
@@ -555,7 +555,7 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
     }
 
     if constexpr (op == Op::VE) {
-        assert(patch_info.num_vertices <= 2 * patch_info.num_edges[0]);
+        assert(patch_info.num_vertices[0] <= 2 * patch_info.num_edges[0]);
         uint16_t* s_ev =
             shrd_alloc.alloc<uint16_t>(2 * 2 * patch_info.num_edges[0]);
         load_async(block,
@@ -573,7 +573,7 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
     }
 
     if constexpr (op == Op::VF) {
-        assert(patch_info.num_vertices <= 2 * patch_info.num_edges);
+        assert(patch_info.num_vertices[0] <= 2 * patch_info.num_edges[0]);
         uint16_t* s_fe =
             shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
         uint16_t* s_ev =
@@ -609,7 +609,7 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
     }
 
     if constexpr (op == Op::EF) {
-        assert(patch_info.num_edges <= 3 * patch_info.num_faces[0]);
+        assert(patch_info.num_edges[0] <= 3 * patch_info.num_faces[0]);
         uint16_t* s_fe =
             shrd_alloc.alloc<uint16_t>(2 * 3 * patch_info.num_faces[0]);
         load_async(block,
@@ -667,7 +667,7 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
     }
 
     if constexpr (op == Op::FF) {
-        assert(patch_info.num_edges <= 3 * patch_info.num_faces[0]);
+        assert(patch_info.num_edges[0] <= 3 * patch_info.num_faces[0]);
         s_output_offset =
             shrd_alloc.alloc<uint16_t>(4 * patch_info.num_faces[0]);
         s_output_value = &s_output_offset[patch_info.num_faces[0] + 1];

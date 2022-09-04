@@ -93,18 +93,20 @@ struct Cavity
         if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
                       cop == CavityOp::EE || cop == CavityOp::EF) {
             // TODO EV may also mark its vertices immediately
-            m_cavity_id_e[handle.unpack().first] = id;
+            m_cavity_id_e[handle.unpack().second]     = id;
+            //m_cavity_id_e[handle.unpack().second - 1] = id;
+            //m_cavity_id_e[handle.unpack().second + 1] = id;
         }
 
         if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                       cop == CavityOp::VE || cop == CavityOp::VF) {
-            m_cavity_id_v[handle.unpack().first] = id;
+            m_cavity_id_v[handle.unpack().second] = id;
         }
 
         if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
                       cop == CavityOp::FE || cop == CavityOp::FF) {
             // TODO FE may also mark its edges immediately
-            m_cavity_id_f[handle.unpack().first] = id;
+            m_cavity_id_f[handle.unpack().second] = id;
         }
     }
 
@@ -116,6 +118,39 @@ struct Cavity
     __device__ __inline__ void process(cooperative_groups::thread_block& block,
                                        ShmemAllocator& shrd_alloc,
                                        PatchInfo&      patch_info)
+    {
+        // load mesh FE and EV
+        load_mesh_async(block, shrd_alloc, patch_info);
+        block.sync();
+
+        // Expand cavities
+        if constexpr (cop == CavityOp::V) {
+            mark_edges_through_vertices(patch_info);
+            block.sync();
+            mark_faces_through_edges(patch_info);
+            block.sync();
+        }
+
+        if constexpr (cop == CavityOp::E) {
+            mark_faces_through_edges(patch_info);
+            block.sync();
+        }
+
+        // construct cavity boundary loop
+        construct_cavities_edge_loop(block, patch_info);
+
+        // sort each cavity edge loop
+        sort_cavities_edge_loop();
+    }
+
+
+    /**
+     * @brief load mesh FE and EV into shared memory
+     */
+    __device__ __inline__ void load_mesh_async(
+        cooperative_groups::thread_block& block,
+        ShmemAllocator&                   shrd_alloc,
+        PatchInfo&                        patch_info)
     {
         // Load mesh info
         m_s_cavity_size = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
@@ -137,27 +172,7 @@ struct Cavity
                            3 * patch_info.num_faces[0],
                            m_s_fe,
                            true);
-        block.sync();
-
-        // Expand cavities
-        if constexpr (cop == CavityOp::V) {
-            mark_edges_through_vertices(patch_info);
-            block.sync();
-            mark_faces_through_edges(patch_info);
-            block.sync();
-        }
-
-        if constexpr (cop == CavityOp::E) {
-            mark_faces_through_edges(patch_info);
-            block.sync();
-        }
-
-        // construct cavity boundary loop
-        construct_cavities_edge_loop(block, patch_info);
-
-        // TODO sort each cavity edge loop
     }
-
 
     /**
      * @brief propagate the cavity tag from vertices to their incident edges
@@ -165,18 +180,20 @@ struct Cavity
     __device__ __inline__ void mark_edges_through_vertices(
         PatchInfo& patch_info)
     {
-        for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0]; ++e) {
+        for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0];
+             e += blockThreads) {
             if (!detail::is_deleted(e, patch_info.active_mask_e)) {
-                // vertices tag
-                const uint16_t v0 = m_cavity_id_v[m_s_ev[2 * e]];
-                const uint16_t v1 = m_cavity_id_v[m_s_ev[2 * e + 1]];
 
-                if (v0 != INVALID16) {
+                // vertices tag
+                const uint16_t v0 = m_s_ev[2 * e];
+                const uint16_t v1 = m_s_ev[2 * e + 1];
+
+                if (m_cavity_id_v[v0] != INVALID16) {
                     // TODO possible race condition
                     m_cavity_id_e[e] = v0;
                 }
 
-                if (v1 != INVALID16) {
+                if (m_cavity_id_v[v1] != INVALID16) {
                     // TODO possible race condition
                     m_cavity_id_e[e] = v1;
                 }
@@ -184,33 +201,49 @@ struct Cavity
         }
     }
 
-
     /**
      * @brief propagate the cavity tag from edges to their incident faces
      */
     __device__ __inline__ void mark_faces_through_edges(PatchInfo& patch_info)
     {
-        for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0]; ++f) {
+        for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0];
+             f += blockThreads) {
             if (!detail::is_deleted(f, patch_info.active_mask_f)) {
 
                 // edges tag
-                const uint16_t e0 = m_cavity_id_v[m_s_fe[3 * f]];
-                const uint16_t e1 = m_cavity_id_v[m_s_fe[3 * f + 1]];
-                const uint16_t e2 = m_cavity_id_v[m_s_fe[3 * f + 2]];
+                const uint16_t e0 = m_s_fe[3 * f] >> 1;
+                const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
+                const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
 
-                if (e0 != INVALID16) {
-                    // TODO possible race condition
-                    m_cavity_id_f[f] = e0;
+                const uint16_t c0 = m_cavity_id_e[e0];
+                const uint16_t c1 = m_cavity_id_e[e1];
+                const uint16_t c2 = m_cavity_id_e[e2];
+
+                if (c0 != INVALID16) {
+                    m_cavity_id_f[f] = c0;
+                    // printf("\n T= %u, f= %u, e= %u, c= %u",
+                    //       threadIdx.x,
+                    //       f,
+                    //       e0,
+                    //       c0);
                 }
 
-                if (e1 != INVALID16) {
-                    // TODO possible race condition
-                    m_cavity_id_f[f] = e1;
+                if (c1 != INVALID16) {
+                    m_cavity_id_f[f] = c1;
+                    // printf("\n T= %u, f= %u, e= %u, c= %u",
+                    //       threadIdx.x,
+                    //       f,
+                    //       e1,
+                    //       c1);
                 }
 
-                if (e2 != INVALID16) {
-                    // TODO possible race condition
-                    m_cavity_id_f[f] = e2;
+                if (c2 != INVALID16) {
+                    m_cavity_id_f[f] = c2;
+                    // printf("\n T= %u, f= %u, e= %u, c= %u",
+                    //       threadIdx.x,
+                    //       f,
+                    //       e2,
+                    //       c2);
                 }
             }
         }
@@ -242,15 +275,29 @@ struct Cavity
 
             local_offset[i] = INVALID16;
 
-            const uint16_t face_cavity = m_cavity_id_f[f];
+            uint16_t face_cavity = INVALID16;
+            if (f < patch_info.num_faces[0]) {
+                face_cavity = m_cavity_id_f[f];
+            }
 
             // if the face is inside a cavity
             // we could check on if the face is deleted but we only mark faces
             // that are not deleted so no need to double check this
             if (face_cavity != INVALID16) {
-                const uint16_t c0 = m_cavity_id_e[m_s_ev[3 * f + 0] >> 1];
-                const uint16_t c1 = m_cavity_id_e[m_s_ev[3 * f + 1] >> 1];
-                const uint16_t c2 = m_cavity_id_e[m_s_ev[3 * f + 2] >> 1];
+                const uint16_t c0 = m_cavity_id_e[m_s_fe[3 * f + 0] >> 1];
+                const uint16_t c1 = m_cavity_id_e[m_s_fe[3 * f + 1] >> 1];
+                const uint16_t c2 = m_cavity_id_e[m_s_fe[3 * f + 2] >> 1];
+
+                // printf("\n T= %u, f= %u, c= %u, E(%u, %u, %u) C(%u, %u, %u)",
+                //       threadIdx.x,
+                //       f,
+                //       face_cavity,
+                //       m_s_fe[3 * f + 0] >> 1,
+                //       m_s_fe[3 * f + 1] >> 1,
+                //       m_s_fe[3 * f + 2] >> 1,
+                //       c0,
+                //       c1,
+                //       c2);
 
                 // the edge tag is supposed to be the same as the face tag
                 assert(c0 == INVALID16 || c0 == face_cavity);
@@ -260,9 +307,9 @@ struct Cavity
                 // count how many edges this face contribute to the cavity
                 // boundary loop
                 int num_edges_on_boundary = 0;
-                num_edges_on_boundary += (c0 != INVALID16);
-                num_edges_on_boundary += (c1 != INVALID16);
-                num_edges_on_boundary += (c2 != INVALID16);
+                num_edges_on_boundary += (c0 == INVALID16);
+                num_edges_on_boundary += (c1 == INVALID16);
+                num_edges_on_boundary += (c2 == INVALID16);
 
                 // it is a face on the boundary only if it has 1 or 2 edges
                 // tagged with the (same) cavity id. If it is three edges, then
@@ -273,12 +320,12 @@ struct Cavity
                 }
             }
         }
-
-
         block.sync();
+
         // scan
         detail::cub_block_exclusive_sum<int, blockThreads>(m_s_cavity_size,
                                                            m_s_num_cavities[0]);
+        block.sync();
 
         for (uint16_t i = 0; i < itemPerThread; ++i) {
             if (local_offset[i] != INVALID16) {
@@ -289,17 +336,17 @@ struct Cavity
 
                 int num_added = 0;
 
-                const uint16_t e0 = m_s_ev[3 * f + 0] >> 1;
-                const uint16_t e1 = m_s_ev[3 * f + 1] >> 1;
-                const uint16_t e2 = m_s_ev[3 * f + 2] >> 1;
+                const uint16_t e0 = m_s_fe[3 * f + 0];
+                const uint16_t e1 = m_s_fe[3 * f + 1];
+                const uint16_t e2 = m_s_fe[3 * f + 2];
 
-                const uint16_t c0 = m_cavity_id_e[e0];
-                const uint16_t c1 = m_cavity_id_e[e1];
-                const uint16_t c2 = m_cavity_id_e[e2];
+                const uint16_t c0 = m_cavity_id_e[e0 >> 1];
+                const uint16_t c1 = m_cavity_id_e[e1 >> 1];
+                const uint16_t c2 = m_cavity_id_e[e2 >> 1];
 
 
                 auto check_and_add = [&](const uint16_t c, const uint16_t e) {
-                    if (c0 != INVALID16) {
+                    if (c == INVALID16) {
                         uint16_t offset = m_s_cavity_size[face_cavity] +
                                           local_offset[i] + num_added;
                         m_cavity_edge_loop[offset] = e;
@@ -314,6 +361,55 @@ struct Cavity
         }
     }
 
+
+    /**
+     * @brief sort cavity edge loop
+     */
+    __device__ __inline__ void sort_cavities_edge_loop()
+    {
+        for (uint16_t c = threadIdx.x; c < m_s_num_cavities[0];
+             c += blockThreads) {
+
+            const uint16_t start = m_s_cavity_size[c];
+            const uint16_t end   = m_s_cavity_size[c + 1];
+
+            /*for (uint16_t e = start; e < end; ++e) {
+                uint32_t edge = m_cavity_edge_loop[e];
+                // need to shift e_id to get the edge id
+                // e_id has starting vertex as the edge that made this cavity
+                if (...) {
+                    uint16_t temp             = m_cavity_edge_loop[start];
+                    m_cavity_edge_loop[start] = edge;
+                    m_cavity_edge_loop[e]     = temp;
+                    break;
+                }
+            }*/
+
+
+            for (uint16_t e = start; e < end; ++e) {
+                uint16_t edge;
+                uint8_t  dir;
+                Context::unpack_edge_dir(m_cavity_edge_loop[e], edge, dir);
+                uint16_t end_vertex = m_s_ev[2 * edge + 1];
+                if (dir) {
+                    end_vertex = m_s_ev[2 * edge];
+                }
+
+                for (uint16_t i = e + 1; i < end; ++i) {
+                    uint32_t ee = m_cavity_edge_loop[i] >> 1;
+                    uint32_t v0 = m_s_ev[2 * ee + 0];
+                    uint32_t v1 = m_s_ev[2 * ee + 1];
+
+                    if (v0 == end_vertex || v1 == end_vertex) {
+                        uint16_t temp             = m_cavity_edge_loop[e + 1];
+                        m_cavity_edge_loop[e + 1] = m_cavity_edge_loop[i];
+                        m_cavity_edge_loop[i]     = temp;
+                        break;
+                    }
+                }
+            }
+        }
+    }
 
     template <typename FillInT>
     __device__ __inline__ void for_each_cavity(
@@ -344,7 +440,7 @@ struct Cavity
         assert(c < m_s_num_cavities[0]);
         assert(e < m_s_cavity_size[c + 1] - m_s_cavity_size[c]);
         return EdgeHandle(patch_info.patch_id,
-                          m_cavity_edge_loop[m_s_cavity_size[c] + e]);
+                          m_cavity_edge_loop[m_s_cavity_size[c] + e] >> 1);
     }
 
 

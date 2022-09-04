@@ -722,21 +722,23 @@ void RXMesh::build_device()
                               cudaMemcpyHostToDevice));
 
         // allocate and copy patch topology to the device
-        CUDA_ERROR(
-            cudaMalloc((void**)&d_patch.ev,
-                       d_patch.edges_capacity[0] * 2 * sizeof(LocalVertexT)));
-        CUDA_ERROR(cudaMemcpy(d_patch.ev,
-                              m_h_patches_info[p].ev,
-                              d_patch.num_edges[0] * 2 * sizeof(LocalVertexT),
-                              cudaMemcpyHostToDevice));
+        CUDA_ERROR(cudaMalloc(
+            (void**)&d_patch.ev,
+            m_h_patches_info[p].edges_capacity[0] * 2 * sizeof(LocalVertexT)));
+        CUDA_ERROR(cudaMemcpy(
+            d_patch.ev,
+            m_h_patches_info[p].ev,
+            m_h_patches_info[p].num_edges[0] * 2 * sizeof(LocalVertexT),
+            cudaMemcpyHostToDevice));
 
-        CUDA_ERROR(
-            cudaMalloc((void**)&d_patch.fe,
-                       d_patch.faces_capacity[0] * 3 * sizeof(LocalEdgeT)));
-        CUDA_ERROR(cudaMemcpy(d_patch.fe,
-                              m_h_patches_info[p].fe,
-                              d_patch.num_faces[0] * 3 * sizeof(LocalEdgeT),
-                              cudaMemcpyHostToDevice));
+        CUDA_ERROR(cudaMalloc(
+            (void**)&d_patch.fe,
+            m_h_patches_info[p].faces_capacity[0] * 3 * sizeof(LocalEdgeT)));
+        CUDA_ERROR(cudaMemcpy(
+            d_patch.fe,
+            m_h_patches_info[p].fe,
+            m_h_patches_info[p].num_faces[0] * 3 * sizeof(LocalEdgeT),
+            cudaMemcpyHostToDevice));
 
         // allocate and set bitmask
         auto bitmask = [&](uint32_t*& d_mask,

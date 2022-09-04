@@ -71,6 +71,24 @@ class RXMeshDynamic : public RXMeshStatic
             this->m_max_faces_per_patch * sizeof(uint16_t) +
             3 * ShmemAllocator::default_alignment;
 
+        // cavity loop
+        launch_box.smem_bytes_dyn +=
+            this->m_max_edges_per_patch * sizeof(uint16_t) +
+            ShmemAllocator::default_alignment;
+
+        // store number of cavities
+        launch_box.smem_bytes_dyn +=
+            sizeof(int) + ShmemAllocator::default_alignment;
+
+        // store number of cavities
+        launch_box.smem_bytes_dyn +=
+            sizeof(int) + ShmemAllocator::default_alignment;
+
+        // store cavity size (assume number of cavities is half the patch size)
+        launch_box.smem_bytes_dyn +=
+            (this->m_max_faces_per_patch / 2) * sizeof(int) +
+            ShmemAllocator::default_alignment;
+
         if (!this->m_quite) {
             RXMESH_TRACE(
                 "RXMeshDynamic::calc_shared_memory() launching {} blocks with "
