@@ -10,7 +10,7 @@ set( SOURCE_LIST
     test_queries.h
 	test_queries_oriented.h
 	test_higher_queries.h
-	query.cuh
+	query_kernel.cuh
 	higher_query.cuh
 	test_for_each.cuh
 	test_validate.h

@@ -14,6 +14,9 @@ extern __shared__ char SHMEM_START[];
  */
 struct ShmemAllocator
 {
+    ShmemAllocator(const ShmemAllocator&) = delete;
+    ShmemAllocator& operator=(const ShmemAllocator&) = delete;
+
     static constexpr uint32_t default_alignment = 8;
 
     __device__ ShmemAllocator() : m_ptr(SHMEM_START)

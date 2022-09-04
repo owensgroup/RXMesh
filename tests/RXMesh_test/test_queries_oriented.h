@@ -9,7 +9,7 @@
 #include "rxmesh/util/report.h"
 #include "rxmesh_test.h"
 
-#include "query.cuh"
+#include "query_kernel.cuh"
 
 TEST(RXMeshStatic, Oriented_VV_Open)
 {

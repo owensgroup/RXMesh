@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "rxmesh/kernels/update_dispatcher.cuh"
+#include "rxmesh/cavity.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
 template <uint32_t blockThreads>
