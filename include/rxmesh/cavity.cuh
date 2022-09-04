@@ -220,30 +220,15 @@ struct Cavity
                 const uint16_t c2 = m_cavity_id_e[e2];
 
                 if (c0 != INVALID16) {
-                    m_cavity_id_f[f] = c0;
-                    // printf("\n T= %u, f= %u, e= %u, c= %u",
-                    //       threadIdx.x,
-                    //       f,
-                    //       e0,
-                    //       c0);
+                    m_cavity_id_f[f] = c0;                    
                 }
 
                 if (c1 != INVALID16) {
-                    m_cavity_id_f[f] = c1;
-                    // printf("\n T= %u, f= %u, e= %u, c= %u",
-                    //       threadIdx.x,
-                    //       f,
-                    //       e1,
-                    //       c1);
+                    m_cavity_id_f[f] = c1;                    
                 }
 
                 if (c2 != INVALID16) {
-                    m_cavity_id_f[f] = c2;
-                    // printf("\n T= %u, f= %u, e= %u, c= %u",
-                    //       threadIdx.x,
-                    //       f,
-                    //       e2,
-                    //       c2);
+                    m_cavity_id_f[f] = c2;                    
                 }
             }
         }
@@ -286,18 +271,7 @@ struct Cavity
             if (face_cavity != INVALID16) {
                 const uint16_t c0 = m_cavity_id_e[m_s_fe[3 * f + 0] >> 1];
                 const uint16_t c1 = m_cavity_id_e[m_s_fe[3 * f + 1] >> 1];
-                const uint16_t c2 = m_cavity_id_e[m_s_fe[3 * f + 2] >> 1];
-
-                // printf("\n T= %u, f= %u, c= %u, E(%u, %u, %u) C(%u, %u, %u)",
-                //       threadIdx.x,
-                //       f,
-                //       face_cavity,
-                //       m_s_fe[3 * f + 0] >> 1,
-                //       m_s_fe[3 * f + 1] >> 1,
-                //       m_s_fe[3 * f + 2] >> 1,
-                //       c0,
-                //       c1,
-                //       c2);
+                const uint16_t c2 = m_cavity_id_e[m_s_fe[3 * f + 2] >> 1];              
 
                 // the edge tag is supposed to be the same as the face tag
                 assert(c0 == INVALID16 || c0 == face_cavity);

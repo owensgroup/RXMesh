@@ -7,7 +7,7 @@
 #include "rxmesh/context.h"
 #include "rxmesh/iterator.cuh"
 #include "rxmesh/kernels/query_dispatcher.cuh"
-
+#include "rxmesh/query.cuh"
 
 /**
  * @brief perform query of type of and store the output as well as the
@@ -34,5 +34,9 @@ __global__ static void query_kernel(const rxmesh::Context context,
         }
     };
 
-    query_block_dispatcher<op, blockThreads>(context, store_lambda, oriented);
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    query.dispatch<op>(
+        block, store_lambda, [](InputHandleT) { return true; }, oriented);
 }
