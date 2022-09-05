@@ -22,25 +22,32 @@ __global__ static void dynamic_kernel(rxmesh::Context                context,
     for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
         // TODO user-defined condition
         if (eh.unpack().second == 10) {
-            e_attr(eh) = 100;
-            // e_attr({eh.unpack().first, eh.unpack().second - 1}) = 100;
-            // e_attr({eh.unpack().first, eh.unpack().second + 1}) = 100;
             cavity.add(eh);
         }
     });
     block.sync();
 
     cavity.process(block, shrd_alloc, patch_info);
-    block.sync();
 
     cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
-        for (uint16_t i = 0; i < size; ++i) {
-            // e_attr(cavity(patch_info, c, i)) = 10 * (i + 1);
-            // auto v0 = cavity.add_vertex(patch_info);
-            // auto v1 = cavity.add_vertex(patch_info);
-            // auto e  = cavity.add_edge(patch_info, v0, v1);
-        }
+        assert(size == 4);
+
+        auto new_edge =
+            cavity.add_edge(patch_info,
+                            cavity.get_cavity_vertex(patch_info, c, 1),
+                            cavity.get_cavity_vertex(patch_info, c, 3));
+        cavity.add_face(patch_info,
+                        cavity.get_cavity_edge(patch_info, c, 0),
+                        new_edge,
+                        cavity.get_cavity_edge(patch_info, c, 3));
+
+        cavity.add_face(patch_info,
+                        cavity.get_cavity_edge(patch_info, c, 1),
+                        cavity.get_cavity_edge(patch_info, c, 2),
+                        new_edge.get_flip_dedge());
     });
+
+    //cavity.cleanup();
 }
 
 TEST(RXMeshDynamic, Cavity)

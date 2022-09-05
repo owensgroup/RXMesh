@@ -13,7 +13,7 @@ struct LocalVertexT
     /**
      * @brief Default constructor
      */
-    __device__ __host__ LocalVertexT() : id(INVALID16)
+    constexpr __device__ __host__ LocalVertexT() : id(INVALID16)
     {
     }
 
@@ -22,7 +22,7 @@ struct LocalVertexT
      * @param id vertex local index in the owner patch
      * @return
      */
-    __device__ __host__ LocalVertexT(uint16_t id) : id(id)
+    constexpr __device__ __host__ LocalVertexT(uint16_t id) : id(id)
     {
     }
     uint16_t id;
@@ -36,7 +36,7 @@ struct LocalEdgeT
     /**
      * @brief Default constructor
      */
-    __device__ __host__ LocalEdgeT() : id(INVALID16)
+    constexpr __device__ __host__ LocalEdgeT() : id(INVALID16)
     {
     }
 
@@ -45,7 +45,7 @@ struct LocalEdgeT
      * @param id edge local index in the owner patch
      * @return
      */
-    __device__ __host__ LocalEdgeT(uint16_t id) : id(id)
+    constexpr __device__ __host__ LocalEdgeT(uint16_t id) : id(id)
     {
     }
     uint16_t id;
@@ -59,7 +59,7 @@ struct LocalFaceT
     /**
      * @brief Default constructor
      */
-    __device__ __host__ LocalFaceT() : id(INVALID16)
+    constexpr __device__ __host__ LocalFaceT() : id(INVALID16)
     {
     }
 
@@ -68,7 +68,7 @@ struct LocalFaceT
      * @param id face local index in the owner patch
      * @return
      */
-    __device__ __host__ LocalFaceT(uint16_t id) : id(id)
+    constexpr __device__ __host__ LocalFaceT(uint16_t id) : id(id)
     {
     }
     uint16_t id;

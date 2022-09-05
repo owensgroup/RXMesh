@@ -141,6 +141,7 @@ struct Iterator
 
 using VertexIterator = Iterator<VertexHandle>;
 using EdgeIterator   = Iterator<EdgeHandle>;
+using DEdgeIterator  = Iterator<DEdgeHandle>;
 using FaceIterator   = Iterator<FaceHandle>;
 
 }  // namespace rxmesh
