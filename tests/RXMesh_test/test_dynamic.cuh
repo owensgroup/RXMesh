@@ -94,7 +94,7 @@ TEST(RXMeshDynamic, Cavity)
     f_attr->move(DEVICE, HOST);
 
     // TODO
-    / rx.update_host();
+    // rx.update_host();
     // EXPECT_TRUE(rx.validate());
 
 #if USE_POLYSCOPE
