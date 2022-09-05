@@ -17,11 +17,13 @@ __global__ static void dynamic_kernel(rxmesh::Context                context,
     cg::thread_block block = cg::this_thread_block();
     ShmemAllocator   shrd_alloc;
     PatchInfo        patch_info = context.get_patches_info()[blockIdx.x];
+    
     Cavity<blockThreads, CavityOp::E> cavity(block, shrd_alloc, patch_info);
 
     for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
         // TODO user-defined condition
         if (eh.unpack().second == 10) {
+            e_attr(eh) = 100;
             cavity.add(eh);
         }
     });
@@ -34,20 +36,23 @@ __global__ static void dynamic_kernel(rxmesh::Context                context,
 
         auto new_edge =
             cavity.add_edge(patch_info,
+                            c,
                             cavity.get_cavity_vertex(patch_info, c, 1),
                             cavity.get_cavity_vertex(patch_info, c, 3));
         cavity.add_face(patch_info,
+                        c,
                         cavity.get_cavity_edge(patch_info, c, 0),
                         new_edge,
                         cavity.get_cavity_edge(patch_info, c, 3));
 
         cavity.add_face(patch_info,
+                        c,
                         cavity.get_cavity_edge(patch_info, c, 1),
                         cavity.get_cavity_edge(patch_info, c, 2),
                         new_edge.get_flip_dedge());
     });
 
-    //cavity.cleanup();
+    cavity.cleanup(block, patch_info);    
 }
 
 TEST(RXMeshDynamic, Cavity)
@@ -88,6 +93,10 @@ TEST(RXMeshDynamic, Cavity)
     e_attr->move(DEVICE, HOST);
     f_attr->move(DEVICE, HOST);
 
+    // TODO
+    / rx.update_host();
+    // EXPECT_TRUE(rx.validate());
+
 #if USE_POLYSCOPE
     polyscope::init();
     auto polyscope_mesh = rx.get_polyscope_mesh();
@@ -100,8 +109,4 @@ TEST(RXMeshDynamic, Cavity)
     polyscope_mesh->addFaceScalarQuantity("fAttr", *f_attr);
     polyscope::show();
 #endif
-
-    // TODO
-    // rx.update_host();
-    // EXPECT_TRUE(rx.validate());
 }

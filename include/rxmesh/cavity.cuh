@@ -477,11 +477,23 @@ struct Cavity
     /**
      * @brief should be called by a single thread
      */
-    __device__ __inline__ VertexHandle add_vertex(PatchInfo& patch_info)
+    __device__ __inline__ VertexHandle add_vertex(PatchInfo&     patch_info,
+                                                  const uint16_t cavity_id)
     {
-        // TODO set v_id active mask and owned mask
-        // TODO reuse cavity vertices
-        uint16_t v_id = atomicAdd(patch_info.num_vertices, 1);
+        // First try to reuse a vertex in the cavity or a deleted vertex
+        uint16_t v_id = add_element(cavity_id,
+                                    m_cavity_id_v,
+                                    patch_info.active_mask_v,
+                                    patch_info.num_vertices[0]);
+
+        if (v_id == INVALID16) {
+            // if this fails, then add a new vertex to the mesh
+            v_id = atomicAdd(patch_info.num_vertices, 1);
+            assert(v_id < patch_info.vertices_capacity[0]);
+        }
+
+        detail::bitmask_set_bit(v_id, patch_info.active_mask_v);
+        detail::bitmask_set_bit(v_id, patch_info.owned_mask_v);
         return {patch_info.patch_id, v_id};
     }
 
@@ -490,16 +502,27 @@ struct Cavity
      * @brief should be called by a single thread
      */
     __device__ __inline__ DEdgeHandle add_edge(PatchInfo&         patch_info,
+                                               const uint16_t     cavity_id,
                                                const VertexHandle src,
                                                const VertexHandle dest)
     {
-        // TODO set e_id active mask and owned mask
-        // TODO reuse cavity edges
         assert(src.unpack().first == patch_info.patch_id);
         assert(dest.unpack().first == patch_info.patch_id);
-        uint16_t e_id        = atomicAdd(patch_info.num_edges, 1);
+
+        // First try to reuse an edge in the cavity or a deleted edge
+        uint16_t e_id = add_element(cavity_id,
+                                    m_cavity_id_e,
+                                    patch_info.active_mask_e,
+                                    patch_info.num_edges[0]);
+        if (e_id == INVALID16) {
+            // if this fails, then add a new edge to the mesh
+            e_id = atomicAdd(patch_info.num_edges, 1);
+            assert(e_id < patch_info.edges_capacity[0]);
+        }
         m_s_ev[2 * e_id + 0] = src.unpack().second;
         m_s_ev[2 * e_id + 1] = dest.unpack().second;
+        detail::bitmask_set_bit(e_id, patch_info.active_mask_e);
+        detail::bitmask_set_bit(e_id, patch_info.owned_mask_e);
         return {patch_info.patch_id, e_id, 0};
     }
 
@@ -508,21 +531,78 @@ struct Cavity
      * @brief should be called by a single thread
      */
     __device__ __inline__ FaceHandle add_face(PatchInfo&        patch_info,
+                                              const uint16_t    cavity_id,
                                               const DEdgeHandle e0,
                                               const DEdgeHandle e1,
                                               const DEdgeHandle e2)
     {
-        // TODO set f_id active mask and owned mask
-        // TODO reuse cavity faces
         assert(e0.unpack().first == patch_info.patch_id);
         assert(e1.unpack().first == patch_info.patch_id);
         assert(e2.unpack().first == patch_info.patch_id);
-        uint16_t f_id        = atomicAdd(patch_info.num_faces, 1);
+
+        // First try to reuse a face in the cavity or a deleted face
+        uint16_t f_id = add_element(cavity_id,
+                                    m_cavity_id_f,
+                                    patch_info.active_mask_f,
+                                    patch_info.num_faces[0]);
+
+        if (f_id == INVALID16) {
+            // if this fails, then add a new face to the mesh
+            f_id = atomicAdd(patch_info.num_faces, 1);
+            assert(f_id < patch_info.faces_capacity[0]);
+        }
+
         m_s_fe[3 * f_id + 0] = e0.unpack().second;
         m_s_fe[3 * f_id + 1] = e1.unpack().second;
         m_s_fe[3 * f_id + 2] = e2.unpack().second;
+        detail::bitmask_set_bit(f_id, patch_info.active_mask_f);
+        detail::bitmask_set_bit(f_id, patch_info.owned_mask_f);
         return {patch_info.patch_id, f_id};
     }
+
+    /**
+     * @brief cleanup by moving data from shared memory to global memory
+     */
+    __device__ __inline__ void cleanup(cooperative_groups::thread_block& block,
+                                       PatchInfo& patch_info)
+    {
+        detail::store<blockThreads>(m_s_ev,
+                                    2 * patch_info.num_edges[0],
+                                    reinterpret_cast<uint16_t*>(patch_info.ev));
+
+        detail::store<blockThreads>(m_s_fe,
+                                    3 * patch_info.num_faces[0],
+                                    reinterpret_cast<uint16_t*>(patch_info.fe));
+    }
+
+
+    /**
+     * @brief find the index of the next element to add. First search within the
+     * cavity and find the first element that has it cavity set to cavity_id. If
+     * nothing found, search for the first element that has its bitmask set to 0
+     */
+    __device__ __inline__ uint16_t add_element(const uint16_t cavity_id,
+                                               uint16_t*      element_cavity_id,
+                                               uint32_t*      active_bitmask,
+                                               const uint16_t num_elements)
+    {
+
+        for (uint16_t i = 0; i < num_elements; ++i) {
+            if (element_cavity_id[i] == cavity_id) {
+                element_cavity_id[i] = INVALID16;
+                return i;
+            }
+        }
+
+        for (uint16_t i = 0; i < num_elements; ++i) {
+            if (!detail::is_set_bit(i, active_bitmask)) {
+                return i;
+            }
+        }
+
+        return INVALID16;
+    }
+
 
     int*      m_s_num_cavities;
     uint16_t *m_cavity_id_v, *m_cavity_id_e, *m_cavity_id_f;
