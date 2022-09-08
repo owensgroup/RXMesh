@@ -17,7 +17,7 @@ __global__ static void dynamic_kernel(rxmesh::Context                context,
     cg::thread_block block = cg::this_thread_block();
     ShmemAllocator   shrd_alloc;
     PatchInfo        patch_info = context.get_patches_info()[blockIdx.x];
-    
+
     Cavity<blockThreads, CavityOp::E> cavity(block, shrd_alloc, patch_info);
 
     for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
@@ -52,7 +52,7 @@ __global__ static void dynamic_kernel(rxmesh::Context                context,
                         new_edge.get_flip_dedge());
     });
 
-    cavity.cleanup(block, patch_info);    
+    cavity.cleanup(block, patch_info);
 }
 
 TEST(RXMeshDynamic, Cavity)
@@ -94,8 +94,9 @@ TEST(RXMeshDynamic, Cavity)
     f_attr->move(DEVICE, HOST);
 
     // TODO
-    // rx.update_host();
+    rx.update_host();
     // EXPECT_TRUE(rx.validate());
+
 
 #if USE_POLYSCOPE
     polyscope::init();

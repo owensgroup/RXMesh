@@ -715,71 +715,97 @@ void RXMeshDynamic::update_host()
 
         assert(d_patch.patch_id == p);
 
+        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].num_vertices,
+                              d_patch.num_vertices,
+                              sizeof(uint16_t),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].num_edges,
+                              d_patch.num_edges,
+                              sizeof(uint16_t),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].num_faces,
+                              d_patch.num_faces,
+                              sizeof(uint16_t),
+                              cudaMemcpyDeviceToHost));
+
         // resize topology (don't update capacity here)
-        if (d_patch.num_edges > m_h_patches_info[p].edges_capacity) {
+        if (m_h_patches_info[p].num_edges[0] >
+            m_h_patches_info[p].edges_capacity[0]) {
             free(m_h_patches_info[p].ev);
             m_h_patches_info[p].ev = (LocalVertexT*)malloc(
-                d_patch.num_edges[0] * 2 * sizeof(LocalVertexT));
+                m_h_patches_info[p].num_edges[0] * 2 * sizeof(LocalVertexT));
         }
 
-        if (d_patch.num_faces > m_h_patches_info[p].faces_capacity) {
+        if (m_h_patches_info[p].num_faces[0] >
+            m_h_patches_info[p].faces_capacity[0]) {
             free(m_h_patches_info[p].fe);
             m_h_patches_info[p].fe = (LocalEdgeT*)malloc(
-                d_patch.num_faces[0] * 3 * sizeof(LocalEdgeT));
+                m_h_patches_info[p].num_faces[0] * 3 * sizeof(LocalEdgeT));
         }
 
         // copy topology
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].ev,
-                              d_patch.ev,
-                              2 * d_patch.num_edges[0] * sizeof(LocalVertexT),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].fe,
-                              d_patch.fe,
-                              3 * d_patch.num_faces[0] * sizeof(LocalEdgeT),
-                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(
+            m_h_patches_info[p].ev,
+            d_patch.ev,
+            2 * m_h_patches_info[p].num_edges[0] * sizeof(LocalVertexT),
+            cudaMemcpyDeviceToHost));
+
+        CUDA_ERROR(cudaMemcpy(
+            m_h_patches_info[p].fe,
+            d_patch.fe,
+            3 * m_h_patches_info[p].num_faces[0] * sizeof(LocalEdgeT),
+            cudaMemcpyDeviceToHost));
 
         // resize mask (update capacity)
-        resize_masks(d_patch.num_vertices[0],
+        resize_masks(m_h_patches_info[p].num_vertices[0],
                      m_h_patches_info[p].vertices_capacity[0],
                      m_h_patches_info[p].active_mask_v,
                      m_h_patches_info[p].owned_mask_v);
-        resize_masks(d_patch.num_edges[0],
+
+        resize_masks(m_h_patches_info[p].num_edges[0],
                      m_h_patches_info[p].edges_capacity[0],
                      m_h_patches_info[p].active_mask_e,
                      m_h_patches_info[p].owned_mask_e);
-        resize_masks(d_patch.num_faces[0],
+
+        resize_masks(m_h_patches_info[p].num_faces[0],
                      m_h_patches_info[p].faces_capacity[0],
                      m_h_patches_info[p].active_mask_f,
                      m_h_patches_info[p].owned_mask_f);
 
         // copy masks
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_v,
-                              d_patch.active_mask_v,
-                              detail::mask_num_bytes(d_patch.num_vertices[0]),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].owned_mask_v,
-                              d_patch.owned_mask_v,
-                              detail::mask_num_bytes(d_patch.num_vertices[0]),
-                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(
+            m_h_patches_info[p].active_mask_v,
+            d_patch.active_mask_v,
+            detail::mask_num_bytes(m_h_patches_info[p].num_vertices[0]),
+            cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(
+            m_h_patches_info[p].owned_mask_v,
+            d_patch.owned_mask_v,
+            detail::mask_num_bytes(m_h_patches_info[p].num_vertices[0]),
+            cudaMemcpyDeviceToHost));
 
 
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_e,
-                              d_patch.active_mask_e,
-                              detail::mask_num_bytes(d_patch.num_edges[0]),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].owned_mask_e,
-                              d_patch.owned_mask_e,
-                              detail::mask_num_bytes(d_patch.num_edges[0]),
-                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(
+            cudaMemcpy(m_h_patches_info[p].active_mask_e,
+                       d_patch.active_mask_e,
+                       detail::mask_num_bytes(m_h_patches_info[p].num_edges[0]),
+                       cudaMemcpyDeviceToHost));
+        CUDA_ERROR(
+            cudaMemcpy(m_h_patches_info[p].owned_mask_e,
+                       d_patch.owned_mask_e,
+                       detail::mask_num_bytes(m_h_patches_info[p].num_edges[0]),
+                       cudaMemcpyDeviceToHost));
 
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].active_mask_f,
-                              d_patch.active_mask_f,
-                              detail::mask_num_bytes(d_patch.num_faces[0]),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].owned_mask_f,
-                              d_patch.owned_mask_f,
-                              detail::mask_num_bytes(d_patch.num_faces[0]),
-                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(
+            cudaMemcpy(m_h_patches_info[p].active_mask_f,
+                       d_patch.active_mask_f,
+                       detail::mask_num_bytes(m_h_patches_info[p].num_faces[0]),
+                       cudaMemcpyDeviceToHost));
+        CUDA_ERROR(
+            cudaMemcpy(m_h_patches_info[p].owned_mask_f,
+                       d_patch.owned_mask_f,
+                       detail::mask_num_bytes(m_h_patches_info[p].num_faces[0]),
+                       cudaMemcpyDeviceToHost));
 
 
         // copy patch stash
@@ -815,12 +841,40 @@ void RXMeshDynamic::update_host()
                               d_patch.lp_f.get_stash(),
                               LPHashTable::stash_size * sizeof(LPPair),
                               cudaMemcpyDeviceToHost));
-
-
-        // copy elements count
-        m_h_patches_info[p].num_vertices = d_patch.num_vertices;
-        m_h_patches_info[p].num_edges    = d_patch.num_edges;
-        m_h_patches_info[p].num_faces    = d_patch.num_faces;
     }
+
+
+    CUDA_ERROR(cudaMemcpy(&this->m_num_vertices,
+                          m_rxmesh_context.m_num_vertices,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+    CUDA_ERROR(cudaMemcpy(&this->m_num_edges,
+                          m_rxmesh_context.m_num_edges,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+    CUDA_ERROR(cudaMemcpy(&this->m_num_faces,
+                          m_rxmesh_context.m_num_faces,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+
+    // count and update num_owned and it prefix sum
+    for (uint32_t p = 0; p < m_num_patches; ++p) {
+        m_h_num_owned_v[p]       = m_h_patches_info[p].get_num_owned_vertices();
+        m_h_vertex_prefix[p + 1] = m_h_vertex_prefix[p] + m_h_num_owned_v[p];
+
+        m_h_num_owned_e[p]     = m_h_patches_info[p].get_num_owned_edges();
+        m_h_edge_prefix[p + 1] = m_h_edge_prefix[p] + m_h_num_owned_e[p];
+
+        m_h_num_owned_f[p]     = m_h_patches_info[p].get_num_owned_faces();
+        m_h_face_prefix[p + 1] = m_h_face_prefix[p] + m_h_num_owned_f[p];
+    }
+
+#if USE_POLYSCOPE
+    // for polyscope, we just remove the mesh and re-add it since polyscope does
+    // not support changing the mesh topology
+    polyscope::removeSurfaceMesh(this->m_polyscope_mesh_name, true);
+    // this->m_polyscope_mesh_name = this->m_polyscope_mesh_name + "updated";
+    this->register_polyscope();
+#endif
 }
 }  // namespace rxmesh
