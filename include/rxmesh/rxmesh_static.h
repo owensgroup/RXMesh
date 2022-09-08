@@ -56,7 +56,7 @@ class RXMeshStatic : public RXMesh
         m_attr_container = std::make_shared<AttributeContainer>();
 
         m_input_vertex_coordinates =
-            this->add_vertex_attribute<float>(vertices, "RX:vertices");
+            this->add_vertex_attribute<float>(vertices, "rx:vertices");
 
 #if USE_POLYSCOPE
         m_polyscope_mesh_name = polyscope::guessNiceNameFromPath(file_path);
@@ -99,8 +99,14 @@ class RXMeshStatic : public RXMesh
      */
     polyscope::SurfaceFaceScalarQuantity* polyscope_render_face_patch()
     {
-        return m_polyscope_mesh->addFaceScalarQuantity(
-            "rx:FPatch", this->m_patcher->get_face_patch());
+        std::string name = "rx:FPatch";
+        auto face_patch  = this->add_face_attribute<uint32_t>(name, 1, HOST);
+        for_each_face(HOST, [&](FaceHandle fh) {
+            (*face_patch)(fh) = fh.unpack().first;
+        });
+        auto ret = m_polyscope_mesh->addFaceScalarQuantity(name, *face_patch);
+        remove_attribute(name);
+        return ret;
     }
 
     /**
@@ -110,8 +116,15 @@ class RXMeshStatic : public RXMesh
      */
     polyscope::SurfaceVertexScalarQuantity* polyscope_render_vertex_patch()
     {
-        return m_polyscope_mesh->addVertexScalarQuantity(
-            "rx:VPatch", this->m_patcher->get_vertex_patch());
+        std::string name  = "rx:VPatch";
+        auto vertex_patch = this->add_vertex_attribute<uint32_t>(name, 1, HOST);
+        for_each_vertex(HOST, [&](VertexHandle vh) {
+            (*vertex_patch)(vh) = vh.unpack().first;
+        });
+        auto ret =
+            m_polyscope_mesh->addVertexScalarQuantity(name, *vertex_patch);
+        remove_attribute(name);
+        return ret;
     }
 
     /**
@@ -121,8 +134,14 @@ class RXMeshStatic : public RXMesh
      */
     polyscope::SurfaceEdgeScalarQuantity* polyscope_render_edge_patch()
     {
-        return m_polyscope_mesh->addEdgeScalarQuantity(
-            "rx:EPatch", this->m_patcher->get_edge_patch());
+        std::string name = "rx:EPatch";
+        auto edge_patch  = this->add_edge_attribute<uint32_t>(name, 1, HOST);
+        for_each_edge(HOST, [&](EdgeHandle eh) {
+            (*edge_patch)(eh) = eh.unpack().first;
+        });
+        auto ret = m_polyscope_mesh->addEdgeScalarQuantity(name, *edge_patch);
+        remove_attribute(name);
+        return ret;
     }
 #endif
 
@@ -787,8 +806,6 @@ class RXMeshStatic : public RXMesh
 
 
    protected:
-
-
     template <uint32_t blockThreads>
     size_t calc_shared_memory(const Op op, const bool oriented) const
     {
