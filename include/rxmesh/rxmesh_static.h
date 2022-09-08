@@ -60,8 +60,7 @@ class RXMeshStatic : public RXMesh
 
 #if USE_POLYSCOPE
         m_polyscope_mesh_name = polyscope::guessNiceNameFromPath(file_path);
-        m_polyscope_mesh      = polyscope::registerSurfaceMesh(
-            m_polyscope_mesh_name, *m_input_vertex_coordinates, fv);
+        this->register_polyscope();
 #endif
     };
 
@@ -722,6 +721,7 @@ class RXMeshStatic : public RXMesh
         return m_h_patches_ltog_f[pl.first][pl.second];
     }
 
+
     /**
      * @brief Export the mesh to obj file
      * @tparam T type of vertices coordinates
@@ -787,6 +787,8 @@ class RXMeshStatic : public RXMesh
 
 
    protected:
+
+
     template <uint32_t blockThreads>
     size_t calc_shared_memory(const Op op, const bool oriented) const
     {
@@ -1097,13 +1099,57 @@ class RXMeshStatic : public RXMesh
         }
     }
 
-
-    std::shared_ptr<AttributeContainer>     m_attr_container;
-    std::shared_ptr<VertexAttribute<float>> m_input_vertex_coordinates;
-
 #if USE_POLYSCOPE
+    void register_polyscope()
+    {
+        std::vector<std::array<uint32_t, 3>> fv;
+        fv.reserve(m_num_faces);
+
+
+        for (uint32_t p = 0; p < this->m_num_patches; ++p) {
+            for (uint32_t f = 0; f < this->m_h_patches_info[p].num_faces[0];
+                 ++f) {
+                if (!detail::is_deleted(
+                        f, this->m_h_patches_info[p].active_mask_f) &&
+                    detail::is_owned(f,
+                                     this->m_h_patches_info[p].owned_mask_f)) {
+
+                    std::array<uint32_t, 3> face;
+                    for (uint32_t e = 0; e < 3; ++e) {
+                        uint16_t edge =
+                            this->m_h_patches_info[p].fe[3 * f + e].id;
+                        flag_t dir(0);
+                        Context::unpack_edge_dir(edge, edge, dir);
+                        uint16_t e_id = (2 * edge) + dir;
+                        uint16_t v_id = this->m_h_patches_info[p].ev[e_id].id;
+                        uint32_t p_id = p;
+                        if (!detail::is_owned(
+                                v_id, m_h_patches_info[p].owned_mask_v)) {
+
+                            LPPair lp =
+                                this->m_h_patches_info[p].lp_v.find(v_id);
+                            v_id = lp.local_id_in_owner_patch();
+                            p_id =
+                                this->m_h_patches_info[p].patch_stash.get_patch(
+                                    lp);
+                        }
+
+                        face[e] = v_id + m_h_vertex_prefix[p_id];
+                    }
+                    fv.push_back(face);
+                }
+            }
+        }
+
+        m_polyscope_mesh = polyscope::registerSurfaceMesh(
+            m_polyscope_mesh_name, *m_input_vertex_coordinates, fv);
+    }
+
     std::string             m_polyscope_mesh_name;
     polyscope::SurfaceMesh* m_polyscope_mesh;
 #endif
+
+    std::shared_ptr<AttributeContainer>     m_attr_container;
+    std::shared_ptr<VertexAttribute<float>> m_input_vertex_coordinates;
 };
 }  // namespace rxmesh

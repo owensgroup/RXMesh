@@ -622,17 +622,7 @@ class FaceAttribute : public Attribute<T>
 #ifdef USE_POLYSCOPE
     T operator()(size_t i, size_t j = 0) const
     {
-        uint32_t   p   = m_rxmesh->m_patcher->get_face_patch_id(i);
-        const auto end = m_rxmesh->m_h_patches_ltog_f[p].begin() +
-                         m_rxmesh->m_h_num_owned_f[p];
-        const auto lid =
-            std::lower_bound(m_rxmesh->m_h_patches_ltog_f[p].begin(), end, i);
-        if (lid == end) {
-            RXMESH_ERROR(
-                "FaceAttribute operator(i,j) can not find the local id");
-        }
-        return Attribute<T>::operator()(
-            p, lid - m_rxmesh->m_h_patches_ltog_f[p].begin(), j);
+        return this->operator()(m_rxmesh->map_to_local_face(i), j);
     }
     size_t rows() const
     {
@@ -721,17 +711,7 @@ class EdgeAttribute : public Attribute<T>
 #ifdef USE_POLYSCOPE
     T operator()(size_t i, size_t j = 0) const
     {
-        uint32_t   p   = m_rxmesh->m_patcher->get_edge_patch_id(i);
-        const auto end = m_rxmesh->m_h_patches_ltog_e[p].begin() +
-                         m_rxmesh->m_h_num_owned_e[p];
-        const auto lid =
-            std::lower_bound(m_rxmesh->m_h_patches_ltog_e[p].begin(), end, i);
-        if (lid == end) {
-            RXMESH_ERROR(
-                "EdgeAttribute operator(i,j) can not find the local id");
-        }
-        return Attribute<T>::operator()(
-            p, lid - m_rxmesh->m_h_patches_ltog_e[p].begin(), j);
+        return this->operator()(m_rxmesh->map_to_local_edge(i), j);
     }
     size_t rows() const
     {
@@ -820,17 +800,7 @@ class VertexAttribute : public Attribute<T>
 #ifdef USE_POLYSCOPE
     T operator()(size_t i, size_t j = 0) const
     {
-        uint32_t   p   = m_rxmesh->m_patcher->get_vertex_patch_id(i);
-        const auto end = m_rxmesh->m_h_patches_ltog_v[p].begin() +
-                         m_rxmesh->m_h_num_owned_v[p];
-        const auto lid =
-            std::lower_bound(m_rxmesh->m_h_patches_ltog_v[p].begin(), end, i);
-        if (lid == end) {
-            RXMESH_ERROR(
-                "VertexAttribute operator(i,j) can not find the local id");
-        }
-        return Attribute<T>::operator()(
-            p, lid - m_rxmesh->m_h_patches_ltog_v[p].begin(), j);
+        return this->operator()(m_rxmesh->map_to_local_vertex(i), j);
     }
     size_t rows() const
     {
