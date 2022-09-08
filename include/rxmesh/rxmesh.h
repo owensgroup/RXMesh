@@ -321,6 +321,12 @@ class RXMesh
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_e;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
 
+    //the prefix sum of the owned vertices/edges/faces in patches 
+    std::vector<uint32_t> m_h_vertex_prefix;
+    std::vector<uint32_t> m_h_edge_prefix;
+    std::vector<uint32_t> m_h_face_prefix;
+
+
     // Should be updated with update_host
     PatchInfo *m_d_patches_info, *m_h_patches_info;
 

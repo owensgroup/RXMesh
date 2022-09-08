@@ -170,11 +170,20 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     m_h_num_owned_f.resize(m_num_patches);
     m_h_num_owned_v.resize(m_num_patches);
     m_h_num_owned_e.resize(m_num_patches);
-
+    m_h_vertex_prefix.resize(m_num_patches + 1, 0);
+    m_h_edge_prefix.resize(m_num_patches + 1, 0);
+    m_h_face_prefix.resize(m_num_patches + 1, 0);
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
         build_single_patch(fv, p);
     }
+
+    for (uint32_t p = 0; p < m_num_patches; ++p) {
+        m_h_vertex_prefix[p + 1] = m_h_vertex_prefix[p] + m_h_num_owned_v[p];
+        m_h_edge_prefix[p + 1]   = m_h_edge_prefix[p] + m_h_num_owned_e[p];
+        m_h_face_prefix[p + 1]   = m_h_face_prefix[p] + m_h_num_owned_f[p];
+    }
+
 
     calc_input_statistics(fv, ef);
 }
