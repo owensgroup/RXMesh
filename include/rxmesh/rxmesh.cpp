@@ -188,6 +188,23 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     calc_input_statistics(fv, ef);
 }
 
+const std::pair<uint32_t, uint16_t> RXMesh::map_to_local(
+    const uint32_t               i,
+    const std::vector<uint32_t>& element_prefix) const
+{
+    const auto end = element_prefix.end();
+
+    auto p = std::lower_bound(
+        element_prefix.begin(), end, i, [](int a, int b) { return a <= b; });
+    if (p == end) {
+        RXMESH_ERROR(
+            "RXMeshStatic::map_to_local can not its patch. Input is out of "
+            "pound!");
+    }
+    p -= 1;
+    return {std::distance(element_prefix.begin(), p), i - *p};
+}
+
 void RXMesh::build_supporting_structures(
     const std::vector<std::vector<uint32_t>>& fv,
     std::vector<std::vector<uint32_t>>&       ef,

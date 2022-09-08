@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <vector>
 #include "rxmesh/context.h"
+#include "rxmesh/handle.h"
 #include "rxmesh/patch_info.h"
 #include "rxmesh/patcher/patcher.h"
 #include "rxmesh/types.h"
@@ -197,6 +198,39 @@ class RXMesh
         m_patcher->save(filename);
     }
 
+    /**
+     * @brief map a global vertex index to a VertexHandle i.e., a local vertex
+     * Note: The mapping is different than the mapping from the input
+     * @param i global vertex index
+     */
+    const VertexHandle map_to_local_vertex(uint32_t i) const
+    {
+        auto pl = map_to_local(i, m_h_vertex_prefix);
+        return {pl.first, pl.second};
+    }
+
+    /**
+     * @brief map a global vertex index to a EdgexHandle i.e., a local edge.
+     * Note: The mapping is different than the mapping from the input
+     * @param i global edge index
+     */
+    const EdgeHandle map_to_local_edge(uint32_t i) const
+    {
+        auto pl = map_to_local(i, m_h_edge_prefix);
+        return {pl.first, pl.second};
+    }
+
+    /**
+     * @brief map a global vertex index to an FaceHandle i.e., a local face
+     * Note: The mapping is different than the mapping from the input
+     * @param i global face index
+     */
+    const FaceHandle map_to_local_face(uint32_t i) const
+    {
+        auto pl = map_to_local(i, m_h_face_prefix);
+        return {pl.first, pl.second};
+    }
+
    protected:
     // Edge hash map that takes two vertices and return their edge id
     using EdgeMapT = std::unordered_map<std::pair<uint32_t, uint32_t>,
@@ -252,6 +286,10 @@ class RXMesh
      * @param on_device either do the computation on device or host
      */
     void calc_max_elements();
+
+    const std::pair<uint32_t, uint16_t> map_to_local(
+        const uint32_t               i,
+        const std::vector<uint32_t>& element_prefix) const;
 
     uint32_t max_bitmask_size(ELEMENT ele) const;
 
@@ -321,7 +359,7 @@ class RXMesh
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_e;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
 
-    //the prefix sum of the owned vertices/edges/faces in patches 
+    // the prefix sum of the owned vertices/edges/faces in patches
     std::vector<uint32_t> m_h_vertex_prefix;
     std::vector<uint32_t> m_h_edge_prefix;
     std::vector<uint32_t> m_h_face_prefix;
