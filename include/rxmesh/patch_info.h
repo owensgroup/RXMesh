@@ -5,6 +5,7 @@
 #include "rxmesh/lp_hashtable.cuh"
 #include "rxmesh/patch_stash.cuh"
 #include "rxmesh/util/macros.h"
+#include "rxmesh/util/bitmask_util.h"
 
 namespace rxmesh {
 
@@ -67,5 +68,46 @@ struct ALIGN(16) PatchInfo
     // mesh elements to their owner patch and their local indices in their owner
     // patch
     LPHashTable lp_v, lp_e, lp_f;
+
+
+    /**
+     * @brief count number of owned active vertices from the bitmasks
+     */
+    __host__ __inline__ uint16_t get_num_owned_vertices() const
+    {
+        return count_num_owned(owned_mask_v, active_mask_v, num_vertices[0]);
+    }
+
+    /**
+     * @brief count the number of owned active edges from the bitmasks
+     * @return
+     */
+    __host__ __inline__ uint16_t get_num_owned_edges() const
+    {
+        return count_num_owned(owned_mask_e, active_mask_e, num_edges[0]);
+    }
+
+    /**
+     * @brief count the number of owned active faces from the bitmaks
+     */
+    __host__ __inline__ uint16_t get_num_owned_faces() const
+    {
+        return count_num_owned(owned_mask_f, active_mask_f, num_faces[0]);
+    }
+
+   private:
+    __host__ __inline__ uint16_t count_num_owned(const uint32_t* owned_bitmask,
+                                                 const uint32_t* active_bitmask,
+                                                 const uint16_t  size) const
+    {
+        uint16_t ret = 0;
+        for (uint16_t i = 0; i < size; ++i) {
+            if (detail::is_owned(i, owned_bitmask) &&
+                !detail::is_deleted(i, active_bitmask)) {
+                ret++;
+            }
+        }
+        return ret;
+    }
 };
 }  // namespace rxmesh
