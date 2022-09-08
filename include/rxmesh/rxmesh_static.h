@@ -59,10 +59,9 @@ class RXMeshStatic : public RXMesh
             this->add_vertex_attribute<float>(vertices, "RX:vertices");
 
 #if USE_POLYSCOPE
-        m_polyscope_mesh = polyscope::registerSurfaceMesh(
-            polyscope::guessNiceNameFromPath(file_path),
-            *m_input_vertex_coordinates,
-            fv);
+        m_polyscope_mesh_name = polyscope::guessNiceNameFromPath(file_path);
+        m_polyscope_mesh      = polyscope::registerSurfaceMesh(
+            m_polyscope_mesh_name, *m_input_vertex_coordinates, fv);
 #endif
     };
 
@@ -1103,6 +1102,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<VertexAttribute<float>> m_input_vertex_coordinates;
 
 #if USE_POLYSCOPE
+    std::string             m_polyscope_mesh_name;
     polyscope::SurfaceMesh* m_polyscope_mesh;
 #endif
 };
