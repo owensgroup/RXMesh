@@ -1,3 +1,4 @@
+#include <assert.h>
 #include "gtest/gtest.h"
 
 #include "rxmesh/cavity.cuh"
@@ -17,12 +18,15 @@ __global__ static void dynamic_kernel(rxmesh::Context                context,
     cg::thread_block block = cg::this_thread_block();
     ShmemAllocator   shrd_alloc;
     PatchInfo        patch_info = context.get_patches_info()[blockIdx.x];
-
     Cavity<blockThreads, CavityOp::E> cavity(block, shrd_alloc, patch_info);
+
+    const uint16_t edge_id          = 26;
+    const uint16_t before_num_faces = patch_info.num_faces[0];
+    const uint16_t before_num_edges = patch_info.num_edges[0];
 
     for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
         // TODO user-defined condition
-        if (eh.unpack().second == 10) {
+        if (eh.unpack().second == edge_id) {
             e_attr(eh) = 100;
             cavity.add(eh);
         }
@@ -39,6 +43,9 @@ __global__ static void dynamic_kernel(rxmesh::Context                context,
                             c,
                             cavity.get_cavity_vertex(patch_info, c, 1),
                             cavity.get_cavity_vertex(patch_info, c, 3));
+
+        assert(new_edge.get_edge_handle().unpack().second == edge_id);
+
         cavity.add_face(patch_info,
                         c,
                         cavity.get_cavity_edge(patch_info, c, 0),
@@ -53,6 +60,9 @@ __global__ static void dynamic_kernel(rxmesh::Context                context,
     });
 
     cavity.cleanup(block, patch_info);
+
+    assert(before_num_faces == patch_info.num_faces[0]);
+    assert(before_num_edges == patch_info.num_edges[0]);
 }
 
 TEST(RXMeshDynamic, Cavity)
@@ -101,7 +111,6 @@ TEST(RXMeshDynamic, Cavity)
 #if USE_POLYSCOPE
     polyscope::init();
     auto polyscope_mesh = rx.get_polyscope_mesh();
-    polyscope_mesh->setEdgeWidth(1.0);
     rx.polyscope_render_vertex_patch();
     rx.polyscope_render_edge_patch();
     rx.polyscope_render_face_patch();

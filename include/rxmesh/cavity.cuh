@@ -366,8 +366,8 @@ struct Cavity
             for (uint16_t e = start; e < end; ++e) {
                 uint32_t edge = m_cavity_edge_loop[e];
 
-                if (m_s_ev[2 * (edge >> 1) + 0] == cavity_edge_src_vertex ||
-                    m_s_ev[2 * (edge >> 1) + 1] == cavity_edge_src_vertex) {
+                if (get_cavity_vertex(patch_info, c, e).unpack().second ==
+                    cavity_edge_src_vertex) {
                     uint16_t temp             = m_cavity_edge_loop[start];
                     m_cavity_edge_loop[start] = edge;
                     m_cavity_edge_loop[e]     = temp;
