@@ -4,6 +4,7 @@ input/*
 !input/diamond.obj
 !input/plane.obj
 !input/bumpy-cube.obj
+!input/sphere3_patches
 build/
 include/rxmesh/util/git_sha1.cpp
 .vscode/
