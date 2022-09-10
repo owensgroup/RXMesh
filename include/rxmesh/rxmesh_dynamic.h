@@ -57,37 +57,39 @@ class RXMeshDynamic : public RXMeshStatic
                          this->calc_shared_memory<blockThreads>(o, oriented));
         }
 
-        // For dynamic changes we load EV and FE
-        launch_box.smem_bytes_dyn =
-            std::max(launch_box.smem_bytes_dyn,
-                     3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
-                         2 * this->m_max_edges_per_patch * sizeof(uint16_t) +
-                         2 * ShmemAllocator::default_alignment);
+        // To load EV and FE
+        uint32_t dyn_shmem =
+            3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
+            2 * this->m_max_edges_per_patch * sizeof(uint16_t) +
+            2 * ShmemAllocator::default_alignment;
 
         // cavity ID of fake deleted elements
-        launch_box.smem_bytes_dyn +=
-            this->m_max_vertices_per_patch * sizeof(uint16_t) +
-            this->m_max_edges_per_patch * sizeof(uint16_t) +
-            this->m_max_faces_per_patch * sizeof(uint16_t) +
-            3 * ShmemAllocator::default_alignment;
+        dyn_shmem += this->m_max_vertices_per_patch * sizeof(uint16_t) +
+                     this->m_max_edges_per_patch * sizeof(uint16_t) +
+                     this->m_max_faces_per_patch * sizeof(uint16_t) +
+                     3 * ShmemAllocator::default_alignment;
 
         // cavity loop
-        launch_box.smem_bytes_dyn +=
-            this->m_max_edges_per_patch * sizeof(uint16_t) +
-            ShmemAllocator::default_alignment;
+        dyn_shmem += this->m_max_edges_per_patch * sizeof(uint16_t) +
+                     ShmemAllocator::default_alignment;
 
         // store number of cavities
-        launch_box.smem_bytes_dyn +=
-            sizeof(int) + ShmemAllocator::default_alignment;
+        dyn_shmem += sizeof(int) + ShmemAllocator::default_alignment;
 
-        // store number of cavities
-        launch_box.smem_bytes_dyn +=
-            sizeof(int) + ShmemAllocator::default_alignment;
 
         // store cavity size (assume number of cavities is half the patch size)
-        launch_box.smem_bytes_dyn +=
-            (this->m_max_faces_per_patch / 2) * sizeof(int) +
-            ShmemAllocator::default_alignment;
+        dyn_shmem += (this->m_max_faces_per_patch / 2) * sizeof(int) +
+                     ShmemAllocator::default_alignment;
+
+
+        // load active and owned mask
+        dyn_shmem +=
+            2 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
+            2 * ShmemAllocator::default_alignment;
+        dyn_shmem += 2 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
+                     2 * ShmemAllocator::default_alignment;
+        dyn_shmem += 2 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
+                     2 * ShmemAllocator::default_alignment;
 
         if (!this->m_quite) {
             RXMESH_TRACE(
@@ -96,6 +98,9 @@ class RXMeshDynamic : public RXMeshStatic
                 launch_box.blocks,
                 blockThreads);
         }
+
+        // TODO we can do better than this
+        launch_box.smem_bytes_dyn += dyn_shmem;
 
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,

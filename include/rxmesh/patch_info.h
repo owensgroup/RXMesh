@@ -58,7 +58,7 @@ struct ALIGN(16) PatchInfo
     // active_mask_v/e/f, owned_mask_v/e/f
     uint16_t *vertices_capacity, *edges_capacity, *faces_capacity;
 
-    // The index of this patch (relative to all other patches)
+    // The index of this patch 
     uint32_t patch_id;
 
     // neighbor patches stash
