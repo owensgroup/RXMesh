@@ -5,10 +5,12 @@
 #include "rxmesh/rxmesh_dynamic.h"
 
 template <uint32_t blockThreads>
-__global__ static void dynamic_kernel(rxmesh::Context                context,
-                                      rxmesh::VertexAttribute<float> v_attr,
-                                      rxmesh::EdgeAttribute<float>   e_attr,
-                                      rxmesh::FaceAttribute<float>   f_attr)
+__global__ static void dynamic_kernel(
+    rxmesh::Context                      context,
+    const rxmesh::VertexAttribute<float> coords,
+    rxmesh::VertexAttribute<float>       v_attr,
+    rxmesh::EdgeAttribute<float>         e_attr,
+    rxmesh::FaceAttribute<float>         f_attr)
 {
     if (blockIdx.x != 0) {
         return;
@@ -20,13 +22,14 @@ __global__ static void dynamic_kernel(rxmesh::Context                context,
     PatchInfo        patch_info = context.get_patches_info()[blockIdx.x];
     Cavity<blockThreads, CavityOp::E> cavity(block, shrd_alloc, patch_info);
 
-    const uint16_t edge_id          = 26;
     const uint16_t before_num_faces = patch_info.num_faces[0];
     const uint16_t before_num_edges = patch_info.num_edges[0];
 
     for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
-        // TODO user-defined condition
-        if (eh.unpack().second == edge_id) {
+        if (eh.unpack().second == 26 || eh.unpack().second == 174 ||
+            eh.unpack().second == 184 || eh.unpack().second == 94 ||
+            eh.unpack().second == 58 || eh.unpack().second == 362 ||
+            eh.unpack().second == 70 || eh.unpack().second == 420) {
             e_attr(eh) = 100;
             cavity.add(eh);
         }
@@ -43,8 +46,6 @@ __global__ static void dynamic_kernel(rxmesh::Context                context,
                             c,
                             cavity.get_cavity_vertex(patch_info, c, 1),
                             cavity.get_cavity_vertex(patch_info, c, 3));
-
-        assert(new_edge.get_edge_handle().unpack().second == edge_id);
 
         cavity.add_face(patch_info,
                         c,
@@ -71,11 +72,11 @@ TEST(RXMeshDynamic, Cavity)
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
     // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
-    // rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patcher");
+    // rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches");
 
     RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
                      rxmesh_args.quite,
-                     STRINGIFY(OUTPUT_DIR) "sphere3_patcher");
+                     STRINGIFY(INPUT_DIR) "sphere3_patches");
 
     auto coords = rx.get_input_vertex_coordinates();
 
@@ -95,7 +96,7 @@ TEST(RXMeshDynamic, Cavity)
     dynamic_kernel<blockThreads><<<launch_box.blocks,
                                    launch_box.num_threads,
                                    launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *v_attr, *e_attr, *f_attr);
+        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
