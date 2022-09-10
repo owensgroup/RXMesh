@@ -857,7 +857,7 @@ void RXMeshDynamic::update_host()
                           sizeof(uint32_t),
                           cudaMemcpyDeviceToHost));
 
-    // count and update num_owned and it prefix sum
+    // count and update num_owned and it prefix sum    
     for (uint32_t p = 0; p < m_num_patches; ++p) {
         m_h_num_owned_v[p]       = m_h_patches_info[p].get_num_owned_vertices();
         m_h_vertex_prefix[p + 1] = m_h_vertex_prefix[p] + m_h_num_owned_v[p];
@@ -868,6 +868,7 @@ void RXMeshDynamic::update_host()
         m_h_num_owned_f[p]     = m_h_patches_info[p].get_num_owned_faces();
         m_h_face_prefix[p + 1] = m_h_face_prefix[p] + m_h_num_owned_f[p];
     }
+    this->calc_max_elements();
 
 #if USE_POLYSCOPE
     // for polyscope, we just remove the mesh and re-add it since polyscope does

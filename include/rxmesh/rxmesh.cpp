@@ -359,15 +359,14 @@ void RXMesh::calc_max_elements()
 
 
     for (uint32_t p = 0; p < this->m_num_patches; ++p) {
-        m_max_vertices_per_patch =
-            std::max(m_max_vertices_per_patch,
-                     uint32_t(m_h_patches_info[p].num_vertices[0]));
+        m_max_vertices_per_patch = std::max(
+            m_max_vertices_per_patch, m_h_patches_info[p].num_vertices[0]);
 
-        m_max_edges_per_patch = std::max(
-            m_max_edges_per_patch, uint32_t(m_h_patches_info[p].num_edges[0]));
+        m_max_edges_per_patch =
+            std::max(m_max_edges_per_patch, m_h_patches_info[p].num_edges[0]);
 
-        m_max_faces_per_patch = std::max(
-            m_max_faces_per_patch, uint32_t(m_h_patches_info[p].num_faces[0]));
+        m_max_faces_per_patch =
+            std::max(m_max_faces_per_patch, m_h_patches_info[p].num_faces[0]);
 
 
         m_max_not_owned_vertices =

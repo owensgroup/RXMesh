@@ -349,7 +349,7 @@ class RXMesh
     uint32_t m_max_not_owned_vertices, m_max_not_owned_edges,
         m_max_not_owned_faces;
     // Should be updated with update_host
-    uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
+    uint16_t m_max_vertices_per_patch, m_max_edges_per_patch,
         m_max_faces_per_patch;
 
     // mappings
