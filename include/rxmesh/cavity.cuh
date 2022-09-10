@@ -136,21 +136,29 @@ struct Cavity
         }
 
         int id = ::atomicAdd(m_s_num_cavities, 1);
-        if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
-                      cop == CavityOp::EE || cop == CavityOp::EF) {
-            // TODO EV may also mark its vertices immediately
-            m_cavity_id_e[handle.unpack().second] = id;
-        }
 
         if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                       cop == CavityOp::VE || cop == CavityOp::VF) {
             m_cavity_id_v[handle.unpack().second] = id;
+            detail::bitmask_clear_bit(
+                handle.unpack().second, m_s_active_mask_v, true);
         }
+
+        if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
+                      cop == CavityOp::EE || cop == CavityOp::EF) {
+            // TODO EV may also mark its vertices immediately
+            m_cavity_id_e[handle.unpack().second] = id;
+            detail::bitmask_clear_bit(
+                handle.unpack().second, m_s_active_mask_e, true);
+        }
+
 
         if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
                       cop == CavityOp::FE || cop == CavityOp::FF) {
             // TODO FE may also mark its edges immediately
             m_cavity_id_f[handle.unpack().second] = id;
+            detail::bitmask_clear_bit(
+                handle.unpack().second, m_s_active_mask_f, true);
         }
     }
 
@@ -231,17 +239,19 @@ struct Cavity
             if (!detail::is_deleted(e, m_s_active_mask_e)) {
 
                 // vertices tag
-                const uint16_t v0 = m_s_ev[2 * e];
+                const uint16_t v0 = m_s_ev[2 * e + 0];
                 const uint16_t v1 = m_s_ev[2 * e + 1];
 
                 if (m_cavity_id_v[v0] != INVALID16) {
                     // TODO possible race condition
                     m_cavity_id_e[e] = v0;
+                    detail::bitmask_clear_bit(e, m_s_active_mask_e, true);
                 }
 
                 if (m_cavity_id_v[v1] != INVALID16) {
                     // TODO possible race condition
                     m_cavity_id_e[e] = v1;
+                    detail::bitmask_clear_bit(e, m_s_active_mask_e, true);
                 }
             }
         }
@@ -267,14 +277,17 @@ struct Cavity
 
                 if (c0 != INVALID16) {
                     m_cavity_id_f[f] = c0;
+                    detail::bitmask_clear_bit(f, m_s_active_mask_f, true);
                 }
 
                 if (c1 != INVALID16) {
                     m_cavity_id_f[f] = c1;
+                    detail::bitmask_clear_bit(f, m_s_active_mask_f, true);
                 }
 
                 if (c2 != INVALID16) {
                     m_cavity_id_f[f] = c2;
+                    detail::bitmask_clear_bit(f, m_s_active_mask_f, true);
                 }
             }
         }
