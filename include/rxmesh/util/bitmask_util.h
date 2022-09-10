@@ -46,31 +46,84 @@ __host__ __inline__ uint32_t count_zero_bits(const uint32_t  size,
     }
     return sum;
 }
+
+template <typename FuncT>
+__device__ __inline__ void atomic_try(uint32_t*      bitmask,
+                                      const uint16_t idx,
+                                      FuncT          func)
+{
+    uint32_t old = bitmask[idx];
+    while (true) {
+        const uint32_t val  = func(old);
+        const uint32_t temp = ::atomicExch(bitmask + idx, val);
+        if (temp == old) {
+            break;
+        }
+        old = temp;
+    }
+}
+
 __host__ __device__ __inline__ void bitmask_set_bit(const uint16_t local_id,
-                                                    uint32_t*      bitmask)
+                                                    uint32_t*      bitmask,
+                                                    bool is_atomic = false)
 {
     const uint16_t     idx = local_id / 32;
     const uint32_t     bit = local_id % 32;
     constexpr uint32_t one = 1;
-    bitmask[idx] |= (one << bit);
+
+    auto op = [&](uint32_t old) { return old | (one << bit); };
+
+/*#ifdef __CUDA_ARCH__
+    if (!is_atomic) {
+        bitmask[idx] = op(bitmask[idx]);
+    } else {
+        atomic_try(bitmask, idx, op);
+    }
+#else*/
+    bitmask[idx] = op(bitmask[idx]);
+//#endif
 }
 
 __host__ __device__ __inline__ void bitmask_clear_bit(const uint16_t local_id,
-                                                      uint32_t*      bitmask)
+                                                      uint32_t*      bitmask,
+                                                      bool is_atomic = false)
 {
     const uint16_t     idx = local_id / 32;
     const uint32_t     bit = local_id % 32;
     constexpr uint32_t one = 1;
-    bitmask[idx] &= ~(one << bit);
+
+    auto op = [&](uint32_t old) { return old & ~(one << bit); };
+
+/*#ifdef __CUDA_ARCH__
+    if (!is_atomic) {
+        bitmask[idx] = op(bitmask[idx]);
+    } else {
+        atomic_try(bitmask, idx, op);
+    }
+#else*/
+    bitmask[idx] = op(bitmask[idx]);
+//#endif
 }
 
 __host__ __device__ __inline__ void bitmask_flip_bit(const uint16_t local_id,
-                                                     uint32_t*      bitmask)
+                                                     uint32_t*      bitmask,
+                                                     bool is_atomic = false)
 {
     const uint16_t     idx = local_id / 32;
     const uint32_t     bit = local_id % 32;
-    constexpr uint32_t one = 1;
-    bitmask[idx] ^= (one << bit);
+    constexpr uint32_t one = 1;    
+
+    auto op = [&](uint32_t old) { return old ^ (one << bit); };
+
+/*#ifdef __CUDA_ARCH__
+    if (!is_atomic) {
+        bitmask[idx] = op(bitmask[idx]);
+    } else {
+        atomic_try(bitmask, idx, op);
+    }
+#else*/
+    bitmask[idx] = op(bitmask[idx]);
+//#endif
 }
 
 constexpr __host__ __device__ __inline__ uint32_t mask_num_bytes(
