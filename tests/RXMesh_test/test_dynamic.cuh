@@ -78,6 +78,10 @@ TEST(RXMeshDynamic, Cavity)
                      rxmesh_args.quite,
                      STRINGIFY(INPUT_DIR) "sphere3_patches");
 
+    const uint32_t num_vertices = rx.get_num_vertices();
+    const uint32_t num_edges    = rx.get_num_edges();
+    const uint32_t num_faces    = rx.get_num_faces();
+
     auto coords = rx.get_input_vertex_coordinates();
 
     auto v_attr = rx.add_vertex_attribute<float>("vAttr", 1);
@@ -107,6 +111,10 @@ TEST(RXMeshDynamic, Cavity)
     // TODO
     rx.update_host();
     // EXPECT_TRUE(rx.validate());
+
+    EXPECT_EQ(num_vertices, rx.get_num_vertices());
+    EXPECT_EQ(num_edges, rx.get_num_edges());
+    EXPECT_EQ(num_faces, rx.get_num_faces());
 
 
 #if USE_POLYSCOPE
