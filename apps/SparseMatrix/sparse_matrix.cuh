@@ -240,6 +240,56 @@ struct SparseMatInfo
                               cudaMemcpyHostToDevice));
     }
 
+    // Overload the bracket for manipulation
+    // printf("\n ptr= %p", (void*)ptr);
+    __host__ __device__ T& operator()(const VertexHandle row_v,
+                                      const VertexHandle col_v)
+    {
+        auto     r_ids      = row_v.unpack();
+        uint32_t r_patch_id = r_ids.first;
+        uint16_t r_local_id = r_ids.second;
+
+        auto     c_ids      = col_v.unpack();
+        uint32_t c_patch_id = c_ids.first;
+        uint16_t c_local_id = c_ids.second;
+
+        uint32_t col_index = m_d_patch_ptr_v[c_patch_id] + c_local_id;
+        uint32_t row_index = m_d_patch_ptr_v[r_patch_id] + r_local_id;
+
+        for (uint32_t i = m_d_row_ptr[row_index];
+             i < m_d_row_ptr[row_index + 1];
+             ++i) {
+            if (m_d_col_idx[i] == col_index) {
+                return m_d_val[i];
+            }
+        }
+        assert(1 != 1);
+    }
+
+    __host__ __device__ T& operator()(const VertexHandle row_v,
+                                      const VertexHandle col_v) const
+    {
+        auto     r_ids      = row_v.unpack();
+        uint32_t r_patch_id = r_ids.first;
+        uint16_t r_local_id = r_ids.second;
+
+        auto     c_ids      = col_v.unpack();
+        uint32_t c_patch_id = c_ids.first;
+        uint16_t c_local_id = c_ids.second;
+
+        uint32_t col_index = m_d_patch_ptr_v[c_patch_id] + c_local_id;
+        uint32_t row_index = m_d_patch_ptr_v[r_patch_id] + r_local_id;
+
+        for (uint32_t i = m_d_row_ptr[row_index];
+             i < m_d_row_ptr[row_index + 1];
+             ++i) {
+            if (m_d_col_idx[i] == col_index) {
+                return m_d_val[i];
+            }
+        }
+        assert(1 != 1);
+    }
+
     void free()
     {
         CUDA_ERROR(cudaFree(m_d_patch_ptr_v));

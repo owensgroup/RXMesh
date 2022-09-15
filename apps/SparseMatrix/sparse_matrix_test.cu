@@ -29,6 +29,30 @@ __global__ static void sparse_mat_test(const rxmesh::Context context,
     query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
 }
 
+template <uint32_t blockThreads>
+__global__ static void sparse_mat_query_test(
+    const rxmesh::Context      context,
+    uint32_t                   entry_size,
+    rxmesh::SparseMatInfo<int> sparse_mat)
+{
+    using namespace rxmesh;
+    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
+        for (uint32_t v = 0; v < iter.size(); ++v) {
+            printf(" tid: %d bid: %d %" PRIu32 " - %" PRIu32 " \n",
+                   threadIdx.x,
+                   blockIdx.x,
+                   sparse_mat(v_id, iter[v]),
+                   sparse_mat(iter[v], v_id));
+        }
+
+        // for (int i = 0; i < entry_size; ++i) {
+        //     printf(" %" PRIu32 " \n ", sparse_mat.m_d_col_idx[i]);
+        // }
+    };
+
+    query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
+}
+
 __global__ void spmat_multi_hardwired_kernel(
     int*                       vec,
     rxmesh::SparseMatInfo<int> sparse_mat,
@@ -111,7 +135,7 @@ TEST(Apps, SparseMatrix)
     cuda_query(0);
 
     // generate rxmesh obj
-    std::string  obj_path = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
     RXMeshStatic rxmesh(obj_path);
 
     uint32_t num_vertices = rxmesh.get_num_vertices();
@@ -162,6 +186,17 @@ TEST(Apps, SparseMatrix)
     for (uint32_t i = 0; i < num_vertices; ++i) {
         EXPECT_EQ(h_result[i], h_vet_degree[i]);
     }
+
+    // query test
+    // printf(" %" PRIu32 " \n", );
+
+    // rxmesh.prepare_launch_box(
+    //     {Op::VV}, launch_box, (void*)sparse_mat_query_test<threads>);
+
+    // sparse_mat_query_test<threads><<<launch_box.blocks,
+    //                                  launch_box.num_threads,
+    //                                  launch_box.smem_bytes_dyn>>>(
+    //     rxmesh.get_context(), rxmesh.get_num_vertices(), spmat);
 
     spmat.free();
 }
