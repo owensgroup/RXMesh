@@ -108,14 +108,13 @@ TEST(RXMeshDynamic, Cavity)
     e_attr->move(DEVICE, HOST);
     f_attr->move(DEVICE, HOST);
 
-    // TODO
     rx.update_host();
-    // EXPECT_TRUE(rx.validate());
 
     EXPECT_EQ(num_vertices, rx.get_num_vertices());
     EXPECT_EQ(num_edges, rx.get_num_edges());
     EXPECT_EQ(num_faces, rx.get_num_faces());
 
+    EXPECT_TRUE(rx.validate());
 
 #if USE_POLYSCOPE
     polyscope::init();

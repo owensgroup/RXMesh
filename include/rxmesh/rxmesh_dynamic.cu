@@ -389,6 +389,19 @@ __global__ static void compute_vf(const Context               context,
 
 
 template <uint32_t blockThreads>
+__global__ static void compute_max_valence(const Context context,
+                                           uint32_t*     d_max_valence)
+{
+    using namespace rxmesh;
+
+    auto max_valence = [&](VertexHandle& v_id, VertexIterator& iter) {
+        ::atomicMax(d_max_valence, iter.size());
+    };
+
+    query_block_dispatcher<Op::VV, blockThreads>(context, max_valence);
+}
+
+template <uint32_t blockThreads>
 __global__ static void check_ribbon_faces(const Context               context,
                                           VertexAttribute<FaceHandle> global_vf,
                                           unsigned long long int*     d_check)
@@ -637,18 +650,39 @@ bool RXMeshDynamic::validate()
             return false;
         }
 
-        auto vf_global = this->add_vertex_attribute<FaceHandle>(
-            "vf", this->get_input_max_valence(), rxmesh::DEVICE);
-        vf_global->reset(FaceHandle(), rxmesh::DEVICE);
+        uint32_t* d_max_valence;
+        CUDA_ERROR(cudaMalloc((void**)&d_max_valence, sizeof(uint32_t)));
+        CUDA_ERROR(cudaMemset(d_max_valence, 0, sizeof(uint32_t)));
 
         LaunchBox<block_size> launch_box;
+        RXMeshStatic::prepare_launch_box(
+            {Op::VV},
+            launch_box,
+            (void*)detail::compute_max_valence<block_size>);
+        detail::compute_max_valence<block_size>
+            <<<launch_box.blocks, block_size, launch_box.smem_bytes_dyn>>>(
+                m_rxmesh_context, d_max_valence);
+
+
+        uint32_t h_max_valence = 0;
+        CUDA_ERROR(cudaMemcpy(&h_max_valence,
+                              d_max_valence,
+                              sizeof(uint32_t),
+                              cudaMemcpyDeviceToHost));
+
+        GPU_FREE(d_max_valence);
+
+        auto vf_global = this->add_vertex_attribute<FaceHandle>(
+            "vf", h_max_valence, rxmesh::DEVICE);
+        vf_global->reset(FaceHandle(), rxmesh::DEVICE);
+
+
         RXMeshStatic::prepare_launch_box(
             {Op::VF}, launch_box, (void*)detail::compute_vf<block_size>);
 
         detail::compute_vf<block_size>
             <<<launch_box.blocks, block_size, launch_box.smem_bytes_dyn>>>(
                 m_rxmesh_context, *vf_global);
-
 
         dynamic_smem =
             ShmemAllocator::default_alignment * 3 +
@@ -857,7 +891,7 @@ void RXMeshDynamic::update_host()
                           sizeof(uint32_t),
                           cudaMemcpyDeviceToHost));
 
-    // count and update num_owned and it prefix sum    
+    // count and update num_owned and it prefix sum
     for (uint32_t p = 0; p < m_num_patches; ++p) {
         m_h_num_owned_v[p]       = m_h_patches_info[p].get_num_owned_vertices();
         m_h_vertex_prefix[p + 1] = m_h_vertex_prefix[p] + m_h_num_owned_v[p];
@@ -873,8 +907,8 @@ void RXMeshDynamic::update_host()
 #if USE_POLYSCOPE
     // for polyscope, we just remove the mesh and re-add it since polyscope does
     // not support changing the mesh topology
-    polyscope::removeSurfaceMesh(this->m_polyscope_mesh_name, true);
-    // this->m_polyscope_mesh_name = this->m_polyscope_mesh_name + "updated";
+    // polyscope::removeSurfaceMesh(this->m_polyscope_mesh_name, true);
+    this->m_polyscope_mesh_name = this->m_polyscope_mesh_name + "updated";
     this->register_polyscope();
 #endif
 }
