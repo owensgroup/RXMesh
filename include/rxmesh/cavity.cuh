@@ -140,25 +140,17 @@ struct Cavity
         if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                       cop == CavityOp::VE || cop == CavityOp::VF) {
             m_cavity_id_v[handle.unpack().second] = id;
-            detail::bitmask_clear_bit(
-                handle.unpack().second, m_s_active_mask_v, true);
         }
 
         if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
                       cop == CavityOp::EE || cop == CavityOp::EF) {
-            // TODO EV may also mark its vertices immediately
             m_cavity_id_e[handle.unpack().second] = id;
-            detail::bitmask_clear_bit(
-                handle.unpack().second, m_s_active_mask_e, true);
         }
 
 
         if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
                       cop == CavityOp::FE || cop == CavityOp::FF) {
-            // TODO FE may also mark its edges immediately
             m_cavity_id_f[handle.unpack().second] = id;
-            detail::bitmask_clear_bit(
-                handle.unpack().second, m_s_active_mask_f, true);
         }
     }
 
@@ -175,7 +167,7 @@ struct Cavity
         load_mesh_async(block, shrd_alloc, patch_info);
         block.sync();
 
-        // Expand cavities
+        // Expand cavities by marking incident elements
         if constexpr (cop == CavityOp::V) {
             mark_edges_through_vertices(patch_info);
             block.sync();
@@ -187,6 +179,16 @@ struct Cavity
             mark_faces_through_edges(patch_info);
             block.sync();
         }
+
+        // mark elements in the cavity as deleted in the bitmask
+        clear_bitmask_if_in_cavity(block,
+                                   m_s_active_mask_v,
+                                   m_cavity_id_v,
+                                   patch_info.num_vertices[0]);
+        clear_bitmask_if_in_cavity(
+            block, m_s_active_mask_e, m_cavity_id_e, patch_info.num_edges[0]);
+        clear_bitmask_if_in_cavity(
+            block, m_s_active_mask_f, m_cavity_id_f, patch_info.num_faces[0]);
 
         // construct cavity boundary loop
         construct_cavities_edge_loop(block, patch_info);
@@ -230,6 +232,7 @@ struct Cavity
 
     /**
      * @brief propagate the cavity tag from vertices to their incident edges
+     * TODO use atomicMin to avoid race condition
      */
     __device__ __inline__ void mark_edges_through_vertices(
         PatchInfo& patch_info)
@@ -245,13 +248,11 @@ struct Cavity
                 if (m_cavity_id_v[v0] != INVALID16) {
                     // TODO possible race condition
                     m_cavity_id_e[e] = v0;
-                    detail::bitmask_clear_bit(e, m_s_active_mask_e, true);
                 }
 
                 if (m_cavity_id_v[v1] != INVALID16) {
                     // TODO possible race condition
                     m_cavity_id_e[e] = v1;
-                    detail::bitmask_clear_bit(e, m_s_active_mask_e, true);
                 }
             }
         }
@@ -259,6 +260,7 @@ struct Cavity
 
     /**
      * @brief propagate the cavity tag from edges to their incident faces
+     * TODO use atomicMin to avoid race condition
      */
     __device__ __inline__ void mark_faces_through_edges(PatchInfo& patch_info)
     {
@@ -277,18 +279,33 @@ struct Cavity
 
                 if (c0 != INVALID16) {
                     m_cavity_id_f[f] = c0;
-                    detail::bitmask_clear_bit(f, m_s_active_mask_f, true);
                 }
 
                 if (c1 != INVALID16) {
                     m_cavity_id_f[f] = c1;
-                    detail::bitmask_clear_bit(f, m_s_active_mask_f, true);
                 }
 
                 if (c2 != INVALID16) {
                     m_cavity_id_f[f] = c2;
-                    detail::bitmask_clear_bit(f, m_s_active_mask_f, true);
                 }
+            }
+        }
+    }
+
+
+    /**
+     * @brief clear the bit corresponding to an element in the bitmask if the
+     * element is in a cavity
+     */
+    __device__ __inline__ void clear_bitmask_if_in_cavity(
+        cooperative_groups::thread_block& block,
+        uint32_t*                         bitmask,
+        const uint16_t*                   cavity_id,
+        const uint16_t                    size)
+    {
+        for (uint16_t b = threadIdx.x; b < size; b += blockThreads) {
+            if (cavity_id[b] != INVALID16) {
+                detail::bitmask_clear_bit(b, bitmask, true);
             }
         }
     }
@@ -301,8 +318,6 @@ struct Cavity
         cooperative_groups::thread_block& block,
         PatchInfo&                        patch_info)
     {
-
-
         // Trace faces on the border of the cavity i.e., having an edge on the
         // cavity boundary loop. These faces will add how many of their edges
         // are on the boundary loop. We then do scan and then populate the

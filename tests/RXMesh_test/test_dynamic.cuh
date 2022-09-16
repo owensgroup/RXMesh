@@ -5,12 +5,13 @@
 #include "rxmesh/rxmesh_dynamic.h"
 
 template <uint32_t blockThreads>
-__global__ static void dynamic_kernel(
+__global__ static void edge_flip_kernel(
     rxmesh::Context                      context,
     const rxmesh::VertexAttribute<float> coords,
     rxmesh::VertexAttribute<float>       v_attr,
     rxmesh::EdgeAttribute<float>         e_attr,
-    rxmesh::FaceAttribute<float>         f_attr)
+    rxmesh::FaceAttribute<float>         f_attr,
+    bool                                 conflicting)
 {
     if (blockIdx.x != 0) {
         return;
@@ -25,15 +26,24 @@ __global__ static void dynamic_kernel(
     const uint16_t before_num_faces = patch_info.num_faces[0];
     const uint16_t before_num_edges = patch_info.num_edges[0];
 
+
     for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
-        if (eh.unpack().second == 26 || eh.unpack().second == 174 ||
-            eh.unpack().second == 184 || eh.unpack().second == 94 ||
-            eh.unpack().second == 58 || eh.unpack().second == 362 ||
-            eh.unpack().second == 70 || eh.unpack().second == 420) {
-            e_attr(eh) = 100;
-            cavity.add(eh);
+        if (!conflicting) {
+            if (eh.unpack().second == 26 || eh.unpack().second == 174 ||
+                eh.unpack().second == 184 || eh.unpack().second == 94 ||
+                eh.unpack().second == 58 || eh.unpack().second == 362 ||
+                eh.unpack().second == 70 || eh.unpack().second == 420) {
+                e_attr(eh) = 100;
+                cavity.add(eh);
+            }
+        } else {
+            if (eh.unpack().second == 26 || eh.unpack().second == 22) {
+                e_attr(eh) = 100;
+                cavity.add(eh);
+            }
         }
     });
+
     block.sync();
 
     cavity.process(block, shrd_alloc, patch_info);
@@ -71,8 +81,8 @@ TEST(RXMeshDynamic, Cavity)
     using namespace rxmesh;
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
-    // rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches");
+    // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
+    // rxmesh_args.quite); rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches");
 
     RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
                      rxmesh_args.quite,
@@ -95,12 +105,13 @@ TEST(RXMeshDynamic, Cavity)
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
 
-    rx.prepare_launch_box({}, launch_box, (void*)dynamic_kernel<blockThreads>);
+    rx.prepare_launch_box(
+        {}, launch_box, (void*)edge_flip_kernel<blockThreads>);
 
-    dynamic_kernel<blockThreads><<<launch_box.blocks,
-                                   launch_box.num_threads,
-                                   launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr);
+    edge_flip_kernel<blockThreads><<<launch_box.blocks,
+                                     launch_box.num_threads,
+                                     launch_box.smem_bytes_dyn>>>(
+        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, false);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
