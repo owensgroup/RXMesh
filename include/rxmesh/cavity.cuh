@@ -29,6 +29,9 @@ struct Cavity
                                  ShmemAllocator&                   shrd_alloc,
                                  const PatchInfo&                  patch_info)
     {
+        __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
+        m_s_active_cavity_bitmask = smem;
+
         // TODO we don't to store the cavity IDs for all elements. we can
         // optimize this based on the give CavityOp
         m_s_num_cavities = shrd_alloc.alloc<int>(1);
@@ -101,6 +104,11 @@ struct Cavity
              f += blockThreads) {
             m_cavity_id_f[f] = INVALID16;
         }
+
+        for (uint16_t c = threadIdx.x; c < DIVIDE_UP(blockThreads, 32);
+             c += blockThreads) {
+            m_s_active_cavity_bitmask[c] = INVALID32;
+        }
         cooperative_groups::wait(block);
         block.sync();
     }
@@ -137,6 +145,8 @@ struct Cavity
 
         int id = ::atomicAdd(m_s_num_cavities, 1);
 
+        // there is no race condition in here since each thread is assigned to
+        // one element
         if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                       cop == CavityOp::VE || cop == CavityOp::VF) {
             m_cavity_id_v[handle.unpack().second] = id;
@@ -232,7 +242,6 @@ struct Cavity
 
     /**
      * @brief propagate the cavity tag from vertices to their incident edges
-     * TODO use atomicMin to avoid race condition
      */
     __device__ __inline__ void mark_edges_through_vertices(
         PatchInfo& patch_info)
@@ -245,14 +254,15 @@ struct Cavity
                 const uint16_t v0 = m_s_ev[2 * e + 0];
                 const uint16_t v1 = m_s_ev[2 * e + 1];
 
-                if (m_cavity_id_v[v0] != INVALID16) {
-                    // TODO possible race condition
-                    m_cavity_id_e[e] = v0;
+                const uint16_t c0 = m_cavity_id_v[v0];
+                const uint16_t c1 = m_cavity_id_v[v1];
+
+                if (c0 != INVALID16) {
+                    atomic_mark(m_cavity_id_e, e, c0);
                 }
 
-                if (m_cavity_id_v[v1] != INVALID16) {
-                    // TODO possible race condition
-                    m_cavity_id_e[e] = v1;
+                if (c1 != INVALID16) {
+                    atomic_mark(m_cavity_id_e, e, c1);
                 }
             }
         }
@@ -260,7 +270,6 @@ struct Cavity
 
     /**
      * @brief propagate the cavity tag from edges to their incident faces
-     * TODO use atomicMin to avoid race condition
      */
     __device__ __inline__ void mark_faces_through_edges(PatchInfo& patch_info)
     {
@@ -278,20 +287,38 @@ struct Cavity
                 const uint16_t c2 = m_cavity_id_e[e2];
 
                 if (c0 != INVALID16) {
-                    m_cavity_id_f[f] = c0;
+                    atomic_mark(m_cavity_id_f, f, c0);
                 }
 
                 if (c1 != INVALID16) {
-                    m_cavity_id_f[f] = c1;
+                    atomic_mark(m_cavity_id_f, f, c1);
                 }
 
                 if (c2 != INVALID16) {
-                    m_cavity_id_f[f] = c2;
+                    atomic_mark(m_cavity_id_f, f, c2);
                 }
             }
         }
     }
 
+    /**
+     * @brief using atomicMin, we mark the element cavity ID with a given cavity
+     * ID. Since the element cavity ID buffer is initialized by INVALID16, we
+     * can guarantee that one cavity will be fully constructed if there is
+     * conflicts
+     * @return true if the marking is successful i.e., the previous element
+     * cavity ID was bigger or equal to the given cavity_id
+     */
+    __device__ __inline__ bool atomic_mark(uint16_t*      element_cavity_id,
+                                           const uint16_t element_id,
+                                           const uint16_t cavity_id)
+    {
+        // TODO
+        element_cavity_id[element_id] = cavity_id;
+        return true;
+        // return ::atomicMin(element_cavity_id + element_id, cavity_id) >=
+        //       cavity_id;
+    }
 
     /**
      * @brief clear the bit corresponding to an element in the bitmask if the
@@ -703,6 +730,7 @@ struct Cavity
 
 
     int *     m_s_num_cavities, *m_s_cavity_size;
+    uint32_t* m_s_active_cavity_bitmask;
     uint32_t *m_s_owned_mask_v, *m_s_owned_mask_e, *m_s_owned_mask_f;
     uint32_t *m_s_active_mask_v, *m_s_active_mask_e, *m_s_active_mask_f;
     uint16_t *m_s_ev, *m_s_fe;
