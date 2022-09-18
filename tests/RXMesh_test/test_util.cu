@@ -1,4 +1,7 @@
 #include "gtest/gtest.h"
+
+#include <algorithm>
+
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/rxmesh_queries.cuh"
 #include "rxmesh/kernels/util.cuh"
@@ -6,11 +9,11 @@
 #include "rxmesh/util/util.h"
 
 template <uint32_t rowOffset, uint32_t blockThreads, uint32_t itemPerThread>
-__global__ static void k_test_block_mat_transpose(uint16_t*      d_src,
-                                                  const uint32_t num_rows,
-                                                  const uint32_t num_cols,
-                                                  uint16_t*      d_output,
-                                                  uint32_t*      d_row_bitmask)
+__global__ static void test_block_mat_transpose_kernel(uint16_t*      d_src,
+                                                       const uint32_t num_rows,
+                                                       const uint32_t num_cols,
+                                                       uint16_t*      d_output,
+                                                       uint32_t* d_row_bitmask)
 {
 
     rxmesh::detail::block_mat_transpose<rowOffset, blockThreads, itemPerThread>(
@@ -18,13 +21,21 @@ __global__ static void k_test_block_mat_transpose(uint16_t*      d_src,
 }
 
 template <typename T, uint32_t blockThreads>
-__global__ static void k_test_block_exclusive_sum(T* d_src, const uint32_t size)
+__global__ static void test_block_exclusive_sum_kernel(T*             d_src,
+                                                       const uint32_t size)
 {
     rxmesh::detail::cub_block_exclusive_sum<T, blockThreads>(d_src, size);
 }
 
 template <typename T>
-__global__ static void k_test_atomicAdd(T* d_val)
+__global__ static void test_atomicMin_kernel(T* d_in, T* d_out)
+{
+    uint32_t tid = threadIdx.x + blockIdx.x * blockDim.x;
+    rxmesh::atomicMin(d_out, d_in[tid]);
+}
+
+template <typename T>
+__global__ static void test_atomicAdd_kernel(T* d_val)
 {
     rxmesh::atomicAdd(d_val, 1);
     /*__half* as_half = (__half*)(d_val);
@@ -48,7 +59,7 @@ TEST(Util, Scan)
     CUDA_ERROR(cudaMemcpy(
         d_src, h_src.data(), size * sizeof(uint32_t), cudaMemcpyHostToDevice));
 
-    k_test_block_exclusive_sum<uint32_t, blockThreads>
+    test_block_exclusive_sum_kernel<uint32_t, blockThreads>
         <<<1, blockThreads>>>(d_src, size);
 
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -76,7 +87,7 @@ bool test_atomicAdd(const uint32_t threads = 1024)
     CUDA_ERROR(cudaMemcpy(d_val, &h_val, sizeof(T), cudaMemcpyHostToDevice));
 
 
-    k_test_atomicAdd<T><<<1, threads>>>(d_val);
+    test_atomicAdd_kernel<T><<<1, threads>>>(d_val);
 
     CUDA_ERROR(cudaDeviceSynchronize());
     CUDA_ERROR(cudaGetLastError());
@@ -92,6 +103,61 @@ bool test_atomicAdd(const uint32_t threads = 1024)
     GPU_FREE(d_val);
 
     return passed;
+}
+
+template <typename T>
+bool test_atomicMin(const uint32_t threads = 1024)
+{
+    using namespace rxmesh;
+
+    T* d_out;
+    T* d_in;
+    CUDA_ERROR(cudaMalloc((void**)&d_out, sizeof(T)));
+    CUDA_ERROR(cudaMalloc((void**)&d_in, threads * sizeof(T)));
+    if constexpr (sizeof(T) == 1) {
+        CUDA_ERROR(cudaMemset(d_out, INVALID8, sizeof(T)));
+    }
+    if constexpr (sizeof(T) == 2) {
+        CUDA_ERROR(cudaMemset(d_out, INVALID16, sizeof(T)));
+    }
+    if constexpr (sizeof(T) == 4) {
+        CUDA_ERROR(cudaMemset(d_out, INVALID32, sizeof(T)));
+    }
+    if constexpr (sizeof(T) == 8) {
+        CUDA_ERROR(cudaMemset(d_out, INVALID64, sizeof(T)));
+    }
+
+    std::vector<T> h_in(threads);
+    fill_with_random_numbers(h_in.data(), h_in.size());
+    std::transform(h_in.cbegin(), h_in.cend(), h_in.begin(), [](T c) {
+        return 5 * (c + 1);
+    });
+    CUDA_ERROR(cudaMemcpy(
+        d_in, h_in.data(), threads * sizeof(T), cudaMemcpyHostToDevice));
+
+
+    test_atomicMin_kernel<<<1, threads>>>(d_in, d_out);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+    CUDA_ERROR(cudaGetLastError());
+
+    T h_out;
+    CUDA_ERROR(cudaMemcpy(&h_out, d_out, sizeof(T), cudaMemcpyDeviceToHost));
+
+    std::sort(h_in.begin(), h_in.end());
+
+
+    // check
+    bool passed = h_in[0] == h_out;
+
+    GPU_FREE(d_in);
+    GPU_FREE(d_out);
+
+    return passed;
+}
+TEST(Util, AtomicMin)
+{
+    EXPECT_TRUE(test_atomicMin<uint16_t>()) << "uint16_t failed";
 }
 
 TEST(Util, AtomicAdd)
@@ -184,7 +250,7 @@ TEST(Util, BlockMatrixTranspose)
                           cudaMemcpyHostToDevice));
 
 
-    k_test_block_mat_transpose<rowOffset, threads, item_per_thread>
+    test_block_mat_transpose_kernel<rowOffset, threads, item_per_thread>
         <<<blocks, threads, numRows * rowOffset * sizeof(uint32_t)>>>(
             d_src, numRows, numCols, d_offset, d_bitmask);
 
