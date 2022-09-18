@@ -190,7 +190,10 @@ struct Cavity
             block.sync();
         }
 
-        // mark elements in the cavity as deleted in the bitmask
+        // Repair for conflicting cavities
+        deactivate_conflicting_cavities(patch_info);
+
+        // Clear bitmask for elements in the (active) cavity
         clear_bitmask_if_in_cavity(block,
                                    m_s_active_mask_v,
                                    m_cavity_id_v,
@@ -257,13 +260,8 @@ struct Cavity
                 const uint16_t c0 = m_cavity_id_v[v0];
                 const uint16_t c1 = m_cavity_id_v[v1];
 
-                if (c0 != INVALID16) {
-                    atomic_mark(m_cavity_id_e, e, c0);
-                }
-
-                if (c1 != INVALID16) {
-                    atomic_mark(m_cavity_id_e, e, c1);
-                }
+                mark_element(m_cavity_id_e, e, c0);
+                mark_element(m_cavity_id_e, e, c1);
             }
         }
     }
@@ -286,38 +284,87 @@ struct Cavity
                 const uint16_t c1 = m_cavity_id_e[e1];
                 const uint16_t c2 = m_cavity_id_e[e2];
 
-                if (c0 != INVALID16) {
-                    atomic_mark(m_cavity_id_f, f, c0);
-                }
+                mark_element(m_cavity_id_f, f, c0);
+                mark_element(m_cavity_id_f, f, c1);
+                mark_element(m_cavity_id_f, f, c2);
+            }
+        }
+    }
 
-                if (c1 != INVALID16) {
-                    atomic_mark(m_cavity_id_f, f, c1);
-                }
 
-                if (c2 != INVALID16) {
-                    atomic_mark(m_cavity_id_f, f, c2);
-                }
+    /**
+     * @brief deactivate the cavities that has been marked as inactivate in the
+     * bitmask (m_s_active_cavity_bitmask) by reverting all mesh element ID
+     * assigned to these cavities to be INVALID16
+     */
+    __device__ __inline__ void deactivate_conflicting_cavities(
+        PatchInfo& patch_info)
+    {
+        deactivate_conflicting_cavities(patch_info.num_vertices[0],
+                                        m_cavity_id_v);
+
+        deactivate_conflicting_cavities(patch_info.num_edges[0], m_cavity_id_e);
+
+        deactivate_conflicting_cavities(patch_info.num_faces[0], m_cavity_id_f);
+    }
+
+    /**
+     * @brief revert the element cavity ID to INVALID16 if the element's cavity
+     * ID is a cavity that has been marked as inactive in
+     * m_s_active_cavity_bitmask
+     */
+    __device__ __inline__ void deactivate_conflicting_cavities(
+        const uint16_t num_elements,
+        uint16_t*      element_cavity_id)
+    {
+        for (uint16_t i = threadIdx.x; i < num_elements; i += blockThreads) {
+            if (!detail::is_set_bit(element_cavity_id[i],
+                                    m_s_active_cavity_bitmask)) {
+                element_cavity_id[i] = INVALID16;
             }
         }
     }
 
     /**
-     * @brief using atomicMin, we mark the element cavity ID with a given cavity
-     * ID. Since the element cavity ID buffer is initialized by INVALID16, we
-     * can guarantee that one cavity will be fully constructed if there is
-     * conflicts
-     * @return true if the marking is successful i.e., the previous element
-     * cavity ID was bigger or equal to the given cavity_id
+     * @brief mark element and inactivate cavities if there is a conflict. Each
+     * element should be marked by one cavity. In case of conflict, the cavity
+     * with min id wins. If the element has been marked previously with cavity
+     * of higher ID, this higher ID cavity will be deactivated. If the element
+     * has been already been marked with a cavity of lower ID, the current
+     * cavity (cavity_id) will be deactivated
+     * This function assumes no other thread is trying to update element_id's
+     * cavity ID
      */
-    __device__ __inline__ bool atomic_mark(uint16_t*      element_cavity_id,
-                                           const uint16_t element_id,
-                                           const uint16_t cavity_id)
+    __device__ __inline__ void mark_element(uint16_t*      element_cavity_id,
+                                            const uint16_t element_id,
+                                            const uint16_t cavity_id)
     {
-        // TODO
-        element_cavity_id[element_id] = cavity_id;
-        return true;
-        // return ::atomicMin(element_cavity_id + element_id, cavity_id) >=
-        //       cavity_id;
+        if (cavity_id != INVALID16) {
+            const uint16_t prv_element_cavity_id =
+                element_cavity_id[element_id];
+
+
+            if (prv_element_cavity_id == cavity_id) {
+                return;
+            }
+
+            if (prv_element_cavity_id == INVALID16) {
+                element_cavity_id[element_id] = cavity_id;
+            }
+
+            if (prv_element_cavity_id > cavity_id) {
+                // deactivate previous element cavity ID
+                detail::bitmask_clear_bit(
+                    prv_element_cavity_id, m_s_active_cavity_bitmask, true);
+                element_cavity_id[element_id] = cavity_id;
+            }
+
+            if (prv_element_cavity_id < cavity_id) {
+                // deactivate cavity ID
+                detail::bitmask_clear_bit(
+                    cavity_id, m_s_active_cavity_bitmask, true);
+            }
+        }
     }
 
     /**
@@ -515,8 +562,10 @@ struct Cavity
         // least one warp processing one cavity
         for (uint16_t c = threadIdx.x; c < m_s_num_cavities[0];
              c += blockThreads) {
-
-            FillInFunc(c, get_cavity_size(c));
+            const uint16_t size = get_cavity_size(c);
+            if (size > 0) {
+                FillInFunc(c, size);
+            }
         }
 
         block.sync();

@@ -37,7 +37,11 @@ __global__ static void edge_flip_kernel(
                 cavity.add(eh);
             }
         } else {
-            if (eh.unpack().second == 26 || eh.unpack().second == 22) {
+            if (eh.unpack().second == 26 || eh.unpack().second == 22 ||
+                eh.unpack().second == 29 || eh.unpack().second == 156 ||
+                eh.unpack().second == 23 || eh.unpack().second == 389 ||
+                eh.unpack().second == 39 || eh.unpack().second == 40 ||
+                eh.unpack().second == 41 || eh.unpack().second == 16) {
                 e_attr(eh) = 100;
                 cavity.add(eh);
             }
@@ -111,7 +115,7 @@ TEST(RXMeshDynamic, Cavity)
     edge_flip_kernel<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, false);
+        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, true);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
