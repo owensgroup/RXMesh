@@ -207,6 +207,7 @@ void sparse_mat_init(RXMeshStatic& rx,
 
 
 // TODO: add compatibility for EE, FF, VE......
+// TODO: purge operation?
 template <typename T>
 struct SparseMatInfo
 {
@@ -240,8 +241,6 @@ struct SparseMatInfo
                               cudaMemcpyHostToDevice));
     }
 
-    // Overload the bracket for manipulation
-    // printf("\n ptr= %p", (void*)ptr);
     __host__ __device__ T& operator()(const VertexHandle row_v,
                                       const VertexHandle col_v)
     {
