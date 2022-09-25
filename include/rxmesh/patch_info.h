@@ -4,8 +4,8 @@
 #include "rxmesh/local.h"
 #include "rxmesh/lp_hashtable.cuh"
 #include "rxmesh/patch_stash.cuh"
-#include "rxmesh/util/macros.h"
 #include "rxmesh/util/bitmask_util.h"
+#include "rxmesh/util/macros.h"
 
 namespace rxmesh {
 
@@ -15,7 +15,7 @@ namespace rxmesh {
  */
 struct ALIGN(16) PatchInfo
 {
-    PatchInfo()
+    __device__ __host__ PatchInfo()
         : ev(nullptr),
           fe(nullptr),
           active_mask_v(nullptr),
@@ -32,11 +32,11 @@ struct ALIGN(16) PatchInfo
           faces_capacity(0),
           patch_id(INVALID32){};
 
-    PatchInfo(const PatchInfo& other) = default;
-    PatchInfo(PatchInfo&&)            = default;
-    PatchInfo& operator=(const PatchInfo&) = default;
-    PatchInfo& operator=(PatchInfo&&) = default;
-    ~PatchInfo()                      = default;
+    __device__ __host__ PatchInfo(const PatchInfo& other) = default;
+    __device__ __host__ PatchInfo(PatchInfo&&)            = default;
+    __device__ __host__ PatchInfo& operator=(const PatchInfo&) = default;
+    __device__ __host__ PatchInfo& operator=(PatchInfo&&) = default;
+    __device__                     __host__ ~PatchInfo()  = default;
 
     // The topology information: edge incident vertices and face incident edges
     LocalVertexT* ev;
@@ -58,7 +58,7 @@ struct ALIGN(16) PatchInfo
     // active_mask_v/e/f, owned_mask_v/e/f
     uint16_t *vertices_capacity, *edges_capacity, *faces_capacity;
 
-    // The index of this patch 
+    // The index of this patch
     uint32_t patch_id;
 
     // neighbor patches stash

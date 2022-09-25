@@ -11,73 +11,82 @@ __global__ static void edge_flip_kernel(
     rxmesh::VertexAttribute<float>       v_attr,
     rxmesh::EdgeAttribute<float>         e_attr,
     rxmesh::FaceAttribute<float>         f_attr,
-    bool                                 conflicting)
+    bool                                 conflicting,
+    bool                                 on_ribbon)
 {
     if (blockIdx.x != 0) {
         return;
     }
     using namespace rxmesh;
-    namespace cg           = cooperative_groups;
-    cg::thread_block block = cg::this_thread_block();
-    ShmemAllocator   shrd_alloc;
-    PatchInfo        patch_info = context.get_patches_info()[blockIdx.x];
-    Cavity<blockThreads, CavityOp::E> cavity(block, shrd_alloc, patch_info);
+    auto           block = cooperative_groups::this_thread_block();
+    ShmemAllocator shrd_alloc;
+    Cavity<blockThreads, CavityOp::E> cavity(block, context, shrd_alloc);
 
-    const uint16_t before_num_faces = patch_info.num_faces[0];
-    const uint16_t before_num_edges = patch_info.num_edges[0];
+    const uint16_t before_num_faces = cavity.m_patch_info.num_faces[0];
+    const uint16_t before_num_edges = cavity.m_patch_info.num_edges[0];
 
+
+    /*for (uint16_t v = 0; v < patch_info.num_vertices[0]; ++v) {
+        if (!detail::is_owned(v, patch_info.owned_mask_v)) {
+            LPPair lp = patch_info.lp_v.find(v);
+            v_attr({patch_info.patch_stash.get_patch(lp),
+                    lp.local_id_in_owner_patch()}) = v;
+        }
+    }*/
 
     for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
-        if (!conflicting) {
-            if (eh.unpack().second == 26 || eh.unpack().second == 174 ||
-                eh.unpack().second == 184 || eh.unpack().second == 94 ||
-                eh.unpack().second == 58 || eh.unpack().second == 362 ||
-                eh.unpack().second == 70 || eh.unpack().second == 420) {
+        if (on_ribbon) {
+            if (eh.unpack().second == 11) {
                 e_attr(eh) = 100;
                 cavity.add(eh);
             }
         } else {
-            if (eh.unpack().second == 26 || eh.unpack().second == 22 ||
-                eh.unpack().second == 29 || eh.unpack().second == 156 ||
-                eh.unpack().second == 23 || eh.unpack().second == 389 ||
-                eh.unpack().second == 39 || eh.unpack().second == 40 ||
-                eh.unpack().second == 41 || eh.unpack().second == 16) {
-                e_attr(eh) = 100;
-                cavity.add(eh);
+            if (!conflicting) {
+                if (eh.unpack().second == 26 || eh.unpack().second == 174 ||
+                    eh.unpack().second == 184 || eh.unpack().second == 94 ||
+                    eh.unpack().second == 58 || eh.unpack().second == 362 ||
+                    eh.unpack().second == 70 || eh.unpack().second == 420) {
+                    e_attr(eh) = 100;
+                    cavity.add(eh);
+                }
+            } else {
+                if (eh.unpack().second == 26 || eh.unpack().second == 22 ||
+                    eh.unpack().second == 29 || eh.unpack().second == 156 ||
+                    eh.unpack().second == 23 || eh.unpack().second == 389 ||
+                    eh.unpack().second == 39 || eh.unpack().second == 40 ||
+                    eh.unpack().second == 41 || eh.unpack().second == 16) {
+                    e_attr(eh) = 100;
+                    cavity.add(eh);
+                }
             }
         }
     });
 
     block.sync();
 
-    cavity.process(block, shrd_alloc, patch_info);
+    cavity.process(block, shrd_alloc);
 
     cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
         assert(size == 4);
 
-        auto new_edge =
-            cavity.add_edge(patch_info,
-                            c,
-                            cavity.get_cavity_vertex(patch_info, c, 1),
-                            cavity.get_cavity_vertex(patch_info, c, 3));
+        auto new_edge = cavity.add_edge(
+            c, cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c, 3));
 
-        cavity.add_face(patch_info,
-                        c,
-                        cavity.get_cavity_edge(patch_info, c, 0),
+        cavity.add_face(c,
+                        cavity.get_cavity_edge(c, 0),
                         new_edge,
-                        cavity.get_cavity_edge(patch_info, c, 3));
+                        cavity.get_cavity_edge(c, 3));
 
-        cavity.add_face(patch_info,
-                        c,
-                        cavity.get_cavity_edge(patch_info, c, 1),
-                        cavity.get_cavity_edge(patch_info, c, 2),
+        cavity.add_face(c,
+                        cavity.get_cavity_edge(c, 1),
+                        cavity.get_cavity_edge(c, 2),
                         new_edge.get_flip_dedge());
     });
 
-    cavity.cleanup(block, patch_info);
+    cavity.cleanup(block);
 
-    assert(before_num_faces == patch_info.num_faces[0]);
-    assert(before_num_edges == patch_info.num_edges[0]);
+    assert(before_num_faces == cavity.m_patch_info.num_faces[0]);
+    assert(before_num_edges == cavity.m_patch_info.num_edges[0]);
 }
 
 TEST(RXMeshDynamic, Cavity)
@@ -115,7 +124,7 @@ TEST(RXMeshDynamic, Cavity)
     edge_flip_kernel<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, true);
+        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, true, false);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
