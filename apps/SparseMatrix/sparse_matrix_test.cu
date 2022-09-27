@@ -211,9 +211,12 @@ TEST(Apps, SparseMatrix)
         EXPECT_EQ(h_result[i], h_vet_degree[i]);
     }
 
+
+    CUDA_ERROR(cudaFree(d_arr_ones));
+    CUDA_ERROR(cudaFree(d_result));
+    CUDA_ERROR(cudaFree(vet_degree));
     spmat.free();
 }
-
 
 TEST(Apps, SparseMatrixQuery)
 {
@@ -327,6 +330,9 @@ TEST(Apps, SparseMatrixEdgeLen)
         EXPECT_EQ(h_result[i], h_arr_ref[i]);
     }
 
+    CUDA_ERROR(cudaFree(d_arr_ref));
+    CUDA_ERROR(cudaFree(d_arr_ones));
+    CUDA_ERROR(cudaFree(d_result));
     spmat.free();
 }
 
