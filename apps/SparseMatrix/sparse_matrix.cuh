@@ -207,6 +207,7 @@ void sparse_mat_init(RXMeshStatic& rx,
 
 
 // TODO: add compatibility for EE, FF, VE......
+// TODO: purge operation?
 template <typename T>
 struct SparseMatInfo
 {
@@ -238,6 +239,42 @@ struct SparseMatInfo
                               init_tmp_arr.data(),
                               m_nnz_entry_size * sizeof(T),
                               cudaMemcpyHostToDevice));
+    }
+
+    __host__ __device__ uint32_t get_val_idx(const VertexHandle row_v,
+                                             const VertexHandle col_v)
+    {
+        auto     r_ids      = row_v.unpack();
+        uint32_t r_patch_id = r_ids.first;
+        uint16_t r_local_id = r_ids.second;
+
+        auto     c_ids      = col_v.unpack();
+        uint32_t c_patch_id = c_ids.first;
+        uint16_t c_local_id = c_ids.second;
+
+        uint32_t col_index = m_d_patch_ptr_v[c_patch_id] + c_local_id;
+        uint32_t row_index = m_d_patch_ptr_v[r_patch_id] + r_local_id;
+
+        for (uint32_t i = m_d_row_ptr[row_index];
+             i < m_d_row_ptr[row_index + 1];
+             ++i) {
+            if (m_d_col_idx[i] == col_index) {
+                return i;
+            }
+        }
+        assert(1 != 1);
+    }
+
+    __host__ __device__ T& operator()(const VertexHandle row_v,
+                                      const VertexHandle col_v)
+    {
+        return m_d_val[get_val_idx(row_v, col_v)];
+    }
+
+    __host__ __device__ T& operator()(const VertexHandle row_v,
+                                      const VertexHandle col_v) const
+    {
+        return m_d_val[get_val_idx(row_v, col_v)];
     }
 
     void free()

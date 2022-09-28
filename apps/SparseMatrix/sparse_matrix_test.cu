@@ -29,6 +29,58 @@ __global__ static void sparse_mat_test(const rxmesh::Context context,
     query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
 }
 
+template <uint32_t blockThreads>
+__global__ static void sparse_mat_query_test(
+    const rxmesh::Context      context,
+    rxmesh::SparseMatInfo<int> sparse_mat)
+{
+    using namespace rxmesh;
+    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
+        sparse_mat(v_id, v_id) = 2;
+        for (uint32_t v = 0; v < iter.size(); ++v) {
+            sparse_mat(v_id, iter[v]) = 2;
+            sparse_mat(iter[v], v_id) = 2;
+        }
+    };
+
+    query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
+}
+
+template <uint32_t blockThreads>
+__global__ static void sparse_mat_edge_len_test(
+    const rxmesh::Context          context,
+    rxmesh::VertexAttribute<float> coords,
+    rxmesh::SparseMatInfo<int>     sparse_mat,
+    int*                           arr_ref)
+{
+    using namespace rxmesh;
+    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
+        // reference value calculation
+        auto     r_ids      = v_id.unpack();
+        uint32_t r_patch_id = r_ids.first;
+        uint16_t r_local_id = r_ids.second;
+
+        uint32_t row_index =
+            sparse_mat.m_d_patch_ptr_v[r_patch_id] + r_local_id;
+
+        arr_ref[row_index]     = 0;
+        sparse_mat(v_id, v_id) = 0;
+
+        Vector<3, float> v_coord(
+            coords(v_id, 0), coords(v_id, 1), coords(v_id, 2));
+        for (uint32_t v = 0; v < iter.size(); ++v) {
+            Vector<3, float> vi_coord(
+                coords(iter[v], 0), coords(iter[v], 1), coords(iter[v], 2));
+            sparse_mat(v_id, iter[v]) = dist(v_coord, vi_coord);
+            sparse_mat(iter[v], v_id) = sparse_mat(v_id, iter[v]);
+
+            arr_ref[row_index] += dist(v_coord, vi_coord);
+        }
+    };
+
+    query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
+}
+
 __global__ void spmat_multi_hardwired_kernel(
     int*                       vec,
     rxmesh::SparseMatInfo<int> sparse_mat,
@@ -72,7 +124,6 @@ TEST(Apps, PatchPointer)
                   rx.get_patches_info()[i].num_owned_vertices);
     }
 
-
     // edges
     CUDA_ERROR(cudaMemcpy(h_ptchptr.data(),
                           spmat.m_d_patch_ptr_e,
@@ -84,7 +135,6 @@ TEST(Apps, PatchPointer)
         EXPECT_EQ(h_ptchptr[i + 1] - h_ptchptr[i],
                   rx.get_patches_info()[i].num_owned_edges);
     }
-
 
     // faces
     CUDA_ERROR(cudaMemcpy(h_ptchptr.data(),
@@ -98,20 +148,18 @@ TEST(Apps, PatchPointer)
                   rx.get_patches_info()[i].num_owned_faces);
     }
 
-
     spmat.free();
 }
 
 TEST(Apps, SparseMatrix)
 {
     using namespace rxmesh;
-    using dataT = float;
 
     // Select device
     cuda_query(0);
 
     // generate rxmesh obj
-    std::string  obj_path = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
     RXMeshStatic rxmesh(obj_path);
 
     uint32_t num_vertices = rxmesh.get_num_vertices();
@@ -163,6 +211,128 @@ TEST(Apps, SparseMatrix)
         EXPECT_EQ(h_result[i], h_vet_degree[i]);
     }
 
+
+    CUDA_ERROR(cudaFree(d_arr_ones));
+    CUDA_ERROR(cudaFree(d_result));
+    CUDA_ERROR(cudaFree(vet_degree));
+    spmat.free();
+}
+
+TEST(Apps, SparseMatrixQuery)
+{
+    using namespace rxmesh;
+
+    // Select device
+    cuda_query(0);
+
+    // generate rxmesh obj
+    std::string  obj_path = STRINGIFY(INPUT_DIR) "cube.obj";
+    RXMeshStatic rxmesh(obj_path);
+
+    uint32_t num_vertices = rxmesh.get_num_vertices();
+
+    const uint32_t threads = 256;
+    const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
+
+    SparseMatInfo<int> spmat(rxmesh);
+    spmat.set_ones();
+
+    LaunchBox<threads> launch_box;
+    rxmesh.prepare_launch_box(
+        {Op::VV}, launch_box, (void*)sparse_mat_query_test<threads>);
+
+    sparse_mat_query_test<threads>
+        <<<launch_box.blocks,
+           launch_box.num_threads,
+           launch_box.smem_bytes_dyn>>>(rxmesh.get_context(), spmat);
+
+    std::vector<uint32_t> h_result(spmat.m_nnz_entry_size);
+    CUDA_ERROR(cudaMemcpy(h_result.data(),
+                          spmat.m_d_val,
+                          spmat.m_nnz_entry_size * sizeof(int),
+                          cudaMemcpyDeviceToHost));
+
+    std::vector<uint32_t> h_ref(spmat.m_nnz_entry_size, 2);
+
+    for (uint32_t i = 0; i < spmat.m_nnz_entry_size; ++i) {
+        EXPECT_EQ(h_result[i], h_ref[i]);
+    }
+
+    spmat.free();
+}
+
+TEST(Apps, SparseMatrixEdgeLen)
+{
+    using namespace rxmesh;
+
+    // Select device
+    cuda_query(0);
+
+    // generate rxmesh obj
+    std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
+    RXMeshStatic rxmesh(obj_path);
+
+    uint32_t num_vertices = rxmesh.get_num_vertices();
+
+    const uint32_t threads = 256;
+    const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
+
+    std::vector<std::vector<float>> Verts;
+    auto coords = rxmesh.get_input_vertex_coordinates();
+
+    int* d_arr_ones;
+
+    std::vector<uint32_t> init_tmp_arr(num_vertices, 1);
+    CUDA_ERROR(cudaMalloc((void**)&d_arr_ones, (num_vertices) * sizeof(int)));
+    CUDA_ERROR(cudaMemcpy(d_arr_ones,
+                          init_tmp_arr.data(),
+                          num_vertices * sizeof(int),
+                          cudaMemcpyHostToDevice));
+
+    SparseMatInfo<int> spmat(rxmesh);
+
+    int* d_arr_ref;
+    int* d_result;
+
+    CUDA_ERROR(
+        cudaMalloc((void**)&d_arr_ref, (spmat.m_nnz_entry_size) * sizeof(int)));
+    CUDA_ERROR(
+        cudaMalloc((void**)&d_result, (spmat.m_nnz_entry_size) * sizeof(int)));
+
+    LaunchBox<threads> launch_box;
+    rxmesh.prepare_launch_box(
+        {Op::VV}, launch_box, (void*)sparse_mat_edge_len_test<threads>);
+
+    sparse_mat_edge_len_test<threads><<<launch_box.blocks,
+                                        launch_box.num_threads,
+                                        launch_box.smem_bytes_dyn>>>(
+        rxmesh.get_context(), *coords, spmat, d_arr_ref);
+
+    // Spmat matrix multiply
+
+    spmat_multi_hardwired_kernel<<<blocks, threads>>>(
+        d_arr_ones, spmat, d_result, num_vertices);
+
+    // copy the value back to host
+    std::vector<uint32_t> h_arr_ref(num_vertices);
+    CUDA_ERROR(cudaMemcpy(h_arr_ref.data(),
+                          d_arr_ref,
+                          num_vertices * sizeof(int),
+                          cudaMemcpyDeviceToHost));
+
+    std::vector<uint32_t> h_result(num_vertices);
+    CUDA_ERROR(cudaMemcpy(h_result.data(),
+                          d_result,
+                          num_vertices * sizeof(int),
+                          cudaMemcpyDeviceToHost));
+
+    for (uint32_t i = 0; i < num_vertices; ++i) {
+        EXPECT_EQ(h_result[i], h_arr_ref[i]);
+    }
+
+    CUDA_ERROR(cudaFree(d_arr_ref));
+    CUDA_ERROR(cudaFree(d_arr_ones));
+    CUDA_ERROR(cudaFree(d_result));
     spmat.free();
 }
 
