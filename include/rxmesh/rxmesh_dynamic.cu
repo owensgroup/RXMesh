@@ -525,6 +525,9 @@ __global__ static void check_ribbon_faces(const Context               context,
 
 bool RXMeshDynamic::validate()
 {
+    bool cached_quite = this->m_quite;
+    this->m_quite     = true;
+
     CUDA_ERROR(cudaDeviceSynchronize());
 
     uint32_t num_patches;
@@ -720,6 +723,8 @@ bool RXMeshDynamic::validate()
     }
 
     CUDA_ERROR(cudaFree(d_check));
+
+    this->m_quite = cached_quite;
 
     return success;
 }

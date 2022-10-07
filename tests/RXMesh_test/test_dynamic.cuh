@@ -22,14 +22,15 @@ __global__ static void edge_flip_kernel(
     ShmemAllocator shrd_alloc;
     Cavity<blockThreads, CavityOp::E> cavity(block, context, shrd_alloc);
 
-    const uint16_t before_num_faces = cavity.m_patch_info.num_faces[0];
-    const uint16_t before_num_edges = cavity.m_patch_info.num_edges[0];
+    const uint16_t before_num_vertices = cavity.m_patch_info.num_vertices[0];
+    const uint16_t before_num_edges    = cavity.m_patch_info.num_edges[0];
+    const uint16_t before_num_faces    = cavity.m_patch_info.num_faces[0];
 
 
-    /*for (uint16_t v = 0; v < patch_info.num_vertices[0]; ++v) {
-        if (!detail::is_owned(v, patch_info.owned_mask_v)) {
-            LPPair lp = patch_info.lp_v.find(v);
-            v_attr({patch_info.patch_stash.get_patch(lp),
+    /*for (uint16_t v = 0; v < cavity.m_patch_info.num_vertices[0]; ++v) {
+        if (!detail::is_owned(v, cavity.m_patch_info.owned_mask_v)) {
+            LPPair lp = cavity.m_patch_info.lp_v.find(v);
+            v_attr({cavity.m_patch_info.patch_stash.get_patch(lp),
                     lp.local_id_in_owner_patch()}) = v;
         }
     }*/
@@ -64,9 +65,10 @@ __global__ static void edge_flip_kernel(
 
     block.sync();
 
+
     cavity.process(block, shrd_alloc);
 
-    cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+    /*cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
         assert(size == 4);
 
         auto new_edge = cavity.add_edge(
@@ -85,8 +87,10 @@ __global__ static void edge_flip_kernel(
 
     cavity.cleanup(block);
 
-    assert(before_num_faces == cavity.m_patch_info.num_faces[0]);
+    assert(before_num_vertices == cavity.m_patch_info.num_vertices[0]);
     assert(before_num_edges == cavity.m_patch_info.num_edges[0]);
+    assert(before_num_faces == cavity.m_patch_info.num_faces[0]);
+    */
 }
 
 TEST(RXMeshDynamic, Cavity)
@@ -94,8 +98,8 @@ TEST(RXMeshDynamic, Cavity)
     using namespace rxmesh;
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
 
-    // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
-    // rxmesh_args.quite); rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches");
+    // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+    // rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches");
 
     RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
                      rxmesh_args.quite,
@@ -124,7 +128,7 @@ TEST(RXMeshDynamic, Cavity)
     edge_flip_kernel<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, true, false);
+        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, false, true);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 

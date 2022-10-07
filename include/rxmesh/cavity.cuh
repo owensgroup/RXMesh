@@ -28,8 +28,10 @@ struct Cavity
     __device__ __inline__ Cavity(cooperative_groups::thread_block& block,
                                  Context&                          context,
                                  ShmemAllocator&                   shrd_alloc)
+        : m_context(context)
     {
-        m_patch_info = context.get_patches_info()[blockIdx.x];
+
+        m_patch_info = m_context.get_patches_info()[blockIdx.x];
 
         __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
         m_s_active_cavity_bitmask = smem;
@@ -44,49 +46,56 @@ struct Cavity
         m_cavity_edge_loop =
             shrd_alloc.alloc<uint16_t>(m_patch_info.num_edges[0]);
 
-        uint32_t mask_size =
-            detail::mask_num_bytes(m_patch_info.num_vertices[0]);
-        m_s_owned_mask_v =
-            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
-        m_s_active_mask_v =
-            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
-        detail::load_async(reinterpret_cast<char*>(m_patch_info.owned_mask_v),
-                           mask_size,
-                           reinterpret_cast<char*>(m_s_owned_mask_v),
-                           false);
-        detail::load_async(reinterpret_cast<char*>(m_patch_info.active_mask_v),
-                           mask_size,
-                           reinterpret_cast<char*>(m_s_active_mask_v),
-                           false);
+        auto alloc_masks = [&](const uint16_t  num_elements,
+                               uint32_t*&      owned,
+                               uint32_t*&      active,
+                               uint32_t*&      migrate,
+                               const uint32_t* g_owned,
+                               const uint32_t* g_active) {
+            const uint32_t mask_size = detail::mask_num_bytes(num_elements);
+            owned   = reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
+            active  = reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
+            migrate = reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
 
-        mask_size = detail::mask_num_bytes(m_patch_info.num_edges[0]);
-        m_s_owned_mask_e =
-            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
-        m_s_active_mask_e =
-            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
-        detail::load_async(reinterpret_cast<char*>(m_patch_info.owned_mask_e),
-                           mask_size,
-                           reinterpret_cast<char*>(m_s_owned_mask_e),
-                           false);
-        detail::load_async(reinterpret_cast<char*>(m_patch_info.active_mask_e),
-                           mask_size,
-                           reinterpret_cast<char*>(m_s_active_mask_e),
-                           false);
+            detail::load_async(reinterpret_cast<const char*>(g_owned),
+                               mask_size,
+                               reinterpret_cast<char*>(owned),
+                               false);
+            detail::load_async(reinterpret_cast<const char*>(g_active),
+                               mask_size,
+                               reinterpret_cast<char*>(active),
+                               false);
+
+            for (uint32_t i = threadIdx.x; i < mask_size / 4;
+                 i += blockThreads) {
+                migrate[i] = 0;
+            }
+        };
 
 
-        mask_size = detail::mask_num_bytes(m_patch_info.num_faces[0]);
-        m_s_owned_mask_f =
-            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
-        m_s_active_mask_f =
-            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
-        detail::load_async(reinterpret_cast<char*>(m_patch_info.owned_mask_f),
-                           mask_size,
-                           reinterpret_cast<char*>(m_s_owned_mask_f),
-                           false);
-        detail::load_async(reinterpret_cast<char*>(m_patch_info.active_mask_f),
-                           mask_size,
-                           reinterpret_cast<char*>(m_s_active_mask_f),
-                           false);
+        // vertices masks
+        alloc_masks(m_patch_info.num_vertices[0],
+                    m_s_owned_mask_v,
+                    m_s_active_mask_v,
+                    m_s_migrate_mask_v,
+                    m_patch_info.owned_mask_v,
+                    m_patch_info.active_mask_v);
+
+        // edges masks
+        alloc_masks(m_patch_info.num_edges[0],
+                    m_s_owned_mask_e,
+                    m_s_active_mask_e,
+                    m_s_migrate_mask_e,
+                    m_patch_info.owned_mask_e,
+                    m_patch_info.active_mask_e);
+
+        // faces masks
+        alloc_masks(m_patch_info.num_faces[0],
+                    m_s_owned_mask_f,
+                    m_s_active_mask_f,
+                    m_s_migrate_mask_f,
+                    m_patch_info.owned_mask_f,
+                    m_patch_info.active_mask_f);
 
 
         if (threadIdx.x == 0) {
@@ -213,6 +222,8 @@ struct Cavity
         sort_cavities_edge_loop();
 
         block.sync();
+
+        migrate(block);
     }
 
 
@@ -749,7 +760,8 @@ struct Cavity
      * @brief find the index of the next element to add. First search within the
      * cavity and find the first element that has its cavity set to cavity_id.
      * If nothing found, search for the first element that has its bitmask set
-     * to 0
+     * to 0.
+     * TODO add new elements when needed
      */
     __device__ __inline__ uint16_t add_element(const uint16_t cavity_id,
                                                uint16_t*      element_cavity_id,
@@ -774,14 +786,37 @@ struct Cavity
     }
 
 
+    /**
+     * @brief migrate edges and face incident to vertices in the bitmask to this
+     * m_patch_info from a neighbor_patch
+     */
+    __device__ __inline__ void migrate(cooperative_groups::thread_block& block)
+    {
+
+        // TODO we may fuse this part with earlier computation that access the
+        // cavity's vertices
+        for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+            for (uint16_t i = 0; i < size; ++i) {
+                uint16_t vertex = get_cavity_vertex(c, i).unpack().second;
+                // we only want to migrate vertices that are not currently owned
+                if (!detail::is_owned(vertex, m_s_owned_mask_v)) {
+                    detail::bitmask_set_bit(vertex, m_s_migrate_mask_v, true);
+                }
+            }
+        });
+        block.sync();
+    }
+
     int *     m_s_num_cavities, *m_s_cavity_size;
     uint32_t* m_s_active_cavity_bitmask;
     uint32_t *m_s_owned_mask_v, *m_s_owned_mask_e, *m_s_owned_mask_f;
     uint32_t *m_s_active_mask_v, *m_s_active_mask_e, *m_s_active_mask_f;
+    uint32_t *m_s_migrate_mask_v, *m_s_migrate_mask_e, *m_s_migrate_mask_f;
     uint16_t *m_s_ev, *m_s_fe;
     uint16_t *m_cavity_id_v, *m_cavity_id_e, *m_cavity_id_f;
     uint16_t* m_cavity_edge_loop;
     PatchInfo m_patch_info;
+    Context   m_context;
 };
 
 }  // namespace rxmesh
