@@ -46,12 +46,12 @@ __global__ static void sparse_mat_query_test(
     query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
 }
 
-template <uint32_t blockThreads>
+template <typename T, uint32_t blockThreads>
 __global__ static void sparse_mat_edge_len_test(
-    const rxmesh::Context          context,
-    rxmesh::VertexAttribute<float> coords,
-    rxmesh::SparseMatInfo<int>     sparse_mat,
-    int*                           arr_ref)
+    const rxmesh::Context      context,
+    rxmesh::VertexAttribute<T> coords,
+    rxmesh::SparseMatInfo<T>   sparse_mat,
+    T*                         arr_ref)
 {
     using namespace rxmesh;
     auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
@@ -66,13 +66,12 @@ __global__ static void sparse_mat_edge_len_test(
         arr_ref[row_index]     = 0;
         sparse_mat(v_id, v_id) = 0;
 
-        Vector<3, float> v_coord(
-            coords(v_id, 0), coords(v_id, 1), coords(v_id, 2));
+        Vector<3, T> v_coord(coords(v_id, 0), coords(v_id, 1), coords(v_id, 2));
         for (uint32_t v = 0; v < iter.size(); ++v) {
-            Vector<3, float> vi_coord(
+            Vector<3, T> vi_coord(
                 coords(iter[v], 0), coords(iter[v], 1), coords(iter[v], 2));
+
             sparse_mat(v_id, iter[v]) = dist(v_coord, vi_coord);
-            sparse_mat(iter[v], v_id) = sparse_mat(v_id, iter[v]);
 
             arr_ref[row_index] += dist(v_coord, vi_coord);
         }
@@ -81,20 +80,23 @@ __global__ static void sparse_mat_edge_len_test(
     query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
 }
 
+template <typename T>
 __global__ void spmat_multi_hardwired_kernel(
-    int*                       vec,
-    rxmesh::SparseMatInfo<int> sparse_mat,
-    int*                       out,
-    const int                  N)
+    T*                       vec,
+    rxmesh::SparseMatInfo<T> sparse_mat,
+    T*                       out,
+    const int                N)
 {
     int   tid = threadIdx.x + blockIdx.x * blockDim.x;
     float sum = 0;
     if (tid < N) {
         for (int i = 0;
              i < sparse_mat.m_d_row_ptr[tid + 1] - sparse_mat.m_d_row_ptr[tid];
-             i++)
+             i++) {
+
             sum += vec[sparse_mat.m_d_col_idx[tid + i]] *
-                   sparse_mat.m_d_val[tid + i];
+                   sparse_mat.m_d_val[sparse_mat.m_d_row_ptr[tid] + i];
+        }
         out[tid] = sum;
     }
 }
@@ -280,54 +282,53 @@ TEST(Apps, SparseMatrixEdgeLen)
     std::vector<std::vector<float>> Verts;
     auto coords = rxmesh.get_input_vertex_coordinates();
 
-    int* d_arr_ones;
+    float* d_arr_ones;
 
-    std::vector<uint32_t> init_tmp_arr(num_vertices, 1);
-    CUDA_ERROR(cudaMalloc((void**)&d_arr_ones, (num_vertices) * sizeof(int)));
+    std::vector<float> init_tmp_arr(num_vertices, 1.f);
+    CUDA_ERROR(cudaMalloc((void**)&d_arr_ones, (num_vertices) * sizeof(float)));
     CUDA_ERROR(cudaMemcpy(d_arr_ones,
                           init_tmp_arr.data(),
-                          num_vertices * sizeof(int),
+                          num_vertices * sizeof(float),
                           cudaMemcpyHostToDevice));
 
-    SparseMatInfo<int> spmat(rxmesh);
+    SparseMatInfo<float> spmat(rxmesh);
 
-    int* d_arr_ref;
-    int* d_result;
+    float* d_arr_ref;
+    float* d_result;
 
-    CUDA_ERROR(
-        cudaMalloc((void**)&d_arr_ref, (spmat.m_nnz_entry_size) * sizeof(int)));
-    CUDA_ERROR(
-        cudaMalloc((void**)&d_result, (spmat.m_nnz_entry_size) * sizeof(int)));
+    CUDA_ERROR(cudaMalloc((void**)&d_arr_ref, (num_vertices) * sizeof(float)));
+    CUDA_ERROR(cudaMalloc((void**)&d_result, (num_vertices) * sizeof(float)));
 
     LaunchBox<threads> launch_box;
     rxmesh.prepare_launch_box(
-        {Op::VV}, launch_box, (void*)sparse_mat_edge_len_test<threads>);
+        {Op::VV}, launch_box, (void*)sparse_mat_edge_len_test<float, threads>);
 
-    sparse_mat_edge_len_test<threads><<<launch_box.blocks,
-                                        launch_box.num_threads,
-                                        launch_box.smem_bytes_dyn>>>(
+    sparse_mat_edge_len_test<float, threads><<<launch_box.blocks,
+                                               launch_box.num_threads,
+                                               launch_box.smem_bytes_dyn>>>(
         rxmesh.get_context(), *coords, spmat, d_arr_ref);
 
     // Spmat matrix multiply
 
-    spmat_multi_hardwired_kernel<<<blocks, threads>>>(
-        d_arr_ones, spmat, d_result, num_vertices);
+    spmat_multi_hardwired_kernel<float>
+        <<<blocks, threads>>>(d_arr_ones, spmat, d_result, num_vertices);
 
     // copy the value back to host
-    std::vector<uint32_t> h_arr_ref(num_vertices);
+    std::vector<float> h_arr_ref(num_vertices);
     CUDA_ERROR(cudaMemcpy(h_arr_ref.data(),
                           d_arr_ref,
-                          num_vertices * sizeof(int),
+                          num_vertices * sizeof(float),
                           cudaMemcpyDeviceToHost));
 
-    std::vector<uint32_t> h_result(num_vertices);
+    std::vector<float> h_result(num_vertices);
     CUDA_ERROR(cudaMemcpy(h_result.data(),
                           d_result,
-                          num_vertices * sizeof(int),
+                          num_vertices * sizeof(float),
                           cudaMemcpyDeviceToHost));
 
     for (uint32_t i = 0; i < num_vertices; ++i) {
-        EXPECT_EQ(h_result[i], h_arr_ref[i]);
+        // printf("Idx: %" PRIu32 " %f %f \n", i, h_result[i], h_arr_ref[i]);
+        EXPECT_FLOAT_EQ(h_result[i], h_arr_ref[i]);
     }
 
     CUDA_ERROR(cudaFree(d_arr_ref));
