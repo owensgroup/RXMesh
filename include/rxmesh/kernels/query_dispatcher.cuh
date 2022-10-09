@@ -221,7 +221,7 @@ __device__ __inline__ void query_block_dispatcher(
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
 
-    assert(patch_id < context.get_num_patches());
+    assert(patch_id < context.m_num_patches[0]);
 
 
     uint32_t    num_src_in_patch = 0;
@@ -232,19 +232,18 @@ __device__ __inline__ void query_block_dispatcher(
     LPHashTable output_lp_hashtable;
     LPPair*     s_table;
 
-    query_block_dispatcher<op, blockThreads>(
-        block,
-        shrd_alloc,
-        context.get_patches_info()[patch_id],
-        compute_active_set,
-        oriented,
-        num_src_in_patch,
-        s_output_offset,
-        s_output_value,
-        s_participant_bitmask,
-        s_output_owned_bitmask,
-        output_lp_hashtable,
-        s_table);
+    query_block_dispatcher<op, blockThreads>(block,
+                                             shrd_alloc,
+                                             context.m_patches_info[patch_id],
+                                             compute_active_set,
+                                             oriented,
+                                             num_src_in_patch,
+                                             s_output_offset,
+                                             s_output_value,
+                                             s_participant_bitmask,
+                                             s_output_owned_bitmask,
+                                             output_lp_hashtable,
+                                             s_table);
 
     // Call compute on the output in shared memory by looping over all
     // source elements in this patch.
@@ -260,17 +259,16 @@ __device__ __inline__ void query_block_dispatcher(
         if (is_set_bit(local_id, s_participant_bitmask)) {
 
             ComputeHandleT   handle(patch_id, local_id);
-            ComputeIteratorT iter(
-                local_id,
-                reinterpret_cast<LocalT*>(s_output_value),
-                s_output_offset,
-                fixed_offset,
-                patch_id,
-                s_output_owned_bitmask,
-                output_lp_hashtable,
-                s_table,
-                context.get_patches_info()[patch_id].patch_stash,
-                int(op == Op::FE));
+            ComputeIteratorT iter(local_id,
+                                  reinterpret_cast<LocalT*>(s_output_value),
+                                  s_output_offset,
+                                  fixed_offset,
+                                  patch_id,
+                                  s_output_owned_bitmask,
+                                  output_lp_hashtable,
+                                  s_table,
+                                  context.m_patches_info[patch_id].patch_stash,
+                                  int(op == Op::FE));
 
             compute_op(handle, iter);
         }
@@ -338,7 +336,7 @@ __device__ __inline__ void query_block_dispatcher(
     activeSetT                        compute_active_set,
     const bool                        oriented = false)
 {
-    if (blockIdx.x >= context.get_num_patches()) {
+    if (blockIdx.x >= context.m_num_patches[0]) {
         return;
     }
 
@@ -361,7 +359,7 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
                                                   activeSetT compute_active_set,
                                                   const bool oriented = false)
 {
-    if (blockIdx.x >= context.get_num_patches()) {
+    if (blockIdx.x >= context.m_num_patches[0]) {
         return;
     }
 
@@ -524,7 +522,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
 
         uint32_t patch_id = s_block_patches[p];
 
-        assert(patch_id < context.get_num_patches());
+        assert(patch_id < context.m_num_patches[0]);
 
         uint32_t    num_src_in_patch = 0;
         uint16_t*   s_output_offset(nullptr);
@@ -537,7 +535,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
         detail::template query_block_dispatcher<op, blockThreads>(
             block,
             shrd_alloc,
-            context.get_patches_info()[patch_id],
+            context.m_patches_info[patch_id],
             compute_active_set,
             oriented,
             num_src_in_patch,
@@ -566,7 +564,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
                 s_output_owned_bitmask,
                 output_lp_hashtable,
                 s_table,
-                context.get_patches_info()[patch_id].patch_stash,
+                context.m_patches_info[patch_id].patch_stash,
                 int(op == Op::FE));
 
             compute_op(src_id, iter);

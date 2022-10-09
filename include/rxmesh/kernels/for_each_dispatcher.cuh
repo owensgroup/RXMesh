@@ -42,7 +42,7 @@ __device__ __inline__ void for_each_dispatcher(const Context& context,
             "for_each_dispatcher() since input template parameter operation is "
             "Op::V, the lambda function should take VertexHandle as an input");
         detail::for_each_vertex_kernel(
-            context.get_num_patches(), context.get_patches_info(), compute_op);
+            context.m_num_patches[0], context.m_patches_info, compute_op);
     }
     if constexpr (op == Op::E) {
         static_assert(
@@ -50,7 +50,7 @@ __device__ __inline__ void for_each_dispatcher(const Context& context,
             "for_each_dispatcher() since input template parameter operation is "
             "Op::E, the lambda function should take EdgeHandle as an input");
         detail::for_each_edge_kernel(
-            context.get_num_patches(), context.get_patches_info(), compute_op);
+            context.m_num_patches[0], context.m_patches_info, compute_op);
     }
     if constexpr (op == Op::F) {
         static_assert(
@@ -58,7 +58,7 @@ __device__ __inline__ void for_each_dispatcher(const Context& context,
             "for_each_dispatcher() since input template parameter operation is "
             "Op::F, the lambda function should take FaceHandle as an input");
         detail::for_each_face_kernel(
-            context.get_num_patches(), context.get_patches_info(), compute_op);
+            context.m_num_patches[0], context.m_patches_info, compute_op);
     }
 
     __syncthreads();

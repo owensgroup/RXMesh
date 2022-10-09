@@ -44,9 +44,9 @@ __global__ static void check_uniqueness(const Context           context,
 
     const uint32_t patch_id = blockIdx.x;
 
-    if (patch_id < context.get_num_patches()) {
+    if (patch_id < context.m_num_patches[0]) {
 
-        PatchInfo patch_info = context.get_patches_info()[patch_id];
+        PatchInfo patch_info = context.m_patches_info[patch_id];
 
         ShmemAllocator shrd_alloc;
 
@@ -144,9 +144,9 @@ __global__ static void check_not_owned(const Context           context,
 
     const uint32_t patch_id = blockIdx.x;
 
-    if (patch_id < context.get_num_patches()) {
+    if (patch_id < context.m_num_patches[0]) {
 
-        PatchInfo patch_info = context.get_patches_info()[patch_id];
+        PatchInfo patch_info = context.m_patches_info[patch_id];
 
         ShmemAllocator shrd_alloc;
         uint16_t*      s_fe =
@@ -200,8 +200,7 @@ __global__ static void check_not_owned(const Context           context,
                 auto      f_pair  = patch_info.lp_f.find(f);
                 uint16_t  f_owned = f_pair.local_id_in_owner_patch();
                 uint32_t  f_patch = patch_info.patch_stash.get_patch(f_pair);
-                PatchInfo owner_patch_info =
-                    context.get_patches_info()[f_patch];
+                PatchInfo owner_patch_info = context.m_patches_info[f_patch];
 
                 // the owner patch should have indicate that the owned face is
                 // owned by it
@@ -268,8 +267,7 @@ __global__ static void check_not_owned(const Context           context,
                 auto      e_pair  = patch_info.lp_e.find(e);
                 uint16_t  e_owned = e_pair.local_id_in_owner_patch();
                 uint32_t  e_patch = patch_info.patch_stash.get_patch(e_pair);
-                PatchInfo owner_patch_info =
-                    context.get_patches_info()[e_patch];
+                PatchInfo owner_patch_info = context.m_patches_info[e_patch];
 
                 // the owner patch should have indicate that the owned face is
                 // owned by it
@@ -311,8 +309,8 @@ __global__ static void check_ribbon_edges(const Context           context,
 
     const uint32_t patch_id = blockIdx.x;
 
-    if (patch_id < context.get_num_patches()) {
-        PatchInfo patch_info = context.get_patches_info()[patch_id];
+    if (patch_id < context.m_num_patches[0]) {
+        PatchInfo patch_info = context.m_patches_info[patch_id];
 
         ShmemAllocator shrd_alloc;
         uint16_t*      s_fe =
@@ -410,8 +408,8 @@ __global__ static void check_ribbon_faces(const Context               context,
 
     const uint32_t patch_id = blockIdx.x;
 
-    if (patch_id < context.get_num_patches()) {
-        PatchInfo patch_info = context.get_patches_info()[patch_id];
+    if (patch_id < context.m_num_patches[0]) {
+        PatchInfo patch_info = context.m_patches_info[patch_id];
 
         ShmemAllocator shrd_alloc;
         uint16_t*      s_fv =

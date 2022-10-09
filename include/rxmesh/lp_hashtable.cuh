@@ -274,10 +274,20 @@ struct LPHashTable
         } while (cuckoo_counter < m_max_cuckoo_chains);
 
         for (uint8_t i = 0; i < stash_size; ++i) {
+#ifdef __CUDA_ARCH__
+            if (::atomicCAS(reinterpret_cast<uint32_t*>(m_stash + i),
+                            INVALID32,
+                            pair.m_pair) == INVALID32) {
+#else
             if (m_stash[i].is_sentinel()) {
                 m_stash[i] = pair;
+#endif
                 return true;
             }
+            // if (m_stash[i].is_sentinel()) {
+            //    m_stash[i] = pair;
+            //    return true;
+            //}
         }
 
         return false;

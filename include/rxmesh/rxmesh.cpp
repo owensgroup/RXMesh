@@ -57,14 +57,19 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     build(fv, patcher_file);
     build_device();
 
+    calc_max_elements();
+
     // Allocate and copy the context to the gpu
-    m_rxmesh_context.init(m_num_edges,
+    m_rxmesh_context.init(m_num_vertices,
+                          m_num_edges,
                           m_num_faces,
-                          m_num_vertices,
+                          m_max_vertices_per_patch,
+                          m_max_edges_per_patch,
+                          m_max_faces_per_patch,
                           m_num_patches,
                           m_d_patches_info);
 
-    calc_max_elements();
+
     if (!m_quite) {
         RXMESH_TRACE("#Vertices = {}, #Faces= {}, #Edges= {}",
                      m_num_vertices,

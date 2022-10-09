@@ -19,7 +19,7 @@ struct Query
     Query& operator=(const Query&) = delete;
 
     __device__ __inline__ Query(const Context& context)
-        : m_patch_info(context.get_patches_info()[blockIdx.x]),
+        : m_patch_info(context.m_patches_info[blockIdx.x]),
           m_status(Empty),
           m_num_src_in_patch(0),
           m_s_participant_bitmask(nullptr),
@@ -29,7 +29,7 @@ struct Query
           m_s_table(nullptr)
     {
 
-        assert(m_patch_info.patch_id < context.get_num_patches());
+        assert(m_patch_info.patch_id < context.m_num_patches[0]);
     }
 
 
