@@ -854,12 +854,12 @@ struct Cavity
                 }
 
 
-                /*const uint32_t e_max_mask_size =
+                const uint32_t e_max_mask_size =
                     detail::mask_num_bytes(m_context.m_max_num_edges[0]) / 4;
                 for (uint32_t i = threadIdx.x; i < e_max_mask_size;
                      i += blockThreads) {
                     m_s_src_mask_e[i] = 0;
-                }*/
+                }
 
 
                 block.sync();
@@ -914,30 +914,36 @@ struct Cavity
 
                     // make sure there is a copy in p for any vertex in
                     // m_s_src_connect_mask_v
-                    for (uint16_t v = threadIdx.x;
-                         v < q_patch_info.num_vertices[0];
+                    const uint16_t num_v_up = ROUND_UP_TO_NEXT_MULTIPLE(
+                        q_patch_info.num_vertices[0], blockThreads);
+
+                    for (uint16_t v = threadIdx.x; v < num_v_up;
                          v += blockThreads) {
-                        if (detail::is_set_bit(v, m_s_src_connect_mask_v)) {
-                            uint16_t vq = v;
-                            uint32_t o  = q;
-                            uint16_t vp = find_copy_vertex(vq, o);
-                            if (vp == INVALID16) {
+                        LPPair lp;
 
-                                vp = atomicAdd(m_s_num_vertices, 1u);
+                        if (v < q_patch_info.num_vertices[0]) {
+                            if (detail::is_set_bit(v, m_s_src_connect_mask_v)) {
+                                uint16_t vq = v;
+                                uint32_t o  = q;
+                                uint16_t vp = find_copy_vertex(vq, o);
+                                if (vp == INVALID16) {
 
-                                const uint8_t owner_stash_id =
-                                    m_patch_info.patch_stash.find_patch_index(
-                                        o);
-                                LPPair lp(vp, vq, owner_stash_id);
+                                    vp = atomicAdd(m_s_num_vertices, 1u);
 
-                                // TODO we need to make sure that no other
-                                // thread is querying the hashtable while we
-                                // insert in it but this may lead to deadlock!!!
-                                block.sync();
-
-
-                                assert(m_patch_info.lp_v.insert(lp));
+                                    const uint8_t owner_stash_id =
+                                        m_patch_info.patch_stash
+                                            .find_patch_index(o);
+                                    LPPair lp(vp, vq, owner_stash_id);
+                                }
                             }
+                        }
+
+                        // we need to make sure that no other
+                        // thread is querying the hashtable while we
+                        // insert in it
+                        block.sync();
+                        if (!lp.is_sentinel()) {
+                            assert(m_patch_info.lp_v.insert(lp));
                         }
                     }
 

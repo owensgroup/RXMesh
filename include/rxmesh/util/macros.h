@@ -14,6 +14,8 @@ constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 9;
 // used for integer rounding
 #define DIVIDE_UP(num, divisor) (num + divisor - 1) / (divisor)
 
+#define ROUND_UP_TO_NEXT_MULTIPLE(num, mult) (DIVIDE_UP(num, mult) * mult)
+
 // unsigned 64-bit
 #define INVALID64 0xFFFFFFFFFFFFFFFFu
 
