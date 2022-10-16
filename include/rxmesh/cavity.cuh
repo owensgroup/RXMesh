@@ -845,20 +845,13 @@ struct Cavity
                 if (threadIdx.x == 0) {
                     s_ok_q = 0;
                 }
+
+                // init src_v bitmask
                 const uint32_t v_max_mask_size =
                     detail::mask_num_bytes(m_context.m_max_num_vertices[0]) / 4;
                 for (uint32_t i = threadIdx.x; i < v_max_mask_size;
                      i += blockThreads) {
-                    m_s_src_mask_v[i]         = 0;
-                    m_s_src_connect_mask_v[i] = 0;
-                }
-
-
-                const uint32_t e_max_mask_size =
-                    detail::mask_num_bytes(m_context.m_max_num_edges[0]) / 4;
-                for (uint32_t i = threadIdx.x; i < e_max_mask_size;
-                     i += blockThreads) {
-                    m_s_src_mask_e[i] = 0;
+                    m_s_src_mask_v[i] = 0;
                 }
 
 
@@ -888,13 +881,32 @@ struct Cavity
                 if (s_ok_q != 0) {
                     PatchInfo q_patch_info = m_context.m_patches_info[q];
 
+                    const uint16_t q_num_vertices =
+                        q_patch_info.num_vertices[0];
+                    const uint16_t q_num_edges = q_patch_info.num_edges[0];
+                    const uint16_t q_num_faces = q_patch_info.num_faces[0];
+
+                    // initialize connect_mask and src_e bitmask
+                    const uint32_t v_mask_size =
+                        detail::mask_num_bytes(q_num_vertices) / 4;
+                    for (uint32_t i = threadIdx.x; i < v_mask_size;
+                         i += blockThreads) {
+                        m_s_src_connect_mask_v[i] = 0;
+                    }
+                    const uint32_t e_mask_size =
+                        detail::mask_num_bytes(q_num_edges) / 4;
+                    for (uint32_t i = threadIdx.x; i < e_mask_size;
+                         i += blockThreads) {
+                        m_s_src_mask_e[i] = 0;
+                    }
+                    block.sync();
+
 
                     // in m_s_src_connect_mask_v, mark the vertices connected to
                     // vertices in m_s_src_mask_v
                     const uint16_t num_vertices_q =
                         m_context.m_patches_info[q].num_vertices[0];
-                    for (uint16_t e = threadIdx.x;
-                         e < q_patch_info.num_edges[0];
+                    for (uint16_t e = threadIdx.x; e < q_num_edges;
                          e += blockThreads) {
                         const uint16_t v0q = q_patch_info.ev[2 * e + 0].id;
                         const uint16_t v1q = q_patch_info.ev[2 * e + 1].id;
@@ -912,16 +924,17 @@ struct Cavity
                     block.sync();
 
 
+
                     // make sure there is a copy in p for any vertex in
                     // m_s_src_connect_mask_v
-                    const uint16_t num_v_up = ROUND_UP_TO_NEXT_MULTIPLE(
-                        q_patch_info.num_vertices[0], blockThreads);
+                    const uint16_t num_v_up =
+                        ROUND_UP_TO_NEXT_MULTIPLE(q_num_vertices, blockThreads);
 
                     for (uint16_t v = threadIdx.x; v < num_v_up;
                          v += blockThreads) {
                         LPPair lp;
 
-                        if (v < q_patch_info.num_vertices[0]) {
+                        if (v < q_num_vertices) {
                             if (detail::is_set_bit(v, m_s_src_connect_mask_v)) {
                                 uint16_t vq = v;
                                 uint32_t o  = q;
@@ -949,9 +962,7 @@ struct Cavity
 
                     block.sync();
 
-
-                    for (uint16_t e = threadIdx.x;
-                         e < q_patch_info.num_edges[0];
+                    for (uint16_t e = threadIdx.x; e < q_num_edges;
                          e += blockThreads) {
 
                         // edge v0q--v1q where o0 is owner patch of v0q and o1
@@ -1004,11 +1015,73 @@ struct Cavity
                             }
                         }
                     }
+                    block.sync();
+
+                    for (uint16_t f = threadIdx.x; f < q_num_faces;
+                         f += blockThreads) {
+
+                        uint16_t e0q, e1q, e2q, e0p, e1p, e2p;
+                        flag_t   d0, d1, d2;
+                        uint32_t o0(q), o1(q), o2(q);
+
+                        Context::unpack_edge_dir(
+                            q_patch_info.fe[2 * f + 0].id, e0q, d0);
+                        Context::unpack_edge_dir(
+                            q_patch_info.fe[2 * f + 1].id, e1q, d1);
+                        Context::unpack_edge_dir(
+                            q_patch_info.fe[2 * f + 2].id, e2q, d2);
+
+                        // If any of these three edges are participant in the
+                        // src bitmask
+                        if (detail::is_set_bit(e0q, m_s_src_mask_e) ||
+                            detail::is_set_bit(e1q, m_s_src_mask_e) ||
+                            detail::is_set_bit(e2q, m_s_src_mask_e)) {
+
+                            // eq -> mapped it to its local index in owner patch
+                            // o-> mapped to the owner patch
+                            // ep-> mapped to the corresponding local index in p
+                            e0p = find_copy_edge(e0q, o0);
+                            e1p = find_copy_edge(e1q, o1);
+                            e2p = find_copy_edge(e2q, o2);
+
+                            // since any edge in m_s_src_mask_e has been added
+                            // already to p, then we should find the copy
+                            // otherwise there is something wrong
+                            assert(e0p != INVALID16);
+                            assert(e1p != INVALID16);
+                            assert(e2p != INVALID16);
+
+                            // check on if e already exist in p
+                            uint16_t fq = f;
+                            uint32_t o  = q;
+                            uint16_t fp = find_copy_face(fq, o);
+
+                            if (fp == INVALID16) {
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
+    /**
+     * @brief given a local face in a patch, find its corresponding local
+     * index in the patch associated with this cavity i.e., m_patch_info
+     */
+    __device__ __inline__ uint16_t find_copy_face(uint16_t& local_id,
+                                                  uint32_t& patch)
+    {
+        return find_copy(local_id,
+                         patch,
+                         m_context.m_patches_info[patch].owned_mask_f,
+                         m_context.m_patches_info[patch].lp_f,
+                         m_context.m_patches_info[patch].patch_stash,
+                         m_s_num_faces[0],
+                         m_s_owned_mask_f,
+                         m_patch_info.lp_f,
+                         m_patch_info.patch_stash);
+    }
 
     /**
      * @brief given a local edge in a patch, find its corresponding local
