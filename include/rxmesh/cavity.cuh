@@ -904,8 +904,6 @@ struct Cavity
 
                     // in m_s_src_connect_mask_v, mark the vertices connected to
                     // vertices in m_s_src_mask_v
-                    const uint16_t num_vertices_q =
-                        m_context.m_patches_info[q].num_vertices[0];
                     for (uint16_t e = threadIdx.x; e < q_num_edges;
                          e += blockThreads) {
                         const uint16_t v0q = q_patch_info.ev[2 * e + 0].id;
@@ -924,12 +922,18 @@ struct Cavity
                     block.sync();
 
 
-
                     // make sure there is a copy in p for any vertex in
                     // m_s_src_connect_mask_v
                     const uint16_t num_v_up =
                         ROUND_UP_TO_NEXT_MULTIPLE(q_num_vertices, blockThreads);
 
+                    // we need to make sure that no other is query the vertex
+                    // hashtable before adding items to it. So, we need to sync
+                    // the whole block before adding a new vertex but some
+                    // threads may not be participant in this for-loop if. So,
+                    // we round up the end of the loop to be multiple of the
+                    // blockthreads and check inside the loop so we don't access
+                    // non-existing vertices
                     for (uint16_t v = threadIdx.x; v < num_v_up;
                          v += blockThreads) {
                         LPPair lp;
@@ -943,10 +947,21 @@ struct Cavity
 
                                     vp = atomicAdd(m_s_num_vertices, 1u);
 
+                                    assert(vp <
+                                           m_patch_info.vertices_capacity[0]);
+
+                                    // activate the vertex in the bit mask
+                                    detail::bitmask_set_bit(
+                                        vp, m_s_active_mask_v, true);
+
+                                    // since it is owned by some other patch
+                                    detail::bitmask_clear_bit(
+                                        vp, m_s_owned_mask_v, true);
+
                                     const uint8_t owner_stash_id =
                                         m_patch_info.patch_stash
                                             .find_patch_index(o);
-                                    LPPair lp(vp, vq, owner_stash_id);
+                                    lp = LPPair(vp, vq, owner_stash_id);
                                 }
                             }
                         }
@@ -962,102 +977,146 @@ struct Cavity
 
                     block.sync();
 
-                    for (uint16_t e = threadIdx.x; e < q_num_edges;
+                    // same story as with the loop that adds vertices
+                    const uint16_t num_e_up =
+                        ROUND_UP_TO_NEXT_MULTIPLE(q_num_edges, blockThreads);
+                    for (uint16_t e = threadIdx.x; e < num_e_up;
                          e += blockThreads) {
 
-                        // edge v0q--v1q where o0 is owner patch of v0q and o1
-                        // is owner patch for v1q
-                        // We assume that the owner patch is q and will fix this
-                        // later
-                        uint16_t v0q, v1q, v0p, v1p;
-                        uint32_t o0(q), o1(q);
+                        LPPair lp;
+                        if (e < q_num_edges) {
+                            // edge v0q--v1q where o0 (defined below) is owner
+                            // patch of v0q and o1 (defined below) is owner
+                            // patch for v1q
 
-                        v0q = q_patch_info.ev[2 * e + 0].id;
-                        v1q = q_patch_info.ev[2 * e + 1].id;
+                            uint16_t v0q = q_patch_info.ev[2 * e + 0].id;
+                            uint16_t v1q = q_patch_info.ev[2 * e + 1].id;
 
-                        // If any of these two vertices are participant in the
-                        // src bitmask
-                        if (detail::is_set_bit(v0q, m_s_src_mask_v) ||
-                            detail::is_set_bit(v1q, m_s_src_mask_v)) {
+                            // If any of these two vertices are participant in
+                            // the src bitmask
+                            if (detail::is_set_bit(v0q, m_s_src_mask_v) ||
+                                detail::is_set_bit(v1q, m_s_src_mask_v)) {
 
-                            // vq -> mapped it to its local index in owner patch
-                            // o-> mapped to the owner patch
-                            // vp-> mapped to the corresponding local index in p
-                            v0p = find_copy_vertex(v0q, o0);
-                            v1p = find_copy_vertex(v1q, o1);
+                                // We assume that the owner patch is q and will
+                                // fix this later
+                                uint32_t o0(q), o1(q);
 
-                            // since any vertex in m_s_src_mask_v has been added
-                            // already to p, then we should find the copy
-                            // otherwise there is something wrong
-                            assert(v0p != INVALID16);
-                            assert(v1p != INVALID16);
+                                // vq -> mapped to its local index in owner
+                                // patch o-> mapped to the owner patch vp->
+                                // mapped to the corresponding local index in p
+                                uint16_t v0p = find_copy_vertex(v0q, o0);
+                                uint16_t v1p = find_copy_vertex(v1q, o1);
 
-                            // check on if e already exist in p
-                            uint16_t eq = e;
-                            uint32_t o  = q;
-                            uint16_t ep = find_copy_edge(eq, o);
+                                // since any vertex in m_s_src_mask_v has been
+                                // added already to p, then we should find the
+                                // copy otherwise there is something wrong
+                                assert(v0p != INVALID16);
+                                assert(v1p != INVALID16);
 
-                            if (ep == INVALID16) {
-                                const uint16_t new_e =
-                                    atomicAdd(m_s_num_edges, 1u);
+                                // check on if e already exist in p
+                                uint16_t eq = e;
+                                uint32_t o  = q;
+                                uint16_t ep = find_copy_edge(eq, o);
 
-                                assert(new_e < m_patch_info.edges_capacity[0]);
+                                if (ep == INVALID16) {
+                                    ep = atomicAdd(m_s_num_edges, 1u);
 
-                                m_s_ev[2 * new_e + 0] = v0p;
-                                m_s_ev[2 * new_e + 1] = v1p;
+                                    assert(ep < m_patch_info.edges_capacity[0]);
 
+                                    m_s_ev[2 * ep + 0] = v0p;
+                                    m_s_ev[2 * ep + 1] = v1p;
 
-                                detail::bitmask_set_bit(
-                                    e, m_s_active_mask_e, true);
+                                    // activate the edge in the bitmask
+                                    detail::bitmask_set_bit(
+                                        e, m_s_active_mask_e, true);
 
-                                detail::bitmask_clear_bit(
-                                    e, m_s_owned_mask_e, true);
+                                    // since it is owned by some other patch
+                                    detail::bitmask_clear_bit(
+                                        e, m_s_owned_mask_e, true);
+
+                                    const uint8_t owner_stash_id =
+                                        m_patch_info.patch_stash
+                                            .find_patch_index(o);
+                                    lp = LPPair(ep, eq, owner_stash_id);
+                                }
                             }
+                        }
+
+                        block.sync();
+                        if (!lp.is_sentinel()) {
+                            assert(m_patch_info.lp_e.insert(lp));
                         }
                     }
                     block.sync();
 
-                    for (uint16_t f = threadIdx.x; f < q_num_faces;
+                    // same story as with the loop that adds vertices
+                    const uint16_t num_f_up =
+                        ROUND_UP_TO_NEXT_MULTIPLE(q_num_faces, blockThreads);
+                    for (uint16_t f = threadIdx.x; f < num_f_up;
                          f += blockThreads) {
+                        LPPair lp;
 
-                        uint16_t e0q, e1q, e2q, e0p, e1p, e2p;
-                        flag_t   d0, d1, d2;
-                        uint32_t o0(q), o1(q), o2(q);
+                        if (f < q_num_faces) {
+                            uint16_t e0q, e1q, e2q;
+                            flag_t   d0, d1, d2;
+                            Context::unpack_edge_dir(
+                                q_patch_info.fe[2 * f + 0].id, e0q, d0);
+                            Context::unpack_edge_dir(
+                                q_patch_info.fe[2 * f + 1].id, e1q, d1);
+                            Context::unpack_edge_dir(
+                                q_patch_info.fe[2 * f + 2].id, e2q, d2);
 
-                        Context::unpack_edge_dir(
-                            q_patch_info.fe[2 * f + 0].id, e0q, d0);
-                        Context::unpack_edge_dir(
-                            q_patch_info.fe[2 * f + 1].id, e1q, d1);
-                        Context::unpack_edge_dir(
-                            q_patch_info.fe[2 * f + 2].id, e2q, d2);
+                            // If any of these three edges are participant in
+                            // the src bitmask
+                            if (detail::is_set_bit(e0q, m_s_src_mask_e) ||
+                                detail::is_set_bit(e1q, m_s_src_mask_e) ||
+                                detail::is_set_bit(e2q, m_s_src_mask_e)) {
 
-                        // If any of these three edges are participant in the
-                        // src bitmask
-                        if (detail::is_set_bit(e0q, m_s_src_mask_e) ||
-                            detail::is_set_bit(e1q, m_s_src_mask_e) ||
-                            detail::is_set_bit(e2q, m_s_src_mask_e)) {
+                                uint32_t o0(q), o1(q), o2(q);
 
-                            // eq -> mapped it to its local index in owner patch
-                            // o-> mapped to the owner patch
-                            // ep-> mapped to the corresponding local index in p
-                            e0p = find_copy_edge(e0q, o0);
-                            e1p = find_copy_edge(e1q, o1);
-                            e2p = find_copy_edge(e2q, o2);
+                                // eq -> mapped it to its local index in owner
+                                // patch o-> mapped to the owner patch ep->
+                                // mapped to the corresponding local index in p
+                                uint16_t e0p = find_copy_edge(e0q, o0);
+                                uint16_t e1p = find_copy_edge(e1q, o1);
+                                uint16_t e2p = find_copy_edge(e2q, o2);
 
-                            // since any edge in m_s_src_mask_e has been added
-                            // already to p, then we should find the copy
-                            // otherwise there is something wrong
-                            assert(e0p != INVALID16);
-                            assert(e1p != INVALID16);
-                            assert(e2p != INVALID16);
+                                // since any edge in m_s_src_mask_e has been
+                                // added already to p, then we should find the
+                                // copy otherwise there is something wrong
+                                assert(e0p != INVALID16);
+                                assert(e1p != INVALID16);
+                                assert(e2p != INVALID16);
 
-                            // check on if e already exist in p
-                            uint16_t fq = f;
-                            uint32_t o  = q;
-                            uint16_t fp = find_copy_face(fq, o);
+                                // check on if e already exist in p
+                                uint16_t fq = f;
+                                uint32_t o  = q;
+                                uint16_t fp = find_copy_face(fq, o);
 
-                            if (fp == INVALID16) {
+                                if (fp == INVALID16) {
+                                    fp = atomicAdd(m_s_num_faces, 1u);
+
+                                    assert(fp < m_patch_info.faces_capacity[0]);
+
+                                    // activate the face in the bitmask
+                                    detail::bitmask_set_bit(
+                                        fp, m_s_active_mask_f, true);
+
+                                    // since it is owned by some other patch
+                                    detail::bitmask_clear_bit(
+                                        fp, m_s_owned_mask_f, true);
+
+                                    const uint8_t owner_stash_id =
+                                        m_patch_info.patch_stash
+                                            .find_patch_index(o);
+                                    lp = LPPair(fp, fq, owner_stash_id);
+                                }
                             }
+                        }
+
+                        block.sync();
+                        if (!lp.is_sentinel()) {
+                            assert(m_patch_info.lp_f.insert(lp));
                         }
                     }
                 }
@@ -1067,7 +1126,9 @@ struct Cavity
 
     /**
      * @brief given a local face in a patch, find its corresponding local
-     * index in the patch associated with this cavity i.e., m_patch_info
+     * index in the patch associated with this cavity i.e., m_patch_info.
+     * If the given face (local_id) is not owned by the given patch, they will
+     * be mapped to their owner patch and local index in the owner patch
      */
     __device__ __inline__ uint16_t find_copy_face(uint16_t& local_id,
                                                   uint32_t& patch)
@@ -1085,7 +1146,9 @@ struct Cavity
 
     /**
      * @brief given a local edge in a patch, find its corresponding local
-     * index in the patch associated with this cavity i.e., m_patch_info
+     * index in the patch associated with this cavity i.e., m_patch_info.
+     * If the given edge (local_id) is not owned by the given patch, they will
+     * be mapped to their owner patch and local index in the owner patch
      */
     __device__ __inline__ uint16_t find_copy_edge(uint16_t& local_id,
                                                   uint32_t& patch)
@@ -1103,7 +1166,9 @@ struct Cavity
 
     /**
      * @brief given a local vertex in a patch, find its corresponding local
-     * index in the patch associated with this cavity i.e., m_patch_info
+     * index in the patch associated with this cavity i.e., m_patch_info.
+     * If the given vertex (local_id) is not owned by the given patch, they will
+     * be mapped to their owner patch and local index in the owner patch.
      */
     __device__ __inline__ uint16_t find_copy_vertex(uint16_t& local_id,
                                                     uint32_t& patch)
