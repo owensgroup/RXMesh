@@ -86,8 +86,8 @@ class RXMeshDynamic : public RXMeshStatic
         dyn_shmem +=
             5 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
             5 * ShmemAllocator::default_alignment;
-        dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
-                     4 * ShmemAllocator::default_alignment;
+        dyn_shmem += 5 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
+                     5 * ShmemAllocator::default_alignment;
         dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
                      4 * ShmemAllocator::default_alignment;
 
