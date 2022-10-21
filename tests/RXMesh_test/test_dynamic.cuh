@@ -145,14 +145,22 @@ TEST(RXMeshDynamic, Cavity)
     EXPECT_TRUE(rx.validate());
 
 #if USE_POLYSCOPE
+    std::pair<double, double> range(-2, 2);
     polyscope::init();
-    auto polyscope_mesh = rx.get_polyscope_mesh();
-    rx.polyscope_render_vertex_patch();
-    rx.polyscope_render_edge_patch();
-    rx.polyscope_render_face_patch();
-    polyscope_mesh->addVertexScalarQuantity("vAttr", *v_attr);
-    polyscope_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
-    polyscope_mesh->addFaceScalarQuantity("fAttr", *f_attr);
+    auto ps_mesh = rx.get_polyscope_mesh();
+    rx.polyscope_render_vertex_patch()->setMapRange(range);
+    rx.polyscope_render_edge_patch()->setMapRange(range);
+    rx.polyscope_render_face_patch()->setMapRange(range);
+
+    uint32_t pid      = 0;
+    auto     ps_patch = rx.render_patch(pid);
+    rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(range);
+    rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(range);
+    rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(range);
+
+    ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
+    ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
+    ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
     polyscope::show();
 #endif
 }
