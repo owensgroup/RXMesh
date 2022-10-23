@@ -701,22 +701,23 @@ bool RXMeshDynamic::validate()
 
     bool success = true;
     if (!check_num_mesh_elements()) {
-        RXMESH_WARN("RXMeshDynamic::validate() check_num_mesh_elements failed");
+        RXMESH_ERROR(
+            "RXMeshDynamic::validate() check_num_mesh_elements failed");
         success = false;
     }
 
     if (!check_uniqueness()) {
-        RXMESH_WARN("RXMeshDynamic::validate() check_uniqueness failed");
+        RXMESH_ERROR("RXMeshDynamic::validate() check_uniqueness failed");
         success = false;
     }
 
     if (!check_not_owned()) {
-        RXMESH_WARN("RXMeshDynamic::validate() check_not_owned failed");
+        RXMESH_ERROR("RXMeshDynamic::validate() check_not_owned failed");
         success = false;
     }
 
     if (!check_ribbon()) {
-        RXMESH_WARN("RXMeshDynamic::validate() check_ribbon failed");
+        RXMESH_ERROR("RXMeshDynamic::validate() check_ribbon failed");
         success = false;
     }
 
@@ -905,12 +906,36 @@ void RXMeshDynamic::update_host()
         m_h_num_owned_f[p]     = m_h_patches_info[p].get_num_owned_faces();
         m_h_face_prefix[p + 1] = m_h_face_prefix[p] + m_h_num_owned_f[p];
     }
+
+    if (m_h_vertex_prefix.back() != this->m_num_vertices) {
+        RXMESH_ERROR(
+            "RXMeshDynamic::update_host error in updating host. m_num_vertices "
+            "{} does not match m_h_vertex_prefix calculation {}",
+            this->m_num_vertices,
+            m_h_vertex_prefix.back());
+    }
+
+    if (m_h_edge_prefix.back() != this->m_num_edges) {
+        RXMESH_ERROR(
+            "RXMeshDynamic::update_host error in updating host. m_num_faces "
+            "{} does not match m_h_face_prefix calculation {}",
+            this->m_num_faces,
+            m_h_face_prefix.back());
+    }
+
+    if (m_h_face_prefix.back() != this->m_num_faces) {
+        RXMESH_ERROR(
+            "RXMeshDynamic::update_host error in updating host. m_num_edges "
+            "{} does not match m_h_edge_prefix calculation {}",
+            this->m_num_edges,
+            m_h_edge_prefix.back());
+    }
     this->calc_max_elements();
 
 #if USE_POLYSCOPE
     // for polyscope, we just remove the mesh and re-add it since polyscope does
     // not support changing the mesh topology
-    // polyscope::removeSurfaceMesh(this->m_polyscope_mesh_name, true);
+    //polyscope::removeSurfaceMesh(this->m_polyscope_mesh_name, true);
     this->m_polyscope_mesh_name = this->m_polyscope_mesh_name + "updated";
     this->register_polyscope();
 #endif

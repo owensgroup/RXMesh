@@ -35,8 +35,8 @@ struct LPPair
     constexpr static uint32_t PatchStashNumBits = 4;
 
     /**
-     * @brief Constructor using the local ID, local id with the owner patch,
-     * patch id within the PatchStash
+     * @brief Constructor using the local ID (key),
+     * local ID with the owner patch, patch id within the PatchStash (value)
      * @param local_id the local ID in the (not the owner) patch
      * @param local_id_in_owner_patch the local index within the owner patch
      * @param owner_patch the owner patch id within the PatchStash

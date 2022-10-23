@@ -59,8 +59,10 @@ class RXMeshDynamic : public RXMeshStatic
 
         // To load EV and FE
         uint32_t dyn_shmem =
-            3 * this->m_max_faces_per_patch * sizeof(uint16_t) +
-            2 * this->m_max_edges_per_patch * sizeof(uint16_t) +
+            3 * m_capacity_factor * this->m_max_faces_per_patch *
+                sizeof(uint16_t) +
+            2 * m_capacity_factor * this->m_max_edges_per_patch *
+                sizeof(uint16_t) +
             2 * ShmemAllocator::default_alignment;
 
         // cavity ID of fake deleted elements

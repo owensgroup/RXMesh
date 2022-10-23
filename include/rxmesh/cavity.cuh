@@ -251,7 +251,9 @@ struct Cavity
         // Repair for conflicting cavities
         deactivate_conflicting_cavities();
 
-        // Clear bitmask for elements in the (active) cavity
+        // Clear bitmask for elements in the (active) cavity to indicate that
+        // they are deleted (but only in shared memory)
+        //
         clear_bitmask_if_in_cavity(
             block, m_s_active_mask_v, m_s_cavity_id_v, m_s_num_vertices[0]);
         clear_bitmask_if_in_cavity(
@@ -267,7 +269,6 @@ struct Cavity
 
         block.sync();
 
-        // migrate(block);
         migrate(block);
     }
 
@@ -287,13 +288,13 @@ struct Cavity
             m_s_cavity_size[i] = 0;
         }
 
-        m_s_ev = shrd_alloc.alloc<uint16_t>(2 * m_s_num_edges[0]);
+        m_s_ev = shrd_alloc.alloc<uint16_t>(2 * m_patch_info.edges_capacity[0]);
         detail::load_async(block,
                            reinterpret_cast<uint16_t*>(m_patch_info.ev),
                            2 * m_s_num_edges[0],
                            m_s_ev,
                            false);
-        m_s_fe = shrd_alloc.alloc<uint16_t>(3 * m_s_num_faces[0]);
+        m_s_fe = shrd_alloc.alloc<uint16_t>(3 * m_patch_info.faces_capacity[0]);
         detail::load_async(block,
                            reinterpret_cast<uint16_t*>(m_patch_info.fe),
                            3 * m_s_num_faces[0],
@@ -936,17 +937,17 @@ struct Cavity
 
                     // make sure there is a copy in p for any vertex in
                     // m_s_src_connect_mask_v
-                    const uint16_t num_v_up =
+                    const uint16_t q_num_vertices_up =
                         ROUND_UP_TO_NEXT_MULTIPLE(q_num_vertices, blockThreads);
 
-                    // we need to make sure that no other is query the vertex
-                    // hashtable before adding items to it. So, we need to sync
-                    // the whole block before adding a new vertex but some
-                    // threads may not be participant in this for-loop if. So,
-                    // we round up the end of the loop to be multiple of the
+                    // we need to make sure that no other thread is query the
+                    // vertex hashtable before adding items to it. So, we need
+                    // to sync the whole block before adding a new vertex but
+                    // some threads may not be participant in this for-loop.
+                    // So, we round up the end of the loop to be multiple of the
                     // blockthreads and check inside the loop so we don't access
                     // non-existing vertices
-                    for (uint16_t v = threadIdx.x; v < num_v_up;
+                    for (uint16_t v = threadIdx.x; v < q_num_vertices_up;
                          v += blockThreads) {
                         LPPair lp;
 
@@ -973,6 +974,7 @@ struct Cavity
                                     const uint8_t owner_stash_id =
                                         m_patch_info.patch_stash
                                             .find_patch_index(o);
+                                    assert(owner_stash_id != INVALID8);
                                     lp = LPPair(vp, vq, owner_stash_id);
                                 }
                             }
@@ -990,9 +992,9 @@ struct Cavity
                     block.sync();
 
                     // same story as with the loop that adds vertices
-                    const uint16_t num_e_up =
+                    const uint16_t q_num_edges_up =
                         ROUND_UP_TO_NEXT_MULTIPLE(q_num_edges, blockThreads);
-                    for (uint16_t e = threadIdx.x; e < num_e_up;
+                    for (uint16_t e = threadIdx.x; e < q_num_edges_up;
                          e += blockThreads) {
 
                         LPPair lp;
@@ -1054,6 +1056,7 @@ struct Cavity
                                     const uint8_t owner_stash_id =
                                         m_patch_info.patch_stash
                                             .find_patch_index(o);
+                                    assert(owner_stash_id != INVALID8);
                                     lp = LPPair(ep, eq, owner_stash_id);
                                 }
                             }
@@ -1074,7 +1077,7 @@ struct Cavity
                     // we migrate all faces touches a vertex in m_s_src_mask_v,
                     // we need to first to present the edges that touches these
                     // faces in q before migrating the faces
-                    for (uint16_t f = threadIdx.x; f < q_num_edges;
+                    for (uint16_t f = threadIdx.x; f < q_num_faces;
                          f += blockThreads) {
                         const uint16_t e0 = q_patch_info.fe[3 * f + 0].id >> 1;
                         const uint16_t e1 = q_patch_info.fe[3 * f + 1].id >> 1;
@@ -1103,7 +1106,7 @@ struct Cavity
 
                     // make sure that there is a copy of edge in
                     // m_s_src_connect_mask_e in q
-                    for (uint16_t e = threadIdx.x; e < num_e_up;
+                    for (uint16_t e = threadIdx.x; e < q_num_edges_up;
                          e += blockThreads) {
                         LPPair lp;
 
@@ -1140,22 +1143,23 @@ struct Cavity
                                     const uint8_t owner_stash_id =
                                         m_patch_info.patch_stash
                                             .find_patch_index(o);
+                                    assert(owner_stash_id != INVALID8);
                                     lp = LPPair(ep, eq, owner_stash_id);
                                 }
                             }
                         }
                         block.sync();
 
-                        if (lp.is_sentinel()) {
+                        if (!lp.is_sentinel()) {
                             assert(m_patch_info.lp_e.insert(lp));
                         }
                     }
 
                     block.sync();
                     // same story as with the loop that adds vertices
-                    const uint16_t num_f_up =
+                    const uint16_t q_num_faces_up =
                         ROUND_UP_TO_NEXT_MULTIPLE(q_num_faces, blockThreads);
-                    for (uint16_t f = threadIdx.x; f < num_f_up;
+                    for (uint16_t f = threadIdx.x; f < q_num_faces_up;
                          f += blockThreads) {
                         LPPair lp;
 
@@ -1201,6 +1205,10 @@ struct Cavity
 
                                     assert(fp < m_patch_info.faces_capacity[0]);
 
+                                    m_s_fe[3 * fp + 0] = (e0p << 1) | d0;
+                                    m_s_fe[3 * fp + 1] = (e1p << 1) | d1;
+                                    m_s_fe[3 * fp + 2] = (e2p << 1) | d2;
+
                                     // activate the face in the bitmask
                                     detail::bitmask_set_bit(
                                         fp, m_s_active_mask_f, true);
@@ -1212,6 +1220,7 @@ struct Cavity
                                     const uint8_t owner_stash_id =
                                         m_patch_info.patch_stash
                                             .find_patch_index(o);
+                                    assert(owner_stash_id != INVALID8);
                                     lp = LPPair(fp, fq, owner_stash_id);
                                 }
                             }
