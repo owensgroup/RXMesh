@@ -1,6 +1,7 @@
 add_executable(SparseMatrix)
 
 set(SOURCE_LIST
+    dense_matrix.cuh
     sparse_matrix.cuh
     sparse_matrix_mcf.cuh
     sparse_matrix_test.cu

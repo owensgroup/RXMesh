@@ -90,12 +90,11 @@ __global__ void spmat_multi_hardwired_kernel(
     int   tid = threadIdx.x + blockIdx.x * blockDim.x;
     float sum = 0;
     if (tid < N) {
-        for (int i = 0;
-             i < sparse_mat.m_d_row_ptr[tid + 1] - sparse_mat.m_d_row_ptr[tid];
-             i++) {
-
-            sum += vec[sparse_mat.m_d_col_idx[tid + i]] *
-                   sparse_mat.m_d_val[sparse_mat.m_d_row_ptr[tid] + i];
+        uint32_t start = sparse_mat.m_d_row_ptr[tid];
+        uint32_t end   = sparse_mat.m_d_row_ptr[tid + 1];
+        for (int i = 0; i < end - start; i++) {
+            sum += vec[sparse_mat.m_d_col_idx[start + i]] *
+                   sparse_mat.m_d_val[start + i];
         }
         out[tid] = sum;
     }
@@ -335,6 +334,11 @@ TEST(Apps, SparseMatrixEdgeLen)
     CUDA_ERROR(cudaFree(d_arr_ones));
     CUDA_ERROR(cudaFree(d_result));
     spmat.free();
+}
+
+TEST(Apps, SparseMatrixMCFSolve)
+{
+    
 }
 
 int main(int argc, char** argv)
