@@ -109,16 +109,10 @@ struct Cavity
                     context.m_max_num_vertices[0],
                     m_patch_info.owned_mask_v,
                     m_patch_info.active_mask_v);
-        {
-            const uint32_t max_mask_size =
-                detail::mask_num_bytes(context.m_max_num_vertices[0]);
-            m_s_src_connect_mask_v =
-                reinterpret_cast<uint32_t*>(shrd_alloc.alloc(max_mask_size));
-            for (uint32_t i = threadIdx.x; i < max_mask_size / 4;
-                 i += blockThreads) {
-                m_s_src_mask_v[i] = 0;
-            }
-        }
+
+        m_s_src_connect_mask_v =
+            Bitmask(context.m_max_num_vertices[0], shrd_alloc);
+
 
         // edges masks
         alloc_masks(m_s_num_edges[0],
@@ -130,16 +124,8 @@ struct Cavity
                     m_patch_info.owned_mask_e,
                     m_patch_info.active_mask_e);
 
-        {
-            const uint32_t max_mask_size =
-                detail::mask_num_bytes(context.m_max_num_edges[0]);
-            m_s_src_connect_mask_e =
-                reinterpret_cast<uint32_t*>(shrd_alloc.alloc(max_mask_size));
-            for (uint32_t i = threadIdx.x; i < max_mask_size / 4;
-                 i += blockThreads) {
-                m_s_src_mask_e[i] = 0;
-            }
-        }
+        m_s_src_connect_mask_e =
+            Bitmask(context.m_max_num_edges[0], shrd_alloc);
 
         // faces masks
         alloc_masks(m_s_num_faces[0],
@@ -259,12 +245,12 @@ struct Cavity
         // Clear bitmask for elements in the (active) cavity to indicate that
         // they are deleted (but only in shared memory)
         //
-        clear_bitmask_if_in_cavity(
+        /*clear_bitmask_if_in_cavity(
             block, m_s_active_mask_v, m_s_cavity_id_v, m_s_num_vertices[0]);
         clear_bitmask_if_in_cavity(
             block, m_s_active_mask_e, m_s_cavity_id_e, m_s_num_edges[0]);
         clear_bitmask_if_in_cavity(
-            block, m_s_active_mask_f, m_s_cavity_id_f, m_s_num_faces[0]);
+            block, m_s_active_mask_f, m_s_cavity_id_f, m_s_num_faces[0]);*/
 
         // construct cavity boundary loop
         construct_cavities_edge_loop(block);
@@ -274,7 +260,7 @@ struct Cavity
 
         block.sync();
 
-        // migrate(block);
+        migrate(block);
     }
 
 
@@ -379,8 +365,11 @@ struct Cavity
         uint16_t*      element_cavity_id)
     {
         for (uint16_t i = threadIdx.x; i < num_elements; i += blockThreads) {
-            if (!m_s_active_cavity_bitmask(element_cavity_id[i])) {
-                element_cavity_id[i] = INVALID16;
+            const uint32_t c = element_cavity_id[i];
+            if (c != INVALID16) {
+                if (!m_s_active_cavity_bitmask(c)) {
+                    element_cavity_id[i] = INVALID16;
+                }
             }
         }
     }
@@ -902,18 +891,13 @@ struct Cavity
                     const uint16_t q_num_faces = q_patch_info.num_faces[0];
 
                     // initialize connect_mask and src_e bitmask
-                    const uint32_t v_mask_size =
-                        detail::mask_num_bytes(q_num_vertices) / 4;
-                    for (uint32_t i = threadIdx.x; i < v_mask_size;
-                         i += blockThreads) {
-                        m_s_src_connect_mask_v[i] = 0;
-                    }
+                    m_s_src_connect_mask_v.reset(block);
+                    m_s_src_connect_mask_e.reset(block);
                     const uint32_t e_mask_size =
                         detail::mask_num_bytes(q_num_edges) / 4;
                     for (uint32_t i = threadIdx.x; i < e_mask_size;
                          i += blockThreads) {
-                        m_s_src_mask_e[i]         = 0;
-                        m_s_src_connect_mask_e[i] = 0;
+                        m_s_src_mask_e[i] = 0;
                     }
                     block.sync();
 
@@ -926,13 +910,11 @@ struct Cavity
                         const uint16_t v1q = q_patch_info.ev[2 * e + 1].id;
 
                         if (detail::is_set_bit(v0q, m_s_src_mask_v)) {
-                            detail::bitmask_set_bit(
-                                v1q, m_s_src_connect_mask_v, true);
+                            m_s_src_connect_mask_v.set(v1q, true);
                         }
 
                         if (detail::is_set_bit(v1q, m_s_src_mask_v)) {
-                            detail::bitmask_set_bit(
-                                v0q, m_s_src_connect_mask_v, true);
+                            m_s_src_connect_mask_v.set(v0q, true);
                         }
                     }
                     block.sync();
@@ -955,7 +937,7 @@ struct Cavity
                         LPPair lp;
 
                         if (v < q_num_vertices) {
-                            if (detail::is_set_bit(v, m_s_src_connect_mask_v)) {
+                            if (m_s_src_connect_mask_v(v)) {
                                 uint16_t vq = v;
                                 uint32_t o  = q;
                                 uint16_t vp = find_copy_vertex(vq, o);
@@ -1092,16 +1074,13 @@ struct Cavity
 
                         if (b0 || b1 || b2) {
                             if (!b0) {
-                                detail::bitmask_set_bit(
-                                    e0, m_s_src_connect_mask_e, true);
+                                m_s_src_connect_mask_e.set(e0, true);
                             }
                             if (!b1) {
-                                detail::bitmask_set_bit(
-                                    e1, m_s_src_connect_mask_e, true);
+                                m_s_src_connect_mask_e.set(e1, true);
                             }
                             if (!b2) {
-                                detail::bitmask_set_bit(
-                                    e2, m_s_src_connect_mask_e, true);
+                                m_s_src_connect_mask_e.set(e2, true);
                             }
                         }
                     }
@@ -1114,7 +1093,7 @@ struct Cavity
                         LPPair lp;
 
                         if (e < q_num_edges) {
-                            if (detail::is_set_bit(e, m_s_src_connect_mask_e)) {
+                            if (m_s_src_connect_mask_e(e)) {
                                 uint16_t eq = e;
                                 uint32_t o  = q;
                                 uint16_t ep = find_copy_edge(eq, o);
@@ -1363,7 +1342,7 @@ struct Cavity
     uint32_t *m_s_active_mask_v, *m_s_active_mask_e, *m_s_active_mask_f;
     uint32_t *m_s_migrate_mask_v, *m_s_migrate_mask_e, *m_s_migrate_mask_f;
     uint32_t *m_s_src_mask_v, *m_s_src_mask_e, *m_s_src_mask_f;
-    uint32_t *m_s_src_connect_mask_v, *m_s_src_connect_mask_e;
+    Bitmask   m_s_src_connect_mask_v, m_s_src_connect_mask_e;
     uint16_t *m_s_ev, *m_s_fe;
     uint16_t *m_s_cavity_id_v, *m_s_cavity_id_e, *m_s_cavity_id_f;
     uint16_t *m_s_num_vertices, *m_s_num_edges, *m_s_num_faces;
