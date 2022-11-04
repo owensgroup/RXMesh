@@ -2,6 +2,7 @@
 
 #include <cooperative_groups.h>
 
+#include "rxmesh/bitmask.cuh"
 #include "rxmesh/context.h"
 #include "rxmesh/handle.h"
 #include "rxmesh/kernels/collective.cuh"
@@ -11,6 +12,13 @@
 
 namespace rxmesh {
 
+/**
+ * @brief create, process, and manipulate cavities. A block would normally
+ * process a single patch in which it may create more than one cavity. This
+ * class creates, processes, and manipulates all cavities created by a block
+ * The patch being processed by the block is referred to as P
+ * A neighbor patch to P is referred to as Q
+ */
 template <uint32_t blockThreads, CavityOp cop>
 struct Cavity
 {
@@ -34,7 +42,7 @@ struct Cavity
         m_patch_info = m_context.m_patches_info[blockIdx.x];
 
         __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
-        m_s_active_cavity_bitmask = smem;
+        m_s_active_cavity_bitmask = Bitmask(blockThreads, smem);
 
         __shared__ uint16_t counts[3];
         m_s_num_vertices = counts + 0;
@@ -164,10 +172,7 @@ struct Cavity
             m_s_cavity_id_f[f] = INVALID16;
         }
 
-        for (uint16_t c = threadIdx.x; c < DIVIDE_UP(blockThreads, 32);
-             c += blockThreads) {
-            m_s_active_cavity_bitmask[c] = INVALID32;
-        }
+        m_s_active_cavity_bitmask.set(block);
         cooperative_groups::wait(block);
         block.sync();
     }
@@ -269,7 +274,7 @@ struct Cavity
 
         block.sync();
 
-        migrate(block);
+        // migrate(block);
     }
 
 
@@ -374,8 +379,7 @@ struct Cavity
         uint16_t*      element_cavity_id)
     {
         for (uint16_t i = threadIdx.x; i < num_elements; i += blockThreads) {
-            if (!detail::is_set_bit(element_cavity_id[i],
-                                    m_s_active_cavity_bitmask)) {
+            if (!m_s_active_cavity_bitmask(element_cavity_id[i])) {
                 element_cavity_id[i] = INVALID16;
             }
         }
@@ -406,19 +410,18 @@ struct Cavity
 
             if (prv_element_cavity_id == INVALID16) {
                 element_cavity_id[element_id] = cavity_id;
+                return;
             }
 
             if (prv_element_cavity_id > cavity_id) {
                 // deactivate previous element cavity ID
-                detail::bitmask_clear_bit(
-                    prv_element_cavity_id, m_s_active_cavity_bitmask, true);
+                m_s_active_cavity_bitmask.reset(prv_element_cavity_id, true);
                 element_cavity_id[element_id] = cavity_id;
             }
 
             if (prv_element_cavity_id < cavity_id) {
                 // deactivate cavity ID
-                detail::bitmask_clear_bit(
-                    cavity_id, m_s_active_cavity_bitmask, true);
+                m_s_active_cavity_bitmask.reset(cavity_id, true);
             }
         }
     }
@@ -1236,6 +1239,18 @@ struct Cavity
         }
     }
 
+
+    /**
+     * @brief migrate edges and face incident to vertices in the bitmask to this
+     * m_patch_info from a neighbor_patch
+     */
+    __device__ __inline__ void migrate_v2(
+        cooperative_groups::thread_block& block)
+    {
+        // TODO we may fuse this part with earlier computation that access the
+        // cavity's vertices
+    }
+
     /**
      * @brief given a local face in a patch, find its corresponding local
      * index in the patch associated with this cavity i.e., m_patch_info.
@@ -1343,7 +1358,7 @@ struct Cavity
     }
 
     int *     m_s_num_cavities, *m_s_cavity_size;
-    uint32_t* m_s_active_cavity_bitmask;
+    Bitmask   m_s_active_cavity_bitmask;
     uint32_t *m_s_owned_mask_v, *m_s_owned_mask_e, *m_s_owned_mask_f;
     uint32_t *m_s_active_mask_v, *m_s_active_mask_e, *m_s_active_mask_f;
     uint32_t *m_s_migrate_mask_v, *m_s_migrate_mask_e, *m_s_migrate_mask_f;

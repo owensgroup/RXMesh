@@ -119,7 +119,7 @@ struct Bitmask
     __device__ __inline__ void set(cooperative_groups::thread_group& g)
     {
         assert(m_bitmask != nullptr);
-        uint32_t mask_num_elements = DIVIDE_UP(m_size, 32);
+        const uint32_t mask_num_elements = DIVIDE_UP(m_size, 32);
         for (uint32_t i = g.thread_rank(); i < mask_num_elements;
              i += g.size()) {
             m_bitmask[i] = INVALID32;
