@@ -917,16 +917,16 @@ void RXMeshDynamic::update_host()
 
     if (m_h_edge_prefix.back() != this->m_num_edges) {
         RXMESH_ERROR(
-            "RXMeshDynamic::update_host error in updating host. m_num_faces "
-            "{} does not match m_h_face_prefix calculation {}",
+            "RXMeshDynamic::update_host error in updating host. m_num_edges "
+            "{} does not match m_h_edge_prefix calculation {}",
             this->m_num_faces,
             m_h_face_prefix.back());
     }
 
     if (m_h_face_prefix.back() != this->m_num_faces) {
         RXMESH_ERROR(
-            "RXMeshDynamic::update_host error in updating host. m_num_edges "
-            "{} does not match m_h_edge_prefix calculation {}",
+            "RXMeshDynamic::update_host error in updating host. m_num_faces "
+            "{} does not match m_h_face_prefix calculation {}",
             this->m_num_edges,
             m_h_edge_prefix.back());
     }

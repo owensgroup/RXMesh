@@ -72,9 +72,8 @@ __global__ static void edge_flip_kernel(
     /*cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
         assert(size == 4);
 
-        auto new_edge = cavity.add_edge(
-            c, cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c,
-    3));
+        DEdgeHandle new_edge = cavity.add_edge(
+            c, cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c, 3));
 
         cavity.add_face(c,
                         cavity.get_cavity_edge(c, 0),
@@ -86,6 +85,7 @@ __global__ static void edge_flip_kernel(
                         cavity.get_cavity_edge(c, 2),
                         new_edge.get_flip_dedge());
     });*/
+    block.sync();
 
     cavity.cleanup(block);
 }
@@ -125,7 +125,7 @@ TEST(RXMeshDynamic, Cavity)
     edge_flip_kernel<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, false, true);
+        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, true, true);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
@@ -140,7 +140,7 @@ TEST(RXMeshDynamic, Cavity)
     EXPECT_EQ(num_edges, rx.get_num_edges());
     EXPECT_EQ(num_faces, rx.get_num_faces());
 
-    // EXPECT_TRUE(rx.validate());
+    EXPECT_TRUE(rx.validate());
 
 #if USE_POLYSCOPE
     std::pair<double, double> range(-2, 2);
