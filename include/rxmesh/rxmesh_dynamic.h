@@ -84,14 +84,15 @@ class RXMeshDynamic : public RXMeshStatic
                      ShmemAllocator::default_alignment;
 
 
-        // active, owned, migrate, src bitmask, src connect
+        // active, owned, migrate(for vertices only), src bitmask (for vertices
+        // and edges only), src connect (for vertices and edges only)
         dyn_shmem +=
             5 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
             5 * ShmemAllocator::default_alignment;
-        dyn_shmem += 5 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
-                     5 * ShmemAllocator::default_alignment;
-        dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
+        dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
                      4 * ShmemAllocator::default_alignment;
+        dyn_shmem += 2 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
+                     2 * ShmemAllocator::default_alignment;
 
 
         if (!this->m_quite) {
