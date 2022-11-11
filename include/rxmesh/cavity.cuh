@@ -67,10 +67,12 @@ struct Cavity
         auto alloc_masks = [&](uint16_t*       num_elements,
                                Bitmask&        owned,
                                Bitmask&        active,
+                               Bitmask&        ownership,
                                const uint32_t* g_owned,
                                const uint32_t* g_active) {
-            owned  = Bitmask(num_elements, shrd_alloc);
-            active = Bitmask(num_elements, shrd_alloc);
+            owned     = Bitmask(num_elements, shrd_alloc);
+            active    = Bitmask(num_elements, shrd_alloc);
+            ownership = Bitmask(num_elements, shrd_alloc);
 
             detail::load_async(reinterpret_cast<const char*>(g_owned),
                                owned.num_bytes(),
@@ -80,6 +82,8 @@ struct Cavity
                                active.num_bytes(),
                                reinterpret_cast<char*>(active.m_bitmask),
                                false);
+
+            ownership.reset(block);
         };
 
 
@@ -87,6 +91,7 @@ struct Cavity
         alloc_masks(m_s_num_vertices,
                     m_s_owned_mask_v,
                     m_s_active_mask_v,
+                    m_s_ownership_change_mask_v,
                     m_patch_info.owned_mask_v,
                     m_patch_info.active_mask_v);
         m_s_migrate_mask_v = Bitmask(m_s_num_vertices[0], shrd_alloc);
@@ -99,6 +104,7 @@ struct Cavity
         alloc_masks(m_s_num_edges,
                     m_s_owned_mask_e,
                     m_s_active_mask_e,
+                    m_s_ownership_change_mask_e,
                     m_patch_info.owned_mask_e,
                     m_patch_info.active_mask_e);
         m_s_src_mask_e = Bitmask(context.m_max_num_edges[0], shrd_alloc);
@@ -109,6 +115,7 @@ struct Cavity
         alloc_masks(m_s_num_faces,
                     m_s_owned_mask_f,
                     m_s_active_mask_f,
+                    m_s_ownership_change_mask_f,
                     m_patch_info.owned_mask_f,
                     m_patch_info.active_mask_f);
 
@@ -244,6 +251,12 @@ struct Cavity
         block.sync();
 
         migrate(block);
+        block.sync();
+
+        change_vertex_ownership(block);
+        change_edge_ownership(block);
+        change_face_ownership(block);
+        block.sync();
     }
 
 
@@ -796,6 +809,98 @@ struct Cavity
         return INVALID16;
     }
 
+    /**
+     * @brief change ownership for vertices marked in
+     * m_s_ownership_change_mask_v
+     */
+    __device__ __inline__ void change_vertex_ownership(
+        cooperative_groups::thread_block& block)
+    {
+
+        for (uint32_t vp = threadIdx.x; vp < m_s_num_vertices[0];
+             vp += blockThreads) {
+
+            if (m_s_ownership_change_mask_v(vp)) {
+                auto p_lp = m_patch_info.lp_v.find(vp);
+
+                m_patch_info.lp_v.remove(vp);
+
+                const uint32_t q  = m_patch_info.patch_stash.get_patch(p_lp);
+                const uint32_t qv = p_lp.local_id_in_owner_patch();
+
+                m_s_owned_mask_v.set(vp, true);
+
+                LPPair q_lp(qv, vp, m_patch_info.patch_id);
+
+                m_context.m_patches_info[q].lp_v.insert(q_lp);
+                detail::bitmask_set_bit(
+                    qv, m_context.m_patches_info[q].owned_mask_v, true);
+            }
+        }
+    }
+
+
+    /**
+     * @brief change ownership for edges marked in
+     * m_s_ownership_change_mask_e
+     */
+    __device__ __inline__ void change_edge_ownership(
+        cooperative_groups::thread_block& block)
+    {
+
+        for (uint32_t ep = threadIdx.x; ep < m_s_num_edges[0];
+             ep += blockThreads) {
+
+            if (m_s_ownership_change_mask_e(ep)) {
+                auto p_lp = m_patch_info.lp_e.find(ep);
+
+                m_patch_info.lp_e.remove(ep);
+
+                const uint32_t q  = m_patch_info.patch_stash.get_patch(p_lp);
+                const uint32_t qe = p_lp.local_id_in_owner_patch();
+
+                m_s_owned_mask_e.set(ep, true);
+
+                LPPair q_lp(qe, ep, m_patch_info.patch_id);
+
+                m_context.m_patches_info[q].lp_e.insert(q_lp);
+                detail::bitmask_set_bit(
+                    qe, m_context.m_patches_info[q].owned_mask_e, true);
+            }
+        }
+    }
+
+
+    /**
+     * @brief change ownership for faces marked in
+     * m_s_ownership_change_mask_f
+     */
+    __device__ __inline__ void change_face_ownership(
+        cooperative_groups::thread_block& block)
+    {
+
+        for (uint32_t fp = threadIdx.x; fp < m_s_num_faces[0];
+             fp += blockThreads) {
+
+            if (m_s_ownership_change_mask_f(fp)) {
+                auto p_lp = m_patch_info.lp_f.find(fp);
+
+                m_patch_info.lp_f.remove(fp);
+
+                const uint32_t q  = m_patch_info.patch_stash.get_patch(p_lp);
+                const uint32_t qf = p_lp.local_id_in_owner_patch();
+
+                m_s_owned_mask_f.set(fp, true);
+
+                LPPair q_lp(qf, fp, m_patch_info.patch_id);
+
+                m_context.m_patches_info[q].lp_f.insert(q_lp);
+                detail::bitmask_set_bit(
+                    qf, m_context.m_patches_info[q].owned_mask_f, true);
+            }
+        }
+    }
+
 
     /**
      * @brief migrate edges and face incident to vertices in the bitmask to this
@@ -937,6 +1042,7 @@ struct Cavity
                     migrate_vertex(q,
                                    q_num_vertices,
                                    v,
+                                   true,
                                    q_patch_info,
                                    [&](const uint16_t vertex) {
                                        return m_s_src_connect_mask_v(vertex);
@@ -967,6 +1073,7 @@ struct Cavity
                     q,
                     q_num_edges,
                     e,
+                    true,
                     q_patch_info,
                     [&](const uint16_t edge,
                         const uint16_t v0q,
@@ -1030,6 +1137,7 @@ struct Cavity
                     migrate_edge(q,
                                  q_num_edges,
                                  e,
+                                 true,
                                  q_patch_info,
                                  [&](const uint16_t edge,
                                      const uint16_t v0q,
@@ -1055,6 +1163,7 @@ struct Cavity
                 LPPair lp = migrate_face(q,
                                          q_num_faces,
                                          f,
+                                         true,
                                          q_patch_info,
                                          [&](const uint16_t face,
                                              const uint16_t e0q,
@@ -1076,11 +1185,13 @@ struct Cavity
 
 
     template <typename FuncT>
-    __device__ __inline__ LPPair migrate_vertex(const uint32_t q,
-                                                const uint16_t q_num_vertices,
-                                                const uint16_t q_vertex,
-                                                PatchInfo&     q_patch_info,
-                                                FuncT          should_migrate)
+    __device__ __inline__ LPPair migrate_vertex(
+        const uint32_t q,
+        const uint16_t q_num_vertices,
+        const uint16_t q_vertex,
+        const bool     require_ownership_change,
+        PatchInfo&     q_patch_info,
+        FuncT          should_migrate)
     {
         LPPair ret;
         if (q_vertex < q_num_vertices) {
@@ -1105,17 +1216,23 @@ struct Cavity
                     assert(owner_stash_id != INVALID8);
                     ret = LPPair(vp, vq, owner_stash_id);
                 }
+
+                if (require_ownership_change && m_s_owned_mask_v(vp)) {
+                    m_s_ownership_change_mask_v.set(vp);
+                }
             }
         }
         return ret;
     }
 
     template <typename FuncT>
-    __device__ __inline__ LPPair migrate_edge(const uint32_t q,
-                                              const uint16_t q_num_edges,
-                                              const uint16_t q_edge,
-                                              PatchInfo&     q_patch_info,
-                                              FuncT          should_migrate)
+    __device__ __inline__ LPPair migrate_edge(
+        const uint32_t q,
+        const uint16_t q_num_edges,
+        const uint16_t q_edge,
+        const bool     require_ownership_change,
+        PatchInfo&     q_patch_info,
+        FuncT          should_migrate)
     {
         LPPair ret;
 
@@ -1170,6 +1287,10 @@ struct Cavity
                     assert(owner_stash_id != INVALID8);
                     ret = LPPair(ep, eq, owner_stash_id);
                 }
+
+                if (require_ownership_change && m_s_owned_mask_e(ep)) {
+                    m_s_ownership_change_mask_e.set(ep);
+                }
             }
         }
 
@@ -1179,11 +1300,13 @@ struct Cavity
 
 
     template <typename FuncT>
-    __device__ __inline__ LPPair migrate_face(const uint32_t q,
-                                              const uint16_t q_num_faces,
-                                              const uint16_t q_face,
-                                              PatchInfo&     q_patch_info,
-                                              FuncT          should_migrate)
+    __device__ __inline__ LPPair migrate_face(
+        const uint32_t q,
+        const uint16_t q_num_faces,
+        const uint16_t q_face,
+        const bool     require_ownership_change,
+        PatchInfo&     q_patch_info,
+        FuncT          should_migrate)
     {
         LPPair ret;
 
@@ -1201,22 +1324,6 @@ struct Cavity
             // the src bitmask
             if (should_migrate(q_face, e0q, e1q, e2q)) {
 
-                uint32_t o0(q), o1(q), o2(q);
-
-                // eq -> mapped it to its local index in owner
-                // patch o-> mapped to the owner patch ep->
-                // mapped to the corresponding local index in p
-                uint16_t e0p = find_copy_edge(e0q, o0);
-                uint16_t e1p = find_copy_edge(e1q, o1);
-                uint16_t e2p = find_copy_edge(e2q, o2);
-
-                // since any edge in m_s_src_mask_e has been
-                // added already to p, then we should find the
-                // copy otherwise there is something wrong
-                assert(e0p != INVALID16);
-                assert(e1p != INVALID16);
-                assert(e2p != INVALID16);
-
                 // check on if e already exist in p
                 uint16_t fq = q_face;
                 uint32_t o  = q;
@@ -1226,6 +1333,22 @@ struct Cavity
                     fp = atomicAdd(m_s_num_faces, 1u);
 
                     assert(fp < m_patch_info.faces_capacity[0]);
+
+                    uint32_t o0(q), o1(q), o2(q);
+
+                    // eq -> mapped it to its local index in owner
+                    // patch o-> mapped to the owner patch ep->
+                    // mapped to the corresponding local index in p
+                    uint16_t e0p = find_copy_edge(e0q, o0);
+                    uint16_t e1p = find_copy_edge(e1q, o1);
+                    uint16_t e2p = find_copy_edge(e2q, o2);
+
+                    // since any edge in m_s_src_mask_e has been
+                    // added already to p, then we should find the
+                    // copy otherwise there is something wrong
+                    assert(e0p != INVALID16);
+                    assert(e1p != INVALID16);
+                    assert(e2p != INVALID16);
 
                     m_s_fe[3 * fp + 0] = (e0p << 1) | d0;
                     m_s_fe[3 * fp + 1] = (e1p << 1) | d1;
@@ -1241,6 +1364,10 @@ struct Cavity
                         m_patch_info.patch_stash.find_patch_index(o);
                     assert(owner_stash_id != INVALID8);
                     ret = LPPair(fp, fq, owner_stash_id);
+                }
+
+                if (require_ownership_change && m_s_owned_mask_f(fp)) {
+                    m_s_ownership_change_mask_f.set(fp);
                 }
             }
         }
@@ -1339,9 +1466,9 @@ struct Cavity
             return lid;
         }
 
-        // otherwise, we do a search over the not-owned vertices by the patch
-        // associated with this cavity. For every not-owned vertex, we map it to
-        // its owner patch and check against lid-src_patch pair
+        // otherwise, we do a search over the not-owned elements by the patch
+        // associated with this cavity. For every not-owned element, we map it
+        // to its owner patch and check against lid-src_patch pair
         for (uint16_t i = 0; i < dest_patch_num_elements; ++i) {
             if (!dest_patch_owned_mask(i)) {
                 auto lp = dest_patch_lp.find(i);
@@ -1362,6 +1489,8 @@ struct Cavity
     Bitmask m_s_migrate_mask_v;
     Bitmask m_s_src_mask_v, m_s_src_mask_e;
     Bitmask m_s_src_connect_mask_v, m_s_src_connect_mask_e;
+    Bitmask m_s_ownership_change_mask_v, m_s_ownership_change_mask_e,
+        m_s_ownership_change_mask_f;
 
     uint16_t *m_s_ev, *m_s_fe;
     uint16_t *m_s_cavity_id_v, *m_s_cavity_id_e, *m_s_cavity_id_f;
