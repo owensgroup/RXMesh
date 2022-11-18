@@ -821,6 +821,7 @@ struct Cavity
              vp += blockThreads) {
 
             if (m_s_ownership_change_mask_v(vp)) {
+
                 auto p_lp = m_patch_info.lp_v.find(vp);
 
                 m_patch_info.lp_v.remove(vp);
@@ -832,9 +833,10 @@ struct Cavity
 
                 LPPair q_lp(qv, vp, m_patch_info.patch_id);
 
-                m_context.m_patches_info[q].lp_v.insert(q_lp);
-                detail::bitmask_set_bit(
+                detail::bitmask_clear_bit(
                     qv, m_context.m_patches_info[q].owned_mask_v, true);
+
+                m_context.m_patches_info[q].lp_v.insert(q_lp);
             }
         }
     }
@@ -864,7 +866,7 @@ struct Cavity
                 LPPair q_lp(qe, ep, m_patch_info.patch_id);
 
                 m_context.m_patches_info[q].lp_e.insert(q_lp);
-                detail::bitmask_set_bit(
+                detail::bitmask_clear_bit(
                     qe, m_context.m_patches_info[q].owned_mask_e, true);
             }
         }
@@ -895,7 +897,7 @@ struct Cavity
                 LPPair q_lp(qf, fp, m_patch_info.patch_id);
 
                 m_context.m_patches_info[q].lp_f.insert(q_lp);
-                detail::bitmask_set_bit(
+                detail::bitmask_clear_bit(
                     qf, m_context.m_patches_info[q].owned_mask_f, true);
             }
         }
@@ -920,6 +922,7 @@ struct Cavity
                 // we only want to migrate vertices that are not currently owned
                 if (!m_s_owned_mask_v(vertex)) {
                     m_s_migrate_mask_v.set(vertex, true);
+                    m_s_ownership_change_mask_v.set(vertex, true);
                 }
             }
         });
@@ -1042,7 +1045,7 @@ struct Cavity
                     migrate_vertex(q,
                                    q_num_vertices,
                                    v,
-                                   true,
+                                   change_ownership,
                                    q_patch_info,
                                    [&](const uint16_t vertex) {
                                        return m_s_src_connect_mask_v(vertex);
@@ -1073,7 +1076,7 @@ struct Cavity
                     q,
                     q_num_edges,
                     e,
-                    true,
+                    change_ownership,
                     q_patch_info,
                     [&](const uint16_t edge,
                         const uint16_t v0q,
@@ -1137,7 +1140,7 @@ struct Cavity
                     migrate_edge(q,
                                  q_num_edges,
                                  e,
-                                 true,
+                                 change_ownership,
                                  q_patch_info,
                                  [&](const uint16_t edge,
                                      const uint16_t v0q,
@@ -1163,7 +1166,7 @@ struct Cavity
                 LPPair lp = migrate_face(q,
                                          q_num_faces,
                                          f,
-                                         true,
+                                         change_ownership,
                                          q_patch_info,
                                          [&](const uint16_t face,
                                              const uint16_t e0q,
@@ -1199,6 +1202,7 @@ struct Cavity
                 uint16_t vq = q_vertex;
                 uint32_t o  = q;
                 uint16_t vp = find_copy_vertex(vq, o);
+
                 if (vp == INVALID16) {
 
                     vp = atomicAdd(m_s_num_vertices, 1u);
@@ -1217,8 +1221,8 @@ struct Cavity
                     ret = LPPair(vp, vq, owner_stash_id);
                 }
 
-                if (require_ownership_change && m_s_owned_mask_v(vp)) {
-                    m_s_ownership_change_mask_v.set(vp);
+                if (require_ownership_change && !m_s_owned_mask_v(vp)) {
+                    m_s_ownership_change_mask_v.set(vp, true);
                 }
             }
         }
@@ -1288,8 +1292,8 @@ struct Cavity
                     ret = LPPair(ep, eq, owner_stash_id);
                 }
 
-                if (require_ownership_change && m_s_owned_mask_e(ep)) {
-                    m_s_ownership_change_mask_e.set(ep);
+                if (require_ownership_change && !m_s_owned_mask_e(ep)) {
+                    m_s_ownership_change_mask_e.set(ep, true);
                 }
             }
         }
@@ -1366,8 +1370,8 @@ struct Cavity
                     ret = LPPair(fp, fq, owner_stash_id);
                 }
 
-                if (require_ownership_change && m_s_owned_mask_f(fp)) {
-                    m_s_ownership_change_mask_f.set(fp);
+                if (require_ownership_change && !m_s_owned_mask_f(fp)) {
+                    m_s_ownership_change_mask_f.set(fp, true);
                 }
             }
         }

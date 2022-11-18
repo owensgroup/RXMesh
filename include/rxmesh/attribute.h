@@ -455,14 +455,16 @@ class Attribute : public AttributeBase
                                                       const uint32_t attr) const
     {
         assert(patch_id < m_num_patches);
-        assert(attr < m_num_attributes);
+        assert(attr < m_num_attributes);        
 
         const uint32_t pitch_x = (m_layout == AoS) ? m_num_attributes : 1;
 #ifdef __CUDA_ARCH__
+        assert(local_id < m_d_element_per_patch[patch_id]);
         const uint32_t pitch_y =
             (m_layout == AoS) ? 1 : m_d_element_per_patch[patch_id];
         return m_d_attr[patch_id][local_id * pitch_x + attr * pitch_y];
 #else
+        assert(local_id < m_h_element_per_patch[patch_id]);
         const uint32_t pitch_y =
             (m_layout == AoS) ? 1 : m_h_element_per_patch[patch_id];
         return m_h_attr[patch_id][local_id * pitch_x + attr * pitch_y];
@@ -486,10 +488,12 @@ class Attribute : public AttributeBase
 
         const uint32_t pitch_x = (m_layout == AoS) ? m_num_attributes : 1;
 #ifdef __CUDA_ARCH__
+        assert(local_id < m_d_element_per_patch[patch_id]);
         const uint32_t pitch_y =
             (m_layout == AoS) ? 1 : m_d_element_per_patch[patch_id];
         return m_d_attr[patch_id][local_id * pitch_x + attr * pitch_y];
 #else
+        assert(local_id < m_h_element_per_patch[patch_id]);
         const uint32_t pitch_y =
             (m_layout == AoS) ? 1 : m_h_element_per_patch[patch_id];
         return m_h_attr[patch_id][local_id * pitch_x + attr * pitch_y];
