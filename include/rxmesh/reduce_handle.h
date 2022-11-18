@@ -11,11 +11,14 @@ namespace rxmesh {
  * from Attribute
  * @tparam T The type of the attribute
  */
-template <typename T>
+template <typename T, typename HandleT>
 class ReduceHandle
 {
 
    public:
+    using HandleType = HandleT;
+    using Type       = T;
+
     ReduceHandle()                    = default;
     ReduceHandle(const ReduceHandle&) = default;
 
@@ -25,7 +28,8 @@ class ReduceHandle
      * @param attr one of Attribute used for subsequent reduction
      * operations
      */
-    ReduceHandle(const Attribute<T>& attr) : m_num_patches(attr.m_num_patches)
+    ReduceHandle(const Attribute<T, HandleT>& attr)
+        : m_num_patches(attr.m_num_patches)
     {
         CUDA_ERROR(
             cudaMalloc(&m_d_reduce_1st_stage, m_num_patches * sizeof(T)));
@@ -61,10 +65,10 @@ class ReduceHandle
      * @param stream stream to run the computation on
      * @return the output of dot product on the host
      */
-    T dot(const Attribute<T>& attr1,
-          const Attribute<T>& attr2,
-          uint32_t            attribute_id = INVALID32,
-          cudaStream_t        stream       = NULL)
+    T dot(const Attribute<T, HandleT>& attr1,
+          const Attribute<T, HandleT>& attr2,
+          uint32_t                     attribute_id = INVALID32,
+          cudaStream_t                 stream       = NULL)
     {
         if ((attr1.get_allocated() & DEVICE) != DEVICE ||
             (attr2.get_allocated() & DEVICE) != DEVICE) {
@@ -95,9 +99,9 @@ class ReduceHandle
      * @param stream stream to run the computation on
      * @return the output of L2 norm on the host
      */
-    T norm2(const Attribute<T>& attr,
-            uint32_t            attribute_id = INVALID32,
-            cudaStream_t        stream       = NULL)
+    T norm2(const Attribute<T, HandleT>& attr,
+            uint32_t                     attribute_id = INVALID32,
+            cudaStream_t                 stream       = NULL)
     {
         if ((attr.get_allocated() & DEVICE) != DEVICE) {
             RXMESH_ERROR(
@@ -146,11 +150,11 @@ class ReduceHandle
      */
 
     template <typename ReductionOp>
-    T reduce(const Attribute<T>& attr,
-             ReductionOp         reduction_op,
-             T                   init,
-             uint32_t            attribute_id = INVALID32,
-             cudaStream_t        stream       = NULL)
+    T reduce(const Attribute<T, HandleT>& attr,
+             ReductionOp                  reduction_op,
+             T                            init,
+             uint32_t                     attribute_id = INVALID32,
+             cudaStream_t                 stream       = NULL)
     {
         if ((attr.get_allocated() & DEVICE) != DEVICE) {
             RXMESH_ERROR(
@@ -203,4 +207,14 @@ class ReduceHandle
     void*    m_d_reduce_temp_storage;
     uint32_t m_num_patches;
 };
+
+template <class T>
+using VertexReduceHandle = ReduceHandle<T, VertexHandle>;
+
+template <class T>
+using EdgeReduceHandle = ReduceHandle<T, EdgeHandle>;
+
+template <class T>
+using FaceReduceHandle = ReduceHandle<T, FaceHandle>;
+
 }  // namespace rxmesh

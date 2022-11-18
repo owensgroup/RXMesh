@@ -51,18 +51,22 @@ class AttributeBase
  * RXMeshStatic)
  * @tparam T type of the attribute
  */
-template <class T>
+template <class T, typename HandleT>
 class Attribute : public AttributeBase
 {
-    template <typename S>
+    template <typename S, typename H>
     friend class ReduceHandle;
 
    public:
+    using HandleType = HandleT;
+    using Type       = T;
+
     /**
      * @brief Default constructor which initializes all pointers to nullptr
      */
     Attribute()
         : AttributeBase(),
+          m_rxmesh(nullptr),
           m_name(nullptr),
           m_num_attributes(0),
           m_allocated(LOCATION_NONE),
@@ -80,11 +84,22 @@ class Attribute : public AttributeBase
     }
 
     /**
-     * @brief Main constructor
-     * @param name attribute name
+     * @brief Main constructor to be used by RXMeshStatic not directly by the
+     * user
+     * @param name of the attribute
+     * @param element_per_patch number of elements owned per patch
+     * @param num_attributes number of attribute per face
+     * @param location where the attribute to be allocated
+     * @param layout memory layout in case of num_attributes>1
      */
-    Attribute(const char* name)
+    Attribute(const char*                  name,
+              const std::vector<uint16_t>& element_per_patch,
+              const uint32_t               num_attributes,
+              locationT                    location,
+              const layoutT                layout,
+              const RXMesh*                rxmesh)
         : AttributeBase(),
+          m_rxmesh(rxmesh),
           m_name(nullptr),
           m_num_attributes(0),
           m_allocated(LOCATION_NONE),
@@ -100,7 +115,48 @@ class Attribute : public AttributeBase
             this->m_name = (char*)malloc(sizeof(char) * (strlen(name) + 1));
             strcpy(this->m_name, name);
         }
+
+        this->init(element_per_patch, num_attributes, location, layout);
     }
+
+
+#ifdef USE_POLYSCOPE
+    T operator()(size_t i, size_t j = 0) const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return this->operator()(m_rxmesh->map_to_local_vertex(i), j);
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return this->operator()(m_rxmesh->map_to_local_edge(i), j);
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return this->operator()(m_rxmesh->map_to_local_face(i), j);
+        }
+    }
+    size_t rows() const
+    {
+        return size();
+    }
+    size_t cols() const
+    {
+        return this->get_num_attributes();
+    }
+
+    uint32_t size() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return m_rxmesh->get_num_vertices();
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return m_rxmesh->get_num_edges();
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return m_rxmesh->get_num_faces();
+        }
+    }
+#endif
 
     Attribute(const Attribute& rhs) = default;
 
@@ -310,10 +366,10 @@ class Attribute : public AttributeBase
      * @param dst_flag defines where we will copy to
      * @param stream used to launch kernel/memcpy
      */
-    void copy_from(Attribute<T>& source,
-                   locationT     source_flag,
-                   locationT     dst_flag,
-                   cudaStream_t  stream = NULL)
+    void copy_from(Attribute<T, HandleT>& source,
+                   locationT              source_flag,
+                   locationT              dst_flag,
+                   cudaStream_t           stream = NULL)
     {
 
 
@@ -443,6 +499,34 @@ class Attribute : public AttributeBase
     }
 
     /**
+     * @brief Accessing an attribute using a handle to the mesh element
+     * @param handle input handle
+     * @param attr the attribute id
+     * @return const reference to the attribute
+     */
+    __host__ __device__ __forceinline__ T& operator()(
+        const HandleT  handle,
+        const uint32_t attr = 0) const
+    {
+        auto         pl = handle.unpack();
+        return this->operator()(pl.first, pl.second, attr);
+    }
+
+
+    /**
+     * @brief Accessing an attribute using a handle to the mesh element
+     * @param handle input handle
+     * @param attr the attribute id
+     * @return non-const reference to the attribute
+     */
+    __host__ __device__ __forceinline__ T& operator()(const HandleT  handle,
+                                                      const uint32_t attr = 0)
+    {
+        auto         pl = handle.unpack();
+        return this->operator()(pl.first, pl.second, attr);
+    }
+
+    /**
      * @brief Access the attribute value using patch and local index in the
      * patch. This is meant to be used by XXAttribute not directly by the user
      * @param patch_id patch to be accessed
@@ -455,7 +539,7 @@ class Attribute : public AttributeBase
                                                       const uint32_t attr) const
     {
         assert(patch_id < m_num_patches);
-        assert(attr < m_num_attributes);        
+        assert(attr < m_num_attributes);
 
         const uint32_t pitch_x = (m_layout == AoS) ? m_num_attributes : 1;
 #ifdef __CUDA_ARCH__
@@ -575,286 +659,29 @@ class Attribute : public AttributeBase
         }
     }
 
-
-    char*     m_name;
-    uint32_t  m_num_attributes;
-    locationT m_allocated;
-    T**       m_h_attr;
-    T**       m_h_ptr_on_device;
-    T**       m_d_attr;
-    uint32_t  m_num_patches;
-    uint16_t* m_d_element_per_patch;
-    uint16_t* m_h_element_per_patch;
-    layoutT   m_layout;
+    const RXMesh* m_rxmesh;
+    char*         m_name;
+    uint32_t      m_num_attributes;
+    locationT     m_allocated;
+    T**           m_h_attr;
+    T**           m_h_ptr_on_device;
+    T**           m_d_attr;
+    uint32_t      m_num_patches;
+    uint16_t*     m_d_element_per_patch;
+    uint16_t*     m_h_element_per_patch;
+    layoutT       m_layout;
 
     constexpr static uint32_t m_block_size = 256;
 };
 
-/**
- * @brief Attributes for faces
- * @tparam T the attribute type
- */
 template <class T>
-class FaceAttribute : public Attribute<T>
-{
-   public:
-    /**
-     * @brief Default constructor
-     */
-    FaceAttribute() = default;
+using VertexAttribute = Attribute<T, VertexHandle>;
 
-    /**
-     * @brief Main constructor to be used by RXMeshStatic not directly by the
-     * user
-     * @param name of the attribute
-     * @param face_per_patch number of faces owned per patch
-     * @param num_attributes number of attribute per face
-     * @param location where the attribute to be allocated
-     * @param layout memory layout in case of num_attributes>1
-     */
-    FaceAttribute(const char*                  name,
-                  const std::vector<uint16_t>& face_per_patch,
-                  const uint32_t               num_attributes,
-                  locationT                    location,
-                  const layoutT                layout,
-                  const RXMesh*                rxmesh)
-        : Attribute<T>(name), m_rxmesh(rxmesh)
-    {
-        this->init(face_per_patch, num_attributes, location, layout);
-    }
-
-#ifdef USE_POLYSCOPE
-    T operator()(size_t i, size_t j = 0) const
-    {
-        return this->operator()(m_rxmesh->map_to_local_face(i), j);
-    }
-    size_t rows() const
-    {
-        return size();
-    }
-    size_t cols() const
-    {
-        return this->get_num_attributes();
-    }
-
-    /**
-     * @brief returns the size of the attributes i.e., number of faces
-     */
-    uint32_t size() const
-    {
-        return m_rxmesh->get_num_faces();
-    }
-#endif
-
-    /**
-     * @brief Accessing face attribute using FaceHandle
-     * @param f_handle input face handle
-     * @param attr the attribute id
-     * @return const reference to the attribute
-     */
-    __host__ __device__ __forceinline__ T& operator()(
-        const FaceHandle f_handle,
-        const uint32_t   attr = 0) const
-    {
-        auto                 pl = f_handle.unpack();
-        return Attribute<T>::operator()(pl.first, pl.second, attr);
-    }
-
-
-    /**
-     * @brief Accessing face attribute using FaceHandle
-     * @param f_handle input face handle
-     * @param attr the attribute id
-     * @return non-const reference to the attribute
-     */
-    __host__ __device__ __forceinline__ T& operator()(const FaceHandle f_handle,
-                                                      const uint32_t   attr = 0)
-    {
-        auto                 pl = f_handle.unpack();
-        return Attribute<T>::operator()(pl.first, pl.second, attr);
-    }
-
-   private:
-    const RXMesh* m_rxmesh;
-};
-
-
-/**
- * @brief Attributes for edges
- * @tparam T the attribute type
- */
 template <class T>
-class EdgeAttribute : public Attribute<T>
-{
-   public:
-    /**
-     * @brief Default constructor
-     */
-    EdgeAttribute() = default;
+using EdgeAttribute = Attribute<T, EdgeHandle>;
 
-    /**
-     * @brief Main constructor to be used by RXMeshStatic not directly by the
-     * user
-     * @param name of the attribute
-     * @param edge_per_patch number of edges owned per patch
-     * @param num_attributes number of attribute per edge
-     * @param location where the attribute to be allocated
-     * @param layout memory layout in case of num_attributes>1
-     */
-    EdgeAttribute(const char*                  name,
-                  const std::vector<uint16_t>& edge_per_patch,
-                  const uint32_t               num_attributes,
-                  locationT                    location,
-                  const layoutT                layout,
-                  const RXMesh*                rxmesh)
-        : Attribute<T>(name), m_rxmesh(rxmesh)
-    {
-        this->init(edge_per_patch, num_attributes, location, layout);
-    }
-
-#ifdef USE_POLYSCOPE
-    T operator()(size_t i, size_t j = 0) const
-    {
-        return this->operator()(m_rxmesh->map_to_local_edge(i), j);
-    }
-    size_t rows() const
-    {
-        return size();
-    }
-    size_t cols() const
-    {
-        return this->get_num_attributes();
-    }
-
-    /**
-     * @brief returns the size of the attributes i.e., number of edges
-     */
-    uint32_t size() const
-    {
-        return m_rxmesh->get_num_edges();
-    }
-#endif
-
-    /**
-     * @brief Accessing edge attribute using EdgeHandle
-     * @param e_handle input edge handle
-     * @param attr the attribute id
-     * @return const reference to the attribute
-     */
-    __host__ __device__ __forceinline__ T& operator()(
-        const EdgeHandle e_handle,
-        const uint32_t   attr = 0) const
-    {
-        auto                 pl = e_handle.unpack();
-        return Attribute<T>::operator()(pl.first, pl.second, attr);
-    }
-
-    /**
-     * @brief Accessing edge attribute using EdgeHandle
-     * @param e_handle input edge handle
-     * @param attr the attribute id
-     * @return non-const reference to the attribute
-     */
-    __host__ __device__ __forceinline__ T& operator()(const EdgeHandle e_handle,
-                                                      const uint32_t   attr = 0)
-    {
-        auto                 pl = e_handle.unpack();
-        return Attribute<T>::operator()(pl.first, pl.second, attr);
-    }
-
-   private:
-    const RXMesh* m_rxmesh;
-};
-
-
-/**
- * @brief Attributes for vertices
- * @tparam T the attribute type
- */
 template <class T>
-class VertexAttribute : public Attribute<T>
-{
-   public:
-    /**
-     * @brief Default constructor
-     */
-    VertexAttribute() = default;
-
-    /**
-     * @brief Main constructor to be used by RXMeshStatic not directly by the
-     * user
-     * @param name of the attribute
-     * @param vertex_per_patch number of vertices owned per patch
-     * @param num_attributes number of attribute per vertex
-     * @param location where the attribute to be allocated
-     * @param layout memory layout in case of num_attributes > 1
-     */
-    VertexAttribute(const char*                  name,
-                    const std::vector<uint16_t>& vertex_per_patch,
-                    const uint32_t               num_attributes,
-                    locationT                    location,
-                    const layoutT                layout,
-                    const RXMesh*                rxmesh)
-        : Attribute<T>(name), m_rxmesh(rxmesh)
-    {
-        this->init(vertex_per_patch, num_attributes, location, layout);
-    }
-
-
-#ifdef USE_POLYSCOPE
-    T operator()(size_t i, size_t j = 0) const
-    {
-        return this->operator()(m_rxmesh->map_to_local_vertex(i), j);
-    }
-    size_t rows() const
-    {
-        return size();
-    }
-    size_t cols() const
-    {
-        return this->get_num_attributes();
-    }
-
-    /**
-     * @brief returns the size of the attributes i.e., number of vertices
-     */
-    uint32_t size() const
-    {
-        return m_rxmesh->get_num_vertices();
-    }
-#endif
-
-    /**
-     * @brief Accessing vertex attribute using VertexHandle
-     * @param v_handle input face handle
-     * @param attr the attribute id
-     * @return const reference to the attribute
-     */
-    __host__ __device__ __forceinline__ T& operator()(
-        const VertexHandle v_handle,
-        const uint32_t     attr = 0) const
-    {
-        auto                 pl = v_handle.unpack();
-        return Attribute<T>::operator()(pl.first, pl.second, attr);
-    }
-
-    /**
-     * @brief Accessing vertex attribute using VertexHandle
-     * @param v_handle input face handle
-     * @param attr the attribute id
-     * @return non-const reference to the attribute
-     */
-    __host__ __device__ __forceinline__ T& operator()(
-        const VertexHandle v_handle,
-        const uint32_t     attr = 0)
-    {
-        auto                 pl = v_handle.unpack();
-        return Attribute<T>::operator()(pl.first, pl.second, attr);
-    }
-
-   private:
-    const RXMesh* m_rxmesh;
-};
+using FaceAttribute = Attribute<T, FaceHandle>;
 
 /**
  * @brief Attribute container used to manage a collection of attributes by

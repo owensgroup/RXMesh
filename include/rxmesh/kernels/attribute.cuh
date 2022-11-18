@@ -5,7 +5,7 @@
 
 namespace rxmesh {
 
-template <typename T>
+template <typename T, typename HandleT>
 class Attribute;
 
 namespace detail {
@@ -22,14 +22,14 @@ __device__ __forceinline__ void cub_block_sum(const T thread_val,
     }
 }
 
-template <class T, uint32_t blockSize>
+template <class T, uint32_t blockSize, typename HandleT>
 __launch_bounds__(blockSize) __global__
-    void norm2_kernel(const Attribute<T> X,
-                      const uint16_t*    d_element_per_patch,
-                      const uint32_t     num_patches,
-                      const uint32_t     num_attributes,
-                      T*                 d_block_output,
-                      uint32_t           attribute_id)
+    void norm2_kernel(const Attribute<T, HandleT> X,
+                      const uint16_t*             d_element_per_patch,
+                      const uint32_t              num_patches,
+                      const uint32_t              num_attributes,
+                      T*                          d_block_output,
+                      uint32_t                    attribute_id)
 {
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
@@ -52,15 +52,15 @@ __launch_bounds__(blockSize) __global__
 }
 
 
-template <typename T, uint32_t blockSize>
+template <class T, uint32_t blockSize, typename HandleT>
 __launch_bounds__(blockSize) __global__
-    void dot_kernel(const Attribute<T> X,
-                    const Attribute<T> Y,
-                    const uint16_t*    d_element_per_patch,
-                    const uint32_t     num_patches,
-                    const uint32_t     num_attributes,
-                    T*                 d_block_output,
-                    uint32_t           attribute_id)
+    void dot_kernel(const Attribute<T, HandleT> X,
+                    const Attribute<T, HandleT> Y,
+                    const uint16_t*             d_element_per_patch,
+                    const uint32_t              num_patches,
+                    const uint32_t              num_attributes,
+                    T*                          d_block_output,
+                    uint32_t                    attribute_id)
 {
     assert(X.get_num_attributes() == Y.get_num_attributes());
 
@@ -84,16 +84,16 @@ __launch_bounds__(blockSize) __global__
 }
 
 
-template <class T, uint32_t blockSize, typename ReductionOp>
+template <class T, uint32_t blockSize, typename ReductionOp, typename HandleT>
 __launch_bounds__(blockSize) __global__
-    void generic_reduce(const Attribute<T> X,
-                        const uint16_t*    d_element_per_patch,
-                        const uint32_t     num_patches,
-                        const uint32_t     num_attributes,
-                        T*                 d_block_output,
-                        ReductionOp        reduction_op,
-                        T                  init,
-                        uint32_t           attribute_id)
+    void generic_reduce(const Attribute<T, HandleT> X,
+                        const uint16_t*             d_element_per_patch,
+                        const uint32_t              num_patches,
+                        const uint32_t              num_attributes,
+                        T*                          d_block_output,
+                        ReductionOp                 reduction_op,
+                        T                           init,
+                        uint32_t                    attribute_id)
 {
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
@@ -122,12 +122,12 @@ __launch_bounds__(blockSize) __global__
 }
 
 
-template <typename T>
-__global__ void memset_attribute(const Attribute<T> attr,
-                                 const T            value,
-                                 const uint16_t*    d_element_per_patch,
-                                 const uint32_t     num_patches,
-                                 const uint32_t     num_attributes)
+template <typename T, typename HandleT>
+__global__ void memset_attribute(const Attribute<T, HandleT> attr,
+                                 const T                     value,
+                                 const uint16_t* d_element_per_patch,
+                                 const uint32_t  num_patches,
+                                 const uint32_t  num_attributes)
 {
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {

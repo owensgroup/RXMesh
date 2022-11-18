@@ -314,12 +314,9 @@ class RXMesh
 
     friend class ::RXMeshTest;
 
-    template <typename T>
-    friend class VertexAttribute;
-    template <typename T>
-    friend class EdgeAttribute;
-    template <typename T>
-    friend class FaceAttribute;
+    template <typename T, typename HandleT>
+    friend class Attribute;
+
 
     Context  m_rxmesh_context;
     EdgeMapT m_edges_map;
