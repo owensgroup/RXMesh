@@ -80,8 +80,7 @@ class ReduceHandle
         detail::dot_kernel<T, attr1.m_block_size>
             <<<m_num_patches, attr1.m_block_size, 0, stream>>>(
                 attr1,
-                attr2,
-                attr1.m_d_element_per_patch,
+                attr2,                
                 m_num_patches,
                 attr1.get_num_attributes(),
                 m_d_reduce_1st_stage,
@@ -111,8 +110,7 @@ class ReduceHandle
 
         detail::norm2_kernel<T, attr.m_block_size>
             <<<m_num_patches, attr.m_block_size, 0, stream>>>(
-                attr,
-                attr.m_d_element_per_patch,
+                attr,                
                 m_num_patches,
                 attr.get_num_attributes(),
                 m_d_reduce_1st_stage,
@@ -164,8 +162,7 @@ class ReduceHandle
 
         detail::generic_reduce<T, attr.m_block_size>
             <<<m_num_patches, attr.m_block_size, 0, stream>>>(
-                attr,
-                attr.m_d_element_per_patch,
+                attr,                
                 m_num_patches,
                 attr.get_num_attributes(),
                 m_d_reduce_1st_stage,

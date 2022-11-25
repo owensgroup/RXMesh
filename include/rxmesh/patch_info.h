@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 
+#include "rxmesh/handle.h"
 #include "rxmesh/local.h"
 #include "rxmesh/lp_hashtable.cuh"
 #include "rxmesh/patch_stash.cuh"
@@ -68,6 +69,89 @@ struct ALIGN(16) PatchInfo
     // mesh elements to their owner patch and their local indices in their owner
     // patch
     LPHashTable lp_v, lp_e, lp_f;
+
+
+    /**
+     * @brief return pointer to the number of elements corresponding  to the
+     * handle type
+     * @tparam HandleT
+     */
+    template <typename HandleT>
+    __device__ __host__ __inline__ uint16_t* get_num_elements()
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return num_vertices;
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return num_edges;
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return num_faces;
+        }
+    }
+
+    /**
+     * @brief return pointer to the number of elements corresponding  to the
+     * handle type
+     * @tparam HandleT
+     */
+    template <typename HandleT>
+    __device__ __host__ __inline__ const uint16_t* get_num_elements() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return num_vertices;
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return num_edges;
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return num_faces;
+        }
+    }
+
+    /**
+     * @brief return the capacity corresponding to the handle type
+     * @tparam HandleT
+     */
+    template <typename HandleT>
+    __device__ __host__ __inline__ uint16_t* get_capacity()
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return vertices_capacity;
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return edges_capacity;
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return faces_capacity;
+        }
+    }
+
+    /**
+     * @brief return the capacity corresponding to the handle type
+     * @tparam HandleT
+     */
+    template <typename HandleT>
+    __device__ __host__ __inline__ const uint16_t* get_capacity() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return vertices_capacity;
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return edges_capacity;
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return faces_capacity;
+        }
+    }
 
 
     /**

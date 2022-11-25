@@ -908,15 +908,12 @@ void RXMeshDynamic::update_host()
 
     // count and update num_owned and it prefix sum
     for (uint32_t p = 0; p < m_num_patches; ++p) {
-        m_h_num_v[p]             = m_h_patches_info[p].num_vertices[0];
         m_h_num_owned_v[p]       = m_h_patches_info[p].get_num_owned_vertices();
         m_h_vertex_prefix[p + 1] = m_h_vertex_prefix[p] + m_h_num_owned_v[p];
 
-        m_h_num_e[p]           = m_h_patches_info[p].num_edges[0];
         m_h_num_owned_e[p]     = m_h_patches_info[p].get_num_owned_edges();
         m_h_edge_prefix[p + 1] = m_h_edge_prefix[p] + m_h_num_owned_e[p];
 
-        m_h_num_f[p]           = m_h_patches_info[p].num_faces[0];
         m_h_num_owned_f[p]     = m_h_patches_info[p].get_num_owned_faces();
         m_h_face_prefix[p + 1] = m_h_face_prefix[p] + m_h_num_owned_f[p];
     }
@@ -946,35 +943,6 @@ void RXMeshDynamic::update_host()
     }
     this->calc_max_elements();
 
-    CUDA_ERROR(cudaMemcpy(m_d_num_owned_v,
-                          m_h_num_owned_v.data(),
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-
-    CUDA_ERROR(cudaMemcpy(m_d_num_owned_e,
-                          m_h_num_owned_e.data(),
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-
-    CUDA_ERROR(cudaMemcpy(m_d_num_owned_f,
-                          m_h_num_owned_f.data(),
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-
-    CUDA_ERROR(cudaMemcpy(m_d_num_v,
-                          m_h_num_v.data(),
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-
-    CUDA_ERROR(cudaMemcpy(m_d_num_e,
-                          m_h_num_e.data(),
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-
-    CUDA_ERROR(cudaMemcpy(m_d_num_f,
-                          m_h_num_f.data(),
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
 
 #if USE_POLYSCOPE
     // for polyscope, we just remove the mesh and re-add it since polyscope does

@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <string>
 #include "rxmesh/local.h"
-#include "rxmesh/patch_info.h"
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {

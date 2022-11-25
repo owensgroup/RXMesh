@@ -25,7 +25,6 @@ __device__ __forceinline__ void cub_block_sum(const T thread_val,
 template <class T, uint32_t blockSize, typename HandleT>
 __launch_bounds__(blockSize) __global__
     void norm2_kernel(const Attribute<T, HandleT> X,
-                      const uint16_t*             d_element_per_patch,
                       const uint32_t              num_patches,
                       const uint32_t              num_attributes,
                       T*                          d_block_output,
@@ -33,7 +32,7 @@ __launch_bounds__(blockSize) __global__
 {
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
-        const uint16_t element_per_patch = d_element_per_patch[p_id];
+        const uint16_t element_per_patch = X.size(p_id);
         T              thread_val        = 0;
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
             if (attribute_id != INVALID32) {
@@ -56,7 +55,6 @@ template <class T, uint32_t blockSize, typename HandleT>
 __launch_bounds__(blockSize) __global__
     void dot_kernel(const Attribute<T, HandleT> X,
                     const Attribute<T, HandleT> Y,
-                    const uint16_t*             d_element_per_patch,
                     const uint32_t              num_patches,
                     const uint32_t              num_attributes,
                     T*                          d_block_output,
@@ -66,7 +64,7 @@ __launch_bounds__(blockSize) __global__
 
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
-        const uint16_t element_per_patch = d_element_per_patch[p_id];
+        const uint16_t element_per_patch = X.size(p_id);
         T              thread_val        = 0;
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
             if (attribute_id != INVALID32) {
@@ -87,7 +85,6 @@ __launch_bounds__(blockSize) __global__
 template <class T, uint32_t blockSize, typename ReductionOp, typename HandleT>
 __launch_bounds__(blockSize) __global__
     void generic_reduce(const Attribute<T, HandleT> X,
-                        const uint16_t*             d_element_per_patch,
                         const uint32_t              num_patches,
                         const uint32_t              num_attributes,
                         T*                          d_block_output,
@@ -97,7 +94,7 @@ __launch_bounds__(blockSize) __global__
 {
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
-        const uint16_t element_per_patch = d_element_per_patch[p_id];
+        const uint16_t element_per_patch = X.size(p_id);
         T              thread_val        = init;
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
             if (attribute_id != INVALID32) {
@@ -125,13 +122,12 @@ __launch_bounds__(blockSize) __global__
 template <typename T, typename HandleT>
 __global__ void memset_attribute(const Attribute<T, HandleT> attr,
                                  const T                     value,
-                                 const uint16_t* d_element_per_patch,
-                                 const uint32_t  num_patches,
-                                 const uint32_t  num_attributes)
+                                 const uint32_t              num_patches,
+                                 const uint32_t              num_attributes)
 {
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
-        const uint16_t element_per_patch = d_element_per_patch[p_id];
+        const uint16_t element_per_patch = attr.size(p_id);
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockDim.x) {
             for (uint32_t j = 0; j < num_attributes; ++j) {
                 attr(p_id, i, j) = value;

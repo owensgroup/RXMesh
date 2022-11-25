@@ -436,14 +436,7 @@ class RXMeshStatic : public RXMesh
         layoutT            layout   = SoA)
     {
         return m_attr_container->template add<FaceAttribute<T>>(
-            name.c_str(),
-            get_num_patches(),
-            this->m_h_num_f.data(),
-            this->m_d_num_f,
-            num_attributes,
-            location,
-            layout,
-            this);
+            name.c_str(), num_attributes, location, layout, this);
     }
 
     /**
@@ -480,14 +473,7 @@ class RXMeshStatic : public RXMesh
         uint32_t num_attributes = f_attributes[0].size();
 
         auto ret = m_attr_container->template add<FaceAttribute<T>>(
-            name.c_str(),
-            get_num_patches(),
-            this->m_h_num_f.data(),
-            this->m_d_num_f,
-            num_attributes,
-            LOCATION_ALL,
-            layout,
-            this);
+            name.c_str(), num_attributes, LOCATION_ALL, layout, this);
 
         // populate the attribute before returning it
         const int num_patches = this->get_num_patches();
@@ -544,14 +530,7 @@ class RXMeshStatic : public RXMesh
         uint32_t num_attributes = 1;
 
         auto ret = m_attr_container->template add<FaceAttribute<T>>(
-            name.c_str(),
-            get_num_patches(),
-            this->m_h_num_f.data(),
-            this->m_d_num_f,
-            num_attributes,
-            LOCATION_ALL,
-            layout,
-            this);
+            name.c_str(), num_attributes, LOCATION_ALL, layout, this);
 
         // populate the attribute before returning it
         const int num_patches = this->get_num_patches();
@@ -591,14 +570,7 @@ class RXMeshStatic : public RXMesh
         layoutT            layout   = SoA)
     {
         return m_attr_container->template add<EdgeAttribute<T>>(
-            name.c_str(),
-            get_num_patches(),
-            this->m_h_num_e.data(),
-            this->m_d_num_e,
-            num_attributes,
-            location,
-            layout,
-            this);
+            name.c_str(), num_attributes, location, layout, this);
     }
 
     /**
@@ -620,14 +592,7 @@ class RXMeshStatic : public RXMesh
         layoutT            layout   = SoA)
     {
         return m_attr_container->template add<VertexAttribute<T>>(
-            name.c_str(),
-            get_num_patches(),
-            this->m_h_num_v.data(),
-            this->m_d_num_v,
-            num_attributes,
-            location,
-            layout,
-            this);
+            name.c_str(), num_attributes, location, layout, this);
     }
 
     /**
@@ -667,14 +632,7 @@ class RXMeshStatic : public RXMesh
         uint32_t num_attributes = v_attributes[0].size();
 
         auto ret = m_attr_container->template add<VertexAttribute<T>>(
-            name.c_str(),
-            get_num_patches(),
-            this->m_h_num_v.data(),
-            this->m_d_num_v,
-            num_attributes,
-            LOCATION_ALL,
-            layout,
-            this);
+            name.c_str(), num_attributes, LOCATION_ALL, layout, this);
 
         // populate the attribute before returning it
         const int num_patches = this->get_num_patches();
@@ -734,14 +692,7 @@ class RXMeshStatic : public RXMesh
         uint32_t num_attributes = 1;
 
         auto ret = m_attr_container->template add<VertexAttribute<T>>(
-            name.c_str(),
-            get_num_patches(),
-            this->m_h_num_v.data(),
-            this->m_d_num_v,
-            num_attributes,
-            LOCATION_ALL,
-            layout,
-            this);
+            name.c_str(), num_attributes, LOCATION_ALL, layout, this);
 
         // populate the attribute before returning it
         const int num_patches = this->get_num_patches();

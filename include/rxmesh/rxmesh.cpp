@@ -140,12 +140,6 @@ RXMesh::~RXMesh()
         m_h_patches_info[p].patch_stash.free();
     }
     GPU_FREE(m_d_patches_info);
-    GPU_FREE(m_d_num_owned_v);
-    GPU_FREE(m_d_num_owned_e);
-    GPU_FREE(m_d_num_owned_f);
-    GPU_FREE(m_d_num_v);
-    GPU_FREE(m_d_num_e);
-    GPU_FREE(m_d_num_f);
     free(m_h_patches_info);
     m_rxmesh_context.release();
 }
@@ -181,9 +175,6 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     m_h_num_owned_f.resize(m_num_patches);
     m_h_num_owned_v.resize(m_num_patches);
     m_h_num_owned_e.resize(m_num_patches);
-    m_h_num_f.resize(m_num_patches);
-    m_h_num_v.resize(m_num_patches);
-    m_h_num_e.resize(m_num_patches);
     m_h_vertex_prefix.resize(m_num_patches + 1, 0);
     m_h_edge_prefix.resize(m_num_patches + 1, 0);
     m_h_face_prefix.resize(m_num_patches + 1, 0);
@@ -451,10 +442,6 @@ void RXMesh::build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
 
     build_single_patch_ltog(fv, patch_id);
 
-    m_h_num_v[patch_id] = m_h_patches_ltog_v[patch_id].size();
-    m_h_num_e[patch_id] = m_h_patches_ltog_e[patch_id].size();
-    m_h_num_f[patch_id] = m_h_patches_ltog_f[patch_id].size();
-
     build_single_patch_topology(fv, patch_id);
 }
 
@@ -547,8 +534,8 @@ void RXMesh::build_single_patch_topology(
                           m_patcher->get_external_ribbon_offset()[patch_id - 1];
     const uint32_t r_end = m_patcher->get_external_ribbon_offset()[patch_id];
 
-    const uint16_t patch_num_edges = m_h_num_e[patch_id];
-    const uint16_t patch_num_faces = m_h_num_f[patch_id];
+    const uint16_t patch_num_edges = m_h_patches_ltog_e[patch_id].size();
+    const uint16_t patch_num_faces = m_h_patches_ltog_f[patch_id].size();
 
     m_h_patches_info[patch_id].ev =
         (LocalVertexT*)malloc(patch_num_edges * 2 * sizeof(LocalVertexT));
@@ -702,11 +689,11 @@ void RXMesh::build_device()
         uint16_t* h_counts = (uint16_t*)malloc(6 * sizeof(uint16_t));
 
         m_h_patches_info[p].num_faces         = h_counts;
-        m_h_patches_info[p].num_faces[0]      = m_h_num_f[p];
+        m_h_patches_info[p].num_faces[0]      = m_h_patches_ltog_f[p].size();
         m_h_patches_info[p].num_edges         = h_counts + 1;
-        m_h_patches_info[p].num_edges[0]      = m_h_num_e[p];
+        m_h_patches_info[p].num_edges[0]      = m_h_patches_ltog_e[p].size();
         m_h_patches_info[p].num_vertices      = h_counts + 2;
-        m_h_patches_info[p].num_vertices[0]   = m_h_num_v[p];
+        m_h_patches_info[p].num_vertices[0]   = m_h_patches_ltog_v[p].size();
         m_h_patches_info[p].faces_capacity    = h_counts + 3;
         m_h_patches_info[p].faces_capacity[0] = static_cast<uint16_t>(
             m_capacity_factor *
@@ -961,51 +948,6 @@ void RXMesh::build_device()
                               sizeof(PatchInfo),
                               cudaMemcpyHostToDevice));
     }
-
-
-    CUDA_ERROR(
-        cudaMalloc((void**)&m_d_num_owned_v, m_num_patches * sizeof(uint32_t)));
-    CUDA_ERROR(
-        cudaMalloc((void**)&m_d_num_owned_e, m_num_patches * sizeof(uint32_t)));
-    CUDA_ERROR(
-        cudaMalloc((void**)&m_d_num_owned_f, m_num_patches * sizeof(uint32_t)));
-
-    CUDA_ERROR(
-        cudaMalloc((void**)&m_d_num_v, m_num_patches * sizeof(uint32_t)));
-    CUDA_ERROR(
-        cudaMalloc((void**)&m_d_num_e, m_num_patches * sizeof(uint32_t)));
-    CUDA_ERROR(
-        cudaMalloc((void**)&m_d_num_f, m_num_patches * sizeof(uint32_t)));
-
-    CUDA_ERROR(cudaMemcpy(m_d_num_owned_v,
-                          m_h_num_owned_v.data(),
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-
-    CUDA_ERROR(cudaMemcpy(m_d_num_owned_e,
-                          m_h_num_owned_e.data(),
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-
-    CUDA_ERROR(cudaMemcpy(m_d_num_owned_f,
-                          m_h_num_owned_f.data(),
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-
-    CUDA_ERROR(cudaMemcpy(m_d_num_v,
-                          m_h_num_v.data(),
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-
-    CUDA_ERROR(cudaMemcpy(m_d_num_e,
-                          m_h_num_e.data(),
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
-
-    CUDA_ERROR(cudaMemcpy(m_d_num_f,
-                          m_h_num_f.data(),
-                          m_num_patches * sizeof(uint32_t),
-                          cudaMemcpyHostToDevice));
 }
 
 }  // namespace rxmesh
