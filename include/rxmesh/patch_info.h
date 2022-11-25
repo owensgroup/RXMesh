@@ -70,28 +70,6 @@ struct ALIGN(16) PatchInfo
     // patch
     LPHashTable lp_v, lp_e, lp_f;
 
-
-    /**
-     * @brief return pointer to the number of elements corresponding  to the
-     * handle type
-     * @tparam HandleT
-     */
-    template <typename HandleT>
-    __device__ __host__ __inline__ uint16_t* get_num_elements()
-    {
-        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            return num_vertices;
-        }
-
-        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            return num_edges;
-        }
-
-        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            return num_faces;
-        }
-    }
-
     /**
      * @brief return pointer to the number of elements corresponding  to the
      * handle type
@@ -113,25 +91,6 @@ struct ALIGN(16) PatchInfo
         }
     }
 
-    /**
-     * @brief return the capacity corresponding to the handle type
-     * @tparam HandleT
-     */
-    template <typename HandleT>
-    __device__ __host__ __inline__ uint16_t* get_capacity()
-    {
-        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            return vertices_capacity;
-        }
-
-        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            return edges_capacity;
-        }
-
-        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            return faces_capacity;
-        }
-    }
 
     /**
      * @brief return the capacity corresponding to the handle type

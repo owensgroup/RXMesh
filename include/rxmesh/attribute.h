@@ -161,12 +161,32 @@ class Attribute : public AttributeBase
     }
 #endif
 
+    /**
+     * @brief get the number of elements in a patch. The element type
+     * corresponds to the template HandleT
+     * @param p the patch id
+     */
     __host__ __device__ __forceinline__ uint32_t size(const uint32_t p) const
     {
 #ifdef __CUDA_ARCH__
         return m_d_patches_info[p].get_num_elements<HandleT>()[0];
 #else
         return m_h_patches_info[p].get_num_elements<HandleT>()[0];
+#endif
+    }
+
+    /**
+     * @brief get maximum number of elements in a patch. The element type
+     * corresponds to the template HandleT
+     * @param p the patch id
+     */
+    __host__ __device__ __forceinline__ uint32_t
+    capacity(const uint32_t p) const
+    {
+#ifdef __CUDA_ARCH__
+        return m_d_patches_info[p].get_capacity<HandleT>()[0];
+#else
+        return m_h_patches_info[p].get_capacity<HandleT>()[0];
 #endif
     }
 
@@ -573,7 +593,7 @@ class Attribute : public AttributeBase
 
                 for (uint32_t p = 0; p < m_num_patches; ++p) {
                     m_h_attr[p] = static_cast<T*>(
-                        malloc(sizeof(T) * size(p) * m_num_attributes));
+                        malloc(sizeof(T) * capacity(p) * m_num_attributes));
                 }
 
                 m_allocated = m_allocated | HOST;
@@ -591,7 +611,7 @@ class Attribute : public AttributeBase
                 for (uint32_t p = 0; p < m_num_patches; ++p) {
                     CUDA_ERROR(
                         cudaMalloc((void**)&(m_h_ptr_on_device[p]),
-                                   sizeof(T) * size(p) * m_num_attributes));
+                                   sizeof(T) * capacity(p) * m_num_attributes));
                 }
                 CUDA_ERROR(cudaMemcpy(m_d_attr,
                                       m_h_ptr_on_device,
