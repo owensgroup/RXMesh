@@ -437,7 +437,9 @@ class RXMeshStatic : public RXMesh
     {
         return m_attr_container->template add<FaceAttribute<T>>(
             name.c_str(),
-            this->m_h_num_owned_f,
+            get_num_patches(),
+            this->m_h_num_f.data(),
+            this->m_d_num_f,
             num_attributes,
             location,
             layout,
@@ -479,7 +481,9 @@ class RXMeshStatic : public RXMesh
 
         auto ret = m_attr_container->template add<FaceAttribute<T>>(
             name.c_str(),
-            this->m_h_num_owned_f,
+            get_num_patches(),
+            this->m_h_num_f.data(),
+            this->m_d_num_f,
             num_attributes,
             LOCATION_ALL,
             layout,
@@ -541,7 +545,9 @@ class RXMeshStatic : public RXMesh
 
         auto ret = m_attr_container->template add<FaceAttribute<T>>(
             name.c_str(),
-            this->m_h_num_owned_f,
+            get_num_patches(),
+            this->m_h_num_f.data(),
+            this->m_d_num_f,
             num_attributes,
             LOCATION_ALL,
             layout,
@@ -586,7 +592,9 @@ class RXMeshStatic : public RXMesh
     {
         return m_attr_container->template add<EdgeAttribute<T>>(
             name.c_str(),
-            this->m_h_num_owned_e,
+            get_num_patches(),
+            this->m_h_num_e.data(),
+            this->m_d_num_e,
             num_attributes,
             location,
             layout,
@@ -613,7 +621,9 @@ class RXMeshStatic : public RXMesh
     {
         return m_attr_container->template add<VertexAttribute<T>>(
             name.c_str(),
-            this->m_h_num_owned_v,
+            get_num_patches(),
+            this->m_h_num_v.data(),
+            this->m_d_num_v,
             num_attributes,
             location,
             layout,
@@ -658,7 +668,9 @@ class RXMeshStatic : public RXMesh
 
         auto ret = m_attr_container->template add<VertexAttribute<T>>(
             name.c_str(),
-            this->m_h_num_owned_v,
+            get_num_patches(),
+            this->m_h_num_v.data(),
+            this->m_d_num_v,
             num_attributes,
             LOCATION_ALL,
             layout,
@@ -723,7 +735,9 @@ class RXMeshStatic : public RXMesh
 
         auto ret = m_attr_container->template add<VertexAttribute<T>>(
             name.c_str(),
-            this->m_h_num_owned_v,
+            get_num_patches(),
+            this->m_h_num_v.data(),
+            this->m_d_num_v,
             num_attributes,
             LOCATION_ALL,
             layout,

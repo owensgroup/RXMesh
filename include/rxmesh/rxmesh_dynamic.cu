@@ -464,7 +464,7 @@ __global__ static void check_ribbon_faces(const Context               context,
             // Only if the face is owned, we do the check
             if (is_owned(f, patch_info.owned_mask_f)) {
 
-                // for the three vertices incidet to this face
+                // for the three vertices incident to this face
                 for (uint16_t k = 0; k < 3; ++k) {
                     uint16_t v_id = s_fv[3 * f + k];
 
@@ -744,6 +744,17 @@ void RXMeshDynamic::update_host()
         }
     };
 
+    uint32_t num_patches = 0;
+    CUDA_ERROR(cudaMemcpy(&num_patches,
+                          m_rxmesh_context.m_num_patches,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+    if (num_patches != m_num_patches) {
+        RXMESH_ERROR(
+            "RXMeshDynamic::update_host() does support changing number of "
+            "patches in the mesh");
+    }
+
     for (uint32_t p = 0; p < m_num_patches; ++p) {
         PatchInfo d_patch;
         CUDA_ERROR(cudaMemcpy(&d_patch,
@@ -897,12 +908,15 @@ void RXMeshDynamic::update_host()
 
     // count and update num_owned and it prefix sum
     for (uint32_t p = 0; p < m_num_patches; ++p) {
+        m_h_num_v[p]             = m_h_patches_info[p].num_vertices[0];
         m_h_num_owned_v[p]       = m_h_patches_info[p].get_num_owned_vertices();
         m_h_vertex_prefix[p + 1] = m_h_vertex_prefix[p] + m_h_num_owned_v[p];
 
+        m_h_num_e[p]           = m_h_patches_info[p].num_edges[0];
         m_h_num_owned_e[p]     = m_h_patches_info[p].get_num_owned_edges();
         m_h_edge_prefix[p + 1] = m_h_edge_prefix[p] + m_h_num_owned_e[p];
 
+        m_h_num_f[p]           = m_h_patches_info[p].num_faces[0];
         m_h_num_owned_f[p]     = m_h_patches_info[p].get_num_owned_faces();
         m_h_face_prefix[p + 1] = m_h_face_prefix[p] + m_h_num_owned_f[p];
     }
@@ -932,10 +946,40 @@ void RXMeshDynamic::update_host()
     }
     this->calc_max_elements();
 
+    CUDA_ERROR(cudaMemcpy(m_d_num_owned_v,
+                          m_h_num_owned_v.data(),
+                          m_num_patches * sizeof(uint32_t),
+                          cudaMemcpyHostToDevice));
+
+    CUDA_ERROR(cudaMemcpy(m_d_num_owned_e,
+                          m_h_num_owned_e.data(),
+                          m_num_patches * sizeof(uint32_t),
+                          cudaMemcpyHostToDevice));
+
+    CUDA_ERROR(cudaMemcpy(m_d_num_owned_f,
+                          m_h_num_owned_f.data(),
+                          m_num_patches * sizeof(uint32_t),
+                          cudaMemcpyHostToDevice));
+
+    CUDA_ERROR(cudaMemcpy(m_d_num_v,
+                          m_h_num_v.data(),
+                          m_num_patches * sizeof(uint32_t),
+                          cudaMemcpyHostToDevice));
+
+    CUDA_ERROR(cudaMemcpy(m_d_num_e,
+                          m_h_num_e.data(),
+                          m_num_patches * sizeof(uint32_t),
+                          cudaMemcpyHostToDevice));
+
+    CUDA_ERROR(cudaMemcpy(m_d_num_f,
+                          m_h_num_f.data(),
+                          m_num_patches * sizeof(uint32_t),
+                          cudaMemcpyHostToDevice));
+
 #if USE_POLYSCOPE
     // for polyscope, we just remove the mesh and re-add it since polyscope does
     // not support changing the mesh topology
-    //polyscope::removeSurfaceMesh(this->m_polyscope_mesh_name, true);
+    polyscope::removeSurfaceMesh(this->m_polyscope_mesh_name, true);
     this->m_polyscope_mesh_name = this->m_polyscope_mesh_name + "updated";
     this->register_polyscope();
 #endif

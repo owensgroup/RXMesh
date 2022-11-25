@@ -92,31 +92,37 @@ class Attribute : public AttributeBase
      * @param location where the attribute to be allocated
      * @param layout memory layout in case of num_attributes>1
      */
-    Attribute(const char*                  name,
-              const std::vector<uint16_t>& element_per_patch,
-              const uint32_t               num_attributes,
-              locationT                    location,
-              const layoutT                layout,
-              const RXMesh*                rxmesh)
+    Attribute(const char*     name,
+              const uint32_t  num_patches,
+              const uint16_t* h_element_per_patch,
+              const uint16_t* d_element_per_patch,
+              const uint32_t  num_attributes,
+              locationT       location,
+              const layoutT   layout,
+              const RXMesh*   rxmesh)
         : AttributeBase(),
           m_rxmesh(rxmesh),
           m_name(nullptr),
-          m_num_attributes(0),
+          m_num_attributes(num_attributes),
           m_allocated(LOCATION_NONE),
           m_h_attr(nullptr),
           m_h_ptr_on_device(nullptr),
           m_d_attr(nullptr),
-          m_num_patches(0),
-          m_d_element_per_patch(nullptr),
-          m_h_element_per_patch(nullptr),
-          m_layout(AoS)
+          m_num_patches(num_patches),
+          m_h_element_per_patch(h_element_per_patch),
+          m_d_element_per_patch(d_element_per_patch),
+          m_layout(layout)
     {
         if (name != nullptr) {
             this->m_name = (char*)malloc(sizeof(char) * (strlen(name) + 1));
             strcpy(this->m_name, name);
         }
 
-        this->init(element_per_patch, num_attributes, location, layout);
+        if (m_num_patches == 0) {
+            return;
+        }
+
+        allocate(location);
     }
 
 
@@ -237,31 +243,6 @@ class Attribute : public AttributeBase
         }
     }
 
-    /**
-     * @brief Allocate memory for attribute. This is meant to be used by
-     * RXMeshStatic
-     * @param element_per_patch indicate the number of mesh element owned by
-     * each patch
-     * @param num_attributes number of attribute per mesh element
-     * @param location where the memory should reside (host, device, or both)
-     * @param layout memory layout in case num_attributes>1
-     */
-    void init(const std::vector<uint16_t>& element_per_patch,
-              const uint32_t               num_attributes,
-              locationT                    location = LOCATION_ALL,
-              const layoutT                layout   = AoS)
-    {
-        release();
-        m_num_patches    = element_per_patch.size();
-        m_num_attributes = num_attributes;
-        m_layout         = layout;
-
-        if (m_num_patches == 0) {
-            return;
-        }
-
-        allocate(element_per_patch.data(), location);
-    }
 
     /**
      * @brief Copy memory from one location to another. If target is not
@@ -297,7 +278,7 @@ class Attribute : public AttributeBase
             RXMESH_WARN(
                 "Attribute::move() allocating target before moving to {}",
                 location_to_string(target));
-            allocate(m_h_element_per_patch, target);
+            allocate(target);
         }
 
         if (this->m_num_patches == 0) {
@@ -336,10 +317,8 @@ class Attribute : public AttributeBase
                 free(m_h_attr[p]);
             }
             free(m_h_attr);
-            m_h_attr = nullptr;
-            free(m_h_element_per_patch);
-            m_h_element_per_patch = nullptr;
-            m_allocated           = m_allocated & (~HOST);
+            m_h_attr    = nullptr;
+            m_allocated = m_allocated & (~HOST);
         }
 
         if (((location & DEVICE) == DEVICE) &&
@@ -348,7 +327,6 @@ class Attribute : public AttributeBase
                 GPU_FREE(m_h_ptr_on_device[p]);
             }
             GPU_FREE(m_d_attr);
-            GPU_FREE(m_d_element_per_patch);
             m_allocated = m_allocated & (~DEVICE);
         }
     }
@@ -597,25 +575,20 @@ class Attribute : public AttributeBase
     /**
      * @brief allocate internal memory
      */
-    void allocate(const uint16_t* element_per_patch, locationT location)
+    void allocate(locationT location)
     {
 
         if (m_num_patches != 0) {
 
             if ((location & HOST) == HOST) {
                 release(HOST);
-                m_h_element_per_patch = static_cast<uint16_t*>(
-                    malloc(sizeof(uint16_t) * m_num_patches));
 
                 m_h_attr = static_cast<T**>(malloc(sizeof(T*) * m_num_patches));
 
-                std::memcpy(m_h_element_per_patch,
-                            element_per_patch,
-                            sizeof(uint16_t) * m_num_patches);
-
                 for (uint32_t p = 0; p < m_num_patches; ++p) {
-                    m_h_attr[p] = static_cast<T*>(malloc(
-                        sizeof(T) * element_per_patch[p] * m_num_attributes));
+                    m_h_attr[p] = static_cast<T*>(
+                        malloc(sizeof(T) * m_h_element_per_patch[p] *
+                               m_num_attributes));
                 }
 
                 m_allocated = m_allocated | HOST;
@@ -624,26 +597,11 @@ class Attribute : public AttributeBase
             if ((location & DEVICE) == DEVICE) {
                 release(DEVICE);
 
-                m_h_element_per_patch = static_cast<uint16_t*>(
-                    malloc(sizeof(uint16_t) * m_num_patches));
-
-                std::memcpy(m_h_element_per_patch,
-                            element_per_patch,
-                            sizeof(uint16_t) * m_num_patches);
-
-                CUDA_ERROR(cudaMalloc((void**)&(m_d_element_per_patch),
-                                      sizeof(uint16_t) * m_num_patches));
-
 
                 CUDA_ERROR(cudaMalloc((void**)&(m_d_attr),
                                       sizeof(T*) * m_num_patches));
                 m_h_ptr_on_device =
                     static_cast<T**>(malloc(sizeof(T*) * m_num_patches));
-
-                CUDA_ERROR(cudaMemcpy(m_d_element_per_patch,
-                                      element_per_patch,
-                                      sizeof(uint16_t) * m_num_patches,
-                                      cudaMemcpyHostToDevice));
 
                 for (uint32_t p = 0; p < m_num_patches; ++p) {
                     CUDA_ERROR(cudaMalloc((void**)&(m_h_ptr_on_device[p]),
@@ -659,17 +617,17 @@ class Attribute : public AttributeBase
         }
     }
 
-    const RXMesh* m_rxmesh;
-    char*         m_name;
-    uint32_t      m_num_attributes;
-    locationT     m_allocated;
-    T**           m_h_attr;
-    T**           m_h_ptr_on_device;
-    T**           m_d_attr;
-    uint32_t      m_num_patches;
-    uint16_t*     m_d_element_per_patch;
-    uint16_t*     m_h_element_per_patch;
-    layoutT       m_layout;
+    const RXMesh*   m_rxmesh;
+    char*           m_name;
+    uint32_t        m_num_attributes;
+    locationT       m_allocated;
+    T**             m_h_attr;
+    T**             m_h_ptr_on_device;
+    T**             m_d_attr;
+    uint32_t        m_num_patches;
+    const uint16_t* m_d_element_per_patch;
+    const uint16_t* m_h_element_per_patch;
+    layoutT         m_layout;
 
     constexpr static uint32_t m_block_size = 256;
 };
@@ -738,12 +696,14 @@ class AttributeContainer
      * @return a shared pointer to the attribute
      */
     template <typename AttrT>
-    std::shared_ptr<AttrT> add(const char*            name,
-                               std::vector<uint16_t>& element_per_patch,
-                               uint32_t               num_attributes,
-                               locationT              location,
-                               layoutT                layout,
-                               const RXMesh*          rxmesh)
+    std::shared_ptr<AttrT> add(const char*     name,
+                               const uint32_t  num_patches,
+                               const uint16_t* h_element_per_patch,
+                               const uint16_t* d_element_per_patch,
+                               uint32_t        num_attributes,
+                               locationT       location,
+                               layoutT         layout,
+                               const RXMesh*   rxmesh)
     {
         if (does_exist(name)) {
             RXMESH_WARN(
@@ -752,8 +712,14 @@ class AttributeContainer
                 std::string(name));
         }
 
-        auto new_attr = std::make_shared<AttrT>(
-            name, element_per_patch, num_attributes, location, layout, rxmesh);
+        auto new_attr = std::make_shared<AttrT>(name,
+                                                num_patches,
+                                                h_element_per_patch,
+                                                d_element_per_patch,
+                                                num_attributes,
+                                                location,
+                                                layout,
+                                                rxmesh);
         m_attr_container.push_back(
             std::dynamic_pointer_cast<AttributeBase>(new_attr));
 

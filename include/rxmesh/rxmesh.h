@@ -330,7 +330,7 @@ class RXMesh
     bool m_is_input_edge_manifold;
     bool m_is_input_closed;
 
-    // May need to be updated with update_host
+    
     uint32_t       m_num_patches;
     const uint32_t m_patch_size;
 
@@ -339,13 +339,15 @@ class RXMesh
     std::unique_ptr<patcher::Patcher> m_patcher;
 
     // the number of owned mesh elements per patch
-    // Should be updated with update_host
     std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;
+    uint16_t *            m_d_num_owned_f, *m_d_num_owned_e, *m_d_num_owned_v;
 
-    // Should be updated with update_host
+    // the total number of elements per patch
+    std::vector<uint16_t> m_h_num_f, m_h_num_e, m_h_num_v;
+    uint16_t *            m_d_num_f, *m_d_num_e, *m_d_num_v;
+
     uint32_t m_max_not_owned_vertices, m_max_not_owned_edges,
         m_max_not_owned_faces;
-    // Should be updated with update_host
     uint16_t m_max_vertices_per_patch, m_max_edges_per_patch,
         m_max_faces_per_patch;
 
@@ -361,8 +363,6 @@ class RXMesh
     std::vector<uint32_t> m_h_edge_prefix;
     std::vector<uint32_t> m_h_face_prefix;
 
-
-    // Should be updated with update_host
     PatchInfo *m_d_patches_info, *m_h_patches_info;
 
     float m_capacity_factor, m_lp_hashtable_load_factor;

@@ -90,7 +90,7 @@ __global__ static void edge_flip_kernel(
     cavity.cleanup(block);
 }
 
-TEST(RXMeshDynamic, Cavity)
+TEST(RXMeshDynamic, DISABLED_Cavity)
 {
     using namespace rxmesh;
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);

@@ -5,7 +5,7 @@
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh_test.h"
 
-TEST(RXMeshStatic, HigherQueries)
+TEST(RXMeshStatic, DISABLED_HigherQueries)
 {
     using namespace rxmesh;
 
