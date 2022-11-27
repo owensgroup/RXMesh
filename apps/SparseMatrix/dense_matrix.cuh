@@ -1,3 +1,5 @@
+#pragma once
+
 #include <iostream>
 #include <vector>
 #include "rxmesh/attribute.h"
@@ -24,16 +26,28 @@ struct DenseMatInfo
                               cudaMemcpyHostToDevice));
     }
 
-    __host__ __device__ T& operator()(const u_int32_t row,
+    // __host__ __device__ T& operator()(const u_int32_t row,
+    //                                   const u_int32_t col)
+    // {
+    //     return m_d_val[row * m_nnz_col_size + col];
+    // }
+
+    // __host__ __device__ T& operator()(const u_int32_t row,
+    //                                   const u_int32_t col) const
+    // {
+    //     return m_d_val[row * m_nnz_col_size + col];
+    // }
+
+        __host__ __device__ T& operator()(const u_int32_t row,
                                       const u_int32_t col)
     {
-        return m_d_val[row * m_nnz_col_size + col];
+        return m_d_val[col * m_nnz_row_size + row]; // pitch & stride
     }
 
     __host__ __device__ T& operator()(const u_int32_t row,
                                       const u_int32_t col) const
     {
-        return m_d_val[row * m_nnz_col_size + col];
+        return m_d_val[col * m_nnz_row_size + row];
     }
 
     uint32_t bytes() const

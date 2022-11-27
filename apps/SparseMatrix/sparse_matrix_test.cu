@@ -5,7 +5,7 @@
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh/util/timer.h"
-#include "sparse_matrix.cuh"
+#include "sparse_matrix_mcf.cuh"
 
 template <uint32_t blockThreads>
 __global__ static void sparse_mat_test(const rxmesh::Context context,
@@ -278,7 +278,6 @@ TEST(Apps, SparseMatrixEdgeLen)
     const uint32_t threads = 256;
     const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
 
-    std::vector<std::vector<float>> Verts;
     auto coords = rxmesh.get_input_vertex_coordinates();
 
     float* d_arr_ones;
@@ -336,10 +335,74 @@ TEST(Apps, SparseMatrixEdgeLen)
     spmat.free();
 }
 
-TEST(Apps, SparseMatrixMCFSolve)
+TEST(Apps, SparseMatrixSimpleSolve)
 {
-    
+    using namespace rxmesh;
+
+    // Select device
+    cuda_query(0);
+
+    // generate rxmesh obj
+    std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
+    RXMeshStatic rxmesh(obj_path);
+
+    uint32_t num_vertices = rxmesh.get_num_vertices();
+
+    const uint32_t threads = 256;
+    const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
+
+    SparseMatInfo<float> spmat(rxmesh);
+    spmat.set_ones();
+
+    DenseMatInfo<float> X_mat(num_vertices, 3);
+    X_mat.set_ones();
+    DenseMatInfo<float> B_mat(num_vertices, 3);
+    B_mat.set_ones();
+
+    sparse_coord_solve(spmat,
+                          B_mat,
+                        X_mat);
+
+
 }
+
+// TEST(Apps, SparseMatrixMCFSolve)
+// {
+//     using namespace rxmesh;
+
+//     // Select device
+//     cuda_query(0);
+
+//     // generate rxmesh obj
+//     std::string  obj_path = STRINGIFY(INPUT_DIR) "cube.obj";
+//     RXMeshStatic rxmesh(obj_path);
+
+//     uint32_t num_vertices = rxmesh.get_num_vertices();
+
+//     const uint32_t threads = 256;
+//     const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
+
+//     auto                 coords = rxmesh.get_input_vertex_coordinates();
+//     SparseMatInfo<float> spmat(rxmesh);
+//     DenseMatInfo<float>  denmat(num_vertices, 3);
+
+//     bool  use_uniform_laplace = true;
+//     float time_step           = 1.f;
+
+//     LaunchBox<threads> launch_box;
+//     rxmesh.prepare_launch_box(
+//         {Op::VV}, launch_box, (void*)mcf_A_B_setup<float, threads>);
+
+//     mcf_A_B_setup<float, threads>
+//         <<<launch_box.blocks,
+//            launch_box.num_threads,
+//            launch_box.smem_bytes_dyn>>>(rxmesh.get_context(),
+//                                         *coords,
+//                                         spmat,
+//                                         denmat,
+//                                         use_uniform_laplace,
+//                                         time_step);
+// }
 
 int main(int argc, char** argv)
 {
