@@ -782,6 +782,15 @@ struct Cavity
 
 
     /**
+     * @brief update an attribute such that it can be used after the topology
+     * changes
+     */
+    template <typename AttributeT>
+    __device__ __inline__ void update_attributes(AttributeT attribute)
+    {
+    }
+
+    /**
      * @brief find the index of the next element to add. First search within the
      * cavity and find the first element that has its cavity set to cavity_id.
      * If nothing found, search for the first element that has its bitmask set
@@ -827,7 +836,7 @@ struct Cavity
                 m_patch_info.lp_v.remove(vp);
 
                 const uint32_t q  = m_patch_info.patch_stash.get_patch(p_lp);
-                const uint32_t qv = p_lp.local_id_in_owner_patch();
+                const uint16_t qv = p_lp.local_id_in_owner_patch();
 
                 m_s_owned_mask_v.set(vp, true);
 
@@ -859,7 +868,7 @@ struct Cavity
                 m_patch_info.lp_e.remove(ep);
 
                 const uint32_t q  = m_patch_info.patch_stash.get_patch(p_lp);
-                const uint32_t qe = p_lp.local_id_in_owner_patch();
+                const uint16_t qe = p_lp.local_id_in_owner_patch();
 
                 m_s_owned_mask_e.set(ep, true);
 
@@ -890,7 +899,7 @@ struct Cavity
                 m_patch_info.lp_f.remove(fp);
 
                 const uint32_t q  = m_patch_info.patch_stash.get_patch(p_lp);
-                const uint32_t qf = p_lp.local_id_in_owner_patch();
+                const uint16_t qf = p_lp.local_id_in_owner_patch();
 
                 m_s_owned_mask_f.set(fp, true);
 
