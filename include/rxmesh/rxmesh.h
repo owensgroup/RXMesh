@@ -203,33 +203,21 @@ class RXMesh
      * Note: The mapping is different than the mapping from the input
      * @param i global vertex index
      */
-    const VertexHandle map_to_local_vertex(uint32_t i) const
-    {
-        auto pl = map_to_local(i, m_h_vertex_prefix);
-        return {pl.first, pl.second};
-    }
+    const VertexHandle map_to_local_vertex(uint32_t i) const;
 
     /**
      * @brief map a global vertex index to a EdgexHandle i.e., a local edge.
      * Note: The mapping is different than the mapping from the input
      * @param i global edge index
      */
-    const EdgeHandle map_to_local_edge(uint32_t i) const
-    {
-        auto pl = map_to_local(i, m_h_edge_prefix);
-        return {pl.first, pl.second};
-    }
+    const EdgeHandle map_to_local_edge(uint32_t i) const;
 
     /**
      * @brief map a global vertex index to an FaceHandle i.e., a local face
      * Note: The mapping is different than the mapping from the input
      * @param i global face index
      */
-    const FaceHandle map_to_local_face(uint32_t i) const
-    {
-        auto pl = map_to_local(i, m_h_face_prefix);
-        return {pl.first, pl.second};
-    }
+    const FaceHandle map_to_local_face(uint32_t i) const;
 
    protected:
     // Edge hash map that takes two vertices and return their edge id
@@ -287,6 +275,7 @@ class RXMesh
      */
     void calc_max_elements();
 
+    template <typename HandleT>
     const std::pair<uint32_t, uint16_t> map_to_local(
         const uint32_t               i,
         const std::vector<uint32_t>& element_prefix) const;
@@ -339,7 +328,7 @@ class RXMesh
     std::unique_ptr<patcher::Patcher> m_patcher;
 
     // the number of owned mesh elements per patch
-    std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;    
+    std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;
 
     uint32_t m_max_not_owned_vertices, m_max_not_owned_edges,
         m_max_not_owned_faces;

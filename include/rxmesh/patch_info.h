@@ -114,6 +114,95 @@ struct ALIGN(16) PatchInfo
 
 
     /**
+     * @brief return the active mask corresponding to the handle type
+     * @tparam HandleT
+     */
+    template <typename HandleT>
+    __device__ __host__ __inline__ const uint32_t* get_active_mask() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return active_mask_v;
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return active_mask_e;
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return active_mask_f;
+        }
+    }
+
+    /**
+     * @brief return the owned mask corresponding to the handle type
+     * @tparam HandleT
+     */
+    template <typename HandleT>
+    __device__ __host__ __inline__ const uint32_t* get_owned_mask() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return owned_mask_v;
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return owned_mask_e;
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return owned_mask_f;
+        }
+    }
+
+    /**
+     * @brief check if a vertex within this patch is owned by it
+     */
+    __device__ __host__ __inline__ const bool is_owned(LocalVertexT vh) const
+    {
+        return detail::is_owned(vh.id, get_owned_mask<VertexHandle>());
+    }
+
+    /**
+     * @brief check if an edge within this patch is owned by it
+     */
+    __device__ __host__ __inline__ const bool is_owned(LocalEdgeT eh) const
+    {
+        return detail::is_owned(eh.id, get_owned_mask<EdgeHandle>());
+    }
+
+    /**
+     * @brief check if a face within this patch is owned by it
+     */
+    __device__ __host__ __inline__ const bool is_owned(LocalFaceT fh) const
+    {
+        return detail::is_owned(fh.id, get_owned_mask<FaceHandle>());
+    }
+
+    /**
+     * @brief check if a vertex within this patch is deleted
+     */
+    __device__ __host__ __inline__ const bool is_deleted(LocalVertexT vh) const
+    {
+        return detail::is_deleted(vh.id, get_active_mask<VertexHandle>());
+    }
+
+    /**
+     * @brief check if an edge within this patch is deleted
+     */
+    __device__ __host__ __inline__ const bool is_deleted(LocalEdgeT eh) const
+    {
+        return detail::is_deleted(eh.id, get_active_mask<EdgeHandle>());
+    }
+
+    /**
+     * @brief check if a face within this patch is deleted
+     */
+    __device__ __host__ __inline__ const bool is_deleted(LocalFaceT fh) const
+    {
+        return detail::is_deleted(fh.id, get_active_mask<FaceHandle>());
+    }
+
+
+    /**
      * @brief count number of owned active vertices from the bitmasks
      */
     __host__ __inline__ uint16_t get_num_owned_vertices() const

@@ -5,14 +5,13 @@
 #include "rxmesh/rxmesh_dynamic.h"
 
 template <uint32_t blockThreads>
-__global__ static void edge_flip_kernel(
-    rxmesh::Context                      context,
-    const rxmesh::VertexAttribute<float> coords,
-    rxmesh::VertexAttribute<float>       v_attr,
-    rxmesh::EdgeAttribute<float>         e_attr,
-    rxmesh::FaceAttribute<float>         f_attr,
-    bool                                 conflicting,
-    bool                                 on_ribbon)
+__global__ static void edge_flip_kernel(rxmesh::Context                context,
+                                        rxmesh::VertexAttribute<float> coords,
+                                        rxmesh::VertexAttribute<float> v_attr,
+                                        rxmesh::EdgeAttribute<float>   e_attr,
+                                        rxmesh::FaceAttribute<float>   f_attr,
+                                        bool conflicting,
+                                        bool on_ribbon)
 {
     if (blockIdx.x != 0) {
         return;
@@ -68,6 +67,10 @@ __global__ static void edge_flip_kernel(
 
 
     cavity.process(block, shrd_alloc);
+    cavity.update_attributes(block, coords);
+    cavity.update_attributes(block, v_attr);
+    cavity.update_attributes(block, e_attr);
+    cavity.update_attributes(block, f_attr);
 
     /*cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
         assert(size == 4);
@@ -84,13 +87,13 @@ __global__ static void edge_flip_kernel(
                         cavity.get_cavity_edge(c, 1),
                         cavity.get_cavity_edge(c, 2),
                         new_edge.get_flip_dedge());
-    });*/
-    block.sync();
+    });
+    block.sync();*/
 
     cavity.cleanup(block);
 }
 
-TEST(RXMeshDynamic, DISABLED_Cavity)
+TEST(RXMeshDynamic, Cavity)
 {
     using namespace rxmesh;
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
@@ -133,7 +136,6 @@ TEST(RXMeshDynamic, DISABLED_Cavity)
     e_attr->move(DEVICE, HOST);
     f_attr->move(DEVICE, HOST);
 
-
     rx.update_host();
 
     EXPECT_EQ(num_vertices, rx.get_num_vertices());
@@ -144,20 +146,19 @@ TEST(RXMeshDynamic, DISABLED_Cavity)
 
 #if USE_POLYSCOPE
     std::pair<double, double> range(-2, 2);
-    polyscope::init();
-    auto ps_mesh = rx.get_polyscope_mesh();
+    auto                      ps_mesh = rx.get_polyscope_mesh();
     rx.polyscope_render_vertex_patch()->setMapRange(range);
-    rx.polyscope_render_edge_patch()->setMapRange(range);
+    // rx.polyscope_render_edge_patch()->setMapRange(range);
     rx.polyscope_render_face_patch()->setMapRange(range);
 
     uint32_t pid      = 0;
     auto     ps_patch = rx.render_patch(pid);
     rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(range);
-    rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(range);
+    // rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(range);
     rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(range);
 
     ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
-    ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
+    // ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
     ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
     polyscope::show();
 #endif

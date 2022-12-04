@@ -59,6 +59,7 @@ class RXMeshStatic : public RXMesh
             this->add_vertex_attribute<float>(vertices, "rx:vertices");
 
 #if USE_POLYSCOPE
+        polyscope::init();
         m_polyscope_mesh_name = polyscope::guessNiceNameFromPath(file_path);
         this->register_polyscope();
 #endif
@@ -1199,7 +1200,8 @@ class RXMeshStatic : public RXMesh
                         p_id =
                             this->m_h_patches_info[p].patch_stash.get_patch(lp);
                     }
-
+                    v_id = detail::count_set_bits(
+                        v_id, m_h_patches_info[p].owned_mask_v);
                     face[e] = v_id + m_h_vertex_prefix[p_id];
                 }
                 fv.push_back(face);

@@ -192,23 +192,6 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     calc_input_statistics(fv, ef);
 }
 
-const std::pair<uint32_t, uint16_t> RXMesh::map_to_local(
-    const uint32_t               i,
-    const std::vector<uint32_t>& element_prefix) const
-{
-    const auto end = element_prefix.end();
-
-    auto p = std::lower_bound(
-        element_prefix.begin(), end, i, [](int a, int b) { return a <= b; });
-    if (p == end) {
-        RXMESH_ERROR(
-            "RXMeshStatic::map_to_local can not its patch. Input is out of "
-            "pound!");
-    }
-    p -= 1;
-    return {std::distance(element_prefix.begin(), p), i - *p};
-}
-
 void RXMesh::build_supporting_structures(
     const std::vector<std::vector<uint32_t>>& fv,
     std::vector<std::vector<uint32_t>>&       ef,
@@ -647,6 +630,59 @@ void RXMesh::build_single_patch_topology(
         add_new_face(face_id);
     }
 }
+
+const VertexHandle RXMesh::map_to_local_vertex(uint32_t i) const
+{
+    auto pl = map_to_local<VertexHandle>(i, m_h_vertex_prefix);
+    return {pl.first, pl.second};
+}
+
+const EdgeHandle RXMesh::map_to_local_edge(uint32_t i) const
+{
+    auto pl = map_to_local<EdgeHandle>(i, m_h_edge_prefix);
+    return {pl.first, pl.second};
+}
+
+const FaceHandle RXMesh::map_to_local_face(uint32_t i) const
+{
+    auto pl = map_to_local<FaceHandle>(i, m_h_face_prefix);
+    return {pl.first, pl.second};
+}
+
+
+template <typename HandleT>
+const std::pair<uint32_t, uint16_t> RXMesh::map_to_local(
+    const uint32_t               i,
+    const std::vector<uint32_t>& element_prefix) const
+{
+    const auto end = element_prefix.end();
+
+    auto p = std::lower_bound(
+        element_prefix.begin(), end, i, [](int a, int b) { return a <= b; });
+    if (p == end) {
+        RXMESH_ERROR(
+            "RXMeshStatic::map_to_local can not its patch. Input is out of "
+            "range!");
+    }
+    p -= 1;
+    uint32_t patch_id = std::distance(element_prefix.begin(), p);
+    uint32_t prefix   = i - *p;
+    uint16_t local_id = 0;
+    uint16_t num_elements =
+        *(m_h_patches_info[patch_id].template get_num_elements<HandleT>());
+    for (uint16_t l = 0; l < num_elements; ++l) {
+        if (m_h_patches_info[patch_id].is_owned(typename HandleT::LocalT(l)) &&
+            !m_h_patches_info[patch_id].is_deleted(
+                typename HandleT::LocalT(l))) {
+            if (local_id == prefix) {
+                break;
+            }
+            local_id++;
+        }
+    }
+    return {patch_id, local_id};
+}
+
 
 uint32_t RXMesh::get_edge_id(const uint32_t v0, const uint32_t v1) const
 {

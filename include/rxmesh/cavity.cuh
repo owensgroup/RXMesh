@@ -256,6 +256,13 @@ struct Cavity
         change_vertex_ownership(block);
         change_edge_ownership(block);
         change_face_ownership(block);
+
+        if (threadIdx.x == 0) {
+            m_patch_info.num_vertices[0] = m_s_num_vertices[0];
+            m_patch_info.num_edges[0]    = m_s_num_edges[0];
+            m_patch_info.num_faces[0]    = m_s_num_faces[0];
+        }
+
         block.sync();
     }
 
@@ -739,10 +746,29 @@ struct Cavity
      */
     __device__ __inline__ void cleanup(cooperative_groups::thread_block& block)
     {
-        if (threadIdx.x == 0) {
-            m_patch_info.num_vertices[0] = m_s_num_vertices[0];
-            m_patch_info.num_edges[0]    = m_s_num_edges[0];
-            m_patch_info.num_faces[0]    = m_s_num_faces[0];
+
+        // cleanup the hashtable by removing the vertices/edges/faces that has
+        // changed their ownership to be in this patch (p) and thus should not
+        // be in the hashtable
+        for (uint32_t vp = threadIdx.x; vp < m_s_num_vertices[0];
+             vp += blockThreads) {
+            if (m_s_ownership_change_mask_v(vp)) {
+                m_patch_info.lp_v.remove(vp);
+            }
+        }
+
+        for (uint32_t ep = threadIdx.x; ep < m_s_num_edges[0];
+             ep += blockThreads) {
+            if (m_s_ownership_change_mask_e(ep)) {
+                m_patch_info.lp_e.remove(ep);
+            }
+        }
+
+        for (uint32_t fp = threadIdx.x; fp < m_s_num_faces[0];
+             fp += blockThreads) {
+            if (m_s_ownership_change_mask_f(fp)) {
+                m_patch_info.lp_f.remove(fp);
+            }
         }
 
         detail::store<blockThreads>(
@@ -786,8 +812,70 @@ struct Cavity
      * changes
      */
     template <typename AttributeT>
-    __device__ __inline__ void update_attributes(AttributeT attribute)
+    __device__ __inline__ void update_attributes(
+        cooperative_groups::thread_block& block,
+        AttributeT&                       attribute)
     {
+        using HandleT = typename AttributeT::HandleType;
+        using Type    = typename AttributeT::Type;
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            for (uint32_t vp = threadIdx.x; vp < m_s_num_vertices[0];
+                 vp += blockThreads) {
+                if (m_s_ownership_change_mask_v(vp)) {
+                    assert(m_s_owned_mask_v(vp));
+                    auto           p_lp = m_patch_info.lp_v.find(vp);
+                    const uint32_t q = m_patch_info.patch_stash.get_patch(p_lp);
+                    const uint16_t qv = p_lp.local_id_in_owner_patch();
+
+                    const uint32_t num_attr = attribute.get_num_attributes();
+                    for (uint32_t attr = 0; attr < num_attr; ++attr) {
+                        attribute(m_patch_info.patch_id, vp, attr) =
+                            attribute(q, qv, attr);
+                    }
+                }
+            }
+        }
+
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            for (uint32_t ep = threadIdx.x; ep < m_s_num_edges[0];
+                 ep += blockThreads) {
+                if (m_s_ownership_change_mask_e(ep)) {
+                    assert(m_s_owned_mask_e(ep));
+                    auto           p_lp = m_patch_info.lp_e.find(ep);
+                    const uint32_t q = m_patch_info.patch_stash.get_patch(p_lp);
+                    const uint16_t qe = p_lp.local_id_in_owner_patch();
+
+                    const uint32_t num_attr = attribute.get_num_attributes();
+                    for (uint32_t attr = 0; attr < num_attr; ++attr) {
+                        attribute(m_patch_info.patch_id, ep, attr) =
+                            attribute(q, qe, attr);
+                    }
+                }
+            }
+        }
+
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            for (uint32_t fp = threadIdx.x; fp < m_s_num_faces[0];
+                 fp += blockThreads) {
+                if (m_s_ownership_change_mask_f(fp)) {
+                    assert(m_s_owned_mask_f(fp));
+                    auto           p_lp = m_patch_info.lp_f.find(fp);
+                    const uint32_t q = m_patch_info.patch_stash.get_patch(p_lp);
+                    const uint16_t qf = p_lp.local_id_in_owner_patch();
+
+                    const uint32_t num_attr = attribute.get_num_attributes();
+                    for (uint32_t attr = 0; attr < num_attr; ++attr) {
+                        attribute(m_patch_info.patch_id, fp, attr) =
+                            attribute(q, qf, attr);
+                    }
+                }
+            }
+        }
+
+        block.sync();
     }
 
     /**
@@ -820,7 +908,10 @@ struct Cavity
 
     /**
      * @brief change ownership for vertices marked in
-     * m_s_ownership_change_mask_v
+     * m_s_ownership_change_mask_v. We can remove these vertices from the
+     * hashtable stored in shared memory, but we delay this (do it in cleanup)
+     * since we need to get these vertices' original owner patch in
+     * update_attributes()
      */
     __device__ __inline__ void change_vertex_ownership(
         cooperative_groups::thread_block& block)
@@ -833,7 +924,7 @@ struct Cavity
 
                 auto p_lp = m_patch_info.lp_v.find(vp);
 
-                m_patch_info.lp_v.remove(vp);
+                // m_patch_info.lp_v.remove(vp);
 
                 const uint32_t q  = m_patch_info.patch_stash.get_patch(p_lp);
                 const uint16_t qv = p_lp.local_id_in_owner_patch();
@@ -853,7 +944,10 @@ struct Cavity
 
     /**
      * @brief change ownership for edges marked in
-     * m_s_ownership_change_mask_e
+     * m_s_ownership_change_mask_e. We can remove these edges from the
+     * hashtable stored in shared memory, but we delay this (do it in cleanup)
+     * since we need to get these edges' original owner patch in
+     * update_attributes()
      */
     __device__ __inline__ void change_edge_ownership(
         cooperative_groups::thread_block& block)
@@ -865,7 +959,7 @@ struct Cavity
             if (m_s_ownership_change_mask_e(ep)) {
                 auto p_lp = m_patch_info.lp_e.find(ep);
 
-                m_patch_info.lp_e.remove(ep);
+                // m_patch_info.lp_e.remove(ep);
 
                 const uint32_t q  = m_patch_info.patch_stash.get_patch(p_lp);
                 const uint16_t qe = p_lp.local_id_in_owner_patch();
@@ -884,7 +978,10 @@ struct Cavity
 
     /**
      * @brief change ownership for faces marked in
-     * m_s_ownership_change_mask_f
+     * m_s_ownership_change_mask_f. We can remove these faces from the
+     * hashtable stored in shared memory, but we delay this (do it in cleanup)
+     * since we need to get these faces' original owner patch in
+     * update_attributes()
      */
     __device__ __inline__ void change_face_ownership(
         cooperative_groups::thread_block& block)
@@ -896,7 +993,7 @@ struct Cavity
             if (m_s_ownership_change_mask_f(fp)) {
                 auto p_lp = m_patch_info.lp_f.find(fp);
 
-                m_patch_info.lp_f.remove(fp);
+                // m_patch_info.lp_f.remove(fp);
 
                 const uint32_t q  = m_patch_info.patch_stash.get_patch(p_lp);
                 const uint16_t qf = p_lp.local_id_in_owner_patch();
