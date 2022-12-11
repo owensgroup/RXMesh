@@ -675,6 +675,7 @@ const std::pair<uint32_t, uint16_t> RXMesh::map_to_local(
             !m_h_patches_info[patch_id].is_deleted(
                 typename HandleT::LocalT(l))) {
             if (local_id == prefix) {
+                local_id = l;
                 break;
             }
             local_id++;

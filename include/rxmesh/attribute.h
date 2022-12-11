@@ -123,7 +123,6 @@ class Attribute : public AttributeBase
     }
 
 
-#ifdef USE_POLYSCOPE
     T operator()(size_t i, size_t j = 0) const
     {
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
@@ -159,7 +158,7 @@ class Attribute : public AttributeBase
             return m_rxmesh->get_num_faces();
         }
     }
-#endif
+
 
     /**
      * @brief get the number of elements in a patch. The element type
@@ -188,6 +187,19 @@ class Attribute : public AttributeBase
 #else
         return m_h_patches_info[p].get_capacity<HandleT>()[0];
 #endif
+    }
+
+
+    __host__ __device__ __forceinline__ uint32_t pitch_x() const
+    {
+
+        return (m_layout == AoS) ? m_num_attributes : 1;
+    }
+
+    __host__ __device__ __forceinline__ uint32_t pitch_y(const uint32_t p) const
+    {
+
+        return (m_layout == AoS) ? 1 : capacity(p);
     }
 
     Attribute(const Attribute& rhs) = default;
@@ -313,7 +325,7 @@ class Attribute : public AttributeBase
                 CUDA_ERROR(
                     cudaMemcpyAsync(m_h_ptr_on_device[p],
                                     m_h_attr[p],
-                                    sizeof(T) * size(p) * m_num_attributes,
+                                    sizeof(T) * capacity(p) * m_num_attributes,
                                     cudaMemcpyHostToDevice,
                                     stream));
             }
@@ -322,7 +334,7 @@ class Attribute : public AttributeBase
                 CUDA_ERROR(
                     cudaMemcpyAsync(m_h_attr[p],
                                     m_h_ptr_on_device[p],
-                                    sizeof(T) * size(p) * m_num_attributes,
+                                    sizeof(T) * capacity(p) * m_num_attributes,
                                     cudaMemcpyDeviceToHost,
                                     stream));
             }
@@ -411,7 +423,7 @@ class Attribute : public AttributeBase
             for (uint32_t p = 0; p < m_num_patches; ++p) {
                 std::memcpy(m_h_ptr_on_device[p],
                             source.m_h_ptr_on_device[p],
-                            sizeof(T) * size(p) * m_num_attributes);
+                            sizeof(T) * capacity(p) * m_num_attributes);
             }
         }
 
@@ -433,7 +445,7 @@ class Attribute : public AttributeBase
                 CUDA_ERROR(
                     cudaMemcpyAsync(m_h_ptr_on_device[p],
                                     source.m_h_ptr_on_device[p],
-                                    sizeof(T) * size(p) * m_num_attributes,
+                                    sizeof(T) * capacity(p) * m_num_attributes,
                                     cudaMemcpyDeviceToDevice,
                                     stream));
             }
@@ -458,7 +470,7 @@ class Attribute : public AttributeBase
                 CUDA_ERROR(
                     cudaMemcpyAsync(m_h_attr[p],
                                     source.m_h_ptr_on_device[p],
-                                    sizeof(T) * size(p) * m_num_attributes,
+                                    sizeof(T) * capacity(p) * m_num_attributes,
                                     cudaMemcpyDeviceToHost,
                                     stream));
             }
@@ -483,7 +495,7 @@ class Attribute : public AttributeBase
                 CUDA_ERROR(
                     cudaMemcpyAsync(m_h_ptr_on_device[p],
                                     source.m_h_attr[p],
-                                    sizeof(T) * size(p) * m_num_attributes,
+                                    sizeof(T) * capacity(p) * m_num_attributes,
                                     cudaMemcpyHostToDevice,
                                     stream));
             }
@@ -521,50 +533,46 @@ class Attribute : public AttributeBase
     /**
      * @brief Access the attribute value using patch and local index in the
      * patch. This is meant to be used by XXAttribute not directly by the user
-     * @param patch_id patch to be accessed
+     * @param p_id patch to be accessed
      * @param local_id the local id in the patch
      * @param attr the attribute id
      * @return const reference to the attribute
      */
-    __host__ __device__ __forceinline__ T& operator()(const uint32_t patch_id,
+    __host__ __device__ __forceinline__ T& operator()(const uint32_t p_id,
                                                       const uint16_t local_id,
                                                       const uint32_t attr) const
     {
-        assert(patch_id < m_num_patches);
+        assert(p_id < m_num_patches);
         assert(attr < m_num_attributes);
+        assert(local_id < size(p_id));
 
-        const uint32_t pitch_x = (m_layout == AoS) ? m_num_attributes : 1;
-        assert(local_id < size(patch_id));
-        const uint32_t pitch_y = (m_layout == AoS) ? 1 : size(patch_id);
 #ifdef __CUDA_ARCH__
-        return m_d_attr[patch_id][local_id * pitch_x + attr * pitch_y];
+        return m_d_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
 #else
-        return m_h_attr[patch_id][local_id * pitch_x + attr * pitch_y];
+        return m_h_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
 #endif
     }
 
     /**
      * @brief Access the attribute value using patch and local index in the
      * patch. This is meant to be used by XXAttribute not directly by the user
-     * @param patch_id patch to be accessed
+     * @param p_id patch to be accessed
      * @param local_id the local id in the patch
      * @param attr the attribute id
      * @return non-const reference to the attribute
      */
-    __host__ __device__ __forceinline__ T& operator()(const uint32_t patch_id,
+    __host__ __device__ __forceinline__ T& operator()(const uint32_t p_id,
                                                       const uint16_t local_id,
                                                       const uint32_t attr)
     {
-        assert(patch_id < m_num_patches);
+        assert(p_id < m_num_patches);
         assert(attr < m_num_attributes);
+        assert(local_id < size(p_id));
 
-        const uint32_t pitch_x = (m_layout == AoS) ? m_num_attributes : 1;
-        assert(local_id < size(patch_id));
-        const uint32_t pitch_y = (m_layout == AoS) ? 1 : size(patch_id);
 #ifdef __CUDA_ARCH__
-        return m_d_attr[patch_id][local_id * pitch_x + attr * pitch_y];
+        return m_d_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
 #else
-        return m_h_attr[patch_id][local_id * pitch_x + attr * pitch_y];
+        return m_h_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
 #endif
     }
 

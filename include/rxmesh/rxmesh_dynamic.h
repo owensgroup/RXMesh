@@ -130,5 +130,15 @@ class RXMeshDynamic : public RXMeshStatic
      * after performing mesh refinement on the GPU)
      */
     void update_host();
+
+    /**
+     * @brief update polyscope after performing dynamic changes. This function
+     * is supposed to be called after a call to update_host since polyscope
+     * reads information from the host side of RXMesh which include the topology
+     * (stored in RXMesh/RXMeshStatic/RXMeshDynamic) and the input vertex
+     * coordinates as well. Thus, a call to `move(DEVICE, HOST)` should be done
+     * to RXMesh-stored vertex coordinates before calling this function.
+     */
+    void update_polyscope();
 };
 }  // namespace rxmesh

@@ -1200,8 +1200,10 @@ class RXMeshStatic : public RXMesh
                         p_id =
                             this->m_h_patches_info[p].patch_stash.get_patch(lp);
                     }
-                    v_id = detail::count_set_bits(
-                        v_id, m_h_patches_info[p].owned_mask_v);
+                    v_id = this->m_h_patches_info[p_id].count_num_owned(
+                        m_h_patches_info[p_id].owned_mask_v,
+                        m_h_patches_info[p_id].active_mask_v,
+                        v_id);
                     face[e] = v_id + m_h_vertex_prefix[p_id];
                 }
                 fv.push_back(face);

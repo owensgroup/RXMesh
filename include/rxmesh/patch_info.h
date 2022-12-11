@@ -227,7 +227,7 @@ struct ALIGN(16) PatchInfo
         return count_num_owned(owned_mask_f, active_mask_f, num_faces[0]);
     }
 
-   private:
+   
     __host__ __inline__ uint16_t count_num_owned(const uint32_t* owned_bitmask,
                                                  const uint32_t* active_bitmask,
                                                  const uint16_t  size) const

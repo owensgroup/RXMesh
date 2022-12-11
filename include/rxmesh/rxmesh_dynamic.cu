@@ -942,14 +942,17 @@ void RXMeshDynamic::update_host()
             m_h_edge_prefix.back());
     }
     this->calc_max_elements();
+}
 
-
+void RXMeshDynamic::update_polyscope()
+{
 #if USE_POLYSCOPE
     // for polyscope, we just remove the mesh and re-add it since polyscope does
     // not support changing the mesh topology
-    polyscope::removeSurfaceMesh(this->m_polyscope_mesh_name, true);
+    // polyscope::removeSurfaceMesh(this->m_polyscope_mesh_name, true);
     this->m_polyscope_mesh_name = this->m_polyscope_mesh_name + "updated";
     this->register_polyscope();
 #endif
 }
+
 }  // namespace rxmesh
