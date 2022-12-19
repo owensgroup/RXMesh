@@ -73,8 +73,8 @@ void spmat_linear_solve(rxmesh::SparseMatInfo<T> A_mat,
                                        A_mat.m_d_row_ptr,
                                        A_mat.m_d_col_idx,
                                        A_mat.m_d_val,
-                                       B_mat.data(i),
-                                       X_mat.data(i));
+                                       B_mat.col_data(i),
+                                       X_mat.col_data(i));
     }
 }
 
@@ -184,17 +184,23 @@ void spmat_denmat_mul()
 {
 }
 
+
+// only works for float
 template <typename T>
 void spmat_arr_mul(rxmesh::SparseMatInfo<T> sp_mat, T* in_arr, T* rt_arr)
 {
-    const double minus_one  = -1.0;
-    const double one        = 1.0;
-    size_t       bufferSize = 0;
+    const float minus_one = -1.0f;
+    const float one       = 1.0f;
+    const float zero      = 0.0f;
 
-    cusparseHandle_t cusparseHandle = NULL;
+    cusparseHandle_t     cusparseHandle = NULL;
+    void*                buffer         = NULL;
+    size_t               bufferSize     = 0;
+    cusparseSpMatDescr_t sp_mat_des     = NULL;
+    cusparseDnVecDescr_t vecx           = NULL;
+    cusparseDnVecDescr_t vecy           = NULL;
+
     cusparseCreate(&cusparseHandle);
-
-    cusparseSpMatDescr_t sp_mat_des = NULL;
     cusparseCreateCsr(&sp_mat_des,
                       sp_mat.m_row_size,
                       sp_mat.m_col_size,
@@ -205,37 +211,37 @@ void spmat_arr_mul(rxmesh::SparseMatInfo<T> sp_mat, T* in_arr, T* rt_arr)
                       CUSPARSE_INDEX_32I,
                       CUSPARSE_INDEX_32I,
                       CUSPARSE_INDEX_BASE_ZERO,
-                      CUDA_R_64F);
-
-    cusparseDnVecDescr_t vecx = NULL;
-    cusparseCreateDnVec(&vecx, sp_mat.m_col_size, in_arr, CUDA_R_64F);
-    cusparseDnVecDescr_t vecy = NULL;
-    cusparseCreateDnVec(&vecy, sp_mat.m_row_size, rt_arr, CUDA_R_64F);
+                      CUDA_R_32F);
+    cusparseCreateDnVec(&vecx, sp_mat.m_col_size, in_arr, CUDA_R_32F);
+    cusparseCreateDnVec(&vecy, sp_mat.m_row_size, rt_arr, CUDA_R_32F);
 
     cusparseSpMV_bufferSize(cusparseHandle,
                             CUSPARSE_OPERATION_NON_TRANSPOSE,
-                            &minus_one,
-                            sp_mat,
-                            vecx,
                             &one,
+                            sp_mat_des,
+                            vecx,
+                            &zero,
                             vecy,
-                            CUDA_R_64F,
+                            CUDA_R_32F,
                             CUSPARSE_SPMV_ALG_DEFAULT,
                             &bufferSize);
-
-    void* buffer = NULL;
     cudaMalloc(&buffer, bufferSize);
 
     cusparseSpMV(cusparseHandle,
                  CUSPARSE_OPERATION_NON_TRANSPOSE,
-                 &minus_one,
-                 sp_mat,
-                 vecx,
                  &one,
+                 sp_mat_des,
+                 vecx,
+                 &zero,
                  vecy,
-                 CUDA_R_64F,
+                 CUDA_R_32F,
                  CUSPARSE_SPMV_ALG_DEFAULT,
                  buffer);
+
+    cusparseDestroySpMat(sp_mat_des);
+    cusparseDestroyDnVec(vecx);
+    cusparseDestroyDnVec(vecy);
+    cusparseDestroy(cusparseHandle);
 }
 
 }  // namespace rxmesh

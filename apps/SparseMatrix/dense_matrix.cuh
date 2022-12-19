@@ -54,7 +54,7 @@ struct DenseMatInfo
         return m_d_val;
     }
 
-    T* data(const u_int32_t col) const
+    T* col_data(const u_int32_t col) const
     {
         return m_d_val + col * m_col_size;
     }

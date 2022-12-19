@@ -145,7 +145,6 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
     query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
 }
 
-
 TEST(Apps, PatchPointer)
 {
     using namespace rxmesh;
@@ -315,7 +314,7 @@ TEST(Apps, SparseMatrixEdgeLen)
     cuda_query(0);
 
     // generate rxmesh obj
-    std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
+    std::string  obj_path = STRINGIFY(INPUT_DIR) "cube.obj";
     RXMeshStatic rxmesh(obj_path);
 
     uint32_t num_vertices = rxmesh.get_num_vertices();
@@ -353,8 +352,9 @@ TEST(Apps, SparseMatrixEdgeLen)
 
     // Spmat matrix multiply
 
-    spmat_multi_hardwired_kernel<float>
-        <<<blocks, threads>>>(d_arr_ones, spmat, d_result, num_vertices);
+    // spmat_multi_hardwired_kernel<float>
+    //     <<<blocks, threads>>>(d_arr_ones, spmat, d_result, num_vertices);
+    spmat_arr_mul(spmat, d_arr_ones, d_result);
 
     // copy the value back to host
     std::vector<float> h_arr_ref(num_vertices);
@@ -414,7 +414,7 @@ TEST(Apps, SparseMatrixSimpleSolve)
 
     spmat_linear_solve(A_mat, X_mat, B_mat, Solver::CHOL, Reorder::NONE);
 
-
+    spmat_arr_mul(A_mat, X_mat.col_data(0), B_mat.col_data(0));
 
 }
 
