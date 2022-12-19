@@ -8,10 +8,10 @@
 
 namespace rxmesh {
 
-template <typename T>
+template <typename T, typename IndexT = int>
 struct DenseMatInfo
 {
-    DenseMatInfo(uint32_t row_size, uint32_t col_size)
+    DenseMatInfo(IndexT row_size, IndexT col_size)
         : m_nnz_row_size(row_size), m_nnz_col_size(col_size)
     {
         cudaMalloc((void**)&m_d_val, bytes());
@@ -38,10 +38,9 @@ struct DenseMatInfo
     //     return m_d_val[row * m_nnz_col_size + col];
     // }
 
-        __host__ __device__ T& operator()(const u_int32_t row,
-                                      const u_int32_t col)
+    __host__ __device__ T& operator()(const u_int32_t row, const u_int32_t col)
     {
-        return m_d_val[col * m_nnz_row_size + row]; // pitch & stride
+        return m_d_val[col * m_nnz_row_size + row];  // pitch & stride
     }
 
     __host__ __device__ T& operator()(const u_int32_t row,
@@ -50,13 +49,23 @@ struct DenseMatInfo
         return m_d_val[col * m_nnz_row_size + row];
     }
 
-    uint32_t bytes() const
+    T* data() const
+    {
+        return m_d_val;
+    }
+
+    T* data(const u_int32_t col) const
+    {
+        return m_d_val + col * m_nnz_col_size;
+    }
+
+    IndexT bytes() const
     {
         return m_nnz_row_size * m_nnz_col_size * sizeof(T);
     }
 
-    uint32_t m_nnz_row_size;
-    uint32_t m_nnz_col_size;
+    IndexT m_nnz_row_size;
+    IndexT m_nnz_col_size;
     T*       m_d_val;
 };
 
