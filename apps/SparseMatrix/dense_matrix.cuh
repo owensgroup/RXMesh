@@ -12,14 +12,14 @@ template <typename T, typename IndexT = int>
 struct DenseMatInfo
 {
     DenseMatInfo(IndexT row_size, IndexT col_size)
-        : m_nnz_row_size(row_size), m_nnz_col_size(col_size)
+        : m_row_size(row_size), m_col_size(col_size)
     {
         cudaMalloc((void**)&m_d_val, bytes());
     }
 
     void set_ones()
     {
-        std::vector<T> init_tmp_arr(m_nnz_row_size * m_nnz_col_size, 1);
+        std::vector<T> init_tmp_arr(m_row_size * m_col_size, 1);
         CUDA_ERROR(cudaMemcpy(m_d_val,
                               init_tmp_arr.data(),
                               bytes() * sizeof(T),
@@ -29,24 +29,24 @@ struct DenseMatInfo
     // __host__ __device__ T& operator()(const u_int32_t row,
     //                                   const u_int32_t col)
     // {
-    //     return m_d_val[row * m_nnz_col_size + col];
+    //     return m_d_val[row * m_col_size + col];
     // }
 
     // __host__ __device__ T& operator()(const u_int32_t row,
     //                                   const u_int32_t col) const
     // {
-    //     return m_d_val[row * m_nnz_col_size + col];
+    //     return m_d_val[row * m_col_size + col];
     // }
 
     __host__ __device__ T& operator()(const u_int32_t row, const u_int32_t col)
     {
-        return m_d_val[col * m_nnz_row_size + row];  // pitch & stride
+        return m_d_val[col * m_row_size + row];  // pitch & stride
     }
 
     __host__ __device__ T& operator()(const u_int32_t row,
                                       const u_int32_t col) const
     {
-        return m_d_val[col * m_nnz_row_size + row];
+        return m_d_val[col * m_row_size + row];
     }
 
     T* data() const
@@ -56,16 +56,16 @@ struct DenseMatInfo
 
     T* data(const u_int32_t col) const
     {
-        return m_d_val + col * m_nnz_col_size;
+        return m_d_val + col * m_col_size;
     }
 
     IndexT bytes() const
     {
-        return m_nnz_row_size * m_nnz_col_size * sizeof(T);
+        return m_row_size * m_col_size * sizeof(T);
     }
 
-    IndexT m_nnz_row_size;
-    IndexT m_nnz_col_size;
+    IndexT m_row_size;
+    IndexT m_col_size;
     T*       m_d_val;
 };
 
