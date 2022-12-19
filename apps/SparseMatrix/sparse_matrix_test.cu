@@ -414,47 +414,8 @@ TEST(Apps, SparseMatrixSimpleSolve)
 
     spmat_linear_solve(A_mat, X_mat, B_mat, Solver::CHOL, Reorder::NONE);
 
-    /* Wrap raw data into cuSPARSE generic API objects */
-    cusparseSpMatDescr_t matA = NULL;
-    cusparseCreateCsr(&matA,
-                      A_mat.m_row_size,
-                      A_mat.m_col_size,
-                      A_mat.m_nnz,
-                      A_mat.m_d_row_ptr,
-                      A_mat.m_d_col_idx,
-                      A_mat.m_d_val,
-                      CUSPARSE_INDEX_32I,
-                      CUSPARSE_INDEX_32I,
-                      CUSPARSE_INDEX_BASE_ZERO,
-                      CUDA_R_64F);
 
-    cusparseDnVecDescr_t vecx = NULL;
 
-    cusparseCreateDnVec(&vecx, A_mat.m_col_size, X_mat.data(), CUDA_R_64F);
-    cusparseDnVecDescr_t vecAx = NULL;
-    cusparseCreateDnVec(&vecAx, A_mat.m_row_size, B_mat.data(), CUDA_R_64F);
-
-    // const double minus_one  = -1.0;
-    // const double one        = 1.0;
-    // size_t       bufferSize = 0;
-    // checkCudaErrors(cusparseSpMV_bufferSize(cusparseHandle,
-    //                                         CUSPARSE_OPERATION_NON_TRANSPOSE,
-    //                                         &minus_one,
-    //                                         matA,
-    //                                         vecx,
-    //                                         &one,
-    //                                         vecAx,
-    //                                         CUDA_R_64F,
-    //                                         CUSPARSE_SPMV_ALG_DEFAULT,
-    //                                         &bufferSize));
-    // void* buffer = NULL;
-    // checkCudaErrors(cudaMalloc(&buffer, bufferSize));
-
-    // checkCudaErrors(cusparseSpMV(cusparseHandle,
-    // CUSPARSE_OPERATION_NON_TRANSPOSE,
-    //                            &minus_one, matA, vecx, &one, vecAx,
-    //                            CUDA_R_64F, CUSPARSE_SPMV_ALG_DEFAULT,
-    //                            buffer));
 }
 
 int main(int argc, char** argv)

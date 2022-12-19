@@ -89,9 +89,9 @@ void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
                                     int                   nnzA,
                                     int*                  d_csrRowPtrA,
                                     int*                  d_csrColIndA,
-                                    T*               d_csrValA,
-                                    T*               d_b,
-                                    T*               d_x)
+                                    T*                    d_csrValA,
+                                    T*                    d_b,
+                                    T*                    d_x)
 {
     if constexpr ((!std::is_same_v<T, float>)&&(!std::is_same_v<T, double>)) {
         RXMESH_ERROR(
@@ -177,6 +177,65 @@ void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
                     singularity,
                     tol);
     }
+}
+
+template <typename T>
+void spmat_denmat_mul()
+{
+}
+
+template <typename T>
+void spmat_arr_mul(rxmesh::SparseMatInfo<T> sp_mat, T* in_arr, T* rt_arr)
+{
+    const double minus_one  = -1.0;
+    const double one        = 1.0;
+    size_t       bufferSize = 0;
+
+    cusparseHandle_t cusparseHandle = NULL;
+    cusparseCreate(&cusparseHandle);
+
+    cusparseSpMatDescr_t sp_mat_des = NULL;
+    cusparseCreateCsr(&sp_mat_des,
+                      sp_mat.m_row_size,
+                      sp_mat.m_col_size,
+                      sp_mat.m_nnz,
+                      sp_mat.m_d_row_ptr,
+                      sp_mat.m_d_col_idx,
+                      sp_mat.m_d_val,
+                      CUSPARSE_INDEX_32I,
+                      CUSPARSE_INDEX_32I,
+                      CUSPARSE_INDEX_BASE_ZERO,
+                      CUDA_R_64F);
+
+    cusparseDnVecDescr_t vecx = NULL;
+    cusparseCreateDnVec(&vecx, sp_mat.m_col_size, in_arr, CUDA_R_64F);
+    cusparseDnVecDescr_t vecy = NULL;
+    cusparseCreateDnVec(&vecy, sp_mat.m_row_size, rt_arr, CUDA_R_64F);
+
+    cusparseSpMV_bufferSize(cusparseHandle,
+                            CUSPARSE_OPERATION_NON_TRANSPOSE,
+                            &minus_one,
+                            sp_mat,
+                            vecx,
+                            &one,
+                            vecy,
+                            CUDA_R_64F,
+                            CUSPARSE_SPMV_ALG_DEFAULT,
+                            &bufferSize);
+
+    void* buffer = NULL;
+    cudaMalloc(&buffer, bufferSize);
+
+    cusparseSpMV(cusparseHandle,
+                 CUSPARSE_OPERATION_NON_TRANSPOSE,
+                 &minus_one,
+                 sp_mat,
+                 vecx,
+                 &one,
+                 vecy,
+                 CUDA_R_64F,
+                 CUSPARSE_SPMV_ALG_DEFAULT,
+                 buffer);
 }
 
 }  // namespace rxmesh
