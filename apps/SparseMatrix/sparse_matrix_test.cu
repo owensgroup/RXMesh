@@ -388,7 +388,7 @@ TEST(Apps, SparseMatrixSimpleSolve)
     cuda_query(0);
 
     // generate rxmesh obj
-    std::string  obj_path = STRINGIFY(INPUT_DIR) "cube.obj";
+    std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
     RXMeshStatic rxmesh(obj_path);
 
     uint32_t num_vertices = rxmesh.get_num_vertices();
@@ -413,21 +413,25 @@ TEST(Apps, SparseMatrixSimpleSolve)
                                          launch_box.smem_bytes_dyn>>>(
         rxmesh.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
-    spmat_linear_solve(A_mat,
-                       B_mat,
-                       X_mat,
-                       Solver::CHOL,
-                       Reorder::NONE);
+    spmat_linear_solve(A_mat, B_mat, X_mat, Solver::CHOL, Reorder::NONE);
 
-    print_device<<<1, 1>>>(X_mat.data(), (int)num_vertices * 3);
-    cudaDeviceSynchronize();
-
+    // spmat_denmat_mul(A_mat, X_mat, ret_mat);
     spmat_denmat_mul_test(A_mat, X_mat, ret_mat);
 
-    print_device<<<1, 1>>>(ret_mat.data(), (int)num_vertices * 3);
-    cudaDeviceSynchronize();
-    print_device<<<1, 1>>>(B_mat.data(), (int)num_vertices * 3);
-    cudaDeviceSynchronize();
+    std::vector<float> h_ret_mat(num_vertices * 3);
+    cudaMemcpy(h_ret_mat.data(),
+               ret_mat.data(),
+               num_vertices * 3,
+               cudaMemcpyDeviceToHost);
+    std::vector<float> h_B_mat(num_vertices * 3);
+    cudaMemcpy(h_B_mat.data(),
+               B_mat.data(),
+               num_vertices * 3,
+               cudaMemcpyDeviceToHost);
+
+    for (uint32_t i = 0; i < num_vertices * 3; ++i) {
+        EXPECT_NEAR(h_ret_mat[i], h_B_mat[i], 1e-3);
+    }
 }
 
 int main(int argc, char** argv)

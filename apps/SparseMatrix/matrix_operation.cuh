@@ -150,10 +150,6 @@ void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
     /* solve B*z = Q*b */
     if (solver == Solver::CHOL) {
         if constexpr (std::is_same_v<T, float>) {
-            printf("\nHit\n \n");
-
-            print_device<<<1, 1>>>(d_x, (int)rowsA);
-            cudaDeviceSynchronize();
             cusolverSpScsrlsvchol(handle,
                                   rowsA,
                                   nnzA,
@@ -166,11 +162,6 @@ void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
                                   reorder,
                                   d_x,
                                   &singularity);
-
-            print_device<<<1, 1>>>(d_x, (int)rowsA);
-            cudaDeviceSynchronize();
-
-            printf("\n End \n \n");
         }
 
         if constexpr (std::is_same_v<T, double>) {
