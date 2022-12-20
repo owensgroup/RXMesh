@@ -15,6 +15,7 @@ struct DenseMatInfo
         : m_row_size(row_size), m_col_size(col_size)
     {
         cudaMalloc((void**)&m_d_val, bytes());
+        m_ld = m_col_size; // col major for now
     }
 
     void set_ones()
@@ -56,7 +57,7 @@ struct DenseMatInfo
 
     T* col_data(const u_int32_t col) const
     {
-        return m_d_val + col * m_col_size;
+        return m_d_val + col * m_row_size;
     }
 
     IndexT bytes() const
@@ -64,6 +65,7 @@ struct DenseMatInfo
         return m_row_size * m_col_size * sizeof(T);
     }
 
+    IndexT m_ld;
     IndexT m_row_size;
     IndexT m_col_size;
     T*       m_d_val;

@@ -122,9 +122,9 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
 
         uint32_t row_index = A_mat.m_d_patch_ptr_v[r_patch_id] + r_local_id;
 
-        B_mat(row_index, 0) = threadIdx.x;
-        B_mat(row_index, 1) = blockIdx.x;
-        B_mat(row_index, 2) = row_index * 3;
+        B_mat(row_index, 0) = iter.size() * 7;
+        B_mat(row_index, 1) = iter.size() * 2;
+        B_mat(row_index, 2) = iter.size() * 10;
 
         X_mat(row_index, 0) = coords(v_id, 0) * v_weight;
         X_mat(row_index, 1) = coords(v_id, 1) * v_weight;
@@ -400,6 +400,7 @@ TEST(Apps, SparseMatrixSimpleSolve)
     SparseMatInfo<float> A_mat(rxmesh);
     DenseMatInfo<float>  X_mat(num_vertices, 3);
     DenseMatInfo<float>  B_mat(num_vertices, 3);
+    DenseMatInfo<float>  ret_mat(num_vertices, 3);
 
     float time_step = 1.f;
 
@@ -412,10 +413,21 @@ TEST(Apps, SparseMatrixSimpleSolve)
                                          launch_box.smem_bytes_dyn>>>(
         rxmesh.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
-    spmat_linear_solve(A_mat, X_mat, B_mat, Solver::CHOL, Reorder::NONE);
+    spmat_linear_solve(A_mat,
+                       B_mat,
+                       X_mat,
+                       Solver::CHOL,
+                       Reorder::NONE);
 
-    spmat_arr_mul(A_mat, X_mat.col_data(0), B_mat.col_data(0));
+    print_device<<<1, 1>>>(X_mat.data(), (int)num_vertices * 3);
+    cudaDeviceSynchronize();
 
+    spmat_denmat_mul_test(A_mat, X_mat, ret_mat);
+
+    print_device<<<1, 1>>>(ret_mat.data(), (int)num_vertices * 3);
+    cudaDeviceSynchronize();
+    print_device<<<1, 1>>>(B_mat.data(), (int)num_vertices * 3);
+    cudaDeviceSynchronize();
 }
 
 int main(int argc, char** argv)
