@@ -72,7 +72,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
     cavity.update_attributes(block, e_attr);
     cavity.update_attributes(block, f_attr);
 
-    /*cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+    cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
         assert(size == 4);
 
         DEdgeHandle new_edge = cavity.add_edge(
@@ -87,7 +87,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
                         cavity.get_cavity_edge(c, 1),
                         cavity.get_cavity_edge(c, 2),
                         new_edge.get_flip_dedge());
-    });*/
+    });
     block.sync();
 
     cavity.cleanup(block);
@@ -119,13 +119,6 @@ TEST(RXMeshDynamic, Cavity)
     e_attr->reset(0, DEVICE);
     f_attr->reset(0, DEVICE);
 
-    {
-        std::pair<double, double> range(-2, 2);
-        auto                      ps_mesh = rx.get_polyscope_mesh();
-        rx.polyscope_render_vertex_patch()->setMapRange(range);
-        rx.polyscope_render_edge_patch()->setMapRange(range);
-        rx.polyscope_render_face_patch()->setMapRange(range);
-    }
 
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
@@ -161,11 +154,11 @@ TEST(RXMeshDynamic, Cavity)
     rx.polyscope_render_edge_patch()->setMapRange(range);
     rx.polyscope_render_face_patch()->setMapRange(range);
 
-    uint32_t pid      = 0;
+    /*uint32_t pid      = 0;
     auto     ps_patch = rx.render_patch(pid);
     rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(range);
     rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(range);
-    rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(range);
+    rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(range);*/
 
     ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
     ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);

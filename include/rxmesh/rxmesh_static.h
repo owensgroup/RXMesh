@@ -101,13 +101,15 @@ class RXMeshStatic : public RXMesh
     polyscope::SurfaceMesh* render_patch(const uint32_t p)
     {
         std::vector<std::array<uint32_t, 3>> fv;
+        EdgeMapT                             edges_map;
         fv.reserve(m_h_patches_info[p].num_faces[0]);
-        add_patch_to_polyscope(p, fv, true);
+        add_patch_to_polyscope(p, fv, edges_map, true);
 
         return polyscope::registerSurfaceMesh(
             m_polyscope_mesh_name + "_patch_" + std::to_string(p),
             *m_input_vertex_coordinates,
-            fv);
+            fv,
+            edges_map);
     }
 
     /**
@@ -1171,8 +1173,42 @@ class RXMeshStatic : public RXMesh
 #if USE_POLYSCOPE
     void add_patch_to_polyscope(const uint32_t                        p,
                                 std::vector<std::array<uint32_t, 3>>& fv,
+                                EdgeMapT&                             edges_map,
                                 bool with_ribbon)
     {
+        auto original_vertex = [&](uint16_t vertex) {
+            uint16_t ret  = vertex;
+            uint32_t p_id = p;
+            if (!detail::is_owned(ret, m_h_patches_info[p].owned_mask_v)) {
+
+                LPPair lp = this->m_h_patches_info[p].lp_v.find(ret);
+                ret       = lp.local_id_in_owner_patch();
+                p_id      = this->m_h_patches_info[p].patch_stash.get_patch(lp);
+            }
+            ret = this->m_h_patches_info[p_id].count_num_owned(
+                m_h_patches_info[p_id].owned_mask_v,
+                m_h_patches_info[p_id].active_mask_v,
+                ret);
+            return ret + m_h_vertex_prefix[p_id];
+        };
+
+
+        auto original_edge = [&](uint16_t edge) {
+            uint16_t ret  = edge;
+            uint32_t p_id = p;
+            if (!detail::is_owned(ret, m_h_patches_info[p].owned_mask_e)) {
+
+                LPPair lp = this->m_h_patches_info[p].lp_e.find(ret);
+                ret       = lp.local_id_in_owner_patch();
+                p_id      = this->m_h_patches_info[p].patch_stash.get_patch(lp);
+            }
+            ret = this->m_h_patches_info[p_id].count_num_owned(
+                m_h_patches_info[p_id].owned_mask_e,
+                m_h_patches_info[p_id].active_mask_e,
+                ret);
+            return ret + m_h_edge_prefix[p_id];
+        };
+
         for (uint32_t f = 0; f < this->m_h_patches_info[p].num_faces[0]; ++f) {
             if (!detail::is_deleted(f,
                                     this->m_h_patches_info[p].active_mask_f)) {
@@ -1183,28 +1219,27 @@ class RXMeshStatic : public RXMesh
                     }
                 }
 
-
                 std::array<uint32_t, 3> face;
                 for (uint32_t e = 0; e < 3; ++e) {
                     uint16_t edge = this->m_h_patches_info[p].fe[3 * f + e].id;
                     flag_t   dir(0);
                     Context::unpack_edge_dir(edge, edge, dir);
-                    uint16_t e_id = (2 * edge) + dir;
-                    uint16_t v_id = this->m_h_patches_info[p].ev[e_id].id;
-                    uint32_t p_id = p;
-                    if (!detail::is_owned(v_id,
-                                          m_h_patches_info[p].owned_mask_v)) {
+                    uint16_t eid0 = (2 * edge) + dir;
+                    uint16_t eid1 = (2 * edge) + (dir ^ 1);
+                    uint16_t v0   = this->m_h_patches_info[p].ev[eid0].id;
+                    uint16_t v1   = this->m_h_patches_info[p].ev[eid1].id;
 
-                        LPPair lp = this->m_h_patches_info[p].lp_v.find(v_id);
-                        v_id      = lp.local_id_in_owner_patch();
-                        p_id =
-                            this->m_h_patches_info[p].patch_stash.get_patch(lp);
+                    uint16_t v_org0 = original_vertex(v0);
+                    uint16_t v_org1 = original_vertex(v1);
+
+                    face[e] = v_org0;
+
+                    auto key    = detail::edge_key(v_org0, v_org1);
+                    auto e_iter = edges_map.find(key);
+                    if (e_iter == edges_map.end()) {
+                        edges_map.insert(
+                            std::make_pair(key, original_edge(edge)));
                     }
-                    v_id = this->m_h_patches_info[p_id].count_num_owned(
-                        m_h_patches_info[p_id].owned_mask_v,
-                        m_h_patches_info[p_id].active_mask_v,
-                        v_id);
-                    face[e] = v_id + m_h_vertex_prefix[p_id];
                 }
                 fv.push_back(face);
             }
@@ -1213,14 +1248,15 @@ class RXMeshStatic : public RXMesh
     void register_polyscope()
     {
         std::vector<std::array<uint32_t, 3>> fv;
+        EdgeMapT                             edges_map;
         fv.reserve(m_num_faces);
 
         for (uint32_t p = 0; p < this->m_num_patches; ++p) {
-            add_patch_to_polyscope(p, fv, false);
+            add_patch_to_polyscope(p, fv, edges_map, false);
         }
 
         m_polyscope_mesh = polyscope::registerSurfaceMesh(
-            m_polyscope_mesh_name, *m_input_vertex_coordinates, fv);
+            m_polyscope_mesh_name, *m_input_vertex_coordinates, fv, edges_map);
     }
 
     std::string             m_polyscope_mesh_name;
