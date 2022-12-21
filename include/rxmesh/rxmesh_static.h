@@ -93,6 +93,7 @@ class RXMeshStatic : public RXMesh
         return m_polyscope_mesh;
     }
 
+#if 0
     /**
      * @brief add a patch as a separate SurfaceMesh to polyscope renderer. The
      * patch is added along with its ribbon which could be helpful for debugging
@@ -175,6 +176,8 @@ class RXMeshStatic : public RXMesh
         });
         return polyscope_mesh->addVertexScalarQuantity(name, is_owned);
     }
+#endif
+
     /**
      * @brief add the vertex's patch scalar quantity to the polyscope instance
      * associated RXMeshStatic
