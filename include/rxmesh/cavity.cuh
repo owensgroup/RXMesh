@@ -94,8 +94,9 @@ struct Cavity
                     m_s_ownership_change_mask_v,
                     m_patch_info.owned_mask_v,
                     m_patch_info.active_mask_v);
-        m_s_migrate_mask_v = Bitmask(m_s_num_vertices[0], shrd_alloc);
-        m_s_src_mask_v     = Bitmask(context.m_max_num_vertices[0], shrd_alloc);
+        m_s_migrate_mask_v      = Bitmask(m_s_num_vertices[0], shrd_alloc);
+        m_s_owned_cavity_bdry_v = Bitmask(m_s_num_vertices[0], shrd_alloc);
+        m_s_src_mask_v = Bitmask(context.m_max_num_vertices[0], shrd_alloc);
         m_s_src_connect_mask_v =
             Bitmask(context.m_max_num_vertices[0], shrd_alloc);
 
@@ -234,13 +235,13 @@ struct Cavity
         // Clear bitmask for elements in the (active) cavity to indicate that
         // they are deleted (but only in shared memory)
 
-        /*clear_bitmask_if_in_cavity(
+        clear_bitmask_if_in_cavity(
             m_s_active_mask_v, m_s_cavity_id_v, m_s_num_vertices[0]);
         clear_bitmask_if_in_cavity(
             m_s_active_mask_e, m_s_cavity_id_e, m_s_num_edges[0]);
         clear_bitmask_if_in_cavity(
             m_s_active_mask_f, m_s_cavity_id_f, m_s_num_faces[0]);
-        block.sync();*/
+        block.sync();
 
         // construct cavity boundary loop
         construct_cavities_edge_loop(block);
@@ -1017,22 +1018,72 @@ struct Cavity
     __device__ __inline__ void migrate(cooperative_groups::thread_block& block)
     {
 
+        m_s_owned_cavity_bdry_v.reset(block);
         m_s_migrate_mask_v.reset(block);
+        m_s_ownership_change_mask_v.reset(block);
+        m_s_ownership_change_mask_e.reset(block);
+        m_s_ownership_change_mask_f.reset(block);
         block.sync();
 
-        // TODO we may fuse this part with earlier computation that access the
-        // cavity's vertices
+        // Some vertices on the boundary of the cavity are owned and other are
+        // not. For owned vertices, edges and faces connected to them exists in
+        // the patch (by definition) and they could be owned or not. For that,
+        // we need to fist make sure that these edges and faces are marked in
+        // m_s_ownership_change_mask_e/f.
+        // For not-owned vertices on the cavity boundary, we process them by
+        // first marking them in m_s_migrate_mask_v and then look for their
+        // owned version in the neighbor patches in migrate_from_patch
+
+        // first consider owned vertices on the cavity boundary
         for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             for (uint16_t i = 0; i < size; ++i) {
                 uint16_t vertex = get_cavity_vertex(c, i).unpack().second;
-                // we only want to migrate vertices that are not currently owned
-                if (!m_s_owned_mask_v(vertex)) {
+                if (m_s_owned_mask_v(vertex)) {
+                    m_s_owned_cavity_bdry_v.set(vertex, true);
+                } else {
                     m_s_migrate_mask_v.set(vertex, true);
                     m_s_ownership_change_mask_v.set(vertex, true);
                 }
             }
         });
+        block.sync();
 
+        // mark an edge in the ownership change (m_s_ownership_change_mask_e) if
+        // one of its vertices is on the cavity boundary and owned
+        for (uint16_t e = threadIdx.x; e < m_s_num_edges[0];
+             e += blockThreads) {
+            if (!m_s_owned_mask_e(e)) {
+
+                const uint16_t v0 = m_s_ev[2 * e + 0];
+                const uint16_t v1 = m_s_ev[2 * e + 1];
+
+                if (m_s_owned_cavity_bdry_v(v0) ||
+                    m_s_owned_cavity_bdry_v(v1)) {
+                    m_s_ownership_change_mask_e.set(e, true);
+                }
+            }
+        }
+        
+
+        // mark a face in the ownership change (m_s_ownership_change_mask_f) if
+        // one of its is connected to a vertex that is marked in
+        // m_s_owned_cavity_bdry_v
+        for (uint16_t f = threadIdx.x; f < m_s_num_faces[0];
+             f += blockThreads) {
+            if (!m_s_owned_mask_f(f)) {
+                for (int i = 0; i < 3; ++i) {
+                    const uint16_t e = m_s_fe[3 * f + i] >> 1;
+
+                    const uint16_t v0 = m_s_ev[2 * e + 0];
+                    const uint16_t v1 = m_s_ev[2 * e + 1];
+
+                    if (m_s_owned_cavity_bdry_v(v0) ||
+                        m_s_owned_cavity_bdry_v(v1)) {
+                        m_s_ownership_change_mask_f.set(f, true);
+                    }
+                }
+            }
+        }
         block.sync();
 
 
@@ -1601,6 +1652,7 @@ struct Cavity
     Bitmask m_s_src_connect_mask_v, m_s_src_connect_mask_e;
     Bitmask m_s_ownership_change_mask_v, m_s_ownership_change_mask_e,
         m_s_ownership_change_mask_f;
+    Bitmask m_s_owned_cavity_bdry_v;
 
     uint16_t *m_s_ev, *m_s_fe;
     uint16_t *m_s_cavity_id_v, *m_s_cavity_id_e, *m_s_cavity_id_f;
