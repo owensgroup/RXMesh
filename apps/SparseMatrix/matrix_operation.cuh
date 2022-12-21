@@ -14,35 +14,39 @@
 #include "cusolverSp.h"
 #include "cusparse.h"
 
-template <typename E>
-constexpr typename std::underlying_type<E>::type to_underlying(E e) noexcept
-{
-    return static_cast<typename std::underlying_type<E>::type>(e);
-}
-
-__global__ void print_device(float* arr, int size)
-{
-    for (int i = 0; i < size; ++i) {
-        printf("%f ", arr[i]);
-    }
-    printf("\n");
-}
-
 namespace rxmesh {
-enum Solver
+enum class Solver
 {
     CHOL = 0,
     LU   = 1,
     QR   = 2
 };
 
-enum Reorder
+enum class Reorder
 {
     NONE   = 0,
     SYMRCM = 1,
     SYMAMD = 2,
     NSTDIS = 3
 };
+
+static int reorder_to_int(const Reorder& reorder) 
+{
+    switch (reorder) {
+        case Reorder::NONE:
+            return 0;
+        case Reorder::SYMRCM:
+            return 1;
+        case Reorder::SYMAMD:
+            return 2;
+        case Reorder::NSTDIS:
+            return 3;
+        default: {
+            RXMESH_ERROR("reorder_to_int() unknown input reorder");
+            return 0;
+        }
+    }
+}
 
 template <typename T>
 void spmat_linear_solve(rxmesh::SparseMatInfo<T> A_mat,
@@ -159,7 +163,7 @@ void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
                                   d_csrColIndA,
                                   d_b,
                                   tol,
-                                  reorder,
+                                  reorder_to_int(reorder),
                                   d_x,
                                   &singularity);
         }
@@ -174,7 +178,7 @@ void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
                                   d_csrColIndA,
                                   d_b,
                                   tol,
-                                  reorder,
+                                  reorder_to_int(reorder),
                                   d_x,
                                   &singularity);
         }
@@ -190,7 +194,7 @@ void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
                                 d_csrColIndA,
                                 d_b,
                                 tol,
-                                reorder,
+                                reorder_to_int(reorder),
                                 d_x,
                                 &singularity);
         }
@@ -205,7 +209,7 @@ void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
                                 d_csrColIndA,
                                 d_b,
                                 tol,
-                                reorder,
+                                reorder_to_int(reorder),
                                 d_x,
                                 &singularity);
         }
@@ -257,7 +261,7 @@ void spmat_denmat_mul(rxmesh::SparseMatInfo<T> A_mat,
     cusparseCreateDnMat(&matB,
                         B_mat.m_row_size,
                         B_mat.m_col_size,
-                        B_mat.m_ld,
+                        B_mat.m_ld, 
                         B_mat.data(),
                         CUDA_R_32F,
                         CUSPARSE_ORDER_COL);

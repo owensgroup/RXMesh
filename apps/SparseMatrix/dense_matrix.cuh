@@ -27,25 +27,26 @@ struct DenseMatInfo
                               cudaMemcpyHostToDevice));
     }
 
-    // __host__ __device__ T& operator()(const u_int32_t row,
-    //                                   const u_int32_t col)
+    // row major 
+    // __host__ __device__ T& operator()(const uint32_t row,
+    //                                   const uint32_t col)
     // {
     //     return m_d_val[row * m_col_size + col];
     // }
 
-    // __host__ __device__ T& operator()(const u_int32_t row,
-    //                                   const u_int32_t col) const
+    // __host__ __device__ T& operator()(const uint32_t row,
+    //                                   const uint32_t col) const
     // {
     //     return m_d_val[row * m_col_size + col];
     // }
 
-    __host__ __device__ T& operator()(const u_int32_t row, const u_int32_t col)
+    __host__ __device__ T& operator()(const uint32_t row, const uint32_t col)
     {
         return m_d_val[col * m_row_size + row];  // pitch & stride
     }
 
-    __host__ __device__ T& operator()(const u_int32_t row,
-                                      const u_int32_t col) const
+    __host__ __device__ T& operator()(const uint32_t row,
+                                      const uint32_t col) const
     {
         return m_d_val[col * m_row_size + row];
     }
@@ -55,7 +56,7 @@ struct DenseMatInfo
         return m_d_val;
     }
 
-    T* col_data(const u_int32_t col) const
+    T* col_data(const uint32_t col) const
     {
         return m_d_val + col * m_row_size;
     }
