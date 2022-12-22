@@ -153,6 +153,28 @@ struct ALIGN(16) PatchInfo
         }
     }
 
+
+    /**
+     * @brief return LP hashtable corresponding to the handle type
+     * @tparam HandleT
+     */
+    template <typename HandleT>
+    __device__ __host__ __inline__ const LPHashTable& get_lp() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return lp_v;
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return lp_e;
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return lp_f;
+        }
+    }
+
+
     /**
      * @brief check if a vertex within this patch is owned by it
      */

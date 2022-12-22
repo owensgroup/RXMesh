@@ -154,6 +154,12 @@ TEST(RXMeshDynamic, Cavity)
     rx.polyscope_render_edge_patch()->setMapRange(range);
     rx.polyscope_render_face_patch()->setMapRange(range);
 
+    uint32_t pid      = 0;
+    auto     ps_patch = rx.render_patch(pid);
+    rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(range);
+    rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(range);
+    rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(range);
+
     ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
     ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
     ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
