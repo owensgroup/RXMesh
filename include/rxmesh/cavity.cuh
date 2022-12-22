@@ -1048,29 +1048,14 @@ struct Cavity
         });
         block.sync();
 
-        // mark an edge in the ownership change (m_s_ownership_change_mask_e) if
-        // one of its vertices is on the cavity boundary and owned
-        for (uint16_t e = threadIdx.x; e < m_s_num_edges[0];
-             e += blockThreads) {
-            if (!m_s_owned_mask_e(e)) {
-
-                const uint16_t v0 = m_s_ev[2 * e + 0];
-                const uint16_t v1 = m_s_ev[2 * e + 1];
-
-                if (m_s_owned_cavity_bdry_v(v0) ||
-                    m_s_owned_cavity_bdry_v(v1)) {
-                    m_s_ownership_change_mask_e.set(e, true);
-                }
-            }
-        }
-        
-
         // mark a face in the ownership change (m_s_ownership_change_mask_f) if
-        // one of its is connected to a vertex that is marked in
-        // m_s_owned_cavity_bdry_v
+        // one of its edges is connected to a vertex that is marked in
+        // m_s_owned_cavity_bdry_v. Then mark that face's three edges in the
+        // ownership change (m_s_ownership_change_mask_e)
         for (uint16_t f = threadIdx.x; f < m_s_num_faces[0];
              f += blockThreads) {
             if (!m_s_owned_mask_f(f)) {
+                bool change = false;
                 for (int i = 0; i < 3; ++i) {
                     const uint16_t e = m_s_fe[3 * f + i] >> 1;
 
@@ -1079,7 +1064,18 @@ struct Cavity
 
                     if (m_s_owned_cavity_bdry_v(v0) ||
                         m_s_owned_cavity_bdry_v(v1)) {
+                        change = true;
                         m_s_ownership_change_mask_f.set(f, true);
+                        break;
+                    }
+                }
+
+                if (change) {
+                    for (int i = 0; i < 3; ++i) {
+                        const uint16_t e = m_s_fe[3 * f + i] >> 1;
+                        if (!m_s_owned_mask_e(e)) {
+                            m_s_ownership_change_mask_e.set(e, true);
+                        }
                     }
                 }
             }
