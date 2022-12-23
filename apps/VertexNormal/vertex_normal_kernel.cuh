@@ -2,7 +2,7 @@
 
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
-#include "rxmesh/kernels/query_dispatcher.cuh"
+#include "rxmesh/query.cuh"
 #include "rxmesh/util/vector.h"
 /**
  * vertex_normal()
@@ -33,5 +33,9 @@ __global__ static void compute_vertex_normal(const rxmesh::Context      context,
         }
     };
 
-    query_block_dispatcher<Op::FV, blockThreads>(context, vn_lambda);
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    query.dispatch<Op::FV>(
+        block, vn_lambda, [](FaceHandle) { return true; }, false);
 }

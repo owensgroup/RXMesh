@@ -6,7 +6,6 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/iterator.cuh"
-#include "rxmesh/kernels/query_dispatcher.cuh"
 #include "rxmesh/query.cuh"
 
 /**

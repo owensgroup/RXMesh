@@ -6,7 +6,7 @@
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/log.h"
 
-#include "rxmesh/kernels/query_dispatcher.cuh"
+#include "rxmesh/query.cuh"
 
 template <typename T, uint32_t blockThreads>
 __global__ static void compute_vertex_normal(const rxmesh::Context      context,
@@ -35,7 +35,11 @@ __global__ static void compute_vertex_normal(const rxmesh::Context      context,
         }
     };
 
-    query_block_dispatcher<Op::FV, blockThreads>(context, vn_lambda);
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    query.dispatch<Op::FV>(
+        block, vn_lambda, [](FaceHandle) { return true; }, false);
 }
 
 int main(int argc, char** argv)
@@ -53,7 +57,7 @@ int main(int argc, char** argv)
 
     polyscope_mesh->setEdgeWidth(1.0);
 
-    //Vertex Color 
+    // Vertex Color
     auto vertex_pos   = *rx.get_input_vertex_coordinates();
     auto vertex_color = *rx.add_vertex_attribute<float>("vColor", 3);
     rx.for_each_vertex(
@@ -72,7 +76,7 @@ int main(int argc, char** argv)
     // rx.polyscope_render_vertex_patch();
     // rx.polyscope_render_edge_patch();
 
-    //Vertex Normal  
+    // Vertex Normal
     auto vertex_normals = rx.add_vertex_attribute<float>("vNormals", 3);
     vertex_normals->reset(0, rxmesh::LOCATION_ALL);
 

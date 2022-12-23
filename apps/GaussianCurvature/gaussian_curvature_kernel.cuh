@@ -1,7 +1,7 @@
 #pragma once
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
-#include "rxmesh/kernels/query_dispatcher.cuh"
+#include "rxmesh/query.cuh"
 #include "rxmesh/util/vector.h"
 /**
  * gaussian_curvature()
@@ -14,7 +14,7 @@ __global__ static void compute_gaussian_curvature(
     rxmesh::VertexAttribute<T> amix)
 {
     using namespace rxmesh;
-    
+
     auto gc_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
         // get the face's three vertices coordinates
         Vector<3, T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
@@ -56,5 +56,9 @@ __global__ static void compute_gaussian_curvature(
         }
     };
 
-    query_block_dispatcher<Op::FV, blockThreads>(context, gc_lambda);
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    query.dispatch<Op::FV>(
+        block, gc_lambda, [](FaceHandle) { return true; }, false);
 }
