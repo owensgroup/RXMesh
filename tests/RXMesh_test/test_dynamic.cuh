@@ -149,7 +149,6 @@ TEST(RXMeshDynamic, Cavity)
 #if USE_POLYSCOPE
     rx.update_polyscope();
     std::pair<double, double> range(-2, 2);
-    auto                      ps_mesh = rx.get_polyscope_mesh();
     rx.polyscope_render_vertex_patch()->setMapRange(range);
     rx.polyscope_render_edge_patch()->setMapRange(range);
     rx.polyscope_render_face_patch()->setMapRange(range);
@@ -160,6 +159,7 @@ TEST(RXMeshDynamic, Cavity)
     rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(range);
     rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(range);
 
+    auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
     ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
     ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);

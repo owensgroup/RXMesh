@@ -125,14 +125,24 @@ class RXMeshStatic : public RXMesh
         polyscope::SurfaceMesh* polyscope_mesh)
     {
         std::string      name = "rx:FPatch" + std::to_string(p);
-        std::vector<int> is_owned(m_h_patches_info[p].num_faces[0], -(p + 1));
+        std::vector<int> patch_id(m_h_patches_info[p].num_faces[0], -(p + 1));
 
-        for_each_face(HOST, [&](FaceHandle fh) {
-            if (fh.unpack().first == p) {
-                is_owned[fh.unpack().second] = p;
+        for (uint16_t f = 0; f < this->m_h_patches_info[p].num_faces[0]; ++f) {
+            LocalFaceT lf(f);
+            if (!this->m_h_patches_info[p].is_deleted(lf)) {
+
+                if (this->m_h_patches_info[p].is_owned(lf)) {
+                    patch_id[f] = p;
+                } else {
+                    LPPair lp =
+                        this->m_h_patches_info[p].get_lp<FaceHandle>().find(f);
+                    patch_id[f] =
+                        this->m_h_patches_info[p].patch_stash.get_patch(lp);
+                }
             }
-        });
-        return polyscope_mesh->addFaceScalarQuantity(name, is_owned);
+        }
+
+        return polyscope_mesh->addFaceScalarQuantity(name, patch_id);
     }
 
     /**
@@ -148,20 +158,19 @@ class RXMeshStatic : public RXMesh
         polyscope::SurfaceMesh* polyscope_mesh)
     {
         std::string name = "rx:EPatch" + std::to_string(p);
-        // unlike polyscope_render_face_patch and polyscope_render_vertex_patch
-        // where the size of this std::vector is the size of number
-        // faces/vertices in patch, here we use the total number of edges since
-        // we pass to polyscope the edge map for the whole mesh (not just for
-        // this patch) (see render_patch) and thus it expects the size of
-        // this quantity to be the same size i.e., total number of edges
-        std::vector<int> is_owned(get_num_edges(), -(p + 1));
+        // unlike polyscope_render_face_patch and  where the size of this
+        // std::vector is the size of number faces in patch, here we
+        // use the total number of edges since we pass to polyscope the edge map
+        // for the whole mesh (not just for this patch) (see render_patch) and
+        // thus it expects the size of this quantity to be the same size i.e.,
+        // total number of edges
+        std::vector<int> patch_id(get_num_edges(), -(p + 1));
 
         for_each_edge(HOST, [&](EdgeHandle eh) {
-            if (eh.unpack().first == p) {
-                is_owned[eh.unpack().second] = p;
-            }
+            patch_id[linear_id(eh)] = eh.unpack().first;
         });
-        return polyscope_mesh->addEdgeScalarQuantity(name, is_owned);
+
+        return polyscope_mesh->addEdgeScalarQuantity(name, patch_id);
     }
 
     /**
@@ -176,15 +185,20 @@ class RXMeshStatic : public RXMesh
         const uint32_t          p,
         polyscope::SurfaceMesh* polyscope_mesh)
     {
-        std::string      name = "rx:VPatch" + std::to_string(p);
-        std::vector<int> is_owned(get_num_vertices(), -(p + 1));
+        std::string name = "rx:VPatch" + std::to_string(p);
+        // unlike polyscope_render_face_patch and  where the size of this
+        // std::vector is the size of number faces in patch, here we
+        // use the total number of vertices since we pass to polyscope the
+        // vertex position for the whole mesh (not just for this patch) (see
+        // render_patch) and thus it expects the size of this quantity to be the
+        // same size i.e., total number of vertices
+        std::vector<int> patch_id(get_num_vertices(), -(p + 1));
 
         for_each_vertex(HOST, [&](VertexHandle vh) {
-            if (vh.unpack().first == p) {
-                is_owned[vh.unpack().second] = p;
-            }
+            patch_id[linear_id(vh)] = vh.unpack().first;
         });
-        return polyscope_mesh->addVertexScalarQuantity(name, is_owned);
+
+        return polyscope_mesh->addVertexScalarQuantity(name, patch_id);
     }
 
 
