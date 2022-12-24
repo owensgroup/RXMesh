@@ -11,7 +11,7 @@
 
 #include "query_kernel.cuh"
 
-TEST(RXMeshStatic, DISABLED_Oriented_VV_Open)
+TEST(RXMeshStatic, Oriented_VV_Open)
 {
     using namespace rxmesh;
 
@@ -133,7 +133,7 @@ TEST(RXMeshStatic, DISABLED_Oriented_VV_Open)
     });
 }
 
-TEST(RXMeshStatic, DISABLED_Oriented_VV_Closed)
+TEST(RXMeshStatic, Oriented_VV_Closed)
 {
     using namespace rxmesh;
 

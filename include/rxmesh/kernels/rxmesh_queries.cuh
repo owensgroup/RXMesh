@@ -105,69 +105,56 @@ __device__ __forceinline__ void e_f_manifold(const uint16_t  num_edges,
                                              const uint16_t  num_faces,
                                              const uint16_t* s_fe,
                                              uint16_t*       s_ef,
-                                             const uint32_t* active_mask_e)
+                                             const uint32_t* active_mask_f)
 {
     // s_ef should be filled with INVALID16 before calling this function
-    // TODO check active_mask_e
     for (uint16_t e = threadIdx.x; e < 3 * num_faces; e += blockThreads) {
-        uint16_t edge    = s_fe[e] >> 1;
         uint16_t face_id = e / 3;
 
-        auto ret = atomicCAS(s_ef + 2 * edge, INVALID16, face_id);
-        if (ret != INVALID16) {
-            ret = atomicCAS(s_ef + 2 * edge + 1, INVALID16, face_id);
-            assert(ret == INVALID16);
+        if (!is_deleted(face_id, active_mask_f)) {
+            uint16_t edge = s_fe[e] >> 1;
+
+            auto ret = atomicCAS(s_ef + 2 * edge, INVALID16, face_id);
+            if (ret != INVALID16) {
+                ret = atomicCAS(s_ef + 2 * edge + 1, INVALID16, face_id);
+                assert(ret == INVALID16);
+            }
         }
     }
 }
-
 template <uint32_t blockThreads>
-__device__ __forceinline__ void v_e_oreinted(const PatchInfo& patch_info,
-                                             uint16_t*&       s_output_offset,
-                                             uint16_t*&       s_output_value,
-                                             uint16_t*        s_ev,
-                                             const uint32_t*  active_mask_e,
-                                             const uint32_t*  active_mask_v)
+__device__ __forceinline__ void orient_edges_around_vertices(
+    const PatchInfo& patch_info,
+    ShmemAllocator&  shrd_alloc,
+    uint16_t*&       s_output_offset,
+    uint16_t*&       s_output_value)
 {
     const uint16_t num_edges    = patch_info.num_edges[0];
     const uint16_t num_faces    = patch_info.num_faces[0];
     const uint16_t num_vertices = patch_info.num_vertices[0];
 
-    s_output_offset = &s_ev[0];
-    s_output_value  = &s_ev[num_vertices + 1 + (num_vertices + 1) % 2];
 
-    // start by loading the faces while also doing transposing EV (might
-    // increase ILP)
-    uint16_t* s_fe = &s_output_value[2 * num_edges];
-    uint16_t* s_ef = &s_fe[3 * num_faces + (3 * num_faces) % 2];
+    // start by loading the faces while also doing transposing EV
+    uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
+    uint16_t* s_ef = shrd_alloc.alloc<uint16_t>(3 * num_faces);
     load_async(reinterpret_cast<const uint16_t*>(patch_info.fe),
-               num_faces * 3,
+               3 * num_faces,
                reinterpret_cast<uint16_t*>(s_fe),
                false);
 
-    for (uint32_t i = threadIdx.x; i < num_edges * 2; i += blockThreads) {
+    for (uint32_t i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
         s_ef[i] = INVALID16;
     }
-
-    block_mat_transpose<2u, blockThreads>(num_edges,
-                                          num_vertices,
-                                          s_output_offset,
-                                          s_output_value,
-                                          active_mask_e,
-                                          0);
-
-    // block_mat_transpose<2u, blockThreads>(
-    //    num_faces, num_edges, s_patch_EF_offset, s_patch_EF_output);
 
     // We could have used block_mat_transpose to transpose FE so we can look
     // up the "two" faces sharing an edge. But we can do better because we know
     // that we are working on manifold so it is only two edges per face. We
     // also wanna keep FE for quick look up on a face's three edges.
 
-    // We need to sync here to make sure that s_fe is loaded but there is
-    // a sync in block_mat_transpose that takes care of this
+    __syncthreads();
 
-    e_f_manifold<blockThreads>(num_edges, num_faces, s_fe, s_ef, active_mask_e);
+    e_f_manifold<blockThreads>(
+        num_edges, num_faces, s_fe, s_ef, patch_info.active_mask_f);
 
     // To orient, we pin the first edge and check all the subsequent edges
     // For each edge, we search for the two faces containing it (should be
@@ -175,11 +162,11 @@ __device__ __forceinline__ void v_e_oreinted(const PatchInfo& patch_info,
     __syncthreads();
 
     // TODO check active_mask_v
-    // for (uint32_t v = threadIdx.x; v < num_owned_vertices; v += blockDim.x) {
     for (uint32_t v = threadIdx.x; v < num_vertices; v += blockDim.x) {
 
-        // if the vertex is not owned by this patch, then there is no reason
-        // to orient its edges because no serious computation is done on it
+        // TODO if the vertex is not owned by this patch, then there is no
+        // reason to orient its edges because no serious computation is done on
+        // it
 
         uint16_t start = s_output_offset[v];
         uint16_t end   = s_output_offset[v + 1];
@@ -199,7 +186,8 @@ __device__ __forceinline__ void v_e_oreinted(const PatchInfo& patch_info,
             }
         }
 
-        uint16_t e_id        = start_id;
+        uint16_t e_id = start_id;
+
         uint16_t edges_count = 0;
         while (true) {
 
@@ -251,55 +239,8 @@ __device__ __forceinline__ void v_e_oreinted(const PatchInfo& patch_info,
             e_id = ((e_id - start + 1) % (end - start)) + start;
         }
     }
-}
 
-template <uint32_t blockThreads>
-__device__ __forceinline__ void v_v_oreinted(const PatchInfo& patch_info,
-                                             uint16_t*&       s_output_offset,
-                                             uint16_t*&       s_output_value,
-                                             uint16_t*        s_ev,
-                                             const uint32_t*  active_mask_e,
-                                             const uint32_t*  active_mask_v)
-{
-
-    const uint16_t num_edges    = patch_info.num_edges[0];
-    const uint16_t num_vertices = patch_info.num_vertices[0];
-
-    v_e_oreinted<blockThreads>(patch_info,
-                               s_output_offset,
-                               s_output_value,
-                               s_ev,
-                               active_mask_e,
-                               active_mask_v);
-
-    __syncthreads();
-
-    // Re-load EV (since it is been overwritten) right after the output
-    // the output size is 2*#E since this is number of non-zero elements in EV
-    // matrix
-    s_ev = &s_output_value[2 * num_edges];
-    load_async(reinterpret_cast<const uint16_t*>(patch_info.ev),
-               num_edges * 2,
-               reinterpret_cast<uint16_t*>(s_ev),
-               true);
-
-    __syncthreads();
-
-    for (uint32_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
-        uint32_t start = s_output_offset[v];
-        uint32_t end   = s_output_offset[v + 1];
-
-
-        for (uint32_t e = start; e < end; ++e) {
-            uint16_t edge = s_output_value[e];
-            uint16_t v0   = s_ev[2 * edge];
-            uint16_t v1   = s_ev[2 * edge + 1];
-
-            assert(v0 == v || v1 == v);
-            // d_output[e] = (v0 == v) ? v1 : v0;
-            s_output_value[e] = (v0 == v) * v1 + (v1 == v) * v0;
-        }
-    }
+    shrd_alloc.dealloc<uint16_t>(2 * 3 * num_faces);
 }
 
 template <uint32_t blockThreads>
@@ -322,50 +263,81 @@ __device__ __forceinline__ void v_e(const uint16_t  num_vertices,
 }
 
 template <uint32_t blockThreads>
-__device__ __forceinline__ void v_v(const uint16_t  num_vertices,
-                                    const uint16_t  num_edges,
-                                    uint16_t*       d_edges,
-                                    uint16_t*       d_edges_duplicate,
-                                    uint16_t*       d_output,
-                                    const uint32_t* active_mask_e,
-                                    const uint32_t* active_mask_v)
+__device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
+                                    const PatchInfo& patch_info,
+                                    ShmemAllocator&  shrd_alloc,
+                                    uint16_t*        s_output_offset,
+                                    uint16_t*        s_output_value,
+                                    bool             oriented)
 {
     // M_vv = M_EV^{T} \dot M_EV
     // This requires computing M_EV^{T} which we compute in shared memory
-    // similar to v_e. Doing that, we have store in d_output the edges
+    // similar to v_e. Doing that, we have store in s_output_value the edges
     // incident to each vertex. After that we need to replace each edge with
     // the other end vertex which is duplicated by writing it to
     // s_edges_duplicate
+    const uint16_t  num_vertices   = patch_info.num_vertices[0];
+    const uint16_t  num_edges      = patch_info.num_edges[0];
+    const uint32_t* active_mask_e  = patch_info.active_mask_e;
+    const uint32_t* active_mask_v  = patch_info.active_mask_v;
+    uint16_t*       s_ev_duplicate = nullptr;
 
     assert(2 * 2 * num_edges >= num_vertices + 1 + 2 * num_edges);
 
-    // TODO we can also use load_async to load d_edges_duplicate from global
-    // memory and then sync/wait after the transpose
-    for (uint16_t i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
-        d_edges_duplicate[i] = d_edges[i];
+    if (!oriented) {
+        s_ev_duplicate =
+            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
+        for (uint16_t i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
+            s_ev_duplicate[i] = s_output_offset[i];
+        }
+        // we should sync here to avoid writing to s_ev before reading it into
+        // s_ev_duplicate but we rely on the sync in block_mat_transpose
     }
 
-    v_e<blockThreads>(
-        num_vertices, num_edges, d_edges, d_output, active_mask_e);
+    v_e<blockThreads>(num_vertices,
+                      num_edges,
+                      s_output_offset,
+                      s_output_value,
+                      active_mask_e);
 
-    __syncthreads();
+    if (oriented) {
+        block.sync();
+
+        orient_edges_around_vertices<blockThreads>(
+            patch_info, shrd_alloc, s_output_offset, s_output_value);
+
+        block.sync();
+
+        s_ev_duplicate =
+            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
+
+        load_async(block,
+                   reinterpret_cast<uint16_t*>(patch_info.ev),
+                   2 * num_edges,
+                   s_ev_duplicate,
+                   true);
+    }
+
+    block.sync();
 
     // TODO we can load-balance this better than this
     for (uint32_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
-        uint32_t start = d_edges[v];
-        uint32_t end   = d_edges[v + 1];
+        uint32_t start = s_output_offset[v];
+        uint32_t end   = s_output_offset[v + 1];
 
         for (uint32_t e = start; e < end; ++e) {
-            uint16_t edge = d_output[e];
-            uint16_t v0   = d_edges_duplicate[2 * edge];
-            uint16_t v1   = d_edges_duplicate[2 * edge + 1];
+            uint16_t edge = s_output_value[e];
+            uint16_t v0   = s_ev_duplicate[2 * edge];
+            uint16_t v1   = s_ev_duplicate[2 * edge + 1];
 
             assert(v0 != INVALID16 && v1 != INVALID16);
             assert(v0 == v || v1 == v);
-            // d_output[e] = (v0 == v) ? v1 : v0;
-            d_output[e] = (v0 == v) * v1 + (v1 == v) * v0;
+            // s_output_value[e] = (v0 == v) ? v1 : v0;
+            s_output_value[e] = (v0 == v) * v1 + (v1 == v) * v0;
         }
     }
+
+    shrd_alloc.dealloc<uint16_t>(2 * patch_info.num_edges[0]);
 }
 
 template <uint32_t blockThreads>
@@ -385,7 +357,6 @@ __device__ __forceinline__ void f_v(const uint16_t  num_edges,
         uint16_t f_v[3];
         uint32_t f_id = 3 * f;
         if (!is_deleted(f, active_mask_f)) {
-            // TODO use vector load and store instead of looping
             for (uint32_t i = 0; i < 3; i++) {
                 uint16_t e = d_faces[f_id + i];
                 if (e == INVALID16) {
@@ -440,7 +411,7 @@ __device__ __forceinline__ void e_f(const uint16_t  num_edges,
                                     const uint16_t  num_faces,
                                     uint16_t*       d_faces,
                                     uint16_t*       d_output,
-                                    const uint32_t* active_mask_e,
+                                    const uint32_t* active_mask_f,
                                     int             shift = 1)
 {
     // M_ef = M_fe^{T}. M_fe is already encoded and we need to just transpose
@@ -453,7 +424,7 @@ __device__ __forceinline__ void e_f(const uint16_t  num_edges,
     // d_output should be allocated to size = num_faces*3
 
     block_mat_transpose<3u, blockThreads>(
-        num_faces, num_edges, d_faces, d_output, active_mask_e, shift);
+        num_faces, num_edges, d_faces, d_output, active_mask_f, shift);
 }
 
 template <uint32_t blockThreads>
@@ -463,7 +434,6 @@ __device__ __forceinline__ void f_f(const uint16_t  num_edges,
                                     uint16_t*       s_EF_offset,
                                     uint16_t*       s_FF_offset,
                                     uint16_t*       s_FF_output,
-                                    const uint32_t* active_mask_e,
                                     const uint32_t* active_mask_f)
 {
     // First construct M_EF in shared memory
@@ -480,7 +450,7 @@ __device__ __forceinline__ void f_f(const uint16_t  num_edges,
     __syncthreads();
 
     e_f<blockThreads>(
-        num_edges, num_faces, s_EF_offset, s_EF_output, active_mask_e, 0);
+        num_edges, num_faces, s_EF_offset, s_EF_output, active_mask_f, 0);
     __syncthreads();
 
     // Every thread (T) is responsible for a face (F)
@@ -528,15 +498,14 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
                                       const PatchInfo& patch_info,
                                       ShmemAllocator&  shrd_alloc,
                                       uint16_t*&       s_output_offset,
-                                      uint16_t*&       s_output_value)
+                                      uint16_t*&       s_output_value,
+                                      bool             oriented)
 {
 
     if constexpr (op == Op::VV) {
         assert(patch_info.num_vertices[0] <= 2 * patch_info.num_edges[0]);
         uint16_t* s_ev =
             shrd_alloc.alloc<uint16_t>(2 * 2 * patch_info.num_edges[0]);
-        uint16_t* s_ev_duplicate =
-            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
                    2 * patch_info.num_edges[0],
@@ -544,14 +513,12 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
                    true);
         s_output_offset = &s_ev[0];
         s_output_value  = &s_ev[patch_info.num_vertices[0] + 1];
-        v_v<blockThreads>(patch_info.num_vertices[0],
-                          patch_info.num_edges[0],
-                          s_ev,
-                          s_ev_duplicate,
+        v_v<blockThreads>(block,
+                          patch_info,
+                          shrd_alloc,
+                          s_output_offset,
                           s_output_value,
-                          patch_info.active_mask_e,
-                          patch_info.active_mask_v);
-        shrd_alloc.dealloc<uint16_t>(2 * patch_info.num_edges[0]);
+                          oriented);
     }
 
     if constexpr (op == Op::VE) {
@@ -570,6 +537,10 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
                           s_ev,
                           s_output_value,
                           patch_info.active_mask_e);
+        if (oriented) {
+            orient_edges_around_vertices<blockThreads>(
+                patch_info, shrd_alloc, s_output_offset, s_output_value);
+        }
     }
 
     if constexpr (op == Op::VF) {
@@ -623,7 +594,7 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
                           patch_info.num_faces[0],
                           s_fe,
                           s_output_value,
-                          patch_info.active_mask_e,
+                          patch_info.active_mask_f,
                           1);
     }
 
@@ -689,12 +660,12 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
                           s_ef,
                           s_output_offset,
                           s_output_value,
-                          patch_info.active_mask_e,
                           patch_info.active_mask_f);
 
         shrd_alloc.dealloc<uint16_t>(2 * 3 * patch_info.num_faces[0]);
         shrd_alloc.dealloc<uint16_t>(3 * patch_info.num_faces[0]);
     }
 }
+
 }  // namespace detail
 }  // namespace rxmesh

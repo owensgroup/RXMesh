@@ -1046,22 +1046,30 @@ class RXMeshStatic : public RXMesh
             dynamic_smem += max_bitmask_size(ELEMENT::EDGE);
 
             // stores edge LP hashtable
-            dynamic_smem +=
+            uint32_t lp_smem =
                 sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::EDGE);
+
+
+            // For oriented VE, we additionally need to store FE and EF
+            // along with the (transposed) VE. FE needs 3*max_num_faces. Since
+            // oriented is only done on manifold, EF needs only 2*max_num_edges
+            // since every edge is neighbor to maximum of two faces (which we
+            // write on the same place as the extra EV)
+
+            uint32_t fe_ef_smem =
+                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t) +
+                (3 * this->m_max_faces_per_patch) * sizeof(uint16_t);
+
+            if (oriented) {
+                dynamic_smem += std::max(lp_smem, fe_ef_smem);
+            } else {
+                dynamic_smem += lp_smem;
+            }
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
-            dynamic_smem += ShmemAllocator::default_alignment * 4;
+            dynamic_smem += ShmemAllocator::default_alignment * 6;
 
-            // TODO
-            /*if (!oriented) {
-                // to load the not-owned edges local and patch id
-                // we only need this extra memory for non-oriented computation
-                // since oriented computation requires extra memory that we
-                // could then overwrite by the not-owned info
-                dynamic_smem += this->m_max_not_owned_edges * sizeof(uint32_t);
-                dynamic_smem += this->m_max_not_owned_edges * sizeof(uint16_t);
-            }*/
         } else if (op == Op::EF) {
             // same as Op::VE but with faces
             dynamic_smem =
@@ -1113,8 +1121,6 @@ class RXMeshStatic : public RXMesh
             // the hash table
             dynamic_smem =
                 (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
-            dynamic_smem +=
-                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
@@ -1122,19 +1128,35 @@ class RXMeshStatic : public RXMesh
             // store not-owned bitmask
             dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
 
-            // stores the vertex LP hashtable
-            uint32_t table_bytes =
-                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::VERTEX);
-            if (table_bytes >
-                2 * this->m_max_edges_per_patch * sizeof(uint16_t)) {
+            // duplicate EV
+            uint32_t ev_smem =
+                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
-                dynamic_smem += table_bytes - 2 * this->m_max_edges_per_patch *
-                                                  sizeof(uint16_t);
+            // stores the vertex LP hashtable
+            uint32_t lp_smem =
+                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::VERTEX);
+
+            if (oriented) {
+                // For oriented VV, we additionally need to store FE and EF
+                // along with the (transposed) VE. FE needs 3*max_num_faces.
+                // Since oriented is only done on manifold, EF needs only
+                // 2*max_num_edges since every edge is neighbor to maximum of
+                // two faces (which we write on the same place as the extra EV).
+                // With VV, we need to reload EV again (since it is overwritten)
+
+                uint32_t fe_smem =
+                    (3 * this->m_max_faces_per_patch) * sizeof(uint16_t);
+
+                dynamic_smem += std::max(lp_smem, ev_smem + fe_smem);
+
+            } else {
+                dynamic_smem += std::max(lp_smem, ev_smem);
             }
+
 
             // for possible padding for alignment
             // 5 since there are 5 calls for ShmemAllocator.alloc
-            dynamic_smem += ShmemAllocator::default_alignment * 5;
+            dynamic_smem += ShmemAllocator::default_alignment * 8;
 
         } else if (op == Op::FF) {
             // FF needs to store FE and EF along side with the output itself
