@@ -127,12 +127,11 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rxmesh,
                  timer.elapsed_millis(),
                  iter);
 
-    // std::vector<T> geo(rxmesh.get_num_vertices());
-    // rxmesh.for_each_vertex(rxmesh::HOST, [&](const VertexHandle vh) {
-    //    uint32_t v_id = rxmesh.map_to_global(vh);
-    //    geo[v_id]     = (*rxmesh_geo)(vh);
-    //});
-
+#if USE_POLYSCOPE
+    auto ps_mesh = rxmesh.get_polyscope_mesh();
+    ps_mesh->addVertexScalarQuantity("geodesic", *rxmesh_geo);
+    polyscope::show();
+#endif
 
     GPU_FREE(d_error);
 
