@@ -70,7 +70,7 @@ struct Bitmask
     /**
      * @brief the number of bits represented by this bitmask
      */
-    __device__ __host__ __inline__ uint16_t size() const
+    constexpr __device__ __host__ __inline__ uint16_t size() const
     {
         return (m_size_ptr) ? *m_size_ptr : m_size;
     }
