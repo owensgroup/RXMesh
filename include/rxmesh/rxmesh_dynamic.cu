@@ -3,8 +3,8 @@
 #include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/for_each_dispatcher.cuh"
 #include "rxmesh/kernels/loader.cuh"
-#include "rxmesh/kernels/query_dispatcher.cuh"
 #include "rxmesh/kernels/shmem_allocator.cuh"
+#include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 #include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/macros.h"
@@ -382,7 +382,11 @@ __global__ static void compute_vf(const Context               context,
         }
     };
 
-    query_block_dispatcher<Op::VF, blockThreads>(context, store_lambda);
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    query.dispatch<Op::VF>(
+        block, store_lambda, [](VertexHandle) { return true; }, false);
 }
 
 
@@ -396,7 +400,11 @@ __global__ static void compute_max_valence(const Context context,
         ::atomicMax(d_max_valence, iter.size());
     };
 
-    query_block_dispatcher<Op::VV, blockThreads>(context, max_valence);
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    query.dispatch<Op::VV>(
+        block, max_valence, [](VertexHandle) { return true; }, false);
 }
 
 template <uint32_t blockThreads>
@@ -455,6 +463,7 @@ __global__ static void check_ribbon_faces(const Context               context,
                                               s_ev,
                                               patch_info.active_mask_f,
                                               0);
+        block.sync();
 
         // For every incident vertex V to an owned face, check if VF of V
         // using global_VF can be retrieved from local_VF
