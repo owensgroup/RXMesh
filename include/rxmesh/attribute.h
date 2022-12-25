@@ -123,7 +123,20 @@ class Attribute : public AttributeBase
     }
 
 
-    T operator()(size_t i, size_t j = 0) const
+    T& operator()(size_t i, size_t j = 0)
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return this->operator()(m_rxmesh->map_to_local_vertex(i), j);
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return this->operator()(m_rxmesh->map_to_local_edge(i), j);
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return this->operator()(m_rxmesh->map_to_local_face(i), j);
+        }
+    }
+
+    T& operator()(size_t i, size_t j = 0) const
     {
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             return this->operator()(m_rxmesh->map_to_local_vertex(i), j);

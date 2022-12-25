@@ -9,8 +9,7 @@
 namespace rxmesh {
 struct Bitmask
 {
-    __device__ __host__ __inline__ Bitmask()
-        : m_size_ptr(nullptr), m_size(0), m_bitmask(nullptr)
+    __device__ __host__ __inline__ Bitmask() : m_size(0), m_bitmask(nullptr)
     {
     }
 
@@ -28,7 +27,7 @@ struct Bitmask
      * @return
      */
     __device__ __host__ __inline__ Bitmask(uint16_t sz, uint32_t* mask)
-        : m_size_ptr(nullptr), m_size(sz), m_bitmask(mask)
+        : m_size(sz), m_bitmask(mask)
     {
     }
 
@@ -43,36 +42,19 @@ struct Bitmask
      * @return
      */
     __device__ __inline__ Bitmask(uint16_t sz, ShmemAllocator& shrd_alloc)
-        : m_size(sz), m_size_ptr(nullptr)
+        : m_size(sz)
     {
         m_bitmask =
             reinterpret_cast<uint32_t*>(shrd_alloc.alloc(num_bytes(size())));
     }
 
-    /**
-     * @brief constructor that works for bitmask stored in shared memory on the
-     * device and the size is controlled externally by a pointer (potentially
-     * in shared memory as well). It takes a shared memory allocator and perform
-     * the allocation internally.This is the right constructor is the size of
-     * the bitmask does grow.
-     * @param sz pointer to the size
-     * @param shrd_alloc shared memory allocator used to allocate the bitmask
-     * bytes
-     * @return
-     */
-    __device__ __inline__ Bitmask(uint16_t* sz, ShmemAllocator& shrd_alloc)
-        : m_size(0), m_size_ptr(sz)
-    {
-        m_bitmask =
-            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(num_bytes(size())));
-    }
 
     /**
      * @brief the number of bits represented by this bitmask
      */
     constexpr __device__ __host__ __inline__ uint16_t size() const
     {
-        return (m_size_ptr) ? *m_size_ptr : m_size;
+        return m_size;
     }
 
 
@@ -210,8 +192,7 @@ struct Bitmask
     }
 
    private:
-    uint16_t  m_size;
-    uint16_t* m_size_ptr;
+    uint16_t m_size;    
 
    public:
     uint32_t* m_bitmask;

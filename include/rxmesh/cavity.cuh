@@ -64,7 +64,7 @@ struct Cavity
         m_s_cavity_id_f      = shrd_alloc.alloc<uint16_t>(m_s_num_faces[0]);
         m_s_cavity_edge_loop = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
 
-        auto alloc_masks = [&](uint16_t*       num_elements,
+        auto alloc_masks = [&](uint16_t        num_elements,
                                Bitmask&        owned,
                                Bitmask&        active,
                                Bitmask&        ownership,
@@ -88,21 +88,24 @@ struct Cavity
 
 
         // vertices masks
-        alloc_masks(m_s_num_vertices,
+        uint16_t vert_cap = *m_patch_info.vertices_capacity;
+        alloc_masks(vert_cap,
                     m_s_owned_mask_v,
                     m_s_active_mask_v,
                     m_s_ownership_change_mask_v,
                     m_patch_info.owned_mask_v,
                     m_patch_info.active_mask_v);
-        m_s_migrate_mask_v      = Bitmask(m_s_num_vertices[0], shrd_alloc);
-        m_s_owned_cavity_bdry_v = Bitmask(m_s_num_vertices[0], shrd_alloc);
+        m_s_migrate_mask_v      = Bitmask(vert_cap, shrd_alloc);
+        m_s_owned_cavity_bdry_v = Bitmask(vert_cap, shrd_alloc);
+        m_s_ribbonize_v         = Bitmask(vert_cap, shrd_alloc);
         m_s_src_mask_v = Bitmask(context.m_max_num_vertices[0], shrd_alloc);
         m_s_src_connect_mask_v =
             Bitmask(context.m_max_num_vertices[0], shrd_alloc);
 
 
         // edges masks
-        alloc_masks(m_s_num_edges,
+        uint16_t edge_cap = *m_patch_info.edges_capacity;
+        alloc_masks(edge_cap,
                     m_s_owned_mask_e,
                     m_s_active_mask_e,
                     m_s_ownership_change_mask_e,
@@ -113,7 +116,8 @@ struct Cavity
             Bitmask(context.m_max_num_edges[0], shrd_alloc);
 
         // faces masks
-        alloc_masks(m_s_num_faces,
+        uint16_t face_cap = *m_patch_info.faces_capacity;
+        alloc_masks(face_cap,
                     m_s_owned_mask_f,
                     m_s_active_mask_f,
                     m_s_ownership_change_mask_f,
@@ -1018,6 +1022,7 @@ struct Cavity
     __device__ __inline__ void migrate(cooperative_groups::thread_block& block)
     {
 
+        m_s_ribbonize_v.reset(block);
         m_s_owned_cavity_bdry_v.reset(block);
         m_s_migrate_mask_v.reset(block);
         m_s_ownership_change_mask_v.reset(block);
@@ -1083,10 +1088,51 @@ struct Cavity
         block.sync();
 
 
+        // construct protection zone
         for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
             const uint32_t q = m_patch_info.patch_stash.get_patch(p);
             if (q != INVALID32) {
-                migrate_from_patch(block, q, true);
+                migrate_from_patch(block, q, m_s_migrate_mask_v, true);
+            }
+        }
+
+
+        block.sync();
+
+        // ribbonize protection zone
+        for (uint16_t e = threadIdx.x; e < m_s_num_edges[0];
+             e += blockThreads) {
+
+            // we only want to ribbonize vertices connected to a vertex on the
+            // boundary of a cavity boundaries. If the two vertices are on the
+            // cavity boundaries (b0=true and b1=true), then this is an edge on
+            // the cavity and we don't to ribbonize any of these two vertices
+            // Only when one of the vertices are on the cavity boundaries and
+            // the other is not, we then want to ribbonize the other one
+            const uint16_t v0 = m_s_ev[2 * e + 0];
+            const uint16_t v1 = m_s_ev[2 * e + 1];
+
+            const bool b0 =
+                m_s_migrate_mask_v(v0) || m_s_owned_cavity_bdry_v(v0);
+
+            const bool b1 =
+                m_s_migrate_mask_v(v1) || m_s_owned_cavity_bdry_v(v1);
+
+            if (b0 && !b1 && !m_s_owned_mask_v(v1)) {
+                m_s_ribbonize_v.set(v1, true);
+            }
+
+            if (b1 && !b0 && !m_s_owned_mask_v(v0)) {
+                m_s_ribbonize_v.set(v0, true);
+            }
+        }
+
+        block.sync();
+
+        for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
+            const uint32_t q = m_patch_info.patch_stash.get_patch(p);
+            if (q != INVALID32) {
+                migrate_from_patch(block, q, m_s_ribbonize_v, false);
             }
         }
     }
@@ -1101,13 +1147,14 @@ struct Cavity
     __device__ __inline__ void migrate_from_patch(
         cooperative_groups::thread_block& block,
         const uint32_t                    q,
+        Bitmask&                          migrate_mask_v,
         bool                              change_ownership)
     {
-        // m_s_migrate_mask_v uses the index space of p
+        // migrate_mask_v uses the index space of p
         // m_s_src_mask_v and m_s_src_connect_mask_v use the index space of q
 
         // 1. mark vertices in m_s_src_mask_v that corresponds to vertices
-        // marked in m_s_migrate_mask_v
+        // marked in migrate_mask_v
         // 2. mark vertices in m_s_src_connect_mask_v that are connected to
         // vertices in m_s_src_mask_v
         // 3. move vertices marked in m_s_src_connect_mask_v to p
@@ -1134,7 +1181,7 @@ struct Cavity
         // it now. If no vertices found, then we skip this patch
         for (uint32_t v = threadIdx.x; v < m_s_num_vertices[0];
              v += blockThreads) {
-            if (m_s_migrate_mask_v(v)) {
+            if (migrate_mask_v(v)) {
                 // get the owner patch of v
                 const auto     lp      = m_patch_info.lp_v.find(v);
                 const uint32_t v_patch = m_patch_info.patch_stash.get_patch(lp);
@@ -1240,7 +1287,7 @@ struct Cavity
 
                             // set the bit for this edge in src_e mask so we
                             // can use it for migrating faces
-                            m_s_src_mask_e.set(e, true);
+                            m_s_src_mask_e.set(edge, true);
                             return true;
                         }
                         return false;
@@ -1649,6 +1696,7 @@ struct Cavity
     Bitmask m_s_ownership_change_mask_v, m_s_ownership_change_mask_e,
         m_s_ownership_change_mask_f;
     Bitmask m_s_owned_cavity_bdry_v;
+    Bitmask m_s_ribbonize_v;
 
     uint16_t *m_s_ev, *m_s_fe;
     uint16_t *m_s_cavity_id_v, *m_s_cavity_id_e, *m_s_cavity_id_f;

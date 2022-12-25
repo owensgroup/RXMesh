@@ -105,6 +105,13 @@ TEST(RXMeshDynamic, Cavity)
                      rxmesh_args.quite,
                      STRINGIFY(INPUT_DIR) "sphere3_patches");
 
+#if USE_POLYSCOPE
+    std::pair<double, double> ps_range(-2, 2);
+    rx.polyscope_render_vertex_patch()->setMapRange(ps_range);
+    rx.polyscope_render_edge_patch()->setMapRange(ps_range);
+    rx.polyscope_render_face_patch()->setMapRange(ps_range);
+#endif
+
     const uint32_t num_vertices = rx.get_num_vertices();
     const uint32_t num_edges    = rx.get_num_edges();
     const uint32_t num_faces    = rx.get_num_faces();
@@ -148,18 +155,18 @@ TEST(RXMeshDynamic, Cavity)
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
-    std::pair<double, double> range(-2, 2);
-    rx.polyscope_render_vertex_patch()->setMapRange(range);
-    rx.polyscope_render_edge_patch()->setMapRange(range);
-    rx.polyscope_render_face_patch()->setMapRange(range);
+    rx.polyscope_render_vertex_patch()->setMapRange(ps_range);
+    rx.polyscope_render_edge_patch()->setMapRange(ps_range);
+    rx.polyscope_render_face_patch()->setMapRange(ps_range);
 
-    uint32_t pid      = 0;
+    /*uint32_t pid      = 0;
     auto     ps_patch = rx.render_patch(pid);
-    rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(range);
-    rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(range);
-    rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(range);
+    rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(ps_range);
+    rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(ps_range);
+    rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(ps_range);*/
 
     auto ps_mesh = rx.get_polyscope_mesh();
+    ps_mesh->updateVertexPositions(*coords);
     ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
     ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
     ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
