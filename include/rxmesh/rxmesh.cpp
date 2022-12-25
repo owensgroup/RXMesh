@@ -520,15 +520,16 @@ void RXMesh::build_single_patch_topology(
     const uint16_t patch_num_edges = m_h_patches_ltog_e[patch_id].size();
     const uint16_t patch_num_faces = m_h_patches_ltog_f[patch_id].size();
 
-    m_h_patches_info[patch_id].ev =
-        (LocalVertexT*)malloc(patch_num_edges * 2 * sizeof(LocalVertexT));
-    m_h_patches_info[patch_id].fe =
-        (LocalEdgeT*)malloc(patch_num_faces * 3 * sizeof(LocalEdgeT));
+    const uint32_t edges_cap = static_cast<uint16_t>(
+        m_capacity_factor * static_cast<float>(patch_num_edges));
+
+    const uint32_t faces_cap = static_cast<uint16_t>(
+        m_capacity_factor * static_cast<float>(patch_num_faces));
 
     m_h_patches_info[patch_id].ev =
-        (LocalVertexT*)malloc(patch_num_edges * 2 * sizeof(LocalVertexT));
+        (LocalVertexT*)malloc(edges_cap * 2 * sizeof(LocalVertexT));
     m_h_patches_info[patch_id].fe =
-        (LocalEdgeT*)malloc(patch_num_faces * 3 * sizeof(LocalEdgeT));
+        (LocalEdgeT*)malloc(faces_cap * 3 * sizeof(LocalEdgeT));
 
     std::vector<bool> is_added_edge(patch_num_edges, false);
 

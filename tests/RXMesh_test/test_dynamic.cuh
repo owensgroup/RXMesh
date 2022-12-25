@@ -159,11 +159,11 @@ TEST(RXMeshDynamic, Cavity)
     rx.polyscope_render_edge_patch()->setMapRange(ps_range);
     rx.polyscope_render_face_patch()->setMapRange(ps_range);
 
-    /*uint32_t pid      = 0;
+    uint32_t pid      = 0;
     auto     ps_patch = rx.render_patch(pid);
     rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(ps_range);
     rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(ps_range);
-    rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(ps_range);*/
+    rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(ps_range);
 
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(*coords);
