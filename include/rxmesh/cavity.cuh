@@ -261,6 +261,9 @@ struct Cavity
         change_vertex_ownership(block);
         change_edge_ownership(block);
         change_face_ownership(block);
+        block.sync();
+
+        post_migration_cleanup(block);
 
         if (threadIdx.x == 0) {
             m_patch_info.num_vertices[0] = m_s_num_vertices[0];
@@ -1577,6 +1580,60 @@ struct Cavity
         }
 
         return ret;
+    }
+
+
+    /**
+     * @brief cleanup neighbor patches after migration
+     */
+    __device__ __inline__ void post_migration_cleanup(
+        cooperative_groups::thread_block& block)
+    {
+        const uint32_t p = m_patch_info.patch_id;
+
+        for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
+            const uint32_t q = m_patch_info.patch_stash.get_patch(p);
+            if (q != INVALID32) {
+                auto q_patch_info = m_context.m_patches_info[q];
+
+                post_migration_cleanup<VertexHandle>(
+                    block, p, q_patch_info, m_s_cavity_id_v);
+                post_migration_cleanup<EdgeHandle>(
+                    block, p, q_patch_info, m_s_cavity_id_e);
+                post_migration_cleanup<FaceHandle>(
+                    block, p, q_patch_info, m_s_cavity_id_f);
+            }
+        }
+    }
+    /**
+     * @brief clean up patch q from any elements that resides in p's cavity
+     * @param q neighbor patch to cleanup
+     */
+    template <typename HandleT>
+    __device__ __inline__ void post_migration_cleanup(
+        cooperative_groups::thread_block& block,
+        const uint32_t                    p,
+        PatchInfo                         q_patch_info,
+        const uint16_t*                   s_cavity_id)
+    {
+        uint16_t q_num_elements = q_patch_info.get_num_elements<HandleT>()[0];
+
+        for (uint16_t v = threadIdx.x; v < q_num_elements; v += blockThreads) {
+            if (!detail::is_deleted(v,
+                                    q_patch_info.get_active_mask<HandleT>()) &&
+                !detail::is_owned(v, q_patch_info.get_owned_mask<HandleT>())) {
+
+                LPPair lp = q_patch_info.get_lp<HandleT>().find(v);
+                if (q_patch_info.patch_stash.get_patch(lp) == p) {
+                    uint16_t vp = lp.local_id_in_owner_patch();
+                    if (s_cavity_id[vp] != INVALID16) {
+                        detail::bitmask_clear_bit(
+                            v, q_patch_info.get_active_mask<HandleT>(), true);
+                        q_patch_info.get_lp<HandleT>().remove(v);
+                    }
+                }
+            }
+        }
     }
 
     /**

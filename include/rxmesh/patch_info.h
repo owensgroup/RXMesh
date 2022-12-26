@@ -134,6 +134,27 @@ struct ALIGN(16) PatchInfo
     }
 
     /**
+     * @brief return the active mask corresponding to the handle type
+     * @tparam HandleT
+     */
+    template <typename HandleT>
+    __device__ __host__ __inline__ uint32_t* get_active_mask()
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return active_mask_v;
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return active_mask_e;
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return active_mask_f;
+        }
+    }
+
+
+    /**
      * @brief return the owned mask corresponding to the handle type
      * @tparam HandleT
      */
@@ -160,6 +181,27 @@ struct ALIGN(16) PatchInfo
      */
     template <typename HandleT>
     __device__ __host__ __inline__ const LPHashTable& get_lp() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return lp_v;
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return lp_e;
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return lp_f;
+        }
+    }
+
+
+    /**
+     * @brief return LP hashtable corresponding to the handle type
+     * @tparam HandleT
+     */
+    template <typename HandleT>
+    __device__ __host__ __inline__ LPHashTable& get_lp()
     {
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             return lp_v;
