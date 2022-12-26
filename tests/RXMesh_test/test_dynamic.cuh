@@ -26,15 +26,6 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
     const uint16_t before_num_faces    = cavity.m_patch_info.num_faces[0];
 
 
-    // for (uint16_t v = 0; v < cavity.m_patch_info.num_vertices[0]; ++v) {
-    //    if (!detail::is_owned(v, cavity.m_patch_info.owned_mask_v)) {
-    //        LPPair lp = cavity.m_patch_info.lp_v.find(v);
-    //        v_attr({cavity.m_patch_info.patch_stash.get_patch(lp),
-    //                lp.local_id_in_owner_patch()}) = v;
-    //    }
-    //}
-
-
     for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
         if (on_ribbon) {
             if (eh.unpack().second == 11) {
@@ -159,11 +150,20 @@ TEST(RXMeshDynamic, Cavity)
     rx.polyscope_render_edge_patch()->setMapRange(ps_range);
     rx.polyscope_render_face_patch()->setMapRange(ps_range);
 
-    uint32_t pid      = 0;
-    auto     ps_patch = rx.render_patch(pid);
-    rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(ps_range);
-    rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(ps_range);
-    rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(ps_range);
+    {
+        uint32_t pid      = 0;
+        auto     ps_patch = rx.render_patch(pid);
+        rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(ps_range);
+        rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(ps_range);
+        rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(ps_range);
+    }
+    {
+        uint32_t pid      = 1;
+        auto     ps_patch = rx.render_patch(pid);
+        rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(ps_range);
+        rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(ps_range);
+        rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(ps_range);
+    }
 
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(*coords);

@@ -125,7 +125,7 @@ class RXMeshStatic : public RXMesh
         polyscope::SurfaceMesh* polyscope_mesh)
     {
         std::string      name = "rx:FPatch" + std::to_string(p);
-        std::vector<int> patch_id(m_h_patches_info[p].num_faces[0], -(p + 1));
+        std::vector<int> patch_id(m_h_patches_info[p].num_faces[0], -1);
 
         for (uint16_t f = 0; f < this->m_h_patches_info[p].num_faces[0]; ++f) {
             LocalFaceT lf(f);
@@ -142,6 +142,8 @@ class RXMeshStatic : public RXMesh
             }
         }
 
+        patch_id.erase(std::remove(patch_id.begin(), patch_id.end(), -1),
+                       patch_id.end());
         return polyscope_mesh->addFaceScalarQuantity(name, patch_id);
     }
 

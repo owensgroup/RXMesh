@@ -58,10 +58,14 @@ struct Cavity
 
         // TODO we don't to store the cavity IDs for all elements. we can
         // optimize this based on the give CavityOp
+        const uint16_t vert_cap = *m_patch_info.vertices_capacity;
+        const uint16_t edge_cap = *m_patch_info.edges_capacity;
+        const uint16_t face_cap = *m_patch_info.faces_capacity;
+
         m_s_num_cavities     = shrd_alloc.alloc<int>(1);
-        m_s_cavity_id_v      = shrd_alloc.alloc<uint16_t>(m_s_num_vertices[0]);
-        m_s_cavity_id_e      = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
-        m_s_cavity_id_f      = shrd_alloc.alloc<uint16_t>(m_s_num_faces[0]);
+        m_s_cavity_id_v      = shrd_alloc.alloc<uint16_t>(vert_cap);
+        m_s_cavity_id_e      = shrd_alloc.alloc<uint16_t>(edge_cap);
+        m_s_cavity_id_f      = shrd_alloc.alloc<uint16_t>(face_cap);
         m_s_cavity_edge_loop = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
 
         auto alloc_masks = [&](uint16_t        num_elements,
@@ -88,7 +92,6 @@ struct Cavity
 
 
         // vertices masks
-        uint16_t vert_cap = *m_patch_info.vertices_capacity;
         alloc_masks(vert_cap,
                     m_s_owned_mask_v,
                     m_s_active_mask_v,
@@ -104,7 +107,6 @@ struct Cavity
 
 
         // edges masks
-        uint16_t edge_cap = *m_patch_info.edges_capacity;
         alloc_masks(edge_cap,
                     m_s_owned_mask_e,
                     m_s_active_mask_e,
@@ -116,7 +118,6 @@ struct Cavity
             Bitmask(context.m_max_num_edges[0], shrd_alloc);
 
         // faces masks
-        uint16_t face_cap = *m_patch_info.faces_capacity;
         alloc_masks(face_cap,
                     m_s_owned_mask_f,
                     m_s_active_mask_f,
@@ -130,18 +131,15 @@ struct Cavity
         }
 
         // TODO fix the bank conflict
-        for (uint16_t v = threadIdx.x; v < m_s_num_vertices[0];
-             v += blockThreads) {
+        for (uint16_t v = threadIdx.x; v < vert_cap; v += blockThreads) {
             m_s_cavity_id_v[v] = INVALID16;
         }
 
-        for (uint16_t e = threadIdx.x; e < m_s_num_edges[0];
-             e += blockThreads) {
+        for (uint16_t e = threadIdx.x; e < edge_cap; e += blockThreads) {
             m_s_cavity_id_e[e] = INVALID16;
         }
 
-        for (uint16_t f = threadIdx.x; f < m_s_num_faces[0];
-             f += blockThreads) {
+        for (uint16_t f = threadIdx.x; f < face_cap; f += blockThreads) {
             m_s_cavity_id_f[f] = INVALID16;
         }
 
@@ -1595,7 +1593,6 @@ struct Cavity
             const uint32_t q = m_patch_info.patch_stash.get_patch(p);
             if (q != INVALID32) {
                 auto q_patch_info = m_context.m_patches_info[q];
-
                 post_migration_cleanup<VertexHandle>(
                     block, p, q_patch_info, m_s_cavity_id_v);
                 post_migration_cleanup<EdgeHandle>(

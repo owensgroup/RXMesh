@@ -57,6 +57,18 @@ class RXMeshDynamic : public RXMeshStatic
                          this->calc_shared_memory<blockThreads>(o, oriented));
         }
 
+        uint16_t vertex_cap = static_cast<uint16_t>(
+            this->m_capacity_factor *
+            static_cast<float>(this->m_max_vertices_per_patch));
+
+        uint16_t edge_cap = static_cast<uint16_t>(
+            this->m_capacity_factor *
+            static_cast<float>(this->m_max_edges_per_patch));
+
+        uint16_t face_cap = static_cast<uint16_t>(
+            this->m_capacity_factor *
+            static_cast<float>(this->m_max_faces_per_patch));
+
         // To load EV and FE
         uint32_t dyn_shmem =
             3 * m_capacity_factor * this->m_max_faces_per_patch *
@@ -66,9 +78,8 @@ class RXMeshDynamic : public RXMeshStatic
             2 * ShmemAllocator::default_alignment;
 
         // cavity ID of fake deleted elements
-        dyn_shmem += this->m_max_vertices_per_patch * sizeof(uint16_t) +
-                     this->m_max_edges_per_patch * sizeof(uint16_t) +
-                     this->m_max_faces_per_patch * sizeof(uint16_t) +
+        dyn_shmem += vertex_cap * sizeof(uint16_t) +
+                     edge_cap * sizeof(uint16_t) + face_cap * sizeof(uint16_t) +
                      3 * ShmemAllocator::default_alignment;
 
         // cavity loop
@@ -82,18 +93,6 @@ class RXMeshDynamic : public RXMeshStatic
         // store cavity size (assume number of cavities is half the patch size)
         dyn_shmem += (this->m_max_faces_per_patch / 2) * sizeof(int) +
                      ShmemAllocator::default_alignment;
-
-        uint16_t vertex_cap = static_cast<uint16_t>(
-            this->m_capacity_factor *
-            static_cast<float>(this->m_max_vertices_per_patch));
-
-        uint16_t edge_cap = static_cast<uint16_t>(
-            this->m_capacity_factor *
-            static_cast<float>(this->m_max_edges_per_patch));
-
-        uint16_t face_cap = static_cast<uint16_t>(
-            this->m_capacity_factor *
-            static_cast<float>(this->m_max_faces_per_patch));
 
         // active, owned, migrate(for vertices only), src bitmask (for vertices
         // and edges only), src connect (for vertices and edges only), ownership
