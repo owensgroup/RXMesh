@@ -235,7 +235,7 @@ class RXMesh
               const std::string                         patcher_file    = "",
               const bool                                quite           = false,
               const float                               capacity_factor = 1.2,
-              const float lp_hashtable_load_factor                      = 0.9);
+              const float lp_hashtable_load_factor                      = 0.8);
 
     /**
      * @brief build different supporting data structure used to build RXMesh

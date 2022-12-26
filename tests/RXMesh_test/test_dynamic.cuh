@@ -28,9 +28,13 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
 
     for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
         if (on_ribbon) {
-            if (eh.unpack().second == 11) {
-                e_attr(eh) = 100;
-                cavity.add(eh);
+            if (!conflicting) {
+                if (eh.unpack().second == 11 || eh.unpack().second == 51 ||
+                    eh.unpack().second == 2 || eh.unpack().second == 315) {
+                    e_attr(eh) = 100;
+                    cavity.add(eh);
+                }
+            } else {
             }
         } else {
             if (!conflicting) {
@@ -127,7 +131,7 @@ TEST(RXMeshDynamic, Cavity)
     edge_flip_kernel<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, true, true);
+        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, false, true);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
