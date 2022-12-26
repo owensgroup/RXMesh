@@ -49,7 +49,6 @@ int main(int argc, char** argv)
 
     polyscope::view::upDir = polyscope::UpDir::ZUp;
 
-    polyscope::init();
 
     rxmesh::RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
