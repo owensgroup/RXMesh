@@ -70,6 +70,29 @@ struct ALIGN(16) PatchInfo
     // patch
     LPHashTable lp_v, lp_e, lp_f;
 
+    uint32_t* mutex;
+
+    __device__ bool lock(uint32_t p)
+    {
+#ifdef __CUDA_ARCH__
+        uint32_t old = ::atomicCAS(mutex, INVALID32, p);
+        if (old == INVALID32) {
+            return true;
+        } else {
+            return false;
+        }
+#endif
+    }
+
+
+    __device__ void unlock()
+    {
+#ifdef __CUDA_ARCH__
+        atomicExch(mutex, INVALID32);
+#endif
+    }
+
+
     /**
      * @brief return pointer to the number of elements corresponding  to the
      * handle type
@@ -291,7 +314,7 @@ struct ALIGN(16) PatchInfo
         return count_num_owned(owned_mask_f, active_mask_f, num_faces[0]);
     }
 
-   
+
     __host__ __inline__ uint16_t count_num_owned(const uint32_t* owned_bitmask,
                                                  const uint32_t* active_bitmask,
                                                  const uint16_t  size) const
