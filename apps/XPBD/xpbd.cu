@@ -1,11 +1,35 @@
 // Reference
 // https://github.com/taichi-dev/meshtaichi/blob/main/xpbd_cloth/solver.py
 
+#include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
+
+using namespace rxmesh;
+
+template <uint32_t blockThreads>
+void __global__ init_edges(const Context                context,
+                           const VertexAttribute<float> x,
+                           const EdgeAttribute<float>   rest_len)
+{
+    auto calc_rest_len = [&](const EdgeHandle& eh, const VertexIterator& iter) {
+        auto v0 = iter[0];
+        auto v1 = iter[1];
+
+        const Vector3f x0(x(v0, 0), x(v0, 1), x(v0, 2));
+        const Vector3f x1(x(v1, 0), x(v1, 1), x(v1, 2));
+
+        rest_len(eh, 0) = (x0 - x1).norm();
+    };
+
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    query.dispatch<Op::EV>(
+        block, calc_rest_len, [](EdgeHandle) { return true; }, false);
+}
 
 int main(int argc, char** argv)
 {
-    using namespace rxmesh;
     Log::init();
 
 #if USE_POLYSCOPE
@@ -34,7 +58,7 @@ int main(int argc, char** argv)
     const bool     XPBD               = true;
 
     // fixtures paramters
-    const float    box_len  = 0.013;
+    const float    box_len  = 0.01;
     const Vector3f boxes[4] = {{0.25, 0.75, 0.75},
                                {0.75, 0.75, 0.75},
                                {0.25, 0.25, 0.75},
@@ -51,7 +75,30 @@ int main(int argc, char** argv)
     auto la_s     = rx.add_edge_attribute<float>("la_s", 1);
     auto la_b     = rx.add_edge_attribute<float>("la_b", 1);
 
+
     // initialize
+    rx.for_each_vertex(DEVICE,
+                       [mass, boxes, box_len, invM = *invM, x = *x] __device__(
+                           VertexHandle vh) {
+                           invM(vh, 0) = mass;
+                           Vector3f v(x(vh, 0), x(vh, 1), x(vh, 2));
+                           float    eps = std::numeric_limits<float>::epsilon();
+                           if ((v - boxes[0]).norm2() - box_len < eps ||
+                               (v - boxes[1]).norm2() - box_len < eps ||
+                               (v - boxes[2]).norm2() - box_len < eps ||
+                               (v - boxes[3]).norm2() - box_len < eps) {
+                               invM(vh, 0) = 0;
+                           }
+                       });
+
+    LaunchBox<blockThreads> init_edges_lb;
+    rx.prepare_launch_box(
+        {Op::EV}, init_edges_lb, (void*)init_edges<blockThreads>);
+
+    init_edges<blockThreads>
+        <<<init_edges_lb.blocks,
+           init_edges_lb.num_threads,
+           init_edges_lb.smem_bytes_dyn>>>(rx.get_context(), *x, *rest_len);
 
     // solve
     auto solve = [&]() mutable {

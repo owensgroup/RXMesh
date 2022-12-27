@@ -714,7 +714,7 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
         rxmesh::memset<<<blocks_f, threads_f>>>(
             d_face_patch, INVALID32, m_num_faces);
 
-        rxmesh::memcpy<<<blocks_s, threads_s>>>(
+        rxmesh::memcopy<<<blocks_s, threads_s>>>(
             d_queue, d_seeds, m_num_patches);
 
         rxmesh::memset<<<blocks_s, threads_s>>>(

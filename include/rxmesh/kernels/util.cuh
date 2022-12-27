@@ -5,7 +5,9 @@
 namespace rxmesh {
 
 template <typename attrT>
-__global__ void memcpy(attrT* d_dest, const attrT* d_src, const uint32_t length)
+__global__ void memcopy(attrT*         d_dest,
+                        const attrT*   d_src,
+                        const uint32_t length)
 {
     const uint32_t stride = blockDim.x * gridDim.x;
     uint32_t       i      = blockDim.x * blockIdx.x + threadIdx.x;
