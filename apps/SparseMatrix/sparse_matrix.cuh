@@ -253,7 +253,7 @@ struct SparseMatInfo
                               cudaMemcpyHostToDevice));
     }
 
-    __host__ __device__ IndexT get_val_idx(const VertexHandle& row_v,
+    __device__ IndexT get_val_idx(const VertexHandle& row_v,
                                              const VertexHandle& col_v)
     {
         auto     r_ids      = row_v.unpack();
@@ -277,13 +277,13 @@ struct SparseMatInfo
         assert(1 != 1);
     }
 
-    __host__ __device__ T& operator()(const VertexHandle& row_v,
+    __device__ T& operator()(const VertexHandle& row_v,
                                       const VertexHandle& col_v)
     {
         return m_d_val[get_val_idx(row_v, col_v)];
     }
 
-    __host__ __device__ T& operator()(const VertexHandle& row_v,
+    __device__ T& operator()(const VertexHandle& row_v,
                                       const VertexHandle& col_v) const
     {
         return m_d_val[get_val_idx(row_v, col_v)];

@@ -8,6 +8,8 @@
 
 namespace rxmesh {
 
+// Currently this is device & col major only
+// host/device and leading dimension compatiobility will be added
 template <typename T, typename IndexT = int>
 struct DenseMatInfo
 {
@@ -27,25 +29,12 @@ struct DenseMatInfo
                               cudaMemcpyHostToDevice));
     }
 
-    // row major 
-    // __host__ __device__ T& operator()(const uint32_t row,
-    //                                   const uint32_t col)
-    // {
-    //     return m_d_val[row * m_col_size + col];
-    // }
-
-    // __host__ __device__ T& operator()(const uint32_t row,
-    //                                   const uint32_t col) const
-    // {
-    //     return m_d_val[row * m_col_size + col];
-    // }
-
-    __host__ __device__ T& operator()(const uint32_t row, const uint32_t col)
+     __device__ T& operator()(const uint32_t row, const uint32_t col)
     {
         return m_d_val[col * m_row_size + row];  // pitch & stride
     }
 
-    __host__ __device__ T& operator()(const uint32_t row,
+    __device__ T& operator()(const uint32_t row,
                                       const uint32_t col) const
     {
         return m_d_val[col * m_row_size + row];

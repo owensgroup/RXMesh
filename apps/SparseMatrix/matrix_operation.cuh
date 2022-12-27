@@ -242,8 +242,6 @@ void spmat_denmat_mul(rxmesh::SparseMatInfo<T> A_mat,
     void*                dBuffer    = NULL;
     size_t               bufferSize = 0;
 
-    printf("%d, %d, %d\n", B_mat.m_row_size, B_mat.m_col_size, B_mat.m_ld);
-
     cusparseCreate(&handle);
     // Create sparse matrix A in CSR format
     cusparseCreateCsr(&matA,
