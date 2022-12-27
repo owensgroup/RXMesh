@@ -21,12 +21,8 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
     ShmemAllocator shrd_alloc;
     Cavity<blockThreads, CavityOp::E> cavity(block, context, shrd_alloc);
 
-    const uint16_t before_num_vertices = cavity.m_patch_info.num_vertices[0];
-    const uint16_t before_num_edges    = cavity.m_patch_info.num_edges[0];
-    const uint16_t before_num_faces    = cavity.m_patch_info.num_faces[0];
 
-
-    for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
+    for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {        
         if (on_ribbon) {
             if (!conflicting) {
                 if (eh.unpack().second == 11 || eh.unpack().second == 51 ||
@@ -67,31 +63,35 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
     block.sync();
 
 
-    cavity.process(block, shrd_alloc);
-    cavity.update_attributes(block, coords);
-    cavity.update_attributes(block, v_attr);
-    cavity.update_attributes(block, e_attr);
-    cavity.update_attributes(block, f_attr);
+    if (cavity.process(block, shrd_alloc)) {
 
-    cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
-        assert(size == 4);
+        cavity.update_attributes(block, coords);
+        cavity.update_attributes(block, v_attr);
+        cavity.update_attributes(block, e_attr);
+        cavity.update_attributes(block, f_attr);
 
-        DEdgeHandle new_edge = cavity.add_edge(
-            c, cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c, 3));
+        cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+            assert(size == 4);
 
-        cavity.add_face(c,
-                        cavity.get_cavity_edge(c, 0),
-                        new_edge,
-                        cavity.get_cavity_edge(c, 3));
+            DEdgeHandle new_edge =
+                cavity.add_edge(c,
+                                cavity.get_cavity_vertex(c, 1),
+                                cavity.get_cavity_vertex(c, 3));
 
-        cavity.add_face(c,
-                        cavity.get_cavity_edge(c, 1),
-                        cavity.get_cavity_edge(c, 2),
-                        new_edge.get_flip_dedge());
-    });
-    block.sync();
+            cavity.add_face(c,
+                            cavity.get_cavity_edge(c, 0),
+                            new_edge,
+                            cavity.get_cavity_edge(c, 3));
 
-    cavity.cleanup(block);
+            cavity.add_face(c,
+                            cavity.get_cavity_edge(c, 1),
+                            cavity.get_cavity_edge(c, 2),
+                            new_edge.get_flip_dedge());
+        });
+        block.sync();
+
+        cavity.cleanup(block);
+    }
 }
 
 TEST(RXMeshDynamic, Cavity)

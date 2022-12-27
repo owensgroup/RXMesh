@@ -70,12 +70,9 @@ class RXMeshDynamic : public RXMeshStatic
             static_cast<float>(this->m_max_faces_per_patch));
 
         // To load EV and FE
-        uint32_t dyn_shmem =
-            3 * m_capacity_factor * this->m_max_faces_per_patch *
-                sizeof(uint16_t) +
-            2 * m_capacity_factor * this->m_max_edges_per_patch *
-                sizeof(uint16_t) +
-            2 * ShmemAllocator::default_alignment;
+        uint32_t dyn_shmem = 3 * face_cap * sizeof(uint16_t) +
+                             2 * edge_cap * sizeof(uint16_t) +
+                             2 * ShmemAllocator::default_alignment;
 
         // cavity ID of fake deleted elements
         dyn_shmem += vertex_cap * sizeof(uint16_t) +
@@ -86,8 +83,8 @@ class RXMeshDynamic : public RXMeshStatic
         dyn_shmem += this->m_max_edges_per_patch * sizeof(uint16_t) +
                      ShmemAllocator::default_alignment;
 
-        // store number of cavities
-        dyn_shmem += sizeof(int) + ShmemAllocator::default_alignment;
+        // store number of cavities and patches to lock
+        dyn_shmem += 2 * sizeof(int) + ShmemAllocator::default_alignment;
 
 
         // store cavity size (assume number of cavities is half the patch size)

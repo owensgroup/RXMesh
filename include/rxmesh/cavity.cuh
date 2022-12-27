@@ -24,12 +24,18 @@ struct Cavity
 {
     __device__ __inline__ Cavity()
         : m_s_num_cavities(nullptr),
+          m_s_cavity_size(nullptr),
           m_s_cavity_id_v(nullptr),
           m_s_cavity_id_e(nullptr),
           m_s_cavity_id_f(nullptr),
           m_s_cavity_edge_loop(nullptr),
           m_s_ev(nullptr),
-          m_s_fe(nullptr)
+          m_s_fe(nullptr),
+          m_s_num_vertices(nullptr),
+          m_s_num_edges(nullptr),
+          m_s_num_faces(nullptr),
+          m_s_cavity_edge_loop(nullptr)
+
     {
     }
 
@@ -125,6 +131,8 @@ struct Cavity
                     m_patch_info.owned_mask_f,
                     m_patch_info.active_mask_f);
 
+        m_s_patches_to_lock_mask =
+            Bitmask(PatchStash::stash_size + 1, shrd_alloc);
 
         if (threadIdx.x == 0) {
             m_s_num_cavities[0] = 0;
@@ -143,6 +151,7 @@ struct Cavity
             m_s_cavity_id_f[f] = INVALID16;
         }
 
+        m_s_patches_to_lock_mask.reset(block);
         m_s_active_cavity_bitmask.set(block);
         cooperative_groups::wait(block);
         block.sync();
@@ -204,7 +213,7 @@ struct Cavity
      * TODO we probably need to clear any shared memory used for queries during
      * adding elements to cavity
      */
-    __device__ __inline__ void process(cooperative_groups::thread_block& block,
+    __device__ __inline__ bool process(cooperative_groups::thread_block& block,
                                        ShmemAllocator& shrd_alloc)
     {
         m_s_cavity_size = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
@@ -253,7 +262,9 @@ struct Cavity
         sort_cavities_edge_loop();
         block.sync();
 
-        migrate(block);
+        if (!migrate(block)) {
+            return false;
+        }
         block.sync();
 
         change_vertex_ownership(block);
@@ -270,6 +281,7 @@ struct Cavity
         }
 
         block.sync();
+        return true;
     }
 
 
@@ -1020,7 +1032,7 @@ struct Cavity
      * @brief migrate edges and face incident to vertices in the bitmask to this
      * m_patch_info from a neighbor_patch
      */
-    __device__ __inline__ void migrate(cooperative_groups::thread_block& block)
+    __device__ __inline__ bool migrate(cooperative_groups::thread_block& block)
     {
 
         m_s_ribbonize_v.reset(block);
@@ -1072,6 +1084,9 @@ struct Cavity
                         m_s_owned_cavity_bdry_v(v1)) {
                         change = true;
                         m_s_ownership_change_mask_f.set(f, true);
+                        auto lp = m_patch_info.lp_f.find(f);
+                        m_s_patches_to_lock_mask.set(lp.patch_stash_id() + 1,
+                                                     true);
                         break;
                     }
                 }
@@ -1081,6 +1096,9 @@ struct Cavity
                         const uint16_t e = m_s_fe[3 * f + i] >> 1;
                         if (!m_s_owned_mask_e(e)) {
                             m_s_ownership_change_mask_e.set(e, true);
+                            auto lp = m_patch_info.lp_e.find(e);
+                            m_s_patches_to_lock_mask.set(
+                                lp.patch_stash_id() + 1, true);
                         }
                     }
                 }
@@ -1136,6 +1154,7 @@ struct Cavity
                 migrate_from_patch(block, q, m_s_ribbonize_v, false);
             }
         }
+        return true;
     }
 
 
@@ -1246,7 +1265,7 @@ struct Cavity
                     migrate_vertex(q,
                                    q_num_vertices,
                                    v,
-                                   change_ownership,
+                                   false,  // change_ownership,
                                    q_patch_info,
                                    [&](const uint16_t vertex) {
                                        return m_s_src_connect_mask_v(vertex);
@@ -1296,6 +1315,10 @@ struct Cavity
 
                 block.sync();
                 if (!lp.is_sentinel()) {
+                    if (change_ownership) {
+                        m_s_patches_to_lock_mask.set(lp.patch_stash_id() + 1,
+                                                     true);
+                    }
                     assert(m_patch_info.lp_e.insert(lp));
                 }
             }
@@ -1352,6 +1375,10 @@ struct Cavity
 
                 block.sync();
                 if (!lp.is_sentinel()) {
+                    if (change_ownership) {
+                        m_s_patches_to_lock_mask.set(lp.patch_stash_id() + 1,
+                                                     true);
+                    }
                     assert(m_patch_info.lp_e.insert(lp));
                 }
             }
@@ -1381,6 +1408,10 @@ struct Cavity
 
                 block.sync();
                 if (!lp.is_sentinel()) {
+                    if (change_ownership) {
+                        m_s_patches_to_lock_mask.set(lp.patch_stash_id() + 1,
+                                                     true);
+                    }
                     assert(m_patch_info.lp_f.insert(lp));
                 }
             }
@@ -1751,6 +1782,7 @@ struct Cavity
         m_s_ownership_change_mask_f;
     Bitmask m_s_owned_cavity_bdry_v;
     Bitmask m_s_ribbonize_v;
+    Bitmask m_s_patches_to_lock_mask;
 
     uint16_t *m_s_ev, *m_s_fe;
     uint16_t *m_s_cavity_id_v, *m_s_cavity_id_e, *m_s_cavity_id_f;
