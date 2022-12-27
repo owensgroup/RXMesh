@@ -100,6 +100,7 @@ int main(int argc, char** argv)
            init_edges_lb.num_threads,
            init_edges_lb.smem_bytes_dyn>>>(rx.get_context(), *x, *rest_len);
 
+
     // solve
     auto solve = [&]() mutable {
         float    frame_time_left = frame_dt;
@@ -109,20 +110,65 @@ int main(int argc, char** argv)
             float dt0 = std::min(dt, frame_time_left);
             frame_time_left -= dt0;
 
-            // applyExtForce(dt0);
+            // applyExtForce
+            rx.for_each_vertex(DEVICE,
+                               [dt0,
+                                gravity,
+                                invM  = *invM,
+                                v     = *v,
+                                new_x = *new_x,
+                                x     = *x] __device__(VertexHandle vh) {
+                                   if (invM(vh, 0) > 0.0) {
+                                       v(vh, 0) += gravity[0] * dt0;
+                                       v(vh, 1) += gravity[1] * dt0;
+                                       v(vh, 2) += gravity[2] * dt0;
+                                   }
+                                   new_x(vh, 0) = x(vh, 0) + v(vh, 0) * dt0;
+                                   new_x(vh, 1) = x(vh, 1) + v(vh, 1) * dt0;
+                                   new_x(vh, 2) = x(vh, 2) + v(vh, 2) * dt0;
+                               });
+
             if (XPBD) {
                 la_s->reset(0.0, DEVICE);
                 la_b->reset(0.0, DEVICE);
             }
 
             for (uint32_t iter = 0; iter < rest_iter; ++iter) {
-                // preSolve();
+                // preSolve
+                dp->reset(0, DEVICE);
+
                 // solveStretch(dt0);
                 // solveBending(dt0);
-                // postSolve(1.0);
+                
+                // postSolve
+                rx.for_each_vertex(
+                    DEVICE,
+                    [dp = *dp, new_x = *new_x] __device__(VertexHandle vh) {
+                        new_x(vh, 0) += dp(vh, 0);
+                        new_x(vh, 1) += dp(vh, 1);
+                        new_x(vh, 2) += dp(vh, 2);
+                    });
             }
 
-            // update(dt0);
+            // update;
+            rx.for_each_vertex(
+                DEVICE,
+                [dt0, invM = *invM, v = *v, new_x = *new_x, x = *x] __device__(
+                    VertexHandle vh) {
+                    if (invM(vh, 0) <= 0.0) {
+                        new_x(vh, 0) = x(vh, 0);
+                        new_x(vh, 1) = x(vh, 1);
+                        new_x(vh, 2) = x(vh, 2);
+                    } else {
+                        v(vh, 0) = (new_x(vh, 0) - x(vh, 0)) / dt0;
+                        v(vh, 1) = (new_x(vh, 1) - x(vh, 1)) / dt0;
+                        v(vh, 2) = (new_x(vh, 2) - x(vh, 2)) / dt0;
+
+                        x(vh, 0) = new_x(vh, 0);
+                        x(vh, 1) = new_x(vh, 1);
+                        x(vh, 2) = new_x(vh, 2);
+                    }
+                });
         }
 
         // x->move(DEVICE, HOST);
