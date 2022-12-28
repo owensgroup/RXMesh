@@ -15,6 +15,10 @@
 #include "cusparse.h"
 
 namespace rxmesh {
+
+/**
+ * @brief The enum class for choosing different solver types
+ */
 enum class Solver
 {
     CHOL = 0,
@@ -22,6 +26,12 @@ enum class Solver
     QR   = 2
 };
 
+/**
+ * @brief The enum class for choosing different reorder types
+ * NONE for No Reordering Applied, SYMRCM for Symmetric Reverse Cuthill-McKee
+ * permutation, SYMAMD for Symmetric Approximate Minimum Degree Algorithm based
+ * on Quotient Graph, NSTDIS for Nested Dissection
+ */
 enum class Reorder
 {
     NONE   = 0,
@@ -30,7 +40,7 @@ enum class Reorder
     NSTDIS = 3
 };
 
-static int reorder_to_int(const Reorder& reorder) 
+static int reorder_to_int(const Reorder& reorder)
 {
     switch (reorder) {
         case Reorder::NONE:
@@ -48,6 +58,41 @@ static int reorder_to_int(const Reorder& reorder)
     }
 }
 
+/**
+ * @brief for transpose the dense matrix using cublas
+ */
+template <typename T>
+void denmat_transpose(rxmesh::DenseMatInfo<T> den_mat)
+{
+    T* d_rt_arr;
+    cudaMalloc(&d_rt_arr, den_mat.bytes());
+
+    float const alpha(1.0);
+    float const beta(0.0);
+
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+    cublasSgeam(handle,
+                CUBLAS_OP_T,
+                CUBLAS_OP_N,
+                den_mat.m_row_size,
+                den_mat.m_col_size,
+                &alpha,               // 0
+                den_mat.data(),       // A_arr
+                den_mat.m_col_size,   // ld_a
+                &beta,                // 0
+                den_mat.data(),       // B_arr
+                den_mat.m_row_size,   // ld_b
+                d_rt_arr,             // rt_arr
+                den_mat.m_row_size);  // ld_cm
+    cublasDestroy(handle);
+
+    den_mat.m_d_val = d_rt_arr;
+}
+
+/**
+ * @brief solve the Ax=b for x where x and b are all array
+ */
 template <typename T>
 void spmat_linear_solve(rxmesh::SparseMatInfo<T> A_mat,
                         T*                       B_arr,
@@ -84,8 +129,17 @@ void spmat_linear_solve(rxmesh::SparseMatInfo<T> A_mat,
                                    A_mat.m_d_val,
                                    B_arr,
                                    X_arr);
+
+    cusolverSpDestroy(handle);
+    cusparseDestroy(cusparseHandle);
+    cudaStreamDestroy(stream);
+    cusparseDestroyMatDescr(descrA);
 }
 
+/**
+ * @brief solve the AX=B for X where X and B are all dense matrix and we would
+ * solve it in a column wise manner
+ */
 template <typename T>
 void spmat_linear_solve(rxmesh::SparseMatInfo<T> A_mat,
                         rxmesh::DenseMatInfo<T>  B_mat,
@@ -124,8 +178,17 @@ void spmat_linear_solve(rxmesh::SparseMatInfo<T> A_mat,
                                        B_mat.col_data(i),
                                        X_mat.col_data(i));
     }
+
+    cusolverSpDestroy(handle);
+    cusparseDestroy(cusparseHandle);
+    cudaStreamDestroy(stream);
+    cusparseDestroyMatDescr(descrA);
 }
 
+/**
+ * @brief wrap up the cusolver api for solving linear systems. This is a lower
+ * level api
+ */
 template <typename T>
 void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
                                     const rxmesh::Reorder reorder,
@@ -227,7 +290,10 @@ void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
     }
 }
 
-
+/**
+ * @brief wrap up the cusparse api for sparse matrix dense matrix
+ * multiplication.
+ */
 template <typename T>
 void spmat_denmat_mul(rxmesh::SparseMatInfo<T> A_mat,
                       rxmesh::DenseMatInfo<T>  B_mat,
@@ -259,7 +325,7 @@ void spmat_denmat_mul(rxmesh::SparseMatInfo<T> A_mat,
     cusparseCreateDnMat(&matB,
                         B_mat.m_row_size,
                         B_mat.m_col_size,
-                        B_mat.m_ld, 
+                        B_mat.lead_dim(),
                         B_mat.data(),
                         CUDA_R_32F,
                         CUSPARSE_ORDER_COL);
@@ -267,7 +333,7 @@ void spmat_denmat_mul(rxmesh::SparseMatInfo<T> A_mat,
     cusparseCreateDnMat(&matC,
                         C_mat.m_row_size,
                         C_mat.m_col_size,
-                        C_mat.m_ld,
+                        C_mat.lead_dim(),
                         C_mat.data(),
                         CUDA_R_32F,
                         CUSPARSE_ORDER_COL);
@@ -305,6 +371,11 @@ void spmat_denmat_mul(rxmesh::SparseMatInfo<T> A_mat,
     cusparseDestroy(handle);
 }
 
+
+/**
+ * @brief wrap up the cusparse api for sparse matrix array
+ * multiplication.
+ */
 // only works for float
 template <typename T>
 void spmat_arr_mul(rxmesh::SparseMatInfo<T> sp_mat, T* in_arr, T* rt_arr)
@@ -364,10 +435,14 @@ void spmat_arr_mul(rxmesh::SparseMatInfo<T> sp_mat, T* in_arr, T* rt_arr)
     cusparseDestroy(handle);
 }
 
+/**
+ * @brief do the sparse matrix dense matrix multiplication using sparse matrix
+ * array multiplication in a column wise way
+ */
 template <typename T>
-void spmat_denmat_mul_test(rxmesh::SparseMatInfo<T> A_mat,
-                           rxmesh::DenseMatInfo<T>  B_mat,
-                           rxmesh::DenseMatInfo<T>  C_mat)
+void spmat_denmat_mul_cw(rxmesh::SparseMatInfo<T> A_mat,
+                         rxmesh::DenseMatInfo<T>  B_mat,
+                         rxmesh::DenseMatInfo<T>  C_mat)
 {
     for (int i = 0; i < B_mat.m_col_size; ++i) {
         spmat_arr_mul(A_mat, B_mat.col_data(i), C_mat.col_data(i));

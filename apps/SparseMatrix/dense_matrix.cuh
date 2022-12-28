@@ -17,7 +17,15 @@ struct DenseMatInfo
         : m_row_size(row_size), m_col_size(col_size)
     {
         cudaMalloc((void**)&m_d_val, bytes());
-        m_ld = m_col_size; // col major for now
+        m_is_row_major = false;
+    }
+
+    DenseMatInfo(IndexT row_size, IndexT col_size, bool is_row_major)
+        : m_row_size(row_size),
+          m_col_size(col_size),
+          m_is_row_major(is_row_major)
+    {
+        cudaMalloc((void**)&m_d_val, bytes());
     }
 
     void set_ones()
@@ -29,15 +37,31 @@ struct DenseMatInfo
                               cudaMemcpyHostToDevice));
     }
 
-     __device__ T& operator()(const uint32_t row, const uint32_t col)
+    IndexT& lead_dim() const
     {
-        return m_d_val[col * m_row_size + row];  // pitch & stride
+        if (m_is_row_major) {
+            return m_row_size;
+        } else {
+            return m_col_size;
+        }
     }
 
-    __device__ T& operator()(const uint32_t row,
-                                      const uint32_t col) const
+    __device__ T& operator()(const uint32_t row, const uint32_t col)
     {
-        return m_d_val[col * m_row_size + row];
+        if (m_is_row_major) {
+            return m_d_val[row * m_row_size + col];
+        } else {
+            return m_d_val[col * m_row_size + row];
+        }
+    }
+
+    __device__ T& operator()(const uint32_t row, const uint32_t col) const
+    {
+        if (m_is_row_major) {
+            return m_d_val[row * m_row_size + col];
+        } else {
+            return m_d_val[col * m_row_size + row];
+        }
     }
 
     T* data() const
@@ -47,6 +71,11 @@ struct DenseMatInfo
 
     T* col_data(const uint32_t col) const
     {
+        if (m_is_row_major) {
+            RXMESH_ERROR(
+                "Row major format!"
+                "Can't be accessed by column");
+        }
         return m_d_val + col * m_row_size;
     }
 
@@ -55,10 +84,10 @@ struct DenseMatInfo
         return m_row_size * m_col_size * sizeof(T);
     }
 
-    IndexT m_ld;
+    bool   m_is_row_major;
     IndexT m_row_size;
     IndexT m_col_size;
-    T*       m_d_val;
+    T*     m_d_val;
 };
 
 }  // namespace rxmesh

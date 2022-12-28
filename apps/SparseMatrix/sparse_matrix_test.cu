@@ -416,7 +416,7 @@ TEST(Apps, SparseMatrixSimpleSolve)
     spmat_linear_solve(A_mat, B_mat, X_mat, Solver::CHOL, Reorder::NONE);
 
     // spmat_denmat_mul(A_mat, X_mat, ret_mat);
-    spmat_denmat_mul_test(A_mat, X_mat, ret_mat);
+    spmat_denmat_mul_cw(A_mat, X_mat, ret_mat);
 
     std::vector<float> h_ret_mat(num_vertices * 3);
     cudaMemcpy(h_ret_mat.data(),
@@ -424,14 +424,14 @@ TEST(Apps, SparseMatrixSimpleSolve)
                num_vertices * 3,
                cudaMemcpyDeviceToHost);
     std::vector<float> h_B_mat(num_vertices * 3);
-    cudaMemcpy(h_B_mat.data(),
-               B_mat.data(),
-               num_vertices * 3,
-               cudaMemcpyDeviceToHost);
+    cudaMemcpy(
+        h_B_mat.data(), B_mat.data(), num_vertices * 3, cudaMemcpyDeviceToHost);
 
     for (uint32_t i = 0; i < num_vertices * 3; ++i) {
         EXPECT_NEAR(h_ret_mat[i], h_B_mat[i], 1e-3);
     }
+
+    denmat_transpose(X_mat);
 }
 
 int main(int argc, char** argv)
