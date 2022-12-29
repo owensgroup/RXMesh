@@ -51,18 +51,18 @@ void __global__ solve_stretch(const Context                context,
         const float w1(invM(v0, 0)), w2(invM(v1, 0));
 
         if (w1 + w2 > 0.f) {
-            Vector3f    n = v0 - v1;
+            Vector3f    n = x0 - x1;
             const float d = n.norm();
             Vector3f    dpp(0.f, 0.f, 0.f);
             const float constraint = (d - rest_len(eh, 0));
 
-            //TODO check on n.normalized(1e-12)
             n.normalize();
             if (XPBD) {
                 const float compliance = stretch_compliance / (dt * dt);
 
-                float d_lambda = -(constraint + compliance * la_s(eh, 0)) /
-                                 (w1 + w2 + compliance) * stretch_relaxation;
+                const float d_lambda =
+                    -(constraint + compliance * la_s(eh, 0)) /
+                    (w1 + w2 + compliance) * stretch_relaxation;
 
                 for (int i = 0; i < 3; ++i) {
                     dpp[i] = d_lambda * n[i];
@@ -71,8 +71,8 @@ void __global__ solve_stretch(const Context                context,
 
             } else {
                 for (int i = 0; i < 3; ++i) {
-                    dpp[i] = -constraint / (w1[i] + w2[i]) * n[i] *
-                             stretch_relaxation;
+                    dpp[i] =
+                        -constraint / (w1 + w2) * n[i] * stretch_relaxation;
                 }
             }
 
@@ -219,7 +219,8 @@ int main(int argc, char** argv)
                                                           stretch_compliance,
                                                           stretch_relaxation,
                                                           dt0);
-                // solveBending(dt0);
+                // TODO
+                //  solveBending(dt0);
 
                 // postSolve
                 rx.for_each_vertex(
@@ -252,8 +253,8 @@ int main(int argc, char** argv)
                 });
         }
 
-        // x->move(DEVICE, HOST);
-        // rx.get_polyscope_mesh()->updateVertexPositions(*x);
+        x->move(DEVICE, HOST);
+        rx.get_polyscope_mesh()->updateVertexPositions(*x);
     };
 
 #if USE_POLYSCOPE
