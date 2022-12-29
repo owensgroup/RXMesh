@@ -28,6 +28,69 @@ void __global__ init_edges(const Context                context,
         block, calc_rest_len, [](EdgeHandle) { return true; }, false);
 }
 
+
+template <uint32_t blockThreads>
+void __global__ solve_stretch(const Context                context,
+                              VertexAttribute<float>       dp,
+                              EdgeAttribute<float>         la_s,
+                              const VertexAttribute<float> invM,
+                              const VertexAttribute<float> new_x,
+                              const EdgeAttribute<float>   rest_len,
+                              const bool                   XPBD,
+                              const float                  stretch_compliance,
+                              const float                  stretch_relaxation,
+                              const float                  dt)
+{
+    auto solve = [&](const EdgeHandle& eh, const VertexIterator& iter) {
+        auto v0 = iter[0];
+        auto v1 = iter[1];
+
+        const Vector3f x0(new_x(v0, 0), new_x(v0, 1), new_x(v0, 2));
+        const Vector3f x1(new_x(v1, 0), new_x(v1, 1), new_x(v1, 2));
+
+        const float w1(invM(v0, 0)), w2(invM(v1, 0));
+
+        if (w1 + w2 > 0.f) {
+            Vector3f    n = v0 - v1;
+            const float d = n.norm();
+            Vector3f    dpp(0.f, 0.f, 0.f);
+            const float constraint = (d - rest_len(eh, 0));
+
+            //TODO check on n.normalized(1e-12)
+            n.normalize();
+            if (XPBD) {
+                const float compliance = stretch_compliance / (dt * dt);
+
+                float d_lambda = -(constraint + compliance * la_s(eh, 0)) /
+                                 (w1 + w2 + compliance) * stretch_relaxation;
+
+                for (int i = 0; i < 3; ++i) {
+                    dpp[i] = d_lambda * n[i];
+                }
+                la_s(eh, 0) += d_lambda;
+
+            } else {
+                for (int i = 0; i < 3; ++i) {
+                    dpp[i] = -constraint / (w1[i] + w2[i]) * n[i] *
+                             stretch_relaxation;
+                }
+            }
+
+            for (int i = 0; i < 3; ++i) {
+                ::atomicAdd(&dp(v0, i), dpp[i] * w1);
+                ::atomicAdd(&dp(v1, i), dpp[i] * w2);
+            }
+        }
+    };
+
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    query.dispatch<Op::EV>(
+        block, solve, [](EdgeHandle) { return true; }, false);
+}
+
+
 int main(int argc, char** argv)
 {
     Log::init();
@@ -92,8 +155,13 @@ int main(int argc, char** argv)
                        });
 
     LaunchBox<blockThreads> init_edges_lb;
+    LaunchBox<blockThreads> solve_stretch_lb;
+
     rx.prepare_launch_box(
         {Op::EV}, init_edges_lb, (void*)init_edges<blockThreads>);
+
+    rx.prepare_launch_box(
+        {Op::EV}, solve_stretch_lb, (void*)solve_stretch<blockThreads>);
 
     init_edges<blockThreads>
         <<<init_edges_lb.blocks,
@@ -102,7 +170,7 @@ int main(int argc, char** argv)
 
 
     // solve
-    auto solve = [&]() mutable {
+    auto polyscope_callback = [&]() mutable {
         float    frame_time_left = frame_dt;
         uint32_t substep         = 0;
         while (frame_time_left > 0.0) {
@@ -137,9 +205,22 @@ int main(int argc, char** argv)
                 // preSolve
                 dp->reset(0, DEVICE);
 
-                // solveStretch(dt0);
+                // solveStretch
+                solve_stretch<blockThreads>
+                    <<<solve_stretch_lb.blocks,
+                       solve_stretch_lb.num_threads,
+                       solve_stretch_lb.smem_bytes_dyn>>>(rx.get_context(),
+                                                          *dp,
+                                                          *la_s,
+                                                          *invM,
+                                                          *new_x,
+                                                          *rest_len,
+                                                          XPBD,
+                                                          stretch_compliance,
+                                                          stretch_relaxation,
+                                                          dt0);
                 // solveBending(dt0);
-                
+
                 // postSolve
                 rx.for_each_vertex(
                     DEVICE,
@@ -176,7 +257,7 @@ int main(int argc, char** argv)
     };
 
 #if USE_POLYSCOPE
-    polyscope::state::userCallback = solve;
+    polyscope::state::userCallback = polyscope_callback;
     polyscope::show();
 #endif
 }
