@@ -78,7 +78,7 @@ void __global__ solve_stretch(const Context                context,
 
             for (int i = 0; i < 3; ++i) {
                 ::atomicAdd(&dp(v0, i), dpp[i] * w1);
-                ::atomicAdd(&dp(v1, i), dpp[i] * w2);
+                ::atomicAdd(&dp(v1, i), -(dpp[i] * w2));
             }
         }
     };
@@ -171,10 +171,8 @@ int main(int argc, char** argv)
 
     // solve
     auto polyscope_callback = [&]() mutable {
-        float    frame_time_left = frame_dt;
-        uint32_t substep         = 0;
+        float frame_time_left = frame_dt;
         while (frame_time_left > 0.0) {
-            substep += 1;
             float dt0 = std::min(dt, frame_time_left);
             frame_time_left -= dt0;
 
