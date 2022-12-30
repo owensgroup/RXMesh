@@ -1276,7 +1276,7 @@ struct Cavity
                 // insert in it
                 block.sync();
                 if (!lp.is_sentinel()) {
-                    assert(m_patch_info.lp_v.insert(lp));
+                    m_patch_info.lp_v.insert(lp);
                 }
             }
 
@@ -1319,7 +1319,7 @@ struct Cavity
                         m_s_patches_to_lock_mask.set(lp.patch_stash_id() + 1,
                                                      true);
                     }
-                    assert(m_patch_info.lp_e.insert(lp));
+                    m_patch_info.lp_e.insert(lp);
                 }
             }
             block.sync();
@@ -1379,7 +1379,7 @@ struct Cavity
                         m_s_patches_to_lock_mask.set(lp.patch_stash_id() + 1,
                                                      true);
                     }
-                    assert(m_patch_info.lp_e.insert(lp));
+                    m_patch_info.lp_e.insert(lp);
                 }
             }
 
@@ -1412,7 +1412,7 @@ struct Cavity
                         m_s_patches_to_lock_mask.set(lp.patch_stash_id() + 1,
                                                      true);
                     }
-                    assert(m_patch_info.lp_f.insert(lp));
+                    m_patch_info.lp_f.insert(lp);
                 }
             }
         }
