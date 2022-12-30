@@ -79,18 +79,19 @@ enum class ELEMENT
  */
 enum class Op
 {
-    V  = 0,
-    E  = 1,
-    F  = 2,
-    VV = 3,
-    VE = 4,
-    VF = 5,
-    FV = 6,
-    FE = 7,
-    FF = 8,
-    EV = 9,
-    EE = 10,
-    EF = 11,
+    V         = 0,
+    E         = 1,
+    F         = 2,
+    VV        = 3,
+    VE        = 4,
+    VF        = 5,
+    FV        = 6,
+    FE        = 7,
+    FF        = 8,
+    EV        = 9,
+    EE        = 10,
+    EF        = 11,
+    EVDiamond = 12,
 };
 
 /**
@@ -148,6 +149,8 @@ static std::string op_to_string(const Op& op)
             return "EF";
         case Op::EE:
             return "EE";
+        case Op::EVDiamond:
+            return "EVDiamond";
         default: {
             RXMESH_ERROR("to_string() unknown input operation");
             return "";

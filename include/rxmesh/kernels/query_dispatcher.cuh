@@ -50,7 +50,7 @@ __device__ __inline__ void query_block_dispatcher(
         input_active_mask = patch_info.active_mask_v;
         input_owned_mask  = patch_info.owned_mask_v;
     }
-    if constexpr (op == Op::EV || op == Op::EF) {
+    if constexpr (op == Op::EV || op == Op::EF || op == Op::EVDiamond) {
         num_src_in_patch  = patch_info.num_edges[0];
         input_active_mask = patch_info.active_mask_e;
         input_owned_mask  = patch_info.owned_mask_e;
@@ -73,7 +73,8 @@ __device__ __inline__ void query_block_dispatcher(
 
     // alloc and load owned mask async
     // select lp hashtable
-    if constexpr (op == Op::VV || op == Op::EV || op == Op::FV) {
+    if constexpr (op == Op::VV || op == Op::EV || op == Op::FV ||
+                  op == Op::EVDiamond) {
         const uint32_t mask_size = mask_num_bytes(patch_info.num_vertices[0]);
         s_output_owned_bitmask =
             reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
@@ -116,7 +117,8 @@ __device__ __inline__ void query_block_dispatcher(
                    with_wait);
     };
 
-    if constexpr (op != Op::FV && op != Op::VV && op != Op::FF) {
+    if constexpr (op != Op::FV && op != Op::VV && op != Op::FF &&
+                  op != Op::EVDiamond) {
         if (op != Op::EV && oriented) {
             alloc_then_load_table(false);
         }
@@ -162,7 +164,8 @@ __device__ __inline__ void query_block_dispatcher(
                             s_output_value,
                             oriented);
 
-    if constexpr (op == Op::FV || op == Op::VV || op == Op::FF) {
+    if constexpr (op == Op::FV || op == Op::VV || op == Op::FF ||
+                  op == Op::EVDiamond) {
         block.sync();
         alloc_then_load_table(true);
     }
@@ -234,9 +237,11 @@ __device__ __inline__ void query_block_dispatcher(
 
     // Call compute on the output in shared memory by looping over all
     // source elements in this patch.
-    constexpr uint32_t fixed_offset = ((op == Op::EV)                 ? 2 :
-                                       (op == Op::FV || op == Op::FE) ? 3 :
-                                                                        0);
+    constexpr uint32_t fixed_offset =
+        ((op == Op::EV) ? 2 :
+                          ((op == Op::FV || op == Op::FE) ?
+                               3 :
+                               ((op == Op::EVDiamond) ? 4 : 0)));
 
     for (uint16_t local_id = threadIdx.x; local_id < num_src_in_patch;
          local_id += blockThreads) {
@@ -537,9 +542,10 @@ __device__ __inline__ void higher_query_block_dispatcher(
         if (pl.first == patch_id) {
 
             constexpr uint32_t fixed_offset =
-                ((op == Op::EV)                 ? 2 :
-                 (op == Op::FV || op == Op::FE) ? 3 :
-                                                  0);
+                ((op == Op::EV) ? 2 :
+                                  ((op == Op::FV || op == Op::FE) ?
+                                       3 :
+                                       ((op == Op::EVDiamond) ? 4 : 0)));
 
             ComputeIteratorT iter(
                 pl.second,

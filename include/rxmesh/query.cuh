@@ -78,9 +78,11 @@ struct Query
             m_output_lp_hashtable,
             m_s_table);
 
-        constexpr uint32_t fixed_offset = ((op == Op::EV)                 ? 2 :
-                                           (op == Op::FV || op == Op::FE) ? 3 :
-                                                                            0);
+        constexpr uint32_t fixed_offset =
+            ((op == Op::EV) ? 2 :
+                              ((op == Op::FV || op == Op::FE) ?
+                                   3 :
+                                   ((op == Op::EVDiamond) ? 4 : 0)));
 
         const uint32_t patch_id = m_patch_info.patch_id;
 
@@ -124,6 +126,7 @@ struct Query
         FV                = 64,
         FE                = 128,
         FF                = 512,
+        EVDiamond         = 1024,
     };
 
     template <Op op>
@@ -159,6 +162,10 @@ struct Query
 
         if constexpr (op == Op::FF) {
             m_status = m_status | FF;
+        }
+
+        if constexpr (op == Op::EVDiamond) {
+            m_status = m_status | EVDiamond;
         }
     }
 

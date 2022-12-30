@@ -101,6 +101,70 @@ __device__ __forceinline__ void block_mat_transpose(
 }
 
 template <uint32_t blockThreads>
+__device__ __forceinline__ void e_v_diamond(
+    cooperative_groups::thread_block& block,
+    const PatchInfo&                  patch_info,
+    ShmemAllocator&                   shrd_alloc,
+    uint16_t*&                        s_output_value)
+{
+    const uint16_t num_edges(patch_info.num_edges[0]),
+        num_faces(patch_info.num_faces[0]);
+
+    s_output_value = shrd_alloc.alloc<uint16_t>(4 * num_edges);
+
+    uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
+
+    for (uint16_t e = threadIdx.x; e < 4 * num_edges; e += blockThreads) {
+        s_output_value[e] = INVALID16;
+    }
+    block.sync();
+
+    load_async(block,
+               reinterpret_cast<uint16_t*>(patch_info.fe),
+               3 * num_faces,
+               s_fe,
+               false);
+
+    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        const uint16_t src = patch_info.ev[2 * e + 0].id;
+        const uint16_t dst = patch_info.ev[2 * e + 1].id;
+
+        s_output_value[4 * e + 0] = src;
+        s_output_value[4 * e + 2] = dst;
+    }
+
+
+    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+
+        if (!is_deleted(f, patch_info.active_mask_f)) {
+            uint16_t f_v[3];
+            uint16_t f_e[3];
+            flag_t   f_dir[3];
+            for (int i = 0; i < 3; ++i) {
+                f_e[i] = s_fe[3 * f + i];
+                Context::unpack_edge_dir(f_e[i], f_e[i], f_dir[i]);
+                uint16_t id = (4 * f_e[i]) + (2 * f_dir[i]);
+                assert(id < 4 * num_edges);
+                f_v[i] = s_output_value[id];
+            }
+
+            for (int i = 0; i < 3; ++i) {
+                uint16_t v = f_v[(i + 2) % 3];
+                // if f_dir[i]==0 --> 4 * f_e[i] + 1
+                // if f_dir[i]==1 --> 4 * f_e[i] + 3
+                uint32_t id = (4 * f_e[i] + 1) + (2 * f_dir[i]);
+                assert(id < 4 * num_edges);
+                s_output_value[id] = v;
+            }
+        }
+    }
+
+
+    shrd_alloc.dealloc<uint16_t>(3 * num_faces);
+}
+
+
+template <uint32_t blockThreads>
 __device__ __forceinline__ void e_f_manifold(const uint16_t  num_edges,
                                              const uint16_t  num_faces,
                                              const uint16_t* s_fe,
@@ -664,6 +728,11 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
 
         shrd_alloc.dealloc<uint16_t>(2 * 3 * patch_info.num_faces[0]);
         shrd_alloc.dealloc<uint16_t>(3 * patch_info.num_faces[0]);
+    }
+
+    if constexpr (op == Op::EVDiamond) {
+        e_v_diamond<blockThreads>(
+            block, patch_info, shrd_alloc, s_output_value);
     }
 }
 

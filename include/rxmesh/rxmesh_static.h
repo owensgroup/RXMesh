@@ -964,6 +964,12 @@ class RXMeshStatic : public RXMesh
                 op_to_string(op));
         }
 
+        if (op == Op::EVDiamond && !m_is_input_edge_manifold) {
+            RXMESH_ERROR(
+                "RXMeshStatic::calc_shared_memory() Op::EVDiamond only works "
+                "on edge manifold mesh. The input mesh is not edge manifold");
+        }
+
         size_t dynamic_smem = 0;
 
 
@@ -1182,10 +1188,33 @@ class RXMeshStatic : public RXMesh
             // for possible padding for alignment
             // 6 since there are 6 calls for ShmemAllocator.alloc
             dynamic_smem += ShmemAllocator::default_alignment * 6;
+        } else if (op == Op::EVDiamond) {
+            // to load EV and also store the results which contains 4 vertices
+            // for each edge
+            dynamic_smem = 4 * this->m_max_edges_per_patch * sizeof(uint16_t);
+
+            // to store FE
+            uint32_t fe_smem =
+                3 * this->m_max_faces_per_patch * sizeof(uint16_t);
+
+            // store participant bitmask
+            dynamic_smem += max_bitmask_size(ELEMENT::EDGE);
+
+            // store not-owned bitmask
+            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
+
+            // stores vertex LP hashtable
+            uint32_t lp_smem =
+                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::VERTEX);
+
+            dynamic_smem += std::max(fe_smem, lp_smem);
+
+            // for possible padding for alignment
+            // 4 since there are 4 calls for ShmemAllocator.alloc
+            dynamic_smem += ShmemAllocator::default_alignment * 5;
         }
 
         if (oriented) {
-            // TODO
             if (op == Op::VE) {
                 // For VE, we need to add the extra memory we needed for VV that
                 // load EV beside the VE
