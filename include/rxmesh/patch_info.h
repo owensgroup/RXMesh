@@ -72,7 +72,7 @@ struct ALIGN(16) PatchInfo
 
     uint32_t* mutex;
 
-    __device__ bool lock(uint32_t p)
+    __device__ bool try_lock(uint32_t p)
     {
 #ifdef __CUDA_ARCH__
         uint32_t old = ::atomicCAS(mutex, INVALID32, p);

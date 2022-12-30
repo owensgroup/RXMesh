@@ -35,9 +35,10 @@ struct Query
 
     template <Op op, typename computeT, typename activeSetT>
     __device__ __inline__ void dispatch(cooperative_groups::thread_block& block,
-                                        computeT   compute_op,
-                                        activeSetT compute_active_set,
-                                        const bool oriented)
+                                        ShmemAllocator& shrd_alloc,
+                                        computeT        compute_op,
+                                        activeSetT      compute_active_set,
+                                        const bool      oriented)
     {
         static_assert(op != Op::EE, "Op::EE is not supported!");
 
@@ -66,7 +67,7 @@ struct Query
 
         detail::query_block_dispatcher<op, blockThreads>(
             block,
-            m_shrd_alloc,
+            shrd_alloc,
             m_patch_info,
             compute_active_set,
             oriented,
@@ -178,6 +179,5 @@ struct Query
     uint16_t*        m_s_output_value;
     LPHashTable      m_output_lp_hashtable;
     LPPair*          m_s_table;
-    ShmemAllocator   m_shrd_alloc;
 };
 }  // namespace rxmesh

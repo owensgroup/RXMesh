@@ -98,8 +98,10 @@ __global__ static void init_B(const rxmesh::Context            context,
     auto block = cooperative_groups::this_thread_block();
 
     Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
     query.dispatch<Op::VV>(
         block,
+        shrd_alloc,
         init_lambda,
         [](VertexHandle) { return true; },
         !use_uniform_laplace);
@@ -200,8 +202,10 @@ __global__ static void rxmesh_matvec(const rxmesh::Context            context,
     auto block = cooperative_groups::this_thread_block();
 
     Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
     query.dispatch<Op::VV>(
         block,
+        shrd_alloc,
         matvec_lambda,
         [](VertexHandle) { return true; },
         !use_uniform_laplace);

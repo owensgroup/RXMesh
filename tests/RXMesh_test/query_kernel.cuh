@@ -36,6 +36,11 @@ __global__ static void query_kernel(const rxmesh::Context context,
     auto block = cooperative_groups::this_thread_block();
 
     Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
     query.dispatch<op>(
-        block, store_lambda, [](InputHandleT) { return true; }, oriented);
+        block,
+        shrd_alloc,
+        store_lambda,
+        [](InputHandleT) { return true; },
+        oriented);
 }

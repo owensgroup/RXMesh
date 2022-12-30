@@ -59,6 +59,7 @@ __global__ static void compute_gaussian_curvature(
     auto block = cooperative_groups::this_thread_block();
 
     Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
     query.dispatch<Op::FV>(
-        block, gc_lambda, [](FaceHandle) { return true; }, false);
+        block, shrd_alloc, gc_lambda, [](FaceHandle) { return true; }, false);
 }

@@ -24,8 +24,13 @@ void __global__ init_edges(const Context                context,
     auto block = cooperative_groups::this_thread_block();
 
     Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
     query.dispatch<Op::EV>(
-        block, calc_rest_len, [](EdgeHandle) { return true; }, false);
+        block,
+        shrd_alloc,
+        calc_rest_len,
+        [](EdgeHandle) { return true; },
+        false);
 }
 
 
@@ -86,8 +91,9 @@ void __global__ solve_stretch(const Context                context,
     auto block = cooperative_groups::this_thread_block();
 
     Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
     query.dispatch<Op::EV>(
-        block, solve, [](EdgeHandle) { return true; }, false);
+        block, shrd_alloc, solve, [](EdgeHandle) { return true; }, false);
 }
 
 

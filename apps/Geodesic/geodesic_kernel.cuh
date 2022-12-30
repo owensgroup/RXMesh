@@ -128,5 +128,6 @@ __global__ static void relax_ptp_rxmesh(
     auto block = cooperative_groups::this_thread_block();
 
     Query<blockThreads> query(context);
-    query.dispatch<Op::VV>(block, geo_lambda, in_active_set, true);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, geo_lambda, in_active_set, true);
 }

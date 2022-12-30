@@ -131,8 +131,7 @@ struct Cavity
                     m_patch_info.owned_mask_f,
                     m_patch_info.active_mask_f);
 
-        m_s_patches_to_lock_mask =
-            Bitmask(PatchStash::stash_size + 1, shrd_alloc);
+        m_s_patches_to_lock_mask = Bitmask(PatchStash::stash_size, shrd_alloc);
 
         if (threadIdx.x == 0) {
             m_s_num_cavities[0] = 0;
@@ -1085,8 +1084,7 @@ struct Cavity
                         change = true;
                         m_s_ownership_change_mask_f.set(f, true);
                         auto lp = m_patch_info.lp_f.find(f);
-                        m_s_patches_to_lock_mask.set(lp.patch_stash_id() + 1,
-                                                     true);
+                        m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
                         break;
                     }
                 }
@@ -1097,8 +1095,8 @@ struct Cavity
                         if (!m_s_owned_mask_e(e)) {
                             m_s_ownership_change_mask_e.set(e, true);
                             auto lp = m_patch_info.lp_e.find(e);
-                            m_s_patches_to_lock_mask.set(
-                                lp.patch_stash_id() + 1, true);
+                            m_s_patches_to_lock_mask.set(lp.patch_stash_id(),
+                                                         true);
                         }
                     }
                 }
@@ -1316,8 +1314,7 @@ struct Cavity
                 block.sync();
                 if (!lp.is_sentinel()) {
                     if (change_ownership) {
-                        m_s_patches_to_lock_mask.set(lp.patch_stash_id() + 1,
-                                                     true);
+                        m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
                     }
                     m_patch_info.lp_e.insert(lp);
                 }
@@ -1376,8 +1373,7 @@ struct Cavity
                 block.sync();
                 if (!lp.is_sentinel()) {
                     if (change_ownership) {
-                        m_s_patches_to_lock_mask.set(lp.patch_stash_id() + 1,
-                                                     true);
+                        m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
                     }
                     m_patch_info.lp_e.insert(lp);
                 }
@@ -1409,8 +1405,7 @@ struct Cavity
                 block.sync();
                 if (!lp.is_sentinel()) {
                     if (change_ownership) {
-                        m_s_patches_to_lock_mask.set(lp.patch_stash_id() + 1,
-                                                     true);
+                        m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
                     }
                     m_patch_info.lp_f.insert(lp);
                 }

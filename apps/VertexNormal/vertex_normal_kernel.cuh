@@ -36,6 +36,7 @@ __global__ static void compute_vertex_normal(const rxmesh::Context      context,
     auto block = cooperative_groups::this_thread_block();
 
     Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
     query.dispatch<Op::FV>(
-        block, vn_lambda, [](FaceHandle) { return true; }, false);
+        block, shrd_alloc, vn_lambda, [](FaceHandle) { return true; }, false);
 }
