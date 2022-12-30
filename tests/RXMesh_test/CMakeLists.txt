@@ -16,6 +16,7 @@ set( SOURCE_LIST
 	test_validate.h
 	test_lp_pair.h
 	test_dynamic.cuh
+	test_ev_diamond.h
 )
 
 target_sources( RXMesh_test 
