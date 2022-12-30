@@ -88,6 +88,7 @@ void denmat_transpose(rxmesh::DenseMatInfo<T> den_mat)
     cublasDestroy(handle);
 
     den_mat.m_d_val = d_rt_arr;
+    // TODO cont;
 }
 
 /**
@@ -175,8 +176,8 @@ void spmat_linear_solve(rxmesh::SparseMatInfo<T> A_mat,
                                        A_mat.m_d_row_ptr,
                                        A_mat.m_d_col_idx,
                                        A_mat.m_d_val,
-                                       B_mat.col_data(i),
-                                       X_mat.col_data(i));
+                                       B_mat.ld_data(i),
+                                       X_mat.ld_data(i));
     }
 
     cusolverSpDestroy(handle);
@@ -445,7 +446,7 @@ void spmat_denmat_mul_cw(rxmesh::SparseMatInfo<T> A_mat,
                          rxmesh::DenseMatInfo<T>  C_mat)
 {
     for (int i = 0; i < B_mat.m_col_size; ++i) {
-        spmat_arr_mul(A_mat, B_mat.col_data(i), C_mat.col_data(i));
+        spmat_arr_mul(A_mat, B_mat.ld_data(i), C_mat.ld_data(i));
     }
 }
 

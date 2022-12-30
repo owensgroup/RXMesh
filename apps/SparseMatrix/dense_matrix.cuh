@@ -8,8 +8,8 @@
 
 namespace rxmesh {
 
-// Currently this is device & col major only
-// host/device and leading dimension compatiobility will be added
+// Currently this is device only
+// host/device transormation will be added
 template <typename T, typename IndexT = int>
 struct DenseMatInfo
 {
@@ -37,19 +37,19 @@ struct DenseMatInfo
                               cudaMemcpyHostToDevice));
     }
 
-    IndexT& lead_dim() const
+    IndexT lead_dim() const
     {
         if (m_is_row_major) {
-            return m_row_size;
-        } else {
             return m_col_size;
+        } else {
+            return m_row_size;
         }
     }
 
     __device__ T& operator()(const uint32_t row, const uint32_t col)
     {
         if (m_is_row_major) {
-            return m_d_val[row * m_row_size + col];
+            return m_d_val[row * m_col_size + col];
         } else {
             return m_d_val[col * m_row_size + row];
         }
@@ -58,7 +58,7 @@ struct DenseMatInfo
     __device__ T& operator()(const uint32_t row, const uint32_t col) const
     {
         if (m_is_row_major) {
-            return m_d_val[row * m_row_size + col];
+            return m_d_val[row * m_col_size + col];
         } else {
             return m_d_val[col * m_row_size + row];
         }
@@ -69,19 +69,20 @@ struct DenseMatInfo
         return m_d_val;
     }
 
-    T* col_data(const uint32_t col) const
+    T* ld_data(const uint32_t ld_idx) const
     {
-        if (m_is_row_major) {
-            RXMESH_ERROR(
-                "Row major format!"
-                "Can't be accessed by column");
-        }
-        return m_d_val + col * m_row_size;
+        return m_d_val + ld_idx * lead_dim();
     }
 
     IndexT bytes() const
     {
         return m_row_size * m_col_size * sizeof(T);
+    }
+
+    void quick_tanspose_w_ld_trans()
+    {
+        std::swap(m_row_size, m_col_size);
+        m_is_row_major = !(m_is_row_major);
     }
 
     bool   m_is_row_major;
