@@ -25,12 +25,7 @@ void __global__ init_edges(const Context                context,
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::EV>(
-        block,
-        shrd_alloc,
-        calc_rest_len,
-        [](EdgeHandle) { return true; },
-        false);
+    query.dispatch<Op::EV>(block, shrd_alloc, calc_rest_len);
 }
 
 
@@ -92,8 +87,7 @@ void __global__ solve_stretch(const Context                context,
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::EV>(
-        block, shrd_alloc, solve, [](EdgeHandle) { return true; }, false);
+    query.dispatch<Op::EV>(block, shrd_alloc, solve);
 }
 
 

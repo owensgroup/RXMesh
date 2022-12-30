@@ -60,6 +60,5 @@ __global__ static void compute_gaussian_curvature(
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::FV>(
-        block, shrd_alloc, gc_lambda, [](FaceHandle) { return true; }, false);
+    query.dispatch<Op::FV>(block, shrd_alloc, gc_lambda);
 }

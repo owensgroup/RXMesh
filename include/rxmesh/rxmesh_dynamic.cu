@@ -386,12 +386,7 @@ __global__ static void compute_vf(const Context               context,
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VF>(
-        block,
-        shrd_alloc,
-        store_lambda,
-        [](VertexHandle) { return true; },
-        false);
+    query.dispatch<Op::VF>(block, shrd_alloc, store_lambda);
 }
 
 
@@ -409,12 +404,7 @@ __global__ static void compute_max_valence(const Context context,
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(
-        block,
-        shrd_alloc,
-        max_valence,
-        [](VertexHandle) { return true; },
-        false);
+    query.dispatch<Op::VV>(block, shrd_alloc, max_valence);
 }
 
 template <uint32_t blockThreads>
