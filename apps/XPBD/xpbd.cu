@@ -39,7 +39,7 @@ void __global__ solve_stretch(const Context                context,
                               const bool                   XPBD,
                               const float                  stretch_compliance,
                               const float                  stretch_relaxation,
-                              const float                  dt)
+                              const float                  dt2)
 {
     auto solve = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         auto v0 = iter[0];
@@ -58,7 +58,7 @@ void __global__ solve_stretch(const Context                context,
 
             n.normalize();
             if (XPBD) {
-                const float compliance = stretch_compliance / (dt * dt);
+                const float compliance = stretch_compliance / dt2;
 
                 const float d_lambda =
                     -(constraint + compliance * la_s(eh, 0)) /
@@ -90,7 +90,97 @@ void __global__ solve_stretch(const Context                context,
     query.dispatch<Op::EV>(block, shrd_alloc, solve);
 }
 
+template <uint32_t blockThreads>
+void __global__ solve_bending(const Context                context,
+                              VertexAttribute<float>       dp,
+                              EdgeAttribute<float>         la_b,
+                              const VertexAttribute<float> invM,
+                              const VertexAttribute<float> new_x,
+                              const bool                   XPBD,
+                              const float                  bending_compliance,
+                              const float                  bending_relaxation,
+                              const float                  dt2)
+{
+    /*
+     *
+     */
+    auto solve = [&](const EdgeHandle& eh, const VertexIterator& iter) {
+        // iter[0] and iter[2] are the edge two
+        // iter[1] and iter[3] are the two opposite vertices
 
+        auto v1 = iter[0];
+        auto v2 = iter[2];
+
+        auto v3 = iter[1];
+        auto v4 = iter[3];
+
+        if (v3.is_valid() && v4.is_valid()) {
+            const float w1(invM(v1, 0)), w2(invM(v2, 0)), w3(invM(v3, 0)),
+                w4(invM(v4, 0));
+            if (w1 + w2 + w3 + w4 > 0.f) {
+                Vector3f p2(new_x(v2, 0) - new_x(v1, 0),
+                            new_x(v2, 1) - new_x(v1, 1),
+                            new_x(v2, 2) - new_x(v1, 2));
+                Vector3f p3(new_x(v3, 0) - new_x(v1, 0),
+                            new_x(v3, 1) - new_x(v1, 1),
+                            new_x(v3, 2) - new_x(v1, 2));
+                Vector3f p4(new_x(v4, 0) - new_x(v1, 0),
+                            new_x(v4, 1) - new_x(v1, 1),
+                            new_x(v4, 2) - new_x(v1, 2));
+
+                float l23 = cross(p2, p3).norm();
+                float l24 = cross(p2, p4).norm();
+                if (l23 < 1e-8) {
+                    l23 = 1.f;
+                }
+                if (l24 < 1e-8) {
+                    l24 = 1.f;
+                }
+                Vector3f n1 = cross(p2, p3);
+                n1 /= l23;
+                Vector3f n2 = cross(p2, p4);
+                n2 /= l24;
+
+                // clamp(dot(n1, n2), -1., 1.)
+                float d = std::max(1.f, std::min(dot(n1, n2), -1.f));
+
+                Vector3f q3 = (cross(p2, n2) + cross(n1, p2) * d) / l23;
+                Vector3f q4 = (cross(p2, n1) + cross(n2, p2) * d) / l24;
+                Vector3f q2 = -(cross(p3, n2) + cross(n1, p3) * d) / l23 -
+                              (cross(p4, n1) + cross(n2, p4) * d) / l24;
+                Vector3f q1 = -q2 - q3 - q4;
+
+                float sum_wq = w1 * q1.norm2() + w2 * q2.norm2() +
+                               w3 * q3.norm2() + w4 * q4.norm2();
+                float constraint = acos(d) - acos(-1.);
+
+                if (XPBD) {
+                    float compliance = bending_compliance / dt2;
+                    float d_lambda = -(constraint + compliance * la_b(eh, 0)) /
+                                     (sum_wq + compliance) * bending_relaxation;
+
+                    constraint = sqrt(1 - d * d) * d_lambda;
+                    la_b(eh, 0) += d_lambda;
+                } else {
+                    constraint = -sqrt(1 - d * d) * constraint /
+                                 (sum_wq + 1e-7) * bending_relaxation;
+                }
+                for (int i = 0; i < 3; ++i) {
+                    ::atomicAdd(&dp(v1, i), w1 * constraint * q1[i]);
+                    ::atomicAdd(&dp(v2, i), w2 * constraint * q2[i]);
+                    ::atomicAdd(&dp(v3, i), w3 * constraint * q3[i]);
+                    ::atomicAdd(&dp(v4, i), w4 * constraint * q4[i]);
+                }
+            }
+        }
+    };
+
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::EVDiamond>(block, shrd_alloc, solve);
+}
 int main(int argc, char** argv)
 {
     Log::init();
@@ -156,6 +246,7 @@ int main(int argc, char** argv)
 
     LaunchBox<blockThreads> init_edges_lb;
     LaunchBox<blockThreads> solve_stretch_lb;
+    LaunchBox<blockThreads> solve_bending_lb;
 
     rx.prepare_launch_box(
         {Op::EV}, init_edges_lb, (void*)init_edges<blockThreads>);
@@ -163,11 +254,19 @@ int main(int argc, char** argv)
     rx.prepare_launch_box(
         {Op::EV}, solve_stretch_lb, (void*)solve_stretch<blockThreads>);
 
+    rx.prepare_launch_box(
+        {Op::EVDiamond}, solve_bending_lb, (void*)solve_bending<blockThreads>);
+
     init_edges<blockThreads>
         <<<init_edges_lb.blocks,
            init_edges_lb.num_threads,
            init_edges_lb.smem_bytes_dyn>>>(rx.get_context(), *x, *rest_len);
 
+    int frame = 0;
+
+    bool  test = true;
+    float mean(0.f);
+    float mean2(0.f);
 
     // solve
     auto polyscope_callback = [&]() mutable {
@@ -216,9 +315,21 @@ int main(int argc, char** argv)
                                                           XPBD,
                                                           stretch_compliance,
                                                           stretch_relaxation,
-                                                          dt0);
-                // TODO
-                //  solveBending(dt0);
+                                                          dt0 * dt0);
+
+                //  solveBending
+                solve_bending<blockThreads>
+                    <<<solve_bending_lb.blocks,
+                       solve_bending_lb.num_threads,
+                       solve_bending_lb.smem_bytes_dyn>>>(rx.get_context(),
+                                                          *dp,
+                                                          *la_b,
+                                                          *invM,
+                                                          *new_x,
+                                                          XPBD,
+                                                          bending_compliance,
+                                                          bending_relaxation,
+                                                          dt0 * dt0);
 
                 // postSolve
                 rx.for_each_vertex(
@@ -255,10 +366,28 @@ int main(int argc, char** argv)
         x->move(DEVICE, HOST);
         rx.get_polyscope_mesh()->updateVertexPositions(*x);
 #endif
+        frame++;
+        if (test) {
+            if (frame == 99) {
+                rx.for_each_vertex(HOST, [&](VertexHandle vh) {
+                    for (int i = 0; i < 3; ++i) {
+                        mean += (*x)(vh, i);
+                        mean2 += (*x)(vh, i) * (*x)(vh, i);
+                    }
+                });
+                mean /= (3.f * rx.get_num_vertices());
+                mean2 /= (3.f * rx.get_num_vertices());
+            }
+        }
     };
 
 #if USE_POLYSCOPE
     polyscope::state::userCallback = polyscope_callback;
     polyscope::show();
 #endif
+
+    if (test) {
+        RXMESH_INFO("mean= {}, mean2= {}", mean, mean2);
+    }
+    
 }
