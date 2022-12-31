@@ -251,8 +251,10 @@ int main(int argc, char** argv)
                 });
         }
 
+#if USE_POLYSCOPE
         x->move(DEVICE, HOST);
         rx.get_polyscope_mesh()->updateVertexPositions(*x);
+#endif
     };
 
 #if USE_POLYSCOPE

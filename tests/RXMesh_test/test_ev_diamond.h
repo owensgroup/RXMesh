@@ -49,7 +49,7 @@ TEST(RXMeshStatic, EVDiamond)
     auto tri_area = [&](Vector3f& x0, Vector3f& x1, Vector3f& x2) {
         float a((x0 - x1).norm()), b((x1 - x2).norm()), c((x2 - x0).norm());
         float s = (a + b + c) / 2;
-        return std::sqrtf(s * (s - a) * (s - b) * (s - c));
+        return std::sqrt(s * (s - a) * (s - b) * (s - c));
     };
 
     rx.for_each_edge(HOST, [&](const EdgeHandle& eh) {
