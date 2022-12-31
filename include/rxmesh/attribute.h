@@ -203,6 +203,16 @@ class Attribute : public AttributeBase
     }
 
 
+    __host__ __device__ __forceinline__ const PatchInfo& get_patch_info(
+        const uint32_t p) const
+    {
+#ifdef __CUDA_ARCH__
+        return m_d_patches_info[p];
+#else
+        return m_h_patches_info[p];
+#endif
+    }
+
     __host__ __device__ __forceinline__ uint32_t pitch_x() const
     {
 

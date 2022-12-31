@@ -1060,7 +1060,7 @@ struct Cavity
                 } else {
                     m_s_migrate_mask_v.set(vertex, true);
                     m_s_ownership_change_mask_v.set(vertex, true);
-                    auto lp = m_patch_info.lp_v.find(v);
+                    auto lp = m_patch_info.lp_v.find(vertex);
                     m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
                 }
             }

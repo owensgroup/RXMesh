@@ -30,18 +30,24 @@ __launch_bounds__(blockSize) __global__
                       T*                          d_block_output,
                       uint32_t                    attribute_id)
 {
+    using LocalT = typename HandleT::LocalT;
+
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
         const uint16_t element_per_patch = X.size(p_id);
         T              thread_val        = 0;
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
-            if (attribute_id != INVALID32) {
-                const T val = X(p_id, i, attribute_id);
-                thread_val += val * val;
-            } else {
-                for (uint32_t j = 0; j < num_attributes; ++j) {
-                    const T val = X(p_id, i, j);
+            if (X.get_patch_info(p_id).is_owned(LocalT(i)) &&
+                !X.get_patch_info(p_id).is_deleted(LocalT(i))) {
+
+                if (attribute_id != INVALID32) {
+                    const T val = X(p_id, i, attribute_id);
                     thread_val += val * val;
+                } else {
+                    for (uint32_t j = 0; j < num_attributes; ++j) {
+                        const T val = X(p_id, i, j);
+                        thread_val += val * val;
+                    }
                 }
             }
         }
@@ -60,6 +66,8 @@ __launch_bounds__(blockSize) __global__
                     T*                          d_block_output,
                     uint32_t                    attribute_id)
 {
+    using LocalT = typename HandleT::LocalT;
+
     assert(X.get_num_attributes() == Y.get_num_attributes());
 
     uint32_t p_id = blockIdx.x;
@@ -67,12 +75,17 @@ __launch_bounds__(blockSize) __global__
         const uint16_t element_per_patch = X.size(p_id);
         T              thread_val        = 0;
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
-            if (attribute_id != INVALID32) {
-                thread_val +=
-                    X(p_id, i, attribute_id) * Y(p_id, i, attribute_id);
-            } else {
-                for (uint32_t j = 0; j < num_attributes; ++j) {
-                    thread_val += X(p_id, i, j) * Y(p_id, i, j);
+
+            if (X.get_patch_info(p_id).is_owned(LocalT(i)) &&
+                !X.get_patch_info(p_id).is_deleted(LocalT(i))) {
+
+                if (attribute_id != INVALID32) {
+                    thread_val +=
+                        X(p_id, i, attribute_id) * Y(p_id, i, attribute_id);
+                } else {
+                    for (uint32_t j = 0; j < num_attributes; ++j) {
+                        thread_val += X(p_id, i, j) * Y(p_id, i, j);
+                    }
                 }
             }
         }
@@ -92,18 +105,23 @@ __launch_bounds__(blockSize) __global__
                         T                           init,
                         uint32_t                    attribute_id)
 {
+    using LocalT = typename HandleT::LocalT;
+
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
         const uint16_t element_per_patch = X.size(p_id);
         T              thread_val        = init;
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
-            if (attribute_id != INVALID32) {
-                const T val = X(p_id, i, attribute_id);
-                thread_val  = reduction_op(thread_val, val);
-            } else {
-                for (uint32_t j = 0; j < num_attributes; ++j) {
-                    const T val = X(p_id, i, j);
+            if (X.get_patch_info(p_id).is_owned(LocalT(i)) &&
+                !X.get_patch_info(p_id).is_deleted(LocalT(i))) {
+                if (attribute_id != INVALID32) {
+                    const T val = X(p_id, i, attribute_id);
                     thread_val  = reduction_op(thread_val, val);
+                } else {
+                    for (uint32_t j = 0; j < num_attributes; ++j) {
+                        const T val = X(p_id, i, j);
+                        thread_val  = reduction_op(thread_val, val);
+                    }
                 }
             }
         }
