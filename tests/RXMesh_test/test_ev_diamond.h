@@ -1,4 +1,5 @@
 #include "gtest/gtest.h"
+#include <cmath>
 
 #include "rxmesh/rxmesh_static.h"
 

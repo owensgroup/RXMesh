@@ -46,6 +46,9 @@ struct Iterator
         assert(m_patch_output);
         assert(i + m_begin < m_end);
         uint16_t lid = (m_patch_output[m_begin + i].id) >> m_shift;
+        if (lid == INVALID16) {
+            return HandleT();
+        }
         if (detail::is_owned(lid, m_output_owned_bitmask)) {
             return {m_patch_id, lid};
         } else {
