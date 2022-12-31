@@ -1,16 +1,17 @@
 #include <cuda_profiler_api.h>
 #include "gtest/gtest.h"
+#include "matrix_operation.cuh"
 #include "rxmesh/attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh/util/timer.h"
-#include "sparse_matrix.cuh"
+#include "sparse_matrix_mcf.cuh"
 
-template <uint32_t blockThreads>
+template <uint32_t blockThreads, typename IndexT = int>
 __global__ static void sparse_mat_test(const rxmesh::Context context,
-                                       uint32_t*             patch_ptr_v,
-                                       uint32_t*             vet_degree)
+                                       IndexT*               patch_ptr_v,
+                                       IndexT*               vet_degree)
 {
     using namespace rxmesh;
 
@@ -90,15 +91,58 @@ __global__ void spmat_multi_hardwired_kernel(
     int   tid = threadIdx.x + blockIdx.x * blockDim.x;
     float sum = 0;
     if (tid < N) {
-        for (int i = 0;
-             i < sparse_mat.m_d_row_ptr[tid + 1] - sparse_mat.m_d_row_ptr[tid];
-             i++) {
-
-            sum += vec[sparse_mat.m_d_col_idx[tid + i]] *
-                   sparse_mat.m_d_val[sparse_mat.m_d_row_ptr[tid] + i];
+        uint32_t start = sparse_mat.m_d_row_ptr[tid];
+        uint32_t end   = sparse_mat.m_d_row_ptr[tid + 1];
+        for (int i = 0; i < end - start; i++) {
+            sum += vec[sparse_mat.m_d_col_idx[start + i]] *
+                   sparse_mat.m_d_val[start + i];
         }
         out[tid] = sum;
     }
+}
+
+template <typename T, uint32_t blockThreads>
+__global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
+                                          rxmesh::VertexAttribute<T> coords,
+                                          rxmesh::SparseMatInfo<T>   A_mat,
+                                          rxmesh::DenseMatInfo<T>    X_mat,
+                                          rxmesh::DenseMatInfo<T>    B_mat,
+                                          const T                    time_step)
+{
+    using namespace rxmesh;
+    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
+        T sum_e_weight(0);
+
+        T v_weight = iter.size();
+
+        // reference value calculation
+        auto     r_ids      = v_id.unpack();
+        uint32_t r_patch_id = r_ids.first;
+        uint16_t r_local_id = r_ids.second;
+
+        uint32_t row_index = A_mat.m_d_patch_ptr_v[r_patch_id] + r_local_id;
+
+        B_mat(row_index, 0) = iter.size() * 7;
+        B_mat(row_index, 1) = iter.size() * 2;
+        B_mat(row_index, 2) = iter.size() * 10;
+
+        X_mat(row_index, 0) = coords(v_id, 0) * v_weight;
+        X_mat(row_index, 1) = coords(v_id, 1) * v_weight;
+        X_mat(row_index, 2) = coords(v_id, 2) * v_weight;
+
+        Vector<3, float> vi_coord(
+            coords(v_id, 0), coords(v_id, 1), coords(v_id, 2));
+        for (uint32_t v = 0; v < iter.size(); ++v) {
+            T e_weight           = 1;
+            A_mat(v_id, iter[v]) = -time_step * e_weight;
+
+            sum_e_weight += e_weight;
+        }
+
+        A_mat(v_id, v_id) = v_weight + time_step * sum_e_weight;
+    };
+
+    query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
 }
 
 TEST(Apps, PatchPointer)
@@ -172,7 +216,7 @@ TEST(Apps, SparseMatrix)
     int* d_arr_ones;
     int* d_result;
 
-    std::vector<uint32_t> init_tmp_arr(num_vertices, 1);
+    std::vector<int> init_tmp_arr(num_vertices, 1);
     CUDA_ERROR(cudaMalloc((void**)&d_arr_ones, (num_vertices) * sizeof(int)));
     CUDA_ERROR(cudaMemcpy(d_arr_ones,
                           init_tmp_arr.data(),
@@ -187,14 +231,13 @@ TEST(Apps, SparseMatrix)
     spmat_multi_hardwired_kernel<<<blocks, threads>>>(
         d_arr_ones, spmat, d_result, num_vertices);
 
-    std::vector<uint32_t> h_result(num_vertices);
+    std::vector<int> h_result(num_vertices);
     CUDA_ERROR(cudaMemcpy(
         h_result.data(), d_result, num_vertices, cudaMemcpyDeviceToHost));
 
     // get reference result
-    uint32_t* vet_degree;
-    CUDA_ERROR(
-        cudaMalloc((void**)&vet_degree, (num_vertices) * sizeof(uint32_t)));
+    int* vet_degree;
+    CUDA_ERROR(cudaMalloc((void**)&vet_degree, (num_vertices) * sizeof(int)));
 
     LaunchBox<threads> launch_box;
     rxmesh.prepare_launch_box(
@@ -205,7 +248,7 @@ TEST(Apps, SparseMatrix)
                                launch_box.smem_bytes_dyn>>>(
         rxmesh.get_context(), spmat.m_d_patch_ptr_v, vet_degree);
 
-    std::vector<uint32_t> h_vet_degree(num_vertices);
+    std::vector<int> h_vet_degree(num_vertices);
     CUDA_ERROR(cudaMemcpy(
         h_vet_degree.data(), vet_degree, num_vertices, cudaMemcpyDeviceToHost));
 
@@ -248,15 +291,15 @@ TEST(Apps, SparseMatrixQuery)
            launch_box.num_threads,
            launch_box.smem_bytes_dyn>>>(rxmesh.get_context(), spmat);
 
-    std::vector<uint32_t> h_result(spmat.m_nnz_entry_size);
+    std::vector<uint32_t> h_result(spmat.m_nnz);
     CUDA_ERROR(cudaMemcpy(h_result.data(),
                           spmat.m_d_val,
-                          spmat.m_nnz_entry_size * sizeof(int),
+                          spmat.m_nnz * sizeof(int),
                           cudaMemcpyDeviceToHost));
 
-    std::vector<uint32_t> h_ref(spmat.m_nnz_entry_size, 2);
+    std::vector<uint32_t> h_ref(spmat.m_nnz, 2);
 
-    for (uint32_t i = 0; i < spmat.m_nnz_entry_size; ++i) {
+    for (int i = 0; i < spmat.m_nnz; ++i) {
         EXPECT_EQ(h_result[i], h_ref[i]);
     }
 
@@ -271,7 +314,7 @@ TEST(Apps, SparseMatrixEdgeLen)
     cuda_query(0);
 
     // generate rxmesh obj
-    std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
+    std::string  obj_path = STRINGIFY(INPUT_DIR) "cube.obj";
     RXMeshStatic rxmesh(obj_path);
 
     uint32_t num_vertices = rxmesh.get_num_vertices();
@@ -279,7 +322,6 @@ TEST(Apps, SparseMatrixEdgeLen)
     const uint32_t threads = 256;
     const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
 
-    std::vector<std::vector<float>> Verts;
     auto coords = rxmesh.get_input_vertex_coordinates();
 
     float* d_arr_ones;
@@ -310,8 +352,9 @@ TEST(Apps, SparseMatrixEdgeLen)
 
     // Spmat matrix multiply
 
-    spmat_multi_hardwired_kernel<float>
-        <<<blocks, threads>>>(d_arr_ones, spmat, d_result, num_vertices);
+    // spmat_multi_hardwired_kernel<float>
+    //     <<<blocks, threads>>>(d_arr_ones, spmat, d_result, num_vertices);
+    spmat_arr_mul(spmat, d_arr_ones, d_result);
 
     // copy the value back to host
     std::vector<float> h_arr_ref(num_vertices);
@@ -335,6 +378,58 @@ TEST(Apps, SparseMatrixEdgeLen)
     CUDA_ERROR(cudaFree(d_arr_ones));
     CUDA_ERROR(cudaFree(d_result));
     spmat.free();
+}
+
+TEST(Apps, SparseMatrixSimpleSolve)
+{
+    using namespace rxmesh;
+
+    // Select device
+    cuda_query(0);
+
+    // generate rxmesh obj
+    std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
+    RXMeshStatic rxmesh(obj_path);
+
+    uint32_t num_vertices = rxmesh.get_num_vertices();
+
+    const uint32_t threads = 256;
+    const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
+
+    auto                 coords = rxmesh.get_input_vertex_coordinates();
+    SparseMatInfo<float> A_mat(rxmesh);
+    DenseMatInfo<float>  X_mat(num_vertices, 3);
+    DenseMatInfo<float>  B_mat(num_vertices, 3);
+    DenseMatInfo<float>  ret_mat(num_vertices, 3);
+
+    float time_step = 1.f;
+
+    LaunchBox<threads> launch_box;
+    rxmesh.prepare_launch_box(
+        {Op::VV}, launch_box, (void*)simple_A_X_B_setup<float, threads>);
+
+    simple_A_X_B_setup<float, threads><<<launch_box.blocks,
+                                         launch_box.num_threads,
+                                         launch_box.smem_bytes_dyn>>>(
+        rxmesh.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
+
+    spmat_linear_solve(A_mat, B_mat, X_mat, Solver::CHOL, Reorder::NONE);
+
+    spmat_denmat_mul(A_mat, X_mat, ret_mat);
+    // spmat_denmat_mul_cw(A_mat, X_mat, ret_mat);
+
+    std::vector<float> h_ret_mat(num_vertices * 3);
+    cudaMemcpy(h_ret_mat.data(),
+               ret_mat.data(),
+               num_vertices * 3,
+               cudaMemcpyDeviceToHost);
+    std::vector<float> h_B_mat(num_vertices * 3);
+    cudaMemcpy(
+        h_B_mat.data(), B_mat.data(), num_vertices * 3, cudaMemcpyDeviceToHost);
+
+    for (uint32_t i = 0; i < num_vertices * 3; ++i) {
+        EXPECT_NEAR(h_ret_mat[i], h_B_mat[i], 1e-3);
+    }
 }
 
 int main(int argc, char** argv)

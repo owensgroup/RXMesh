@@ -1,3 +1,5 @@
+#pragma once
+
 #include <iostream>
 #include <vector>
 #include "rxmesh/attribute.h"
@@ -8,10 +10,11 @@
 namespace rxmesh {
 
 namespace detail {
+template <typename IndexT = int>
 void patch_ptr_init(RXMeshStatic& rx,
-                    uint32_t*&    d_vertex,
-                    uint32_t*&    d_edge,
-                    uint32_t*&    d_face)
+                    IndexT*&    d_vertex,
+                    IndexT*&    d_edge,
+                    IndexT*&    d_face)
 {
 
     uint32_t num_patches = rx.get_num_patches();
@@ -87,10 +90,10 @@ void patch_ptr_init(RXMeshStatic& rx,
 }
 
 // this is the function for the CSR calculation
-template <uint32_t blockThreads>
+template <uint32_t blockThreads, typename IndexT = int>
 __global__ static void sparse_mat_prescan(const rxmesh::Context context,
-                                          uint32_t*             patch_ptr_v,
-                                          uint32_t*             row_ptr)
+                                          IndexT*             patch_ptr_v,
+                                          IndexT*             row_ptr)
 {
     using namespace rxmesh;
 
@@ -104,11 +107,11 @@ __global__ static void sparse_mat_prescan(const rxmesh::Context context,
     query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
 }
 
-template <uint32_t blockThreads>
+template <uint32_t blockThreads, typename IndexT = int>
 __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
-                                           uint32_t*             patch_ptr_v,
-                                           uint32_t*             row_ptr,
-                                           uint32_t*             col_idx)
+                                           IndexT*             patch_ptr_v,
+                                           IndexT*             row_ptr,
+                                           IndexT*             col_idx)
 {
     using namespace rxmesh;
 
@@ -133,26 +136,31 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
 // Follow the idea of "All calculations and storage is done on the GPU." This is
 // for initial mem allocation. This is currently VV implementation, will bge
 // extended
-template <typename T>
+template <typename T, typename IndexT = int>
 void sparse_mat_init(RXMeshStatic& rx,
-                     uint32_t*&    patch_ptr_v,
-                     uint32_t*&    row_ptr,
-                     uint32_t*&    col_idx,
-                     uint32_t&     entry_size,
-                     T*&           val)
+                     IndexT*&    patch_ptr_v,
+                     IndexT*&    row_ptr,
+                     IndexT*&    col_idx,
+                     T*&           val,
+                     IndexT&     row_size,
+                     IndexT&     col_size,
+                     IndexT&     entry_size)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
-    uint32_t num_patches  = rx.get_num_patches();
-    uint32_t num_vertices = rx.get_num_vertices();
-    uint32_t num_edges    = rx.get_num_edges();
+    IndexT num_patches  = rx.get_num_patches();
+    IndexT num_vertices = rx.get_num_vertices();
+    IndexT num_edges    = rx.get_num_edges();
+
+    row_size = num_vertices;
+    col_size = num_vertices;
 
     // row pointer allocation and init with prefix sum for CRS
     CUDA_ERROR(
-        cudaMalloc((void**)&row_ptr, (num_vertices + 1) * sizeof(uint32_t)));
+        cudaMalloc((void**)&row_ptr, (num_vertices + 1) * sizeof(IndexT)));
 
-    CUDA_ERROR(cudaMemset(row_ptr, 0, (num_vertices + 1) * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(row_ptr, 0, (num_vertices + 1) * sizeof(IndexT)));
 
     LaunchBox<blockThreads> launch_box;
     rx.prepare_launch_box(
@@ -184,14 +192,14 @@ void sparse_mat_init(RXMeshStatic& rx,
     // get entry size
     CUDA_ERROR(cudaMemcpy(&entry_size,
                           (row_ptr + num_vertices),
-                          sizeof(uint32_t),
+                          sizeof(IndexT),
                           cudaMemcpyDeviceToHost));
 
     // printf("%" PRIu32 " - %" PRIu32 " \n", entry_size, 2 * num_edges +
     // num_vertices);
 
     // column index allocation and init
-    CUDA_ERROR(cudaMalloc((void**)&col_idx, entry_size * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMalloc((void**)&col_idx, entry_size * sizeof(IndexT)));
     rx.prepare_launch_box(
         {Op::VV}, launch_box, (void*)sparse_mat_col_fill<blockThreads>);
 
@@ -201,14 +209,14 @@ void sparse_mat_init(RXMeshStatic& rx,
         rx.get_context(), patch_ptr_v, row_ptr, col_idx);
 
     // val pointer allocation, actual value init should be in another function
-    CUDA_ERROR(cudaMalloc((void**)&val, entry_size * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMalloc((void**)&val, entry_size * sizeof(IndexT)));
 }
 }  // namespace detail
 
 
 // TODO: add compatibility for EE, FF, VE......
 // TODO: purge operation?
-template <typename T>
+template <typename T, typename IndexT = int>
 struct SparseMatInfo
 {
     SparseMatInfo(RXMeshStatic& rx)
@@ -218,7 +226,9 @@ struct SparseMatInfo
           m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
           m_d_val(nullptr),
-          m_nnz_entry_size(0)
+          m_row_size(0),
+          m_col_size(0),
+          m_nnz(0)
     {
         detail::patch_ptr_init(rx,
                                m_d_patch_ptr_v,
@@ -228,21 +238,23 @@ struct SparseMatInfo
                                 m_d_patch_ptr_v,
                                 m_d_row_ptr,
                                 m_d_col_idx,
-                                m_nnz_entry_size,
-                                m_d_val);
+                                m_d_val,
+                                m_row_size,
+                                m_col_size,
+                                m_nnz);
     }
 
     void set_ones()
     {
-        std::vector<T> init_tmp_arr(m_nnz_entry_size, 1);
+        std::vector<T> init_tmp_arr(m_nnz, 1);
         CUDA_ERROR(cudaMemcpy(m_d_val,
                               init_tmp_arr.data(),
-                              m_nnz_entry_size * sizeof(T),
+                              m_nnz* sizeof(T),
                               cudaMemcpyHostToDevice));
     }
 
-    __host__ __device__ uint32_t get_val_idx(const VertexHandle row_v,
-                                             const VertexHandle col_v)
+    __device__ IndexT get_val_idx(const VertexHandle& row_v,
+                                             const VertexHandle& col_v)
     {
         auto     r_ids      = row_v.unpack();
         uint32_t r_patch_id = r_ids.first;
@@ -255,7 +267,7 @@ struct SparseMatInfo
         uint32_t col_index = m_d_patch_ptr_v[c_patch_id] + c_local_id;
         uint32_t row_index = m_d_patch_ptr_v[r_patch_id] + r_local_id;
 
-        for (uint32_t i = m_d_row_ptr[row_index];
+        for (IndexT i = (IndexT) m_d_row_ptr[row_index];
              i < m_d_row_ptr[row_index + 1];
              ++i) {
             if (m_d_col_idx[i] == col_index) {
@@ -265,14 +277,14 @@ struct SparseMatInfo
         assert(1 != 1);
     }
 
-    __host__ __device__ T& operator()(const VertexHandle row_v,
-                                      const VertexHandle col_v)
+    __device__ T& operator()(const VertexHandle& row_v,
+                                      const VertexHandle& col_v)
     {
         return m_d_val[get_val_idx(row_v, col_v)];
     }
 
-    __host__ __device__ T& operator()(const VertexHandle row_v,
-                                      const VertexHandle col_v) const
+    __device__ T& operator()(const VertexHandle& row_v,
+                                      const VertexHandle& col_v) const
     {
         return m_d_val[get_val_idx(row_v, col_v)];
     }
@@ -287,11 +299,13 @@ struct SparseMatInfo
         CUDA_ERROR(cudaFree(m_d_val));
     }
 
-    uint32_t *m_d_patch_ptr_v, *m_d_patch_ptr_e, *m_d_patch_ptr_f;
-    uint32_t* m_d_row_ptr;
-    uint32_t* m_d_col_idx;
-    T*        m_d_val;
-    uint32_t  m_nnz_entry_size;
+    IndexT *m_d_patch_ptr_v, *m_d_patch_ptr_e, *m_d_patch_ptr_f;
+    IndexT* m_d_row_ptr;
+    IndexT* m_d_col_idx;
+    T*      m_d_val;
+    IndexT  m_row_size;
+    IndexT  m_col_size;
+    IndexT  m_nnz;
 };
 
 }  // namespace rxmesh
