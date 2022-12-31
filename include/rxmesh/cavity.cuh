@@ -1060,6 +1060,8 @@ struct Cavity
                 } else {
                     m_s_migrate_mask_v.set(vertex, true);
                     m_s_ownership_change_mask_v.set(vertex, true);
+                    auto lp = m_patch_info.lp_v.find(v);
+                    m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
                 }
             }
         });
@@ -1274,6 +1276,9 @@ struct Cavity
                 // insert in it
                 block.sync();
                 if (!lp.is_sentinel()) {
+                    if (change_ownership) {
+                        m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
+                    }
                     m_patch_info.lp_v.insert(lp);
                 }
             }
@@ -1442,8 +1447,10 @@ struct Cavity
                     // since it is owned by some other patch
                     m_s_owned_mask_v.reset(vp, true);
 
+                    // insert the patch in the patch stash and return its
+                    // id in the stash
                     const uint8_t owner_stash_id =
-                        m_patch_info.patch_stash.find_patch_index(o);
+                        m_patch_info.patch_stash.insert_patch(o);
                     assert(owner_stash_id != INVALID8);
                     ret = LPPair(vp, vq, owner_stash_id);
                 }
@@ -1514,7 +1521,7 @@ struct Cavity
                     m_s_owned_mask_e.reset(ep, true);
 
                     const uint8_t owner_stash_id =
-                        m_patch_info.patch_stash.find_patch_index(o);
+                        m_patch_info.patch_stash.insert_patch(o);
                     assert(owner_stash_id != INVALID8);
                     ret = LPPair(ep, eq, owner_stash_id);
                 }
@@ -1592,7 +1599,7 @@ struct Cavity
                     m_s_owned_mask_f.reset(fp, true);
 
                     const uint8_t owner_stash_id =
-                        m_patch_info.patch_stash.find_patch_index(o);
+                        m_patch_info.patch_stash.insert_patch(o);
                     assert(owner_stash_id != INVALID8);
                     ret = LPPair(fp, fq, owner_stash_id);
                 }

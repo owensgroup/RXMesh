@@ -54,19 +54,19 @@ struct PatchStash
         return get_patch(p.patch_stash_id());
     }
 
-    __host__ __device__ __inline__ void insert_patch(uint32_t patch)
+    __host__ __device__ __inline__ uint8_t insert_patch(uint32_t patch)
     {
         for (uint8_t i = 0; i < stash_size; ++i) {
             if (m_stash[i] == patch) {
                 // prevent redundancy
-                return;
+                return i;
             }
             if (m_stash[i] == INVALID32) {
                 m_stash[i] = patch;
-                return;
+                return i;
             }
         }
-        assert(1 != 1);
+        return INVALID8;
     }
 
     __host__ __device__ __inline__ uint8_t find_patch_index(
