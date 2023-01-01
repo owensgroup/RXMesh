@@ -5,8 +5,7 @@ project(RXMesh
         LANGUAGES C CXX CUDA)
 
 
-set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")    
-
+set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
 
 if(${USE_POLYSCOPE})
 	message(STATUS "Polyscope is enabled")
@@ -147,9 +146,13 @@ endif()
 
 #OpenMP
 find_package(OpenMP)
-if(OpenMP_CXX_FOUND)
+if (OpenMP_CXX_FOUND)
     target_link_libraries(RXMesh_header_lib INTERFACE OpenMP::OpenMP_CXX)
 endif()
+
+find_package(CUDAToolkit REQUIRED)
+target_link_libraries(RXMesh_header_lib INTERFACE CUDA::cusparse)
+target_link_libraries(RXMesh_header_lib INTERFACE CUDA::cusolver)
 
 add_subdirectory("include")
 

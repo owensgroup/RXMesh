@@ -77,7 +77,6 @@ void gaussian_curvature_rxmesh(const std::vector<T>& gaussian_curvature_gold)
     polyscope_mesh->addVertexScalarQuantity("vGaussianCurv", v_gc);
     polyscope::show();
 #endif
-
 }
 
 TEST(Apps, GaussianCurvature)
