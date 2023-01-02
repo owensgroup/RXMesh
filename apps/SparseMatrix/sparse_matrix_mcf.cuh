@@ -18,8 +18,8 @@ template <typename T, uint32_t blockThreads>
 __global__ static void mcf_A_B_setup(
     const rxmesh::Context      context,
     rxmesh::VertexAttribute<T> coords,  // for non-uniform
-    rxmesh::SparseMatInfo<T>   A_mat,
-    rxmesh::DenseMatInfo<T>    B_mat,
+    rxmesh::SparseMatrix<T>    A_mat,
+    rxmesh::DenseMatrix<T>     B_mat,
     const bool                 use_uniform_laplace,  // for non-uniform
     const T                    time_step)
 {

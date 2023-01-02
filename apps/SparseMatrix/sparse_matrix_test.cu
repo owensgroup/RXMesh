@@ -14,7 +14,7 @@ __global__ static void sparse_mat_test(const rxmesh::Context context,
 {
     using namespace rxmesh;
 
-    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
+    auto compute_valence = [&](VertexHandle& v_id, const VertexIterator& iter) {
         auto     ids      = v_id.unpack();
         uint32_t patch_id = ids.first;
         uint16_t local_id = ids.second;
@@ -25,16 +25,16 @@ __global__ static void sparse_mat_test(const rxmesh::Context context,
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
+    query.dispatch<Op::VV>(block, shrd_alloc, compute_valence);
 }
 
 template <uint32_t blockThreads>
 __global__ static void sparse_mat_query_test(
-    const rxmesh::Context      context,
-    rxmesh::SparseMatInfo<int> sparse_mat)
+    const rxmesh::Context     context,
+    rxmesh::SparseMatrix<int> sparse_mat)
 {
     using namespace rxmesh;
-    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
+    auto fillin = [&](VertexHandle& v_id, const VertexIterator& iter) {
         sparse_mat(v_id, v_id) = 2;
         for (uint32_t v = 0; v < iter.size(); ++v) {
             sparse_mat(v_id, iter[v]) = 2;
@@ -45,18 +45,19 @@ __global__ static void sparse_mat_query_test(
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
+    query.dispatch<Op::VV>(block, shrd_alloc, fillin);
 }
 
 template <typename T, uint32_t blockThreads>
 __global__ static void sparse_mat_edge_len_test(
     const rxmesh::Context      context,
     rxmesh::VertexAttribute<T> coords,
-    rxmesh::SparseMatInfo<T>   sparse_mat,
+    rxmesh::SparseMatrix<T>    sparse_mat,
     T*                         arr_ref)
 {
     using namespace rxmesh;
-    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
+    auto compute_edge_len = [&](VertexHandle&         v_id,
+                                const VertexIterator& iter) {
         // reference value calculation
         auto     r_ids      = v_id.unpack();
         uint32_t r_patch_id = r_ids.first;
@@ -82,15 +83,14 @@ __global__ static void sparse_mat_edge_len_test(
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
+    query.dispatch<Op::VV>(block, shrd_alloc, compute_edge_len);
 }
 
 template <typename T>
-__global__ void spmat_multi_hardwired_kernel(
-    T*                       vec,
-    rxmesh::SparseMatInfo<T> sparse_mat,
-    T*                       out,
-    const int                N)
+__global__ void spmat_multi_hardwired_kernel(T*                      vec,
+                                             rxmesh::SparseMatrix<T> sparse_mat,
+                                             T*                      out,
+                                             const int               N)
 {
     int   tid = threadIdx.x + blockIdx.x * blockDim.x;
     float sum = 0;
@@ -108,13 +108,13 @@ __global__ void spmat_multi_hardwired_kernel(
 template <typename T, uint32_t blockThreads>
 __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
                                           rxmesh::VertexAttribute<T> coords,
-                                          rxmesh::SparseMatInfo<T>   A_mat,
-                                          rxmesh::DenseMatInfo<T>    X_mat,
-                                          rxmesh::DenseMatInfo<T>    B_mat,
+                                          rxmesh::SparseMatrix<T>    A_mat,
+                                          rxmesh::DenseMatrix<T>     X_mat,
+                                          rxmesh::DenseMatrix<T>     B_mat,
                                           const T                    time_step)
 {
     using namespace rxmesh;
-    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
+    auto mat_setup = [&](VertexHandle& v_id, const VertexIterator& iter) {
         T sum_e_weight(0);
 
         T v_weight = iter.size();
@@ -150,7 +150,7 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
+    query.dispatch<Op::VV>(block, shrd_alloc, mat_setup);
 }
 
 TEST(Apps, SparseMatrix)
@@ -181,7 +181,7 @@ TEST(Apps, SparseMatrix)
 
     CUDA_ERROR(cudaMalloc((void**)&d_result, (num_vertices) * sizeof(int)));
 
-    SparseMatInfo<int> spmat(rxmesh);
+    SparseMatrix<int> spmat(rxmesh);
     spmat.set_ones();
 
     spmat_multi_hardwired_kernel<<<blocks, threads>>>(
@@ -235,7 +235,7 @@ TEST(Apps, SparseMatrixQuery)
     const uint32_t threads = 256;
     const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
 
-    SparseMatInfo<int> spmat(rxmesh);
+    SparseMatrix<int> spmat(rxmesh);
     spmat.set_ones();
 
     LaunchBox<threads> launch_box;
@@ -289,7 +289,7 @@ TEST(Apps, SparseMatrixEdgeLen)
                           num_vertices * sizeof(float),
                           cudaMemcpyHostToDevice));
 
-    SparseMatInfo<float> spmat(rxmesh);
+    SparseMatrix<float> spmat(rxmesh);
 
     float* d_arr_ref;
     float* d_result;
@@ -352,11 +352,11 @@ TEST(Apps, SparseMatrixSimpleSolve)
     const uint32_t threads = 256;
     const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
 
-    auto                 coords = rxmesh.get_input_vertex_coordinates();
-    SparseMatInfo<float> A_mat(rxmesh);
-    DenseMatInfo<float>  X_mat(num_vertices, 3);
-    DenseMatInfo<float>  B_mat(num_vertices, 3);
-    DenseMatInfo<float>  ret_mat(num_vertices, 3);
+    auto                coords = rxmesh.get_input_vertex_coordinates();
+    SparseMatrix<float> A_mat(rxmesh);
+    DenseMatrix<float>  X_mat(num_vertices, 3);
+    DenseMatrix<float>  B_mat(num_vertices, 3);
+    DenseMatrix<float>  ret_mat(num_vertices, 3);
 
     float time_step = 1.f;
 

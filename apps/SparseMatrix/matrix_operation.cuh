@@ -62,7 +62,7 @@ static int reorder_to_int(const Reorder& reorder)
  * @brief for transpose the dense matrix using cublas
  */
 template <typename T>
-void denmat_transpose(rxmesh::DenseMatInfo<T> den_mat)
+void denmat_transpose(rxmesh::DenseMatrix<T> den_mat)
 {
     T* d_rt_arr;
     cudaMalloc(&d_rt_arr, den_mat.bytes());
@@ -95,11 +95,11 @@ void denmat_transpose(rxmesh::DenseMatInfo<T> den_mat)
  * @brief solve the Ax=b for x where x and b are all array
  */
 template <typename T>
-void spmat_linear_solve(rxmesh::SparseMatInfo<T> A_mat,
-                        T*                       B_arr,
-                        T*                       X_arr,
-                        rxmesh::Solver           solver,
-                        rxmesh::Reorder          reorder)
+void spmat_linear_solve(rxmesh::SparseMatrix<T> A_mat,
+                        T*                      B_arr,
+                        T*                      X_arr,
+                        rxmesh::Solver          solver,
+                        rxmesh::Reorder         reorder)
 {
     cusolverSpHandle_t handle         = NULL;
     cusparseHandle_t   cusparseHandle = NULL;
@@ -142,11 +142,11 @@ void spmat_linear_solve(rxmesh::SparseMatInfo<T> A_mat,
  * solve it in a column wise manner
  */
 template <typename T>
-void spmat_linear_solve(rxmesh::SparseMatInfo<T> A_mat,
-                        rxmesh::DenseMatInfo<T>  B_mat,
-                        rxmesh::DenseMatInfo<T>  X_mat,
-                        rxmesh::Solver           solver,
-                        rxmesh::Reorder          reorder)
+void spmat_linear_solve(rxmesh::SparseMatrix<T> A_mat,
+                        rxmesh::DenseMatrix<T>  B_mat,
+                        rxmesh::DenseMatrix<T>  X_mat,
+                        rxmesh::Solver          solver,
+                        rxmesh::Reorder         reorder)
 {
     cusolverSpHandle_t handle         = NULL;
     cusparseHandle_t   cusparseHandle = NULL;
@@ -296,9 +296,9 @@ void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
  * multiplication.
  */
 template <typename T>
-void spmat_denmat_mul(rxmesh::SparseMatInfo<T> A_mat,
-                      rxmesh::DenseMatInfo<T>  B_mat,
-                      rxmesh::DenseMatInfo<T>  C_mat)
+void spmat_denmat_mul(rxmesh::SparseMatrix<T> A_mat,
+                      rxmesh::DenseMatrix<T>  B_mat,
+                      rxmesh::DenseMatrix<T>  C_mat)
 {
     float alpha = 1.0f;
     float beta  = 0.0f;
@@ -379,7 +379,7 @@ void spmat_denmat_mul(rxmesh::SparseMatInfo<T> A_mat,
  */
 // only works for float
 template <typename T>
-void spmat_arr_mul(rxmesh::SparseMatInfo<T> sp_mat, T* in_arr, T* rt_arr)
+void spmat_arr_mul(rxmesh::SparseMatrix<T> sp_mat, T* in_arr, T* rt_arr)
 {
     const float minus_one = -1.0f;
     const float one       = 1.0f;
@@ -441,9 +441,9 @@ void spmat_arr_mul(rxmesh::SparseMatInfo<T> sp_mat, T* in_arr, T* rt_arr)
  * array multiplication in a column wise way
  */
 template <typename T>
-void spmat_denmat_mul_cw(rxmesh::SparseMatInfo<T> A_mat,
-                         rxmesh::DenseMatInfo<T>  B_mat,
-                         rxmesh::DenseMatInfo<T>  C_mat)
+void spmat_denmat_mul_cw(rxmesh::SparseMatrix<T> A_mat,
+                         rxmesh::DenseMatrix<T>  B_mat,
+                         rxmesh::DenseMatrix<T>  C_mat)
 {
     for (int i = 0; i < B_mat.m_col_size; ++i) {
         spmat_arr_mul(A_mat, B_mat.ld_data(i), C_mat.ld_data(i));

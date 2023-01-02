@@ -11,16 +11,16 @@ namespace rxmesh {
 // Currently this is device only
 // host/device transormation will be added
 template <typename T, typename IndexT = int>
-struct DenseMatInfo
+struct DenseMatrix
 {
-    DenseMatInfo(IndexT row_size, IndexT col_size)
+    DenseMatrix(IndexT row_size, IndexT col_size)
         : m_row_size(row_size), m_col_size(col_size)
     {
         cudaMalloc((void**)&m_d_val, bytes());
         m_is_row_major = false;
     }
 
-    DenseMatInfo(IndexT row_size, IndexT col_size, bool is_row_major)
+    DenseMatrix(IndexT row_size, IndexT col_size, bool is_row_major)
         : m_row_size(row_size),
           m_col_size(col_size),
           m_is_row_major(is_row_major)

@@ -34,7 +34,7 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
 {
     using namespace rxmesh;
 
-    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
+    auto col_fillin = [&](VertexHandle& v_id, const VertexIterator& iter) {
         auto     ids      = v_id.unpack();
         uint32_t patch_id = ids.first;
         uint16_t local_id = ids.second;
@@ -52,7 +52,7 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
+    query.dispatch<Op::VV>(block, shrd_alloc, col_fillin);
 }
 
 }  // namespace detail
@@ -61,9 +61,9 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
 // TODO: add compatibility for EE, FF, VE......
 // TODO: purge operation?
 template <typename T, typename IndexT = int>
-struct SparseMatInfo
+struct SparseMatrix
 {
-    SparseMatInfo(RXMeshStatic& rx)
+    SparseMatrix(RXMeshStatic& rx)
         : m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
           m_d_val(nullptr),
