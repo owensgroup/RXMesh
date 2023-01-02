@@ -82,15 +82,6 @@ class RXMesh
     }
 
     /**
-     * @brief Return pointer to patches info that stores the patches info on the
-     * host
-     */
-    const PatchInfo* get_patches_info() const
-    {
-        return m_h_patches_info;
-    }
-
-    /**
      * @brief returns true if the input mesh is manifold
      */
     bool is_edge_manifold() const
@@ -286,8 +277,8 @@ class RXMesh
 
     template <typename HandleT>
     const std::pair<uint32_t, uint16_t> map_to_local(
-        const uint32_t               i,
-        const std::vector<uint32_t>& element_prefix) const;
+        const uint32_t  i,
+        const uint32_t* element_prefix) const;
 
     uint32_t max_bitmask_size(ELEMENT ele) const;
 
@@ -352,9 +343,11 @@ class RXMesh
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
 
     // the prefix sum of the owned vertices/edges/faces in patches
-    std::vector<uint32_t> m_h_vertex_prefix;
-    std::vector<uint32_t> m_h_edge_prefix;
-    std::vector<uint32_t> m_h_face_prefix;
+    uint32_t* m_h_vertex_prefix;
+    uint32_t* m_h_edge_prefix;
+    uint32_t* m_h_face_prefix;
+
+    uint32_t *m_d_vertex_prefix, *m_d_edge_prefix, *m_d_face_prefix;
 
     PatchInfo *m_d_patches_info, *m_h_patches_info;
 

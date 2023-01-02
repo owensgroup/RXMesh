@@ -24,6 +24,12 @@ RXMesh::RXMesh()
       m_is_input_edge_manifold(true),
       m_is_input_closed(true),
       m_quite(false),
+      m_h_vertex_prefix(nullptr),
+      m_h_edge_prefix(nullptr),
+      m_h_face_prefix(nullptr),
+      m_d_vertex_prefix(nullptr),
+      m_d_edge_prefix(nullptr),
+      m_d_face_prefix(nullptr),
       m_d_patches_info(nullptr),
       m_h_patches_info(nullptr),
       m_capacity_factor(0),
@@ -67,6 +73,9 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                           m_max_edges_per_patch,
                           m_max_faces_per_patch,
                           m_num_patches,
+                          m_d_vertex_prefix,
+                          m_d_edge_prefix,
+                          m_d_face_prefix,
                           m_d_patches_info);
 
 
@@ -144,6 +153,14 @@ RXMesh::~RXMesh()
     GPU_FREE(m_d_patches_info);
     free(m_h_patches_info);
     m_rxmesh_context.release();
+
+    GPU_FREE(m_d_vertex_prefix);
+    GPU_FREE(m_d_edge_prefix);
+    GPU_FREE(m_d_face_prefix);
+
+    free(m_h_vertex_prefix);
+    free(m_h_edge_prefix);
+    free(m_h_face_prefix);
 }
 
 void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
@@ -177,19 +194,45 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     m_h_num_owned_f.resize(m_num_patches);
     m_h_num_owned_v.resize(m_num_patches);
     m_h_num_owned_e.resize(m_num_patches);
-    m_h_vertex_prefix.resize(m_num_patches + 1, 0);
-    m_h_edge_prefix.resize(m_num_patches + 1, 0);
-    m_h_face_prefix.resize(m_num_patches + 1, 0);
+
+
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
         build_single_patch(fv, p);
     }
+
+
+    const uint32_t patches_1_bytes = (m_num_patches + 1) * sizeof(uint32_t);
+
+    m_h_vertex_prefix = (uint32_t*)malloc(patches_1_bytes);
+    m_h_vertex_prefix[0] = 0;
+    m_h_edge_prefix   = (uint32_t*)malloc(patches_1_bytes);
+    m_h_edge_prefix[0]   = 0;
+    m_h_face_prefix   = (uint32_t*)malloc(patches_1_bytes);
+    m_h_face_prefix[0]   = 0;
 
     for (uint32_t p = 0; p < m_num_patches; ++p) {
         m_h_vertex_prefix[p + 1] = m_h_vertex_prefix[p] + m_h_num_owned_v[p];
         m_h_edge_prefix[p + 1]   = m_h_edge_prefix[p] + m_h_num_owned_e[p];
         m_h_face_prefix[p + 1]   = m_h_face_prefix[p] + m_h_num_owned_f[p];
     }
+
+    CUDA_ERROR(cudaMalloc((void**)&m_d_vertex_prefix, patches_1_bytes));
+    CUDA_ERROR(cudaMalloc((void**)&m_d_edge_prefix, patches_1_bytes));
+    CUDA_ERROR(cudaMalloc((void**)&m_d_face_prefix, patches_1_bytes));
+
+    CUDA_ERROR(cudaMemcpy(m_d_vertex_prefix,
+                          m_h_vertex_prefix,
+                          patches_1_bytes,
+                          cudaMemcpyHostToDevice));
+    CUDA_ERROR(cudaMemcpy(m_d_edge_prefix,
+                          m_h_edge_prefix,
+                          patches_1_bytes,
+                          cudaMemcpyHostToDevice));
+    CUDA_ERROR(cudaMemcpy(m_d_face_prefix,
+                          m_h_face_prefix,
+                          patches_1_bytes,
+                          cudaMemcpyHostToDevice));
 
     calc_input_statistics(fv, ef);
 }
@@ -655,20 +698,20 @@ const FaceHandle RXMesh::map_to_local_face(uint32_t i) const
 
 template <typename HandleT>
 const std::pair<uint32_t, uint16_t> RXMesh::map_to_local(
-    const uint32_t               i,
-    const std::vector<uint32_t>& element_prefix) const
+    const uint32_t  i,
+    const uint32_t* element_prefix) const
 {
-    const auto end = element_prefix.end();
+    const auto end = element_prefix + get_num_patches() + 1;
 
     auto p = std::lower_bound(
-        element_prefix.begin(), end, i, [](int a, int b) { return a <= b; });
+        element_prefix, end, i, [](int a, int b) { return a <= b; });
     if (p == end) {
         RXMESH_ERROR(
             "RXMeshStatic::map_to_local can not its patch. Input is out of "
             "range!");
     }
     p -= 1;
-    uint32_t patch_id = std::distance(element_prefix.begin(), p);
+    uint32_t patch_id = std::distance(element_prefix, p);
     uint32_t prefix   = i - *p;
     uint16_t local_id = 0;
     uint16_t num_elements =

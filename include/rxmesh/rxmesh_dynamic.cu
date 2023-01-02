@@ -916,6 +916,9 @@ void RXMeshDynamic::update_host()
                           cudaMemcpyDeviceToHost));
 
     // count and update num_owned and it prefix sum
+    m_h_vertex_prefix[0] = 0;
+    m_h_edge_prefix[0]   = 0;
+    m_h_face_prefix[0]   = 0;
     for (uint32_t p = 0; p < m_num_patches; ++p) {
         m_h_num_owned_v[p]       = m_h_patches_info[p].get_num_owned_vertices();
         m_h_vertex_prefix[p + 1] = m_h_vertex_prefix[p] + m_h_num_owned_v[p];
@@ -927,29 +930,44 @@ void RXMeshDynamic::update_host()
         m_h_face_prefix[p + 1] = m_h_face_prefix[p] + m_h_num_owned_f[p];
     }
 
-    if (m_h_vertex_prefix.back() != this->m_num_vertices) {
+    if (m_h_vertex_prefix[m_num_patches] != this->m_num_vertices) {
         RXMESH_ERROR(
             "RXMeshDynamic::update_host error in updating host. m_num_vertices "
             "{} does not match m_h_vertex_prefix calculation {}",
             this->m_num_vertices,
-            m_h_vertex_prefix.back());
+            m_h_vertex_prefix[m_num_patches]);
     }
 
-    if (m_h_edge_prefix.back() != this->m_num_edges) {
+    if (m_h_edge_prefix[m_num_patches] != this->m_num_edges) {
         RXMESH_ERROR(
             "RXMeshDynamic::update_host error in updating host. m_num_edges "
             "{} does not match m_h_edge_prefix calculation {}",
             this->m_num_faces,
-            m_h_face_prefix.back());
+            m_h_face_prefix[m_num_patches]);
     }
 
-    if (m_h_face_prefix.back() != this->m_num_faces) {
+    if (m_h_face_prefix[m_num_patches] != this->m_num_faces) {
         RXMESH_ERROR(
             "RXMeshDynamic::update_host error in updating host. m_num_faces "
             "{} does not match m_h_face_prefix calculation {}",
             this->m_num_edges,
-            m_h_edge_prefix.back());
+            m_h_edge_prefix[m_num_patches]);
     }
+
+    const uint32_t patches_1_bytes = (m_num_patches + 1) * sizeof(uint32_t);
+    CUDA_ERROR(cudaMemcpy(m_d_vertex_prefix,
+                          m_h_vertex_prefix,
+                          patches_1_bytes,
+                          cudaMemcpyHostToDevice));
+    CUDA_ERROR(cudaMemcpy(m_d_edge_prefix,
+                          m_h_edge_prefix,
+                          patches_1_bytes,
+                          cudaMemcpyHostToDevice));
+    CUDA_ERROR(cudaMemcpy(m_d_face_prefix,
+                          m_h_face_prefix,
+                          patches_1_bytes,
+                          cudaMemcpyHostToDevice));
+
     this->calc_max_elements();
 }
 

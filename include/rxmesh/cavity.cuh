@@ -763,7 +763,9 @@ struct Cavity
      */
     __device__ __inline__ void cleanup(cooperative_groups::thread_block& block)
     {
-
+        // TODO update context's m_max_num_vertices, m_max_num_edges,
+        // m_max_num_faces using atomicMax()
+        //
         // cleanup the hashtable by removing the vertices/edges/faces that has
         // changed their ownership to be in this patch (p) and thus should not
         // be in the hashtable

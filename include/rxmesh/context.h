@@ -25,6 +25,9 @@ class Context
           m_num_faces(nullptr),
           m_num_vertices(nullptr),
           m_num_patches(nullptr),
+          m_vertex_prefix(nullptr),
+          m_edge_prefix(nullptr),
+          m_face_prefix(nullptr),
           m_patches_info(nullptr)
     {
     }
@@ -89,6 +92,9 @@ class Context
               const uint32_t max_num_edges,
               const uint32_t max_num_faces,
               const uint32_t num_patches,
+              uint32_t*      vertex_prefix,
+              uint32_t*      edge_prefix,
+              uint32_t*      face_prefix,
               PatchInfo*     d_patches)
     {
         uint32_t* buffer = nullptr;
@@ -126,6 +132,11 @@ class Context
                               &max_num_faces,
                               sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
+
+        m_vertex_prefix = vertex_prefix;
+        m_edge_prefix   = edge_prefix;
+        m_face_prefix   = face_prefix;
+
         m_patches_info = d_patches;
     }
 
@@ -137,6 +148,7 @@ class Context
 
     uint32_t * m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;
     uint32_t * m_max_num_vertices, *m_max_num_edges, *m_max_num_faces;
+    uint32_t * m_vertex_prefix, *m_edge_prefix, *m_face_prefix;
     PatchInfo* m_patches_info;
 };
 }  // namespace rxmesh

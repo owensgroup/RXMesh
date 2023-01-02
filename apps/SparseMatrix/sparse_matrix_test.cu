@@ -10,21 +10,16 @@
 
 template <uint32_t blockThreads, typename IndexT = int>
 __global__ static void sparse_mat_test(const rxmesh::Context context,
-                                       IndexT*               patch_ptr_v,
                                        IndexT*               vet_degree)
 {
     using namespace rxmesh;
 
     auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
-        // printf(" %" PRIu32 " - %" PRIu32 " - %" PRIu32 " - %" PRIu32 " \n",
-        //        row_ptr[0],
-        //        row_ptr[1],
-        //        row_ptr[2],
-        //        row_ptr[3]);
-        auto     ids                                 = v_id.unpack();
-        uint32_t patch_id                            = ids.first;
-        uint16_t local_id                            = ids.second;
-        vet_degree[patch_ptr_v[patch_id] + local_id] = iter.size() + 1;
+        auto     ids      = v_id.unpack();
+        uint32_t patch_id = ids.first;
+        uint16_t local_id = ids.second;
+        vet_degree[context.m_vertex_prefix[patch_id] + local_id] =
+            iter.size() + 1;
     };
 
     query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
@@ -62,7 +57,7 @@ __global__ static void sparse_mat_edge_len_test(
         uint16_t r_local_id = r_ids.second;
 
         uint32_t row_index =
-            sparse_mat.m_d_patch_ptr_v[r_patch_id] + r_local_id;
+            sparse_mat.m_context.m_vertex_prefix[r_patch_id] + r_local_id;
 
         arr_ref[row_index]     = 0;
         sparse_mat(v_id, v_id) = 0;
@@ -120,7 +115,8 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
         uint32_t r_patch_id = r_ids.first;
         uint16_t r_local_id = r_ids.second;
 
-        uint32_t row_index = A_mat.m_d_patch_ptr_v[r_patch_id] + r_local_id;
+        uint32_t row_index =
+            A_mat.m_context.m_vertex_prefix[r_patch_id] + r_local_id;
 
         B_mat(row_index, 0) = iter.size() * 7;
         B_mat(row_index, 1) = iter.size() * 2;
@@ -143,58 +139,6 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
     };
 
     query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
-}
-
-TEST(Apps, PatchPointer)
-{
-    using namespace rxmesh;
-
-    cuda_query(0);
-
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
-
-    // move the patch ptr to the host so we can test it
-    std::vector<uint32_t> h_ptchptr(rx.get_num_patches() + 1);
-
-    SparseMatInfo<int> spmat(rx);
-
-    // vertices
-    CUDA_ERROR(cudaMemcpy(h_ptchptr.data(),
-                          spmat.m_d_patch_ptr_v,
-                          h_ptchptr.size() * sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
-    EXPECT_EQ(h_ptchptr.back(), rx.get_num_vertices());
-
-    for (uint32_t i = 0; i < rx.get_num_patches(); ++i) {
-        EXPECT_EQ(h_ptchptr[i + 1] - h_ptchptr[i],
-                  rx.get_patches_info()[i].num_owned_vertices);
-    }
-
-    // edges
-    CUDA_ERROR(cudaMemcpy(h_ptchptr.data(),
-                          spmat.m_d_patch_ptr_e,
-                          h_ptchptr.size() * sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
-    EXPECT_EQ(h_ptchptr.back(), rx.get_num_edges());
-
-    for (uint32_t i = 0; i < rx.get_num_patches(); ++i) {
-        EXPECT_EQ(h_ptchptr[i + 1] - h_ptchptr[i],
-                  rx.get_patches_info()[i].num_owned_edges);
-    }
-
-    // faces
-    CUDA_ERROR(cudaMemcpy(h_ptchptr.data(),
-                          spmat.m_d_patch_ptr_f,
-                          h_ptchptr.size() * sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
-    EXPECT_EQ(h_ptchptr.back(), rx.get_num_faces());
-
-    for (uint32_t i = 0; i < rx.get_num_patches(); ++i) {
-        EXPECT_EQ(h_ptchptr[i + 1] - h_ptchptr[i],
-                  rx.get_patches_info()[i].num_owned_faces);
-    }
-
-    spmat.free();
 }
 
 TEST(Apps, SparseMatrix)
@@ -243,10 +187,10 @@ TEST(Apps, SparseMatrix)
     rxmesh.prepare_launch_box(
         {Op::VV}, launch_box, (void*)sparse_mat_test<threads>);
 
-    sparse_mat_test<threads><<<launch_box.blocks,
-                               launch_box.num_threads,
-                               launch_box.smem_bytes_dyn>>>(
-        rxmesh.get_context(), spmat.m_d_patch_ptr_v, vet_degree);
+    sparse_mat_test<threads>
+        <<<launch_box.blocks,
+           launch_box.num_threads,
+           launch_box.smem_bytes_dyn>>>(rxmesh.get_context(), vet_degree);
 
     std::vector<int> h_vet_degree(num_vertices);
     CUDA_ERROR(cudaMemcpy(
