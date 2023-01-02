@@ -5,7 +5,9 @@
 namespace rxmesh {
 
 template <typename attrT>
-__global__ void memcpy(attrT* d_dest, const attrT* d_src, const uint32_t length)
+__global__ void memcopy(attrT*         d_dest,
+                        const attrT*   d_src,
+                        const uint32_t length)
 {
     const uint32_t stride = blockDim.x * gridDim.x;
     uint32_t       i      = blockDim.x * blockIdx.x + threadIdx.x;
@@ -47,11 +49,34 @@ __device__ __forceinline__ uint16_t atomicAdd(uint16_t* address, uint16_t val)
         newval = static_cast<uint16_t>(val + old_bytes);
         newval = is_32_align ? (old & 0xffff) | (newval << 16) :
                                (old & 0xffff0000) | newval;
-        old    = atomicCAS(address_as_ui, assumed, newval);
+        old    = ::atomicCAS(address_as_ui, assumed, newval);
     } while (assumed != old);
     return (is_32_align) ? uint16_t(old >> 16) : uint16_t(old & 0xffff);
 }
 
+
+__device__ __forceinline__ uint16_t atomicMin(uint16_t* address, uint16_t val)
+{
+    // take from
+    // https://github.com/pytorch/pytorch/blob/8b29b7953a46fbab9363294214f7689d04df0a85/aten/src/ATen/cuda/Atomic.cuh#L104
+    size_t    offset        = (size_t)address & 2;
+    uint32_t* address_as_ui = (uint32_t*)((char*)address - offset);
+    bool      is_32_align   = offset;
+    uint32_t  old           = *address_as_ui;
+    uint32_t  old_bytes;
+    uint32_t  newval;
+    uint32_t  assumed;
+
+    do {
+        assumed   = old;
+        old_bytes = is_32_align ? old >> 16 : old & 0xffff;
+        newval    = std::min(val, static_cast<uint16_t>(old_bytes));
+        newval    = is_32_align ? (old & 0xffff) | (newval << 16) :
+                                  (old & 0xffff0000) | newval;
+        old       = ::atomicCAS(address_as_ui, assumed, newval);
+    } while (assumed != old);
+    return is_32_align ? (old >> 16) : (old & 0xffff);
+}
 
 __device__ __forceinline__ uint8_t atomicAdd(uint8_t* address, uint8_t val)
 {
@@ -72,7 +97,7 @@ __device__ __forceinline__ uint8_t atomicAdd(uint8_t* address, uint8_t val)
         // negative signed values with 1's (e.g. signed -1 = unsigned ~0).
         newval = static_cast<uint8_t>(val + old_byte);
         newval = (old & ~(0x000000ff << shift)) | (newval << shift);
-        old    = atomicCAS(address_as_ui, assumed, newval);
+        old    = ::atomicCAS(address_as_ui, assumed, newval);
     } while (assumed != old);
 
     return uint8_t((old >> shift) & 0xff);

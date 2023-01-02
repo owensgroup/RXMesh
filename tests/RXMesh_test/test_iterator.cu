@@ -14,16 +14,18 @@ __global__ static void test_iterator(uint32_t*       suceess,
     const HandleT truth(patch_id, {local_id});
 
     if (local_id >= num_elements) {
-
+        LPHashTable       ht;
+        PatchStash        stash;
         Iterator<HandleT> iter(
             local_id,
             reinterpret_cast<const typename HandleT::LocalT*>(patch_output),
             nullptr,
             offset_size,
             patch_id,
-            num_elements,
             nullptr,
-            nullptr);
+            ht,
+            nullptr,
+            stash);
 
         if (iter.size() != offset_size) {
             atomicAdd(suceess, 1u);

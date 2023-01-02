@@ -3,7 +3,7 @@
 #include "mcf_util.h"
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
-#include "rxmesh/kernels/query_dispatcher.cuh"
+#include "rxmesh/query.cuh"
 #include "rxmesh/util/vector.h"
 
 /**
@@ -94,9 +94,17 @@ __global__ static void init_B(const rxmesh::Context            context,
     };
 
     // With uniform Laplacian, we just need the valence, thus we
-    // call query_block_dispatcher and set oriented to false
-    query_block_dispatcher<Op::VV, blockThreads>(
-        context, init_lambda, !use_uniform_laplace);
+    // call query and set oriented to false
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(
+        block,
+        shrd_alloc,
+        init_lambda,
+        [](VertexHandle) { return true; },
+        !use_uniform_laplace);
 }
 
 /**
@@ -189,7 +197,16 @@ __global__ static void rxmesh_matvec(const rxmesh::Context            context,
     };
 
     // With uniform Laplacian, we just need the valence, thus we
-    // call query_block_dispatcher and set oriented to false
-    query_block_dispatcher<Op::VV, blockThreads>(
-        context, matvec_lambda, !use_uniform_laplace);
+    // call query and set oriented to false
+
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(
+        block,
+        shrd_alloc,
+        matvec_lambda,
+        [](VertexHandle) { return true; },
+        !use_uniform_laplace);
 }

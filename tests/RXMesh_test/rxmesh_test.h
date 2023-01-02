@@ -6,8 +6,8 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/rxmesh_static.h"
+#include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/util.h"
-
 
 class RXMeshTest
 {
@@ -357,7 +357,25 @@ class RXMeshTest
     {
         auto global_id_from_handle = [&](OutputHandleT xxh) -> uint32_t {
             auto pl = xxh.unpack();
+            assert(pl.first < rxmesh.get_num_patches());
             return output_ltog[pl.first][pl.second];
+        };
+
+        auto check_if_owned = [&](OutputHandleT xxh) -> bool {
+            auto pl = xxh.unpack();
+            assert(pl.first < rxmesh.get_num_patches());
+            if constexpr (std::is_same_v<OutputHandleT, rxmesh::VertexHandle>) {
+                return rxmesh::detail::is_owned(
+                    pl.second, rxmesh.m_h_patches_info[pl.first].owned_mask_v);
+            }
+            if constexpr (std::is_same_v<OutputHandleT, rxmesh::EdgeHandle>) {
+                return rxmesh::detail::is_owned(
+                    pl.second, rxmesh.m_h_patches_info[pl.first].owned_mask_e);
+            }
+            if constexpr (std::is_same_v<OutputHandleT, rxmesh::FaceHandle>) {
+                return rxmesh::detail::is_owned(
+                    pl.second, rxmesh.m_h_patches_info[pl.first].owned_mask_f);
+            }
         };
 
         for (uint32_t p = 0; p < rxmesh.get_num_patches(); ++p) {
@@ -376,6 +394,10 @@ class RXMeshTest
                     OutputHandleT xxh = output(eh, i);
                     if (xxh.is_valid()) {
                         num_xx++;
+
+                        if (!check_if_owned(xxh)) {
+                            return false;
+                        }
 
                         // extract local id from xxh's unique id
                         uint32_t xx_global = global_id_from_handle(xxh);
@@ -430,8 +452,8 @@ class RXMeshTest
         // global gives the same results as from global to local
 
         // Number of edges and faces in this patch
-        uint32_t num_p_edges = rxmesh.m_h_patches_info[patch_id].num_edges;
-        uint32_t num_p_faces = rxmesh.m_h_patches_info[patch_id].num_faces;
+        uint32_t num_p_edges = rxmesh.m_h_patches_info[patch_id].num_edges[0];
+        uint32_t num_p_faces = rxmesh.m_h_patches_info[patch_id].num_faces[0];
 
         assert(num_p_edges <= std::numeric_limits<uint16_t>::max());
         assert(num_p_faces <= std::numeric_limits<uint16_t>::max());
@@ -448,7 +470,7 @@ class RXMeshTest
         // 1) For each local edge in the patch, get its global id using the
         // mapping (using m_h_patches_ltog_e)
 
-        // 2) get the local edge's local vertices (using m_h_patches_ev)
+        // 2) get the local edge's local vertices
 
         // 3) map the local vertices to their global id (using
         // m_h_patches_ltog_v)
@@ -467,8 +489,9 @@ class RXMeshTest
 
             // 2)
             // get the local vertices
-            uint16_t v0_l = rxmesh.m_h_patches_ev.at(patch_id).at(e_l * 2);
-            uint16_t v1_l = rxmesh.m_h_patches_ev.at(patch_id).at(e_l * 2 + 1);
+            uint16_t v0_l = rxmesh.m_h_patches_info[patch_id].ev[e_l * 2].id;
+            uint16_t v1_l =
+                rxmesh.m_h_patches_info[patch_id].ev[e_l * 2 + 1].id;
 
             // 3)
             // convert the local vertices to global
@@ -535,14 +558,12 @@ class RXMeshTest
         // 1) for each local face in the patch, get its global id using the
         // mapping (using m_h_patches_ltog_f)
 
-        // 2) get the local face's local edges (using m_h_patches_fe)
+        // 2) get the local face's local edges
 
         // 3) map the local edges to their global id
         //(using m_h_patches_ltog_v)
 
-        // 4) use the converted edges to get their global face id (using
-        // m_h_patches_fe)
-
+        // 4) use the converted edges to get their global face id
 
         // 5) check if the resulting global face id in 4) matches that
         // obtained in 1)
@@ -558,7 +579,7 @@ class RXMeshTest
             // 2)
             // get the local edges
             for (uint32_t i = 0; i < 3; ++i) {
-                e_l[i] = rxmesh.m_h_patches_fe.at(patch_id).at(f_l * 3 + i);
+                e_l[i] = rxmesh.m_h_patches_info[patch_id].fe[f_l * 3 + i].id;
                 // shift right because the first bit is reserved for edge
                 // direction
                 flag_t dir(0);

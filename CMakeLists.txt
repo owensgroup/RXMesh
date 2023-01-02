@@ -1,9 +1,5 @@
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 
-if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
-  cmake_policy(SET CMP0104 OLD)
-endif()
-
 project(RXMesh 
         VERSION 0.2.1 
         LANGUAGES C CXX CUDA)
@@ -63,12 +59,19 @@ FetchContent_Populate(spdlog)
 if(USE_POLYSCOPE)
 FetchContent_Declare(polyscope
     GIT_REPOSITORY https://github.com/Ahdhn/polyscope.git
-    GIT_TAG        glm_patch #v1.3.0 with patch for glm 
+    GIT_TAG        834b9c6c1a2675ccefd254d526f2dac3e3f831c6
 )
 FetchContent_MakeAvailable(polyscope)
 endif()
 
-# Auto-detect GPU architecture, sets ${CUDA_ARCHS}
+# cereal
+FetchContent_Declare(cereal
+    GIT_REPOSITORY https://github.com/USCiLab/cereal.git
+    GIT_TAG        v1.3.2
+)
+FetchContent_Populate(cereal)
+
+# Auto-detect GPU architecture
 include("cmake/AutoDetectCudaArch.cmake")
 
 # Direct all output to /bin directory
@@ -99,6 +102,7 @@ target_include_directories( RXMesh_header_lib
     INTERFACE "include"
 	INTERFACE "${rapidjson_SOURCE_DIR}/include"
 	INTERFACE "${spdlog_SOURCE_DIR}/include"
+	INTERFACE "${cereal_SOURCE_DIR}/include"
     INTERFACE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
 )
 
@@ -115,8 +119,7 @@ set(cuda_flags
     -Xcompiler=$<$<CXX_COMPILER_ID:GNU>:-Wall -fopenmp -O3 -Wno-unused-function>
     #Disables warning
     #177-D "function XXX was declared but never referenced"
-    -Xcudafe "--display_error_number --diag_suppress=177"
-    ${CUDA_ARCHS}
+    -Xcudafe "--display_error_number --diag_suppress=177"    
     -rdc=true
 	-lineinfo	
 	--expt-extended-lambda	

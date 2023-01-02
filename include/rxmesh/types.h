@@ -79,32 +79,44 @@ enum class ELEMENT
  */
 enum class Op
 {
+    V         = 0,
+    E         = 1,
+    F         = 2,
+    VV        = 3,
+    VE        = 4,
+    VF        = 5,
+    FV        = 6,
+    FE        = 7,
+    FF        = 8,
+    EV        = 9,
+    EE        = 10,
+    EF        = 11,
+    EVDiamond = 12,
+};
+
+/**
+ * @brief defines how we create a cavity. The first element is the source and
+ * the second is the target e.g., VE means removing a vertex and edges connected
+ * to this vertex, FV means removing a face and vertices incident to this face.
+ * Some operations are topologically redundant e.g., since removing a vertex
+ * removes all its incident edges and faces, V and VE are equivalent.
+ */
+enum class CavityOp
+{
     V  = 0,
     E  = 1,
     F  = 2,
     VV = 3,
-    VE = 4,
-    VF = 5,
-    FV = 6,
-    FE = 7,
-    FF = 8,
-    EV = 9,
-    EE = 10,
-    EF = 11,
+    VE = V,  // same as removing a vertex
+    VF = V,  // invalid since it leaves wire-frames edges so we fall back to V
+    FV = 4,
+    FE = 5,
+    FF = FE,  // invalid since it leaves wire-frames edges so we fall back to FE
+    EV = 6,
+    EE = 7,
+    EF = E,  // same as removing an edge
 };
 
-
-/**
- * @brief different dynaimc operators supported in RXMeshDynamic
- */
-enum class DynOp
-{
-    EdgeFlip     = 0,
-    DeleteVertex = 1,
-    DeleteEdge   = 2,
-    DeleteFace   = 3,
-    EdgeCollapse = 4,
-};
 /**
  * @brief Convert an operation to string
  * @param op a query operation
@@ -113,6 +125,12 @@ enum class DynOp
 static std::string op_to_string(const Op& op)
 {
     switch (op) {
+        case Op::V:
+            return "V";
+        case Op::E:
+            return "E";
+        case Op::F:
+            return "F";
         case Op::VV:
             return "VV";
         case Op::VE:
@@ -131,6 +149,8 @@ static std::string op_to_string(const Op& op)
             return "EF";
         case Op::EE:
             return "EE";
+        case Op::EVDiamond:
+            return "EVDiamond";
         default: {
             RXMESH_ERROR("to_string() unknown input operation");
             return "";

@@ -72,8 +72,7 @@ void gaussian_curvature_rxmesh(const std::vector<T>& gaussian_curvature_gold)
 #if USE_POLYSCOPE
     // visualize
     polyscope::view::upDir = polyscope::UpDir::ZUp;
-    polyscope::init();
-    auto polyscope_mesh = rx.get_polyscope_mesh();
+    auto polyscope_mesh    = rx.get_polyscope_mesh();
     polyscope_mesh->setEdgeWidth(1.0);
     polyscope_mesh->addVertexScalarQuantity("vGaussianCurv", v_gc);
     polyscope::show();

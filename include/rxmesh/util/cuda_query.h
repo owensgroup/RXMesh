@@ -88,6 +88,8 @@ inline cudaDeviceProp cuda_query(const int dev, bool quite = false)
                      convert_SMV_to_cores(dev_prop.major, dev_prop.minor),
                      convert_SMV_to_cores(dev_prop.major, dev_prop.minor) *
                          dev_prop.multiProcessorCount);
+        RXMESH_TRACE("Maximum # blocks per SM: {}",
+                     dev_prop.maxBlocksPerMultiProcessor);
         RXMESH_TRACE("ECC support: {}",
                      (dev_prop.ECCEnabled ? "Enabled" : "Disabled"));
         RXMESH_TRACE("GPU Max Clock rate: {0:.1f} MHz ({1:.2f} GHz)",

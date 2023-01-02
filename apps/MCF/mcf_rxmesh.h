@@ -96,7 +96,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     auto X = rxmesh.add_vertex_attribute<T>("X", 3, rxmesh::LOCATION_ALL);
     X->copy_from(*input_coord, rxmesh::DEVICE, rxmesh::DEVICE);
 
-    ReduceHandle<T> reduce_handle(*X);
+    VertexReduceHandle<T> reduce_handle(*X);
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box_init_B;

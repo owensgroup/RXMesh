@@ -2,7 +2,11 @@ output/
 input/*
 !input/dragon.obj
 !input/diamond.obj
+!input/plane.obj
 !input/bumpy-cube.obj
+!input/sphere3_patches
+!input/cloth.obj
+!input/plane_5.obj
 build/
 include/rxmesh/util/git_sha1.cpp
 .vscode/

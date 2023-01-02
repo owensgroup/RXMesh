@@ -20,12 +20,13 @@ struct RXMeshTestArg
 // clang-format off
 #include "test_higher_queries.h"
 #include "test_queries.h"
+#include "test_queries_oriented.h"
 #include "test_attribute.cuh"
 #include "test_for_each.cuh"
-#include "test_edge_flip.cuh"
 #include "test_validate.h"
-#include "test_deletion.cuh"
-#include "test_edge_collapse.cuh"
+#include "test_lp_pair.h"
+#include "test_dynamic.cuh"
+#include "test_ev_diamond.h"
 // clang-format on
 
 int main(int argc, char** argv)

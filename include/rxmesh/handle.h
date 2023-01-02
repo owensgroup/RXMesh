@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <string>
 #include "rxmesh/local.h"
-#include "rxmesh/patch_info.h"
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
@@ -16,8 +15,8 @@ namespace detail {
  * @param patch_id the patch owning the mesh element
  * @return
  */
-uint64_t __device__ __host__ __forceinline__ unique_id(const uint16_t local_id,
-                                                       const uint32_t patch_id)
+constexpr __device__ __host__ __forceinline__ uint64_t
+unique_id(const uint16_t local_id, const uint32_t patch_id)
 {
     uint64_t ret = patch_id;
     ret          = (ret << 32);
@@ -32,8 +31,8 @@ uint64_t __device__ __host__ __forceinline__ unique_id(const uint16_t local_id,
  * @param uid unique id
  * @return a std::pair storing the patch id and local id
  */
-std::pair<uint32_t, uint16_t> __device__ __host__ __forceinline__
-unpack(uint64_t uid)
+constexpr __device__ __host__ __forceinline__ std::pair<uint32_t, uint16_t>
+                                              unpack(uint64_t uid)
 {
     uint16_t local_id = uid & ((1 << 16) - 1);
     uint32_t patch_id = uid >> 32;
@@ -53,7 +52,7 @@ struct VertexHandle
     /**
      * @brief Default constructor
      */
-    __device__ __host__ VertexHandle() : m_handle(INVALID64)
+    constexpr __device__ __host__ VertexHandle() : m_handle(INVALID64)
     {
     }
 
@@ -63,8 +62,8 @@ struct VertexHandle
      * @param patch_id the patch where the vertex belongs
      * @param vertex_local_id the vertex local index within the patch
      */
-    __device__ __host__ VertexHandle(uint32_t     patch_id,
-                                     LocalVertexT vertex_local_id)
+    constexpr __device__ __host__ VertexHandle(uint32_t     patch_id,
+                                               LocalVertexT vertex_local_id)
         : m_handle(detail::unique_id(vertex_local_id.id, patch_id))
     {
     }
@@ -72,7 +71,7 @@ struct VertexHandle
     /**
      * @brief Operator ==
      */
-    bool __device__ __host__ __inline__ operator==(
+    constexpr __device__ __host__ __inline__ bool operator==(
         const VertexHandle& rhs) const
     {
         return m_handle == rhs.m_handle;
@@ -81,7 +80,7 @@ struct VertexHandle
     /**
      * @brief Operator !=
      */
-    bool __device__ __host__ __inline__ operator!=(
+    constexpr __device__ __host__ __inline__ bool operator!=(
         const VertexHandle& rhs) const
     {
         return !(*this == rhs);
@@ -90,7 +89,7 @@ struct VertexHandle
     /**
      * @brief Check if the vertex is valid i.e., has been initialized by RXMesh
      */
-    bool __device__ __host__ __inline__ is_valid() const
+    constexpr __device__ __host__ __inline__ bool is_valid() const
     {
         return m_handle != INVALID64;
     }
@@ -98,7 +97,7 @@ struct VertexHandle
     /**
      * @brief The unique identifier that represents the vertex
      */
-    uint64_t __device__ __host__ __inline__ unique_id() const
+    constexpr __device__ __host__ __inline__ uint64_t unique_id() const
     {
         return m_handle;
     }
@@ -107,7 +106,8 @@ struct VertexHandle
      * @brief Unpack the handle to its patch id and vertex local index within
      * the patch
      */
-    std::pair<uint32_t, uint16_t> __device__ __host__ __inline__ unpack() const
+    constexpr __device__ __host__ __inline__ std::pair<uint32_t, uint16_t>
+                         unpack() const
     {
         return detail::unpack(m_handle);
     }
@@ -116,13 +116,6 @@ struct VertexHandle
     uint64_t m_handle;
 };
 
-/**
- * @brief print vertex unique_id to ostream
- */
-/*inline std::ostream& operator<<(std::ostream& os, VertexHandle v_handle)
-{
-    return (os << 'v' << v_handle.unique_id());
-}*/
 
 /**
  * @brief edge identifier. It is a unique handle for each edge equipped with
@@ -135,7 +128,7 @@ struct EdgeHandle
     /**
      * @brief Default constructor
      */
-    __device__ __host__ EdgeHandle() : m_handle(INVALID64)
+    constexpr __device__ __host__ EdgeHandle() : m_handle(INVALID64)
     {
     }
 
@@ -145,7 +138,8 @@ struct EdgeHandle
      * @param patch_id the patch where the edge belongs
      * @param edge_local_id the edge local index within the patch
      */
-    __device__ __host__ EdgeHandle(uint32_t patch_id, LocalEdgeT edge_local_id)
+    constexpr __device__ __host__ EdgeHandle(uint32_t   patch_id,
+                                             LocalEdgeT edge_local_id)
         : m_handle(detail::unique_id(edge_local_id.id, patch_id))
     {
     }
@@ -153,7 +147,8 @@ struct EdgeHandle
     /**
      * @brief Operator ==
      */
-    bool __device__ __host__ __inline__ operator==(const EdgeHandle& rhs) const
+    constexpr __device__ __host__ __inline__ bool operator==(
+        const EdgeHandle& rhs) const
     {
         return m_handle == rhs.m_handle;
     }
@@ -162,7 +157,8 @@ struct EdgeHandle
     /**
      * @brief Operator !=
      */
-    bool __device__ __host__ __inline__ operator!=(const EdgeHandle& rhs) const
+    constexpr __device__ __host__ __inline__ bool operator!=(
+        const EdgeHandle& rhs) const
     {
         return !(*this == rhs);
     }
@@ -170,7 +166,7 @@ struct EdgeHandle
     /**
      * @brief Check if the edge is valid i.e., has been initialized by RXMesh
      */
-    bool __device__ __host__ __inline__ is_valid() const
+    constexpr __device__ __host__ __inline__ bool is_valid() const
     {
         return m_handle != INVALID64;
     }
@@ -178,7 +174,7 @@ struct EdgeHandle
     /**
      * @brief The unique identifier that represents the edge
      */
-    uint64_t __device__ __host__ __inline__ unique_id() const
+    constexpr __device__ __host__ __inline__ uint64_t unique_id() const
     {
         return m_handle;
     }
@@ -187,7 +183,8 @@ struct EdgeHandle
      * @brief Unpack the handle to its patch id and edge local index within
      * the patch
      */
-    std::pair<uint32_t, uint16_t> __device__ __host__ __inline__ unpack() const
+    constexpr __device__ __host__ __inline__ std::pair<uint32_t, uint16_t>
+                         unpack() const
     {
         return detail::unpack(m_handle);
     }
@@ -195,13 +192,139 @@ struct EdgeHandle
    private:
     uint64_t m_handle;
 };
+
 /**
- * @brief print edge unique_id to ostream
+ * @brief directed edges identifier. It is a unique handle for each edge
+ * equipped with operator==. It is possible to extract the underlying EdgeHandle
+ * of the directed edge. The idea is that every edge in the mesh could be split
+ * into two edges of opposite direction (similar to half-edge data structure).
  */
-/*inline std::ostream& operator<<(std::ostream& os, EdgeHandle e_handle)
+struct DEdgeHandle
 {
-    return (os << 'e' << e_handle.unique_id());
-}*/
+    using LocalT = LocalEdgeT;
+
+    /**
+     * @brief Default constructor
+     */
+    constexpr __device__ __host__ DEdgeHandle() : m_handle(INVALID64)
+    {
+    }
+
+    /**
+     * @brief Constructor meant to be used internally by RXMesh and
+     * query_dispatcher
+     * @param patch_id the patch where the edge belongs
+     * @param edge_local_id the undirected edge local index within the patch
+     * @param dir direction of the edge; 1 if flipped, 0 otherwise
+     */
+    constexpr __device__ __host__ DEdgeHandle(uint32_t   patch_id,
+                                              LocalEdgeT edge_local_id,
+                                              flag_t     dir)
+        : m_handle(detail::unique_id((edge_local_id.id << 1) | dir, patch_id))
+    {
+    }
+
+
+    /**
+     * @brief Constructor meant to be used internally by RXMesh and
+     * query_dispatcher
+     * @param patch_id the patch where the edge belongs
+     * @param edge_local_id the directed edge local index which has the
+     * direction embedded in it i.e., in the first bit
+     */
+    constexpr __device__ __host__ DEdgeHandle(uint32_t   patch_id,
+                                              LocalEdgeT edge_local_id)
+        : m_handle(detail::unique_id(edge_local_id.id, patch_id))
+    {
+    }
+
+    /**
+     * @brief get a DEdgeHandle by flipping this directed edge
+     */
+    constexpr __device__ __host__ __inline__ DEdgeHandle get_flip_dedge()
+    {
+        return {unpack().first, uint16_t(unpack().second ^ 1)};
+    }
+
+    /**
+     * @brief extract the underlying undirected edge
+     */
+    constexpr __device__ __host__ __inline__ EdgeHandle get_edge_handle()
+    {
+        return {unpack().first, uint16_t(unpack().second >> 1)};
+    }
+
+
+    /**
+     * @brief Operator == compare this directed edge to an undirected one
+     */
+    constexpr __device__ __host__ __inline__ bool operator==(
+        const EdgeHandle& rhs) const
+    {
+        auto p = detail::unpack(m_handle);
+        return detail::unpack(m_handle).first == rhs.unpack().first &&
+               (detail::unpack(m_handle).second >> 1) == rhs.unpack().second;
+    }
+
+
+    /**
+     * @brief Operator !=
+     */
+    constexpr __device__ __host__ __inline__ bool operator!=(
+        const EdgeHandle& rhs) const
+    {
+        return !(*this == rhs);
+    }
+
+    /**
+     * @brief Operator == compare this directed edge to another directed one. To
+     * directed edge are equal if both has the same underlying undirected edge
+     * and have the same direction
+     */
+    constexpr __device__ __host__ __inline__ bool operator==(
+        const DEdgeHandle& rhs) const
+    {
+        return m_handle == rhs.m_handle;
+    }
+
+    /**
+     * @brief Operator !=
+     */
+    constexpr __device__ __host__ __inline__ bool operator!=(
+        const DEdgeHandle& rhs) const
+    {
+        return !(*this == rhs);
+    }
+
+    /**
+     * @brief Check if the edge is valid i.e., has been initialized by RXMesh
+     */
+    constexpr __device__ __host__ __inline__ bool is_valid() const
+    {
+        return m_handle != INVALID64;
+    }
+
+    /**
+     * @brief The unique identifier that represents the edge
+     */
+    constexpr __device__ __host__ __inline__ uint64_t unique_id() const
+    {
+        return m_handle;
+    }
+
+    /**
+     * @brief Unpack the handle to its patch id and edge local index within
+     * the patch
+     */
+    constexpr __device__ __host__ __inline__ std::pair<uint32_t, uint16_t>
+                         unpack() const
+    {
+        return detail::unpack(m_handle);
+    }
+
+   private:
+    uint64_t m_handle;
+};
 
 /**
  * @brief face identifier. It is a unique handle for each face equipped with
@@ -214,7 +337,7 @@ struct FaceHandle
     /**
      * @brief Default constructor
      */
-    __device__ __host__ FaceHandle() : m_handle(INVALID64)
+    constexpr __device__ __host__ FaceHandle() : m_handle(INVALID64)
     {
     }
 
@@ -224,7 +347,8 @@ struct FaceHandle
      * @param patch_id the patch where the face belongs
      * @param vertex_local_id the face local index within the patch
      */
-    __device__ __host__ FaceHandle(uint32_t patch_id, LocalFaceT face_local_id)
+    constexpr __device__ __host__ FaceHandle(uint32_t   patch_id,
+                                             LocalFaceT face_local_id)
         : m_handle(detail::unique_id(face_local_id.id, patch_id))
     {
     }
@@ -232,7 +356,8 @@ struct FaceHandle
     /**
      * @brief Operator ==
      */
-    bool __device__ __host__ __inline__ operator==(const FaceHandle& rhs) const
+    constexpr __device__ __host__ __inline__ bool operator==(
+        const FaceHandle& rhs) const
     {
         return m_handle == rhs.m_handle;
     }
@@ -240,7 +365,8 @@ struct FaceHandle
     /**
      * @brief Operator !=
      */
-    bool __device__ __host__ __inline__ operator!=(const FaceHandle& rhs) const
+    constexpr __device__ __host__ __inline__ bool operator!=(
+        const FaceHandle& rhs) const
     {
         return !(*this == rhs);
     }
@@ -248,7 +374,7 @@ struct FaceHandle
     /**
      * @brief Check if the face is valid i.e., has been initialized by RXMesh
      */
-    bool __device__ __host__ __inline__ is_valid() const
+    constexpr __device__ __host__ __inline__ bool is_valid() const
     {
         return m_handle != INVALID64;
     }
@@ -256,7 +382,7 @@ struct FaceHandle
     /**
      * @brief The unique identifier that represents the face
      */
-    uint64_t __device__ __host__ __inline__ unique_id() const
+    constexpr __device__ __host__ __inline__ uint64_t unique_id() const
     {
         return m_handle;
     }
@@ -265,7 +391,8 @@ struct FaceHandle
      * @brief Unpack the handle to its patch id and face local index within
      * the patch
      */
-    std::pair<uint32_t, uint16_t> __device__ __host__ __inline__ unpack() const
+    constexpr __device__ __host__ __inline__ std::pair<uint32_t, uint16_t>
+                         unpack() const
     {
         return detail::unpack(m_handle);
     }
@@ -273,12 +400,4 @@ struct FaceHandle
    private:
     uint64_t m_handle;
 };
-
-/**
- * @brief print face unique_id to ostream
- */
-/*inline std::ostream& operator<<(std::ostream& os, FaceHandle f_handle)
-{
-    return (os << 'f' << f_handle.unique_id());
-}*/
 }  // namespace rxmesh

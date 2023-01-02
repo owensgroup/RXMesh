@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include <assert.h>
+#include <cooperative_groups.h>
 #include <stdint.h>
 #include <cub/block/block_discontinuity.cuh>
 
@@ -8,10 +9,12 @@
 #include "rxmesh/iterator.cuh"
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/debug.cuh"
-#include "rxmesh/kernels/is_deleted.cuh"
+#include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/rxmesh_queries.cuh"
+#include "rxmesh/kernels/shmem_allocator.cuh"
 #include "rxmesh/types.h"
+#include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/meta.h"
 
 namespace rxmesh {
@@ -22,104 +25,155 @@ namespace detail {
  * query_block_dispatcher()
  */
 template <Op op, uint32_t blockThreads, typename activeSetT>
-__device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
-                                                  activeSetT compute_active_set,
-                                                  const bool oriented,
-                                                  uint32_t&  num_src_in_patch,
-                                                  uint16_t*& s_output_offset,
-                                                  uint16_t*& s_output_value,
-                                                  uint16_t&  num_owned,
-                                                  uint32_t*& not_owned_patch,
-                                                  uint16_t*& not_owned_local_id,
-                                                  uint32_t*& input_mask)
+__device__ __inline__ void query_block_dispatcher(
+    cooperative_groups::thread_block& block,
+    ShmemAllocator&                   shrd_alloc,
+    const PatchInfo&                  patch_info,
+    activeSetT                        compute_active_set,
+    const bool                        oriented,
+    uint32_t&                         num_src_in_patch,
+    uint16_t*&                        s_output_offset,
+    uint16_t*&                        s_output_value,
+    uint32_t*&                        s_participant_bitmask,
+    uint32_t*&                        s_output_owned_bitmask,
+    LPHashTable&                      output_lp_hashtable,
+    LPPair*&                          s_table)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
-    // Check if any of the mesh elements are in the active set
-    // input mapping does not need to be stored in shared memory since it will
-    // be read coalesced, we can rely on L1 cache here
-    num_src_in_patch = 0;
+    num_src_in_patch                = 0;
+    uint16_t    num_output_in_patch = 0;
+    uint32_t *  input_active_mask, *input_owned_mask;
+    LPHashTable hashtable;
     if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
-        num_src_in_patch = patch_info.num_owned_vertices;
-        input_mask       = patch_info.mask_v;
+        num_src_in_patch  = patch_info.num_vertices[0];
+        input_active_mask = patch_info.active_mask_v;
+        input_owned_mask  = patch_info.owned_mask_v;
     }
-    if constexpr (op == Op::EV || op == Op::EF) {
-        num_src_in_patch = patch_info.num_owned_edges;
-        input_mask       = patch_info.mask_e;
+    if constexpr (op == Op::EV || op == Op::EF || op == Op::EVDiamond) {
+        num_src_in_patch  = patch_info.num_edges[0];
+        input_active_mask = patch_info.active_mask_e;
+        input_owned_mask  = patch_info.owned_mask_e;
     }
     if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
-        num_src_in_patch = patch_info.num_owned_faces;
-        input_mask       = patch_info.mask_f;
+        num_src_in_patch  = patch_info.num_faces[0];
+        input_active_mask = patch_info.active_mask_f;
+        input_owned_mask  = patch_info.owned_mask_f;
     }
 
-    // TODO we could cache the result of is_active if we can guarantee that a
-    // thread process a fixed number of input mesh elements
-    bool     is_active = false;
-    uint16_t local_id  = threadIdx.x;
-    while (local_id < num_src_in_patch) {
-        if (!is_deleted(local_id, input_mask)) {
-            is_active = is_active ||
-                        compute_active_set({patch_info.patch_id, local_id});
-            local_id += blockThreads;
+    // alloc participant bitmask
+    s_participant_bitmask = reinterpret_cast<uint32_t*>(
+        shrd_alloc.alloc(mask_num_bytes(num_src_in_patch)));
+
+    for (uint32_t i = threadIdx.x; i < DIVIDE_UP(num_src_in_patch, 32);
+         i += blockThreads) {
+        s_participant_bitmask[i] = 0;
+    }
+    __syncthreads();
+
+    // alloc and load owned mask async
+    // select lp hashtable
+    if constexpr (op == Op::VV || op == Op::EV || op == Op::FV ||
+                  op == Op::EVDiamond) {
+        const uint32_t mask_size = mask_num_bytes(patch_info.num_vertices[0]);
+        s_output_owned_bitmask =
+            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
+        load_async(reinterpret_cast<char*>(patch_info.owned_mask_v),
+                   mask_size,
+                   reinterpret_cast<char*>(s_output_owned_bitmask),
+                   false);
+        output_lp_hashtable = patch_info.lp_v;
+    }
+    if constexpr (op == Op::VE || op == Op::EE || op == Op::FE) {
+        const uint32_t mask_size = mask_num_bytes(patch_info.num_edges[0]);
+        s_output_owned_bitmask =
+            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
+        load_async(reinterpret_cast<char*>(patch_info.owned_mask_e),
+                   mask_size,
+                   reinterpret_cast<char*>(s_output_owned_bitmask),
+                   false);
+        output_lp_hashtable = patch_info.lp_e;
+    }
+    if constexpr (op == Op::VF || op == Op::EF || op == Op::FF) {
+        const uint32_t mask_size = mask_num_bytes(patch_info.num_faces[0]);
+        s_output_owned_bitmask =
+            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
+        load_async(reinterpret_cast<char*>(patch_info.owned_mask_f),
+                   mask_size,
+                   reinterpret_cast<char*>(s_output_owned_bitmask),
+                   false);
+        output_lp_hashtable = patch_info.lp_f;
+    }
+
+
+    // load table async
+    auto alloc_then_load_table = [&](bool with_wait) {
+        s_table = shrd_alloc.template alloc<LPPair>(
+            output_lp_hashtable.get_capacity());
+        load_async(block,
+                   output_lp_hashtable.get_table(),
+                   output_lp_hashtable.get_capacity(),
+                   s_table,
+                   with_wait);
+    };
+
+    if constexpr (op != Op::FV && op != Op::VV && op != Op::FF &&
+                  op != Op::EVDiamond) {
+        if (op != Op::EV && oriented) {
+            alloc_then_load_table(false);
         }
     }
 
-    if (__syncthreads_or(is_active) == 0) {
+
+    // we  cache the result of (is_active && is_owned && is_compute_set) in
+    // shared memory to check on it later
+    bool is_participant = false;
+    block_loop<uint16_t,
+               blockThreads,
+               true>(num_src_in_patch, [&](const uint16_t local_id) {
+        bool is_par = false;
+        if (local_id < num_src_in_patch) {
+            bool is_del = is_deleted(local_id, input_active_mask);
+            bool is_own = is_owned(local_id, input_owned_mask);
+            bool is_act = compute_active_set({patch_info.patch_id, local_id});
+            is_par      = !is_del && is_own && is_act;
+        }
+        is_participant     = is_participant || is_par;
+        uint32_t warp_mask = __ballot_sync(0xFFFFFFFF, is_par);
+        uint32_t lane_id   = threadIdx.x % 32;
+        if (lane_id == 0) {
+            uint32_t mask_id               = local_id / 32;
+            s_participant_bitmask[mask_id] = warp_mask;
+        }
+    });
+
+
+    if (__syncthreads_or(is_participant) == 0) {
         // reset num_src_in_patch to zero to indicate that this block/patch has
         // no work to do
         num_src_in_patch = 0;
         return;
     }
 
-    // 2) Load the patch info
-    // TODO need shift shrd_mem to be aligned to 128-byte boundary
-    extern __shared__ uint16_t shrd_mem[];
-    uint16_t*                  s_ev = shrd_mem;
-    uint16_t*                  s_fe = shrd_mem;
-    load_mesh_async<op>(patch_info, s_ev, s_fe, true);
 
-    not_owned_patch    = reinterpret_cast<uint32_t*>(shrd_mem);
-    not_owned_local_id = shrd_mem;
-    num_owned          = 0;
+    // Perform the query operation
+    query<blockThreads, op>(block,
+                            patch_info,
+                            shrd_alloc,
+                            s_output_offset,
+                            s_output_value,
+                            oriented);
 
-    __syncthreads();
-
-    // 3)Perform the query operation
-    if (oriented) {
-        assert(op == Op::VV);
-        if constexpr (op == Op::VV) {
-            v_v_oreinted<blockThreads>(
-                patch_info, s_output_offset, s_output_value, s_ev);
-        }
-    } else {
-        if constexpr (!(op == Op::VV || op == Op::FV || op == Op::FF)) {
-            load_not_owned_async<op>(patch_info,
-                                     not_owned_local_id,
-                                     not_owned_patch,
-                                     num_owned,
-                                     true);
-        }
-
-        query<blockThreads, op>(s_output_offset,
-                                s_output_value,
-                                s_ev,
-                                s_fe,
-                                patch_info.num_vertices,
-                                patch_info.num_edges,
-                                patch_info.num_faces);
+    if constexpr (op == Op::FV || op == Op::VV || op == Op::FF ||
+                  op == Op::EVDiamond) {
+        block.sync();
+        alloc_then_load_table(true);
     }
-
-    // load not-owned local and patch id
-    if constexpr (op == Op::VV || op == Op::FV || op == Op::FF) {
-        // need to sync since we will overwrite things that are used in
-        // query
-        __syncthreads();
-        load_not_owned_async<op>(
-            patch_info, not_owned_local_id, not_owned_patch, num_owned, true);
+    if (op == Op::EV && oriented) {
+        block.sync();
+        alloc_then_load_table(true);
     }
-
-
-    __syncthreads();
+    block.sync();
 }
 
 
@@ -127,16 +181,18 @@ __device__ __inline__ void query_block_dispatcher(const PatchInfo& patch_info,
  * query_block_dispatcher()
  */
 template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
-__device__ __inline__ void query_block_dispatcher(const Context& context,
-                                                  const uint32_t patch_id,
-                                                  computeT       compute_op,
-                                                  activeSetT compute_active_set,
-                                                  const bool oriented = false)
+__device__ __inline__ void query_block_dispatcher(
+    cooperative_groups::thread_block& block,
+    ShmemAllocator&                   shrd_alloc,
+    const Context&                    context,
+    const uint32_t                    patch_id,
+    computeT                          compute_op,
+    activeSetT                        compute_active_set,
+    const bool                        oriented = false)
 {
     // Extract the type of the input parameters of the compute lambda function.
     // The first parameter should be Vertex/Edge/FaceHandle and second parameter
     // should be RXMeshVertex/Edge/FaceIterator
-
     using ComputeTraits    = detail::FunctionTraits<computeT>;
     using ComputeHandleT   = typename ComputeTraits::template arg<0>::type;
     using ComputeIteratorT = typename ComputeTraits::template arg<1>::type;
@@ -155,42 +211,44 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
 
-    assert(patch_id < context.get_num_patches());
+    assert(patch_id < context.m_num_patches[0]);
 
-    uint32_t  num_src_in_patch = 0;
-    uint16_t* s_output_offset(nullptr);
-    uint16_t* s_output_value(nullptr);
-    uint16_t  num_owned;
-    uint32_t* not_owned_patch(nullptr);
-    uint16_t* not_owned_local_id(nullptr);
-    uint32_t* input_mask(nullptr);
 
-    query_block_dispatcher<op, blockThreads>(
-        context.get_patches_info()[patch_id],
-        compute_active_set,
-        oriented,
-        num_src_in_patch,
-        s_output_offset,
-        s_output_value,
-        num_owned,
-        not_owned_patch,
-        not_owned_local_id,
-        input_mask);
+    uint32_t    num_src_in_patch = 0;
+    uint16_t*   s_output_offset(nullptr);
+    uint16_t*   s_output_value(nullptr);
+    uint32_t*   s_participant_bitmask;
+    uint32_t*   s_output_owned_bitmask;
+    LPHashTable output_lp_hashtable;
+    LPPair*     s_table;
+
+    query_block_dispatcher<op, blockThreads>(block,
+                                             shrd_alloc,
+                                             context.m_patches_info[patch_id],
+                                             compute_active_set,
+                                             oriented,
+                                             num_src_in_patch,
+                                             s_output_offset,
+                                             s_output_value,
+                                             s_participant_bitmask,
+                                             s_output_owned_bitmask,
+                                             output_lp_hashtable,
+                                             s_table);
 
     // Call compute on the output in shared memory by looping over all
     // source elements in this patch.
+    constexpr uint32_t fixed_offset =
+        ((op == Op::EV) ? 2 :
+                          ((op == Op::FV || op == Op::FE) ?
+                               3 :
+                               ((op == Op::EVDiamond) ? 4 : 0)));
 
-    uint16_t local_id = threadIdx.x;
-    while (local_id < num_src_in_patch) {
+    for (uint16_t local_id = threadIdx.x; local_id < num_src_in_patch;
+         local_id += blockThreads) {
 
         assert(s_output_value);
-        if (!is_deleted(local_id, input_mask) &&
-            compute_active_set({patch_id, local_id})) {
-            constexpr uint32_t fixed_offset =
-                ((op == Op::EV)                 ? 2 :
-                 (op == Op::FV || op == Op::FE) ? 3 :
-                                                  0);
 
+        if (is_set_bit(local_id, s_participant_bitmask)) {
 
             ComputeHandleT   handle(patch_id, local_id);
             ComputeIteratorT iter(local_id,
@@ -198,16 +256,39 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
                                   s_output_offset,
                                   fixed_offset,
                                   patch_id,
-                                  num_owned,
-                                  not_owned_patch,
-                                  not_owned_local_id,
+                                  s_output_owned_bitmask,
+                                  output_lp_hashtable,
+                                  s_table,
+                                  context.m_patches_info[patch_id].patch_stash,
                                   int(op == Op::FE));
 
             compute_op(handle, iter);
         }
-
-        local_id += blockThreads;
     }
+}
+
+
+/**
+ * query_block_dispatcher()
+ */
+template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
+__device__ __inline__ void query_block_dispatcher(const Context& context,
+                                                  const uint32_t patch_id,
+                                                  computeT       compute_op,
+                                                  activeSetT compute_active_set,
+                                                  const bool oriented = false)
+{
+    namespace cg           = cooperative_groups;
+    cg::thread_block block = cg::this_thread_block();
+    ShmemAllocator   shrd_alloc;
+
+    query_block_dispatcher<op, blockThreads>(block,
+                                             shrd_alloc,
+                                             context,
+                                             patch_id,
+                                             compute_op,
+                                             compute_active_set,
+                                             oriented);
 }
 
 }  // namespace detail
@@ -222,6 +303,8 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
  * @tparam blockThreads the number of CUDA threads in the block
  * @tparam computeT the type of compute lambda function (inferred)
  * @tparam activeSetT the type of active set lambda function (inferred)
+ * @param block cooperative group block
+ * @param shrd_alloc dynamic shared memory allocator
  * @param context which store various parameters needed for the query
  * operation. The context can be obtained from RXMeshStatic
  * @param compute_op the computation lambda function that will be executed by
@@ -237,12 +320,38 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
  * is supported for oriented queries. FV, FE and EV is oriented by default
  */
 template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
+__device__ __inline__ void query_block_dispatcher(
+    cooperative_groups::thread_block& block,
+    ShmemAllocator&                   shrd_alloc,
+    const Context&                    context,
+    computeT                          compute_op,
+    activeSetT                        compute_active_set,
+    const bool                        oriented = false)
+{
+    if (blockIdx.x >= context.m_num_patches[0]) {
+        return;
+    }
+
+    detail::query_block_dispatcher<op, blockThreads>(block,
+                                                     shrd_alloc,
+                                                     context,
+                                                     blockIdx.x,
+                                                     compute_op,
+                                                     compute_active_set,
+                                                     oriented);
+}
+
+/**
+ * @brief same as the above function but no cooperative group or shared memory
+ * allocator needed
+ */
+template <Op op, uint32_t blockThreads, typename computeT, typename activeSetT>
 __device__ __inline__ void query_block_dispatcher(const Context& context,
                                                   computeT       compute_op,
                                                   activeSetT compute_active_set,
                                                   const bool oriented = false)
 {
-    if (blockIdx.x >= context.get_num_patches()) {
+    if (blockIdx.x >= context.m_num_patches[0]) {
         return;
     }
 
@@ -258,6 +367,8 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
  * @tparam Op the type of query operation
  * @tparam blockThreads the number of CUDA threads in the block
  * @tparam computeT the type of compute lambda function (inferred)
+ * @param block cooperative group block
+ * @param shrd_alloc dynamic shared memory allocator
  * @param context which store various parameters needed for the query
  * operation. The context can be obtained from RXMeshStatic
  * @param compute_op the computation lambda function that will be executed by
@@ -268,6 +379,32 @@ __device__ __inline__ void query_block_dispatcher(const Context& context,
  * "iterated" on (e.g., EdgeIterator for VE query)
  * @param oriented specifies if the query are oriented. Currently only VV query
  * is supported for oriented queries. FV, FE and EV is oriented by default
+ */
+template <Op op, uint32_t blockThreads, typename computeT>
+__device__ __inline__ void query_block_dispatcher(
+    cooperative_groups::thread_block& block,
+    ShmemAllocator&                   shrd_alloc,
+    const Context&                    context,
+    computeT                          compute_op,
+    const bool                        oriented = false)
+{
+    // Extract the type of the first input parameters of the compute lambda
+    // function. It should be Vertex/Edge/FaceHandle
+    using ComputeTraits  = detail::FunctionTraits<computeT>;
+    using ComputeHandleT = typename ComputeTraits::template arg<0>::type;
+
+    query_block_dispatcher<op, blockThreads>(
+        block,
+        shrd_alloc,
+        context,
+        compute_op,
+        [](ComputeHandleT) { return true; },
+        oriented);
+}
+
+/**
+ * @brief same as the above function but no cooperative group or shared memory
+ * allocator needed
  */
 template <Op op, uint32_t blockThreads, typename computeT>
 __device__ __inline__ void query_block_dispatcher(const Context& context,
@@ -369,39 +506,46 @@ __device__ __inline__ void higher_query_block_dispatcher(
     }*/
     __syncthreads();
 
+    namespace cg           = cooperative_groups;
+    cg::thread_block block = cg::this_thread_block();
+    ShmemAllocator   shrd_alloc;
 
     for (uint32_t p = 0; p < s_num_patches; ++p) {
 
         uint32_t patch_id = s_block_patches[p];
 
-        assert(patch_id < context.get_num_patches());
+        assert(patch_id < context.m_num_patches[0]);
 
-        uint32_t  num_src_in_patch = 0;
-        uint16_t *s_output_offset(nullptr), *s_output_value(nullptr);
-        uint16_t  num_owned = 0;
-        uint16_t* not_owned_local_id(nullptr);
-        uint32_t* not_owned_patch(nullptr);
-        uint32_t* input_mask(nullptr);
+        uint32_t    num_src_in_patch = 0;
+        uint16_t*   s_output_offset(nullptr);
+        uint16_t*   s_output_value(nullptr);
+        uint32_t*   s_participant_bitmask;
+        uint32_t*   s_output_owned_bitmask;
+        LPHashTable output_lp_hashtable;
+        LPPair*     s_table;
 
         detail::template query_block_dispatcher<op, blockThreads>(
-            context.get_patches_info()[patch_id],
+            block,
+            shrd_alloc,
+            context.m_patches_info[patch_id],
             compute_active_set,
             oriented,
             num_src_in_patch,
             s_output_offset,
             s_output_value,
-            num_owned,
-            not_owned_patch,
-            not_owned_local_id,
-            input_mask);
+            s_participant_bitmask,
+            s_output_owned_bitmask,
+            output_lp_hashtable,
+            s_table);
 
 
         if (pl.first == patch_id) {
 
             constexpr uint32_t fixed_offset =
-                ((op == Op::EV)                 ? 2 :
-                 (op == Op::FV || op == Op::FE) ? 3 :
-                                                  0);
+                ((op == Op::EV) ? 2 :
+                                  ((op == Op::FV || op == Op::FE) ?
+                                       3 :
+                                       ((op == Op::EVDiamond) ? 4 : 0)));
 
             ComputeIteratorT iter(
                 pl.second,
@@ -410,9 +554,10 @@ __device__ __inline__ void higher_query_block_dispatcher(
                 s_output_offset,
                 fixed_offset,
                 patch_id,
-                num_owned,
-                not_owned_patch,
-                not_owned_local_id,
+                s_output_owned_bitmask,
+                output_lp_hashtable,
+                s_table,
+                context.m_patches_info[patch_id].patch_stash,
                 int(op == Op::FE));
 
             compute_op(src_id, iter);

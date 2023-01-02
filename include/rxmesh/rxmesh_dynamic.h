@@ -13,8 +13,10 @@ class RXMeshDynamic : public RXMeshStatic
      * @param file_path path to an obj file
      * @param quite run in quite mode
      */
-    RXMeshDynamic(const std::string file_path, const bool quite = false)
-        : RXMeshStatic(file_path, quite)
+    RXMeshDynamic(const std::string file_path,
+                  const bool        quite        = false,
+                  const std::string patcher_file = "")
+        : RXMeshStatic(file_path, quite, patcher_file)
     {
     }
 
@@ -24,8 +26,9 @@ class RXMeshDynamic : public RXMeshStatic
      * @param quite run in quite mode
      */
     RXMeshDynamic(std::vector<std::vector<uint32_t>>& fv,
-                  const bool                          quite = false)
-        : RXMeshStatic(fv, quite)
+                  const bool                          quite        = false,
+                  const std::string                   patcher_file = "")
+        : RXMeshStatic(fv, quite, patcher_file)
     {
     }
 
@@ -33,39 +36,70 @@ class RXMeshDynamic : public RXMeshStatic
      * @brief populate the launch_box with grid size and dynamic shared memory
      * needed for a kernel that may use dynamic and query operations
      * @param op List of query operations done inside the kernel
-     * @param dyn_op List of dynamic update done inside the kernel
      * @param launch_box input launch box to be populated
      * @param kernel The kernel to be launched
      * @param oriented if the query is oriented. Valid only for Op::VV queries
      */
     template <uint32_t blockThreads>
     void prepare_launch_box(const std::vector<Op>    op,
-                            const std::vector<DynOp> dyn_op,
                             LaunchBox<blockThreads>& launch_box,
                             const void*              kernel,
                             const bool               oriented = false) const
     {
-        static_assert(
-            blockThreads && ((blockThreads & (blockThreads - 1)) == 0),
-            " RXMeshDynamic::prepare_launch_box() CUDA block size should be of "
-            "power 2");
-
 
         launch_box.blocks         = this->m_num_patches;
         launch_box.smem_bytes_dyn = 0;
-        for (auto o : dyn_op) {
-            launch_box.smem_bytes_dyn =
-                std::max(launch_box.smem_bytes_dyn,
-                         this->template calc_shared_memory<blockThreads>(o));
-        }
+
 
         for (auto o : op) {
             launch_box.smem_bytes_dyn =
                 std::max(launch_box.smem_bytes_dyn,
-                         this->RXMeshStatic::calc_shared_memory<blockThreads>(
-                             o, oriented));
+                         this->calc_shared_memory<blockThreads>(o, oriented));
         }
 
+        uint16_t vertex_cap = static_cast<uint16_t>(
+            this->m_capacity_factor *
+            static_cast<float>(this->m_max_vertices_per_patch));
+
+        uint16_t edge_cap = static_cast<uint16_t>(
+            this->m_capacity_factor *
+            static_cast<float>(this->m_max_edges_per_patch));
+
+        uint16_t face_cap = static_cast<uint16_t>(
+            this->m_capacity_factor *
+            static_cast<float>(this->m_max_faces_per_patch));
+
+        // To load EV and FE
+        uint32_t dyn_shmem = 3 * face_cap * sizeof(uint16_t) +
+                             2 * edge_cap * sizeof(uint16_t) +
+                             2 * ShmemAllocator::default_alignment;
+
+        // cavity ID of fake deleted elements
+        dyn_shmem += vertex_cap * sizeof(uint16_t) +
+                     edge_cap * sizeof(uint16_t) + face_cap * sizeof(uint16_t) +
+                     3 * ShmemAllocator::default_alignment;
+
+        // cavity loop
+        dyn_shmem += this->m_max_edges_per_patch * sizeof(uint16_t) +
+                     ShmemAllocator::default_alignment;
+
+        // store number of cavities and patches to lock
+        dyn_shmem += 2 * sizeof(int) + ShmemAllocator::default_alignment;
+
+
+        // store cavity size (assume number of cavities is half the patch size)
+        dyn_shmem += (this->m_max_faces_per_patch / 2) * sizeof(int) +
+                     ShmemAllocator::default_alignment;
+
+        // active, owned, migrate(for vertices only), src bitmask (for vertices
+        // and edges only), src connect (for vertices and edges only), ownership
+        // owned_cavity_bdry (for vertices only), ribbonize (for vertices only)
+        dyn_shmem += 8 * detail::mask_num_bytes(vertex_cap) +
+                     8 * ShmemAllocator::default_alignment;
+        dyn_shmem += 5 * detail::mask_num_bytes(edge_cap) +
+                     5 * ShmemAllocator::default_alignment;
+        dyn_shmem += 3 * detail::mask_num_bytes(face_cap) +
+                     3 * ShmemAllocator::default_alignment;
 
         if (!this->m_quite) {
             RXMESH_TRACE(
@@ -75,9 +109,13 @@ class RXMeshDynamic : public RXMeshStatic
                 blockThreads);
         }
 
+        // TODO we can do better than this
+        launch_box.smem_bytes_dyn += dyn_shmem;
+
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,
                             launch_box.num_registers_per_thread,
+                            blockThreads,
                             kernel);
     }
 
@@ -91,71 +129,22 @@ class RXMeshDynamic : public RXMeshStatic
      */
     bool validate();
 
-   private:
-    template <uint32_t blockThreads>
-    size_t calc_shared_memory(const DynOp op) const
-    {
-        if (op == DynOp::EdgeFlip && !this->is_edge_manifold()) {
-            RXMESH_ERROR(
-                "RXMeshDynamic::calc_shared_memory() edge flips is only "
-                "supported on manifold mesh.");
-        }
+    /**
+     * @brief update the host side. Use this function to update the host side
+     * after performing (dynamic) updates on the GPU. This function may
+     * re-allocates the host side memory buffers in case it is not enough (e.g.,
+     * after performing mesh refinement on the GPU)
+     */
+    void update_host();
 
-        size_t dynamic_smem = 0;
-        if (op == DynOp::EdgeFlip) {
-            // load FE, then transpose it into EF, then update FE. Thus, we need
-            // to have both in memory at one point. Then, load EV and update it
-            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
-            dynamic_smem += 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
-            dynamic_smem += DIVIDE_UP(this->m_max_faces_per_patch -
-                                          this->m_max_not_owned_faces,
-                                      2) *
-                            2 * sizeof(uint16_t);
-        }
-
-        if (op == DynOp::DeleteFace) {
-            // load FE only
-            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
-        }
-
-        if (op == DynOp::DeleteEdge) {
-            dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
-                                    2 * this->m_max_edges_per_patch) *
-                           sizeof(uint16_t);
-            dynamic_smem +=
-                DIVIDE_UP(this->m_max_edges_per_patch, 32) * sizeof(uint32_t);
-        }
-
-        if (op == DynOp::DeleteVertex) {
-            dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
-                                    2 * this->m_max_edges_per_patch) *
-                           sizeof(uint16_t);
-            dynamic_smem +=
-                std::max(DIVIDE_UP(this->m_max_vertices_per_patch, 32),
-                         DIVIDE_UP(this->m_max_edges_per_patch, 32)) *
-                sizeof(uint32_t);
-        }
-
-        if (op == DynOp::EdgeCollapse) {
-            // to load EV and then FE. Only need one of them at a time
-            dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
-                                    2 * this->m_max_edges_per_patch) *
-                           sizeof(uint16_t);
-
-            // to store the vertex/edge glue. Only need one of them at a time
-            dynamic_smem += (1 + std::max(this->m_max_vertices_per_patch,
-                                          this->m_max_edges_per_patch)) *
-                            sizeof(uint16_t);
-
-            // to store the source vertex for all edges (to check on if we need
-            // to flip glued edges)
-            dynamic_smem += 1 + this->m_max_edges_per_patch * sizeof(uint16_t);
-
-            // to store the mask for collapsed edges
-            dynamic_smem +=
-                DIVIDE_UP(this->m_max_edges_per_patch, 32) * sizeof(uint32_t);
-        }
-        return dynamic_smem;
-    }
+    /**
+     * @brief update polyscope after performing dynamic changes. This function
+     * is supposed to be called after a call to update_host since polyscope
+     * reads information from the host side of RXMesh which include the topology
+     * (stored in RXMesh/RXMeshStatic/RXMeshDynamic) and the input vertex
+     * coordinates as well. Thus, a call to `move(DEVICE, HOST)` should be done
+     * to RXMesh-stored vertex coordinates before calling this function.
+     */
+    void update_polyscope();
 };
 }  // namespace rxmesh

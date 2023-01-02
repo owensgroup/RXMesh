@@ -439,6 +439,34 @@ inline std::istream& operator>>(std::istream& input, const Vector<N, T>& v)
     return input;
 }
 
+template <uint32_t N, typename T>
+__host__ __device__ __forceinline__ Vector<N, T> operator+(
+    const Vector<N, T>& v0,
+    const Vector<N, T>& v1)
+{
+    return Vector<N, T>(v0) += v1;
+}
+
+
+template <uint32_t N, typename T>
+__host__ __device__ __forceinline__ Vector<N, T> operator-(
+    const Vector<N, T>& v0,
+    const Vector<N, T>& v1)
+{
+    return Vector<N, T>(v0) -= v1;
+}
+
+template <uint32_t N, typename T>
+__host__ __device__ __forceinline__ Vector<N, T> operator-(
+    const Vector<N, T>& v)
+{
+    Vector<N, T> ret;
+    for (int i = 0; i < N; ++i) {
+        ret[i] = -v[i];
+    }
+    return ret;
+}
+
 // Alias
 using Vector2d  = Vector<2, double>;
 using Vector2f  = Vector<2, float>;

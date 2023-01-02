@@ -1,9 +1,18 @@
 #pragma once
 
 #include <stdint.h>
+#include <fstream>
 #include <functional>
+#include <string>
 #include <unordered_map>
+
 #include "rxmesh/util/util.h"
+
+#define CEREAL_RAPIDJSON_NAMESPACE CerealRapidjson
+
+#include "cereal/archives/portable_binary.hpp"
+#include "cereal/cereal.hpp"
+#include "cereal/types/vector.hpp"
 
 namespace rxmesh {
 
@@ -29,7 +38,9 @@ class Patcher
             const uint32_t num_edges,
             const bool     quite);
 
-    virtual ~Patcher();
+    Patcher(std::string filename);
+
+    ~Patcher();
 
     void print_statistics();
 
@@ -46,21 +57,6 @@ class Patcher
     std::vector<uint32_t>& get_face_patch()
     {
         return m_face_patch;
-    }
-
-    uint32_t* get_device_face_patch()
-    {
-        return m_d_face_patch;
-    }
-
-    uint32_t* get_device_vertex_patch()
-    {
-        return m_d_vertex_patch;
-    }
-
-    uint32_t* get_device_edge_patch()
-    {
-        return m_d_edge_patch;
     }
 
     std::vector<uint32_t>& get_vertex_patch()
@@ -150,12 +146,42 @@ class Patcher
         return m_num_lloyd_run;
     }
 
+    void save(std::string filename)
+    {
+        std::ofstream                       ss(filename, std::ios::binary);
+        cereal::PortableBinaryOutputArchive archive(ss);
+        archive(*this);
+    }
+
+
+    template <class Archive>
+    void serialize(Archive& archive)
+    {
+        archive(CEREAL_NVP(m_patch_size),
+                CEREAL_NVP(m_num_patches),
+                CEREAL_NVP(m_num_vertices),
+                CEREAL_NVP(m_num_edges),
+                CEREAL_NVP(m_num_faces),
+                CEREAL_NVP(m_num_seeds),
+                CEREAL_NVP(m_max_num_patches),
+                CEREAL_NVP(m_num_components),
+                CEREAL_NVP(m_num_lloyd_run),
+                CEREAL_NVP(m_face_patch),
+                CEREAL_NVP(m_vertex_patch),
+                CEREAL_NVP(m_edge_patch),
+                CEREAL_NVP(m_patches_val),
+                CEREAL_NVP(m_patches_offset),
+                CEREAL_NVP(m_ribbon_ext_val),
+                CEREAL_NVP(m_ribbon_ext_offset),
+                CEREAL_NVP(m_patching_time_ms));
+    }
+
    private:
     /**
      * @brief Allocate various auxiliary memory needed to store patches info on
      * the host
      */
-    void allocate_memory();
+    void allocate_memory(std::vector<uint32_t>& seeds);
 
     /**
      * @brief Allocate various temporarily memory on the device needed to
@@ -164,8 +190,24 @@ class Patcher
      * get face-incident-faces
      * @param ff_values stores face-incident-faces in compressed format
      */
-    void allocate_device_memory(const std::vector<uint32_t>& ff_offset,
-                                const std::vector<uint32_t>& ff_values);
+    void allocate_device_memory(const std::vector<uint32_t>& seeds,
+                                const std::vector<uint32_t>& ff_offset,
+                                const std::vector<uint32_t>& ff_values,
+                                uint32_t*&                   d_face_patch,
+                                uint32_t*&                   d_queue,
+                                uint32_t*&                   d_queue_ptr,
+                                uint32_t*&                   d_ff_values,
+                                uint32_t*&                   d_ff_offset,
+                                void*&     d_cub_temp_storage_scan,
+                                void*&     d_cub_temp_storage_max,
+                                size_t&    cub_scan_bytes,
+                                size_t&    cub_max_bytes,
+                                uint32_t*& d_seeds,
+                                uint32_t*& d_new_num_patches,
+                                uint32_t*& d_max_patch_size,
+                                uint32_t*& d_patches_offset,
+                                uint32_t*& d_patches_size,
+                                uint32_t*& d_patches_val);
 
     void assign_patch(
         const std::vector<std::vector<uint32_t>>&                 fv,
@@ -173,24 +215,48 @@ class Patcher
                                  uint32_t,
                                  ::rxmesh::detail::edge_key_hash> edges_map);
 
-    void initialize_random_seeds(const std::vector<uint32_t>& ff_offset,
+    void initialize_random_seeds(std::vector<uint32_t>&       seeds,
+                                 const std::vector<uint32_t>& ff_offset,
                                  const std::vector<uint32_t>& ff_values);
 
     void get_multi_components(std::vector<std::vector<uint32_t>>& components,
                               const std::vector<uint32_t>&        ff_offset,
                               const std::vector<uint32_t>&        ff_values);
 
-    void initialize_random_seeds_single_component();
-    void generate_random_seed_from_component(std::vector<uint32_t>& component,
+    void initialize_random_seeds_single_component(std::vector<uint32_t>& seeds);
+    void generate_random_seed_from_component(std::vector<uint32_t>& seeds,
+                                             std::vector<uint32_t>& component,
                                              uint32_t               num_seeds);
 
     void postprocess(const std::vector<std::vector<uint32_t>>& fv,
                      const std::vector<uint32_t>&              ff_offset,
                      const std::vector<uint32_t>&              ff_values);
 
-    uint32_t construct_patches_compressed_format();
+    uint32_t construct_patches_compressed_format(uint32_t* d_face_patch,
+                                                 void*  d_cub_temp_storage_scan,
+                                                 void*  d_cub_temp_storage_max,
+                                                 size_t cub_scan_bytes,
+                                                 size_t cub_max_bytes,
+                                                 uint32_t* d_max_patch_size,
+                                                 uint32_t* d_patches_offset,
+                                                 uint32_t* d_patches_size,
+                                                 uint32_t* d_patches_val);
 
-    void run_lloyd();
+    void run_lloyd(uint32_t* d_face_patch,
+                   uint32_t* d_queue,
+                   uint32_t* d_queue_ptr,
+                   uint32_t* d_ff_values,
+                   uint32_t* d_ff_offset,
+                   void*     d_cub_temp_storage_scan,
+                   void*     d_cub_temp_storage_max,
+                   size_t    cub_scan_bytes,
+                   size_t    cub_max_bytes,
+                   uint32_t* d_seeds,
+                   uint32_t* d_new_num_patches,
+                   uint32_t* d_max_patch_size,
+                   uint32_t* d_patches_offset,
+                   uint32_t* d_patches_size,
+                   uint32_t* d_patches_val);
 
 
     uint32_t m_patch_size, m_num_patches, m_num_vertices, m_num_edges,
@@ -199,37 +265,16 @@ class Patcher
 
     // store the face, vertex, edge patch
     std::vector<uint32_t> m_face_patch, m_vertex_patch, m_edge_patch;
-    uint32_t *            m_d_face_patch, *m_d_vertex_patch, *m_d_edge_patch;
 
 
     // Stores the patches in compressed format
     std::vector<uint32_t> m_patches_val, m_patches_offset;
-
-    // deallocated immediately after computing patches
-    uint32_t *m_d_patches_offset, *m_d_patches_size, *m_d_patches_val;
 
     // Stores ribbon in compressed format
     std::vector<uint32_t> m_ribbon_ext_val, m_ribbon_ext_offset;
 
     // caching the time taken to construct the patches
     float m_patching_time_ms;
-
-    std::vector<uint32_t> m_seeds;
-
-    // (deallocated immediately after computing patches)
-    uint32_t* m_d_seeds;
-
-    // stores ff on the device (deallocated immediately after computing patches)
-    uint32_t *m_d_ff_values, *m_d_ff_offset;
-
-    // utility used during creating patches (deallocated immediately after
-    // computing patches)
-    uint32_t *m_d_queue, *m_d_queue_ptr, *m_d_new_num_patches,
-        *m_d_max_patch_size;
-
-    // CUB temp memory(deallocated immediately after computing patches)
-    void * m_d_cub_temp_storage_scan, *m_d_cub_temp_storage_max;
-    size_t m_cub_scan_bytes, m_cub_max_bytes;
 };
 
 }  // namespace patcher

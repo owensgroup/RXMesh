@@ -2,7 +2,7 @@
 
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
-#include "rxmesh/kernels/query_dispatcher.cuh"
+#include "rxmesh/query.cuh"
 #include "rxmesh/util/vector.h"
 
 /**
@@ -125,7 +125,9 @@ __global__ static void relax_ptp_rxmesh(
         }
     };
 
+    auto block = cooperative_groups::this_thread_block();
 
-    query_block_dispatcher<Op::VV, blockThreads>(
-        context, geo_lambda, in_active_set, true);
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, geo_lambda, in_active_set, true);
 }
