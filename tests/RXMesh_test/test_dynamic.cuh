@@ -19,10 +19,9 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    Cavity<blockThreads, CavityOp::E> cavity(block, context, shrd_alloc);
+    Cavity<blockThreads, CavityOp::E> cavity(block, context, shrd_alloc);    
 
-
-    for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {        
+    for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
         if (on_ribbon) {
             if (!conflicting) {
                 if (eh.unpack().second == 11 || eh.unpack().second == 51 ||
@@ -33,7 +32,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
             } else {
                 if (eh.unpack().second == 11 || eh.unpack().second == 10 ||
                     eh.unpack().second == 358 || eh.unpack().second == 359 ||
-                    eh.unpack().second == 354 || eh.unpack().second == 356 ) {
+                    eh.unpack().second == 354 || eh.unpack().second == 356) {
                     e_attr(eh) = 100;
                     cavity.add(eh);
                 }

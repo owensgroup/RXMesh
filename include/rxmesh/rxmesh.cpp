@@ -116,8 +116,7 @@ RXMesh::~RXMesh()
         free(m_h_patches_info[p].owned_mask_v);
         free(m_h_patches_info[p].owned_mask_e);
         free(m_h_patches_info[p].owned_mask_f);
-        free(m_h_patches_info[p].num_faces);
-        free(m_h_patches_info[p].mutex);
+        free(m_h_patches_info[p].num_faces);        
         m_h_patches_info[p].lp_v.free();
         m_h_patches_info[p].lp_e.free();
         m_h_patches_info[p].lp_f.free();
@@ -143,12 +142,12 @@ RXMesh::~RXMesh()
         GPU_FREE(m_h_patches_info[p].owned_mask_f);
         GPU_FREE(m_h_patches_info[p].ev);
         GPU_FREE(m_h_patches_info[p].fe);
-        GPU_FREE(m_h_patches_info[p].num_faces);
-        GPU_FREE(m_h_patches_info[p].mutex);
+        GPU_FREE(m_h_patches_info[p].num_faces);        
         m_h_patches_info[p].lp_v.free();
         m_h_patches_info[p].lp_e.free();
         m_h_patches_info[p].lp_f.free();
         m_h_patches_info[p].patch_stash.free();
+        m_h_patches_info[p].lock.free();
     }
     GPU_FREE(m_d_patches_info);
     free(m_h_patches_info);
@@ -204,11 +203,11 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
 
     const uint32_t patches_1_bytes = (m_num_patches + 1) * sizeof(uint32_t);
 
-    m_h_vertex_prefix = (uint32_t*)malloc(patches_1_bytes);
+    m_h_vertex_prefix    = (uint32_t*)malloc(patches_1_bytes);
     m_h_vertex_prefix[0] = 0;
-    m_h_edge_prefix   = (uint32_t*)malloc(patches_1_bytes);
+    m_h_edge_prefix      = (uint32_t*)malloc(patches_1_bytes);
     m_h_edge_prefix[0]   = 0;
-    m_h_face_prefix   = (uint32_t*)malloc(patches_1_bytes);
+    m_h_face_prefix      = (uint32_t*)malloc(patches_1_bytes);
     m_h_face_prefix[0]   = 0;
 
     for (uint32_t p = 0; p < m_num_patches; ++p) {
@@ -792,9 +791,6 @@ void RXMesh::build_device()
         m_h_patches_info[p].patch_id    = p;
         m_h_patches_info[p].patch_stash = PatchStash(false);
 
-        m_h_patches_info[p].mutex    = (uint32_t*)malloc(sizeof(uint32_t));
-        m_h_patches_info[p].mutex[0] = INVALID32;
-
 
         uint16_t* d_counts;
         CUDA_ERROR(cudaMalloc((void**)&d_counts, 6 * sizeof(uint16_t)));
@@ -809,13 +805,7 @@ void RXMesh::build_device()
         d_patch.vertices_capacity = d_counts + 5;
         d_patch.patch_id          = p;
         d_patch.patch_stash       = PatchStash(true);
-
-        // lock
-        CUDA_ERROR(cudaMalloc((void**)&d_patch.mutex, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMemcpy(d_patch.mutex,
-                              m_h_patches_info[p].mutex,
-                              sizeof(uint32_t),
-                              cudaMemcpyHostToDevice));
+        d_patch.lock.init();
 
         // copy count and capacities
         CUDA_ERROR(cudaMemcpy(d_patch.num_faces,

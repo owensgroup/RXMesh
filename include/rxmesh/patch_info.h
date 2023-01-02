@@ -4,6 +4,7 @@
 #include "rxmesh/handle.h"
 #include "rxmesh/local.h"
 #include "rxmesh/lp_hashtable.cuh"
+#include "rxmesh/patch_lock.h"
 #include "rxmesh/patch_stash.cuh"
 #include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/macros.h"
@@ -70,28 +71,7 @@ struct ALIGN(16) PatchInfo
     // patch
     LPHashTable lp_v, lp_e, lp_f;
 
-    uint32_t* mutex;
-
-    __device__ bool try_lock(uint32_t p)
-    {
-#ifdef __CUDA_ARCH__
-        uint32_t old = ::atomicCAS(mutex, INVALID32, p);
-        if (old == INVALID32) {
-            return true;
-        } else {
-            return false;
-        }
-#endif
-    }
-
-
-    __device__ void unlock()
-    {
-#ifdef __CUDA_ARCH__
-        atomicExch(mutex, INVALID32);
-#endif
-    }
-
+    PatchLock lock;
 
     /**
      * @brief return pointer to the number of elements corresponding  to the
