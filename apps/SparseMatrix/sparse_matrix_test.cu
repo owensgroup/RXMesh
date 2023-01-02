@@ -1,11 +1,11 @@
 #include <cuda_profiler_api.h>
 #include "gtest/gtest.h"
-#include "matrix_operation.cuh"
+
 #include "rxmesh/attribute.h"
+#include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
-#include "rxmesh/util/import_obj.h"
-#include "rxmesh/util/report.h"
-#include "rxmesh/util/timer.h"
+
+#include "matrix_operation.cuh"
 #include "sparse_matrix_mcf.cuh"
 
 template <uint32_t blockThreads, typename IndexT = int>
@@ -22,7 +22,10 @@ __global__ static void sparse_mat_test(const rxmesh::Context context,
             iter.size() + 1;
     };
 
-    query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
+    auto                block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
 }
 
 template <uint32_t blockThreads>
@@ -39,7 +42,10 @@ __global__ static void sparse_mat_query_test(
         }
     };
 
-    query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
+    auto                block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
 }
 
 template <typename T, uint32_t blockThreads>
@@ -73,7 +79,10 @@ __global__ static void sparse_mat_edge_len_test(
         }
     };
 
-    query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
+    auto                block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
 }
 
 template <typename T>
@@ -138,7 +147,10 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
         A_mat(v_id, v_id) = v_weight + time_step * sum_e_weight;
     };
 
-    query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
+    auto                block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
 }
 
 TEST(Apps, SparseMatrix)

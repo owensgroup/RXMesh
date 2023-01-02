@@ -1,7 +1,4 @@
 #pragma once
-
-#include <iostream>
-#include <vector>
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/query.cuh"
