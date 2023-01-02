@@ -325,8 +325,7 @@ TEST(Apps, SparseMatrixEdgeLen)
                           num_vertices * sizeof(float),
                           cudaMemcpyDeviceToHost));
 
-    for (uint32_t i = 0; i < num_vertices; ++i) {
-        // printf("Idx: %" PRIu32 " %f %f \n", i, h_result[i], h_arr_ref[i]);
+    for (uint32_t i = 0; i < num_vertices; ++i) {        
         EXPECT_FLOAT_EQ(h_result[i], h_arr_ref[i]);
     }
 

@@ -163,9 +163,10 @@ struct SparseMatrix
         uint32_t col_index = m_context.m_vertex_prefix[c_patch_id] + c_local_id;
         uint32_t row_index = m_context.m_vertex_prefix[r_patch_id] + r_local_id;
 
-        for (IndexT i = (IndexT)m_d_row_ptr[row_index];
-             i < m_d_row_ptr[row_index + 1];
-             ++i) {
+        const IndexT start = m_d_row_ptr[row_index];
+        const IndexT end   = m_d_row_ptr[row_index + 1];
+
+        for (IndexT i = start; i < end; ++i) {
             if (m_d_col_idx[i] == col_index) {
                 return i;
             }
