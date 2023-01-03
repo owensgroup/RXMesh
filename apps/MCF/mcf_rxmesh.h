@@ -9,6 +9,8 @@
 #include "rxmesh/util/timer.h"
 #include "rxmesh/util/vector.h"
 
+#include "mcf_sparse_matrix.cuh"
+
 template <typename T>
 void axpy(rxmesh::RXMeshStatic&             rxmesh,
           rxmesh::VertexAttribute<T>&       y,
