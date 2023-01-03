@@ -27,6 +27,7 @@ struct RXMeshTestArg
 #include "test_lp_pair.h"
 #include "test_dynamic.cuh"
 #include "test_ev_diamond.h"
+#include "test_sparse_matrix.cuh"
 // clang-format on
 
 int main(int argc, char** argv)

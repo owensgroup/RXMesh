@@ -1,18 +1,9 @@
 #pragma once
-
-#include <cuda_profiler_api.h>
-#include <cuda_runtime.h>
-
-#include "dense_matrix.cuh"
 #include "rxmesh/attribute.h"
+#include "rxmesh/matrix/dense_matrix.cuh"
+#include "rxmesh/matrix/sparse_matrix.cuh"
 #include "rxmesh/rxmesh_static.h"
-#include "rxmesh/util/import_obj.h"
-#include "rxmesh/util/report.h"
-#include "rxmesh/util/timer.h"
-#include "sparse_matrix.cuh"
 
-#include "cusolverSp.h"
-#include "cusparse.h"
 
 template <typename T, uint32_t blockThreads>
 __global__ static void mcf_A_B_setup(
