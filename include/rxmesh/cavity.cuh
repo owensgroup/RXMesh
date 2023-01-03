@@ -45,7 +45,8 @@ struct Cavity
         : m_context(context)
     {
 
-        m_patch_info = m_context.m_patches_info[blockIdx.x];
+        m_patch_info     = m_context.m_patches_info[blockIdx.x];
+        m_init_timestamp = m_patch_info.timestamp;
 
         __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
         m_s_active_cavity_bitmask = Bitmask(blockThreads, smem);
@@ -1851,6 +1852,7 @@ struct Cavity
     uint16_t* m_s_cavity_edge_loop;
     PatchInfo m_patch_info;
     Context   m_context;
+    uint32_t  m_init_timestamp;
 };
 
 }  // namespace rxmesh

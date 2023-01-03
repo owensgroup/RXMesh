@@ -71,7 +71,28 @@ struct ALIGN(16) PatchInfo
     // patch
     LPHashTable lp_v, lp_e, lp_f;
 
+    // a lock for the patch that should be acquired before modifying the patch
+    // specially if more than one thread is updating the patch
     PatchLock lock;
+
+    // a timestamp that is updated every time the patch is modified
+
+    uint32_t* timestamp;
+
+    __device__ __inline__ void update_timestamp()
+    {
+#ifdef __CUDA_ARCH__
+        // this is the implementation of MarsRng32
+        uint32_t temp = timestamp[0];
+        __threadfence();
+        temp ^= (temp << 13);
+        temp = (temp >> 17);
+        temp ^= (temp << 5);
+        atomicExch(timestamp, temp);
+        __threadfence();
+#endif
+    }
+
 
     /**
      * @brief return pointer to the number of elements corresponding  to the

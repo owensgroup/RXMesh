@@ -22,8 +22,11 @@
 namespace rxmesh {
 struct MarsRng32
 {
+    static constexpr uint32_t init_val = 2463534242;
+
     uint32_t y;
-    __host__ __device__ constexpr MarsRng32() : y(2463534242)
+
+    __host__ __device__ constexpr MarsRng32() : y(init_val)
     {
     }
     constexpr uint32_t __host__ __device__ operator()()

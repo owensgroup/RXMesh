@@ -23,8 +23,10 @@ struct PatchLock
 #ifdef __CUDA_ARCH__
         int attempt = 0;
         while (::atomicCAS(lock, FREE, LOCKED) == LOCKED) {
+            __threadfence();
             if (attempt == MAX_ATTEMPT) {
                 int other = ::atomicMin(spin, id);
+                __threadfence();
                 if (other < id) {
                     return false;
                 }
@@ -73,7 +75,7 @@ struct PatchLock
         GPU_FREE(spin);
     }
 
-    // private:
+   private:
     static constexpr uint32_t FREE        = 0;
     static constexpr uint32_t LOCKED      = INVALID32;
     static constexpr int      MAX_ATTEMPT = 10;
