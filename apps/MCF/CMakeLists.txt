@@ -6,6 +6,7 @@ set(SOURCE_LIST
 	mcf_openmesh.h
 	mcf_rxmesh.h	
 	mcf_util.h
+	mcf_sparse_matrix.cuh
 )
 
 set(COMMON_LIST    

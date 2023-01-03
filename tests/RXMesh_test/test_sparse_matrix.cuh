@@ -1,12 +1,10 @@
-#include <cuda_profiler_api.h>
 #include "gtest/gtest.h"
 
 #include "rxmesh/attribute.h"
+#include "rxmesh/matrix/matrix_operation.cuh"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
 
-#include "matrix_operation.cuh"
-#include "sparse_matrix_mcf.cuh"
 
 template <uint32_t blockThreads, typename IndexT = int>
 __global__ static void sparse_mat_test(const rxmesh::Context context,
@@ -153,7 +151,7 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
     query.dispatch<Op::VV>(block, shrd_alloc, mat_setup);
 }
 
-TEST(Apps, SparseMatrix)
+TEST(RXMeshStatic, SparseMatrix)
 {
     using namespace rxmesh;
 
@@ -219,7 +217,7 @@ TEST(Apps, SparseMatrix)
     spmat.free();
 }
 
-TEST(Apps, SparseMatrixQuery)
+TEST(RXMeshStatic, SparseMatrixQuery)
 {
     using namespace rxmesh;
 
@@ -262,7 +260,7 @@ TEST(Apps, SparseMatrixQuery)
     spmat.free();
 }
 
-TEST(Apps, SparseMatrixEdgeLen)
+TEST(RXMeshStatic, SparseMatrixEdgeLen)
 {
     using namespace rxmesh;
 
@@ -325,7 +323,7 @@ TEST(Apps, SparseMatrixEdgeLen)
                           num_vertices * sizeof(float),
                           cudaMemcpyDeviceToHost));
 
-    for (uint32_t i = 0; i < num_vertices; ++i) {        
+    for (uint32_t i = 0; i < num_vertices; ++i) {
         EXPECT_FLOAT_EQ(h_result[i], h_arr_ref[i]);
     }
 
@@ -335,7 +333,7 @@ TEST(Apps, SparseMatrixEdgeLen)
     spmat.free();
 }
 
-TEST(Apps, SparseMatrixSimpleSolve)
+TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 {
     using namespace rxmesh;
 
@@ -385,14 +383,4 @@ TEST(Apps, SparseMatrixSimpleSolve)
     for (uint32_t i = 0; i < num_vertices * 3; ++i) {
         EXPECT_NEAR(h_ret_mat[i], h_B_mat[i], 1e-3);
     }
-}
-
-int main(int argc, char** argv)
-{
-    using namespace rxmesh;
-    Log::init();
-
-    ::testing::InitGoogleTest(&argc, argv);
-
-    return RUN_ALL_TESTS();
 }
