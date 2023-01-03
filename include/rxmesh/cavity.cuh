@@ -46,7 +46,7 @@ struct Cavity
     {
 
         m_patch_info     = m_context.m_patches_info[blockIdx.x];
-        m_init_timestamp = m_patch_info.timestamp;
+        m_init_timestamp = m_patch_info.timestamp[0];
 
         __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
         m_s_active_cavity_bitmask = Bitmask(blockThreads, smem);
