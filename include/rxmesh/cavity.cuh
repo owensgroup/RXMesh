@@ -763,12 +763,10 @@ struct Cavity
      */
     __device__ __inline__ void cleanup(cooperative_groups::thread_block& block)
     {
-        // TODO update context's m_max_num_vertices, m_max_num_edges,
-        // m_max_num_faces using atomicMax()
-        //
         // cleanup the hashtable by removing the vertices/edges/faces that has
         // changed their ownership to be in this patch (p) and thus should not
         // be in the hashtable
+
         for (uint32_t vp = threadIdx.x; vp < m_s_num_vertices[0];
              vp += blockThreads) {
             if (m_s_ownership_change_mask_v(vp)) {
@@ -789,6 +787,10 @@ struct Cavity
                 m_patch_info.lp_f.remove(fp);
             }
         }
+
+        ::atomicMax(m_context.m_max_num_vertices, m_s_num_vertices[0]);
+        ::atomicMax(m_context.m_max_num_edges, m_s_num_edges[0]);
+        ::atomicMax(m_context.m_max_num_faces, m_s_num_faces[0]);
 
         detail::store<blockThreads>(
             m_s_ev,
@@ -823,6 +825,8 @@ struct Cavity
         detail::store<blockThreads>(m_s_active_mask_f.m_bitmask,
                                     DIVIDE_UP(m_s_num_faces[0], 32),
                                     m_patch_info.active_mask_f);
+
+        unlock_patches(block);
     }
 
 
@@ -1108,6 +1112,10 @@ struct Cavity
         }
         block.sync();
 
+        // lock the patches
+        if (!lock_patches(block)) {
+            return false;
+        }
 
         // construct protection zone
         for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
@@ -1156,9 +1164,66 @@ struct Cavity
                 migrate_from_patch(block, q, m_s_ribbonize_v, false);
             }
         }
+
         return true;
     }
 
+    /**
+     * @brief lock patches marked true in m_s_patches_to_lock_mask
+     * @return
+     */
+    __device__ __inline__ bool lock_patches(
+        cooperative_groups::thread_block& block)
+    {
+        __shared__ bool s_success;
+
+        if (threadIdx.x == 0) {
+            s_success = true;
+            if (m_patch_info.lock.acquire_lock(blockIdx.x)) {
+                for (uint8_t i = 0; i < PatchStash::stash_size; ++i) {
+                    if (m_s_patches_to_lock_mask(i)) {
+                        uint32_t p = m_patch_info.patch_stash.get_patch(i);
+                        if (!m_context.m_patches_info[p].lock.acquire_lock(
+                                blockIdx.x)) {
+                            // if we did not success with this patch (p), we
+                            // need to release the lock acquired for all
+                            // previous ones
+                            s_success = false;
+                            m_patch_info.lock.release_lock();
+
+                            for (uint8_t j = 0; j < i; ++j) {
+                                uint32_t pj =
+                                    m_patch_info.patch_stash.get_patch(j);
+                                m_context.m_patches_info[pj]
+                                    .lock.release_lock();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        block.sync();
+        return s_success;
+    }
+
+    /**
+     * @brief unlock/release lock for the patches stored in
+     * m_s_patches_to_lock_mask. We assume these patches has been locked by this
+     * block via a call to lock_patches() that returned true
+     */
+    __device__ __inline__ bool unlock_patches(
+        cooperative_groups::thread_block& block)
+    {
+        if (threadIdx.x == 0) {
+            m_patch_info.lock.release_lock();
+            for (uint8_t i = 0; i < PatchStash::stash_size; ++i) {
+                if (m_s_patches_to_lock_mask(i)) {
+                    uint32_t p = m_patch_info.patch_stash.get_patch(i);
+                    m_context.m_patches_info[p].lock.release_lock();
+                }
+            }
+        }
+    }
 
     /**
      * @brief given a neighbor patch (q), migrate vertices (and edges and faces
@@ -1278,9 +1343,7 @@ struct Cavity
                 // insert in it
                 block.sync();
                 if (!lp.is_sentinel()) {
-                    if (change_ownership) {
-                        m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
-                    }
+                    assert(m_s_patches_to_lock_mask(lp.patch_stash_id()));
                     m_patch_info.lp_v.insert(lp);
                 }
             }
@@ -1320,9 +1383,7 @@ struct Cavity
 
                 block.sync();
                 if (!lp.is_sentinel()) {
-                    if (change_ownership) {
-                        m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
-                    }
+                    assert(m_s_patches_to_lock_mask(lp.patch_stash_id()));
                     m_patch_info.lp_e.insert(lp);
                 }
             }
@@ -1379,9 +1440,7 @@ struct Cavity
 
                 block.sync();
                 if (!lp.is_sentinel()) {
-                    if (change_ownership) {
-                        m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
-                    }
+                    assert(m_s_patches_to_lock_mask(lp.patch_stash_id()));
                     m_patch_info.lp_e.insert(lp);
                 }
             }
@@ -1411,9 +1470,7 @@ struct Cavity
 
                 block.sync();
                 if (!lp.is_sentinel()) {
-                    if (change_ownership) {
-                        m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
-                    }
+                    assert(m_s_patches_to_lock_mask(lp.patch_stash_id()));
                     m_patch_info.lp_f.insert(lp);
                 }
             }
