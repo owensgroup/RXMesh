@@ -34,6 +34,7 @@ struct PatchLock
             }
             attempt++;
         }
+        atomicExch(spin, id);
         return true;
 #endif
     }
@@ -47,6 +48,7 @@ struct PatchLock
 #ifdef __CUDA_ARCH__
         atomicExch(spin, INVALID32);
         atomicExch(lock, FREE);
+        __threadfence();
 #endif
     }
 
