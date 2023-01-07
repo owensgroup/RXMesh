@@ -1193,10 +1193,12 @@ struct Cavity
                             m_patch_info.lock.release_lock();
 
                             for (uint8_t j = 0; j < i; ++j) {
-                                uint32_t pj =
-                                    m_patch_info.patch_stash.get_patch(j);
-                                m_context.m_patches_info[pj]
-                                    .lock.release_lock();
+                                if (m_s_patches_to_lock_mask(j)) {
+                                    uint32_t pj =
+                                        m_patch_info.patch_stash.get_patch(j);
+                                    m_context.m_patches_info[pj]
+                                        .lock.release_lock();
+                                }
                             }
                         }
                     }
