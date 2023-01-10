@@ -164,4 +164,18 @@ __device__ __forceinline__ unsigned dynamic_smem_size()
 }
 
 
+/**
+ * @brief read from global memory bypassing caches. It could/should be
+ * implemented using
+ * asm volatile ("ld.global.cg.s32 %0, [%1];\n" : "=r"(output) : "l"(ptr));
+ * but this will requires specialization for different types. The code below
+ * performs just the same (in terms of number of registers, clock cycles) and
+ * does not need specialization for different types
+ */
+template <typename T>
+__device__ __forceinline__ T atomic_read(T* ptr)
+{
+    return ::atomicAdd(ptr, T(0));
+}
+
 }  // namespace rxmesh

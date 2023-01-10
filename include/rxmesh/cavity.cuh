@@ -7,8 +7,10 @@
 #include "rxmesh/handle.h"
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/loader.cuh"
+#include "rxmesh/kernels/util.cuh"
 #include "rxmesh/patch_info.h"
 #include "rxmesh/util/meta.h"
+
 
 namespace rxmesh {
 
@@ -46,7 +48,7 @@ struct Cavity
     {
 
         m_patch_info     = m_context.m_patches_info[blockIdx.x];
-        m_init_timestamp = m_patch_info.timestamp[0];
+        m_init_timestamp = atomic_read(m_patch_info.timestamp);
 
         __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
         m_s_active_cavity_bitmask = Bitmask(blockThreads, smem);
