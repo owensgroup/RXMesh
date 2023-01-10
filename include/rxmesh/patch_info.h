@@ -76,19 +76,12 @@ struct ALIGN(16) PatchInfo
     PatchLock lock;
 
     // a timestamp that is updated every time the patch is modified
-
     uint32_t* timestamp;
 
     __device__ __inline__ void update_timestamp()
     {
 #ifdef __CUDA_ARCH__
-        // this is the implementation of MarsRng32
-        uint32_t temp = timestamp[0];
-        __threadfence();
-        temp ^= (temp << 13);
-        temp = (temp >> 17);
-        temp ^= (temp << 5);
-        atomicExch(timestamp, temp);
+        ::atomicAdd(timestamp, 1u);
         __threadfence();
 #endif
     }

@@ -793,7 +793,7 @@ void RXMesh::build_device()
         m_h_patches_info[p].patch_id     = p;
         m_h_patches_info[p].patch_stash  = PatchStash(false);
         m_h_patches_info[p].timestamp    = (uint32_t*)malloc(sizeof(uint32_t));
-        m_h_patches_info[p].timestamp[0] = MarsRng32::init_val;
+        m_h_patches_info[p].timestamp[0] = 0;
 
         uint16_t* d_counts;
         CUDA_ERROR(cudaMalloc((void**)&d_counts, 6 * sizeof(uint16_t)));
