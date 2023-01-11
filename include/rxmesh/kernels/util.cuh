@@ -175,6 +175,7 @@ __device__ __forceinline__ unsigned dynamic_smem_size()
 template <typename T>
 __device__ __forceinline__ T atomic_read(T* ptr)
 {
+    __threadfence();
     return ::atomicAdd(ptr, T(0));
 }
 

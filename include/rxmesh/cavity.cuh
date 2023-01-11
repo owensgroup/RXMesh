@@ -224,9 +224,18 @@ struct Cavity
             m_s_cavity_size[i] = 0;
         }
 
+        // make sure the timestamp is the same after locking the patch
+        if (!is_same_timestamp()) {
+            return false;
+        }
+
         // load mesh FE and EV
         load_mesh_async(block, shrd_alloc);
         block.sync();
+
+        if (!is_same_timestamp()) {
+            return false;
+        }
 
         // Expand cavities by marking incident elements
         if constexpr (cop == CavityOp::V) {
@@ -829,6 +838,8 @@ struct Cavity
                                     DIVIDE_UP(m_s_num_faces[0], 32),
                                     m_patch_info.active_mask_f);
 
+        m_patch_info.update_timestamp();
+
         unlock_patches(block);
     }
 
@@ -1115,8 +1126,13 @@ struct Cavity
         }
         block.sync();
 
-        // lock the patches
+        // lock the neighbor patches including this patch
         if (!lock_patches(block)) {
+            return false;
+        }
+
+        // make sure the timestamp is the same after locking the patch
+        if (!is_same_timestamp()) {
             return false;
         }
 
@@ -1834,6 +1850,15 @@ struct Cavity
             }
         }
         return INVALID16;
+    }
+
+    /**
+     * @brief check if the current timestamp is the same as the timestamp we
+     * read during the constructor
+     */
+    __device__ __inline__ bool is_same_timestamp() const
+    {
+        return atomic_read(m_patch_info.timestamp) != m_init_timestamp;
     }
 
     int *m_s_num_cavities, *m_s_cavity_size;
