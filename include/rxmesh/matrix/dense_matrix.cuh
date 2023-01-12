@@ -21,8 +21,7 @@ struct DenseMatrix
 
     DenseMatrix(IndexT row_size, IndexT col_size, bool is_row_major)
         : m_row_size(row_size),
-          m_col_size(col_size),
-          m_is_row_major(is_row_major)
+          m_col_size(col_size)
     {
         cudaMalloc((void**)&m_d_val, bytes());
     }
