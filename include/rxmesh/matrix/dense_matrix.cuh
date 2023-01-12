@@ -9,6 +9,7 @@ namespace rxmesh {
 
 // Currently this is device only
 // host/device transormation will be added
+// only col major is supportedF
 template <typename T, typename IndexT = int>
 struct DenseMatrix
 {
@@ -16,7 +17,6 @@ struct DenseMatrix
         : m_row_size(row_size), m_col_size(col_size)
     {
         cudaMalloc((void**)&m_d_val, bytes());
-        m_is_row_major = false;
     }
 
     DenseMatrix(IndexT row_size, IndexT col_size, bool is_row_major)
@@ -38,29 +38,17 @@ struct DenseMatrix
 
     IndexT lead_dim() const
     {
-        if (m_is_row_major) {
-            return m_col_size;
-        } else {
-            return m_row_size;
-        }
+        return m_row_size;
     }
 
     __device__ T& operator()(const uint32_t row, const uint32_t col)
     {
-        if (m_is_row_major) {
-            return m_d_val[row * m_col_size + col];
-        } else {
-            return m_d_val[col * m_row_size + row];
-        }
+        return m_d_val[col * m_row_size + row];
     }
 
     __device__ T& operator()(const uint32_t row, const uint32_t col) const
     {
-        if (m_is_row_major) {
-            return m_d_val[row * m_col_size + col];
-        } else {
-            return m_d_val[col * m_row_size + row];
-        }
+        return m_d_val[col * m_row_size + row];
     }
 
     T* data() const
@@ -68,7 +56,7 @@ struct DenseMatrix
         return m_d_val;
     }
 
-    T* ld_data(const uint32_t ld_idx) const
+    T* col_data(const uint32_t ld_idx) const
     {
         return m_d_val + ld_idx * lead_dim();
     }
@@ -78,13 +66,6 @@ struct DenseMatrix
         return m_row_size * m_col_size * sizeof(T);
     }
 
-    // void quick_tanspose_w_ld_trans()
-    // {
-    //     std::swap(m_row_size, m_col_size);
-    //     m_is_row_major = !(m_is_row_major);
-    // }
-
-    bool   m_is_row_major;
     IndexT m_row_size;
     IndexT m_col_size;
     T*     m_d_val;
