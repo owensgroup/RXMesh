@@ -79,11 +79,11 @@ struct DenseMatrix
         return m_row_size * m_col_size * sizeof(T);
     }
 
-    void quick_tanspose_w_ld_trans()
-    {
-        std::swap(m_row_size, m_col_size);
-        m_is_row_major = !(m_is_row_major);
-    }
+    // void quick_tanspose_w_ld_trans()
+    // {
+    //     std::swap(m_row_size, m_col_size);
+    //     m_is_row_major = !(m_is_row_major);
+    // }
 
     bool   m_is_row_major;
     IndexT m_row_size;

@@ -99,7 +99,9 @@ void spmat_linear_solve(rxmesh::SparseMatrix<T> A_mat,
                         T*                      B_arr,
                         T*                      X_arr,
                         rxmesh::Solver          solver,
-                        rxmesh::Reorder         reorder)
+                        rxmesh::Reorder         reorder 
+                        //cudaStream_t       stream = null
+                        )
 {
     cusolverSpHandle_t handle         = NULL;
     cusparseHandle_t   cusparseHandle = NULL;
@@ -326,7 +328,7 @@ void spmat_denmat_mul(rxmesh::SparseMatrix<T> A_mat,
     cusparseCreateDnMat(&matB,
                         B_mat.m_row_size,
                         B_mat.m_col_size,
-                        B_mat.lead_dim(),
+                        B_mat.lead_dim(), // lead_dim < row_size
                         B_mat.data(),
                         CUDA_R_32F,
                         CUSPARSE_ORDER_COL);
