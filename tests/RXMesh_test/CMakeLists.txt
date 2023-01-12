@@ -17,6 +17,7 @@ set( SOURCE_LIST
 	test_lp_pair.h
 	test_dynamic.cuh
 	test_ev_diamond.h
+	test_sparse_matrix.cuh
 )
 
 target_sources( RXMesh_test 
