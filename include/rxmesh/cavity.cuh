@@ -1197,8 +1197,8 @@ struct Cavity
         __shared__ bool s_success;
 
         if (threadIdx.x == 0) {
-            s_success = true;
-            if (m_patch_info.lock.acquire_lock(blockIdx.x)) {
+            s_success = m_patch_info.lock.acquire_lock(blockIdx.x);
+            if (s_success) {
                 for (uint8_t i = 0; i < PatchStash::stash_size; ++i) {
                     if (m_s_patches_to_lock_mask(i)) {
                         uint32_t p = m_patch_info.patch_stash.get_patch(i);
