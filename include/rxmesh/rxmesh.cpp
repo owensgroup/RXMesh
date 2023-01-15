@@ -7,6 +7,7 @@
 
 #include "patcher/patcher.h"
 #include "rxmesh/context.h"
+#include "rxmesh/patch_scheduler.cuh"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/util.h"
@@ -65,6 +66,10 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
 
     calc_max_elements();
 
+    PatchScheduler sch;
+    sch.init(m_num_patches);
+    sch.reset();
+
     // Allocate and copy the context to the gpu
     m_rxmesh_context.init(m_num_vertices,
                           m_num_edges,
@@ -76,7 +81,8 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                           m_d_vertex_prefix,
                           m_d_edge_prefix,
                           m_d_face_prefix,
-                          m_d_patches_info);
+                          m_d_patches_info,
+                          sch);
 
 
     if (!m_quite) {
@@ -109,6 +115,8 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
 
 RXMesh::~RXMesh()
 {
+    m_rxmesh_context.m_patch_scheduler.free();
+
     for (uint32_t p = 0; p < m_num_patches; ++p) {
         free(m_h_patches_info[p].active_mask_v);
         free(m_h_patches_info[p].active_mask_e);

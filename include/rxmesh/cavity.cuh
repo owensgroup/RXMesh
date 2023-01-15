@@ -46,9 +46,7 @@ struct Cavity
                                  ShmemAllocator&                   shrd_alloc)
         : m_context(context)
     {
-
-        m_patch_info     = m_context.m_patches_info[blockIdx.x];
-        m_init_timestamp = atomic_read(m_patch_info.timestamp);
+        __shared__ uint32_t patch_id;
 
         __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
         m_s_active_cavity_bitmask = Bitmask(blockThreads, smem);
@@ -59,11 +57,24 @@ struct Cavity
         m_s_num_faces    = counts + 2;
 
         if (threadIdx.x == 0) {
-            m_s_num_vertices[0] = m_patch_info.num_vertices[0];
-            m_s_num_edges[0]    = m_patch_info.num_edges[0];
-            m_s_num_faces[0]    = m_patch_info.num_faces[0];
+            patch_id = m_context.m_patch_scheduler.pop();
+            if (patch_id != INVALID32) {
+                m_s_num_vertices[0] =
+                    m_context.m_patches_info[patch_id].num_vertices[0];
+                m_s_num_edges[0] =
+                    m_context.m_patches_info[patch_id].num_edges[0];
+                m_s_num_faces[0] =
+                    m_context.m_patches_info[patch_id].num_faces[0];
+            }
         }
         block.sync();
+
+        if (patch_id == INVALID32) {
+            return;
+        }
+
+        m_patch_info     = m_context.m_patches_info[patch_id];
+        m_init_timestamp = atomic_read(m_patch_info.timestamp);
 
         // TODO we don't to store the cavity IDs for all elements. we can
         // optimize this based on the give CavityOp
@@ -1858,7 +1869,7 @@ struct Cavity
      */
     __device__ __inline__ bool is_same_timestamp() const
     {
-        return atomic_read(m_patch_info.timestamp) != m_init_timestamp;
+        return atomic_read(m_patch_info.timestamp) == m_init_timestamp;
     }
 
     int *m_s_num_cavities, *m_s_cavity_size;

@@ -13,13 +13,18 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
                                         bool conflicting,
                                         bool on_ribbon)
 {
-    if (blockIdx.x != 0) {
-        return;
-    }
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
     Cavity<blockThreads, CavityOp::E> cavity(block, context, shrd_alloc);
+
+    if (cavity.m_patch_info.patch_id != 0) {
+        return;
+    }
+
+    // if (cavity.m_patch_info.patch_id == INVALID32) {
+    //    return;
+    //}
 
     for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
         if (on_ribbon) {
@@ -61,7 +66,6 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
 
     block.sync();
 
-    auto append_to_list = [&]() {};
 
     if (cavity.process(block, shrd_alloc)) {
 
@@ -93,7 +97,9 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
         cavity.cleanup(block);
 
     } else {
-        append_to_list();
+        if (threadIdx.x == 0) {
+            context.m_patch_scheduler.push(cavity.m_patch_info.patch_id);
+        }
     }
 }
 

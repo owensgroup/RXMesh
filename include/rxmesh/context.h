@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "rxmesh/patch_info.h"
+#include "rxmesh/patch_scheduler.cuh"
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
@@ -95,7 +96,8 @@ class Context
               uint32_t*      vertex_prefix,
               uint32_t*      edge_prefix,
               uint32_t*      face_prefix,
-              PatchInfo*     d_patches)
+              PatchInfo*     d_patches,
+              PatchScheduler scheduler)
     {
         uint32_t* buffer = nullptr;
         CUDA_ERROR(cudaMalloc((void**)&buffer, 7 * sizeof(uint32_t)));
@@ -138,6 +140,8 @@ class Context
         m_face_prefix   = face_prefix;
 
         m_patches_info = d_patches;
+
+        m_patch_scheduler = scheduler;
     }
 
     void release()
@@ -146,9 +150,10 @@ class Context
     }
 
 
-    uint32_t * m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;
-    uint32_t * m_max_num_vertices, *m_max_num_edges, *m_max_num_faces;
-    uint32_t * m_vertex_prefix, *m_edge_prefix, *m_face_prefix;
-    PatchInfo* m_patches_info;
+    uint32_t *     m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;
+    uint32_t *     m_max_num_vertices, *m_max_num_edges, *m_max_num_faces;
+    uint32_t *     m_vertex_prefix, *m_edge_prefix, *m_face_prefix;
+    PatchInfo*     m_patches_info;
+    PatchScheduler m_patch_scheduler;
 };
 }  // namespace rxmesh
