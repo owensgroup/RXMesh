@@ -20,7 +20,6 @@ struct Query
 
     __device__ __inline__ Query(const Context& context)
         : m_patch_info(context.m_patches_info[blockIdx.x]),
-          m_status(Empty),
           m_num_src_in_patch(0),
           m_s_participant_bitmask(nullptr),
           m_s_output_owned_bitmask(nullptr),
@@ -133,9 +132,6 @@ struct Query
 
         const uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
-        m_status |= SharedMemReserved;
-        set_status<op>();
-
         detail::query_block_dispatcher<op, blockThreads>(
             block,
             shrd_alloc,
@@ -181,68 +177,14 @@ struct Query
                 compute_op(handle, iter);
             }
         }
+
+        //cleanup shared memory allocation 
+        shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() -
+                           shmem_before);
     }
 
    private:
-    // Indicate which query information is currently stored in shared memory
-    using QueryStatus = uint32_t;
-    enum : uint32_t
-    {
-        Empty             = 0,
-        SharedMemReserved = 1,
-        VV                = 2,
-        VE                = 4,
-        VF                = 8,
-        EV                = 16,
-        EF                = 32,
-        FV                = 64,
-        FE                = 128,
-        FF                = 512,
-        EVDiamond         = 1024,
-    };
-
-    template <Op op>
-    __device__ __inline__ void set_status()
-    {
-        if constexpr (op == Op::VV) {
-            m_status = m_status | VV;
-        }
-
-        if constexpr (op == Op::VE) {
-            m_status = m_status | VE;
-        }
-
-        if constexpr (op == Op::VF) {
-            m_status = m_status | VF;
-        }
-
-        if constexpr (op == Op::EV) {
-            m_status = m_status | EV;
-        }
-
-        if constexpr (op == Op::EF) {
-            m_status = m_status | EF;
-        }
-
-        if constexpr (op == Op::FV) {
-            m_status = m_status | FV;
-        }
-
-        if constexpr (op == Op::FE) {
-            m_status = m_status | FE;
-        }
-
-        if constexpr (op == Op::FF) {
-            m_status = m_status | FF;
-        }
-
-        if constexpr (op == Op::EVDiamond) {
-            m_status = m_status | EVDiamond;
-        }
-    }
-
     const PatchInfo& m_patch_info;
-    QueryStatus      m_status;
     uint32_t         m_num_src_in_patch;
     uint32_t*        m_s_participant_bitmask;
     uint32_t*        m_s_output_owned_bitmask;
