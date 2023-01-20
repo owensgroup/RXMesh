@@ -29,6 +29,7 @@ struct RXMeshTestArg
 #include "test_ev_diamond.h"
 #include "test_sparse_matrix.cuh"
 #include "test_patch_lock.cuh"
+#include "test_patch_scheduler.cuh"
 // clang-format on
 
 int main(int argc, char** argv)
