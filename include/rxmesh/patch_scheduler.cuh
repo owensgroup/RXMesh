@@ -23,14 +23,11 @@ struct PatchScheduler
     __device__ __inline__ bool push(const uint32_t pid)
     {
 #ifdef __CUDA_ARCH__
-        // int id = ::atomicAdd(count, 1);
-        //__threadfence();
-        // assert(id < capacity);
-        // list[id] = pid;
+        if (::atomicAdd(count, 1) < static_cast<int>(capacity)) {
+            int pos = ::atomicAdd(back, 1) % capacity;
 
-        int fill = ::atomicAdd(count, 1);
-        if (fill < static_cast<int>(capacity)) {
-            int pos = ::atomicAdd(back, 1);
+            // the loop because another thread/block may have just decremented
+            // the count but has not yet finish reading from the list
             while (::atomicCAS(list + pos, INVALID32, pid) != INVALID32) {
                 // TODO do we really need to sleep if it is only one thread
                 // in the block doing the job??
@@ -38,6 +35,11 @@ struct PatchScheduler
             }
             return true;
         } else {
+            // for our configuration, this should not happen since a block only
+            // pop a patch and, if not able to process it due to dependency
+            // conflict, the block push the same patch again. So at all times
+            // count is less than capacity if capacity is total number of
+            // patches
             return false;
         }
 
@@ -51,29 +53,24 @@ struct PatchScheduler
     __device__ __inline__ uint32_t pop()
     {
 #ifdef __CUDA_ARCH__
-        // const int id = ::atomicAdd(count, -1);
-        //__threadfence();
-        // if (id >= 0) {
-        //    return list[id];
-        //} else {
-        //    return INVALID32;
-        //}
-
         int readable = ::atomicSub(count, 1);
-        if (readable <= 0) {
-            ::atomicAdd(count, 1);
-            return INVALID32;
-        }
 
         uint32_t pid = INVALID32;
 
-        int pos = ::atomicAdd(front, 1);
+        if (readable <= 0) {
+            ::atomicAdd(count, 1);
+        } else {
 
-        while (pid == INVALID32) {
-            pid = atomicExch(list + pos, INVALID32);
-            // TODO do we really need to sleep if it is only one thread
-            // in the block doing the job??
-            //__nanosleep(10);
+            int pos = ::atomicAdd(front, 1) % capacity;
+
+            // the loop because another thread/block may have just incremented
+            // the count but has not yet wrote to the list
+            while (pid == INVALID32) {
+                pid = atomicExch(list + pos, INVALID32);
+                // TODO do we really need to sleep if it is only one thread
+                // in the block doing the job??
+                //__nanosleep(10);
+            }
         }
         return pid;
 
@@ -95,9 +92,9 @@ struct PatchScheduler
             cudaMemcpy(count, &capacity, sizeof(int), cudaMemcpyHostToDevice));
 
         CUDA_ERROR(
-            cudaMemcpy(front, &capacity, sizeof(int), cudaMemcpyHostToDevice));
+            cudaMemcpy(back, &capacity, sizeof(int), cudaMemcpyHostToDevice));
 
-        CUDA_ERROR(cudaMemset(back, 0, sizeof(int)));
+        CUDA_ERROR(cudaMemset(front, 0, sizeof(int)));
     }
 
     /**
