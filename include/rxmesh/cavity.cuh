@@ -1258,6 +1258,15 @@ struct Cavity
     }
 
     /**
+     * @brief push to the current patch to the schdueler
+     * @return
+     */
+    __device__ __inline__ void push()
+    {
+        m_context.m_patch_scheduler.push(m_patch_info.patch_id);
+    }
+
+    /**
      * @brief given a neighbor patch (q), migrate vertices (and edges and faces
      * connected to these vertices) marked in m_s_migrate_mask_v to the patch
      * used by this cavity (p)

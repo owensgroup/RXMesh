@@ -68,7 +68,7 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
 
     PatchScheduler sch;
     sch.init(m_num_patches);
-    sch.reset();
+    sch.refill();
 
     // Allocate and copy the context to the gpu
     m_rxmesh_context.init(m_num_vertices,
