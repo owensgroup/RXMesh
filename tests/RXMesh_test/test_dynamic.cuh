@@ -4,14 +4,23 @@
 #include "rxmesh/cavity.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
+
+using Config = uint32_t;
+enum : Config
+{
+    OnRibbonConflicting    = 0x00,
+    InteriorConflicting    = 0x01,
+    OnRibbonNotConflicting = 0x02,
+    InteriorNotConflicting = 0x04,
+};
+
 template <uint32_t blockThreads>
 __global__ static void edge_flip_kernel(rxmesh::Context                context,
                                         rxmesh::VertexAttribute<float> coords,
                                         rxmesh::VertexAttribute<float> v_attr,
                                         rxmesh::EdgeAttribute<float>   e_attr,
                                         rxmesh::FaceAttribute<float>   f_attr,
-                                        bool conflicting,
-                                        bool on_ribbon)
+                                        Config                         config)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -21,45 +30,49 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
     if (cavity.m_patch_info.patch_id != 0) {
         return;
     }
-
+    
     // if (cavity.m_patch_info.patch_id == INVALID32) {
     //    return;
     //}
 
     for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
-        if (on_ribbon) {
-            if (!conflicting) {
-                if (eh.unpack().second == 11 || eh.unpack().second == 51 ||
-                    eh.unpack().second == 2 || eh.unpack().second == 315) {
-                    e_attr(eh) = 100;
-                    cavity.add(eh);
-                }
-            } else {
-                if (eh.unpack().second == 11 || eh.unpack().second == 10 ||
-                    eh.unpack().second == 358 || eh.unpack().second == 359 ||
-                    eh.unpack().second == 354 || eh.unpack().second == 356) {
-                    e_attr(eh) = 100;
-                    cavity.add(eh);
-                }
+        if ((config & OnRibbonNotConflicting) == OnRibbonNotConflicting) {
+            if (eh.unpack().second == 11 || eh.unpack().second == 51 ||
+                eh.unpack().second == 2 || eh.unpack().second == 315) {
+                e_attr(eh) = 100;
+                cavity.add(eh);
             }
-        } else {
-            if (!conflicting) {
-                if (eh.unpack().second == 26 || eh.unpack().second == 174 ||
-                    eh.unpack().second == 184 || eh.unpack().second == 94 ||
-                    eh.unpack().second == 58 || eh.unpack().second == 362 ||
-                    eh.unpack().second == 70 || eh.unpack().second == 420) {
-                    e_attr(eh) = 100;
-                    cavity.add(eh);
-                }
-            } else {
-                if (eh.unpack().second == 26 || eh.unpack().second == 22 ||
-                    eh.unpack().second == 29 || eh.unpack().second == 156 ||
-                    eh.unpack().second == 23 || eh.unpack().second == 389 ||
-                    eh.unpack().second == 39 || eh.unpack().second == 40 ||
-                    eh.unpack().second == 41 || eh.unpack().second == 16) {
-                    e_attr(eh) = 100;
-                    cavity.add(eh);
-                }
+        }
+
+
+        if ((config & OnRibbonConflicting) == OnRibbonConflicting) {
+            if (eh.unpack().second == 11 || eh.unpack().second == 10 ||
+                eh.unpack().second == 358 || eh.unpack().second == 359 ||
+                eh.unpack().second == 354 || eh.unpack().second == 356) {
+                e_attr(eh) = 100;
+                cavity.add(eh);
+            }
+        }
+
+
+        if ((config & InteriorNotConflicting) == InteriorNotConflicting) {
+            if (eh.unpack().second == 26 || eh.unpack().second == 174 ||
+                eh.unpack().second == 184 || eh.unpack().second == 94 ||
+                eh.unpack().second == 58 || eh.unpack().second == 362 ||
+                eh.unpack().second == 70 || eh.unpack().second == 420) {
+                e_attr(eh) = 100;
+                cavity.add(eh);
+            }
+        }
+
+        if ((config & InteriorConflicting) == InteriorConflicting) {
+            if (eh.unpack().second == 26 || eh.unpack().second == 22 ||
+                eh.unpack().second == 29 || eh.unpack().second == 156 ||
+                eh.unpack().second == 23 || eh.unpack().second == 389 ||
+                eh.unpack().second == 39 || eh.unpack().second == 40 ||
+                eh.unpack().second == 41 || eh.unpack().second == 16) {
+                e_attr(eh) = 100;
+                cavity.add(eh);
             }
         }
     });
@@ -143,10 +156,12 @@ TEST(RXMeshDynamic, Cavity)
     rx.prepare_launch_box(
         {}, launch_box, (void*)edge_flip_kernel<blockThreads>);
 
+    Config congif = InteriorNotConflicting | OnRibbonConflicting;
+
     edge_flip_kernel<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, true, true);
+        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, congif);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
