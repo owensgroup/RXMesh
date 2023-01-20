@@ -237,6 +237,7 @@ struct Cavity
 
         // make sure the timestamp is the same after locking the patch
         if (!is_same_timestamp()) {
+            push();
             return false;
         }
 
@@ -245,6 +246,7 @@ struct Cavity
         block.sync();
 
         if (!is_same_timestamp()) {
+            push();
             return false;
         }
 
@@ -285,6 +287,7 @@ struct Cavity
         block.sync();
 
         if (!migrate(block)) {
+            push();
             return false;
         }
         block.sync();
