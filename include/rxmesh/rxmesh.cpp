@@ -972,7 +972,9 @@ void RXMesh::build_device()
             const uint16_t num_not_owned = ltog[p].size() - num_owned[p];
 
             const uint16_t capacity = static_cast<uint16_t>(
-                static_cast<float>(num_not_owned) / m_lp_hashtable_load_factor);
+                static_cast<float>(static_cast<float>(m_capacity_factor) *
+                                   static_cast<float>(num_not_owned)) /
+                m_lp_hashtable_load_factor);
 
             h_hashtable = LPHashTable(capacity, false);
             d_hashtable = LPHashTable(capacity, true);

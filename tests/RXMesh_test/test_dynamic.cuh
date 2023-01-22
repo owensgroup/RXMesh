@@ -29,7 +29,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
 
     const uint32_t pid = cavity.m_patch_info.patch_id;
 
-    if (pid != 0) {
+    if (pid != 1) {
         return;
     }
 
@@ -84,7 +84,6 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
 
 
         if (pid == 1) {
-
             if ((config & OnRibbonNotConflicting) == OnRibbonNotConflicting) {
                 if (eh.unpack().second == 383 || eh.unpack().second == 324 ||
                     eh.unpack().second == 355 || eh.unpack().second == 340 ||
@@ -97,12 +96,11 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
 
 
             if ((config & OnRibbonConflicting) == OnRibbonConflicting) {
-                if (eh.unpack().second == 367 || eh.unpack().second == 368 ||
-                    eh.unpack().second == 410 || eh.unpack().second == 409 ||
-                    eh.unpack().second == 370 || eh.unpack().second == 174 ||
-                    eh.unpack().second == 372 || eh.unpack().second == 407 ||
-                    eh.unpack().second == 724 || eh.unpack().second == 728 ||
-                    eh.unpack().second == 725) {
+                if (eh.unpack().second == 399 || eh.unpack().second == 398 ||
+                    eh.unpack().second == 402 || eh.unpack().second == 418 ||
+                    eh.unpack().second == 419 || eh.unpack().second == 401 ||
+                    eh.unpack().second == 413 || eh.unpack().second == 388 ||
+                    eh.unpack().second == 396 || eh.unpack().second == 395) {
                     e_attr(eh) = 100;
                     cavity.add(eh);
                 }
@@ -201,14 +199,14 @@ TEST(RXMeshDynamic, Cavity)
     e_attr->reset(0, DEVICE);
     f_attr->reset(0, DEVICE);
 
-
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
 
     rx.prepare_launch_box(
         {}, launch_box, (void*)edge_flip_kernel<blockThreads>);
 
-    Config congif = InteriorNotConflicting | OnRibbonConflicting;
+    Config congif = InteriorNotConflicting | InteriorConflicting |
+                    OnRibbonNotConflicting | OnRibbonConflicting;
 
     edge_flip_kernel<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,

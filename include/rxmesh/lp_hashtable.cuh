@@ -284,10 +284,6 @@ struct LPHashTable
 #endif
                 return true;
             }
-            // if (m_stash[i].is_sentinel()) {
-            //    m_stash[i] = pair;
-            //    return true;
-            //}
         }
 
         return false;
