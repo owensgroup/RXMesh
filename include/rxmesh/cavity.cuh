@@ -1285,7 +1285,9 @@ struct Cavity
      */
     __device__ __inline__ void push()
     {
-        m_context.m_patch_scheduler.push(m_patch_info.patch_id);
+        if (threadIdx.x == 0) {
+            m_context.m_patch_scheduler.push(m_patch_info.patch_id);
+        }
     }
 
     /**

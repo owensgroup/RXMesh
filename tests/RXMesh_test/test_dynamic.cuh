@@ -29,11 +29,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
 
     const uint32_t pid = cavity.m_patch_info.patch_id;
 
-    if (pid != 1) {
-        return;
-    }
-
-    if (cavity.m_patch_info.patch_id == INVALID32) {
+    if (pid == INVALID32) {
         return;
     }
 

@@ -132,7 +132,7 @@ struct PatchScheduler
 #else
         int h_count = 0;
         CUDA_ERROR(cudaMemcpyAsync(
-            count, &h_count, sizeof(int), cudaMemcpyDeviceToHost, stream));
+            &h_count, count, sizeof(int), cudaMemcpyDeviceToHost, stream));
         return h_count == 0;
 #endif
     }
