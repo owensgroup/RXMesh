@@ -2,7 +2,7 @@
 #include "gtest/gtest.h"
 
 #include "rxmesh/cavity.cuh"
-#include "rxmesh/kernels/for_each_dispatcher.cuh"
+#include "rxmesh/kernels/for_each.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
 using Config = uint32_t;
@@ -33,12 +33,11 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
         return;
     }
 
+    if (cavity.m_patch_info.patch_id == INVALID32) {
+        return;
+    }
 
-    // if (cavity.m_patch_info.patch_id == INVALID32) {
-    //    return;
-    //}
-
-    for_each_dispatcher<Op::E, blockThreads>(context, [&](const EdgeHandle eh) {
+    detail::for_each_edge(cavity.m_patch_info, [&](const EdgeHandle eh) {
         if (pid == 0) {
 
             if ((config & OnRibbonNotConflicting) == OnRibbonNotConflicting) {
@@ -208,10 +207,13 @@ TEST(RXMeshDynamic, Cavity)
     Config congif = InteriorNotConflicting | InteriorConflicting |
                     OnRibbonNotConflicting | OnRibbonConflicting;
 
-    edge_flip_kernel<blockThreads><<<launch_box.blocks,
-                                     launch_box.num_threads,
-                                     launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, congif);
+
+    while (!rx.is_queue_empty()) {
+        edge_flip_kernel<blockThreads><<<launch_box.blocks,
+                                         launch_box.num_threads,
+                                         launch_box.smem_bytes_dyn>>>(
+            rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, congif);
+    }
 
     CUDA_ERROR(cudaDeviceSynchronize());
 

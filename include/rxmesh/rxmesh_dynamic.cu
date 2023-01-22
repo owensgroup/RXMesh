@@ -1,7 +1,7 @@
 #include <cooperative_groups.h>
 
 #include "rxmesh/kernels/dynamic_util.cuh"
-#include "rxmesh/kernels/for_each_dispatcher.cuh"
+#include "rxmesh/kernels/for_each.cuh"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/shmem_allocator.cuh"
 #include "rxmesh/query.cuh"
@@ -25,15 +25,15 @@ __global__ static void calc_num_elements(const Context context,
                                          uint32_t*     sum_num_faces)
 {
     auto sum_v = [&](VertexHandle& v_id) { ::atomicAdd(sum_num_vertices, 1u); };
-    for_each_dispatcher<Op::V, blockThreads>(context, sum_v);
+    for_each<Op::V, blockThreads>(context, sum_v);
 
 
     auto sum_e = [&](EdgeHandle& e_id) { ::atomicAdd(sum_num_edges, 1u); };
-    for_each_dispatcher<Op::E, blockThreads>(context, sum_e);
+    for_each<Op::E, blockThreads>(context, sum_e);
 
 
     auto sum_f = [&](FaceHandle& f_id) { ::atomicAdd(sum_num_faces, 1u); };
-    for_each_dispatcher<Op::F, blockThreads>(context, sum_f);
+    for_each<Op::F, blockThreads>(context, sum_f);
 }
 
 template <uint32_t blockThreads>

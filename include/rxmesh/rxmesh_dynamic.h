@@ -122,6 +122,26 @@ class RXMeshDynamic : public RXMeshStatic
     virtual ~RXMeshDynamic() = default;
 
     /**
+     * @brief check if there is remaining patches not processed yet
+     */
+    bool is_queue_empty(cudaStream_t stream = NULL)
+    {
+        return this->m_rxmesh_context.m_patch_scheduler.is_empty(stream);
+    }
+
+
+    /**
+     * @brief reset the patches for a another kernel. This needs only to be
+     * called where more than one kernel is called. For a single kernel, the
+     * queue is initialized during the construction so the user does not to call
+     * this
+     */
+    void reset_queue()
+    {
+        this->m_rxmesh_context.m_patch_scheduler.refill();
+    }
+
+    /**
      * @brief Validate the topology information stored in RXMesh. All checks are
      * done on the information stored on the GPU memory and thus all checks are
      * done on the GPU

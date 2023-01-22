@@ -4,7 +4,7 @@
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/import_obj.h"
 
-#include "rxmesh/kernels/for_each_dispatcher.cuh"
+#include "rxmesh/kernels/for_each.cuh"
 
 TEST(RXMeshStatic, ForEach)
 {
@@ -43,7 +43,7 @@ __global__ static void for_each_kernel(const rxmesh::Context context)
 
     };
 
-    for_each_dispatcher<op, blockThreads>(context, for_each_lambda);
+    for_each<op, blockThreads>(context, for_each_lambda);
 }
 
 TEST(RXMeshStatic, ForEachOnDevice)
