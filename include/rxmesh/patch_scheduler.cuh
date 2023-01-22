@@ -120,6 +120,23 @@ struct PatchScheduler
         GPU_FREE(list);
     }
 
+    /**
+     * @brief check if the list empty. On the host, the check need to move data
+     * from device to host
+     * @return
+     */
+    __host__ __device__ __inline__ bool is_empty(cudaStream_t stream = NULL)
+    {
+#ifdef __CUDA_ARCH__
+        return count[0] == 0;
+#else
+        int h_count = 0;
+        CUDA_ERROR(cudaMemcpyAsync(
+            count, &h_count, sizeof(int), cudaMemcpyDeviceToHost, stream));
+        return h_count == 0;
+#endif
+    }
+
     int*      count;
     int*      front;
     int*      back;
