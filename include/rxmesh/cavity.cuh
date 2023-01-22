@@ -990,7 +990,9 @@ struct Cavity
                 detail::bitmask_clear_bit(
                     qv, m_context.m_patches_info[q].owned_mask_v, true);
 
-                m_context.m_patches_info[q].lp_v.insert(q_lp);
+                if (!m_context.m_patches_info[q].lp_v.insert(q_lp)) {
+                    assert(false);
+                }
             }
         }
     }
@@ -1026,9 +1028,12 @@ struct Cavity
 
                 LPPair q_lp(qe, ep, stash_id);
 
-                m_context.m_patches_info[q].lp_e.insert(q_lp);
                 detail::bitmask_clear_bit(
                     qe, m_context.m_patches_info[q].owned_mask_e, true);
+
+                if (!m_context.m_patches_info[q].lp_e.insert(q_lp)) {
+                    assert(false);
+                }
             }
         }
     }
@@ -1064,9 +1069,12 @@ struct Cavity
 
                 LPPair q_lp(qf, fp, stash_id);
 
-                m_context.m_patches_info[q].lp_f.insert(q_lp);
                 detail::bitmask_clear_bit(
                     qf, m_context.m_patches_info[q].owned_mask_f, true);
+
+                if (!m_context.m_patches_info[q].lp_f.insert(q_lp)) {
+                    assert(false);
+                }
             }
         }
     }
@@ -1399,7 +1407,9 @@ struct Cavity
                 block.sync();
                 if (!lp.is_sentinel()) {
                     assert(m_s_patches_to_lock_mask(lp.patch_stash_id()));
-                    m_patch_info.lp_v.insert(lp);
+                    if (!m_patch_info.lp_v.insert(lp)) {
+                        assert(false);
+                    }
                 }
             }
 
@@ -1439,7 +1449,9 @@ struct Cavity
                 block.sync();
                 if (!lp.is_sentinel()) {
                     assert(m_s_patches_to_lock_mask(lp.patch_stash_id()));
-                    m_patch_info.lp_e.insert(lp);
+                    if (!m_patch_info.lp_e.insert(lp)) {
+                        assert(false);
+                    }
                 }
             }
             block.sync();
@@ -1496,7 +1508,9 @@ struct Cavity
                 block.sync();
                 if (!lp.is_sentinel()) {
                     assert(m_s_patches_to_lock_mask(lp.patch_stash_id()));
-                    m_patch_info.lp_e.insert(lp);
+                    if (!m_patch_info.lp_e.insert(lp)) {
+                        assert(false);
+                    }
                 }
             }
 
@@ -1526,7 +1540,9 @@ struct Cavity
                 block.sync();
                 if (!lp.is_sentinel()) {
                     assert(m_s_patches_to_lock_mask(lp.patch_stash_id()));
-                    m_patch_info.lp_f.insert(lp);
+                    if (!m_patch_info.lp_f.insert(lp)) {
+                        assert(false);
+                    }
                 }
             }
         }
