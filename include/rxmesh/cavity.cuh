@@ -792,7 +792,6 @@ struct Cavity
         // cleanup the hashtable by removing the vertices/edges/faces that has
         // changed their ownership to be in this patch (p) and thus should not
         // be in the hashtable
-
         for (uint32_t vp = threadIdx.x; vp < m_s_num_vertices[0];
              vp += blockThreads) {
             if (m_s_ownership_change_mask_v(vp)) {
@@ -982,7 +981,11 @@ struct Cavity
 
                 m_s_owned_mask_v.set(vp, true);
 
-                LPPair q_lp(qv, vp, m_patch_info.patch_id);
+                const uint8_t stash_id =
+                    m_context.m_patches_info[q].patch_stash.insert_patch(
+                        m_patch_info.patch_id);
+
+                LPPair q_lp(qv, vp, stash_id);
 
                 detail::bitmask_clear_bit(
                     qv, m_context.m_patches_info[q].owned_mask_v, true);
@@ -1017,7 +1020,11 @@ struct Cavity
 
                 m_s_owned_mask_e.set(ep, true);
 
-                LPPair q_lp(qe, ep, m_patch_info.patch_id);
+                const uint8_t stash_id =
+                    m_context.m_patches_info[q].patch_stash.insert_patch(
+                        m_patch_info.patch_id);
+
+                LPPair q_lp(qe, ep, stash_id);
 
                 m_context.m_patches_info[q].lp_e.insert(q_lp);
                 detail::bitmask_clear_bit(
@@ -1051,7 +1058,11 @@ struct Cavity
 
                 m_s_owned_mask_f.set(fp, true);
 
-                LPPair q_lp(qf, fp, m_patch_info.patch_id);
+                const uint8_t stash_id =
+                    m_context.m_patches_info[q].patch_stash.insert_patch(
+                        m_patch_info.patch_id);
+
+                LPPair q_lp(qf, fp, stash_id);
 
                 m_context.m_patches_info[q].lp_f.insert(q_lp);
                 detail::bitmask_clear_bit(
@@ -1723,18 +1734,22 @@ struct Cavity
     __device__ __inline__ void post_migration_cleanup(
         cooperative_groups::thread_block& block)
     {
-        const uint32_t p = m_patch_info.patch_id;
-
         for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
             const uint32_t q = m_patch_info.patch_stash.get_patch(p);
             if (q != INVALID32) {
                 auto q_patch_info = m_context.m_patches_info[q];
-                post_migration_cleanup<VertexHandle>(
-                    block, p, q_patch_info, m_s_cavity_id_v);
-                post_migration_cleanup<EdgeHandle>(
-                    block, p, q_patch_info, m_s_cavity_id_e);
-                post_migration_cleanup<FaceHandle>(
-                    block, p, q_patch_info, m_s_cavity_id_f);
+                post_migration_cleanup<VertexHandle>(block,
+                                                     m_patch_info.patch_id,
+                                                     q_patch_info,
+                                                     m_s_cavity_id_v);
+                post_migration_cleanup<EdgeHandle>(block,
+                                                   m_patch_info.patch_id,
+                                                   q_patch_info,
+                                                   m_s_cavity_id_e);
+                post_migration_cleanup<FaceHandle>(block,
+                                                   m_patch_info.patch_id,
+                                                   q_patch_info,
+                                                   m_s_cavity_id_f);
             }
         }
     }
