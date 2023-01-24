@@ -1167,6 +1167,7 @@ struct Cavity
 
         // make sure the timestamp is the same after locking the patch
         if (!is_same_timestamp(block)) {
+            unlock_patches(block);
             return false;
         }
 
