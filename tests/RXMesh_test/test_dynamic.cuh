@@ -39,7 +39,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
             if ((config & OnRibbonNotConflicting) == OnRibbonNotConflicting) {
                 if (eh.unpack().second == 11 || eh.unpack().second == 51 ||
                     eh.unpack().second == 2 || eh.unpack().second == 315) {
-                    e_attr(eh) = 100;
+                    e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
             }
@@ -49,7 +49,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
                 if (eh.unpack().second == 11 || eh.unpack().second == 10 ||
                     eh.unpack().second == 358 || eh.unpack().second == 359 ||
                     eh.unpack().second == 354 || eh.unpack().second == 356) {
-                    e_attr(eh) = 100;
+                    e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
             }
@@ -60,7 +60,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
                     eh.unpack().second == 184 || eh.unpack().second == 94 ||
                     eh.unpack().second == 58 || eh.unpack().second == 362 ||
                     eh.unpack().second == 70 || eh.unpack().second == 420) {
-                    e_attr(eh) = 100;
+                    e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
             }
@@ -71,7 +71,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
                     eh.unpack().second == 23 || eh.unpack().second == 389 ||
                     eh.unpack().second == 39 || eh.unpack().second == 40 ||
                     eh.unpack().second == 41 || eh.unpack().second == 16) {
-                    e_attr(eh) = 100;
+                    e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
             }
@@ -84,7 +84,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
                     eh.unpack().second == 355 || eh.unpack().second == 340 ||
                     eh.unpack().second == 726 || eh.unpack().second == 667 ||
                     eh.unpack().second == 706) {
-                    e_attr(eh) = 100;
+                    e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
             }
@@ -96,7 +96,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
                     eh.unpack().second == 419 || eh.unpack().second == 401 ||
                     eh.unpack().second == 413 || eh.unpack().second == 388 ||
                     eh.unpack().second == 396 || eh.unpack().second == 395) {
-                    e_attr(eh) = 100;
+                    e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
             }
@@ -107,7 +107,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
                     eh.unpack().second == 103 || eh.unpack().second == 140 ||
                     eh.unpack().second == 206 || eh.unpack().second == 285 ||
                     eh.unpack().second == 162 || eh.unpack().second == 385) {
-                    e_attr(eh) = 100;
+                    e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
             }
@@ -120,7 +120,7 @@ __global__ static void edge_flip_kernel(rxmesh::Context                context,
                     eh.unpack().second == 59 || eh.unpack().second == 57 ||
                     eh.unpack().second == 232 || eh.unpack().second == 214 ||
                     eh.unpack().second == 233) {
-                    e_attr(eh) = 100;
+                    e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
             }
