@@ -47,7 +47,7 @@ struct Cavity
         : m_context(context)
     {
         __shared__ uint32_t patch_id;
-
+        __shared__ uint32_t s_init_timestamp;
         __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
         m_s_active_cavity_bitmask = Bitmask(blockThreads, smem);
 
@@ -65,6 +65,8 @@ struct Cavity
                     m_context.m_patches_info[patch_id].num_edges[0];
                 m_s_num_faces[0] =
                     m_context.m_patches_info[patch_id].num_faces[0];
+                s_init_timestamp =
+                    atomic_read(m_context.m_patches_info[patch_id].timestamp);
             }
         }
         block.sync();
@@ -74,7 +76,8 @@ struct Cavity
         }
 
         m_patch_info     = m_context.m_patches_info[patch_id];
-        m_init_timestamp = atomic_read(m_patch_info.timestamp);
+        m_init_timestamp = s_init_timestamp;
+
 
         // TODO we don't to store the cavity IDs for all elements. we can
         // optimize this based on the give CavityOp
@@ -236,7 +239,7 @@ struct Cavity
         }
 
         // make sure the timestamp is the same after locking the patch
-        if (!is_same_timestamp()) {
+        if (!is_same_timestamp(block)) {
             push();
             return false;
         }
@@ -245,7 +248,7 @@ struct Cavity
         load_mesh_async(block, shrd_alloc);
         block.sync();
 
-        if (!is_same_timestamp()) {
+        if (!is_same_timestamp(block)) {
             push();
             return false;
         }
@@ -851,8 +854,6 @@ struct Cavity
                                     DIVIDE_UP(m_s_num_faces[0], 32),
                                     m_patch_info.active_mask_f);
 
-        m_patch_info.update_timestamp();
-
         unlock_patches(block);
     }
 
@@ -1165,7 +1166,7 @@ struct Cavity
         }
 
         // make sure the timestamp is the same after locking the patch
-        if (!is_same_timestamp()) {
+        if (!is_same_timestamp(block)) {
             return false;
         }
 
@@ -1251,6 +1252,7 @@ struct Cavity
                                         .lock.release_lock();
                                 }
                             }
+                            break;
                         }
                     }
                 }
@@ -1269,18 +1271,22 @@ struct Cavity
         cooperative_groups::thread_block& block)
     {
         if (threadIdx.x == 0) {
-            m_patch_info.lock.release_lock();
+
             for (uint8_t i = 0; i < PatchStash::stash_size; ++i) {
                 if (m_s_patches_to_lock_mask(i)) {
                     uint32_t p = m_patch_info.patch_stash.get_patch(i);
+                    m_context.m_patches_info[p].update_timestamp();
                     m_context.m_patches_info[p].lock.release_lock();
                 }
             }
+
+            m_patch_info.update_timestamp();
+            m_patch_info.lock.release_lock();
         }
     }
 
     /**
-     * @brief push to the current patch to the schdueler
+     * @brief push to the current patch to the scheduler
      * @return
      */
     __device__ __inline__ void push()
@@ -1912,9 +1918,16 @@ struct Cavity
      * @brief check if the current timestamp is the same as the timestamp we
      * read during the constructor
      */
-    __device__ __inline__ bool is_same_timestamp() const
+    __device__ __inline__ bool is_same_timestamp(
+        cooperative_groups::thread_block& block) const
     {
-        return atomic_read(m_patch_info.timestamp) == m_init_timestamp;
+        __shared__ uint32_t s_init_timestamp;
+        if (threadIdx.x == 0) {
+            s_init_timestamp = atomic_read(m_patch_info.timestamp);
+        }
+        block.sync();
+
+        return s_init_timestamp == m_init_timestamp;
     }
 
     int *m_s_num_cavities, *m_s_cavity_size;
