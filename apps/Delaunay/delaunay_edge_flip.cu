@@ -73,4 +73,6 @@ int main(int argc, char** argv)
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
+
+    return RUN_ALL_TESTS();
 }

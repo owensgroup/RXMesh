@@ -105,7 +105,7 @@ void __global__ solve_bending(const Context                context,
      *
      */
     auto solve = [&](const EdgeHandle& eh, const VertexIterator& iter) {
-        // iter[0] and iter[2] are the edge two
+        // iter[0] and iter[2] are the edge two vertices
         // iter[1] and iter[3] are the two opposite vertices
 
         auto v1 = iter[0];
