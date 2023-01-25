@@ -2,8 +2,7 @@ add_executable(DelaunayEdgeFlip)
 
 set(SOURCE_LIST
     delaunay_edge_flip.cu  
-	delaunay_rxmesh.h
-	delaunay_edge_flip_kernel.cuh
+	delaunay_rxmesh.cuh	
 )
 
 target_sources(DelaunayEdgeFlip 

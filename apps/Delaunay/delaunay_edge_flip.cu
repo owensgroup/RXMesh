@@ -11,7 +11,7 @@ struct arg
     int         argc;
 } Arg;
 
-#include "delaunay_rxmesh.h"
+#include "delaunay_rxmesh.cuh"
 
 TEST(Apps, DelaunayEdgeFlip)
 {
@@ -21,11 +21,13 @@ TEST(Apps, DelaunayEdgeFlip)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshDynamic rx(Arg.obj_file_name, false);
+    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
+                     false,
+                     STRINGIFY(INPUT_DIR) "sphere3_patches");
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
-    delaunay_rxmesh(rx);
+    ASSERT_TRUE(delaunay_rxmesh(rx));
 }
 
 

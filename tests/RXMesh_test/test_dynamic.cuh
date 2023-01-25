@@ -15,12 +15,12 @@ enum : Config
 };
 
 template <uint32_t blockThreads>
-__global__ static void edge_flip_kernel(rxmesh::Context                context,
-                                        rxmesh::VertexAttribute<float> coords,
-                                        rxmesh::VertexAttribute<float> v_attr,
-                                        rxmesh::EdgeAttribute<float>   e_attr,
-                                        rxmesh::FaceAttribute<float>   f_attr,
-                                        Config                         config)
+__global__ static void random_flips(rxmesh::Context                context,
+                                    rxmesh::VertexAttribute<float> coords,
+                                    rxmesh::VertexAttribute<float> v_attr,
+                                    rxmesh::EdgeAttribute<float>   e_attr,
+                                    rxmesh::FaceAttribute<float>   f_attr,
+                                    Config                         config)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -197,17 +197,16 @@ TEST(RXMeshDynamic, Cavity)
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
 
-    rx.prepare_launch_box(
-        {}, launch_box, (void*)edge_flip_kernel<blockThreads>);
+    rx.prepare_launch_box({}, launch_box, (void*)random_flips<blockThreads>);
 
     Config congif = InteriorNotConflicting | InteriorConflicting |
                     OnRibbonNotConflicting | OnRibbonConflicting;
 
 
     while (!rx.is_queue_empty()) {
-        edge_flip_kernel<blockThreads><<<launch_box.blocks,
-                                         launch_box.num_threads,
-                                         launch_box.smem_bytes_dyn>>>(
+        random_flips<blockThreads><<<launch_box.blocks,
+                                     launch_box.num_threads,
+                                     launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, congif);
     }
 
