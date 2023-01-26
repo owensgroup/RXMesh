@@ -15,11 +15,12 @@ namespace rxmesh {
 template <uint32_t blockThreads>
 struct Query
 {
-    Query(const ShmemAllocator&) = delete;
+    Query(const Query&) = delete;
     Query& operator=(const Query&) = delete;
 
-    __device__ __inline__ Query(const Context& context)
-        : m_patch_info(context.m_patches_info[blockIdx.x]),
+    __device__ __inline__ Query(const Context& context,
+                                const uint32_t pid = blockIdx.x)
+        : m_patch_info(context.m_patches_info[pid]),
           m_num_src_in_patch(0),
           m_s_participant_bitmask(nullptr),
           m_s_output_owned_bitmask(nullptr),
@@ -178,7 +179,7 @@ struct Query
             }
         }
 
-        //cleanup shared memory allocation 
+        // cleanup shared memory allocation
         shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() -
                            shmem_before);
     }

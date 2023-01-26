@@ -92,7 +92,7 @@ __global__ static void delaunay_edge_flip(rxmesh::Context              context,
         }
     };
 
-    Query<blockThreads> query(context);
+    Query<blockThreads> query(context, pid);
     query.dispatch<Op::EVDiamond>(block, shrd_alloc, is_delaunay);
     block.sync();
 
@@ -161,7 +161,6 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
             <<<launch_box.blocks,
                launch_box.num_threads,
                launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords, *e_attr);
-        break;
     }
 
     timer.stop();
@@ -182,6 +181,7 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     EXPECT_TRUE(rx.validate());
 
+    // rx.export_obj("del_sphere3.obj", *coords);
 #if USE_POLYSCOPE
     rx.update_polyscope();
     auto ps_mesh = rx.get_polyscope_mesh();

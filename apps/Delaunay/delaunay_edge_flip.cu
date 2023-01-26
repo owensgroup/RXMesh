@@ -21,9 +21,7 @@ TEST(Apps, DelaunayEdgeFlip)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
-                     false,
-                     STRINGIFY(INPUT_DIR) "sphere3_patches");
+    RXMeshDynamic rx(Arg.obj_file_name);
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
@@ -49,7 +47,7 @@ int main(int argc, char** argv)
                         " -input:      Input file. Input file should be under the input/ subdirectory\n"
                         "              Default is {} \n"
                         "              Hint: Only accept OBJ files\n"
-                        " -o:          JSON file output folder. Default is {} \n"                        
+                        " -o:          JSON file output folder. Default is {} \n"
                         " -device_id:  GPU device ID. Default is {}",
             Arg.obj_file_name, Arg.output_folder, Arg.device_id);
             // clang-format on
