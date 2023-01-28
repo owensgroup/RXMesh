@@ -1099,7 +1099,7 @@ struct Cavity
         // Some vertices on the boundary of the cavity are owned and other are
         // not. For owned vertices, edges and faces connected to them exists in
         // the patch (by definition) and they could be owned or not. For that,
-        // we need to fist make sure that these edges and faces are marked in
+        // we need to first make sure that these edges and faces are marked in
         // m_s_ownership_change_mask_e/f.
         // For not-owned vertices on the cavity boundary, we process them by
         // first marking them in m_s_migrate_mask_v and then look for their
@@ -1759,22 +1759,57 @@ struct Cavity
     __device__ __inline__ void post_migration_cleanup(
         cooperative_groups::thread_block& block)
     {
+
+        // we prepare vertex/edge/face bitmask for elements in P such that if
+        // these elements are seen in another patch q, it means that we can
+        // safely delete them from q
+
+        // we are reusing these bitmask since we no longer need it
+        // here we only change their names to improve readability
+        assert(m_s_migrate_mask_v.m_size >= m_s_num_vertices[0]);
+
+        Bitmask vertex_incident_to_not_owned_face =
+            Bitmask(m_s_migrate_mask_v.m_size, m_s_migrate_mask_v.m_bitmask);
+
+        // here boundary vertex means a vertex incident to not-owed face
+        Bitmask vertex_incident_to_boundary_vertex =
+            Bitmask(m_s_src_mask_v.m_size, m_s_src_mask_v.m_bitmask);
+
+        // means that one end of the edge is a boundary vertex
+        assert(m_s_src_mask_e.m_size >= m_s_num_edges[0]);
+        Bitmask edge_incident_to_boundary_vertex =
+            Bitmask(m_s_src_mask_e.m_size, m_s_src_mask_e.m_bitmask);
+
+        // means that one of the face's three vertices is a boundary vertex
+        assert(m_s_src_connect_mask_e.m_size >= m_s_num_faces[0]);
+        Bitmask face_incident_to_boundary_vertex =
+            Bitmask(m_s_src_connect_mask_e.m_size, m_s_src_mask_e.m_bitmask);
+
+        classify_elements_for_post_migtation_cleanup(
+            vertex_incident_to_not_owned_face,
+            vertex_incident_to_boundary_vertex,
+            edge_incident_to_boundary_vertex,
+            face_incident_to_boundary_vertex);
+
         for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
             const uint32_t q = m_patch_info.patch_stash.get_patch(p);
             if (q != INVALID32) {
                 auto q_patch_info = m_context.m_patches_info[q];
-                post_migration_cleanup<VertexHandle>(block,
-                                                     m_patch_info.patch_id,
-                                                     q_patch_info,
-                                                     m_s_cavity_id_v);
-                post_migration_cleanup<EdgeHandle>(block,
-                                                   m_patch_info.patch_id,
-                                                   q_patch_info,
-                                                   m_s_cavity_id_e);
                 post_migration_cleanup<FaceHandle>(block,
                                                    m_patch_info.patch_id,
+                                                   q,
                                                    q_patch_info,
                                                    m_s_cavity_id_f);
+                post_migration_cleanup<EdgeHandle>(block,
+                                                   m_patch_info.patch_id,
+                                                   q,
+                                                   q_patch_info,
+                                                   m_s_cavity_id_e);
+                post_migration_cleanup<VertexHandle>(block,
+                                                     m_patch_info.patch_id,
+                                                     q,
+                                                     q_patch_info,
+                                                     m_s_cavity_id_v);
             }
         }
     }
@@ -1786,16 +1821,20 @@ struct Cavity
     __device__ __inline__ void post_migration_cleanup(
         cooperative_groups::thread_block& block,
         const uint32_t                    p,
+        const uint32_t                    q,
         PatchInfo                         q_patch_info,
         const uint16_t*                   s_cavity_id)
     {
+        using LocalT = typename HandleT::LocalT;
+
         uint16_t q_num_elements = q_patch_info.get_num_elements<HandleT>()[0];
 
         for (uint16_t v = threadIdx.x; v < q_num_elements; v += blockThreads) {
-            if (!detail::is_deleted(v,
-                                    q_patch_info.get_active_mask<HandleT>()) &&
-                !detail::is_owned(v, q_patch_info.get_owned_mask<HandleT>())) {
+            auto local = LocalT(v);
+            if (!q_patch_info.is_deleted(local) &&
+                !q_patch_info.is_owned(local)) {
 
+                // delete an element if its inside p's cavity
                 LPPair lp = q_patch_info.get_lp<HandleT>().find(v);
                 if (q_patch_info.patch_stash.get_patch(lp) == p) {
                     uint16_t vp = lp.local_id_in_owner_patch();
@@ -1808,6 +1847,22 @@ struct Cavity
             }
         }
     }
+
+
+    /**
+     * @brief classify mesh elements in P such that if they are seen in a
+     * different patch Q, then they could be deleted from Q
+     * @return
+     */
+    __device__ __inline__ void classify_elements_for_post_migtation_cleanup(
+        Bitmask& vertex_incident_to_not_owned_face,
+        Bitmask& vertex_incident_to_boundary_vertex,
+        Bitmask& edge_incident_to_boundary_vertex,
+        Bitmask& face_incident_to_boundary_vertex)
+    {
+
+    }
+
 
     /**
      * @brief given a local face in a patch, find its corresponding local

@@ -191,10 +191,9 @@ struct Bitmask
         return detail::is_set_bit(bit, m_bitmask);
     }
 
-   private:
-    uint16_t m_size;    
 
-   public:
+    uint16_t m_size;
+
     uint32_t* m_bitmask;
 };
 }  // namespace rxmesh
