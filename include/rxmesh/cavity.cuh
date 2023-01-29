@@ -124,9 +124,8 @@ struct Cavity
         m_s_migrate_mask_v      = Bitmask(vert_cap, shrd_alloc);
         m_s_owned_cavity_bdry_v = Bitmask(vert_cap, shrd_alloc);
         m_s_ribbonize_v         = Bitmask(vert_cap, shrd_alloc);
-        m_s_src_mask_v = Bitmask(context.m_max_num_vertices[0], shrd_alloc);
-        m_s_src_connect_mask_v =
-            Bitmask(context.m_max_num_vertices[0], shrd_alloc);
+        m_s_src_mask_v          = Bitmask(vert_cap, shrd_alloc);
+        m_s_src_connect_mask_v  = Bitmask(vert_cap, shrd_alloc);
 
 
         // edges masks
@@ -136,9 +135,8 @@ struct Cavity
                     m_s_ownership_change_mask_e,
                     m_patch_info.owned_mask_e,
                     m_patch_info.active_mask_e);
-        m_s_src_mask_e = Bitmask(context.m_max_num_edges[0], shrd_alloc);
-        m_s_src_connect_mask_e =
-            Bitmask(context.m_max_num_edges[0], shrd_alloc);
+        m_s_src_mask_e         = Bitmask(edge_cap, shrd_alloc);
+        m_s_src_connect_mask_e = Bitmask(edge_cap, shrd_alloc);
 
         // faces masks
         alloc_masks(face_cap,
@@ -1772,6 +1770,7 @@ struct Cavity
             Bitmask(m_s_migrate_mask_v.m_size, m_s_migrate_mask_v.m_bitmask);
 
         // here boundary vertex means a vertex incident to not-owed face
+        assert(m_s_src_mask_v.m_size >= m_s_num_vertices[0]);
         Bitmask vertex_incident_to_boundary_vertex =
             Bitmask(m_s_src_mask_v.m_size, m_s_src_mask_v.m_bitmask);
 
@@ -1782,10 +1781,11 @@ struct Cavity
 
         // means that one of the face's three vertices is a boundary vertex
         assert(m_s_src_connect_mask_e.m_size >= m_s_num_faces[0]);
-        Bitmask face_incident_to_boundary_vertex =
-            Bitmask(m_s_src_connect_mask_e.m_size, m_s_src_mask_e.m_bitmask);
+        Bitmask face_incident_to_boundary_vertex = Bitmask(
+            m_s_src_connect_mask_e.m_size, m_s_src_connect_mask_e.m_bitmask);
 
         classify_elements_for_post_migtation_cleanup(
+            block,
             vertex_incident_to_not_owned_face,
             vertex_incident_to_boundary_vertex,
             edge_incident_to_boundary_vertex,
@@ -1795,21 +1795,27 @@ struct Cavity
             const uint32_t q = m_patch_info.patch_stash.get_patch(p);
             if (q != INVALID32) {
                 auto q_patch_info = m_context.m_patches_info[q];
-                post_migration_cleanup<FaceHandle>(block,
-                                                   m_patch_info.patch_id,
-                                                   q,
-                                                   q_patch_info,
-                                                   m_s_cavity_id_f);
-                post_migration_cleanup<EdgeHandle>(block,
-                                                   m_patch_info.patch_id,
-                                                   q,
-                                                   q_patch_info,
-                                                   m_s_cavity_id_e);
-                post_migration_cleanup<VertexHandle>(block,
-                                                     m_patch_info.patch_id,
-                                                     q,
-                                                     q_patch_info,
-                                                     m_s_cavity_id_v);
+                post_migration_cleanup<FaceHandle>(
+                    block,
+                    m_patch_info.patch_id,
+                    q,
+                    q_patch_info,
+                    m_s_cavity_id_f,
+                    face_incident_to_boundary_vertex);
+                post_migration_cleanup<EdgeHandle>(
+                    block,
+                    m_patch_info.patch_id,
+                    q,
+                    q_patch_info,
+                    m_s_cavity_id_e,
+                    edge_incident_to_boundary_vertex);
+                post_migration_cleanup<VertexHandle>(
+                    block,
+                    m_patch_info.patch_id,
+                    q,
+                    q_patch_info,
+                    m_s_cavity_id_v,
+                    vertex_incident_to_boundary_vertex);
             }
         }
     }
@@ -1823,7 +1829,8 @@ struct Cavity
         const uint32_t                    p,
         const uint32_t                    q,
         PatchInfo                         q_patch_info,
-        const uint16_t*                   s_cavity_id)
+        const uint16_t*                   s_cavity_id,
+        const Bitmask&                    p_flag)
     {
         using LocalT = typename HandleT::LocalT;
 
@@ -1838,7 +1845,7 @@ struct Cavity
                 LPPair lp = q_patch_info.get_lp<HandleT>().find(v);
                 if (q_patch_info.patch_stash.get_patch(lp) == p) {
                     uint16_t vp = lp.local_id_in_owner_patch();
-                    if (s_cavity_id[vp] != INVALID16) {
+                    if (s_cavity_id[vp] != INVALID16 || !p_flag(vp)) {
                         detail::bitmask_clear_bit(
                             v, q_patch_info.get_active_mask<HandleT>(), true);
                         q_patch_info.get_lp<HandleT>().remove(v);
@@ -1855,12 +1862,86 @@ struct Cavity
      * @return
      */
     __device__ __inline__ void classify_elements_for_post_migtation_cleanup(
-        Bitmask& vertex_incident_to_not_owned_face,
-        Bitmask& vertex_incident_to_boundary_vertex,
-        Bitmask& edge_incident_to_boundary_vertex,
-        Bitmask& face_incident_to_boundary_vertex)
+        cooperative_groups::thread_block& block,
+        Bitmask&                          vertex_incident_to_not_owned_face,
+        Bitmask&                          vertex_incident_to_boundary_vertex,
+        Bitmask&                          edge_incident_to_boundary_vertex,
+        Bitmask&                          face_incident_to_boundary_vertex)
     {
+        vertex_incident_to_not_owned_face.reset(block);
+        block.sync();
+        vertex_incident_to_boundary_vertex.reset(block);
+        edge_incident_to_boundary_vertex.reset(block);
+        face_incident_to_boundary_vertex.reset(block);
 
+        // loop over not-owned faces in P and set a bit for the face's three
+        // vertices in vertex_incident_to_not_owned_face
+        const uint16_t num_faces = m_s_num_faces[0];
+        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+            if (!m_s_owned_mask_f(f) && m_s_active_mask_f(f)) {
+                for (int i = 0; i < 3; i++) {
+                    uint16_t edge = m_s_fe[3 * f + i];
+                    assert((edge >> 1) < m_s_num_edges[0]);
+                    flag_t e_dir(0);
+                    Context::unpack_edge_dir(edge, edge, e_dir);
+                    uint16_t e_id = (2 * edge) + (1 * e_dir);
+                    assert(e_id < m_s_num_edges[0] * 2);
+                    uint16_t vertex = m_s_ev[e_id];
+                    assert(vertex < m_s_num_vertices[0]);
+                    vertex_incident_to_not_owned_face.set(vertex, true);
+                }
+            }
+        }
+        block.sync();
+
+        // loop over edges and set the vertex bit if it's connected to a vertex
+        // that is incident to a not-owned face in
+        // vertex_incident_to_boundary_vertex
+        const uint16_t num_edges = m_s_num_edges[0];
+        for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+            if (m_s_active_mask_e(e)) {
+                const uint16_t v0 = m_s_ev[2 * e + 0];
+                const uint16_t v1 = m_s_ev[2 * e + 1];
+                if (vertex_incident_to_not_owned_face(v0) ||
+                    vertex_incident_to_not_owned_face(v1)) {
+                    vertex_incident_to_boundary_vertex.set(v0, true);
+                    vertex_incident_to_boundary_vertex.set(v1, true);
+                }
+            }
+        }
+        block.sync();
+
+        // loop over edges and set the edge bit if it is connected to a vertex
+        // that is incident to boundary vertex in
+        // edge_incident_to_boundary_vertex
+        for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+            if (m_s_active_mask_e(e)) {
+                uint16_t v0 = m_s_ev[2 * e + 0];
+                uint16_t v1 = m_s_ev[2 * e + 1];
+                if (vertex_incident_to_boundary_vertex(v0) &&
+                    vertex_incident_to_boundary_vertex(v1)) {
+                    edge_incident_to_boundary_vertex.set(e, true);
+                }
+            }
+        }
+        block.sync();
+
+        // loop over edges and set the edge bit if it is connected to a vertex
+        // that is incident to boundary vertex in
+        // edge_incident_to_boundary_vertex
+        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+            if (m_s_active_mask_f(f)) {
+                bool flag = true;
+                for (int i = 0; i < 3; i++) {
+                    const uint16_t edge = m_s_fe[3 * f + i] >> 1;
+                    flag &= edge_incident_to_boundary_vertex(edge);
+                }
+                if (flag) {
+                    face_incident_to_boundary_vertex.set(f, true);
+                }
+            }
+        }
+        block.sync();
     }
 
 
