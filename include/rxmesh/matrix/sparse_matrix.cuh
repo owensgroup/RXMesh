@@ -76,7 +76,8 @@ struct SparseMatrix
           m_cusparse_handle(NULL),
           m_descr(NULL),
           m_spdescr(NULL),
-          m_spmm_buffer_size(0)
+          m_spmm_buffer_size(0),
+          m_spmv_buffer_size(0)
     {
         using namespace rxmesh;
         constexpr uint32_t blockThreads = 256;
@@ -314,71 +315,18 @@ struct SparseMatrix
         CUDA_ERROR(cudaFree(dBuffer));
     }
 
-    // void arr_mul_buffer_size(T* in_arr, T* rt_arr, cudaStream_t stream = 0)
-    // {
-    //     const float alpha = 1.0f;
-    //     const float beta  = 0.0f;
-
-    //     cusparseDnVecDescr_t vecx   = NULL;
-    //     cusparseDnVecDescr_t vecy   = NULL;
-
-    //     printf("check\n");
-
-    //     CUSPARSE_ERROR(
-    //         cusparseCreateDnVec(&vecx, m_col_size, in_arr, CUDA_R_32F));
-    //     CUSPARSE_ERROR(
-    //         cusparseCreateDnVec(&vecy, m_row_size, rt_arr, CUDA_R_32F));
-
-    //     printf("check\n");
-
-    //     CUSPARSE_ERROR(cusparseSpMV_bufferSize(m_cusparse_handle,
-    //                                            CUSPARSE_OPERATION_NON_TRANSPOSE,
-    //                                            &alpha,
-    //                                            m_spdescr,
-    //                                            vecx,
-    //                                            &beta,
-    //                                            vecy,
-    //                                            CUDA_R_32F,
-    //                                            CUSPARSE_SPMV_ALG_DEFAULT,
-    //                                            &m_spmv_buffer_size));
-    //     printf("check\n");
-    // }
-
-    /**
-     * @brief wrap up the cusparse api for sparse matrix array
-     * multiplication.
-     */
-    void arr_mul(T* in_arr, T* rt_arr, cudaStream_t stream = 0)
+    void arr_mul_buffer_size(T* in_arr, T* rt_arr, cudaStream_t stream = 0)
     {
         const float alpha = 1.0f;
         const float beta  = 0.0f;
 
-        printf("check\n");
-
-        size_t m_spmv_buffer_size = 0;
-
-        printf("check\n");
-
-        void*                buffer = NULL;
-        cusparseDnVecDescr_t vecx   = NULL;
-        cusparseDnVecDescr_t vecy   = NULL;
-
-        printf("check\n");
+        cusparseDnVecDescr_t vecx = NULL;
+        cusparseDnVecDescr_t vecy = NULL;
 
         CUSPARSE_ERROR(
             cusparseCreateDnVec(&vecx, m_col_size, in_arr, CUDA_R_32F));
         CUSPARSE_ERROR(
             cusparseCreateDnVec(&vecy, m_row_size, rt_arr, CUDA_R_32F));
-
-        cusparseSetStream(m_cusparse_handle, stream);
-
-        // if (m_spmv_buffer_size == 0) {
-        //     RXMESH_WARN(
-        //         "Sparse matrix - Array multiplication buffer size not "
-        //         "initialized.",
-        //         "Calculate it now.");
-        //     arr_mul_buffer_size(in_arr, rt_arr, stream);
-        // }
 
         CUSPARSE_ERROR(cusparseSpMV_bufferSize(m_cusparse_handle,
                                                CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -390,6 +338,47 @@ struct SparseMatrix
                                                CUDA_R_32F,
                                                CUSPARSE_SPMV_ALG_DEFAULT,
                                                &m_spmv_buffer_size));
+    }
+
+    /**
+     * @brief wrap up the cusparse api for sparse matrix array
+     * multiplication.
+     */
+    void arr_mul(T* in_arr, T* rt_arr, cudaStream_t stream = 0)
+    {
+        const float alpha = 1.0f;
+        const float beta  = 0.0f;
+
+        void*                buffer = NULL;
+        cusparseDnVecDescr_t vecx   = NULL;
+        cusparseDnVecDescr_t vecy   = NULL;
+
+        CUSPARSE_ERROR(
+            cusparseCreateDnVec(&vecx, m_col_size, in_arr, CUDA_R_32F));
+        CUSPARSE_ERROR(
+            cusparseCreateDnVec(&vecy, m_row_size, rt_arr, CUDA_R_32F));
+
+        cusparseSetStream(m_cusparse_handle, stream);
+
+        if (m_spmv_buffer_size == 0) {
+            RXMESH_WARN(
+                "Sparse matrix - Array multiplication buffer size not "
+                "initialized."
+                "Calculate it now.");
+            arr_mul_buffer_size(in_arr, rt_arr, stream);
+        }
+
+        // CUSPARSE_ERROR(cusparseSpMV_bufferSize(m_cusparse_handle,
+        //                                        CUSPARSE_OPERATION_NON_TRANSPOSE,
+        //                                        &alpha,
+        //                                        m_spdescr,
+        //                                        vecx,
+        //                                        &beta,
+        //                                        vecy,
+        //                                        CUDA_R_32F,
+        //                                        CUSPARSE_SPMV_ALG_DEFAULT,
+        //                                        &m_spmv_buffer_size));
+
         CUDA_ERROR(cudaMalloc(&buffer, m_spmv_buffer_size));
 
         CUSPARSE_ERROR(cusparseSpMV(m_cusparse_handle,
@@ -415,6 +404,7 @@ struct SparseMatrix
     cusparseMatDescr_t   m_descr;
 
     size_t m_spmm_buffer_size;
+    size_t m_spmv_buffer_size;
 
     IndexT* m_d_row_ptr;
     IndexT* m_d_col_idx;

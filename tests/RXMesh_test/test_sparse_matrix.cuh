@@ -307,12 +307,8 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
     float* d_arr_ref;
     float* d_result;
 
-    printf("check1\n");
-
     CUDA_ERROR(cudaMalloc((void**)&d_arr_ref, (num_vertices) * sizeof(float)));
     CUDA_ERROR(cudaMalloc((void**)&d_result, (num_vertices) * sizeof(float)));
-
-    printf("check2\n");
 
     LaunchBox<threads> launch_box;
     rxmesh.prepare_launch_box(
@@ -323,12 +319,10 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
                                                launch_box.smem_bytes_dyn>>>(
         rxmesh.get_context(), *coords, spmat, d_arr_ref);
 
-    printf("check3\n");
-
     // Spmat matrix array multiply
-    spmat_multi_hardwired_kernel<float>
-        <<<blocks, threads>>>(d_arr_ones, spmat, d_result, num_vertices);
-    // spmat.arr_mul(d_arr_ones, d_result);
+    // spmat_multi_hardwired_kernel<float>
+    //     <<<blocks, threads>>>(d_arr_ones, spmat, d_result, num_vertices);
+    spmat.arr_mul(d_arr_ones, d_result);
 
     // copy the value back to host
     std::vector<float> h_arr_ref(num_vertices);
@@ -420,4 +414,5 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
             EXPECT_NEAR(h_ret_mat[i][j], h_B_mat[i][j], 1e-3);
         }
     }
+    A_mat.free();
 }
