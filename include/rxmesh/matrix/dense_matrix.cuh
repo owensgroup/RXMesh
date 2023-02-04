@@ -1,6 +1,6 @@
 #pragma once
 #include <vector>
-
+#include "cusparse.h"
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/types.h"
@@ -14,16 +14,17 @@ template <typename T, typename IndexT = int>
 struct DenseMatrix
 {
     DenseMatrix(IndexT row_size, IndexT col_size)
-        : m_row_size(row_size), m_col_size(col_size)
+        : m_row_size(row_size), m_col_size(col_size), m_dendescr(NULL)
     {
-        cudaMalloc((void**)&m_d_val, bytes());
-    }
+        CUDA_ERROR(cudaMalloc((void**)&m_d_val, bytes()));
 
-    DenseMatrix(IndexT row_size, IndexT col_size, bool is_row_major)
-        : m_row_size(row_size),
-          m_col_size(col_size)
-    {
-        cudaMalloc((void**)&m_d_val, bytes());
+        CUSPARSE_ERROR(cusparseCreateDnMat(&m_dendescr,
+                            m_row_size,
+                            m_col_size,
+                            m_row_size, // leading dim
+                            m_d_val,
+                            CUDA_R_32F,
+                            CUSPARSE_ORDER_COL));
     }
 
     void set_ones()
@@ -65,9 +66,10 @@ struct DenseMatrix
         return m_row_size * m_col_size * sizeof(T);
     }
 
-    IndexT m_row_size;
-    IndexT m_col_size;
-    T*     m_d_val;
+    cusparseDnMatDescr_t m_dendescr;
+    IndexT               m_row_size;
+    IndexT               m_col_size;
+    T*                   m_d_val;
 };
 
 }  // namespace rxmesh
