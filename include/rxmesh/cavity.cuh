@@ -56,8 +56,11 @@ struct Cavity
         m_s_num_edges    = counts + 1;
         m_s_num_faces    = counts + 2;
 
+        __shared__ bool readd[1];
+        m_s_readd_to_queue = readd;
         if (threadIdx.x == 0) {
-            patch_id = m_context.m_patch_scheduler.pop();
+            m_s_readd_to_queue[0] = false;
+            patch_id              = m_context.m_patch_scheduler.pop();
             if (patch_id != INVALID32) {
                 m_s_num_vertices[0] =
                     m_context.m_patches_info[patch_id].num_vertices[0];
@@ -796,6 +799,7 @@ struct Cavity
         for (uint32_t vp = threadIdx.x; vp < m_s_num_vertices[0];
              vp += blockThreads) {
             if (m_s_ownership_change_mask_v(vp)) {
+                m_s_readd_to_queue[0] = true;
                 m_patch_info.lp_v.remove(vp);
             }
         }
@@ -803,6 +807,7 @@ struct Cavity
         for (uint32_t ep = threadIdx.x; ep < m_s_num_edges[0];
              ep += blockThreads) {
             if (m_s_ownership_change_mask_e(ep)) {
+                m_s_readd_to_queue[0] = true;
                 m_patch_info.lp_e.remove(ep);
             }
         }
@@ -810,6 +815,7 @@ struct Cavity
         for (uint32_t fp = threadIdx.x; fp < m_s_num_faces[0];
              fp += blockThreads) {
             if (m_s_ownership_change_mask_f(fp)) {
+                m_s_readd_to_queue[0] = true;
                 m_patch_info.lp_f.remove(fp);
             }
         }
@@ -852,6 +858,7 @@ struct Cavity
                                     DIVIDE_UP(m_s_num_faces[0], 32),
                                     m_patch_info.active_mask_f);
 
+        block.sync();
         unlock_patches(block);
     }
 
@@ -1270,6 +1277,9 @@ struct Cavity
         cooperative_groups::thread_block& block)
     {
         if (threadIdx.x == 0) {
+            if (m_s_readd_to_queue[0]) {
+                m_context.m_patch_scheduler.push(m_patch_info.patch_id);
+            }
 
             for (uint8_t i = 0; i < PatchStash::stash_size; ++i) {
                 if (m_s_patches_to_lock_mask(i)) {
@@ -2080,6 +2090,8 @@ struct Cavity
     Bitmask m_s_owned_cavity_bdry_v;
     Bitmask m_s_ribbonize_v;
     Bitmask m_s_patches_to_lock_mask;
+
+    bool* m_s_readd_to_queue;
 
     uint16_t *m_s_ev, *m_s_fe;
     uint16_t *m_s_cavity_id_v, *m_s_cavity_id_e, *m_s_cavity_id_f;
