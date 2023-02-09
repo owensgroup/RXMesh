@@ -127,8 +127,9 @@ struct Cavity
         m_s_migrate_mask_v      = Bitmask(vert_cap, shrd_alloc);
         m_s_owned_cavity_bdry_v = Bitmask(vert_cap, shrd_alloc);
         m_s_ribbonize_v         = Bitmask(vert_cap, shrd_alloc);
-        m_s_src_mask_v          = Bitmask(vert_cap, shrd_alloc);
-        m_s_src_connect_mask_v  = Bitmask(vert_cap, shrd_alloc);
+        m_s_src_mask_v = Bitmask(context.m_max_num_vertices[0], shrd_alloc);
+        m_s_src_connect_mask_v =
+            Bitmask(context.m_max_num_vertices[0], shrd_alloc);
 
 
         // edges masks
@@ -138,8 +139,12 @@ struct Cavity
                     m_s_ownership_change_mask_e,
                     m_patch_info.owned_mask_e,
                     m_patch_info.active_mask_e);
-        m_s_src_mask_e         = Bitmask(edge_cap, shrd_alloc);
-        m_s_src_connect_mask_e = Bitmask(edge_cap, shrd_alloc);
+        const uint16_t max_edge_cap = static_cast<uint16_t>(
+            context.m_capacity_factor *
+            static_cast<float>(context.m_max_num_edges[0]));
+        m_s_src_mask_e = Bitmask(std::max(max_edge_cap, edge_cap), shrd_alloc);
+        m_s_src_connect_mask_e =
+            Bitmask(context.m_max_num_edges[0], shrd_alloc);
 
         // faces masks
         alloc_masks(face_cap,
@@ -791,7 +796,8 @@ struct Cavity
     /**
      * @brief cleanup by moving data from shared memory to global memory
      */
-    __device__ __inline__ void cleanup(cooperative_groups::thread_block& block)
+    __device__ __inline__ void cleanup(cooperative_groups::thread_block& block,
+                                       const bool readd = true)
     {
         // cleanup the hashtable by removing the vertices/edges/faces that has
         // changed their ownership to be in this patch (p) and thus should not
@@ -859,6 +865,12 @@ struct Cavity
                                     m_patch_info.active_mask_f);
 
         block.sync();
+
+        // readd the patch to the queue if there is ownership change
+        if (threadIdx.x == 0 && readd && m_s_readd_to_queue[0]) {
+            m_context.m_patch_scheduler.push(m_patch_info.patch_id);
+        }
+
         unlock_patches(block);
     }
 
@@ -1277,10 +1289,6 @@ struct Cavity
         cooperative_groups::thread_block& block)
     {
         if (threadIdx.x == 0) {
-            if (m_s_readd_to_queue[0]) {
-                m_context.m_patch_scheduler.push(m_patch_info.patch_id);
-            }
-
             for (uint8_t i = 0; i < PatchStash::stash_size; ++i) {
                 if (m_s_patches_to_lock_mask(i)) {
                     uint32_t p = m_patch_info.patch_stash.get_patch(i);
@@ -1780,9 +1788,9 @@ struct Cavity
             Bitmask(m_s_migrate_mask_v.m_size, m_s_migrate_mask_v.m_bitmask);
 
         // here boundary vertex means a vertex incident to not-owed face
-        assert(m_s_src_mask_v.m_size >= m_s_num_vertices[0]);
-        Bitmask vertex_incident_to_boundary_vertex =
-            Bitmask(m_s_src_mask_v.m_size, m_s_src_mask_v.m_bitmask);
+        assert(m_s_owned_cavity_bdry_v.m_size >= m_s_num_vertices[0]);
+        Bitmask vertex_incident_to_boundary_vertex = Bitmask(
+            m_s_owned_cavity_bdry_v.m_size, m_s_owned_cavity_bdry_v.m_bitmask);
 
         // means that one end of the edge is a boundary vertex
         assert(m_s_src_mask_e.m_size >= m_s_num_edges[0]);
@@ -1794,12 +1802,12 @@ struct Cavity
         Bitmask face_incident_to_boundary_vertex = Bitmask(
             m_s_src_connect_mask_e.m_size, m_s_src_connect_mask_e.m_bitmask);
 
-        classify_elements_for_post_migtation_cleanup(
+        /*classify_elements_for_post_migtation_cleanup(
             block,
             vertex_incident_to_not_owned_face,
             vertex_incident_to_boundary_vertex,
             edge_incident_to_boundary_vertex,
-            face_incident_to_boundary_vertex);
+            face_incident_to_boundary_vertex);*/
 
         for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
             const uint32_t q = m_patch_info.patch_stash.get_patch(p);
@@ -1855,7 +1863,7 @@ struct Cavity
                 LPPair lp = q_patch_info.get_lp<HandleT>().find(v);
                 if (q_patch_info.patch_stash.get_patch(lp) == p) {
                     uint16_t vp = lp.local_id_in_owner_patch();
-                    if (s_cavity_id[vp] != INVALID16 || !p_flag(vp)) {
+                    if (s_cavity_id[vp] != INVALID16 /*|| !p_flag(vp)*/) {
                         detail::bitmask_clear_bit(
                             v, q_patch_info.get_active_mask<HandleT>(), true);
                         q_patch_info.get_lp<HandleT>().remove(v);

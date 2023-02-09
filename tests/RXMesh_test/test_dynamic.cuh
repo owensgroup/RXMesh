@@ -157,7 +157,7 @@ __global__ static void random_flips(rxmesh::Context                context,
         });
         block.sync();
 
-        cavity.cleanup(block);
+        cavity.cleanup(block, false);
     }
 }
 
