@@ -28,6 +28,7 @@ struct arg
 
 #include "mcf_openmesh.h"
 #include "mcf_rxmesh.h"
+#include "mcf_sparse_matrix.cuh"
 
 
 TEST(App, MCF)

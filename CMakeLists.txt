@@ -10,7 +10,6 @@ project(RXMesh
 
 
 set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
-set(USE_POLYSCOPE "OFF")
 
 
 if(${USE_POLYSCOPE})

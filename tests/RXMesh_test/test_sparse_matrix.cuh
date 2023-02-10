@@ -1,7 +1,8 @@
 #include "gtest/gtest.h"
 
 #include "rxmesh/attribute.h"
-#include "rxmesh/matrix/matrix_operation.cuh"
+#include "rxmesh/matrix/dense_matrix.cuh"
+#include "rxmesh/matrix/sparse_matrix.cuh"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
 
@@ -11,7 +12,6 @@ __global__ static void sparse_mat_test(const rxmesh::Context context,
                                        IndexT*               vet_degree)
 {
     using namespace rxmesh;
-
     auto compute_valence = [&](VertexHandle& v_id, const VertexIterator& iter) {
         auto     ids      = v_id.unpack();
         uint32_t patch_id = ids.first;
@@ -72,9 +72,9 @@ __global__ static void sparse_mat_edge_len_test(
             Vector<3, T> vi_coord(
                 coords(iter[v], 0), coords(iter[v], 1), coords(iter[v], 2));
 
-            sparse_mat(v_id, iter[v]) = 1; //dist(v_coord, vi_coord);
+            sparse_mat(v_id, iter[v]) = 1;  // dist(v_coord, vi_coord);
 
-            arr_ref[row_index] += 1; //dist(v_coord, vi_coord);
+            arr_ref[row_index] += 1;  // dist(v_coord, vi_coord);
         }
     };
 
@@ -283,8 +283,7 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
     cuda_query(0);
 
     // generate rxmesh obj
-    std::string  obj_path = STRINGIFY(INPUT_DIR) "cube.obj";
-    RXMeshStatic rxmesh(obj_path);
+    RXMeshStatic rxmesh(rxmesh_args.obj_file_name, rxmesh_args.quite);
 
     uint32_t num_vertices = rxmesh.get_num_vertices();
 
@@ -319,9 +318,6 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
                                                launch_box.smem_bytes_dyn>>>(
         rxmesh.get_context(), *coords, spmat, d_arr_ref);
 
-    // Spmat matrix array multiply
-    // spmat_multi_hardwired_kernel<float>
-    //     <<<blocks, threads>>>(d_arr_ones, spmat, d_result, num_vertices);
     spmat.arr_mul(d_arr_ones, d_result);
 
     // copy the value back to host
@@ -355,9 +351,8 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
     cuda_query(0);
 
     // generate rxmesh obj
-    std::string obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";  // STRINGIFY(INPUT_DIR) "dragon.obj";
-                                          // "/home/ericycc/data/120628.obj";
-    RXMeshStatic rxmesh(obj_path);
+    std::string  obj_path = rxmesh_args.obj_file_name;
+    RXMeshStatic rxmesh(obj_path, rxmesh_args.quite);
 
     uint32_t num_vertices = rxmesh.get_num_vertices();
 
@@ -383,7 +378,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 
     print_diag<float><<<1, 1>>>(A_mat, num_vertices);
 
-    spmat_linear_solve(A_mat, B_mat, X_mat, Solver::CHOL, Reorder::NONE);
+    A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NONE);
 
     // timing begins for spmm
     GPUTimer timer;
