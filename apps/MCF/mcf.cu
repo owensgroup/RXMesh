@@ -54,6 +54,9 @@ TEST(App, MCF)
 
     // RXMesh Impl
     mcf_rxmesh(rxmesh, ground_truth);
+
+    // RXMesh cusolver Impl
+    mcf_rxmesh_solver(rxmesh, ground_truth);
 }
 
 int main(int argc, char** argv)
