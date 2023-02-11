@@ -298,7 +298,7 @@ struct SparseMatrix
         cusparseDnMatDescr_t matC    = C_mat.m_dendescr;
         void*                dBuffer = NULL;
 
-        cusparseSetStream(m_cusparse_handle, stream);
+        CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
 
         // allocate an external buffer if needed
         CUSPARSE_ERROR(cusparseSpMM_bufferSize(m_cusparse_handle,
@@ -331,7 +331,7 @@ struct SparseMatrix
         cusparseDnMatDescr_t matC    = C_mat.m_dendescr;
         void*                dBuffer = NULL;
 
-        cusparseSetStream(m_cusparse_handle, stream);
+        CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
 
         // allocate an external buffer if needed
         if (m_spmm_buffer_size == 0) {
@@ -402,7 +402,7 @@ struct SparseMatrix
         CUSPARSE_ERROR(
             cusparseCreateDnVec(&vecy, m_row_size, rt_arr, CUDA_R_32F));
 
-        cusparseSetStream(m_cusparse_handle, stream);
+        CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
 
         if (m_spmv_buffer_size == 0) {
             RXMESH_WARN(
