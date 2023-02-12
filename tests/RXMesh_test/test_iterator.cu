@@ -13,10 +13,14 @@ __global__ static void test_iterator(uint32_t*       suceess,
     uint16_t      local_id = threadIdx.x;
     const HandleT truth(patch_id, {local_id});
 
+    // empty context to just get things working
+    Context context;
+
     if (local_id >= num_elements) {
         LPHashTable       ht;
         PatchStash        stash;
         Iterator<HandleT> iter(
+            context,
             local_id,
             reinterpret_cast<const typename HandleT::LocalT*>(patch_output),
             nullptr,

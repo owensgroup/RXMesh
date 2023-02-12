@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "rxmesh/context.h"
 #include "rxmesh/handle.h"
 #include "rxmesh/lp_hashtable.cuh"
 #include "rxmesh/patch_stash.cuh"
@@ -12,7 +13,8 @@ struct Iterator
 {
     using LocalT = typename HandleT::LocalT;
 
-    __device__ Iterator(const uint16_t     local_id,
+    __device__ Iterator(const Context&     context,
+                        const uint16_t     local_id,
                         const LocalT*      patch_output,
                         const uint16_t*    patch_offset,
                         const uint32_t     offset_size,
@@ -22,7 +24,8 @@ struct Iterator
                         const LPPair*      s_table,
                         const PatchStash   patch_stash,
                         int                shift = 0)
-        : m_patch_output(patch_output),
+        : m_context(context),
+          m_patch_output(patch_output),
           m_patch_id(patch_id),
           m_output_owned_bitmask(output_owned_bitmask),
           m_output_lp_hashtable(output_lp_hashtable),
@@ -52,8 +55,20 @@ struct Iterator
         if (detail::is_owned(lid, m_output_owned_bitmask)) {
             return {m_patch_id, lid};
         } else {
-            LPPair lp = m_output_lp_hashtable.find(lid, m_s_table);
-            return {m_patch_stash.get_patch(lp), lp.local_id_in_owner_patch()};
+            LPPair   lp    = m_output_lp_hashtable.find(lid, m_s_table);
+            uint32_t owner = m_patch_stash.get_patch(lp);
+
+
+            while (!m_context.m_patches_info[owner].is_owned(
+                LocalT(lp.local_id_in_owner_patch()))) {
+
+                lp = m_context.m_patches_info[owner].get_lp<HandleT>().find(
+                    lp.local_id_in_owner_patch());
+
+                owner =
+                    m_context.m_patches_info[owner].patch_stash.get_patch(lp);
+            }
+            return {owner, lp.local_id_in_owner_patch()};
         }
     }
 
@@ -115,13 +130,14 @@ struct Iterator
 
 
    private:
+    const Context&    m_context;
     uint16_t          m_local_id;
     const LocalT*     m_patch_output;
     const uint32_t    m_patch_id;
     const uint32_t*   m_output_owned_bitmask;
     const LPHashTable m_output_lp_hashtable;
     const LPPair*     m_s_table;
-    PatchStash        m_patch_stash;
+    const PatchStash  m_patch_stash;
     uint16_t          m_begin;
     uint16_t          m_end;
     uint16_t          m_current;

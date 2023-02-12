@@ -21,7 +21,7 @@ class Context
     /**
      * @brief Default constructor
      */
-    Context()
+    __host__ __device__ Context()
         : m_num_edges(nullptr),
           m_num_faces(nullptr),
           m_num_vertices(nullptr),

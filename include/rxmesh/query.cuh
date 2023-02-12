@@ -20,7 +20,8 @@ struct Query
 
     __device__ __inline__ Query(const Context& context,
                                 const uint32_t pid = blockIdx.x)
-        : m_patch_info(context.m_patches_info[pid]),
+        : m_context(context),
+          m_patch_info(context.m_patches_info[pid]),
           m_num_src_in_patch(0),
           m_s_participant_bitmask(nullptr),
           m_s_output_owned_bitmask(nullptr),
@@ -164,6 +165,7 @@ struct Query
 
                 ComputeHandleT   handle(patch_id, local_id);
                 ComputeIteratorT iter(
+                    m_context,
                     local_id,
                     reinterpret_cast<LocalT*>(m_s_output_value),
                     m_s_output_offset,
@@ -185,6 +187,7 @@ struct Query
     }
 
    private:
+    const Context&   m_context;
     const PatchInfo& m_patch_info;
     uint32_t         m_num_src_in_patch;
     uint32_t*        m_s_participant_bitmask;

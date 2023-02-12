@@ -251,7 +251,8 @@ __device__ __inline__ void query_block_dispatcher(
         if (is_set_bit(local_id, s_participant_bitmask)) {
 
             ComputeHandleT   handle(patch_id, local_id);
-            ComputeIteratorT iter(local_id,
+            ComputeIteratorT iter(context,
+                                  local_id,
                                   reinterpret_cast<LocalT*>(s_output_value),
                                   s_output_offset,
                                   fixed_offset,
@@ -548,6 +549,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
                                        ((op == Op::EVDiamond) ? 4 : 0)));
 
             ComputeIteratorT iter(
+                context,
                 pl.second,
                 reinterpret_cast<typename ComputeIteratorT::LocalT*>(
                     s_output_value),
