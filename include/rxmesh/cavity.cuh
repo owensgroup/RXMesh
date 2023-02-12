@@ -1805,12 +1805,12 @@ struct Cavity
         Bitmask face_incident_to_boundary_vertex = Bitmask(
             m_s_src_connect_mask_e.m_size, m_s_src_connect_mask_e.m_bitmask);
 
-        /*classify_elements_for_post_migtation_cleanup(
+        classify_elements_for_post_migtation_cleanup(
             block,
             vertex_incident_to_not_owned_face,
             vertex_incident_to_boundary_vertex,
             edge_incident_to_boundary_vertex,
-            face_incident_to_boundary_vertex);*/
+            face_incident_to_boundary_vertex);
 
         for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
             const uint32_t q = m_patch_info.patch_stash.get_patch(p);
@@ -1866,7 +1866,7 @@ struct Cavity
                 LPPair lp = q_patch_info.get_lp<HandleT>().find(v);
                 if (q_patch_info.patch_stash.get_patch(lp) == p) {
                     uint16_t vp = lp.local_id_in_owner_patch();
-                    if (s_cavity_id[vp] != INVALID16 /*|| !p_flag(vp)*/) {
+                    if (s_cavity_id[vp] != INVALID16 || !p_flag(vp)) {
                         detail::bitmask_clear_bit(
                             v, q_patch_info.get_active_mask<HandleT>(), true);
                         q_patch_info.get_lp<HandleT>().remove(v);
