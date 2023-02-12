@@ -1144,7 +1144,8 @@ struct Cavity
         // ownership change (m_s_ownership_change_mask_e)
         for (uint16_t f = threadIdx.x; f < m_s_num_faces[0];
              f += blockThreads) {
-            if (!m_s_owned_mask_f(f)) {
+            if (!m_s_owned_mask_f(f) &&
+                (m_s_active_mask_f(f) || m_s_cavity_id_f[f] != INVALID16)) {
                 bool change = false;
                 for (int i = 0; i < 3; ++i) {
                     const uint16_t e = m_s_fe[3 * f + i] >> 1;
@@ -1166,6 +1167,7 @@ struct Cavity
                     for (int i = 0; i < 3; ++i) {
                         const uint16_t e = m_s_fe[3 * f + i] >> 1;
                         if (!m_s_owned_mask_e(e)) {
+                            assert(m_s_active_mask_e(e));
                             m_s_ownership_change_mask_e.set(e, true);
                             auto lp = m_patch_info.lp_e.find(e);
                             m_s_patches_to_lock_mask.set(lp.patch_stash_id(),
@@ -1254,6 +1256,7 @@ struct Cavity
                 for (uint8_t i = 0; i < PatchStash::stash_size; ++i) {
                     if (m_s_patches_to_lock_mask(i)) {
                         uint32_t p = m_patch_info.patch_stash.get_patch(i);
+                        assert(p != INVALID32);
                         if (!m_context.m_patches_info[p].lock.acquire_lock(
                                 blockIdx.x)) {
                             // if we did not success with this patch (p), we

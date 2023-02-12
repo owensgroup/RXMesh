@@ -26,12 +26,12 @@ struct ALIGN(16) PatchInfo
           owned_mask_v(nullptr),
           owned_mask_e(nullptr),
           owned_mask_f(nullptr),
-          num_vertices(0),
-          num_edges(0),
-          num_faces(0),
-          vertices_capacity(0),
-          edges_capacity(0),
-          faces_capacity(0),
+          num_vertices(nullptr),
+          num_edges(nullptr),
+          num_faces(nullptr),
+          vertices_capacity(nullptr),
+          edges_capacity(nullptr),
+          faces_capacity(nullptr),
           patch_id(INVALID32){};
 
     __device__ __host__ PatchInfo(const PatchInfo& other) = default;

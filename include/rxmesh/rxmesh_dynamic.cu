@@ -705,6 +705,7 @@ bool RXMeshDynamic::validate()
             <<<grid_size, block_size, dynamic_smem>>>(
                 m_rxmesh_context, *vf_global, d_check);
 
+        remove_attribute("vf");
         return is_okay();
     };
 
