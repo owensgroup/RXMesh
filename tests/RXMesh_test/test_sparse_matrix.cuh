@@ -144,6 +144,10 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
 
         A_mat(v_id, v_id) = v_weight + time_step * sum_e_weight +
                             iter.size() * iter.size() + 1000000;
+
+        if (row_index % 10 == 0) {
+            A_mat(v_id, v_id) = 0;
+        }
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -378,7 +382,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 
     print_diag<float><<<1, 1>>>(A_mat, num_vertices);
 
-    A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NONE);
+    A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
 
     // timing begins for spmm
     GPUTimer timer;
@@ -399,10 +403,6 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
                B_mat.data(),
                num_vertices * 3 * sizeof(float),
                cudaMemcpyDeviceToHost);
-
-    // auto ps_mesh = rxmesh.get_polyscope_mesh();
-    // ps_mesh->addVertexColorQuantity("ret_mat", h_ret_mat);
-    // ps_mesh->addVertexColorQuantity("B_mat", h_B_mat);
 
     for (uint32_t i = 0; i < num_vertices; ++i) {
         for (uint32_t j = 0; j < 3; ++j) {
