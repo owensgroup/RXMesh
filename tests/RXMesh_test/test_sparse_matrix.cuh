@@ -125,9 +125,9 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
         uint32_t row_index =
             A_mat.m_context.m_vertex_prefix[r_patch_id] + r_local_id;
 
-        B_mat(row_index, 0) = iter.size() * 7;
-        B_mat(row_index, 1) = iter.size() * 2;
-        B_mat(row_index, 2) = iter.size() * 10;
+        B_mat(row_index, 0) = iter.size() * 7.4f;
+        B_mat(row_index, 1) = iter.size() * 2.6f;
+        B_mat(row_index, 2) = iter.size() * 10.3f;
 
         X_mat(row_index, 0) = coords(v_id, 0) * v_weight;
         X_mat(row_index, 1) = coords(v_id, 1) * v_weight;
@@ -144,10 +144,6 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
 
         A_mat(v_id, v_id) = v_weight + time_step * sum_e_weight +
                             iter.size() * iter.size() + 1000000;
-
-        if (row_index % 10 == 0) {
-            A_mat(v_id, v_id) = 0;
-        }
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -156,20 +152,8 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
     query.dispatch<Op::VV>(block, shrd_alloc, mat_setup);
 }
 
-template <typename T>
-__global__ static void print_diag(rxmesh::SparseMatrix<T> A_mat, int num_vet)
-{
-    int t_idx = threadIdx.x + blockDim.x * blockIdx.x;
-    if (t_idx == 0) {
 
-        for (int i = 0; i < num_vet; ++i) {
-            if (A_mat.direct_access(i, i) < 1) {
-                printf("A_mat diag %d: %f \n", i, A_mat.direct_access(i, i));
-            }
-        }
-    }
-}
-
+/* Check the access of the sparse matrix in CSR format in device */
 TEST(RXMeshStatic, SparseMatrix)
 {
     using namespace rxmesh;
@@ -216,6 +200,7 @@ TEST(RXMeshStatic, SparseMatrix)
     rxmesh.prepare_launch_box(
         {Op::VV}, launch_box, (void*)sparse_mat_test<threads>);
 
+    // test kernel
     sparse_mat_test<threads>
         <<<launch_box.blocks,
            launch_box.num_threads,
@@ -236,6 +221,7 @@ TEST(RXMeshStatic, SparseMatrix)
     spmat.free();
 }
 
+/* check if the operator '()' works normally */
 TEST(RXMeshStatic, SparseMatrixQuery)
 {
     using namespace rxmesh;
@@ -259,6 +245,7 @@ TEST(RXMeshStatic, SparseMatrixQuery)
     rxmesh.prepare_launch_box(
         {Op::VV}, launch_box, (void*)sparse_mat_query_test<threads>);
 
+    // test kernel
     sparse_mat_query_test<threads>
         <<<launch_box.blocks,
            launch_box.num_threads,
@@ -279,6 +266,9 @@ TEST(RXMeshStatic, SparseMatrixQuery)
     spmat.free();
 }
 
+/* First replace the sparse matrix entry with the edge length and then do spmv
+ * with an all one array and check the result
+ */
 TEST(RXMeshStatic, SparseMatrixEdgeLen)
 {
     using namespace rxmesh;
@@ -347,6 +337,10 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
     spmat.free();
 }
 
+/* set up a simple AX=B system where A is a sparse matrix, B and C are dense
+ * matrix. Solve it using the warpped up cusolver API and check the final AX
+ * with B using warpped up cusparse API.
+ */
 TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 {
     using namespace rxmesh;
@@ -379,8 +373,6 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
                                          launch_box.num_threads,
                                          launch_box.smem_bytes_dyn>>>(
         rxmesh.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
-
-    print_diag<float><<<1, 1>>>(A_mat, num_vertices);
 
     A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
 
