@@ -377,7 +377,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
         rxmesh.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
     print_diag<float><<<1, 1>>>(A_mat, num_vertices);
-
+    
     A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NONE);
 
     // timing begins for spmm

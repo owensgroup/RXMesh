@@ -19,12 +19,12 @@ struct DenseMatrix
         CUDA_ERROR(cudaMalloc((void**)&m_d_val, bytes()));
 
         CUSPARSE_ERROR(cusparseCreateDnMat(&m_dendescr,
-                            m_row_size,
-                            m_col_size,
-                            m_row_size, // leading dim
-                            m_d_val,
-                            CUDA_R_32F,
-                            CUSPARSE_ORDER_COL));
+                                           m_row_size,
+                                           m_col_size,
+                                           m_row_size,  // leading dim
+                                           m_d_val,
+                                           CUDA_R_32F,
+                                           CUSPARSE_ORDER_COL));
     }
 
     void set_ones()
@@ -65,6 +65,8 @@ struct DenseMatrix
     {
         return m_row_size * m_col_size * sizeof(T);
     }
+
+    // TODO: something like attribute->move()
 
     cusparseDnMatDescr_t m_dendescr;
     IndexT               m_row_size;
