@@ -1111,8 +1111,81 @@ struct Cavity
         m_s_ownership_change_mask_v.reset(block);
         m_s_ownership_change_mask_e.reset(block);
         m_s_ownership_change_mask_f.reset(block);
+        m_s_patches_to_lock_mask.reset(block);
         block.sync();
 
+        patches_to_lock(block);
+        block.sync();
+
+        // lock the neighbor patches including this patch
+        if (!lock_patches(block)) {
+            return false;
+        }
+
+        // make sure the timestamp is the same after locking the patch
+        if (!is_same_timestamp(block)) {
+            unlock_patches(block);
+            return false;
+        }
+
+        // construct protection zone
+        for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
+            const uint32_t q = m_patch_info.patch_stash.get_patch(p);
+            if (q != INVALID32) {
+                migrate_from_patch(block, q, m_s_migrate_mask_v, true);
+            }
+        }
+
+
+        block.sync();
+
+        // ribbonize protection zone
+        for (uint16_t e = threadIdx.x; e < m_s_num_edges[0];
+             e += blockThreads) {
+
+            // we only want to ribbonize vertices connected to a vertex on the
+            // boundary of a cavity boundaries. If the two vertices are on the
+            // cavity boundaries (b0=true and b1=true), then this is an edge on
+            // the cavity and we don't to ribbonize any of these two vertices
+            // Only when one of the vertices are on the cavity boundaries and
+            // the other is not, we then want to ribbonize the other one
+            const uint16_t v0 = m_s_ev[2 * e + 0];
+            const uint16_t v1 = m_s_ev[2 * e + 1];
+
+            const bool b0 =
+                m_s_migrate_mask_v(v0) || m_s_owned_cavity_bdry_v(v0);
+
+            const bool b1 =
+                m_s_migrate_mask_v(v1) || m_s_owned_cavity_bdry_v(v1);
+
+            if (b0 && !b1 && !m_s_owned_mask_v(v1)) {
+                m_s_ribbonize_v.set(v1, true);
+            }
+
+            if (b1 && !b0 && !m_s_owned_mask_v(v0)) {
+                m_s_ribbonize_v.set(v0, true);
+            }
+        }
+
+        block.sync();
+
+        for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
+            const uint32_t q = m_patch_info.patch_stash.get_patch(p);
+            if (q != INVALID32) {
+                migrate_from_patch(block, q, m_s_ribbonize_v, false);
+            }
+        }
+
+        return true;
+    }
+
+
+    /**
+     * @brief determine which patches needs to locked
+     */
+    __device__ __inline__ void patches_to_lock(
+        cooperative_groups::thread_block& block)
+    {
         // Some vertices on the boundary of the cavity are owned and other are
         // not. For owned vertices, edges and faces connected to them exists in
         // the patch (by definition) and they could be owned or not. For that,
@@ -1177,68 +1250,83 @@ struct Cavity
                 }
             }
         }
+
         block.sync();
 
-        // lock the neighbor patches including this patch
-        if (!lock_patches(block)) {
-            return false;
-        }
-
-        // make sure the timestamp is the same after locking the patch
-        if (!is_same_timestamp(block)) {
-            unlock_patches(block);
-            return false;
-        }
-
-        // construct protection zone
+        // far away patch i.e., 2-ring of cavity boundary vertices
+        // we do this by looping over patches current in patch stash
+        // for each patch, we check if we request it to be locked,
+        // if so, then there must be a vertex in there that we want to lock
+        // we search for this vertex and for each other vertex connected to it
+        // with an edge, we check its owner patch. If this owner patch is not
+        // is not in the list of patches to be locked, we add it
         for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
             const uint32_t q = m_patch_info.patch_stash.get_patch(p);
             if (q != INVALID32) {
-                migrate_from_patch(block, q, m_s_migrate_mask_v, true);
+                if (m_s_patches_to_lock_mask(p)) {
+                    // m_s_src_mask_v uses the q's index space
+                    m_s_src_mask_v.reset(block);
+
+                    __shared__ int s_ok_q;
+                    if (threadIdx.x == 0) {
+                        s_ok_q = 0;
+                    }
+
+                    block.sync();
+
+                    for (uint32_t v = threadIdx.x; v < m_s_num_vertices[0];
+                         v += blockThreads) {
+                        if (m_s_migrate_mask_v(v)) {
+                            // get the owner patch of v
+                            const auto lp = m_patch_info.lp_v.find(v);
+
+                            const uint32_t v_patch =
+                                m_patch_info.patch_stash.get_patch(lp);
+                            const uint32_t lid = lp.local_id_in_owner_patch();
+                            if (v_patch == q) {
+                                ::atomicAdd(&s_ok_q, 1);
+                                m_s_src_mask_v.set(lid, true);
+                            }
+                        }
+                    }
+                    block.sync();
+
+                    if (s_ok_q != 0) {
+
+                        PatchInfo q_patch_info = m_context.m_patches_info[q];
+                        const uint16_t q_num_edges = q_patch_info.num_edges[0];
+
+                        for (uint16_t e = threadIdx.x; e < q_num_edges;
+                             e += blockThreads) {
+
+                            const auto v0q = q_patch_info.ev[2 * e + 0];
+                            const auto v1q = q_patch_info.ev[2 * e + 1];
+
+                            auto add_vq_patch = [&](const LocalVertexT vq) {
+                                auto lp = q_patch_info.lp_v.find(vq.id);
+                                const uint32_t o =
+                                    q_patch_info.patch_stash.get_patch(lp);
+                                if (o != m_patch_info.patch_id) {
+                                    const uint8_t st =
+                                        m_patch_info.patch_stash.insert_patch(
+                                            o);
+                                    m_s_patches_to_lock_mask.set(st, true);
+                                }
+                            };
+                            if (m_s_src_mask_v(v0q.id) &&
+                                !q_patch_info.is_owned(v1q)) {
+                                add_vq_patch(v1q);
+                            }
+                            if (m_s_src_mask_v(v1q.id) &&
+                                !q_patch_info.is_owned(v0q)) {
+                                add_vq_patch(v0q);
+                            }
+                        }
+                    }
+                }
             }
+            block.sync();
         }
-
-
-        block.sync();
-
-        // ribbonize protection zone
-        for (uint16_t e = threadIdx.x; e < m_s_num_edges[0];
-             e += blockThreads) {
-
-            // we only want to ribbonize vertices connected to a vertex on the
-            // boundary of a cavity boundaries. If the two vertices are on the
-            // cavity boundaries (b0=true and b1=true), then this is an edge on
-            // the cavity and we don't to ribbonize any of these two vertices
-            // Only when one of the vertices are on the cavity boundaries and
-            // the other is not, we then want to ribbonize the other one
-            const uint16_t v0 = m_s_ev[2 * e + 0];
-            const uint16_t v1 = m_s_ev[2 * e + 1];
-
-            const bool b0 =
-                m_s_migrate_mask_v(v0) || m_s_owned_cavity_bdry_v(v0);
-
-            const bool b1 =
-                m_s_migrate_mask_v(v1) || m_s_owned_cavity_bdry_v(v1);
-
-            if (b0 && !b1 && !m_s_owned_mask_v(v1)) {
-                m_s_ribbonize_v.set(v1, true);
-            }
-
-            if (b1 && !b0 && !m_s_owned_mask_v(v0)) {
-                m_s_ribbonize_v.set(v0, true);
-            }
-        }
-
-        block.sync();
-
-        for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
-            const uint32_t q = m_patch_info.patch_stash.get_patch(p);
-            if (q != INVALID32) {
-                migrate_from_patch(block, q, m_s_ribbonize_v, false);
-            }
-        }
-
-        return true;
     }
 
     /**
