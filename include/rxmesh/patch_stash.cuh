@@ -61,10 +61,16 @@ struct PatchStash
                 // prevent redundancy
                 return i;
             }
+#ifdef __CUDA_ARCH__
+            if (::atomicCAS(m_stash + i, INVALID32, patch) == INVALID32) {
+                return i;
+            }
+#else
             if (m_stash[i] == INVALID32) {
                 m_stash[i] = patch;
                 return i;
             }
+#endif
         }
         return INVALID8;
     }
