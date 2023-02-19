@@ -132,7 +132,7 @@ class RXMeshStatic : public RXMesh
             if (!this->m_h_patches_info[p].is_deleted(lf)) {
 
                 const FaceHandle fh = Context::get_owner_handle<FaceHandle>(
-                    {p, lf}, nullptr, m_h_patches_info);
+                    {p, lf}, m_h_patches_info);
 
                 patch_id[f] = fh.patch_id();
             }
@@ -209,8 +209,8 @@ class RXMeshStatic : public RXMesh
     {
         std::string name = "rx:FPatch";
         auto face_patch  = this->add_face_attribute<uint32_t>(name, 1, HOST);
-        for_each_face(HOST, [&](FaceHandle fh) { (*face_patch)(fh) = fh.patch_id();
-        });
+        for_each_face(
+            HOST, [&](FaceHandle fh) { (*face_patch)(fh) = fh.patch_id(); });
         auto ret = m_polyscope_mesh->addFaceScalarQuantity(name, *face_patch);
         remove_attribute(name);
         return ret;
@@ -225,8 +225,8 @@ class RXMeshStatic : public RXMesh
     {
         std::string name = "rx:EPatch";
         auto edge_patch  = this->add_edge_attribute<uint32_t>(name, 1, HOST);
-        for_each_edge(HOST, [&](EdgeHandle eh) { (*edge_patch)(eh) = eh.patch_id();
-        });
+        for_each_edge(
+            HOST, [&](EdgeHandle eh) { (*edge_patch)(eh) = eh.patch_id(); });
         auto ret = m_polyscope_mesh->addEdgeScalarQuantity(name, *edge_patch);
         remove_attribute(name);
         return ret;
@@ -835,7 +835,7 @@ class RXMeshStatic : public RXMesh
         }
 
         const HandleT owner_handle =
-            Context::get_owner_handle(input, nullptr, m_h_patches_info);
+            Context::get_owner_handle(input, m_h_patches_info);
 
         uint32_t p_id = owner_handle.patch_id();
         uint16_t ret  = owner_handle.local_id();
@@ -879,7 +879,7 @@ class RXMeshStatic : public RXMesh
             for (uint16_t v = 0; v < p_num_vertices; ++v) {
 
                 const VertexHandle vh = Context::get_owner_handle<VertexHandle>(
-                    {p, {v}}, nullptr, m_h_patches_info);
+                    {p, {v}}, m_h_patches_info);
 
                 file << "v " << coords(vh, 0) << " " << coords(vh, 1) << " "
                      << coords(vh, 2) << std::endl;

@@ -58,7 +58,7 @@ struct Iterator
             return ret;
         } else {
             return m_context.get_owner_handle(
-                ret, m_s_table, m_context.m_patches_info);
+                ret, m_context.m_patches_info, m_s_table);
         }
     }
 

@@ -71,17 +71,24 @@ __global__ static void check_uniqueness(const Context           context,
         // make sure an edge is connecting two unique vertices
         for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0];
              e += blockThreads) {
+
+            const LocalEdgeT el = e;
+
             uint16_t v0 = s_ev[2 * e + 0];
             uint16_t v1 = s_ev[2 * e + 1];
 
-            if (!is_deleted(e, patch_info.active_mask_e)) {
+            if (!patch_info.is_deleted(el)) {
 
                 if (v0 >= patch_info.num_vertices[0] ||
                     v1 >= patch_info.num_vertices[0] || v0 == v1) {
+                    printf("\n 1 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
-                if (is_deleted(v0, patch_info.active_mask_v) ||
-                    is_deleted(v1, patch_info.active_mask_v)) {
+
+                if (patch_info.is_deleted(LocalVertexT(v0)) ||
+                    patch_info.is_deleted(LocalVertexT(v1))) {
+
+                    printf("\n 2 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -92,7 +99,9 @@ __global__ static void check_uniqueness(const Context           context,
         for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0];
              f += blockThreads) {
 
-            if (!is_deleted(f, patch_info.active_mask_f)) {
+            const LocalEdgeT fl = f;
+
+            if (!patch_info.is_deleted(fl)) {
                 uint16_t e0, e1, e2;
                 flag_t   d0(0), d1(0), d2(0);
                 Context::unpack_edge_dir(s_fe[3 * f + 0], e0, d0);
@@ -103,12 +112,14 @@ __global__ static void check_uniqueness(const Context           context,
                     e1 >= patch_info.num_edges[0] ||
                     e2 >= patch_info.num_edges[0] || e0 == e1 || e0 == e2 ||
                     e1 == e2) {
+                    printf("\n 3 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
-                if (is_deleted(e0, patch_info.active_mask_e) ||
-                    is_deleted(e1, patch_info.active_mask_e) ||
-                    is_deleted(e2, patch_info.active_mask_e)) {
+                if (patch_info.is_deleted(LocalEdgeT(e0)) ||
+                    patch_info.is_deleted(LocalEdgeT(e1)) ||
+                    patch_info.is_deleted(LocalEdgeT(e2))) {
+                    printf("\n 4 unqiuness = %u, f= %u", patch_id, f);
                     ::atomicAdd(d_check, 1);
                 }
 
@@ -122,12 +133,14 @@ __global__ static void check_uniqueness(const Context           context,
                     v1 >= patch_info.num_vertices[0] ||
                     v2 >= patch_info.num_vertices[0] || v0 == v1 || v0 == v2 ||
                     v1 == v2) {
+                    printf("\n 5 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
-                if (is_deleted(v0, patch_info.active_mask_v) ||
-                    is_deleted(v1, patch_info.active_mask_v) ||
-                    is_deleted(v2, patch_info.active_mask_v)) {
+                if (patch_info.is_deleted(LocalVertexT(v0)) ||
+                    patch_info.is_deleted(LocalVertexT(v1)) ||
+                    patch_info.is_deleted(LocalVertexT(v2))) {
+                    printf("\n 6 unqiuness = %u, f=%u", patch_id, f);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -171,9 +184,8 @@ __global__ static void check_not_owned(const Context           context,
         // not-owned) are the same as those in the face's owner patch
         for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0];
              f += blockThreads) {
-
-            if (!is_deleted(f, patch_info.active_mask_f) &&
-                !is_owned(f, patch_info.owned_mask_f)) {
+            const LocalFaceT fl(f);
+            if (!patch_info.is_deleted(fl) && !patch_info.is_owned(fl)) {
 
                 uint16_t e0, e1, e2;
                 flag_t   d0(0), d1(0), d2(0);
@@ -186,46 +198,58 @@ __global__ static void check_not_owned(const Context           context,
                 // patch
                 auto get_owned_e =
                     [&](uint16_t& e, uint32_t& p, const PatchInfo pi) {
-                        if (!is_owned(e, pi.owned_mask_e)) {
-                            auto e_pair = pi.lp_e.find(e);
-                            e           = e_pair.local_id_in_owner_patch();
-                            p           = pi.patch_stash.get_patch(e_pair);
-                        }
+                        EdgeHandle eh = context.get_owner_edge_handle(
+                            EdgeHandle(pi.patch_id, {e}));
+
+                        e = eh.local_id();
+                        p = eh.patch_id();
                     };
+
                 get_owned_e(e0, p0, patch_info);
                 get_owned_e(e1, p1, patch_info);
                 get_owned_e(e2, p2, patch_info);
 
                 // get f's three edges from its owner patch
-                auto      f_pair  = patch_info.lp_f.find(f);
-                uint16_t  f_owned = f_pair.local_id_in_owner_patch();
-                uint32_t  f_patch = patch_info.patch_stash.get_patch(f_pair);
-                PatchInfo owner_patch_info = context.m_patches_info[f_patch];
+
+                // face handle of this face (f) in its owner patch
+                FaceHandle f_owned = context.get_owner_face_handle(
+                    FaceHandle(patch_info.patch_id, fl));
+                PatchInfo owner_patch_info =
+                    context.m_patches_info[f_owned.patch_id()];
 
                 // the owner patch should have indicate that the owned face is
                 // owned by it
-                if (!is_owned(f_owned, owner_patch_info.owned_mask_f)) {
+                if (!owner_patch_info.is_owned(
+                        LocalFaceT(f_owned.local_id()))) {
+                    printf("\n 1 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
                 // If a face is deleted, it should also be deleted in the other
                 // patches that have it as not-owned
-                bool is_del =
-                    is_deleted(f_owned, owner_patch_info.active_mask_f);
-                if (is_del) {
+                if (owner_patch_info.is_deleted(
+                        LocalFaceT(f_owned.local_id()))) {
+                    printf("\n 2 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 } else {
                     // TODO this is a scattered read from global that could be
                     // improved by using shared memory
                     uint16_t ew0, ew1, ew2;
                     flag_t   dw0(0), dw1(0), dw2(0);
-                    uint32_t pw0(f_patch), pw1(f_patch), pw2(f_patch);
+                    uint32_t pw0(f_owned.patch_id()), pw1(f_owned.patch_id()),
+                        pw2(f_owned.patch_id());
                     Context::unpack_edge_dir(
-                        owner_patch_info.fe[3 * f_owned + 0].id, ew0, dw0);
+                        owner_patch_info.fe[3 * f_owned.local_id() + 0].id,
+                        ew0,
+                        dw0);
                     Context::unpack_edge_dir(
-                        owner_patch_info.fe[3 * f_owned + 1].id, ew1, dw1);
+                        owner_patch_info.fe[3 * f_owned.local_id() + 1].id,
+                        ew1,
+                        dw1);
                     Context::unpack_edge_dir(
-                        owner_patch_info.fe[3 * f_owned + 2].id, ew2, dw2);
+                        owner_patch_info.fe[3 * f_owned.local_id() + 2].id,
+                        ew2,
+                        dw2);
 
                     get_owned_e(ew0, pw0, owner_patch_info);
                     get_owned_e(ew1, pw1, owner_patch_info);
@@ -234,6 +258,7 @@ __global__ static void check_not_owned(const Context           context,
                     if (e0 != ew0 || d0 != dw0 || p0 != pw0 || e1 != ew1 ||
                         d1 != dw1 || p1 != pw1 || e2 != ew2 || d2 != dw2 ||
                         p2 != pw2) {
+                        printf("\n 3 owned = %u", patch_id);
                         ::atomicAdd(d_check, 1);
                     }
                 }
@@ -245,8 +270,8 @@ __global__ static void check_not_owned(const Context           context,
         for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0];
              e += blockThreads) {
 
-            if (!is_deleted(e, patch_info.active_mask_e) &&
-                !is_owned(e, patch_info.owned_mask_e)) {
+            const LocalEdgeT el(e);
+            if (!patch_info.is_deleted(el) && !patch_info.is_owned(el)) {
 
                 uint16_t v0 = s_ev[2 * e + 0];
                 uint16_t v1 = s_ev[2 * e + 1];
@@ -254,39 +279,46 @@ __global__ static void check_not_owned(const Context           context,
 
                 auto get_owned_v =
                     [&](uint16_t& v, uint32_t& p, const PatchInfo pi) {
-                        if (!is_owned(v, pi.owned_mask_v)) {
-                            auto v_pair = pi.lp_v.find(v);
-                            v           = v_pair.local_id_in_owner_patch();
-                            p           = pi.patch_stash.get_patch(v_pair);
-                        }
+                        VertexHandle vh = context.get_owner_vertex_handle(
+                            VertexHandle(pi.patch_id, {v}));
+
+                        v = vh.local_id();
+                        p = vh.patch_id();
                     };
+
                 get_owned_v(v0, p0, patch_info);
                 get_owned_v(v1, p1, patch_info);
 
                 // get e's two vertices from its owner patch
-                auto      e_pair  = patch_info.lp_e.find(e);
-                uint16_t  e_owned = e_pair.local_id_in_owner_patch();
-                uint32_t  e_patch = patch_info.patch_stash.get_patch(e_pair);
-                PatchInfo owner_patch_info = context.m_patches_info[e_patch];
+                EdgeHandle e_owned = context.get_owner_edge_handle(
+                    EdgeHandle(patch_info.patch_id, el));
+
+                PatchInfo owner_patch_info =
+                    context.m_patches_info[e_owned.patch_id()];
+
 
                 // the owner patch should have indicate that the owned face is
                 // owned by it
-                if (!is_owned(e_owned, owner_patch_info.owned_mask_e)) {
+                if (!owner_patch_info.is_owned(
+                        LocalEdgeT(e_owned.local_id()))) {
+                    printf("\n 4 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
                 // If an edge is deleted, it should also be deleted in the other
                 // patches that have it as not-owned
-                bool is_del =
-                    is_deleted(e_owned, owner_patch_info.active_mask_e);
-                if (is_del) {
+                if (owner_patch_info.is_deleted(
+                        LocalEdgeT(e_owned.local_id()))) {
+                    printf("\n 5 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 } else {
                     // TODO this is a scatter read from global that could be
                     // improved by using shared memory
-                    uint16_t vw0 = owner_patch_info.ev[2 * e_owned + 0].id;
-                    uint16_t vw1 = owner_patch_info.ev[2 * e_owned + 1].id;
-                    uint32_t pw0(e_patch), pw1(e_patch);
+                    uint16_t vw0 =
+                        owner_patch_info.ev[2 * e_owned.local_id() + 0].id;
+                    uint16_t vw1 =
+                        owner_patch_info.ev[2 * e_owned.local_id() + 1].id;
+                    uint32_t pw0(e_owned.patch_id()), pw1(e_owned.patch_id());
 
                     get_owned_v(vw0, pw0, owner_patch_info);
                     get_owned_v(vw1, pw1, owner_patch_info);
@@ -338,16 +370,16 @@ __global__ static void check_ribbon_edges(const Context           context,
         // not incident to any owned faces
         for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0];
              f += blockThreads) {
+            const LocalFaceT fl(f);
 
-            if (!is_deleted(f, patch_info.active_mask_f) &&
-                is_owned(f, patch_info.owned_mask_f)) {
+            if (!patch_info.is_deleted(fl) && patch_info.is_owned(fl)) {
 
                 uint16_t e0 = s_fe[3 * f + 0] >> 1;
                 uint16_t e1 = s_fe[3 * f + 1] >> 1;
                 uint16_t e2 = s_fe[3 * f + 2] >> 1;
 
                 auto mark_if_owned = [&](uint16_t edge) {
-                    if (is_owned(edge, patch_info.owned_mask_e)) {
+                    if (patch_info.is_owned(LocalEdgeT(edge))) {
                         atomicAdd(s_mark_edges + edge, uint16_t(1));
                     }
                 };
@@ -360,8 +392,10 @@ __global__ static void check_ribbon_edges(const Context           context,
         block.sync();
         for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0];
              e += blockThreads) {
-            if (is_owned(e, patch_info.owned_mask_e)) {
+            const LocalEdgeT el(e);
+            if (patch_info.is_owned(el)) {
                 if (s_mark_edges[e] == 0) {
+                    printf("\n ribbon edge = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -470,22 +504,18 @@ __global__ static void check_ribbon_faces(const Context               context,
         for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0];
              f += blockThreads) {
 
+            const LocalFaceT fl(f);
+
             // Only if the face is owned, we do the check
-            if (is_owned(f, patch_info.owned_mask_f)) {
+            if (patch_info.is_owned(fl)) {
 
                 // for the three vertices incident to this face
                 for (uint16_t k = 0; k < 3; ++k) {
                     uint16_t v_id = s_fv[3 * f + k];
 
                     // get the vertex handle so we can index the attributes
-                    uint16_t lid = v_id;
-                    uint32_t pid = patch_id;
-                    if (!is_owned(v_id, patch_info.owned_mask_v)) {
-                        auto lp = patch_info.lp_v.find(lid);
-                        lid     = lp.local_id_in_owner_patch();
-                        pid     = patch_info.patch_stash.get_patch(lp);
-                    }
-                    VertexHandle vh(pid, lid);
+                    const VertexHandle vh =
+                        context.get_owner_vertex_handle({patch_id, {v_id}});
 
                     // for every incident face to this vertex
                     for (uint16_t i = 0; i < global_vf.get_num_attributes();
@@ -499,16 +529,9 @@ __global__ static void check_ribbon_faces(const Context               context,
                                  j < s_vf_offset[v_id + 1];
                                  ++j) {
 
-                                uint16_t f_lid = s_vf_value[j];
-                                uint32_t f_pid = patch_id;
-
-                                if (!is_owned(f_lid, patch_info.owned_mask_f)) {
-                                    auto lp = patch_info.lp_f.find(f_lid);
-                                    f_lid   = lp.local_id_in_owner_patch();
-                                    f_pid =
-                                        patch_info.patch_stash.get_patch(lp);
-                                }
-                                FaceHandle fh(f_pid, f_lid);
+                                const FaceHandle fh =
+                                    context.get_owner_face_handle(
+                                        {patch_id, {s_vf_value[j]}});
 
                                 if (global_vf(vh, i) == fh) {
                                     found = true;
@@ -517,6 +540,7 @@ __global__ static void check_ribbon_faces(const Context               context,
                             }
 
                             if (!found) {
+                                printf("\n ribbon face = %u", patch_id);
                                 ::atomicAdd(d_check, 1);
                                 break;
                             }

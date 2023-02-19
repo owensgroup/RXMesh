@@ -84,7 +84,7 @@ class Context
         const VertexHandle vh,
         const LPPair*      table = nullptr) const
     {
-        return get_owner_handle(vh, table, m_patches_info);
+        return get_owner_handle(vh, m_patches_info, table);
     }
 
     /**
@@ -97,7 +97,7 @@ class Context
         const EdgeHandle eh,
         const LPPair*    table = nullptr) const
     {
-        return get_owner_handle(eh, table, m_patches_info);
+        return get_owner_handle(eh, m_patches_info, table);
     }
 
     /**
@@ -110,7 +110,7 @@ class Context
         const FaceHandle fh,
         const LPPair*    table = nullptr) const
     {
-        return get_owner_handle(fh, table, m_patches_info);
+        return get_owner_handle(fh, m_patches_info, table);
     }
 
     /**
@@ -122,8 +122,8 @@ class Context
     template <typename HandleT>
     static __device__ __host__ __inline__ HandleT get_owner_handle(
         const HandleT    handle,
-        const LPPair*    table,
-        const PatchInfo* patches_info)
+        const PatchInfo* patches_info,
+        const LPPair*    table = nullptr)
     {
         using LocalT   = typename HandleT::LocalT;
         uint32_t owner = handle.patch_id();
