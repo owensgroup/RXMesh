@@ -128,17 +128,13 @@ class RXMeshStatic : public RXMesh
         std::vector<int> patch_id(m_h_patches_info[p].num_faces[0], -1);
 
         for (uint16_t f = 0; f < this->m_h_patches_info[p].num_faces[0]; ++f) {
-            LocalFaceT lf(f);
+            const LocalFaceT lf(f);
             if (!this->m_h_patches_info[p].is_deleted(lf)) {
 
-                if (this->m_h_patches_info[p].is_owned(lf)) {
-                    patch_id[f] = p;
-                } else {
-                    LPPair lp =
-                        this->m_h_patches_info[p].get_lp<FaceHandle>().find(f);
-                    patch_id[f] =
-                        this->m_h_patches_info[p].patch_stash.get_patch(lp);
-                }
+                const FaceHandle fh = Context::get_owner_handle<FaceHandle>(
+                    {p, lf}, nullptr, m_h_patches_info);
+
+                patch_id[f] = fh.unpack().first;
             }
         }
 
@@ -827,26 +823,25 @@ class RXMeshStatic : public RXMesh
     template <typename HandleT>
     uint32_t linear_id(HandleT input)
     {
+        using LocalT = typename HandleT::LocalT;
+
         if (!input.is_valid()) {
             RXMESH_ERROR("RXMeshStatic::linear_id() input handle is not valid");
         }
-        uint32_t p_id = input.unpack().first;
-        uint16_t ret  = input.unpack().second;
 
-        if (p_id >= get_num_patches()) {
+
+        if (input.patch_id() >= get_num_patches()) {
             RXMESH_ERROR(
                 "RXMeshStatic::linear_id() patch index ({}) is out-of-bound",
-                p_id);
+                input.patch_id());
         }
 
-        if (!detail::is_owned(
-                ret, m_h_patches_info[p_id].get_owned_mask<HandleT>())) {
+        const HandleT owner_handle =
+            Context::get_owner_handle(input, nullptr, m_h_patches_info);
 
-            LPPair lp =
-                this->m_h_patches_info[p_id].get_lp<HandleT>().find(ret);
-            ret  = lp.local_id_in_owner_patch();
-            p_id = this->m_h_patches_info[p_id].patch_stash.get_patch(lp);
-        }
+        uint32_t p_id = owner_handle.unpack().first;
+        uint16_t ret  = owner_handle.unpack().second;
+
         ret = this->m_h_patches_info[p_id].count_num_owned(
             m_h_patches_info[p_id].get_owned_mask<HandleT>(),
             m_h_patches_info[p_id].get_active_mask<HandleT>(),
@@ -884,19 +879,10 @@ class RXMeshStatic : public RXMesh
                 this->m_h_patches_info[p].num_vertices[0];
 
             for (uint16_t v = 0; v < p_num_vertices; ++v) {
-                uint16_t v_id = v;
-                uint32_t p_id = p;
 
-                if (!detail::is_owned(v_id,
-                                      this->m_h_patches_info[p].owned_mask_v)) {
+                const VertexHandle vh = Context::get_owner_handle<VertexHandle>(
+                    {p, {v}}, nullptr, m_h_patches_info);
 
-                    LPPair lp = this->m_h_patches_info[p].lp_v.find(v_id);
-
-                    v_id = lp.local_id_in_owner_patch();
-                    p_id = this->m_h_patches_info[p].patch_stash.get_patch(lp);
-                }
-
-                VertexHandle vh(p_id, {v_id});
                 file << "v " << coords(vh, 0) << " " << coords(vh, 1) << " "
                      << coords(vh, 2) << std::endl;
             }

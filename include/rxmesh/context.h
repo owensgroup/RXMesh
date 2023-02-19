@@ -74,6 +74,82 @@ class Context
         edge = edge_dir >> 1;
     }
 
+    /**
+     * @brief get the owner handle of a given vertex handle
+     * @param vh the vertex handle
+     * @param table pointer to LPPair hashtable in case it's stored in shared
+     * memory
+     */
+    __device__ __inline__ VertexHandle get_owner_vertex_handle(
+        const VertexHandle vh,
+        const LPPair*      table = nullptr) const
+    {
+        return get_owner_handle(vh, table, m_patches_info);
+    }
+
+    /**
+     * @brief get the owner handle of a given edge handle
+     * @param eh the edge handle
+     * @param table pointer to LPPair hashtable in case it's stored in shared
+     * memory
+     */
+    __device__ __inline__ EdgeHandle get_owner_edge_handle(
+        const EdgeHandle eh,
+        const LPPair*    table = nullptr) const
+    {
+        return get_owner_handle(eh, table, m_patches_info);
+    }
+
+    /**
+     * @brief get the owner handle of a given face handle
+     * @param fh the face handle
+     * @param table pointer to LPPair hashtable in case it's stored in shared
+     * memory
+     */
+    __device__ __inline__ FaceHandle get_owner_face_handle(
+        const FaceHandle fh,
+        const LPPair*    table = nullptr) const
+    {
+        return get_owner_handle(fh, table, m_patches_info);
+    }
+
+    /**
+     * @brief get the owner handle of a given mesh element handle
+     * @param handle the mesh element handle
+     * @param table pointer to LPPair hashtable in case it's stored in shared
+     * memory
+     */
+    template <typename HandleT>
+    static __device__ __host__ __inline__ HandleT get_owner_handle(
+        const HandleT    handle,
+        const LPPair*    table,
+        const PatchInfo* patches_info)
+    {
+        using LocalT   = typename HandleT::LocalT;
+        uint32_t owner = handle.unpack().first;
+        uint16_t lid   = handle.unpack().second;
+
+        if (patches_info[owner].is_owned(LocalT(lid))) {
+            return handle;
+        } else {
+
+            LPPair lp = patches_info[owner].get_lp<HandleT>().find(lid, table);
+
+            owner = patches_info[owner].patch_stash.get_patch(lp);
+
+            while (!patches_info[owner].is_owned(
+                LocalT(lp.local_id_in_owner_patch()))) {
+
+                lp = patches_info[owner].get_lp<HandleT>().find(
+                    lp.local_id_in_owner_patch());
+
+                owner = patches_info[owner].patch_stash.get_patch(lp);
+            }
+
+            return HandleT(owner, lp.local_id_in_owner_patch());
+        }
+    }
+
 
     /**
      * @brief initialize various members

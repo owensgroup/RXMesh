@@ -112,6 +112,23 @@ struct VertexHandle
         return detail::unpack(m_handle);
     }
 
+    /**
+     * @brief return the patch id of this handle
+     */
+    constexpr __device__ __host__ __inline__ uint32_t patch_id() const
+    {
+        return detail::unpack(m_handle).first;
+    }
+
+
+    /**
+     * @brief return the local index stored in this handle
+     */
+    constexpr __device__ __host__ __inline__ uint16_t local_id() const
+    {
+        return detail::unpack(m_handle).second;
+    }
+
    private:
     uint64_t m_handle;
 };
@@ -187,6 +204,22 @@ struct EdgeHandle
                          unpack() const
     {
         return detail::unpack(m_handle);
+    }
+
+    /**
+     * @brief return the patch id of this handle
+     */
+    constexpr __device__ __host__ __inline__ uint32_t patch_id() const
+    {
+        return detail::unpack(m_handle).first;
+    }
+
+    /**
+     * @brief return the local index stored in this handle
+     */
+    constexpr __device__ __host__ __inline__ uint16_t local_id() const
+    {
+        return detail::unpack(m_handle).second;
     }
 
    private:
@@ -322,6 +355,22 @@ struct DEdgeHandle
         return detail::unpack(m_handle);
     }
 
+    /**
+     * @brief return the patch id of this handle
+     */
+    constexpr __device__ __host__ __inline__ uint32_t patch_id() const
+    {
+        return detail::unpack(m_handle).first;
+    }
+
+    /**
+     * @brief return the local index stored in this handle
+     */
+    constexpr __device__ __host__ __inline__ uint16_t local_id() const
+    {
+        return detail::unpack(m_handle).second;
+    }
+
    private:
     uint64_t m_handle;
 };
@@ -395,6 +444,22 @@ struct FaceHandle
                          unpack() const
     {
         return detail::unpack(m_handle);
+    }
+
+    /**
+     * @brief return the patch id of this handle
+     */
+    constexpr __device__ __host__ __inline__ uint32_t patch_id() const
+    {
+        return detail::unpack(m_handle).first;
+    }
+
+    /**
+     * @brief return the local index stored in this handle
+     */
+    constexpr __device__ __host__ __inline__ uint16_t local_id() const
+    {
+        return detail::unpack(m_handle).second;
     }
 
    private:

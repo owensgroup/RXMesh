@@ -52,23 +52,13 @@ struct Iterator
         if (lid == INVALID16) {
             return HandleT();
         }
+        HandleT ret(m_patch_id, lid);
+
         if (detail::is_owned(lid, m_output_owned_bitmask)) {
-            return {m_patch_id, lid};
+            return ret;
         } else {
-            LPPair   lp    = m_output_lp_hashtable.find(lid, m_s_table);
-            uint32_t owner = m_patch_stash.get_patch(lp);
-
-
-            while (!m_context.m_patches_info[owner].is_owned(
-                LocalT(lp.local_id_in_owner_patch()))) {
-
-                lp = m_context.m_patches_info[owner].get_lp<HandleT>().find(
-                    lp.local_id_in_owner_patch());
-
-                owner =
-                    m_context.m_patches_info[owner].patch_stash.get_patch(lp);
-            }
-            return {owner, lp.local_id_in_owner_patch()};
+            return m_context.get_owner_handle(
+                ret, m_s_table, m_context.m_patches_info);
         }
     }
 
