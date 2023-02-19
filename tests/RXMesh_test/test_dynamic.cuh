@@ -37,8 +37,8 @@ __global__ static void random_flips(rxmesh::Context                context,
         if (pid == 0) {
 
             if ((config & OnRibbonNotConflicting) == OnRibbonNotConflicting) {
-                if (eh.unpack().second == 11 || eh.unpack().second == 51 ||
-                    eh.unpack().second == 2 || eh.unpack().second == 315) {
+                if (eh.local_id() == 11 || eh.local_id() == 51 ||
+                    eh.local_id() == 2 || eh.local_id() == 315) {
                     e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
@@ -46,9 +46,9 @@ __global__ static void random_flips(rxmesh::Context                context,
 
 
             if ((config & OnRibbonConflicting) == OnRibbonConflicting) {
-                if (eh.unpack().second == 11 || eh.unpack().second == 10 ||
-                    eh.unpack().second == 358 || eh.unpack().second == 359 ||
-                    eh.unpack().second == 354 || eh.unpack().second == 356) {
+                if (eh.local_id() == 11 || eh.local_id() == 10 ||
+                    eh.local_id() == 358 || eh.local_id() == 359 ||
+                    eh.local_id() == 354 || eh.local_id() == 356) {
                     e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
@@ -56,21 +56,21 @@ __global__ static void random_flips(rxmesh::Context                context,
 
 
             if ((config & InteriorNotConflicting) == InteriorNotConflicting) {
-                if (eh.unpack().second == 26 || eh.unpack().second == 174 ||
-                    eh.unpack().second == 184 || eh.unpack().second == 94 ||
-                    eh.unpack().second == 58 || eh.unpack().second == 362 ||
-                    eh.unpack().second == 70 || eh.unpack().second == 420) {
+                if (eh.local_id() == 26 || eh.local_id() == 174 ||
+                    eh.local_id() == 184 || eh.local_id() == 94 ||
+                    eh.local_id() == 58 || eh.local_id() == 362 ||
+                    eh.local_id() == 70 || eh.local_id() == 420) {
                     e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
             }
 
             if ((config & InteriorConflicting) == InteriorConflicting) {
-                if (eh.unpack().second == 26 || eh.unpack().second == 22 ||
-                    eh.unpack().second == 29 || eh.unpack().second == 156 ||
-                    eh.unpack().second == 23 || eh.unpack().second == 389 ||
-                    eh.unpack().second == 39 || eh.unpack().second == 40 ||
-                    eh.unpack().second == 41 || eh.unpack().second == 16) {
+                if (eh.local_id() == 26 || eh.local_id() == 22 ||
+                    eh.local_id() == 29 || eh.local_id() == 156 ||
+                    eh.local_id() == 23 || eh.local_id() == 389 ||
+                    eh.local_id() == 39 || eh.local_id() == 40 ||
+                    eh.local_id() == 41 || eh.local_id() == 16) {
                     e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
@@ -80,10 +80,10 @@ __global__ static void random_flips(rxmesh::Context                context,
 
         if (pid == 1) {
             if ((config & OnRibbonNotConflicting) == OnRibbonNotConflicting) {
-                if (eh.unpack().second == 383 || eh.unpack().second == 324 ||
-                    eh.unpack().second == 355 || eh.unpack().second == 340 ||
-                    eh.unpack().second == 726 || eh.unpack().second == 667 ||
-                    eh.unpack().second == 706) {
+                if (eh.local_id() == 383 || eh.local_id() == 324 ||
+                    eh.local_id() == 355 || eh.local_id() == 340 ||
+                    eh.local_id() == 726 || eh.local_id() == 667 ||
+                    eh.local_id() == 706) {
                     e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
@@ -91,11 +91,11 @@ __global__ static void random_flips(rxmesh::Context                context,
 
 
             if ((config & OnRibbonConflicting) == OnRibbonConflicting) {
-                if (eh.unpack().second == 399 || eh.unpack().second == 398 ||
-                    eh.unpack().second == 402 || eh.unpack().second == 418 ||
-                    eh.unpack().second == 419 || eh.unpack().second == 401 ||
-                    eh.unpack().second == 413 || eh.unpack().second == 388 ||
-                    eh.unpack().second == 396 || eh.unpack().second == 395) {
+                if (eh.local_id() == 399 || eh.local_id() == 398 ||
+                    eh.local_id() == 402 || eh.local_id() == 418 ||
+                    eh.local_id() == 419 || eh.local_id() == 401 ||
+                    eh.local_id() == 413 || eh.local_id() == 388 ||
+                    eh.local_id() == 396 || eh.local_id() == 395) {
                     e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
@@ -103,23 +103,23 @@ __global__ static void random_flips(rxmesh::Context                context,
 
 
             if ((config & InteriorNotConflicting) == InteriorNotConflicting) {
-                if (eh.unpack().second == 528 || eh.unpack().second == 532 ||
-                    eh.unpack().second == 103 || eh.unpack().second == 140 ||
-                    eh.unpack().second == 206 || eh.unpack().second == 285 ||
-                    eh.unpack().second == 162 || eh.unpack().second == 385) {
+                if (eh.local_id() == 528 || eh.local_id() == 532 ||
+                    eh.local_id() == 103 || eh.local_id() == 140 ||
+                    eh.local_id() == 206 || eh.local_id() == 285 ||
+                    eh.local_id() == 162 || eh.local_id() == 385) {
                     e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }
             }
 
             if ((config & InteriorConflicting) == InteriorConflicting) {
-                if (eh.unpack().second == 527 || eh.unpack().second == 209 ||
-                    eh.unpack().second == 44 || eh.unpack().second == 525 ||
-                    eh.unpack().second == 212 || eh.unpack().second == 47 ||
-                    eh.unpack().second == 46 || eh.unpack().second == 58 ||
-                    eh.unpack().second == 59 || eh.unpack().second == 57 ||
-                    eh.unpack().second == 232 || eh.unpack().second == 214 ||
-                    eh.unpack().second == 233) {
+                if (eh.local_id() == 527 || eh.local_id() == 209 ||
+                    eh.local_id() == 44 || eh.local_id() == 525 ||
+                    eh.local_id() == 212 || eh.local_id() == 47 ||
+                    eh.local_id() == 46 || eh.local_id() == 58 ||
+                    eh.local_id() == 59 || eh.local_id() == 57 ||
+                    eh.local_id() == 232 || eh.local_id() == 214 ||
+                    eh.local_id() == 233) {
                     e_attr(eh) = (pid + 1) * 5;
                     cavity.add(eh);
                 }

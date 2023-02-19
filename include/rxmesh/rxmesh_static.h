@@ -134,7 +134,7 @@ class RXMeshStatic : public RXMesh
                 const FaceHandle fh = Context::get_owner_handle<FaceHandle>(
                     {p, lf}, nullptr, m_h_patches_info);
 
-                patch_id[f] = fh.unpack().first;
+                patch_id[f] = fh.patch_id();
             }
         }
 
@@ -165,7 +165,7 @@ class RXMeshStatic : public RXMesh
         std::vector<int> patch_id(get_num_edges(), -(p + 1));
 
         for_each_edge(HOST, [&](EdgeHandle eh) {
-            patch_id[linear_id(eh)] = eh.unpack().first;
+            patch_id[linear_id(eh)] = eh.patch_id();
         });
 
         return polyscope_mesh->addEdgeScalarQuantity(name, patch_id);
@@ -193,7 +193,7 @@ class RXMeshStatic : public RXMesh
         std::vector<int> patch_id(get_num_vertices(), -(p + 1));
 
         for_each_vertex(HOST, [&](VertexHandle vh) {
-            patch_id[linear_id(vh)] = vh.unpack().first;
+            patch_id[linear_id(vh)] = vh.patch_id();
         });
 
         return polyscope_mesh->addVertexScalarQuantity(name, patch_id);
@@ -209,8 +209,7 @@ class RXMeshStatic : public RXMesh
     {
         std::string name = "rx:FPatch";
         auto face_patch  = this->add_face_attribute<uint32_t>(name, 1, HOST);
-        for_each_face(HOST, [&](FaceHandle fh) {
-            (*face_patch)(fh) = fh.unpack().first;
+        for_each_face(HOST, [&](FaceHandle fh) { (*face_patch)(fh) = fh.patch_id();
         });
         auto ret = m_polyscope_mesh->addFaceScalarQuantity(name, *face_patch);
         remove_attribute(name);
@@ -226,8 +225,7 @@ class RXMeshStatic : public RXMesh
     {
         std::string name = "rx:EPatch";
         auto edge_patch  = this->add_edge_attribute<uint32_t>(name, 1, HOST);
-        for_each_edge(HOST, [&](EdgeHandle eh) {
-            (*edge_patch)(eh) = eh.unpack().first;
+        for_each_edge(HOST, [&](EdgeHandle eh) { (*edge_patch)(eh) = eh.patch_id();
         });
         auto ret = m_polyscope_mesh->addEdgeScalarQuantity(name, *edge_patch);
         remove_attribute(name);
@@ -245,7 +243,7 @@ class RXMeshStatic : public RXMesh
         std::string name  = "rx:VPatch";
         auto vertex_patch = this->add_vertex_attribute<uint32_t>(name, 1, HOST);
         for_each_vertex(HOST, [&](VertexHandle vh) {
-            (*vertex_patch)(vh) = vh.unpack().first;
+            (*vertex_patch)(vh) = vh.patch_id();
         });
         auto ret =
             m_polyscope_mesh->addVertexScalarQuantity(name, *vertex_patch);
@@ -839,8 +837,8 @@ class RXMeshStatic : public RXMesh
         const HandleT owner_handle =
             Context::get_owner_handle(input, nullptr, m_h_patches_info);
 
-        uint32_t p_id = owner_handle.unpack().first;
-        uint16_t ret  = owner_handle.unpack().second;
+        uint32_t p_id = owner_handle.patch_id();
+        uint16_t ret  = owner_handle.local_id();
 
         ret = this->m_h_patches_info[p_id].count_num_owned(
             m_h_patches_info[p_id].get_owned_mask<HandleT>(),

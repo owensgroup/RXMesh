@@ -215,18 +215,18 @@ struct Cavity
         // one element
         if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                       cop == CavityOp::VE || cop == CavityOp::VF) {
-            m_s_cavity_id_v[handle.unpack().second] = id;
+            m_s_cavity_id_v[handle.local_id()] = id;
         }
 
         if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
                       cop == CavityOp::EE || cop == CavityOp::EF) {
-            m_s_cavity_id_e[handle.unpack().second] = id;
+            m_s_cavity_id_e[handle.local_id()] = id;
         }
 
 
         if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
                       cop == CavityOp::FE || cop == CavityOp::FF) {
-            m_s_cavity_id_f[handle.unpack().second] = id;
+            m_s_cavity_id_f[handle.local_id()] = id;
         }
     }
 
@@ -606,7 +606,7 @@ struct Cavity
             for (uint16_t e = start; e < end; ++e) {
                 uint32_t edge = m_s_cavity_edge_loop[e];
 
-                if (get_cavity_vertex(c, e - start).unpack().second ==
+                if (get_cavity_vertex(c, e - start).local_id() ==
                     cavity_edge_src_vertex) {
                     uint16_t temp               = m_s_cavity_edge_loop[start];
                     m_s_cavity_edge_loop[start] = edge;
@@ -742,8 +742,8 @@ struct Cavity
                                                const VertexHandle src,
                                                const VertexHandle dest)
     {
-        assert(src.unpack().first == m_patch_info.patch_id);
-        assert(dest.unpack().first == m_patch_info.patch_id);
+        assert(src.patch_id() == m_patch_info.patch_id);
+        assert(dest.patch_id() == m_patch_info.patch_id);
 
         // First try to reuse an edge in the cavity or a deleted edge
         uint16_t e_id = add_element(
@@ -753,8 +753,8 @@ struct Cavity
             e_id = atomicAdd(m_s_num_edges, 1);
             assert(e_id < m_patch_info.edges_capacity[0]);
         }
-        m_s_ev[2 * e_id + 0] = src.unpack().second;
-        m_s_ev[2 * e_id + 1] = dest.unpack().second;
+        m_s_ev[2 * e_id + 0] = src.local_id();
+        m_s_ev[2 * e_id + 1] = dest.local_id();
         m_s_active_mask_e.set(e_id, true);
         m_s_owned_mask_e.set(e_id, true);
         return {m_patch_info.patch_id, e_id, 0};
@@ -769,9 +769,9 @@ struct Cavity
                                               const DEdgeHandle e1,
                                               const DEdgeHandle e2)
     {
-        assert(e0.unpack().first == m_patch_info.patch_id);
-        assert(e1.unpack().first == m_patch_info.patch_id);
-        assert(e2.unpack().first == m_patch_info.patch_id);
+        assert(e0.patch_id() == m_patch_info.patch_id);
+        assert(e1.patch_id() == m_patch_info.patch_id);
+        assert(e2.patch_id() == m_patch_info.patch_id);
 
         // First try to reuse a face in the cavity or a deleted face
         uint16_t f_id = add_element(
@@ -783,9 +783,9 @@ struct Cavity
             assert(f_id < m_patch_info.faces_capacity[0]);
         }
 
-        m_s_fe[3 * f_id + 0] = e0.unpack().second;
-        m_s_fe[3 * f_id + 1] = e1.unpack().second;
-        m_s_fe[3 * f_id + 2] = e2.unpack().second;
+        m_s_fe[3 * f_id + 0] = e0.local_id();
+        m_s_fe[3 * f_id + 1] = e1.local_id();
+        m_s_fe[3 * f_id + 2] = e2.local_id();
 
         m_s_active_mask_f.set(f_id, true);
         m_s_owned_mask_f.set(f_id, true);
@@ -1198,7 +1198,7 @@ struct Cavity
         // first consider owned vertices on the cavity boundary
         for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             for (uint16_t i = 0; i < size; ++i) {
-                uint16_t vertex = get_cavity_vertex(c, i).unpack().second;
+                uint16_t vertex = get_cavity_vertex(c, i).local_id();
                 if (m_s_owned_mask_v(vertex)) {
                     m_s_owned_cavity_bdry_v.set(vertex, true);
                 } else {

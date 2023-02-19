@@ -117,7 +117,7 @@ struct VertexHandle
      */
     constexpr __device__ __host__ __inline__ uint32_t patch_id() const
     {
-        return detail::unpack(m_handle).first;
+        return unpack().first;
     }
 
 
@@ -126,7 +126,7 @@ struct VertexHandle
      */
     constexpr __device__ __host__ __inline__ uint16_t local_id() const
     {
-        return detail::unpack(m_handle).second;
+        return unpack().second;
     }
 
    private:
@@ -211,7 +211,7 @@ struct EdgeHandle
      */
     constexpr __device__ __host__ __inline__ uint32_t patch_id() const
     {
-        return detail::unpack(m_handle).first;
+        return unpack().first;
     }
 
     /**
@@ -219,7 +219,7 @@ struct EdgeHandle
      */
     constexpr __device__ __host__ __inline__ uint16_t local_id() const
     {
-        return detail::unpack(m_handle).second;
+        return unpack().second;
     }
 
    private:
@@ -276,7 +276,7 @@ struct DEdgeHandle
      */
     constexpr __device__ __host__ __inline__ DEdgeHandle get_flip_dedge()
     {
-        return {unpack().first, uint16_t(unpack().second ^ 1)};
+        return {patch_id(), uint16_t(local_id() ^ 1)};
     }
 
     /**
@@ -284,7 +284,7 @@ struct DEdgeHandle
      */
     constexpr __device__ __host__ __inline__ EdgeHandle get_edge_handle()
     {
-        return {unpack().first, uint16_t(unpack().second >> 1)};
+        return {patch_id(), uint16_t(local_id() >> 1)};
     }
 
 
@@ -293,10 +293,9 @@ struct DEdgeHandle
      */
     constexpr __device__ __host__ __inline__ bool operator==(
         const EdgeHandle& rhs) const
-    {
-        auto p = detail::unpack(m_handle);
-        return detail::unpack(m_handle).first == rhs.unpack().first &&
-               (detail::unpack(m_handle).second >> 1) == rhs.unpack().second;
+    {       
+        return unpack().first == rhs.patch_id() &&
+               (unpack().second >> 1) == rhs.local_id();
     }
 
 
@@ -360,7 +359,7 @@ struct DEdgeHandle
      */
     constexpr __device__ __host__ __inline__ uint32_t patch_id() const
     {
-        return detail::unpack(m_handle).first;
+        return unpack().first;
     }
 
     /**
@@ -368,7 +367,7 @@ struct DEdgeHandle
      */
     constexpr __device__ __host__ __inline__ uint16_t local_id() const
     {
-        return detail::unpack(m_handle).second;
+        return unpack().second;
     }
 
    private:
@@ -451,7 +450,7 @@ struct FaceHandle
      */
     constexpr __device__ __host__ __inline__ uint32_t patch_id() const
     {
-        return detail::unpack(m_handle).first;
+        return unpack().first;
     }
 
     /**
@@ -459,7 +458,7 @@ struct FaceHandle
      */
     constexpr __device__ __host__ __inline__ uint16_t local_id() const
     {
-        return detail::unpack(m_handle).second;
+        return unpack().second;
     }
 
    private:

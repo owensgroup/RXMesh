@@ -126,8 +126,8 @@ class Context
         const PatchInfo* patches_info)
     {
         using LocalT   = typename HandleT::LocalT;
-        uint32_t owner = handle.unpack().first;
-        uint16_t lid   = handle.unpack().second;
+        uint32_t owner = handle.patch_id();
+        uint16_t lid   = handle.local_id();
 
         if (patches_info[owner].is_owned(LocalT(lid))) {
             return handle;
