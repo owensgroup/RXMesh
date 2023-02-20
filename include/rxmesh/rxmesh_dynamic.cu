@@ -72,7 +72,7 @@ __global__ static void check_uniqueness(const Context           context,
         for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0];
              e += blockThreads) {
 
-            const LocalEdgeT el = e;
+            const LocalEdgeT el(e);
 
             uint16_t v0 = s_ev[2 * e + 0];
             uint16_t v1 = s_ev[2 * e + 1];
@@ -99,7 +99,7 @@ __global__ static void check_uniqueness(const Context           context,
         for (uint16_t f = threadIdx.x; f < patch_info.num_faces[0];
              f += blockThreads) {
 
-            const LocalEdgeT fl = f;
+            const LocalFaceT fl(f);
 
             if (!patch_info.is_deleted(fl)) {
                 uint16_t e0, e1, e2;
