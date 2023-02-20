@@ -108,9 +108,11 @@ void filtering_openmesh(const int                    num_omp_threads,
         input_mesh.update_normals();
 
         const int num_vertrices = static_cast<int>(input_mesh.n_vertices());
+#ifndef _MSC_VER
 #pragma omp parallel for schedule(static) num_threads(num_omp_threads) \
     reduction(max                                                      \
               : max_neighbour_size)
+#endif
         for (int vert = 0; vert < num_vertrices; vert++) {
             TriMesh::VertexIter v_it = input_mesh.vertices_begin() + vert;
 
