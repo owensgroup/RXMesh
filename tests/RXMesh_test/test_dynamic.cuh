@@ -17,10 +17,7 @@ enum : Config
 template <uint32_t blockThreads>
 __global__ static void random_flips(rxmesh::Context                context,
                                     rxmesh::VertexAttribute<float> coords,
-                                    rxmesh::VertexAttribute<float> v_attr,
-                                    rxmesh::EdgeAttribute<float>   e_attr,
-                                    rxmesh::FaceAttribute<float>   f_attr,
-                                    Config                         config)
+                                    rxmesh::EdgeAttribute<int>     to_flip)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -34,96 +31,9 @@ __global__ static void random_flips(rxmesh::Context                context,
     }
 
     detail::for_each_edge(cavity.m_patch_info, [&](const EdgeHandle eh) {
-        if (pid == 0) {
-
-            if ((config & OnRibbonNotConflicting) == OnRibbonNotConflicting) {
-                if (eh.local_id() == 11 || eh.local_id() == 51 ||
-                    eh.local_id() == 2 || eh.local_id() == 315) {
-                    e_attr(eh) = (pid + 1) * 5;
-                    cavity.add(eh);
-                }
-            }
-
-
-            if ((config & OnRibbonConflicting) == OnRibbonConflicting) {
-                if (eh.local_id() == 11 || eh.local_id() == 10 ||
-                    eh.local_id() == 358 || eh.local_id() == 359 ||
-                    eh.local_id() == 354 || eh.local_id() == 356) {
-                    e_attr(eh) = (pid + 1) * 5;
-                    cavity.add(eh);
-                }
-            }
-
-
-            if ((config & InteriorNotConflicting) == InteriorNotConflicting) {
-                if (eh.local_id() == 26 || eh.local_id() == 174 ||
-                    eh.local_id() == 184 || eh.local_id() == 94 ||
-                    eh.local_id() == 58 || eh.local_id() == 362 ||
-                    eh.local_id() == 70 || eh.local_id() == 420) {
-                    e_attr(eh) = (pid + 1) * 5;
-                    cavity.add(eh);
-                }
-            }
-
-            if ((config & InteriorConflicting) == InteriorConflicting) {
-                if (eh.local_id() == 26 || eh.local_id() == 22 ||
-                    eh.local_id() == 29 || eh.local_id() == 156 ||
-                    eh.local_id() == 23 || eh.local_id() == 389 ||
-                    eh.local_id() == 39 || eh.local_id() == 40 ||
-                    eh.local_id() == 41 || eh.local_id() == 16) {
-                    e_attr(eh) = (pid + 1) * 5;
-                    cavity.add(eh);
-                }
-            }
-        }
-
-
-        if (pid == 1) {
-            if ((config & OnRibbonNotConflicting) == OnRibbonNotConflicting) {
-                if (eh.local_id() == 383 || eh.local_id() == 324 ||
-                    eh.local_id() == 355 || eh.local_id() == 340 ||
-                    eh.local_id() == 726 || eh.local_id() == 667 ||
-                    eh.local_id() == 706) {
-                    e_attr(eh) = (pid + 1) * 5;
-                    cavity.add(eh);
-                }
-            }
-
-
-            if ((config & OnRibbonConflicting) == OnRibbonConflicting) {
-                if (eh.local_id() == 399 || eh.local_id() == 398 ||
-                    eh.local_id() == 402 || eh.local_id() == 418 ||
-                    eh.local_id() == 419 || eh.local_id() == 401 ||
-                    eh.local_id() == 413 || eh.local_id() == 388 ||
-                    eh.local_id() == 396 || eh.local_id() == 395) {
-                    e_attr(eh) = (pid + 1) * 5;
-                    cavity.add(eh);
-                }
-            }
-
-
-            if ((config & InteriorNotConflicting) == InteriorNotConflicting) {
-                if (eh.local_id() == 528 || eh.local_id() == 532 ||
-                    eh.local_id() == 103 || eh.local_id() == 140 ||
-                    eh.local_id() == 206 || eh.local_id() == 285 ||
-                    eh.local_id() == 162 || eh.local_id() == 385) {
-                    e_attr(eh) = (pid + 1) * 5;
-                    cavity.add(eh);
-                }
-            }
-
-            if ((config & InteriorConflicting) == InteriorConflicting) {
-                if (eh.local_id() == 527 || eh.local_id() == 209 ||
-                    eh.local_id() == 44 || eh.local_id() == 525 ||
-                    eh.local_id() == 212 || eh.local_id() == 47 ||
-                    eh.local_id() == 46 || eh.local_id() == 58 ||
-                    eh.local_id() == 59 || eh.local_id() == 57 ||
-                    eh.local_id() == 232 || eh.local_id() == 214 ||
-                    eh.local_id() == 233) {
-                    e_attr(eh) = (pid + 1) * 5;
-                    cavity.add(eh);
-                }
-            }
+        if (to_flip(eh) == 1) {
+            cavity.add(eh);
+            to_flip(eh) = 0;
         }
     });
 
@@ -133,9 +43,8 @@ __global__ static void random_flips(rxmesh::Context                context,
     if (cavity.process(block, shrd_alloc)) {
 
         cavity.update_attributes(block, coords);
-        cavity.update_attributes(block, v_attr);
-        cavity.update_attributes(block, e_attr);
-        cavity.update_attributes(block, f_attr);
+        cavity.update_attributes(block, to_flip);
+
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
@@ -157,7 +66,7 @@ __global__ static void random_flips(rxmesh::Context                context,
         });
         block.sync();
 
-        cavity.cleanup(block, false);
+        cavity.cleanup(block);
     }
 }
 
@@ -173,12 +82,6 @@ TEST(RXMeshDynamic, Cavity)
                      rxmesh_args.quite,
                      STRINGIFY(INPUT_DIR) "sphere3_patches");
 
-#if USE_POLYSCOPE
-    std::pair<double, double> ps_range(-2, 2);
-    rx.polyscope_render_vertex_patch()->setMapRange(ps_range);
-    rx.polyscope_render_edge_patch()->setMapRange(ps_range);
-    rx.polyscope_render_face_patch()->setMapRange(ps_range);
-#endif
 
     const uint32_t num_vertices = rx.get_num_vertices();
     const uint32_t num_edges    = rx.get_num_edges();
@@ -186,28 +89,123 @@ TEST(RXMeshDynamic, Cavity)
 
     auto coords = rx.get_input_vertex_coordinates();
 
-    auto v_attr = rx.add_vertex_attribute<float>("vAttr", 1);
-    auto e_attr = rx.add_edge_attribute<float>("eAttr", 1);
-    auto f_attr = rx.add_face_attribute<float>("fAttr", 1);
+    auto to_flip = rx.add_edge_attribute<int>("to_flip", 1);
 
-    v_attr->reset(0, DEVICE);
-    e_attr->reset(0, DEVICE);
-    f_attr->reset(0, DEVICE);
+    to_flip->reset(0, HOST);
+
+    const Config config = InteriorNotConflicting | InteriorConflicting |
+                          OnRibbonNotConflicting | OnRibbonConflicting;
+
+
+    rx.for_each_edge(HOST, [to_flip = *to_flip, config](const EdgeHandle eh) {
+        if (eh.patch_id() == 0) {
+
+            if ((config & OnRibbonNotConflicting) == OnRibbonNotConflicting) {
+                if (eh.local_id() == 11 || eh.local_id() == 51 ||
+                    eh.local_id() == 2 || eh.local_id() == 315) {
+                    to_flip(eh) = 1;
+                }
+            }
+
+
+            if ((config & OnRibbonConflicting) == OnRibbonConflicting) {
+                if (eh.local_id() == 11 || eh.local_id() == 10 ||
+                    eh.local_id() == 358 || eh.local_id() == 359 ||
+                    eh.local_id() == 354 || eh.local_id() == 356) {
+                    to_flip(eh) = 1;
+                }
+            }
+
+
+            if ((config & InteriorNotConflicting) == InteriorNotConflicting) {
+                if (eh.local_id() == 26 || eh.local_id() == 174 ||
+                    eh.local_id() == 184 || eh.local_id() == 94 ||
+                    eh.local_id() == 58 || eh.local_id() == 362 ||
+                    eh.local_id() == 70 || eh.local_id() == 420) {
+                    to_flip(eh) = 1;
+                }
+            }
+
+            if ((config & InteriorConflicting) == InteriorConflicting) {
+                if (eh.local_id() == 26 || eh.local_id() == 22 ||
+                    eh.local_id() == 29 || eh.local_id() == 156 ||
+                    eh.local_id() == 23 || eh.local_id() == 389 ||
+                    eh.local_id() == 39 || eh.local_id() == 40 ||
+                    eh.local_id() == 41 || eh.local_id() == 16) {
+                    to_flip(eh) = 1;
+                }
+            }
+        }
+
+
+        if (eh.patch_id() == 1) {
+            if ((config & OnRibbonNotConflicting) == OnRibbonNotConflicting) {
+                if (eh.local_id() == 383 || eh.local_id() == 324 ||
+                    eh.local_id() == 355 || eh.local_id() == 340 ||
+                    eh.local_id() == 726 || eh.local_id() == 667 ||
+                    eh.local_id() == 706) {
+                    to_flip(eh) = 1;
+                }
+            }
+
+
+            if ((config & OnRibbonConflicting) == OnRibbonConflicting) {
+                if (eh.local_id() == 399 || eh.local_id() == 398 ||
+                    eh.local_id() == 402 || eh.local_id() == 418 ||
+                    eh.local_id() == 419 || eh.local_id() == 401 ||
+                    eh.local_id() == 413 || eh.local_id() == 388 ||
+                    eh.local_id() == 396 || eh.local_id() == 395) {
+                    to_flip(eh) = 1;
+                }
+            }
+
+
+            if ((config & InteriorNotConflicting) == InteriorNotConflicting) {
+                if (eh.local_id() == 528 || eh.local_id() == 532 ||
+                    eh.local_id() == 103 || eh.local_id() == 140 ||
+                    eh.local_id() == 206 || eh.local_id() == 285 ||
+                    eh.local_id() == 162 || eh.local_id() == 385) {
+                    to_flip(eh) = 1;
+                }
+            }
+
+            if ((config & InteriorConflicting) == InteriorConflicting) {
+                if (eh.local_id() == 527 || eh.local_id() == 209 ||
+                    eh.local_id() == 44 || eh.local_id() == 525 ||
+                    eh.local_id() == 212 || eh.local_id() == 47 ||
+                    eh.local_id() == 46 || eh.local_id() == 58 ||
+                    eh.local_id() == 59 || eh.local_id() == 57 ||
+                    eh.local_id() == 232 || eh.local_id() == 214 ||
+                    eh.local_id() == 233) {
+                    to_flip(eh) = 1;
+                }
+            }
+        }
+    });
+
+    to_flip->move(HOST, DEVICE);
+
+
+#if USE_POLYSCOPE
+    std::pair<double, double> ps_range(-2, 2);
+    rx.polyscope_render_vertex_patch()->setMapRange(ps_range);
+    rx.polyscope_render_edge_patch()->setMapRange(ps_range);
+    rx.polyscope_render_face_patch()->setMapRange(ps_range);
+    rx.get_polyscope_mesh()->addEdgeScalarQuantity("toFlip", *to_flip);
+#endif
+
 
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
 
     rx.prepare_launch_box({}, launch_box, (void*)random_flips<blockThreads>);
 
-    Config congif = InteriorNotConflicting | InteriorConflicting |
-                    OnRibbonNotConflicting | OnRibbonConflicting;
-
 
     while (!rx.is_queue_empty()) {
         random_flips<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
-            rx.get_context(), *coords, *v_attr, *e_attr, *f_attr, congif);
+            rx.get_context(), *coords, *to_flip);
     }
 
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -215,9 +213,7 @@ TEST(RXMeshDynamic, Cavity)
     rx.update_host();
 
     coords->move(DEVICE, HOST);
-    v_attr->move(DEVICE, HOST);
-    e_attr->move(DEVICE, HOST);
-    f_attr->move(DEVICE, HOST);
+    to_flip->move(DEVICE, HOST);
 
     EXPECT_EQ(num_vertices, rx.get_num_vertices());
     EXPECT_EQ(num_edges, rx.get_num_edges());
@@ -248,9 +244,7 @@ TEST(RXMeshDynamic, Cavity)
 
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(*coords);
-    ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
-    ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
-    ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
+    ps_mesh->addEdgeScalarQuantity("toFlip", *to_flip);
     polyscope::show();
 #endif
 }
