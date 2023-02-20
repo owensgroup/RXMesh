@@ -1950,14 +1950,62 @@ struct Cavity
             if (!q_patch_info.is_deleted(local) &&
                 !q_patch_info.is_owned(local)) {
 
-                // delete an element if its inside p's cavity
+                // This is the same functionality implemented in
+                // Context::get_owner_handle() but we implement here since we
+                // want to read p's bitmask from shared memory
                 LPPair lp = q_patch_info.get_lp<HandleT>().find(v);
-                if (q_patch_info.patch_stash.get_patch(lp) == p) {
+                assert(!lp.is_sentinel());
+                uint32_t owner = q_patch_info.patch_stash.get_patch(lp);
+
+                while (true) {
+                    if (owner == p) {
+                        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+                            if (m_s_owned_mask_v(
+                                    lp.local_id_in_owner_patch())) {
+                                break;
+                            }
+                        }
+                        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+                            if (m_s_owned_mask_e(
+                                    lp.local_id_in_owner_patch())) {
+                                break;
+                            }
+                        }
+                        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+                            if (m_s_owned_mask_f(
+                                    lp.local_id_in_owner_patch())) {
+                                break;
+                            }
+                        }
+                    } else {
+                        if (m_context.m_patches_info[owner].is_owned(
+                                LocalT(lp.local_id_in_owner_patch()))) {
+                            break;
+                        }
+                    }
+
+                    lp = m_context.m_patches_info[owner].get_lp<HandleT>().find(
+                        lp.local_id_in_owner_patch());
+
+                    assert(!lp.is_sentinel());
+
+                    owner =
+                        m_context.m_patches_info[owner].patch_stash.get_patch(
+                            lp);
+                }
+
+
+                if (owner == p) {
                     uint16_t vp = lp.local_id_in_owner_patch();
                     if (s_cavity_id[vp] != INVALID16 || !p_flag(vp)) {
                         detail::bitmask_clear_bit(
                             v, q_patch_info.get_active_mask<HandleT>(), true);
-                        q_patch_info.get_lp<HandleT>().remove(v);
+                        // TODO we now don't remove things for the hashtable
+                        // we can do it at the end where if an element is
+                        // deleted (by reading its bitmask) we delete it from
+                        // the hashtable which is a patch-local operation and
+                        // can be done at the end by launching a seperate kernel
+                        // q_patch_info.get_lp<HandleT>().remove(v);
                     }
                 }
             }

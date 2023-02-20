@@ -131,8 +131,7 @@ class RXMeshStatic : public RXMesh
             const LocalFaceT lf(f);
             if (!this->m_h_patches_info[p].is_deleted(lf)) {
 
-                const FaceHandle fh = Context::get_owner_handle<FaceHandle>(
-                    {p, lf}, m_h_patches_info);
+                const FaceHandle fh = get_owner_handle<FaceHandle>({p, lf});
 
                 patch_id[f] = fh.patch_id();
             }
@@ -819,7 +818,7 @@ class RXMeshStatic : public RXMesh
      * @param input handle
      */
     template <typename HandleT>
-    uint32_t linear_id(HandleT input)
+    uint32_t linear_id(HandleT input) const
     {
         using LocalT = typename HandleT::LocalT;
 
@@ -834,8 +833,7 @@ class RXMeshStatic : public RXMesh
                 input.patch_id());
         }
 
-        const HandleT owner_handle =
-            Context::get_owner_handle(input, m_h_patches_info);
+        const HandleT owner_handle = get_owner_handle(input);
 
         uint32_t p_id = owner_handle.patch_id();
         uint16_t ret  = owner_handle.local_id();
@@ -857,6 +855,44 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
+     * @brief get the owner handle of a given vertex handle
+     * @param vh the vertex handle
+     */
+    VertexHandle get_owner_vertex_handle(const VertexHandle vh) const
+    {
+        return get_owner_handle(vh);
+    }
+
+    /**
+     * @brief get the owner handle of a given edge handle
+     * @param eh the edge handle
+     */
+    EdgeHandle get_owner_edge_handle(const EdgeHandle eh) const
+    {
+        return get_owner_handle(eh);
+    }
+
+    /**
+     * @brief get the owner handle of a given face handle
+     * @param fh the face handle
+     */
+    FaceHandle get_owner_face_handle(const FaceHandle fh) const
+    {
+        return get_owner_handle(fh);
+    }
+
+    /**
+     * @brief get the owner handle of a given mesh element handle
+     * @param handle the mesh element handle
+     * memory
+     */
+    template <typename HandleT>
+    HandleT get_owner_handle(const HandleT input) const
+    {
+        return Context::get_owner_handle(input, m_h_patches_info);
+    }
+
+    /**
      * @brief Export the mesh to obj file
      * @tparam T type of vertices coordinates
      * @param filename the output file
@@ -864,7 +900,7 @@ class RXMeshStatic : public RXMesh
      */
     template <typename T>
     void export_obj(const std::string&        filename,
-                    const VertexAttribute<T>& coords)
+                    const VertexAttribute<T>& coords) const
     {
         std::string  fn = filename;
         std::fstream file(fn, std::ios::out);
@@ -878,8 +914,8 @@ class RXMeshStatic : public RXMesh
 
             for (uint16_t v = 0; v < p_num_vertices; ++v) {
 
-                const VertexHandle vh = Context::get_owner_handle<VertexHandle>(
-                    {p, {v}}, m_h_patches_info);
+                const VertexHandle vh =
+                    get_owner_handle<VertexHandle>({p, {v}});
 
                 file << "v " << coords(vh, 0) << " " << coords(vh, 1) << " "
                      << coords(vh, 2) << std::endl;

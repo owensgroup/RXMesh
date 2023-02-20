@@ -129,13 +129,18 @@ class Context
         uint32_t owner = handle.patch_id();
         uint16_t lid   = handle.local_id();
 
+        assert(!patches_info[owner].is_deleted(LocalT(lid)));
         if (patches_info[owner].is_owned(LocalT(lid))) {
             return handle;
         } else {
 
             LPPair lp = patches_info[owner].get_lp<HandleT>().find(lid, table);
 
+            assert(!lp.is_sentinel());
             owner = patches_info[owner].patch_stash.get_patch(lp);
+
+            // assert(!patches_info[owner].is_deleted(
+            //    LocalT(lp.local_id_in_owner_patch())));
 
             while (!patches_info[owner].is_owned(
                 LocalT(lp.local_id_in_owner_patch()))) {
@@ -143,7 +148,11 @@ class Context
                 lp = patches_info[owner].get_lp<HandleT>().find(
                     lp.local_id_in_owner_patch());
 
+                assert(!lp.is_sentinel());
                 owner = patches_info[owner].patch_stash.get_patch(lp);
+
+                //  assert(!patches_info[owner].is_deleted(
+                //      LocalT(lp.local_id_in_owner_patch())));
             }
 
             return HandleT(owner, lp.local_id_in_owner_patch());
