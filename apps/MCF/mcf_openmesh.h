@@ -326,7 +326,7 @@ void implicit_smoothing(TriMesh&                     mesh,
     std::vector<std::vector<T>> B(X), R(X), P(X), S(X);
 
 #pragma omp parallel for
-    for (uint32_t v_id = 0; v_id < mesh.n_vertices(); ++v_id) {
+    for (int v_id = 0; v_id < mesh.n_vertices(); ++v_id) {
         TriMesh::VertexIter v_iter = mesh.vertices_begin() + v_id;
 
         // LHS
