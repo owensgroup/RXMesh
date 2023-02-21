@@ -63,6 +63,36 @@ __global__ static void mcf_A_X_B_setup(
         !use_uniform_laplace);
 }
 
+template <typename T, uint32_t blockThreads>
+__global__ static void update_smooth_result(const rxmesh::Context      context,
+                                            rxmesh::VertexAttribute<T> smooth_X,
+                                            rxmesh::SparseMatrix<T>    A_mat,
+                                            rxmesh::DenseMatrix<T>     X_mat)
+{
+    using namespace rxmesh;
+    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
+        auto     r_ids      = v_id.unpack();
+        uint32_t r_patch_id = r_ids.first;
+        uint16_t r_local_id = r_ids.second;
+
+        uint32_t row_index =
+            A_mat.m_context.m_vertex_prefix[r_patch_id] + r_local_id;
+
+        // printf("check: %f\n", X_mat(row_index, 0));
+
+        smooth_X(v_id, 0) = X_mat(row_index, 0);
+        smooth_X(v_id, 1) = X_mat(row_index, 1);
+        smooth_X(v_id, 2) = X_mat(row_index, 2);
+
+        // printf("s_check: %f\n", smooth_X(v_id, 0));
+    };
+
+    auto                block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
+}
+
 template <typename T>
 void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
                        const std::vector<std::vector<T>>& ground_truth)
@@ -77,13 +107,13 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
     DenseMatrix<float>  X_mat(num_vertices, 3);
     DenseMatrix<float>  B_mat(num_vertices, 3);
 
-    LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(
-        {Op::VV}, launch_box, (void*)mcf_A_X_B_setup<float, blockThreads>);
-
     printf("use_uniform_laplace: %d, time_step: %f\n",
            Arg.use_uniform_laplace,
            Arg.time_step);
+
+    LaunchBox<blockThreads> launch_box;
+    rxmesh.prepare_launch_box(
+        {Op::VV}, launch_box, (void*)mcf_A_X_B_setup<float, blockThreads>);
 
     mcf_A_X_B_setup<float, blockThreads>
         <<<launch_box.blocks,
@@ -98,17 +128,45 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
 
     A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NONE);
 
+    auto smooth_X =
+        rxmesh.add_vertex_attribute<T>("smooth_X", 3, rxmesh::LOCATION_ALL);
 
-    std::vector<Vector3f> h_X_mat(num_vertices);
-    cudaMemcpy(h_X_mat.data(),
-               X_mat.data(),
-               num_vertices * 3 * sizeof(float),
-               cudaMemcpyDeviceToHost);
+    LaunchBox<blockThreads> launch_box_smooth;
+    rxmesh.prepare_launch_box({Op::VV},
+                              launch_box_smooth,
+                              (void*)update_smooth_result<float, blockThreads>);
 
-    const T tol = 0.1f;
-    // for (uint32_t i = 0; i < num_vertices; ++i) {
-    //     for (uint32_t j = 0; j < 3; ++j) {
-    //         EXPECT_NEAR(h_X_mat[i][j], ground_truth[i][j], tol);
-    //     }
-    // }
+    update_smooth_result<float, blockThreads>
+        <<<launch_box_smooth.blocks,
+           launch_box_smooth.num_threads,
+           launch_box_smooth.smem_bytes_dyn>>>(
+            rxmesh.get_context(), *smooth_X, A_mat, X_mat);
+
+    smooth_X->move(rxmesh::DEVICE, rxmesh::HOST);
+
+    const T tol     = 0.001;
+    T       tmp_tol = tol;
+    bool    passed  = true;
+    rxmesh.for_each_vertex(HOST, [&](const VertexHandle vh) {
+        uint32_t v_id = rxmesh.map_to_global(vh);
+
+        for (uint32_t i = 0; i < 3; ++i) {
+            tmp_tol = std::abs(((*smooth_X)(vh, i) - ground_truth[v_id][i]) /
+                               ground_truth[v_id][i]);
+            if (tmp_tol > tol) {
+                printf("val: %f, truth: %f, tol: %f\n",
+                       (*smooth_X)(vh, i),
+                       ground_truth[v_id][i],
+                       tmp_tol);
+            }
+
+            if (std::abs(((*smooth_X)(vh, i) - ground_truth[v_id][i]) /
+                         ground_truth[v_id][i]) > tol) {
+                passed = false;
+                break;
+            }
+        }
+    });
+
+    EXPECT_TRUE(passed);
 }
