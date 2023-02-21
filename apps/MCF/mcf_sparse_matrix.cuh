@@ -46,7 +46,7 @@ __global__ static void mcf_A_B_setup(
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, compute_valence);
+    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
 }
 
 void mcf_rxmesh_solver() {}
