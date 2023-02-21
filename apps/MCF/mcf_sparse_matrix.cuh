@@ -130,6 +130,8 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
 
     auto smooth_X =
         rxmesh.add_vertex_attribute<T>("smooth_X", 3, rxmesh::LOCATION_ALL);
+    auto truth_X =
+        rxmesh.add_vertex_attribute<T>("truth_X", 3, rxmesh::LOCATION_ALL);
 
     LaunchBox<blockThreads> launch_box_smooth;
     rxmesh.prepare_launch_box({Op::VV},
@@ -143,6 +145,7 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
             rxmesh.get_context(), *smooth_X, A_mat, X_mat);
 
     smooth_X->move(rxmesh::DEVICE, rxmesh::HOST);
+    truth_X->move(rxmesh::DEVICE, rxmesh::HOST);
 
     const T tol     = 0.001;
     T       tmp_tol = tol;
@@ -151,6 +154,7 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
         uint32_t v_id = rxmesh.map_to_global(vh);
 
         for (uint32_t i = 0; i < 3; ++i) {
+            (*truth_X)(vh, i) = ground_truth[v_id][i];
             tmp_tol = std::abs(((*smooth_X)(vh, i) - ground_truth[v_id][i]) /
                                ground_truth[v_id][i]);
             if (tmp_tol > tol) {
@@ -167,6 +171,11 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
             }
         }
     });
+
+    auto ps_mesh = rxmesh.get_polyscope_mesh();
+    ps_mesh->addVertexColorQuantity("smooth_x", *smooth_X);
+    ps_mesh->addVertexColorQuantity("smooth_om", *truth_X);
+    polyscope::show();
 
     EXPECT_TRUE(passed);
 }
