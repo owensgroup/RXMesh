@@ -139,8 +139,8 @@ class Context
             assert(!lp.is_sentinel());
             owner = patches_info[owner].patch_stash.get_patch(lp);
 
-            // assert(!patches_info[owner].is_deleted(
-            //    LocalT(lp.local_id_in_owner_patch())));
+            assert(!patches_info[owner].is_deleted(
+                LocalT(lp.local_id_in_owner_patch())));
 
             while (!patches_info[owner].is_owned(
                 LocalT(lp.local_id_in_owner_patch()))) {
@@ -151,8 +151,8 @@ class Context
                 assert(!lp.is_sentinel());
                 owner = patches_info[owner].patch_stash.get_patch(lp);
 
-                //  assert(!patches_info[owner].is_deleted(
-                //      LocalT(lp.local_id_in_owner_patch())));
+                assert(!patches_info[owner].is_deleted(
+                    LocalT(lp.local_id_in_owner_patch())));
             }
 
             return HandleT(owner, lp.local_id_in_owner_patch());

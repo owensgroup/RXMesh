@@ -104,6 +104,10 @@ struct Cavity
             active    = Bitmask(num_elements, shrd_alloc);
             ownership = Bitmask(num_elements, shrd_alloc);
 
+            owned.reset(block);
+            active.reset(block);
+            ownership.reset(block);
+
             detail::load_async(reinterpret_cast<const char*>(g_owned),
                                owned.num_bytes(),
                                reinterpret_cast<char*>(owned.m_bitmask),
@@ -796,8 +800,7 @@ struct Cavity
     /**
      * @brief cleanup by moving data from shared memory to global memory
      */
-    __device__ __inline__ void cleanup(cooperative_groups::thread_block& block,
-                                       const bool readd = true)
+    __device__ __inline__ void cleanup(cooperative_groups::thread_block& block)
     {
         // cleanup the hashtable by removing the vertices/edges/faces that has
         // changed their ownership to be in this patch (p) and thus should not
@@ -867,7 +870,7 @@ struct Cavity
         block.sync();
 
         // readd the patch to the queue if there is ownership change
-        if (threadIdx.x == 0 && readd && m_s_readd_to_queue[0]) {
+        if (threadIdx.x == 0 && m_s_readd_to_queue[0]) {
             m_context.m_patch_scheduler.push(m_patch_info.patch_id);
         }
 
@@ -2118,8 +2121,10 @@ struct Cavity
                          m_context.m_patches_info[patch].patch_stash,
                          m_s_num_faces[0],
                          m_s_owned_mask_f,
+                         m_s_active_mask_f,
                          m_patch_info.lp_f,
-                         m_patch_info.patch_stash);
+                         m_patch_info.patch_stash,
+                         m_s_cavity_id_f);
     }
 
     /**
@@ -2138,8 +2143,10 @@ struct Cavity
                          m_context.m_patches_info[patch].patch_stash,
                          m_s_num_edges[0],
                          m_s_owned_mask_e,
+                         m_s_active_mask_e,
                          m_patch_info.lp_e,
-                         m_patch_info.patch_stash);
+                         m_patch_info.patch_stash,
+                         m_s_cavity_id_e);
     }
 
     /**
@@ -2158,8 +2165,10 @@ struct Cavity
                          m_context.m_patches_info[patch].patch_stash,
                          m_s_num_vertices[0],
                          m_s_owned_mask_v,
+                         m_s_active_mask_v,
                          m_patch_info.lp_v,
-                         m_patch_info.patch_stash);
+                         m_patch_info.patch_stash,
+                         m_s_cavity_id_v);
     }
 
 
@@ -2176,8 +2185,10 @@ struct Cavity
         const PatchStash&  src_patch_stash,
         const uint16_t     dest_patch_num_elements,
         const Bitmask&     dest_patch_owned_mask,
+        const Bitmask&     dest_patch_active_mask,
         const LPHashTable& dest_patch_lp,
-        const PatchStash&  dest_patch_stash)
+        const PatchStash&  dest_patch_stash,
+        const uint16_t*    dest_cavity_id)
     {
         // first check if lid is owned by src_patch. If not, then map it to its
         // owner patch and local index in it
@@ -2193,11 +2204,15 @@ struct Cavity
             return lid;
         }
 
-        // otherwise, we do a search over the not-owned elements by the patch
-        // associated with this cavity. For every not-owned element, we map it
-        // to its owner patch and check against lid-src_patch pair
+        // otherwise, we do a search over the not-owned elements in the dest
+        // patch. For every not-owned element, we map it to its owner patch and
+        // check against lid-src_patch pair
         for (uint16_t i = 0; i < dest_patch_num_elements; ++i) {
-            if (!dest_patch_owned_mask(i)) {
+            if (i >= dest_patch_active_mask.size()) {
+                printf("\n size = %u, i= %u", dest_patch_active_mask.size(), i);
+            }
+            if (!dest_patch_owned_mask(i) &&
+                (dest_patch_active_mask(i) || dest_cavity_id[i] != INVALID16)) {
                 auto lp = dest_patch_lp.find(i);
                 if (dest_patch_stash.get_patch(lp) == src_patch &&
                     lp.local_id_in_owner_patch() == lid) {

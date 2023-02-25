@@ -17,7 +17,10 @@ enum : Config
 template <uint32_t blockThreads>
 __global__ static void random_flips(rxmesh::Context                context,
                                     rxmesh::VertexAttribute<float> coords,
-                                    rxmesh::EdgeAttribute<int>     to_flip)
+                                    rxmesh::EdgeAttribute<int>     to_flip,
+                                    rxmesh::FaceAttribute<int>     f_attr,
+                                    rxmesh::EdgeAttribute<int>     e_attr,
+                                    rxmesh::VertexAttribute<int>   v_attr)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -33,7 +36,7 @@ __global__ static void random_flips(rxmesh::Context                context,
     detail::for_each_edge(cavity.m_patch_info, [&](const EdgeHandle eh) {
         if (to_flip(eh) == 1) {
             cavity.add(eh);
-            to_flip(eh) = 0;
+            to_flip(eh) = 2;
         }
     });
 
@@ -44,6 +47,8 @@ __global__ static void random_flips(rxmesh::Context                context,
 
         cavity.update_attributes(block, coords);
         cavity.update_attributes(block, to_flip);
+        cavity.update_attributes(block, f_attr);
+        cavity.update_attributes(block, e_attr);
 
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
@@ -67,6 +72,12 @@ __global__ static void random_flips(rxmesh::Context                context,
         block.sync();
 
         cavity.cleanup(block);
+    } else {
+        detail::for_each_edge(cavity.m_patch_info, [&](const EdgeHandle eh) {
+            if (to_flip(eh) == 2) {
+                to_flip(eh) = 1;
+            }
+        });
     }
 }
 
@@ -91,7 +102,16 @@ TEST(RXMeshDynamic, Cavity)
 
     auto to_flip = rx.add_edge_attribute<int>("to_flip", 1);
 
-    to_flip->reset(0, HOST);
+    auto f_attr = rx.add_face_attribute<int>("fAttr", 1);
+    auto e_attr = rx.add_edge_attribute<int>("eAttr", 1);
+    auto v_attr = rx.add_vertex_attribute<int>("vAttr", 1);
+    f_attr->reset(0, HOST);
+    f_attr->reset(0, DEVICE);
+    e_attr->reset(0, HOST);
+    e_attr->reset(0, DEVICE);
+
+    v_attr->reset(0, DEVICE);
+
 
     const Config config = InteriorNotConflicting | InteriorConflicting |
                           OnRibbonNotConflicting | OnRibbonConflicting;
@@ -192,6 +212,21 @@ TEST(RXMeshDynamic, Cavity)
     rx.polyscope_render_edge_patch()->setMapRange(ps_range);
     rx.polyscope_render_face_patch()->setMapRange(ps_range);
     rx.get_polyscope_mesh()->addEdgeScalarQuantity("toFlip", *to_flip);
+    rx.get_polyscope_mesh()->addFaceScalarQuantity("fAttr", *f_attr);
+    {
+        uint32_t pid      = 0;
+        auto     ps_patch = rx.render_patch(pid);
+        rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(ps_range);
+        rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(ps_range);
+        rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(ps_range);
+    }
+    {
+        uint32_t pid      = 1;
+        auto     ps_patch = rx.render_patch(pid);
+        rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(ps_range);
+        rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(ps_range);
+        rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(ps_range);
+    }
 #endif
 
 
@@ -205,7 +240,7 @@ TEST(RXMeshDynamic, Cavity)
         random_flips<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
-            rx.get_context(), *coords, *to_flip);
+            rx.get_context(), *coords, *to_flip, *f_attr, *e_attr, *v_attr);
     }
 
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -214,6 +249,9 @@ TEST(RXMeshDynamic, Cavity)
 
     coords->move(DEVICE, HOST);
     to_flip->move(DEVICE, HOST);
+    f_attr->move(DEVICE, HOST);
+    e_attr->move(DEVICE, HOST);
+    v_attr->move(DEVICE, HOST);
 
     EXPECT_EQ(num_vertices, rx.get_num_vertices());
     EXPECT_EQ(num_edges, rx.get_num_edges());
@@ -245,6 +283,9 @@ TEST(RXMeshDynamic, Cavity)
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(*coords);
     ps_mesh->addEdgeScalarQuantity("toFlip", *to_flip);
+    ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
+    ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
+    ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
     polyscope::show();
 #endif
 }
