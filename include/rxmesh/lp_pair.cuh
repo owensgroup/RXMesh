@@ -10,7 +10,7 @@ namespace rxmesh {
  * unsigned int where the high 16 bits store the local index within the patch
  * and the low 16 bits stores the local index in owner patch along with the
  * owner patch id. These lower 16 bits are actually divided into high 4 bits
- * that store an index into PatchStash and high 12 bits that stores the index
+ * that store an index into PatchStash and low 12 bits that stores the index
  * into this owner patch
  * So, the 32-bit stored in this struct would look like
  *

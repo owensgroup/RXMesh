@@ -226,11 +226,11 @@ struct LPHashTable
     __host__ __device__ __inline__ bool insert(LPPair           pair,
                                                volatile LPPair* table = nullptr)
     {
-
         auto     bucket_id      = m_hasher0(pair.key()) % m_capacity;
         uint16_t cuckoo_counter = 0;
 
         do {
+            const auto input_key = pair.key();
 #ifdef __CUDA_ARCH__
             if (table != nullptr) {
                 pair.m_pair =
@@ -250,7 +250,10 @@ struct LPHashTable
             }
 #endif
 
-            if (pair.m_pair == INVALID32) {
+            // compare against initial key to avoid duplicated
+            // i.e., if we are inserting a pair such that its key already
+            // exists, this comparison would allow updating the pair
+            if (pair.is_sentinel() || pair.key() == input_key) {
                 return true;
             } else {
                 auto bucket0 = m_hasher0(pair.key()) % m_capacity;
@@ -273,13 +276,16 @@ struct LPHashTable
             cuckoo_counter++;
         } while (cuckoo_counter < m_max_cuckoo_chains);
 
+        const auto input_key = pair.key();
         for (uint8_t i = 0; i < stash_size; ++i) {
 #ifdef __CUDA_ARCH__
-            if (::atomicCAS(reinterpret_cast<uint32_t*>(m_stash + i),
-                            INVALID32,
-                            pair.m_pair) == INVALID32) {
+            LPPair prv;
+            prv.m_pair = ::atomicCAS(reinterpret_cast<uint32_t*>(m_stash + i),
+                                     INVALID32,
+                                     pair.m_pair);
+            if (prv.is_sentinel() || prv.key() == input_key) {
 #else
-            if (m_stash[i].is_sentinel()) {
+            if (m_stash[i].is_sentinel() || m_stash[i].key() == input_key) {
                 m_stash[i] = pair;
 #endif
                 return true;
