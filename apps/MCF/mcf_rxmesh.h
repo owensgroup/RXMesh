@@ -227,6 +227,7 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
     // output to obj
     // rxmesh.export_obj("mcf_rxmesh.obj", *X);
+    rxmesh.export_obj("mcf_rxmesh_cg.obj", *X);
 
     // Verify
     const T tol    = 0.001;
