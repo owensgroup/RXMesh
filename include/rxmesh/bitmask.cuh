@@ -179,6 +179,18 @@ struct Bitmask
         detail::bitmask_flip_bit(bit, m_bitmask, is_atomic);
     }
 
+    /**
+     * @brief try to set a bit mask. if the bit was not set, returns true which
+     * means that this thread has successfully set the bit. if the bit was set
+     * already, then return false means that this thread did not set the bit. 
+     * On device, this function is done atomically 
+     * @param bit the bit position
+     */
+    __device__ __host__ __inline__ bool try_set(const uint16_t bit)
+    {
+        assert(bit < size());
+        return detail::bitmask_try_set_bit(bit, m_bitmask);
+    }
 
     /**
      * @brief check if bit is set

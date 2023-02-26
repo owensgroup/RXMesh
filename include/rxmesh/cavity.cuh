@@ -219,25 +219,29 @@ struct Cavity
         // one element
         if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                       cop == CavityOp::VE || cop == CavityOp::VF) {
+            assert(m_s_active_mask_v(handle.local_id()));
+            assert(m_s_owned_mask_v(handle.local_id()));
             m_s_cavity_id_v[handle.local_id()] = id;
         }
 
         if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
                       cop == CavityOp::EE || cop == CavityOp::EF) {
+            assert(m_s_active_mask_e(handle.local_id()));
+            assert(m_s_owned_mask_e(handle.local_id()));
             m_s_cavity_id_e[handle.local_id()] = id;
         }
 
 
         if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
                       cop == CavityOp::FE || cop == CavityOp::FF) {
+            assert(m_s_active_mask_f(handle.local_id()));
+            assert(m_s_owned_mask_f(handle.local_id()));
             m_s_cavity_id_f[handle.local_id()] = id;
         }
     }
 
     /**
      * @brief delete elements by applying the cop operation
-     * TODO we probably need to clear any shared memory used for queries during
-     * adding elements to cavity
      */
     __device__ __inline__ bool process(cooperative_groups::thread_block& block,
                                        ShmemAllocator& shrd_alloc)
@@ -249,15 +253,19 @@ struct Cavity
         }
 
         // make sure the timestamp is the same after locking the patch
-        if (!is_same_timestamp(block)) {
-            push();
-            return false;
-        }
+        // if (!is_same_timestamp(block)) {
+        //    push();
+        //    return false;
+        //}
 
         // load mesh FE and EV
         load_mesh_async(block, shrd_alloc);
         block.sync();
 
+        // need to make sure we have the same timestamp since if it is different
+        // we could just quite and save a lot of work but also since the
+        // topology could have changed and now when we operate on it, we may
+        // encounter errors/illegal memory read/failed assertions
         if (!is_same_timestamp(block)) {
             push();
             return false;
@@ -282,13 +290,8 @@ struct Cavity
 
         // Clear bitmask for elements in the (active) cavity to indicate that
         // they are deleted (but only in shared memory)
-
-        clear_bitmask_if_in_cavity(
-            m_s_active_mask_v, m_s_cavity_id_v, m_s_num_vertices[0]);
-        clear_bitmask_if_in_cavity(
-            m_s_active_mask_e, m_s_cavity_id_e, m_s_num_edges[0]);
-        clear_bitmask_if_in_cavity(
-            m_s_active_mask_f, m_s_cavity_id_f, m_s_num_faces[0]);
+        // TODO optimize this based on CavityOp
+        clear_bitmask_if_in_cavity();
         block.sync();
 
         // construct cavity boundary loop
@@ -305,9 +308,7 @@ struct Cavity
         }
         block.sync();
 
-        change_vertex_ownership(block);
-        change_edge_ownership(block);
-        change_face_ownership(block);
+        change_ownership(block);
         block.sync();
 
         post_migration_cleanup(block);
@@ -351,7 +352,7 @@ struct Cavity
     {
         for (uint16_t e = threadIdx.x; e < m_s_num_edges[0];
              e += blockThreads) {
-            if (!m_s_active_mask_e(e)) {
+            if (m_s_active_mask_e(e)) {
 
                 // vertices tag
                 const uint16_t v0 = m_s_ev[2 * e + 0];
@@ -466,19 +467,33 @@ struct Cavity
         }
     }
 
+
+    /**
+     * @brief clear the bit corresponding to an element in the active bitmask if
+     * the element is in a cavity. Apply this for vertices, edges and face
+     */
+    __device__ __inline__ void clear_bitmask_if_in_cavity()
+    {
+        clear_bitmask_if_in_cavity(
+            m_s_active_mask_v, m_s_cavity_id_v, m_s_num_vertices[0]);
+        clear_bitmask_if_in_cavity(
+            m_s_active_mask_e, m_s_cavity_id_e, m_s_num_edges[0]);
+        clear_bitmask_if_in_cavity(
+            m_s_active_mask_f, m_s_cavity_id_f, m_s_num_faces[0]);
+    }
     /**
      * @brief clear the bit corresponding to an element in the bitmask if the
      * element is in a cavity
      */
     __device__ __inline__ void clear_bitmask_if_in_cavity(
-        Bitmask&        bitmask,
-        const uint16_t* cavity_id,
-        const uint16_t  size)
+        Bitmask&        active_bitmask,
+        const uint16_t* element_cavity_id,
+        const uint16_t  num_elements)
     {
-        for (uint16_t b = threadIdx.x; b < size; b += blockThreads) {
-            if (cavity_id[b] != INVALID16) {
-                bitmask.reset(b, true);
-                assert(!bitmask(b));
+        for (uint16_t b = threadIdx.x; b < num_elements; b += blockThreads) {
+            if (element_cavity_id[b] != INVALID16) {
+                active_bitmask.reset(b, true);
+                assert(!active_bitmask(b));
             }
         }
     }
@@ -490,6 +505,10 @@ struct Cavity
     __device__ __inline__ void construct_cavities_edge_loop(
         cooperative_groups::thread_block& block)
     {
+
+        assert(itemPerThread * blockThreads >= m_s_num_faces[0],
+               "Cavity::construct_cavities_edge_loop() increase itemPerThread");
+
         // Trace faces on the border of the cavity i.e., having an edge on the
         // cavity boundary loop. These faces will add how many of their edges
         // are on the boundary loop. We then do scan and then populate the
@@ -596,6 +615,8 @@ struct Cavity
 
             // Specify the starting edge of the cavity before sorting everything
             // TODO this may be tuned for different CavityOp's
+            assert(cop == CavityOp::E);
+
             uint16_t cavity_edge_src_vertex;
             for (uint16_t e = 0; e < m_s_num_edges[0]; ++e) {
                 if (m_s_cavity_id_e[e] == c) {
@@ -962,19 +983,32 @@ struct Cavity
     {
 
         for (uint16_t i = 0; i < num_elements; ++i) {
-            if (element_cavity_id[i] == cavity_id) {
-                element_cavity_id[i] = INVALID16;
+            if (atomicCAS(element_cavity_id + i, cavity_id, INVALID16) ==
+                cavity_id) {
                 return i;
             }
         }
 
-        for (uint16_t i = 0; i < num_elements; ++i) {
-            if (!active_bitmask(i)) {
+        for (uint16_t i = 0; i < num_elements; ++i) {            
+            if (active_bitmask.try_set(i)) {
                 return i;
-            }
+            }            
         }
 
         return INVALID16;
+    }
+
+
+    /**
+     * @brief change vertices, edges, and faces ownership as marked in
+     * m_s_ownership_change_mask
+     */
+    __device__ __inline__ void change_ownership(
+        cooperative_groups::thread_block& block)
+    {
+        change_vertex_ownership(block);
+        change_edge_ownership(block);
+        change_face_ownership(block);
     }
 
     /**
@@ -1107,6 +1141,14 @@ struct Cavity
      */
     __device__ __inline__ bool migrate(cooperative_groups::thread_block& block)
     {
+        // Some vertices on the boundary of the cavity are owned and other are
+        // not. For owned vertices, edges and faces connected to them exists in
+        // the patch (by definition) and they could be owned or not. For that,
+        // we need to first make sure that these edges and faces are marked in
+        // m_s_ownership_change_mask_e/f.
+        // For not-owned vertices on the cavity boundary, we process them by
+        // first marking them in m_s_migrate_mask_v and then look for their
+        // owned version in the neighbor patches in migrate_from_patch
 
         m_s_ribbonize_v.reset(block);
         m_s_owned_cavity_bdry_v.reset(block);
@@ -1117,6 +1159,7 @@ struct Cavity
         m_s_patches_to_lock_mask.reset(block);
         block.sync();
 
+        // decide which patch to lock
         patches_to_lock(block);
         block.sync();
 
@@ -1189,14 +1232,7 @@ struct Cavity
     __device__ __inline__ void patches_to_lock(
         cooperative_groups::thread_block& block)
     {
-        // Some vertices on the boundary of the cavity are owned and other are
-        // not. For owned vertices, edges and faces connected to them exists in
-        // the patch (by definition) and they could be owned or not. For that,
-        // we need to first make sure that these edges and faces are marked in
-        // m_s_ownership_change_mask_e/f.
-        // For not-owned vertices on the cavity boundary, we process them by
-        // first marking them in m_s_migrate_mask_v and then look for their
-        // owned version in the neighbor patches in migrate_from_patch
+
 
         // first consider owned vertices on the cavity boundary
         for_each_cavity(block, [&](uint16_t c, uint16_t size) {
@@ -2230,13 +2266,13 @@ struct Cavity
     __device__ __inline__ bool is_same_timestamp(
         cooperative_groups::thread_block& block) const
     {
-        __shared__ uint32_t s_init_timestamp;
+        __shared__ uint32_t s_current_timestamp;
         if (threadIdx.x == 0) {
-            s_init_timestamp = atomic_read(m_patch_info.timestamp);
+            s_current_timestamp = atomic_read(m_patch_info.timestamp);
         }
         block.sync();
 
-        return s_init_timestamp == m_init_timestamp;
+        return s_current_timestamp == m_init_timestamp;
     }
 
     int *m_s_num_cavities, *m_s_cavity_size;
