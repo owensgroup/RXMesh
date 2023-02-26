@@ -288,15 +288,15 @@ struct SparseMatrix
         return m_nnz;
     }
 
-    __device__ IndexT get_row_ptr_at(IndexT idx) const {
+    __device__ IndexT& get_row_ptr_at(IndexT idx) const {
         return m_d_row_ptr[idx];
     }
 
-    __device__ IndexT get_col_idx_at(IndexT idx) const {
+    __device__ IndexT& get_col_idx_at(IndexT idx) const {
         return m_d_col_idx[idx];
     }
 
-    __device__ IndexT get_val_at(IndexT idx) const {
+    __device__ T& get_val_at(IndexT idx) const {
         return m_d_val[idx];
     }
 
