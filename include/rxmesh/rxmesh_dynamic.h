@@ -47,13 +47,12 @@ class RXMeshDynamic : public RXMeshStatic
                             const bool               oriented = false) const
     {
 
-        launch_box.blocks         = this->m_num_patches;
-        launch_box.smem_bytes_dyn = 0;
+        launch_box.blocks = this->m_num_patches;
 
-
+        size_t static_shmem = 0;
         for (auto o : op) {
-            launch_box.smem_bytes_dyn =
-                std::max(launch_box.smem_bytes_dyn,
+            static_shmem =
+                std::max(static_shmem,
                          this->calc_shared_memory<blockThreads>(o, oriented));
         }
 
@@ -70,9 +69,9 @@ class RXMeshDynamic : public RXMeshStatic
             static_cast<float>(this->m_max_faces_per_patch));
 
         // To load EV and FE
-        uint32_t dyn_shmem = 3 * face_cap * sizeof(uint16_t) +
-                             2 * edge_cap * sizeof(uint16_t) +
-                             2 * ShmemAllocator::default_alignment;
+        size_t dyn_shmem = 3 * face_cap * sizeof(uint16_t) +
+                           2 * edge_cap * sizeof(uint16_t) +
+                           2 * ShmemAllocator::default_alignment;
 
         // cavity ID of fake deleted elements
         dyn_shmem += vertex_cap * sizeof(uint16_t) +
@@ -109,8 +108,9 @@ class RXMeshDynamic : public RXMeshStatic
                 blockThreads);
         }
 
-        // TODO we can do better than this
-        launch_box.smem_bytes_dyn += dyn_shmem;
+        // since we are either doing static query or dynamic changes,
+        // shared memory is the max of both
+        launch_box.smem_bytes_dyn = std::max(dyn_shmem, static_shmem);
 
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,
