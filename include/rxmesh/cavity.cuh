@@ -989,10 +989,10 @@ struct Cavity
             }
         }
 
-        for (uint16_t i = 0; i < num_elements; ++i) {            
+        for (uint16_t i = 0; i < num_elements; ++i) {
             if (active_bitmask.try_set(i)) {
                 return i;
-            }            
+            }
         }
 
         return INVALID16;
@@ -1006,35 +1006,47 @@ struct Cavity
     __device__ __inline__ void change_ownership(
         cooperative_groups::thread_block& block)
     {
-        change_vertex_ownership(block);
-        change_edge_ownership(block);
-        change_face_ownership(block);
+        change_ownership<VertexHandle>(block,
+                                       m_s_num_vertices[0],
+                                       m_s_ownership_change_mask_v,
+                                       m_s_owned_mask_v);
+
+        change_ownership<EdgeHandle>(block,
+                                     m_s_num_edges[0],
+                                     m_s_ownership_change_mask_e,
+                                     m_s_owned_mask_e);
+
+        change_ownership<FaceHandle>(block,
+                                     m_s_num_faces[0],
+                                     m_s_ownership_change_mask_f,
+                                     m_s_owned_mask_f);
     }
 
     /**
-     * @brief change ownership for vertices marked in
-     * m_s_ownership_change_mask_v. We can remove these vertices from the
-     * hashtable stored in shared memory, but we delay this (do it in cleanup)
-     * since we need to get these vertices' original owner patch in
-     * update_attributes()
+     * @brief change ownership for mesh elements of type HandleT marked in
+     * ownership_change. We can remove these mesh elements from the
+     * hashtable, but we delay this (do it in cleanup) since we need to get
+     * these mesh elements' original owner patch in update_attributes()
      */
-    __device__ __inline__ void change_vertex_ownership(
-        cooperative_groups::thread_block& block)
+    template <typename HandleT>
+    __device__ __inline__ void change_ownership(
+        cooperative_groups::thread_block& block,
+        const uint16_t                    num_elements,
+        const Bitmask&                    s_ownership_change,
+        Bitmask&                          s_owned_bitmask)
     {
+        for (uint32_t vp = threadIdx.x; vp < num_elements; vp += blockThreads) {
 
-        for (uint32_t vp = threadIdx.x; vp < m_s_num_vertices[0];
-             vp += blockThreads) {
+            if (s_ownership_change(vp)) {
 
-            if (m_s_ownership_change_mask_v(vp)) {
+                auto p_lp = m_patch_info.get_lp<HandleT>().find(vp);
 
-                auto p_lp = m_patch_info.lp_v.find(vp);
-
-                // m_patch_info.lp_v.remove(vp);
+                // m_patch_info.get_lp<HandleT>().remove(vp);
 
                 const uint32_t q  = m_patch_info.patch_stash.get_patch(p_lp);
                 const uint16_t qv = p_lp.local_id_in_owner_patch();
 
-                m_s_owned_mask_v.set(vp, true);
+                s_owned_bitmask.set(vp, true);
 
                 const uint8_t stash_id =
                     m_context.m_patches_info[q].patch_stash.insert_patch(
@@ -1043,91 +1055,12 @@ struct Cavity
                 LPPair q_lp(qv, vp, stash_id);
 
                 detail::bitmask_clear_bit(
-                    qv, m_context.m_patches_info[q].owned_mask_v, true);
+                    qv,
+                    m_context.m_patches_info[q].get_owned_mask<HandleT>(),
+                    true);
 
-                if (!m_context.m_patches_info[q].lp_v.insert(q_lp)) {
-                    assert(false);
-                }
-            }
-        }
-    }
-
-
-    /**
-     * @brief change ownership for edges marked in
-     * m_s_ownership_change_mask_e. We can remove these edges from the
-     * hashtable stored in shared memory, but we delay this (do it in cleanup)
-     * since we need to get these edges' original owner patch in
-     * update_attributes()
-     */
-    __device__ __inline__ void change_edge_ownership(
-        cooperative_groups::thread_block& block)
-    {
-
-        for (uint32_t ep = threadIdx.x; ep < m_s_num_edges[0];
-             ep += blockThreads) {
-
-            if (m_s_ownership_change_mask_e(ep)) {
-                auto p_lp = m_patch_info.lp_e.find(ep);
-
-                // m_patch_info.lp_e.remove(ep);
-
-                const uint32_t q  = m_patch_info.patch_stash.get_patch(p_lp);
-                const uint16_t qe = p_lp.local_id_in_owner_patch();
-
-                m_s_owned_mask_e.set(ep, true);
-
-                const uint8_t stash_id =
-                    m_context.m_patches_info[q].patch_stash.insert_patch(
-                        m_patch_info.patch_id);
-
-                LPPair q_lp(qe, ep, stash_id);
-
-                detail::bitmask_clear_bit(
-                    qe, m_context.m_patches_info[q].owned_mask_e, true);
-
-                if (!m_context.m_patches_info[q].lp_e.insert(q_lp)) {
-                    assert(false);
-                }
-            }
-        }
-    }
-
-
-    /**
-     * @brief change ownership for faces marked in
-     * m_s_ownership_change_mask_f. We can remove these faces from the
-     * hashtable stored in shared memory, but we delay this (do it in cleanup)
-     * since we need to get these faces' original owner patch in
-     * update_attributes()
-     */
-    __device__ __inline__ void change_face_ownership(
-        cooperative_groups::thread_block& block)
-    {
-
-        for (uint32_t fp = threadIdx.x; fp < m_s_num_faces[0];
-             fp += blockThreads) {
-
-            if (m_s_ownership_change_mask_f(fp)) {
-                auto p_lp = m_patch_info.lp_f.find(fp);
-
-                // m_patch_info.lp_f.remove(fp);
-
-                const uint32_t q  = m_patch_info.patch_stash.get_patch(p_lp);
-                const uint16_t qf = p_lp.local_id_in_owner_patch();
-
-                m_s_owned_mask_f.set(fp, true);
-
-                const uint8_t stash_id =
-                    m_context.m_patches_info[q].patch_stash.insert_patch(
-                        m_patch_info.patch_id);
-
-                LPPair q_lp(qf, fp, stash_id);
-
-                detail::bitmask_clear_bit(
-                    qf, m_context.m_patches_info[q].owned_mask_f, true);
-
-                if (!m_context.m_patches_info[q].lp_f.insert(q_lp)) {
+                if (!m_context.m_patches_info[q].get_lp<HandleT>().insert(
+                        q_lp)) {
                     assert(false);
                 }
             }

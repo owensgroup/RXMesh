@@ -191,6 +191,26 @@ struct ALIGN(16) PatchInfo
         }
     }
 
+    /**
+     * @brief return the owned mask corresponding to the handle type
+     * @tparam HandleT
+     */
+    template <typename HandleT>
+    __device__ __host__ __inline__ uint32_t* get_owned_mask()
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return owned_mask_v;
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return owned_mask_e;
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return owned_mask_f;
+        }
+    }
+
 
     /**
      * @brief return LP hashtable corresponding to the handle type
