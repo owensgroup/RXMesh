@@ -1,9 +1,5 @@
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 
-if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-  set(CMAKE_CUDA_ARCHITECTURES 75)
-endif()
-
 project(RXMesh 
         VERSION 0.2.1 
         LANGUAGES C CXX CUDA)
@@ -11,6 +7,7 @@ project(RXMesh
 
 set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
 set(USE_POLYSCOPE "OFF")
+
 if(${USE_POLYSCOPE})
 	message(STATUS "Polyscope is enabled")
 else()

@@ -258,7 +258,7 @@ struct SparseMatrix
         return m_d_val[get_val_idx(row_v, col_v)];
     }
 
-    __device__ T& direct_access(IndexT x, IndexT y)
+    __device__ T& operator()(const IndexT x, const IndexT y)
     {
         const IndexT start = m_d_row_ptr[x];
         const IndexT end   = m_d_row_ptr[x + 1];
@@ -269,6 +269,35 @@ struct SparseMatrix
             }
         }
         assert(1 != 1);
+    }
+
+    __device__ T& operator()(const IndexT x, const IndexT y) const
+    {
+        const IndexT start = m_d_row_ptr[x];
+        const IndexT end   = m_d_row_ptr[x + 1];
+
+        for (IndexT i = start; i < end; ++i) {
+            if (m_d_col_idx[i] == y) {
+                return m_d_val[i];
+            }
+        }
+        assert(1 != 1);
+    }
+
+    __host__ __device__ IndexT& get_nnz() const {
+        return m_nnz;
+    }
+
+    __device__ IndexT get_row_ptr_at(IndexT idx) const {
+        return m_d_row_ptr[idx];
+    }
+
+    __device__ IndexT get_col_idx_at(IndexT idx) const {
+        return m_d_col_idx[idx];
+    }
+
+    __device__ IndexT get_val_at(IndexT idx) const {
+        return m_d_val[idx];
     }
 
     void free()
@@ -585,7 +614,7 @@ struct SparseMatrix
                 "for "
                 "Solver::LU");
         }
-        cudaDeviceSynchronize();
+        CUDA_ERROR(cudaDeviceSynchronize());
 
         if (0 <= singularity) {
             RXMESH_WARN(
@@ -595,6 +624,7 @@ struct SparseMatrix
         }
     }
 
+   private:
     const Context        m_context;
     cusparseHandle_t     m_cusparse_handle;
     cusolverSpHandle_t   m_cusolver_sphandle;
