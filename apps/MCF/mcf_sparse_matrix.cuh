@@ -219,10 +219,6 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
                                             Arg.use_uniform_laplace,
                                             Arg.time_step);
 
-    printf("use_uniform_laplace: %d, time_step: %f\n",
-           Arg.use_uniform_laplace,
-           Arg.time_step);
-
     // Solving the linear system
     A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NONE);
 
@@ -243,10 +239,6 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
             rxmesh.get_context(), *smooth_X, A_mat, X_mat);
     smooth_X->move(rxmesh::DEVICE, rxmesh::HOST);
     truth_X->move(rxmesh::DEVICE, rxmesh::HOST);
-
-    printf("use_uniform_laplace: %d, time_step: %f\n",
-           Arg.use_uniform_laplace,
-           Arg.time_step);
 
     rxmesh.export_obj("mcf_rxmesh_solver.obj", *smooth_X);
 
@@ -274,11 +266,6 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
             }
         }
     });
-
-    auto ps_mesh = rxmesh.get_polyscope_mesh();
-    ps_mesh->addVertexColorQuantity("smooth_x", *smooth_X);
-    ps_mesh->addVertexColorQuantity("smooth_om", *truth_X);
-    polyscope::show();
 
     EXPECT_TRUE(passed);
 }
