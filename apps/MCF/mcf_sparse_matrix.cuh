@@ -46,6 +46,10 @@ __global__ static void mcf_B_setup(const rxmesh::Context            context,
             B_mat(row_index, 0) = coords(p_id, 0) / v_weight;
             B_mat(row_index, 1) = coords(p_id, 1) / v_weight;
             B_mat(row_index, 2) = coords(p_id, 2) / v_weight;
+            printf("check: %f, %f, %f\n",
+                   B_mat(row_index, 0),
+                   B_mat(row_index, 1),
+                   B_mat(row_index, 2));
         }
     };
 
@@ -84,8 +88,7 @@ __global__ static void mcf_A_X_setup(
         uint32_t r_patch_id = r_ids.first;
         uint16_t r_local_id = r_ids.second;
 
-        uint32_t row_index =
-            A_mat.m_context.m_vertex_prefix[r_patch_id] + r_local_id;
+        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
 
         // set up initial X matrix
         X_mat(row_index, 0) = coords(p_id, 0);
@@ -158,16 +161,13 @@ __global__ static void update_smooth_result(const rxmesh::Context      context,
         uint32_t r_patch_id = r_ids.first;
         uint16_t r_local_id = r_ids.second;
 
-        uint32_t row_index =
-            A_mat.m_context.m_vertex_prefix[r_patch_id] + r_local_id;
+        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
 
         // printf("check: %f\n", X_mat(row_index, 0));
 
         smooth_X(v_id, 0) = X_mat(row_index, 0);
         smooth_X(v_id, 1) = X_mat(row_index, 1);
         smooth_X(v_id, 2) = X_mat(row_index, 2);
-
-        // printf("s_check: %f\n", smooth_X(v_id, 0));
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -199,6 +199,8 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
                                        launch_box_B.num_threads,
                                        launch_box_B.smem_bytes_dyn>>>(
         rxmesh.get_context(), *coords, B_mat, Arg.use_uniform_laplace);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
 
     printf("use_uniform_laplace: %d, time_step: %f\n",
            Arg.use_uniform_laplace,
