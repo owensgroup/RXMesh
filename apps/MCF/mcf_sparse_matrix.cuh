@@ -84,8 +84,7 @@ __global__ static void mcf_A_X_setup(
         uint32_t r_patch_id = r_ids.first;
         uint16_t r_local_id = r_ids.second;
 
-        uint32_t row_index =
-            A_mat.m_context.m_vertex_prefix[r_patch_id] + r_local_id;
+        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
 
         // set up initial X matrix
         X_mat(row_index, 0) = coords(p_id, 0);
@@ -158,8 +157,7 @@ __global__ static void update_smooth_result(const rxmesh::Context      context,
         uint32_t r_patch_id = r_ids.first;
         uint16_t r_local_id = r_ids.second;
 
-        uint32_t row_index =
-            A_mat.m_context.m_vertex_prefix[r_patch_id] + r_local_id;
+        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
 
         // printf("check: %f\n", X_mat(row_index, 0));
 
