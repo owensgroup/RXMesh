@@ -49,7 +49,7 @@ void init_PR(rxmesh::RXMeshStatic&             rxmesh,
 }
 
 template <typename T>
-void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
+void mcf_rxmesh_cg(rxmesh::RXMeshStatic&              rxmesh,
                 const std::vector<std::vector<T>>& ground_truth)
 {
     using namespace rxmesh;
@@ -118,8 +118,6 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
                               launch_box_init_B.num_threads,
                               launch_box_init_B.smem_bytes_dyn>>>(
         rxmesh.get_context(), *X, *B, Arg.use_uniform_laplace);
-
-    CUDA_ERROR(cudaDeviceSynchronize());
 
     // CG scalars
     T alpha(0), beta(0), delta_new(0), delta_old(0);
