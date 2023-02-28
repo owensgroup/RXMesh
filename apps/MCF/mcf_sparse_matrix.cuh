@@ -28,7 +28,7 @@ __global__ static void mcf_B_setup(const rxmesh::Context            context,
         } else {
             T v_weight = 0;
 
-            //this is the last vertex in the one-ring (before r_id)
+            // this is the last vertex in the one-ring (before r_id)
             VertexHandle q_id = iter.back();
 
             for (uint32_t v = 0; v < iter.size(); ++v) {
@@ -171,8 +171,8 @@ __global__ static void update_smooth_result(const rxmesh::Context      context,
 }
 
 template <typename T>
-void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
-                       const std::vector<std::vector<T>>& ground_truth)
+void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rxmesh,
+                              const std::vector<std::vector<T>>& ground_truth)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -190,8 +190,10 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
 
     // B set up
     LaunchBox<blockThreads> launch_box_B;
-    rxmesh.prepare_launch_box(
-        {Op::VV}, launch_box_B, (void*)mcf_B_setup<float, blockThreads>, !Arg.use_uniform_laplace);
+    rxmesh.prepare_launch_box({Op::VV},
+                              launch_box_B,
+                              (void*)mcf_B_setup<float, blockThreads>,
+                              !Arg.use_uniform_laplace);
 
     mcf_B_setup<float, blockThreads><<<launch_box_B.blocks,
                                        launch_box_B.num_threads,
@@ -202,8 +204,10 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
 
     // A and X set up
     LaunchBox<blockThreads> launch_box_A_X;
-    rxmesh.prepare_launch_box(
-        {Op::VV}, launch_box_A_X, (void*)mcf_A_X_setup<float, blockThreads>, !Arg.use_uniform_laplace);
+    rxmesh.prepare_launch_box({Op::VV},
+                              launch_box_A_X,
+                              (void*)mcf_A_X_setup<float, blockThreads>,
+                              !Arg.use_uniform_laplace);
 
     mcf_A_X_setup<float, blockThreads>
         <<<launch_box_A_X.blocks,
@@ -215,7 +219,7 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
                                             Arg.use_uniform_laplace,
                                             Arg.time_step);
 
-    // Solving the linear system
+    // Solving the linear system using chol factorization and no reordering
     A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NONE);
 
     auto smooth_X =
