@@ -106,11 +106,11 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     rxmesh.prepare_launch_box({rxmesh::Op::VV},
                               launch_box_init_B,
                               (void*)init_B<T, blockThreads>,
-                              true);
+                              !Arg.use_uniform_laplace);
     rxmesh.prepare_launch_box({rxmesh::Op::VV},
                               launch_box_matvec,
                               (void*)rxmesh_matvec<T, blockThreads>,
-                              true);
+                              !Arg.use_uniform_laplace);
 
 
     // init kernel to initialize RHS (B)
@@ -229,7 +229,6 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
 
     // output to obj
     // rxmesh.export_obj("mcf_rxmesh.obj", *X);
-    rxmesh.export_obj("mcf_rxmesh_cg.obj", *X);
 
     // Verify
     const T tol    = 0.001;

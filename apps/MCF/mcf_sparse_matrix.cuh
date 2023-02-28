@@ -26,30 +26,26 @@ __global__ static void mcf_B_setup(const rxmesh::Context            context,
             B_mat(row_index, 1) = coords(p_id, 1) * valence;
             B_mat(row_index, 2) = coords(p_id, 2) * valence;
         } else {
-            // T v_weight = 0;
+            T v_weight = 0;
 
-            // this is the last vertex in the one-ring (before r_id)
-            // VertexHandle q_id = iter.back();
+            //this is the last vertex in the one-ring (before r_id)
+            VertexHandle q_id = iter.back();
 
-            // for (uint32_t v = 0; v < iter.size(); ++v) {
-            //     // the current one ring vertex
-            //     VertexHandle r_id = iter[v];
+            for (uint32_t v = 0; v < iter.size(); ++v) {
+                // the current one ring vertex
+                VertexHandle r_id = iter[v];
 
-            //     T tri_area = partial_voronoi_area(p_id, q_id, r_id, coords);
+                T tri_area = partial_voronoi_area(p_id, q_id, r_id, coords);
 
-            //     v_weight += (tri_area > 0) ? tri_area : 0.0;
+                v_weight += (tri_area > 0) ? tri_area : 0.0;
 
-            //     q_id = r_id;
-            // }
-            // v_weight = 0.5 / v_weight;
+                q_id = r_id;
+            }
+            v_weight = 0.5 / v_weight;
 
-            B_mat(row_index, 0) = coords(p_id, 0); //  / v_weight;
-            B_mat(row_index, 1) = coords(p_id, 1); //  / v_weight;
-            B_mat(row_index, 2) = coords(p_id, 2); //  / v_weight;
-            // printf("check: %f, %f, %f\n",
-            //        B_mat(row_index, 0),
-            //        B_mat(row_index, 1),
-            //        B_mat(row_index, 2));
+            B_mat(row_index, 0) = coords(p_id, 0) / v_weight;
+            B_mat(row_index, 1) = coords(p_id, 1) / v_weight;
+            B_mat(row_index, 2) = coords(p_id, 2) / v_weight;
         }
     };
 
@@ -163,8 +159,6 @@ __global__ static void update_smooth_result(const rxmesh::Context      context,
 
         uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
 
-        // printf("check: %f\n", X_mat(row_index, 0));
-
         smooth_X(v_id, 0) = X_mat(row_index, 0);
         smooth_X(v_id, 1) = X_mat(row_index, 1);
         smooth_X(v_id, 2) = X_mat(row_index, 2);
@@ -197,7 +191,7 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
     // B set up
     LaunchBox<blockThreads> launch_box_B;
     rxmesh.prepare_launch_box(
-        {Op::VV}, launch_box_B, (void*)mcf_B_setup<float, blockThreads>);
+        {Op::VV}, launch_box_B, (void*)mcf_B_setup<float, blockThreads>, !Arg.use_uniform_laplace);
 
     mcf_B_setup<float, blockThreads><<<launch_box_B.blocks,
                                        launch_box_B.num_threads,
@@ -209,7 +203,7 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
     // A and X set up
     LaunchBox<blockThreads> launch_box_A_X;
     rxmesh.prepare_launch_box(
-        {Op::VV}, launch_box_A_X, (void*)mcf_A_X_setup<float, blockThreads>);
+        {Op::VV}, launch_box_A_X, (void*)mcf_A_X_setup<float, blockThreads>, !Arg.use_uniform_laplace);
 
     mcf_A_X_setup<float, blockThreads>
         <<<launch_box_A_X.blocks,
