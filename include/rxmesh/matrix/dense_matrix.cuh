@@ -43,6 +43,7 @@ struct DenseMatrix
 
     __device__ T& operator()(const uint32_t row, const uint32_t col)
     {
+        //assert(col < m_col_size);
         return m_d_val[col * m_row_size + row];
     }
 

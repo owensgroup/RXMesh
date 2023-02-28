@@ -26,30 +26,30 @@ __global__ static void mcf_B_setup(const rxmesh::Context            context,
             B_mat(row_index, 1) = coords(p_id, 1) * valence;
             B_mat(row_index, 2) = coords(p_id, 2) * valence;
         } else {
-            T v_weight = 0;
+            // T v_weight = 0;
 
             // this is the last vertex in the one-ring (before r_id)
-            VertexHandle q_id = iter.back();
+            // VertexHandle q_id = iter.back();
 
-            for (uint32_t v = 0; v < iter.size(); ++v) {
-                // the current one ring vertex
-                VertexHandle r_id = iter[v];
+            // for (uint32_t v = 0; v < iter.size(); ++v) {
+            //     // the current one ring vertex
+            //     VertexHandle r_id = iter[v];
 
-                T tri_area = partial_voronoi_area(p_id, q_id, r_id, coords);
+            //     T tri_area = partial_voronoi_area(p_id, q_id, r_id, coords);
 
-                v_weight += (tri_area > 0) ? tri_area : 0.0;
+            //     v_weight += (tri_area > 0) ? tri_area : 0.0;
 
-                q_id = r_id;
-            }
-            v_weight = 0.5 / v_weight;
+            //     q_id = r_id;
+            // }
+            // v_weight = 0.5 / v_weight;
 
-            B_mat(row_index, 0) = coords(p_id, 0) / v_weight;
-            B_mat(row_index, 1) = coords(p_id, 1) / v_weight;
-            B_mat(row_index, 2) = coords(p_id, 2) / v_weight;
-            printf("check: %f, %f, %f\n",
-                   B_mat(row_index, 0),
-                   B_mat(row_index, 1),
-                   B_mat(row_index, 2));
+            B_mat(row_index, 0) = coords(p_id, 0); //  / v_weight;
+            B_mat(row_index, 1) = coords(p_id, 1); //  / v_weight;
+            B_mat(row_index, 2) = coords(p_id, 2); //  / v_weight;
+            // printf("check: %f, %f, %f\n",
+            //        B_mat(row_index, 0),
+            //        B_mat(row_index, 1),
+            //        B_mat(row_index, 2));
         }
     };
 
@@ -190,6 +190,10 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
     DenseMatrix<float>  X_mat(num_vertices, 3);
     DenseMatrix<float>  B_mat(num_vertices, 3);
 
+    printf("use_uniform_laplace: %d, time_step: %f\n",
+           Arg.use_uniform_laplace,
+           Arg.time_step);
+
     // B set up
     LaunchBox<blockThreads> launch_box_B;
     rxmesh.prepare_launch_box(
@@ -201,10 +205,6 @@ void mcf_rxmesh_solver(rxmesh::RXMeshStatic&              rxmesh,
         rxmesh.get_context(), *coords, B_mat, Arg.use_uniform_laplace);
 
     CUDA_ERROR(cudaDeviceSynchronize());
-
-    printf("use_uniform_laplace: %d, time_step: %f\n",
-           Arg.use_uniform_laplace,
-           Arg.time_step);
 
     // A and X set up
     LaunchBox<blockThreads> launch_box_A_X;
