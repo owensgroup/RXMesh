@@ -43,5 +43,10 @@ __global__ static void mcf_A_B_setup(
         A_mat(v_id, v_id) = v_weight + time_step * sum_e_weight;
     };
 
-    query_block_dispatcher<Op::VV, blockThreads>(context, init_lambda);
+    auto                block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
 }
+
+void mcf_rxmesh_solver() {}

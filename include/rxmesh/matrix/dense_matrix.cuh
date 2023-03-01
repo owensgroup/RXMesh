@@ -1,6 +1,6 @@
 #pragma once
 #include <vector>
-
+#include "cusparse.h"
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/types.h"
@@ -9,22 +9,22 @@ namespace rxmesh {
 
 // Currently this is device only
 // host/device transormation will be added
+// only col major is supportedF
 template <typename T, typename IndexT = int>
 struct DenseMatrix
 {
     DenseMatrix(IndexT row_size, IndexT col_size)
-        : m_row_size(row_size), m_col_size(col_size)
+        : m_row_size(row_size), m_col_size(col_size), m_dendescr(NULL)
     {
-        cudaMalloc((void**)&m_d_val, bytes());
-        m_is_row_major = false;
-    }
+        CUDA_ERROR(cudaMalloc((void**)&m_d_val, bytes()));
 
-    DenseMatrix(IndexT row_size, IndexT col_size, bool is_row_major)
-        : m_row_size(row_size),
-          m_col_size(col_size),
-          m_is_row_major(is_row_major)
-    {
-        cudaMalloc((void**)&m_d_val, bytes());
+        CUSPARSE_ERROR(cusparseCreateDnMat(&m_dendescr,
+                            m_row_size,
+                            m_col_size,
+                            m_row_size, // leading dim
+                            m_d_val,
+                            CUDA_R_32F,
+                            CUSPARSE_ORDER_COL));
     }
 
     void set_ones()
@@ -38,29 +38,17 @@ struct DenseMatrix
 
     IndexT lead_dim() const
     {
-        if (m_is_row_major) {
-            return m_col_size;
-        } else {
-            return m_row_size;
-        }
+        return m_row_size;
     }
 
     __device__ T& operator()(const uint32_t row, const uint32_t col)
     {
-        if (m_is_row_major) {
-            return m_d_val[row * m_col_size + col];
-        } else {
-            return m_d_val[col * m_row_size + row];
-        }
+        return m_d_val[col * m_row_size + row];
     }
 
     __device__ T& operator()(const uint32_t row, const uint32_t col) const
     {
-        if (m_is_row_major) {
-            return m_d_val[row * m_col_size + col];
-        } else {
-            return m_d_val[col * m_row_size + row];
-        }
+        return m_d_val[col * m_row_size + row];
     }
 
     T* data() const
@@ -68,7 +56,7 @@ struct DenseMatrix
         return m_d_val;
     }
 
-    T* ld_data(const uint32_t ld_idx) const
+    T* col_data(const uint32_t ld_idx) const
     {
         return m_d_val + ld_idx * lead_dim();
     }
@@ -78,16 +66,10 @@ struct DenseMatrix
         return m_row_size * m_col_size * sizeof(T);
     }
 
-    void quick_tanspose_w_ld_trans()
-    {
-        std::swap(m_row_size, m_col_size);
-        m_is_row_major = !(m_is_row_major);
-    }
-
-    bool   m_is_row_major;
-    IndexT m_row_size;
-    IndexT m_col_size;
-    T*     m_d_val;
+    cusparseDnMatDescr_t m_dendescr;
+    IndexT               m_row_size;
+    IndexT               m_col_size;
+    T*                   m_d_val;
 };
 
 }  // namespace rxmesh
