@@ -184,7 +184,7 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rxmesh,
     DenseMatrix<float>  X_mat(num_vertices, 3);
     DenseMatrix<float>  B_mat(num_vertices, 3);
 
-    printf("use_uniform_laplace: %d, time_step: %f\n",
+    RXMESH_INFO("use_uniform_laplace: {}, time_step: {}",
            Arg.use_uniform_laplace,
            Arg.time_step);
 
@@ -224,8 +224,6 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rxmesh,
 
     auto smooth_X =
         rxmesh.add_vertex_attribute<T>("smooth_X", 3, rxmesh::LOCATION_ALL);
-    auto truth_X =
-        rxmesh.add_vertex_attribute<T>("truth_X", 3, rxmesh::LOCATION_ALL);
 
     LaunchBox<blockThreads> launch_box_smooth;
     rxmesh.prepare_launch_box({Op::VV},
@@ -238,7 +236,6 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rxmesh,
            launch_box_smooth.smem_bytes_dyn>>>(
             rxmesh.get_context(), *smooth_X, A_mat, X_mat);
     smooth_X->move(rxmesh::DEVICE, rxmesh::HOST);
-    truth_X->move(rxmesh::DEVICE, rxmesh::HOST);
 
     rxmesh.export_obj("mcf_rxmesh_solver.obj", *smooth_X);
 
@@ -249,18 +246,14 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rxmesh,
         uint32_t v_id = rxmesh.map_to_global(vh);
 
         for (uint32_t i = 0; i < 3; ++i) {
-            (*truth_X)(vh, i) = ground_truth[v_id][i];
             tmp_tol = std::abs(((*smooth_X)(vh, i) - ground_truth[v_id][i]) /
                                ground_truth[v_id][i]);
+
             if (tmp_tol > tol) {
-                printf("val: %f, truth: %f, tol: %f\n",
+                RXMESH_WARN("val: {}, truth: {}, tol: {}\n",
                        (*smooth_X)(vh, i),
                        ground_truth[v_id][i],
                        tmp_tol);
-            }
-
-            if (std::abs(((*smooth_X)(vh, i) - ground_truth[v_id][i]) /
-                         ground_truth[v_id][i]) > tol) {
                 passed = false;
                 break;
             }
