@@ -25,6 +25,14 @@ struct LocalVertexT
     constexpr __device__ __host__ LocalVertexT(uint16_t id) : id(id)
     {
     }
+
+    /**
+     * @brief return the name of the mesh element i.e., vertex
+     */
+    constexpr static __device__ __host__ __inline__ const char* name()
+    {
+        return "Vertex";
+    }
     uint16_t id;
 };
 
@@ -48,6 +56,14 @@ struct LocalEdgeT
     constexpr __device__ __host__ LocalEdgeT(uint16_t id) : id(id)
     {
     }
+
+    /**
+     * @brief return the name of the mesh element i.e., edge
+     */
+    constexpr static __device__ __host__ __inline__ const char* name()
+    {
+        return "Edge";
+    }
     uint16_t id;
 };
 
@@ -70,6 +86,14 @@ struct LocalFaceT
      */
     constexpr __device__ __host__ LocalFaceT(uint16_t id) : id(id)
     {
+    }
+
+    /**
+     * @brief return the name of the mesh element i.e., face
+     */
+    constexpr static __device__ __host__ __inline__ const char* name()
+    {
+        return "Face";
     }
     uint16_t id;
 };
