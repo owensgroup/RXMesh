@@ -8,6 +8,7 @@
 using Config = uint32_t;
 enum : Config
 {
+    None                   = 0x00,
     OnRibbonConflicting    = 0x01,
     InteriorConflicting    = 0x02,
     OnRibbonNotConflicting = 0x04,
@@ -243,7 +244,6 @@ TEST(RXMeshDynamic, Cavity)
             rx.get_context(), *coords, *to_flip, *f_attr, *e_attr, *v_attr);
     }
 
-    CUDA_ERROR(cudaDeviceSynchronize());
 
     rx.update_host();
 

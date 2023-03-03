@@ -506,8 +506,7 @@ struct Cavity
         cooperative_groups::thread_block& block)
     {
 
-        assert(itemPerThread * blockThreads >= m_s_num_faces[0],
-               "Cavity::construct_cavities_edge_loop() increase itemPerThread");
+        assert(itemPerThread * blockThreads >= m_s_num_faces[0]);
 
         // Trace faces on the border of the cavity i.e., having an edge on the
         // cavity boundary loop. These faces will add how many of their edges
@@ -1121,28 +1120,34 @@ struct Cavity
         // ribbonize protection zone
         for (uint16_t e = threadIdx.x; e < m_s_num_edges[0];
              e += blockThreads) {
+            if (m_s_active_mask_e(e) || m_s_cavity_id_e[e] != INVALID16) {
 
-            // we only want to ribbonize vertices connected to a vertex on the
-            // boundary of a cavity boundaries. If the two vertices are on the
-            // cavity boundaries (b0=true and b1=true), then this is an edge on
-            // the cavity and we don't to ribbonize any of these two vertices
-            // Only when one of the vertices are on the cavity boundaries and
-            // the other is not, we then want to ribbonize the other one
-            const uint16_t v0 = m_s_ev[2 * e + 0];
-            const uint16_t v1 = m_s_ev[2 * e + 1];
+                // we only want to ribbonize vertices connected to a vertex on
+                // the boundary of a cavity boundaries. If the two vertices are
+                // on the cavity boundaries (b0=true and b1=true), then this is
+                // an edge on the cavity and we don't to ribbonize any of these
+                // two vertices Only when one of the vertices are on the cavity
+                // boundaries and the other is not, we then want to ribbonize
+                // the other one
+                const uint16_t v0 = m_s_ev[2 * e + 0];
+                const uint16_t v1 = m_s_ev[2 * e + 1];
 
-            const bool b0 =
-                m_s_migrate_mask_v(v0) || m_s_owned_cavity_bdry_v(v0);
+                assert(m_s_active_mask_v(v0));
+                assert(m_s_active_mask_v(v1));
 
-            const bool b1 =
-                m_s_migrate_mask_v(v1) || m_s_owned_cavity_bdry_v(v1);
+                const bool b0 =
+                    m_s_migrate_mask_v(v0) || m_s_owned_cavity_bdry_v(v0);
 
-            if (b0 && !b1 && !m_s_owned_mask_v(v1)) {
-                m_s_ribbonize_v.set(v1, true);
-            }
+                const bool b1 =
+                    m_s_migrate_mask_v(v1) || m_s_owned_cavity_bdry_v(v1);
 
-            if (b1 && !b0 && !m_s_owned_mask_v(v0)) {
-                m_s_ribbonize_v.set(v0, true);
+                if (b0 && !b1 && !m_s_owned_mask_v(v1)) {
+                    m_s_ribbonize_v.set(v1, true);
+                }
+
+                if (b1 && !b0 && !m_s_owned_mask_v(v0)) {
+                    m_s_ribbonize_v.set(v0, true);
+                }
             }
         }
 
@@ -1171,6 +1176,7 @@ struct Cavity
         for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             for (uint16_t i = 0; i < size; ++i) {
                 uint16_t vertex = get_cavity_vertex(c, i).local_id();
+                assert(m_s_active_mask_v(vertex));
                 if (m_s_owned_mask_v(vertex)) {
                     m_s_owned_cavity_bdry_v.set(vertex, true);
                 } else {
@@ -1195,8 +1201,16 @@ struct Cavity
                 for (int i = 0; i < 3; ++i) {
                     const uint16_t e = m_s_fe[3 * f + i] >> 1;
 
+                    assert(m_s_active_mask_e(e) ||
+                           m_s_cavity_id_e[e] != INVALID16);
+
                     const uint16_t v0 = m_s_ev[2 * e + 0];
                     const uint16_t v1 = m_s_ev[2 * e + 1];
+
+                    assert(m_s_active_mask_v(v0) ||
+                           m_s_cavity_id_v[v0] != INVALID16);
+                    assert(m_s_active_mask_v(v1) ||
+                           m_s_cavity_id_v[v1] != INVALID16);
 
                     if (m_s_owned_cavity_bdry_v(v0) ||
                         m_s_owned_cavity_bdry_v(v1)) {
@@ -1212,7 +1226,8 @@ struct Cavity
                     for (int i = 0; i < 3; ++i) {
                         const uint16_t e = m_s_fe[3 * f + i] >> 1;
                         if (!m_s_owned_mask_e(e)) {
-                            assert(m_s_active_mask_e(e));
+                            assert(m_s_active_mask_e(e) ||
+                                   m_s_cavity_id_e[e] != INVALID16);
                             m_s_ownership_change_mask_e.set(e, true);
                             auto lp = m_patch_info.lp_e.find(e);
                             m_s_patches_to_lock_mask.set(lp.patch_stash_id(),
@@ -1231,7 +1246,7 @@ struct Cavity
         // if so, then there must be a vertex in there that we want to lock
         // we search for this vertex and for each other vertex connected to it
         // with an edge, we check its owner patch. If this owner patch is not
-        // is not in the list of patches to be locked, we add it
+        // in the list of patches to be locked, we add it
         for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
             const uint32_t q = m_patch_info.patch_stash.get_patch(p);
             if (q != INVALID32) {
@@ -1250,14 +1265,16 @@ struct Cavity
                          v += blockThreads) {
                         if (m_s_migrate_mask_v(v)) {
                             // get the owner patch of v
-                            const auto lp = m_patch_info.lp_v.find(v);
 
-                            const uint32_t v_patch =
-                                m_patch_info.patch_stash.get_patch(lp);
-                            const uint32_t lid = lp.local_id_in_owner_patch();
-                            if (v_patch == q) {
+                            assert(!m_patch_info.is_deleted(LocalVertexT(v)));
+
+                            const VertexHandle v_owner =
+                                m_context.get_owner_vertex_handle(
+                                    {m_patch_info.patch_id, {v}});
+
+                            if (v_owner.patch_id() == q) {
                                 ::atomicAdd(&s_ok_q, 1);
-                                m_s_src_mask_v.set(lid, true);
+                                m_s_src_mask_v.set(v_owner.local_id(), true);
                             }
                         }
                     }
@@ -1271,27 +1288,38 @@ struct Cavity
                         for (uint16_t e = threadIdx.x; e < q_num_edges;
                              e += blockThreads) {
 
-                            const auto v0q = q_patch_info.ev[2 * e + 0];
-                            const auto v1q = q_patch_info.ev[2 * e + 1];
+                            if (!q_patch_info.is_deleted(LocalEdgeT(e))) {
 
-                            auto add_vq_patch = [&](const LocalVertexT vq) {
-                                auto lp = q_patch_info.lp_v.find(vq.id);
-                                const uint32_t o =
-                                    q_patch_info.patch_stash.get_patch(lp);
-                                if (o != m_patch_info.patch_id) {
-                                    const uint8_t st =
-                                        m_patch_info.patch_stash.insert_patch(
-                                            o);
-                                    m_s_patches_to_lock_mask.set(st, true);
+                                const auto v0q = q_patch_info.ev[2 * e + 0];
+                                const auto v1q = q_patch_info.ev[2 * e + 1];
+
+                                assert(!q_patch_info.is_deleted(v0q));
+                                assert(!q_patch_info.is_deleted(v1q));
+
+                                auto add_vq_patch = [&](const LocalVertexT vq) {
+                                    assert(!q_patch_info.is_deleted(
+                                        LocalVertexT(vq)));
+
+                                    const VertexHandle v_owner =
+                                        m_context.get_owner_vertex_handle(
+                                            {q, vq});
+                                    const uint32_t o = v_owner.patch_id();
+
+                                    if (o != m_patch_info.patch_id) {
+                                        const uint8_t st =
+                                            m_patch_info.patch_stash
+                                                .insert_patch(o);
+                                        m_s_patches_to_lock_mask.set(st, true);
+                                    }
+                                };
+                                if (m_s_src_mask_v(v0q.id) &&
+                                    !q_patch_info.is_owned(v1q)) {
+                                    add_vq_patch(v1q);
                                 }
-                            };
-                            if (m_s_src_mask_v(v0q.id) &&
-                                !q_patch_info.is_owned(v1q)) {
-                                add_vq_patch(v1q);
-                            }
-                            if (m_s_src_mask_v(v1q.id) &&
-                                !q_patch_info.is_owned(v0q)) {
-                                add_vq_patch(v0q);
+                                if (m_s_src_mask_v(v1q.id) &&
+                                    !q_patch_info.is_owned(v0q)) {
+                                    add_vq_patch(v0q);
+                                }
                             }
                         }
                     }
@@ -1421,12 +1449,16 @@ struct Cavity
              v += blockThreads) {
             if (migrate_mask_v(v)) {
                 // get the owner patch of v
-                const auto     lp      = m_patch_info.lp_v.find(v);
-                const uint32_t v_patch = m_patch_info.patch_stash.get_patch(lp);
-                const uint32_t lid     = lp.local_id_in_owner_patch();
-                if (v_patch == q) {
+
+                // we don't check if this vertex is active in global memory
+                // since, it could have been activated/added only in shared
+                // memory (through a previous call to mirgate_from_patch)
+                assert(m_s_active_mask_v(v));
+                const VertexHandle v_owner = m_context.get_owner_vertex_handle(
+                    {m_patch_info.patch_id, {v}}, nullptr, false);
+                if (v_owner.patch_id() == q) {
                     ::atomicAdd(&s_ok_q, 1);
-                    m_s_src_mask_v.set(lid, true);
+                    m_s_src_mask_v.set(v_owner.local_id(), true);
                 }
             }
         }
@@ -1932,24 +1964,46 @@ struct Cavity
                 while (true) {
                     if (owner == p) {
                         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+                            assert(
+                                m_s_cavity_id_v[lp.local_id_in_owner_patch()] !=
+                                    INVALID16 ||
+                                m_s_active_mask_v(
+                                    lp.local_id_in_owner_patch()));
+
                             if (m_s_owned_mask_v(
                                     lp.local_id_in_owner_patch())) {
                                 break;
                             }
                         }
                         if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+                            assert(
+                                m_s_cavity_id_e[lp.local_id_in_owner_patch()] !=
+                                    INVALID16 ||
+                                m_s_active_mask_e(
+                                    lp.local_id_in_owner_patch()));
+
                             if (m_s_owned_mask_e(
                                     lp.local_id_in_owner_patch())) {
                                 break;
                             }
                         }
                         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+                            assert(
+                                m_s_cavity_id_f[lp.local_id_in_owner_patch()] !=
+                                    INVALID16 ||
+                                m_s_active_mask_f(
+                                    lp.local_id_in_owner_patch()));
+
                             if (m_s_owned_mask_f(
                                     lp.local_id_in_owner_patch())) {
                                 break;
                             }
                         }
                     } else {
+
+                        assert(!m_context.m_patches_info[owner].is_deleted(
+                            LocalT(lp.local_id_in_owner_patch())));
+
                         if (m_context.m_patches_info[owner].is_owned(
                                 LocalT(lp.local_id_in_owner_patch()))) {
                             break;

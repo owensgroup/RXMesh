@@ -82,9 +82,10 @@ class Context
      */
     __device__ __inline__ VertexHandle get_owner_vertex_handle(
         const VertexHandle vh,
-        const LPPair*      table = nullptr) const
+        const LPPair*      table = nullptr,
+        const bool         check = true) const
     {
-        return get_owner_handle(vh, m_patches_info, table);
+        return get_owner_handle(vh, m_patches_info, table, check);
     }
 
     /**
@@ -95,9 +96,10 @@ class Context
      */
     __device__ __inline__ EdgeHandle get_owner_edge_handle(
         const EdgeHandle eh,
-        const LPPair*    table = nullptr) const
+        const LPPair*    table = nullptr,
+        const bool       check = true) const
     {
-        return get_owner_handle(eh, m_patches_info, table);
+        return get_owner_handle(eh, m_patches_info, table, check);
     }
 
     /**
@@ -108,9 +110,10 @@ class Context
      */
     __device__ __inline__ FaceHandle get_owner_face_handle(
         const FaceHandle fh,
-        const LPPair*    table = nullptr) const
+        const LPPair*    table = nullptr,
+        const bool       check = true) const
     {
-        return get_owner_handle(fh, m_patches_info, table);
+        return get_owner_handle(fh, m_patches_info, table, check);
     }
 
     /**
@@ -123,13 +126,19 @@ class Context
     static __device__ __host__ __inline__ HandleT get_owner_handle(
         const HandleT    handle,
         const PatchInfo* patches_info,
-        const LPPair*    table = nullptr)
+        const LPPair*    table = nullptr,
+        const bool       check = true)
     {
         using LocalT   = typename HandleT::LocalT;
         uint32_t owner = handle.patch_id();
         uint16_t lid   = handle.local_id();
 
-        assert(!patches_info[owner].is_deleted(LocalT(lid)));
+
+        if (check) {
+            assert(!patches_info[owner].is_deleted(LocalT(lid)));
+        }
+
+
         if (patches_info[owner].is_owned(LocalT(lid))) {
             return handle;
         } else {
