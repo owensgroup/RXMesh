@@ -83,7 +83,7 @@ class RXMeshDynamic : public RXMeshStatic
                      ShmemAllocator::default_alignment;
 
         // store number of cavities and patches to lock
-        dyn_shmem += 2 * sizeof(int) + ShmemAllocator::default_alignment;
+        dyn_shmem += 3 * sizeof(int) + ShmemAllocator::default_alignment;
 
 
         // store cavity size (assume number of cavities is half the patch size)

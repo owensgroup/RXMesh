@@ -19,7 +19,7 @@ template <uint32_t blockThreads>
 __global__ static void random_flips(rxmesh::Context                context,
                                     rxmesh::VertexAttribute<float> coords,
                                     rxmesh::EdgeAttribute<int>     to_flip,
-                                    rxmesh::FaceAttribute<int>     f_attr,
+                                    rxmesh::FaceAttribute<float>     f_attr,
                                     rxmesh::EdgeAttribute<int>     e_attr,
                                     rxmesh::VertexAttribute<int>   v_attr)
 {
@@ -44,7 +44,7 @@ __global__ static void random_flips(rxmesh::Context                context,
     block.sync();
 
 
-    if (cavity.process(block, shrd_alloc)) {
+    if (cavity.process(block, shrd_alloc, f_attr)) {
 
         cavity.update_attributes(block, coords);
         cavity.update_attributes(block, to_flip);
@@ -103,7 +103,7 @@ TEST(RXMeshDynamic, Cavity)
 
     auto to_flip = rx.add_edge_attribute<int>("to_flip", 1);
 
-    auto f_attr = rx.add_face_attribute<int>("fAttr", 1);
+    auto f_attr = rx.add_face_attribute<float>("fAttr", 1);
     auto e_attr = rx.add_edge_attribute<int>("eAttr", 1);
     auto v_attr = rx.add_vertex_attribute<int>("vAttr", 1);
     f_attr->reset(0, HOST);

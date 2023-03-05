@@ -88,6 +88,17 @@ struct ALIGN(16) PatchInfo
 
 
     /**
+     * @brief convert an LPPair to a handle. The LPPair should be generated but
+     * one of the LPHashTable stored here
+     */
+    template <typename HandleT>
+    __device__ __inline__ HandleT get_handle(const LPPair lp)
+    {
+        return HandleT(patch_stash.get_patch(lp),
+                       {lp.local_id_in_owner_patch()});
+    }
+
+    /**
      * @brief return pointer to the number of elements corresponding  to the
      * handle type
      * @tparam HandleT

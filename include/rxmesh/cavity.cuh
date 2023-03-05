@@ -11,6 +11,8 @@
 #include "rxmesh/patch_info.h"
 #include "rxmesh/util/meta.h"
 
+#include "rxmesh/attribute.h"
+
 
 namespace rxmesh {
 
@@ -159,6 +161,7 @@ struct Cavity
                     m_patch_info.active_mask_f);
 
         m_s_patches_to_lock_mask = Bitmask(PatchStash::stash_size, shrd_alloc);
+        m_s_locked_patches_mask  = Bitmask(PatchStash::stash_size, shrd_alloc);
 
         if (threadIdx.x == 0) {
             m_s_num_cavities[0] = 0;
@@ -244,7 +247,8 @@ struct Cavity
      * @brief delete elements by applying the cop operation
      */
     __device__ __inline__ bool process(cooperative_groups::thread_block& block,
-                                       ShmemAllocator& shrd_alloc)
+                                       ShmemAllocator&               shrd_alloc,
+                                       rxmesh::FaceAttribute<float>& f_attr)
     {
         m_s_cavity_size = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
         for (uint16_t i = threadIdx.x; i < m_s_num_cavities[0] + 1;
@@ -302,10 +306,15 @@ struct Cavity
         sort_cavities_edge_loop();
         block.sync();
 
-        if (!migrate(block)) {
+        if (!migrate_v2(block)) {
             push();
             return false;
         }
+
+        // if (!migrate(block, f_attr)) {
+        //    push();
+        //    return false;
+        //}
         block.sync();
 
         change_ownership(block);
@@ -894,7 +903,7 @@ struct Cavity
             m_context.m_patch_scheduler.push(m_patch_info.patch_id);
         }
 
-        unlock_patches(block);
+        unlock_patches_and_update_timestamp(block);
     }
 
 
@@ -1067,11 +1076,15 @@ struct Cavity
     }
 
 
+    __device__ __inline__ bool migrate_v2(
+        cooperative_groups::thread_block& block);
+
     /**
      * @brief migrate edges and face incident to vertices in the bitmask to this
      * m_patch_info from a neighbor_patch
      */
-    __device__ __inline__ bool migrate(cooperative_groups::thread_block& block)
+    /*__device__ __inline__ bool migrate(cooperative_groups::thread_block&
+    block, rxmesh::FaceAttribute<float>&     f_attr)
     {
         // Some vertices on the boundary of the cavity are owned and other are
         // not. For owned vertices, edges and faces connected to them exists in
@@ -1092,7 +1105,7 @@ struct Cavity
         block.sync();
 
         // decide which patch to lock
-        patches_to_lock(block);
+        patches_to_lock(block, f_attr);
         block.sync();
 
         // lock the neighbor patches including this patch
@@ -1161,29 +1174,44 @@ struct Cavity
         }
 
         return true;
-    }
-
+    }*/
 
     /**
      * @brief determine which patches needs to locked
      */
-    __device__ __inline__ void patches_to_lock(
-        cooperative_groups::thread_block& block)
+    /*__device__ __inline__ void patches_to_lock(
+        cooperative_groups::thread_block& block,
+        rxmesh::FaceAttribute<float>&     f_attr)
     {
 
 
-        // first consider owned vertices on the cavity boundary
+        // mark vertices on the boundary of all active cavities in this patch
+        // owned vertices are marked in m_s_owned_cavity_bdry_v and not-owned
+        // vertices are marked in m_s_migrate_mask_v (since we need to migrate
+        // them). Owner patches of vertices marked in m_s_migrate_mask_v will be
+        // added to the set of patches to be locked
         for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             for (uint16_t i = 0; i < size; ++i) {
                 uint16_t vertex = get_cavity_vertex(c, i).local_id();
                 assert(m_s_active_mask_v(vertex));
                 if (m_s_owned_mask_v(vertex)) {
                     m_s_owned_cavity_bdry_v.set(vertex, true);
+
                 } else {
                     m_s_migrate_mask_v.set(vertex, true);
                     m_s_ownership_change_mask_v.set(vertex, true);
-                    auto lp = m_patch_info.lp_v.find(vertex);
-                    m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
+
+                    const VertexHandle v_owner =
+                        m_context.get_owner_vertex_handle(
+                            {m_patch_info.patch_id, {vertex}});
+
+                    assert(
+                        m_context.m_patches_info[v_owner.patch_id()].is_owned(
+                            LocalVertexT(v_owner.local_id())));
+
+                    const uint8_t st_id = m_patch_info.patch_stash.insert_patch(
+                        v_owner.patch_id());
+                    m_s_patches_to_lock_mask.set(st_id, true);
                 }
             }
         });
@@ -1195,7 +1223,7 @@ struct Cavity
         // ownership change (m_s_ownership_change_mask_e)
         for (uint16_t f = threadIdx.x; f < m_s_num_faces[0];
              f += blockThreads) {
-            if (!m_s_owned_mask_f(f) &&
+            if (//!m_s_owned_mask_f(f) &&
                 (m_s_active_mask_f(f) || m_s_cavity_id_f[f] != INVALID16)) {
                 bool change = false;
                 for (int i = 0; i < 3; ++i) {
@@ -1213,11 +1241,26 @@ struct Cavity
                            m_s_cavity_id_v[v1] != INVALID16);
 
                     if (m_s_owned_cavity_bdry_v(v0) ||
-                        m_s_owned_cavity_bdry_v(v1)) {
+                        m_s_owned_cavity_bdry_v(v1) || m_s_migrate_mask_v(v0) ||
+                        m_s_migrate_mask_v(v1)) {
                         change = true;
-                        m_s_ownership_change_mask_f.set(f, true);
-                        auto lp = m_patch_info.lp_f.find(f);
-                        m_s_patches_to_lock_mask.set(lp.patch_stash_id(), true);
+                        if (!m_s_owned_mask_f(f)) {
+                            m_s_ownership_change_mask_f.set(f, true);
+
+                            const FaceHandle f_owner =
+                                m_context.get_owner_face_handle(
+                                    {m_patch_info.patch_id, {f}});
+
+                            assert(
+                                m_context.m_patches_info[f_owner.patch_id()]
+                                    .is_owned(LocalFaceT(f_owner.local_id())));
+
+                            const uint8_t st_id =
+                                m_patch_info.patch_stash.insert_patch(
+                                    f_owner.patch_id());
+
+                            m_s_patches_to_lock_mask.set(st_id, true);
+                        }
                         break;
                     }
                 }
@@ -1229,9 +1272,20 @@ struct Cavity
                             assert(m_s_active_mask_e(e) ||
                                    m_s_cavity_id_e[e] != INVALID16);
                             m_s_ownership_change_mask_e.set(e, true);
-                            auto lp = m_patch_info.lp_e.find(e);
-                            m_s_patches_to_lock_mask.set(lp.patch_stash_id(),
-                                                         true);
+
+                            const EdgeHandle e_owner =
+                                m_context.get_owner_edge_handle(
+                                    {m_patch_info.patch_id, {e}});
+
+                            assert(
+                                m_context.m_patches_info[e_owner.patch_id()]
+                                    .is_owned(LocalEdgeT(e_owner.local_id())));
+
+                            const uint8_t st_id =
+                                m_patch_info.patch_stash.insert_patch(
+                                    e_owner.patch_id());
+
+                            m_s_patches_to_lock_mask.set(st_id, true);
                         }
                     }
                 }
@@ -1240,7 +1294,7 @@ struct Cavity
 
         block.sync();
 
-        // far away patch i.e., 2-ring of cavity boundary vertices
+        // Locking far-away patch i.e., 2-ring of cavity boundary vertices:
         // we do this by looping over patches current in patch stash
         // for each patch, we check if we request it to be locked,
         // if so, then there must be a vertex in there that we want to lock
@@ -1253,7 +1307,7 @@ struct Cavity
                 if (m_s_patches_to_lock_mask(p)) {
                     // m_s_src_mask_v uses the q's index space
                     m_s_src_mask_v.reset(block);
-
+                    m_s_src_mask_e.reset(block);
                     __shared__ int s_ok_q;
                     if (threadIdx.x == 0) {
                         s_ok_q = 0;
@@ -1265,7 +1319,6 @@ struct Cavity
                          v += blockThreads) {
                         if (m_s_migrate_mask_v(v)) {
                             // get the owner patch of v
-
                             assert(!m_patch_info.is_deleted(LocalVertexT(v)));
 
                             const VertexHandle v_owner =
@@ -1284,7 +1337,10 @@ struct Cavity
 
                         PatchInfo q_patch_info = m_context.m_patches_info[q];
                         const uint16_t q_num_edges = q_patch_info.num_edges[0];
+                        const uint16_t q_num_faces = q_patch_info.num_faces[0];
 
+                        // TODO should check if we can read q i.e., if q is
+                        // locked
                         for (uint16_t e = threadIdx.x; e < q_num_edges;
                              e += blockThreads) {
 
@@ -1293,32 +1349,91 @@ struct Cavity
                                 const auto v0q = q_patch_info.ev[2 * e + 0];
                                 const auto v1q = q_patch_info.ev[2 * e + 1];
 
+
                                 assert(!q_patch_info.is_deleted(v0q));
                                 assert(!q_patch_info.is_deleted(v1q));
 
                                 auto add_vq_patch = [&](const LocalVertexT vq) {
-                                    assert(!q_patch_info.is_deleted(
-                                        LocalVertexT(vq)));
-
                                     const VertexHandle v_owner =
                                         m_context.get_owner_vertex_handle(
                                             {q, vq});
-                                    const uint32_t o = v_owner.patch_id();
+                                    const uint32_t ov = v_owner.patch_id();
 
-                                    if (o != m_patch_info.patch_id) {
+                                    if (ov != m_patch_info.patch_id) {
                                         const uint8_t st =
                                             m_patch_info.patch_stash
-                                                .insert_patch(o);
+                                                .insert_patch(ov);
                                         m_s_patches_to_lock_mask.set(st, true);
                                     }
                                 };
-                                if (m_s_src_mask_v(v0q.id) &&
-                                    !q_patch_info.is_owned(v1q)) {
+
+                                if (m_s_src_mask_v(v0q.id)
+                                    //&&!q_patch_info.is_owned(v1q)
+                                    ) {
+                                    printf("\n q = %u, v0q = %u, v1q= %u",
+                                           q,
+                                           v0q.id,
+                                           v1q.id);
                                     add_vq_patch(v1q);
                                 }
-                                if (m_s_src_mask_v(v1q.id) &&
-                                    !q_patch_info.is_owned(v0q)) {
+
+                                if (m_s_src_mask_v(v1q.id)
+                                    //&& !q_patch_info.is_owned(v0q)
+                                    ) {
+                                    printf("\n q = %u, v0q = %u, v1q= %u",
+                                           q,
+                                           v0q.id,
+                                           v1q.id);
                                     add_vq_patch(v0q);
+                                }
+
+                                if (m_s_src_mask_v(v1q.id) ||
+                                    m_s_src_mask_v(v0q.id)) {
+                                    m_s_src_mask_e.set(e, true);
+
+                                    // get the edge owner and make sure we
+                                    // can lock it
+
+                                    const EdgeHandle e_owner =
+                                        m_context.get_owner_edge_handle(
+                                            {q, {e}});
+                                    const uint32_t oe = e_owner.patch_id();
+
+                                    if (oe != m_patch_info.patch_id) {
+                                        const uint8_t st =
+                                            m_patch_info.patch_stash
+                                                .insert_patch(oe);
+                                        m_s_patches_to_lock_mask.set(st, true);
+                                    }
+                                }
+                            }
+                        }
+
+
+                        for (uint16_t f = threadIdx.x; f < q_num_faces;
+                             f += blockThreads) {
+
+                            if (!q_patch_info.is_deleted(LocalFaceT(f))) {
+
+                                auto e0q = q_patch_info.fe[3 * f + 0].id >> 1;
+                                auto e1q = q_patch_info.fe[3 * f + 1].id >> 1;
+                                auto e2q = q_patch_info.fe[3 * f + 2].id >> 1;
+
+                                if (m_s_src_mask_e(e0q) ||
+                                    m_s_src_mask_e(e1q) ||
+                                    m_s_src_mask_e(e2q)) {
+
+                                    const FaceHandle f_owner =
+                                        m_context.get_owner_face_handle(
+                                            {q, {f}});
+                                    const uint32_t of = f_owner.patch_id();
+
+                                    if (of != m_patch_info.patch_id) {
+                                        const uint8_t st =
+                                            m_patch_info.patch_stash
+                                                .insert_patch(of);
+                                        m_s_patches_to_lock_mask.set(st, true);
+                                    }
                                 }
                             }
                         }
@@ -1327,13 +1442,13 @@ struct Cavity
             }
             block.sync();
         }
-    }
+    }*/
 
     /**
      * @brief lock patches marked true in m_s_patches_to_lock_mask
      * @return
      */
-    __device__ __inline__ bool lock_patches(
+    /*__device__ __inline__ bool lock_patches(
         cooperative_groups::thread_block& block)
     {
         __shared__ bool s_success;
@@ -1369,19 +1484,19 @@ struct Cavity
         }
         block.sync();
         return s_success;
-    }
+    }*/
 
     /**
      * @brief unlock/release lock for the patches stored in
-     * m_s_patches_to_lock_mask. We assume these patches has been locked by this
-     * block via a call to lock_patches() that returned true
+     * m_s_patches_to_lock_mask. This functionally additionally update the
+     * timestamp of the locked patches and this patch
      */
-    __device__ __inline__ bool unlock_patches(
+    __device__ __inline__ bool unlock_patches_and_update_timestamp(
         cooperative_groups::thread_block& block)
     {
         if (threadIdx.x == 0) {
             for (uint8_t i = 0; i < PatchStash::stash_size; ++i) {
-                if (m_s_patches_to_lock_mask(i)) {
+                if (m_s_locked_patches_mask(i)) {
                     uint32_t p = m_patch_info.patch_stash.get_patch(i);
                     m_context.m_patches_info[p].update_timestamp();
                     m_context.m_patches_info[p].lock.release_lock();
@@ -1403,6 +1518,14 @@ struct Cavity
             m_context.m_patch_scheduler.push(m_patch_info.patch_id);
         }
     }
+
+
+    __device__ __inline__ bool migrate_from_patch_v2(
+        cooperative_groups::thread_block& block,
+        const uint32_t                    q,
+        const Bitmask&                    migrate_mask_v,
+        const bool                        change_ownership);
+
 
     /**
      * @brief given a neighbor patch (q), migrate vertices (and edges and faces
@@ -1703,6 +1826,13 @@ struct Cavity
                         m_patch_info.patch_stash.insert_patch(o);
                     assert(owner_stash_id != INVALID8);
                     ret = LPPair(vp, vq, owner_stash_id);
+
+                    m_s_patches_to_lock_mask.set(owner_stash_id, true);
+                } else if (o != m_patch_info.patch_id) {
+                    assert(m_patch_info.patch_stash.find_patch_index(o) !=
+                           INVALID8);
+                    m_s_patches_to_lock_mask.set(
+                        m_patch_info.patch_stash.find_patch_index(o), true);
                 }
 
                 if (require_ownership_change && !m_s_owned_mask_v(vp)) {
@@ -1774,6 +1904,13 @@ struct Cavity
                         m_patch_info.patch_stash.insert_patch(o);
                     assert(owner_stash_id != INVALID8);
                     ret = LPPair(ep, eq, owner_stash_id);
+
+                    m_s_patches_to_lock_mask.set(owner_stash_id, true);
+                } else if (o != q && o != m_patch_info.patch_id) {
+                    assert(m_patch_info.patch_stash.find_patch_index(o) !=
+                           INVALID8);
+                    m_s_patches_to_lock_mask.set(
+                        m_patch_info.patch_stash.find_patch_index(o), true);
                 }
 
                 if (require_ownership_change && !m_s_owned_mask_e(ep)) {
@@ -1852,6 +1989,13 @@ struct Cavity
                         m_patch_info.patch_stash.insert_patch(o);
                     assert(owner_stash_id != INVALID8);
                     ret = LPPair(fp, fq, owner_stash_id);
+
+                    m_s_patches_to_lock_mask.set(owner_stash_id, true);
+                } else if (o != q && o != m_patch_info.patch_id) {
+                    assert(m_patch_info.patch_stash.find_patch_index(o) !=
+                           INVALID8);
+                    m_s_patches_to_lock_mask.set(
+                        m_patch_info.patch_stash.find_patch_index(o), true);
                 }
 
                 if (require_ownership_change && !m_s_owned_mask_f(fp)) {
@@ -1945,6 +2089,7 @@ struct Cavity
         const uint16_t*                   s_cavity_id,
         const Bitmask&                    p_flag)
     {
+
         using LocalT = typename HandleT::LocalT;
 
         uint16_t q_num_elements = q_patch_info.get_num_elements<HandleT>()[0];
@@ -2000,9 +2145,35 @@ struct Cavity
                             }
                         }
                     } else {
+#ifdef DEBUG
+                        bool owner_locked = false;
+                        if (m_context.m_patches_info[owner].is_deleted(
+                                LocalT(lp.local_id_in_owner_patch()))) {
+                            // if the element is deleted, then we should ensure
+                            // that this patch is locked since then this would
+                            // mean that this block has deleted it earlier which
+                            // is okay
 
-                        assert(!m_context.m_patches_info[owner].is_deleted(
-                            LocalT(lp.local_id_in_owner_patch())));
+                            for (uint8_t i = 0;
+                                 i < m_s_patches_to_lock_mask.size();
+                                 ++i) {
+                                if (m_s_patches_to_lock_mask(i)) {
+                                    uint32_t pp = m_patch_info.patch_stash(i);
+                                    if (pp == owner) {
+                                        owner_locked = true;
+                                        printf("\n sssssssssss");
+                                        break;
+                                    }
+                                }
+                            }
+                            assert(owner_locked);
+                        }
+
+                        assert(owner_locked ||
+                               !m_context.m_patches_info[owner].is_deleted(
+                                   LocalT(lp.local_id_in_owner_patch())));
+
+#endif
 
                         if (m_context.m_patches_info[owner].is_owned(
                                 LocalT(lp.local_id_in_owner_patch()))) {
@@ -2231,9 +2402,6 @@ struct Cavity
         // patch. For every not-owned element, we map it to its owner patch and
         // check against lid-src_patch pair
         for (uint16_t i = 0; i < dest_patch_num_elements; ++i) {
-            if (i >= dest_patch_active_mask.size()) {
-                printf("\n size = %u, i= %u", dest_patch_active_mask.size(), i);
-            }
             if (!dest_patch_owned_mask(i) &&
                 (dest_patch_active_mask(i) || dest_cavity_id[i] != INVALID16)) {
                 auto lp = dest_patch_lp.find(i);
@@ -2275,6 +2443,7 @@ struct Cavity
     Bitmask m_s_owned_cavity_bdry_v;
     Bitmask m_s_ribbonize_v;
     Bitmask m_s_patches_to_lock_mask;
+    Bitmask m_s_locked_patches_mask;
 
     bool* m_s_readd_to_queue;
 
@@ -2288,3 +2457,5 @@ struct Cavity
 };
 
 }  // namespace rxmesh
+
+#include "rxmesh/cavity_impl.cuh"
