@@ -71,7 +71,16 @@ struct DenseMatrix
 
     T* data() const
     {
-        return m_d_val;
+        if ((location & HOST) == HOST) {
+            return m_h_val;
+        }
+
+        if ((location & DEVICE) == DEVICE) {
+            return m_d_val;
+        }
+
+        assert(1 != 1);
+        return 0;
     }
 
     T* col_data(const uint32_t ld_idx, locationT location = DEVICE) const
