@@ -117,8 +117,6 @@ struct DenseMatrix
             RXMESH_WARN(
                 "DenseMatrix::move() allocating target before moving to {}",
                 location_to_string(target));
-
-            printf("aaaaaaaaaaaaaaaaaaa\n");
             allocate(target);
         }
 
@@ -152,8 +150,6 @@ struct DenseMatrix
             release(HOST);
 
             m_h_val = static_cast<T*>(malloc(bytes()));
-
-            printf("aaaaaaaaaaaaaaaaaaa\n");
 
             m_allocated = m_allocated | HOST;
         }

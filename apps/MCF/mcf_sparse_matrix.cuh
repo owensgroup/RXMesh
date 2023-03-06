@@ -145,31 +145,6 @@ __global__ static void mcf_A_X_setup(
         !use_uniform_laplace);
 }
 
-template <typename T, uint32_t blockThreads>
-__global__ static void update_smooth_result(const rxmesh::Context      context,
-                                            rxmesh::VertexAttribute<T> smooth_X,
-                                            rxmesh::SparseMatrix<T>    A_mat,
-                                            rxmesh::DenseMatrix<T>     X_mat)
-{
-    using namespace rxmesh;
-    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
-        auto     r_ids      = v_id.unpack();
-        uint32_t r_patch_id = r_ids.first;
-        uint16_t r_local_id = r_ids.second;
-
-        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
-
-        smooth_X(v_id, 0) = X_mat(row_index, 0);
-        smooth_X(v_id, 1) = X_mat(row_index, 1);
-        smooth_X(v_id, 2) = X_mat(row_index, 2);
-    };
-
-    auto                block = cooperative_groups::this_thread_block();
-    Query<blockThreads> query(context);
-    ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
-}
-
 template <typename T>
 void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rxmesh,
                               const std::vector<std::vector<T>>& ground_truth)
@@ -222,21 +197,6 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rxmesh,
     // Solving the linear system using chol factorization and no reordering
     A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NONE);
 
-    auto smooth_X =
-        rxmesh.add_vertex_attribute<T>("smooth_X", 3, rxmesh::LOCATION_ALL);
-
-    LaunchBox<blockThreads> launch_box_smooth;
-    rxmesh.prepare_launch_box({Op::VV},
-                              launch_box_smooth,
-                              (void*)update_smooth_result<float, blockThreads>);
-
-    update_smooth_result<float, blockThreads>
-        <<<launch_box_smooth.blocks,
-           launch_box_smooth.num_threads,
-           launch_box_smooth.smem_bytes_dyn>>>(
-            rxmesh.get_context(), *smooth_X, A_mat, X_mat);
-    smooth_X->move(rxmesh::DEVICE, rxmesh::HOST);
-
     X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
 
     const T tol     = 0.001;
@@ -247,17 +207,14 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rxmesh,
         uint32_t v_linear_id = rxmesh.linear_id(vh);
 
         T a = X_mat(v_linear_id, 0);
-        T b = (*smooth_X)(vh, 0);
-        
-        EXPECT_EQ(X_mat(v_linear_id, 0), (*smooth_X)(vh, 0));
 
         for (uint32_t i = 0; i < 3; ++i) {
-            tmp_tol = std::abs(((*smooth_X)(vh, i) - ground_truth[v_id][i]) /
+            tmp_tol = std::abs((X_mat(v_linear_id, i) - ground_truth[v_id][i]) /
                                ground_truth[v_id][i]);
 
             if (tmp_tol > tol) {
                 RXMESH_WARN("val: {}, truth: {}, tol: {}\n",
-                       (*smooth_X)(vh, i),
+                       X_mat(v_linear_id, i),
                        ground_truth[v_id][i],
                        tmp_tol);
                 passed = false;
