@@ -237,13 +237,19 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rxmesh,
             rxmesh.get_context(), *smooth_X, A_mat, X_mat);
     smooth_X->move(rxmesh::DEVICE, rxmesh::HOST);
 
-    rxmesh.export_obj("mcf_rxmesh_solver.obj", *smooth_X);
+    X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
 
     const T tol     = 0.001;
     T       tmp_tol = tol;
     bool    passed  = true;
     rxmesh.for_each_vertex(HOST, [&](const VertexHandle vh) {
         uint32_t v_id = rxmesh.map_to_global(vh);
+        uint32_t v_linear_id = rxmesh.linear_id(vh);
+
+        T a = X_mat(v_linear_id, 0);
+        T b = (*smooth_X)(vh, 0);
+        
+        EXPECT_EQ(X_mat(v_linear_id, 0), (*smooth_X)(vh, 0));
 
         for (uint32_t i = 0; i < 3; ++i) {
             tmp_tol = std::abs(((*smooth_X)(vh, i) - ground_truth[v_id][i]) /
