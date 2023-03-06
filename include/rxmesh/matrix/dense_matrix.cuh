@@ -69,7 +69,7 @@ struct DenseMatrix
 #endif
     }
 
-    T* data() const
+    T* data(locationT location = DEVICE) const
     {
         if ((location & HOST) == HOST) {
             return m_h_val;
