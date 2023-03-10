@@ -86,9 +86,9 @@ struct Cavity
 
         // TODO we don't to store the cavity IDs for all elements. we can
         // optimize this based on the give CavityOp
-        const uint16_t vert_cap = *m_patch_info.vertices_capacity;
-        const uint16_t edge_cap = *m_patch_info.edges_capacity;
-        const uint16_t face_cap = *m_patch_info.faces_capacity;
+        const uint16_t vert_cap = m_patch_info.vertices_capacity[0];
+        const uint16_t edge_cap = m_patch_info.edges_capacity[0];
+        const uint16_t face_cap = m_patch_info.faces_capacity[0];
 
         m_s_num_cavities     = shrd_alloc.alloc<int>(1);
         m_s_cavity_id_v      = shrd_alloc.alloc<uint16_t>(vert_cap);
@@ -100,11 +100,13 @@ struct Cavity
                                Bitmask&        owned,
                                Bitmask&        active,
                                Bitmask&        ownership,
+                               Bitmask&        added_to_lp,
                                const uint32_t* g_owned,
                                const uint32_t* g_active) {
-            owned     = Bitmask(num_elements, shrd_alloc);
-            active    = Bitmask(num_elements, shrd_alloc);
-            ownership = Bitmask(num_elements, shrd_alloc);
+            owned       = Bitmask(num_elements, shrd_alloc);
+            active      = Bitmask(num_elements, shrd_alloc);
+            ownership   = Bitmask(num_elements, shrd_alloc);
+            added_to_lp = Bitmask(num_elements, shrd_alloc);
 
             owned.reset(block);
             active.reset(block);
@@ -128,6 +130,7 @@ struct Cavity
                     m_s_owned_mask_v,
                     m_s_active_mask_v,
                     m_s_ownership_change_mask_v,
+                    m_s_added_to_lp_v,
                     m_patch_info.owned_mask_v,
                     m_patch_info.active_mask_v);
         m_s_migrate_mask_v      = Bitmask(vert_cap, shrd_alloc);
@@ -143,6 +146,7 @@ struct Cavity
                     m_s_owned_mask_e,
                     m_s_active_mask_e,
                     m_s_ownership_change_mask_e,
+                    m_s_added_to_lp_e,
                     m_patch_info.owned_mask_e,
                     m_patch_info.active_mask_e);
         const uint16_t max_edge_cap = static_cast<uint16_t>(
@@ -157,6 +161,7 @@ struct Cavity
                     m_s_owned_mask_f,
                     m_s_active_mask_f,
                     m_s_ownership_change_mask_f,
+                    m_s_added_to_lp_f,
                     m_patch_info.owned_mask_f,
                     m_patch_info.active_mask_f);
 
@@ -247,8 +252,7 @@ struct Cavity
      * @brief delete elements by applying the cop operation
      */
     __device__ __inline__ bool process(cooperative_groups::thread_block& block,
-                                       ShmemAllocator&               shrd_alloc,
-                                       rxmesh::FaceAttribute<float>& f_attr)
+                                       ShmemAllocator& shrd_alloc)
     {
         m_s_cavity_size = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
         for (uint16_t i = threadIdx.x; i < m_s_num_cavities[0] + 1;
@@ -311,7 +315,7 @@ struct Cavity
             return false;
         }
 
-        // if (!migrate(block, f_attr)) {
+        // if (!migrate(block)) {
         //    push();
         //    return false;
         //}
@@ -1076,6 +1080,10 @@ struct Cavity
     }
 
 
+    /**
+     * @brief migrate edges and face incident to vertices in the bitmask to this
+     * m_patch_info from a neighbor_patch
+     */
     __device__ __inline__ bool migrate_v2(
         cooperative_groups::thread_block& block);
 
@@ -1084,7 +1092,7 @@ struct Cavity
      * m_patch_info from a neighbor_patch
      */
     /*__device__ __inline__ bool migrate(cooperative_groups::thread_block&
-    block, rxmesh::FaceAttribute<float>&     f_attr)
+    block)
     {
         // Some vertices on the boundary of the cavity are owned and other are
         // not. For owned vertices, edges and faces connected to them exists in
@@ -1105,7 +1113,7 @@ struct Cavity
         block.sync();
 
         // decide which patch to lock
-        patches_to_lock(block, f_attr);
+        patches_to_lock(block);
         block.sync();
 
         // lock the neighbor patches including this patch
@@ -1180,8 +1188,7 @@ struct Cavity
      * @brief determine which patches needs to locked
      */
     /*__device__ __inline__ void patches_to_lock(
-        cooperative_groups::thread_block& block,
-        rxmesh::FaceAttribute<float>&     f_attr)
+        cooperative_groups::thread_block& block)
     {
 
 
@@ -1520,6 +1527,11 @@ struct Cavity
     }
 
 
+    /**
+     * @brief given a neighbor patch (q), migrate vertices (and edges and faces
+     * connected to these vertices) marked in migrate_mask_v to the patch
+     * used by this cavity (p)
+     */
     __device__ __inline__ bool migrate_from_patch_v2(
         cooperative_groups::thread_block& block,
         const uint32_t                    q,
@@ -1531,9 +1543,8 @@ struct Cavity
      * @brief given a neighbor patch (q), migrate vertices (and edges and faces
      * connected to these vertices) marked in m_s_migrate_mask_v to the patch
      * used by this cavity (p)
-     * @return
      */
-    __device__ __inline__ void migrate_from_patch(
+    /*__device__ __inline__ void migrate_from_patch(
         cooperative_groups::thread_block& block,
         const uint32_t                    q,
         Bitmask&                          migrate_mask_v,
@@ -1789,9 +1800,13 @@ struct Cavity
                 }
             }
         }
-    }
+    }*/
 
 
+    /**
+     * @brief give a neighbor patch q and a vertex in it q_vertex, find the copy
+     * of q_vertex in this patch. If it does not exist, create such a copy.
+     */
     template <typename FuncT>
     __device__ __inline__ LPPair migrate_vertex(
         const uint32_t q,
@@ -1820,6 +1835,9 @@ struct Cavity
                     // since it is owned by some other patch
                     m_s_owned_mask_v.reset(vp, true);
 
+                    // mark that we have added vp to the hashtable
+                    m_s_added_to_lp_v.set(vp, true);
+
                     // insert the patch in the patch stash and return its
                     // id in the stash
                     const uint8_t owner_stash_id =
@@ -1828,11 +1846,10 @@ struct Cavity
                     ret = LPPair(vp, vq, owner_stash_id);
 
                     m_s_patches_to_lock_mask.set(owner_stash_id, true);
-                } else if (o != m_patch_info.patch_id) {
-                    assert(m_patch_info.patch_stash.find_patch_index(o) !=
-                           INVALID8);
-                    m_s_patches_to_lock_mask.set(
-                        m_patch_info.patch_stash.find_patch_index(o), true);
+                } else if (o != q && o != m_patch_info.patch_id) {
+                    uint8_t st = m_patch_info.patch_stash.find_patch_index(o);
+                    assert(st != INVALID8);
+                    m_s_patches_to_lock_mask.set(st, true);
                 }
 
                 if (require_ownership_change && !m_s_owned_mask_v(vp)) {
@@ -1843,6 +1860,10 @@ struct Cavity
         return ret;
     }
 
+    /**
+     * @brief give a neighbor patch q and an edge in it q_edge, find the copy
+     * of q_edge in this patch. If it does not exist, create such a copy.
+     */
     template <typename FuncT>
     __device__ __inline__ LPPair migrate_edge(
         const uint32_t q,
@@ -1900,6 +1921,9 @@ struct Cavity
                     // since it is owned by some other patch
                     m_s_owned_mask_e.reset(ep, true);
 
+                    // mark that we have added ep to the hashtable
+                    m_s_added_to_lp_e.set(ep, true);
+
                     const uint8_t owner_stash_id =
                         m_patch_info.patch_stash.insert_patch(o);
                     assert(owner_stash_id != INVALID8);
@@ -1907,10 +1931,9 @@ struct Cavity
 
                     m_s_patches_to_lock_mask.set(owner_stash_id, true);
                 } else if (o != q && o != m_patch_info.patch_id) {
-                    assert(m_patch_info.patch_stash.find_patch_index(o) !=
-                           INVALID8);
-                    m_s_patches_to_lock_mask.set(
-                        m_patch_info.patch_stash.find_patch_index(o), true);
+                    uint8_t st = m_patch_info.patch_stash.find_patch_index(o);
+                    assert(st != INVALID8);
+                    m_s_patches_to_lock_mask.set(st, true);
                 }
 
                 if (require_ownership_change && !m_s_owned_mask_e(ep)) {
@@ -1924,6 +1947,10 @@ struct Cavity
     }
 
 
+    /**
+     * @brief give a neighbor patch q and a face in it q_face, find the copy
+     * of q_face in this patch. If it does not exist, create such a copy.
+     */
     template <typename FuncT>
     __device__ __inline__ LPPair migrate_face(
         const uint32_t q,
@@ -1985,6 +2012,9 @@ struct Cavity
                     // since it is owned by some other patch
                     m_s_owned_mask_f.reset(fp, true);
 
+                    // mark that we have added fp to the hashtable
+                    m_s_added_to_lp_f.set(fp, true);
+
                     const uint8_t owner_stash_id =
                         m_patch_info.patch_stash.insert_patch(o);
                     assert(owner_stash_id != INVALID8);
@@ -1992,10 +2022,9 @@ struct Cavity
 
                     m_s_patches_to_lock_mask.set(owner_stash_id, true);
                 } else if (o != q && o != m_patch_info.patch_id) {
-                    assert(m_patch_info.patch_stash.find_patch_index(o) !=
-                           INVALID8);
-                    m_s_patches_to_lock_mask.set(
-                        m_patch_info.patch_stash.find_patch_index(o), true);
+                    uint8_t st = m_patch_info.patch_stash.find_patch_index(o);
+                    assert(st != INVALID8);
+                    m_s_patches_to_lock_mask.set(st, true);
                 }
 
                 if (require_ownership_change && !m_s_owned_mask_f(fp)) {
@@ -2444,6 +2473,7 @@ struct Cavity
     Bitmask m_s_ribbonize_v;
     Bitmask m_s_patches_to_lock_mask;
     Bitmask m_s_locked_patches_mask;
+    Bitmask m_s_added_to_lp_v, m_s_added_to_lp_e, m_s_added_to_lp_f;
 
     bool* m_s_readd_to_queue;
 

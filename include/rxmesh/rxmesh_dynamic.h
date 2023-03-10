@@ -93,12 +93,13 @@ class RXMeshDynamic : public RXMeshStatic
         // active, owned, migrate(for vertices only), src bitmask (for vertices
         // and edges only), src connect (for vertices and edges only), ownership
         // owned_cavity_bdry (for vertices only), ribbonize (for vertices only)
-        dyn_shmem += 8 * detail::mask_num_bytes(vertex_cap) +
-                     8 * ShmemAllocator::default_alignment;
-        dyn_shmem += 5 * detail::mask_num_bytes(edge_cap) +
-                     5 * ShmemAllocator::default_alignment;
-        dyn_shmem += 3 * detail::mask_num_bytes(face_cap) +
-                     3 * ShmemAllocator::default_alignment;
+        // added_to_lp
+        dyn_shmem += 9 * detail::mask_num_bytes(vertex_cap) +
+                     9 * ShmemAllocator::default_alignment;
+        dyn_shmem += 6 * detail::mask_num_bytes(edge_cap) +
+                     6 * ShmemAllocator::default_alignment;
+        dyn_shmem += 4 * detail::mask_num_bytes(face_cap) +
+                     4 * ShmemAllocator::default_alignment;
 
         if (!this->m_quite) {
             RXMESH_TRACE(
