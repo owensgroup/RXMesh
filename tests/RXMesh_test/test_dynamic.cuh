@@ -19,7 +19,7 @@ template <uint32_t blockThreads>
 __global__ static void random_flips(rxmesh::Context                context,
                                     rxmesh::VertexAttribute<float> coords,
                                     rxmesh::EdgeAttribute<int>     to_flip,
-                                    rxmesh::FaceAttribute<float>     f_attr,
+                                    rxmesh::FaceAttribute<float>   f_attr,
                                     rxmesh::EdgeAttribute<int>     e_attr,
                                     rxmesh::VertexAttribute<int>   v_attr)
 {
@@ -44,8 +44,7 @@ __global__ static void random_flips(rxmesh::Context                context,
     block.sync();
 
 
-    if (cavity.process(block, shrd_alloc, f_attr)) {
-
+    if (cavity.process(block, shrd_alloc)) {
         cavity.update_attributes(block, coords);
         cavity.update_attributes(block, to_flip);
         cavity.update_attributes(block, f_attr);
@@ -208,26 +207,15 @@ TEST(RXMeshDynamic, Cavity)
 
 
 #if USE_POLYSCOPE
-    std::pair<double, double> ps_range(-2, 2);
-    rx.polyscope_render_vertex_patch()->setMapRange(ps_range);
-    rx.polyscope_render_edge_patch()->setMapRange(ps_range);
-    rx.polyscope_render_face_patch()->setMapRange(ps_range);
+    rx.polyscope_render_vertex_patch();
+    rx.polyscope_render_edge_patch();
+    rx.polyscope_render_face_patch();
     rx.get_polyscope_mesh()->addEdgeScalarQuantity("toFlip", *to_flip);
     rx.get_polyscope_mesh()->addFaceScalarQuantity("fAttr", *f_attr);
-    {
-        uint32_t pid      = 0;
-        auto     ps_patch = rx.render_patch(pid);
-        rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(ps_range);
-        rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(ps_range);
-        rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(ps_range);
-    }
-    {
-        uint32_t pid      = 1;
-        auto     ps_patch = rx.render_patch(pid);
-        rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(ps_range);
-        rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(ps_range);
-        rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(ps_range);
-    }
+
+    rx.render_patch(0);
+    rx.render_patch(1);
+
 #endif
 
 
@@ -242,50 +230,38 @@ TEST(RXMeshDynamic, Cavity)
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, *to_flip, *f_attr, *e_attr, *v_attr);
-    }
 
 
-    rx.update_host();
+        rx.update_host();
 
-    coords->move(DEVICE, HOST);
-    to_flip->move(DEVICE, HOST);
-    f_attr->move(DEVICE, HOST);
-    e_attr->move(DEVICE, HOST);
-    v_attr->move(DEVICE, HOST);
+        coords->move(DEVICE, HOST);
+        to_flip->move(DEVICE, HOST);
+        f_attr->move(DEVICE, HOST);
+        e_attr->move(DEVICE, HOST);
+        v_attr->move(DEVICE, HOST);
 
-    EXPECT_EQ(num_vertices, rx.get_num_vertices());
-    EXPECT_EQ(num_edges, rx.get_num_edges());
-    EXPECT_EQ(num_faces, rx.get_num_faces());
+        EXPECT_EQ(num_vertices, rx.get_num_vertices());
+        EXPECT_EQ(num_edges, rx.get_num_edges());
+        EXPECT_EQ(num_faces, rx.get_num_faces());
 
-    EXPECT_TRUE(rx.validate());
+        EXPECT_TRUE(rx.validate());
 
 #if USE_POLYSCOPE
-    rx.update_polyscope();
-    rx.polyscope_render_vertex_patch()->setMapRange(ps_range);
-    rx.polyscope_render_edge_patch()->setMapRange(ps_range);
-    rx.polyscope_render_face_patch()->setMapRange(ps_range);
+        rx.update_polyscope();
+        rx.polyscope_render_vertex_patch();
+        rx.polyscope_render_edge_patch();
+        rx.polyscope_render_face_patch();
 
-    {
-        uint32_t pid      = 0;
-        auto     ps_patch = rx.render_patch(pid);
-        rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(ps_range);
-        rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(ps_range);
-        rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(ps_range);
-    }
-    {
-        uint32_t pid      = 1;
-        auto     ps_patch = rx.render_patch(pid);
-        rx.polyscope_render_vertex_patch(pid, ps_patch)->setMapRange(ps_range);
-        rx.polyscope_render_face_patch(pid, ps_patch)->setMapRange(ps_range);
-        rx.polyscope_render_edge_patch(pid, ps_patch)->setMapRange(ps_range);
-    }
+        rx.render_patch(0);
+        rx.render_patch(1);
 
-    auto ps_mesh = rx.get_polyscope_mesh();
-    ps_mesh->updateVertexPositions(*coords);
-    ps_mesh->addEdgeScalarQuantity("toFlip", *to_flip);
-    ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
-    ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
-    ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
-    polyscope::show();
+        auto ps_mesh = rx.get_polyscope_mesh();
+        ps_mesh->updateVertexPositions(*coords);
+        ps_mesh->addEdgeScalarQuantity("toFlip", *to_flip);
+        ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
+        ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
+        ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
+        polyscope::show();
 #endif
+    }
 }
