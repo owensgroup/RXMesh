@@ -252,7 +252,10 @@ struct Cavity
      * @brief delete elements by applying the cop operation
      */
     __device__ __inline__ bool process(cooperative_groups::thread_block& block,
-                                       ShmemAllocator& shrd_alloc)
+                                       ShmemAllocator&               shrd_alloc/*,
+                                       rxmesh::VertexAttribute<int>& v_attr,
+                                       rxmesh::EdgeAttribute<int>&   e_attr,
+                                       rxmesh::FaceAttribute<int>    f_attr*/)
     {
         m_s_cavity_size = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
         for (uint16_t i = threadIdx.x; i < m_s_num_cavities[0] + 1;
@@ -310,7 +313,7 @@ struct Cavity
         sort_cavities_edge_loop();
         block.sync();
 
-        if (!migrate_v2(block)) {
+        if (!migrate_v2(block/*, v_attr, e_attr, f_attr*/)) {
             push();
             return false;
         }
@@ -1085,7 +1088,10 @@ struct Cavity
      * m_patch_info from a neighbor_patch
      */
     __device__ __inline__ bool migrate_v2(
-        cooperative_groups::thread_block& block);
+        cooperative_groups::thread_block& block/*,
+        rxmesh::VertexAttribute<int>&     v_attr,
+        rxmesh::EdgeAttribute<int>&       e_attr,
+        rxmesh::FaceAttribute<int>        f_attr*/);
 
     /**
      * @brief migrate edges and face incident to vertices in the bitmask to this

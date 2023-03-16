@@ -520,7 +520,10 @@ __global__ static void check_ribbon_faces(const Context               context,
                     // for every incident face to this vertex
                     for (uint16_t i = 0; i < global_vf.get_num_attributes();
                          ++i) {
-                        if (global_vf(vh, i).is_valid()) {
+
+                        const auto fvh_global = global_vf(vh, i);
+
+                        if (fvh_global.is_valid()) {
 
                             // look for the face incident to the vertex in local
                             // VF
@@ -533,7 +536,7 @@ __global__ static void check_ribbon_faces(const Context               context,
                                     context.get_owner_face_handle(
                                         {patch_id, {s_vf_value[j]}});
 
-                                if (global_vf(vh, i) == fh) {
+                                if (fvh_global == fh) {
                                     found = true;
                                     break;
                                 }

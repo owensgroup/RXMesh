@@ -19,7 +19,7 @@ template <uint32_t blockThreads>
 __global__ static void random_flips(rxmesh::Context                context,
                                     rxmesh::VertexAttribute<float> coords,
                                     rxmesh::EdgeAttribute<int>     to_flip,
-                                    rxmesh::FaceAttribute<float>   f_attr,
+                                    rxmesh::FaceAttribute<int>     f_attr,
                                     rxmesh::EdgeAttribute<int>     e_attr,
                                     rxmesh::VertexAttribute<int>   v_attr)
 {
@@ -35,6 +35,7 @@ __global__ static void random_flips(rxmesh::Context                context,
     }
 
     detail::for_each_edge(cavity.m_patch_info, [&](const EdgeHandle eh) {
+        // e_attr(context.get_owner_edge_handle(eh)) = eh.local_id();
         if (to_flip(eh) == 1) {
             cavity.add(eh);
             to_flip(eh) = 2;
@@ -44,12 +45,12 @@ __global__ static void random_flips(rxmesh::Context                context,
     block.sync();
 
 
-    if (cavity.process(block, shrd_alloc)) {
+    if (cavity.process(block, shrd_alloc /*, v_attr, e_attr, f_attr*/)) {
         cavity.update_attributes(block, coords);
         cavity.update_attributes(block, to_flip);
         cavity.update_attributes(block, f_attr);
         cavity.update_attributes(block, e_attr);
-
+        cavity.update_attributes(block, v_attr);
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
@@ -102,13 +103,14 @@ TEST(RXMeshDynamic, Cavity)
 
     auto to_flip = rx.add_edge_attribute<int>("to_flip", 1);
 
-    auto f_attr = rx.add_face_attribute<float>("fAttr", 1);
+    auto f_attr = rx.add_face_attribute<int>("fAttr", 1);
     auto e_attr = rx.add_edge_attribute<int>("eAttr", 1);
     auto v_attr = rx.add_vertex_attribute<int>("vAttr", 1);
     f_attr->reset(0, HOST);
     f_attr->reset(0, DEVICE);
     e_attr->reset(0, HOST);
     e_attr->reset(0, DEVICE);
+    to_flip->reset(0, HOST);
 
     v_attr->reset(0, DEVICE);
 

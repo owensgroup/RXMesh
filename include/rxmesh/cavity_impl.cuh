@@ -3,7 +3,10 @@ namespace rxmesh {
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_v2(
-    cooperative_groups::thread_block& block)
+    cooperative_groups::thread_block& block/*,
+    rxmesh::VertexAttribute<int>&     v_attr,
+    rxmesh::EdgeAttribute<int>&       e_attr,
+    rxmesh::FaceAttribute<int>        f_attr*/)
 {
     // Some vertices on the boundary of the cavity are owned and other are
     // not. For owned vertices, edges and faces connected to them exists in
@@ -89,7 +92,6 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_v2(
             assert(m_s_active_mask_v(vertex));
             if (m_s_owned_mask_v(vertex)) {
                 m_s_owned_cavity_bdry_v.set(vertex, true);
-
             } else {
                 m_s_migrate_mask_v.set(vertex, true);
                 m_s_ownership_change_mask_v.set(vertex, true);
@@ -124,10 +126,9 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_v2(
                     m_s_owned_cavity_bdry_v(v1) || m_s_migrate_mask_v(v0) ||
                     m_s_migrate_mask_v(v1)) {
                     change = true;
-
                     m_s_ownership_change_mask_f.set(f, true);
+                    break;
                 }
-                break;
             }
 
             if (change) {
@@ -382,7 +383,7 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_from_patch_v2(
                 migrate_vertex(q,
                                q_num_vertices,
                                v,
-                               false,  // change_ownership,
+                               change_ownership,
                                q_patch_info,
                                [&](const uint16_t vertex) {
                                    return m_s_src_connect_mask_v(vertex);
