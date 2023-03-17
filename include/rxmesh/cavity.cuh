@@ -1936,17 +1936,14 @@ struct Cavity
     __device__ __inline__ uint16_t find_copy_face(uint16_t& local_id,
                                                   uint32_t& patch)
     {
-        return find_copy(local_id,
-                         patch,
-                         m_context.m_patches_info[patch].owned_mask_f,
-                         m_context.m_patches_info[patch].lp_f,
-                         m_context.m_patches_info[patch].patch_stash,
-                         m_s_num_faces[0],
-                         m_s_owned_mask_f,
-                         m_s_active_mask_f,
-                         m_patch_info.lp_f,
-                         m_patch_info.patch_stash,
-                         m_s_cavity_id_f);
+        return find_copy<FaceHandle>(local_id,
+                                     patch,
+                                     m_s_num_faces[0],
+                                     m_s_owned_mask_f,
+                                     m_s_active_mask_f,
+                                     m_patch_info.lp_f,
+                                     m_patch_info.patch_stash,
+                                     m_s_cavity_id_f);
     }
 
     /**
@@ -1958,17 +1955,14 @@ struct Cavity
     __device__ __inline__ uint16_t find_copy_edge(uint16_t& local_id,
                                                   uint32_t& patch)
     {
-        return find_copy(local_id,
-                         patch,
-                         m_context.m_patches_info[patch].owned_mask_e,
-                         m_context.m_patches_info[patch].lp_e,
-                         m_context.m_patches_info[patch].patch_stash,
-                         m_s_num_edges[0],
-                         m_s_owned_mask_e,
-                         m_s_active_mask_e,
-                         m_patch_info.lp_e,
-                         m_patch_info.patch_stash,
-                         m_s_cavity_id_e);
+        return find_copy<EdgeHandle>(local_id,
+                                     patch,
+                                     m_s_num_edges[0],
+                                     m_s_owned_mask_e,
+                                     m_s_active_mask_e,
+                                     m_patch_info.lp_e,
+                                     m_patch_info.patch_stash,
+                                     m_s_cavity_id_e);
     }
 
     /**
@@ -1980,17 +1974,14 @@ struct Cavity
     __device__ __inline__ uint16_t find_copy_vertex(uint16_t& local_id,
                                                     uint32_t& patch)
     {
-        return find_copy(local_id,
-                         patch,
-                         m_context.m_patches_info[patch].owned_mask_v,
-                         m_context.m_patches_info[patch].lp_v,
-                         m_context.m_patches_info[patch].patch_stash,
-                         m_s_num_vertices[0],
-                         m_s_owned_mask_v,
-                         m_s_active_mask_v,
-                         m_patch_info.lp_v,
-                         m_patch_info.patch_stash,
-                         m_s_cavity_id_v);
+        return find_copy<VertexHandle>(local_id,
+                                       patch,
+                                       m_s_num_vertices[0],
+                                       m_s_owned_mask_v,
+                                       m_s_active_mask_v,
+                                       m_patch_info.lp_v,
+                                       m_patch_info.patch_stash,
+                                       m_s_cavity_id_v);
     }
 
 
@@ -1999,12 +1990,10 @@ struct Cavity
      * the lid lives in src_patch and we want to find the corresponding local
      * index in dest_patch
      */
+    template <typename HandleT>
     __device__ __inline__ uint16_t find_copy(
         uint16_t&          lid,
         uint32_t&          src_patch,
-        const uint32_t*    src_patch_owned_mask,
-        const LPHashTable& src_patch_lp,
-        const PatchStash&  src_patch_stash,
         const uint16_t     dest_patch_num_elements,
         const Bitmask&     dest_patch_owned_mask,
         const Bitmask&     dest_patch_active_mask,
@@ -2014,11 +2003,12 @@ struct Cavity
     {
         // first check if lid is owned by src_patch. If not, then map it to its
         // owner patch and local index in it
-        if (!detail::is_owned(lid, src_patch_owned_mask)) {
-            auto lp   = src_patch_lp.find(lid);
-            lid       = lp.local_id_in_owner_patch();
-            src_patch = src_patch_stash.get_patch(lp);
-        }
+        auto owner = m_context.get_owner_handle(HandleT(src_patch, {lid}),
+                                                m_context.m_patches_info);
+
+        src_patch = owner.patch_id();
+        lid       = owner.local_id();
+
 
         // if the owner src_patch is the same as the patch associated with this
         // cavity, the lid is the local index we are looking for
