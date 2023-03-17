@@ -5,7 +5,9 @@
 template <typename T, uint32_t blockThreads>
 __global__ static void delaunay_edge_flip(rxmesh::Context              context,
                                           rxmesh::VertexAttribute<T>   coords,
-                                          rxmesh::EdgeAttribute<float> e_attr)
+                                          rxmesh::EdgeAttribute<int>   e_attr,
+                                          rxmesh::VertexAttribute<int> v_attr,
+                                          rxmesh::FaceAttribute<int>   f_attr)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -75,7 +77,6 @@ __global__ static void delaunay_edge_flip(rxmesh::Context              context,
 
             if (lambda + gamma > PII + std::numeric_limits<T>::epsilon()) {
                 // check if flipping won't create foldover
-                T alpha, beta;
 
                 const T alpha0 = angle_between_three_vertices(V3, V0, V1);
                 const T beta0  = angle_between_three_vertices(V2, V0, V1);
@@ -102,6 +103,7 @@ __global__ static void delaunay_edge_flip(rxmesh::Context              context,
         // update the cavity
         cavity.update_attributes(block, coords);
         cavity.update_attributes(block, e_attr);
+        cavity.update_attributes(block, f_attr);
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
@@ -150,45 +152,72 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     auto coords = rx.get_input_vertex_coordinates();
 
-    auto e_attr = rx.add_edge_attribute<float>("eAttr", 1);
+    auto e_attr = rx.add_edge_attribute<int>("eAttr", 1);
     e_attr->reset(0, DEVICE);
+
+    auto v_attr = rx.add_vertex_attribute<int>("vAttr", 1);
+    v_attr->reset(0, DEVICE);
+
+    auto f_attr = rx.add_face_attribute<int>("fAttr", 1);
+    f_attr->reset(0, DEVICE);
 
     GPUTimer timer;
     timer.start();
-
+    int iter = 0;
     while (!rx.is_queue_empty()) {
-        delaunay_edge_flip<float, blockThreads>
-            <<<launch_box.blocks,
-               launch_box.num_threads,
-               launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords, *e_attr);
-    }
-
-    timer.stop();
-    CUDA_ERROR(cudaDeviceSynchronize());
-    CUDA_ERROR(cudaGetLastError());
-    RXMESH_TRACE("delaunay_rxmesh() RXMesh Delaunay Edge Flip took {} (ms)",
-                 timer.elapsed_millis());
+        RXMESH_INFO("iter = {}", ++iter);
+        f_attr->reset(0, DEVICE);
+        delaunay_edge_flip<float, blockThreads><<<launch_box.blocks,
+                                                  launch_box.num_threads,
+                                                  launch_box.smem_bytes_dyn>>>(
+            rx.get_context(), *coords, *e_attr, *v_attr, *f_attr);
 
 
-    rx.update_host();
+        timer.stop();
+        CUDA_ERROR(cudaDeviceSynchronize());
+        CUDA_ERROR(cudaGetLastError());
+        //RXMESH_TRACE("delaunay_rxmesh() RXMesh Delaunay Edge Flip took {} (ms)",
+        //             timer.elapsed_millis());
 
-    coords->move(DEVICE, HOST);
-    e_attr->move(DEVICE, HOST);
+        rx.update_host();
 
-    EXPECT_EQ(num_vertices, rx.get_num_vertices());
-    EXPECT_EQ(num_edges, rx.get_num_edges());
-    EXPECT_EQ(num_faces, rx.get_num_faces());
+        coords->move(DEVICE, HOST);
+        e_attr->move(DEVICE, HOST);
+        v_attr->move(DEVICE, HOST);
+        f_attr->move(DEVICE, HOST);
 
-    EXPECT_TRUE(rx.validate());
+        EXPECT_EQ(num_vertices, rx.get_num_vertices());
+        EXPECT_EQ(num_edges, rx.get_num_edges());
+        EXPECT_EQ(num_faces, rx.get_num_faces());
 
-    // rx.export_obj("del_sphere3.obj", *coords);
+        EXPECT_TRUE(rx.validate());
+
+        // rx.export_obj("del_sphere3.obj", *coords);
+
 #if USE_POLYSCOPE
-    rx.update_polyscope();
-    auto ps_mesh = rx.get_polyscope_mesh();
-    ps_mesh->updateVertexPositions(*coords);
-    ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
-    polyscope::show();
-#endif
 
+        rx.update_polyscope();
+
+        auto ps_mesh = rx.get_polyscope_mesh();
+        ps_mesh->updateVertexPositions(*coords);
+
+        // auto f_2_412 = rx.get_owner_face_handle({2, {412}});
+        // std::cout << "f_2_412 ==> " << f_2_412.patch_id() << " "
+        //          << f_2_412.local_id() << "\n";
+        //(*f_attr)(f_2_412) = 10;
+
+
+        ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
+        ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
+        ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
+
+        rx.polyscope_render_vertex_patch();
+        rx.polyscope_render_edge_patch();
+        rx.polyscope_render_face_patch();
+
+        polyscope::show();
+
+#endif
+    }
     return true;
 }

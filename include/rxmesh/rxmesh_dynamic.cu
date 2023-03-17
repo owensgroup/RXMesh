@@ -159,7 +159,7 @@ __global__ static void check_not_owned(const Context           context,
 
     if (patch_id < context.m_num_patches[0]) {
 
-        PatchInfo patch_info = context.m_patches_info[patch_id];
+        const PatchInfo patch_info = context.m_patches_info[patch_id];
 
         ShmemAllocator shrd_alloc;
         uint16_t*      s_fe =
@@ -232,8 +232,6 @@ __global__ static void check_not_owned(const Context           context,
                     printf("\n 2 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 } else {
-                    // TODO this is a scattered read from global that could be
-                    // improved by using shared memory
                     uint16_t ew0, ew1, ew2;
                     flag_t   dw0(0), dw1(0), dw2(0);
                     uint32_t pw0(f_owned.patch_id()), pw1(f_owned.patch_id()),
@@ -255,10 +253,55 @@ __global__ static void check_not_owned(const Context           context,
                     get_owned_e(ew1, pw1, owner_patch_info);
                     get_owned_e(ew2, pw2, owner_patch_info);
 
-                    if (e0 != ew0 || d0 != dw0 || p0 != pw0 || e1 != ew1 ||
-                        d1 != dw1 || p1 != pw1 || e2 != ew2 || d2 != dw2 ||
-                        p2 != pw2) {
-                        printf("\n 3 owned = %u", patch_id);
+                    if (e0 != ew0 || p0 != pw0 ||  //
+                        e1 != ew1 || p1 != pw1 ||  //
+                        e2 != ew2 || p2 != pw2) {
+                        if (e0 != ew0 || p0 != pw0) {
+                            printf(
+                                "\n 3A owned patch= %u, f=%u, fw(%u, %u), "
+                                "(p0=%u, e0=%u, pw0=%u, ew0=%u)",
+                                patch_info.patch_id,
+                                f,
+                                f_owned.patch_id(),
+                                f_owned.local_id(),
+                                p0,
+                                e0,
+                                pw0,
+                                ew0);
+                        }
+
+                        if (e1 != ew1 || p1 != pw1) {
+                            printf(
+                                "\n 3B owned patch= %u, f=%u, fw(%u, %u), "
+                                "(p1=%u, e1=%u, pw1=%u, ew1=%u)",
+                                patch_info.patch_id,
+                                f,
+                                f_owned.patch_id(),
+                                f_owned.local_id(),
+                                p1,
+                                e1,
+                                pw1,
+                                ew1);
+                        }
+
+                        if (e2 != ew2 || p2 != pw2) {
+                            printf(
+                                "\n 3C owned patch= %u, f=%u, fw(%u, %u), "
+                                "(p2=%u, e2=%u, pw2=%u, ew2=%u)",
+                                patch_info.patch_id,
+                                f,
+                                f_owned.patch_id(),
+                                f_owned.local_id(),
+                                p2,
+                                e2,
+                                pw2,
+                                ew2);
+                        }
+                        ::atomicAdd(d_check, 1);
+                    }
+
+                    if (d0 != dw0 || d1 != dw1 || d2 != dw2) {
+                        printf("\n 4 owned = %u", patch_id);
                         ::atomicAdd(d_check, 1);
                     }
                 }
@@ -301,7 +344,7 @@ __global__ static void check_not_owned(const Context           context,
                 // owned by it
                 if (!owner_patch_info.is_owned(
                         LocalEdgeT(e_owned.local_id()))) {
-                    printf("\n 4 owned = %u", patch_id);
+                    printf("\n 5 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
@@ -309,11 +352,9 @@ __global__ static void check_not_owned(const Context           context,
                 // patches that have it as not-owned
                 if (owner_patch_info.is_deleted(
                         LocalEdgeT(e_owned.local_id()))) {
-                    printf("\n 5 owned = %u", patch_id);
+                    printf("\n 6 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 } else {
-                    // TODO this is a scatter read from global that could be
-                    // improved by using shared memory
                     uint16_t vw0 =
                         owner_patch_info.ev[2 * e_owned.local_id() + 0].id;
                     uint16_t vw1 =
@@ -324,6 +365,7 @@ __global__ static void check_not_owned(const Context           context,
                     get_owned_v(vw1, pw1, owner_patch_info);
 
                     if (v0 != vw0 || p0 != pw0 || v1 != vw1 || p1 != pw1) {
+                        printf("\n 7 owned = %u", patch_id);
                         ::atomicAdd(d_check, 1);
                     }
                 }
@@ -395,7 +437,7 @@ __global__ static void check_ribbon_edges(const Context           context,
             const LocalEdgeT el(e);
             if (patch_info.is_owned(el)) {
                 if (s_mark_edges[e] == 0) {
-                    printf("\n ribbon edge = %u", patch_id);
+                    printf("\n ribbon edge = %u, %u", patch_id, e);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -543,7 +585,13 @@ __global__ static void check_ribbon_faces(const Context               context,
                             }
 
                             if (!found) {
-                                printf("\n ribbon face = %u", patch_id);
+                                printf(
+                                    "\n T=%u, ribbon face = %u, f= %u, v_id= "
+                                    "%u ",
+                                    threadIdx.x,
+                                    patch_id,
+                                    f,
+                                    v_id);
                                 ::atomicAdd(d_check, 1);
                                 break;
                             }
@@ -672,7 +720,7 @@ bool RXMeshDynamic::validate()
     // face is inside the patch
     auto check_ribbon = [&]() {
         CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
-        constexpr uint32_t block_size = 256;
+        constexpr uint32_t block_size = 512;
         const uint32_t     grid_size  = num_patches;
         uint32_t           dynamic_smem =
             ShmemAllocator::default_alignment * 3 +
