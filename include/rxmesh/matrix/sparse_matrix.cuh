@@ -6,6 +6,7 @@
 #include "rxmesh/query.cuh"
 #include "rxmesh/types.h"
 
+#include "cusolverSp_LOWLEVEL_PREVIEW.h"
 #include "rxmesh/matrix/dense_matrix.cuh"
 
 namespace rxmesh {
@@ -284,19 +285,23 @@ struct SparseMatrix
         assert(1 != 1);
     }
 
-    __host__ __device__ IndexT& get_nnz() const {
+    __host__ __device__ IndexT& get_nnz() const
+    {
         return m_nnz;
     }
 
-    __device__ IndexT& get_row_ptr_at(IndexT idx) const {
+    __device__ IndexT& get_row_ptr_at(IndexT idx) const
+    {
         return m_d_row_ptr[idx];
     }
 
-    __device__ IndexT& get_col_idx_at(IndexT idx) const {
+    __device__ IndexT& get_col_idx_at(IndexT idx) const
+    {
         return m_d_col_idx[idx];
     }
 
-    __device__ T& get_val_at(IndexT idx) const {
+    __device__ T& get_val_at(IndexT idx) const
+    {
         return m_d_val[idx];
     }
 
@@ -310,6 +315,7 @@ struct SparseMatrix
         CUSOLVER_ERROR(cusolverSpDestroy(m_cusolver_sphandle));
     }
 
+    /* ----- CUSPARSE SPMM & SPMV ----- */
 
     /**
      * @brief wrap up the cusparse api for sparse matrix dense matrix
@@ -471,6 +477,10 @@ struct SparseMatrix
         }
     }
 
+    /*  ----- SOLVER -----  */
+
+    /* --- HIGH LEVEL API --- */
+
     /**
      * @brief solve the Ax=b for x where x and b are all array
      */
@@ -624,6 +634,225 @@ struct SparseMatrix
         }
     }
 
+    /* --- LOW LEVEL API --- */
+
+    void spmat_chol_analysis()
+    {
+        CUSOLVER_ERROR(cusolverSpCreateCsrcholInfo(&m_chol_info));
+        m_internalDataInBytes = 0;
+        m_workspaceInBytes    = 0;
+        CUSOLVER_ERROR(cusolverSpXcsrcholAnalysis(m_cusolver_sphandle,
+                                                  m_row_size,
+                                                  m_nnz,
+                                                  m_descr,
+                                                  m_d_row_ptr,
+                                                  m_d_col_idx,
+                                                  m_chol_info));
+    }
+
+    void spmat_chol_buffer_alloc()
+    {
+        if constexpr (std::is_same_v<T, float>) {
+            CUSOLVER_ERROR(cusolverSpScsrcholBufferInfo(m_cusolver_sphandle,
+                                                        m_row_size,
+                                                        m_nnz,
+                                                        m_descr,
+                                                        m_d_val,
+                                                        m_d_row_ptr,
+                                                        m_d_col_idx,
+                                                        m_chol_info,
+                                                        &m_internalDataInBytes,
+                                                        &m_workspaceInBytes));
+        }
+
+        if constexpr (std::is_same_v<T, double>) {
+            CUSOLVER_ERROR(cusolverSpDcsrcholBufferInfo(m_cusolver_sphandle,
+                                                        m_row_size,
+                                                        m_nnz,
+                                                        m_descr,
+                                                        m_d_val,
+                                                        m_d_row_ptr,
+                                                        m_d_col_idx,
+                                                        m_chol_info,
+                                                        &m_internalDataInBytes,
+                                                        &m_workspaceInBytes));
+        }
+
+        CUDA_ERROR(cudaMalloc((void**)&m_chol_buffer, m_workspaceInBytes));
+    }
+
+    void spmat_chol_buffer_free()
+    {
+        CUDA_ERROR(cudaFree(m_chol_buffer));
+    }
+
+    void spmat_chol_factor()
+    {
+        if constexpr (std::is_same_v<T, float>) {
+            CUSOLVER_ERROR(cusolverSpScsrcholFactor(m_cusolver_sphandle,
+                                                    m_row_size,
+                                                    m_nnz,
+                                                    m_descr,
+                                                    m_d_val,
+                                                    m_d_row_ptr,
+                                                    m_d_col_idx,
+                                                    m_chol_info,
+                                                    m_chol_buffer));
+        }
+        if constexpr (std::is_same_v<T, double>) {
+            CUSOLVER_ERROR(cusolverSpDcsrcholFactor(m_cusolver_sphandle,
+                                                    m_row_size,
+                                                    m_nnz,
+                                                    m_descr,
+                                                    m_d_val,
+                                                    m_d_row_ptr,
+                                                    m_d_col_idx,
+                                                    m_chol_info,
+                                                    m_chol_buffer));
+        }
+
+        double tol = 1.0e-8;
+        int    singularity;
+
+        CUSOLVER_ERROR(cusolverSpDcsrcholZeroPivot(
+            m_cusolver_sphandle, m_chol_info, tol, &singularity));
+        if (0 <= singularity) {
+            RXMESH_WARN(
+                "WARNING: the matrix is singular at row {} under tol ({})",
+                singularity,
+                tol);
+        }
+    }
+
+    void spmat_chol_solve(T* d_b, T* d_x)
+    {
+        if constexpr (std::is_same_v<T, float>) {
+            CUSOLVER_ERROR(cusolverSpScsrcholSolve(m_cusolver_sphandle,
+                                                   m_row_size,
+                                                   d_b,
+                                                   d_x,
+                                                   m_chol_info,
+                                                   m_chol_buffer));
+        }
+        if constexpr (std::is_same_v<T, double>) {
+            CUSOLVER_ERROR(cusolverSpDcsrcholSolve(m_cusolver_sphandle,
+                                                   m_row_size,
+                                                   d_b,
+                                                   d_x,
+                                                   m_chol_info,
+                                                   m_chol_buffer));
+        }
+    }
+
+    /* Host compatibility */
+
+    void move(locationT source, locationT target, cudaStream_t stream = NULL)
+    {
+        if (source == target) {
+            RXMESH_WARN(
+                "DenseMatrix::move() source ({}) and target ({}) "
+                "are the same.",
+                location_to_string(source),
+                location_to_string(target));
+            return;
+        }
+
+        if ((source == HOST || source == DEVICE) &&
+            ((source & m_allocated) != source)) {
+            RXMESH_ERROR(
+                "DenseMatrix::move() moving source is not valid"
+                " because it was not allocated on source i.e., {}",
+                location_to_string(source));
+        }
+
+        if (((target & HOST) == HOST || (target & DEVICE) == DEVICE) &&
+            ((target & m_allocated) != target)) {
+            RXMESH_WARN(
+                "DenseMatrix::move() allocating target before moving to {}",
+                location_to_string(target));
+            allocate(target);
+        }
+
+        if (source == HOST && target == DEVICE) {
+            CUDA_ERROR(cudaMemcpyAsync(m_d_val,
+                                       m_h_val,
+                                       m_nnz * sizeof(T),
+                                       cudaMemcpyHostToDevice,
+                                       stream));
+            CUDA_ERROR(cudaMemcpyAsync(m_d_row_ptr,
+                                       m_h_row_ptr,
+                                       m_row_size * sizeof(IndexT),
+                                       cudaMemcpyHostToDevice,
+                                       stream));
+            CUDA_ERROR(cudaMemcpyAsync(m_d_col_idx,
+                                       m_h_col_idx,
+                                       m_nnz * sizeof(IndexT),
+                                       cudaMemcpyHostToDevice,
+                                       stream));
+        } else if (source == DEVICE && target == HOST) {
+            CUDA_ERROR(cudaMemcpyAsync(m_h_val,
+                                       m_d_val,
+                                       m_nnz * sizeof(T),
+                                       cudaMemcpyDeviceToHost,
+                                       stream));
+            CUDA_ERROR(cudaMemcpyAsync(m_h_row_ptr,
+                                       m_d_row_ptr,
+                                       m_row_size * sizeof(IndexT),
+                                       cudaMemcpyDeviceToHost,
+                                       stream));
+            CUDA_ERROR(cudaMemcpyAsync(m_h_col_idx,
+                                       m_d_col_idx,
+                                       m_nnz * sizeof(IndexT),
+                                       cudaMemcpyDeviceToHost,
+                                       stream));
+        }
+    }
+
+    void release(locationT location = LOCATION_ALL)
+    {
+        if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
+            free(m_h_val);
+            m_h_val     = nullptr;
+            m_h_row_ptr = nullptr;
+            m_h_col_idx = nullptr;
+            m_allocated = m_allocated & (~HOST);
+        }
+
+        if (((location & DEVICE) == DEVICE) &&
+            ((m_allocated & DEVICE) == DEVICE)) {
+            GPU_FREE(m_d_val);
+            GPU_FREE(m_h_row_ptr);
+            GPU_FREE(m_h_col_idx);
+            m_allocated = m_allocated & (~DEVICE);
+        }
+    }
+
+    void allocate(locationT location)
+    {
+        if ((location & HOST) == HOST) {
+            release(HOST);
+
+            m_h_val     = static_cast<T*>(malloc(m_nnz * sizeof(T)));
+            m_h_row_ptr = static_cast<T*>(malloc(m_row_size * sizeof(IndexT)));
+            m_d_col_idx = static_cast<T*>(malloc(m_nnz * sizeof(IndexT)));
+
+            m_allocated = m_allocated | HOST;
+        }
+
+        if ((location & DEVICE) == DEVICE) {
+            release(DEVICE);
+
+            CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_nnz * sizeof(T)));
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_h_row_ptr, m_row_size * sizeof(IndexT)));
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_d_col_idx, m_nnz * sizeof(IndexT)));
+
+            m_allocated = m_allocated | DEVICE;
+        }
+    }
+
+
    private:
     const Context        m_context;
     cusparseHandle_t     m_cusparse_handle;
@@ -640,6 +869,18 @@ struct SparseMatrix
     IndexT  m_row_size;
     IndexT  m_col_size;
     IndexT  m_nnz;
+
+    // host data parameters
+    locationT m_allocated;
+    IndexT*   m_h_row_ptr;
+    IndexT*   m_h_col_idx;
+    T*        m_h_val;
+
+    // lower level API parameters
+    csrcholInfo_t m_chol_info;
+    size_t        m_internalDataInBytes;
+    size_t        m_workspaceInBytes;
+    void*         m_chol_buffer;
 };
 
 }  // namespace rxmesh
