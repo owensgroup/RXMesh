@@ -860,27 +860,34 @@ struct SparseMatrix
     cusparseSpMatDescr_t m_spdescr;
     cusparseMatDescr_t   m_descr;
 
-    size_t m_spmm_buffer_size;
-    size_t m_spmv_buffer_size;
+    IndexT m_row_size;
+    IndexT m_col_size;
+    IndexT m_nnz;
 
     IndexT* m_d_row_ptr;
     IndexT* m_d_col_idx;
     T*      m_d_val;
-    IndexT  m_row_size;
-    IndexT  m_col_size;
-    IndexT  m_nnz;
 
-    // host data parameters
-    locationT m_allocated;
-    IndexT*   m_h_row_ptr;
-    IndexT*   m_h_col_idx;
-    T*        m_h_val;
+    // host csr data
+    IndexT* m_h_row_ptr;
+    IndexT* m_h_col_idx;
+    T*      m_h_val;
+
+    // susparse buffer
+    size_t m_spmm_buffer_size;
+    size_t m_spmv_buffer_size;
 
     // lower level API parameters
     csrcholInfo_t m_chol_info;
     size_t        m_internalDataInBytes;
     size_t        m_workspaceInBytes;
     void*         m_chol_buffer;
+
+    // purmutation
+    IndexT* m_h_permute;
+    IndexT* m_d_permute;
+
+    locationT m_allocated;
 };
 
 }  // namespace rxmesh
