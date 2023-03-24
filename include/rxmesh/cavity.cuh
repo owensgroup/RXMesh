@@ -911,6 +911,8 @@ struct Cavity
         }
 
         unlock_patches_and_update_timestamp(block);
+
+        block.sync();        
     }
 
 

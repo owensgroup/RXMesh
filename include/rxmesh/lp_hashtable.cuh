@@ -24,6 +24,10 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/prime_numbers.h"
 
+#ifdef __CUDA_ARCH__
+#include "rxmesh/kernels/util.cuh"
+#endif
+
 namespace rxmesh {
 /**
  * @brief Hash table storing a patch's ribbon (not-owned) mesh elements where
@@ -380,7 +384,13 @@ struct LPHashTable
             if (table != nullptr) {
                 found = table[bucket_id];
             } else {
+#ifdef __CUDA_ARCH__
+                uint32_t* ptr =
+                    reinterpret_cast<uint32_t*>(m_table + bucket_id);
+                found = LPPair(atomic_read(ptr));
+#else
                 found = m_table[bucket_id];
+#endif
             }
 
             if (found.key() == key) {

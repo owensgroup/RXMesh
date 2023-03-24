@@ -66,6 +66,7 @@ struct LPPair
     }
 
     __host__ __device__ LPPair() : m_pair(INVALID32){};
+    __host__ __device__ LPPair(uint32_t p) : m_pair(p){};
     LPPair(const LPPair& other) = default;
     LPPair(LPPair&&)            = default;
     LPPair& operator=(const LPPair&) = default;
