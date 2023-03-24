@@ -81,14 +81,14 @@ __global__ static void check_uniqueness(const Context           context,
 
                 if (v0 >= patch_info.num_vertices[0] ||
                     v1 >= patch_info.num_vertices[0] || v0 == v1) {
-                    printf("\n 1 unqiuness = %u", patch_id);
+                    //printf("\n 1 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
                 if (patch_info.is_deleted(LocalVertexT(v0)) ||
                     patch_info.is_deleted(LocalVertexT(v1))) {
 
-                    printf("\n 2 unqiuness = %u", patch_id);
+                    //printf("\n 2 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -112,14 +112,14 @@ __global__ static void check_uniqueness(const Context           context,
                     e1 >= patch_info.num_edges[0] ||
                     e2 >= patch_info.num_edges[0] || e0 == e1 || e0 == e2 ||
                     e1 == e2) {
-                    printf("\n 3 unqiuness = %u", patch_id);
+                    //printf("\n 3 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
                 if (patch_info.is_deleted(LocalEdgeT(e0)) ||
                     patch_info.is_deleted(LocalEdgeT(e1)) ||
                     patch_info.is_deleted(LocalEdgeT(e2))) {
-                    printf("\n 4 unqiuness = %u, f= %u", patch_id, f);
+                    //printf("\n 4 unqiuness = %u, f= %u", patch_id, f);
                     ::atomicAdd(d_check, 1);
                 }
 
@@ -133,14 +133,14 @@ __global__ static void check_uniqueness(const Context           context,
                     v1 >= patch_info.num_vertices[0] ||
                     v2 >= patch_info.num_vertices[0] || v0 == v1 || v0 == v2 ||
                     v1 == v2) {
-                    printf("\n 5 unqiuness = %u", patch_id);
+                    //printf("\n 5 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
                 if (patch_info.is_deleted(LocalVertexT(v0)) ||
                     patch_info.is_deleted(LocalVertexT(v1)) ||
                     patch_info.is_deleted(LocalVertexT(v2))) {
-                    printf("\n 6 unqiuness = %u, f=%u", patch_id, f);
+                    //printf("\n 6 unqiuness = %u, f=%u", patch_id, f);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -221,7 +221,7 @@ __global__ static void check_not_owned(const Context           context,
                 // owned by it
                 if (!owner_patch_info.is_owned(
                         LocalFaceT(f_owned.local_id()))) {
-                    printf("\n 1 owned = %u", patch_id);
+                    //printf("\n 1 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
@@ -229,7 +229,7 @@ __global__ static void check_not_owned(const Context           context,
                 // patches that have it as not-owned
                 if (owner_patch_info.is_deleted(
                         LocalFaceT(f_owned.local_id()))) {
-                    printf("\n 2 owned = %u", patch_id);
+                    //printf("\n 2 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 } else {
                     uint16_t ew0, ew1, ew2;
@@ -256,7 +256,7 @@ __global__ static void check_not_owned(const Context           context,
                     if (e0 != ew0 || p0 != pw0 ||  //
                         e1 != ew1 || p1 != pw1 ||  //
                         e2 != ew2 || p2 != pw2) {
-                        if (e0 != ew0 || p0 != pw0) {
+                        /*if (e0 != ew0 || p0 != pw0) {
                             printf(
                                 "\n 3A owned patch= %u, f=%u, fw(%u, %u), "
                                 "(p0=%u, e0=%u, pw0=%u, ew0=%u)",
@@ -296,12 +296,12 @@ __global__ static void check_not_owned(const Context           context,
                                 e2,
                                 pw2,
                                 ew2);
-                        }
+                        }*/
                         ::atomicAdd(d_check, 1);
                     }
 
                     if (d0 != dw0 || d1 != dw1 || d2 != dw2) {
-                        printf("\n 4 owned = %u", patch_id);
+                        //printf("\n 4 owned = %u", patch_id);
                         ::atomicAdd(d_check, 1);
                     }
                 }
@@ -344,7 +344,7 @@ __global__ static void check_not_owned(const Context           context,
                 // owned by it
                 if (!owner_patch_info.is_owned(
                         LocalEdgeT(e_owned.local_id()))) {
-                    printf("\n 5 owned = %u", patch_id);
+                    //printf("\n 5 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
@@ -352,7 +352,7 @@ __global__ static void check_not_owned(const Context           context,
                 // patches that have it as not-owned
                 if (owner_patch_info.is_deleted(
                         LocalEdgeT(e_owned.local_id()))) {
-                    printf("\n 6 owned = %u", patch_id);
+                    //printf("\n 6 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 } else {
                     uint16_t vw0 =
@@ -365,7 +365,7 @@ __global__ static void check_not_owned(const Context           context,
                     get_owned_v(vw1, pw1, owner_patch_info);
 
                     if (v0 != vw0 || p0 != pw0 || v1 != vw1 || p1 != pw1) {
-                        printf("\n 7 owned = %u", patch_id);
+                        //printf("\n 7 owned = %u", patch_id);
                         ::atomicAdd(d_check, 1);
                     }
                 }
@@ -437,7 +437,7 @@ __global__ static void check_ribbon_edges(const Context           context,
             const LocalEdgeT el(e);
             if (patch_info.is_owned(el)) {
                 if (s_mark_edges[e] == 0) {
-                    printf("\n ribbon edge = %u, %u", patch_id, e);
+                    //printf("\n ribbon edge = %u, %u", patch_id, e);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -585,13 +585,13 @@ __global__ static void check_ribbon_faces(const Context               context,
                             }
 
                             if (!found) {
-                                printf(
+                                /*printf(
                                     "\n T=%u, ribbon face = %u, f= %u, v_id= "
                                     "%u ",
                                     threadIdx.x,
                                     patch_id,
                                     f,
-                                    v_id);
+                                    v_id);*/
                                 ::atomicAdd(d_check, 1);
                                 break;
                             }

@@ -176,8 +176,8 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
         timer.stop();
         CUDA_ERROR(cudaDeviceSynchronize());
         CUDA_ERROR(cudaGetLastError());
-        //RXMESH_TRACE("delaunay_rxmesh() RXMesh Delaunay Edge Flip took {} (ms)",
-        //             timer.elapsed_millis());
+        // RXMESH_TRACE("delaunay_rxmesh() RXMesh Delaunay Edge Flip took {}
+        // (ms)", timer.elapsed_millis());
 
         rx.update_host();
 
@@ -191,21 +191,14 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
         EXPECT_EQ(num_faces, rx.get_num_faces());
 
         EXPECT_TRUE(rx.validate());
-
-        // rx.export_obj("del_sphere3.obj", *coords);
+        CUDA_ERROR(cudaGetLastError());
+        
 
 #if USE_POLYSCOPE
-
         rx.update_polyscope();
 
         auto ps_mesh = rx.get_polyscope_mesh();
         ps_mesh->updateVertexPositions(*coords);
-
-        // auto f_2_412 = rx.get_owner_face_handle({2, {412}});
-        // std::cout << "f_2_412 ==> " << f_2_412.patch_id() << " "
-        //          << f_2_412.local_id() << "\n";
-        //(*f_attr)(f_2_412) = 10;
-
 
         ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
         ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
@@ -216,7 +209,6 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
         rx.polyscope_render_face_patch();
 
         polyscope::show();
-
 #endif
     }
     return true;
