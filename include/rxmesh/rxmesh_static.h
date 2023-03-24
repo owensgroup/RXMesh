@@ -899,33 +899,6 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
-     * @brief get the owner handle of a given vertex handle
-     * @param vh the vertex handle
-     */
-    VertexHandle get_owner_vertex_handle(const VertexHandle vh) const
-    {
-        return get_owner_handle(vh);
-    }
-
-    /**
-     * @brief get the owner handle of a given edge handle
-     * @param eh the edge handle
-     */
-    EdgeHandle get_owner_edge_handle(const EdgeHandle eh) const
-    {
-        return get_owner_handle(eh);
-    }
-
-    /**
-     * @brief get the owner handle of a given face handle
-     * @param fh the face handle
-     */
-    FaceHandle get_owner_face_handle(const FaceHandle fh) const
-    {
-        return get_owner_handle(fh);
-    }
-
-    /**
      * @brief get the owner handle of a given mesh element handle
      * @param handle the mesh element handle
      * memory
@@ -933,7 +906,7 @@ class RXMeshStatic : public RXMesh
     template <typename HandleT>
     HandleT get_owner_handle(const HandleT input) const
     {
-        return Context::get_owner_handle(input, m_h_patches_info);
+        return get_context().get_owner_handle(input, m_h_patches_info);
     }
 
     /**

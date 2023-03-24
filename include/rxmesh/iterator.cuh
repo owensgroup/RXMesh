@@ -57,8 +57,7 @@ struct Iterator
         if (detail::is_owned(lid, m_output_owned_bitmask)) {
             return ret;
         } else {
-            return m_context.get_owner_handle(
-                ret, m_context.m_patches_info, m_s_table);
+            return m_context.get_owner_handle(ret, nullptr, m_s_table);
         }
     }
 

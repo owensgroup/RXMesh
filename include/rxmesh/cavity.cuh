@@ -912,7 +912,7 @@ struct Cavity
 
         unlock_patches_and_update_timestamp(block);
 
-        block.sync();        
+        block.sync();
     }
 
 
@@ -1190,8 +1190,9 @@ struct Cavity
                 // since, it could have been activated/added only in shared
                 // memory (through a previous call to mirgate_from_patch)
                 assert(m_s_active_mask_v(v));
-                const VertexHandle v_owner = m_context.get_owner_vertex_handle(
-                    {m_patch_info.patch_id, {v}}, nullptr, false);
+                const VertexHandle v_owner = m_context.get_owner_handle(
+                    VertexHandle(m_patch_info.patch_id, {v}), nullptr, nullptr,
+                    false);
                 if (v_owner.patch_id() == q) {
                     ::atomicAdd(&s_ok_q, 1);
                     m_s_src_mask_v.set(v_owner.local_id(), true);
@@ -1791,7 +1792,7 @@ struct Cavity
                                 if (m_s_patches_to_lock_mask(i)) {
                                     uint32_t pp = m_patch_info.patch_stash(i);
                                     if (pp == owner) {
-                                        owner_locked = true;                                        
+                                        owner_locked = true;
                                         break;
                                     }
                                 }
@@ -2005,8 +2006,7 @@ struct Cavity
     {
         // first check if lid is owned by src_patch. If not, then map it to its
         // owner patch and local index in it
-        auto owner = m_context.get_owner_handle(HandleT(src_patch, {lid}),
-                                                m_context.m_patches_info);
+        auto owner = m_context.get_owner_handle(HandleT(src_patch, {lid}));
 
         src_patch = owner.patch_id();
         lid       = owner.local_id();
@@ -2025,6 +2025,8 @@ struct Cavity
             if (!dest_patch_owned_mask(i) &&
                 (dest_patch_active_mask(i) || dest_cavity_id[i] != INVALID16)) {
                 auto lp = dest_patch_lp.find(i);
+                // auto handle = m_context.get_owner_handle<HandleT>(
+                //    {m_patch_info.patch_id, {i}},  );
                 if (dest_patch_stash.get_patch(lp) == src_patch &&
                     lp.local_id_in_owner_patch() == lid) {
                     return i;

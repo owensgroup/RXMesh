@@ -252,8 +252,11 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_from_patch_v2(
             // since, it could have been activated/added only in shared
             // memory (through a previous call to mirgate_from_patch)
             assert(m_s_active_mask_v(v));
-            const VertexHandle v_owner = m_context.get_owner_vertex_handle(
-                {m_patch_info.patch_id, {v}}, nullptr, false);
+            const VertexHandle v_owner = m_context.get_owner_handle(
+                VertexHandle(m_patch_info.patch_id, {v}),
+                nullptr,
+                nullptr,
+                false);
             if (v_owner.patch_id() == q) {
                 ::atomicAdd(&s_ok_q, 1);
                 m_s_src_mask_v.set(v_owner.local_id(), true);
