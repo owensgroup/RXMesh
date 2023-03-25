@@ -85,7 +85,8 @@ class Context
         const HandleT    handle,
         const PatchInfo* patches_info = nullptr,
         const LPPair*    table        = nullptr,
-        const bool       check        = true) const
+        const bool       check0       = true,
+        const bool       check1       = true) const
     {
         using LocalT   = typename HandleT::LocalT;
         uint32_t owner = handle.patch_id();
@@ -94,7 +95,7 @@ class Context
         const PatchInfo* pi =
             (patches_info == nullptr) ? m_patches_info : patches_info;
 
-        if (check) {
+        if (check0) {
             assert(!pi[owner].is_deleted(LocalT(lid)));
         }
 
@@ -108,7 +109,10 @@ class Context
             assert(!lp.is_sentinel());
             owner = pi[owner].patch_stash.get_patch(lp);
 
-            assert(!pi[owner].is_deleted(LocalT(lp.local_id_in_owner_patch())));
+            if (check1) {
+                assert(!pi[owner].is_deleted(
+                    LocalT(lp.local_id_in_owner_patch())));
+            }
 
             while (!pi[owner].is_owned(LocalT(lp.local_id_in_owner_patch()))) {
 
@@ -118,8 +122,10 @@ class Context
                 assert(!lp.is_sentinel());
                 owner = pi[owner].patch_stash.get_patch(lp);
 
-                assert(!pi[owner].is_deleted(
-                    LocalT(lp.local_id_in_owner_patch())));
+                if (check1) {
+                    assert(!pi[owner].is_deleted(
+                        LocalT(lp.local_id_in_owner_patch())));
+                }
             }
 
             return HandleT(owner, lp.local_id_in_owner_patch());

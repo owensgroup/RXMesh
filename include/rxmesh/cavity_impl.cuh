@@ -353,15 +353,19 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_from_patch_v2(
         // 2. in m_s_src_connect_mask_v, mark the vertices connected to
         // vertices in m_s_src_mask_v
         for (uint16_t e = threadIdx.x; e < q_num_edges; e += blockThreads) {
-            const uint16_t v0q = q_patch_info.ev[2 * e + 0].id;
-            const uint16_t v1q = q_patch_info.ev[2 * e + 1].id;
+            if (!q_patch_info.is_deleted(LocalEdgeT(e))) {
+                const uint16_t v0q = q_patch_info.ev[2 * e + 0].id;
+                const uint16_t v1q = q_patch_info.ev[2 * e + 1].id;
 
-            if (m_s_src_mask_v(v0q)) {
-                m_s_src_connect_mask_v.set(v1q, true);
-            }
+                if (m_s_src_mask_v(v0q)) {
+                    m_s_src_connect_mask_v.set(v1q, true);
+                    assert(!q_patch_info.is_deleted(LocalVertexT(v1q)));
+                }
 
-            if (m_s_src_mask_v(v1q)) {
-                m_s_src_connect_mask_v.set(v0q, true);
+                if (m_s_src_mask_v(v1q)) {
+                    m_s_src_connect_mask_v.set(v0q, true);
+                    assert(!q_patch_info.is_deleted(LocalVertexT(v0q)));
+                }
             }
         }
         block.sync();
@@ -381,7 +385,6 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_from_patch_v2(
         for (uint16_t v = threadIdx.x; v < q_num_vertices_up;
              v += blockThreads) {
 
-
             LPPair lp =
                 migrate_vertex(q,
                                q_num_vertices,
@@ -398,9 +401,8 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_from_patch_v2(
             block.sync();
 
             if (!lp.is_sentinel()) {
-                if (!m_patch_info.lp_v.insert(lp)) {
-                    assert(false);
-                }
+                bool inserted = m_patch_info.lp_v.insert(lp);
+                assert(inserted);
             }
         }
         block.sync();
@@ -431,7 +433,7 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_from_patch_v2(
                     // If any of these two vertices are participant in
                     // the src bitmask
                     if (m_s_src_mask_v(v0q) || m_s_src_mask_v(v1q)) {
-
+                        assert(!q_patch_info.is_deleted(LocalEdgeT(edge)));
                         // set the bit for this edge in src_e mask so we
                         // can use it for migrating faces
                         m_s_src_mask_e.set(edge, true);
@@ -443,9 +445,8 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_from_patch_v2(
             block.sync();
 
             if (!lp.is_sentinel()) {
-                if (!m_patch_info.lp_e.insert(lp)) {
-                    assert(false);
-                }
+                bool inserted = m_patch_info.lp_e.insert(lp);
+                assert(inserted);
             }
         }
         block.sync();
@@ -464,23 +465,30 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_from_patch_v2(
         // we need first to represent the edges that touch these
         // faces in q before migrating the faces
         for (uint16_t f = threadIdx.x; f < q_num_faces; f += blockThreads) {
-            const uint16_t e0 = q_patch_info.fe[3 * f + 0].id >> 1;
-            const uint16_t e1 = q_patch_info.fe[3 * f + 1].id >> 1;
-            const uint16_t e2 = q_patch_info.fe[3 * f + 2].id >> 1;
+            if (!q_patch_info.is_deleted(LocalFaceT(f))) {
 
-            bool b0 = m_s_src_mask_e(e0);
-            bool b1 = m_s_src_mask_e(e1);
-            bool b2 = m_s_src_mask_e(e2);
+                const uint16_t e0 = q_patch_info.fe[3 * f + 0].id >> 1;
+                const uint16_t e1 = q_patch_info.fe[3 * f + 1].id >> 1;
+                const uint16_t e2 = q_patch_info.fe[3 * f + 2].id >> 1;
 
-            if (b0 || b1 || b2) {
-                if (!b0) {
-                    m_s_src_connect_mask_e.set(e0, true);
-                }
-                if (!b1) {
-                    m_s_src_connect_mask_e.set(e1, true);
-                }
-                if (!b2) {
-                    m_s_src_connect_mask_e.set(e2, true);
+                assert(!q_patch_info.is_deleted(LocalEdgeT(e0)));
+                assert(!q_patch_info.is_deleted(LocalEdgeT(e1)));
+                assert(!q_patch_info.is_deleted(LocalEdgeT(e2)));
+
+                bool b0 = m_s_src_mask_e(e0);
+                bool b1 = m_s_src_mask_e(e1);
+                bool b2 = m_s_src_mask_e(e2);
+
+                if (b0 || b1 || b2) {
+                    if (!b0) {
+                        m_s_src_connect_mask_e.set(e0, true);
+                    }
+                    if (!b1) {
+                        m_s_src_connect_mask_e.set(e1, true);
+                    }
+                    if (!b2) {
+                        m_s_src_connect_mask_e.set(e2, true);
+                    }
                 }
             }
         }
@@ -505,9 +513,8 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_from_patch_v2(
             block.sync();
 
             if (!lp.is_sentinel()) {
-                if (!m_patch_info.lp_e.insert(lp)) {
-                    assert(false);
-                }
+                bool inserted = m_patch_info.lp_e.insert(lp);
+                assert(inserted);
             }
         }
 
@@ -542,9 +549,8 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_from_patch_v2(
             block.sync();
 
             if (!lp.is_sentinel()) {
-                if (!m_patch_info.lp_f.insert(lp)) {
-                    assert(false);
-                }
+                bool inserted = m_patch_info.lp_f.insert(lp);
+                assert(inserted);
             }
         }
 
