@@ -952,6 +952,7 @@ struct Cavity
         using HandleT = typename AttributeT::HandleType;
         using Type    = typename AttributeT::Type;
 
+        const uint32_t p = m_patch_info.patch_id;
 
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             for (uint32_t vp = threadIdx.x; vp < m_s_num_vertices[0];
@@ -961,14 +962,13 @@ struct Cavity
                     assert(m_s_active_mask_v(vp) ||
                            m_s_cavity_id_v[vp] != INVALID32);
 
-                    auto           p_lp = m_patch_info.lp_v.find(vp);
-                    const uint32_t q = m_patch_info.patch_stash.get_patch(p_lp);
-                    const uint16_t qv = p_lp.local_id_in_owner_patch();
+                    const VertexHandle handle =
+                        get_owner_handle<VertexHandle>(p, m_patch_info, vp);
 
                     const uint32_t num_attr = attribute.get_num_attributes();
                     for (uint32_t attr = 0; attr < num_attr; ++attr) {
                         attribute(m_patch_info.patch_id, vp, attr) =
-                            attribute(q, qv, attr);
+                            attribute(handle, attr);
                     }
                 }
             }
@@ -982,14 +982,13 @@ struct Cavity
                     assert(m_s_active_mask_e(ep) ||
                            m_s_cavity_id_e[ep] != INVALID32);
 
-                    auto           p_lp = m_patch_info.lp_e.find(ep);
-                    const uint32_t q = m_patch_info.patch_stash.get_patch(p_lp);
-                    const uint16_t qe = p_lp.local_id_in_owner_patch();
+                    const EdgeHandle handle =
+                        get_owner_handle<EdgeHandle>(p, m_patch_info, ep);
 
                     const uint32_t num_attr = attribute.get_num_attributes();
                     for (uint32_t attr = 0; attr < num_attr; ++attr) {
                         attribute(m_patch_info.patch_id, ep, attr) =
-                            attribute(q, qe, attr);
+                            attribute(handle, attr);
                     }
                 }
             }
@@ -1003,14 +1002,13 @@ struct Cavity
                     assert(m_s_active_mask_f(fp) ||
                            m_s_cavity_id_f[fp] != INVALID32);
 
-                    auto           p_lp = m_patch_info.lp_f.find(fp);
-                    const uint32_t q = m_patch_info.patch_stash.get_patch(p_lp);
-                    const uint16_t qf = p_lp.local_id_in_owner_patch();
+                    const FaceHandle handle =
+                        get_owner_handle<FaceHandle>(p, m_patch_info, fp);
 
                     const uint32_t num_attr = attribute.get_num_attributes();
                     for (uint32_t attr = 0; attr < num_attr; ++attr) {
                         attribute(m_patch_info.patch_id, fp, attr) =
-                            attribute(q, qf, attr);
+                            attribute(handle, attr);
                     }
                 }
             }
@@ -1133,7 +1131,7 @@ struct Cavity
                     assert(false);
                 }
             }
-        }        
+        }
     }
 
 
@@ -1559,8 +1557,7 @@ struct Cavity
             if (!q_patch_info.is_deleted(local) &&
                 !q_patch_info.is_owned(local)) {
 
-                HandleT owner =
-                    get_owner_handle<HandleT>(p, q_patch_info, q, v);
+                HandleT owner = get_owner_handle<HandleT>(p, q_patch_info, v);
 
                 if (owner.patch_id() == p) {
                     if (s_cavity_id[owner.local_id()] != INVALID16 ||
@@ -1587,7 +1584,6 @@ struct Cavity
     template <typename HandleT>
     __device__ __inline__ HandleT get_owner_handle(const uint32_t  p,
                                                    const PatchInfo patch_info,
-                                                   const uint32_t  patch,
                                                    const uint16_t  lid)
     {
         using LocalT = typename HandleT::LocalT;
