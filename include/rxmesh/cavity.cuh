@@ -646,7 +646,7 @@ struct Cavity
             for (uint16_t e = start; e < end; ++e) {
                 uint32_t edge = m_s_cavity_edge_loop[e];
 
-                assert(m_s_active_mask_e(edge));
+                assert(m_s_active_mask_e((edge >> 1)));
                 if (get_cavity_vertex(c, e - start).local_id() ==
                     cavity_edge_src_vertex) {
                     uint16_t temp               = m_s_cavity_edge_loop[start];
@@ -841,9 +841,9 @@ struct Cavity
 
         assert(!m_s_active_mask_f(f_id));
 
-        assert(m_s_active_mask_e(e0.local_id()));
-        assert(m_s_active_mask_e(e1.local_id()));
-        assert(m_s_active_mask_e(e2.local_id()));
+        assert(m_s_active_mask_e(e0.get_edge_handle().local_id()));
+        assert(m_s_active_mask_e(e1.get_edge_handle().local_id()));
+        assert(m_s_active_mask_e(e2.get_edge_handle().local_id()));
 
         m_s_active_mask_f.set(f_id, true);
         m_s_owned_mask_f.set(f_id, true);
@@ -1450,7 +1450,9 @@ struct Cavity
         FuncT          should_migrate)
     {
         LPPair ret;
-        if (q_vertex < q_num_vertices) {
+        if (q_vertex < q_num_vertices &&
+            !q_patch_info.is_deleted(LocalVertexT(q_vertex))) {
+
             if (should_migrate(q_vertex)) {
                 uint16_t vq = q_vertex;
                 uint32_t o  = q;
@@ -1512,7 +1514,8 @@ struct Cavity
     {
         LPPair ret;
 
-        if (q_edge < q_num_edges) {
+        if (q_edge < q_num_edges &&
+            !q_patch_info.is_deleted(LocalEdgeT(q_edge))) {
 
             // edge v0q--v1q where o0 (defined below) is owner
             // patch of v0q and o1 (defined below) is owner
@@ -1555,7 +1558,7 @@ struct Cavity
                     assert(m_context.m_patches_info[o1].is_owned(
                         LocalVertexT(v1q)));
 
-                    
+
                     // since any vertex in m_s_src_mask_v has been
                     // added already to p, then we should find the
                     // copy otherwise there is something wrong
@@ -1613,7 +1616,9 @@ struct Cavity
     {
         LPPair ret;
 
-        if (q_face < q_num_faces) {
+        if (q_face < q_num_faces &&
+            !q_patch_info.is_deleted(LocalFaceT(q_face))) {
+
             uint16_t e0q, e1q, e2q;
             flag_t   d0, d1, d2;
             Context::unpack_edge_dir(
@@ -1633,10 +1638,8 @@ struct Cavity
                 uint16_t fp = find_copy_face(fq, o);
 
 
-                assert(!m_context.m_patches_info[o].is_deleted(
-                    LocalFaceT(fq)));
-                assert(
-                    m_context.m_patches_info[o].is_owned(LocalFaceT(fq)));
+                assert(!m_context.m_patches_info[o].is_deleted(LocalFaceT(fq)));
+                assert(m_context.m_patches_info[o].is_owned(LocalFaceT(fq)));
 
                 if (fp == INVALID16) {
                     fp = atomicAdd(m_s_num_faces, 1u);

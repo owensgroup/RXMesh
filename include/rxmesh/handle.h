@@ -274,7 +274,7 @@ struct DEdgeHandle
     /**
      * @brief get a DEdgeHandle by flipping this directed edge
      */
-    constexpr __device__ __host__ __inline__ DEdgeHandle get_flip_dedge()
+    constexpr __device__ __host__ __inline__ DEdgeHandle get_flip_dedge() const
     {
         return {patch_id(), uint16_t(local_id() ^ 1)};
     }
@@ -282,7 +282,7 @@ struct DEdgeHandle
     /**
      * @brief extract the underlying undirected edge
      */
-    constexpr __device__ __host__ __inline__ EdgeHandle get_edge_handle()
+    constexpr __device__ __host__ __inline__ EdgeHandle get_edge_handle() const
     {
         return {patch_id(), uint16_t(local_id() >> 1)};
     }
