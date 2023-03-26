@@ -1083,8 +1083,15 @@ struct Cavity
 
             if (s_ownership_change(vp)) {
                 // get handle to the owner
+                // we don't check if the element is deleted since vp could have
+                // just been added to this patch and thus it is not active in
+                // global memory
                 const HandleT h = m_context.get_owner_handle<HandleT>(
-                    {m_patch_info.patch_id, {vp}});
+                    {m_patch_info.patch_id, {vp}},
+                    nullptr,
+                    nullptr,
+                    false,
+                    true);
 
                 const uint32_t q  = h.patch_id();
                 const uint16_t vq = h.local_id();
@@ -1093,6 +1100,12 @@ struct Cavity
                 s_owned_bitmask.set(vp, true);
 
                 // m_patch_info.get_lp<HandleT>().remove(vp);
+
+                assert(!m_context.m_patches_info[q].is_deleted(
+                    HandleT::LocalT(vq)));
+
+                assert(
+                    m_context.m_patches_info[q].is_owned(HandleT::LocalT(vq)));
 
                 // add this patch (p) to the owner's patch stash
                 const uint8_t stash_id =
@@ -1111,7 +1124,7 @@ struct Cavity
                     assert(false);
                 }
             }
-        }
+        }        
     }
 
 
@@ -2113,7 +2126,7 @@ struct Cavity
                 if (handle.patch_id() == src_patch &&
                     handle.local_id() == lid) {
                     return i;
-                }
+                }                
             }
         }
         return INVALID16;

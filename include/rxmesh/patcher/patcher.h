@@ -38,7 +38,7 @@ class Patcher
             const uint32_t num_edges,
             const bool     quite);
 
-    Patcher(std::string filename);
+    Patcher(std::string filename, const bool quite);
 
     ~Patcher();
 

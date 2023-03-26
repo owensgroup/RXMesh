@@ -183,7 +183,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     build_supporting_structures(fv, ef, ff_offset, ff_values);
 
     if (!patcher_file.empty()) {
-        m_patcher = std::make_unique<patcher::Patcher>(patcher_file);
+        m_patcher = std::make_unique<patcher::Patcher>(patcher_file, m_quite);
     } else {
         m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
                                                        ff_offset,

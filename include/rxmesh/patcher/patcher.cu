@@ -21,11 +21,15 @@ namespace rxmesh {
 
 namespace patcher {
 
-Patcher::Patcher(std::string filename)
+Patcher::Patcher(std::string filename, const bool quite)
 {
     std::ifstream                      is(filename, std::ios::binary);
     cereal::PortableBinaryInputArchive archive(is);
     archive(*this);
+
+    if (!quite) {
+        print_statistics();
+    }
 }
 
 Patcher::Patcher(uint32_t                                        patch_size,
