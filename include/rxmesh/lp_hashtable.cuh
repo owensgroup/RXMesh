@@ -315,6 +315,30 @@ struct LPHashTable
         return find(key, bucket_id, in_stash, table);
     }
 
+
+    /**
+     * @brief Replace an existing pair with another. We use the new_pair to
+     * find the old pair. Then, we replace it with new_pair
+     * @param new_pair the new pair that will be inserted
+     */
+    __host__ __device__ __inline__ void replace(const LPPair new_pair)
+    {
+        uint32_t bucket_id(0);
+        bool     in_stash(false);
+        LPPair   old_pair = find(new_pair.key(), bucket_id, in_stash);
+
+        assert(!old_pair.is_sentinel());
+
+        assert(new_pair.key() == old_pair.key());
+
+        if (!in_stash) {
+            m_table[bucket_id].m_pair = new_pair.m_pair;
+        } else {
+            m_stash[bucket_id].m_pair = new_pair.m_pair;
+        }
+    }
+
+
     /**
      * @brief remove item from the hash table i.e., replace it with
      * sentinel_pair

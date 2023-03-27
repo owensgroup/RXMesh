@@ -17,6 +17,78 @@
 namespace rxmesh {
 
 namespace detail {
+template <uint32_t blockThreads, typename HandleT>
+__device__ __inline__ void fix_lphashtable(PatchInfo& pi)
+{
+    using LocalT = typename HandleT::LocalT;
+
+    const uint16_t num_elements = *(pi.get_num_elements<HandleT>());
+    for (uint16_t i = threadIdx.x; i < num_elements; i += blockThreads) {
+        HandleT handle;
+        bool    replace = false;
+
+        if (!pi.is_owned(LocalT(i)) && !pi.is_deleted(LocalT(i))) {
+
+            // This is the same implementation in Context::get_owner_handle()
+
+            uint32_t owner = pi.patch_id;
+            uint16_t lid   = i;
+
+            LPPair lp = pi.get_lp<HandleT>().find(lid);
+            owner     = pi.patch_stash.get_patch(lp);
+
+            assert(owner != INVALID32);
+            assert(!lp.is_sentinel());
+            assert(!context.m_patches_info[owner].is_deleted(
+                LocalT(lp.local_id_in_owner_patch())));
+
+
+            while (!context.m_patches_info[owner].is_owned(
+                LocalT(lp.local_id_in_owner_patch()))) {
+
+                replace = true;
+
+                lp = context.m_patches_info[owner].get_lp<HandleT>().find(
+                    lp.local_id_in_owner_patch());
+
+                assert(!lp.is_sentinel());
+
+                owner = context.m_patches_info[owner].patch_stash.get_patch(lp);
+
+                assert(!context.m_patches_info[owner].is_deleted(
+                    LocalT(lp.local_id_in_owner_patch())));
+            }
+
+            handle = HandleT(owner, lp.local_id_in_owner_patch());
+        }
+
+        syncthreads();
+
+        if (replace) {
+
+            uint8_t o = pi.patch_stash.insert_patch(handle.patch_id());
+
+            LPPair lp(i, handle.local_id(), o);
+
+            pi.get_lp<HandleT>().replace(lp);
+        }
+    }
+}
+
+template <uint32_t blockThreads>
+__global__ static void fix_lphashtable(const Context context)
+{
+    const uint32_t pid = blockIdx.x;
+    if (pid >= context.m_num_patches[0]) {
+        return;
+    }
+
+    PatchInfo pi = context.m_patches_info[pid];
+
+    fix_lphashtable<blockThreads, VertexHandle>(pi);
+    fix_lphashtable<blockThreads, EdgeHandle>(pi);
+    fix_lphashtable<blockThreads, FaceHandle>(pi);
+}
 
 template <uint32_t blockThreads>
 __global__ static void calc_num_elements(const Context context,
