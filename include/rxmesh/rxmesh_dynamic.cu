@@ -18,7 +18,7 @@ namespace rxmesh {
 
 namespace detail {
 template <uint32_t blockThreads, typename HandleT>
-__device__ __inline__ void fix_lphashtable(PatchInfo& pi)
+__device__ __inline__ void fix_lphashtable(const Context context, PatchInfo& pi)
 {
     using LocalT = typename HandleT::LocalT;
 
@@ -85,9 +85,9 @@ __global__ static void fix_lphashtable(const Context context)
 
     PatchInfo pi = context.m_patches_info[pid];
 
-    fix_lphashtable<blockThreads, VertexHandle>(pi);
-    fix_lphashtable<blockThreads, EdgeHandle>(pi);
-    fix_lphashtable<blockThreads, FaceHandle>(pi);
+    fix_lphashtable<blockThreads, VertexHandle>(context, pi);
+    fix_lphashtable<blockThreads, EdgeHandle>(context, pi);
+    fix_lphashtable<blockThreads, FaceHandle>(context, pi);
 }
 
 template <uint32_t blockThreads>
