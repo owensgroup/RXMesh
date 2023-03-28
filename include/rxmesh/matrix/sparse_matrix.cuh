@@ -306,7 +306,7 @@ struct SparseMatrix
         return m_d_val[idx];
     }
 
-    void free()
+    void free_mat()
     {
         CUDA_ERROR(cudaFree(m_d_row_ptr));
         CUDA_ERROR(cudaFree(m_d_col_idx));
@@ -637,16 +637,89 @@ struct SparseMatrix
 
     /* --- LOW LEVEL API --- */
 
+    void spmat_chol_test()
+    {
+        // cholesky csr info
+        csrcholInfo_t chol_info;
+        CUSOLVER_ERROR(cusolverSpCreateCsrcholInfo(&chol_info));
+
+        // cholesky analysis
+        CUSOLVER_ERROR(cusolverSpXcsrcholAnalysis(m_cusolver_sphandle,
+                                                  m_row_size,
+                                                  m_nnz,
+                                                  m_descr,
+                                                  m_d_row_ptr,
+                                                  m_d_col_idx,
+                                                  chol_info));
+
+        size_t internalDataInBytes = 0;
+        size_t workspaceInBytes    = 0;
+
+        // allocate cholesky buffer
+        CUSOLVER_ERROR(cusolverSpScsrcholBufferInfo(m_cusolver_sphandle,
+                                                    m_row_size,
+                                                    m_nnz,
+                                                    m_descr,
+                                                    m_d_val,
+                                                    m_d_row_ptr,
+                                                    m_d_col_idx,
+                                                    chol_info,
+                                                    &internalDataInBytes,
+                                                    &workspaceInBytes));
+
+        void* chol_buffer;
+        CUDA_ERROR(cudaMalloc((void**)&chol_buffer, workspaceInBytes));
+
+
+        // cholesky factor
+        CUSOLVER_ERROR(cusolverSpScsrcholFactor(m_cusolver_sphandle,
+                                                m_row_size,
+                                                m_nnz,
+                                                m_descr,
+                                                m_d_val,
+                                                m_d_row_ptr,
+                                                m_d_col_idx,
+                                                chol_info,
+                                                chol_buffer));
+
+        double tol = 1.0e-8;
+        int    singularity;
+
+        CUSOLVER_ERROR(cusolverSpScsrcholZeroPivot(
+            m_cusolver_sphandle, chol_info, tol, &singularity));
+        if (0 <= singularity) {
+            printf("WARNING: the matrix is singular at row %d under tol (%E)\n",
+                   singularity,
+                   tol);
+        }
+    }
+
     void spmat_chol_reorder(rxmesh::Reorder reorder)
     {
         if (reorder == Reorder::NONE) {
             RXMESH_INFO("None reordering is specified",
                         "Continue without reordering");
             m_use_reorder = false;
+
+            if (m_reorder_allocated) {
+                GPU_FREE(m_d_val);
+                GPU_FREE(m_h_row_ptr);
+                GPU_FREE(m_h_col_idx);
+                m_reorder_allocated = false;
+            }
+
             return;
         }
 
         m_use_reorder = true;
+
+        // allocate the purmutated csr
+        m_reorder_allocated = true;
+        CUDA_ERROR(cudaMalloc((void**)&m_d_solver_val, m_nnz * sizeof(T)));
+        CUDA_ERROR(cudaMalloc((void**)&m_d_solver_row_ptr,
+                              m_row_size * sizeof(IndexT)));
+        CUDA_ERROR(
+            cudaMalloc((void**)&m_d_solver_col_idx, m_nnz * sizeof(IndexT)));
 
         /*check on host*/
         bool on_host = true;
@@ -702,8 +775,8 @@ struct SparseMatrix
 
         IndexT* h_mapBfromQ =
             static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
-        IndexT* d_mapBfromQ = CUDA_ERROR(
-            cudaMalloc((void**)&m_d_col_idx, m_nnz * sizeof(IndexT)));
+        IndexT* d_mapBfromQ;
+        CUDA_ERROR(cudaMalloc((void**)&d_mapBfromQ, m_nnz * sizeof(IndexT)));
 
         // do the permutation which works only on the col and row indices
         CUSOLVER_ERROR(cusolverSpXcsrpermHost(m_cusolver_sphandle,
@@ -718,13 +791,7 @@ struct SparseMatrix
                                               h_mapBfromQ,
                                               perm_buffer_cpu));
 
-        // allocate the purmutated csr and copy from the host
-        CUDA_ERROR(cudaMalloc((void**)&m_d_solver_val, m_nnz * sizeof(T)));
-        CUDA_ERROR(cudaMalloc((void**)&m_d_solver_row_ptr,
-                              m_row_size * sizeof(IndexT)));
-        CUDA_ERROR(
-            cudaMalloc((void**)&m_d_solver_col_idx, m_nnz * sizeof(IndexT)));
-
+        // copy the purmutated csr from the host
         CUDA_ERROR(cudaMemcpyAsync(m_d_solver_val,
                                    m_h_val,
                                    m_nnz * sizeof(T),
@@ -858,8 +925,14 @@ struct SparseMatrix
         double tol = 1.0e-8;
         int    singularity;
 
-        CUSOLVER_ERROR(cusolverSpDcsrcholZeroPivot(
-            m_cusolver_sphandle, m_chol_info, tol, &singularity));
+        if constexpr (std::is_same_v<T, float>) {
+            CUSOLVER_ERROR(cusolverSpScsrcholZeroPivot(
+                m_cusolver_sphandle, m_chol_info, tol, &singularity));
+        }
+        if constexpr (std::is_same_v<T, double>) {
+            CUSOLVER_ERROR(cusolverSpDcsrcholZeroPivot(
+                m_cusolver_sphandle, m_chol_info, tol, &singularity));
+        }
         if (0 <= singularity) {
             RXMESH_WARN(
                 "WARNING: the matrix is singular at row {} under tol ({})",
@@ -1017,8 +1090,8 @@ struct SparseMatrix
         if (((location & DEVICE) == DEVICE) &&
             ((m_allocated & DEVICE) == DEVICE)) {
             GPU_FREE(m_d_val);
-            GPU_FREE(m_h_row_ptr);
-            GPU_FREE(m_h_col_idx);
+            GPU_FREE(m_d_row_ptr);
+            GPU_FREE(m_d_col_idx);
             m_allocated = m_allocated & (~DEVICE);
         }
     }
@@ -1088,6 +1161,7 @@ struct SparseMatrix
     // CSR matrix for solving only
     // equal to the original matrix if not permutated
     // only allocated as a new CSR matrix if permutated
+    bool    m_reorder_allocated;
     IndexT* m_d_solver_row_ptr;
     IndexT* m_d_solver_col_idx;
     T*      m_d_solver_val;

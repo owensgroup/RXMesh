@@ -196,7 +196,7 @@ TEST(RXMeshStatic, SparseMatrix)
     CUDA_ERROR(cudaFree(d_arr_ones));
     CUDA_ERROR(cudaFree(d_result));
     CUDA_ERROR(cudaFree(vet_degree));
-    spmat.free();
+    spmat.free_mat();
 }
 
 /* First replace the sparse matrix entry with the edge length and then do spmv
@@ -267,7 +267,7 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
     CUDA_ERROR(cudaFree(d_arr_ref));
     CUDA_ERROR(cudaFree(d_arr_ones));
     CUDA_ERROR(cudaFree(d_result));
-    spmat.free();
+    spmat.free_mat();
 }
 
 /* set up a simple AX=B system where A is a sparse matrix, B and C are dense
@@ -334,7 +334,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
             EXPECT_NEAR(h_ret_mat[i][j], h_B_mat[i][j], 1e-3);
         }
     }
-    A_mat.free();
+    A_mat.free_mat();
 }
 
 TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
@@ -371,6 +371,9 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
         rxmesh.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
     // A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
+
+    // A_mat.spmat_chol_test();
+    A_mat.spmat_chol_reorder(Reorder::NSTDIS);
     A_mat.spmat_chol_analysis();
     A_mat.spmat_chol_buffer_alloc();
     A_mat.spmat_chol_factor();
@@ -397,5 +400,5 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
             EXPECT_NEAR(h_ret_mat[i][j], h_B_mat[i][j], 1e-3);
         }
     }
-    A_mat.free();
+    A_mat.free_mat();
 }
