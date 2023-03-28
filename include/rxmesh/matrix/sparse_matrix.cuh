@@ -123,7 +123,8 @@ struct SparseMatrix
           m_spdescr(NULL),
           m_spmm_buffer_size(0),
           m_spmv_buffer_size(0),
-          m_use_reorder(false)
+          m_use_reorder(false),
+          m_allocated(LOCATION_NONE)
     {
         using namespace rxmesh;
         constexpr uint32_t blockThreads = 256;
@@ -711,6 +712,13 @@ struct SparseMatrix
             return;
         }
 
+        /*check on host*/
+        bool on_host = true;
+        if ((HOST & m_allocated) != HOST) {
+            move(DEVICE, HOST);
+            on_host = false;
+        }
+
         m_use_reorder = true;
 
         // allocate the purmutated csr
@@ -721,12 +729,9 @@ struct SparseMatrix
         CUDA_ERROR(
             cudaMalloc((void**)&m_d_solver_col_idx, m_nnz * sizeof(IndexT)));
 
-        /*check on host*/
-        bool on_host = true;
-        if ((HOST & m_allocated) != HOST) {
-            move(DEVICE, HOST);
-            on_host = false;
-        }
+        m_h_permute = (IndexT*)malloc(m_row_size * sizeof(IndexT));
+        CUDA_ERROR(
+            cudaMalloc((void**)&m_d_permute, m_row_size * sizeof(IndexT)));
 
         if (reorder == Reorder::SYMRCM) {
             CUSOLVER_ERROR(cusolverSpXcsrsymrcmHost(m_cusolver_sphandle,
@@ -755,7 +760,19 @@ struct SparseMatrix
                                                      m_h_permute));
         }
 
+        CUDA_ERROR(cudaMemcpyAsync(m_d_permute,
+                                   m_h_permute,
+                                   m_row_size * sizeof(IndexT),
+                                   cudaMemcpyHostToDevice));
+
         // working space for permutation: B = A*Q*A^T
+        // the permutation for matrix A which works only for the col and row
+        // indices, the val will be done on device with the d/h_val_permute
+        IndexT* h_val_permute =
+            static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
+        IndexT* d_val_permute;
+        CUDA_ERROR(cudaMalloc((void**)&d_val_permute, m_nnz * sizeof(IndexT)));
+
         size_t size_perm       = 0;
         void*  perm_buffer_cpu = NULL;
 
@@ -771,14 +788,7 @@ struct SparseMatrix
                                                          &size_perm));
 
         perm_buffer_cpu = (void*)malloc(sizeof(char) * size_perm);
-        assert(NULL != perm_buffer_cpu);
 
-        IndexT* h_mapBfromQ =
-            static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
-        IndexT* d_mapBfromQ;
-        CUDA_ERROR(cudaMalloc((void**)&d_mapBfromQ, m_nnz * sizeof(IndexT)));
-
-        // do the permutation which works only on the col and row indices
         CUSOLVER_ERROR(cusolverSpXcsrpermHost(m_cusolver_sphandle,
                                               m_row_size,
                                               m_col_size,
@@ -788,7 +798,7 @@ struct SparseMatrix
                                               m_h_col_idx,
                                               m_h_permute,
                                               m_h_permute,
-                                              h_mapBfromQ,
+                                              h_val_permute,
                                               perm_buffer_cpu));
 
         // copy the purmutated csr from the host
@@ -805,33 +815,33 @@ struct SparseMatrix
                                    m_nnz * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
 
-        // do the permutation for val indices
-        cusparseDnVecDescr_t val_values;
-        cusparseSpVecDescr_t val_permutation;
+        // do the permutation for val indices on device
+        cusparseDnVecDescr_t val_final_desc;
+        cusparseSpVecDescr_t val_permute_desc;
 
-        CUDA_ERROR(cudaMemcpyAsync(d_mapBfromQ,
-                                   h_mapBfromQ,
+        CUDA_ERROR(cudaMemcpyAsync(d_val_permute,
+                                   h_val_permute,
                                    m_nnz * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
 
-        CUSPARSE_ERROR(cusparseCreateSpVec(&val_permutation,
+        CUSPARSE_ERROR(cusparseCreateSpVec(&val_permute_desc,
                                            m_nnz,
                                            m_nnz,
-                                           d_mapBfromQ,
+                                           d_val_permute,
                                            m_d_val,
                                            CUSPARSE_INDEX_32I,
                                            CUSPARSE_INDEX_BASE_ZERO,
                                            CUDA_R_32F));
         CUSPARSE_ERROR(cusparseCreateDnVec(
-            &val_values, m_nnz, m_d_solver_val, CUDA_R_32F));
-        CUSPARSE_ERROR(
-            cusparseScatter(m_cusparse_handle, val_permutation, val_values));
-        CUSPARSE_ERROR(cusparseDestroyDnVec(val_values));
-        CUSPARSE_ERROR(cusparseDestroySpVec(val_permutation));
+            &val_final_desc, m_nnz, m_d_solver_val, CUDA_R_32F));
+        CUSPARSE_ERROR(cusparseScatter(
+            m_cusparse_handle, val_permute_desc, val_final_desc));
+        CUSPARSE_ERROR(cusparseDestroyDnVec(val_final_desc));
+        CUSPARSE_ERROR(cusparseDestroySpVec(val_permute_desc));
 
         free(perm_buffer_cpu);
-        free(h_mapBfromQ);
-        CUDA_ERROR(cudaFree(d_mapBfromQ));
+        free(h_val_permute);
+        // CUDA_ERROR(cudaFree(d_val_permute));
 
         // restore the host data back to the original
         if (on_host) {
@@ -1017,7 +1027,7 @@ struct SparseMatrix
     {
         if (source == target) {
             RXMESH_WARN(
-                "DenseMatrix::move() source ({}) and target ({}) "
+                "SparseMatrix::move() source ({}) and target ({}) "
                 "are the same.",
                 location_to_string(source),
                 location_to_string(target));
@@ -1027,7 +1037,7 @@ struct SparseMatrix
         if ((source == HOST || source == DEVICE) &&
             ((source & m_allocated) != source)) {
             RXMESH_ERROR(
-                "DenseMatrix::move() moving source is not valid"
+                "SparseMatrix::move() moving source is not valid"
                 " because it was not allocated on source i.e., {}",
                 location_to_string(source));
         }
@@ -1035,7 +1045,7 @@ struct SparseMatrix
         if (((target & HOST) == HOST || (target & DEVICE) == DEVICE) &&
             ((target & m_allocated) != target)) {
             RXMESH_WARN(
-                "DenseMatrix::move() allocating target before moving to {}",
+                "SparseMatrix::move() allocating target before moving to {}",
                 location_to_string(target));
             allocate(target);
         }
