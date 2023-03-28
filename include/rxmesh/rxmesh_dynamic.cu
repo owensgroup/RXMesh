@@ -20,14 +20,22 @@ namespace detail {
 template <uint32_t blockThreads, typename HandleT>
 __device__ __inline__ void fix_lphashtable(const Context context, PatchInfo& pi)
 {
+    // TODO cleanup patch stash
+    // TODO load the hashtable in shared memory
+    // TODO cleanup the hash table for stall elements
     using LocalT = typename HandleT::LocalT;
 
     const uint16_t num_elements = *(pi.get_num_elements<HandleT>());
-    for (uint16_t i = threadIdx.x; i < num_elements; i += blockThreads) {
+
+    const uint16_t num_elements_up =
+        ROUND_UP_TO_NEXT_MULTIPLE(num_elements, blockThreads);
+
+    for (uint16_t i = threadIdx.x; i < num_elements_up; i += blockThreads) {
         HandleT handle;
         bool    replace = false;
 
-        if (!pi.is_owned(LocalT(i)) && !pi.is_deleted(LocalT(i))) {
+        if (i < num_elements && !pi.is_owned(LocalT(i)) &&
+            !pi.is_deleted(LocalT(i))) {
 
             // This is the same implementation in Context::get_owner_handle()
 
@@ -62,7 +70,7 @@ __device__ __inline__ void fix_lphashtable(const Context context, PatchInfo& pi)
             handle = HandleT(owner, lp.local_id_in_owner_patch());
         }
 
-        syncthreads();
+        __syncthreads();
 
         if (replace) {
 
@@ -692,6 +700,8 @@ bool RXMeshDynamic::validate()
     unsigned long long int* d_check;
     CUDA_ERROR(cudaMalloc((void**)&d_check, sizeof(unsigned long long int)));
 
+    assert(num_patches == get_num_patches());
+
     auto is_okay = [&]() {
         unsigned long long int h_check(0);
         CUDA_ERROR(cudaMemcpy(&h_check,
@@ -885,6 +895,16 @@ bool RXMeshDynamic::validate()
     return success;
 }
 
+void RXMeshDynamic::fix_lphashtable()
+{
+    constexpr uint32_t block_size = 256;
+    const uint32_t     grid_size  = get_num_patches();
+
+    detail::fix_lphashtable<block_size>
+        <<<grid_size, block_size>>>(this->m_rxmesh_context);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+}
 
 void RXMeshDynamic::update_host()
 {

@@ -216,8 +216,8 @@ TEST(RXMeshDynamic, Cavity)
     rx.get_polyscope_mesh()->addFaceScalarQuantity("fAttr", *f_attr);
 
     rx.render_patch(0);
-    rx.render_patch(1);
 
+    rx.render_patch(1);
 #endif
 
 
@@ -227,11 +227,14 @@ TEST(RXMeshDynamic, Cavity)
     rx.prepare_launch_box({}, launch_box, (void*)random_flips<blockThreads>);
 
 
+    // int iter = 0;
     while (!rx.is_queue_empty()) {
+        // RXMESH_INFO("iter = {}", ++iter);
         random_flips<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, *to_flip, *f_attr, *e_attr, *v_attr);
+        rx.fix_lphashtable();
     }
 
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -250,6 +253,7 @@ TEST(RXMeshDynamic, Cavity)
 
     EXPECT_TRUE(rx.validate());
 
+    // rx.export_obj("rand_flips.obj", *coords);
 #if USE_POLYSCOPE
     rx.update_polyscope();
     rx.polyscope_render_vertex_patch();

@@ -151,6 +151,11 @@ class RXMeshDynamic : public RXMeshStatic
     bool validate();
 
     /**
+     * @brief fix LPHashTables after updates 
+    */
+    void fix_lphashtable();
+
+    /**
      * @brief update the host side. Use this function to update the host side
      * after performing (dynamic) updates on the GPU. This function may
      * re-allocates the host side memory buffers in case it is not enough (e.g.,
