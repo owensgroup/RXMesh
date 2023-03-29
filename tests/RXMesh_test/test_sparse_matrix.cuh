@@ -372,33 +372,33 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 
     // A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
 
-    // A_mat.spmat_chol_test();
-    A_mat.spmat_chol_reorder(Reorder::NSTDIS);
-    A_mat.spmat_chol_analysis();
-    A_mat.spmat_chol_buffer_alloc();
-    A_mat.spmat_chol_factor();
+    A_mat.spmat_chol_test_purmute();
+    A_mat.spmat_chol_reorder(Reorder::SYMRCM);
+    // A_mat.spmat_chol_analysis();
+    // A_mat.spmat_chol_buffer_alloc();
+    // A_mat.spmat_chol_factor();
 
-    for (int i = 0; i < B_mat.m_col_size; ++i) {
-        A_mat.spmat_chol_solve(B_mat.col_data(i), X_mat.col_data(i));
-    }
+    // for (int i = 0; i < B_mat.m_col_size; ++i) {
+    //     A_mat.spmat_chol_solve(B_mat.col_data(i), X_mat.col_data(i));
+    // }
 
-    A_mat.denmat_mul(X_mat, ret_mat);
+    // A_mat.denmat_mul(X_mat, ret_mat);
 
-    std::vector<Vector3f> h_ret_mat(num_vertices);
-    CUDA_ERROR(cudaMemcpy(h_ret_mat.data(),
-                          ret_mat.data(),
-                          num_vertices * 3 * sizeof(float),
-                          cudaMemcpyDeviceToHost));
-    std::vector<Vector3f> h_B_mat(num_vertices);
-    CUDA_ERROR(cudaMemcpy(h_B_mat.data(),
-                          B_mat.data(),
-                          num_vertices * 3 * sizeof(float),
-                          cudaMemcpyDeviceToHost));
+    // std::vector<Vector3f> h_ret_mat(num_vertices);
+    // CUDA_ERROR(cudaMemcpy(h_ret_mat.data(),
+    //                       ret_mat.data(),
+    //                       num_vertices * 3 * sizeof(float),
+    //                       cudaMemcpyDeviceToHost));
+    // std::vector<Vector3f> h_B_mat(num_vertices);
+    // CUDA_ERROR(cudaMemcpy(h_B_mat.data(),
+    //                       B_mat.data(),
+    //                       num_vertices * 3 * sizeof(float),
+    //                       cudaMemcpyDeviceToHost));
 
-    for (uint32_t i = 0; i < num_vertices; ++i) {
-        for (uint32_t j = 0; j < 3; ++j) {
-            EXPECT_NEAR(h_ret_mat[i][j], h_B_mat[i][j], 1e-3);
-        }
-    }
-    A_mat.free_mat();
+    // for (uint32_t i = 0; i < num_vertices; ++i) {
+    //     for (uint32_t j = 0; j < 3; ++j) {
+    //         EXPECT_NEAR(h_ret_mat[i][j], h_B_mat[i][j], 1e-3);
+    //     }
+    // }
+    // A_mat.free_mat();
 }

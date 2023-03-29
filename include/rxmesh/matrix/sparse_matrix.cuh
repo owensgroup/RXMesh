@@ -191,7 +191,7 @@ struct SparseMatrix
 
         // val pointer allocation, actual value init should be in another
         // function
-        CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_nnz * sizeof(IndexT)));
+        CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_nnz * sizeof(T)));
 
         CUSPARSE_ERROR(cusparseCreateMatDescr(&m_descr));
         CUSPARSE_ERROR(
@@ -213,6 +213,8 @@ struct SparseMatrix
 
         CUSPARSE_ERROR(cusparseCreate(&m_cusparse_handle));
         CUSOLVER_ERROR(cusolverSpCreate(&m_cusolver_sphandle));
+
+        m_allocated = m_allocated | DEVICE;
     }
 
     void set_ones()
@@ -638,61 +640,83 @@ struct SparseMatrix
 
     /* --- LOW LEVEL API --- */
 
-    void spmat_chol_test()
+    void spmat_chol_test_reorder()
     {
-        // cholesky csr info
-        csrcholInfo_t chol_info;
-        CUSOLVER_ERROR(cusolverSpCreateCsrcholInfo(&chol_info));
+    }
 
-        // cholesky analysis
-        CUSOLVER_ERROR(cusolverSpXcsrcholAnalysis(m_cusolver_sphandle,
-                                                  m_row_size,
-                                                  m_nnz,
-                                                  m_descr,
-                                                  m_d_row_ptr,
-                                                  m_d_col_idx,
-                                                  chol_info));
+    void spmat_chol_test_purmute()
+    {
+        // Host problem definition
+        int   size         = 8;
+        int   nnz          = 4;
+        int   hX_indices[] = {0, 3, 4, 7, 1, 2, 5, 6};
+        float hX_values[]  = {5.0f, 6.0f, 7.0f, 8.0f, 1.0f, 2.0f, 3.0f, 4.0f};
+        float hY[]         = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+        float hY_result[]  = {5.0f, 1.0f, 2.0f, 6.0f, 7.0f, 3.0f, 4.0f, 8.0f};
+        //--------------------------------------------------------------------------
+        // Device memory management
+        int*   dX_indices;
+        float *dY, *dX_values;
+        CUDA_ERROR(cudaMalloc((void**)&dX_indices, size * sizeof(int)));
+        CUDA_ERROR(cudaMalloc((void**)&dX_values, size * sizeof(float)));
+        CUDA_ERROR(cudaMalloc((void**)&dY, size * sizeof(float)));
 
-        size_t internalDataInBytes = 0;
-        size_t workspaceInBytes    = 0;
+        CUDA_ERROR(cudaMemcpy(dX_indices,
+                              hX_indices,
+                              size * sizeof(int),
+                              cudaMemcpyHostToDevice));
+        CUDA_ERROR(cudaMemcpy(dX_values,
+                              hX_values,
+                              size * sizeof(float),
+                              cudaMemcpyHostToDevice));
+        CUDA_ERROR(
+            cudaMemcpy(dY, hY, size * sizeof(float), cudaMemcpyHostToDevice));
+        //--------------------------------------------------------------------------
+        // CUSPARSE APIs
+        cusparseHandle_t     handle = NULL;
+        cusparseSpVecDescr_t vecX;
+        cusparseDnVecDescr_t vecY;
+        CUSPARSE_ERROR(cusparseCreate(&handle));
+        // Create sparse vector X
+        CUSPARSE_ERROR(cusparseCreateSpVec(&vecX,
+                                           size,
+                                           size,
+                                           dX_indices,
+                                           dX_values,
+                                           CUSPARSE_INDEX_32I,
+                                           CUSPARSE_INDEX_BASE_ZERO,
+                                           CUDA_R_32F));
+        // Create dense vector y
+        CUSPARSE_ERROR(cusparseCreateDnVec(&vecY, size, dY, CUDA_R_32F));
 
-        // allocate cholesky buffer
-        CUSOLVER_ERROR(cusolverSpScsrcholBufferInfo(m_cusolver_sphandle,
-                                                    m_row_size,
-                                                    m_nnz,
-                                                    m_descr,
-                                                    m_d_val,
-                                                    m_d_row_ptr,
-                                                    m_d_col_idx,
-                                                    chol_info,
-                                                    &internalDataInBytes,
-                                                    &workspaceInBytes));
+        // execute Scatter
+        CUSPARSE_ERROR(cusparseScatter(handle, vecX, vecY));
 
-        void* chol_buffer;
-        CUDA_ERROR(cudaMalloc((void**)&chol_buffer, workspaceInBytes));
-
-
-        // cholesky factor
-        CUSOLVER_ERROR(cusolverSpScsrcholFactor(m_cusolver_sphandle,
-                                                m_row_size,
-                                                m_nnz,
-                                                m_descr,
-                                                m_d_val,
-                                                m_d_row_ptr,
-                                                m_d_col_idx,
-                                                chol_info,
-                                                chol_buffer));
-
-        double tol = 1.0e-8;
-        int    singularity;
-
-        CUSOLVER_ERROR(cusolverSpScsrcholZeroPivot(
-            m_cusolver_sphandle, chol_info, tol, &singularity));
-        if (0 <= singularity) {
-            printf("WARNING: the matrix is singular at row %d under tol (%E)\n",
-                   singularity,
-                   tol);
+        // destroy matrix/vector descriptors
+        CUSPARSE_ERROR(cusparseDestroySpVec(vecX));
+        CUSPARSE_ERROR(cusparseDestroyDnVec(vecY));
+        CUSPARSE_ERROR(cusparseDestroy(handle));
+        //--------------------------------------------------------------------------
+        // device result check
+        CUDA_ERROR(
+            cudaMemcpy(hY, dY, size * sizeof(float), cudaMemcpyDeviceToHost));
+        int correct = 1;
+        for (int i = 0; i < size; i++) {
+            RXMESH_INFO("hY[]: {}; hY_result[i]: {};", hY[i], hY_result[i]);
+            if (hY[i] != hY_result[i]) {
+                correct = 0;
+                break;
+            }
         }
+        if (correct)
+            printf("scatter_example test PASSED\n");
+        else
+            printf("scatter_example test FAILED: wrong result\n");
+        //--------------------------------------------------------------------------
+        // device memory deallocation
+        CUDA_ERROR(cudaFree(dX_indices));
+        CUDA_ERROR(cudaFree(dX_values));
+        CUDA_ERROR(cudaFree(dY));
     }
 
     void spmat_chol_reorder(rxmesh::Reorder reorder)
@@ -703,9 +727,9 @@ struct SparseMatrix
             m_use_reorder = false;
 
             if (m_reorder_allocated) {
-                GPU_FREE(m_d_val);
-                GPU_FREE(m_h_row_ptr);
-                GPU_FREE(m_h_col_idx);
+                GPU_FREE(m_d_solver_val);
+                GPU_FREE(m_d_solver_row_ptr);
+                GPU_FREE(m_d_solver_col_idx);
                 m_reorder_allocated = false;
             }
 
@@ -733,6 +757,27 @@ struct SparseMatrix
         CUDA_ERROR(
             cudaMalloc((void**)&m_d_permute, m_row_size * sizeof(IndexT)));
 
+        CUSOLVER_ERROR(cusolverSpCreate(&m_cusolver_sphandle));
+
+        RXMESH_INFO("nnz {} - size_row {} - size_col {}",
+                    m_nnz,
+                    m_row_size,
+                    m_col_size);
+
+        RXMESH_INFO("print: {}, {}, {}, {}, {}",
+                    m_h_row_ptr[0],
+                    m_h_row_ptr[1],
+                    m_h_row_ptr[2],
+                    m_h_row_ptr[3],
+                    m_h_row_ptr[4]);
+
+        RXMESH_INFO("print: {}, {}, {}, {}, {}",
+                    m_h_col_idx[0],
+                    m_h_col_idx[1],
+                    m_h_col_idx[2],
+                    m_h_col_idx[3],
+                    m_h_col_idx[4]);
+
         if (reorder == Reorder::SYMRCM) {
             CUSOLVER_ERROR(cusolverSpXcsrsymrcmHost(m_cusolver_sphandle,
                                                     m_row_size,
@@ -759,6 +804,13 @@ struct SparseMatrix
                                                      NULL,
                                                      m_h_permute));
         }
+
+        RXMESH_INFO("print: {}, {}, {}, {}, {}",
+                    m_h_permute[0],
+                    m_h_permute[1],
+                    m_h_permute[2],
+                    m_h_permute[3],
+                    m_h_permute[4]);
 
         CUDA_ERROR(cudaMemcpyAsync(m_d_permute,
                                    m_h_permute,
@@ -789,6 +841,11 @@ struct SparseMatrix
 
         perm_buffer_cpu = (void*)malloc(sizeof(char) * size_perm);
 
+        RXMESH_INFO("size_perm {} - size_row {} - size_col {}",
+                    size_perm,
+                    m_row_size,
+                    m_col_size);
+
         CUSOLVER_ERROR(cusolverSpXcsrpermHost(m_cusolver_sphandle,
                                               m_row_size,
                                               m_col_size,
@@ -800,6 +857,14 @@ struct SparseMatrix
                                               m_h_permute,
                                               h_val_permute,
                                               perm_buffer_cpu));
+
+
+        RXMESH_INFO("print: {}, {}, {}, {}, {}",
+                    h_val_permute[0],
+                    h_val_permute[1],
+                    h_val_permute[2],
+                    h_val_permute[3],
+                    h_val_permute[4]);
 
         // copy the purmutated csr from the host
         CUDA_ERROR(cudaMemcpyAsync(m_d_solver_val,
@@ -816,8 +881,8 @@ struct SparseMatrix
                                    cudaMemcpyHostToDevice));
 
         // do the permutation for val indices on device
-        cusparseDnVecDescr_t val_final_desc;
         cusparseSpVecDescr_t val_permute_desc;
+        cusparseDnVecDescr_t val_final_desc;
 
         CUDA_ERROR(cudaMemcpyAsync(d_val_permute,
                                    h_val_permute,
@@ -836,12 +901,13 @@ struct SparseMatrix
             &val_final_desc, m_nnz, m_d_solver_val, CUDA_R_32F));
         CUSPARSE_ERROR(cusparseScatter(
             m_cusparse_handle, val_permute_desc, val_final_desc));
-        CUSPARSE_ERROR(cusparseDestroyDnVec(val_final_desc));
+
         CUSPARSE_ERROR(cusparseDestroySpVec(val_permute_desc));
+        CUSPARSE_ERROR(cusparseDestroyDnVec(val_final_desc));
 
         free(perm_buffer_cpu);
         free(h_val_permute);
-        // CUDA_ERROR(cudaFree(d_val_permute));
+        CUDA_ERROR(cudaFree(d_val_permute));
 
         // restore the host data back to the original
         if (on_host) {

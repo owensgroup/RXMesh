@@ -20,6 +20,7 @@ struct DenseMatrix
           m_allocated(LOCATION_NONE)
     {
         CUDA_ERROR(cudaMalloc((void**)&m_d_val, bytes()));
+        m_allocated = m_allocated | DEVICE;
 
         CUSPARSE_ERROR(cusparseCreateDnMat(&m_dendescr,
                                            m_row_size,
@@ -28,6 +29,7 @@ struct DenseMatrix
                                            m_d_val,
                                            CUDA_R_32F,
                                            CUSPARSE_ORDER_COL));
+        
     }
 
     void set_ones()
