@@ -640,7 +640,7 @@ struct SparseMatrix
 
     /* --- LOW LEVEL API --- */
 
-    void spmat_chol_test_reorder()
+    void spmat_chol_test_val_reorder()
     {
     }
 
@@ -749,7 +749,7 @@ struct SparseMatrix
         m_reorder_allocated = true;
         CUDA_ERROR(cudaMalloc((void**)&m_d_solver_val, m_nnz * sizeof(T)));
         CUDA_ERROR(cudaMalloc((void**)&m_d_solver_row_ptr,
-                              m_row_size * sizeof(IndexT)));
+                              (m_row_size + 1) * sizeof(IndexT)));
         CUDA_ERROR(
             cudaMalloc((void**)&m_d_solver_col_idx, m_nnz * sizeof(IndexT)));
 
@@ -764,14 +764,14 @@ struct SparseMatrix
                     m_row_size,
                     m_col_size);
 
-        RXMESH_INFO("print: {}, {}, {}, {}, {}",
+        RXMESH_INFO("m_h_row_ptr: {}, {}, {}, {}, {}",
                     m_h_row_ptr[0],
                     m_h_row_ptr[1],
                     m_h_row_ptr[2],
                     m_h_row_ptr[3],
                     m_h_row_ptr[4]);
 
-        RXMESH_INFO("print: {}, {}, {}, {}, {}",
+        RXMESH_INFO("m_h_col_idx: {}, {}, {}, {}, {}",
                     m_h_col_idx[0],
                     m_h_col_idx[1],
                     m_h_col_idx[2],
@@ -805,7 +805,7 @@ struct SparseMatrix
                                                      m_h_permute));
         }
 
-        RXMESH_INFO("print: {}, {}, {}, {}, {}",
+        RXMESH_INFO("m_h_permute: {}, {}, {}, {}, {}",
                     m_h_permute[0],
                     m_h_permute[1],
                     m_h_permute[2],
@@ -828,6 +828,20 @@ struct SparseMatrix
         size_t size_perm       = 0;
         void*  perm_buffer_cpu = NULL;
 
+        RXMESH_INFO("m_h_row_ptr: {}, {}, {}, {}, {}",
+                    m_h_row_ptr[0],
+                    m_h_row_ptr[1],
+                    m_h_row_ptr[2],
+                    m_h_row_ptr[3],
+                    m_h_row_ptr[4]);
+
+        RXMESH_INFO("m_h_col_idx: {}, {}, {}, {}, {}",
+                    m_h_col_idx[0],
+                    m_h_col_idx[1],
+                    m_h_col_idx[2],
+                    m_h_col_idx[3],
+                    m_h_col_idx[4]);
+
         CUSOLVER_ERROR(cusolverSpXcsrperm_bufferSizeHost(m_cusolver_sphandle,
                                                          m_row_size,
                                                          m_col_size,
@@ -841,10 +855,11 @@ struct SparseMatrix
 
         perm_buffer_cpu = (void*)malloc(sizeof(char) * size_perm);
 
-        RXMESH_INFO("size_perm {} - size_row {} - size_col {}",
-                    size_perm,
-                    m_row_size,
-                    m_col_size);
+        RXMESH_INFO("size_perm {}", size_perm);
+
+        for (int j = 0; j < m_nnz; j++) {
+            h_val_permute[j] = j;
+        }
 
         CUSOLVER_ERROR(cusolverSpXcsrpermHost(m_cusolver_sphandle,
                                               m_row_size,
@@ -858,8 +873,7 @@ struct SparseMatrix
                                               h_val_permute,
                                               perm_buffer_cpu));
 
-
-        RXMESH_INFO("print: {}, {}, {}, {}, {}",
+        RXMESH_INFO("h_val_permute: {}, {}, {}, {}, {}",
                     h_val_permute[0],
                     h_val_permute[1],
                     h_val_permute[2],
@@ -873,7 +887,7 @@ struct SparseMatrix
                                    cudaMemcpyHostToDevice));
         CUDA_ERROR(cudaMemcpyAsync(m_d_solver_row_ptr,
                                    m_h_row_ptr,
-                                   m_row_size * sizeof(IndexT),
+                                   (m_row_size + 1) * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
         CUDA_ERROR(cudaMemcpyAsync(m_d_solver_col_idx,
                                    m_h_col_idx,
@@ -1040,7 +1054,7 @@ struct SparseMatrix
                                                CUSPARSE_INDEX_BASE_ZERO,
                                                CUDA_R_32F));
             CUSPARSE_ERROR(
-                cusparseCreateDnVec(&b_values, m_nnz, d_solver_b, CUDA_R_32F));
+                cusparseCreateDnVec(&b_values, m_row_size, d_solver_b, CUDA_R_32F));
             CUSPARSE_ERROR(
                 cusparseScatter(m_cusparse_handle, b_permutation, b_values));
             CUSPARSE_ERROR(cusparseDestroyDnVec(b_values));
@@ -1058,7 +1072,7 @@ struct SparseMatrix
                                                CUSPARSE_INDEX_BASE_ZERO,
                                                CUDA_R_32F));
             CUSPARSE_ERROR(
-                cusparseCreateDnVec(&x_values, m_nnz, d_solver_x, CUDA_R_32F));
+                cusparseCreateDnVec(&x_values, m_col_size, d_solver_x, CUDA_R_32F));
             CUSPARSE_ERROR(
                 cusparseScatter(m_cusparse_handle, x_permutation, x_values));
             CUSPARSE_ERROR(cusparseDestroyDnVec(x_values));
@@ -1124,7 +1138,7 @@ struct SparseMatrix
                                        stream));
             CUDA_ERROR(cudaMemcpyAsync(m_d_row_ptr,
                                        m_h_row_ptr,
-                                       m_row_size * sizeof(IndexT),
+                                       (m_row_size + 1) * sizeof(IndexT),
                                        cudaMemcpyHostToDevice,
                                        stream));
             CUDA_ERROR(cudaMemcpyAsync(m_d_col_idx,
@@ -1140,7 +1154,7 @@ struct SparseMatrix
                                        stream));
             CUDA_ERROR(cudaMemcpyAsync(m_h_row_ptr,
                                        m_d_row_ptr,
-                                       m_row_size * sizeof(IndexT),
+                                       (m_row_size + 1) * sizeof(IndexT),
                                        cudaMemcpyDeviceToHost,
                                        stream));
             CUDA_ERROR(cudaMemcpyAsync(m_h_col_idx,
@@ -1179,7 +1193,7 @@ struct SparseMatrix
 
             m_h_val = static_cast<T*>(malloc(m_nnz * sizeof(T)));
             m_h_row_ptr =
-                static_cast<IndexT*>(malloc(m_row_size * sizeof(IndexT)));
+                static_cast<IndexT*>(malloc((m_row_size + 1) * sizeof(IndexT)));
             m_h_col_idx = static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
 
             m_allocated = m_allocated | HOST;
@@ -1189,8 +1203,8 @@ struct SparseMatrix
             release(DEVICE);
 
             CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_nnz * sizeof(T)));
-            CUDA_ERROR(
-                cudaMalloc((void**)&m_d_row_ptr, m_row_size * sizeof(IndexT)));
+            CUDA_ERROR(cudaMalloc((void**)&m_d_row_ptr,
+                                  (m_row_size + 1) * sizeof(IndexT)));
             CUDA_ERROR(
                 cudaMalloc((void**)&m_d_col_idx, m_nnz * sizeof(IndexT)));
 
