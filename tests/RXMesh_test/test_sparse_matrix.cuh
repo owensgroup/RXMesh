@@ -130,6 +130,21 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
     query.dispatch<Op::VV>(block, shrd_alloc, mat_setup);
 }
 
+template <typename T, uint32_t blockThreads>
+__global__ static void check_diag(const rxmesh::Context   context,
+                                  rxmesh::SparseMatrix<T> A_mat)
+{
+    using namespace rxmesh;
+    auto init = [&](VertexHandle& v_id, const VertexIterator& iter) {
+        printf("%lf\n", A_mat(v_id, v_id));
+    };
+
+    auto                block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, init);
+}
+
 
 /* Check the access of the sparse matrix in CSR format in device */
 TEST(RXMeshStatic, SparseMatrix)
@@ -370,10 +385,22 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
                                          launch_box.smem_bytes_dyn>>>(
         rxmesh.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
+
+    LaunchBox<threads> test_launch_box;
+    rxmesh.prepare_launch_box(
+        {Op::VV}, test_launch_box, (void*)check_diag<float, threads>);
+
+    check_diag<float, threads>
+        <<<test_launch_box.blocks,
+           test_launch_box.num_threads,
+           test_launch_box.smem_bytes_dyn>>>(rxmesh.get_context(), A_mat);
+
+    cudaDeviceSynchronize();
+
     // A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
 
     // A_mat.spmat_chol_test_purmute();
-    // A_mat.spmat_chol_reorder(Reorder::NSTDIS);
+    A_mat.spmat_chol_reorder(Reorder::NSTDIS);
     A_mat.spmat_chol_analysis();
     A_mat.spmat_chol_buffer_alloc();
     A_mat.spmat_chol_factor();

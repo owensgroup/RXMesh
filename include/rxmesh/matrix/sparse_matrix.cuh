@@ -640,10 +640,6 @@ struct SparseMatrix
 
     /* --- LOW LEVEL API --- */
 
-    void spmat_chol_test_val_reorder()
-    {
-    }
-
     void spmat_chol_test_purmute()
     {
         // Host problem definition
@@ -759,24 +755,31 @@ struct SparseMatrix
 
         CUSOLVER_ERROR(cusolverSpCreate(&m_cusolver_sphandle));
 
-        RXMESH_INFO("nnz {} - size_row {} - size_col {}",
-                    m_nnz,
-                    m_row_size,
-                    m_col_size);
+        // RXMESH_INFO("nnz {} - size_row {} - size_col {}",
+        //             m_nnz,
+        //             m_row_size,
+        //             m_col_size);
 
-        RXMESH_INFO("m_h_row_ptr: {}, {}, {}, {}, {}",
-                    m_h_row_ptr[0],
-                    m_h_row_ptr[1],
-                    m_h_row_ptr[2],
-                    m_h_row_ptr[3],
-                    m_h_row_ptr[4]);
+        // RXMESH_INFO("m_h_row_ptr: {}, {}, {}, {}, {}",
+        //             m_h_row_ptr[0],
+        //             m_h_row_ptr[1],
+        //             m_h_row_ptr[2],
+        //             m_h_row_ptr[3],
+        //             m_h_row_ptr[4]);
 
-        RXMESH_INFO("m_h_col_idx: {}, {}, {}, {}, {}",
-                    m_h_col_idx[0],
-                    m_h_col_idx[1],
-                    m_h_col_idx[2],
-                    m_h_col_idx[3],
-                    m_h_col_idx[4]);
+        // RXMESH_INFO("m_h_col_idx: {}, {}, {}, {}, {}",
+        //             m_h_col_idx[0],
+        //             m_h_col_idx[1],
+        //             m_h_col_idx[2],
+        //             m_h_col_idx[3],
+        //             m_h_col_idx[4]);
+
+        // printf("m_h_val: %f %f %f %f %f\n",
+        //        m_h_val[0],
+        //        m_h_val[1],
+        //        m_h_val[2],
+        //        m_h_val[3],
+        //        m_h_val[4]);
 
         if (reorder == Reorder::SYMRCM) {
             CUSOLVER_ERROR(cusolverSpXcsrsymrcmHost(m_cusolver_sphandle,
@@ -805,12 +808,12 @@ struct SparseMatrix
                                                      m_h_permute));
         }
 
-        RXMESH_INFO("m_h_permute: {}, {}, {}, {}, {}",
-                    m_h_permute[0],
-                    m_h_permute[1],
-                    m_h_permute[2],
-                    m_h_permute[3],
-                    m_h_permute[4]);
+        // RXMESH_INFO("m_h_permute: {}, {}, {}, {}, {}",
+        //             m_h_permute[0],
+        //             m_h_permute[1],
+        //             m_h_permute[2],
+        //             m_h_permute[3],
+        //             m_h_permute[4]);
 
         CUDA_ERROR(cudaMemcpyAsync(m_d_permute,
                                    m_h_permute,
@@ -827,20 +830,6 @@ struct SparseMatrix
 
         size_t size_perm       = 0;
         void*  perm_buffer_cpu = NULL;
-
-        RXMESH_INFO("m_h_row_ptr: {}, {}, {}, {}, {}",
-                    m_h_row_ptr[0],
-                    m_h_row_ptr[1],
-                    m_h_row_ptr[2],
-                    m_h_row_ptr[3],
-                    m_h_row_ptr[4]);
-
-        RXMESH_INFO("m_h_col_idx: {}, {}, {}, {}, {}",
-                    m_h_col_idx[0],
-                    m_h_col_idx[1],
-                    m_h_col_idx[2],
-                    m_h_col_idx[3],
-                    m_h_col_idx[4]);
 
         CUSOLVER_ERROR(cusolverSpXcsrperm_bufferSizeHost(m_cusolver_sphandle,
                                                          m_row_size,
@@ -873,12 +862,51 @@ struct SparseMatrix
                                               h_val_permute,
                                               perm_buffer_cpu));
 
-        RXMESH_INFO("h_val_permute: {}, {}, {}, {}, {}",
-                    h_val_permute[0],
-                    h_val_permute[1],
-                    h_val_permute[2],
-                    h_val_permute[3],
-                    h_val_permute[4]);
+        // RXMESH_INFO("h_val_permute: {}, {}, {}, {}, {}",
+        //             h_val_permute[0],
+        //             h_val_permute[1],
+        //             h_val_permute[2],
+        //             h_val_permute[3],
+        //             h_val_permute[4]);
+
+        // RXMESH_INFO("m_h_row_ptr: {}, {}, {}, {}, {}",
+        //             m_h_row_ptr[0],
+        //             m_h_row_ptr[1],
+        //             m_h_row_ptr[2],
+        //             m_h_row_ptr[3],
+        //             m_h_row_ptr[4]);
+
+        // RXMESH_INFO("m_h_col_idx: {}, {}, {}, {}, {}",
+        //             m_h_col_idx[0],
+        //             m_h_col_idx[1],
+        //             m_h_col_idx[2],
+        //             m_h_col_idx[3],
+        //             m_h_col_idx[4]);
+
+        // printf("m_h_val: %f %f %f %f %f\n",
+        //        m_h_val[0],
+        //        m_h_val[1],
+        //        m_h_val[2],
+        //        m_h_val[3],
+        //        m_h_val[4]);
+
+
+        // host test val permute
+        // T* tmp_h_val = static_cast<T*>(malloc(m_nnz * sizeof(T)));
+
+        // for (int j = 0; j < m_nnz; j++) {
+        //     tmp_h_val[j] = m_h_val[j];
+        // }
+        // for (int j = 0; j < m_nnz; j++) {
+        //     m_h_val[j] = tmp_h_val[h_val_permute[j]];
+        // }
+
+        // printf("m_h_val: %f %f %f %f %f\n",
+        //        m_h_val[0],
+        //        m_h_val[1],
+        //        m_h_val[2],
+        //        m_h_val[3],
+        //        m_h_val[4]);
 
         // copy the purmutated csr from the host
         CUDA_ERROR(cudaMemcpyAsync(m_d_solver_val,
@@ -1042,26 +1070,26 @@ struct SparseMatrix
             CUDA_ERROR(cudaMalloc((void**)&d_solver_b, m_row_size * sizeof(T)));
             CUDA_ERROR(cudaMalloc((void**)&d_solver_x, m_col_size * sizeof(T)));
 
-            cusparseDnVecDescr_t b_values;
             cusparseSpVecDescr_t b_permutation;
+            cusparseDnVecDescr_t b_values;
 
             CUSPARSE_ERROR(cusparseCreateSpVec(&b_permutation,
                                                m_row_size,
                                                m_row_size,
                                                m_d_permute,
-                                               d_b,
+                                               static_cast<T*>(d_b),
                                                CUSPARSE_INDEX_32I,
                                                CUSPARSE_INDEX_BASE_ZERO,
                                                CUDA_R_32F));
-            CUSPARSE_ERROR(
-                cusparseCreateDnVec(&b_values, m_row_size, d_solver_b, CUDA_R_32F));
+            CUSPARSE_ERROR(cusparseCreateDnVec(
+                &b_values, m_row_size, d_solver_b, CUDA_R_32F));
             CUSPARSE_ERROR(
                 cusparseScatter(m_cusparse_handle, b_permutation, b_values));
             CUSPARSE_ERROR(cusparseDestroyDnVec(b_values));
             CUSPARSE_ERROR(cusparseDestroySpVec(b_permutation));
 
-            cusparseDnVecDescr_t x_values;
             cusparseSpVecDescr_t x_permutation;
+            cusparseDnVecDescr_t x_values;
 
             CUSPARSE_ERROR(cusparseCreateSpVec(&x_permutation,
                                                m_col_size,
@@ -1071,8 +1099,8 @@ struct SparseMatrix
                                                CUSPARSE_INDEX_32I,
                                                CUSPARSE_INDEX_BASE_ZERO,
                                                CUDA_R_32F));
-            CUSPARSE_ERROR(
-                cusparseCreateDnVec(&x_values, m_col_size, d_solver_x, CUDA_R_32F));
+            CUSPARSE_ERROR(cusparseCreateDnVec(
+                &x_values, m_col_size, d_solver_x, CUDA_R_32F));
             CUSPARSE_ERROR(
                 cusparseScatter(m_cusparse_handle, x_permutation, x_values));
             CUSPARSE_ERROR(cusparseDestroyDnVec(x_values));
