@@ -866,6 +866,51 @@ bool RXMeshDynamic::validate()
         return is_okay();
     };
 
+
+    // every mesh element in the ribbon of a patch should be mapped to an owner
+    // that lives in a different. otherwise, the ribbon element is actually
+    // duplicated. We check on this here
+    auto check_unique_ribbon = [&]() {
+        for (uint32_t p = 0; p < get_num_patches(); ++p) {
+            PatchInfo pi = m_h_patches_info[p];
+
+            for (uint32_t v = 0; v < pi.num_vertices[0]; v++) {
+                const LocalVertexT vl(v);
+                if (!pi.is_deleted(vl) && !pi.is_owned(vl)) {
+                    const VertexHandle vh =
+                        get_owner_handle<VertexHandle>({p, vl});
+                    if (vh.patch_id() == p) {
+                        return false;
+                    }
+                }
+            }
+
+
+            for (uint32_t e = 0; e < pi.num_edges[0]; e++) {
+                const LocalEdgeT el(e);
+                if (!pi.is_deleted(el) && !pi.is_owned(el)) {
+                    const EdgeHandle eh = get_owner_handle<EdgeHandle>({p, el});
+                    if (eh.patch_id() == p) {
+                        return false;
+                    }
+                }
+            }
+
+
+            for (uint32_t f = 0; f < pi.num_faces[0]; f++) {
+                const LocalFaceT fl(f);
+                if (!pi.is_deleted(fl) && !pi.is_owned(fl)) {
+                    const FaceHandle fh = get_owner_handle<FaceHandle>({p, fl});
+                    if (fh.patch_id() == p) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    };
+
     bool success = true;
     if (!check_num_mesh_elements()) {
         RXMESH_ERROR(
@@ -880,6 +925,11 @@ bool RXMeshDynamic::validate()
 
     if (!check_not_owned()) {
         RXMESH_ERROR("RXMeshDynamic::validate() check_not_owned failed");
+        success = false;
+    }
+
+    if (!check_unique_ribbon()) {
+        RXMESH_ERROR("RXMeshDynamic::validate() check_unique_ribbon failed");
         success = false;
     }
 
