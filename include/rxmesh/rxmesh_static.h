@@ -931,11 +931,15 @@ class RXMeshStatic : public RXMesh
 
             for (uint16_t v = 0; v < p_num_vertices; ++v) {
 
-                const VertexHandle vh =
-                    get_owner_handle<VertexHandle>({p, {v}});
-
-                file << "v " << coords(vh, 0) << " " << coords(vh, 1) << " "
-                     << coords(vh, 2) << std::endl;
+                if (!detail::is_deleted(
+                        v, this->m_h_patches_info[p].active_mask_v)) {
+                    const VertexHandle vh =
+                        get_owner_handle<VertexHandle>({p, {v}});
+                    file << "v " << coords(vh, 0) << " " << coords(vh, 1) << " "
+                         << coords(vh, 2) << std::endl;
+                } else {
+                    file << "v " << 0 << " " << 0 << " " << 0 << std::endl;
+                }
             }
 
             const uint32_t p_num_faces = this->m_h_patches_info[p].num_faces[0];
