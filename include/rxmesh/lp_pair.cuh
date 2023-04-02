@@ -108,6 +108,16 @@ struct LPPair
         return local_id();
     }
 
+
+    /**
+     * @brief the key used for hashing
+     */
+    __device__ __host__ __inline__ ValueT value() const
+    {
+        // get the low 16 bits 
+        return m_pair & INVALID16;
+    }
+
     /**
      * @brief returns the local index in the owner patch
      */

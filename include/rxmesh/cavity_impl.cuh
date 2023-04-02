@@ -107,20 +107,18 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_v2(
     // ownership change (m_s_ownership_change_mask_e)
     for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
         if (!m_s_owned_mask_f(f) &&
-            (m_s_active_mask_f(f) || m_s_cavity_id_f[f] != INVALID16)) {
+            (m_s_active_mask_f(f) || m_s_in_cavity_f(f))) {
             bool change = false;
             for (int i = 0; i < 3; ++i) {
                 const uint16_t e = m_s_fe[3 * f + i] >> 1;
 
-                assert(m_s_active_mask_e(e) || m_s_cavity_id_e[e] != INVALID16);
+                assert(m_s_active_mask_e(e) || m_s_in_cavity_e(e));
 
                 const uint16_t v0 = m_s_ev[2 * e + 0];
                 const uint16_t v1 = m_s_ev[2 * e + 1];
 
-                assert(m_s_active_mask_v(v0) ||
-                       m_s_cavity_id_v[v0] != INVALID16);
-                assert(m_s_active_mask_v(v1) ||
-                       m_s_cavity_id_v[v1] != INVALID16);
+                assert(m_s_active_mask_v(v0) || m_s_in_cavity_v(v0));
+                assert(m_s_active_mask_v(v1) || m_s_in_cavity_v(v1));
 
                 if (m_s_owned_cavity_bdry_v(v0) ||
                     m_s_owned_cavity_bdry_v(v1) || m_s_migrate_mask_v(v0) ||
@@ -135,8 +133,7 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_v2(
                 for (int i = 0; i < 3; ++i) {
                     const uint16_t e = m_s_fe[3 * f + i] >> 1;
                     if (!m_s_owned_mask_e(e)) {
-                        assert(m_s_active_mask_e(e) ||
-                               m_s_cavity_id_e[e] != INVALID16);
+                        assert(m_s_active_mask_e(e) || m_s_in_cavity_e(e));
                         m_s_ownership_change_mask_e.set(e, true);
                     }
                 }
@@ -161,7 +158,7 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_v2(
 
     // ribbonize protection zone
     for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
-        if (m_s_active_mask_e(e) || m_s_cavity_id_e[e] != INVALID16) {
+        if (m_s_active_mask_e(e) || m_s_in_cavity_e(e)) {
 
             // we only want to ribbonize vertices connected to a vertex on
             // the boundary of a cavity boundaries. If the two vertices are

@@ -92,8 +92,11 @@ struct Cavity
 
         m_s_num_cavities     = shrd_alloc.alloc<int>(1);
         m_s_cavity_id_v      = shrd_alloc.alloc<uint16_t>(vert_cap);
+        m_s_owner_v          = m_s_cavity_id_v;
         m_s_cavity_id_e      = shrd_alloc.alloc<uint16_t>(edge_cap);
+        m_s_owner_e          = m_s_cavity_id_e;
         m_s_cavity_id_f      = shrd_alloc.alloc<uint16_t>(face_cap);
+        m_s_owner_f          = m_s_cavity_id_f;
         m_s_cavity_edge_loop = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
 
         auto alloc_masks = [&](uint16_t        num_elements,
@@ -101,16 +104,20 @@ struct Cavity
                                Bitmask&        active,
                                Bitmask&        ownership,
                                Bitmask&        added_to_lp,
+                               Bitmask&        in_cavity,
                                const uint32_t* g_owned,
                                const uint32_t* g_active) {
             owned       = Bitmask(num_elements, shrd_alloc);
             active      = Bitmask(num_elements, shrd_alloc);
             ownership   = Bitmask(num_elements, shrd_alloc);
             added_to_lp = Bitmask(num_elements, shrd_alloc);
+            in_cavity   = Bitmask(num_elements, shrd_alloc);
 
             owned.reset(block);
             active.reset(block);
             ownership.reset(block);
+            added_to_lp.reset(block);
+            in_cavity.reset(block);
 
             detail::load_async(reinterpret_cast<const char*>(g_owned),
                                owned.num_bytes(),
@@ -131,6 +138,7 @@ struct Cavity
                     m_s_active_mask_v,
                     m_s_ownership_change_mask_v,
                     m_s_added_to_lp_v,
+                    m_s_in_cavity_v,
                     m_patch_info.owned_mask_v,
                     m_patch_info.active_mask_v);
         m_s_migrate_mask_v      = Bitmask(vert_cap, shrd_alloc);
@@ -147,6 +155,7 @@ struct Cavity
                     m_s_active_mask_e,
                     m_s_ownership_change_mask_e,
                     m_s_added_to_lp_e,
+                    m_s_in_cavity_e,
                     m_patch_info.owned_mask_e,
                     m_patch_info.active_mask_e);
         const uint16_t max_edge_cap = static_cast<uint16_t>(
@@ -162,6 +171,7 @@ struct Cavity
                     m_s_active_mask_f,
                     m_s_ownership_change_mask_f,
                     m_s_added_to_lp_f,
+                    m_s_in_cavity_f,
                     m_patch_info.owned_mask_f,
                     m_patch_info.active_mask_f);
 
@@ -172,6 +182,21 @@ struct Cavity
             m_s_num_cavities[0] = 0;
         }
 
+        init_cavity_id(vert_cap, edge_cap, face_cap);
+
+        m_s_patches_to_lock_mask.reset(block);
+        m_s_active_cavity_bitmask.set(block);
+        cooperative_groups::wait(block);
+        block.sync();
+    }
+
+    /**
+     * @brief init cavity id arrays
+     */
+    __device__ __inline__ void init_cavity_id(const uint16_t vert_cap,
+                                              const uint16_t edge_cap,
+                                              const uint16_t face_cap)
+    {
         // TODO fix the bank conflict
         for (uint16_t v = threadIdx.x; v < vert_cap; v += blockThreads) {
             m_s_cavity_id_v[v] = INVALID16;
@@ -184,11 +209,6 @@ struct Cavity
         for (uint16_t f = threadIdx.x; f < face_cap; f += blockThreads) {
             m_s_cavity_id_f[f] = INVALID16;
         }
-
-        m_s_patches_to_lock_mask.reset(block);
-        m_s_active_cavity_bitmask.set(block);
-        cooperative_groups::wait(block);
-        block.sync();
     }
 
     /**
@@ -311,6 +331,16 @@ struct Cavity
 
         // sort each cavity edge loop
         sort_cavities_edge_loop();
+        block.sync();
+
+        // init cavity_id_v/e/f which points at the same place as owner_v/e/f
+        init_cavity_id(m_patch_info.vertices_capacity[0],
+                       m_patch_info.edges_capacity[0],
+                       m_patch_info.faces_capacity[0]);
+        block.sync();
+
+        // cache owner_v/e/f
+        load_owner();
         block.sync();
 
         if (!migrate_v2(block /*, v_attr, e_attr, f_attr*/)) {
@@ -486,12 +516,18 @@ struct Cavity
      */
     __device__ __inline__ void clear_bitmask_if_in_cavity()
     {
-        clear_bitmask_if_in_cavity(
-            m_s_active_mask_v, m_s_cavity_id_v, m_s_num_vertices[0]);
-        clear_bitmask_if_in_cavity(
-            m_s_active_mask_e, m_s_cavity_id_e, m_s_num_edges[0]);
-        clear_bitmask_if_in_cavity(
-            m_s_active_mask_f, m_s_cavity_id_f, m_s_num_faces[0]);
+        clear_bitmask_if_in_cavity(m_s_active_mask_v,
+                                   m_s_in_cavity_v,
+                                   m_s_cavity_id_v,
+                                   m_s_num_vertices[0]);
+        clear_bitmask_if_in_cavity(m_s_active_mask_e,
+                                   m_s_in_cavity_e,
+                                   m_s_cavity_id_e,
+                                   m_s_num_edges[0]);
+        clear_bitmask_if_in_cavity(m_s_active_mask_f,
+                                   m_s_in_cavity_f,
+                                   m_s_cavity_id_f,
+                                   m_s_num_faces[0]);
     }
     /**
      * @brief clear the bit corresponding to an element in the bitmask if the
@@ -499,12 +535,14 @@ struct Cavity
      */
     __device__ __inline__ void clear_bitmask_if_in_cavity(
         Bitmask&        active_bitmask,
+        Bitmask&        in_cavity,
         const uint16_t* element_cavity_id,
         const uint16_t  num_elements)
     {
         for (uint16_t b = threadIdx.x; b < num_elements; b += blockThreads) {
             if (element_cavity_id[b] != INVALID16) {
                 active_bitmask.reset(b, true);
+                in_cavity.set(b, true);
                 assert(!active_bitmask(b));
             }
         }
@@ -758,11 +796,10 @@ struct Cavity
     /**
      * @brief should be called by a single thread
      */
-    __device__ __inline__ VertexHandle add_vertex(const uint16_t cavity_id)
+    __device__ __inline__ VertexHandle add_vertex()
     {
         // First try to reuse a vertex in the cavity or a deleted vertex
-        uint16_t v_id = add_element(
-            cavity_id, m_s_cavity_id_v, m_s_active_mask_v, m_s_num_vertices[0]);
+        uint16_t v_id = add_element(m_s_active_mask_v, m_s_num_vertices[0]);
 
         if (v_id == INVALID16) {
             // if this fails, then add a new vertex to the mesh
@@ -780,16 +817,14 @@ struct Cavity
     /**
      * @brief should be called by a single thread
      */
-    __device__ __inline__ DEdgeHandle add_edge(const uint16_t     cavity_id,
-                                               const VertexHandle src,
+    __device__ __inline__ DEdgeHandle add_edge(const VertexHandle src,
                                                const VertexHandle dest)
     {
         assert(src.patch_id() == m_patch_info.patch_id);
         assert(dest.patch_id() == m_patch_info.patch_id);
 
         // First try to reuse an edge in the cavity or a deleted edge
-        uint16_t e_id = add_element(
-            cavity_id, m_s_cavity_id_e, m_s_active_mask_e, m_s_num_edges[0]);
+        uint16_t e_id = add_element(m_s_active_mask_e, m_s_num_edges[0]);
         if (e_id == INVALID16) {
             // if this fails, then add a new edge to the mesh
             e_id = atomicAdd(m_s_num_edges, 1);
@@ -812,8 +847,7 @@ struct Cavity
     /**
      * @brief should be called by a single thread
      */
-    __device__ __inline__ FaceHandle add_face(const uint16_t    cavity_id,
-                                              const DEdgeHandle e0,
+    __device__ __inline__ FaceHandle add_face(const DEdgeHandle e0,
                                               const DEdgeHandle e1,
                                               const DEdgeHandle e2)
     {
@@ -822,8 +856,7 @@ struct Cavity
         assert(e2.patch_id() == m_patch_info.patch_id);
 
         // First try to reuse a face in the cavity or a deleted face
-        uint16_t f_id = add_element(
-            cavity_id, m_s_cavity_id_f, m_s_active_mask_f, m_s_num_faces[0]);
+        uint16_t f_id = add_element(m_s_active_mask_f, m_s_num_faces[0]);
 
         if (f_id == INVALID16) {
             // if this fails, then add a new face to the mesh
@@ -959,11 +992,28 @@ struct Cavity
                  vp += blockThreads) {
                 if (m_s_ownership_change_mask_v(vp)) {
                     assert(m_s_owned_mask_v(vp));
-                    assert(m_s_active_mask_v(vp) ||
-                           m_s_cavity_id_v[vp] != INVALID32);
+                    assert(m_s_active_mask_v(vp) || m_s_in_cavity_v(vp));
 
-                    const VertexHandle handle =
-                        get_owner_handle<VertexHandle>(p, m_patch_info, vp);
+                    // const VertexHandle handle =
+                    // get_owner_handle<VertexHandle>(
+                    //    p, m_patch_info, vp, false);
+
+                    uint16_t lp    = m_s_owner_v[vp];
+                    uint8_t  st    = lp & INVALID8;
+                    uint32_t owner = m_patch_info.patch_stash.m_stash[st];
+
+                    assert(owner != p);
+                    assert(owner != INVALID32);
+
+                    uint16_t local_id_in_owner =
+                        lp >> LPPair::PatchStashNumBits;
+
+                    const VertexHandle handle(owner, {local_id_in_owner});
+
+                    //printf("\n owner= %u, local= %u, lp = %u",
+                    //       owner,
+                    //       local_id_in_owner,
+                    //       lp);
 
                     const uint32_t num_attr = attribute.get_num_attributes();
                     for (uint32_t attr = 0; attr < num_attr; ++attr) {
@@ -979,11 +1029,12 @@ struct Cavity
                  ep += blockThreads) {
                 if (m_s_ownership_change_mask_e(ep)) {
                     assert(m_s_owned_mask_e(ep));
-                    assert(m_s_active_mask_e(ep) ||
-                           m_s_cavity_id_e[ep] != INVALID32);
+                    assert(m_s_active_mask_e(ep) || m_s_in_cavity_e(ep));
 
-                    const EdgeHandle handle =
-                        get_owner_handle<EdgeHandle>(p, m_patch_info, ep);
+                    const EdgeHandle handle = get_owner_handle<EdgeHandle>(
+                        p, m_patch_info, ep, false);
+
+                    assert(handle.patch_id() != p);
 
                     const uint32_t num_attr = attribute.get_num_attributes();
                     for (uint32_t attr = 0; attr < num_attr; ++attr) {
@@ -999,11 +1050,12 @@ struct Cavity
                  fp += blockThreads) {
                 if (m_s_ownership_change_mask_f(fp)) {
                     assert(m_s_owned_mask_f(fp));
-                    assert(m_s_active_mask_f(fp) ||
-                           m_s_cavity_id_f[fp] != INVALID32);
+                    assert(m_s_active_mask_f(fp) || m_s_in_cavity_f(fp));
 
-                    const FaceHandle handle =
-                        get_owner_handle<FaceHandle>(p, m_patch_info, fp);
+                    const FaceHandle handle = get_owner_handle<FaceHandle>(
+                        p, m_patch_info, fp, false);
+
+                    assert(handle.patch_id() != p);
 
                     const uint32_t num_attr = attribute.get_num_attributes();
                     for (uint32_t attr = 0; attr < num_attr; ++attr) {
@@ -1023,18 +1075,16 @@ struct Cavity
      * If nothing found, search for the first element that has its bitmask set
      * to 0.
      */
-    __device__ __inline__ uint16_t add_element(const uint16_t cavity_id,
-                                               uint16_t*      element_cavity_id,
-                                               Bitmask        active_bitmask,
+    __device__ __inline__ uint16_t add_element(Bitmask        active_bitmask,
                                                const uint16_t num_elements)
     {
 
-        for (uint16_t i = 0; i < num_elements; ++i) {
+        /*for (uint16_t i = 0; i < num_elements; ++i) {
             if (atomicCAS(element_cavity_id + i, cavity_id, INVALID16) ==
                 cavity_id) {
                 return i;
             }
-        }
+        }*/
 
         for (uint16_t i = 0; i < num_elements; ++i) {
             if (active_bitmask.try_set(i)) {
@@ -1043,6 +1093,62 @@ struct Cavity
         }
 
         return INVALID16;
+    }
+
+
+    template <typename HandleT>
+    __device__ __inline void load_owner(const uint32_t patch_id,
+                                        const uint16_t num_elements,
+                                        uint16_t*      s_owner)
+    {
+        using LocalT = typename HandleT::LocalT;
+
+        for (uint16_t v = threadIdx.x; v < num_elements; v += blockThreads) {
+            const LocalT vl(v);
+            if (!m_patch_info.is_deleted(vl) && !m_patch_info.is_owned(vl)) {
+
+
+                LPPair lp = m_patch_info.get_lp<HandleT>().find(v);
+
+                assert(!lp.is_sentinel());
+
+                uint32_t owner = m_patch_info.patch_stash.get_patch(lp);
+
+                assert(!m_context.m_patches_info[owner].is_deleted(
+                    LocalT(lp.local_id_in_owner_patch())));
+
+
+                while (!m_context.m_patches_info[owner].is_owned(
+                    LocalT(lp.local_id_in_owner_patch()))) {
+
+                    lp = m_context.m_patches_info[owner].get_lp<HandleT>().find(
+                        lp.local_id_in_owner_patch());
+
+                    assert(!lp.is_sentinel());
+
+                    owner =
+                        m_context.m_patches_info[owner].patch_stash.get_patch(
+                            lp);
+
+                    assert(!m_context.m_patches_info[owner].is_deleted(
+                        LocalT(lp.local_id_in_owner_patch())));
+                }
+
+
+                assert(m_patch_info.patch_stash.get_patch(lp) != INVALID32);
+                assert(owner != patch_id);
+
+                s_owner[v] = lp.value();
+            }
+        }
+    }
+
+    __device__ __inline void load_owner()
+    {
+        const uint32_t p = m_patch_info.patch_id;
+        load_owner<VertexHandle>(p, m_s_num_vertices[0], m_s_owner_v);
+        load_owner<EdgeHandle>(p, m_s_num_edges[0], m_s_owner_e);
+        load_owner<FaceHandle>(p, m_s_num_faces[0], m_s_owner_f);
     }
 
 
@@ -1247,6 +1353,7 @@ struct Cavity
 
                 if (require_ownership_change && !m_s_owned_mask_v(vp)) {
                     m_s_ownership_change_mask_v.set(vp, true);
+                    m_s_owner_v[vp] = ret.value();
                 }
             }
         }
@@ -1346,6 +1453,7 @@ struct Cavity
 
                 if (require_ownership_change && !m_s_owned_mask_e(ep)) {
                     m_s_ownership_change_mask_e.set(ep, true);
+                    m_s_owner_e[ep] = ret.value();
                 }
             }
         }
@@ -1458,6 +1566,7 @@ struct Cavity
 
                 if (require_ownership_change && !m_s_owned_mask_f(fp)) {
                     m_s_ownership_change_mask_f.set(fp, true);
+                    m_s_owner_f[fp] = ret.value();
                 }
             }
         }
@@ -1515,21 +1624,21 @@ struct Cavity
                     m_patch_info.patch_id,
                     q,
                     q_patch_info,
-                    m_s_cavity_id_f,
+                    m_s_in_cavity_f,
                     face_incident_to_boundary_vertex);
                 post_migration_cleanup<EdgeHandle>(
                     block,
                     m_patch_info.patch_id,
                     q,
                     q_patch_info,
-                    m_s_cavity_id_e,
+                    m_s_in_cavity_e,
                     edge_incident_to_boundary_vertex);
                 post_migration_cleanup<VertexHandle>(
                     block,
                     m_patch_info.patch_id,
                     q,
                     q_patch_info,
-                    m_s_cavity_id_v,
+                    m_s_in_cavity_v,
                     vertex_incident_to_boundary_vertex);
             }
         }
@@ -1544,7 +1653,7 @@ struct Cavity
         const uint32_t                    p,
         const uint32_t                    q,
         PatchInfo                         q_patch_info,
-        const uint16_t*                   s_cavity_id,
+        const Bitmask&                    in_cavity,
         const Bitmask&                    p_flag)
     {
 
@@ -1560,7 +1669,7 @@ struct Cavity
                 HandleT owner = get_owner_handle<HandleT>(p, q_patch_info, v);
 
                 if (owner.patch_id() == p) {
-                    if (s_cavity_id[owner.local_id()] != INVALID16 ||
+                    if (in_cavity(owner.local_id()) ||
                         !p_flag(owner.local_id())) {
                         detail::bitmask_clear_bit(
                             v, q_patch_info.get_active_mask<HandleT>(), true);
@@ -1584,7 +1693,8 @@ struct Cavity
     template <typename HandleT>
     __device__ __inline__ HandleT get_owner_handle(const uint32_t  p,
                                                    const PatchInfo patch_info,
-                                                   const uint16_t  lid)
+                                                   const uint16_t  lid,
+                                                   const bool sh_owned = true)
     {
         using LocalT = typename HandleT::LocalT;
 
@@ -1595,30 +1705,48 @@ struct Cavity
         while (true) {
             if (owner == p) {
                 if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-                    assert(m_s_cavity_id_v[lp.local_id_in_owner_patch()] !=
-                               INVALID16 ||
+                    assert(m_s_in_cavity_v(lp.local_id_in_owner_patch()) ||
                            m_s_active_mask_v(lp.local_id_in_owner_patch()));
 
-                    if (m_s_owned_mask_v(lp.local_id_in_owner_patch())) {
-                        break;
+                    if (sh_owned) {
+                        if (m_s_owned_mask_v(lp.local_id_in_owner_patch())) {
+                            break;
+                        }
+                    } else {
+                        if (m_patch_info.is_owned(
+                                LocalT(lp.local_id_in_owner_patch()))) {
+                            break;
+                        }
                     }
                 }
                 if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-                    assert(m_s_cavity_id_e[lp.local_id_in_owner_patch()] !=
-                               INVALID16 ||
+                    assert(m_s_in_cavity_e(lp.local_id_in_owner_patch()) ||
                            m_s_active_mask_e(lp.local_id_in_owner_patch()));
 
-                    if (m_s_owned_mask_e(lp.local_id_in_owner_patch())) {
-                        break;
+                    if (sh_owned) {
+                        if (m_s_owned_mask_e(lp.local_id_in_owner_patch())) {
+                            break;
+                        }
+                    } else {
+                        if (m_patch_info.is_owned(
+                                LocalT(lp.local_id_in_owner_patch()))) {
+                            break;
+                        }
                     }
                 }
                 if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-                    assert(m_s_cavity_id_f[lp.local_id_in_owner_patch()] !=
-                               INVALID16 ||
+                    assert(m_s_in_cavity_f(lp.local_id_in_owner_patch()) ||
                            m_s_active_mask_f(lp.local_id_in_owner_patch()));
 
-                    if (m_s_owned_mask_f(lp.local_id_in_owner_patch())) {
-                        break;
+                    if (sh_owned) {
+                        if (m_s_owned_mask_f(lp.local_id_in_owner_patch())) {
+                            break;
+                        }
+                    } else {
+                        if (m_patch_info.is_owned(
+                                LocalT(lp.local_id_in_owner_patch()))) {
+                            break;
+                        }
                     }
                 }
             } else {
@@ -1770,7 +1898,7 @@ struct Cavity
                                      m_s_num_faces[0],
                                      m_s_owned_mask_f,
                                      m_s_active_mask_f,
-                                     m_s_cavity_id_f);
+                                     m_s_in_cavity_f);
     }
 
     /**
@@ -1787,7 +1915,7 @@ struct Cavity
                                      m_s_num_edges[0],
                                      m_s_owned_mask_e,
                                      m_s_active_mask_e,
-                                     m_s_cavity_id_e);
+                                     m_s_in_cavity_e);
     }
 
     /**
@@ -1804,7 +1932,7 @@ struct Cavity
                                        m_s_num_vertices[0],
                                        m_s_owned_mask_v,
                                        m_s_active_mask_v,
-                                       m_s_cavity_id_v);
+                                       m_s_in_cavity_v);
     }
 
 
@@ -1815,12 +1943,12 @@ struct Cavity
      */
     template <typename HandleT>
     __device__ __inline__ uint16_t find_copy(
-        uint16_t&       lid,
-        uint32_t&       src_patch,
-        const uint16_t  dest_patch_num_elements,
-        const Bitmask&  dest_patch_owned_mask,
-        const Bitmask&  dest_patch_active_mask,
-        const uint16_t* dest_cavity_id)
+        uint16_t&      lid,
+        uint32_t&      src_patch,
+        const uint16_t dest_patch_num_elements,
+        const Bitmask& dest_patch_owned_mask,
+        const Bitmask& dest_patch_active_mask,
+        const Bitmask& dest_in_cavity)
     {
         // first check if lid is owned by src_patch. If not, then map it to its
         // owner patch and local index in it
@@ -1845,7 +1973,7 @@ struct Cavity
         // check against lid-src_patch pair
         for (uint16_t i = 0; i < dest_patch_num_elements; ++i) {
             if (!dest_patch_owned_mask(i) &&
-                (dest_patch_active_mask(i) || dest_cavity_id[i] != INVALID16)) {
+                (dest_patch_active_mask(i) || dest_in_cavity(i))) {
                 // we disable check0 since the element might have been just
                 // added in the patch in shared memory and not visible to global
                 // memory yet
@@ -1896,11 +2024,13 @@ struct Cavity
     Bitmask m_s_patches_to_lock_mask;
     Bitmask m_s_locked_patches_mask;
     Bitmask m_s_added_to_lp_v, m_s_added_to_lp_e, m_s_added_to_lp_f;
+    Bitmask m_s_in_cavity_v, m_s_in_cavity_e, m_s_in_cavity_f;
 
     bool* m_s_readd_to_queue;
 
     uint16_t *m_s_ev, *m_s_fe;
     uint16_t *m_s_cavity_id_v, *m_s_cavity_id_e, *m_s_cavity_id_f;
+    uint16_t *m_s_owner_v, *m_s_owner_e, *m_s_owner_f;
     uint16_t *m_s_num_vertices, *m_s_num_edges, *m_s_num_faces;
     uint16_t* m_s_cavity_edge_loop;
     PatchInfo m_patch_info;
