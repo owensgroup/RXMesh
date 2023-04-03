@@ -55,18 +55,14 @@ __global__ static void random_flips(rxmesh::Context                context,
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
 
-            DEdgeHandle new_edge =
-                cavity.add_edge(c,
-                                cavity.get_cavity_vertex(c, 1),
-                                cavity.get_cavity_vertex(c, 3));
+            DEdgeHandle new_edge = cavity.add_edge(
+                cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c, 3));
 
-            cavity.add_face(c,
-                            cavity.get_cavity_edge(c, 0),
+            cavity.add_face(cavity.get_cavity_edge(c, 0),
                             new_edge,
                             cavity.get_cavity_edge(c, 3));
 
-            cavity.add_face(c,
-                            cavity.get_cavity_edge(c, 1),
+            cavity.add_face(cavity.get_cavity_edge(c, 1),
                             cavity.get_cavity_edge(c, 2),
                             new_edge.get_flip_dedge());
         });

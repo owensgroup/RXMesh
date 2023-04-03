@@ -108,18 +108,14 @@ __global__ static void delaunay_edge_flip(rxmesh::Context              context,
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
 
-            DEdgeHandle new_edge =
-                cavity.add_edge(c,
-                                cavity.get_cavity_vertex(c, 1),
-                                cavity.get_cavity_vertex(c, 3));
+            DEdgeHandle new_edge = cavity.add_edge(
+                cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c, 3));
 
-            cavity.add_face(c,
-                            cavity.get_cavity_edge(c, 0),
+            cavity.add_face(cavity.get_cavity_edge(c, 0),
                             new_edge,
                             cavity.get_cavity_edge(c, 3));
 
-            cavity.add_face(c,
-                            cavity.get_cavity_edge(c, 1),
+            cavity.add_face(cavity.get_cavity_edge(c, 1),
                             cavity.get_cavity_edge(c, 2),
                             new_edge.get_flip_dedge());
         });
@@ -161,6 +157,8 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
     auto f_attr = rx.add_face_attribute<int>("fAttr", 1);
     f_attr->reset(0, DEVICE);
 
+    EXPECT_TRUE(rx.validate());
+
     GPUTimer timer;
     timer.start();
     int iter = 0;
@@ -172,6 +170,9 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
                                                   launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, *e_attr, *v_attr, *f_attr);
 
+        CUDA_ERROR(cudaDeviceSynchronize());
+
+        rx.fix_lphashtable();
 
         timer.stop();
         CUDA_ERROR(cudaDeviceSynchronize());
