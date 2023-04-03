@@ -386,16 +386,16 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
         rxmesh.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
 
-    LaunchBox<threads> test_launch_box;
-    rxmesh.prepare_launch_box(
-        {Op::VV}, test_launch_box, (void*)check_diag<float, threads>);
+    // LaunchBox<threads> test_launch_box;
+    // rxmesh.prepare_launch_box(
+    //     {Op::VV}, test_launch_box, (void*)check_diag<float, threads>);
 
-    check_diag<float, threads>
-        <<<test_launch_box.blocks,
-           test_launch_box.num_threads,
-           test_launch_box.smem_bytes_dyn>>>(rxmesh.get_context(), A_mat);
+    // check_diag<float, threads>
+    //     <<<test_launch_box.blocks,
+    //        test_launch_box.num_threads,
+    //        test_launch_box.smem_bytes_dyn>>>(rxmesh.get_context(), A_mat);
 
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 
     // A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
 

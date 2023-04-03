@@ -10,17 +10,26 @@ namespace rxmesh {
 // Currently this is device only
 // host/device transormation will be added
 // only col major is supported
-template <typename T, typename IndexT = int>
+template <typename T, typename IndexT = int, unsigned int MemAlignSize = 0>
 struct DenseMatrix
 {
     DenseMatrix(IndexT row_size, IndexT col_size)
         : m_row_size(row_size),
           m_col_size(col_size),
           m_dendescr(NULL),
-          m_allocated(LOCATION_NONE)
+          m_allocated(LOCATION_NONE),
+          m_col_pad_bytes(0),
+          m_col_pad_idx(0)
     {
-        CUDA_ERROR(cudaMalloc((void**)&m_d_val, bytes()));
         m_allocated = m_allocated | DEVICE;
+
+        IndexT col_data_bytes = m_row_size * sizeof(T);
+        if (MemAlignSize != 0 && col_data_bytes % MemAlignSize != 0) {
+            m_col_pad_bytes = MemAlignSize - (col_data_bytes % MemAlignSize);
+            m_col_pad_idx   = m_col_pad_bytes / sizeof(T);
+        }
+
+        CUDA_ERROR(cudaMalloc((void**)&m_d_val, bytes()));
 
         CUSPARSE_ERROR(cusparseCreateDnMat(&m_dendescr,
                                            m_row_size,
@@ -29,17 +38,16 @@ struct DenseMatrix
                                            m_d_val,
                                            CUDA_R_32F,
                                            CUSPARSE_ORDER_COL));
-        
     }
 
-    void set_ones()
-    {
-        std::vector<T> init_tmp_arr(m_row_size * m_col_size, 1);
-        CUDA_ERROR(cudaMemcpy(m_d_val,
-                              init_tmp_arr.data(),
-                              bytes() * sizeof(T),
-                              cudaMemcpyHostToDevice));
-    }
+    // void set_ones()
+    // {
+    //     std::vector<T> init_tmp_arr(m_row_size * m_col_size, 1);
+    //     CUDA_ERROR(cudaMemcpy(m_d_val,
+    //                           init_tmp_arr.data(),
+    //                           bytes() * sizeof(T),
+    //                           cudaMemcpyHostToDevice));
+    // }
 
     IndexT lead_dim() const
     {
@@ -52,9 +60,9 @@ struct DenseMatrix
         assert(col < m_col_size);
 
 #ifdef __CUDA_ARCH__
-        return m_d_val[col * m_row_size + row];
+        return m_d_val[col * (m_row_size + m_col_pad_idx) + row];
 #else
-        return m_h_val[col * m_row_size + row];
+        return m_h_val[col * (m_row_size + m_col_pad_idx) + row];
 #endif
     }
 
@@ -65,9 +73,9 @@ struct DenseMatrix
         assert(col < m_col_size);
 
 #ifdef __CUDA_ARCH__
-        return m_d_val[col * m_row_size + row];
+        return m_d_val[col * (m_row_size + m_col_pad_idx) + row];
 #else
-        return m_h_val[col * m_row_size + row];
+        return m_h_val[col * (m_row_size + m_col_pad_idx) + row];
 #endif
     }
 
@@ -88,11 +96,15 @@ struct DenseMatrix
     T* col_data(const uint32_t ld_idx, locationT location = DEVICE) const
     {
         if ((location & HOST) == HOST) {
-            return m_h_val + ld_idx * lead_dim();
+            return m_h_val + ld_idx * (m_row_size + m_col_pad_idx);
         }
 
         if ((location & DEVICE) == DEVICE) {
-            return m_d_val + ld_idx * lead_dim();
+            return m_d_val + ld_idx * (m_row_size + m_col_pad_idx);
+        }
+
+        if ((location & m_allocated) == location) {
+            RXMESH_ERROR("Requested data not allocated on {}", location);
         }
 
         assert(1 != 1);
@@ -101,7 +113,7 @@ struct DenseMatrix
 
     IndexT bytes() const
     {
-        return m_row_size * m_col_size * sizeof(T);
+        return (m_row_size + m_col_pad_idx) * m_col_size * sizeof(T);
     }
 
     void move(locationT source, locationT target, cudaStream_t stream = NULL)
@@ -182,6 +194,9 @@ struct DenseMatrix
     IndexT               m_col_size;
     T*                   m_d_val;
     T*                   m_h_val;
+
+    IndexT m_col_pad_bytes;
+    IndexT m_col_pad_idx;
 };
 
 }  // namespace rxmesh
