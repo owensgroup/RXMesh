@@ -385,21 +385,8 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
                                          launch_box.smem_bytes_dyn>>>(
         rxmesh.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
-
-    // LaunchBox<threads> test_launch_box;
-    // rxmesh.prepare_launch_box(
-    //     {Op::VV}, test_launch_box, (void*)check_diag<float, threads>);
-
-    // check_diag<float, threads>
-    //     <<<test_launch_box.blocks,
-    //        test_launch_box.num_threads,
-    //        test_launch_box.smem_bytes_dyn>>>(rxmesh.get_context(), A_mat);
-
-    // cudaDeviceSynchronize();
-
     // A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
 
-    // A_mat.spmat_chol_test_purmute();
     A_mat.spmat_chol_reorder(Reorder::NSTDIS);
     A_mat.spmat_chol_analysis();
     A_mat.spmat_chol_buffer_alloc();
@@ -408,6 +395,8 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
     for (int i = 0; i < B_mat.m_col_size; ++i) {
         A_mat.spmat_chol_solve(B_mat.col_data(i), X_mat.col_data(i));
     }
+
+    A_mat.spmat_chol_buffer_free();
 
     A_mat.denmat_mul(X_mat, ret_mat);
 

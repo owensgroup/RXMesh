@@ -112,8 +112,8 @@ template <typename T, typename IndexT = int>
 void permute_scatter(IndexT* d_p, T* d_in, T* d_out, IndexT size)
 {
     thrust::device_ptr<IndexT> t_p(d_p);
-    thrust::device_ptr<T> t_i(d_in);
-    thrust::device_ptr<T> t_o(d_out);
+    thrust::device_ptr<T>      t_i(d_in);
+    thrust::device_ptr<T>      t_o(d_out);
 
     thrust::scatter(thrust::device, t_i, t_i + size, t_p, t_o);
 }
@@ -123,27 +123,13 @@ template <typename T, typename IndexT = int>
 void permute_gather(IndexT* d_p, T* d_in, T* d_out, IndexT size)
 {
     thrust::device_ptr<IndexT> t_p(d_p);
-    thrust::device_ptr<T> t_i(d_in);
-    thrust::device_ptr<T> t_o(d_out);
+    thrust::device_ptr<T>      t_i(d_in);
+    thrust::device_ptr<T>      t_o(d_out);
 
     thrust::gather(thrust::device, t_p, t_p + size, t_i, t_o);
 }
 
 }  // namespace detail
-
-__global__ void check_arr_int(int* arr, int size) {
-    for (int i = 0; i < size; ++i) {
-        printf("%d ", arr[i]);
-    }
-    printf("\n ");
-}
-
-__global__ void check_arr_float(float* arr, int size) {
-    for (int i = 0; i < size; ++i) {
-        printf("%f ", arr[i]);
-    }
-    printf("\n ");
-}
 
 // TODO: add compatibility for EE, FF, VE......
 // TODO: purge operation?
@@ -357,6 +343,12 @@ struct SparseMatrix
         CUSPARSE_ERROR(cusparseDestroy(m_cusparse_handle));
         CUSPARSE_ERROR(cusparseDestroyMatDescr(m_descr));
         CUSOLVER_ERROR(cusolverSpDestroy(m_cusolver_sphandle));
+
+        if (m_reorder_allocated) {
+            GPU_FREE(m_d_solver_val);
+            GPU_FREE(m_d_solver_row_ptr);
+            GPU_FREE(m_d_solver_col_idx);
+        }
     }
 
     /* ----- CUSPARSE SPMM & SPMV ----- */
@@ -680,81 +672,6 @@ struct SparseMatrix
 
     /* --- LOW LEVEL API --- */
 
-    void spmat_chol_test_purmute()
-    {
-        // Host problem definition
-        int   size         = 8;
-        int   nnz          = 4;
-        int   hX_indices[] = {0, 3, 4, 7, 1, 2, 5, 6};
-        float hX_values[]  = {5.0f, 6.0f, 7.0f, 8.0f, 1.0f, 2.0f, 3.0f, 4.0f};
-        float hY[]         = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-        float hY_result[]  = {5.0f, 1.0f, 2.0f, 6.0f, 7.0f, 3.0f, 4.0f, 8.0f};
-        //--------------------------------------------------------------------------
-        // Device memory management
-        int*   dX_indices;
-        float *dY, *dX_values;
-        CUDA_ERROR(cudaMalloc((void**)&dX_indices, size * sizeof(int)));
-        CUDA_ERROR(cudaMalloc((void**)&dX_values, size * sizeof(float)));
-        CUDA_ERROR(cudaMalloc((void**)&dY, size * sizeof(float)));
-
-        CUDA_ERROR(cudaMemcpy(dX_indices,
-                              hX_indices,
-                              size * sizeof(int),
-                              cudaMemcpyHostToDevice));
-        CUDA_ERROR(cudaMemcpy(dX_values,
-                              hX_values,
-                              size * sizeof(float),
-                              cudaMemcpyHostToDevice));
-        CUDA_ERROR(
-            cudaMemcpy(dY, hY, size * sizeof(float), cudaMemcpyHostToDevice));
-        //--------------------------------------------------------------------------
-        // CUSPARSE APIs
-        cusparseHandle_t     handle = NULL;
-        cusparseSpVecDescr_t vecX;
-        cusparseDnVecDescr_t vecY;
-        CUSPARSE_ERROR(cusparseCreate(&handle));
-        // Create sparse vector X
-        CUSPARSE_ERROR(cusparseCreateSpVec(&vecX,
-                                           size,
-                                           size,
-                                           dX_indices,
-                                           dX_values,
-                                           CUSPARSE_INDEX_32I,
-                                           CUSPARSE_INDEX_BASE_ZERO,
-                                           CUDA_R_32F));
-        // Create dense vector y
-        CUSPARSE_ERROR(cusparseCreateDnVec(&vecY, size, dY, CUDA_R_32F));
-
-        // execute Scatter
-        CUSPARSE_ERROR(cusparseScatter(handle, vecX, vecY));
-
-        // destroy matrix/vector descriptors
-        CUSPARSE_ERROR(cusparseDestroySpVec(vecX));
-        CUSPARSE_ERROR(cusparseDestroyDnVec(vecY));
-        CUSPARSE_ERROR(cusparseDestroy(handle));
-        //--------------------------------------------------------------------------
-        // device result check
-        CUDA_ERROR(
-            cudaMemcpy(hY, dY, size * sizeof(float), cudaMemcpyDeviceToHost));
-        int correct = 1;
-        for (int i = 0; i < size; i++) {
-            RXMESH_INFO("hY[]: {}; hY_result[i]: {};", hY[i], hY_result[i]);
-            if (hY[i] != hY_result[i]) {
-                correct = 0;
-                break;
-            }
-        }
-        if (correct)
-            printf("scatter_example test PASSED\n");
-        else
-            printf("scatter_example test FAILED: wrong result\n");
-        //--------------------------------------------------------------------------
-        // device memory deallocation
-        CUDA_ERROR(cudaFree(dX_indices));
-        CUDA_ERROR(cudaFree(dX_values));
-        CUDA_ERROR(cudaFree(dY));
-    }
-
     void spmat_chol_reorder(rxmesh::Reorder reorder)
     {
         if (reorder == Reorder::NONE) {
@@ -766,6 +683,8 @@ struct SparseMatrix
                 GPU_FREE(m_d_solver_val);
                 GPU_FREE(m_d_solver_row_ptr);
                 GPU_FREE(m_d_solver_col_idx);
+                GPU_FREE(m_d_permute);
+                free(m_h_permute);
                 m_reorder_allocated = false;
             }
 
@@ -897,7 +816,7 @@ struct SparseMatrix
                                    h_val_permute,
                                    m_nnz * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
-        
+
         detail::permute_gather(d_val_permute, m_d_val, m_d_solver_val, m_nnz);
 
         free(h_val_permute);
