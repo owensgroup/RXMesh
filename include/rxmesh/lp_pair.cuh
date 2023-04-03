@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <numeric>
 
+#include "rxmesh/util/bitmask_util.h"
+
 namespace rxmesh {
 /**
  * @brief This struct store the index of the not-owned mesh elements as a 32-bit
@@ -67,11 +69,11 @@ struct LPPair
 
     __host__ __device__ LPPair() : m_pair(INVALID32){};
     __host__ __device__ LPPair(uint32_t p) : m_pair(p){};
-    LPPair(const LPPair& other) = default;
-    LPPair(LPPair&&)            = default;
+    LPPair(const LPPair& other)      = default;
+    LPPair(LPPair&&)                 = default;
     LPPair& operator=(const LPPair&) = default;
-    LPPair& operator=(LPPair&&) = default;
-    ~LPPair()                   = default;
+    LPPair& operator=(LPPair&&)      = default;
+    ~LPPair()                        = default;
 
     /**
      * @brief Construct and return a tombstone pair
@@ -114,7 +116,7 @@ struct LPPair
      */
     __device__ __host__ __inline__ ValueT value() const
     {
-        // get the low 16 bits 
+        // get the low 16 bits
         return m_pair & INVALID16;
     }
 
@@ -124,7 +126,7 @@ struct LPPair
     __device__ __host__ __inline__ uint16_t local_id_in_owner_patch() const
     {
         // get the low 12 bits by clearing the high bits
-        return m_pair & ((1 << LIDOwnerNumBits) - 1);
+        return detail::extract_low_bits<LIDOwnerNumBits>(m_pair);
     }
 
     /**
@@ -134,7 +136,8 @@ struct LPPair
     __device__ __host__ __inline__ uint8_t patch_stash_id() const
     {
         const uint16_t temp = m_pair >> (LIDOwnerNumBits);
-        return static_cast<uint8_t>(temp & ((1 << PatchStashNumBits) - 1));
+        return static_cast<uint8_t>(
+            detail::extract_low_bits<PatchStashNumBits>(temp));
     }
 
     uint32_t m_pair;
