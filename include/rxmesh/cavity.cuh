@@ -1124,13 +1124,7 @@ struct Cavity
 
                 assert(m_patch_info.patch_stash.get_patch(lp) != INVALID32);
                 assert(owner != patch_id);
-
-                if (std::is_same_v<HandleT, VertexHandle>) {
-                    printf("\n v= %u, lp=%u, lp_full= %u",
-                           v,
-                           lp.value(),
-                           lp.m_pair);
-                }
+                
                 s_owner[v] = lp.value();
             }
         }
