@@ -348,11 +348,8 @@ struct SparseMatrix
             GPU_FREE(m_d_solver_val);
             GPU_FREE(m_d_solver_row_ptr);
             GPU_FREE(m_d_solver_col_idx);
-<<<<<<< HEAD
             GPU_FREE(m_d_permute);
             free(m_h_permute);
-=======
->>>>>>> a53ab72c7f4683e3a57a7fecd374b5e4801dcff9
         }
     }
 
