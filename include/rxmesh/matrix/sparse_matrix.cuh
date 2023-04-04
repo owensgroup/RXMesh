@@ -674,6 +674,12 @@ struct SparseMatrix
 
     /* --- LOW LEVEL API --- */
 
+    /**
+     * @brief The lower level api of reordering. Sprcify the reordering type or
+     * simply NONE for no reordering. This should be called at the begining of
+     * the solving process. Any other function call order would be undefined.
+     * @param reorder: the reorder method applied.
+     */
     void spmat_chol_reorder(rxmesh::Reorder reorder)
     {
         if (reorder == Reorder::NONE) {
@@ -832,6 +838,10 @@ struct SparseMatrix
         }
     }
 
+    /**
+     * @brief The lower level api of matrix analysis. Generating a member value
+     * of type csrcholInfo_t for cucolver.
+     */
     void spmat_chol_analysis()
     {
         if (!m_use_reorder) {
@@ -852,6 +862,10 @@ struct SparseMatrix
                                                   m_chol_info));
     }
 
+    /**
+     * @brief The lower level api of matrix factorization buffer calculation and
+     * allocation. The buffer is a member variable.
+     */
     void spmat_chol_buffer_alloc()
     {
         if constexpr (std::is_same_v<T, float>) {
@@ -883,11 +897,18 @@ struct SparseMatrix
         CUDA_ERROR(cudaMalloc((void**)&m_chol_buffer, m_workspaceInBytes));
     }
 
+    /**
+     * @brief The lower level api of matrix factorization buffer release.
+     */
     void spmat_chol_buffer_free()
     {
         CUDA_ERROR(cudaFree(m_chol_buffer));
     }
 
+    /**
+     * @brief The lower level api of matrix factorization and save the
+     * factorization result in to the buffer.
+     */
     void spmat_chol_factor()
     {
         if constexpr (std::is_same_v<T, float>) {
@@ -932,6 +953,14 @@ struct SparseMatrix
         }
     }
 
+    /**
+     * @brief The lower level api of solving the linear system after using
+     * cholesky factorization. The format follows Ax=b to solve x, where A is
+     * the sparse matrix, x and b are device array. As long as A doesn't change.
+     * This function could be called for many different b and x.
+     * @param d_b: device array of b
+     * @param d_x: device array of x
+     */
     void spmat_chol_solve(T* d_b, T* d_x)
     {
 
