@@ -984,20 +984,6 @@ struct Cavity
 
         const uint32_t p = m_patch_info.patch_id;
 
-        auto owner_handle = [&](uint16_t v, const uint16_t* s_owner) {
-            const uint16_t lp = s_owner[v];
-            const uint8_t  st =
-                static_cast<uint8_t>((lp >> LPPair::LIDOwnerNumBits));
-            const uint32_t owner = m_patch_info.patch_stash.m_stash[st];
-
-            assert(owner != p);
-            assert(owner != INVALID32);
-
-            const uint16_t local_id_in_owner =
-                detail::extract_low_bits<LPPair::LIDOwnerNumBits>(lp);
-
-            return HandleT(owner, {local_id_in_owner});
-        };
 
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             for (uint16_t vp = threadIdx.x; vp < m_s_num_vertices[0];
@@ -1006,7 +992,12 @@ struct Cavity
                     assert(m_s_owned_mask_v(vp));
                     assert(m_s_active_mask_v(vp) || m_s_in_cavity_v(vp));
 
-                    const HandleT handle = owner_handle(vp, m_s_owner_v);
+                    const HandleT handle =
+                        convert_to_handle<HandleT>(m_s_owner_v[vp]);
+
+                    assert(handle.patch_id() != p);
+                    assert(handle.patch_id() != INVALID32);
+                    assert(handle.local_id() != INVALID16);
 
                     const uint32_t num_attr = attribute.get_num_attributes();
                     for (uint32_t attr = 0; attr < num_attr; ++attr) {
@@ -1023,8 +1014,13 @@ struct Cavity
                 if (m_s_ownership_change_mask_e(ep)) {
                     assert(m_s_owned_mask_e(ep));
                     assert(m_s_active_mask_e(ep) || m_s_in_cavity_e(ep));
+                                        
+                    const HandleT handle =
+                        convert_to_handle<HandleT>(m_s_owner_e[ep]);
 
-                    const HandleT handle = owner_handle(ep, m_s_owner_e);
+                    assert(handle.patch_id() != p);
+                    assert(handle.patch_id() != INVALID32);
+                    assert(handle.local_id() != INVALID16);
 
                     const uint32_t num_attr = attribute.get_num_attributes();
                     for (uint32_t attr = 0; attr < num_attr; ++attr) {
@@ -1042,7 +1038,12 @@ struct Cavity
                     assert(m_s_owned_mask_f(fp));
                     assert(m_s_active_mask_f(fp) || m_s_in_cavity_f(fp));
 
-                    const HandleT handle = owner_handle(fp, m_s_owner_f);
+                    const HandleT handle =
+                        convert_to_handle<HandleT>(m_s_owner_f[fp]);
+
+                    assert(handle.patch_id() != p);
+                    assert(handle.patch_id() != INVALID32);
+                    assert(handle.local_id() != INVALID16);
 
                     const uint32_t num_attr = attribute.get_num_attributes();
                     for (uint32_t attr = 0; attr < num_attr; ++attr) {
@@ -1124,7 +1125,7 @@ struct Cavity
 
                 assert(m_patch_info.patch_stash.get_patch(lp) != INVALID32);
                 assert(owner != patch_id);
-                
+
                 s_owner[v] = lp.value();
             }
         }
@@ -1891,7 +1892,8 @@ struct Cavity
                                      m_s_num_faces[0],
                                      m_s_owned_mask_f,
                                      m_s_active_mask_f,
-                                     m_s_in_cavity_f);
+                                     m_s_in_cavity_f,
+                                     m_s_owner_f);
     }
 
     /**
@@ -1908,7 +1910,8 @@ struct Cavity
                                      m_s_num_edges[0],
                                      m_s_owned_mask_e,
                                      m_s_active_mask_e,
-                                     m_s_in_cavity_e);
+                                     m_s_in_cavity_e,
+                                     m_s_owner_e);
     }
 
     /**
@@ -1925,7 +1928,8 @@ struct Cavity
                                        m_s_num_vertices[0],
                                        m_s_owned_mask_v,
                                        m_s_active_mask_v,
-                                       m_s_in_cavity_v);
+                                       m_s_in_cavity_v,
+                                       m_s_owner_v);
     }
 
 
@@ -1936,18 +1940,18 @@ struct Cavity
      */
     template <typename HandleT>
     __device__ __inline__ uint16_t find_copy(
-        uint16_t&      lid,
-        uint32_t&      src_patch,
-        const uint16_t dest_patch_num_elements,
-        const Bitmask& dest_patch_owned_mask,
-        const Bitmask& dest_patch_active_mask,
-        const Bitmask& dest_in_cavity)
+        uint16_t&       lid,
+        uint32_t&       src_patch,
+        const uint16_t  dest_patch_num_elements,
+        const Bitmask&  dest_patch_owned_mask,
+        const Bitmask&  dest_patch_active_mask,
+        const Bitmask&  dest_in_cavity,
+        const uint16_t* dest_owner)
     {
         // first check if lid is owned by src_patch. If not, then map it to its
         // owner patch and local index in it
         assert(!m_context.m_patches_info[src_patch].is_deleted(
             HandleT::LocalT(lid)));
-
 
         auto owner = m_context.get_owner_handle(HandleT(src_patch, {lid}));
 
@@ -1965,7 +1969,17 @@ struct Cavity
         // patch. For every not-owned element, we map it to its owner patch and
         // check against lid-src_patch pair
         for (uint16_t i = 0; i < dest_patch_num_elements; ++i) {
-            if (!dest_patch_owned_mask(i) &&
+            const uint16_t lp = dest_owner[i];
+
+            if (lp != INVALID16) {
+                const HandleT handle = convert_to_handle<HandleT>(lp);
+                if (handle.patch_id() == src_patch &&
+                    handle.local_id() == lid) {
+                    return i;
+                }
+            }
+
+            /*if (!dest_patch_owned_mask(i) &&
                 (dest_patch_active_mask(i) || dest_in_cavity(i))) {
                 // we disable check0 since the element might have been just
                 // added in the patch in shared memory and not visible to global
@@ -1981,7 +1995,7 @@ struct Cavity
                     handle.local_id() == lid) {
                     return i;
                 }
-            }
+            }*/
         }
         return INVALID16;
     }
@@ -2000,6 +2014,19 @@ struct Cavity
         block.sync();
 
         return s_current_timestamp == m_init_timestamp;
+    }
+
+    template <typename HandleT>
+    __device__ __inline__ HandleT convert_to_handle(const uint16_t lp)
+    {
+        const uint8_t st =
+            static_cast<uint8_t>((lp >> LPPair::LIDOwnerNumBits));
+        const uint32_t owner = m_patch_info.patch_stash.m_stash[st];
+
+        const uint16_t local_id_in_owner =
+            detail::extract_low_bits<LPPair::LIDOwnerNumBits>(lp);
+
+        return {owner, {local_id_in_owner}};
     }
 
     int *m_s_num_cavities, *m_s_cavity_size;
