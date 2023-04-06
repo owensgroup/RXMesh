@@ -1014,7 +1014,7 @@ struct Cavity
                 if (m_s_ownership_change_mask_e(ep)) {
                     assert(m_s_owned_mask_e(ep));
                     assert(m_s_active_mask_e(ep) || m_s_in_cavity_e(ep));
-                                        
+
                     const HandleT handle =
                         convert_to_handle<HandleT>(m_s_owner_e[ep]);
 
@@ -1150,16 +1150,19 @@ struct Cavity
         change_ownership<VertexHandle>(block,
                                        m_s_num_vertices[0],
                                        m_s_ownership_change_mask_v,
+                                       m_s_owner_v,
                                        m_s_owned_mask_v);
 
         change_ownership<EdgeHandle>(block,
                                      m_s_num_edges[0],
                                      m_s_ownership_change_mask_e,
+                                     m_s_owner_e,
                                      m_s_owned_mask_e);
 
         change_ownership<FaceHandle>(block,
                                      m_s_num_faces[0],
                                      m_s_ownership_change_mask_f,
+                                     m_s_owner_f,
                                      m_s_owned_mask_f);
     }
 
@@ -1174,6 +1177,7 @@ struct Cavity
         cooperative_groups::thread_block& block,
         const uint16_t                    num_elements,
         const Bitmask&                    s_ownership_change,
+        const uint16_t*                   s_owner,
         Bitmask&                          s_owned_bitmask)
     {
         for (uint32_t vp = threadIdx.x; vp < num_elements; vp += blockThreads) {
@@ -1186,12 +1190,10 @@ struct Cavity
 
                 assert(!m_patch_info.is_owned(HandleT::LocalT(vp)));
 
-                const HandleT h = m_context.get_owner_handle<HandleT>(
-                    {m_patch_info.patch_id, {vp}},
-                    nullptr,
-                    nullptr,
-                    false,
-                    true);
+                const HandleT h = convert_to_handle<HandleT>(s_owner[vp]);
+
+                assert(h.patch_id() != INVALID32);
+                assert(h.local_id() != INVALID16);
 
                 const uint32_t q  = h.patch_id();
                 const uint16_t vq = h.local_id();
@@ -1702,45 +1704,34 @@ struct Cavity
                     assert(m_s_in_cavity_v(lp.local_id_in_owner_patch()) ||
                            m_s_active_mask_v(lp.local_id_in_owner_patch()));
 
-                    if (sh_owned) {
-                        if (m_s_owned_mask_v(lp.local_id_in_owner_patch())) {
-                            break;
-                        }
+                    if (m_s_owned_mask_v(lp.local_id_in_owner_patch())) {
+                        break;
                     } else {
-                        if (m_patch_info.is_owned(
-                                LocalT(lp.local_id_in_owner_patch()))) {
-                            break;
-                        }
+                        return convert_to_handle<HandleT>(
+                            m_s_owner_v[lp.local_id_in_owner_patch()]);
                     }
                 }
                 if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
                     assert(m_s_in_cavity_e(lp.local_id_in_owner_patch()) ||
                            m_s_active_mask_e(lp.local_id_in_owner_patch()));
 
-                    if (sh_owned) {
-                        if (m_s_owned_mask_e(lp.local_id_in_owner_patch())) {
-                            break;
-                        }
+
+                    if (m_s_owned_mask_e(lp.local_id_in_owner_patch())) {
+                        break;
                     } else {
-                        if (m_patch_info.is_owned(
-                                LocalT(lp.local_id_in_owner_patch()))) {
-                            break;
-                        }
+                        return convert_to_handle<HandleT>(
+                            m_s_owner_e[lp.local_id_in_owner_patch()]);
                     }
                 }
                 if constexpr (std::is_same_v<HandleT, FaceHandle>) {
                     assert(m_s_in_cavity_f(lp.local_id_in_owner_patch()) ||
                            m_s_active_mask_f(lp.local_id_in_owner_patch()));
 
-                    if (sh_owned) {
-                        if (m_s_owned_mask_f(lp.local_id_in_owner_patch())) {
-                            break;
-                        }
+                    if (m_s_owned_mask_f(lp.local_id_in_owner_patch())) {
+                        break;
                     } else {
-                        if (m_patch_info.is_owned(
-                                LocalT(lp.local_id_in_owner_patch()))) {
-                            break;
-                        }
+                        return convert_to_handle<HandleT>(
+                            m_s_owner_f[lp.local_id_in_owner_patch()]);
                     }
                 }
             } else {
