@@ -2,6 +2,7 @@
 #include "gtest/gtest.h"
 
 #include "rxmesh/cavity.cuh"
+#include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/kernels/for_each.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
@@ -26,55 +27,60 @@ __global__ static void random_flips(rxmesh::Context                context,
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    Cavity<blockThreads, CavityOp::E> cavity(block, context, shrd_alloc);
 
-    const uint32_t pid = cavity.m_patch_info.patch_id;
+    CavityManager<blockThreads, CavityOp::E> cavity_manager(
+        block, context, shrd_alloc);
 
-    if (pid == INVALID32) {
+
+    if (cavity_manager.patch_id() == INVALID32) {
         return;
     }
 
-    detail::for_each_edge(cavity.m_patch_info, [&](const EdgeHandle eh) {
-        // e_attr(context.get_owner_handle(eh)) = eh.local_id();
-        if (to_flip(eh) == 1) {
-            cavity.add(eh);
-            to_flip(eh) = 2;
-        }
-    });
+    detail::for_each_edge(cavity_manager.patch_info(),
+                          [&](const EdgeHandle eh) {
+                              // e_attr(context.get_owner_handle(eh)) =
+                              // eh.local_id();
+                              if (to_flip(eh) == 1) {
+                                  cavity_manager.create(eh);
+                                  to_flip(eh) = 2;
+                              }
+                          });
 
     block.sync();
 
+    if (cavity_manager.prologue(block, shrd_alloc)) {
+        // TODO
+        // cavity_manager.update_attributes(block, coords);
+        // cavity_manager.update_attributes(block, to_flip);
+        // cavity_manager.update_attributes(block, f_attr);
+        // cavity_manager.update_attributes(block, e_attr);
+        // cavity_manager.update_attributes(block, v_attr);
 
-    if (cavity.process(block, shrd_alloc /*, v_attr, e_attr, f_attr*/)) {
-        cavity.update_attributes(block, coords);
-        cavity.update_attributes(block, to_flip);
-        cavity.update_attributes(block, f_attr);
-        cavity.update_attributes(block, e_attr);
-        cavity.update_attributes(block, v_attr);
-
-        cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+        cavity_manager.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
 
-            DEdgeHandle new_edge = cavity.add_edge(
-                cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c, 3));
+            DEdgeHandle new_edge =
+                cavity_manager.add_edge(cavity_manager.get_cavity_vertex(c, 1),
+                                        cavity_manager.get_cavity_vertex(c, 3));
 
-            cavity.add_face(cavity.get_cavity_edge(c, 0),
-                            new_edge,
-                            cavity.get_cavity_edge(c, 3));
+            cavity_manager.add_face(cavity_manager.get_cavity_edge(c, 0),
+                                    new_edge,
+                                    cavity_manager.get_cavity_edge(c, 3));
 
-            cavity.add_face(cavity.get_cavity_edge(c, 1),
-                            cavity.get_cavity_edge(c, 2),
-                            new_edge.get_flip_dedge());
+            cavity_manager.add_face(cavity_manager.get_cavity_edge(c, 1),
+                                    cavity_manager.get_cavity_edge(c, 2),
+                                    new_edge.get_flip_dedge());
         });
         block.sync();
 
-        cavity.cleanup(block);
+        cavity_manager.epilogue(block);
     } else {
-        detail::for_each_edge(cavity.m_patch_info, [&](const EdgeHandle eh) {
-            if (to_flip(eh) == 2) {
-                to_flip(eh) = 1;
-            }
-        });
+        detail::for_each_edge(cavity_manager.patch_info(),
+                              [&](const EdgeHandle eh) {
+                                  if (to_flip(eh) == 2) {
+                                      to_flip(eh) = 1;
+                                  }
+                              });
     }
 }
 
