@@ -22,12 +22,18 @@ struct CavityManager
     __device__ __inline__ CavityManager()
         : m_s_num_cavities(nullptr),
           m_s_cavity_size_prefix(nullptr),
+          m_vert_cap(0),
+          m_edge_cap(0),
+          m_face_cap(0),
+          m_s_readd_to_queue(nullptr),
+          m_s_ev(nullptr),
+          m_s_fe(nullptr),
           m_s_cavity_id_v(nullptr),
           m_s_cavity_id_e(nullptr),
           m_s_cavity_id_f(nullptr),
-          m_s_cavity_edge_loop(nullptr),
-          m_s_ev(nullptr),
-          m_s_fe(nullptr),
+          m_s_table_v(nullptr),
+          m_s_table_e(nullptr),
+          m_s_table_f(nullptr),
           m_s_num_vertices(nullptr),
           m_s_num_edges(nullptr),
           m_s_num_faces(nullptr),
@@ -84,6 +90,13 @@ struct CavityManager
         return m_patch_info.patch_id;
     }
 
+    /**
+     * @brief return the patch info assigned to this cavity manager
+     */
+    __device__ __forceinline__ const PatchInfo& patch_info() const
+    {
+        return m_patch_info;
+    }
 
     /**
      * @brief apply a lambda function on each cavity to fill it in with edges
@@ -159,6 +172,12 @@ struct CavityManager
         cooperative_groups::thread_block& block,
         ShmemAllocator&                   shrd_alloc);
 
+
+    /**
+     * @brief load hashtable into shared memory
+     */
+    __device__ __inline__ void load_hashtable(
+        cooperative_groups::thread_block& block);
 
     /**
      * @brief propage the cavity ID from the seeds to indicent/adjacent elements
@@ -248,7 +267,144 @@ struct CavityManager
     __device__ __inline__ uint16_t add_element(Bitmask        active_bitmask,
                                                const uint16_t num_elements);
 
-    //
+    /**
+     * @brief enqueue patch in the patch scheduler so that it can be scheduled
+     * latter
+     */
+    __device__ __inline__ void push();
+
+    /**
+     * @brief release the lock of this patch
+     */
+    __device__ __forceinline__ void unlock();
+
+
+    /**
+     * @brief try to acquire the lock of the patch q. The block call this
+     * function while only one thread is needed to do the job but we broadcast
+     * the results to all threads
+     */
+    __device__ __forceinline__ bool lock(
+        cooperative_groups::thread_block& block,
+        const uint8_t                     stash_id,
+        const uint32_t                    q);
+
+
+    /**
+     * @brief release the lock acquired earlier for the patch q.
+     */
+    __device__ __forceinline__ void unlock(const uint8_t  stash_id,
+                                           const uint32_t q);
+
+    /**
+     * @brief unlock all locked patches done by this cavity manager
+     * @return
+     */
+    __device__ __inline__ void unlock_locked_patches();
+
+    /**
+     * @brief migrate vertices/edges/faces from neighbor patches to this patch
+     */
+    __device__ __inline__ bool migrate(cooperative_groups::thread_block& block);
+
+    /**
+     * @brief given a neighbor patch (q), migrate vertices (and edges and faces
+     * connected to these vertices) marked in migrate_mask_v to the patch
+     * managed by this cavity manager
+     */
+    __device__ __inline__ bool migrate_from_patch(
+        cooperative_groups::thread_block& block,
+        const uint8_t                     q_stash_id,
+        const uint32_t                    q,
+        const Bitmask&                    migrate_mask_v,
+        const bool                        change_ownership);
+
+    /**
+     * @brief give a neighbor patch q and a vertex in it q_vertex, find the copy
+     * of q_vertex in this patch. If it does not exist, create such a copy.
+     */
+    template <typename FuncT>
+    __device__ __inline__ LPPair migrate_vertex(
+        const uint32_t q,
+        const uint16_t q_num_vertices,
+        const uint16_t q_vertex,
+        const bool     require_ownership_change,
+        PatchInfo&     q_patch_info,
+        FuncT          should_migrate);
+
+
+    /**
+     * @brief give a neighbor patch q and an edge in it q_edge, find the copy
+     * of q_edge in this patch. If it does not exist, create such a copy.
+     */
+    template <typename FuncT>
+    __device__ __inline__ LPPair migrate_edge(
+        const uint32_t q,
+        const uint16_t q_num_edges,
+        const uint16_t q_edge,
+        const bool     require_ownership_change,
+        PatchInfo&     q_patch_info,
+        FuncT          should_migrate);
+
+
+    /**
+     * @brief give a neighbor patch q and a face in it q_face, find the copy
+     * of q_face in this patch. If it does not exist, create such a copy.
+     */
+    template <typename FuncT>
+    __device__ __inline__ LPPair migrate_face(
+        const uint32_t q,
+        const uint16_t q_num_faces,
+        const uint16_t q_face,
+        const bool     require_ownership_change,
+        PatchInfo&     q_patch_info,
+        FuncT          should_migrate);
+
+    /**
+     * @brief given a local vertex in a patch, find its corresponding local
+     * index in the patch associated with this cavity i.e., m_patch_info.
+     * If the given vertex (local_id) is not owned by the given patch, they will
+     * be mapped to their owner patch and local index in the owner patch.
+     */
+    __device__ __inline__ uint16_t find_copy_vertex(uint16_t& local_id,
+                                                    uint32_t& patch);
+
+    /**
+     * @brief given a local edge in a patch, find its corresponding local
+     * index in the patch associated with this cavity i.e., m_patch_info.
+     * If the given edge (local_id) is not owned by the given patch, they will
+     * be mapped to their owner patch and local index in the owner patch
+     */
+    __device__ __inline__ uint16_t find_copy_edge(uint16_t& local_id,
+                                                  uint32_t& patch);
+
+    /**
+     * @brief given a local face in a patch, find its corresponding local
+     * index in the patch associated with this cavity i.e., m_patch_info.
+     * If the given face (local_id) is not owned by the given patch, they will
+     * be mapped to their owner patch and local index in the owner patch
+     */
+    __device__ __inline__ uint16_t find_copy_face(uint16_t& local_id,
+                                                  uint32_t& patch);
+
+
+    /**
+     * @brief find a copy of mesh element from a src_patch in a dest_patch i.e.,
+     * the lid lives in src_patch and we want to find the corresponding local
+     * index in dest_patch
+     */
+    template <typename HandleT>
+    __device__ __inline__ uint16_t find_copy(
+        uint16_t&      lid,
+        uint32_t&      src_patch,
+        const uint16_t dest_patch_num_elements,
+        const Bitmask& dest_patch_owned_mask,
+        const Bitmask& dest_patch_active_mask,
+        const Bitmask& dest_in_cavity,
+        const LPPair*  m_s_table);
+
+
+    /*******/
     // num_cavities could be uint16_t but we use int since we need atomicAdd
     int* m_s_num_cavities;
 
@@ -292,7 +448,6 @@ struct CavityManager
     // indicate which patch (in the patch stash) is actually locked
     Bitmask m_s_locked_patches_mask;
 
-    Bitmask m_s_added_to_lp_v, m_s_added_to_lp_e, m_s_added_to_lp_f;
 
     // indicate if the mesh element is in the interior of the cavity
     Bitmask m_s_in_cavity_v, m_s_in_cavity_e, m_s_in_cavity_f;
@@ -306,8 +461,8 @@ struct CavityManager
     // does not belong to any cavity, then it stores INVALID32
     uint16_t *m_s_cavity_id_v, *m_s_cavity_id_e, *m_s_cavity_id_f;
 
-    // TODO this should be the hashtable pointers
-    uint16_t *m_s_owner_v, *m_s_owner_e, *m_s_owner_f;
+    // the hashtable (this memory overlaps with m_s_cavity_id_v/e/f)
+    LPPair *m_s_table_v, *m_s_table_e, *m_s_table_f;
 
     // store the number of elements. we use pointers since the number of mesh
     // elements could change

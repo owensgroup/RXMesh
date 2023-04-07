@@ -38,7 +38,7 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
                 blockIdx.x);
             if (!locked) {
                 // if we can not, we add it again to the queue
-                m_context.m_patch_scheduler.push(patch_id);
+                push();
 
                 // and signal other threads to also exit
                 patch_id = INVALID32;
@@ -65,31 +65,25 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     m_face_cap = m_patch_info.faces_capacity[0];
 
     m_s_cavity_id_v      = shrd_alloc.alloc<uint16_t>(m_vert_cap);
-    m_s_owner_v          = m_s_cavity_id_v;
     m_s_cavity_id_e      = shrd_alloc.alloc<uint16_t>(m_edge_cap);
-    m_s_owner_e          = m_s_cavity_id_e;
     m_s_cavity_id_f      = shrd_alloc.alloc<uint16_t>(m_face_cap);
-    m_s_owner_f          = m_s_cavity_id_f;
     m_s_cavity_edge_loop = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
 
     auto alloc_masks = [&](uint16_t        num_elements,
                            Bitmask&        owned,
                            Bitmask&        active,
                            Bitmask&        ownership,
-                           Bitmask&        added_to_lp,
                            Bitmask&        in_cavity,
                            const uint32_t* g_owned,
                            const uint32_t* g_active) {
-        owned       = Bitmask(num_elements, shrd_alloc);
-        active      = Bitmask(num_elements, shrd_alloc);
-        ownership   = Bitmask(num_elements, shrd_alloc);
-        added_to_lp = Bitmask(num_elements, shrd_alloc);
-        in_cavity   = Bitmask(num_elements, shrd_alloc);
+        owned     = Bitmask(num_elements, shrd_alloc);
+        active    = Bitmask(num_elements, shrd_alloc);
+        ownership = Bitmask(num_elements, shrd_alloc);
+        in_cavity = Bitmask(num_elements, shrd_alloc);
 
         owned.reset(block);
         active.reset(block);
         ownership.reset(block);
-        added_to_lp.reset(block);
         in_cavity.reset(block);
 
         detail::load_async(reinterpret_cast<const char*>(g_owned),
@@ -110,7 +104,6 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
                 m_s_owned_mask_v,
                 m_s_active_mask_v,
                 m_s_ownership_change_mask_v,
-                m_s_added_to_lp_v,
                 m_s_in_cavity_v,
                 m_patch_info.owned_mask_v,
                 m_patch_info.active_mask_v);
@@ -126,7 +119,6 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
                 m_s_owned_mask_e,
                 m_s_active_mask_e,
                 m_s_ownership_change_mask_e,
-                m_s_added_to_lp_e,
                 m_s_in_cavity_e,
                 m_patch_info.owned_mask_e,
                 m_patch_info.active_mask_e);
@@ -141,7 +133,6 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
                 m_s_owned_mask_f,
                 m_s_active_mask_f,
                 m_s_ownership_change_mask_f,
-                m_s_added_to_lp_f,
                 m_s_in_cavity_f,
                 m_patch_info.owned_mask_f,
                 m_patch_info.active_mask_f);
@@ -260,6 +251,23 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     // sort each cavity edge loop
     sort_cavities_edge_loop();
     block.sync();
+
+
+    // load hashtables
+    load_hashtable(block);
+    block.sync();
+
+    // change patch layout to accommodate all cavities created in the patch
+    if (!migrate(block)) {
+        unlock_locked_patches();
+        unlock();
+        push();
+        return false;
+    }
+    block.sync();
+
+
+    return true;
 }
 
 template <uint32_t blockThreads, CavityOp cop>
@@ -746,8 +754,10 @@ __device__ __inline__ FaceHandle CavityManager<blockThreads, cop>::add_face(
 }
 
 
-__device__ __inline__ uint16_t add_element(Bitmask        active_bitmask,
-                                           const uint16_t num_elements)
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ uint16_t CavityManager<blockThreads, cop>::add_element(
+    Bitmask        active_bitmask,
+    const uint16_t num_elements)
 {
 
     for (uint16_t i = 0; i < num_elements; ++i) {
@@ -758,4 +768,948 @@ __device__ __inline__ uint16_t add_element(Bitmask        active_bitmask,
 
     return INVALID16;
 }
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void CavityManager<blockThreads, cop>::load_hashtable(
+    cooperative_groups::thread_block& block)
+{
+    assert(m_patch_info.lp_v.get_capacity() * sizeof(LPPair) <=
+           m_vert_cap * sizeof(uint16_t));
+    m_s_table_v = reinterpret_cast<LPPair*>(m_s_cavity_id_v);
+
+    assert(m_patch_info.lp_e.get_capacity() * sizeof(LPPair) <=
+           m_edge_cap * sizeof(uint16_t));
+    m_s_table_e = reinterpret_cast<LPPair*>(m_s_cavity_id_e);
+
+    assert(m_patch_info.lp_f.get_capacity() * sizeof(LPPair) <=
+           m_face_cap * sizeof(uint16_t));
+    m_s_table_f = reinterpret_cast<LPPair*>(m_s_cavity_id_f);
+
+    detail::load_async(block,
+                       m_patch_info.lp_v.get_table(),
+                       m_patch_info.lp_v.get_capacity(),
+                       m_s_table_v,
+                       false);
+
+    detail::load_async(block,
+                       m_patch_info.lp_e.get_table(),
+                       m_patch_info.lp_e.get_capacity(),
+                       m_s_table_e,
+                       false);
+
+    detail::load_async(block,
+                       m_patch_info.lp_f.get_table(),
+                       m_patch_info.lp_f.get_capacity(),
+                       m_s_table_f,
+                       true);
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void CavityManager<blockThreads, cop>::push()
+{
+    if (threadIdx.x == 0) {
+        m_context.m_patch_scheduler.push(m_patch_info.patch_id);
+    }
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __forceinline__ bool CavityManager<blockThreads, cop>::lock(
+    cooperative_groups::thread_block& block,
+    const uint8_t                     stash_id,
+    const uint32_t                    q)
+{
+    __shared__ bool s_success;
+    if (threadIdx.x == 0) {
+        bool okay = m_s_locked_patches_mask(stash_id);
+        if (!okay) {
+            okay = m_context.m_patches_info[q].lock.acquire_lock(blockIdx.x);
+            if (okay) {
+                m_s_locked_patches_mask.set(stash_id);
+            }
+        }
+        s_success = okay;
+    }
+    block.sync();
+    return s_success;
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::unlock()
+{
+    if (threadIdx.x == 0) {
+        m_patch_info.lock.release_lock();
+    }
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::unlock_locked_patches()
+{
+    if (threadIdx.x == 0) {
+        for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
+            if (m_s_locked_patches_mask(st)) {
+                uint32_t q = m_patch_info.patch_stash.get_patch(st);
+                assert(q != INVALID32);
+                m_context.m_patches_info[q].lock.release_lock();
+                m_s_locked_patches_mask.reset(st);
+            }
+        }
+    }
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::unlock(
+    const uint8_t  stash_id,
+    const uint32_t q)
+{
+    if (threadIdx.x == 0) {
+        assert(m_s_locked_patches_mask(stash_id));
+        m_context.m_patches_info[q].lock.release_lock();
+        m_s_locked_patches_mask.reset(stash_id);
+    }
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
+    cooperative_groups::thread_block& block)
+{
+    // Some vertices on the boundary of the cavity are owned and other are
+    // not. For owned vertices, edges and faces connected to them exists in
+    // the patch (by definition) and they could be owned or not. For that,
+    // we need to first make sure that these edges and faces are marked in
+    // m_s_ownership_change_mask_e/f.
+    // For not-owned vertices on the cavity boundary, we process them by
+    // first marking them in m_s_migrate_mask_v and then look for their
+    // owned version in the neighbor patches in migrate_from_patch
+
+
+    m_s_ribbonize_v.reset(block);
+    m_s_owned_cavity_bdry_v.reset(block);
+    m_s_migrate_mask_v.reset(block);
+    m_s_patches_to_lock_mask.reset(block);
+    m_s_locked_patches_mask.reset(block);
+    block.sync();
+
+
+    // Mark vertices on the boundary of all active cavities in this patch
+    // Owned vertices are marked in m_s_owned_cavity_bdry_v and not-owned
+    // vertices are marked in m_s_migrate_mask_v (since we need to migrate
+    // them) as well as in m_s_ownership_change_mask_v (since a vertex on the
+    // boundary of the cavity has to be owned by the patch)
+    // TODO this could be fused in construct_cavities_edge_loop()
+    for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+        for (uint16_t i = 0; i < size; ++i) {
+            uint16_t vertex = get_cavity_vertex(c, i).local_id();
+            assert(m_s_active_mask_v(vertex));
+            if (m_s_owned_mask_v(vertex)) {
+                m_s_owned_cavity_bdry_v.set(vertex, true);
+            } else {
+                m_s_migrate_mask_v.set(vertex, true);
+                m_s_ownership_change_mask_v.set(vertex, true);
+            }
+        }
+    });
+    block.sync();
+
+
+    // Mark a face in the ownership change (m_s_ownership_change_mask_f) if
+    // one of its edges is connected to a vertex that is marked in
+    // m_s_owned_cavity_bdry_v. Then mark that face's three edges in the
+    // ownership change (m_s_ownership_change_mask_e)
+    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+        if (!m_s_owned_mask_f(f) &&
+            (m_s_active_mask_f(f) || m_s_in_cavity_f(f))) {
+            bool change = false;
+
+            const uint16_t edges[3] = {m_s_fe[3 * f + 0] >> 1,
+                                       m_s_fe[3 * f + 1] >> 1,
+                                       m_s_fe[3 * f + 2] >> 1};
+            for (int i = 0; i < 3; ++i) {
+                const uint16_t e = edges[i];
+
+                assert(m_s_active_mask_e(e) || m_s_in_cavity_e(e));
+
+                const uint16_t v0 = m_s_ev[2 * e + 0];
+                const uint16_t v1 = m_s_ev[2 * e + 1];
+
+                assert(m_s_active_mask_v(v0) || m_s_in_cavity_v(v0));
+                assert(m_s_active_mask_v(v1) || m_s_in_cavity_v(v1));
+
+                if (m_s_owned_cavity_bdry_v(v0) ||
+                    m_s_owned_cavity_bdry_v(v1) || m_s_migrate_mask_v(v0) ||
+                    m_s_migrate_mask_v(v1)) {
+                    change = true;
+                    m_s_ownership_change_mask_f.set(f, true);
+                    break;
+                }
+            }
+
+            if (change) {
+                for (int i = 0; i < 3; ++i) {
+                    const uint16_t e = edges[i];
+                    if (!m_s_owned_mask_e(e)) {
+                        assert(m_s_active_mask_e(e) || m_s_in_cavity_e(e));
+                        m_s_ownership_change_mask_e.set(e, true);
+                    }
+                }
+            }
+        }
+    }
+    block.sync();
+
+
+    // construct protection zone
+    for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
+        const uint32_t q = m_patch_info.patch_stash.get_patch(st);
+        if (q != INVALID32) {
+            if (!migrate_from_patch(block, st, q, m_s_migrate_mask_v, true)) {
+                return false;
+            }
+        }
+    }
+    block.sync();
+
+
+    // ribbonize protection zone
+    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+        if (m_s_active_mask_e(e) || m_s_in_cavity_e(e)) {
+
+            // We want to ribbonize vertices connected to a vertex on
+            // the boundary of a cavity boundaries. If the two vertices are
+            // on the cavity boundaries (b0=true and b1=true), then this is
+            // an edge on the cavity and we don't to ribbonize any of these
+            // two vertices. Only when one of the vertices are on the cavity
+            // boundaries and the other is not, we then want to ribbonize
+            // the other one
+
+            const uint16_t v0 = m_s_ev[2 * e + 0];
+            const uint16_t v1 = m_s_ev[2 * e + 1];
+
+            assert(m_s_active_mask_v(v0));
+            assert(m_s_active_mask_v(v1));
+
+            const bool b0 =
+                m_s_migrate_mask_v(v0) || m_s_owned_cavity_bdry_v(v0);
+
+            const bool b1 =
+                m_s_migrate_mask_v(v1) || m_s_owned_cavity_bdry_v(v1);
+
+            if (b0 && !b1 && !m_s_owned_mask_v(v1)) {
+                // The vertex we want to ribbonize should not be inside the
+                // cavity. we assert this here and if this fails then maybe we
+                // should look into this case to undertsand if this makes sense
+                assert(!m_s_in_cavity_v(v1));
+                m_s_ribbonize_v.set(v1, true);
+            }
+
+            if (b1 && !b0 && !m_s_owned_mask_v(v0)) {
+                assert(!m_s_in_cavity_v(v0));
+                m_s_ribbonize_v.set(v0, true);
+            }
+        }
+    }
+
+    block.sync();
+
+    for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
+        const uint32_t q = m_patch_info.patch_stash.get_patch(st);
+        if (q != INVALID32) {
+            if (!migrate_from_patch(block, st, q, m_s_ribbonize_v, false)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
+    cooperative_groups::thread_block& block,
+    const uint8_t                     q_stash_id,
+    const uint32_t                    q,
+    const Bitmask&                    migrate_mask_v,
+    const bool                        change_ownership)
+{
+    // migrate_mask_v uses the index space of p
+    // m_s_src_mask_v and m_s_src_connect_mask_v use the index space of q
+
+    // 1. mark vertices in m_s_src_mask_v that corresponds to vertices
+    // marked in migrate_mask_v
+    // 2. mark vertices in m_s_src_connect_mask_v that are connected to
+    // vertices in m_s_src_mask_v
+    // 3. move vertices marked in m_s_src_connect_mask_v to p
+    // 4. move any edges formed by a vertex in m_s_src_mask_v from q to p
+    // and mark these edges in m_s_src_mask_e
+    // 5. move edges needed to represent any face that has a vertex marked
+    // in m_s_src_mask_v
+    // 6. move the faces that touch at least one vertex marked in
+    // m_s_src_mask_v
+
+
+    __shared__ int s_ok_q;
+    if (threadIdx.x == 0) {
+        s_ok_q = 0;
+    }
+
+
+    // loop over m_s_patches_to_lock and make sure that any patch set to true is
+    // locked (which is indicated in m_s_locked_patches)
+    auto lock_patches_to_lock = [&]() {
+        for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
+            if (m_s_patches_to_lock_mask(st) && !m_s_locked_patches_mask(st)) {
+                const uint32_t patch = m_patch_info.patch_stash.get_patch(st);
+                if (!lock(block, st, patch)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+
+    // try to lock q before reading from it
+    if (!lock(block, q_stash_id, q)) {
+        return false;
+    }
+
+    // init src_v bitmask
+    m_s_src_mask_v.reset(block);
+    block.sync();
+
+
+    // 1. mark vertices in q that will be migrated into p
+    // this requires query p's hashtable, so we could not insert in
+    // it now. If no vertices found, then we skip this patch
+    for (uint32_t v = threadIdx.x; v < m_s_num_vertices[0]; v += blockThreads) {
+        if (migrate_mask_v(v)) {
+            // get the owner patch of v
+
+            // we don't check if this vertex is active in global memory
+            // since, it could have been activated/added only in shared
+            // memory (through a previous call to mirgate_from_patch)
+            assert(m_s_active_mask_v(v));
+            assert(!m_s_owned_mask_v(v));
+
+            // const VertexHandle v_owner =
+            //    m_context.get_owner_handle<VertexHandle>(
+            //        {m_patch_info.patch_id, {v}},
+            //        nullptr,
+            //        m_s_table_v,
+            //        false,
+            //        false);
+
+            const VertexHandle v_owner = m_patch_info.find<VertexHandle>(v, m_s_table_v);
+
+            assert(v_owner.is_valid());
+            assert(v_owner.patch_id() != INVALID32);
+            assert(v_owner.local_id() != INVALID16);
+
+            if (v_owner.patch_id() == q) {
+
+                // make sure that q is the actual owner of of v
+                assert(m_context.m_patches_info[q].is_owned(
+                    LocalVertexT(v_owner.local_id())));
+
+                ::atomicAdd(&s_ok_q, 1);
+                m_s_src_mask_v.set(v_owner.local_id(), true);
+            }
+        }
+    }
+    block.sync();
+
+
+    if (s_ok_q == 0) {
+        // we should not keep q locked
+        unlock(q_stash_id, q);
+    } else {
+
+        // In every call to migrate_vertex/edge/face, threads make sure that
+        // they mark patches they read from in m_s_patches_to_lock_mask.
+        // At the end of every round, one thread make sure make sure that all
+        // patches marked in m_s_patches_to_lock_mask are actually locked.
+
+
+        PatchInfo q_patch_info = m_context.m_patches_info[q];
+
+        const uint16_t q_num_vertices = q_patch_info.num_vertices[0];
+        const uint16_t q_num_edges    = q_patch_info.num_edges[0];
+        const uint16_t q_num_faces    = q_patch_info.num_faces[0];
+
+        // initialize connect_mask and src_e bitmask
+        m_s_src_connect_mask_v.reset(block);
+        m_s_src_connect_mask_e.reset(block);
+        m_s_src_mask_e.reset(block);
+        block.sync();
+
+        // 2. in m_s_src_connect_mask_v, mark the vertices connected to
+        // vertices in m_s_src_mask_v
+        for (uint16_t e = threadIdx.x; e < q_num_edges; e += blockThreads) {
+            if (!q_patch_info.is_deleted(LocalEdgeT(e))) {
+                const uint16_t v0q = q_patch_info.ev[2 * e + 0].id;
+                const uint16_t v1q = q_patch_info.ev[2 * e + 1].id;
+
+                if (m_s_src_mask_v(v0q)) {
+                    m_s_src_connect_mask_v.set(v1q, true);
+                    assert(!q_patch_info.is_deleted(LocalVertexT(v1q)));
+                }
+
+                if (m_s_src_mask_v(v1q)) {
+                    m_s_src_connect_mask_v.set(v0q, true);
+                    assert(!q_patch_info.is_deleted(LocalVertexT(v0q)));
+                }
+            }
+        }
+        block.sync();
+
+        // 3. make sure there is a copy in p for any vertex in
+        // m_s_src_connect_mask_v
+        const uint16_t q_num_vertices_up =
+            ROUND_UP_TO_NEXT_MULTIPLE(q_num_vertices, blockThreads);
+
+        // we need to make sure that no other thread is query the
+        // vertex hashtable before adding items to it. So, we need
+        // to sync the whole block before adding a new vertex but
+        // some threads may not be participant in this for-loop.
+        // So, we round up the end of the loop to be multiple of the
+        // blockthreads and check inside the loop so we don't access
+        // non-existing vertices
+        for (uint16_t v = threadIdx.x; v < q_num_vertices_up;
+             v += blockThreads) {
+
+            LPPair lp =
+                migrate_vertex(q,
+                               q_num_vertices,
+                               v,
+                               change_ownership,
+                               q_patch_info,
+                               [&](const uint16_t vertex) {
+                                   return m_s_src_connect_mask_v(vertex);
+                               });
+
+            // we need to make sure that no other
+            // thread is querying the hashtable while we
+            // insert in it
+            block.sync();
+
+            if (!lp.is_sentinel()) {
+                bool inserted = m_patch_info.lp_v.insert(lp, m_s_table_v);
+                assert(inserted);
+            }
+        }
+        block.sync();
+
+        if (!lock_patches_to_lock()) {
+            return false;
+        }
+
+
+        // same story as with the loop that adds vertices
+        const uint16_t q_num_edges_up =
+            ROUND_UP_TO_NEXT_MULTIPLE(q_num_edges, blockThreads);
+
+        // 4. move edges since we now have a copy of the vertices in p
+        for (uint16_t e = threadIdx.x; e < q_num_edges_up; e += blockThreads) {
+
+
+            LPPair lp = migrate_edge(
+                q,
+                q_num_edges,
+                e,
+                change_ownership,
+                q_patch_info,
+                [&](const uint16_t edge,
+                    const uint16_t v0q,
+                    const uint16_t v1q) {
+                    // If any of these two vertices are participant in
+                    // the src bitmask
+                    if (m_s_src_mask_v(v0q) || m_s_src_mask_v(v1q)) {
+                        assert(!q_patch_info.is_deleted(LocalEdgeT(edge)));
+                        // set the bit for this edge in src_e mask so we
+                        // can use it for migrating faces
+                        m_s_src_mask_e.set(edge, true);
+                        return true;
+                    }
+                    return false;
+                });
+
+            block.sync();
+
+            if (!lp.is_sentinel()) {
+                bool inserted = m_patch_info.lp_e.insert(lp, m_s_table_e);
+                assert(inserted);
+            }
+        }
+        block.sync();
+
+        if (!lock_patches_to_lock()) {
+            return false;
+        }
+
+        // 5. in m_s_src_connect_mask_e, mark the edges connected to
+        // faces that has an edge that is marked in m_s_src_mask_e
+        // Since edges in m_s_src_mask_e are marked because they
+        // have one vertex in m_s_src_mask_v, then any face touches
+        // these edges also touches a vertex in m_s_src_mask_v. Since
+        // we migrate all faces touches a vertex in m_s_src_mask_v,
+        // we need first to represent the edges that touch these
+        // faces in q before migrating the faces
+        for (uint16_t f = threadIdx.x; f < q_num_faces; f += blockThreads) {
+            if (!q_patch_info.is_deleted(LocalFaceT(f))) {
+
+                const uint16_t e0 = q_patch_info.fe[3 * f + 0].id >> 1;
+                const uint16_t e1 = q_patch_info.fe[3 * f + 1].id >> 1;
+                const uint16_t e2 = q_patch_info.fe[3 * f + 2].id >> 1;
+
+                assert(!q_patch_info.is_deleted(LocalEdgeT(e0)));
+                assert(!q_patch_info.is_deleted(LocalEdgeT(e1)));
+                assert(!q_patch_info.is_deleted(LocalEdgeT(e2)));
+
+                bool b0 = m_s_src_mask_e(e0);
+                bool b1 = m_s_src_mask_e(e1);
+                bool b2 = m_s_src_mask_e(e2);
+
+                if (b0 || b1 || b2) {
+                    if (!b0) {
+                        m_s_src_connect_mask_e.set(e0, true);
+                    }
+                    if (!b1) {
+                        m_s_src_connect_mask_e.set(e1, true);
+                    }
+                    if (!b2) {
+                        m_s_src_connect_mask_e.set(e2, true);
+                    }
+                }
+            }
+        }
+        block.sync();
+
+        // make sure that there is a copy of edge in
+        // m_s_src_connect_mask_e in q
+        for (uint16_t e = threadIdx.x; e < q_num_edges_up; e += blockThreads) {
+
+            LPPair lp = migrate_edge(q,
+                                     q_num_edges,
+                                     e,
+                                     change_ownership,
+                                     q_patch_info,
+                                     [&](const uint16_t edge,
+                                         const uint16_t v0q,
+                                         const uint16_t v1q) {
+                                         return m_s_src_connect_mask_e(edge);
+                                     });
+
+
+            block.sync();
+
+            if (!lp.is_sentinel()) {
+                bool inserted = m_patch_info.lp_e.insert(lp, m_s_table_e);
+                assert(inserted);
+            }
+        }
+
+        block.sync();
+        if (!lock_patches_to_lock()) {
+            return false;
+        }
+
+
+        // same story as with the loop that adds vertices
+        const uint16_t q_num_faces_up =
+            ROUND_UP_TO_NEXT_MULTIPLE(q_num_faces, blockThreads);
+
+        // 6.  move face since we now have a copy of the edges in p
+        for (uint16_t f = threadIdx.x; f < q_num_faces_up; f += blockThreads) {
+            LPPair lp = migrate_face(q,
+                                     q_num_faces,
+                                     f,
+                                     change_ownership,
+                                     q_patch_info,
+                                     [&](const uint16_t face,
+                                         const uint16_t e0q,
+                                         const uint16_t e1q,
+                                         const uint16_t e2q) {
+                                         return m_s_src_mask_e(e0q) ||
+                                                m_s_src_mask_e(e1q) ||
+                                                m_s_src_mask_e(e2q);
+                                     });
+
+
+            block.sync();
+
+            if (!lp.is_sentinel()) {
+                bool inserted = m_patch_info.lp_f.insert(lp, m_s_table_f);
+                assert(inserted);
+            }
+        }
+
+        if (!lock_patches_to_lock()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+template <typename FuncT>
+__device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
+    const uint32_t q,
+    const uint16_t q_num_vertices,
+    const uint16_t q_vertex,
+    const bool     require_ownership_change,
+    PatchInfo&     q_patch_info,
+    FuncT          should_migrate)
+{
+    LPPair ret;
+    if (q_vertex < q_num_vertices &&
+        !q_patch_info.is_deleted(LocalVertexT(q_vertex))) {
+
+        if (should_migrate(q_vertex)) {
+            uint16_t vq = q_vertex;
+            uint32_t o  = q;
+            uint16_t vp = find_copy_vertex(vq, o);
+
+            assert(!m_context.m_patches_info[o].is_deleted(LocalVertexT(vq)));
+            assert(m_context.m_patches_info[o].is_owned(LocalVertexT(vq)));
+
+            if (vp == INVALID16) {
+
+                vp = atomicAdd(m_s_num_vertices, 1u);
+
+                assert(vp < m_patch_info.vertices_capacity[0]);
+
+                // activate the vertex in the bit mask
+                m_s_active_mask_v.set(vp, true);
+
+                // since it is owned by some other patch
+                m_s_owned_mask_v.reset(vp, true);
+
+
+                // insert the patch in the patch stash and return its
+                // id in the stash
+                const uint8_t owner_stash_id =
+                    m_patch_info.patch_stash.insert_patch(o);
+                assert(owner_stash_id != INVALID8);
+                ret = LPPair(vp, vq, owner_stash_id);
+
+                m_s_patches_to_lock_mask.set(owner_stash_id, true);
+            } else if (o != q && o != m_patch_info.patch_id) {
+                uint8_t st = m_patch_info.patch_stash.find_patch_index(o);
+                assert(st != INVALID8);
+                m_s_patches_to_lock_mask.set(st, true);
+            }
+
+            if (require_ownership_change && !m_s_owned_mask_v(vp)) {
+                m_s_ownership_change_mask_v.set(vp, true);
+            }
+        }
+    }
+    return ret;
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+template <typename FuncT>
+__device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
+    const uint32_t q,
+    const uint16_t q_num_edges,
+    const uint16_t q_edge,
+    const bool     require_ownership_change,
+    PatchInfo&     q_patch_info,
+    FuncT          should_migrate)
+{
+    LPPair ret;
+
+    if (q_edge < q_num_edges && !q_patch_info.is_deleted(LocalEdgeT(q_edge))) {
+
+        // edge v0q--v1q where o0 (defined below) is owner
+        // patch of v0q and o1 (defined below) is owner
+        // patch for v1q
+        uint16_t v0q = q_patch_info.ev[2 * q_edge + 0].id;
+        uint16_t v1q = q_patch_info.ev[2 * q_edge + 1].id;
+
+        if (should_migrate(q_edge, v0q, v1q)) {
+
+            // check on if e already exist in p
+            uint16_t eq = q_edge;
+            uint32_t o  = q;
+            uint16_t ep = find_copy_edge(eq, o);
+
+            assert(!m_context.m_patches_info[o].is_deleted(LocalEdgeT(eq)));
+            assert(m_context.m_patches_info[o].is_owned(LocalEdgeT(eq)));
+
+            if (ep == INVALID16) {
+                ep = atomicAdd(m_s_num_edges, 1u);
+                assert(ep < m_patch_info.edges_capacity[0]);
+
+
+                // We assume that the owner patch is q and will
+                // fix this later
+                uint32_t o0(q), o1(q);
+
+                // vq -> mapped to its local index in owner
+                // patch o-> mapped to the owner patch vp->
+                // mapped to the corresponding local index in p
+                uint16_t v0p = find_copy_vertex(v0q, o0);
+                uint16_t v1p = find_copy_vertex(v1q, o1);
+
+                assert(!m_context.m_patches_info[o0].is_deleted(
+                    LocalVertexT(v0q)));
+                assert(
+                    m_context.m_patches_info[o0].is_owned(LocalVertexT(v0q)));
+
+                assert(!m_context.m_patches_info[o1].is_deleted(
+                    LocalVertexT(v1q)));
+                assert(
+                    m_context.m_patches_info[o1].is_owned(LocalVertexT(v1q)));
+
+
+                // since any vertex in m_s_src_mask_v has been
+                // added already to p, then we should find the
+                // copy otherwise there is something wrong
+                assert(v0p != INVALID16);
+                assert(v1p != INVALID16);
+
+
+                m_s_ev[2 * ep + 0] = v0p;
+                m_s_ev[2 * ep + 1] = v1p;
+
+                // activate the edge in the bitmask
+                m_s_active_mask_e.set(ep, true);
+
+                // since it is owned by some other patch
+                m_s_owned_mask_e.reset(ep, true);
+
+                const uint8_t owner_stash_id =
+                    m_patch_info.patch_stash.insert_patch(o);
+                assert(owner_stash_id != INVALID8);
+                ret = LPPair(ep, eq, owner_stash_id);
+
+                m_s_patches_to_lock_mask.set(owner_stash_id, true);
+            } else if (o != q && o != m_patch_info.patch_id) {
+                uint8_t st = m_patch_info.patch_stash.find_patch_index(o);
+                assert(st != INVALID8);
+                m_s_patches_to_lock_mask.set(st, true);
+            }
+
+            if (require_ownership_change && !m_s_owned_mask_e(ep)) {
+                m_s_ownership_change_mask_e.set(ep, true);
+            }
+        }
+    }
+
+
+    return ret;
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+template <typename FuncT>
+__device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
+    const uint32_t q,
+    const uint16_t q_num_faces,
+    const uint16_t q_face,
+    const bool     require_ownership_change,
+    PatchInfo&     q_patch_info,
+    FuncT          should_migrate)
+{
+    LPPair ret;
+
+    if (q_face < q_num_faces && !q_patch_info.is_deleted(LocalFaceT(q_face))) {
+
+        uint16_t e0q, e1q, e2q;
+        flag_t   d0, d1, d2;
+        Context::unpack_edge_dir(q_patch_info.fe[3 * q_face + 0].id, e0q, d0);
+        Context::unpack_edge_dir(q_patch_info.fe[3 * q_face + 1].id, e1q, d1);
+        Context::unpack_edge_dir(q_patch_info.fe[3 * q_face + 2].id, e2q, d2);
+
+        // If any of these three edges are participant in
+        // the src bitmask
+        if (should_migrate(q_face, e0q, e1q, e2q)) {
+
+            // check on if e already exist in p
+            uint16_t fq = q_face;
+            uint32_t o  = q;
+            uint16_t fp = find_copy_face(fq, o);
+
+
+            assert(!m_context.m_patches_info[o].is_deleted(LocalFaceT(fq)));
+            assert(m_context.m_patches_info[o].is_owned(LocalFaceT(fq)));
+
+            if (fp == INVALID16) {
+                fp = atomicAdd(m_s_num_faces, 1u);
+
+                assert(fp < m_patch_info.faces_capacity[0]);
+
+                uint32_t o0(q), o1(q), o2(q);
+
+                // eq -> mapped it to its local index in owner
+                // patch o-> mapped to the owner patch ep->
+                // mapped to the corresponding local index in p
+                const uint16_t e0p = find_copy_edge(e0q, o0);
+                const uint16_t e1p = find_copy_edge(e1q, o1);
+                const uint16_t e2p = find_copy_edge(e2q, o2);
+
+                assert(
+                    !m_context.m_patches_info[o0].is_deleted(LocalEdgeT(e0q)));
+                assert(m_context.m_patches_info[o0].is_owned(LocalEdgeT(e0q)));
+
+                assert(
+                    !m_context.m_patches_info[o1].is_deleted(LocalEdgeT(e1q)));
+                assert(m_context.m_patches_info[o1].is_owned(LocalEdgeT(e1q)));
+
+                assert(
+                    !m_context.m_patches_info[o2].is_deleted(LocalEdgeT(e2q)));
+                assert(m_context.m_patches_info[o2].is_owned(LocalEdgeT(e2q)));
+
+                // since any edge in m_s_src_mask_e has been
+                // added already to p, then we should find the
+                // copy otherwise there is something wrong
+                assert(e0p != INVALID16);
+                assert(e1p != INVALID16);
+                assert(e2p != INVALID16);
+
+                m_s_fe[3 * fp + 0] = (e0p << 1) | d0;
+                m_s_fe[3 * fp + 1] = (e1p << 1) | d1;
+                m_s_fe[3 * fp + 2] = (e2p << 1) | d2;
+
+                // activate the face in the bitmask
+                m_s_active_mask_f.set(fp, true);
+
+                // since it is owned by some other patch
+                m_s_owned_mask_f.reset(fp, true);
+
+                const uint8_t owner_stash_id =
+                    m_patch_info.patch_stash.insert_patch(o);
+                assert(owner_stash_id != INVALID8);
+                ret = LPPair(fp, fq, owner_stash_id);
+
+                m_s_patches_to_lock_mask.set(owner_stash_id, true);
+            } else if (o != q && o != m_patch_info.patch_id) {
+                uint8_t st = m_patch_info.patch_stash.find_patch_index(o);
+                assert(st != INVALID8);
+                m_s_patches_to_lock_mask.set(st, true);
+            }
+
+            if (require_ownership_change && !m_s_owned_mask_f(fp)) {
+                m_s_ownership_change_mask_f.set(fp, true);
+            }
+        }
+    }
+
+    return ret;
+}
+
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ uint16_t
+CavityManager<blockThreads, cop>::find_copy_vertex(uint16_t& local_id,
+                                                   uint32_t& patch)
+{
+    return find_copy<VertexHandle>(local_id,
+                                   patch,
+                                   m_s_num_vertices[0],
+                                   m_s_owned_mask_v,
+                                   m_s_active_mask_v,
+                                   m_s_in_cavity_v,
+                                   m_s_table_v);
+}
+
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy_edge(
+    uint16_t& local_id,
+    uint32_t& patch)
+{
+    return find_copy<EdgeHandle>(local_id,
+                                 patch,
+                                 m_s_num_edges[0],
+                                 m_s_owned_mask_e,
+                                 m_s_active_mask_e,
+                                 m_s_in_cavity_e,
+                                 m_s_table_e);
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy_face(
+    uint16_t& local_id,
+    uint32_t& patch)
+{
+    return find_copy<FaceHandle>(local_id,
+                                 patch,
+                                 m_s_num_faces[0],
+                                 m_s_owned_mask_f,
+                                 m_s_active_mask_f,
+                                 m_s_in_cavity_f,
+                                 m_s_table_f);
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+template <typename HandleT>
+__device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
+    uint16_t&      lid,
+    uint32_t&      src_patch,
+    const uint16_t dest_patch_num_elements,
+    const Bitmask& dest_patch_owned_mask,
+    const Bitmask& dest_patch_active_mask,
+    const Bitmask& dest_in_cavity,
+    const LPPair*  m_s_table)
+{
+
+    assert(
+        !m_context.m_patches_info[src_patch].is_deleted(HandleT::LocalT(lid)));
+
+    // First check if lid is owned by src_patch. If not, then map it to its
+    // owner patch and local index in it
+
+    auto owner = m_context.get_owner_handle(HandleT(src_patch, {lid}));
+
+    src_patch = owner.patch_id();
+    lid       = owner.local_id();
+
+
+    // if the owner src_patch is the same as the patch associated with this
+    // cavity, the lid is the local index we are looking for
+    if (src_patch == m_patch_info.patch_id) {
+        return lid;
+    }
+
+    // otherwise, we do a search over the not-owned elements in the dest
+    // patch. For every not-owned element, we map it to its owner patch and
+    // check against lid-src_patch pair
+    for (uint16_t i = 0; i < dest_patch_num_elements; ++i) {
+        if (!dest_patch_owned_mask(i) &&
+            (dest_patch_active_mask(i) || dest_in_cavity(i))) {
+            // we disable check0 since the element might have been just
+            // added in the patch in shared memory and not visible to global
+            // memory yet            
+            //auto handle = m_context.get_owner_handle<HandleT>(
+            //    {m_patch_info.patch_id, {i}}, nullptr, m_s_table, false, true);
+
+            const HandleT handle = m_patch_info.find<HandleT>(i, m_s_table_v);
+
+            assert(handle.is_valid());
+            assert(handle.patch_id() != INVALID32);
+            assert(handle.local_id() != INVALID16);
+
+            if (handle.patch_id() == src_patch && handle.local_id() == lid) {
+                return i;
+            }
+        }
+    }
+    return INVALID16;
+}
+
 }  // namespace rxmesh

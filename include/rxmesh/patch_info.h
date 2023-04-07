@@ -86,6 +86,24 @@ struct ALIGN(16) PatchInfo
 #endif
     }
 
+    template <typename HandleT>
+    __device__ __inline__ HandleT find(const LPPair::KeyT key,
+                                       const LPPair*      table = nullptr)
+    {
+        LPPair lp;
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            lp = lp_v.find(key, table);
+        }
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            lp = lp_e.find(key, table);
+        }
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            lp = lp_f.find(key, table);
+        }
+
+        return get_handle<HandleT>(lp);
+    }
+
 
     /**
      * @brief convert an LPPair to a handle. The LPPair should be generated but

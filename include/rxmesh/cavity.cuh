@@ -1105,7 +1105,7 @@ struct Cavity
         return INVALID16;
     }
 
-
+    //##
     template <typename HandleT>
     __device__ __inline void load_owner(const uint32_t patch_id,
                                         const uint16_t num_elements,
@@ -1153,6 +1153,7 @@ struct Cavity
         }
     }
 
+    //##
     __device__ __inline void load_owner()
     {
         const uint32_t p = m_patch_info.patch_id;
@@ -1256,12 +1257,10 @@ struct Cavity
     /**
      * @brief migrate edges and face incident to vertices in the bitmask to this
      * m_patch_info from a neighbor_patch
+     * ##
      */
     __device__ __inline__ bool migrate(
-        cooperative_groups::thread_block& block/*,
-        rxmesh::VertexAttribute<int>&     v_attr,
-        rxmesh::EdgeAttribute<int>&       e_attr,
-        rxmesh::FaceAttribute<int>        f_attr*/);
+        cooperative_groups::thread_block& block);
 
     /**
      * @brief unlock/release lock for the patches stored in
@@ -1288,6 +1287,7 @@ struct Cavity
     /**
      * @brief push to the current patch to the scheduler
      * @return
+     * ##
      */
     __device__ __inline__ void push()
     {
@@ -1301,6 +1301,7 @@ struct Cavity
      * @brief given a neighbor patch (q), migrate vertices (and edges and faces
      * connected to these vertices) marked in migrate_mask_v to the patch
      * used by this cavity (p)
+     * ##
      */
     __device__ __inline__ bool migrate_from_patch(
         cooperative_groups::thread_block& block,
@@ -1311,6 +1312,7 @@ struct Cavity
     /**
      * @brief give a neighbor patch q and a vertex in it q_vertex, find the copy
      * of q_vertex in this patch. If it does not exist, create such a copy.
+     * ##
      */
     template <typename FuncT>
     __device__ __inline__ LPPair migrate_vertex(
@@ -1377,6 +1379,7 @@ struct Cavity
     /**
      * @brief give a neighbor patch q and an edge in it q_edge, find the copy
      * of q_edge in this patch. If it does not exist, create such a copy.
+     * ##
      */
     template <typename FuncT>
     __device__ __inline__ LPPair migrate_edge(
@@ -1482,6 +1485,7 @@ struct Cavity
     /**
      * @brief give a neighbor patch q and a face in it q_face, find the copy
      * of q_face in this patch. If it does not exist, create such a copy.
+     * ##
      */
     template <typename FuncT>
     __device__ __inline__ LPPair migrate_face(
@@ -1896,6 +1900,7 @@ struct Cavity
      * index in the patch associated with this cavity i.e., m_patch_info.
      * If the given face (local_id) is not owned by the given patch, they will
      * be mapped to their owner patch and local index in the owner patch
+     * ##
      */
     __device__ __inline__ uint16_t find_copy_face(uint16_t& local_id,
                                                   uint32_t& patch)
@@ -1914,6 +1919,7 @@ struct Cavity
      * index in the patch associated with this cavity i.e., m_patch_info.
      * If the given edge (local_id) is not owned by the given patch, they will
      * be mapped to their owner patch and local index in the owner patch
+     * ##
      */
     __device__ __inline__ uint16_t find_copy_edge(uint16_t& local_id,
                                                   uint32_t& patch)
@@ -1932,6 +1938,7 @@ struct Cavity
      * index in the patch associated with this cavity i.e., m_patch_info.
      * If the given vertex (local_id) is not owned by the given patch, they will
      * be mapped to their owner patch and local index in the owner patch.
+     * ##
      */
     __device__ __inline__ uint16_t find_copy_vertex(uint16_t& local_id,
                                                     uint32_t& patch)
@@ -1950,6 +1957,7 @@ struct Cavity
      * @brief find a copy of mesh element from a src_patch in a dest_patch i.e.,
      * the lid lives in src_patch and we want to find the corresponding local
      * index in dest_patch
+     * ##
      */
     template <typename HandleT>
     __device__ __inline__ uint16_t find_copy(
