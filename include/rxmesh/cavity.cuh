@@ -43,6 +43,7 @@ struct Cavity
     {
     }
 
+    //##
     __device__ __inline__ Cavity(cooperative_groups::thread_block& block,
                                  Context&                          context,
                                  ShmemAllocator&                   shrd_alloc)
@@ -192,6 +193,7 @@ struct Cavity
 
     /**
      * @brief init cavity id arrays
+     * ##
      */
     __device__ __inline__ void init_cavity_id(const uint16_t vert_cap,
                                               const uint16_t edge_cap,
@@ -213,6 +215,7 @@ struct Cavity
 
     /**
      * @brief create new cavity
+     * ##
      */
     template <typename HandleT>
     __device__ __inline__ void add(HandleT handle)
@@ -343,7 +346,7 @@ struct Cavity
         load_owner();
         block.sync();
 
-        if (!migrate_v2(block /*, v_attr, e_attr, f_attr*/)) {
+        if (!migrate(block /*, v_attr, e_attr, f_attr*/)) {
             push();
             return false;
         }
@@ -1235,7 +1238,7 @@ struct Cavity
      * @brief migrate edges and face incident to vertices in the bitmask to this
      * m_patch_info from a neighbor_patch
      */
-    __device__ __inline__ bool migrate_v2(
+    __device__ __inline__ bool migrate(
         cooperative_groups::thread_block& block/*,
         rxmesh::VertexAttribute<int>&     v_attr,
         rxmesh::EdgeAttribute<int>&       e_attr,
@@ -1280,7 +1283,7 @@ struct Cavity
      * connected to these vertices) marked in migrate_mask_v to the patch
      * used by this cavity (p)
      */
-    __device__ __inline__ bool migrate_from_patch_v2(
+    __device__ __inline__ bool migrate_from_patch(
         cooperative_groups::thread_block& block,
         const uint32_t                    q,
         const Bitmask&                    migrate_mask_v,

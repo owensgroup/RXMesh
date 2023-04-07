@@ -2,7 +2,7 @@
 namespace rxmesh {
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __inline__ bool Cavity<blockThreads, cop>::migrate_v2(
+__device__ __inline__ bool Cavity<blockThreads, cop>::migrate(
     cooperative_groups::thread_block& block/*,
     rxmesh::VertexAttribute<int>&     v_attr,
     rxmesh::EdgeAttribute<int>&       e_attr,
@@ -147,7 +147,7 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_v2(
     for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
         const uint32_t q = m_patch_info.patch_stash.get_patch(p);
         if (q != INVALID32) {
-            if (!migrate_from_patch_v2(block, q, m_s_migrate_mask_v, true)) {
+            if (!migrate_from_patch(block, q, m_s_migrate_mask_v, true)) {
                 unlock_this_patch_on_failure();
                 return false;
             }
@@ -194,7 +194,7 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_v2(
     for (uint32_t p = 0; p < PatchStash::stash_size; ++p) {
         const uint32_t q = m_patch_info.patch_stash.get_patch(p);
         if (q != INVALID32) {
-            if (!migrate_from_patch_v2(block, q, m_s_ribbonize_v, false)) {
+            if (!migrate_from_patch(block, q, m_s_ribbonize_v, false)) {
                 unlock_this_patch_on_failure();
                 return false;
             }
@@ -206,7 +206,7 @@ __device__ __inline__ bool Cavity<blockThreads, cop>::migrate_v2(
 
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __inline__ bool Cavity<blockThreads, cop>::migrate_from_patch_v2(
+__device__ __inline__ bool Cavity<blockThreads, cop>::migrate_from_patch(
     cooperative_groups::thread_block& block,
     const uint32_t                    q,
     const Bitmask&                    migrate_mask_v,

@@ -179,4 +179,12 @@ __device__ __forceinline__ T atomic_read(T* ptr)
     return ::atomicAdd(ptr, T(0));
 }
 
+
+template <uint32_t blockThreads, typename T, typename SizeT>
+__device__ __forceinline__ void fill_n(T* arr, const SizeT size, const T val)
+{
+    for (SizeT i = threadIdx.x; i < size; i += blockThreads) {
+        arr[i] = val;
+    }
+}
 }  // namespace rxmesh
