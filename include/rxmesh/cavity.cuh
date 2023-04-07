@@ -371,6 +371,7 @@ struct Cavity
 
     /**
      * @brief load mesh FE and EV into shared memory
+     * ##
      */
     __device__ __inline__ void load_mesh_async(
         cooperative_groups::thread_block& block,
@@ -392,6 +393,7 @@ struct Cavity
 
     /**
      * @brief propagate the cavity tag from vertices to their incident edges
+     * ##
      */
     __device__ __inline__ void mark_edges_through_vertices()
     {
@@ -414,6 +416,7 @@ struct Cavity
 
     /**
      * @brief propagate the cavity tag from edges to their incident faces
+     * ##
      */
     __device__ __inline__ void mark_faces_through_edges()
     {
@@ -442,6 +445,7 @@ struct Cavity
      * @brief deactivate the cavities that has been marked as inactivate in the
      * bitmask (m_s_active_cavity_bitmask) by reverting all mesh element ID
      * assigned to these cavities to be INVALID16
+     * ##
      */
     __device__ __inline__ void deactivate_conflicting_cavities()
     {
@@ -456,6 +460,7 @@ struct Cavity
      * @brief revert the element cavity ID to INVALID16 if the element's cavity
      * ID is a cavity that has been marked as inactive in
      * m_s_active_cavity_bitmask
+     * ##
      */
     __device__ __inline__ void deactivate_conflicting_cavities(
         const uint16_t num_elements,
@@ -480,6 +485,7 @@ struct Cavity
      * cavity (cavity_id) will be deactivated
      * This function assumes no other thread is trying to update element_id's
      * cavity ID
+     * ##
      */
     __device__ __inline__ void mark_element(uint16_t*      element_cavity_id,
                                             const uint16_t element_id,
@@ -516,6 +522,7 @@ struct Cavity
     /**
      * @brief clear the bit corresponding to an element in the active bitmask if
      * the element is in a cavity. Apply this for vertices, edges and face
+     * ##
      */
     __device__ __inline__ void clear_bitmask_if_in_cavity()
     {
@@ -535,6 +542,7 @@ struct Cavity
     /**
      * @brief clear the bit corresponding to an element in the bitmask if the
      * element is in a cavity
+     * ##
      */
     __device__ __inline__ void clear_bitmask_if_in_cavity(
         Bitmask&        active_bitmask,
@@ -553,6 +561,7 @@ struct Cavity
 
     /**
      * @brief construct the cavities boundary loop
+     * ##
      */
     template <uint32_t itemPerThread = 5>
     __device__ __inline__ void construct_cavities_edge_loop(
@@ -656,6 +665,7 @@ struct Cavity
 
     /**
      * @brief sort cavity edge loop
+     * ##
      */
     __device__ __inline__ void sort_cavities_edge_loop()
     {
@@ -725,6 +735,7 @@ struct Cavity
     /**
      * @brief apply a lambda function on each cavity to fill it in with edges
      * and then faces
+     * ##
      */
     template <typename FillInT>
     __device__ __inline__ void for_each_cavity(
@@ -746,6 +757,7 @@ struct Cavity
 
     /**
      * @brief return number of cavities in this patch
+     * ##
      */
     __device__ __inline__ int get_num_cavities() const
     {
@@ -755,6 +767,7 @@ struct Cavity
     /**
      * @brief return the size of the c-th cavity. The size is the number of
      * edges surrounding the cavity
+     * ##
      */
     __device__ __inline__ uint16_t get_cavity_size(uint16_t c) const
     {
@@ -763,6 +776,7 @@ struct Cavity
 
     /**
      * @brief get an edge handle to the i-th edges in the c-th cavity
+     * ##
      */
     __device__ __inline__ DEdgeHandle get_cavity_edge(uint16_t c,
                                                       uint16_t i) const
@@ -776,6 +790,7 @@ struct Cavity
 
     /**
      * @brief get a vertex handle to the i-th vertex in the c-th cavity
+     * ##
      */
     __device__ __inline__ VertexHandle get_cavity_vertex(uint16_t c,
                                                          uint16_t i) const
@@ -798,6 +813,7 @@ struct Cavity
 
     /**
      * @brief should be called by a single thread
+     * ##
      */
     __device__ __inline__ VertexHandle add_vertex()
     {
@@ -819,6 +835,7 @@ struct Cavity
 
     /**
      * @brief should be called by a single thread
+     * ##
      */
     __device__ __inline__ DEdgeHandle add_edge(const VertexHandle src,
                                                const VertexHandle dest)
@@ -847,6 +864,7 @@ struct Cavity
 
     /**
      * @brief should be called by a single thread
+     * ##
      */
     __device__ __inline__ FaceHandle add_face(const DEdgeHandle e0,
                                               const DEdgeHandle e1,
@@ -1065,6 +1083,7 @@ struct Cavity
      * cavity and find the first element that has its cavity set to cavity_id.
      * If nothing found, search for the first element that has its bitmask set
      * to 0.
+     * ##
      */
     __device__ __inline__ uint16_t add_element(Bitmask        active_bitmask,
                                                const uint16_t num_elements)
