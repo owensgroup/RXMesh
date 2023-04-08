@@ -73,15 +73,6 @@ struct CavityManager
     __device__ __inline__ bool prologue(cooperative_groups::thread_block& block,
                                         ShmemAllocator& shrd_alloc);
 
-
-    /**
-     * @brief cleanup and store updated patch to global memory
-     * @param block
-     * @return
-     */
-    __device__ __inline__ void epilogue(
-        cooperative_groups::thread_block& block);
-
     /**
      * @brief return the patch id that this cavity manager operates on
      */
@@ -171,6 +162,16 @@ struct CavityManager
     __device__ __inline__ void update_attributes(
         cooperative_groups::thread_block& block,
         AttributeT&                       attribute);
+
+
+    /**
+     * @brief cleanup and store updated patch to global memory
+     * @param block
+     * @return
+     */
+    __device__ __inline__ void epilogue(
+        cooperative_groups::thread_block& block);
+
 
    private:
     /**

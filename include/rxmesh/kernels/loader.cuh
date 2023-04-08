@@ -47,14 +47,11 @@ __device__ __inline__ void load_async(const T*    in,
 
 /**
  * @brief store shared memory into global memory. Optimized for uint16_t but
- * also works okay with uint32_t
+ * also works okay for other types
  */
 template <uint32_t blockThreads, typename T, typename SizeT>
 __device__ __forceinline__ void store(const T* in, const SizeT size, T* out)
 {
-    static_assert(std::is_same_v<T, uint16_t> || std::is_same_v<T, uint32_t>,
-                  "store() only works for uint16_t and uint32_t");
-
     if constexpr (std::is_same_v<T, uint16_t>) {
         const uint32_t  size32   = size / 2;
         const uint32_t  reminder = size % 2;
@@ -71,12 +68,10 @@ __device__ __forceinline__ void store(const T* in, const SizeT size, T* out)
                 out[size - 1] = in[size - 1];
             }
         }
-    }
-
-    if constexpr (std::is_same_v<T, uint32_t>) {
+    } else {
         for (uint32_t i = threadIdx.x; i < size; i += blockThreads) {
-            uint32_t a = in[i];
-            out[i]     = a;
+            T a    = in[i];
+            out[i] = a;
         }
     }
 }

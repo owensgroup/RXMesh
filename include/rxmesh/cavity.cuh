@@ -903,6 +903,7 @@ struct Cavity
     /**
      * @brief store owned and active bitmasks to global memory
      * @return
+     * ##
      */
     __device__ __inline__ void store_bitmasks()
     {
@@ -1270,6 +1271,7 @@ struct Cavity
      * @brief unlock/release lock for the patches stored in
      * m_s_patches_to_lock_mask. This functionally additionally update the
      * timestamp of the locked patches and this patch
+     * ##
      */
     __device__ __inline__ bool unlock_patches_and_update_timestamp(
         cooperative_groups::thread_block& block)
