@@ -49,12 +49,11 @@ __global__ static void random_flips(rxmesh::Context                context,
     block.sync();
 
     if (cavity_manager.prologue(block, shrd_alloc)) {
-        // TODO
-        // cavity_manager.update_attributes(block, coords);
-        // cavity_manager.update_attributes(block, to_flip);
-        // cavity_manager.update_attributes(block, f_attr);
-        // cavity_manager.update_attributes(block, e_attr);
-        // cavity_manager.update_attributes(block, v_attr);
+        cavity_manager.update_attributes(block, coords);
+        cavity_manager.update_attributes(block, to_flip);
+        cavity_manager.update_attributes(block, f_attr);
+        cavity_manager.update_attributes(block, e_attr);
+        cavity_manager.update_attributes(block, v_attr);
 
         cavity_manager.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);

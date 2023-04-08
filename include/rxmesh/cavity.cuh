@@ -273,6 +273,7 @@ struct Cavity
 
     /**
      * @brief delete elements by applying the cop operation
+     * ##
      */
     __device__ __inline__ bool process(cooperative_groups::thread_block& block,
                                        ShmemAllocator&               shrd_alloc/*,
@@ -994,6 +995,7 @@ struct Cavity
     /**
      * @brief update an attribute such that it can be used after the topology
      * changes
+     * ##
      */
     template <typename AttributeT>
     __device__ __inline__ void update_attributes(
@@ -1166,6 +1168,7 @@ struct Cavity
     /**
      * @brief change vertices, edges, and faces ownership as marked in
      * m_s_ownership_change_mask
+     * ##
      */
     __device__ __inline__ void change_ownership(
         cooperative_groups::thread_block& block)
@@ -1194,6 +1197,7 @@ struct Cavity
      * ownership_change. We can remove these mesh elements from the
      * hashtable, but we delay this (do it in cleanup) since we need to get
      * these mesh elements' original owner patch in update_attributes()
+     * ##
      */
     template <typename HandleT>
     __device__ __inline__ void change_ownership(

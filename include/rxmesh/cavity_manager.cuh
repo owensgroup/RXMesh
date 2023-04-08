@@ -37,7 +37,7 @@ struct CavityManager
           m_s_num_vertices(nullptr),
           m_s_num_edges(nullptr),
           m_s_num_faces(nullptr),
-          m_s_cavity_edge_loop(nullptr)
+          m_s_cavity_boundary_edges(nullptr)
     {
     }
 
@@ -162,6 +162,15 @@ struct CavityManager
     __device__ __inline__ FaceHandle add_face(const DEdgeHandle e0,
                                               const DEdgeHandle e1,
                                               const DEdgeHandle e2);
+
+    /**
+     * @brief update an attribute such that it can be used after the topology
+     * changes
+     */
+    template <typename AttributeT>
+    __device__ __inline__ void update_attributes(
+        cooperative_groups::thread_block& block,
+        AttributeT&                       attribute);
 
    private:
     /**
@@ -404,6 +413,27 @@ struct CavityManager
         const LPPair*  m_s_table);
 
 
+    /**
+     * @brief change vertices, edges, and faces ownership as marked in
+     * m_s_ownership_change_mask_v/e/f
+     */
+    __device__ __inline__ void change_ownership(
+        cooperative_groups::thread_block& block);
+
+    /**
+     * @brief change ownership for mesh elements of type HandleT marked in
+     * s_ownership_change. We can remove these mesh elements from the
+     * hashtable, but we delay this (do it in cleanup) since we need to get
+     * these mesh elements' original owner patch in update_attributes()
+     */
+    template <typename HandleT>
+    __device__ __inline__ void change_ownership(
+        cooperative_groups::thread_block& block,
+        const uint16_t                    num_elements,
+        const Bitmask&                    s_ownership_change,
+        const LPPair*                     s_table,
+        Bitmask&                          s_owned_bitmask);
+
     /*******/
     // num_cavities could be uint16_t but we use int since we need atomicAdd
     int* m_s_num_cavities;
@@ -468,7 +498,9 @@ struct CavityManager
     // elements could change
     uint16_t *m_s_num_vertices, *m_s_num_edges, *m_s_num_faces;
 
-    uint16_t* m_s_cavity_edge_loop;
+    // store the boundary edges of all cavities in compact format (similar to
+    // CSR for sparse matrices using m_s_cavity_size_prefix but no value ptr)
+    uint16_t* m_s_cavity_boundary_edges;
 
     PatchInfo m_patch_info;
     Context   m_context;
