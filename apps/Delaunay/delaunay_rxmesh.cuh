@@ -172,7 +172,7 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
 
         CUDA_ERROR(cudaDeviceSynchronize());
 
-        rx.fix_lphashtable();
+        rx.cleanup();
 
         timer.stop();
         CUDA_ERROR(cudaDeviceSynchronize());

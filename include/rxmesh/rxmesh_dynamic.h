@@ -151,9 +151,10 @@ class RXMeshDynamic : public RXMeshStatic
     bool validate();
 
     /**
-     * @brief fix LPHashTables after updates
+     * @brief cleanup after topology changes by removing surplus elements 
+     * and make sure that hashtable store owner patches 
      */
-    void fix_lphashtable();
+    void cleanup();
 
     /**
      * @brief update the host side. Use this function to update the host side

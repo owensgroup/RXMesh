@@ -934,6 +934,7 @@ struct Cavity
 
     /**
      * @brief cleanup by moving data from shared memory to global memory
+     * ##
      */
     __device__ __inline__ void cleanup(cooperative_groups::thread_block& block)
     {

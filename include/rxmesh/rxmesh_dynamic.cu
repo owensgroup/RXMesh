@@ -1,5 +1,6 @@
 #include <cooperative_groups.h>
 
+#include "rxmesh/bitmask.cuh"
 #include "rxmesh/kernels/dynamic_util.cuh"
 #include "rxmesh/kernels/for_each.cuh"
 #include "rxmesh/kernels/loader.cuh"
@@ -97,6 +98,168 @@ __global__ static void fix_lphashtable(const Context context)
     fix_lphashtable<blockThreads, EdgeHandle>(context, pi);
     fix_lphashtable<blockThreads, FaceHandle>(context, pi);
 }
+
+
+template <uint32_t blockThreads>
+__global__ static void remove_surplus_elements(const Context context)
+{
+    auto block = cooperative_groups::this_thread_block();
+
+    const uint32_t pid = blockIdx.x;
+    if (pid >= context.m_num_patches[0]) {
+        return;
+    }
+
+    PatchInfo pi = context.m_patches_info[pid];
+
+    const uint16_t num_vertices = pi.num_vertices[0];
+    const uint16_t num_edges    = pi.num_edges[0];
+    const uint16_t num_faces    = pi.num_faces[0];
+
+    ShmemAllocator shrd_alloc;
+
+    uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
+    load_async(
+        block, reinterpret_cast<uint16_t*>(pi.fe), 3 * num_faces, s_fe, false);
+
+    uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * num_edges);
+    load_async(
+        block, reinterpret_cast<uint16_t*>(pi.ev), 2 * num_edges, s_ev, false);
+
+    Bitmask s_owned_v = Bitmask(num_vertices, shrd_alloc);
+    s_owned_v.load_async(block, pi.owned_mask_v);
+
+    Bitmask s_owned_e = Bitmask(num_edges, shrd_alloc);
+    s_owned_e.load_async(block, pi.owned_mask_e);
+
+    Bitmask s_owned_f = Bitmask(num_faces, shrd_alloc);
+    s_owned_f.load_async(block, pi.owned_mask_f);
+
+    Bitmask s_active_v = Bitmask(num_vertices, shrd_alloc);
+    s_active_v.load_async(block, pi.active_mask_v);
+
+    Bitmask s_active_e = Bitmask(num_edges, shrd_alloc);
+    s_active_e.load_async(block, pi.active_mask_e);
+
+    Bitmask s_active_f = Bitmask(num_faces, shrd_alloc);
+    s_active_f.load_async(block, pi.active_mask_f, true);
+
+
+    // indicate if an edge is incident to an owned face
+    Bitmask s_edge_tag = Bitmask(num_edges, shrd_alloc);
+    s_edge_tag.reset(block);
+
+    Bitmask s_vert_tag = Bitmask(num_vertices, shrd_alloc);
+    s_vert_tag.reset(block);
+
+    Bitmask s_face_tag = Bitmask(num_faces, shrd_alloc);
+    s_face_tag.reset(block);
+
+    block.sync();
+
+    auto tag_edges_and_vertices_through_face = [&]() {
+        // mark edges that are incident to owned faces
+        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+            if (s_active_f(f) && s_owned_f(f)) {
+                for (int i = 0; i < 3; ++i) {
+                    const uint16_t e = s_fe[3 * f + i] >> 1;
+                    assert(e < num_edges);
+                    assert(s_active_e(e));
+
+                    const uint16_t v0 = s_ev[2 * e + 0];
+                    assert(v0 < num_vertices);
+                    assert(s_active_v(v0));
+
+                    const uint16_t v1 = s_ev[2 * e + 1];
+                    assert(v1 < num_vertices);
+                    assert(s_active_v(v1));
+
+                    s_edge_tag.set(e, true);
+                    s_vert_tag.set(v0, true);
+                    s_vert_tag.set(v1, true);
+                }
+            }
+        }
+    };
+
+
+    tag_edges_and_vertices_through_face();
+    block.sync();
+
+    // tag faces through edges
+    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+        if (s_active_f(f)) {
+
+            for (int i = 0; i < 3; ++i) {
+                const uint16_t e = s_fe[3 * f + i] >> 1;
+                assert(e < num_edges);
+                assert(s_active_e(e));
+
+                const uint16_t v0 = s_ev[2 * e + 0];
+                assert(v0 < num_vertices);
+                assert(s_active_v(v0));
+
+                const uint16_t v1 = s_ev[2 * e + 1];
+                assert(v1 < num_vertices);
+                assert(s_active_v(v1));
+
+                if (s_edge_tag(e) || s_vert_tag(v0) || s_vert_tag(v1)) {
+                    s_face_tag.set(f, true);
+                    break;
+                }
+            }
+        }
+    }
+    block.sync();
+
+    tag_edges_and_vertices_through_face();
+    block.sync();
+
+
+    // tag vertices through edges
+    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        if (s_active_e(e) && (s_owned_e(e) || s_edge_tag(e))) {
+
+            const uint16_t v0 = s_ev[2 * e + 0];
+            assert(v0 < num_vertices);
+            assert(s_active_v(v0));
+
+            const uint16_t v1 = s_ev[2 * e + 1];
+            assert(v1 < num_vertices);
+            assert(s_active_v(v1));
+
+            s_vert_tag.set(v0, true);
+            s_vert_tag.set(v1, true);
+            s_edge_tag.set(e, true);
+        }
+    }
+
+    block.sync();
+
+    for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+        if (s_face_tag(v)) {
+            s_active_v.set(v, true);
+        }
+    }
+
+    for (uint16_t e = threadIdx.x; e < num_faces; e += blockThreads) {
+        if (s_edge_tag(e)) {
+            s_active_e.set(e, true);
+        }
+    }
+
+    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+        if (s_face_tag(f)) {
+            s_active_f.set(f, true);
+        }
+    }
+
+    block.sync();
+    s_active_v.store<blockThreads>(pi.active_mask_v);
+    s_active_e.store<blockThreads>(pi.active_mask_e);
+    s_active_f.store<blockThreads>(pi.active_mask_f);
+}
+
 
 template <uint32_t blockThreads>
 __global__ static void calc_num_elements(const Context context,
@@ -945,13 +1108,31 @@ bool RXMeshDynamic::validate()
     return success;
 }
 
-void RXMeshDynamic::fix_lphashtable()
+void RXMeshDynamic::cleanup()
 {
     constexpr uint32_t block_size = 256;
     const uint32_t     grid_size  = get_num_patches();
 
+    uint16_t vertex_cap = this->m_max_vertices_per_patch;
+
+    uint32_t dyn_shmem = 2 * ShmemAllocator::default_alignment +
+                         (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
+                         (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+
+    dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
+                 3 * ShmemAllocator::default_alignment;
+
+    dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
+                 3 * ShmemAllocator::default_alignment;
+
+    dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
+                 3 * ShmemAllocator::default_alignment;
+
     detail::fix_lphashtable<block_size>
         <<<grid_size, block_size>>>(this->m_rxmesh_context);
+
+    detail::remove_surplus_elements<block_size>
+        <<<grid_size, block_size, dyn_shmem>>>(this->m_rxmesh_context);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 }

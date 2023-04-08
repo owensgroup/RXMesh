@@ -235,7 +235,7 @@ TEST(RXMeshDynamic, Cavity)
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, *to_flip, *f_attr, *e_attr, *v_attr);
-        rx.fix_lphashtable();
+        rx.cleanup();
     }
 
     CUDA_ERROR(cudaDeviceSynchronize());

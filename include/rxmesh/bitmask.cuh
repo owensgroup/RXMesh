@@ -3,6 +3,7 @@
 #include <cooperative_groups.h>
 #include <stdint.h>
 
+#include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/shmem_allocator.cuh"
 #include "rxmesh/util/bitmask_util.h"
 
@@ -46,6 +47,32 @@ struct Bitmask
     {
         m_bitmask =
             reinterpret_cast<uint32_t*>(shrd_alloc.alloc(num_bytes(size())));
+    }
+
+    /**
+     * @brief load the bitmask from global memory
+     * @param mask a pointer to global memory
+     */
+    __device__ __inline__ void load_async(
+        cooperative_groups::thread_block& block,
+        const uint32_t*                   mask,
+        bool                              with_wait = false)
+    {
+        detail::load_async(block,
+                           reinterpret_cast<const char*>(mask),
+                           num_bytes(),
+                           reinterpret_cast<char*>(m_bitmask),
+                           with_wait);
+    }
+
+    /**
+     * @brief store the bitmask to global memory
+     * @param mask a point to global memory
+     */
+    template <uint32_t blockThreads>
+    __device__ __inline__ void store(uint32_t* mask)
+    {
+        detail::store<blockThreads>(m_bitmask, DIVIDE_UP(m_size, 32), mask);
     }
 
 
@@ -182,8 +209,8 @@ struct Bitmask
     /**
      * @brief try to set a bit mask. if the bit was not set, returns true which
      * means that this thread has successfully set the bit. if the bit was set
-     * already, then return false means that this thread did not set the bit. 
-     * On device, this function is done atomically 
+     * already, then return false means that this thread did not set the bit.
+     * On device, this function is done atomically
      * @param bit the bit position
      */
     __device__ __host__ __inline__ bool try_set(const uint16_t bit)

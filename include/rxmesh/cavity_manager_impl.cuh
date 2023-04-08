@@ -86,11 +86,13 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
         ownership.reset(block);
         in_cavity.reset(block);
 
-        detail::load_async(reinterpret_cast<const char*>(g_owned),
+        detail::load_async(block,
+                           reinterpret_cast<const char*>(g_owned),
                            owned.num_bytes(),
                            reinterpret_cast<char*>(owned.m_bitmask),
                            false);
-        detail::load_async(reinterpret_cast<const char*>(g_active),
+        detail::load_async(block,
+                           reinterpret_cast<const char*>(g_active),
                            active.num_bytes(),
                            reinterpret_cast<char*>(active.m_bitmask),
                            false);
@@ -1968,6 +1970,5 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
 
     unlock_locked_patches();
     unlock();
-        
 }
 }  // namespace rxmesh
