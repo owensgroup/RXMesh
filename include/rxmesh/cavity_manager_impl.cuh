@@ -1770,7 +1770,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
 
             // m_patch_info.get_lp<HandleT>().remove(vp);
 
-            // make sure that q is lokced
+            // make sure that q is locked
             assert(m_s_locked_patches_mask(
                 m_patch_info.patch_stash.find_patch_index(q)));
 
