@@ -411,7 +411,7 @@ struct CavityManager
         const Bitmask& dest_patch_owned_mask,
         const Bitmask& dest_patch_active_mask,
         const Bitmask& dest_in_cavity,
-        const LPPair*  m_s_table);
+        const LPPair*  s_table);
 
 
     /**

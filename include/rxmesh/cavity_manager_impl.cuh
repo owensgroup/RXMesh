@@ -1670,7 +1670,7 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
     const Bitmask& dest_patch_owned_mask,
     const Bitmask& dest_patch_active_mask,
     const Bitmask& dest_in_cavity,
-    const LPPair*  m_s_table)
+    const LPPair*  s_table)
 {
 
     assert(
@@ -1701,10 +1701,9 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
             // added in the patch in shared memory and not visible to global
             // memory yet
             // auto handle = m_context.get_owner_handle<HandleT>(
-            //    {m_patch_info.patch_id, {i}}, nullptr, m_s_table, false,
-            //    true);
+            //    {m_patch_info.patch_id, {i}}, nullptr, s_table, false, true);
 
-            const HandleT handle = m_patch_info.find<HandleT>(i, m_s_table_v);
+            const HandleT handle = m_patch_info.find<HandleT>(i, s_table);
 
             assert(handle.is_valid());
             assert(handle.patch_id() != INVALID32);

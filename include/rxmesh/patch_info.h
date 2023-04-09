@@ -87,21 +87,26 @@ struct ALIGN(16) PatchInfo
     }
 
     template <typename HandleT>
-    __device__ __inline__ HandleT find(const LPPair::KeyT key,
-                                       const LPPair*      table = nullptr)
+    __device__ __host__ __inline__ HandleT find(const LPPair::KeyT key,
+                                                const LPPair* table = nullptr)
     {
         LPPair lp;
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             lp = lp_v.find(key, table);
         }
-        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
             lp = lp_e.find(key, table);
         }
-        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             lp = lp_f.find(key, table);
         }
 
-        return get_handle<HandleT>(lp);
+        // assert(!lp.is_sentinel());
+        if (lp.is_sentinel()) {
+            return HandleT();
+        } else {
+            return get_handle<HandleT>(lp);
+        }
     }
 
 
@@ -110,7 +115,7 @@ struct ALIGN(16) PatchInfo
      * one of the LPHashTable stored here
      */
     template <typename HandleT>
-    __device__ __inline__ HandleT get_handle(const LPPair lp)
+    __device__ __host__ __inline__ HandleT get_handle(const LPPair lp)
     {
         return HandleT(patch_stash.get_patch(lp),
                        {lp.local_id_in_owner_patch()});
