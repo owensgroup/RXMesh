@@ -1113,7 +1113,20 @@ void RXMeshDynamic::cleanup()
     constexpr uint32_t block_size = 256;
     const uint32_t     grid_size  = get_num_patches();
 
-    uint16_t vertex_cap = this->m_max_vertices_per_patch;
+    CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
+                          this->m_rxmesh_context.m_max_num_vertices,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+
+    CUDA_ERROR(cudaMemcpy(&this->m_max_edges_per_patch,
+                          this->m_rxmesh_context.m_max_num_edges,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+
+    CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
+                          this->m_rxmesh_context.m_max_num_faces,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
 
     uint32_t dyn_shmem = 2 * ShmemAllocator::default_alignment +
                          (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
