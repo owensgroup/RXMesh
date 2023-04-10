@@ -57,15 +57,17 @@ struct PatchStash
     __host__ __device__ __inline__ uint8_t insert_patch(uint32_t patch)
     {
         for (uint8_t i = 0; i < stash_size; ++i) {
+#ifdef __CUDA_ARCH__
+            uint32_t old = ::atomicCAS(m_stash + i, INVALID32, patch);
+            if (old == INVALID32 || old == patch) {
+                return i;
+            }
+#else
             if (m_stash[i] == patch) {
                 // prevent redundancy
                 return i;
             }
-#ifdef __CUDA_ARCH__
-            if (::atomicCAS(m_stash + i, INVALID32, patch) == INVALID32) {
-                return i;
-            }
-#else
+
             if (m_stash[i] == INVALID32) {
                 m_stash[i] = patch;
                 return i;
