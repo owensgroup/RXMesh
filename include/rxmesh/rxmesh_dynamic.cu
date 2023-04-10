@@ -160,7 +160,7 @@ __global__ static void remove_surplus_elements(const Context context)
     auto tag_edges_and_vertices_through_face = [&]() {
         // mark edges that are incident to owned faces
         for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-            if (s_active_f(f) && s_owned_f(f)) {
+            if (s_active_f(f) && (s_owned_f(f) || s_face_tag(f))) {
                 for (int i = 0; i < 3; ++i) {
                     const uint16_t e = s_fe[3 * f + i] >> 1;
                     assert(e < num_edges);
@@ -235,29 +235,9 @@ __global__ static void remove_surplus_elements(const Context context)
     }
 
     block.sync();
-
-    for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
-        if (s_face_tag(v)) {
-            s_active_v.set(v, true);
-        }
-    }
-
-    for (uint16_t e = threadIdx.x; e < num_faces; e += blockThreads) {
-        if (s_edge_tag(e)) {
-            s_active_e.set(e, true);
-        }
-    }
-
-    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-        if (s_face_tag(f)) {
-            s_active_f.set(f, true);
-        }
-    }
-
-    block.sync();
-    s_active_v.store<blockThreads>(pi.active_mask_v);
-    s_active_e.store<blockThreads>(pi.active_mask_e);
-    s_active_f.store<blockThreads>(pi.active_mask_f);
+    s_vert_tag.store<blockThreads>(pi.active_mask_v);
+    s_edge_tag.store<blockThreads>(pi.active_mask_e);
+    s_face_tag.store<blockThreads>(pi.active_mask_f);
 }
 
 
