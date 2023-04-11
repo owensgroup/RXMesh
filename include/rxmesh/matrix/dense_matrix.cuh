@@ -7,6 +7,12 @@
 
 namespace rxmesh {
 
+/**
+ * @brief dense matrix use for device and host, inside is a array.
+ * The dense matrix is initialized as col major on device.
+ * We would only support col major dense matrix for now since that's what
+ * cusparse and cusolver wants.
+ */
 template <typename T, typename IndexT = int, unsigned int MemAlignSize = 0>
 struct DenseMatrix
 {
@@ -67,6 +73,9 @@ struct DenseMatrix
 #endif
     }
 
+    /**
+     * @brief return the raw pointer based on the location specified
+     */
     T* data(locationT location = DEVICE) const
     {
         if ((location & HOST) == HOST) {
@@ -81,6 +90,10 @@ struct DenseMatrix
         return 0;
     }
 
+    /**
+     * @brief return the raw pointer to columns based on column index the
+     * location specified and
+     */
     T* col_data(const uint32_t ld_idx, locationT location = DEVICE) const
     {
         if ((location & HOST) == HOST) {
@@ -92,18 +105,25 @@ struct DenseMatrix
         }
 
         if ((location & m_allocated) == location) {
-            RXMESH_ERROR("Requested data not allocated on {}", location_to_string(location));
+            RXMESH_ERROR("Requested data not allocated on {}",
+                         location_to_string(location));
         }
 
         assert(1 != 1);
         return 0;
     }
 
+    /**
+     * @brief return the total number bytes used by the array
+    */
     IndexT bytes() const
     {
         return (m_row_size + m_col_pad_idx) * m_col_size * sizeof(T);
     }
 
+    /**
+     * @brief move the data between host an device 
+    */
     void move(locationT source, locationT target, cudaStream_t stream = NULL)
     {
         if (source == target) {
@@ -140,6 +160,9 @@ struct DenseMatrix
         }
     }
 
+    /**
+     * @brief release the data on host or device 
+    */
     void release(locationT location = LOCATION_ALL)
     {
         if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
@@ -155,6 +178,9 @@ struct DenseMatrix
         }
     }
 
+    /**
+     * @brief allocate the data on host or device 
+    */
     void allocate(locationT location)
     {
         if ((location & HOST) == HOST) {

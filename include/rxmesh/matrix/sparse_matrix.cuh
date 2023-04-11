@@ -131,8 +131,13 @@ void permute_gather(IndexT* d_p, T* d_in, T* d_out, IndexT size)
 
 }  // namespace detail
 
-// TODO: add compatibility for EE, FF, VE......
-// TODO: purge operation?
+
+/**
+ * @brief the sparse matrix implementation and all the functions and soolvers
+ * related. Right now, only VV is supported and we would add more compatibility
+ * for EE, FF, VE......
+ * This is device/host compatiable
+ */
 template <typename T, typename IndexT = int>
 struct SparseMatrix
 {
@@ -1005,7 +1010,9 @@ struct SparseMatrix
     }
 
     /* Host data compatibility */
-
+    /**
+     * @brief move the data between host an device
+     */
     void move(locationT source, locationT target, cudaStream_t stream = NULL)
     {
         if (source == target) {
@@ -1068,6 +1075,9 @@ struct SparseMatrix
         }
     }
 
+    /**
+     * @brief release the data on host or device
+     */
     void release(locationT location = LOCATION_ALL)
     {
         if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
@@ -1089,6 +1099,9 @@ struct SparseMatrix
         }
     }
 
+    /**
+     * @brief allocate the data on host or device
+     */
     void allocate(locationT location)
     {
         if ((location & HOST) == HOST) {
