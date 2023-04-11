@@ -7,9 +7,6 @@
 
 namespace rxmesh {
 
-// Currently this is device only
-// host/device transormation will be added
-// only col major is supported
 template <typename T, typename IndexT = int, unsigned int MemAlignSize = 0>
 struct DenseMatrix
 {
@@ -39,15 +36,6 @@ struct DenseMatrix
                                            CUDA_R_32F,
                                            CUSPARSE_ORDER_COL));
     }
-
-    // void set_ones()
-    // {
-    //     std::vector<T> init_tmp_arr(m_row_size * m_col_size, 1);
-    //     CUDA_ERROR(cudaMemcpy(m_d_val,
-    //                           init_tmp_arr.data(),
-    //                           bytes() * sizeof(T),
-    //                           cudaMemcpyHostToDevice));
-    // }
 
     IndexT lead_dim() const
     {
@@ -104,7 +92,7 @@ struct DenseMatrix
         }
 
         if ((location & m_allocated) == location) {
-            RXMESH_ERROR("Requested data not allocated on {}", location);
+            RXMESH_ERROR("Requested data not allocated on {}", location_to_string(location));
         }
 
         assert(1 != 1);

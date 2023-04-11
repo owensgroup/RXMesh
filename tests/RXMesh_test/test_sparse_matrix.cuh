@@ -130,22 +130,6 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
     query.dispatch<Op::VV>(block, shrd_alloc, mat_setup);
 }
 
-template <typename T, uint32_t blockThreads>
-__global__ static void check_diag(const rxmesh::Context   context,
-                                  rxmesh::SparseMatrix<T> A_mat)
-{
-    using namespace rxmesh;
-    auto init = [&](VertexHandle& v_id, const VertexIterator& iter) {
-        printf("%lf\n", A_mat(v_id, v_id));
-    };
-
-    auto                block = cooperative_groups::this_thread_block();
-    Query<blockThreads> query(context);
-    ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, init);
-}
-
-
 /* Check the access of the sparse matrix in CSR format in device */
 TEST(RXMeshStatic, SparseMatrix)
 {
