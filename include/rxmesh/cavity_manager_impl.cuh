@@ -1199,7 +1199,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                                [&](const uint16_t vertex) {
                                    return m_s_src_connect_mask_v(vertex);
                                });
-
             // we need to make sure that no other
             // thread is querying the hashtable while we
             // insert in it
@@ -1209,8 +1208,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 bool inserted = m_patch_info.lp_v.insert(lp, m_s_table_v);
                 assert(inserted);
             }
+            block.sync();
         }
-        block.sync();
+        
 
         if (!lock_patches_to_lock()) {
             return false;
@@ -1223,8 +1223,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
 
         // 4. move edges since we now have a copy of the vertices in p
         for (uint16_t e = threadIdx.x; e < q_num_edges_up; e += blockThreads) {
-
-
             LPPair lp = migrate_edge(
                 q,
                 q_num_edges,
@@ -1247,13 +1245,13 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 });
 
             block.sync();
-
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_e.insert(lp, m_s_table_e);
                 assert(inserted);
             }
+            block.sync();
         }
-        block.sync();
+        
 
         if (!lock_patches_to_lock()) {
             return false;
@@ -1311,17 +1309,15 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                                          const uint16_t v1q) {
                                          return m_s_src_connect_mask_e(edge);
                                      });
-
-
             block.sync();
 
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_e.insert(lp, m_s_table_e);
                 assert(inserted);
             }
+            block.sync();
         }
-
-        block.sync();
+                
         if (!lock_patches_to_lock()) {
             return false;
         }
@@ -1346,14 +1342,13 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                                                 m_s_src_mask_e(e1q) ||
                                                 m_s_src_mask_e(e2q);
                                      });
-
-
             block.sync();
 
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_f.insert(lp, m_s_table_f);
                 assert(inserted);
             }
+            block.sync();
         }
 
         if (!lock_patches_to_lock()) {
