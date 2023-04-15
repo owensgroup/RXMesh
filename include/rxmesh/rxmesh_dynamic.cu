@@ -19,7 +19,8 @@ namespace rxmesh {
 
 namespace detail {
 template <uint32_t blockThreads, typename HandleT>
-__device__ __inline__ void fix_lphashtable(const Context context, PatchInfo& pi)
+__device__ __inline__ void hashtable_calibration(const Context context,
+                                                 PatchInfo&    pi)
 {
     // TODO cleanup patch stash
     // TODO load the hashtable in shared memory
@@ -47,9 +48,16 @@ __device__ __inline__ void fix_lphashtable(const Context context, PatchInfo& pi)
             owner     = pi.patch_stash.get_patch(lp);
 
             assert(owner != INVALID32);
-            assert(!lp.is_sentinel());
-            assert(!context.m_patches_info[owner].is_deleted(
-                LocalT(lp.local_id_in_owner_patch())));
+
+            // This only happen when the element i resides in the cavity of the
+            // owner where it will be cleaned up later in
+            // remove_surplus_elements
+            if (context.m_patches_info[owner].is_deleted(
+                    LocalT(lp.local_id_in_owner_patch()))) {
+                continue;
+            }
+            // assert(!context.m_patches_info[owner].is_deleted(
+            //    LocalT(lp.local_id_in_owner_patch())));
 
 
             while (!context.m_patches_info[owner].is_owned(
@@ -85,7 +93,7 @@ __device__ __inline__ void fix_lphashtable(const Context context, PatchInfo& pi)
 }
 
 template <uint32_t blockThreads>
-__global__ static void fix_lphashtable(const Context context)
+__global__ static void hashtable_calibration(const Context context)
 {
     const uint32_t pid = blockIdx.x;
     if (pid >= context.m_num_patches[0]) {
@@ -94,9 +102,9 @@ __global__ static void fix_lphashtable(const Context context)
 
     PatchInfo pi = context.m_patches_info[pid];
 
-    fix_lphashtable<blockThreads, VertexHandle>(context, pi);
-    fix_lphashtable<blockThreads, EdgeHandle>(context, pi);
-    fix_lphashtable<blockThreads, FaceHandle>(context, pi);
+    hashtable_calibration<blockThreads, VertexHandle>(context, pi);
+    hashtable_calibration<blockThreads, EdgeHandle>(context, pi);
+    hashtable_calibration<blockThreads, FaceHandle>(context, pi);
 }
 
 
@@ -773,13 +781,15 @@ __global__ static void check_ribbon_faces(const Context               context,
             const LocalFaceT fl(f);
 
             // Only if the face is owned, we do the check
-            if (patch_info.is_owned(fl)) {
+            if (!patch_info.is_deleted(fl) && patch_info.is_owned(fl)) {
 
                 // for the three vertices incident to this face
                 for (uint16_t k = 0; k < 3; ++k) {
                     uint16_t v_id = s_fv[3 * f + k];
 
                     // get the vertex handle so we can index the attributes
+                    assert(!patch_info.is_deleted(LocalVertexT(v_id)));
+
                     const VertexHandle vh = context.get_owner_handle(
                         VertexHandle(patch_id, {v_id}));
 
@@ -797,6 +807,9 @@ __global__ static void check_ribbon_faces(const Context               context,
                             for (uint16_t j = s_vf_offset[v_id];
                                  j < s_vf_offset[v_id + 1];
                                  ++j) {
+
+                                assert(!patch_info.is_deleted(
+                                    LocalFaceT(s_vf_value[j])));
 
                                 const FaceHandle fh = context.get_owner_handle(
                                     FaceHandle(patch_id, {s_vf_value[j]}));
@@ -1121,7 +1134,7 @@ void RXMeshDynamic::cleanup()
     dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
                  3 * ShmemAllocator::default_alignment;
 
-    detail::fix_lphashtable<block_size>
+    detail::hashtable_calibration<block_size>
         <<<grid_size, block_size>>>(this->m_rxmesh_context);
 
     detail::remove_surplus_elements<block_size>
@@ -1368,7 +1381,9 @@ void RXMeshDynamic::update_polyscope()
 #if USE_POLYSCOPE
     // for polyscope, we just remove the mesh and re-add it since polyscope does
     // not support changing the mesh topology
+    // if (this->m_polyscope_mesh_name.find("updated") != std::string::npos) {
     // polyscope::removeSurfaceMesh(this->m_polyscope_mesh_name, true);
+    //}
     this->m_polyscope_mesh_name = this->m_polyscope_mesh_name + "updated";
     this->register_polyscope();
 #endif
