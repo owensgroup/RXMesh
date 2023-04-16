@@ -123,7 +123,7 @@ struct LPHashTable
     /**
      * @brief Get the hash table capacity
      */
-    __host__ __device__ __inline__ uint32_t get_capacity() const
+    __host__ __device__ __inline__ uint16_t get_capacity() const
     {
         return m_capacity;
     }

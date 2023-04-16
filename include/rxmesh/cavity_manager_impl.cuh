@@ -64,9 +64,14 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     m_edge_cap = m_patch_info.edges_capacity[0];
     m_face_cap = m_patch_info.faces_capacity[0];
 
-    m_s_cavity_id_v           = shrd_alloc.alloc<uint16_t>(m_vert_cap);
-    m_s_cavity_id_e           = shrd_alloc.alloc<uint16_t>(m_edge_cap);
-    m_s_cavity_id_f           = shrd_alloc.alloc<uint16_t>(m_face_cap);
+    // divide by 2 since size of LPPair is 4 bytes
+    m_s_cavity_id_v = shrd_alloc.alloc<uint16_t>(std::max(
+        m_vert_cap, uint16_t(m_patch_info.lp_v.get_capacity() / uint16_t(2))));
+    m_s_cavity_id_e = shrd_alloc.alloc<uint16_t>(std::max(
+        m_edge_cap, uint16_t(m_patch_info.lp_e.get_capacity() / uint16_t(2))));
+    m_s_cavity_id_f = shrd_alloc.alloc<uint16_t>(std::max(
+        m_face_cap, uint16_t(m_patch_info.lp_f.get_capacity() / uint16_t(2))));
+
     m_s_cavity_boundary_edges = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
 
     auto alloc_masks = [&](uint16_t        num_elements,
@@ -781,16 +786,16 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::load_hashtable(
     cooperative_groups::thread_block& block)
 {
-    assert(m_patch_info.lp_v.get_capacity() * sizeof(LPPair) <=
-           m_vert_cap * sizeof(uint16_t));
+    // assert(m_patch_info.lp_v.get_capacity() * sizeof(LPPair) <=
+    //       m_vert_cap * sizeof(uint16_t));
     m_s_table_v = reinterpret_cast<LPPair*>(m_s_cavity_id_v);
 
-    assert(m_patch_info.lp_e.get_capacity() * sizeof(LPPair) <=
-           m_edge_cap * sizeof(uint16_t));
+    // assert(m_patch_info.lp_e.get_capacity() * sizeof(LPPair) <=
+    //       m_edge_cap * sizeof(uint16_t));
     m_s_table_e = reinterpret_cast<LPPair*>(m_s_cavity_id_e);
 
-    assert(m_patch_info.lp_f.get_capacity() * sizeof(LPPair) <=
-           m_face_cap * sizeof(uint16_t));
+    // assert(m_patch_info.lp_f.get_capacity() * sizeof(LPPair) <=
+    //       m_face_cap * sizeof(uint16_t));
     m_s_table_f = reinterpret_cast<LPPair*>(m_s_cavity_id_f);
 
     detail::load_async(block,

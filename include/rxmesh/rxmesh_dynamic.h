@@ -73,10 +73,18 @@ class RXMeshDynamic : public RXMeshStatic
                            2 * edge_cap * sizeof(uint16_t) +
                            2 * ShmemAllocator::default_alignment;
 
-        // cavity ID of fake deleted elements
-        dyn_shmem += vertex_cap * sizeof(uint16_t) +
-                     edge_cap * sizeof(uint16_t) + face_cap * sizeof(uint16_t) +
-                     3 * ShmemAllocator::default_alignment;
+        // cavity ID
+        dyn_shmem += std::max(
+            vertex_cap * sizeof(uint16_t),
+            max_lp_hashtable_capacity<LocalVertexT>() * sizeof(LPPair));
+        dyn_shmem +=
+            std::max(edge_cap * sizeof(uint16_t),
+                     max_lp_hashtable_capacity<LocalEdgeT>() * sizeof(LPPair));
+        dyn_shmem +=
+            std::max(face_cap * sizeof(uint16_t),
+                     max_lp_hashtable_capacity<LocalFaceT>() * sizeof(LPPair));
+
+        dyn_shmem += 3 * ShmemAllocator::default_alignment;
 
         // cavity loop
         dyn_shmem += this->m_max_edges_per_patch * sizeof(uint16_t) +
@@ -151,8 +159,8 @@ class RXMeshDynamic : public RXMeshStatic
     bool validate();
 
     /**
-     * @brief cleanup after topology changes by removing surplus elements 
-     * and make sure that hashtable store owner patches 
+     * @brief cleanup after topology changes by removing surplus elements
+     * and make sure that hashtable store owner patches
      */
     void cleanup();
 

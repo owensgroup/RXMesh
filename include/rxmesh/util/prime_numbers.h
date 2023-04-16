@@ -3,7 +3,7 @@
 #include <algorithm>
 
 namespace rxmesh {
-static const uint32_t prime_numbers[669] = {
+static const uint16_t prime_numbers[669] = {
     2,    3,    5,    7,    11,   13,   17,   19,   23,   29,   31,   37,
     41,   43,   47,   53,   59,   61,   67,   71,   73,   79,   83,   89,
     97,   101,  103,  107,  109,  113,  127,  131,  137,  139,  149,  151,
@@ -61,7 +61,7 @@ static const uint32_t prime_numbers[669] = {
     4817, 4831, 4861, 4871, 4877, 4889, 4903, 4909, 4919, 4931, 4933, 4937,
     4943, 4951, 4957, 4967, 4969, 4973, 4987, 4993, 4999};
 
-inline uint32_t find_next_prime_number(uint32_t input)
+inline uint32_t find_next_prime_number(uint16_t input)
 {
     constexpr const uint32_t size =
         sizeof(prime_numbers) / sizeof(prime_numbers[0]);
