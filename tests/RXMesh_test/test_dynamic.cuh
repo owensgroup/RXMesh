@@ -1,7 +1,6 @@
 #include <assert.h>
 #include "gtest/gtest.h"
 
-#include "rxmesh/cavity.cuh"
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/kernels/for_each.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
@@ -227,10 +226,9 @@ TEST(RXMeshDynamic, Cavity)
 
     rx.prepare_launch_box({}, launch_box, (void*)random_flips<blockThreads>);
 
-
-    // int iter = 0;
+    int iter = 0;
     while (!rx.is_queue_empty()) {
-        // RXMESH_INFO("iter = {}", ++iter);
+        RXMESH_INFO("\n iter = {}", ++iter);
         random_flips<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
