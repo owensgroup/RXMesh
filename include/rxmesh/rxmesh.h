@@ -297,24 +297,25 @@ class RXMesh
     }
 
     template <typename LocalT>
-    uint32_t max_lp_hashtable_size() const
+    uint32_t max_lp_hashtable_capacity() const
     {
         if constexpr (std::is_same_v<LocalT, LocalVertexT>) {
-            return static_cast<uint32_t>(
-                static_cast<float>(m_max_not_owned_vertices) /
-                m_lp_hashtable_load_factor);
+            return find_next_prime_number(static_cast<uint32_t>(
+                std::ceil(m_capacity_factor *
+                          static_cast<float>(m_max_not_owned_vertices) /
+                          m_lp_hashtable_load_factor)));
         }
 
         if constexpr (std::is_same_v<LocalT, LocalEdgeT>) {
-            return static_cast<uint32_t>(
-                static_cast<float>(m_max_not_owned_edges) /
-                m_lp_hashtable_load_factor);
+            return find_next_prime_number(static_cast<uint32_t>(std::ceil(
+                m_capacity_factor * static_cast<float>(m_max_not_owned_edges) /
+                m_lp_hashtable_load_factor)));
         }
 
         if constexpr (std::is_same_v<LocalT, LocalFaceT>) {
-            return static_cast<uint32_t>(
-                static_cast<float>(m_max_not_owned_faces) /
-                m_lp_hashtable_load_factor);
+            return find_next_prime_number(static_cast<uint32_t>(std::ceil(
+                m_capacity_factor * static_cast<float>(m_max_not_owned_faces) /
+                m_lp_hashtable_load_factor)));
         }
     }
 

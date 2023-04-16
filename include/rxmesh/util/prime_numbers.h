@@ -65,8 +65,11 @@ inline uint32_t find_next_prime_number(uint32_t input)
 {
     constexpr const uint32_t size =
         sizeof(prime_numbers) / sizeof(prime_numbers[0]);
+    if (input < prime_numbers[0]) {
+        return 0;
+    }
 
-    if (input < prime_numbers[0] || input > prime_numbers[size - 1]) {
+    if (input > prime_numbers[size - 1]) {
         RXMESH_ERROR(
             "find_next_prime_number() can not find the next prime number for "
             "{} because it is out of range ({}, {})",

@@ -1026,7 +1026,7 @@ class RXMeshStatic : public RXMesh
 
             // stores edges LP hashtable
             dynamic_smem +=
-                sizeof(LPPair) * max_lp_hashtable_size<LocalEdgeT>();
+                sizeof(LPPair) * max_lp_hashtable_capacity<LocalEdgeT>();
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
@@ -1044,7 +1044,7 @@ class RXMeshStatic : public RXMesh
 
             // stores vertex LP hashtable
             dynamic_smem +=
-                sizeof(LPPair) * max_lp_hashtable_size<LocalVertexT>();
+                sizeof(LPPair) * max_lp_hashtable_capacity<LocalVertexT>();
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
@@ -1065,7 +1065,7 @@ class RXMeshStatic : public RXMesh
 
             //  stores vertex LP hashtable
             uint32_t table_bytes =
-                sizeof(LPPair) * max_lp_hashtable_size<LocalVertexT>();
+                sizeof(LPPair) * max_lp_hashtable_capacity<LocalVertexT>();
             if (table_bytes >
                 2 * this->m_max_edges_per_patch * sizeof(uint16_t)) {
 
@@ -1096,7 +1096,7 @@ class RXMeshStatic : public RXMesh
 
             // stores edge LP hashtable
             uint32_t lp_smem =
-                sizeof(LPPair) * max_lp_hashtable_size<LocalEdgeT>();
+                sizeof(LPPair) * max_lp_hashtable_capacity<LocalEdgeT>();
 
 
             // For oriented VE, we additionally need to store FE and EF
@@ -1133,7 +1133,7 @@ class RXMeshStatic : public RXMesh
 
             // stores the face LP hashtable
             dynamic_smem +=
-                sizeof(LPPair) * max_lp_hashtable_size<LocalFaceT>();
+                sizeof(LPPair) * max_lp_hashtable_capacity<LocalFaceT>();
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
@@ -1158,7 +1158,7 @@ class RXMeshStatic : public RXMesh
 
             // stores the face LP hashtable
             dynamic_smem +=
-                sizeof(LPPair) * max_lp_hashtable_size<LocalFaceT>();
+                sizeof(LPPair) * max_lp_hashtable_capacity<LocalFaceT>();
 
             // for possible padding for alignment
             // 5 since there are 5 calls for ShmemAllocator.alloc
@@ -1183,7 +1183,7 @@ class RXMeshStatic : public RXMesh
 
             // stores the vertex LP hashtable
             uint32_t lp_smem =
-                sizeof(LPPair) * max_lp_hashtable_size<LocalVertexT>();
+                sizeof(LPPair) * max_lp_hashtable_capacity<LocalVertexT>();
 
             if (oriented) {
                 // For oriented VV, we additionally need to store FE and EF
@@ -1246,7 +1246,7 @@ class RXMeshStatic : public RXMesh
 
             // stores vertex LP hashtable
             uint32_t lp_smem =
-                sizeof(LPPair) * max_lp_hashtable_size<LocalVertexT>();
+                sizeof(LPPair) * max_lp_hashtable_capacity<LocalVertexT>();
 
             dynamic_smem += std::max(fe_smem, lp_smem);
 

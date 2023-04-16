@@ -411,20 +411,20 @@ void RXMesh::calc_max_elements()
             std::max(m_max_faces_per_patch, m_h_patches_info[p].num_faces[0]);
 
 
-        m_max_not_owned_vertices =
-            std::max(m_max_not_owned_vertices,
-                     detail::count_set_bits(m_h_patches_info[p].num_vertices[0],
-                                            m_h_patches_info[p].owned_mask_v));
+        m_max_not_owned_vertices = std::max(
+            m_max_not_owned_vertices,
+            detail::count_zero_bits(m_h_patches_info[p].num_vertices[0],
+                                    m_h_patches_info[p].owned_mask_v));
 
         m_max_not_owned_edges =
             std::max(m_max_not_owned_edges,
-                     detail::count_set_bits(m_h_patches_info[p].num_edges[0],
-                                            m_h_patches_info[p].owned_mask_e));
+                     detail::count_zero_bits(m_h_patches_info[p].num_edges[0],
+                                             m_h_patches_info[p].owned_mask_e));
 
         m_max_not_owned_faces =
             std::max(m_max_not_owned_faces,
-                     detail::count_set_bits(m_h_patches_info[p].num_faces[0],
-                                            m_h_patches_info[p].owned_mask_f));
+                     detail::count_zero_bits(m_h_patches_info[p].num_faces[0],
+                                             m_h_patches_info[p].owned_mask_f));
     }
 }
 
@@ -934,10 +934,9 @@ void RXMesh::build_device()
                             LPHashTable&                 d_hashtable) {
             const uint16_t num_not_owned = ltog[p].size() - num_owned[p];
 
-            const uint16_t capacity = static_cast<uint16_t>(
-                static_cast<float>(static_cast<float>(m_capacity_factor) *
-                                   static_cast<float>(num_not_owned)) /
-                m_lp_hashtable_load_factor);
+            const uint16_t capacity = static_cast<uint16_t>(std::ceil(
+                m_capacity_factor * static_cast<float>(num_not_owned) /
+                m_lp_hashtable_load_factor));
 
             h_hashtable = LPHashTable(capacity, false);
             d_hashtable = LPHashTable(capacity, true);
@@ -988,12 +987,12 @@ void RXMesh::build_device()
         };
 
 
-        build_ht(m_h_patches_ltog_f,
-                 m_patcher->get_face_patch(),
-                 m_h_num_owned_f,
+        build_ht(m_h_patches_ltog_v,
+                 m_patcher->get_vertex_patch(),
+                 m_h_num_owned_v,
                  m_h_patches_info[p].patch_stash,
-                 m_h_patches_info[p].lp_f,
-                 d_patch.lp_f);
+                 m_h_patches_info[p].lp_v,
+                 d_patch.lp_v);
 
         build_ht(m_h_patches_ltog_e,
                  m_patcher->get_edge_patch(),
@@ -1002,12 +1001,12 @@ void RXMesh::build_device()
                  m_h_patches_info[p].lp_e,
                  d_patch.lp_e);
 
-        build_ht(m_h_patches_ltog_v,
-                 m_patcher->get_vertex_patch(),
-                 m_h_num_owned_v,
+        build_ht(m_h_patches_ltog_f,
+                 m_patcher->get_face_patch(),
+                 m_h_num_owned_f,
                  m_h_patches_info[p].patch_stash,
-                 m_h_patches_info[p].lp_v,
-                 d_patch.lp_v);
+                 m_h_patches_info[p].lp_f,
+                 d_patch.lp_f);
 
         CUDA_ERROR(cudaMemcpy(m_d_patches_info + p,
                               &d_patch,
