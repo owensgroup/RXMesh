@@ -36,47 +36,56 @@ __device__ __inline__ void hashtable_calibration(const Context context,
         HandleT handle;
         bool    replace = false;
 
-        if (i < num_elements && !pi.is_owned(LocalT(i)) &&
-            !pi.is_deleted(LocalT(i))) {
+        if (i < num_elements) {
 
-            // This is the same implementation in Context::get_owner_handle()
+            if (!pi.is_owned(LocalT(i)) && !pi.is_deleted(LocalT(i))) {
 
-            uint32_t owner = pi.patch_id;
-            uint16_t lid   = i;
+                // This is the same implementation in
+                // Context::get_owner_handle()
 
-            LPPair lp = pi.get_lp<HandleT>().find(lid);
-            owner     = pi.patch_stash.get_patch(lp);
+                uint32_t owner = pi.patch_id;
+                uint16_t lid   = i;
 
-            assert(owner != INVALID32);
-
-            // This only happen when the element i resides in the cavity of the
-            // owner where it will be cleaned up later in
-            // remove_surplus_elements
-            if (context.m_patches_info[owner].is_deleted(
-                    LocalT(lp.local_id_in_owner_patch()))) {
-                continue;
-            }
-            // assert(!context.m_patches_info[owner].is_deleted(
-            //    LocalT(lp.local_id_in_owner_patch())));
-
-
-            while (!context.m_patches_info[owner].is_owned(
-                LocalT(lp.local_id_in_owner_patch()))) {
-
-                replace = true;
-
-                lp = context.m_patches_info[owner].get_lp<HandleT>().find(
-                    lp.local_id_in_owner_patch());
+                LPPair lp = pi.get_lp<HandleT>().find(lid);
 
                 assert(!lp.is_sentinel());
 
-                owner = context.m_patches_info[owner].patch_stash.get_patch(lp);
+                owner = pi.patch_stash.get_patch(lp);
 
-                assert(!context.m_patches_info[owner].is_deleted(
-                    LocalT(lp.local_id_in_owner_patch())));
+                assert(owner != INVALID32);
+
+                // This only happen when the element i resides in the cavity of
+                // the owner where it will be cleaned up later in
+                // remove_surplus_elements
+                if (!context.m_patches_info[owner].is_deleted(
+                        LocalT(lp.local_id_in_owner_patch()))) {
+
+                    // assert(!context.m_patches_info[owner].is_deleted(
+                    //    LocalT(lp.local_id_in_owner_patch())));
+
+
+                    while (!context.m_patches_info[owner].is_owned(
+                        LocalT(lp.local_id_in_owner_patch()))) {
+
+                        replace = true;
+
+                        lp = context.m_patches_info[owner]
+                                 .get_lp<HandleT>()
+                                 .find(lp.local_id_in_owner_patch());
+
+                        assert(!lp.is_sentinel());
+
+                        owner =
+                            context.m_patches_info[owner].patch_stash.get_patch(
+                                lp);
+
+                        assert(!context.m_patches_info[owner].is_deleted(
+                            LocalT(lp.local_id_in_owner_patch())));
+                    }
+
+                    handle = HandleT(owner, lp.local_id_in_owner_patch());
+                }
             }
-
-            handle = HandleT(owner, lp.local_id_in_owner_patch());
         }
 
         __syncthreads();
@@ -667,7 +676,7 @@ __global__ static void check_ribbon_edges(const Context           context,
         for (uint16_t e = threadIdx.x; e < patch_info.num_edges[0];
              e += blockThreads) {
             const LocalEdgeT el(e);
-            if (patch_info.is_owned(el)) {
+            if (patch_info.is_owned(el) && !patch_info.is_deleted(el)) {
                 if (s_mark_edges[e] == 0) {
                     // printf("\n ribbon edge = %u, %u", patch_id, e);
                     ::atomicAdd(d_check, 1);
