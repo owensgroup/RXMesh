@@ -280,9 +280,43 @@ class RXMesh
         const uint32_t  i,
         const uint32_t* element_prefix) const;
 
-    uint32_t max_bitmask_size(ELEMENT ele) const;
+    template <typename LocalT>
+    uint32_t max_bitmask_size() const
+    {
+        if constexpr (std::is_same_v<LocalT, LocalVertexT>) {
+            return detail::mask_num_bytes(this->m_max_vertices_per_patch);
+        }
 
-    uint32_t max_lp_hashtable_size(ELEMENT ele) const;
+        if constexpr (std::is_same_v<LocalT, LocalEdgeT>) {
+            return detail::mask_num_bytes(this->m_max_edges_per_patch);
+        }
+
+        if constexpr (std::is_same_v<LocalT, LocalFaceT>) {
+            return detail::mask_num_bytes(this->m_max_faces_per_patch);
+        }
+    }
+
+    template <typename LocalT>
+    uint32_t max_lp_hashtable_size() const
+    {
+        if constexpr (std::is_same_v<LocalT, LocalVertexT>) {
+            return static_cast<uint32_t>(
+                static_cast<float>(m_max_not_owned_vertices) /
+                m_lp_hashtable_load_factor);
+        }
+
+        if constexpr (std::is_same_v<LocalT, LocalEdgeT>) {
+            return static_cast<uint32_t>(
+                static_cast<float>(m_max_not_owned_edges) /
+                m_lp_hashtable_load_factor);
+        }
+
+        if constexpr (std::is_same_v<LocalT, LocalFaceT>) {
+            return static_cast<uint32_t>(
+                static_cast<float>(m_max_not_owned_faces) /
+                m_lp_hashtable_load_factor);
+        }
+    }
 
     void build(const std::vector<std::vector<uint32_t>>& fv,
                const std::string                         patcher_file);

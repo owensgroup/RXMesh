@@ -1019,14 +1019,14 @@ class RXMeshStatic : public RXMesh
             dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::FACE);
+            dynamic_smem += max_bitmask_size<LocalFaceT>();
 
             // store not-owned bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::EDGE);
+            dynamic_smem += max_bitmask_size<LocalEdgeT>();
 
             // stores edges LP hashtable
             dynamic_smem +=
-                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::EDGE);
+                sizeof(LPPair) * max_lp_hashtable_size<LocalEdgeT>();
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
@@ -1037,14 +1037,14 @@ class RXMeshStatic : public RXMesh
             dynamic_smem = 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::EDGE);
+            dynamic_smem += max_bitmask_size<LocalEdgeT>();
 
             // store not-owned bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size<LocalVertexT>();
 
             // stores vertex LP hashtable
             dynamic_smem +=
-                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::VERTEX);
+                sizeof(LPPair) * max_lp_hashtable_size<LocalVertexT>();
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
@@ -1058,14 +1058,14 @@ class RXMeshStatic : public RXMesh
             dynamic_smem += 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::FACE);
+            dynamic_smem += max_bitmask_size<LocalFaceT>();
 
             // store not-owned bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size<LocalVertexT>();
 
             //  stores vertex LP hashtable
             uint32_t table_bytes =
-                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::VERTEX);
+                sizeof(LPPair) * max_lp_hashtable_size<LocalVertexT>();
             if (table_bytes >
                 2 * this->m_max_edges_per_patch * sizeof(uint16_t)) {
 
@@ -1089,14 +1089,14 @@ class RXMeshStatic : public RXMesh
                 (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size<LocalVertexT>();
 
             // store not-owned bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::EDGE);
+            dynamic_smem += max_bitmask_size<LocalEdgeT>();
 
             // stores edge LP hashtable
             uint32_t lp_smem =
-                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::EDGE);
+                sizeof(LPPair) * max_lp_hashtable_size<LocalEdgeT>();
 
 
             // For oriented VE, we additionally need to store FE and EF
@@ -1126,14 +1126,14 @@ class RXMeshStatic : public RXMesh
                 sizeof(uint16_t) + sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::EDGE);
+            dynamic_smem += max_bitmask_size<LocalEdgeT>();
 
             // store not-owned bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::FACE);
+            dynamic_smem += max_bitmask_size<LocalFaceT>();
 
             // stores the face LP hashtable
             dynamic_smem +=
-                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::FACE);
+                sizeof(LPPair) * max_lp_hashtable_size<LocalFaceT>();
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
@@ -1151,14 +1151,14 @@ class RXMeshStatic : public RXMesh
                             sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size<LocalVertexT>();
 
             // store not-owned bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::FACE);
+            dynamic_smem += max_bitmask_size<LocalFaceT>();
 
             // stores the face LP hashtable
             dynamic_smem +=
-                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::FACE);
+                sizeof(LPPair) * max_lp_hashtable_size<LocalFaceT>();
 
             // for possible padding for alignment
             // 5 since there are 5 calls for ShmemAllocator.alloc
@@ -1172,10 +1172,10 @@ class RXMeshStatic : public RXMesh
                 (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size<LocalVertexT>();
 
             // store not-owned bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size<LocalVertexT>();
 
             // duplicate EV
             uint32_t ev_smem =
@@ -1183,7 +1183,7 @@ class RXMeshStatic : public RXMesh
 
             // stores the vertex LP hashtable
             uint32_t lp_smem =
-                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::VERTEX);
+                sizeof(LPPair) * max_lp_hashtable_size<LocalVertexT>();
 
             if (oriented) {
                 // For oriented VV, we additionally need to store FE and EF
@@ -1221,10 +1221,10 @@ class RXMeshStatic : public RXMesh
                            sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::FACE);
+            dynamic_smem += max_bitmask_size<LocalFaceT>();
 
             // store not-owned bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::FACE);
+            dynamic_smem += max_bitmask_size<LocalFaceT>();
 
             // for possible padding for alignment
             // 6 since there are 6 calls for ShmemAllocator.alloc
@@ -1239,14 +1239,14 @@ class RXMeshStatic : public RXMesh
                 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
 
             // store participant bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::EDGE);
+            dynamic_smem += max_bitmask_size<LocalEdgeT>();
 
             // store not-owned bitmask
-            dynamic_smem += max_bitmask_size(ELEMENT::VERTEX);
+            dynamic_smem += max_bitmask_size<LocalVertexT>();
 
             // stores vertex LP hashtable
             uint32_t lp_smem =
-                sizeof(LPPair) * max_lp_hashtable_size(ELEMENT::VERTEX);
+                sizeof(LPPair) * max_lp_hashtable_size<LocalVertexT>();
 
             dynamic_smem += std::max(fe_smem, lp_smem);
 

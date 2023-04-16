@@ -65,16 +65,6 @@ static std::string layout_to_string(const layoutT layout)
 }
 
 /**
- * @brief ELEMENT represents the three types of mesh elements
- */
-enum class ELEMENT
-{
-    VERTEX = 0,
-    EDGE   = 1,
-    FACE   = 2
-};
-
-/**
  * @brief Various query operations supported in RXMeshStatic
  */
 enum class Op
