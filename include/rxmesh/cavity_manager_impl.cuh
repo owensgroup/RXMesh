@@ -1949,17 +1949,9 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
                                 m_patch_info.active_mask_f);
 
     // store hashtable
-    detail::store<blockThreads>(m_s_table_v,
-                                m_patch_info.lp_v.get_capacity(),
-                                m_patch_info.lp_v.get_table());
-
-    detail::store<blockThreads>(m_s_table_e,
-                                m_patch_info.lp_e.get_capacity(),
-                                m_patch_info.lp_e.get_table());
-
-    detail::store<blockThreads>(m_s_table_f,
-                                m_patch_info.lp_f.get_capacity(),
-                                m_patch_info.lp_f.get_table());
+    m_patch_info.lp_v.write_to_global_memory<blockThreads>(m_s_table_v);
+    m_patch_info.lp_e.write_to_global_memory<blockThreads>(m_s_table_e);
+    m_patch_info.lp_f.write_to_global_memory<blockThreads>(m_s_table_f);
 
     block.sync();
     // readd the patch to the queue if there is ownership change

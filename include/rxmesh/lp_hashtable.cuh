@@ -212,9 +212,7 @@ struct LPHashTable
     __device__ __inline__ void write_to_global_memory(const LPPair* s_table)
     {
 #ifdef __CUDA_ARCH__
-        for (int i = threadIdx.x; i < m_capacity; i += blockSize) {
-            m_table[i] = s_table[i];
-        }
+        detail::store<blockSize>(s_table, m_capacity, m_table);
 #endif
     }
 
