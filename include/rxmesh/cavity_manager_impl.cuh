@@ -786,35 +786,14 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::load_hashtable(
     cooperative_groups::thread_block& block)
 {
-    // assert(m_patch_info.lp_v.get_capacity() * sizeof(LPPair) <=
-    //       m_vert_cap * sizeof(uint16_t));
+
     m_s_table_v = reinterpret_cast<LPPair*>(m_s_cavity_id_v);
-
-    // assert(m_patch_info.lp_e.get_capacity() * sizeof(LPPair) <=
-    //       m_edge_cap * sizeof(uint16_t));
     m_s_table_e = reinterpret_cast<LPPair*>(m_s_cavity_id_e);
-
-    // assert(m_patch_info.lp_f.get_capacity() * sizeof(LPPair) <=
-    //       m_face_cap * sizeof(uint16_t));
     m_s_table_f = reinterpret_cast<LPPair*>(m_s_cavity_id_f);
 
-    detail::load_async(block,
-                       m_patch_info.lp_v.get_table(),
-                       m_patch_info.lp_v.get_capacity(),
-                       m_s_table_v,
-                       false);
-
-    detail::load_async(block,
-                       m_patch_info.lp_e.get_table(),
-                       m_patch_info.lp_e.get_capacity(),
-                       m_s_table_e,
-                       false);
-
-    detail::load_async(block,
-                       m_patch_info.lp_f.get_table(),
-                       m_patch_info.lp_f.get_capacity(),
-                       m_s_table_f,
-                       true);
+    m_patch_info.lp_v.load_in_shared_memory(block, m_s_table_v, false);
+    m_patch_info.lp_e.load_in_shared_memory(block, m_s_table_e, false);
+    m_patch_info.lp_f.load_in_shared_memory(block, m_s_table_f, true);
 }
 
 
@@ -1215,7 +1194,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             }
             block.sync();
         }
-        
+
 
         if (!lock_patches_to_lock()) {
             return false;
@@ -1256,7 +1235,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             }
             block.sync();
         }
-        
+
 
         if (!lock_patches_to_lock()) {
             return false;
@@ -1322,7 +1301,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             }
             block.sync();
         }
-                
+
         if (!lock_patches_to_lock()) {
             return false;
         }

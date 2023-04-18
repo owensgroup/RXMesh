@@ -1287,32 +1287,9 @@ void RXMeshDynamic::update_host()
                               cudaMemcpyDeviceToHost));
 
         // copy lp hashtable
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].lp_v.get_table(),
-                              d_patch.lp_v.get_table(),
-                              d_patch.lp_v.num_bytes(),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].lp_e.get_table(),
-                              d_patch.lp_e.get_table(),
-                              d_patch.lp_e.num_bytes(),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].lp_f.get_table(),
-                              d_patch.lp_f.get_table(),
-                              d_patch.lp_f.num_bytes(),
-                              cudaMemcpyDeviceToHost));
-
-        // copy lp hashtable stash
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].lp_v.get_stash(),
-                              d_patch.lp_v.get_stash(),
-                              LPHashTable::stash_size * sizeof(LPPair),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].lp_e.get_stash(),
-                              d_patch.lp_e.get_stash(),
-                              LPHashTable::stash_size * sizeof(LPPair),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].lp_f.get_stash(),
-                              d_patch.lp_f.get_stash(),
-                              LPHashTable::stash_size * sizeof(LPPair),
-                              cudaMemcpyDeviceToHost));
+        m_h_patches_info[p].lp_v.move(d_patch.lp_v);
+        m_h_patches_info[p].lp_e.move(d_patch.lp_e);
+        m_h_patches_info[p].lp_f.move(d_patch.lp_f);
     }
 
 

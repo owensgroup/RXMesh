@@ -110,11 +110,7 @@ __device__ __inline__ void query_block_dispatcher(
     auto alloc_then_load_table = [&](bool with_wait) {
         s_table = shrd_alloc.template alloc<LPPair>(
             output_lp_hashtable.get_capacity());
-        load_async(block,
-                   output_lp_hashtable.get_table(),
-                   output_lp_hashtable.get_capacity(),
-                   s_table,
-                   with_wait);
+        output_lp_hashtable.load_in_shared_memory(block, s_table, with_wait);
     };
 
     if constexpr (op != Op::FV && op != Op::VV && op != Op::FF &&

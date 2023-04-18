@@ -122,7 +122,7 @@ TEST(RXMesh, DISABLED_BenchmarkLPHashTable)
 
             bool fail = false;
             for (auto& p : pairs) {
-                if (!table.insert(p, table.get_table())) {
+                if (!table.insert(p)) {
                     fail = true;
                     break;
                 }

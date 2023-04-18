@@ -25,6 +25,8 @@
 #include "rxmesh/util/prime_numbers.h"
 
 #ifdef __CUDA_ARCH__
+#include <cooperative_groups.h>
+#include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/util.cuh"
 #endif
 
@@ -104,21 +106,6 @@ struct LPHashTable
         randomize_hash_functions(rng);
     }
 
-    /**
-     * @brief return a pointer to the hash table
-     */
-    __host__ __device__ __inline__ LPPair* get_table()
-    {
-        return m_table;
-    }
-
-    /**
-     * @brief return a pointer to the stash
-     */
-    __host__ __device__ __inline__ LPPair* get_stash()
-    {
-        return m_stash;
-    }
 
     /**
      * @brief Get the hash table capacity
@@ -190,19 +177,59 @@ struct LPHashTable
         m_hasher3 = initialize_hf<HashT>(rng);
     }
 
+
+    /**
+     * @brief memcpy the hashtable from host to device, host to host, device to
+     * host, device to device depending on where the src and this is allocated
+     */
+    void move(const LPHashTable src)
+    {
+        const size_t stash_num_bytes = LPHashTable::stash_size * sizeof(LPPair);
+        if (src.m_is_on_device && m_is_on_device) {
+            CUDA_ERROR(cudaMemcpy(
+                m_table, src.m_table, num_bytes(), cudaMemcpyDeviceToDevice));
+            CUDA_ERROR(cudaMemcpy(m_stash,
+                                  src.m_stash,
+                                  stash_num_bytes,
+                                  cudaMemcpyDeviceToDevice));
+        }
+
+        if (!src.m_is_on_device && !m_is_on_device) {
+            std::memcpy(m_table, src.m_table, num_bytes());
+            std::memcpy(m_stash, src.m_stash, stash_num_bytes);
+        }
+
+        if (src.m_is_on_device && !m_is_on_device) {
+            CUDA_ERROR(cudaMemcpy(
+                m_table, src.m_table, num_bytes(), cudaMemcpyDeviceToHost));
+            CUDA_ERROR(cudaMemcpy(
+                m_stash, src.m_stash, stash_num_bytes, cudaMemcpyDeviceToHost));
+        }
+
+        if (!src.m_is_on_device && m_is_on_device) {
+            CUDA_ERROR(cudaMemcpy(
+                m_table, src.m_table, num_bytes(), cudaMemcpyHostToDevice));
+            CUDA_ERROR(cudaMemcpy(
+                m_stash, src.m_stash, stash_num_bytes, cudaMemcpyHostToDevice));
+        }
+    }
+
+
+#ifdef __CUDA_ARCH__
     /**
      * @brief Load the memory used for the hash table into a shared memory
      * buffer
      */
-    template <uint32_t blockSize>
-    __device__ __inline__ void load_in_shared_memory(LPPair* s_table) const
+    __device__ __inline__ void load_in_shared_memory(
+        cooperative_groups::thread_block& block,
+        LPPair*                           s_table,
+        bool                              with_wait) const
     {
-#ifdef __CUDA_ARCH__
-        for (int i = threadIdx.x; i < m_capacity; i += blockSize) {
-            s_table[i] = m_table[i];
-        }
-#endif
+
+        detail::load_async(block, m_table, m_capacity, s_table, with_wait);
     }
+#endif
+
 
     /**
      * @brief write the content of the hash table from (likely shared memory)

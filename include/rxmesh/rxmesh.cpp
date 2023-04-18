@@ -975,15 +975,7 @@ void RXMesh::build_device()
                 }
             }
 
-            CUDA_ERROR(cudaMemcpy(d_hashtable.get_table(),
-                                  h_hashtable.get_table(),
-                                  h_hashtable.num_bytes(),
-                                  cudaMemcpyHostToDevice));
-
-            CUDA_ERROR(cudaMemcpy(d_hashtable.get_stash(),
-                                  h_hashtable.get_stash(),
-                                  LPHashTable::stash_size * sizeof(LPPair),
-                                  cudaMemcpyHostToDevice));
+            d_hashtable.move(h_hashtable);            
         };
 
 
