@@ -67,13 +67,20 @@ struct LPPair
         m_pair |= pv;
     }
 
+    __host__ __device__ LPPair(KeyT key, ValueT value)
+    {
+        m_pair = key;
+        m_pair = m_pair << 16;
+        m_pair |= value;
+    }
+
     __host__ __device__ LPPair() : m_pair(INVALID32){};
     __host__ __device__ LPPair(uint32_t p) : m_pair(p){};
-    LPPair(const LPPair& other)      = default;
-    LPPair(LPPair&&)                 = default;
+    LPPair(const LPPair& other) = default;
+    LPPair(LPPair&&)            = default;
     LPPair& operator=(const LPPair&) = default;
-    LPPair& operator=(LPPair&&)      = default;
-    ~LPPair()                        = default;
+    LPPair& operator=(LPPair&&) = default;
+    ~LPPair()                   = default;
 
     /**
      * @brief Construct and return a tombstone pair
@@ -112,7 +119,7 @@ struct LPPair
 
 
     /**
-     * @brief the key used for hashing
+     * @brief the value associated with the key
      */
     __device__ __host__ __inline__ ValueT value() const
     {

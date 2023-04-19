@@ -31,7 +31,7 @@ struct LPArray
         if (m_is_on_device) {
             CUDA_ERROR(cudaMalloc((void**)&m_table, num_bytes()));
         } else {
-            m_table = (uint16_t*)malloc(num_bytes());
+            m_table = (LPPair::ValueT*)malloc(num_bytes());
         }
 
         clear();
@@ -91,7 +91,7 @@ struct LPArray
      */
     __host__ __device__ __inline__ uint32_t num_bytes() const
     {
-        return m_capacity * sizeof(uint16_t);
+        return m_capacity * sizeof(LPPair::ValueT);
     }
 
 
@@ -100,7 +100,8 @@ struct LPArray
      * buffer
      */
     template <uint32_t blockSize>
-    __device__ __inline__ void write_to_global_memory(const uint16_t* s_table)
+    __device__ __inline__ void write_to_global_memory(
+        const LPPair::ValueT* s_table)
     {
 #ifdef __CUDA_ARCH__
         detail::store<blockSize>(s_table, m_capacity, m_table);
@@ -117,11 +118,14 @@ struct LPArray
      * @return true if the insertion succeeded and false otherwise
      */
     __host__ __device__ __inline__ bool insert(
-        LPPair             pair,
-        volatile uint16_t* table = nullptr)
+        LPPair                   pair,
+        volatile LPPair::ValueT* table = nullptr)
     {
-
-        return true;
+        if (table != nullptr) {
+            return table[pair.key()] = pair.value();
+        } else {
+            return m_table[pair.key()] = pair.value();
+        }
     }
 
     /**
@@ -133,7 +137,7 @@ struct LPArray
      */
     __host__ __device__ __inline__ LPPair find(
         const typename LPPair::KeyT key,
-        const uint16_t*             table = nullptr) const
+        const LPPair::ValueT*       table = nullptr) const
     {
         return find(key, table);
     }
@@ -158,7 +162,7 @@ struct LPArray
      * device)
      */
     __host__ __device__ __inline__ void remove(const typename LPPair::KeyT key,
-                                               uint16_t* table = nullptr)
+                                               LPPair::ValueT* table = nullptr)
     {
 
         if (table != nullptr) {
@@ -180,16 +184,18 @@ struct LPArray
      */
     __host__ __device__ __inline__ LPPair find(
         const typename LPPair::KeyT key,
-        const LPPair*               table = nullptr) const
+        const LPPair::ValueT*       table = nullptr) const
     {
-
-
-        return LPPair::sentinel_pair();
+        if (table != nullptr) {
+            return LPPair(key, table[key]);
+        } else {
+            return LPPair(key, m_table[key]);
+        }
     }
 
 
-    uint16_t* m_table;
-    uint16_t  m_capacity;
-    bool      m_is_on_device;
+    LPPair::ValueT* m_table;
+    uint16_t        m_capacity;
+    bool            m_is_on_device;
 };
 }  // namespace rxmesh
