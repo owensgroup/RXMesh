@@ -15,11 +15,12 @@ namespace rxmesh {
 namespace detail {
 
 template <typename T, typename SizeT>
-__device__ __inline__ void load_async(cooperative_groups::thread_block& block,
-                                      const T*                          in,
-                                      const SizeT                       size,
-                                      T*                                out,
-                                      bool with_wait)
+__device__ __forceinline__ void load_async(
+    cooperative_groups::thread_block& block,
+    const T*                          in,
+    const SizeT                       size,
+    T*                                out,
+    bool                              with_wait)
 {
     cooperative_groups::memcpy_async(block, out, in, sizeof(T) * size);
 
@@ -30,10 +31,10 @@ __device__ __inline__ void load_async(cooperative_groups::thread_block& block,
 
 
 template <typename T, typename SizeT>
-__device__ __inline__ void load_async(const T*    in,
-                                      const SizeT size,
-                                      T*          out,
-                                      bool        with_wait)
+__device__ __forceinline__ void load_async(const T*    in,
+                                           const SizeT size,
+                                           T*          out,
+                                           bool        with_wait)
 {
     namespace cg           = cooperative_groups;
     cg::thread_block block = cg::this_thread_block();

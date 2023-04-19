@@ -791,9 +791,9 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::load_hashtable(
     m_s_table_e = reinterpret_cast<LPPair*>(m_s_cavity_id_e);
     m_s_table_f = reinterpret_cast<LPPair*>(m_s_cavity_id_f);
 
-    m_patch_info.lp_v.load_in_shared_memory(block, m_s_table_v, false);
-    m_patch_info.lp_e.load_in_shared_memory(block, m_s_table_e, false);
-    m_patch_info.lp_f.load_in_shared_memory(block, m_s_table_f, true);
+    m_patch_info.lp_v.load_in_shared_memory(m_s_table_v, false);
+    m_patch_info.lp_e.load_in_shared_memory(m_s_table_e, false);
+    m_patch_info.lp_f.load_in_shared_memory(m_s_table_f, true);
 }
 
 

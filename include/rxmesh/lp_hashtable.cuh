@@ -16,6 +16,8 @@
  */
 
 #pragma once
+#include <cooperative_groups.h>
+
 #include <algorithm>
 #include <random>
 
@@ -25,7 +27,6 @@
 #include "rxmesh/util/prime_numbers.h"
 
 #ifdef __CUDA_ARCH__
-#include <cooperative_groups.h>
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/util.cuh"
 #endif
@@ -215,20 +216,18 @@ struct LPHashTable
     }
 
 
-#ifdef __CUDA_ARCH__
     /**
      * @brief Load the memory used for the hash table into a shared memory
      * buffer
      */
-    __device__ __inline__ void load_in_shared_memory(
-        cooperative_groups::thread_block& block,
-        LPPair*                           s_table,
-        bool                              with_wait) const
+    template <typename DummyT = void>
+    __device__ __inline__ void load_in_shared_memory(LPPair* s_table,
+                                                     bool    with_wait) const
     {
-
-        detail::load_async(block, m_table, m_capacity, s_table, with_wait);
-    }
+#ifdef __CUDA_ARCH__
+        detail::load_async(m_table, m_capacity, s_table, with_wait);
 #endif
+    }
 
 
     /**
