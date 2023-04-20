@@ -3,6 +3,7 @@
 
 #include "rxmesh/handle.h"
 #include "rxmesh/local.h"
+#include "rxmesh/lp_array.cuh"
 #include "rxmesh/lp_hashtable.cuh"
 #include "rxmesh/patch_lock.h"
 #include "rxmesh/patch_stash.cuh"

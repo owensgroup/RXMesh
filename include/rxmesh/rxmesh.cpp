@@ -929,6 +929,7 @@ void RXMesh::build_device()
         auto build_ht = [&](const std::vector<std::vector<uint32_t>>& ltog,
                             const std::vector<uint32_t>& element_patch,
                             const std::vector<uint16_t>& num_owned,
+                            const uint16_t               cap,
                             PatchStash&                  stash,
                             LPHashTable&                 h_hashtable,
                             LPHashTable&                 d_hashtable) {
@@ -937,6 +938,7 @@ void RXMesh::build_device()
             const uint16_t capacity = static_cast<uint16_t>(std::ceil(
                 m_capacity_factor * static_cast<float>(num_not_owned) /
                 m_lp_hashtable_load_factor));
+            // const uint16_t capacity = cap;
 
             h_hashtable = LPHashTable(capacity, false);
             d_hashtable = LPHashTable(capacity, true);
@@ -975,13 +977,14 @@ void RXMesh::build_device()
                 }
             }
 
-            d_hashtable.move(h_hashtable);            
+            d_hashtable.move(h_hashtable);
         };
 
 
         build_ht(m_h_patches_ltog_v,
                  m_patcher->get_vertex_patch(),
                  m_h_num_owned_v,
+                 m_h_patches_info[p].vertices_capacity[0],
                  m_h_patches_info[p].patch_stash,
                  m_h_patches_info[p].lp_v,
                  d_patch.lp_v);
@@ -989,6 +992,7 @@ void RXMesh::build_device()
         build_ht(m_h_patches_ltog_e,
                  m_patcher->get_edge_patch(),
                  m_h_num_owned_e,
+                 m_h_patches_info[p].edges_capacity[0],
                  m_h_patches_info[p].patch_stash,
                  m_h_patches_info[p].lp_e,
                  d_patch.lp_e);
@@ -996,6 +1000,7 @@ void RXMesh::build_device()
         build_ht(m_h_patches_ltog_f,
                  m_patcher->get_face_patch(),
                  m_h_num_owned_f,
+                 m_h_patches_info[p].faces_capacity[0],
                  m_h_patches_info[p].patch_stash,
                  m_h_patches_info[p].lp_f,
                  d_patch.lp_f);

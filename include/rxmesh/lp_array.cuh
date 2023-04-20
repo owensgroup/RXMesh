@@ -1,3 +1,4 @@
+#if 0
 #pragma once
 #include <algorithm>
 #include <random>
@@ -8,30 +9,30 @@
 
 namespace rxmesh {
 
-struct LPArray
+struct LPHashTable
 {
-    __device__ __host__ LPArray()
+    __device__ __host__ LPHashTable()
         : m_table(nullptr), m_capacity(0), m_is_on_device(false)
     {
     }
-    LPArray(const LPArray& other) = default;
-    LPArray(LPArray&&)            = default;
-    LPArray& operator=(const LPArray&) = default;
-    LPArray& operator=(LPArray&&) = default;
-    ~LPArray()                    = default;
+    LPHashTable(const LPHashTable& other) = default;
+    LPHashTable(LPHashTable&&)            = default;
+    LPHashTable& operator=(const LPHashTable&) = default;
+    LPHashTable& operator=(LPHashTable&&) = default;
+    ~LPHashTable()                        = default;
 
     /**
      * @brief Constructor using the hash table capacity.This is used as
      * allocation size
      */
-    explicit LPArray(const uint16_t capacity, bool is_on_device)
+    explicit LPHashTable(const uint16_t capacity, bool is_on_device)
         : m_capacity(capacity), m_is_on_device(is_on_device)
     {
 
         if (m_is_on_device) {
             CUDA_ERROR(cudaMalloc((void**)&m_table, num_bytes()));
         } else {
-            m_table = (LPPair::ValueT*)malloc(num_bytes());
+            m_table = (LPPair*)malloc(num_bytes());
         }
 
         clear();
@@ -91,7 +92,48 @@ struct LPArray
      */
     __host__ __device__ __inline__ uint32_t num_bytes() const
     {
-        return m_capacity * sizeof(LPPair::ValueT);
+        return m_capacity * sizeof(LPPair);
+    }
+
+
+    /**
+     * @brief memcpy the hashtable from host to device, host to host, device to
+     * host, device to device depending on where the src and this is allocated
+     */
+    void move(const LPHashTable src)
+    {
+        if (src.m_is_on_device && m_is_on_device) {
+            CUDA_ERROR(cudaMemcpy(
+                m_table, src.m_table, num_bytes(), cudaMemcpyDeviceToDevice));
+        }
+
+        if (!src.m_is_on_device && !m_is_on_device) {
+            std::memcpy(m_table, src.m_table, num_bytes());
+        }
+
+        if (src.m_is_on_device && !m_is_on_device) {
+            CUDA_ERROR(cudaMemcpy(
+                m_table, src.m_table, num_bytes(), cudaMemcpyDeviceToHost));
+        }
+
+        if (!src.m_is_on_device && m_is_on_device) {
+            CUDA_ERROR(cudaMemcpy(
+                m_table, src.m_table, num_bytes(), cudaMemcpyHostToDevice));
+        }
+    }
+
+
+    /**
+     * @brief Load the memory used for the hash table into a shared memory
+     * buffer
+     */
+    template <typename DummyT = void>
+    __device__ __inline__ void load_in_shared_memory(LPPair* s_table,
+                                                     bool    with_wait) const
+    {
+#ifdef __CUDA_ARCH__
+        detail::load_async(m_table, m_capacity, s_table, with_wait);
+#endif
     }
 
 
@@ -100,8 +142,7 @@ struct LPArray
      * buffer
      */
     template <uint32_t blockSize>
-    __device__ __inline__ void write_to_global_memory(
-        const LPPair::ValueT* s_table)
+    __device__ __inline__ void write_to_global_memory(const LPPair* s_table)
     {
 #ifdef __CUDA_ARCH__
         detail::store<blockSize>(s_table, m_capacity, m_table);
@@ -117,15 +158,15 @@ struct LPArray
      * device)
      * @return true if the insertion succeeded and false otherwise
      */
-    __host__ __device__ __inline__ bool insert(
-        LPPair                   pair,
-        volatile LPPair::ValueT* table = nullptr)
+    __host__ __device__ __inline__ bool insert(LPPair  pair,
+                                               LPPair* table = nullptr)
     {
         if (table != nullptr) {
-            return table[pair.key()] = pair.value();
+            table[pair.key()] = pair;
         } else {
-            return m_table[pair.key()] = pair.value();
+            m_table[pair.key()] = pair;
         }
+        return true;
     }
 
     /**
@@ -137,9 +178,13 @@ struct LPArray
      */
     __host__ __device__ __inline__ LPPair find(
         const typename LPPair::KeyT key,
-        const LPPair::ValueT*       table = nullptr) const
+        const LPPair*               table = nullptr) const
     {
-        return find(key, table);
+        if (table != nullptr) {
+            return table[key];
+        } else {
+            return m_table[key];
+        }
     }
 
 
@@ -162,40 +207,21 @@ struct LPArray
      * device)
      */
     __host__ __device__ __inline__ void remove(const typename LPPair::KeyT key,
-                                               LPPair::ValueT* table = nullptr)
+                                               LPPair* table = nullptr)
     {
 
         if (table != nullptr) {
-            table[key] = INVALID16;
+            table[key] = INVALID32;
         } else {
-            m_table[key] = INVALID16;
+            m_table[key] = INVALID32;
         }
     }
 
 
    private:
-    /**
-     * @brief Find a pair in the hash table given its key.
-     * @param key input key
-     * @param bucket_id returned bucket ID of the found LPPair
-     * @param table pointer to the hash table (could shared memory on the
-     * device)
-     * @return a LPPair pair that contains the key and its associated value
-     */
-    __host__ __device__ __inline__ LPPair find(
-        const typename LPPair::KeyT key,
-        const LPPair::ValueT*       table = nullptr) const
-    {
-        if (table != nullptr) {
-            return LPPair(key, table[key]);
-        } else {
-            return LPPair(key, m_table[key]);
-        }
-    }
-
-
-    LPPair::ValueT* m_table;
-    uint16_t        m_capacity;
-    bool            m_is_on_device;
+    LPPair*  m_table;
+    uint16_t m_capacity;
+    bool     m_is_on_device;
 };
 }  // namespace rxmesh
+#endif

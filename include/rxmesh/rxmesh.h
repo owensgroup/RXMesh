@@ -304,18 +304,24 @@ class RXMesh
                 std::ceil(m_capacity_factor *
                           static_cast<float>(m_max_not_owned_vertices) /
                           m_lp_hashtable_load_factor)));
+            // return this->m_capacity_factor *
+            //       static_cast<float>(this->m_max_vertices_per_patch);
         }
 
         if constexpr (std::is_same_v<LocalT, LocalEdgeT>) {
             return find_next_prime_number(static_cast<uint16_t>(std::ceil(
                 m_capacity_factor * static_cast<float>(m_max_not_owned_edges) /
                 m_lp_hashtable_load_factor)));
+            // return this->m_capacity_factor *
+            //       static_cast<float>(this->m_max_edges_per_patch);
         }
 
         if constexpr (std::is_same_v<LocalT, LocalFaceT>) {
             return find_next_prime_number(static_cast<uint16_t>(std::ceil(
                 m_capacity_factor * static_cast<float>(m_max_not_owned_faces) /
                 m_lp_hashtable_load_factor)));
+            // return this->m_capacity_factor *
+            //       static_cast<float>(this->m_max_faces_per_patch);
         }
     }
 
