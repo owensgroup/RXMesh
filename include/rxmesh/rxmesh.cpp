@@ -935,10 +935,13 @@ void RXMesh::build_device()
                             LPHashTable&                 d_hashtable) {
             const uint16_t num_not_owned = ltog[p].size() - num_owned[p];
 
+#ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
+            const uint16_t capacity = cap;
+#else
             const uint16_t capacity = static_cast<uint16_t>(std::ceil(
                 m_capacity_factor * static_cast<float>(num_not_owned) /
                 m_lp_hashtable_load_factor));
-            // const uint16_t capacity = cap;
+#endif
 
             h_hashtable = LPHashTable(capacity, false);
             d_hashtable = LPHashTable(capacity, true);

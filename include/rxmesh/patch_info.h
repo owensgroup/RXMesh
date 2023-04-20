@@ -1,14 +1,21 @@
 #pragma once
+
+#define FLAT_ARRAY_FOR_LP_HASHTABLE
+
 #include <stdint.h>
 
 #include "rxmesh/handle.h"
 #include "rxmesh/local.h"
-#include "rxmesh/lp_array.cuh"
-#include "rxmesh/lp_hashtable.cuh"
 #include "rxmesh/patch_lock.h"
 #include "rxmesh/patch_stash.cuh"
 #include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/macros.h"
+
+#ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
+#include "rxmesh/lp_array.cuh"
+#else
+#include "rxmesh/lp_hashtable.cuh"
+#endif
 
 namespace rxmesh {
 

@@ -1,4 +1,3 @@
-#if 0
 #pragma once
 #include <algorithm>
 #include <random>
@@ -224,4 +223,3 @@ struct LPHashTable
     bool     m_is_on_device;
 };
 }  // namespace rxmesh
-#endif

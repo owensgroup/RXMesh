@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include "rxmesh/context.h"
 #include "rxmesh/handle.h"
-#include "rxmesh/lp_hashtable.cuh"
+//#include "rxmesh/lp_hashtable.cuh"
 #include "rxmesh/patch_stash.cuh"
 #include "rxmesh/util/bitmask_util.h"
 
