@@ -64,13 +64,16 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     m_edge_cap = m_patch_info.edges_capacity[0];
     m_face_cap = m_patch_info.faces_capacity[0];
 
-    // divide by 2 since size of LPPair is 4 bytes
-    m_s_cavity_id_v = shrd_alloc.alloc<uint16_t>(std::max(
-        m_vert_cap, uint16_t(m_patch_info.lp_v.get_capacity() / uint16_t(2))));
-    m_s_cavity_id_e = shrd_alloc.alloc<uint16_t>(std::max(
-        m_edge_cap, uint16_t(m_patch_info.lp_e.get_capacity() / uint16_t(2))));
-    m_s_cavity_id_f = shrd_alloc.alloc<uint16_t>(std::max(
-        m_face_cap, uint16_t(m_patch_info.lp_f.get_capacity() / uint16_t(2))));
+    const uint32_t vert_cap_bytes = sizeof(uint16_t) * m_vert_cap;
+    const uint32_t edge_cap_bytes = sizeof(uint16_t) * m_edge_cap;
+    const uint32_t face_cap_bytes = sizeof(uint16_t) * m_face_cap;
+
+    m_s_cavity_id_v = reinterpret_cast<uint16_t*>(shrd_alloc.alloc(
+        std::max(vert_cap_bytes, m_patch_info.lp_v.num_bytes())));
+    m_s_cavity_id_e = reinterpret_cast<uint16_t*>(shrd_alloc.alloc(
+        std::max(edge_cap_bytes, m_patch_info.lp_e.num_bytes())));
+    m_s_cavity_id_f = reinterpret_cast<uint16_t*>(shrd_alloc.alloc(
+        std::max(face_cap_bytes, m_patch_info.lp_f.num_bytes())));
 
     m_s_cavity_boundary_edges = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
 

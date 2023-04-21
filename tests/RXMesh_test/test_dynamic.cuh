@@ -37,8 +37,6 @@ __global__ static void random_flips(rxmesh::Context                context,
 
     detail::for_each_edge(cavity_manager.patch_info(),
                           [&](const EdgeHandle eh) {
-                              // e_attr(context.get_owner_handle(eh)) =
-                              // eh.local_id();
                               if (to_flip(eh) == 1) {
                                   cavity_manager.create(eh);
                                   to_flip(eh) = 2;
