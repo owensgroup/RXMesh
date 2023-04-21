@@ -17,6 +17,12 @@
 #include "rxmesh/lp_hashtable.cuh"
 #endif
 
+
+#ifdef __CUDA_ARCH__
+#include "rxmesh/kernels/util.cuh"
+#endif
+
+
 namespace rxmesh {
 
 /**
@@ -83,6 +89,39 @@ struct ALIGN(16) PatchInfo
     // specially if more than one thread is updating the patch
     PatchLock lock;
 
+    int* dirty;
+
+    /**
+     * @brief update the dirty flag associated with this patch. The calling
+     * thread should have locked the patch before updating
+     * @return
+     */
+    __device__ __inline__ void set_dirty()
+    {
+#ifdef __CUDA_ARCH__
+        assert(lock.is_locked());
+        ::atomicAdd(dirty, 1u);
+        __threadfence();
+#endif
+    }
+
+    /**
+     * @brief clear up the dirty flag
+     */
+    __device__ __inline__ void clear_dirty()
+    {
+        dirty[0] = 0;
+    }
+
+    /**
+     * @brief check if the patch is dirty (ew!)
+     */
+    __device__ __inline__ bool is_dirty()
+    {
+#ifdef __CUDA_ARCH__
+        return atomic_read(dirty) != 0;
+#endif
+    }
 
     template <typename HandleT>
     __device__ __host__ __inline__ HandleT find(const LPPair::KeyT key,

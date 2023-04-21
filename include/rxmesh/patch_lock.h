@@ -1,4 +1,7 @@
 #pragma once
+#ifdef __CUDA_ARCH__
+#include "rxmesh/kernels/util.cuh"
+#endif
 
 namespace rxmesh {
 /**
@@ -53,6 +56,18 @@ struct PatchLock
     }
 
     /**
+     * @brief check if the patch is locked
+     */
+    __device__ bool is_locked()
+    {
+#ifdef __CUDA_ARCH__
+        return atomic_read(lock) == LOCKED;
+#else
+        return false;
+#endif
+    }
+
+    /**
      * @brief initialize the lock by allocating memory and initialized the
      * values. Should only be called from the host
      */
@@ -76,6 +91,7 @@ struct PatchLock
         GPU_FREE(lock);
         GPU_FREE(spin);
     }
+
 
    private:
     static constexpr uint32_t FREE        = 0;
