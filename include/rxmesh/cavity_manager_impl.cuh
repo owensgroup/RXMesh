@@ -94,6 +94,9 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
         ownership.reset(block);
         in_cavity.reset(block);
 
+        //to remove the racecheck hazard report due to WAW on owned and active 
+        block.sync();
+
         detail::load_async(block,
                            reinterpret_cast<const char*>(g_owned),
                            owned.num_bytes(),
@@ -103,9 +106,7 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
                            reinterpret_cast<const char*>(g_active),
                            active.num_bytes(),
                            reinterpret_cast<char*>(active.m_bitmask),
-                           false);
-
-        ownership.reset(block);
+                           false);        
     };
 
 
