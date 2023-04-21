@@ -10,3 +10,4 @@ input/*
 build/
 include/rxmesh/util/git_sha1.cpp
 .vscode/
+scripts/*.log
