@@ -126,7 +126,6 @@ RXMesh::~RXMesh()
         free(m_h_patches_info[p].owned_mask_e);
         free(m_h_patches_info[p].owned_mask_f);
         free(m_h_patches_info[p].num_faces);
-        free(m_h_patches_info[p].timestamp);
         m_h_patches_info[p].lp_v.free();
         m_h_patches_info[p].lp_e.free();
         m_h_patches_info[p].lp_f.free();
@@ -153,7 +152,6 @@ RXMesh::~RXMesh()
         GPU_FREE(m_h_patches_info[p].ev);
         GPU_FREE(m_h_patches_info[p].fe);
         GPU_FREE(m_h_patches_info[p].num_faces);
-        GPU_FREE(m_h_patches_info[p].timestamp);
         m_h_patches_info[p].lp_v.free();
         m_h_patches_info[p].lp_e.free();
         m_h_patches_info[p].lp_f.free();
@@ -761,10 +759,8 @@ void RXMesh::build_device()
         m_h_patches_info[p].vertices_capacity[0] = static_cast<uint16_t>(
             m_capacity_factor *
             static_cast<float>(m_h_patches_info[p].num_vertices[0]));
-        m_h_patches_info[p].patch_id     = p;
-        m_h_patches_info[p].patch_stash  = PatchStash(false);
-        m_h_patches_info[p].timestamp    = (uint32_t*)malloc(sizeof(uint32_t));
-        m_h_patches_info[p].timestamp[0] = 0;
+        m_h_patches_info[p].patch_id    = p;
+        m_h_patches_info[p].patch_stash = PatchStash(false);
 
         uint16_t* d_counts;
         CUDA_ERROR(cudaMalloc((void**)&d_counts, 6 * sizeof(uint16_t)));
@@ -825,13 +821,6 @@ void RXMesh::build_device()
             m_h_patches_info[p].fe,
             m_h_patches_info[p].num_faces[0] * 3 * sizeof(LocalEdgeT),
             cudaMemcpyHostToDevice));
-
-        CUDA_ERROR(cudaMalloc((void**)&d_patch.timestamp, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMemcpy(d_patch.timestamp,
-                              m_h_patches_info[p].timestamp,
-                              sizeof(uint32_t),
-                              cudaMemcpyHostToDevice));
-
 
         // allocate and set bitmask
         auto bitmask = [&](uint32_t*& d_mask,

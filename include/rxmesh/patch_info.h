@@ -83,16 +83,6 @@ struct ALIGN(16) PatchInfo
     // specially if more than one thread is updating the patch
     PatchLock lock;
 
-    // a timestamp that is updated every time the patch is modified
-    uint32_t* timestamp;
-
-    __device__ __inline__ void update_timestamp()
-    {
-#ifdef __CUDA_ARCH__
-        ::atomicAdd(timestamp, 1u);
-        __threadfence();
-#endif
-    }
 
     template <typename HandleT>
     __device__ __host__ __inline__ HandleT find(const LPPair::KeyT key,
