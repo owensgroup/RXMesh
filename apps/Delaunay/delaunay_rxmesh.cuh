@@ -122,8 +122,8 @@ __global__ static void delaunay_edge_flip(rxmesh::Context              context,
                                     new_edge.get_flip_dedge());
         });
 
-        cavity_manager.epilogue(block);
     }
+    cavity_manager.epilogue(block);
 }
 
 inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
@@ -164,7 +164,7 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
     timer.start();
     int iter = 0;
     while (!rx.is_queue_empty()) {
-        RXMESH_INFO("iter = {}", ++iter);
+        RXMESH_INFO("iter = {}", iter++);
         f_attr->reset(0, DEVICE);
         delaunay_edge_flip<float, blockThreads><<<launch_box.blocks,
                                                   launch_box.num_threads,

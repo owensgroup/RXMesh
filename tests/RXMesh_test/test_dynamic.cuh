@@ -68,8 +68,6 @@ __global__ static void random_flips(rxmesh::Context                context,
                                     new_edge.get_flip_dedge());
         });
         block.sync();
-
-        cavity_manager.epilogue(block);
     } else {
         detail::for_each_edge(cavity_manager.patch_info(),
                               [&](const EdgeHandle eh) {
@@ -78,6 +76,9 @@ __global__ static void random_flips(rxmesh::Context                context,
                                   }
                               });
     }
+
+
+    cavity_manager.epilogue(block);
 }
 
 TEST(RXMeshDynamic, Cavity)

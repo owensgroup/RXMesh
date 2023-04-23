@@ -5,7 +5,7 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     cooperative_groups::thread_block& block,
     Context&                          context,
     ShmemAllocator&                   shrd_alloc)
-    : m_context(context)
+    : m_write_to_gmem(true), m_context(context)
 {
     __shared__ uint32_t patch_id;
     __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
@@ -94,7 +94,7 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
         ownership.reset(block);
         in_cavity.reset(block);
 
-        //to remove the racecheck hazard report due to WAW on owned and active 
+        // to remove the racecheck hazard report due to WAW on owned and active
         block.sync();
 
         detail::load_async(block,
@@ -106,7 +106,7 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
                            reinterpret_cast<const char*>(g_active),
                            active.num_bytes(),
                            reinterpret_cast<char*>(active.m_bitmask),
-                           false);        
+                           false);
     };
 
 
@@ -270,9 +270,8 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
 
     // change patch layout to accommodate all cavities created in the patch
     if (!migrate(block)) {
+        m_write_to_gmem = false;
         unlock_locked_patches();
-        unlock();
-        push();
         return false;
     }
     block.sync();
@@ -1859,90 +1858,100 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
 {
     // make sure all writes are done
     block.sync();
+    if (m_write_to_gmem) {
+        // unlock any neighbor patch we have locked
+        unlock_locked_patches();
 
-    // update number of elements again since add_vertex/edge/face could have
-    // changed it
-    if (threadIdx.x == 0) {
-        m_patch_info.num_vertices[0] = m_s_num_vertices[0];
-        m_patch_info.num_edges[0]    = m_s_num_edges[0];
-        m_patch_info.num_faces[0]    = m_s_num_faces[0];
-    }
-
-    // cleanup the hashtable by removing the vertices/edges/faces that has
-    // changed their ownership to be in this patch (p) and thus should not
-    // be in the hashtable
-    for (uint32_t vp = threadIdx.x; vp < m_s_num_vertices[0];
-         vp += blockThreads) {
-        if (m_s_ownership_change_mask_v(vp)) {
-            m_s_readd_to_queue[0] = true;
-            m_patch_info.lp_v.remove(vp, m_s_table_v);
+        // update number of elements again since add_vertex/edge/face could have
+        // changed it
+        if (threadIdx.x == 0) {
+            m_patch_info.num_vertices[0] = m_s_num_vertices[0];
+            m_patch_info.num_edges[0]    = m_s_num_edges[0];
+            m_patch_info.num_faces[0]    = m_s_num_faces[0];
         }
-    }
 
-    for (uint32_t ep = threadIdx.x; ep < m_s_num_edges[0]; ep += blockThreads) {
-        if (m_s_ownership_change_mask_e(ep)) {
-            m_s_readd_to_queue[0] = true;
-            m_patch_info.lp_e.remove(ep, m_s_table_e);
+        // cleanup the hashtable by removing the vertices/edges/faces that has
+        // changed their ownership to be in this patch (p) and thus should not
+        // be in the hashtable
+        for (uint32_t vp = threadIdx.x; vp < m_s_num_vertices[0];
+             vp += blockThreads) {
+            if (m_s_ownership_change_mask_v(vp)) {
+                m_s_readd_to_queue[0] = true;
+                m_patch_info.lp_v.remove(vp, m_s_table_v);
+            }
         }
-    }
 
-    for (uint32_t fp = threadIdx.x; fp < m_s_num_faces[0]; fp += blockThreads) {
-        if (m_s_ownership_change_mask_f(fp)) {
-            m_s_readd_to_queue[0] = true;
-            m_patch_info.lp_f.remove(fp, m_s_table_f);
+        for (uint32_t ep = threadIdx.x; ep < m_s_num_edges[0];
+             ep += blockThreads) {
+            if (m_s_ownership_change_mask_e(ep)) {
+                m_s_readd_to_queue[0] = true;
+                m_patch_info.lp_e.remove(ep, m_s_table_e);
+            }
         }
+
+        for (uint32_t fp = threadIdx.x; fp < m_s_num_faces[0];
+             fp += blockThreads) {
+            if (m_s_ownership_change_mask_f(fp)) {
+                m_s_readd_to_queue[0] = true;
+                m_patch_info.lp_f.remove(fp, m_s_table_f);
+            }
+        }
+
+        ::atomicMax(m_context.m_max_num_vertices, m_s_num_vertices[0]);
+        ::atomicMax(m_context.m_max_num_edges, m_s_num_edges[0]);
+        ::atomicMax(m_context.m_max_num_faces, m_s_num_faces[0]);
+
+        // store connectivity
+        detail::store<blockThreads>(
+            m_s_ev,
+            2 * m_s_num_edges[0],
+            reinterpret_cast<uint16_t*>(m_patch_info.ev));
+
+        detail::store<blockThreads>(
+            m_s_fe,
+            3 * m_s_num_faces[0],
+            reinterpret_cast<uint16_t*>(m_patch_info.fe));
+
+        // store bitmask
+        detail::store<blockThreads>(m_s_owned_mask_v.m_bitmask,
+                                    DIVIDE_UP(m_s_num_vertices[0], 32),
+                                    m_patch_info.owned_mask_v);
+
+        detail::store<blockThreads>(m_s_active_mask_v.m_bitmask,
+                                    DIVIDE_UP(m_s_num_vertices[0], 32),
+                                    m_patch_info.active_mask_v);
+
+        detail::store<blockThreads>(m_s_owned_mask_e.m_bitmask,
+                                    DIVIDE_UP(m_s_num_edges[0], 32),
+                                    m_patch_info.owned_mask_e);
+
+        detail::store<blockThreads>(m_s_active_mask_e.m_bitmask,
+                                    DIVIDE_UP(m_s_num_edges[0], 32),
+                                    m_patch_info.active_mask_e);
+
+        detail::store<blockThreads>(m_s_owned_mask_f.m_bitmask,
+                                    DIVIDE_UP(m_s_num_faces[0], 32),
+                                    m_patch_info.owned_mask_f);
+
+        detail::store<blockThreads>(m_s_active_mask_f.m_bitmask,
+                                    DIVIDE_UP(m_s_num_faces[0], 32),
+                                    m_patch_info.active_mask_f);
+
+        // store hashtable
+        m_patch_info.lp_v.write_to_global_memory<blockThreads>(m_s_table_v);
+        m_patch_info.lp_e.write_to_global_memory<blockThreads>(m_s_table_e);
+        m_patch_info.lp_f.write_to_global_memory<blockThreads>(m_s_table_f);
     }
 
-    ::atomicMax(m_context.m_max_num_vertices, m_s_num_vertices[0]);
-    ::atomicMax(m_context.m_max_num_edges, m_s_num_edges[0]);
-    ::atomicMax(m_context.m_max_num_faces, m_s_num_faces[0]);
-
-    // store connectivity
-    detail::store<blockThreads>(m_s_ev,
-                                2 * m_s_num_edges[0],
-                                reinterpret_cast<uint16_t*>(m_patch_info.ev));
-
-    detail::store<blockThreads>(m_s_fe,
-                                3 * m_s_num_faces[0],
-                                reinterpret_cast<uint16_t*>(m_patch_info.fe));
-
-    // store bitmask
-    detail::store<blockThreads>(m_s_owned_mask_v.m_bitmask,
-                                DIVIDE_UP(m_s_num_vertices[0], 32),
-                                m_patch_info.owned_mask_v);
-
-    detail::store<blockThreads>(m_s_active_mask_v.m_bitmask,
-                                DIVIDE_UP(m_s_num_vertices[0], 32),
-                                m_patch_info.active_mask_v);
-
-    detail::store<blockThreads>(m_s_owned_mask_e.m_bitmask,
-                                DIVIDE_UP(m_s_num_edges[0], 32),
-                                m_patch_info.owned_mask_e);
-
-    detail::store<blockThreads>(m_s_active_mask_e.m_bitmask,
-                                DIVIDE_UP(m_s_num_edges[0], 32),
-                                m_patch_info.active_mask_e);
-
-    detail::store<blockThreads>(m_s_owned_mask_f.m_bitmask,
-                                DIVIDE_UP(m_s_num_faces[0], 32),
-                                m_patch_info.owned_mask_f);
-
-    detail::store<blockThreads>(m_s_active_mask_f.m_bitmask,
-                                DIVIDE_UP(m_s_num_faces[0], 32),
-                                m_patch_info.active_mask_f);
-
-    // store hashtable
-    m_patch_info.lp_v.write_to_global_memory<blockThreads>(m_s_table_v);
-    m_patch_info.lp_e.write_to_global_memory<blockThreads>(m_s_table_e);
-    m_patch_info.lp_f.write_to_global_memory<blockThreads>(m_s_table_f);
-
-    block.sync();
-    // readd the patch to the queue if there is ownership change
-    if (threadIdx.x == 0 && m_s_readd_to_queue[0]) {
-        m_context.m_patch_scheduler.push(m_patch_info.patch_id);
+    // re-add the patch to the queue if there is ownership change
+    // or we could not lock all neighbor patches (and thus could not write to
+    // global memory)
+    if (m_s_readd_to_queue[0] || !m_write_to_gmem) {
+        push();
     }
 
-    unlock_locked_patches();
+
+    // unlock this patch
     unlock();
 }
 }  // namespace rxmesh

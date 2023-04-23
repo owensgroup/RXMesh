@@ -20,7 +20,8 @@ struct CavityManager
      * @brief default constructor
      */
     __device__ __inline__ CavityManager()
-        : m_s_num_cavities(nullptr),
+        : m_write_to_gmem(true),
+          m_s_num_cavities(nullptr),
           m_s_cavity_size_prefix(nullptr),
           m_vert_cap(0),
           m_edge_cap(0),
@@ -436,6 +437,11 @@ struct CavityManager
         Bitmask&                          s_owned_bitmask);
 
     /*******/
+
+    // indicate if this block can write its updates to global memory during
+    // epilogue
+    bool m_write_to_gmem;
+
     // num_cavities could be uint16_t but we use int since we need atomicAdd
     int* m_s_num_cavities;
 
