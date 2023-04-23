@@ -121,8 +121,8 @@ TEST(RXMeshDynamic, Cavity)
         if (eh.patch_id() == 0) {
 
             if ((config & OnRibbonNotConflicting) == OnRibbonNotConflicting) {
-                if (eh.local_id() == 11 || eh.local_id() == 51 ||
-                    eh.local_id() == 2 || eh.local_id() == 315) {
+                if (eh.local_id() == 42 || eh.local_id() == 2 ||
+                    eh.local_id() == 53 || eh.local_id() == 315) {
                     to_flip(eh) = 1;
                 }
             }
@@ -131,7 +131,8 @@ TEST(RXMeshDynamic, Cavity)
             if ((config & OnRibbonConflicting) == OnRibbonConflicting) {
                 if (eh.local_id() == 11 || eh.local_id() == 10 ||
                     eh.local_id() == 358 || eh.local_id() == 359 ||
-                    eh.local_id() == 354 || eh.local_id() == 356) {
+                    eh.local_id() == 354 || eh.local_id() == 356 ||
+                    eh.local_id() == 51) {
                     to_flip(eh) = 1;
                 }
             }
@@ -214,7 +215,6 @@ TEST(RXMeshDynamic, Cavity)
     rx.get_polyscope_mesh()->addFaceScalarQuantity("fAttr", *f_attr);
 
     rx.render_patch(0);
-
     rx.render_patch(1);
 #endif
 
@@ -250,7 +250,7 @@ TEST(RXMeshDynamic, Cavity)
 
     EXPECT_TRUE(rx.validate());
 
-    // rx.export_obj("rand_flips.obj", *coords);
+// rx.export_obj("rand_flips.obj", *coords);
 #if USE_POLYSCOPE
     rx.update_polyscope();
     rx.polyscope_render_vertex_patch();
