@@ -304,16 +304,19 @@ class RXMeshStatic : public RXMesh
      * function signature takes a VertexHandle
      * @param stream the stream used to run the kernel in case of DEVICE
      * execution location
+     * @param with_omp for HOST execution, use OpenMP where each patch is
+     * assigned to a thread
      */
     template <typename LambdaT>
     void for_each_vertex(locationT    location,
                          LambdaT      apply,
-                         cudaStream_t stream = NULL)
+                         cudaStream_t stream   = NULL,
+                         bool         with_omp = true)
     {
         if ((location & HOST) == HOST) {
             const int num_patches = this->get_num_patches();
-#pragma omp parallel for
-            for (int p = 0; p < num_patches; ++p) {
+
+            auto run = [&](int p) {
                 for (uint16_t v = 0;
                      v < this->m_h_patches_info[p].num_vertices[0];
                      ++v) {
@@ -326,6 +329,17 @@ class RXMeshStatic : public RXMesh
                                                     v);
                         apply(v_handle);
                     }
+                }
+            };
+
+            if (!with_omp) {
+                for (int p = 0; p < num_patches; ++p) {
+                    run(p);
+                }
+            } else {
+#pragma omp parallel for
+                for (int p = 0; p < num_patches; ++p) {
+                    run(p);
                 }
             }
         }
@@ -354,16 +368,19 @@ class RXMeshStatic : public RXMesh
      * function signature takes a EdgeHandle
      * @param stream the stream used to run the kernel in case of DEVICE
      * execution location
+     * @param with_omp for HOST execution, use OpenMP where each patch is
+     * assigned to a thread
      */
     template <typename LambdaT>
     void for_each_edge(locationT    location,
                        LambdaT      apply,
-                       cudaStream_t stream = NULL)
+                       cudaStream_t stream   = NULL,
+                       bool         with_omp = true)
     {
         if ((location & HOST) == HOST) {
             const int num_patches = this->get_num_patches();
-#pragma omp parallel for
-            for (int p = 0; p < num_patches; ++p) {
+
+            auto run = [&](int p) {
                 for (uint16_t e = 0; e < this->m_h_patches_info[p].num_edges[0];
                      ++e) {
 
@@ -374,6 +391,17 @@ class RXMeshStatic : public RXMesh
                         const EdgeHandle e_handle(static_cast<uint32_t>(p), e);
                         apply(e_handle);
                     }
+                }
+            };
+
+            if (!with_omp) {
+                for (int p = 0; p < num_patches; ++p) {
+                    run(p);
+                }
+            } else {
+#pragma omp parallel for
+                for (int p = 0; p < num_patches; ++p) {
+                    run(p);
                 }
             }
         }
@@ -402,16 +430,19 @@ class RXMeshStatic : public RXMesh
      * function signature takes a FaceHandle
      * @param stream the stream used to run the kernel in case of DEVICE
      * execution location
+     * @param with_omp for HOST execution, use OpenMP where each patch is
+     * assigned to a thread
      */
     template <typename LambdaT>
     void for_each_face(locationT    location,
                        LambdaT      apply,
-                       cudaStream_t stream = NULL)
+                       cudaStream_t stream   = NULL,
+                       bool         with_omp = true)
     {
         if ((location & HOST) == HOST) {
             const int num_patches = this->get_num_patches();
-#pragma omp parallel for
-            for (int p = 0; p < num_patches; ++p) {
+
+            auto run = [&](int p) {
                 for (int f = 0; f < this->m_h_patches_info[p].num_faces[0];
                      ++f) {
 
@@ -422,9 +453,20 @@ class RXMeshStatic : public RXMesh
                         apply(f_handle);
                     }
                 }
+            };
+
+
+            if (!with_omp) {
+                for (int p = 0; p < num_patches; ++p) {
+                    run(p);
+                }
+            } else {
+#pragma omp parallel for
+                for (int p = 0; p < num_patches; ++p) {
+                    run(p);
+                }
             }
         }
-
         if ((location & DEVICE) == DEVICE) {
             if constexpr (IS_HD_LAMBDA(LambdaT) || IS_D_LAMBDA(LambdaT)) {
 
