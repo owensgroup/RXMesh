@@ -16,6 +16,8 @@
 
 namespace rxmesh {
 
+class RXMeshDynamic;
+
 namespace patcher {
 
 /**
@@ -24,6 +26,9 @@ namespace patcher {
  */
 class Patcher
 {
+
+    friend class RXMeshDynamic;
+
    public:
     Patcher() = default;
 

@@ -193,7 +193,7 @@ class RXMesh
      * @brief save/seralize the patcher info to a file
      * @param filename
      */
-    void save(std::string filename)
+    virtual void save(std::string filename)
     {
         m_patcher->save(filename);
     }

@@ -1,3 +1,5 @@
+#include <numeric>
+
 #include <cooperative_groups.h>
 
 #include "rxmesh/bitmask.cuh"
@@ -36,6 +38,8 @@ __device__ __inline__ void hashtable_calibration(const Context context,
         HandleT handle;
         bool    replace = false;
 
+        int probe = 0;
+
         if (i < num_elements) {
 
             if (!pi.is_owned(LocalT(i)) && !pi.is_deleted(LocalT(i))) {
@@ -67,6 +71,8 @@ __device__ __inline__ void hashtable_calibration(const Context context,
                     while (!context.m_patches_info[owner].is_owned(
                         LocalT(lp.local_id_in_owner_patch()))) {
 
+                        probe++;
+
                         replace = true;
 
                         lp = context.m_patches_info[owner]
@@ -79,6 +85,12 @@ __device__ __inline__ void hashtable_calibration(const Context context,
                             context.m_patches_info[owner].patch_stash.get_patch(
                                 lp);
 
+                        if (context.m_patches_info[owner].is_deleted(
+                                LocalT(lp.local_id_in_owner_patch()))) {
+                            replace = false;
+                            printf("\n probe = %d", probe);
+                            break;
+                        }
                         assert(!context.m_patches_info[owner].is_deleted(
                             LocalT(lp.local_id_in_owner_patch())));
                     }
@@ -849,6 +861,74 @@ __global__ static void check_ribbon_faces(const Context               context,
 }
 
 }  // namespace detail
+
+
+void RXMeshDynamic::save(std::string filename)
+{
+    if (m_patcher->m_num_patches != get_num_patches()) {
+        RXMESH_ERROR(
+            "RXMeshDynamic:save() does not support changing number of "
+            "patches in the mesh");
+    }
+
+    m_patcher->m_max_num_patches = get_num_patches();
+
+    m_patcher->m_num_vertices = get_num_vertices();
+    m_patcher->m_vertex_patch.resize(m_patcher->m_num_vertices);
+
+    m_patcher->m_num_edges = get_num_edges();
+    m_patcher->m_edge_patch.resize(m_patcher->m_num_edges);
+
+    m_patcher->m_num_faces = get_num_faces();
+    m_patcher->m_face_patch.resize(m_patcher->m_num_faces);
+
+
+    for_each_vertex(HOST, [&](VertexHandle vh) {
+        m_patcher->m_vertex_patch[linear_id(vh)] = vh.patch_id();
+    });
+
+    for_each_edge(HOST, [&](EdgeHandle eh) {
+        m_patcher->m_edge_patch[linear_id(eh)] = eh.patch_id();
+    });
+
+    for_each_face(HOST, [&](FaceHandle fh) {
+        m_patcher->m_face_patch[linear_id(fh)] = fh.patch_id();
+    });
+
+
+    m_patcher->m_patches_offset.resize(get_num_patches(), 0);
+    m_patcher->m_patches_val.resize(get_num_faces());
+
+    for_each_face(
+        HOST,
+        [&](FaceHandle fh) { m_patcher->m_patches_offset[fh.patch_id()]++; },
+        NULL,
+        false);
+
+    std::inclusive_scan(m_patcher->m_patches_offset.begin(),
+                        m_patcher->m_patches_offset.end(),
+                        m_patcher->m_patches_offset.begin());
+
+    std::vector<int> offset(get_num_patches(), 0);
+
+    for_each_face(
+        HOST,
+        [&](FaceHandle fh) {
+            uint32_t p_offset =
+                (fh.patch_id() == 0) ?
+                    0 :
+                    m_patcher->m_patches_offset[fh.patch_id() - 1];
+            m_patcher->m_patches_val[p_offset + (offset[fh.patch_id()]++)] =
+                linear_id(fh);
+        },
+        NULL,
+        false);
+
+    // TODO update m_ribbon_ext_val and m_ribbon_ext_offset
+
+    RXMesh::save(filename);
+}
+
 
 bool RXMeshDynamic::validate()
 {

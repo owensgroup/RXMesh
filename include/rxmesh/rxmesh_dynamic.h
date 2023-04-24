@@ -33,6 +33,12 @@ class RXMeshDynamic : public RXMeshStatic
     }
 
     /**
+     * @brief save/seralize the patcher info to a file
+     * @param filename
+     */
+    virtual void save(std::string filename) override;
+
+    /**
      * @brief populate the launch_box with grid size and dynamic shared memory
      * needed for a kernel that may use dynamic and query operations
      * @param op List of query operations done inside the kernel
