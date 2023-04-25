@@ -897,6 +897,9 @@ void RXMeshDynamic::save(std::string filename)
 
 
     m_patcher->m_patches_offset.resize(get_num_patches(), 0);
+    std::fill(m_patcher->m_patches_offset.begin(),
+              m_patcher->m_patches_offset.end(),
+              0);
     m_patcher->m_patches_val.resize(get_num_faces());
 
     for_each_face(
@@ -924,7 +927,41 @@ void RXMeshDynamic::save(std::string filename)
         NULL,
         false);
 
-    // TODO update m_ribbon_ext_val and m_ribbon_ext_offset
+    // update m_ribbon_ext_val and m_ribbon_ext_offset
+    m_patcher->m_ribbon_ext_offset.resize(get_num_patches(), 0);
+    std::fill(m_patcher->m_ribbon_ext_offset.begin(),
+              m_patcher->m_ribbon_ext_offset.end(),
+              0);
+    m_patcher->m_ribbon_ext_val.resize(get_num_faces(), 0);
+
+
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
+        uint16_t num_not_owned_faces =
+            m_h_patches_info[p].num_faces[0] -
+            m_h_patches_info[p].get_num_owned<FaceHandle>();
+        m_patcher->m_ribbon_ext_offset[p] = num_not_owned_faces;
+    }
+
+    std::inclusive_scan(m_patcher->m_ribbon_ext_offset.begin(),
+                        m_patcher->m_ribbon_ext_offset.end(),
+                        m_patcher->m_ribbon_ext_offset.begin());
+
+
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
+        uint16_t offset = 0;
+        uint32_t p_offset =
+            (p == 0) ? 0 : m_patcher->m_ribbon_ext_offset[p - 1];
+
+        for (uint16_t f = 0; f < m_h_patches_info[p].num_faces[0]; ++f) {
+            LocalFaceT fl(f);
+            if (!m_h_patches_info[p].is_owned(fl)) {
+                FaceHandle fh  = get_owner_handle<FaceHandle>({p, fl});
+                uint32_t   fid = linear_id(fh);
+                m_patcher->m_ribbon_ext_val[p_offset + offset++] = fid;
+            }
+        }
+    }
+
 
     RXMesh::save(filename);
 }
@@ -1391,13 +1428,13 @@ void RXMeshDynamic::update_host()
     m_h_edge_prefix[0]   = 0;
     m_h_face_prefix[0]   = 0;
     for (uint32_t p = 0; p < m_num_patches; ++p) {
-        m_h_num_owned_v[p]       = m_h_patches_info[p].get_num_owned_vertices();
+        m_h_num_owned_v[p] = m_h_patches_info[p].get_num_owned<VertexHandle>();
         m_h_vertex_prefix[p + 1] = m_h_vertex_prefix[p] + m_h_num_owned_v[p];
 
-        m_h_num_owned_e[p]     = m_h_patches_info[p].get_num_owned_edges();
+        m_h_num_owned_e[p] = m_h_patches_info[p].get_num_owned<EdgeHandle>();
         m_h_edge_prefix[p + 1] = m_h_edge_prefix[p] + m_h_num_owned_e[p];
 
-        m_h_num_owned_f[p]     = m_h_patches_info[p].get_num_owned_faces();
+        m_h_num_owned_f[p] = m_h_patches_info[p].get_num_owned<FaceHandle>();
         m_h_face_prefix[p + 1] = m_h_face_prefix[p] + m_h_num_owned_f[p];
     }
 
