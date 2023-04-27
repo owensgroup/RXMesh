@@ -61,6 +61,7 @@ class RXMeshStatic : public RXMesh
 #if USE_POLYSCOPE
         polyscope::init();
         m_polyscope_mesh_name = polyscope::guessNiceNameFromPath(file_path);
+        m_polyscope_mesh_name += std::to_string(rand());
         this->register_polyscope();
 #endif
     };
@@ -311,7 +312,7 @@ class RXMeshStatic : public RXMesh
     void for_each_vertex(locationT    location,
                          LambdaT      apply,
                          cudaStream_t stream   = NULL,
-                         bool         with_omp = true)
+                         bool         with_omp = true) const
     {
         if ((location & HOST) == HOST) {
             const int num_patches = this->get_num_patches();
@@ -375,7 +376,7 @@ class RXMeshStatic : public RXMesh
     void for_each_edge(locationT    location,
                        LambdaT      apply,
                        cudaStream_t stream   = NULL,
-                       bool         with_omp = true)
+                       bool         with_omp = true) const
     {
         if ((location & HOST) == HOST) {
             const int num_patches = this->get_num_patches();
@@ -437,7 +438,7 @@ class RXMeshStatic : public RXMesh
     void for_each_face(locationT    location,
                        LambdaT      apply,
                        cudaStream_t stream   = NULL,
-                       bool         with_omp = true)
+                       bool         with_omp = true) const
     {
         if ((location & HOST) == HOST) {
             const int num_patches = this->get_num_patches();
@@ -965,7 +966,7 @@ class RXMeshStatic : public RXMesh
         std::fstream file(fn, std::ios::out);
         file.precision(30);
 
-        uint32_t num_v = 0;
+        /*uint32_t num_v = 0;
         for (uint32_t p = 0; p < this->m_num_patches; ++p) {
 
             const uint32_t p_num_vertices =
@@ -1006,6 +1007,47 @@ class RXMeshStatic : public RXMesh
             }
 
             num_v += p_num_vertices;
+        }*/
+
+        std::vector<Vector3d> obj_coords(get_num_vertices());
+        for_each_vertex(
+            HOST,
+            [&](const VertexHandle vh) {
+                uint32_t vid       = linear_id(vh);
+                obj_coords[vid][0] = coords(vh, 0);
+                obj_coords[vid][1] = coords(vh, 1);
+                obj_coords[vid][2] = coords(vh, 2);
+            },
+            NULL,
+            false);
+
+        for (uint32_t v = 0; v < obj_coords.size(); ++v) {
+            file << "v " << obj_coords[v][0] << " " << obj_coords[v][1] << " "
+                 << obj_coords[v][2] << " \n";
+        }
+
+        for (uint32_t p = 0; p < this->m_num_patches; ++p) {
+            const uint32_t p_num_faces = this->m_h_patches_info[p].num_faces[0];
+            for (uint32_t f = 0; f < p_num_faces; ++f) {
+                if (!detail::is_deleted(
+                        f, this->m_h_patches_info[p].active_mask_f) &&
+                    detail::is_owned(f,
+                                     this->m_h_patches_info[p].owned_mask_f)) {
+                    file << "f ";
+                    for (uint32_t e = 0; e < 3; ++e) {
+                        uint16_t edge =
+                            this->m_h_patches_info[p].fe[3 * f + e].id;
+                        flag_t dir(0);
+                        Context::unpack_edge_dir(edge, edge, dir);
+                        uint16_t     e_id = (2 * edge) + dir;
+                        uint16_t     v = this->m_h_patches_info[p].ev[e_id].id;
+                        VertexHandle vh(p, v);
+                        uint32_t     vid = linear_id(vh);
+                        file << vid + 1 << " ";
+                    }
+                    file << std::endl;
+                }
+            }
         }
     }
 
