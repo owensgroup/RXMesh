@@ -954,7 +954,8 @@ void RXMeshDynamic::save(std::string filename)
 
         for (uint16_t f = 0; f < m_h_patches_info[p].num_faces[0]; ++f) {
             LocalFaceT fl(f);
-            if (!m_h_patches_info[p].is_owned(fl)) {
+            if (!m_h_patches_info[p].is_owned(fl) &&
+                !m_h_patches_info[p].is_deleted(fl)) {
                 FaceHandle fh  = get_owner_handle<FaceHandle>({p, fl});
                 uint32_t   fid = linear_id(fh);
                 m_patcher->m_ribbon_ext_val[p_offset + offset++] = fid;
@@ -1438,7 +1439,7 @@ void RXMeshDynamic::update_host()
         m_h_face_prefix[p + 1] = m_h_face_prefix[p] + m_h_num_owned_f[p];
     }
 
-    if (m_h_vertex_prefix[m_num_patches] != this->m_num_vertices) {
+    if (m_h_vertex_prefix[m_num_patches] != this->m_num_vertices) {        
         RXMESH_ERROR(
             "RXMeshDynamic::update_host error in updating host. m_num_vertices "
             "{} does not match m_h_vertex_prefix calculation {}",
