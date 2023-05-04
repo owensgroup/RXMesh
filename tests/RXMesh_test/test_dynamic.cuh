@@ -101,10 +101,10 @@ TEST(RXMeshDynamic, Cavity)
     auto coords = rx.get_input_vertex_coordinates();
 
     auto to_flip = rx.add_edge_attribute<int>("to_flip", 1);
+    auto f_attr  = rx.add_face_attribute<int>("fAttr", 1);
+    auto e_attr  = rx.add_edge_attribute<int>("eAttr", 1);
+    auto v_attr  = rx.add_vertex_attribute<int>("vAttr", 1);
 
-    auto f_attr = rx.add_face_attribute<int>("fAttr", 1);
-    auto e_attr = rx.add_edge_attribute<int>("eAttr", 1);
-    auto v_attr = rx.add_vertex_attribute<int>("vAttr", 1);
     f_attr->reset(0, HOST);
     f_attr->reset(0, DEVICE);
     e_attr->reset(0, HOST);
@@ -214,9 +214,8 @@ TEST(RXMeshDynamic, Cavity)
     rx.polyscope_render_face_patch();
     rx.get_polyscope_mesh()->addEdgeScalarQuantity("toFlip", *to_flip);
     rx.get_polyscope_mesh()->addFaceScalarQuantity("fAttr", *f_attr);
-
-    rx.render_patch(0);
-    rx.render_patch(1);
+    rx.render_patch(0)->setEnabled(false);
+    rx.render_patch(1)->setEnabled(false);
 #endif
 
 
@@ -227,7 +226,7 @@ TEST(RXMeshDynamic, Cavity)
 
     int iter = 0;
     while (!rx.is_queue_empty()) {
-        RXMESH_INFO("\n iter = {}", ++iter);
+        RXMESH_INFO("iter = {}", ++iter);
         random_flips<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
@@ -251,15 +250,20 @@ TEST(RXMeshDynamic, Cavity)
 
     EXPECT_TRUE(rx.validate());
 
-// rx.export_obj("rand_flips.obj", *coords);
+    /*rx.export_obj(
+        STRINGIFY(OUTPUT_DIR) "sphere3" + std::to_string(iter) + ".obj",
+        *coords);
+    rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches" +
+            std::to_string(iter));*/
+
 #if USE_POLYSCOPE
     rx.update_polyscope();
     rx.polyscope_render_vertex_patch();
     rx.polyscope_render_edge_patch();
     rx.polyscope_render_face_patch();
 
-    rx.render_patch(0);
-    rx.render_patch(1);
+    rx.render_patch(0)->setEnabled(false);
+    rx.render_patch(1)->setEnabled(false);
 
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(*coords);
@@ -267,6 +271,7 @@ TEST(RXMeshDynamic, Cavity)
     ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
     ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
     ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
+    ps_mesh->setEnabled(false);
     polyscope::show();
 #endif
 }

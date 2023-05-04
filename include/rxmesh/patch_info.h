@@ -388,9 +388,6 @@ struct ALIGN(16) PatchInfo
             return count_num_owned(owned_mask_e, active_mask_e, num_edges[0]);
         }
 
-        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            return count_num_owned(owned_mask_e, active_mask_e, num_edges[0]);
-        }
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return count_num_owned(owned_mask_f, active_mask_f, num_faces[0]);

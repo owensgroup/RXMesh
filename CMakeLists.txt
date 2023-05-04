@@ -130,6 +130,7 @@ set(cuda_flags
     $<$<CXX_COMPILER_ID:GNU>:-O3>
 	--expt-relaxed-constexpr	
     -Xptxas -warn-spills -res-usage   
+	#-Xptxas -dlcm=cg -dscm=cg
 	--ptxas-options=-v	
     #-G    
 )

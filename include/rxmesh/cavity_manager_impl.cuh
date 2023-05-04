@@ -7,7 +7,7 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     ShmemAllocator&                   shrd_alloc)
     : m_write_to_gmem(true), m_context(context)
 {
-    __shared__ uint32_t patch_id;
+    __shared__ uint32_t s_patch_id;
     __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
 
     // assuming the max number of cavities created here is equal to the
@@ -30,35 +30,39 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
         m_s_num_cavities[0]   = 0;
 
         // get a patch
-        patch_id = m_context.m_patch_scheduler.pop();
+        s_patch_id = m_context.m_patch_scheduler.pop();
 
         // try to lock the patch
-        if (patch_id != INVALID32) {
-            bool locked = m_context.m_patches_info[patch_id].lock.acquire_lock(
-                blockIdx.x);
+        if (s_patch_id != INVALID32) {
+            bool locked =
+                m_context.m_patches_info[s_patch_id].lock.acquire_lock(
+                    blockIdx.x);
+
             if (!locked) {
                 // if we can not, we add it again to the queue
                 push();
 
                 // and signal other threads to also exit
-                patch_id = INVALID32;
+                s_patch_id = INVALID32;
             }
         }
 
-        if (patch_id != INVALID32) {
+        if (s_patch_id != INVALID32) {
             m_s_num_vertices[0] =
-                m_context.m_patches_info[patch_id].num_vertices[0];
-            m_s_num_edges[0] = m_context.m_patches_info[patch_id].num_edges[0];
-            m_s_num_faces[0] = m_context.m_patches_info[patch_id].num_faces[0];
+                m_context.m_patches_info[s_patch_id].num_vertices[0];
+            m_s_num_edges[0] =
+                m_context.m_patches_info[s_patch_id].num_edges[0];
+            m_s_num_faces[0] =
+                m_context.m_patches_info[s_patch_id].num_faces[0];
         }
     }
     block.sync();
 
-    if (patch_id == INVALID32) {
+    if (s_patch_id == INVALID32) {
         return;
     }
 
-    m_patch_info = m_context.m_patches_info[patch_id];
+    m_patch_info = m_context.m_patches_info[s_patch_id];
 
     m_vert_cap = m_patch_info.vertices_capacity[0];
     m_edge_cap = m_patch_info.edges_capacity[0];
@@ -1733,7 +1737,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
     const LPPair*                     s_table,
     Bitmask&                          s_owned_bitmask)
 {
-    for (uint32_t vp = threadIdx.x; vp < num_elements; vp += blockThreads) {
+    for (uint16_t vp = threadIdx.x; vp < num_elements; vp += blockThreads) {
 
         if (s_ownership_change(vp)) {
 

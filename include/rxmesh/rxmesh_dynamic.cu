@@ -232,7 +232,8 @@ __global__ static void remove_surplus_elements(const Context context)
                 assert(v1 < num_vertices);
                 assert(s_active_v(v1));
 
-                if (s_edge_tag(e) || s_vert_tag(v0) || s_vert_tag(v1)) {
+                if (s_edge_tag(e) || s_vert_tag(v0) || s_vert_tag(v1) ||
+                    s_owned_e(e) || s_owned_v(v0) || s_owned_v(v1)) {
                     s_face_tag.set(f, true);
                     break;
                 }
