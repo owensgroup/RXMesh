@@ -39,7 +39,6 @@ __global__ static void random_flips(rxmesh::Context                context,
                           [&](const EdgeHandle eh) {
                               if (to_flip(eh) == 1) {
                                   cavity_manager.create(eh);
-                                  to_flip(eh) = 2;
                               }
                           });
 
@@ -51,6 +50,14 @@ __global__ static void random_flips(rxmesh::Context                context,
         cavity_manager.update_attributes(block, f_attr);
         cavity_manager.update_attributes(block, e_attr);
         cavity_manager.update_attributes(block, v_attr);
+
+        // so that we don't flip them again
+        detail::for_each_edge(cavity_manager.patch_info(),
+                              [&](const EdgeHandle eh) {
+                                  if (to_flip(eh) == 1) {
+                                      to_flip(eh) = 2;
+                                  }
+                              });
 
         cavity_manager.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
@@ -68,15 +75,7 @@ __global__ static void random_flips(rxmesh::Context                context,
                                     new_edge.get_flip_dedge());
         });
         block.sync();
-    } else {
-        detail::for_each_edge(cavity_manager.patch_info(),
-                              [&](const EdgeHandle eh) {
-                                  if (to_flip(eh) == 2) {
-                                      to_flip(eh) = 1;
-                                  }
-                              });
     }
-
 
     cavity_manager.epilogue(block);
 }
@@ -212,7 +211,9 @@ TEST(RXMeshDynamic, Cavity)
     rx.polyscope_render_vertex_patch();
     rx.polyscope_render_edge_patch();
     rx.polyscope_render_face_patch();
-    rx.get_polyscope_mesh()->addEdgeScalarQuantity("toFlip", *to_flip);
+    rx.get_polyscope_mesh()
+        ->addEdgeScalarQuantity("toFlip", *to_flip)
+        ->setMapRange({0, 2});
     rx.get_polyscope_mesh()->addFaceScalarQuantity("fAttr", *f_attr);
     rx.render_patch(0)->setEnabled(false);
     rx.render_patch(1)->setEnabled(false);
@@ -223,6 +224,7 @@ TEST(RXMeshDynamic, Cavity)
     LaunchBox<blockThreads> launch_box;
 
     rx.prepare_launch_box({}, launch_box, (void*)random_flips<blockThreads>);
+
 
     int iter = 0;
     while (!rx.is_queue_empty()) {
@@ -267,7 +269,7 @@ TEST(RXMeshDynamic, Cavity)
 
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(*coords);
-    ps_mesh->addEdgeScalarQuantity("toFlip", *to_flip);
+    ps_mesh->addEdgeScalarQuantity("toFlip", *to_flip)->setMapRange({0, 2});
     ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
     ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
     ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
