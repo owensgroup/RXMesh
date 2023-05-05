@@ -1439,6 +1439,7 @@ class RXMeshStatic : public RXMesh
                     VertexHandle vh(p, {this->m_h_patches_info[p].ev[eid0].id});
                     uint32_t     v_org0 = linear_id(vh);
                     face[e]             = v_org0;
+                    assert(v_org0 < get_num_vertices());
                 }
                 fv.push_back(face);
             }
@@ -1466,7 +1467,9 @@ class RXMeshStatic : public RXMesh
                     uint32_t v_org0 = linear_id(v0);
                     uint32_t v_org1 = linear_id(v1);
 
-                    auto key    = detail::edge_key(v_org0, v_org1);
+                    auto key = detail::edge_key(v_org0, v_org1);
+                    assert(v_org0 < get_num_vertices());
+                    assert(v_org1 < get_num_vertices());
                     auto e_iter = m_polyscope_edges_map.find(key);
                     if (e_iter == m_polyscope_edges_map.end()) {
                         EdgeHandle eh(p, {e});
@@ -1482,7 +1485,7 @@ class RXMeshStatic : public RXMesh
         update_polyscope_edge_map();
 
         std::vector<std::array<uint32_t, 3>> fv;
-        fv.reserve(m_num_faces);
+        fv.reserve(get_num_faces());
 
         for (uint32_t p = 0; p < this->m_num_patches; ++p) {
             add_patch_to_polyscope(p, fv, false);
