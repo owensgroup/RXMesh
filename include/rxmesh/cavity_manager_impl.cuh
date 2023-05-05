@@ -227,6 +227,55 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::create(
     }
 }
 
+template <uint32_t blockThreads, CavityOp cop>
+template <typename HandleT>
+__device__ __inline__ bool CavityManager<blockThreads, cop>::is_successful(
+    HandleT seed)
+{
+    if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
+                  cop == CavityOp::VE || cop == CavityOp::VF) {
+        static_assert(std::is_same_v<HandleT, VertexHandle>,
+                      "CavityManager::is_successful() since CavityManager's "
+                      "template parameter operation is "
+                      "CavityOp::V/CavityOp::VV/CavityOp::VE/CavityOp::VF, "
+                      "create() should take VertexHandle as an input");
+    }
+
+    if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
+                  cop == CavityOp::EE || cop == CavityOp::EF) {
+        static_assert(std::is_same_v<HandleT, EdgeHandle>,
+                      "CavityManager::is_successful() since CavityManager's "
+                      "template parameter operation is "
+                      "CavityOp::E/CavityOp::EV/CavityOp::EE/CavityOp::EF, "
+                      "create() should take EdgeHandle as an input");
+    }
+
+    if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
+                  cop == CavityOp::FE || cop == CavityOp::FF) {
+        static_assert(std::is_same_v<HandleT, FaceHandle>,
+                      "CavityManager::is_successful() since CavityManager's "
+                      "template parameter operation is "
+                      "CavityOp::F/CavityOp::FV/CavityOp::FE/CavityOp::FF, "
+                      "create() should take FaceHandle as an input");
+    }
+
+    if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
+                  cop == CavityOp::VE || cop == CavityOp::VF) {
+        return m_s_in_cavity_v(seed.local_id());
+    }
+
+    if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
+                  cop == CavityOp::EE || cop == CavityOp::EF) {
+        return m_s_in_cavity_e(seed.local_id());
+    }
+
+
+    if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
+                  cop == CavityOp::FE || cop == CavityOp::FF) {
+        return m_s_in_cavity_f(seed.local_id());
+    }
+}
+
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(

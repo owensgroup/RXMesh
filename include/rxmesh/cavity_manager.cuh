@@ -63,6 +63,18 @@ struct CavityManager
     __device__ __inline__ void create(HandleT seed);
 
     /**
+     * @brief check if a seed was successful in creating its cavity
+     * Note that not all cavities can be created (by calling create()) since
+     * some of them could be conflicting, rather we select (hopefully maximal)
+     * set of non-conflicting cavities. This function can be used to check if a
+     * specific seed is in this set. This function can only be called after
+     * calling prologue()
+     *
+     */
+    template <typename HandleT>
+    __device__ __inline__ bool is_successful(HandleT seed);
+
+    /**
      * @brief processes all cavities created using create() by removing elements
      * in these cavities, update the patch layout for subsequent cavity fill-in.
      * In the event of failure (due to failure of locking neighbor patches),
