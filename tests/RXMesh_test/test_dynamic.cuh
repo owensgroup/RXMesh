@@ -27,57 +27,52 @@ __global__ static void random_flips(rxmesh::Context                context,
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
 
-    CavityManager<blockThreads, CavityOp::E> cavity_manager(
-        block, context, shrd_alloc);
+    CavityManager<blockThreads, CavityOp::E> cavity(block, context, shrd_alloc);
 
 
-    if (cavity_manager.patch_id() == INVALID32) {
+    if (cavity.patch_id() == INVALID32) {
         return;
     }
 
-    detail::for_each_edge(cavity_manager.patch_info(),
-                          [&](const EdgeHandle eh) {
-                              if (to_flip(eh) == 1) {
-                                  cavity_manager.create(eh);
-                              }
-                          });
+    detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
+        if (to_flip(eh) == 1) {
+            cavity.create(eh);
+        }
+    });
 
     block.sync();
 
-    if (cavity_manager.prologue(block, shrd_alloc)) {
-        cavity_manager.update_attributes(block, coords);
-        cavity_manager.update_attributes(block, to_flip);
-        cavity_manager.update_attributes(block, f_attr);
-        cavity_manager.update_attributes(block, e_attr);
-        cavity_manager.update_attributes(block, v_attr);
+    if (cavity.prologue(block, shrd_alloc)) {
+        cavity.update_attributes(block, coords);
+        cavity.update_attributes(block, to_flip);
+        cavity.update_attributes(block, f_attr);
+        cavity.update_attributes(block, e_attr);
+        cavity.update_attributes(block, v_attr);
 
         // so that we don't flip them again
-        detail::for_each_edge(cavity_manager.patch_info(),
-                              [&](const EdgeHandle eh) {
-                                  if (to_flip(eh) == 1) {
-                                      to_flip(eh) = 2;
-                                  }
-                              });
+        detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
+            if (to_flip(eh) == 1) {
+                to_flip(eh) = 2;
+            }
+        });
 
-        cavity_manager.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+        cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
 
-            DEdgeHandle new_edge =
-                cavity_manager.add_edge(cavity_manager.get_cavity_vertex(c, 1),
-                                        cavity_manager.get_cavity_vertex(c, 3));
+            DEdgeHandle new_edge = cavity.add_edge(
+                cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c, 3));
 
-            cavity_manager.add_face(cavity_manager.get_cavity_edge(c, 0),
-                                    new_edge,
-                                    cavity_manager.get_cavity_edge(c, 3));
+            cavity.add_face(cavity.get_cavity_edge(c, 0),
+                            new_edge,
+                            cavity.get_cavity_edge(c, 3));
 
-            cavity_manager.add_face(cavity_manager.get_cavity_edge(c, 1),
-                                    cavity_manager.get_cavity_edge(c, 2),
-                                    new_edge.get_flip_dedge());
+            cavity.add_face(cavity.get_cavity_edge(c, 1),
+                            cavity.get_cavity_edge(c, 2),
+                            new_edge.get_flip_dedge());
         });
-        block.sync();
     }
 
-    cavity_manager.epilogue(block);
+    cavity.epilogue(block);
 }
 
 TEST(RXMeshDynamic, Cavity)

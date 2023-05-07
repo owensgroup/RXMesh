@@ -12,10 +12,9 @@ __global__ static void delaunay_edge_flip(rxmesh::Context              context,
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CavityManager<blockThreads, CavityOp::E> cavity_manager(
-        block, context, shrd_alloc);
+    CavityManager<blockThreads, CavityOp::E> cavity(block, context, shrd_alloc);
 
-    const uint32_t pid = cavity_manager.patch_id();
+    const uint32_t pid = cavity.patch_id();
 
     if (pid == INVALID32) {
         return;
@@ -88,7 +87,7 @@ __global__ static void delaunay_edge_flip(rxmesh::Context              context,
                 if (alpha0 + beta0 < PII - std::numeric_limits<T>::epsilon() &&
                     alpha1 + beta1 < PII - std::numeric_limits<T>::epsilon()) {
                     e_attr(eh) = 100;
-                    cavity_manager.create(eh);
+                    cavity.create(eh);
                 }
             }
         }
@@ -99,31 +98,34 @@ __global__ static void delaunay_edge_flip(rxmesh::Context              context,
     block.sync();
 
     // create the cavity
-    if (cavity_manager.prologue(block, shrd_alloc)) {
+    if (cavity.prologue(block, shrd_alloc)) {
 
         // update the cavity
-        cavity_manager.update_attributes(block, coords);
-        cavity_manager.update_attributes(block, e_attr);
-        cavity_manager.update_attributes(block, f_attr);
+        cavity.update_attributes(block, coords);
+        cavity.update_attributes(block, e_attr);
+        cavity.update_attributes(block, f_attr);
+        cavity.update_attributes(block, v_attr);
 
-        cavity_manager.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+        cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
 
-            DEdgeHandle new_edge =
-                cavity_manager.add_edge(cavity_manager.get_cavity_vertex(c, 1),
-                                        cavity_manager.get_cavity_vertex(c, 3));
+            DEdgeHandle new_edge = cavity.add_edge(
+                cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c, 3));
 
-            cavity_manager.add_face(cavity_manager.get_cavity_edge(c, 0),
-                                    new_edge,
-                                    cavity_manager.get_cavity_edge(c, 3));
+            cavity.add_face(cavity.get_cavity_edge(c, 0),
+                            new_edge,
+                            cavity.get_cavity_edge(c, 3));
 
-            cavity_manager.add_face(cavity_manager.get_cavity_edge(c, 1),
-                                    cavity_manager.get_cavity_edge(c, 2),
-                                    new_edge.get_flip_dedge());
+            cavity.add_face(cavity.get_cavity_edge(c, 1),
+                            cavity.get_cavity_edge(c, 2),
+                            new_edge.get_flip_dedge());
         });
 
+        if (threadIdx.x == 0) {
+            printf("\n p= %u", cavity.patch_id());
+        }
     }
-    cavity_manager.epilogue(block);
+    cavity.epilogue(block);
 }
 
 inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
