@@ -4,7 +4,7 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "torus.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     uint32_t    device_id     = 0;
     char**      argv;
@@ -21,7 +21,11 @@ TEST(Apps, DelaunayEdgeFlip)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshDynamic rx(Arg.obj_file_name);
+    // RXMeshDynamic rx(Arg.obj_file_name);
+    // rx.save(STRINGIFY(OUTPUT_DIR) "torus_patches");
+
+    RXMeshDynamic rx(
+        Arg.obj_file_name, false, STRINGIFY(INPUT_DIR) "torus_patches");
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
