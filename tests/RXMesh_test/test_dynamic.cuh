@@ -215,15 +215,14 @@ TEST(RXMeshDynamic, Cavity)
 #endif
 
 
-    constexpr uint32_t      blockThreads = 256;
-    LaunchBox<blockThreads> launch_box;
-
-    rx.prepare_launch_box({}, launch_box, (void*)random_flips<blockThreads>);
-
+    constexpr uint32_t blockThreads = 256;
 
     int iter = 0;
     while (!rx.is_queue_empty()) {
         RXMESH_INFO("iter = {}", ++iter);
+        LaunchBox<blockThreads> launch_box;
+        rx.prepare_launch_box(
+            {}, launch_box, (void*)random_flips<blockThreads>);
         random_flips<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(

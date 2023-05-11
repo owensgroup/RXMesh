@@ -143,12 +143,6 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
     rx.polyscope_render_face_patch();
 #endif
 
-
-    LaunchBox<blockThreads> launch_box;
-    rx.prepare_launch_box({Op::EVDiamond},
-                          launch_box,
-                          (void*)delaunay_edge_flip<float, blockThreads>);
-
     auto coords = rx.get_input_vertex_coordinates();
 
     auto e_attr = rx.add_edge_attribute<int>("eAttr", 1);
@@ -167,6 +161,10 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
     int iter = 0;
     while (!rx.is_queue_empty()) {
         RXMESH_INFO("iter = {}", iter++);
+        LaunchBox<blockThreads> launch_box;
+        rx.prepare_launch_box({Op::EVDiamond},
+                              launch_box,
+                              (void*)delaunay_edge_flip<float, blockThreads>);
         f_attr->reset(0, DEVICE);
         delaunay_edge_flip<float, blockThreads><<<launch_box.blocks,
                                                   launch_box.num_threads,

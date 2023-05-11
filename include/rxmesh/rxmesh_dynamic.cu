@@ -38,7 +38,7 @@ __device__ __inline__ void hashtable_calibration(const Context context,
         HandleT handle;
         bool    replace = false;
 
-        int probe = 0;
+        //int probe = 0;
 
         if (i < num_elements) {
 
@@ -71,7 +71,7 @@ __device__ __inline__ void hashtable_calibration(const Context context,
                     while (!context.m_patches_info[owner].is_owned(
                         LocalT(lp.local_id_in_owner_patch()))) {
 
-                        probe++;
+                        //probe++;
 
                         replace = true;
 
@@ -88,7 +88,11 @@ __device__ __inline__ void hashtable_calibration(const Context context,
                         if (context.m_patches_info[owner].is_deleted(
                                 LocalT(lp.local_id_in_owner_patch()))) {
                             replace = false;
-                            printf("\n probe = %d", probe);
+                            //printf("\n probe = %d, p= %u, type= %s, owner= %u",
+                            //       probe,
+                            //       pi.patch_id,
+                            //       LocalT::name(),
+                            //       owner);
                             break;
                         }
                         assert(!context.m_patches_info[owner].is_deleted(
