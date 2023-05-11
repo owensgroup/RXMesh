@@ -874,7 +874,7 @@ __device__ __forceinline__ bool CavityManager<blockThreads, cop>::lock(
         if (!okay) {
             okay = m_context.m_patches_info[q].lock.acquire_lock(blockIdx.x);
             if (okay) {
-                m_s_locked_patches_mask.set(stash_id);
+                m_s_locked_patches_mask.set(stash_id, true);
             }
         }
         s_success = okay;
@@ -902,8 +902,7 @@ CavityManager<blockThreads, cop>::unlock_locked_patches()
             if (m_s_locked_patches_mask(st)) {
                 uint32_t q = m_patch_info.patch_stash.get_patch(st);
                 assert(q != INVALID32);
-                m_context.m_patches_info[q].lock.release_lock();
-                m_s_locked_patches_mask.reset(st);
+                unlock(st, q);
             }
         }
     }
@@ -918,7 +917,7 @@ __device__ __forceinline__ void CavityManager<blockThreads, cop>::unlock(
     if (threadIdx.x == 0) {
         assert(m_s_locked_patches_mask(stash_id));
         m_context.m_patches_info[q].lock.release_lock();
-        m_s_locked_patches_mask.reset(stash_id);
+        m_s_locked_patches_mask.reset(stash_id, true);
     }
 }
 
@@ -942,7 +941,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     m_s_patches_to_lock_mask.reset(block);
     m_s_locked_patches_mask.reset(block);
     block.sync();
-
 
     // Mark vertices on the boundary of all active cavities in this patch
     // Owned vertices are marked in m_s_owned_cavity_bdry_v and not-owned
@@ -1050,7 +1048,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
             if (b0 && !b1 && !m_s_owned_mask_v(v1)) {
                 // The vertex we want to ribbonize should not be inside the
                 // cavity. we assert this here and if this fails then maybe we
-                // should look into this case to undertsand if this makes sense
+                // should look into this case to understand if this makes sense
                 assert(!m_s_in_cavity_v(v1));
                 m_s_ribbonize_v.set(v1, true);
             }
@@ -1076,6 +1074,25 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     return true;
 }
 
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ bool
+CavityManager<blockThreads, cop>::lock_patches_to_lock(
+    cooperative_groups::thread_block& block)
+{
+    block.sync();
+    for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
+        if (m_s_patches_to_lock_mask(st)) {
+            const uint32_t patch = m_patch_info.patch_stash.get_patch(st);
+            if (!lock(block, st, patch)) {
+                return false;
+            } else {
+                assert(m_s_locked_patches_mask(st));
+            }
+        }
+    }
+    return true;
+}
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
@@ -1107,23 +1124,21 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
     }
 
 
-    // loop over m_s_patches_to_lock and make sure that any patch set to true is
-    // locked (which is indicated in m_s_locked_patches)
-    auto lock_patches_to_lock = [&]() {
-        for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
-            if (m_s_patches_to_lock_mask(st) && !m_s_locked_patches_mask(st)) {
-                const uint32_t patch = m_patch_info.patch_stash.get_patch(st);
-                if (!lock(block, st, patch)) {
-                    return false;
-                }
+    // first check if the patch (q) is locked,
+    // if locked, then it is safe to read from it
+    // if not, then lock it and remember that it was not locked since if we
+    // don't need to read from this patch (q) then we should unlock it
+    bool was_locked = m_s_locked_patches_mask(q_stash_id);
+    block.sync();
+    if (!was_locked) {
+        if (!lock(block, q_stash_id, q)) {
+            return false;
+        } else {
+            if (threadIdx.x == 0) {
+                m_s_patches_to_lock_mask.set(q_stash_id, true);
             }
+            assert(m_s_locked_patches_mask(q_stash_id));
         }
-        return true;
-    };
-
-    // try to lock q before reading from it
-    if (!lock(block, q_stash_id, q)) {
-        return false;
     }
 
     // init src_v bitmask
@@ -1174,8 +1189,10 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
 
 
     if (s_ok_q == 0) {
-        // we should not keep q locked
-        unlock(q_stash_id, q);
+        if (!was_locked) {
+            // we should not keep q locked only if it was not locked before
+            unlock(q_stash_id, q);
+        }
     } else {
 
         // In every call to migrate_vertex/edge/face, threads make sure that
@@ -1252,10 +1269,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         }
 
 
-        if (!lock_patches_to_lock()) {
+        if (!lock_patches_to_lock(block)) {
             return false;
         }
-
 
         // same story as with the loop that adds vertices
         const uint16_t q_num_edges_up =
@@ -1293,7 +1309,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         }
 
 
-        if (!lock_patches_to_lock()) {
+        if (!lock_patches_to_lock(block)) {
             return false;
         }
 
@@ -1358,10 +1374,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             block.sync();
         }
 
-        if (!lock_patches_to_lock()) {
+        if (!lock_patches_to_lock(block)) {
             return false;
         }
-
 
         // same story as with the loop that adds vertices
         const uint16_t q_num_faces_up =
@@ -1391,7 +1406,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             block.sync();
         }
 
-        if (!lock_patches_to_lock()) {
+        if (!lock_patches_to_lock(block)) {
             return false;
         }
     }
@@ -1451,6 +1466,10 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
 
             if (require_ownership_change && !m_s_owned_mask_v(vp)) {
                 m_s_ownership_change_mask_v.set(vp, true);
+                if (o != patch_id() && o != q) {
+                    assert(m_s_patches_to_lock_mask(
+                        m_patch_info.patch_stash.find_patch_index(o)));
+                }
             }
         }
     }
@@ -1544,6 +1563,10 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
 
             if (require_ownership_change && !m_s_owned_mask_e(ep)) {
                 m_s_ownership_change_mask_e.set(ep, true);
+                if (o != patch_id() && o != q) {
+                    assert(m_s_patches_to_lock_mask(
+                        m_patch_info.patch_stash.find_patch_index(o)));
+                }
             }
         }
     }
@@ -1643,6 +1666,10 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
 
             if (require_ownership_change && !m_s_owned_mask_f(fp)) {
                 m_s_ownership_change_mask_f.set(fp, true);
+                if (o != patch_id() && o != q) {
+                    assert(m_s_patches_to_lock_mask(
+                        m_patch_info.patch_stash.find_patch_index(o)));
+                }
             }
         }
     }
@@ -1732,11 +1759,6 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
     for (uint16_t i = 0; i < dest_patch_num_elements; ++i) {
         if (!dest_patch_owned_mask(i) &&
             (dest_patch_active_mask(i) || dest_in_cavity(i))) {
-            // we disable check0 since the element might have been just
-            // added in the patch in shared memory and not visible to global
-            // memory yet
-            // auto handle = m_context.get_owner_handle<HandleT>(
-            //    {m_patch_info.patch_id, {i}}, nullptr, s_table, false, true);
 
             const HandleT handle = m_patch_info.find<HandleT>(i, s_table);
 

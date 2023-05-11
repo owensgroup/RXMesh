@@ -448,7 +448,12 @@ struct CavityManager
         const LPPair*                     s_table,
         Bitmask&                          s_owned_bitmask);
 
-    /*******/
+    /**
+     * @brief lock patches marked in m_s_patches_to_lock_mask. Return true
+     * if all patches were locked and false otherwise. Update
+     */
+    __device__ __inline__ bool lock_patches_to_lock(
+        cooperative_groups::thread_block& block);
 
     // indicate if this block can write its updates to global memory during
     // epilogue
