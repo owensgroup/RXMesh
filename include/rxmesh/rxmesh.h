@@ -114,6 +114,15 @@ class RXMesh
     }
 
     /**
+     * @brief the maximum number of patches
+     */
+    uint32_t get_max_num_patches() const
+    {
+        return static_cast<uint32_t>(std::ceil(
+            m_patch_alloc_factor * static_cast<float>(m_num_patches)));
+    }
+
+    /**
      * @brief Returns the number of disconnected component the input mesh is
      * composed of
      */
@@ -143,7 +152,7 @@ class RXMesh
     /**
      * @brief Maximum number of vertices in a patch
      */
-    uint32_t get_per_patch_max_vertices() const
+    uint16_t get_per_patch_max_vertices() const
     {
         return m_max_vertices_per_patch;
     }
@@ -151,7 +160,7 @@ class RXMesh
     /**
      * @brief Maximum number of edges in a patch
      */
-    uint32_t get_per_patch_max_edges() const
+    uint16_t get_per_patch_max_edges() const
     {
         return m_max_edges_per_patch;
     }
@@ -159,9 +168,36 @@ class RXMesh
     /**
      * @brief Maximum number of faces in a patch
      */
-    uint32_t get_per_patch_max_faces() const
+    uint16_t get_per_patch_max_faces() const
     {
         return m_max_faces_per_patch;
+    }
+
+    /**
+     * @brief Maximum capacity number of vertices in a patch
+     */
+    uint16_t get_per_patch_max_vertices_capacity() const
+    {
+        return static_cast<uint16_t>(std::ceil(
+            m_capacity_factor * static_cast<float>(m_max_vertices_per_patch)));
+    }
+
+    /**
+     * @brief Maximum capacity number of edges in a patch
+     */
+    uint32_t get_per_patch_max_edges_capacity() const
+    {
+        return static_cast<uint16_t>(std::ceil(
+            m_capacity_factor * static_cast<float>(m_max_edges_per_patch)));
+    }
+
+    /**
+     * @brief Maximum capacity number of faces in a patch
+     */
+    uint32_t get_per_patch_max_faces_capacity() const
+    {
+        return static_cast<uint16_t>(std::ceil(
+            m_capacity_factor * static_cast<float>(m_max_faces_per_patch)));
     }
 
     /**
@@ -231,10 +267,25 @@ class RXMesh
 
     RXMesh();
 
+    /**
+     * @brief init all the data structures
+     * @param fv the mesh connectivity as an index triangle
+     * @param patcher_file optional file to load the patches
+     * @param quite run in quite mode
+     * @param capacity_factor capacity factor the determine the max allocation
+     * size of a patch as a fraction of its size. For example, a patch with x
+     * faces will be allocated with size that fits capactiy_factor*x faces
+     * @param patch_alloc_factor determine the max number of patches. If the
+     * input mesh is patched into x patches, we will allocate a space for
+     * patch_alloc_factor*x patches
+     * @param lp_hashtable_load_factor loading factor for the hashtable use for
+     * the not-owned vertices/edges/faces
+     */
     void init(const std::vector<std::vector<uint32_t>>& fv,
               const std::string                         patcher_file    = "",
               const bool                                quite           = false,
               const float                               capacity_factor = 2.0,
+              const float patch_alloc_factor                            = 2.0,
               const float lp_hashtable_load_factor                      = 0.75);
 
     /**
@@ -275,6 +326,13 @@ class RXMesh
      */
     void calc_max_elements();
 
+    /**
+     * @brief allocate extra patches needed in cases the number of patches
+     * increases. We allocate these patches space such that they can occupy the
+     * same size as the largest patch in the input mesh
+     */
+    void allocate_extra_patches();
+
     template <typename HandleT>
     const std::pair<uint32_t, uint16_t> map_to_local(
         const uint32_t  i,
@@ -301,18 +359,15 @@ class RXMesh
     {
 #ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
         if constexpr (std::is_same_v<LocalT, LocalVertexT>) {
-            return this->m_capacity_factor *
-                   static_cast<float>(this->m_max_vertices_per_patch);
+            return get_per_patch_max_vertices_capacity();
         }
 
         if constexpr (std::is_same_v<LocalT, LocalEdgeT>) {
-            return this->m_capacity_factor *
-                   static_cast<float>(this->m_max_edges_per_patch);
+            return get_per_patch_max_edges_capacity();
         }
 
         if constexpr (std::is_same_v<LocalT, LocalFaceT>) {
-            return this->m_capacity_factor *
-                   static_cast<float>(this->m_max_faces_per_patch);
+            return get_per_patch_max_faces_capacity();
         }
 #else
         if constexpr (std::is_same_v<LocalT, LocalVertexT>) {
@@ -350,6 +405,21 @@ class RXMesh
 
 
     void build_device();
+    void build_device_single_patch(const uint32_t patch_id,
+                                   const uint16_t p_num_vertices,
+                                   const uint16_t p_num_edges,
+                                   const uint16_t p_num_faces,
+                                   const uint16_t p_vertices_capacity,
+                                   const uint16_t p_edges_capacity,
+                                   const uint16_t p_faces_capacity,
+                                   const uint16_t p_num_owned_vertices,
+                                   const uint16_t p_num_owned_edges,
+                                   const uint16_t p_num_owned_faces,
+                                   const std::vector<uint32_t>& ltog_v,
+                                   const std::vector<uint32_t>& ltog_e,
+                                   const std::vector<uint32_t>& ltog_f,
+                                   PatchInfo&                   h_patch_info,
+                                   PatchInfo&                   d_patch_info);
 
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
@@ -403,6 +473,6 @@ class RXMesh
 
     PatchInfo *m_d_patches_info, *m_h_patches_info;
 
-    float m_capacity_factor, m_lp_hashtable_load_factor;
+    float m_capacity_factor, m_lp_hashtable_load_factor, m_patch_alloc_factor;
 };
 }  // namespace rxmesh

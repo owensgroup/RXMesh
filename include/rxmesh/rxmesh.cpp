@@ -34,7 +34,8 @@ RXMesh::RXMesh()
       m_d_patches_info(nullptr),
       m_h_patches_info(nullptr),
       m_capacity_factor(0),
-      m_lp_hashtable_load_factor(0)
+      m_lp_hashtable_load_factor(0),
+      m_patch_alloc_factor(0)
 {
 }
 
@@ -42,11 +43,13 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                   const std::string                         patcher_file,
                   const bool                                quite,
                   const float                               capacity_factor,
+                  const float                               patch_alloc_factor,
                   const float lp_hashtable_load_factor)
 {
     m_quite                    = quite;
     m_capacity_factor          = capacity_factor;
     m_lp_hashtable_load_factor = lp_hashtable_load_factor;
+    m_patch_alloc_factor       = patch_alloc_factor;
 
     // Build everything from scratch including patches
     if (fv.empty()) {
@@ -55,6 +58,10 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     }
     if (m_capacity_factor < 1.0) {
         RXMESH_ERROR("RXMesh::init capacity factor should be at least one");
+    }
+    if (m_patch_alloc_factor < 1.0) {
+        RXMESH_ERROR(
+            "RXMesh::init patch allocation factor should be at least one");
     }
     if (m_lp_hashtable_load_factor > 1.0) {
         RXMESH_ERROR(
@@ -67,8 +74,11 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     calc_max_elements();
 
     PatchScheduler sch;
-    sch.init(m_num_patches);
+    sch.init(get_max_num_patches());
     sch.refill();
+
+    // Allocate  extra patches
+    allocate_extra_patches();
 
     // Allocate and copy the context to the gpu
     m_rxmesh_context.init(m_num_vertices,
@@ -77,7 +87,8 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                           m_max_vertices_per_patch,
                           m_max_edges_per_patch,
                           m_max_faces_per_patch,
-                          m_num_patches,
+                          get_num_patches(),
+                          get_max_num_patches(),
                           m_capacity_factor,
                           m_d_vertex_prefix,
                           m_d_edge_prefix,
@@ -118,7 +129,7 @@ RXMesh::~RXMesh()
 {
     m_rxmesh_context.m_patch_scheduler.free();
 
-    for (uint32_t p = 0; p < m_num_patches; ++p) {
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
         free(m_h_patches_info[p].active_mask_v);
         free(m_h_patches_info[p].active_mask_e);
         free(m_h_patches_info[p].active_mask_f);
@@ -140,10 +151,10 @@ RXMesh::~RXMesh()
 
     CUDA_ERROR(cudaMemcpy(m_h_patches_info,
                           m_d_patches_info,
-                          m_num_patches * sizeof(PatchInfo),
+                          get_num_patches() * sizeof(PatchInfo),
                           cudaMemcpyDeviceToHost));
 
-    for (uint32_t p = 0; p < m_num_patches; ++p) {
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
         GPU_FREE(m_h_patches_info[p].active_mask_v);
         GPU_FREE(m_h_patches_info[p].active_mask_e);
         GPU_FREE(m_h_patches_info[p].active_mask_f);
@@ -196,32 +207,34 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     }
 
 
-    m_num_patches    = m_patcher->get_num_patches();
-    m_h_patches_info = (PatchInfo*)malloc(m_num_patches * sizeof(PatchInfo));
-    m_h_patches_ltog_f.resize(m_num_patches);
-    m_h_patches_ltog_e.resize(m_num_patches);
-    m_h_patches_ltog_v.resize(m_num_patches);
-    m_h_num_owned_f.resize(m_num_patches);
-    m_h_num_owned_v.resize(m_num_patches);
-    m_h_num_owned_e.resize(m_num_patches);
+    m_num_patches = m_patcher->get_num_patches();
+    m_h_patches_info =
+        (PatchInfo*)malloc(get_max_num_patches() * sizeof(PatchInfo));
+    m_h_patches_ltog_f.resize(get_num_patches());
+    m_h_patches_ltog_e.resize(get_num_patches());
+    m_h_patches_ltog_v.resize(get_num_patches());
+    m_h_num_owned_f.resize(get_max_num_patches());
+    m_h_num_owned_v.resize(get_max_num_patches());
+    m_h_num_owned_e.resize(get_max_num_patches());
 
 
 #pragma omp parallel for
-    for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
+    for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
         build_single_patch(fv, p);
     }
 
+    const uint32_t patches_1_bytes =
+        (get_max_num_patches() + 1) * sizeof(uint32_t);
 
-    const uint32_t patches_1_bytes = (m_num_patches + 1) * sizeof(uint32_t);
+    m_h_vertex_prefix = (uint32_t*)malloc(patches_1_bytes);
+    m_h_edge_prefix   = (uint32_t*)malloc(patches_1_bytes);
+    m_h_face_prefix   = (uint32_t*)malloc(patches_1_bytes);
 
-    m_h_vertex_prefix    = (uint32_t*)malloc(patches_1_bytes);
-    m_h_vertex_prefix[0] = 0;
-    m_h_edge_prefix      = (uint32_t*)malloc(patches_1_bytes);
-    m_h_edge_prefix[0]   = 0;
-    m_h_face_prefix      = (uint32_t*)malloc(patches_1_bytes);
-    m_h_face_prefix[0]   = 0;
+    memset(m_h_vertex_prefix, 0, patches_1_bytes);
+    memset(m_h_edge_prefix, 0, patches_1_bytes);
+    memset(m_h_face_prefix, 0, patches_1_bytes);
 
-    for (uint32_t p = 0; p < m_num_patches; ++p) {
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
         m_h_vertex_prefix[p + 1] = m_h_vertex_prefix[p] + m_h_num_owned_v[p];
         m_h_edge_prefix[p + 1]   = m_h_edge_prefix[p] + m_h_num_owned_e[p];
         m_h_face_prefix[p + 1]   = m_h_face_prefix[p] + m_h_num_owned_f[p];
@@ -400,7 +413,7 @@ void RXMesh::calc_max_elements()
     m_max_faces_per_patch    = 0;
 
 
-    for (uint32_t p = 0; p < this->m_num_patches; ++p) {
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
         m_max_vertices_per_patch = std::max(
             m_max_vertices_per_patch, m_h_patches_info[p].num_vertices[0]);
 
@@ -737,279 +750,337 @@ uint32_t RXMesh::get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const
 void RXMesh::build_device()
 {
     CUDA_ERROR(cudaMalloc((void**)&m_d_patches_info,
-                          m_num_patches * sizeof(PatchInfo)));
+                          get_max_num_patches() * sizeof(PatchInfo)));
 
 #pragma omp parallel for
-    for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
-        uint16_t* h_counts = (uint16_t*)malloc(6 * sizeof(uint16_t));
+    for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
 
-        m_h_patches_info[p].num_faces         = h_counts;
-        m_h_patches_info[p].num_faces[0]      = m_h_patches_ltog_f[p].size();
-        m_h_patches_info[p].num_edges         = h_counts + 1;
-        m_h_patches_info[p].num_edges[0]      = m_h_patches_ltog_e[p].size();
-        m_h_patches_info[p].num_vertices      = h_counts + 2;
-        m_h_patches_info[p].num_vertices[0]   = m_h_patches_ltog_v[p].size();
-        m_h_patches_info[p].faces_capacity    = h_counts + 3;
-        m_h_patches_info[p].faces_capacity[0] = static_cast<uint16_t>(
-            m_capacity_factor *
-            static_cast<float>(m_h_patches_info[p].num_faces[0]));
-        m_h_patches_info[p].edges_capacity    = h_counts + 4;
-        m_h_patches_info[p].edges_capacity[0] = static_cast<uint16_t>(
-            m_capacity_factor *
-            static_cast<float>(m_h_patches_info[p].num_edges[0]));
-        m_h_patches_info[p].vertices_capacity    = h_counts + 5;
-        m_h_patches_info[p].vertices_capacity[0] = static_cast<uint16_t>(
-            m_capacity_factor *
-            static_cast<float>(m_h_patches_info[p].num_vertices[0]));
-        m_h_patches_info[p].patch_id    = p;
-        m_h_patches_info[p].patch_stash = PatchStash(false);
-        m_h_patches_info[p].dirty       = (int*)malloc(sizeof(int));
-        m_h_patches_info[p].dirty[0]    = 0;
+        const uint16_t p_num_vertices =
+            static_cast<uint16_t>(m_h_patches_ltog_v[p].size());
+        const uint16_t p_num_edges =
+            static_cast<uint16_t>(m_h_patches_ltog_e[p].size());
+        const uint16_t p_num_faces =
+            static_cast<uint16_t>(m_h_patches_ltog_f[p].size());
 
-        uint16_t* d_counts;
-        CUDA_ERROR(cudaMalloc((void**)&d_counts, 6 * sizeof(uint16_t)));
+        const uint16_t p_vertices_capacity = static_cast<uint16_t>(
+            std::ceil(m_capacity_factor * static_cast<float>(p_num_vertices)));
+        const uint16_t p_edges_capacity = static_cast<uint16_t>(
+            std::ceil(m_capacity_factor * static_cast<float>(p_num_edges)));
+        const uint16_t p_faces_capacity = static_cast<uint16_t>(
+            std::ceil(m_capacity_factor * static_cast<float>(p_num_faces)));
 
-
-        PatchInfo d_patch;
-        d_patch.num_faces         = d_counts;
-        d_patch.num_edges         = d_counts + 1;
-        d_patch.num_vertices      = d_counts + 2;
-        d_patch.faces_capacity    = d_counts + 3;
-        d_patch.edges_capacity    = d_counts + 4;
-        d_patch.vertices_capacity = d_counts + 5;
-        d_patch.patch_id          = p;
-        d_patch.patch_stash       = PatchStash(true);
-        d_patch.lock.init();
-
-        // copy count and capacities
-        CUDA_ERROR(cudaMemcpy(d_patch.num_faces,
-                              m_h_patches_info[p].num_faces,
-                              sizeof(uint16_t),
-                              cudaMemcpyHostToDevice));
-        CUDA_ERROR(cudaMemcpy(d_patch.num_edges,
-                              m_h_patches_info[p].num_edges,
-                              sizeof(uint16_t),
-                              cudaMemcpyHostToDevice));
-        CUDA_ERROR(cudaMemcpy(d_patch.num_vertices,
-                              m_h_patches_info[p].num_vertices,
-                              sizeof(uint16_t),
-                              cudaMemcpyHostToDevice));
-        CUDA_ERROR(cudaMemcpy(d_patch.faces_capacity,
-                              m_h_patches_info[p].faces_capacity,
-                              sizeof(uint16_t),
-                              cudaMemcpyHostToDevice));
-        CUDA_ERROR(cudaMemcpy(d_patch.edges_capacity,
-                              m_h_patches_info[p].edges_capacity,
-                              sizeof(uint16_t),
-                              cudaMemcpyHostToDevice));
-        CUDA_ERROR(cudaMemcpy(d_patch.vertices_capacity,
-                              m_h_patches_info[p].vertices_capacity,
-                              sizeof(uint16_t),
-                              cudaMemcpyHostToDevice));
-
-        // allocate and copy patch topology to the device
-        CUDA_ERROR(cudaMalloc(
-            (void**)&d_patch.ev,
-            m_h_patches_info[p].edges_capacity[0] * 2 * sizeof(LocalVertexT)));
-        CUDA_ERROR(cudaMemcpy(
-            d_patch.ev,
-            m_h_patches_info[p].ev,
-            m_h_patches_info[p].num_edges[0] * 2 * sizeof(LocalVertexT),
-            cudaMemcpyHostToDevice));
-
-        CUDA_ERROR(cudaMalloc(
-            (void**)&d_patch.fe,
-            m_h_patches_info[p].faces_capacity[0] * 3 * sizeof(LocalEdgeT)));
-        CUDA_ERROR(cudaMemcpy(
-            d_patch.fe,
-            m_h_patches_info[p].fe,
-            m_h_patches_info[p].num_faces[0] * 3 * sizeof(LocalEdgeT),
-            cudaMemcpyHostToDevice));
-
-        CUDA_ERROR(cudaMalloc((void**)&d_patch.dirty, sizeof(int)));
-        CUDA_ERROR(cudaMemset(d_patch.dirty, 0, sizeof(int)));
-
-
-        // allocate and set bitmask
-        auto bitmask = [&](uint32_t*& d_mask,
-                           uint32_t*& h_mask,
-                           uint32_t   size,
-                           auto       predicate) {
-            size_t num_bytes = detail::mask_num_bytes(size);
-            h_mask           = (uint32_t*)malloc(num_bytes);
-            CUDA_ERROR(cudaMalloc((void**)&d_mask, num_bytes));
-
-            for (uint16_t i = 0; i < size; ++i) {
-                if (predicate(i)) {
-                    detail::bitmask_set_bit(i, h_mask);
-                } else {
-                    detail::bitmask_clear_bit(i, h_mask);
-                }
-            }
-
-            CUDA_ERROR(
-                cudaMemcpy(d_mask, h_mask, num_bytes, cudaMemcpyHostToDevice));
-        };
-
-
-        // vertices active mask
-        bitmask(d_patch.active_mask_v,
-                m_h_patches_info[p].active_mask_v,
-                m_h_patches_info[p].vertices_capacity[0],
-                [&](uint16_t v) {
-                    return v < m_h_patches_info[p].num_vertices[0];
-                });
-
-        // edges active mask
-        bitmask(
-            d_patch.active_mask_e,
-            m_h_patches_info[p].active_mask_e,
-            m_h_patches_info[p].edges_capacity[0],
-            [&](uint16_t e) { return e < m_h_patches_info[p].num_edges[0]; });
-
-        // faces active mask
-        bitmask(
-            d_patch.active_mask_f,
-            m_h_patches_info[p].active_mask_f,
-            m_h_patches_info[p].faces_capacity[0],
-            [&](uint16_t f) { return f < m_h_patches_info[p].num_faces[0]; });
-
-        // vertices owned mask
-        bitmask(d_patch.owned_mask_v,
-                m_h_patches_info[p].owned_mask_v,
-                m_h_patches_info[p].vertices_capacity[0],
-                [&](uint16_t v) { return v < m_h_num_owned_v[p]; });
-
-        // edges owned mask
-        bitmask(d_patch.owned_mask_e,
-                m_h_patches_info[p].owned_mask_e,
-                m_h_patches_info[p].edges_capacity[0],
-                [&](uint16_t e) { return e < m_h_num_owned_e[p]; });
-
-        // faces owned mask
-        bitmask(d_patch.owned_mask_f,
-                m_h_patches_info[p].owned_mask_f,
-                m_h_patches_info[p].faces_capacity[0],
-                [&](uint16_t f) { return f < m_h_num_owned_f[p]; });
-
-        // Populate PatchStash
-        auto populate_patch_stash =
-            [&](const std::vector<std::vector<uint32_t>>& ltog,
-                const std::vector<uint32_t>&              element_patch,
-                const std::vector<uint16_t>&              num_owned) {
-                const uint16_t num_not_owned = ltog[p].size() - num_owned[p];
-
-                // loop over all not-owned elements to populate PatchStash
-                for (uint16_t i = 0; i < num_not_owned; ++i) {
-                    uint16_t local_id    = i + num_owned[p];
-                    uint32_t global_id   = ltog[p][local_id];
-                    uint32_t owner_patch = element_patch[global_id];
-
-                    m_h_patches_info[p].patch_stash.insert_patch(owner_patch);
-                }
-            };
-
-        populate_patch_stash(
-            m_h_patches_ltog_f, m_patcher->get_face_patch(), m_h_num_owned_f);
-        populate_patch_stash(
-            m_h_patches_ltog_e, m_patcher->get_edge_patch(), m_h_num_owned_e);
-        populate_patch_stash(
-            m_h_patches_ltog_v, m_patcher->get_vertex_patch(), m_h_num_owned_v);
-
-        CUDA_ERROR(cudaMemcpy(d_patch.patch_stash.m_stash,
-                              m_h_patches_info[p].patch_stash.m_stash,
-                              PatchStash::stash_size * sizeof(uint32_t),
-                              cudaMemcpyHostToDevice));
-
-
-        // build LPHashtable
-        auto build_ht = [&](const std::vector<std::vector<uint32_t>>& ltog,
-                            const std::vector<uint32_t>& element_patch,
-                            const std::vector<uint16_t>& num_owned,
-                            const uint16_t               cap,
-                            PatchStash&                  stash,
-                            LPHashTable&                 h_hashtable,
-                            LPHashTable&                 d_hashtable) {
-            const uint16_t num_not_owned = ltog[p].size() - num_owned[p];
-
-#ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
-            const uint16_t capacity = cap;
-#else
-            const uint16_t capacity = static_cast<uint16_t>(std::ceil(
-                m_capacity_factor * static_cast<float>(num_not_owned) /
-                m_lp_hashtable_load_factor));
-#endif
-
-            h_hashtable = LPHashTable(capacity, false);
-            d_hashtable = LPHashTable(capacity, true);
-
-            for (uint16_t i = 0; i < num_not_owned; ++i) {
-                uint16_t local_id    = i + num_owned[p];
-                uint32_t global_id   = ltog[p][local_id];
-                uint32_t owner_patch = element_patch[global_id];
-
-                auto it = std::lower_bound(
-                    ltog[owner_patch].begin(),
-                    ltog[owner_patch].begin() + num_owned[owner_patch],
-                    global_id);
-
-                if (it == ltog[owner_patch].begin() + num_owned[owner_patch]) {
-                    RXMESH_ERROR(
-                        "rxmesh::build_device can not find the local id of "
-                        "{} in patch {}. Maybe this patch does not own "
-                        "this mesh element.",
-                        global_id,
-                        owner_patch);
-                } else {
-                    uint16_t local_id_in_owner_patch =
-                        static_cast<uint16_t>(it - ltog[owner_patch].begin());
-
-                    uint8_t patch_id = stash.find_patch_index(owner_patch);
-
-                    LPPair pair(local_id, local_id_in_owner_patch, patch_id);
-                    if (!h_hashtable.insert(pair)) {
-                        RXMESH_ERROR(
-                            "rxmesh::build_device failed to insert in the "
-                            "hashtable. Retry with smaller load factor. Load "
-                            "factor used = {}",
-                            m_lp_hashtable_load_factor);
-                    }
-                }
-            }
-
-            d_hashtable.move(h_hashtable);
-        };
-
-
-        build_ht(m_h_patches_ltog_v,
-                 m_patcher->get_vertex_patch(),
-                 m_h_num_owned_v,
-                 m_h_patches_info[p].vertices_capacity[0],
-                 m_h_patches_info[p].patch_stash,
-                 m_h_patches_info[p].lp_v,
-                 d_patch.lp_v);
-
-        build_ht(m_h_patches_ltog_e,
-                 m_patcher->get_edge_patch(),
-                 m_h_num_owned_e,
-                 m_h_patches_info[p].edges_capacity[0],
-                 m_h_patches_info[p].patch_stash,
-                 m_h_patches_info[p].lp_e,
-                 d_patch.lp_e);
-
-        build_ht(m_h_patches_ltog_f,
-                 m_patcher->get_face_patch(),
-                 m_h_num_owned_f,
-                 m_h_patches_info[p].faces_capacity[0],
-                 m_h_patches_info[p].patch_stash,
-                 m_h_patches_info[p].lp_f,
-                 d_patch.lp_f);
-
-        CUDA_ERROR(cudaMemcpy(m_d_patches_info + p,
-                              &d_patch,
-                              sizeof(PatchInfo),
-                              cudaMemcpyHostToDevice));
+        build_device_single_patch(p,
+                                  p_num_vertices,
+                                  p_num_edges,
+                                  p_num_faces,
+                                  p_vertices_capacity,
+                                  p_edges_capacity,
+                                  p_faces_capacity,
+                                  m_h_num_owned_v[p],
+                                  m_h_num_owned_e[p],
+                                  m_h_num_owned_f[p],
+                                  m_h_patches_ltog_v[p],
+                                  m_h_patches_ltog_e[p],
+                                  m_h_patches_ltog_f[p],
+                                  m_h_patches_info[p],
+                                  m_d_patches_info[p]);
     }
 }
 
+void RXMesh::build_device_single_patch(const uint32_t patch_id,
+                                       const uint16_t p_num_vertices,
+                                       const uint16_t p_num_edges,
+                                       const uint16_t p_num_faces,
+                                       const uint16_t p_vertices_capacity,
+                                       const uint16_t p_edges_capacity,
+                                       const uint16_t p_faces_capacity,
+                                       const uint16_t p_num_owned_vertices,
+                                       const uint16_t p_num_owned_edges,
+                                       const uint16_t p_num_owned_faces,
+                                       const std::vector<uint32_t>& ltog_v,
+                                       const std::vector<uint32_t>& ltog_e,
+                                       const std::vector<uint32_t>& ltog_f,
+                                       PatchInfo& h_patch_info,
+                                       PatchInfo& d_patch_info)
+{
+    uint16_t* h_counts = (uint16_t*)malloc(6 * sizeof(uint16_t));
+
+    h_patch_info.num_faces            = h_counts;
+    h_patch_info.num_faces[0]         = p_num_faces;
+    h_patch_info.num_edges            = h_counts + 1;
+    h_patch_info.num_edges[0]         = p_num_edges;
+    h_patch_info.num_vertices         = h_counts + 2;
+    h_patch_info.num_vertices[0]      = p_num_vertices;
+    h_patch_info.faces_capacity       = h_counts + 3;
+    h_patch_info.faces_capacity[0]    = p_faces_capacity;
+    h_patch_info.edges_capacity       = h_counts + 4;
+    h_patch_info.edges_capacity[0]    = p_edges_capacity;
+    h_patch_info.vertices_capacity    = h_counts + 5;
+    h_patch_info.vertices_capacity[0] = p_vertices_capacity;
+    h_patch_info.patch_id             = patch_id;
+    h_patch_info.patch_stash          = PatchStash(false);
+    h_patch_info.dirty                = (int*)malloc(sizeof(int));
+    h_patch_info.dirty[0]             = 0;
+
+    uint16_t* d_counts;
+    CUDA_ERROR(cudaMalloc((void**)&d_counts, 6 * sizeof(uint16_t)));
+
+    PatchInfo d_patch;
+    d_patch.num_faces         = d_counts;
+    d_patch.num_edges         = d_counts + 1;
+    d_patch.num_vertices      = d_counts + 2;
+    d_patch.faces_capacity    = d_counts + 3;
+    d_patch.edges_capacity    = d_counts + 4;
+    d_patch.vertices_capacity = d_counts + 5;
+    d_patch.patch_id          = patch_id;
+    d_patch.patch_stash       = PatchStash(true);
+    d_patch.lock.init();
+
+    // copy count and capacities
+    CUDA_ERROR(cudaMemcpy(d_patch.num_faces,
+                          h_patch_info.num_faces,
+                          sizeof(uint16_t),
+                          cudaMemcpyHostToDevice));
+    CUDA_ERROR(cudaMemcpy(d_patch.num_edges,
+                          h_patch_info.num_edges,
+                          sizeof(uint16_t),
+                          cudaMemcpyHostToDevice));
+    CUDA_ERROR(cudaMemcpy(d_patch.num_vertices,
+                          h_patch_info.num_vertices,
+                          sizeof(uint16_t),
+                          cudaMemcpyHostToDevice));
+    CUDA_ERROR(cudaMemcpy(d_patch.faces_capacity,
+                          h_patch_info.faces_capacity,
+                          sizeof(uint16_t),
+                          cudaMemcpyHostToDevice));
+    CUDA_ERROR(cudaMemcpy(d_patch.edges_capacity,
+                          h_patch_info.edges_capacity,
+                          sizeof(uint16_t),
+                          cudaMemcpyHostToDevice));
+    CUDA_ERROR(cudaMemcpy(d_patch.vertices_capacity,
+                          h_patch_info.vertices_capacity,
+                          sizeof(uint16_t),
+                          cudaMemcpyHostToDevice));
+
+    // allocate and copy patch topology to the device
+    CUDA_ERROR(cudaMalloc((void**)&d_patch.ev,
+                          p_edges_capacity * 2 * sizeof(LocalVertexT)));
+    CUDA_ERROR(cudaMemcpy(d_patch.ev,
+                          h_patch_info.ev,
+                          p_num_edges * 2 * sizeof(LocalVertexT),
+                          cudaMemcpyHostToDevice));
+
+    CUDA_ERROR(cudaMalloc((void**)&d_patch.fe,
+                          p_faces_capacity * 3 * sizeof(LocalEdgeT)));
+    CUDA_ERROR(cudaMemcpy(d_patch.fe,
+                          h_patch_info.fe,
+                          p_num_faces * 3 * sizeof(LocalEdgeT),
+                          cudaMemcpyHostToDevice));
+
+    CUDA_ERROR(cudaMalloc((void**)&d_patch.dirty, sizeof(int)));
+    CUDA_ERROR(cudaMemset(d_patch.dirty, 0, sizeof(int)));
+
+
+    // allocate and set bitmask
+    auto bitmask = [&](uint32_t*& d_mask,
+                       uint32_t*& h_mask,
+                       uint32_t   size,
+                       auto       predicate) {
+        size_t num_bytes = detail::mask_num_bytes(size);
+        h_mask           = (uint32_t*)malloc(num_bytes);
+        CUDA_ERROR(cudaMalloc((void**)&d_mask, num_bytes));
+
+        for (uint16_t i = 0; i < size; ++i) {
+            if (predicate(i)) {
+                detail::bitmask_set_bit(i, h_mask);
+            } else {
+                detail::bitmask_clear_bit(i, h_mask);
+            }
+        }
+
+        CUDA_ERROR(
+            cudaMemcpy(d_mask, h_mask, num_bytes, cudaMemcpyHostToDevice));
+    };
+
+
+    // vertices active mask
+    bitmask(d_patch.active_mask_v,
+            h_patch_info.active_mask_v,
+            p_vertices_capacity,
+            [&](uint16_t v) { return v < p_num_vertices; });
+
+    // edges active mask
+    bitmask(d_patch.active_mask_e,
+            h_patch_info.active_mask_e,
+            p_edges_capacity,
+            [&](uint16_t e) { return e < p_num_edges; });
+
+    // faces active mask
+    bitmask(d_patch.active_mask_f,
+            h_patch_info.active_mask_f,
+            p_faces_capacity,
+            [&](uint16_t f) { return f < p_num_faces; });
+
+    // vertices owned mask
+    bitmask(d_patch.owned_mask_v,
+            h_patch_info.owned_mask_v,
+            p_vertices_capacity,
+            [&](uint16_t v) { return v < p_num_owned_vertices; });
+
+    // edges owned mask
+    bitmask(d_patch.owned_mask_e,
+            h_patch_info.owned_mask_e,
+            p_edges_capacity,
+            [&](uint16_t e) { return e < p_num_owned_edges; });
+
+    // faces owned mask
+    bitmask(d_patch.owned_mask_f,
+            h_patch_info.owned_mask_f,
+            p_faces_capacity,
+            [&](uint16_t f) { return f < p_num_owned_faces; });
+
+
+    // Populate PatchStash
+    auto populate_patch_stash = [&](const std::vector<uint32_t>& ltog,
+                                    const std::vector<uint32_t>& element_patch,
+                                    const uint16_t&              num_owned) {
+        const uint16_t num_not_owned = ltog.size() - num_owned;
+
+        // loop over all not-owned elements to populate PatchStash
+        for (uint16_t i = 0; i < num_not_owned; ++i) {
+            uint16_t local_id    = i + num_owned;
+            uint32_t global_id   = ltog[local_id];
+            uint32_t owner_patch = element_patch[global_id];
+
+            h_patch_info.patch_stash.insert_patch(owner_patch);
+        }
+    };
+
+    populate_patch_stash(
+        ltog_v, m_patcher->get_vertex_patch(), p_num_owned_vertices);
+    populate_patch_stash(
+        ltog_e, m_patcher->get_edge_patch(), p_num_owned_edges);
+    populate_patch_stash(
+        ltog_f, m_patcher->get_face_patch(), p_num_owned_faces);
+
+
+    CUDA_ERROR(cudaMemcpy(d_patch.patch_stash.m_stash,
+                          h_patch_info.patch_stash.m_stash,
+                          PatchStash::stash_size * sizeof(uint32_t),
+                          cudaMemcpyHostToDevice));
+
+
+    // build LPHashtable
+    auto build_ht = [&](const std::vector<std::vector<uint32_t>>& ltog,
+                        const std::vector<uint32_t>&              p_ltog,
+                        const std::vector<uint32_t>&              element_patch,
+                        const std::vector<uint16_t>&              num_owned,
+                        const uint16_t                            num_elements,
+                        const uint16_t num_owned_elements,
+                        const uint16_t cap,
+                        PatchStash&    stash,
+                        LPHashTable&   h_hashtable,
+                        LPHashTable&   d_hashtable) {
+        const uint16_t num_not_owned = num_elements - num_owned_elements;
+
+#ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
+        const uint16_t capacity = cap;
+#else
+        const uint16_t capacity = static_cast<uint16_t>(
+            std::ceil(m_capacity_factor * static_cast<float>(num_not_owned) /
+                      m_lp_hashtable_load_factor));
+#endif
+
+        h_hashtable = LPHashTable(capacity, false);
+        d_hashtable = LPHashTable(capacity, true);
+
+        for (uint16_t i = 0; i < num_not_owned; ++i) {
+            uint16_t local_id    = i + num_owned_elements;
+            uint32_t global_id   = p_ltog[local_id];
+            uint32_t owner_patch = element_patch[global_id];
+
+            auto it = std::lower_bound(
+                ltog[owner_patch].begin(),
+                ltog[owner_patch].begin() + num_owned[owner_patch],
+                global_id);
+
+            if (it == ltog[owner_patch].begin() + num_owned[owner_patch]) {
+                RXMESH_ERROR(
+                    "rxmesh::build_device can not find the local id of "
+                    "{} in patch {}. Maybe this patch does not own "
+                    "this mesh element.",
+                    global_id,
+                    owner_patch);
+            } else {
+                uint16_t local_id_in_owner_patch =
+                    static_cast<uint16_t>(it - ltog[owner_patch].begin());
+
+                uint8_t patch_id = stash.find_patch_index(owner_patch);
+
+                LPPair pair(local_id, local_id_in_owner_patch, patch_id);
+                if (!h_hashtable.insert(pair)) {
+                    RXMESH_ERROR(
+                        "rxmesh::build_device failed to insert in the "
+                        "hashtable. Retry with smaller load factor. Load "
+                        "factor used = {}",
+                        m_lp_hashtable_load_factor);
+                }
+            }
+        }
+
+        d_hashtable.move(h_hashtable);
+    };
+
+
+    build_ht(m_h_patches_ltog_v,
+             ltog_v,
+             m_patcher->get_vertex_patch(),
+             m_h_num_owned_v,
+             p_num_vertices,
+             p_num_owned_vertices,
+             p_vertices_capacity,
+             h_patch_info.patch_stash,
+             h_patch_info.lp_v,
+             d_patch.lp_v);
+
+    build_ht(m_h_patches_ltog_e,
+             ltog_e,
+             m_patcher->get_edge_patch(),
+             m_h_num_owned_e,
+             p_num_edges,
+             p_num_owned_edges,
+             h_patch_info.edges_capacity[0],
+             h_patch_info.patch_stash,
+             h_patch_info.lp_e,
+             d_patch.lp_e);
+
+    build_ht(m_h_patches_ltog_f,
+             ltog_f,
+             m_patcher->get_face_patch(),
+             m_h_num_owned_f,
+             p_num_faces,
+             p_num_owned_faces,
+             h_patch_info.faces_capacity[0],
+             h_patch_info.patch_stash,
+             h_patch_info.lp_f,
+             d_patch.lp_f);
+
+    CUDA_ERROR(cudaMemcpy(
+        &d_patch_info, &d_patch, sizeof(PatchInfo), cudaMemcpyHostToDevice));
+}
+
+void RXMesh::allocate_extra_patches()
+{
+    /*for (uint32_t p = get_num_patches(); p < get_max_num_patches(); ++p) {
+
+        const uint16_t p_num_vertices = 0;
+        const uint16_t p_num_edges    = 0;
+        const uint16_t p_num_faces    = 0;
+
+        m_h_patches_info[p].ev = (LocalVertexT*)malloc(
+            2 * get_per_patch_max_edges_capacity() * sizeof(LocalVertexT));
+        m_h_patches_info[p].fe = (LocalEdgeT*)malloc(
+            3 * get_per_patch_max_faces_capacity() * sizeof(LocalEdgeT));
+    }*/
+}
 }  // namespace rxmesh

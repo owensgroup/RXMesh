@@ -152,6 +152,7 @@ class Context
               const uint32_t max_num_edges,
               const uint32_t max_num_faces,
               const uint32_t num_patches,
+              const uint32_t max_num_patches,
               const float    capacity_factor,
               uint32_t*      vertex_prefix,
               uint32_t*      edge_prefix,
@@ -169,6 +170,7 @@ class Context
         m_max_num_edges    = buffer + 5;
         m_max_num_faces    = buffer + 6;
         m_capacity_factor  = capacity_factor;
+        m_max_num_patches  = max_num_patches;
 
         CUDA_ERROR(cudaMemcpy(m_num_vertices,
                               &num_vertices,
@@ -216,6 +218,7 @@ class Context
     uint32_t *     m_vertex_prefix, *m_edge_prefix, *m_face_prefix;
     PatchInfo*     m_patches_info;
     float          m_capacity_factor;
+    uint32_t       m_max_num_patches;
     PatchScheduler m_patch_scheduler;
 };
 }  // namespace rxmesh
