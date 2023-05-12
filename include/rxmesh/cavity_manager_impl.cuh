@@ -32,8 +32,10 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
         // get a patch
         s_patch_id = m_context.m_patch_scheduler.pop();
 
-        if (m_context.m_patches_info[s_patch_id].patch_id == INVALID32) {
-            s_patch_id = INVALID32;
+        if (s_patch_id != INVALID32) {
+            if (m_context.m_patches_info[s_patch_id].patch_id == INVALID32) {
+                s_patch_id = INVALID32;
+            }
         }
 
         // try to lock the patch
