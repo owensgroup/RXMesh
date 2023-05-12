@@ -171,6 +171,15 @@ class RXMeshDynamic : public RXMeshStatic
     void cleanup();
 
     /**
+     * @brief slice a patch if the number of faces in the patch is greater
+     * than a threshold
+     */
+    void slice_patches(const uint32_t                num_faces_threshold,
+                       rxmesh::FaceAttribute<int>&   f_attr,
+                       rxmesh::EdgeAttribute<int>&   e_attr,
+                       rxmesh::VertexAttribute<int>& v_attr);
+
+    /**
      * @brief update the host side. Use this function to update the host side
      * after performing (dynamic) updates on the GPU. This function may
      * re-allocates the host side memory buffers in case it is not enough (e.g.,

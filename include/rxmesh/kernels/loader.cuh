@@ -5,7 +5,6 @@
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/memcpy_async.h>
-#include "rxmesh/context.h"
 #include "rxmesh/kernels/shmem_allocator.cuh"
 #include "rxmesh/local.h"
 #include "rxmesh/types.h"

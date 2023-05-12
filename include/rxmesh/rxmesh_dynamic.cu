@@ -277,6 +277,236 @@ __global__ static void remove_surplus_elements(const Context context)
 
 
 template <uint32_t blockThreads>
+__inline__ __device__ void bi_assignment(
+    cooperative_groups::thread_block& block,
+    const uint16_t                    num_vertices,
+    const uint16_t                    num_edges,
+    const uint16_t                    num_faces,
+    const Bitmask&                    s_owned_v,
+    const Bitmask&                    s_owned_e,
+    const Bitmask&                    s_owned_f,
+    const Bitmask&                    s_active_v,
+    const Bitmask&                    s_active_e,
+    const Bitmask&                    s_active_f,
+    const uint16_t*                   s_ev,
+    const uint16_t*                   s_fe,
+    Bitmask&                          s_patch_v,
+    Bitmask&                          s_patch_e,
+    Bitmask&                          s_patch_f)
+{
+    // assign mesh element to two partitions. the assignment partition the patch
+    // into contiguous patches of almost equal size
+    //
+    // an element stay in the patch if its bitmask is zero
+
+    // initially, all mesh elements stays in this patch
+    s_patch_v.reset(block);
+    s_patch_e.reset(block);
+    s_patch_f.reset(block);
+    block.sync();
+
+    // number of faces that are assigned to 1
+    __shared__ uint16_t s_num_1_faces;
+    if (threadIdx.x == 0) {
+        // we bootstrap the assignment by assigning a ribbon face to 1
+        for (uint16_t f = 0; f < num_faces; ++f) {
+            if (s_active_f(f) && !s_owned_f(f)) {
+                s_patch_f.set(f);
+            }
+        }
+        s_num_1_faces = 1;
+    }
+    block.sync();
+
+    // TODO count the number of owned faces
+    // and only use the number of owned faces in the new patch to be the
+    // stopping criterion
+
+    // we iterate over faces twice. First, every face atomically set its
+    // three edges if the face is set. Second, every face set itself if there
+    // are two edges incident to it that are set. we stop when the s_num_1_faces
+    // is more than half num_faces
+    while (s_num_1_faces < num_faces / 2) {
+
+        // 1st
+        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+            if (s_active_f(f) && s_patch_f(f)) {
+                const uint16_t e0(s_fe[3 * f + 0] >> 1),
+                    e1(s_fe[3 * f + 1] >> 1), e2(s_fe[3 * f + 2] >> 1);
+                s_patch_e.set(e0, true);
+                s_patch_e.set(e1, true);
+                s_patch_e.set(e2, true);
+            }
+        }
+
+        block.sync();
+
+        // 2nd
+        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+            if (s_active_f(f)) {
+                const uint16_t e0(s_fe[3 * f + 0] >> 1),
+                    e1(s_fe[3 * f + 1] >> 1), e2(s_fe[3 * f + 2] >> 1);
+                int sum = int(s_patch_e(e0)) + int(s_patch_e(e1)) +
+                          int(s_patch_e(e2));
+                if (sum >= 1) {
+                    s_patch_f.set(f, true);
+                    atomicAdd(&s_num_1_faces, 1);
+                }
+            }
+        }
+        block.sync();
+    }
+
+
+    // finally we assign vertices such that each edge assign its two vertices
+    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        if (s_active_e(e) && s_patch_e(e)) {
+            const uint16_t v0(s_ev[2 * e + 0]), v1(s_ev[2 * e + 1]);
+            s_patch_v.set(v0, true);
+            s_patch_v.set(v1, true);
+        }
+    }
+}
+
+template <uint32_t blockThreads>
+__global__ static void slice_patches(const Context  context,
+                                     const uint32_t current_num_patches,
+                                     const uint32_t num_faces_threshold,
+                                     rxmesh::FaceAttribute<int>   f_attr,
+                                     rxmesh::EdgeAttribute<int>   e_attr,
+                                     rxmesh::VertexAttribute<int> v_attr)
+{
+    // ev, fe, active_v/e/f, owned_v/e/f, patch_v/e/f
+    auto block = cooperative_groups::this_thread_block();
+
+    ShmemAllocator shrd_alloc;
+
+    const uint32_t pid = blockIdx.x;
+    if (pid >= current_num_patches) {
+        return;
+    }
+
+    PatchInfo pi = context.m_patches_info[pid];
+
+    const uint16_t num_vertices = pi.num_vertices[0];
+    const uint16_t num_edges    = pi.num_edges[0];
+    const uint16_t num_faces    = pi.num_faces[0];
+
+
+    auto alloc_masks = [&](uint16_t        num_elements,
+                           Bitmask&        owned,
+                           Bitmask&        active,
+                           Bitmask&        patch,
+                           const uint32_t* g_owned,
+                           const uint32_t* g_active) {
+        owned  = Bitmask(num_elements, shrd_alloc);
+        active = Bitmask(num_elements, shrd_alloc);
+        patch  = Bitmask(num_elements, shrd_alloc);
+
+        owned.reset(block);
+        active.reset(block);
+
+        // to remove the racecheck hazard report due to WAW on owned and active
+        block.sync();
+
+        detail::load_async(block,
+                           reinterpret_cast<const char*>(g_owned),
+                           owned.num_bytes(),
+                           reinterpret_cast<char*>(owned.m_bitmask),
+                           false);
+        detail::load_async(block,
+                           reinterpret_cast<const char*>(g_active),
+                           active.num_bytes(),
+                           reinterpret_cast<char*>(active.m_bitmask),
+                           false);
+    };
+
+
+    if (num_faces >= num_faces_threshold) {
+        Bitmask s_owned_v, s_owned_e, s_owned_f;
+        Bitmask s_active_v, s_active_e, s_active_f;
+        Bitmask s_patch_v, s_patch_e, s_patch_f;
+
+        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * num_edges);
+        detail::load_async(block,
+                           reinterpret_cast<uint16_t*>(pi.ev),
+                           2 * num_edges,
+                           s_ev,
+                           false);
+        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
+        detail::load_async(block,
+                           reinterpret_cast<uint16_t*>(pi.fe),
+                           3 * num_faces,
+                           s_fe,
+                           true);
+
+        alloc_masks(num_vertices,
+                    s_owned_v,
+                    s_active_v,
+                    s_patch_v,
+                    pi.owned_mask_v,
+                    pi.active_mask_v);
+        alloc_masks(num_edges,
+                    s_owned_e,
+                    s_active_e,
+                    s_patch_e,
+                    pi.owned_mask_e,
+                    pi.active_mask_e);
+        alloc_masks(num_faces,
+                    s_owned_f,
+                    s_active_f,
+                    s_patch_f,
+                    pi.owned_mask_f,
+                    pi.active_mask_f);
+
+
+        bi_assignment<blockThreads>(block,
+                                    num_vertices,
+                                    num_edges,
+                                    num_faces,
+                                    s_owned_v,
+                                    s_owned_e,
+                                    s_owned_f,
+                                    s_active_v,
+                                    s_active_e,
+                                    s_active_f,
+                                    s_ev,
+                                    s_fe,
+                                    s_patch_v,
+                                    s_patch_e,
+                                    s_patch_f);
+        block.sync();
+
+        if (pi.patch_id == 1) {
+            detail::for_each_face(pi, [&](const FaceHandle fh) {
+                if (s_patch_f(fh.local_id())) {
+                    f_attr(fh) = 1;
+                } else {
+                    f_attr(fh) = 2;
+                }
+            });
+
+            detail::for_each_edge(pi, [&](const EdgeHandle eh) {
+                if (s_patch_e(eh.local_id())) {
+                    e_attr(eh) = 1;
+                } else {
+                    e_attr(eh) = 2;
+                }
+            });
+
+            detail::for_each_vertex(pi, [&](const VertexHandle vh) {
+                if (s_patch_v(vh.local_id())) {
+                    v_attr(vh) = 1;
+                } else {
+                    v_attr(vh) = 2;
+                }
+            });
+        }
+    }
+}
+
+
+template <uint32_t blockThreads>
 __global__ static void calc_num_elements(const Context context,
                                          uint32_t*     sum_num_vertices,
                                          uint32_t*     sum_num_edges,
@@ -1272,8 +1502,39 @@ void RXMeshDynamic::cleanup()
 
     detail::remove_surplus_elements<block_size>
         <<<grid_size, block_size, dyn_shmem>>>(this->m_rxmesh_context);
+}
 
-    CUDA_ERROR(cudaDeviceSynchronize());
+void RXMeshDynamic::slice_patches(const uint32_t num_faces_threshold,
+                                  rxmesh::FaceAttribute<int>&   f_attr,
+                                  rxmesh::EdgeAttribute<int>&   e_attr,
+                                  rxmesh::VertexAttribute<int>& v_attr)
+{
+    constexpr uint32_t block_size = 256;
+    const uint32_t     grid_size  = get_num_patches();
+
+
+    // ev, fe
+    uint32_t dyn_shmem = 2 * ShmemAllocator::default_alignment +
+                         (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
+                         (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+
+    // active_v/e/f, owned_v/e/f, patch_v/e/f
+    dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
+                 3 * ShmemAllocator::default_alignment;
+
+    dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
+                 3 * ShmemAllocator::default_alignment;
+
+    dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
+                 3 * ShmemAllocator::default_alignment;
+
+    detail::slice_patches<block_size>
+        <<<grid_size, block_size, dyn_shmem>>>(this->m_rxmesh_context,
+                                               get_num_patches(),
+                                               num_faces_threshold,
+                                               f_attr,
+                                               e_attr,
+                                               v_attr);
 }
 
 void RXMeshDynamic::update_host()

@@ -75,7 +75,7 @@ __global__ static void random_flips(rxmesh::Context                context,
     cavity.epilogue(block);
 }
 
-TEST(RXMeshDynamic, Cavity)
+TEST(RXMeshDynamic, RandomFlips)
 {
     using namespace rxmesh;
     cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
@@ -264,6 +264,70 @@ TEST(RXMeshDynamic, Cavity)
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(*coords);
     ps_mesh->addEdgeScalarQuantity("toFlip", *to_flip)->setMapRange({0, 2});
+    ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
+    ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
+    ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
+    ps_mesh->setEnabled(false);
+    polyscope::show();
+#endif
+}
+
+
+TEST(RXMeshDynamic, PatchSlicing)
+{
+    using namespace rxmesh;
+    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+
+    // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
+    // rxmesh_args.quite); rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches");
+
+    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
+                     rxmesh_args.quite,
+                     STRINGIFY(INPUT_DIR) "sphere3_patches");
+
+    auto coords = rx.get_input_vertex_coordinates();
+
+    auto f_attr = rx.add_face_attribute<int>("fAttr", 1);
+    auto e_attr = rx.add_edge_attribute<int>("eAttr", 1);
+    auto v_attr = rx.add_vertex_attribute<int>("vAttr", 1);
+    f_attr->reset(0, DEVICE);
+    e_attr->reset(0, DEVICE);
+    v_attr->reset(0, DEVICE);
+
+#if USE_POLYSCOPE
+    rx.polyscope_render_vertex_patch();
+    rx.polyscope_render_edge_patch();
+    rx.polyscope_render_face_patch();
+    rx.render_patch(0)->setEnabled(false);
+    rx.render_patch(1)->setEnabled(false);
+#endif
+
+    const uint32_t num_faces_threshold = 2;
+
+    rx.slice_patches(num_faces_threshold, *f_attr, *e_attr, *v_attr);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+    rx.update_host();
+    coords->move(DEVICE, HOST);
+
+    EXPECT_TRUE(rx.validate());
+
+    f_attr->move(DEVICE, HOST);
+    e_attr->move(DEVICE, HOST);
+    v_attr->move(DEVICE, HOST);
+
+#if USE_POLYSCOPE
+    rx.update_polyscope();
+    rx.polyscope_render_vertex_patch();
+    rx.polyscope_render_edge_patch();
+    rx.polyscope_render_face_patch();
+
+    rx.render_patch(0)->setEnabled(false);
+    rx.render_patch(1)->setEnabled(false);
+
+    auto ps_mesh = rx.get_polyscope_mesh();
+    ps_mesh->updateVertexPositions(*coords);
     ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
     ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
     ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
