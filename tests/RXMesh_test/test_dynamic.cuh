@@ -304,6 +304,7 @@ TEST(RXMeshDynamic, PatchSlicing)
 
     const uint32_t num_faces_threshold = 2;
 
+    //rx.copy_patch_debug(0, *coords);
     rx.slice_patches(num_faces_threshold, *f_attr, *e_attr, *v_attr);
 
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -323,8 +324,9 @@ TEST(RXMeshDynamic, PatchSlicing)
     rx.polyscope_render_edge_patch();
     rx.polyscope_render_face_patch();
 
-    rx.render_patch(0)->setEnabled(false);
-    rx.render_patch(1)->setEnabled(false);
+    for (uint32_t p = 0; p < rx.get_num_patches(); ++p) {
+        rx.render_patch(p)->setEnabled(false);
+    }
 
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(*coords);

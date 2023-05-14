@@ -179,6 +179,9 @@ class RXMeshDynamic : public RXMeshStatic
                        rxmesh::EdgeAttribute<int>&   e_attr,
                        rxmesh::VertexAttribute<int>& v_attr);
 
+    void copy_patch_debug(const uint32_t                  pid,
+                          rxmesh::VertexAttribute<float>& coords);
+
     /**
      * @brief update the host side. Use this function to update the host side
      * after performing (dynamic) updates on the GPU. This function may

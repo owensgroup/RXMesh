@@ -406,7 +406,7 @@ struct LPHashTable
     }
 
 
-   private:
+   //private:
     /**
      * @brief Find a pair in the hash table given its key.
      * @param key input key

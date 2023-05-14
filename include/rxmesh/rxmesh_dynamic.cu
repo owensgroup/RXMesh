@@ -318,18 +318,19 @@ __inline__ __device__ void bi_assignment(
     }
     block.sync();
 
-
-    // we iterate over faces twice. First, every face atomically set its
-    // three vertices if the face is set. Second, every face set itself if there
-    // are one vertex incident to it that is set. we stop when the s_num_1_faces
-    // is more than half num_faces
+    // TODO use number of owned faces and not-owned in the new patch to guide
+    //  its growth
+    //  we iterate over faces twice. First, every face atomically set its
+    //  three vertices if the face is set. Second, every face set itself if
+    //  there are one vertex incident to it that is set. we stop when the
+    //  s_num_1_faces is more than half num_faces
     while (s_num_1_faces < num_faces / 2) {
 
         // 1st
         for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
             if (s_active_f(f) && s_patch_f(f)) {
                 const uint16_t v0(s_fv[3 * f + 0]), v1(s_fv[3 * f + 1]),
-                    v2(s_fv[3 * f + 2]);             
+                    v2(s_fv[3 * f + 2]);
                 s_patch_v.set(v0, true);
                 s_patch_v.set(v1, true);
                 s_patch_v.set(v2, true);
@@ -362,6 +363,131 @@ __inline__ __device__ void bi_assignment(
                 s_patch_e.set(e, true);
             }
         }
+    }
+}
+
+template <uint32_t blockThreads>
+__global__ static void copy_patch_debug(const Context                  context,
+                                        const uint32_t                 pid,
+                                        rxmesh::VertexAttribute<float> coords)
+{
+    auto block = cooperative_groups::this_thread_block();
+
+    if (blockIdx.x == pid) {
+        __shared__ uint32_t s_new_patch_id;
+
+        PatchInfo pi = context.m_patches_info[pid];
+
+        if (threadIdx.x == 0) {
+            s_new_patch_id = ::atomicAdd(context.m_num_patches, uint32_t(1));
+            context.m_patches_info[s_new_patch_id].num_vertices[0] =
+                pi.num_vertices[0];
+            context.m_patches_info[s_new_patch_id].num_edges[0] =
+                pi.num_edges[0];
+            context.m_patches_info[s_new_patch_id].num_faces[0] =
+                pi.num_faces[0];
+            context.m_patches_info[s_new_patch_id].patch_id = s_new_patch_id;
+        }
+        block.sync();
+
+        PatchInfo new_pi = context.m_patches_info[s_new_patch_id];
+
+        detail::store<blockThreads>(reinterpret_cast<uint16_t*>(pi.ev),
+                                    2 * pi.num_edges[0],
+                                    reinterpret_cast<uint16_t*>(new_pi.ev));
+        detail::store<blockThreads>(reinterpret_cast<uint16_t*>(pi.fe),
+                                    3 * pi.num_faces[0],
+                                    reinterpret_cast<uint16_t*>(new_pi.fe));
+        detail::store<blockThreads>(pi.owned_mask_v,
+                                    DIVIDE_UP(pi.num_vertices[0], 32),
+                                    new_pi.owned_mask_v);
+        detail::store<blockThreads>(pi.owned_mask_e,
+                                    DIVIDE_UP(pi.num_edges[0], 32),
+                                    new_pi.owned_mask_e);
+        detail::store<blockThreads>(pi.owned_mask_f,
+                                    DIVIDE_UP(pi.num_faces[0], 32),
+                                    new_pi.owned_mask_f);
+
+        detail::store<blockThreads>(pi.active_mask_v,
+                                    DIVIDE_UP(pi.num_vertices[0], 32),
+                                    new_pi.active_mask_v);
+        detail::store<blockThreads>(pi.active_mask_e,
+                                    DIVIDE_UP(pi.num_edges[0], 32),
+                                    new_pi.active_mask_e);
+        detail::store<blockThreads>(pi.active_mask_f,
+                                    DIVIDE_UP(pi.num_faces[0], 32),
+                                    new_pi.active_mask_f);
+
+        // new_pi.lp_v.write_to_global_memory<blockThreads>(pi.lp_v.m_table);
+        // new_pi.lp_e.write_to_global_memory<blockThreads>(pi.lp_e.m_table);
+        // new_pi.lp_f.write_to_global_memory<blockThreads>(pi.lp_f.m_table);
+
+        for (uint16_t v = threadIdx.x; v < pi.num_vertices[0];
+             v += blockThreads) {
+            VertexHandle vh(pi.patch_id, v);
+            if (!pi.is_deleted(LocalVertexT(v)) &&
+                !pi.is_owned(LocalVertexT(v))) {
+                LPPair lp = pi.lp_v.find(v);
+                assert(!lp.is_sentinel());
+                assert(lp.local_id() == v);
+                LPPair new_lp(
+                    v, lp.local_id_in_owner_patch(), lp.patch_stash_id());
+                new_pi.lp_v.insert(new_lp);
+            } else if (!pi.is_deleted(LocalVertexT(v)) &&
+                       pi.is_owned(LocalVertexT(v))) {
+                ::atomicAdd(context.m_num_vertices, uint32_t(1));
+            }
+        }
+
+
+        for (uint16_t e = threadIdx.x; e < pi.num_edges[0]; e += blockThreads) {
+            EdgeHandle eh(pi.patch_id, e);
+            if (!pi.is_deleted(LocalEdgeT(e)) && !pi.is_owned(LocalEdgeT(e))) {
+                LPPair lp = pi.lp_e.find(e);
+                assert(!lp.is_sentinel());
+                assert(lp.local_id() == e);
+                LPPair new_lp(
+                    e, lp.local_id_in_owner_patch(), lp.patch_stash_id());
+                new_pi.lp_e.insert(new_lp);
+            } else if (!pi.is_deleted(LocalEdgeT(e)) &&
+                       pi.is_owned(LocalEdgeT(e))) {
+                ::atomicAdd(context.m_num_edges, uint32_t(1));
+            }
+        }
+
+        for (uint16_t f = threadIdx.x; f < pi.num_faces[0]; f += blockThreads) {
+            FaceHandle fh(pi.patch_id, f);
+            if (!pi.is_deleted(LocalFaceT(f)) && !pi.is_owned(LocalFaceT(f))) {
+                LPPair lp = pi.lp_f.find(f);
+                assert(!lp.is_sentinel());
+                assert(lp.local_id() == f);
+                LPPair new_lp(
+                    f, lp.local_id_in_owner_patch(), lp.patch_stash_id());
+                new_pi.lp_f.insert(new_lp);
+            } else if (!pi.is_deleted(LocalFaceT(f)) &&
+                       pi.is_owned(LocalFaceT(f))) {
+                ::atomicAdd(context.m_num_faces, uint32_t(1));
+            }
+        }
+
+        detail::store<blockThreads>(
+            pi.lp_v.m_stash, LPHashTable::stash_size, new_pi.lp_v.m_stash);
+        detail::store<blockThreads>(
+            pi.lp_e.m_stash, LPHashTable::stash_size, new_pi.lp_e.m_stash);
+        detail::store<blockThreads>(
+            pi.lp_f.m_stash, LPHashTable::stash_size, new_pi.lp_f.m_stash);
+
+        detail::store<blockThreads>(pi.patch_stash.m_stash,
+                                    PatchStash::stash_size,
+                                    new_pi.patch_stash.m_stash);
+
+        detail::for_each_vertex(pi, [&](const VertexHandle vh) {
+            VertexHandle new_vh(s_new_patch_id, vh.local_id());
+
+            coords(new_vh, 0) = coords(vh, 0);
+            coords(new_vh, 1) = coords(vh, 1);
+            coords(new_vh, 2) = coords(vh, 2);
+        });
     }
 }
 
@@ -420,6 +546,10 @@ __global__ static void slice_patches(const Context  context,
 
 
     if (num_faces >= num_faces_threshold) {
+        __shared__ uint32_t s_new_patch_id;
+        if (threadIdx.x == 0) {
+            s_new_patch_id = ::atomicAdd(context.m_num_patches, uint32_t(1));
+        }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
         Bitmask s_active_v, s_active_e, s_active_f;
         Bitmask s_patch_v, s_patch_e, s_patch_f;
@@ -479,6 +609,23 @@ __global__ static void slice_patches(const Context  context,
                                     s_patch_f);
         block.sync();
 
+
+        /* slice<blockThread>(block,
+                           s_new_patch_id,
+                           num_vertices,
+                           num_edges,
+                           num_faces,
+                           s_owned_v,
+                           s_owned_e,
+                           s_owned_f,
+                           s_active_v,
+                           s_active_e,
+                           s_active_f,
+                           s_ev,
+                           s_fv,
+                           s_patch_v,
+                           s_patch_e,
+                           s_patch_f);*/
 
         if (pi.patch_id == 1) {
             /* for (uint16_t f = threadIdx.x; f < num_faces;
@@ -1579,6 +1726,15 @@ void RXMeshDynamic::slice_patches(const uint32_t num_faces_threshold,
                                                v_attr);
 }
 
+
+void RXMeshDynamic::copy_patch_debug(const uint32_t                  pid,
+                                     rxmesh::VertexAttribute<float>& coords)
+{
+    constexpr uint32_t block_size = 256;
+    detail::copy_patch_debug<block_size>
+        <<<1, block_size, 0>>>(this->m_rxmesh_context, pid, coords);
+}
+
 void RXMeshDynamic::update_host()
 {
     auto resize_masks = [&](uint16_t   size,
@@ -1599,11 +1755,12 @@ void RXMeshDynamic::update_host()
                           m_rxmesh_context.m_num_patches,
                           sizeof(uint32_t),
                           cudaMemcpyDeviceToHost));
-    if (num_patches != m_num_patches) {
+    if (num_patches > get_max_num_patches()) {
         RXMESH_ERROR(
-            "RXMeshDynamic::update_host() does support changing number of "
-            "patches in the mesh");
+            "RXMeshDynamic::update_host() number of patches is bigger than the "
+            "maximum expect number of patches");
     }
+    m_num_patches = num_patches;
 
     for (uint32_t p = 0; p < m_num_patches; ++p) {
         PatchInfo d_patch;
