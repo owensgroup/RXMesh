@@ -435,11 +435,11 @@ __device__ __forceinline__ void f_v(const uint16_t  num_edges,
                 f_v[i] = d_edges[e_id];
             }
             for (uint32_t i = 0; i < 3; i++) {
-                d_faces[f * 3 + i] = f_v[i];
+                d_faces[f_id + i] = f_v[i];
             }
         } else {
             for (uint32_t i = 0; i < 3; i++) {
-                d_faces[f * 3 + i] = INVALID16;
+                d_faces[f_id + i] = INVALID16;
             }
         }
     }

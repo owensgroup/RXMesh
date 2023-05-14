@@ -276,170 +276,6 @@ __global__ static void remove_surplus_elements(const Context context)
 }
 
 template <uint32_t blockThreads>
-__inline__ __device__ void bi_assignment2(
-    cooperative_groups::thread_block& block,
-    ShmemAllocator&                   shrd_alloc,
-    const uint16_t                    num_vertices,
-    const uint16_t                    num_edges,
-    const uint16_t                    num_faces,
-    const Bitmask&                    s_owned_v,
-    const Bitmask&                    s_owned_e,
-    const Bitmask&                    s_owned_f,
-    const Bitmask&                    s_active_v,
-    const Bitmask&                    s_active_e,
-    const Bitmask&                    s_active_f,
-    const uint16_t*                   s_ev,
-    const uint16_t*                   s_fe,
-    Bitmask&                          s_patch_v,
-    Bitmask&                          s_patch_e,
-    Bitmask&                          s_patch_f,
-    const int                         max_num_iter = 10)
-{
-    // initially, all vertices/edges/face belongs to the same (this) patch
-    // so, we only assigne vertices/edges/faces to the other (split) patch
-    // this assignment is indicated by setting a bit in s_patch_v/e/f
-
-    __shared__ int s_seed, s_num_1_faces, s_num_boundary_faces;
-
-
-    Bitmask s_boundary_f(num_faces, shrd_alloc);
-    Bitmask s_boundary_e(num_edges, shrd_alloc);
-
-    s_patch_v.reset(block);
-    s_patch_e.reset(block);
-    s_patch_f.reset(block);
-    block.sync();
-
-    if (threadIdx.x == 0) {
-        // pick two seeds that are active and owned faces
-        for (uint16_t f = 0; f < num_faces; ++f) {
-            if (s_active_f(f) && s_owned_f(f)) {
-                s_seed = f;
-                break;
-            }
-        }
-    }
-    block.sync();
-
-    int num_iter = 0;
-
-    while (num_iter < max_num_iter) {
-        // seeding
-        if (threadIdx.x == 0) {
-            s_patch_f.set(uint16_t(s_seed), true);
-            s_num_1_faces = 1;
-        }
-        block.sync();
-
-        // cluster seed propagation
-        while (s_num_1_faces < num_faces / 2) {
-            // 1st
-            for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-                if (s_active_f(f) && s_patch_f(f)) {
-                    const uint16_t e0(s_fe[3 * f + 0] >> 1),
-                        e1(s_fe[3 * f + 1] >> 1), e2(s_fe[3 * f + 2] >> 1);
-                    s_patch_e.set(e0, true);
-                    s_patch_e.set(e1, true);
-                    s_patch_e.set(e2, true);
-                }
-            }
-
-            block.sync();
-
-            // 2nd
-            for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-                if (s_active_f(f)) {
-                    const uint16_t e0(s_fe[3 * f + 0] >> 1),
-                        e1(s_fe[3 * f + 1] >> 1), e2(s_fe[3 * f + 2] >> 1);
-                    int sum = int(s_patch_e(e0)) + int(s_patch_e(e1)) +
-                              int(s_patch_e(e2));
-                    if (sum >= 1) {
-                        s_patch_f.set(f, true);
-                        ::atomicAdd(&s_num_1_faces, int(1));
-                    }
-                }
-            }
-            block.sync();
-        }
-
-
-        // interior
-        // find the most interior face and set it as seed
-
-        s_boundary_f.reset(block);
-        s_boundary_e.reset(block);
-        if (threadIdx.x == 0) {
-            s_num_boundary_faces = 0;
-        }
-        block.sync();
-
-
-        // set boundary faces
-        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-            if (s_patch_f(f)) {
-                const uint16_t e0(s_fe[3 * f + 0] >> 1),
-                    e1(s_fe[3 * f + 1] >> 1), e2(s_fe[3 * f + 2] >> 1);
-                int sum = int(s_patch_e(e0)) + int(s_patch_e(e1)) +
-                          int(s_patch_e(e2));
-                if (sum == 1 || sum == 2) {
-                    s_boundary_f.set(f, true);
-                    ::atomicAdd(&s_num_boundary_faces, int(1));
-                    atomicExch(&s_seed, int(f));
-                }
-            }
-        }
-        block.sync();
-
-        while (s_num_boundary_faces != s_num_1_faces) {
-            assert(s_num_boundary_faces < s_num_1_faces);
-            block.sync();
-            // set boundary edges
-            for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-                if (s_boundary_f(f)) {
-                    const uint16_t e0(s_fe[3 * f + 0] >> 1),
-                        e1(s_fe[3 * f + 1] >> 1), e2(s_fe[3 * f + 2] >> 1);
-                    s_boundary_e.set(e0, true);
-                    s_boundary_e.set(e1, true);
-                    s_boundary_e.set(e2, true);
-                }
-            }
-            block.sync();
-
-            // set boundary faces
-            for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-                if (s_patch_f(f)) {
-                    const uint16_t e0(s_fe[3 * f + 0] >> 1),
-                        e1(s_fe[3 * f + 1] >> 1), e2(s_fe[3 * f + 2] >> 1);
-                    if (s_boundary_e(e0) || s_boundary_e(e1) ||
-                        s_boundary_e(e2)) {
-                        s_boundary_f.set(f, true);
-                        ::atomicAdd(&s_num_boundary_faces, int(1));
-                        atomicExch(&s_seed, int(f));
-                    }
-                }
-            }
-            block.sync();
-        }
-
-        block.sync();
-        s_patch_e.reset(block);
-        s_patch_f.reset(block);
-        block.sync();
-
-        num_iter++;
-    }
-
-    // finally we assign vertices such that each edge assign its two vertices
-    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-        if (s_active_e(e) && s_patch_e(e)) {
-            const uint16_t v0(s_ev[2 * e + 0]), v1(s_ev[2 * e + 1]);
-            s_patch_v.set(v0, true);
-            s_patch_v.set(v1, true);
-        }
-    }
-}
-
-template <uint32_t blockThreads>
 __inline__ __device__ void bi_assignment(
     cooperative_groups::thread_block& block,
     const uint16_t                    num_vertices,
@@ -452,7 +288,7 @@ __inline__ __device__ void bi_assignment(
     const Bitmask&                    s_active_e,
     const Bitmask&                    s_active_f,
     const uint16_t*                   s_ev,
-    const uint16_t*                   s_fe,
+    const uint16_t*                   s_fv,
     Bitmask&                          s_patch_v,
     Bitmask&                          s_patch_e,
     Bitmask&                          s_patch_f)
@@ -475,6 +311,7 @@ __inline__ __device__ void bi_assignment(
         for (uint16_t f = 0; f < num_faces; ++f) {
             if (s_active_f(f) && !s_owned_f(f)) {
                 s_patch_f.set(f);
+                break;
             }
         }
         s_num_1_faces = 1;
@@ -483,19 +320,19 @@ __inline__ __device__ void bi_assignment(
 
 
     // we iterate over faces twice. First, every face atomically set its
-    // three edges if the face is set. Second, every face set itself if there
-    // are two edges incident to it that are set. we stop when the s_num_1_faces
+    // three vertices if the face is set. Second, every face set itself if there
+    // are one vertex incident to it that is set. we stop when the s_num_1_faces
     // is more than half num_faces
     while (s_num_1_faces < num_faces / 2) {
 
         // 1st
         for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
             if (s_active_f(f) && s_patch_f(f)) {
-                const uint16_t e0(s_fe[3 * f + 0] >> 1),
-                    e1(s_fe[3 * f + 1] >> 1), e2(s_fe[3 * f + 2] >> 1);
-                s_patch_e.set(e0, true);
-                s_patch_e.set(e1, true);
-                s_patch_e.set(e2, true);
+                const uint16_t v0(s_fv[3 * f + 0]), v1(s_fv[3 * f + 1]),
+                    v2(s_fv[3 * f + 2]);             
+                s_patch_v.set(v0, true);
+                s_patch_v.set(v1, true);
+                s_patch_v.set(v2, true);
             }
         }
 
@@ -503,11 +340,11 @@ __inline__ __device__ void bi_assignment(
 
         // 2nd
         for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-            if (s_active_f(f)) {
-                const uint16_t e0(s_fe[3 * f + 0] >> 1),
-                    e1(s_fe[3 * f + 1] >> 1), e2(s_fe[3 * f + 2] >> 1);
+            if (s_active_f(f) && !s_patch_f(f)) {
+                const uint16_t v0(s_fv[3 * f + 0]), v1(s_fv[3 * f + 1]),
+                    v2(s_fv[3 * f + 2]);
 
-                if (s_patch_e(e0) || s_patch_e(e1) || s_patch_e(e2)) {
+                if (s_patch_v(v0) || s_patch_v(v1) || s_patch_v(v2)) {
                     s_patch_f.set(f, true);
                     atomicAdd(&s_num_1_faces, 1);
                 }
@@ -517,12 +354,13 @@ __inline__ __device__ void bi_assignment(
     }
 
 
-    // finally we assign vertices such that each edge assign its two vertices
+    // finally we assign edges
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-        if (s_active_e(e) && s_patch_e(e)) {
+        if (s_active_e(e)) {
             const uint16_t v0(s_ev[2 * e + 0]), v1(s_ev[2 * e + 1]);
-            s_patch_v.set(v0, true);
-            s_patch_v.set(v1, true);
+            if (s_patch_v(v0) || s_patch_v(v1)) {
+                s_patch_e.set(e, true);
+            }
         }
     }
 }
@@ -593,6 +431,7 @@ __global__ static void slice_patches(const Context  context,
                            s_ev,
                            false);
         uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
+        uint16_t* s_fv = s_fe;
         detail::load_async(block,
                            reinterpret_cast<uint16_t*>(pi.fe),
                            3 * num_faces,
@@ -618,9 +457,12 @@ __global__ static void slice_patches(const Context  context,
                     pi.owned_mask_f,
                     pi.active_mask_f);
 
+        block.sync();
+        f_v<blockThreads>(
+            num_edges, s_ev, num_faces, s_fv, s_active_f.m_bitmask);
+        block.sync();
 
         bi_assignment<blockThreads>(block,
-                                    // shrd_alloc,
                                     num_vertices,
                                     num_edges,
                                     num_faces,
@@ -631,14 +473,16 @@ __global__ static void slice_patches(const Context  context,
                                     s_active_e,
                                     s_active_f,
                                     s_ev,
-                                    s_fe,
+                                    s_fv,
                                     s_patch_v,
                                     s_patch_e,
                                     s_patch_f);
         block.sync();
 
+
         if (pi.patch_id == 1) {
-            for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+            /* for (uint16_t f = threadIdx.x; f < num_faces;
+                      f += blockThreads) {
                 FaceHandle fh(pi.patch_id, f);
                 if (!s_owned_f(f)) {
                     fh = pi.find<FaceHandle>(f);
@@ -650,14 +494,40 @@ __global__ static void slice_patches(const Context  context,
                     f_attr(fh) = 2;
                 }
             }
-            detail::for_each_face(pi, [&](const FaceHandle fh) {
+
+            for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+                EdgeHandle eh(pi.patch_id, e);
+                if (!s_owned_e(e)) {
+                    eh = pi.find<EdgeHandle>(e);
+                }
+
+                if (s_patch_e(eh.local_id())) {
+                    e_attr(eh) = 1;
+                } else {
+                    e_attr(eh) = 2;
+                }
+            }
+
+            for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads)
+            { VertexHandle vh(pi.patch_id, v); if (!s_owned_v(v)) { vh =
+            pi.find<VertexHandle>(v);
+                }
+
+                if (s_patch_v(vh.local_id())) {
+                    v_attr(vh) = 1;
+                } else {
+                    v_attr(vh) = 2;
+                }
+            }*/
+
+
+            /* detail::for_each_face(pi, [&](const FaceHandle fh) {
                 if (s_patch_f(fh.local_id())) {
                     f_attr(fh) = 1;
                 } else {
                     f_attr(fh) = 2;
                 }
             });
-
             detail::for_each_edge(pi, [&](const EdgeHandle eh) {
                 if (s_patch_e(eh.local_id())) {
                     e_attr(eh) = 1;
@@ -672,7 +542,7 @@ __global__ static void slice_patches(const Context  context,
                 } else {
                     v_attr(vh) = 2;
                 }
-            });
+            });*/
         }
     }
 }
