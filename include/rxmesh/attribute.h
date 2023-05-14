@@ -75,7 +75,7 @@ class Attribute : public AttributeBase
           m_h_attr(nullptr),
           m_h_ptr_on_device(nullptr),
           m_d_attr(nullptr),
-          m_num_patches(0),
+          m_max_num_patches(0),
           m_layout(AoS)
     {
 
@@ -107,7 +107,7 @@ class Attribute : public AttributeBase
           m_h_attr(nullptr),
           m_h_ptr_on_device(nullptr),
           m_d_attr(nullptr),
-          m_num_patches(m_rxmesh->get_num_patches()),
+          m_max_num_patches(rxmesh->get_max_num_patches()),
           m_layout(layout)
     {
         if (name != nullptr) {
@@ -115,7 +115,7 @@ class Attribute : public AttributeBase
             strcpy(this->m_name, name);
         }
 
-        if (m_num_patches == 0) {
+        if (m_rxmesh->get_num_patches() == 0) {
             return;
         }
 
@@ -285,15 +285,19 @@ class Attribute : public AttributeBase
 
             const int threads = 256;
             detail::template memset_attribute<T>
-                <<<m_num_patches, threads, 0, stream>>>(
-                    *this, value, m_num_patches, m_num_attributes);
+                <<<m_rxmesh->get_num_patches(), threads, 0, stream>>>(
+                    *this,
+                    value,
+                    m_rxmesh->get_num_patches(),
+                    m_num_attributes);
         }
 
 
         if ((location & HOST) == HOST) {
             assert((m_allocated & HOST) == HOST);
 #pragma omp parallel for
-            for (int p = 0; p < static_cast<int>(m_num_patches); ++p) {
+            for (int p = 0; p < static_cast<int>(m_rxmesh->get_num_patches());
+                 ++p) {
                 for (int e = 0; e < size(p); ++e) {
                     m_h_attr[p][e] = value;
                 }
@@ -339,12 +343,12 @@ class Attribute : public AttributeBase
             allocate(target);
         }
 
-        if (this->m_num_patches == 0) {
+        if (m_rxmesh->get_num_patches() == 0) {
             return;
         }
 
         if (source == HOST && target == DEVICE) {
-            for (uint32_t p = 0; p < m_num_patches; ++p) {
+            for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
                 CUDA_ERROR(
                     cudaMemcpyAsync(m_h_ptr_on_device[p],
                                     m_h_attr[p],
@@ -353,7 +357,7 @@ class Attribute : public AttributeBase
                                     stream));
             }
         } else if (source == DEVICE && target == HOST) {
-            for (uint32_t p = 0; p < m_num_patches; ++p) {
+            for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
                 CUDA_ERROR(
                     cudaMemcpyAsync(m_h_attr[p],
                                     m_h_ptr_on_device[p],
@@ -371,7 +375,7 @@ class Attribute : public AttributeBase
     void release(locationT location = LOCATION_ALL)
     {
         if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
-            for (uint32_t p = 0; p < m_num_patches; ++p) {
+            for (uint32_t p = 0; p < m_rxmesh->get_max_num_patches(); ++p) {
                 free(m_h_attr[p]);
             }
             free(m_h_attr);
@@ -381,7 +385,7 @@ class Attribute : public AttributeBase
 
         if (((location & DEVICE) == DEVICE) &&
             ((m_allocated & DEVICE) == DEVICE)) {
-            for (uint32_t p = 0; p < m_num_patches; ++p) {
+            for (uint32_t p = 0; p < m_rxmesh->get_max_num_patches(); ++p) {
                 GPU_FREE(m_h_ptr_on_device[p]);
             }
             GPU_FREE(m_d_attr);
@@ -426,7 +430,7 @@ class Attribute : public AttributeBase
                 "different!");
         }
 
-        if (this->is_empty() || this->m_num_patches == 0) {
+        if (this->is_empty() || m_rxmesh->get_num_patches() == 0) {
             return;
         }
 
@@ -443,7 +447,7 @@ class Attribute : public AttributeBase
                     " because location (this) was not allocated on host");
             }
 
-            for (uint32_t p = 0; p < m_num_patches; ++p) {
+            for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
                 std::memcpy(m_h_ptr_on_device[p],
                             source.m_h_ptr_on_device[p],
                             sizeof(T) * capacity(p) * m_num_attributes);
@@ -464,7 +468,7 @@ class Attribute : public AttributeBase
                     " because location (this) was not allocated on device");
             }
 
-            for (uint32_t p = 0; p < m_num_patches; ++p) {
+            for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
                 CUDA_ERROR(
                     cudaMemcpyAsync(m_h_ptr_on_device[p],
                                     source.m_h_ptr_on_device[p],
@@ -489,7 +493,7 @@ class Attribute : public AttributeBase
             }
 
 
-            for (uint32_t p = 0; p < m_num_patches; ++p) {
+            for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
                 CUDA_ERROR(
                     cudaMemcpyAsync(m_h_attr[p],
                                     source.m_h_ptr_on_device[p],
@@ -514,7 +518,7 @@ class Attribute : public AttributeBase
             }
 
 
-            for (uint32_t p = 0; p < m_num_patches; ++p) {
+            for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
                 CUDA_ERROR(
                     cudaMemcpyAsync(m_h_ptr_on_device[p],
                                     source.m_h_attr[p],
@@ -565,7 +569,7 @@ class Attribute : public AttributeBase
                                                       const uint16_t local_id,
                                                       const uint32_t attr) const
     {
-        assert(p_id < m_num_patches);
+        assert(p_id < m_max_num_patches);
         assert(attr < m_num_attributes);
         assert(local_id < size(p_id));
 
@@ -588,7 +592,7 @@ class Attribute : public AttributeBase
                                                       const uint16_t local_id,
                                                       const uint32_t attr)
     {
-        assert(p_id < m_num_patches);
+        assert(p_id < m_max_num_patches);
         assert(attr < m_num_attributes);
         assert(local_id < size(p_id));
 
@@ -604,7 +608,7 @@ class Attribute : public AttributeBase
      */
     __host__ __device__ __forceinline__ bool is_empty() const
     {
-        return m_num_patches == 0;
+        return m_max_num_patches == 0;
     }
 
 
@@ -614,15 +618,15 @@ class Attribute : public AttributeBase
      */
     void allocate(locationT location)
     {
-
-        if (m_num_patches != 0) {
+        if (m_max_num_patches != 0) {
 
             if ((location & HOST) == HOST) {
                 release(HOST);
 
-                m_h_attr = static_cast<T**>(malloc(sizeof(T*) * m_num_patches));
+                m_h_attr =
+                    static_cast<T**>(malloc(sizeof(T*) * m_max_num_patches));
 
-                for (uint32_t p = 0; p < m_num_patches; ++p) {
+                for (uint32_t p = 0; p < m_max_num_patches; ++p) {
                     m_h_attr[p] = static_cast<T*>(
                         malloc(sizeof(T) * capacity(p) * m_num_attributes));
                 }
@@ -635,18 +639,18 @@ class Attribute : public AttributeBase
 
 
                 CUDA_ERROR(cudaMalloc((void**)&(m_d_attr),
-                                      sizeof(T*) * m_num_patches));
+                                      sizeof(T*) * m_max_num_patches));
                 m_h_ptr_on_device =
-                    static_cast<T**>(malloc(sizeof(T*) * m_num_patches));
+                    static_cast<T**>(malloc(sizeof(T*) * m_max_num_patches));
 
-                for (uint32_t p = 0; p < m_num_patches; ++p) {
+                for (uint32_t p = 0; p < m_max_num_patches; ++p) {
                     CUDA_ERROR(
                         cudaMalloc((void**)&(m_h_ptr_on_device[p]),
                                    sizeof(T) * capacity(p) * m_num_attributes));
                 }
                 CUDA_ERROR(cudaMemcpy(m_d_attr,
                                       m_h_ptr_on_device,
-                                      sizeof(T*) * m_num_patches,
+                                      sizeof(T*) * m_max_num_patches,
                                       cudaMemcpyHostToDevice));
                 m_allocated = m_allocated | DEVICE;
             }
@@ -662,7 +666,7 @@ class Attribute : public AttributeBase
     T**              m_h_attr;
     T**              m_h_ptr_on_device;
     T**              m_d_attr;
-    uint32_t         m_num_patches;
+    uint32_t         m_max_num_patches;
     layoutT          m_layout;
 
     constexpr static uint32_t m_block_size = 256;

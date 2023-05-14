@@ -118,8 +118,7 @@ class RXMesh
      */
     uint32_t get_max_num_patches() const
     {
-        return static_cast<uint32_t>(std::ceil(
-            m_patch_alloc_factor * static_cast<float>(m_num_patches)));
+        return m_max_num_patches;
     }
 
     /**
@@ -442,7 +441,7 @@ class RXMesh
     bool m_is_input_closed;
 
 
-    uint32_t       m_num_patches;
+    uint32_t       m_num_patches, m_max_num_patches;
     const uint32_t m_patch_size;
 
     // pointer to the patcher class responsible for everything related to

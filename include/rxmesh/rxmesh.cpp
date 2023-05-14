@@ -207,7 +207,10 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     }
 
 
-    m_num_patches = m_patcher->get_num_patches();
+    m_num_patches     = m_patcher->get_num_patches();
+    m_max_num_patches = static_cast<uint32_t>(
+        std::ceil(m_patch_alloc_factor * static_cast<float>(m_num_patches)));
+
     m_h_patches_info =
         (PatchInfo*)malloc(get_max_num_patches() * sizeof(PatchInfo));
     m_h_patches_ltog_f.resize(get_num_patches());

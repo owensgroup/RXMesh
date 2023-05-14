@@ -29,10 +29,10 @@ class ReduceHandle
      * operations
      */
     ReduceHandle(const Attribute<T, HandleT>& attr)
-        : m_num_patches(attr.m_num_patches)
+        : m_max_num_patches(attr.m_max_num_patches)
     {
         CUDA_ERROR(
-            cudaMalloc(&m_d_reduce_1st_stage, m_num_patches * sizeof(T)));
+            cudaMalloc(&m_d_reduce_1st_stage, m_max_num_patches * sizeof(T)));
 
         CUDA_ERROR(cudaMalloc(&m_d_reduce_2nd_stage, sizeof(T)));
 
@@ -41,7 +41,7 @@ class ReduceHandle
                                m_reduce_temp_storage_bytes,
                                m_d_reduce_1st_stage,
                                m_d_reduce_2nd_stage,
-                               m_num_patches);
+                               m_max_num_patches);
 
         CUDA_ERROR(
             cudaMalloc(&m_d_reduce_temp_storage, m_reduce_temp_storage_bytes));
@@ -78,10 +78,10 @@ class ReduceHandle
         }
 
         detail::dot_kernel<T, attr1.m_block_size>
-            <<<m_num_patches, attr1.m_block_size, 0, stream>>>(
+            <<<m_max_num_patches, attr1.m_block_size, 0, stream>>>(
                 attr1,
                 attr2,                
-                m_num_patches,
+                m_max_num_patches,
                 attr1.get_num_attributes(),
                 m_d_reduce_1st_stage,
                 attribute_id);
@@ -109,9 +109,9 @@ class ReduceHandle
         }
 
         detail::norm2_kernel<T, attr.m_block_size>
-            <<<m_num_patches, attr.m_block_size, 0, stream>>>(
+            <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
                 attr,                
-                m_num_patches,
+                m_max_num_patches,
                 attr.get_num_attributes(),
                 m_d_reduce_1st_stage,
                 attribute_id);
@@ -161,9 +161,9 @@ class ReduceHandle
         }
 
         detail::generic_reduce<T, attr.m_block_size>
-            <<<m_num_patches, attr.m_block_size, 0, stream>>>(
+            <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
                 attr,                
-                m_num_patches,
+                m_max_num_patches,
                 attr.get_num_attributes(),
                 m_d_reduce_1st_stage,
                 reduction_op,
@@ -183,7 +183,7 @@ class ReduceHandle
                                   m_reduce_temp_storage_bytes,
                                   m_d_reduce_1st_stage,
                                   m_d_reduce_2nd_stage,
-                                  m_num_patches,
+                                  m_max_num_patches,
                                   reduction_op,
                                   init,
                                   stream);
@@ -202,7 +202,7 @@ class ReduceHandle
     T*       m_d_reduce_1st_stage;
     T*       m_d_reduce_2nd_stage;
     void*    m_d_reduce_temp_storage;
-    uint32_t m_num_patches;
+    uint32_t m_max_num_patches;
 };
 
 template <class T>
