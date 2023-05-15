@@ -133,6 +133,45 @@ __global__ static void hashtable_calibration(const Context context)
     hashtable_calibration<blockThreads, FaceHandle>(context, pi);
 }
 
+template <uint32_t blockThreads>
+__device__ __inline__ void tag_edges_and_vertices_through_face(
+    const uint16_t  num_vertices,
+    const uint16_t  num_edges,
+    const uint16_t  num_faces,
+    const uint16_t* s_ev,
+    const uint16_t* s_fe,
+    const Bitmask&  s_active_f,
+    const Bitmask&  s_active_e,
+    const Bitmask&  s_active_v,
+    const Bitmask&  s_owned_f,
+    Bitmask&        s_vert_tag,
+    Bitmask&        s_edge_tag,
+    const Bitmask&  s_face_tag)
+{
+    // mark edges that are incident to owned faces
+    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+        if (s_active_f(f) && (s_owned_f(f) || s_face_tag(f))) {
+            for (int i = 0; i < 3; ++i) {
+                const uint16_t e = s_fe[3 * f + i] >> 1;
+                assert(e < num_edges);
+                assert(s_active_e(e));
+
+                const uint16_t v0 = s_ev[2 * e + 0];
+                assert(v0 < num_vertices);
+                assert(s_active_v(v0));
+
+                const uint16_t v1 = s_ev[2 * e + 1];
+                assert(v1 < num_vertices);
+                assert(s_active_v(v1));
+
+                s_edge_tag.set(e, true);
+                s_vert_tag.set(v0, true);
+                s_vert_tag.set(v1, true);
+            }
+        }
+    }
+};
+
 
 template <uint32_t blockThreads>
 __global__ static void remove_surplus_elements(const Context context)
@@ -191,33 +230,19 @@ __global__ static void remove_surplus_elements(const Context context)
 
     block.sync();
 
-    auto tag_edges_and_vertices_through_face = [&]() {
-        // mark edges that are incident to owned faces
-        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-            if (s_active_f(f) && (s_owned_f(f) || s_face_tag(f))) {
-                for (int i = 0; i < 3; ++i) {
-                    const uint16_t e = s_fe[3 * f + i] >> 1;
-                    assert(e < num_edges);
-                    assert(s_active_e(e));
 
-                    const uint16_t v0 = s_ev[2 * e + 0];
-                    assert(v0 < num_vertices);
-                    assert(s_active_v(v0));
-
-                    const uint16_t v1 = s_ev[2 * e + 1];
-                    assert(v1 < num_vertices);
-                    assert(s_active_v(v1));
-
-                    s_edge_tag.set(e, true);
-                    s_vert_tag.set(v0, true);
-                    s_vert_tag.set(v1, true);
-                }
-            }
-        }
-    };
-
-
-    tag_edges_and_vertices_through_face();
+    tag_edges_and_vertices_through_face<blockThreads>(num_vertices,
+                                                      num_edges,
+                                                      num_faces,
+                                                      s_ev,
+                                                      s_fe,
+                                                      s_active_f,
+                                                      s_active_e,
+                                                      s_active_v,
+                                                      s_owned_f,
+                                                      s_vert_tag,
+                                                      s_edge_tag,
+                                                      s_face_tag);
     block.sync();
 
     // tag faces through edges
@@ -247,7 +272,18 @@ __global__ static void remove_surplus_elements(const Context context)
     }
     block.sync();
 
-    tag_edges_and_vertices_through_face();
+    tag_edges_and_vertices_through_face<blockThreads>(num_vertices,
+                                                      num_edges,
+                                                      num_faces,
+                                                      s_ev,
+                                                      s_fe,
+                                                      s_active_f,
+                                                      s_active_e,
+                                                      s_active_v,
+                                                      s_owned_f,
+                                                      s_vert_tag,
+                                                      s_edge_tag,
+                                                      s_face_tag);
     block.sync();
 
 
@@ -273,6 +309,56 @@ __global__ static void remove_surplus_elements(const Context context)
     s_vert_tag.store<blockThreads>(pi.active_mask_v);
     s_edge_tag.store<blockThreads>(pi.active_mask_e);
     s_face_tag.store<blockThreads>(pi.active_mask_f);
+}
+
+template <uint32_t blockThreads>
+__inline__ __device__ void slice(Context&                          context,
+                                 ShmemAllocator&                   shrd_alloc,
+                                 cooperative_groups::thread_block& block,
+                                 const uint32_t                    new_patch_id,
+                                 const uint16_t                    num_vertices,
+                                 const uint16_t                    num_edges,
+                                 const uint16_t                    num_faces,
+                                 const Bitmask&                    s_owned_v,
+                                 const Bitmask&                    s_owned_e,
+                                 const Bitmask&                    s_owned_f,
+                                 const Bitmask&                    s_active_v,
+                                 const Bitmask&                    s_active_e,
+                                 const Bitmask&                    s_active_f,
+                                 const uint16_t*                   s_ev,
+                                 const uint16_t*                   s_fe,
+                                 const Bitmask&                    s_patch_v,
+                                 const Bitmask&                    s_patch_e,
+                                 const Bitmask&                    s_patch_f)
+{
+    // when we move elements to the other patch, we keep their index the same
+    // since the new patch has a size bigger than the existing one
+
+    // do similar dance that we do in remove_surplus_elements in order to get
+    // what elements to copy to the new patch
+    // s_patch_v/e/f can be considered as s_active_v/e/f but for the new patch
+    Bitmask s_edge_tag = Bitmask(num_edges, shrd_alloc);
+    s_edge_tag.reset(block);
+
+    Bitmask s_vert_tag = Bitmask(num_vertices, shrd_alloc);
+    s_vert_tag.reset(block);
+
+    Bitmask s_face_tag = Bitmask(num_faces, shrd_alloc);
+    s_face_tag.reset(block);
+    block.sync();
+
+    tag_edges_and_vertices_through_face<blockThreads>(num_vertices,
+                                                      num_edges,
+                                                      num_faces,
+                                                      s_ev,
+                                                      s_fe,
+                                                      s_patch_f,
+                                                      s_active_e,
+                                                      s_active_v,
+                                                      s_owned_f,
+                                                      s_vert_tag,
+                                                      s_edge_tag,
+                                                      s_face_tag);
 }
 
 template <uint32_t blockThreads>
@@ -492,7 +578,7 @@ __global__ static void copy_patch_debug(const Context                  context,
 }
 
 template <uint32_t blockThreads>
-__global__ static void slice_patches(const Context  context,
+__global__ static void slice_patches(Context        context,
                                      const uint32_t current_num_patches,
                                      const uint32_t num_faces_threshold,
                                      rxmesh::FaceAttribute<int>   f_attr,
@@ -609,26 +695,35 @@ __global__ static void slice_patches(const Context  context,
                                     s_patch_f);
         block.sync();
 
+        detail::load_async(block,
+                           reinterpret_cast<uint16_t*>(pi.fe),
+                           3 * num_faces,
+                           s_fe,
+                           true);
 
-        /* slice<blockThread>(block,
-                           s_new_patch_id,
-                           num_vertices,
-                           num_edges,
-                           num_faces,
-                           s_owned_v,
-                           s_owned_e,
-                           s_owned_f,
-                           s_active_v,
-                           s_active_e,
-                           s_active_f,
-                           s_ev,
-                           s_fv,
-                           s_patch_v,
-                           s_patch_e,
-                           s_patch_f);*/
+        block.sync();
 
-        if (pi.patch_id == 1) {
-            /* for (uint16_t f = threadIdx.x; f < num_faces;
+        slice<blockThreads>(context,
+                            shrd_alloc,
+                            block,
+                            s_new_patch_id,
+                            num_vertices,
+                            num_edges,
+                            num_faces,
+                            s_owned_v,
+                            s_owned_e,
+                            s_owned_f,
+                            s_active_v,
+                            s_active_e,
+                            s_active_f,
+                            s_ev,
+                            s_fe,
+                            s_patch_v,
+                            s_patch_e,
+                            s_patch_f);
+
+        /* if (pi.patch_id == 1) {
+             for (uint16_t f = threadIdx.x; f < num_faces;
                       f += blockThreads) {
                 FaceHandle fh(pi.patch_id, f);
                 if (!s_owned_f(f)) {
@@ -665,10 +760,10 @@ __global__ static void slice_patches(const Context  context,
                 } else {
                     v_attr(vh) = 2;
                 }
-            }*/
+            }
 
 
-            /* detail::for_each_face(pi, [&](const FaceHandle fh) {
+            detail::for_each_face(pi, [&](const FaceHandle fh) {
                 if (s_patch_f(fh.local_id())) {
                     f_attr(fh) = 1;
                 } else {
@@ -689,8 +784,8 @@ __global__ static void slice_patches(const Context  context,
                 } else {
                     v_attr(vh) = 2;
                 }
-            });*/
-        }
+            });
+        }*/
     }
 }
 
@@ -1708,14 +1803,14 @@ void RXMeshDynamic::slice_patches(const uint32_t num_faces_threshold,
                          (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
     // active_v/e/f, owned_v/e/f, patch_v/e/f
-    dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
-                 3 * ShmemAllocator::default_alignment;
+    dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
+                 4 * ShmemAllocator::default_alignment;
 
-    dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
-                 3 * ShmemAllocator::default_alignment;
+    dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
+                 4 * ShmemAllocator::default_alignment;
 
-    dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
-                 3 * ShmemAllocator::default_alignment;
+    dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
+                 4 * ShmemAllocator::default_alignment;
 
     detail::slice_patches<block_size>
         <<<grid_size, block_size, dyn_shmem>>>(this->m_rxmesh_context,
