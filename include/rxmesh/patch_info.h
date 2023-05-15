@@ -1,6 +1,6 @@
 #pragma once
 
-//#define FLAT_ARRAY_FOR_LP_HASHTABLE
+// #define FLAT_ARRAY_FOR_LP_HASHTABLE
 
 #include <stdint.h>
 
@@ -48,11 +48,11 @@ struct ALIGN(16) PatchInfo
           faces_capacity(nullptr),
           patch_id(INVALID32){};
 
-    __device__ __host__ PatchInfo(const PatchInfo& other) = default;
-    __device__ __host__ PatchInfo(PatchInfo&&)            = default;
-    __device__ __host__ PatchInfo& operator=(const PatchInfo&) = default;
-    __device__ __host__ PatchInfo& operator=(PatchInfo&&) = default;
-    __device__                     __host__ ~PatchInfo()  = default;
+    __device__ __host__            PatchInfo(const PatchInfo& other) = default;
+    __device__ __host__            PatchInfo(PatchInfo&&)            = default;
+    __device__ __host__ PatchInfo& operator=(const PatchInfo&)       = default;
+    __device__ __host__ PatchInfo& operator=(PatchInfo&&)            = default;
+    __device__                     __host__ ~PatchInfo()             = default;
 
     // The topology information: edge incident vertices and face incident edges
     LocalVertexT* ev;
@@ -124,8 +124,9 @@ struct ALIGN(16) PatchInfo
     }
 
     template <typename HandleT>
-    __device__ __host__ __inline__ HandleT find(const LPPair::KeyT key,
-                                                const LPPair* table = nullptr)
+    __device__ __host__ __inline__ HandleT find(
+        const LPPair::KeyT key,
+        const LPPair*      table = nullptr) const
     {
         LPPair lp;
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
@@ -152,7 +153,7 @@ struct ALIGN(16) PatchInfo
      * one of the LPHashTable stored here
      */
     template <typename HandleT>
-    __device__ __host__ __inline__ HandleT get_handle(const LPPair lp)
+    __device__ __host__ __inline__ HandleT get_handle(const LPPair lp) const
     {
         return HandleT(patch_stash.get_patch(lp),
                        {lp.local_id_in_owner_patch()});
@@ -395,7 +396,6 @@ struct ALIGN(16) PatchInfo
     }
 
 
-   
     __host__ __inline__ uint16_t count_num_owned(const uint32_t* owned_bitmask,
                                                  const uint32_t* active_bitmask,
                                                  const uint16_t  size) const

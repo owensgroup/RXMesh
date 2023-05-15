@@ -148,7 +148,7 @@ __device__ __inline__ void tag_edges_and_vertices_through_face(
     Bitmask&        s_edge_tag,
     const Bitmask&  s_face_tag)
 {
-    // mark edges that are incident to owned faces
+    // tag edges and vertices that are incident to owned/tagged faces
     for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
         if (s_active_f(f) && (s_owned_f(f) || s_face_tag(f))) {
             for (int i = 0; i < 3; ++i) {
@@ -172,6 +172,156 @@ __device__ __inline__ void tag_edges_and_vertices_through_face(
     }
 };
 
+
+template <uint32_t blockThreads>
+__device__ __inline__ void tag_faces_through_edges_and_vertices(
+    const uint16_t  num_vertices,
+    const uint16_t  num_edges,
+    const uint16_t  num_faces,
+    const uint16_t* s_ev,
+    const uint16_t* s_fe,
+    const Bitmask&  s_active_v,
+    const Bitmask&  s_active_e,
+    const Bitmask&  s_active_f,
+    const Bitmask&  s_owned_v,
+    const Bitmask&  s_owned_e,
+    const Bitmask&  s_vert_tag,
+    const Bitmask&  s_edge_tag,
+    Bitmask&        s_face_tag)
+{
+    // tag a face if one of its edges or vertices are either tagged or owned
+    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+        if (s_active_f(f)) {
+
+            for (int i = 0; i < 3; ++i) {
+                const uint16_t e = s_fe[3 * f + i] >> 1;
+                assert(e < num_edges);
+                assert(s_active_e(e));
+
+                const uint16_t v0 = s_ev[2 * e + 0];
+                assert(v0 < num_vertices);
+                assert(s_active_v(v0));
+
+                const uint16_t v1 = s_ev[2 * e + 1];
+                assert(v1 < num_vertices);
+                assert(s_active_v(v1));
+
+                if (s_edge_tag(e) || s_vert_tag(v0) || s_vert_tag(v1) ||
+                    s_owned_e(e) || s_owned_v(v0) || s_owned_v(v1)) {
+                    s_face_tag.set(f, true);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+template <uint32_t blockThreads>
+__device__ __inline__ void tag_vertices_through_edges(
+    const uint16_t  num_vertices,
+    const uint16_t  num_edges,
+    const uint16_t* s_ev,
+    const Bitmask&  s_active_v,
+    const Bitmask&  s_active_e,
+    const Bitmask&  s_owned_e,
+    Bitmask&        s_vert_tag,
+    Bitmask&        s_edge_tag)
+{
+    // tag a vertex if it incident to an edge that is tagged or owned
+    // if the edge is owned and it tagged a vertex, we also tag the edge as well
+    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        if (s_active_e(e) && (s_owned_e(e) || s_edge_tag(e))) {
+
+            const uint16_t v0 = s_ev[2 * e + 0];
+            assert(v0 < num_vertices);
+            assert(s_active_v(v0));
+
+            const uint16_t v1 = s_ev[2 * e + 1];
+            assert(v1 < num_vertices);
+            assert(s_active_v(v1));
+
+            s_vert_tag.set(v0, true);
+            s_vert_tag.set(v1, true);
+            s_edge_tag.set(e, true);
+        }
+    }
+}
+
+template <uint32_t blockThreads>
+__device__ __inline__ void reevaluate_active_elements(
+    cooperative_groups::thread_block& block,
+    const uint16_t                    num_vertices,
+    const uint16_t                    num_edges,
+    const uint16_t                    num_faces,
+    const uint16_t*                   s_ev,
+    const uint16_t*                   s_fe,
+    const Bitmask&                    s_active_f,
+    const Bitmask&                    s_active_e,
+    const Bitmask&                    s_active_v,
+    const Bitmask&                    s_owned_v,
+    const Bitmask&                    s_owned_e,
+    const Bitmask&                    s_owned_f,
+    Bitmask&                          s_vert_tag,
+    Bitmask&                          s_edge_tag,
+    Bitmask&                          s_face_tag)
+{
+    // tage edges and vertices through faces
+    tag_edges_and_vertices_through_face<blockThreads>(num_vertices,
+                                                      num_edges,
+                                                      num_faces,
+                                                      s_ev,
+                                                      s_fe,
+                                                      s_active_f,
+                                                      s_active_e,
+                                                      s_active_v,
+                                                      s_owned_f,
+                                                      s_vert_tag,
+                                                      s_edge_tag,
+                                                      s_face_tag);
+    block.sync();
+
+    // tag faces through edges
+    tag_faces_through_edges_and_vertices<blockThreads>(num_vertices,
+                                                       num_edges,
+                                                       num_faces,
+                                                       s_ev,
+                                                       s_fe,
+                                                       s_active_v,
+                                                       s_active_e,
+                                                       s_active_f,
+                                                       s_owned_v,
+                                                       s_owned_e,
+                                                       s_vert_tag,
+                                                       s_edge_tag,
+                                                       s_face_tag);
+    block.sync();
+
+    // tage edges and vertices through faces
+    tag_edges_and_vertices_through_face<blockThreads>(num_vertices,
+                                                      num_edges,
+                                                      num_faces,
+                                                      s_ev,
+                                                      s_fe,
+                                                      s_active_f,
+                                                      s_active_e,
+                                                      s_active_v,
+                                                      s_owned_f,
+                                                      s_vert_tag,
+                                                      s_edge_tag,
+                                                      s_face_tag);
+    block.sync();
+
+    // tage vertices throgg edges
+    // and tag edges if there are owned
+    tag_vertices_through_edges<blockThreads>(num_vertices,
+                                             num_edges,
+                                             s_ev,
+                                             s_active_v,
+                                             s_active_e,
+                                             s_owned_e,
+                                             s_vert_tag,
+                                             s_edge_tag);
+}
 
 template <uint32_t blockThreads>
 __global__ static void remove_surplus_elements(const Context context)
@@ -230,80 +380,21 @@ __global__ static void remove_surplus_elements(const Context context)
 
     block.sync();
 
-
-    tag_edges_and_vertices_through_face<blockThreads>(num_vertices,
-                                                      num_edges,
-                                                      num_faces,
-                                                      s_ev,
-                                                      s_fe,
-                                                      s_active_f,
-                                                      s_active_e,
-                                                      s_active_v,
-                                                      s_owned_f,
-                                                      s_vert_tag,
-                                                      s_edge_tag,
-                                                      s_face_tag);
-    block.sync();
-
-    // tag faces through edges
-    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-        if (s_active_f(f)) {
-
-            for (int i = 0; i < 3; ++i) {
-                const uint16_t e = s_fe[3 * f + i] >> 1;
-                assert(e < num_edges);
-                assert(s_active_e(e));
-
-                const uint16_t v0 = s_ev[2 * e + 0];
-                assert(v0 < num_vertices);
-                assert(s_active_v(v0));
-
-                const uint16_t v1 = s_ev[2 * e + 1];
-                assert(v1 < num_vertices);
-                assert(s_active_v(v1));
-
-                if (s_edge_tag(e) || s_vert_tag(v0) || s_vert_tag(v1) ||
-                    s_owned_e(e) || s_owned_v(v0) || s_owned_v(v1)) {
-                    s_face_tag.set(f, true);
-                    break;
-                }
-            }
-        }
-    }
-    block.sync();
-
-    tag_edges_and_vertices_through_face<blockThreads>(num_vertices,
-                                                      num_edges,
-                                                      num_faces,
-                                                      s_ev,
-                                                      s_fe,
-                                                      s_active_f,
-                                                      s_active_e,
-                                                      s_active_v,
-                                                      s_owned_f,
-                                                      s_vert_tag,
-                                                      s_edge_tag,
-                                                      s_face_tag);
-    block.sync();
-
-
-    // tag vertices through edges
-    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-        if (s_active_e(e) && (s_owned_e(e) || s_edge_tag(e))) {
-
-            const uint16_t v0 = s_ev[2 * e + 0];
-            assert(v0 < num_vertices);
-            assert(s_active_v(v0));
-
-            const uint16_t v1 = s_ev[2 * e + 1];
-            assert(v1 < num_vertices);
-            assert(s_active_v(v1));
-
-            s_vert_tag.set(v0, true);
-            s_vert_tag.set(v1, true);
-            s_edge_tag.set(e, true);
-        }
-    }
+    reevaluate_active_elements<blockThreads>(block,
+                                             num_vertices,
+                                             num_edges,
+                                             num_faces,
+                                             s_ev,
+                                             s_fe,
+                                             s_active_f,
+                                             s_active_e,
+                                             s_active_v,
+                                             s_owned_v,
+                                             s_owned_e,
+                                             s_owned_f,
+                                             s_vert_tag,
+                                             s_edge_tag,
+                                             s_face_tag);
 
     block.sync();
     s_vert_tag.store<blockThreads>(pi.active_mask_v);
@@ -311,10 +402,41 @@ __global__ static void remove_surplus_elements(const Context context)
     s_face_tag.store<blockThreads>(pi.active_mask_f);
 }
 
+template <uint32_t blockThreads, typename HandleT>
+__inline__ __device__ void copy_to_hashtable(const PatchInfo& pi,
+                                             PatchInfo&       new_pi,
+                                             const uint16_t   num_elements,
+                                             const Bitmask&   s_new_p_active,
+                                             const Bitmask&   s_new_p_owned,
+                                             const Bitmask&   s_owned,
+                                             PatchStash&      new_patch_stash)
+{
+
+    for (uint16_t v = threadIdx.x; v < num_elements; v += blockThreads) {
+        // if the element is acitve but not owned in the new patch
+        if (s_new_p_active(v) && !s_new_p_owned(v)) {
+            LPPair lp;
+            // if the element is originally owned by the patch
+            if (s_owned(v)) {
+                lp = LPPair(v, v, 0);
+            } else {
+                HandleT vh = pi.find<HandleT>(v);
+
+                uint8_t st = new_patch_stash.insert_patch(vh.patch_id());
+
+                lp = LPPair(v, vh.local_id(), st);
+            }
+
+            new_pi.lp_v.insert(lp);
+        }
+    }
+}
+
 template <uint32_t blockThreads>
 __inline__ __device__ void slice(Context&                          context,
                                  ShmemAllocator&                   shrd_alloc,
                                  cooperative_groups::thread_block& block,
+                                 const PatchInfo&                  pi,
                                  const uint32_t                    new_patch_id,
                                  const uint16_t                    num_vertices,
                                  const uint16_t                    num_edges,
@@ -327,38 +449,131 @@ __inline__ __device__ void slice(Context&                          context,
                                  const Bitmask&                    s_active_f,
                                  const uint16_t*                   s_ev,
                                  const uint16_t*                   s_fe,
-                                 const Bitmask&                    s_patch_v,
-                                 const Bitmask&                    s_patch_e,
-                                 const Bitmask&                    s_patch_f)
+                                 Bitmask& s_new_p_owned_v,
+                                 Bitmask& s_new_p_owned_e,
+                                 Bitmask& s_new_p_owned_f)
 {
     // when we move elements to the other patch, we keep their index the same
     // since the new patch has a size bigger than the existing one
 
     // do similar dance that we do in remove_surplus_elements in order to get
     // what elements to copy to the new patch
-    // s_patch_v/e/f can be considered as s_active_v/e/f but for the new patch
-    Bitmask s_edge_tag = Bitmask(num_edges, shrd_alloc);
-    s_edge_tag.reset(block);
+    // We start by considering active elements are only those that are owned
+    // and then add more elements
 
-    Bitmask s_vert_tag = Bitmask(num_vertices, shrd_alloc);
-    s_vert_tag.reset(block);
-
-    Bitmask s_face_tag = Bitmask(num_faces, shrd_alloc);
-    s_face_tag.reset(block);
+    // filter now-owned element for s_new_p_owned_v/e/f since these masks were
+    // generated during bi-assignment which considered all elements in the patch
+    for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+        if (s_new_p_owned_v(v) && !s_owned_v(v)) {
+            s_new_p_owned_v.reset(v, true);
+        }
+    }
+    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        if (s_new_p_owned_e(e) && !s_owned_e(e)) {
+            s_new_p_owned_e.reset(e, true);
+        }
+    }
+    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+        if (s_new_p_owned_f(f) && !s_owned_f(f)) {
+            s_new_p_owned_f.reset(f, true);
+        }
+    }
     block.sync();
 
-    tag_edges_and_vertices_through_face<blockThreads>(num_vertices,
-                                                      num_edges,
-                                                      num_faces,
-                                                      s_ev,
-                                                      s_fe,
-                                                      s_patch_f,
-                                                      s_active_e,
-                                                      s_active_v,
-                                                      s_owned_f,
-                                                      s_vert_tag,
-                                                      s_edge_tag,
-                                                      s_face_tag);
+    PatchStash s_new_patch_stash;
+    s_new_patch_stash.m_stash =
+        shrd_alloc.alloc<uint32_t>(PatchStash::stash_size);
+    for (uint8_t i = threadIdx.x; i < PatchStash::stash_size;
+         i += blockThreads) {
+        s_new_patch_stash.m_stash[i] = INVALID32;
+    }
+    if (threadIdx.x == 0) {
+        s_new_patch_stash.m_stash[0] = pi.patch_id;
+    }
+    Bitmask s_new_p_active_v = Bitmask(num_vertices, shrd_alloc);
+    s_new_p_active_v.reset(block);
+    s_new_p_owned_v.store<blockThreads>(s_new_p_active_v.m_bitmask);
+
+    Bitmask s_new_p_active_e = Bitmask(num_edges, shrd_alloc);
+    s_new_p_active_e.reset(block);
+    s_new_p_owned_e.store<blockThreads>(s_new_p_active_e.m_bitmask);
+
+    Bitmask s_new_p_active_f = Bitmask(num_faces, shrd_alloc);
+    s_new_p_active_f.reset(block);
+    s_new_p_owned_f.store<blockThreads>(s_new_p_active_f.m_bitmask);
+
+    block.sync();
+
+    PatchInfo new_patch = context.m_patches_info[new_patch_id];
+
+    // evluate active elements of the new patch
+    reevaluate_active_elements<blockThreads>(block,
+                                             num_vertices,
+                                             num_edges,
+                                             num_faces,
+                                             s_ev,
+                                             s_fe,
+                                             s_active_f,
+                                             s_active_e,
+                                             s_active_v,
+                                             s_owned_v,
+                                             s_owned_e,
+                                             s_owned_f,
+                                             s_new_p_active_v,
+                                             s_new_p_active_e,
+                                             s_new_p_active_f);
+    block.sync();
+
+    // insert elements in the new patch hashtable
+    copy_to_hashtable<blockThreads, VertexHandle>(pi,
+                                                  new_patch,
+                                                  num_vertices,
+                                                  s_new_p_active_v,
+                                                  s_new_p_owned_v,
+                                                  s_owned_v,
+                                                  s_new_patch_stash);
+    copy_to_hashtable<blockThreads, EdgeHandle>(pi,
+                                                new_patch,
+                                                num_edges,
+                                                s_new_p_active_e,
+                                                s_new_p_owned_e,
+                                                s_owned_e,
+                                                s_new_patch_stash);
+    copy_to_hashtable<blockThreads, FaceHandle>(pi,
+                                                new_patch,
+                                                num_faces,
+                                                s_new_p_active_f,
+                                                s_new_p_owned_f,
+                                                s_owned_f,
+                                                s_new_patch_stash);
+
+    // store new patch to global memory
+    if (threadIdx.x == 0) {
+        new_patch.num_vertices[0] = num_vertices;
+        new_patch.num_edges[0]    = num_edges;
+        new_patch.num_faces[0]    = num_faces;
+        new_patch.patch_id        = new_patch_id;
+    }
+    // store active mask
+    s_new_p_active_v.store<blockThreads>(new_patch.active_mask_v);
+    s_new_p_active_e.store<blockThreads>(new_patch.active_mask_e);
+    s_new_p_active_f.store<blockThreads>(new_patch.active_mask_f);
+
+    // store owned mask
+    s_new_p_owned_v.store<blockThreads>(new_patch.owned_mask_v);
+    s_new_p_owned_e.store<blockThreads>(new_patch.owned_mask_e);
+    s_new_p_owned_f.store<blockThreads>(new_patch.owned_mask_f);
+
+    // ev and fe
+    detail::store<blockThreads>(
+        s_ev, 2 * num_edges, reinterpret_cast<uint16_t*>(new_patch.ev));
+    detail::store<blockThreads>(
+        s_fe, 3 * num_faces, reinterpret_cast<uint16_t*>(new_patch.fe));
+
+    // patch stash
+    detail::store<blockThreads>(s_new_patch_stash.m_stash,
+                                PatchStash::stash_size,
+                                new_patch.patch_stash.m_stash);
 }
 
 template <uint32_t blockThreads>
@@ -635,10 +850,11 @@ __global__ static void slice_patches(Context        context,
         __shared__ uint32_t s_new_patch_id;
         if (threadIdx.x == 0) {
             s_new_patch_id = ::atomicAdd(context.m_num_patches, uint32_t(1));
+            assert(s_new_patch_id < context.m_max_num_patches);
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
         Bitmask s_active_v, s_active_e, s_active_f;
-        Bitmask s_patch_v, s_patch_e, s_patch_f;
+        Bitmask s_new_p_owned_v, s_new_p_owned_e, s_new_p_owned_f;
 
         uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * num_edges);
         detail::load_async(block,
@@ -657,19 +873,19 @@ __global__ static void slice_patches(Context        context,
         alloc_masks(num_vertices,
                     s_owned_v,
                     s_active_v,
-                    s_patch_v,
+                    s_new_p_owned_v,
                     pi.owned_mask_v,
                     pi.active_mask_v);
         alloc_masks(num_edges,
                     s_owned_e,
                     s_active_e,
-                    s_patch_e,
+                    s_new_p_owned_e,
                     pi.owned_mask_e,
                     pi.active_mask_e);
         alloc_masks(num_faces,
                     s_owned_f,
                     s_active_f,
-                    s_patch_f,
+                    s_new_p_owned_f,
                     pi.owned_mask_f,
                     pi.active_mask_f);
 
@@ -690,9 +906,9 @@ __global__ static void slice_patches(Context        context,
                                     s_active_f,
                                     s_ev,
                                     s_fv,
-                                    s_patch_v,
-                                    s_patch_e,
-                                    s_patch_f);
+                                    s_new_p_owned_v,
+                                    s_new_p_owned_e,
+                                    s_new_p_owned_f);
         block.sync();
 
         detail::load_async(block,
@@ -706,6 +922,7 @@ __global__ static void slice_patches(Context        context,
         slice<blockThreads>(context,
                             shrd_alloc,
                             block,
+                            pi,
                             s_new_patch_id,
                             num_vertices,
                             num_edges,
@@ -718,9 +935,9 @@ __global__ static void slice_patches(Context        context,
                             s_active_f,
                             s_ev,
                             s_fe,
-                            s_patch_v,
-                            s_patch_e,
-                            s_patch_f);
+                            s_new_p_owned_v,
+                            s_new_p_owned_e,
+                            s_new_p_owned_f);
 
         /* if (pi.patch_id == 1) {
              for (uint16_t f = threadIdx.x; f < num_faces;
