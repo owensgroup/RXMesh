@@ -304,8 +304,9 @@ TEST(RXMeshDynamic, PatchSlicing)
 
     const uint32_t num_faces_threshold = 2;
 
-    //rx.copy_patch_debug(0, *coords);
+    // rx.copy_patch_debug(0, *coords);
     rx.slice_patches(num_faces_threshold, *f_attr, *e_attr, *v_attr);
+    rx.cleanup();
 
     CUDA_ERROR(cudaDeviceSynchronize());
 

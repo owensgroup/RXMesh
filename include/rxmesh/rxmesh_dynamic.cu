@@ -483,13 +483,15 @@ __inline__ __device__ void slice(Context&                          context,
     PatchStash s_new_patch_stash;
     s_new_patch_stash.m_stash =
         shrd_alloc.alloc<uint32_t>(PatchStash::stash_size);
-    for (uint8_t i = threadIdx.x; i < PatchStash::stash_size;
+    for (uint16_t i = threadIdx.x; i < PatchStash::stash_size;
          i += blockThreads) {
-        s_new_patch_stash.m_stash[i] = INVALID32;
+        if (i == 0) {
+            s_new_patch_stash.m_stash[i] = pi.patch_id;
+        } else {
+            s_new_patch_stash.m_stash[i] = INVALID32;
+        }
     }
-    if (threadIdx.x == 0) {
-        s_new_patch_stash.m_stash[0] = pi.patch_id;
-    }
+
     Bitmask s_new_p_active_v = Bitmask(num_vertices, shrd_alloc);
     s_new_p_active_v.reset(block);
     s_new_p_owned_v.store<blockThreads>(s_new_p_active_v.m_bitmask);
@@ -501,6 +503,15 @@ __inline__ __device__ void slice(Context&                          context,
     Bitmask s_new_p_active_f = Bitmask(num_faces, shrd_alloc);
     s_new_p_active_f.reset(block);
     s_new_p_owned_f.store<blockThreads>(s_new_p_active_f.m_bitmask);
+
+    Bitmask s_ribbon_v = Bitmask(num_vertices, shrd_alloc);
+    s_ribbon_v.reset(block);
+
+    Bitmask s_ribbon_e = Bitmask(num_edges, shrd_alloc);
+    s_ribbon_b.reset(block);
+
+    Bitmask s_ribbon_f = Bitmask(num_faces, shrd_alloc);
+    s_ribbon_f.reset(block);
 
     block.sync();
 
@@ -552,7 +563,8 @@ __inline__ __device__ void slice(Context&                          context,
         new_patch.num_vertices[0] = num_vertices;
         new_patch.num_edges[0]    = num_edges;
         new_patch.num_faces[0]    = num_faces;
-        new_patch.patch_id        = new_patch_id;
+
+        context.m_patches_info[new_patch_id].patch_id = new_patch_id;
     }
     // store active mask
     s_new_p_active_v.store<blockThreads>(new_patch.active_mask_v);
@@ -574,6 +586,33 @@ __inline__ __device__ void slice(Context&                          context,
     detail::store<blockThreads>(s_new_patch_stash.m_stash,
                                 PatchStash::stash_size,
                                 new_patch.patch_stash.m_stash);
+
+
+    // now, we update this patch (that we sliced)
+    // update the hashtables by adding
+
+    block.sync();
+    // if the element is active, owned by this patch and the new patch, then
+    // we remove the ownership from this patch
+    for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+        if (s_active_v(v) && s_owned_v(v) && s_new_p_owned_v(v)) {
+            s_owned_v.reset(v, true);
+        }
+    }
+    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        if (s_active_e(e) && s_owned_e(e) && s_new_p_owned_e(e)) {
+            s_owned_e.reset(e, true);
+        }
+    }
+    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+        if (s_active_f(f) && s_owned_f(f) && s_new_p_owned_f(f)) {
+            s_owned_f.reset(f, true);
+        }
+    }
+    block.sync();
+    s_owned_v.store<blockThreads>(pi.owned_mask_v);
+    s_owned_e.store<blockThreads>(pi.owned_mask_e);
+    s_owned_f.store<blockThreads>(pi.owned_mask_f);
 }
 
 template <uint32_t blockThreads>
@@ -2020,14 +2059,14 @@ void RXMeshDynamic::slice_patches(const uint32_t num_faces_threshold,
                          (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
     // active_v/e/f, owned_v/e/f, patch_v/e/f
-    dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
-                 4 * ShmemAllocator::default_alignment;
+    dyn_shmem += 5 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
+                 5 * ShmemAllocator::default_alignment;
 
-    dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
-                 4 * ShmemAllocator::default_alignment;
+    dyn_shmem += 5 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
+                 5 * ShmemAllocator::default_alignment;
 
-    dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
-                 4 * ShmemAllocator::default_alignment;
+    dyn_shmem += 5 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
+                 5 * ShmemAllocator::default_alignment;
 
     detail::slice_patches<block_size>
         <<<grid_size, block_size, dyn_shmem>>>(this->m_rxmesh_context,

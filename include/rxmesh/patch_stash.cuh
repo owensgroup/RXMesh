@@ -27,12 +27,12 @@ struct PatchStash
         }
     }
 
-    PatchStash()                        = default;
-    PatchStash(const PatchStash& other) = default;
-    PatchStash(PatchStash&&)            = default;
-    PatchStash& operator=(const PatchStash&) = default;
-    PatchStash& operator=(PatchStash&&) = default;
-    ~PatchStash()                       = default;
+    __device__ __host__ PatchStash()                             = default;
+    __device__ __host__ PatchStash(const PatchStash& other)      = default;
+    __device__ __host__ PatchStash(PatchStash&&)                 = default;
+    __device__ __host__ PatchStash& operator=(const PatchStash&) = default;
+    __device__ __host__ PatchStash& operator=(PatchStash&&)      = default;
+    __device__                      __host__ ~PatchStash()       = default;
 
     __host__ __device__ __inline__ uint32_t get_patch(uint8_t id) const
     {
