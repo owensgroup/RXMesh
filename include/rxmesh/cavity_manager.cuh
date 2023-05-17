@@ -167,15 +167,21 @@ struct CavityManager
                                               const DEdgeHandle e1,
                                               const DEdgeHandle e2);
 
+
     /**
-     * @brief update an attribute such that it can be used after the topology
-     * changes
+     * @brief update all attributes such that it can be used after the topology
+     * changes. This function takes as many attributes as you want
      */
-    template <typename AttributeT>
+    template <typename... AttributesT>
     __device__ __inline__ void update_attributes(
         cooperative_groups::thread_block& block,
-        AttributeT&                       attribute);
-
+        AttributesT&&... attributes)
+    {
+        // use fold expersion to iterate over each attribute
+        // https://stackoverflow.com/a/60136761
+        ([&] { update_attribute(attributes); }(), ...);
+        block.sync();
+    }
 
     /**
      * @brief cleanup and store updated patch to global memory
@@ -447,6 +453,13 @@ struct CavityManager
         const Bitmask&                    s_ownership_change,
         const LPPair*                     s_table,
         Bitmask&                          s_owned_bitmask);
+
+    /**
+     * @brief update an attribute such that it can be used after the topology
+     * changes
+     */
+    template <typename AttributeT>
+    __device__ __inline__ void update_attribute(AttributeT& attribute);
 
     /**
      * @brief lock patches marked in m_s_patches_to_lock_mask. Return true

@@ -43,11 +43,8 @@ __global__ static void random_flips(rxmesh::Context                context,
     block.sync();
 
     if (cavity.prologue(block, shrd_alloc)) {
-        cavity.update_attributes(block, coords);
-        cavity.update_attributes(block, to_flip);
-        cavity.update_attributes(block, f_attr);
-        cavity.update_attributes(block, e_attr);
-        cavity.update_attributes(block, v_attr);
+        cavity.update_attributes(
+            block, coords, v_attr, to_flip, f_attr, e_attr);        
 
         // so that we don't flip them again
         detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
@@ -227,6 +224,7 @@ TEST(RXMeshDynamic, RandomFlips)
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, *to_flip, *f_attr, *e_attr, *v_attr);
+        CUDA_ERROR(cudaDeviceSynchronize());
         rx.cleanup();
     }
 

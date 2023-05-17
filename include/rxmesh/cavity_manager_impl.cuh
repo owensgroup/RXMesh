@@ -1870,9 +1870,8 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename AttributeT>
-__device__ __inline__ void CavityManager<blockThreads, cop>::update_attributes(
-    cooperative_groups::thread_block& block,
-    AttributeT&                       attribute)
+__device__ __inline__ void CavityManager<blockThreads, cop>::update_attribute(
+    AttributeT& attribute)
 {
     using HandleT = typename AttributeT::HandleType;
     using Type    = typename AttributeT::Type;
@@ -1928,8 +1927,6 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::update_attributes(
             }
         }
     }
-
-    block.sync();
 }
 
 

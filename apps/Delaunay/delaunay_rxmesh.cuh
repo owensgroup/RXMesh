@@ -101,10 +101,7 @@ __global__ static void delaunay_edge_flip(rxmesh::Context              context,
     if (cavity.prologue(block, shrd_alloc)) {
 
         // update the cavity
-        cavity.update_attributes(block, coords);
-        cavity.update_attributes(block, e_attr);
-        cavity.update_attributes(block, f_attr);
-        cavity.update_attributes(block, v_attr);
+        cavity.update_attributes(block, coords, e_attr, f_attr, v_attr);
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
