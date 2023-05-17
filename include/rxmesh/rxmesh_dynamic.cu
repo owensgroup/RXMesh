@@ -2194,6 +2194,11 @@ bool RXMeshDynamic::validate()
 
 void RXMeshDynamic::cleanup()
 {
+    CUDA_ERROR(cudaMemcpy(&m_num_patches,
+                          m_rxmesh_context.m_num_patches,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+
     constexpr uint32_t block_size = 256;
     const uint32_t     grid_size  = get_num_patches();
 
