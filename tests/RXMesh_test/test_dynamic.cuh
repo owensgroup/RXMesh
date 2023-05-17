@@ -44,7 +44,7 @@ __global__ static void random_flips(rxmesh::Context                context,
 
     if (cavity.prologue(block, shrd_alloc)) {
         cavity.update_attributes(
-            block, coords, v_attr, to_flip, f_attr, e_attr);        
+            block, coords, v_attr, to_flip, f_attr, e_attr);
 
         // so that we don't flip them again
         detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {

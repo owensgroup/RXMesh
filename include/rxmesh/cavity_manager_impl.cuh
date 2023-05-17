@@ -1947,7 +1947,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
     block.sync();
     if (m_write_to_gmem) {
         // enforce patch stash inclusion
-        for (uint32_t st = threadIdx.x; st < PatchStash::stash_size;
+        /*for (uint32_t st = threadIdx.x; st < PatchStash::stash_size;
              st += blockThreads) {
             if (m_s_locked_patches_mask(st)) {
                 uint32_t q = m_s_patch_stash.get_patch(st);
@@ -1955,7 +1955,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
                 m_context.m_patches_info[q].patch_stash.insert_patch(
                     m_patch_info.patch_id);
             }
-        }
+        }*/
 
         block.sync();
         // unlock any neighbor patch we have locked

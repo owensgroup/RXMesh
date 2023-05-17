@@ -791,7 +791,7 @@ void RXMesh::build_device()
 
     // make sure that if a patch stash of patch p has patch q, then q's patch
     // stash should have p in it
-    for (uint32_t p = 0; p < get_num_patches(); ++p) {
+    /* for (uint32_t p = 0; p < get_num_patches(); ++p) {
         for (uint8_t p_sh = 0; p_sh < PatchStash::stash_size; ++p_sh) {
             uint32_t q = m_h_patches_info[p].patch_stash.get_patch(p_sh);
             if (q != INVALID32) {
@@ -807,7 +807,7 @@ void RXMesh::build_device()
                 }
             }
         }
-    }
+    }*/
 }
 
 void RXMesh::build_device_single_patch(const uint32_t patch_id,
@@ -844,6 +844,8 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
     h_patch_info.patch_stash          = PatchStash(false);
     h_patch_info.dirty                = (int*)malloc(sizeof(int));
     h_patch_info.dirty[0]             = 0;
+    h_patch_info.child_id             = INVALID32;
+
 
     uint16_t* d_counts;
     CUDA_ERROR(cudaMalloc((void**)&d_counts, 6 * sizeof(uint16_t)));
@@ -858,6 +860,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
     d_patch.patch_id          = patch_id;
     d_patch.patch_stash       = PatchStash(true);
     d_patch.lock.init();
+    d_patch.child_id = INVALID32;
 
     // copy count and capacities
     CUDA_ERROR(cudaMemcpy(d_patch.num_faces,

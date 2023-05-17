@@ -24,9 +24,7 @@ template <uint32_t blockThreads, typename HandleT>
 __device__ __inline__ void hashtable_calibration(const Context context,
                                                  PatchInfo&    pi)
 {
-    // TODO cleanup patch stash
     // TODO load the hashtable in shared memory
-    // TODO cleanup the hash table for stall elements
     using LocalT = typename HandleT::LocalT;
 
     const uint16_t num_elements = *(pi.get_num_elements<HandleT>());
@@ -34,11 +32,30 @@ __device__ __inline__ void hashtable_calibration(const Context context,
     const uint16_t num_elements_up =
         ROUND_UP_TO_NEXT_MULTIPLE(num_elements, blockThreads);
 
+    auto check_child = [&context](uint32_t&     owner,
+                                  const LPPair& lp,
+                                  bool&         is_del,
+                                  bool&         replace) {
+        if (is_del) {
+            // maybe this owner was sliced and so let's check its
+            // child
+            uint32_t owner_child_id = context.m_patches_info[owner].child_id;
+            if (owner_child_id != INVALID32) {
+                is_del = context.m_patches_info[owner_child_id].is_deleted(
+                    LocalT(lp.local_id_in_owner_patch()));
+                if (!is_del) {
+                    // if it is not deleted, then we have found the
+                    // right entry
+                    replace = true;
+                    owner   = owner_child_id;
+                }
+            }
+        }
+    };
+
     for (uint16_t i = threadIdx.x; i < num_elements_up; i += blockThreads) {
         HandleT handle;
         bool    replace = false;
-
-        // int probe = 0;
 
         if (i < num_elements) {
 
@@ -61,17 +78,14 @@ __device__ __inline__ void hashtable_calibration(const Context context,
                 // This only happen when the element i resides in the cavity of
                 // the owner where it will be cleaned up later in
                 // remove_surplus_elements
-                if (!context.m_patches_info[owner].is_deleted(
-                        LocalT(lp.local_id_in_owner_patch()))) {
+                bool is_del = context.m_patches_info[owner].is_deleted(
+                    LocalT(lp.local_id_in_owner_patch()));
 
-                    // assert(!context.m_patches_info[owner].is_deleted(
-                    //    LocalT(lp.local_id_in_owner_patch())));
+                check_child(owner, lp, is_del, replace);
 
-
+                if (!is_del) {
                     while (!context.m_patches_info[owner].is_owned(
                         LocalT(lp.local_id_in_owner_patch()))) {
-
-                        // probe++;
 
                         replace = true;
 
@@ -85,21 +99,16 @@ __device__ __inline__ void hashtable_calibration(const Context context,
                             context.m_patches_info[owner].patch_stash.get_patch(
                                 lp);
 
-                        if (context.m_patches_info[owner].is_deleted(
-                                LocalT(lp.local_id_in_owner_patch()))) {
+                        is_del = context.m_patches_info[owner].is_deleted(
+                            LocalT(lp.local_id_in_owner_patch()));
+
+                        check_child(owner, lp, is_del, replace);
+
+                        if (is_del) {
                             replace = false;
-                            // printf("\n probe = %d, p= %u, type= %s, owner=
-                            // %u",
-                            //       probe,
-                            //       pi.patch_id,
-                            //       LocalT::name(),
-                            //       owner);
                             break;
                         }
-                        assert(!context.m_patches_info[owner].is_deleted(
-                            LocalT(lp.local_id_in_owner_patch())));
                     }
-
                     handle = HandleT(owner, lp.local_id_in_owner_patch());
                 }
             }
@@ -326,6 +335,8 @@ __device__ __inline__ void reevaluate_active_elements(
 template <uint32_t blockThreads>
 __global__ static void remove_surplus_elements(const Context context)
 {
+    // TODO cleanup patch stash
+    // TODO cleanup the hash table for stall elements
     auto block = cooperative_groups::this_thread_block();
 
     const uint32_t pid = blockIdx.x;
@@ -434,27 +445,27 @@ __inline__ __device__ void copy_to_hashtable(const PatchInfo& pi,
 
 template <uint32_t blockThreads>
 __inline__ __device__ void slice(Context&                          context,
-                                 ShmemAllocator&                   shrd_alloc,
                                  cooperative_groups::thread_block& block,
                                  PatchInfo&                        pi,
                                  const uint32_t                    new_patch_id,
                                  const uint16_t                    num_vertices,
                                  const uint16_t                    num_edges,
                                  const uint16_t                    num_faces,
-                                 Bitmask&                          s_owned_v,
-                                 Bitmask&                          s_owned_e,
-                                 Bitmask&                          s_owned_f,
-                                 const Bitmask&                    s_active_v,
-                                 const Bitmask&                    s_active_e,
-                                 const Bitmask&                    s_active_f,
-                                 const uint16_t*                   s_ev,
-                                 const uint16_t*                   s_fe,
-                                 Bitmask& s_new_p_active_v,
-                                 Bitmask& s_new_p_active_e,
-                                 Bitmask& s_new_p_active_f,
-                                 Bitmask& s_new_p_owned_v,
-                                 Bitmask& s_new_p_owned_e,
-                                 Bitmask& s_new_p_owned_f)
+                                 PatchStash&     s_new_patch_stash,
+                                 Bitmask&        s_owned_v,
+                                 Bitmask&        s_owned_e,
+                                 Bitmask&        s_owned_f,
+                                 const Bitmask&  s_active_v,
+                                 const Bitmask&  s_active_e,
+                                 const Bitmask&  s_active_f,
+                                 const uint16_t* s_ev,
+                                 const uint16_t* s_fe,
+                                 Bitmask&        s_new_p_active_v,
+                                 Bitmask&        s_new_p_active_e,
+                                 Bitmask&        s_new_p_active_f,
+                                 Bitmask&        s_new_p_owned_v,
+                                 Bitmask&        s_new_p_owned_e,
+                                 Bitmask&        s_new_p_owned_f)
 {
     // when we move elements to the other patch, we keep their index the same
     // since the new patch has a size bigger than the existing one
@@ -483,9 +494,6 @@ __inline__ __device__ void slice(Context&                          context,
     }
     block.sync();
 
-    PatchStash s_new_patch_stash;
-    s_new_patch_stash.m_stash =
-        shrd_alloc.alloc<uint32_t>(PatchStash::stash_size);
     for (uint16_t i = threadIdx.x; i < PatchStash::stash_size;
          i += blockThreads) {
         if (i == 0) {
@@ -495,10 +503,6 @@ __inline__ __device__ void slice(Context&                          context,
         }
     }
 
-    // initially the new_active is just the new_owned
-    // s_new_p_owned_v.store<blockThreads>(s_new_p_active_v.m_bitmask);
-    // s_new_p_owned_e.store<blockThreads>(s_new_p_active_e.m_bitmask);
-    // s_new_p_owned_f.store<blockThreads>(s_new_p_active_f.m_bitmask);
 
     block.sync();
 
@@ -552,6 +556,7 @@ __inline__ __device__ void slice(Context&                          context,
         new_patch.num_faces[0]    = num_faces;
 
         context.m_patches_info[new_patch_id].patch_id = new_patch_id;
+        context.m_patches_info[pi.patch_id].child_id  = new_patch_id;
     }
     // store active mask
     s_new_p_active_v.store<blockThreads>(new_patch.active_mask_v);
@@ -823,7 +828,6 @@ __global__ static void slice_patches(Context        context,
         __shared__ uint32_t s_new_patch_id;
         if (threadIdx.x == 0) {
             s_new_patch_id = ::atomicAdd(context.m_num_patches, uint32_t(1));
-            printf("\n patch %u ==> %u", pid, s_new_patch_id);
             assert(s_new_patch_id < context.m_max_num_patches);
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
@@ -846,6 +850,10 @@ __global__ static void slice_patches(Context        context,
                            3 * num_faces,
                            s_fe,
                            true);
+
+        PatchStash s_new_patch_stash;
+        s_new_patch_stash.m_stash =
+            shrd_alloc.alloc<uint32_t>(PatchStash::stash_size);
 
         alloc_masks(num_vertices,
                     s_owned_v,
@@ -904,13 +912,13 @@ __global__ static void slice_patches(Context        context,
         block.sync();
 
         slice<blockThreads>(context,
-                            shrd_alloc,
                             block,
                             pi,
                             s_new_patch_id,
                             num_vertices,
                             num_edges,
                             num_faces,
+                            s_new_patch_stash,
                             s_owned_v,
                             s_owned_e,
                             s_owned_f,
@@ -2167,10 +2175,10 @@ bool RXMeshDynamic::validate()
         success = false;
     }
 
-    if (!patch_stash_inclusion()) {
+    /*if (!patch_stash_inclusion()) {
         RXMESH_ERROR("RXMeshDynamic::validate() patch_stash_inclusion failed");
         success = false;
-    }
+    }*/
 
     if (!unique_patch_stash()) {
         RXMESH_ERROR("RXMeshDynamic::validate() unique_patch_stash failed");
