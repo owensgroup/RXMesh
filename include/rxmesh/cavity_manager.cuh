@@ -539,6 +539,9 @@ struct CavityManager
     // CSR for sparse matrices using m_s_cavity_size_prefix but no value ptr)
     uint16_t* m_s_cavity_boundary_edges;
 
+    // patch stash stored in shared memory
+    PatchStash m_s_patch_stash;
+
     PatchInfo m_patch_info;
     Context   m_context;
 };

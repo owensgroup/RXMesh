@@ -2112,6 +2112,34 @@ bool RXMeshDynamic::validate()
         return true;
     };
 
+    // check that a patch is only encoutered once in patch stash
+    auto unique_patch_stash = [&]() {
+        for (uint32_t p = 0; p < get_num_patches(); ++p) {
+            for (uint8_t p_sh = 0; p_sh < PatchStash::stash_size; ++p_sh) {
+                uint32_t q = m_h_patches_info[p].patch_stash.get_patch(p_sh);
+                if (q != INVALID32) {
+                    bool duplicated = false;
+
+                    for (uint8_t pp_sh = 0; pp_sh < PatchStash::stash_size;
+                         ++pp_sh) {
+                        if (pp_sh == p_sh) {
+                            continue;
+                        }
+                        if (m_h_patches_info[p].patch_stash.get_patch(pp_sh) ==
+                            q) {
+                            duplicated = true;
+                            break;
+                        }
+                    }
+                    if (duplicated) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    };
+
     bool success = true;
     if (!check_num_mesh_elements()) {
         RXMESH_ERROR(
@@ -2141,6 +2169,11 @@ bool RXMeshDynamic::validate()
 
     if (!patch_stash_inclusion()) {
         RXMESH_ERROR("RXMeshDynamic::validate() patch_stash_inclusion failed");
+        success = false;
+    }
+
+    if (!unique_patch_stash()) {
+        RXMESH_ERROR("RXMeshDynamic::validate() unique_patch_stash failed");
         success = false;
     }
 

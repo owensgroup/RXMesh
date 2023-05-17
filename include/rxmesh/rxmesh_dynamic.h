@@ -115,6 +115,9 @@ class RXMeshDynamic : public RXMeshStatic
         dyn_shmem += 5 * detail::mask_num_bytes(face_cap) +
                      5 * ShmemAllocator::default_alignment;
 
+        //patch stash 
+        dyn_shmem += PatchStash::stash_size * sizeof(uint32_t);
+
         if (!this->m_quite) {
             RXMESH_TRACE(
                 "RXMeshDynamic::calc_shared_memory() launching {} blocks with "

@@ -165,6 +165,14 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     fill_n<blockThreads>(m_s_cavity_id_e, m_edge_cap, uint16_t(INVALID16));
     fill_n<blockThreads>(m_s_cavity_id_f, m_face_cap, uint16_t(INVALID16));
 
+    // patch stash
+    m_s_patch_stash.m_stash =
+        shrd_alloc.alloc<uint32_t>(PatchStash::stash_size);
+
+    for (uint32_t i = threadIdx.x; i < PatchStash::stash_size;
+         i += blockThreads) {
+        m_s_patch_stash.m_stash[i] = m_patch_info.patch_stash.m_stash[i];
+    }
 
     m_s_patches_to_lock_mask.reset(block);
     m_s_active_cavity_bitmask.set(block);
@@ -906,7 +914,7 @@ CavityManager<blockThreads, cop>::unlock_locked_patches()
     if (threadIdx.x == 0) {
         for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
             if (m_s_locked_patches_mask(st)) {
-                uint32_t q = m_patch_info.patch_stash.get_patch(st);
+                uint32_t q = m_s_patch_stash.get_patch(st);
                 assert(q != INVALID32);
                 unlock(st, q);
             }
@@ -1017,7 +1025,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
 
     // construct protection zone
     for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
-        const uint32_t q = m_patch_info.patch_stash.get_patch(st);
+        const uint32_t q = m_s_patch_stash.get_patch(st);
         if (q != INVALID32) {
             if (!migrate_from_patch(block, st, q, m_s_migrate_mask_v, true)) {
                 return false;
@@ -1069,7 +1077,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     block.sync();
 
     for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
-        const uint32_t q = m_patch_info.patch_stash.get_patch(st);
+        const uint32_t q = m_s_patch_stash.get_patch(st);
         if (q != INVALID32) {
             if (!migrate_from_patch(block, st, q, m_s_ribbonize_v, false)) {
                 return false;
@@ -1089,7 +1097,7 @@ CavityManager<blockThreads, cop>::lock_patches_to_lock(
     block.sync();
     for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
         if (m_s_patches_to_lock_mask(st)) {
-            const uint32_t patch = m_patch_info.patch_stash.get_patch(st);
+            const uint32_t patch = m_s_patch_stash.get_patch(st);
             if (!lock(block, st, patch)) {
                 return false;
             } else {
@@ -1458,14 +1466,13 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
 
                 // insert the patch in the patch stash and return its
                 // id in the stash
-                const uint8_t owner_stash_id =
-                    m_patch_info.patch_stash.insert_patch(o);
+                const uint8_t owner_stash_id = m_s_patch_stash.insert_patch(o);
                 assert(owner_stash_id != INVALID8);
                 ret = LPPair(vp, vq, owner_stash_id);
 
                 m_s_patches_to_lock_mask.set(owner_stash_id, true);
             } else if (o != q && o != m_patch_info.patch_id) {
-                uint8_t st = m_patch_info.patch_stash.find_patch_index(o);
+                uint8_t st = m_s_patch_stash.find_patch_index(o);
                 assert(st != INVALID8);
                 m_s_patches_to_lock_mask.set(st, true);
             }
@@ -1474,7 +1481,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
                 m_s_ownership_change_mask_v.set(vp, true);
                 if (o != patch_id() && o != q) {
                     assert(m_s_patches_to_lock_mask(
-                        m_patch_info.patch_stash.find_patch_index(o)));
+                        m_s_patch_stash.find_patch_index(o)));
                 }
             }
         }
@@ -1555,14 +1562,13 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
                 // since it is owned by some other patch
                 m_s_owned_mask_e.reset(ep, true);
 
-                const uint8_t owner_stash_id =
-                    m_patch_info.patch_stash.insert_patch(o);
+                const uint8_t owner_stash_id = m_s_patch_stash.insert_patch(o);
                 assert(owner_stash_id != INVALID8);
                 ret = LPPair(ep, eq, owner_stash_id);
 
                 m_s_patches_to_lock_mask.set(owner_stash_id, true);
             } else if (o != q && o != m_patch_info.patch_id) {
-                uint8_t st = m_patch_info.patch_stash.find_patch_index(o);
+                uint8_t st = m_s_patch_stash.find_patch_index(o);
                 assert(st != INVALID8);
                 m_s_patches_to_lock_mask.set(st, true);
             }
@@ -1571,7 +1577,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
                 m_s_ownership_change_mask_e.set(ep, true);
                 if (o != patch_id() && o != q) {
                     assert(m_s_patches_to_lock_mask(
-                        m_patch_info.patch_stash.find_patch_index(o)));
+                        m_s_patch_stash.find_patch_index(o)));
                 }
             }
         }
@@ -1658,14 +1664,13 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
                 // since it is owned by some other patch
                 m_s_owned_mask_f.reset(fp, true);
 
-                const uint8_t owner_stash_id =
-                    m_patch_info.patch_stash.insert_patch(o);
+                const uint8_t owner_stash_id = m_s_patch_stash.insert_patch(o);
                 assert(owner_stash_id != INVALID8);
                 ret = LPPair(fp, fq, owner_stash_id);
 
                 m_s_patches_to_lock_mask.set(owner_stash_id, true);
             } else if (o != q && o != m_patch_info.patch_id) {
-                uint8_t st = m_patch_info.patch_stash.find_patch_index(o);
+                uint8_t st = m_s_patch_stash.find_patch_index(o);
                 assert(st != INVALID8);
                 m_s_patches_to_lock_mask.set(st, true);
             }
@@ -1674,7 +1679,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
                 m_s_ownership_change_mask_f.set(fp, true);
                 if (o != patch_id() && o != q) {
                     assert(m_s_patches_to_lock_mask(
-                        m_patch_info.patch_stash.find_patch_index(o)));
+                        m_s_patch_stash.find_patch_index(o)));
                 }
             }
         }
@@ -1833,9 +1838,12 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
 
             // m_patch_info.get_lp<HandleT>().remove(vp);
 
+            // ensure patch inclusion
+            assert(m_s_patch_stash.find_patch_index(q) != INVALID8);
+
             // make sure that q is locked
-            assert(m_s_locked_patches_mask(
-                m_patch_info.patch_stash.find_patch_index(q)));
+            assert(
+                m_s_locked_patches_mask(m_s_patch_stash.find_patch_index(q)));
 
 
             assert(q != m_patch_info.patch_id);
@@ -1851,6 +1859,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
             const uint8_t stash_id =
                 m_context.m_patches_info[q].patch_stash.insert_patch(
                     m_patch_info.patch_id);
+
 
             // clear the bitmask of the owner's patch
             detail::bitmask_clear_bit(
@@ -1937,6 +1946,18 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
     // make sure all writes are done
     block.sync();
     if (m_write_to_gmem) {
+        // enforce patch stash inclusion
+        for (uint32_t st = threadIdx.x; st < PatchStash::stash_size;
+             st += blockThreads) {
+            if (m_s_locked_patches_mask(st)) {
+                uint32_t q = m_s_patch_stash.get_patch(st);
+                assert(q != INVALID32);
+                m_context.m_patches_info[q].patch_stash.insert_patch(
+                    m_patch_info.patch_id);
+            }
+        }
+
+        block.sync();
         // unlock any neighbor patch we have locked
         unlock_locked_patches();
 
@@ -2019,6 +2040,12 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
         m_patch_info.lp_v.write_to_global_memory<blockThreads>(m_s_table_v);
         m_patch_info.lp_e.write_to_global_memory<blockThreads>(m_s_table_e);
         m_patch_info.lp_f.write_to_global_memory<blockThreads>(m_s_table_f);
+
+        // patch stash
+        for (uint32_t i = threadIdx.x; i < PatchStash::stash_size;
+             i += blockThreads) {
+            m_patch_info.patch_stash.m_stash[i] = m_s_patch_stash.m_stash[i];
+        }
     }
 
     // re-add the patch to the queue if there is ownership change
