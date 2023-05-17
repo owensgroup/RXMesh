@@ -254,6 +254,12 @@ class RXMesh
      */
     const FaceHandle map_to_local_face(uint32_t i) const;
 
+    const PatchInfo& get_patch(uint32_t p) const
+    {
+        assert(p < get_num_patches());
+        return m_h_patches_info[p];
+    }
+
    protected:
     // Edge hash map that takes two vertices and return their edge id
     using EdgeMapT = std::unordered_map<std::pair<uint32_t, uint32_t>,

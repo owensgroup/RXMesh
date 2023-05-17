@@ -574,9 +574,10 @@ __inline__ __device__ void slice(Context&                          context,
                                 PatchStash::stash_size,
                                 new_patch.patch_stash.m_stash);
 
-
+    ////////////////////////////
     // now, we update this patch (that we sliced)
     block.sync();
+    // reset s_new_p_active_v/e/f so we could recycle them
     s_new_p_active_v.reset(block);
     s_new_p_active_e.reset(block);
     s_new_p_active_f.reset(block);
@@ -822,6 +823,7 @@ __global__ static void slice_patches(Context        context,
         __shared__ uint32_t s_new_patch_id;
         if (threadIdx.x == 0) {
             s_new_patch_id = ::atomicAdd(context.m_num_patches, uint32_t(1));
+            printf("\n patch %u ==> %u", pid, s_new_patch_id);
             assert(s_new_patch_id < context.m_max_num_patches);
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
@@ -924,70 +926,115 @@ __global__ static void slice_patches(Context        context,
                             s_new_p_owned_e,
                             s_new_p_owned_f);
 
-        /* if (pi.patch_id == 1) {
-             for (uint16_t f = threadIdx.x; f < num_faces;
-                      f += blockThreads) {
-                FaceHandle fh(pi.patch_id, f);
-                if (!s_owned_f(f)) {
-                    fh = pi.find<FaceHandle>(f);
-                }
 
-                if (s_patch_f(fh.local_id())) {
-                    f_attr(fh) = 1;
-                } else {
-                    f_attr(fh) = 2;
-                }
+#ifndef NDEBUG
+        block.sync();
+
+        for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+            bool was_active = s_active_v(v);
+            bool is_active_p =
+                !context.m_patches_info[pid].is_deleted(LocalVertexT(v));
+            bool is_active_new =
+                !context.m_patches_info[s_new_patch_id].is_deleted(
+                    LocalVertexT(v));
+            if (was_active) {
+                assert(is_active_p || is_active_new);
+            } else {
+                assert(!is_active_p && !is_active_new);
+            }
+        }
+
+        for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+            bool was_active = s_active_e(e);
+            bool is_active_p =
+                !context.m_patches_info[pid].is_deleted(LocalEdgeT(e));
+            bool is_active_new =
+                !context.m_patches_info[s_new_patch_id].is_deleted(
+                    LocalEdgeT(e));
+            if (was_active) {
+                assert(is_active_p || is_active_new);
+            } else {
+                assert(!is_active_p && !is_active_new);
+            }
+        }
+
+        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+            bool was_active = s_active_f(f);
+            bool is_active_p =
+                !context.m_patches_info[pid].is_deleted(LocalFaceT(f));
+            bool is_active_new =
+                !context.m_patches_info[s_new_patch_id].is_deleted(
+                    LocalFaceT(f));
+            if (was_active) {
+                assert(is_active_p || is_active_new);
+            } else {
+                assert(!is_active_p && !is_active_new);
+            }
+        }
+#endif
+
+
+        /*for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+            FaceHandle fh(pi.patch_id, f);
+            if (!s_owned_f(f)) {
+                fh = pi.find<FaceHandle>(f);
             }
 
-            for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-                EdgeHandle eh(pi.patch_id, e);
-                if (!s_owned_e(e)) {
-                    eh = pi.find<EdgeHandle>(e);
-                }
+            if (s_patch_f(fh.local_id())) {
+                f_attr(fh) = 1;
+            } else {
+                f_attr(fh) = 2;
+            }
+        }
 
-                if (s_patch_e(eh.local_id())) {
-                    e_attr(eh) = 1;
-                } else {
-                    e_attr(eh) = 2;
-                }
+        for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+            EdgeHandle eh(pi.patch_id, e);
+            if (!s_owned_e(e)) {
+                eh = pi.find<EdgeHandle>(e);
             }
 
-            for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads)
-            { VertexHandle vh(pi.patch_id, v); if (!s_owned_v(v)) { vh =
-            pi.find<VertexHandle>(v);
-                }
+            if (s_patch_e(eh.local_id())) {
+                e_attr(eh) = 1;
+            } else {
+                e_attr(eh) = 2;
+            }
+        }
 
-                if (s_patch_v(vh.local_id())) {
-                    v_attr(vh) = 1;
-                } else {
-                    v_attr(vh) = 2;
-                }
+        for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+            VertexHandle vh(pi.patch_id, v);
+            if (!s_owned_v(v)) {
+                vh = pi.find<VertexHandle>(v);
             }
 
-
-            detail::for_each_face(pi, [&](const FaceHandle fh) {
-                if (s_patch_f(fh.local_id())) {
-                    f_attr(fh) = 1;
-                } else {
-                    f_attr(fh) = 2;
-                }
-            });
-            detail::for_each_edge(pi, [&](const EdgeHandle eh) {
-                if (s_patch_e(eh.local_id())) {
-                    e_attr(eh) = 1;
-                } else {
-                    e_attr(eh) = 2;
-                }
-            });
-
-            detail::for_each_vertex(pi, [&](const VertexHandle vh) {
-                if (s_patch_v(vh.local_id())) {
-                    v_attr(vh) = 1;
-                } else {
-                    v_attr(vh) = 2;
-                }
-            });
+            if (s_patch_v(vh.local_id())) {
+                v_attr(vh) = 1;
+            } else {
+                v_attr(vh) = 2;
+            }
         }*/
+
+        /*detail::for_each_face(pi, [&](const FaceHandle fh) {
+            if (s_new_p_owned_f(fh.local_id())) {
+                f_attr(fh) = pi.patch_id + 2;
+            } else {
+                f_attr(fh) = pi.patch_id;
+            }
+        });
+        detail::for_each_edge(pi, [&](const EdgeHandle eh) {
+            if (s_new_p_owned_e(eh.local_id())) {
+                e_attr(eh) = pi.patch_id + 2;
+            } else {
+                e_attr(eh) = pi.patch_id;
+            }
+        });
+
+        detail::for_each_vertex(pi, [&](const VertexHandle vh) {
+            if (s_new_p_owned_v(vh.local_id())) {
+                v_attr(vh) = pi.patch_id + 2;
+            } else {
+                v_attr(vh) = pi.patch_id;
+            }
+        });*/
     }
 }
 
@@ -2040,6 +2087,31 @@ bool RXMeshDynamic::validate()
         return true;
     };
 
+    // check if a patch p has q in its patch stash, then q also has p in its
+    // patch stash
+    auto patch_stash_inclusion = [&]() {
+        for (uint32_t p = 0; p < get_num_patches(); ++p) {
+            for (uint8_t p_sh = 0; p_sh < PatchStash::stash_size; ++p_sh) {
+                uint32_t q = m_h_patches_info[p].patch_stash.get_patch(p_sh);
+                if (q != INVALID32) {
+                    bool found = false;
+                    for (uint8_t q_sh = 0; q_sh < PatchStash::stash_size;
+                         ++q_sh) {
+                        if (m_h_patches_info[q].patch_stash.get_patch(q_sh) ==
+                            p) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    };
+
     bool success = true;
     if (!check_num_mesh_elements()) {
         RXMESH_ERROR(
@@ -2064,6 +2136,11 @@ bool RXMeshDynamic::validate()
 
     if (!check_ribbon()) {
         RXMESH_ERROR("RXMeshDynamic::validate() check_ribbon failed");
+        success = false;
+    }
+
+    if (!patch_stash_inclusion()) {
+        RXMESH_ERROR("RXMeshDynamic::validate() patch_stash_inclusion failed");
         success = false;
     }
 
