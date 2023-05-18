@@ -91,7 +91,6 @@ __inline__ __device__ void post_slicing_update_attributes(
 template <uint32_t blockThreads, typename... AttributesT>
 __global__ static void slice_patches(Context        context,
                                      const uint32_t current_num_patches,
-                                     const uint32_t num_faces_threshold,
                                      AttributesT... attributes)
 {
     // ev, fe, active_v/e/f, owned_v/e/f, patch_v/e/f
@@ -103,13 +102,6 @@ __global__ static void slice_patches(Context        context,
     if (pid >= current_num_patches) {
         return;
     }
-
-    PatchInfo pi = context.m_patches_info[pid];
-
-    const uint16_t num_vertices = pi.num_vertices[0];
-    const uint16_t num_edges    = pi.num_edges[0];
-    const uint16_t num_faces    = pi.num_faces[0];
-
 
     auto alloc_masks = [&](uint16_t        num_elements,
                            Bitmask&        owned,
@@ -146,8 +138,12 @@ __global__ static void slice_patches(Context        context,
                            false);
     };
 
+    PatchInfo pi = context.m_patches_info[pid];
+    if (pi.should_slice) {
+        const uint16_t num_vertices = pi.num_vertices[0];
+        const uint16_t num_edges    = pi.num_edges[0];
+        const uint16_t num_faces    = pi.num_faces[0];
 
-    if (num_faces >= num_faces_threshold) {
         __shared__ uint32_t s_new_patch_id;
         if (threadIdx.x == 0) {
             s_new_patch_id = ::atomicAdd(context.m_num_patches, uint32_t(1));
@@ -267,6 +263,8 @@ __global__ static void slice_patches(Context        context,
                                                              attributes);
             }(),
             ...);
+
+        context.m_patches_info[pid].should_slice = false;
 
 #ifndef NDEBUG
         block.sync();
@@ -493,8 +491,7 @@ class RXMeshDynamic : public RXMeshStatic
      * than a threshold
      */
     template <typename... AttributesT>
-    void slice_patches(const uint32_t num_faces_threshold,
-                       AttributesT... attributes)
+    void slice_patches(AttributesT... attributes)
     {
         constexpr uint32_t block_size = 256;
         const uint32_t     grid_size  = get_num_patches();
@@ -519,11 +516,8 @@ class RXMeshDynamic : public RXMeshStatic
 
         dyn_shmem += PatchStash::stash_size * sizeof(uint32_t);
 
-        detail::slice_patches<block_size>
-            <<<grid_size, block_size, dyn_shmem>>>(this->m_rxmesh_context,
-                                                   get_num_patches(),
-                                                   num_faces_threshold,
-                                                   attributes...);
+        detail::slice_patches<block_size><<<grid_size, block_size, dyn_shmem>>>(
+            this->m_rxmesh_context, get_num_patches(), attributes...);
     }
 
     void copy_patch_debug(const uint32_t                  pid,

@@ -15,6 +15,15 @@ enum : Config
     InteriorNotConflicting = 0x08,
 };
 
+__global__ static void set_should_slice(rxmesh::Context context)
+{
+    uint32_t tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+    if (tid < context.m_num_patches[0]) {
+        context.m_patches_info[tid].should_slice = true;
+    }
+}
+
 template <uint32_t blockThreads>
 __global__ static void random_flips(rxmesh::Context                context,
                                     rxmesh::VertexAttribute<float> coords,
@@ -293,10 +302,10 @@ TEST(RXMeshDynamic, PatchSlicing)
     rx.render_patch(1)->setEnabled(false);
 #endif
 
-    const uint32_t num_faces_threshold = 2;
+    set_should_slice<<<rx.get_num_patches(), 1>>>(rx.get_context());
 
     // rx.copy_patch_debug(0, *coords);
-    rx.slice_patches(num_faces_threshold, *coords);
+    rx.slice_patches(*coords);
     rx.cleanup();
 
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -304,7 +313,7 @@ TEST(RXMeshDynamic, PatchSlicing)
     rx.update_host();
     EXPECT_TRUE(rx.validate());
 
-    coords->move(DEVICE, HOST); 
+    coords->move(DEVICE, HOST);
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
@@ -317,7 +326,7 @@ TEST(RXMeshDynamic, PatchSlicing)
     }
 
     auto ps_mesh = rx.get_polyscope_mesh();
-    ps_mesh->updateVertexPositions(*coords);    
+    ps_mesh->updateVertexPositions(*coords);
     ps_mesh->setEnabled(false);
     polyscope::show();
 #endif

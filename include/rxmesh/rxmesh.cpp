@@ -845,6 +845,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
     h_patch_info.dirty                = (int*)malloc(sizeof(int));
     h_patch_info.dirty[0]             = 0;
     h_patch_info.child_id             = INVALID32;
+    h_patch_info.should_slice         = false;
 
 
     uint16_t* d_counts;
@@ -860,7 +861,8 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
     d_patch.patch_id          = patch_id;
     d_patch.patch_stash       = PatchStash(true);
     d_patch.lock.init();
-    d_patch.child_id = INVALID32;
+    d_patch.child_id     = INVALID32;
+    d_patch.should_slice = false;
 
     // copy count and capacities
     CUDA_ERROR(cudaMemcpy(d_patch.num_faces,

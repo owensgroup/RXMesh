@@ -95,6 +95,8 @@ struct ALIGN(16) PatchInfo
     // for a sliced patch, the patch we sliced from
     uint32_t child_id;
 
+    bool should_slice;
+
     /**
      * @brief update the dirty flag associated with this patch. The calling
      * thread should have locked the patch before updating

@@ -346,6 +346,8 @@ __global__ static void remove_surplus_elements(const Context context)
 
     PatchInfo pi = context.m_patches_info[pid];
 
+    context.m_patches_info[pid].child_id = INVALID32;
+
     const uint16_t num_vertices = pi.num_vertices[0];
     const uint16_t num_edges    = pi.num_edges[0];
     const uint16_t num_faces    = pi.num_faces[0];
