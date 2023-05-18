@@ -1883,7 +1883,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
             const uint8_t stash_id =
                 m_context.m_patches_info[q].patch_stash.insert_patch(
                     m_patch_info.patch_id);
-
+            assert(stash_id != INVALID8);            
 
             // clear the bitmask of the owner's patch
             detail::bitmask_clear_bit(

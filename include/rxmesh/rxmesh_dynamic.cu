@@ -332,11 +332,45 @@ __device__ __inline__ void reevaluate_active_elements(
                                              s_edge_tag);
 }
 
+
+template <uint32_t blockThreads>
+__inline__ __device__ void remove_idle_elements(
+    cooperative_groups::thread_block& block,
+    LPPair*                           s_table,
+    LPHashTable&                      table,
+    const uint16_t                    num_elements,
+    const Bitmask&                    is_owned,
+    const Bitmask&                    is_active)
+
+{
+    // mesh elements in the patch that are deleted/inactive but not removed from
+    // the hashtable (i.e., replaced by sentinel_pair) dont allow inserting in
+    // their place and need to be removed.
+    //
+    // remove idle elements from the hashtable by query the table from
+    // global memory, write the results to shared memory buffer, then
+    // copy the shared memory buffer to gloabl memory
+
+    fill_n<blockThreads>(s_table, table.get_capacity(), LPPair());
+
+    for (uint16_t e = threadIdx.x; e < num_elements; e += blockThreads) {
+        if (is_active(e) && !is_owned(e)) {
+            LPPair pair = table.find(e);
+            assert(!pair.is_sentinel());
+            table.insert(pair, s_table);
+        }
+    }
+    block.sync();
+
+    for (uint16_t e = threadIdx.x; e < table.get_capacity();
+         e += blockThreads) {
+        table.m_table[e].m_pair = s_table[e].m_pair;
+    }
+}
 template <uint32_t blockThreads>
 __global__ static void remove_surplus_elements(const Context context)
 {
     // TODO cleanup patch stash
-    // TODO cleanup the hash table for stall elements
     auto block = cooperative_groups::this_thread_block();
 
     const uint32_t pid = blockIdx.x;
@@ -353,14 +387,6 @@ __global__ static void remove_surplus_elements(const Context context)
     const uint16_t num_faces    = pi.num_faces[0];
 
     ShmemAllocator shrd_alloc;
-
-    uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
-    load_async(
-        block, reinterpret_cast<uint16_t*>(pi.fe), 3 * num_faces, s_fe, false);
-
-    uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * num_edges);
-    load_async(
-        block, reinterpret_cast<uint16_t*>(pi.ev), 2 * num_edges, s_ev, false);
 
     Bitmask s_owned_v = Bitmask(num_vertices, shrd_alloc);
     s_owned_v.load_async(block, pi.owned_mask_v);
@@ -391,6 +417,14 @@ __global__ static void remove_surplus_elements(const Context context)
     Bitmask s_face_tag = Bitmask(num_faces, shrd_alloc);
     s_face_tag.reset(block);
 
+    uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
+    load_async(
+        block, reinterpret_cast<uint16_t*>(pi.fe), 3 * num_faces, s_fe, false);
+
+    uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * num_edges);
+    load_async(
+        block, reinterpret_cast<uint16_t*>(pi.ev), 2 * num_edges, s_ev, false);
+
     block.sync();
 
     reevaluate_active_elements<blockThreads>(block,
@@ -413,6 +447,41 @@ __global__ static void remove_surplus_elements(const Context context)
     s_vert_tag.store<blockThreads>(pi.active_mask_v);
     s_edge_tag.store<blockThreads>(pi.active_mask_e);
     s_face_tag.store<blockThreads>(pi.active_mask_f);
+
+
+    // dealloc connectivity shared memory so we could use this space for loading
+    // the hashtable
+    shrd_alloc.dealloc<uint16_t>(3 * num_faces);
+    shrd_alloc.dealloc<uint16_t>(2 * num_edges);
+
+    uint16_t max_hash_table_cap =
+        std::max(pi.lp_v.get_capacity(), pi.lp_e.get_capacity());
+    max_hash_table_cap = std::max(max_hash_table_cap, pi.lp_f.get_capacity());
+
+    LPPair* s_table = shrd_alloc.alloc<LPPair>(max_hash_table_cap);
+
+    remove_idle_elements<blockThreads>(block,
+                                       s_table,
+                                       pi.get_lp<VertexHandle>(),
+                                       num_vertices,
+                                       s_owned_v,
+                                       s_vert_tag);
+    block.sync();
+
+    remove_idle_elements<blockThreads>(block,
+                                       s_table,
+                                       pi.get_lp<EdgeHandle>(),
+                                       num_edges,
+                                       s_owned_e,
+                                       s_edge_tag);
+    block.sync();
+
+    remove_idle_elements<blockThreads>(block,
+                                       s_table,
+                                       pi.get_lp<FaceHandle>(),
+                                       num_faces,
+                                       s_owned_f,
+                                       s_face_tag);
 }
 
 template <uint32_t blockThreads, typename HandleT>
@@ -1936,9 +2005,7 @@ void RXMeshDynamic::cleanup()
                           sizeof(uint32_t),
                           cudaMemcpyDeviceToHost));
 
-    uint32_t dyn_shmem = 2 * ShmemAllocator::default_alignment +
-                         (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
-                         (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+    uint32_t dyn_shmem = 0;
 
     dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
                  3 * ShmemAllocator::default_alignment;
@@ -1948,6 +2015,21 @@ void RXMeshDynamic::cleanup()
 
     dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
                  3 * ShmemAllocator::default_alignment;
+
+    uint32_t hash_table_shmem =
+        std::max(sizeof(LPPair) * max_lp_hashtable_capacity<LocalEdgeT>(),
+                 sizeof(LPPair) * max_lp_hashtable_capacity<LocalVertexT>());
+    hash_table_shmem = std::max(
+        hash_table_shmem,
+        uint32_t(sizeof(LPPair) * max_lp_hashtable_capacity<LocalFaceT>()));
+    hash_table_shmem += ShmemAllocator::default_alignment;
+
+    uint32_t connect_shmem =
+        2 * ShmemAllocator::default_alignment +
+        (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
+        (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+
+    dyn_shmem += std::max(hash_table_shmem, connect_shmem);
 
     detail::hashtable_calibration<block_size>
         <<<grid_size, block_size>>>(this->m_rxmesh_context);
