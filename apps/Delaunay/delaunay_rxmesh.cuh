@@ -3,11 +3,8 @@
 #include "rxmesh/rxmesh_dynamic.h"
 
 template <typename T, uint32_t blockThreads>
-__global__ static void delaunay_edge_flip(rxmesh::Context              context,
-                                          rxmesh::VertexAttribute<T>   coords,
-                                          rxmesh::EdgeAttribute<int>   e_attr,
-                                          rxmesh::VertexAttribute<int> v_attr,
-                                          rxmesh::FaceAttribute<int>   f_attr)
+__global__ static void delaunay_edge_flip(rxmesh::Context            context,
+                                          rxmesh::VertexAttribute<T> coords)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -86,7 +83,6 @@ __global__ static void delaunay_edge_flip(rxmesh::Context              context,
 
                 if (alpha0 + beta0 < PII - std::numeric_limits<T>::epsilon() &&
                     alpha1 + beta1 < PII - std::numeric_limits<T>::epsilon()) {
-                    e_attr(eh) = 100;
                     cavity.create(eh);
                 }
             }
@@ -101,7 +97,7 @@ __global__ static void delaunay_edge_flip(rxmesh::Context              context,
     if (cavity.prologue(block, shrd_alloc)) {
 
         // update the cavity
-        cavity.update_attributes(block, coords, e_attr, f_attr, v_attr);
+        cavity.update_attributes(block, coords);
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
@@ -142,15 +138,6 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     auto coords = rx.get_input_vertex_coordinates();
 
-    auto e_attr = rx.add_edge_attribute<int>("eAttr", 1);
-    e_attr->reset(0, DEVICE);
-
-    auto v_attr = rx.add_vertex_attribute<int>("vAttr", 1);
-    v_attr->reset(0, DEVICE);
-
-    auto f_attr = rx.add_face_attribute<int>("fAttr", 1);
-    f_attr->reset(0, DEVICE);
-
     EXPECT_TRUE(rx.validate());
 
     GPUTimer timer;
@@ -162,15 +149,14 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
         rx.prepare_launch_box({Op::EVDiamond},
                               launch_box,
                               (void*)delaunay_edge_flip<float, blockThreads>);
-        f_attr->reset(0, DEVICE);
-        delaunay_edge_flip<float, blockThreads><<<launch_box.blocks,
-                                                  launch_box.num_threads,
-                                                  launch_box.smem_bytes_dyn>>>(
-            rx.get_context(), *coords, *e_attr, *v_attr, *f_attr);
+        delaunay_edge_flip<float, blockThreads>
+            <<<launch_box.blocks,
+               launch_box.num_threads,
+               launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords);
 
         CUDA_ERROR(cudaDeviceSynchronize());
 
-        rx.slice_patches(*coords, *e_attr, *v_attr, *f_attr);
+        rx.slice_patches(*coords);
         rx.cleanup();
 
         timer.stop();
@@ -182,10 +168,7 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
         rx.update_host();
 
         coords->move(DEVICE, HOST);
-        e_attr->move(DEVICE, HOST);
-        v_attr->move(DEVICE, HOST);
-        f_attr->move(DEVICE, HOST);
-
+        
         EXPECT_EQ(num_vertices, rx.get_num_vertices());
         EXPECT_EQ(num_edges, rx.get_num_edges());
         EXPECT_EQ(num_faces, rx.get_num_faces());
@@ -199,10 +182,7 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
 
         auto ps_mesh = rx.get_polyscope_mesh();
         ps_mesh->updateVertexPositions(*coords);
-
-        ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
-        ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
-        ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
+        ps_mesh->setEnabled(false);
 
         rx.polyscope_render_vertex_patch();
         rx.polyscope_render_edge_patch();
