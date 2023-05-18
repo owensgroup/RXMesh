@@ -234,6 +234,8 @@ TEST(RXMeshDynamic, RandomFlips)
                                      launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, *to_flip, *f_attr, *e_attr, *v_attr);
         CUDA_ERROR(cudaDeviceSynchronize());
+
+        rx.slice_patches(*coords, *to_flip, *f_attr, *e_attr, *v_attr);
         rx.cleanup();
     }
 

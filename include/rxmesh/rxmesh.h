@@ -289,7 +289,7 @@ class RXMesh
     void init(const std::vector<std::vector<uint32_t>>& fv,
               const std::string                         patcher_file    = "",
               const bool                                quite           = false,
-              const float                               capacity_factor = 2.0,
+              const float                               capacity_factor = 1.5,
               const float patch_alloc_factor                            = 2.0,
               const float lp_hashtable_load_factor                      = 0.75);
 

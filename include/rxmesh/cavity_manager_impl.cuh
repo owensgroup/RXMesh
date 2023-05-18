@@ -22,11 +22,15 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     __shared__ bool readd[1];
     m_s_readd_to_queue = readd;
 
+    __shared__ bool slice[1];
+    m_s_should_slice = slice;
+
     __shared__ int num_cavities[1];
     m_s_num_cavities = num_cavities;
 
     if (threadIdx.x == 0) {
         m_s_readd_to_queue[0] = false;
+        m_s_should_slice[0]   = false;
         m_s_num_cavities[0]   = 0;
 
         // get a patch
@@ -1274,7 +1278,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             // thread is querying the hashtable while we
             // insert in it
             block.sync();
-
+            if (m_s_should_slice[0]) {
+                return false;
+            }
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_v.insert(lp, m_s_table_v);
                 assert(inserted);
@@ -1315,6 +1321,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 });
 
             block.sync();
+            if (m_s_should_slice[0]) {
+                return false;
+            }
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_e.insert(lp, m_s_table_e);
                 assert(inserted);
@@ -1380,7 +1389,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                                          return m_s_src_connect_mask_e(edge);
                                      });
             block.sync();
-
+            if (m_s_should_slice[0]) {
+                return false;
+            }
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_e.insert(lp, m_s_table_e);
                 assert(inserted);
@@ -1412,7 +1423,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                                                 m_s_src_mask_e(e2q);
                                      });
             block.sync();
-
+            if (m_s_should_slice[0]) {
+                return false;
+            }
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_f.insert(lp, m_s_table_f);
                 assert(inserted);
@@ -1454,8 +1467,11 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
             if (vp == INVALID16) {
 
                 vp = atomicAdd(m_s_num_vertices, 1u);
-
-                assert(vp < m_patch_info.vertices_capacity[0]);
+                if (vp >= m_patch_info.vertices_capacity[0]) {
+                    m_s_should_slice[0] = true;
+                    return ret;
+                }
+                // assert(vp < m_patch_info.vertices_capacity[0]);
 
                 // activate the vertex in the bit mask
                 m_s_active_mask_v.set(vp, true);
@@ -1522,8 +1538,12 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
 
             if (ep == INVALID16) {
                 ep = atomicAdd(m_s_num_edges, 1u);
-                assert(ep < m_patch_info.edges_capacity[0]);
 
+                if (ep >= m_patch_info.edges_capacity[0]) {
+                    m_s_should_slice[0] = true;
+                    return ret;
+                }
+                // assert(ep < m_patch_info.edges_capacity[0]);
 
                 // We assume that the owner patch is q and will
                 // fix this later
@@ -1624,7 +1644,11 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
             if (fp == INVALID16) {
                 fp = atomicAdd(m_s_num_faces, 1u);
 
-                assert(fp < m_patch_info.faces_capacity[0]);
+                if (fp >= m_patch_info.faces_capacity[0]) {
+                    m_s_should_slice[0] = true;
+                    return ret;
+                }
+                // assert(fp < m_patch_info.faces_capacity[0]);
 
                 uint32_t o0(q), o1(q), o2(q);
 
@@ -2045,6 +2069,10 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
         for (uint32_t i = threadIdx.x; i < PatchStash::stash_size;
              i += blockThreads) {
             m_patch_info.patch_stash.m_stash[i] = m_s_patch_stash.m_stash[i];
+        }
+    } else if (m_s_should_slice[0]) {
+        if (threadIdx.x == 0) {
+            m_context.m_patches_info[patch_id()].should_slice = true;
         }
     }
 

@@ -170,6 +170,7 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
 
         CUDA_ERROR(cudaDeviceSynchronize());
 
+        rx.slice_patches(*coords, *e_attr, *v_attr, *f_attr);
         rx.cleanup();
 
         timer.stop();

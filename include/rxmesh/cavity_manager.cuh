@@ -544,6 +544,8 @@ struct CavityManager
 
     PatchInfo m_patch_info;
     Context   m_context;
+
+    bool* m_s_should_slice;
 };
 
 }  // namespace rxmesh
