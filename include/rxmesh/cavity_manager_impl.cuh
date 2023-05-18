@@ -1885,7 +1885,8 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::update_attribute(
     using HandleT = typename AttributeT::HandleType;
     using Type    = typename AttributeT::Type;
 
-    const uint32_t p = m_patch_info.patch_id;
+    const uint32_t p        = m_patch_info.patch_id;
+    const uint32_t num_attr = attribute.get_num_attributes();
 
     auto copy_from_owner = [&](const uint16_t vp, const LPPair* s_table) {
         const HandleT h = m_patch_info.find<HandleT>(vp, s_table);
@@ -1894,7 +1895,6 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::update_attribute(
         assert(h.patch_id() != INVALID32);
         assert(h.local_id() != INVALID16);
 
-        const uint32_t num_attr = attribute.get_num_attributes();
         for (uint32_t attr = 0; attr < num_attr; ++attr) {
             attribute(p, vp, attr) = attribute(h, attr);
         }
