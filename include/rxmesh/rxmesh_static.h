@@ -500,7 +500,8 @@ class RXMeshStatic : public RXMesh
     void prepare_launch_box(const std::vector<Op>    op,
                             LaunchBox<blockThreads>& launch_box,
                             const void*              kernel,
-                            const bool               oriented = false) const
+                            const bool               oriented = false,
+                            const bool with_vertex_valence    = false) const
     {
 
         launch_box.blocks         = this->m_num_patches;
@@ -510,6 +511,18 @@ class RXMeshStatic : public RXMesh
             launch_box.smem_bytes_dyn = std::max(
                 launch_box.smem_bytes_dyn,
                 this->template calc_shared_memory<blockThreads>(o, oriented));
+        }
+
+        if (with_vertex_valence) {
+            if (get_input_max_valence() > 256) {
+                RXMESH_ERROR(
+                    "RXMeshStatic::prepare_launch_box() input max valence if "
+                    "greater than 256 and thus using uint8_t to store the "
+                    "vertex valence will lead to overflow");
+            }
+            launch_box.smem_bytes_dyn +=
+                this->m_max_vertices_per_patch * sizeof(uint8_t) +
+                ShmemAllocator::default_alignment;
         }
 
         if (!this->m_quite) {
@@ -969,48 +982,6 @@ class RXMeshStatic : public RXMesh
         std::fstream file(fn, std::ios::out);
         file.precision(30);
 
-        /*uint32_t num_v = 0;
-        for (uint32_t p = 0; p < this->m_num_patches; ++p) {
-
-            const uint32_t p_num_vertices =
-                this->m_h_patches_info[p].num_vertices[0];
-
-            for (uint16_t v = 0; v < p_num_vertices; ++v) {
-
-                if (!detail::is_deleted(
-                        v, this->m_h_patches_info[p].active_mask_v)) {
-                    const VertexHandle vh =
-                        get_owner_handle<VertexHandle>({p, {v}});
-                    file << "v " << coords(vh, 0) << " " << coords(vh, 1) << " "
-                         << coords(vh, 2) << std::endl;
-                } else {
-                    file << "v " << 0 << " " << 0 << " " << 0 << std::endl;
-                }
-            }
-
-            const uint32_t p_num_faces = this->m_h_patches_info[p].num_faces[0];
-
-            for (uint32_t f = 0; f < p_num_faces; ++f) {
-                if (!detail::is_deleted(
-                        f, this->m_h_patches_info[p].active_mask_f) &&
-                    detail::is_owned(f,
-                                     this->m_h_patches_info[p].owned_mask_f)) {
-                    file << "f ";
-                    for (uint32_t e = 0; e < 3; ++e) {
-                        uint16_t edge =
-                            this->m_h_patches_info[p].fe[3 * f + e].id;
-                        flag_t dir(0);
-                        Context::unpack_edge_dir(edge, edge, dir);
-                        uint16_t e_id = (2 * edge) + dir;
-                        uint16_t v    = this->m_h_patches_info[p].ev[e_id].id;
-                        file << v + num_v + 1 << " ";
-                    }
-                    file << std::endl;
-                }
-            }
-
-            num_v += p_num_vertices;
-        }*/
 
         std::vector<Vector3d> obj_coords(get_num_vertices());
         for_each_vertex(

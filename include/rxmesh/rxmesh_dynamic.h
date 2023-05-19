@@ -363,7 +363,8 @@ class RXMeshDynamic : public RXMeshStatic
     void prepare_launch_box(const std::vector<Op>    op,
                             LaunchBox<blockThreads>& launch_box,
                             const void*              kernel,
-                            const bool               oriented = false) const
+                            const bool               oriented = false,
+                            const bool with_vertex_valence    = false) const
     {
 
         launch_box.blocks = this->m_num_patches;
@@ -442,6 +443,12 @@ class RXMeshDynamic : public RXMeshStatic
         // since we are either doing static query or dynamic changes,
         // shared memory is the max of both
         launch_box.smem_bytes_dyn = std::max(dyn_shmem, static_shmem);
+
+        if (with_vertex_valence) {
+            launch_box.smem_bytes_dyn +=
+                this->m_max_vertices_per_patch * sizeof(uint8_t) +
+                ShmemAllocator::default_alignment;
+        }
 
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,

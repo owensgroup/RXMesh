@@ -40,9 +40,19 @@ __global__ static void random_flips(rxmesh::Context                context,
         return;
     }
 
+    Query<blockThreads> query(context, cavity.patch_id());
+    query.compute_vertex_valence(block, shrd_alloc);
+
+    const LocalVertexT* ev = cavity.patch_info().ev;
+
     detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
+        const uint16_t v0 = ev[2 * eh.local_id() + 0].id;
+        const uint16_t v1 = ev[2 * eh.local_id() + 1].id;
+
         if (to_flip(eh) == 1) {
-            cavity.create(eh);
+            if (query.vertex_valence(v0) > 3 && query.vertex_valence(v1) > 3) {
+                cavity.create(eh);
+            }
         }
     });
 
@@ -87,7 +97,22 @@ TEST(RXMeshDynamic, RandomFlips)
 
     RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
                      rxmesh_args.quite,
-                     STRINGIFY(INPUT_DIR) "sphere3_patches");
+                     STRINGIFY(OUTPUT_DIR) "sphere3_patches");
+
+    /*
+    auto v_attr = rx.add_vertex_attribute<int>("v_attr", 1);
+    auto e_attr = rx.add_edge_attribute<int>("e_attr", 1);
+    auto f_attr = rx.add_face_attribute<int>("f_attr", 1);
+    rx.for_each_vertex(
+        HOST, [&](const VertexHandle vh) { (*v_attr)(vh) = vh.local_id();
+    }); rx.for_each_edge( HOST, [&](const EdgeHandle eh) { (*e_attr)(eh) =
+    eh.local_id(); }); rx.for_each_face( HOST, [&](const FaceHandle fh) {
+    (*f_attr)(fh) = fh.local_id(); });
+
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("v_attr", *v_attr);
+    rx.get_polyscope_mesh()->addEdgeScalarQuantity("e_attr", *e_attr);
+    rx.get_polyscope_mesh()->addFaceScalarQuantity("f_attr", *f_attr);*/
+    // rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches");
 
 
     const uint32_t num_vertices = rx.get_num_vertices();
@@ -200,6 +225,7 @@ TEST(RXMeshDynamic, RandomFlips)
     CUDA_ERROR(cudaDeviceSynchronize());
     rx.update_host();
 
+    EXPECT_TRUE(rx.validate());
     coords->move(DEVICE, HOST);
     to_flip->move(DEVICE, HOST);
     rx.update_polyscope();
@@ -227,7 +253,7 @@ TEST(RXMeshDynamic, RandomFlips)
         RXMESH_INFO("iter = {}", ++iter);
         LaunchBox<blockThreads> launch_box;
         rx.prepare_launch_box(
-            {}, launch_box, (void*)random_flips<blockThreads>);
+            {}, launch_box, (void*)random_flips<blockThreads>, false, true);
         random_flips<blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(

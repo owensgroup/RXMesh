@@ -15,7 +15,7 @@ namespace rxmesh {
 template <uint32_t blockThreads>
 struct Query
 {
-    Query(const Query&) = delete;
+    Query(const Query&)            = delete;
     Query& operator=(const Query&) = delete;
 
     __device__ __inline__ Query(const Context& context,
@@ -27,10 +27,59 @@ struct Query
           m_s_output_owned_bitmask(nullptr),
           m_s_output_offset(nullptr),
           m_s_output_value(nullptr),
+          m_s_valence(nullptr),
           m_s_table(nullptr)
     {
     }
 
+    /**
+     * @brief compute the vertex valence
+     */
+    __device__ __inline__ void compute_vertex_valence(
+        cooperative_groups::thread_block& block,
+        ShmemAllocator&                   shrd_alloc)
+    {
+        const uint16_t num_vertices = m_patch_info.num_vertices[0];
+        const uint16_t num_edges    = m_patch_info.num_edges[0];
+
+        m_s_valence = shrd_alloc.alloc<uint8_t>(num_vertices);
+
+        fill_n<blockThreads>(m_s_valence, num_vertices, uint8_t(0));
+        block.sync();
+
+        for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+            const uint16_t v0 = m_patch_info.ev[2 * e + 0].id;
+            const uint16_t v1 = m_patch_info.ev[2 * e + 1].id;
+            atomicAdd(m_s_valence + v0, uint8_t(1));
+            atomicAdd(m_s_valence + v1, uint8_t(1));
+            assert(m_s_valence[v0] < 255);
+            assert(m_s_valence[v1] < 255);
+        }
+        block.sync();
+    }
+
+
+    /**
+     * @brief return the vertex valence. compute_vertex_valence has to be called
+     * first
+     * @param v vertex for which valence will be returned
+     */
+    __device__ __inline__ uint16_t vertex_valence(uint16_t v) const
+    {
+        assert(m_s_valence);
+        return m_s_valence[v];
+    }
+
+    /**
+     * @brief return the vertex valence. compute_vertex_valence has to be called
+     * first
+     * @param vh vertex for which valence will be returned
+     */
+    __device__ __inline__ uint16_t vertex_valence(VertexHandle vh) const
+    {
+        assert(m_s_valence);
+        return m_s_valence[vh.local_id()];
+    }
 
     /**
      * @brief The query dispatch function to be called by the whole block. In
@@ -194,6 +243,7 @@ struct Query
     uint32_t*        m_s_output_owned_bitmask;
     uint16_t*        m_s_output_offset;
     uint16_t*        m_s_output_value;
+    uint8_t*         m_s_valence;
     LPHashTable      m_output_lp_hashtable;
     LPPair*          m_s_table;
 };

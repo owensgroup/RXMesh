@@ -351,14 +351,24 @@ __inline__ __device__ void remove_idle_elements(
     // global memory, write the results to shared memory buffer, then
     // copy the shared memory buffer to gloabl memory
 
+    __shared__ LPPair s_stash[LPHashTable::stash_size];
+
+    fill_n<blockThreads>(s_stash, uint16_t(LPHashTable::stash_size), LPPair());
     fill_n<blockThreads>(s_table, table.get_capacity(), LPPair());
     block.sync();
 
     for (uint16_t e = threadIdx.x; e < num_elements; e += blockThreads) {
         if (is_active(e) && !is_owned(e)) {
-            LPPair pair = table.find(e);
+
+            uint32_t bucket_id;
+            bool     in_stash;
+            LPPair   pair = table.find(e, bucket_id, in_stash);
             assert(!pair.is_sentinel());
-            table.insert(pair, s_table);
+            if (in_stash) {
+                s_stash[bucket_id] = pair;
+            } else {
+                s_table[bucket_id] = pair;
+            }
         }
     }
     block.sync();
@@ -366,6 +376,10 @@ __inline__ __device__ void remove_idle_elements(
     for (uint16_t e = threadIdx.x; e < table.get_capacity();
          e += blockThreads) {
         table.m_table[e].m_pair = s_table[e].m_pair;
+    }
+    for (uint16_t e = threadIdx.x; e < LPHashTable::stash_size;
+         e += blockThreads) {
+        table.m_stash[e].m_pair = s_stash[e].m_pair;
     }
     block.sync();
 

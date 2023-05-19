@@ -61,11 +61,11 @@ struct LPHashTable
           m_is_on_device(false)
     {
     }
-    LPHashTable(const LPHashTable& other) = default;
-    LPHashTable(LPHashTable&&)            = default;
+    LPHashTable(const LPHashTable& other)      = default;
+    LPHashTable(LPHashTable&&)                 = default;
     LPHashTable& operator=(const LPHashTable&) = default;
-    LPHashTable& operator=(LPHashTable&&) = default;
-    ~LPHashTable()                        = default;
+    LPHashTable& operator=(LPHashTable&&)      = default;
+    ~LPHashTable()                             = default;
 
     /**
      * @brief Constructor using the hash table capacity.This is used as
@@ -379,19 +379,19 @@ struct LPHashTable
 
         // TODO not sure if we need to do this atomically on the GPU. But if we
         // do, here is the implementation
-        //#ifdef __CUDA_ARCH__
+        // #ifdef __CUDA_ARCH__
         //        if (table != nullptr) {
         //            ::atomicExch((uint32_t*)table + bucket_id, INVALID32);
         //        } else {
         //            ::atomicExch((uint32_t*)m_table + bucket_id, INVALID32);
         //        }
-        //#else
+        // #else
         //        if (table != nullptr) {
         //            table[bucket_id].m_pair = INVALID32;
         //        } else {
         //            m_table[bucket_id].m_pair = INVALID32;
         //        }
-        //#endif
+        // #endif
 
 
         if (!in_stash) {
@@ -406,7 +406,7 @@ struct LPHashTable
     }
 
 
-   //private:
+    // private:
     /**
      * @brief Find a pair in the hash table given its key.
      * @param key input key
@@ -437,7 +437,7 @@ struct LPHashTable
                     reinterpret_cast<uint32_t*>(m_table + bucket_id);
                 found = LPPair(atomic_read(ptr));
 #else
-                found = m_table[bucket_id];
+                found      = m_table[bucket_id];
 #endif
             }
 
