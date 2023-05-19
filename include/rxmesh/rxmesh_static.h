@@ -63,6 +63,9 @@ class RXMeshStatic : public RXMesh
         m_polyscope_mesh_name = polyscope::guessNiceNameFromPath(file_path);
         m_polyscope_mesh_name += std::to_string(rand());
         this->register_polyscope();
+        polyscope_render_vertex_patch();
+        polyscope_render_edge_patch();
+        polyscope_render_face_patch();
 #endif
     };
 

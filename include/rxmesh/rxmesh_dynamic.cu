@@ -352,6 +352,7 @@ __inline__ __device__ void remove_idle_elements(
     // copy the shared memory buffer to gloabl memory
 
     fill_n<blockThreads>(s_table, table.get_capacity(), LPPair());
+    block.sync();
 
     for (uint16_t e = threadIdx.x; e < num_elements; e += blockThreads) {
         if (is_active(e) && !is_owned(e)) {
@@ -366,6 +367,16 @@ __inline__ __device__ void remove_idle_elements(
          e += blockThreads) {
         table.m_table[e].m_pair = s_table[e].m_pair;
     }
+    block.sync();
+
+#ifndef NDEBUG
+    for (uint16_t e = threadIdx.x; e < num_elements; e += blockThreads) {
+        if (is_active(e) && !is_owned(e)) {
+            LPPair pair = table.find(e);
+            assert(!pair.is_sentinel());
+        }
+    }
+#endif
 }
 template <uint32_t blockThreads>
 __global__ static void remove_surplus_elements(const Context context)
@@ -460,6 +471,7 @@ __global__ static void remove_surplus_elements(const Context context)
 
     LPPair* s_table = shrd_alloc.alloc<LPPair>(max_hash_table_cap);
 
+    block.sync();
     remove_idle_elements<blockThreads>(block,
                                        s_table,
                                        pi.get_lp<VertexHandle>(),
@@ -791,7 +803,7 @@ __inline__ __device__ void bi_assignment(
     //  three vertices if the face is set. Second, every face set itself if
     //  there are one vertex incident to it that is set. we stop when the
     //  s_num_1_faces is more than half num_faces
-    while (s_num_1_faces < num_faces / 2) {
+    while (true) {
 
         // 1st
         for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
@@ -804,6 +816,9 @@ __inline__ __device__ void bi_assignment(
             }
         }
 
+        if (s_num_1_faces > num_faces / 2) {
+            break;
+        }
         block.sync();
 
         // 2nd
@@ -827,7 +842,7 @@ __inline__ __device__ void bi_assignment(
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
         if (s_active_e(e)) {
             const uint16_t v0(s_ev[2 * e + 0]), v1(s_ev[2 * e + 1]);
-            if (s_new_p_owned_v(v0) || s_new_p_owned_v(v1)) {
+            if (s_new_p_owned_v(v0) && s_new_p_owned_v(v1)) {
                 s_new_p_owned_e.set(e, true);
             }
         }
@@ -1379,7 +1394,11 @@ __global__ static void check_ribbon_edges(const Context           context,
             const LocalEdgeT el(e);
             if (patch_info.is_owned(el) && !patch_info.is_deleted(el)) {
                 if (s_mark_edges[e] == 0) {
-                    // printf("\n ribbon edge = %u, %u", patch_id, e);
+                    // printf("\n ribbon edge = %u, %u, v0= %u, v1= %u",
+                    //        patch_id,
+                    //        e,
+                    //        patch_info.ev[2 * e + 0].id,
+                    //        patch_info.ev[2 * e + 1].id);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -1531,13 +1550,14 @@ __global__ static void check_ribbon_faces(const Context               context,
                             }
 
                             if (!found) {
-                                /*printf(
-                                    "\n T=%u, ribbon face = %u, f= %u, v_id= "
-                                    "%u ",
-                                    threadIdx.x,
-                                    patch_id,
-                                    f,
-                                    v_id);*/
+                                // printf(
+                                //     "\n T=%u, ribbon face = %u, f= %u, v_id=
+                                //     "
+                                //     "%u ",
+                                //     threadIdx.x,
+                                //     patch_id,
+                                //     f,
+                                //     v_id);
                                 ::atomicAdd(d_check, 1);
                                 break;
                             }
@@ -1554,7 +1574,7 @@ __global__ static void check_ribbon_faces(const Context               context,
 
 void RXMeshDynamic::save(std::string filename)
 {
-    if (m_patcher->m_num_patches != get_num_patches()) {
+    /*if (m_patcher->m_num_patches != get_num_patches()) {
         RXMESH_ERROR(
             "RXMeshDynamic:save() does not support changing number of "
             "patches in the mesh");
@@ -1650,7 +1670,7 @@ void RXMeshDynamic::save(std::string filename)
                 m_patcher->m_ribbon_ext_val[p_offset + offset++] = fid;
             }
         }
-    }
+    }*/
 
 
     RXMesh::save(filename);

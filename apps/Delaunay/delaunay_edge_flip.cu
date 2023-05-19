@@ -21,11 +21,12 @@ TEST(Apps, DelaunayEdgeFlip)
     // Select device
     cuda_query(Arg.device_id);
 
-    // RXMeshDynamic rx(Arg.obj_file_name);
+    RXMeshDynamic rx(Arg.obj_file_name);
+
     // rx.save(STRINGIFY(OUTPUT_DIR) "torus_patches");
 
-    RXMeshDynamic rx(
-        Arg.obj_file_name, false, STRINGIFY(INPUT_DIR) "torus_patches");
+    // RXMeshDynamic rx(
+    //     Arg.obj_file_name, false, STRINGIFY(INPUT_DIR) "torus_patches");
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
