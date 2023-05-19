@@ -85,6 +85,7 @@ class Context
         const HandleT    handle,
         const PatchInfo* patches_info = nullptr,
         const LPPair*    table        = nullptr,
+        const LPPair*    stash        = nullptr,
         const bool       check0       = true,
         const bool       check1       = true) const
     {
@@ -104,7 +105,7 @@ class Context
             return handle;
         } else {
 
-            LPPair lp = pi[owner].get_lp<HandleT>().find(lid, table);
+            LPPair lp = pi[owner].get_lp<HandleT>().find(lid, table, stash);
 
             assert(!lp.is_sentinel());
             owner = pi[owner].patch_stash.get_patch(lp);
@@ -117,7 +118,7 @@ class Context
             while (!pi[owner].is_owned(LocalT(lp.local_id_in_owner_patch()))) {
 
                 lp = pi[owner].get_lp<HandleT>().find(
-                    lp.local_id_in_owner_patch());
+                    lp.local_id_in_owner_patch(), nullptr, nullptr);
 
                 assert(!lp.is_sentinel());
                 owner = pi[owner].patch_stash.get_patch(lp);

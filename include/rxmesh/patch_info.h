@@ -130,19 +130,19 @@ struct ALIGN(16) PatchInfo
     }
 
     template <typename HandleT>
-    __device__ __host__ __inline__ HandleT find(
-        const LPPair::KeyT key,
-        const LPPair*      table = nullptr) const
+    __device__ __host__ __inline__ HandleT find(const LPPair::KeyT key,
+                                                const LPPair*      table,
+                                                const LPPair*      stash) const
     {
         LPPair lp;
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            lp = lp_v.find(key, table);
+            lp = lp_v.find(key, table, stash);
         }
         if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            lp = lp_e.find(key, table);
+            lp = lp_e.find(key, table, stash);
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            lp = lp_f.find(key, table);
+            lp = lp_f.find(key, table, stash);
         }
 
         // assert(!lp.is_sentinel());

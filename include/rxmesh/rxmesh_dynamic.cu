@@ -67,7 +67,7 @@ __device__ __inline__ void hashtable_calibration(const Context context,
                 uint32_t owner = pi.patch_id;
                 uint16_t lid   = i;
 
-                LPPair lp = pi.get_lp<HandleT>().find(lid);
+                LPPair lp = pi.get_lp<HandleT>().find(lid, nullptr, nullptr);
 
                 assert(!lp.is_sentinel());
 
@@ -91,7 +91,9 @@ __device__ __inline__ void hashtable_calibration(const Context context,
 
                         lp = context.m_patches_info[owner]
                                  .get_lp<HandleT>()
-                                 .find(lp.local_id_in_owner_patch());
+                                 .find(lp.local_id_in_owner_patch(),
+                                       nullptr,
+                                       nullptr);
 
                         assert(!lp.is_sentinel());
 
@@ -362,7 +364,7 @@ __inline__ __device__ void remove_idle_elements(
 
             uint32_t bucket_id;
             bool     in_stash;
-            LPPair   pair = table.find(e, bucket_id, in_stash);
+            LPPair pair = table.find(e, bucket_id, in_stash, nullptr, nullptr);
             assert(!pair.is_sentinel());
             if (in_stash) {
                 s_stash[bucket_id] = pair;
@@ -386,7 +388,7 @@ __inline__ __device__ void remove_idle_elements(
 #ifndef NDEBUG
     for (uint16_t e = threadIdx.x; e < num_elements; e += blockThreads) {
         if (is_active(e) && !is_owned(e)) {
-            LPPair pair = table.find(e);
+            LPPair pair = table.find(e, nullptr, nullptr);
             assert(!pair.is_sentinel());
         }
     }
@@ -528,14 +530,14 @@ __inline__ __device__ void copy_to_hashtable(const PatchInfo& pi,
             if (s_owned(v)) {
                 lp = LPPair(v, v, 0);
             } else {
-                HandleT vh = pi.find<HandleT>(v);
+                HandleT vh = pi.find<HandleT>(v, nullptr, nullptr);
 
                 uint8_t st = new_patch_stash.insert_patch(vh.patch_id());
 
                 lp = LPPair(v, vh.local_id(), st);
             }
 
-            new_pi.get_lp<HandleT>().insert(lp);
+            new_pi.get_lp<HandleT>().insert(lp, nullptr, nullptr);
         }
     }
 }
@@ -747,7 +749,7 @@ __inline__ __device__ void slice(Context&                          context,
         if (s_new_p_active_v(v) && !s_owned_v(v) && s_new_p_owned_v(v)) {
             assert(!new_patch.is_deleted(LocalVertexT(v)));
             LPPair lp(v, v, s_new_patch_stash_id);
-            pi.lp_v.insert(lp);
+            pi.lp_v.insert(lp, nullptr, nullptr);
         }
     }
 
@@ -755,7 +757,7 @@ __inline__ __device__ void slice(Context&                          context,
         if (s_new_p_active_e(e) && !s_owned_e(e) && s_new_p_owned_e(e)) {
             assert(!new_patch.template is_deleted(LocalEdgeT(e)));
             LPPair lp(e, e, s_new_patch_stash_id);
-            pi.lp_e.insert(lp);
+            pi.lp_e.insert(lp, nullptr, nullptr);
         }
     }
 
@@ -763,7 +765,7 @@ __inline__ __device__ void slice(Context&                          context,
         if (s_new_p_active_f(f) && !s_owned_f(f) && s_new_p_owned_f(f)) {
             assert(!new_patch.template is_deleted(LocalFaceT(f)));
             LPPair lp(f, f, s_new_patch_stash_id);
-            pi.lp_f.insert(lp);
+            pi.lp_f.insert(lp, nullptr, nullptr);
         }
     }
 }
@@ -915,21 +917,17 @@ __global__ static void copy_patch_debug(const Context                  context,
                                     DIVIDE_UP(pi.num_faces[0], 32),
                                     new_pi.active_mask_f);
 
-        // new_pi.lp_v.write_to_global_memory<blockThreads>(pi.lp_v.m_table);
-        // new_pi.lp_e.write_to_global_memory<blockThreads>(pi.lp_e.m_table);
-        // new_pi.lp_f.write_to_global_memory<blockThreads>(pi.lp_f.m_table);
-
         for (uint16_t v = threadIdx.x; v < pi.num_vertices[0];
              v += blockThreads) {
             VertexHandle vh(pi.patch_id, v);
             if (!pi.is_deleted(LocalVertexT(v)) &&
                 !pi.is_owned(LocalVertexT(v))) {
-                LPPair lp = pi.lp_v.find(v);
+                LPPair lp = pi.lp_v.find(v, nullptr, nullptr);
                 assert(!lp.is_sentinel());
                 assert(lp.local_id() == v);
                 LPPair new_lp(
                     v, lp.local_id_in_owner_patch(), lp.patch_stash_id());
-                new_pi.lp_v.insert(new_lp);
+                new_pi.lp_v.insert(new_lp, nullptr, nullptr);
             } else if (!pi.is_deleted(LocalVertexT(v)) &&
                        pi.is_owned(LocalVertexT(v))) {
                 ::atomicAdd(context.m_num_vertices, uint32_t(1));
@@ -940,12 +938,12 @@ __global__ static void copy_patch_debug(const Context                  context,
         for (uint16_t e = threadIdx.x; e < pi.num_edges[0]; e += blockThreads) {
             EdgeHandle eh(pi.patch_id, e);
             if (!pi.is_deleted(LocalEdgeT(e)) && !pi.is_owned(LocalEdgeT(e))) {
-                LPPair lp = pi.lp_e.find(e);
+                LPPair lp = pi.lp_e.find(e, nullptr, nullptr);
                 assert(!lp.is_sentinel());
                 assert(lp.local_id() == e);
                 LPPair new_lp(
                     e, lp.local_id_in_owner_patch(), lp.patch_stash_id());
-                new_pi.lp_e.insert(new_lp);
+                new_pi.lp_e.insert(new_lp, nullptr, nullptr);
             } else if (!pi.is_deleted(LocalEdgeT(e)) &&
                        pi.is_owned(LocalEdgeT(e))) {
                 ::atomicAdd(context.m_num_edges, uint32_t(1));
@@ -955,12 +953,12 @@ __global__ static void copy_patch_debug(const Context                  context,
         for (uint16_t f = threadIdx.x; f < pi.num_faces[0]; f += blockThreads) {
             FaceHandle fh(pi.patch_id, f);
             if (!pi.is_deleted(LocalFaceT(f)) && !pi.is_owned(LocalFaceT(f))) {
-                LPPair lp = pi.lp_f.find(f);
+                LPPair lp = pi.lp_f.find(f, nullptr, nullptr);
                 assert(!lp.is_sentinel());
                 assert(lp.local_id() == f);
                 LPPair new_lp(
                     f, lp.local_id_in_owner_patch(), lp.patch_stash_id());
-                new_pi.lp_f.insert(new_lp);
+                new_pi.lp_f.insert(new_lp, nullptr, nullptr);
             } else if (!pi.is_deleted(LocalFaceT(f)) &&
                        pi.is_owned(LocalFaceT(f))) {
                 ::atomicAdd(context.m_num_faces, uint32_t(1));

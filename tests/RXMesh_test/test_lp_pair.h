@@ -53,23 +53,21 @@ TEST(RXMesh, LPHashTable)
         static_cast<uint16_t>(static_cast<float>(size) / load_factor), false);
 
     for (auto& p : pairs) {
-        EXPECT_TRUE(table.insert(p));
+        EXPECT_TRUE(table.insert(p, nullptr, nullptr));
     }
 
     for (uint32_t i = 0; i < size; ++i) {
-        auto p = table.find(local_id[i]);
+        auto p = table.find(local_id[i], nullptr, nullptr);
         EXPECT_NE(p.m_pair, LPPair::sentinel_pair().m_pair);
         EXPECT_EQ(p.local_id_in_owner_patch(), owner_local_id[i]);
         EXPECT_EQ(p.patch_stash_id(), patch_id[i]);
     }
 
     for (uint32_t i = 0; i < size; ++i) {
-        table.remove(local_id[i]);
-        auto p = table.find(local_id[i]);
-        EXPECT_EQ(p.m_pair, LPPair::sentinel_pair().m_pair);        
+        table.remove(local_id[i], nullptr, nullptr);
+        auto p = table.find(local_id[i], nullptr, nullptr);
+        EXPECT_EQ(p.m_pair, LPPair::sentinel_pair().m_pair);
     }
-
-   
 
 
     table.free();
@@ -122,7 +120,7 @@ TEST(RXMesh, DISABLED_BenchmarkLPHashTable)
 
             bool fail = false;
             for (auto& p : pairs) {
-                if (!table.insert(p)) {
+                if (!table.insert(p, nullptr, nullptr)) {
                     fail = true;
                     break;
                 }
@@ -135,7 +133,7 @@ TEST(RXMesh, DISABLED_BenchmarkLPHashTable)
 
             if (!fail) {
                 for (uint32_t i = 0; i < size; ++i) {
-                    auto p = table.find(local_id[i]);
+                    auto p = table.find(local_id[i], nullptr, nullptr);
                     EXPECT_NE(p.m_pair, LPPair::sentinel_pair().m_pair);
                     EXPECT_EQ(p.local_id_in_owner_patch(), owner_local_id[i]);
                     EXPECT_EQ(p.patch_stash_id(), patch_id[i]);

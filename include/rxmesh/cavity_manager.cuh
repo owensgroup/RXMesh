@@ -430,7 +430,8 @@ struct CavityManager
         const Bitmask& dest_patch_owned_mask,
         const Bitmask& dest_patch_active_mask,
         const Bitmask& dest_in_cavity,
-        const LPPair*  s_table);
+        const LPPair*  s_table,
+        const LPPair*  s_stash);
 
 
     /**
@@ -452,6 +453,7 @@ struct CavityManager
         const uint16_t                    num_elements,
         const Bitmask&                    s_ownership_change,
         const LPPair*                     s_table,
+        const LPPair*                     s_stash,
         Bitmask&                          s_owned_bitmask);
 
     /**
@@ -530,6 +532,7 @@ struct CavityManager
 
     // the hashtable (this memory overlaps with m_s_cavity_id_v/e/f)
     LPPair *m_s_table_v, *m_s_table_e, *m_s_table_f;
+    LPPair *m_s_table_stash_v, *m_s_table_stash_e, *m_s_table_stash_f;
 
     // store the number of elements. we use pointers since the number of mesh
     // elements could change

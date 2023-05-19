@@ -141,6 +141,9 @@ struct LPHashTable
         for (uint32_t i = threadIdx.x; i < m_capacity; i += blockThreads) {
             m_table[i].m_pair = INVALID32;
         }
+        for (uint32_t i = threadIdx.x; i < stash_size; i += blockThreads) {
+            m_stash[i].m_pair = INVALID32;
+        }
 #endif
     }
 
@@ -183,7 +186,7 @@ struct LPHashTable
      * @brief memcpy the hashtable from host to device, host to host, device to
      * host, device to device depending on where the src and this is allocated
      */
-    void move(const LPHashTable src)
+    __host__ void move(const LPHashTable src)
     {
         const size_t stash_num_bytes = LPHashTable::stash_size * sizeof(LPPair);
         if (src.m_is_on_device && m_is_on_device) {
@@ -221,10 +224,15 @@ struct LPHashTable
      * buffer
      */
     template <typename DummyT = void>
-    __device__ __inline__ void load_in_shared_memory(LPPair* s_table,
-                                                     bool    with_wait) const
+    __device__ __inline__ void load_in_shared_memory(
+        LPPair* s_table,
+        bool    with_wait,
+        LPPair* s_stash = nullptr) const
     {
 #ifdef __CUDA_ARCH__
+        if (s_stash != nullptr) {
+            detail::load_async(m_stash, stash_size, s_stash, false);
+        }
         detail::load_async(m_table, m_capacity, s_table, with_wait);
 #endif
     }
@@ -235,9 +243,13 @@ struct LPHashTable
      * buffer
      */
     template <uint32_t blockSize>
-    __device__ __inline__ void write_to_global_memory(const LPPair* s_table)
+    __device__ __inline__ void write_to_global_memory(const LPPair* s_table,
+                                                      const LPPair* s_stash)
     {
 #ifdef __CUDA_ARCH__
+        if (s_stash != nullptr) {
+            detail::store<blockSize>(s_stash, stash_size, m_stash);
+        }
         detail::store<blockSize>(s_table, m_capacity, m_table);
 #endif
     }
@@ -252,8 +264,16 @@ struct LPHashTable
      * @return true if the insertion succeeded and false otherwise
      */
     __host__ __device__ __inline__ bool insert(LPPair           pair,
-                                               volatile LPPair* table = nullptr)
+                                               volatile LPPair* table,
+                                               volatile LPPair* stash)
     {
+#ifndef __CUDA_ARCH__
+        // on the host, these two should be nullprt since there is no shared
+        // memory
+        assert(stash == nullptr);
+        assert(table == nullptr);
+#endif
+
         auto     bucket_id      = m_hasher0(pair.key()) % m_capacity;
         uint16_t cuckoo_counter = 0;
 
@@ -305,21 +325,32 @@ struct LPHashTable
         } while (cuckoo_counter < m_max_cuckoo_chains);
 
         const auto input_key = pair.key();
-        for (uint8_t i = 0; i < stash_size; ++i) {
+
 #ifdef __CUDA_ARCH__
+        for (uint8_t i = 0; i < stash_size; ++i) {
             LPPair prv;
-            prv.m_pair = ::atomicCAS(reinterpret_cast<uint32_t*>(m_stash + i),
-                                     INVALID32,
-                                     pair.m_pair);
+            if (stash != nullptr) {
+                prv.m_pair =
+                    ::atomicCAS((uint32_t*)(stash + i), INVALID32, pair.m_pair);
+            } else {
+                prv.m_pair =
+                    ::atomicCAS(reinterpret_cast<uint32_t*>(m_stash + i),
+                                INVALID32,
+                                pair.m_pair);
+            }
             if (prv.is_sentinel() || prv.key() == input_key) {
-#else
-            if (m_stash[i].is_sentinel() || m_stash[i].key() == input_key) {
-                m_stash[i] = pair;
-#endif
                 return true;
             }
         }
-
+#else
+        assert(stash == nullptr);
+        for (uint8_t i = 0; i < stash_size; ++i) {
+            if (m_stash[i].is_sentinel() || m_stash[i].key() == input_key) {
+                m_stash[i] = pair;
+                return true;
+            }
+        }
+#endif
         return false;
     }
 
@@ -330,13 +361,13 @@ struct LPHashTable
      * device)
      * @return a LPPair pair that contains the key and its associated value
      */
-    __host__ __device__ __inline__ LPPair find(
-        const typename LPPair::KeyT key,
-        const LPPair*               table = nullptr) const
+    __host__ __device__ __inline__ LPPair find(const typename LPPair::KeyT key,
+                                               const LPPair* table,
+                                               const LPPair* stash) const
     {
         uint32_t bucket_id(0);
         bool     in_stash(false);
-        return find(key, bucket_id, in_stash, table);
+        return find(key, bucket_id, in_stash, table, stash);
     }
 
 
@@ -349,7 +380,8 @@ struct LPHashTable
     {
         uint32_t bucket_id(0);
         bool     in_stash(false);
-        LPPair   old_pair = find(new_pair.key(), bucket_id, in_stash);
+        LPPair   old_pair =
+            find(new_pair.key(), bucket_id, in_stash, nullptr, nullptr);
 
         assert(!old_pair.is_sentinel());
 
@@ -368,14 +400,17 @@ struct LPHashTable
      * sentinel_pair
      * @param key key to the item to remove
      * @param table pointer to the hash table (could shared memory on the
-     * device)
+     * device). Otherwise, it should be null
+     * @param stash pointer to the hash table stash (could shared memory on the
+     * device). Otherwise, it should be null
      */
     __host__ __device__ __inline__ void remove(const typename LPPair::KeyT key,
-                                               LPPair* table = nullptr)
+                                               LPPair* table,
+                                               LPPair* stash)
     {
         uint32_t bucket_id(0);
         bool     in_stash(false);
-        find(key, bucket_id, in_stash, table);
+        find(key, bucket_id, in_stash, table, stash);
 
         // TODO not sure if we need to do this atomically on the GPU. But if we
         // do, here is the implementation
@@ -401,7 +436,11 @@ struct LPHashTable
                 m_table[bucket_id].m_pair = INVALID32;
             }
         } else {
-            m_stash[bucket_id].m_pair = INVALID32;
+            if (stash != nullptr) {
+                stash[bucket_id].m_pair = INVALID32;
+            } else {
+                m_stash[bucket_id].m_pair = INVALID32;
+            }
         }
     }
 
@@ -412,15 +451,24 @@ struct LPHashTable
      * @param key input key
      * @param bucket_id returned bucket ID of the found LPPair
      * @param table pointer to the hash table (could shared memory on the
-     * device)
+     * device) Otherwise, it should be null
+     * @param stash pointer to the hash table stash (could shared memory on the
+     * device) Otherwise, it should be null
      * @return a LPPair pair that contains the key and its associated value
      */
-    __host__ __device__ __inline__ LPPair find(
-        const typename LPPair::KeyT key,
-        uint32_t&                   bucket_id,
-        bool&                       in_stash,
-        const LPPair*               table = nullptr) const
+    __host__ __device__ __inline__ LPPair find(const typename LPPair::KeyT key,
+                                               uint32_t&     bucket_id,
+                                               bool&         in_stash,
+                                               const LPPair* table,
+                                               const LPPair* stash) const
     {
+
+#ifndef __CUDA_ARCH__
+        // on the host, these two should be nullprt since there is no shared
+        // memory
+        assert(stash == nullptr);
+        assert(table == nullptr);
+#endif
 
         constexpr int num_hfs = 4;
         in_stash              = false;
@@ -437,7 +485,7 @@ struct LPHashTable
                     reinterpret_cast<uint32_t*>(m_table + bucket_id);
                 found = LPPair(atomic_read(ptr));
 #else
-                found      = m_table[bucket_id];
+                found = m_table[bucket_id];
 #endif
             }
 
@@ -459,9 +507,16 @@ struct LPHashTable
         }
 
         for (bucket_id = 0; bucket_id < stash_size; ++bucket_id) {
-            if (m_stash[bucket_id].key() == key) {
+            LPPair st_pair;
+            if (stash != nullptr) {
+                st_pair = stash[bucket_id];
+            } else {
+                st_pair = m_stash[bucket_id];
+            }
+
+            if (st_pair.key() == key) {
                 in_stash = true;
-                return m_stash[bucket_id];
+                return st_pair;
             }
         }
         return LPPair::sentinel_pair();

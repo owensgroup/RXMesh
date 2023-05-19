@@ -1055,7 +1055,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
                 uint8_t owner_st = stash.find_patch_index(owner_patch);
 
                 LPPair pair(local_id, local_id_in_owner_patch, owner_st);
-                if (!h_hashtable.insert(pair)) {
+                if (!h_hashtable.insert(pair, nullptr, nullptr)) {
                     RXMESH_ERROR(
                         "rxmesh::build_device failed to insert in the "
                         "hashtable. Retry with smaller load factor. Load "
