@@ -819,8 +819,9 @@ __inline__ __device__ void bi_assignment(
     //  three vertices if the face is set. Second, every face set itself if
     //  there are one vertex incident to it that is set. we stop when the
     //  s_num_1_faces is more than half num_faces
+    uint32_t iter = 0;
     while (true) {
-
+        iter++;
         // 1st
         for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
             if (s_active_f(f) && s_new_p_owned_f(f)) {
@@ -832,7 +833,7 @@ __inline__ __device__ void bi_assignment(
             }
         }
 
-        if (s_num_1_faces > num_faces / 2) {
+        if (s_num_1_faces > num_faces / 2 || iter > 20) {
             break;
         }
         block.sync();
