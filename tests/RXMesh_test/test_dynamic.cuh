@@ -292,14 +292,14 @@ TEST(RXMeshDynamic, RandomFlips)
     rx.polyscope_render_face_patch();
 
     for (uint32_t p = 0; p < rx.get_num_patches(); ++p) {
-        // rx.render_patch(p)->setEnabled(false);
+        rx.render_patch(p)->setEnabled(false);
     }
 
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(*coords);
     ps_mesh->addEdgeScalarQuantity("toFlip", *to_flip)->setMapRange({0, 2});
     ps_mesh->setEnabled(false);
-    polyscope::show();
+    //polyscope::show();
 #endif
 }
 
@@ -352,6 +352,6 @@ TEST(RXMeshDynamic, PatchSlicing)
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(*coords);
     ps_mesh->setEnabled(false);
-    polyscope::show();
+    //polyscope::show();
 #endif
 }
