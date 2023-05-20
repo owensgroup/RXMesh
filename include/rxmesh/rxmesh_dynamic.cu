@@ -530,7 +530,7 @@ __inline__ __device__ void copy_to_hashtable(const PatchInfo& pi,
             if (s_owned(v)) {
                 lp = LPPair(v, v, 0);
             } else {
-                HandleT vh = pi.find<HandleT>(v, nullptr, nullptr);
+                HandleT vh = pi.find<HandleT>(v);
 
                 uint8_t st = new_patch_stash.insert_patch(vh.patch_id());
 

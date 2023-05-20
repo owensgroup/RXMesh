@@ -1206,7 +1206,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             //        false);
 
             const VertexHandle v_owner = m_patch_info.find<VertexHandle>(
-                v, m_s_table_v, m_s_table_stash_v);
+                v, m_s_table_v, m_s_table_stash_v, m_s_patch_stash);
 
             assert(v_owner.is_valid());
             assert(v_owner.patch_id() != INVALID32);
@@ -1823,9 +1823,8 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
         if (!dest_patch_owned_mask(i) &&
             (dest_patch_active_mask(i) || dest_in_cavity(i))) {
 
-            const HandleT handle =
-                m_patch_info.find<HandleT>(i, s_table, s_stash);
-
+            const HandleT handle = m_patch_info.find<HandleT>(
+                i, s_table, s_stash, m_s_patch_stash);
             assert(handle.is_valid());
             assert(handle.patch_id() != INVALID32);
             assert(handle.local_id() != INVALID16);
@@ -1882,7 +1881,8 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
 
             assert(!m_patch_info.is_owned(HandleT::LocalT(vp)));
 
-            const HandleT h = m_patch_info.find<HandleT>(vp, s_table, s_stash);
+            const HandleT h = m_patch_info.find<HandleT>(
+                vp, s_table, s_stash, m_s_patch_stash);
 
             assert(h.patch_id() != INVALID32);
             assert(h.local_id() != INVALID16);
@@ -1948,7 +1948,8 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::update_attribute(
 
     auto copy_from_owner =
         [&](const uint16_t vp, const LPPair* s_table, const LPPair* s_stash) {
-            const HandleT h = m_patch_info.find<HandleT>(vp, s_table, s_stash);
+            const HandleT h = m_patch_info.find<HandleT>(
+                vp, s_table, s_stash, m_s_patch_stash);
 
             assert(h.patch_id() != p);
             assert(h.patch_id() != INVALID32);

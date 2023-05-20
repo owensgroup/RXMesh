@@ -97,7 +97,9 @@ TEST(RXMeshDynamic, RandomFlips)
 
     RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
                      rxmesh_args.quite,
-                     STRINGIFY(OUTPUT_DIR) "sphere3_patches");
+                     STRINGIFY(INPUT_DIR) "sphere3_patches");
+
+    // rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches_0");
 
     /*
     auto v_attr = rx.add_vertex_attribute<int>("v_attr", 1);
@@ -112,7 +114,6 @@ TEST(RXMeshDynamic, RandomFlips)
     rx.get_polyscope_mesh()->addVertexScalarQuantity("v_attr", *v_attr);
     rx.get_polyscope_mesh()->addEdgeScalarQuantity("e_attr", *e_attr);
     rx.get_polyscope_mesh()->addFaceScalarQuantity("f_attr", *f_attr);*/
-    // rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches");
 
 
     const uint32_t num_vertices = rx.get_num_vertices();
@@ -219,7 +220,7 @@ TEST(RXMeshDynamic, RandomFlips)
     to_flip->move(HOST, DEVICE);
 
 
-    /* set_should_slice<<<rx.get_num_patches(), 1>>>(rx.get_context());
+    set_should_slice<<<rx.get_num_patches(), 1>>>(rx.get_context());
     rx.slice_patches(*coords, *to_flip);
     rx.cleanup();
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -229,7 +230,7 @@ TEST(RXMeshDynamic, RandomFlips)
     coords->move(DEVICE, HOST);
     to_flip->move(DEVICE, HOST);
     rx.update_polyscope();
-    rx.get_polyscope_mesh()->updateVertexPositions(*coords);*/
+    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
 
 
 #if USE_POLYSCOPE
@@ -291,7 +292,7 @@ TEST(RXMeshDynamic, RandomFlips)
     rx.polyscope_render_face_patch();
 
     for (uint32_t p = 0; p < rx.get_num_patches(); ++p) {
-        rx.render_patch(p)->setEnabled(false);
+        // rx.render_patch(p)->setEnabled(false);
     }
 
     auto ps_mesh = rx.get_polyscope_mesh();

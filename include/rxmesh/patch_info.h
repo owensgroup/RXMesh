@@ -132,7 +132,8 @@ struct ALIGN(16) PatchInfo
     template <typename HandleT>
     __device__ __host__ __inline__ HandleT find(const LPPair::KeyT key,
                                                 const LPPair*      table,
-                                                const LPPair*      stash) const
+                                                const LPPair*      stash,
+                                                const PatchStash&  pstash) const
     {
         LPPair lp;
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
@@ -149,10 +150,32 @@ struct ALIGN(16) PatchInfo
         if (lp.is_sentinel()) {
             return HandleT();
         } else {
-            return get_handle<HandleT>(lp);
+            return HandleT(pstash.get_patch(lp),
+                           {lp.local_id_in_owner_patch()});
         }
     }
 
+    template <typename HandleT>
+    __device__ __host__ __inline__ HandleT find(const LPPair::KeyT key) const
+    {
+        LPPair lp;
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            lp = lp_v.find(key, nullptr, nullptr);
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            lp = lp_e.find(key, nullptr, nullptr);
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            lp = lp_f.find(key, nullptr, nullptr);
+        }
+
+        // assert(!lp.is_sentinel());
+        if (lp.is_sentinel()) {
+            return HandleT();
+        } else {
+            return get_handle<HandleT>(lp);
+        }
+    }
 
     /**
      * @brief convert an LPPair to a handle. The LPPair should be generated but
