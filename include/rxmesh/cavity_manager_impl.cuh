@@ -8,11 +8,7 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     : m_write_to_gmem(true), m_context(context)
 {
     __shared__ uint32_t s_patch_id;
-    __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
 
-    // assuming the max number of cavities created here is equal to the
-    // number of threads in the block
-    m_s_active_cavity_bitmask = Bitmask(blockThreads, smem);
 
     __shared__ uint16_t counts[3];
     m_s_num_vertices = counts + 0;
@@ -28,15 +24,6 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     __shared__ int num_cavities[1];
     m_s_num_cavities = num_cavities;
 
-
-    __shared__ LPPair st_v[LPHashTable::stash_size];
-    m_s_table_stash_v = st_v;
-
-    __shared__ LPPair st_e[LPHashTable::stash_size];
-    m_s_table_stash_e = st_e;
-
-    __shared__ LPPair st_f[LPHashTable::stash_size];
-    m_s_table_stash_f = st_f;
 
     if (threadIdx.x == 0) {
         m_s_readd_to_queue[0] = false;
@@ -84,13 +71,13 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
 
     m_patch_info = m_context.m_patches_info[s_patch_id];
 
-    m_vert_cap = m_patch_info.vertices_capacity[0];
-    m_edge_cap = m_patch_info.edges_capacity[0];
-    m_face_cap = m_patch_info.faces_capacity[0];
+    const uint32_t vert_cap = m_patch_info.vertices_capacity[0];
+    const uint32_t edge_cap = m_patch_info.edges_capacity[0];
+    const uint32_t face_cap = m_patch_info.faces_capacity[0];
 
-    const uint32_t vert_cap_bytes = sizeof(uint16_t) * m_vert_cap;
-    const uint32_t edge_cap_bytes = sizeof(uint16_t) * m_edge_cap;
-    const uint32_t face_cap_bytes = sizeof(uint16_t) * m_face_cap;
+    const uint32_t vert_cap_bytes = sizeof(uint16_t) * vert_cap;
+    const uint32_t edge_cap_bytes = sizeof(uint16_t) * edge_cap;
+    const uint32_t face_cap_bytes = sizeof(uint16_t) * face_cap;
 
     m_s_cavity_id_v = reinterpret_cast<uint16_t*>(shrd_alloc.alloc(
         std::max(vert_cap_bytes, m_patch_info.lp_v.num_bytes())));
@@ -99,7 +86,38 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     m_s_cavity_id_f = reinterpret_cast<uint16_t*>(shrd_alloc.alloc(
         std::max(face_cap_bytes, m_patch_info.lp_f.num_bytes())));
 
-    m_s_cavity_boundary_edges = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
+    fill_n<blockThreads>(m_s_cavity_id_v, vert_cap, uint16_t(INVALID16));
+    fill_n<blockThreads>(m_s_cavity_id_e, edge_cap, uint16_t(INVALID16));
+    fill_n<blockThreads>(m_s_cavity_id_f, face_cap, uint16_t(INVALID16));
+
+    block.sync();
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::alloc_shared_memory(
+    cooperative_groups::thread_block& block,
+    ShmemAllocator&                   shrd_alloc)
+{
+    const uint16_t vert_cap = m_patch_info.vertices_capacity[0];
+    const uint16_t edge_cap = m_patch_info.edges_capacity[0];
+    const uint16_t face_cap = m_patch_info.faces_capacity[0];
+
+    // load EV and FE
+    m_s_ev = shrd_alloc.alloc<uint16_t>(2 * edge_cap);
+    m_s_fe = shrd_alloc.alloc<uint16_t>(3 * face_cap);
+    detail::load_async(block,
+                       reinterpret_cast<uint16_t*>(m_patch_info.ev),
+                       2 * m_s_num_edges[0],
+                       m_s_ev,
+                       false);
+
+    detail::load_async(block,
+                       reinterpret_cast<uint16_t*>(m_patch_info.fe),
+                       3 * m_s_num_faces[0],
+                       m_s_fe,
+                       false);
 
     auto alloc_masks = [&](uint16_t        num_elements,
                            Bitmask&        owned,
@@ -135,22 +153,23 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
 
 
     // vertices masks
-    alloc_masks(m_vert_cap,
+    alloc_masks(vert_cap,
                 m_s_owned_mask_v,
                 m_s_active_mask_v,
                 m_s_ownership_change_mask_v,
                 m_s_in_cavity_v,
                 m_patch_info.owned_mask_v,
                 m_patch_info.active_mask_v);
-    m_s_migrate_mask_v      = Bitmask(m_vert_cap, shrd_alloc);
-    m_s_owned_cavity_bdry_v = Bitmask(m_vert_cap, shrd_alloc);
-    m_s_ribbonize_v         = Bitmask(m_vert_cap, shrd_alloc);
-    m_s_src_mask_v         = Bitmask(context.m_max_num_vertices[0], shrd_alloc);
-    m_s_src_connect_mask_v = Bitmask(context.m_max_num_vertices[0], shrd_alloc);
+    m_s_migrate_mask_v      = Bitmask(vert_cap, shrd_alloc);
+    m_s_owned_cavity_bdry_v = Bitmask(vert_cap, shrd_alloc);
+    m_s_ribbonize_v         = Bitmask(vert_cap, shrd_alloc);
+    m_s_src_mask_v = Bitmask(m_context.m_max_num_vertices[0], shrd_alloc);
+    m_s_src_connect_mask_v =
+        Bitmask(m_context.m_max_num_vertices[0], shrd_alloc);
 
 
     // edges masks
-    alloc_masks(m_edge_cap,
+    alloc_masks(edge_cap,
                 m_s_owned_mask_e,
                 m_s_active_mask_e,
                 m_s_ownership_change_mask_e,
@@ -158,13 +177,13 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
                 m_patch_info.owned_mask_e,
                 m_patch_info.active_mask_e);
     const uint16_t max_edge_cap =
-        static_cast<uint16_t>(context.m_capacity_factor *
-                              static_cast<float>(context.m_max_num_edges[0]));
-    m_s_src_mask_e = Bitmask(std::max(max_edge_cap, m_edge_cap), shrd_alloc);
-    m_s_src_connect_mask_e = Bitmask(context.m_max_num_edges[0], shrd_alloc);
+        static_cast<uint16_t>(m_context.m_capacity_factor *
+                              static_cast<float>(m_context.m_max_num_edges[0]));
+    m_s_src_mask_e = Bitmask(std::max(max_edge_cap, edge_cap), shrd_alloc);
+    m_s_src_connect_mask_e = Bitmask(m_context.m_max_num_edges[0], shrd_alloc);
 
     // faces masks
-    alloc_masks(m_face_cap,
+    alloc_masks(face_cap,
                 m_s_owned_mask_f,
                 m_s_active_mask_f,
                 m_s_ownership_change_mask_f,
@@ -172,12 +191,27 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
                 m_patch_info.owned_mask_f,
                 m_patch_info.active_mask_f);
 
+    // patch to lock
     m_s_patches_to_lock_mask = Bitmask(PatchStash::stash_size, shrd_alloc);
-    m_s_locked_patches_mask  = Bitmask(PatchStash::stash_size, shrd_alloc);
+    m_s_patches_to_lock_mask.reset(block);
 
-    fill_n<blockThreads>(m_s_cavity_id_v, m_vert_cap, uint16_t(INVALID16));
-    fill_n<blockThreads>(m_s_cavity_id_e, m_edge_cap, uint16_t(INVALID16));
-    fill_n<blockThreads>(m_s_cavity_id_f, m_face_cap, uint16_t(INVALID16));
+    // locked patches
+    m_s_locked_patches_mask = Bitmask(PatchStash::stash_size, shrd_alloc);
+    m_s_locked_patches_mask.reset(block);
+
+    // cavity boundary edges
+    m_s_cavity_boundary_edges = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
+
+
+    // lp stash
+    __shared__ LPPair st_v[LPHashTable::stash_size];
+    m_s_table_stash_v = st_v;
+
+    __shared__ LPPair st_e[LPHashTable::stash_size];
+    m_s_table_stash_e = st_e;
+
+    __shared__ LPPair st_f[LPHashTable::stash_size];
+    m_s_table_stash_f = st_f;
 
     fill_n<blockThreads>(
         m_s_table_stash_v, uint16_t(LPHashTable::stash_size), LPPair());
@@ -187,20 +221,29 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
         m_s_table_stash_f, uint16_t(LPHashTable::stash_size), LPPair());
 
     // patch stash
-    m_s_patch_stash.m_stash =
-        shrd_alloc.alloc<uint32_t>(PatchStash::stash_size);
-
+    __shared__ uint32_t p_st[PatchStash::stash_size];
+    m_s_patch_stash.m_stash = p_st;
     for (uint32_t i = threadIdx.x; i < PatchStash::stash_size;
          i += blockThreads) {
         m_s_patch_stash.m_stash[i] = m_patch_info.patch_stash.m_stash[i];
     }
 
-    m_s_patches_to_lock_mask.reset(block);
+    // cavity prefix sum
+    m_s_cavity_size_prefix = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
+    fill_n<blockThreads>(m_s_cavity_size_prefix, m_s_num_cavities[0] + 1, 0);
+
+
+    // active cavity bitmask
+    //  assuming the max number of cavities created here is equal to the
+    //  number of threads in the block
+    assert(m_s_num_cavities[0] < blockThreads);
+    __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
+    m_s_active_cavity_bitmask = Bitmask(blockThreads, smem);
     m_s_active_cavity_bitmask.set(block);
+
     cooperative_groups::wait(block);
     block.sync();
 }
-
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
@@ -234,6 +277,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::create(
                       "create() should take FaceHandle as an input");
     }
 
+    assert(seed.patch_id() == patch_id());
 
     int id = ::atomicAdd(m_s_num_cavities, 1);
 
@@ -241,23 +285,29 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::create(
     // one element
     if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                   cop == CavityOp::VE || cop == CavityOp::VF) {
-        assert(m_s_active_mask_v(seed.local_id()));
-        assert(m_s_owned_mask_v(seed.local_id()));
+        assert(!m_context.m_patches_info[patch_id()].is_deleted(
+            LocalVertexT(seed.local_id())));
+        assert(m_context.m_patches_info[patch_id()].is_owned(
+            LocalVertexT(seed.local_id())));
         m_s_cavity_id_v[seed.local_id()] = id;
     }
 
     if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
                   cop == CavityOp::EE || cop == CavityOp::EF) {
-        assert(m_s_active_mask_e(seed.local_id()));
-        assert(m_s_owned_mask_e(seed.local_id()));
+        assert(!m_context.m_patches_info[patch_id()].is_deleted(
+            LocalEdgeT(seed.local_id())));
+        assert(m_context.m_patches_info[patch_id()].is_owned(
+            LocalEdgeT(seed.local_id())));
         m_s_cavity_id_e[seed.local_id()] = id;
     }
 
 
     if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
                   cop == CavityOp::FE || cop == CavityOp::FF) {
-        assert(m_s_active_mask_f(seed.local_id()));
-        assert(m_s_owned_mask_f(seed.local_id()));
+        assert(!m_context.m_patches_info[patch_id()].is_deleted(
+            LocalFaceT(seed.local_id())));
+        assert(m_context.m_patches_info[patch_id()].is_owned(
+            LocalFaceT(seed.local_id())));
         m_s_cavity_id_f[seed.local_id()] = id;
     }
 }
@@ -317,17 +367,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     cooperative_groups::thread_block& block,
     ShmemAllocator&                   shrd_alloc)
 {
-    // allocate memory for the cavity prefix sum
-    m_s_cavity_size_prefix = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
-    for (uint16_t i = threadIdx.x; i < m_s_num_cavities[0] + 1;
-         i += blockThreads) {
-        m_s_cavity_size_prefix[i] = 0;
-    }
+    // allocate shared memory
+    alloc_shared_memory(block, shrd_alloc);
 
-
-    // load mesh FE and EV
-    load_mesh_async(block, shrd_alloc);
-    block.sync();
 
     // propagate the cavity ID
     propagate(block);
@@ -375,26 +417,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     block.sync();
 
     return true;
-}
-
-
-template <uint32_t blockThreads, CavityOp cop>
-__device__ __inline__ void CavityManager<blockThreads, cop>::load_mesh_async(
-    cooperative_groups::thread_block& block,
-    ShmemAllocator&                   shrd_alloc)
-{
-    m_s_ev = shrd_alloc.alloc<uint16_t>(2 * m_edge_cap);
-    detail::load_async(block,
-                       reinterpret_cast<uint16_t*>(m_patch_info.ev),
-                       2 * m_s_num_edges[0],
-                       m_s_ev,
-                       false);
-    m_s_fe = shrd_alloc.alloc<uint16_t>(3 * m_face_cap);
-    detail::load_async(block,
-                       reinterpret_cast<uint16_t*>(m_patch_info.fe),
-                       3 * m_s_num_faces[0],
-                       m_s_fe,
-                       true);
 }
 
 
@@ -2111,6 +2133,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
         }
     } else if (m_s_should_slice[0]) {
         if (threadIdx.x == 0) {
+            // printf("\n should slice =%u", patch_id());
             m_context.m_patches_info[patch_id()].should_slice = true;
         }
     }

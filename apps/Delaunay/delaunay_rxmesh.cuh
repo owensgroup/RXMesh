@@ -144,7 +144,7 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
     timer.start();
     int iter = 0;
     while (!rx.is_queue_empty()) {
-        RXMESH_INFO("iter = {}", iter++);
+        RXMESH_INFO("\niter = {}", iter++);
         LaunchBox<blockThreads> launch_box;
         rx.prepare_launch_box({Op::EVDiamond},
                               launch_box,
@@ -188,7 +188,7 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
         rx.polyscope_render_edge_patch();
         rx.polyscope_render_face_patch();
 
-        polyscope::show();
+        // polyscope::show();
 #endif
     }
     return true;

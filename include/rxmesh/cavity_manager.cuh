@@ -22,10 +22,7 @@ struct CavityManager
     __device__ __inline__ CavityManager()
         : m_write_to_gmem(true),
           m_s_num_cavities(nullptr),
-          m_s_cavity_size_prefix(nullptr),
-          m_vert_cap(0),
-          m_edge_cap(0),
-          m_face_cap(0),
+          m_s_cavity_size_prefix(nullptr),          
           m_s_readd_to_queue(nullptr),
           m_s_ev(nullptr),
           m_s_fe(nullptr),
@@ -194,13 +191,11 @@ struct CavityManager
 
    private:
     /**
-     * @brief allocate memory and then load the mesh FE and EV into shared
-     * memory
+     * @brief allocate shared memory
      */
-    __device__ __inline__ void load_mesh_async(
+    __device__ __inline__ void alloc_shared_memory(
         cooperative_groups::thread_block& block,
-        ShmemAllocator&                   shrd_alloc);
-
+        ShmemAllocator&                   shrd_alloc);    
 
     /**
      * @brief load hashtable into shared memory
@@ -483,8 +478,6 @@ struct CavityManager
     // it
     int* m_s_cavity_size_prefix;
 
-    // the maximum number of vertices, edges, and faces that this patch can hold
-    uint16_t m_vert_cap, m_edge_cap, m_face_cap;
 
     // some cavities are inactive since they overlap without cavities.
     // we use this bitmask to indicate if the cavity is active or not
