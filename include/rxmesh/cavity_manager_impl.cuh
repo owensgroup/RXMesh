@@ -192,11 +192,13 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                 m_patch_info.active_mask_f);
 
     // patch to lock
-    m_s_patches_to_lock_mask = Bitmask(PatchStash::stash_size, shrd_alloc);
+    __shared__ uint32_t p_to_lock[PatchStash::stash_size];
+    m_s_patches_to_lock_mask = Bitmask(PatchStash::stash_size, p_to_lock);
     m_s_patches_to_lock_mask.reset(block);
 
     // locked patches
-    m_s_locked_patches_mask = Bitmask(PatchStash::stash_size, shrd_alloc);
+    __shared__ uint32_t p_locked[PatchStash::stash_size];
+    m_s_locked_patches_mask = Bitmask(PatchStash::stash_size, p_locked);
     m_s_locked_patches_mask.reset(block);
 
     // cavity boundary edges
@@ -229,16 +231,16 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     }
 
     // cavity prefix sum
+    // this assertion is because when we allocated dynamic shared memory
+    // during kernel launch we assumed the number of cavities is at most
+    // half the number of faces in the patch
+    assert(m_s_num_cavities[0] <= face_cap / 2);
     m_s_cavity_size_prefix = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
     fill_n<blockThreads>(m_s_cavity_size_prefix, m_s_num_cavities[0] + 1, 0);
 
 
     // active cavity bitmask
-    //  assuming the max number of cavities created here is equal to the
-    //  number of threads in the block
-    assert(m_s_num_cavities[0] < blockThreads);
-    __shared__ uint32_t smem[DIVIDE_UP(blockThreads, 32)];
-    m_s_active_cavity_bitmask = Bitmask(blockThreads, smem);
+    m_s_active_cavity_bitmask = Bitmask(m_s_num_cavities[0], shrd_alloc);
     m_s_active_cavity_bitmask.set(block);
 
     cooperative_groups::wait(block);
