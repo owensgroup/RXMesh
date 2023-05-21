@@ -200,6 +200,7 @@ __global__ static void slice_patches(Context        context,
                     pi.owned_mask_f,
                     pi.active_mask_f);
 
+        cooperative_groups::wait(block);
         block.sync();
         f_v<blockThreads>(
             num_edges, s_ev, num_faces, s_fv, s_active_f.m_bitmask);

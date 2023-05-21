@@ -450,7 +450,7 @@ __global__ static void remove_surplus_elements(const Context context)
 
     uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * num_edges);
     load_async(
-        block, reinterpret_cast<uint16_t*>(pi.ev), 2 * num_edges, s_ev, false);
+        block, reinterpret_cast<uint16_t*>(pi.ev), 2 * num_edges, s_ev, true);
 
     block.sync();
 
@@ -576,16 +576,25 @@ __inline__ __device__ void slice(Context&                          context,
 
     // filter not-owned element for s_new_p_owned_v/e/f since these masks were
     // generated during bi-assignment which considered all elements in the patch
+
+    assert(s_owned_v.size() == num_vertices);
+    assert(s_new_p_owned_v.size() == num_vertices);
     for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
         if (s_new_p_owned_v(v) && !s_owned_v(v)) {
             s_new_p_owned_v.reset(v, true);
         }
     }
+
+    assert(s_new_p_owned_e.size() == num_edges);
+    assert(s_owned_e.size() == num_edges);
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
         if (s_new_p_owned_e(e) && !s_owned_e(e)) {
             s_new_p_owned_e.reset(e, true);
         }
     }
+
+    assert(s_new_p_owned_f.size() == num_faces);
+    assert(s_owned_f.size() == num_faces);
     for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
         if (s_new_p_owned_f(f) && !s_owned_f(f)) {
             s_new_p_owned_f.reset(f, true);
@@ -729,6 +738,7 @@ __inline__ __device__ void slice(Context&                          context,
                                              s_new_p_active_v,
                                              s_new_p_active_e,
                                              s_new_p_active_f);
+    block.sync();
 
     // store owned mask
     s_owned_v.store<blockThreads>(pi.owned_mask_v);
@@ -740,7 +750,6 @@ __inline__ __device__ void slice(Context&                          context,
     s_new_p_active_e.store<blockThreads>(pi.active_mask_e);
     s_new_p_active_f.store<blockThreads>(pi.active_mask_f);
 
-    block.sync();
 
     // add to pi the new ribbon elements due to slicing the patch
     // these elements are thoese that are (still) active, not-owned but
@@ -827,6 +836,9 @@ __inline__ __device__ void bi_assignment(
             if (s_active_f(f) && s_new_p_owned_f(f)) {
                 const uint16_t v0(s_fv[3 * f + 0]), v1(s_fv[3 * f + 1]),
                     v2(s_fv[3 * f + 2]);
+                assert(v0 < num_vertices);
+                assert(v1 < num_vertices);
+                assert(v2 < num_vertices);
                 s_new_p_owned_v.set(v0, true);
                 s_new_p_owned_v.set(v1, true);
                 s_new_p_owned_v.set(v2, true);
@@ -843,7 +855,9 @@ __inline__ __device__ void bi_assignment(
             if (s_active_f(f) && !s_new_p_owned_f(f)) {
                 const uint16_t v0(s_fv[3 * f + 0]), v1(s_fv[3 * f + 1]),
                     v2(s_fv[3 * f + 2]);
-
+                assert(v0 < num_vertices);
+                assert(v1 < num_vertices);
+                assert(v2 < num_vertices);
                 if (s_new_p_owned_v(v0) || s_new_p_owned_v(v1) ||
                     s_new_p_owned_v(v2)) {
                     s_new_p_owned_f.set(f, true);
@@ -859,6 +873,8 @@ __inline__ __device__ void bi_assignment(
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
         if (s_active_e(e)) {
             const uint16_t v0(s_ev[2 * e + 0]), v1(s_ev[2 * e + 1]);
+            assert(v0 < num_vertices);
+            assert(v1 < num_vertices);
             if (s_new_p_owned_v(v0) && s_new_p_owned_v(v1)) {
                 s_new_p_owned_e.set(e, true);
             }
