@@ -20,28 +20,28 @@ constexpr __host__ __device__ __inline__ bool is_set_bit(
     return mask & (one << bit);
 }
 
-__host__ __inline__ uint32_t count_set_bits(const uint32_t  size,
+__host__ __inline__ uint16_t count_set_bits(const uint16_t  size,
                                             const uint32_t* bitmask)
 {
     // size here is the number of item represented by this bitmask. So, if
     // the bitmask is a buffer of a single 32-bits, it could represent up to 32
     // items and thus 'size' could be up to 32
-    uint32_t sum = 0;
-    for (uint32_t i = 0; i < size; ++i) {
+    uint16_t sum = 0;
+    for (uint16_t i = 0; i < size; ++i) {
         sum += is_set_bit(i, bitmask);
     }
     return sum;
 }
 
 
-__host__ __inline__ uint32_t count_zero_bits(const uint32_t  size,
+__host__ __inline__ uint16_t count_zero_bits(const uint16_t  size,
                                              const uint32_t* bitmask)
 {
     // size here is the number of item represented by this bitmask. So, if
     // the bitmask is a buffer of a single 32-bits, it could represent up to 32
     // items and thus 'size' could be up to 32
-    uint32_t sum = 0;
-    for (uint32_t i = 0; i < size; ++i) {
+    uint16_t sum = 0;
+    for (uint16_t i = 0; i < size; ++i) {
         sum += !is_set_bit(i, bitmask);
     }
     return sum;

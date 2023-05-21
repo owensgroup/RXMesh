@@ -289,7 +289,7 @@ class RXMesh
     void init(const std::vector<std::vector<uint32_t>>& fv,
               const std::string                         patcher_file    = "",
               const bool                                quite           = false,
-              const float                               capacity_factor = 1.5,
+              const float                               capacity_factor = 1.2,
               const float patch_alloc_factor                            = 2.0,
               const float lp_hashtable_load_factor                      = 0.7);
 
@@ -376,22 +376,25 @@ class RXMesh
         }
 #else
         if constexpr (std::is_same_v<LocalT, LocalVertexT>) {
-            return find_next_prime_number(static_cast<uint16_t>(
-                std::ceil(m_capacity_factor *
-                          static_cast<float>(m_max_not_owned_vertices) /
-                          m_lp_hashtable_load_factor)));
+            // return find_next_prime_number(static_cast<uint16_t>(
+            //     std::ceil(m_capacity_factor *
+            //               static_cast<float>(m_max_not_owned_vertices) /
+            //               m_lp_hashtable_load_factor)));
+            return m_max_capacity_lp_v;
         }
 
         if constexpr (std::is_same_v<LocalT, LocalEdgeT>) {
-            return find_next_prime_number(static_cast<uint16_t>(std::ceil(
-                m_capacity_factor * static_cast<float>(m_max_not_owned_edges) /
-                m_lp_hashtable_load_factor)));
+            // return find_next_prime_number(static_cast<uint16_t>(std::ceil(
+            //     m_capacity_factor * static_cast<float>(m_max_not_owned_edges)
+            //     / m_lp_hashtable_load_factor)));
+            return m_max_capacity_lp_e;
         }
 
         if constexpr (std::is_same_v<LocalT, LocalFaceT>) {
-            return find_next_prime_number(static_cast<uint16_t>(std::ceil(
-                m_capacity_factor * static_cast<float>(m_max_not_owned_faces) /
-                m_lp_hashtable_load_factor)));
+            // return find_next_prime_number(static_cast<uint16_t>(std::ceil(
+            //     m_capacity_factor * static_cast<float>(m_max_not_owned_faces)
+            //     / m_lp_hashtable_load_factor)));
+            return m_max_capacity_lp_f;
         }
 #endif
     }
@@ -457,8 +460,11 @@ class RXMesh
     // the number of owned mesh elements per patch
     std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;
 
-    uint32_t m_max_not_owned_vertices, m_max_not_owned_edges,
-        m_max_not_owned_faces;
+    //uint16_t m_max_not_owned_vertices, m_max_not_owned_edges,
+    //    m_max_not_owned_faces;
+
+    uint16_t m_max_capacity_lp_v, m_max_capacity_lp_e, m_max_capacity_lp_f;
+
     uint16_t m_max_vertices_per_patch, m_max_edges_per_patch,
         m_max_faces_per_patch;
 

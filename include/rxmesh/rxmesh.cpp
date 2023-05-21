@@ -35,6 +35,9 @@ RXMesh::RXMesh()
       m_h_patches_info(nullptr),
       m_capacity_factor(0),
       m_lp_hashtable_load_factor(0),
+      m_max_capacity_lp_v(0),
+      m_max_capacity_lp_e(0),
+      m_max_capacity_lp_f(0),
       m_patch_alloc_factor(0)
 {
 }
@@ -116,12 +119,12 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                      m_max_edges_per_patch);
         RXMESH_TRACE("per-patch maximum vertex count = {}",
                      m_max_vertices_per_patch);
-        RXMESH_TRACE("per-patch maximum not-owned face count = {}",
-                     m_max_not_owned_faces);
-        RXMESH_TRACE("per-patch maximum not-owned edge count = {}",
-                     m_max_not_owned_edges);
-        RXMESH_TRACE("per-patch maximum not-owned vertex count = {}",
-                     m_max_not_owned_vertices);
+        // RXMESH_TRACE("per-patch maximum not-owned face count = {}",
+        //              m_max_not_owned_faces);
+        // RXMESH_TRACE("per-patch maximum not-owned edge count = {}",
+        //              m_max_not_owned_edges);
+        // RXMESH_TRACE("per-patch maximum not-owned vertex count = {}",
+        //              m_max_not_owned_vertices);
     }
 }
 
@@ -190,6 +193,10 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     std::vector<uint32_t>              ff_values;
     std::vector<uint32_t>              ff_offset;
     std::vector<std::vector<uint32_t>> ef;
+
+    m_max_capacity_lp_v = 0;
+    m_max_capacity_lp_e = 0;
+    m_max_capacity_lp_f = 0;
 
     build_supporting_structures(fv, ef, ff_offset, ff_values);
 
@@ -408,9 +415,9 @@ void RXMesh::calc_input_statistics(const std::vector<std::vector<uint32_t>>& fv,
 
 void RXMesh::calc_max_elements()
 {
-    m_max_not_owned_vertices = 0;
-    m_max_not_owned_edges    = 0;
-    m_max_not_owned_faces    = 0;
+    // m_max_not_owned_vertices = 0;
+    // m_max_not_owned_edges    = 0;
+    // m_max_not_owned_faces    = 0;
     m_max_vertices_per_patch = 0;
     m_max_edges_per_patch    = 0;
     m_max_faces_per_patch    = 0;
@@ -427,20 +434,20 @@ void RXMesh::calc_max_elements()
             std::max(m_max_faces_per_patch, m_h_patches_info[p].num_faces[0]);
 
 
-        m_max_not_owned_vertices = std::max(
-            m_max_not_owned_vertices,
-            detail::count_zero_bits(m_h_patches_info[p].num_vertices[0],
-                                    m_h_patches_info[p].owned_mask_v));
-
-        m_max_not_owned_edges =
-            std::max(m_max_not_owned_edges,
-                     detail::count_zero_bits(m_h_patches_info[p].num_edges[0],
-                                             m_h_patches_info[p].owned_mask_e));
-
-        m_max_not_owned_faces =
-            std::max(m_max_not_owned_faces,
-                     detail::count_zero_bits(m_h_patches_info[p].num_faces[0],
-                                             m_h_patches_info[p].owned_mask_f));
+        // m_max_not_owned_vertices = std::max(
+        //     m_max_not_owned_vertices,
+        //     detail::count_zero_bits(m_h_patches_info[p].num_vertices[0],
+        //                             m_h_patches_info[p].owned_mask_v));
+        //
+        // m_max_not_owned_edges =
+        //     std::max(m_max_not_owned_edges,
+        //              detail::count_zero_bits(m_h_patches_info[p].num_edges[0],
+        //                                      m_h_patches_info[p].owned_mask_e));
+        //
+        // m_max_not_owned_faces =
+        //     std::max(m_max_not_owned_faces,
+        //              detail::count_zero_bits(m_h_patches_info[p].num_faces[0],
+        //                                      m_h_patches_info[p].owned_mask_f));
     }
 }
 
@@ -1083,6 +1090,10 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.patch_stash,
              h_patch_info.lp_v,
              d_patch.lp_v);
+    if (patch_id != INVALID32) {
+        m_max_capacity_lp_v =
+            std::max(m_max_capacity_lp_v, h_patch_info.lp_v.get_capacity());
+    }
 
 #ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
     const uint16_t lp_cap_e = p_edges_capacity;
@@ -1099,6 +1110,10 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.patch_stash,
              h_patch_info.lp_e,
              d_patch.lp_e);
+    if (patch_id != INVALID32) {
+        m_max_capacity_lp_e =
+            std::max(m_max_capacity_lp_e, h_patch_info.lp_e.get_capacity());
+    }
 
 #ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
     const uint16_t lp_cap_f = p_faces_capacity;
@@ -1115,6 +1130,10 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.patch_stash,
              h_patch_info.lp_f,
              d_patch.lp_f);
+    if (patch_id != INVALID32) {
+        m_max_capacity_lp_f =
+            std::max(m_max_capacity_lp_f, h_patch_info.lp_f.get_capacity());
+    }
 
     CUDA_ERROR(cudaMemcpy(
         &d_patch_info, &d_patch, sizeof(PatchInfo), cudaMemcpyHostToDevice));
