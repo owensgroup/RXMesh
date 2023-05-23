@@ -572,6 +572,7 @@ CavityManager<blockThreads, cop>::clear_bitmask_if_in_cavity(
     for (uint16_t b = threadIdx.x; b < num_elements; b += blockThreads) {
         if (element_cavity_id[b] != INVALID16) {
             active_bitmask.reset(b, true);
+            // we don't reset owned bitmask since we use it in find_copy
             in_cavity.set(b, true);
             assert(!active_bitmask(b));
         }
@@ -806,16 +807,14 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ VertexHandle
 CavityManager<blockThreads, cop>::add_vertex()
 {
-    // First try to reuse a vertex in the cavity or a deleted vertex
-    uint16_t v_id = add_element(m_s_active_mask_v, m_s_num_vertices[0]);
 
-    if (v_id == INVALID16) {
-        // if this fails, then add a new vertex to the mesh
-        v_id = atomicAdd(m_s_num_vertices, 1);
-        assert(v_id < m_patch_info.vertices_capacity[0]);
-    }
-
-    assert(!m_s_active_mask_v(v_id));
+    uint16_t v_id = add_element(m_s_active_mask_v,
+                                m_s_num_vertices,
+                                m_patch_info.vertices_capacity[0],
+                                m_s_in_cavity_v,
+                                m_s_owned_mask_v,
+                                false);
+    assert(m_s_active_mask_v(v_id));
     m_s_owned_mask_v.set(v_id, true);
     return {m_patch_info.patch_id, v_id};
 }
@@ -829,14 +828,14 @@ __device__ __inline__ DEdgeHandle CavityManager<blockThreads, cop>::add_edge(
     assert(src.patch_id() == m_patch_info.patch_id);
     assert(dest.patch_id() == m_patch_info.patch_id);
 
-    // First try to reuse an edge in the cavity or a deleted edge
-    uint16_t e_id = add_element(m_s_active_mask_e, m_s_num_edges[0]);
-    if (e_id == INVALID16) {
-        // if this fails, then add a new edge to the mesh
-        e_id = atomicAdd(m_s_num_edges, 1);
-        assert(e_id < m_patch_info.edges_capacity[0]);
-    }
+    uint16_t e_id = add_element(m_s_active_mask_e,
+                                m_s_num_edges,
+                                m_patch_info.edges_capacity[0],
+                                m_s_in_cavity_e,
+                                m_s_owned_mask_e,
+                                false);
 
+    assert(m_s_active_mask_e(e_id));
     assert(m_s_active_mask_v(src.local_id()));
     assert(m_s_active_mask_v(dest.local_id()));
 
@@ -857,14 +856,14 @@ __device__ __inline__ FaceHandle CavityManager<blockThreads, cop>::add_face(
     assert(e1.patch_id() == m_patch_info.patch_id);
     assert(e2.patch_id() == m_patch_info.patch_id);
 
-    // First try to reuse a face in the cavity or a deleted face
-    uint16_t f_id = add_element(m_s_active_mask_f, m_s_num_faces[0]);
+    uint16_t f_id = add_element(m_s_active_mask_f,
+                                m_s_num_faces,
+                                m_patch_info.faces_capacity[0],
+                                m_s_in_cavity_f,
+                                m_s_owned_mask_f,
+                                false);
 
-    if (f_id == INVALID16) {
-        // if this fails, then add a new face to the mesh
-        f_id = atomicAdd(m_s_num_faces, 1);
-        assert(f_id < m_patch_info.faces_capacity[0]);
-    }
+    assert(m_s_active_mask_f(f_id));
 
     m_s_fe[3 * f_id + 0] = e0.local_id();
     m_s_fe[3 * f_id + 1] = e1.local_id();
@@ -883,17 +882,30 @@ __device__ __inline__ FaceHandle CavityManager<blockThreads, cop>::add_face(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::add_element(
-    Bitmask        active_bitmask,
-    const uint16_t num_elements)
+    Bitmask&       active_bitmask,
+    uint16_t*      num_elements,
+    const uint16_t capacity,
+    const Bitmask& in_cavity,
+    const Bitmask& owned,
+    bool           avoid_not_owned_in_cavity)
 {
-
-    for (uint16_t i = 0; i < num_elements; ++i) {
+    const uint16_t count = num_elements[0];
+    for (uint16_t i = 0; i < count; ++i) {
+        if (avoid_not_owned_in_cavity && in_cavity(i) && !owned(i)) {
+            continue;
+        }
         if (active_bitmask.try_set(i)) {
             return i;
         }
     }
-
-    return INVALID16;
+    uint16_t ret = atomicAdd(num_elements, uint16_t(1));
+    if (ret >= capacity) {
+        return INVALID16;
+    } else {
+        assert(ret < active_bitmask.size());
+        active_bitmask.set(ret, true);
+        return ret;
+    }
 }
 
 
@@ -1513,16 +1525,18 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
             assert(m_context.m_patches_info[o].is_owned(LocalVertexT(vq)));
 
             if (vp == INVALID16) {
-
-                vp = atomicAdd(m_s_num_vertices, 1u);
-                if (vp >= m_patch_info.vertices_capacity[0]) {
+                vp = add_element(m_s_active_mask_v,
+                                 m_s_num_vertices,
+                                 m_patch_info.vertices_capacity[0],
+                                 m_s_in_cavity_v,
+                                 m_s_owned_mask_v,
+                                 true);
+                if (vp == INVALID16) {
                     m_s_should_slice[0] = true;
                     return ret;
                 }
-                // assert(vp < m_patch_info.vertices_capacity[0]);
 
-                // activate the vertex in the bit mask
-                m_s_active_mask_v.set(vp, true);
+                // active bitmask is set in add_element
 
                 // since it is owned by some other patch
                 m_s_owned_mask_v.reset(vp, true);
@@ -1585,9 +1599,13 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
             assert(m_context.m_patches_info[o].is_owned(LocalEdgeT(eq)));
 
             if (ep == INVALID16) {
-                ep = atomicAdd(m_s_num_edges, 1u);
-
-                if (ep >= m_patch_info.edges_capacity[0]) {
+                ep = add_element(m_s_active_mask_e,
+                                 m_s_num_edges,
+                                 m_patch_info.edges_capacity[0],
+                                 m_s_in_cavity_e,
+                                 m_s_owned_mask_e,
+                                 true);
+                if (ep == INVALID16) {
                     m_s_should_slice[0] = true;
                     return ret;
                 }
@@ -1624,8 +1642,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
                 m_s_ev[2 * ep + 0] = v0p;
                 m_s_ev[2 * ep + 1] = v1p;
 
-                // activate the edge in the bitmask
-                m_s_active_mask_e.set(ep, true);
+                // active bitmask is set in add_element
 
                 // since it is owned by some other patch
                 m_s_owned_mask_e.reset(ep, true);
@@ -1690,9 +1707,14 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
             assert(m_context.m_patches_info[o].is_owned(LocalFaceT(fq)));
 
             if (fp == INVALID16) {
-                fp = atomicAdd(m_s_num_faces, 1u);
+                fp = add_element(m_s_active_mask_f,
+                                 m_s_num_faces,
+                                 m_patch_info.faces_capacity[0],
+                                 m_s_in_cavity_f,
+                                 m_s_owned_mask_f,
+                                 true);
 
-                if (fp >= m_patch_info.faces_capacity[0]) {
+                if (fp == INVALID16) {
                     m_s_should_slice[0] = true;
                     return ret;
                 }
@@ -1730,8 +1752,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
                 m_s_fe[3 * fp + 1] = (e1p << 1) | d1;
                 m_s_fe[3 * fp + 2] = (e2p << 1) | d2;
 
-                // activate the face in the bitmask
-                m_s_active_mask_f.set(fp, true);
+                // active bitmask is set in add_element
 
                 // since it is owned by some other patch
                 m_s_owned_mask_f.reset(fp, true);
@@ -1849,9 +1870,16 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
 
             const HandleT handle = m_patch_info.find<HandleT>(
                 i, s_table, s_stash, m_s_patch_stash);
-            assert(handle.is_valid());
+
+            // These assertion does not work any more since we change the active
+            // and owned mask when we add new elements. So, a thread A might set
+            // the bit for the active mask and reset the owned for element X
+            // before adding it to the hashtable leading to another thread B
+            // looking for it without finding it
+
+            /*assert(handle.is_valid());
             assert(handle.patch_id() != INVALID32);
-            assert(handle.local_id() != INVALID16);
+            assert(handle.local_id() != INVALID16);*/
 
             if (handle.patch_id() == src_patch && handle.local_id() == lid) {
                 return i;
@@ -1902,8 +1930,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
     for (uint16_t vp = threadIdx.x; vp < num_elements; vp += blockThreads) {
 
         if (s_ownership_change(vp)) {
-
-            assert(!m_patch_info.is_owned(HandleT::LocalT(vp)));
+            assert(!s_owned_bitmask(vp));
 
             const HandleT h = m_patch_info.find<HandleT>(
                 vp, s_table, s_stash, m_s_patch_stash);
@@ -1916,8 +1943,6 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
 
             // set the bitmask of this element in shared memory
             s_owned_bitmask.set(vp, true);
-
-            // m_patch_info.get_lp<HandleT>().remove(vp);
 
             // ensure patch inclusion
             assert(m_s_patch_stash.find_patch_index(q) != INVALID8);
@@ -2135,7 +2160,19 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
         }
     } else if (m_s_should_slice[0]) {
         if (threadIdx.x == 0) {
-            // printf("\n should slice =%u", patch_id());
+            // printf(
+            //    "\n should slice =%u, Vertices g(%u), s(%u), cap(%u), Edges "
+            //    "g(%u), s(%u), cap(%u), Face g(%u), s(%u), cap(%u), ",
+            //    patch_id(),
+            //    m_patch_info.num_vertices[0],
+            //    m_s_num_vertices[0],
+            //    m_patch_info.vertices_capacity[0],
+            //    m_patch_info.num_edges[0],
+            //    m_s_num_edges[0],
+            //    m_patch_info.edges_capacity[0],
+            //    m_patch_info.num_faces[0],
+            //    m_s_num_faces[0],
+            //    m_patch_info.faces_capacity[0]);
             m_context.m_patches_info[patch_id()].should_slice = true;
         }
     }

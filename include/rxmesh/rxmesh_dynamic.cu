@@ -698,17 +698,20 @@ __inline__ __device__ void slice(Context&                          context,
     // if the element is active, owned by this patch and the new patch, then
     // we remove the ownership from this patch
     for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
-        if (s_active_v(v) && s_owned_v(v) && s_new_p_owned_v(v)) {
+        if ((s_active_v(v) && s_owned_v(v) && s_new_p_owned_v(v)) ||
+            !s_active_v(v)) {
             s_owned_v.reset(v, true);
         }
     }
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-        if (s_active_e(e) && s_owned_e(e) && s_new_p_owned_e(e)) {
+        if ((s_active_e(e) && s_owned_e(e) && s_new_p_owned_e(e)) ||
+            !s_active_e(e)) {
             s_owned_e.reset(e, true);
         }
     }
     for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-        if (s_active_f(f) && s_owned_f(f) && s_new_p_owned_f(f)) {
+        if ((s_active_f(f) && s_owned_f(f) && s_new_p_owned_f(f)) ||
+            !s_active_f(f)) {
             s_owned_f.reset(f, true);
         }
     }
@@ -2273,22 +2276,23 @@ void RXMeshDynamic::update_host()
             this->m_num_vertices,
             m_h_vertex_prefix[m_num_patches]);
     }
-
+    this->m_num_vertices = m_h_vertex_prefix[m_num_patches];
     if (m_h_edge_prefix[m_num_patches] != this->m_num_edges) {
         RXMESH_ERROR(
             "RXMeshDynamic::update_host error in updating host. m_num_edges "
             "{} does not match m_h_edge_prefix calculation {}",
-            this->m_num_faces,
-            m_h_face_prefix[m_num_patches]);
+            this->m_num_edges,
+            m_h_edge_prefix[m_num_patches]);
     }
-
+    this->m_num_edges = m_h_edge_prefix[m_num_patches];
     if (m_h_face_prefix[m_num_patches] != this->m_num_faces) {
         RXMESH_ERROR(
             "RXMeshDynamic::update_host error in updating host. m_num_faces "
             "{} does not match m_h_face_prefix calculation {}",
-            this->m_num_edges,
-            m_h_edge_prefix[m_num_patches]);
+            this->m_num_faces,
+            m_h_face_prefix[m_num_patches]);
     }
+    this->m_num_faces = m_h_face_prefix[m_num_patches];
 
     const uint32_t patches_1_bytes = (m_num_patches + 1) * sizeof(uint32_t);
     CUDA_ERROR(cudaMemcpy(m_d_vertex_prefix,

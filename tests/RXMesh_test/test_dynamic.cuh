@@ -243,7 +243,7 @@ TEST(RXMeshDynamic, RandomFlips)
     for (uint32_t p = 0; p < rx.get_num_patches(); ++p) {
         rx.render_patch(p)->setEnabled(false);
     }
-    // polyscope::show();
+    //polyscope::show();
 #endif
 
 
@@ -259,7 +259,6 @@ TEST(RXMeshDynamic, RandomFlips)
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, *to_flip);
-        CUDA_ERROR(cudaDeviceSynchronize());
 
         rx.slice_patches(*coords, *to_flip);
         rx.cleanup();

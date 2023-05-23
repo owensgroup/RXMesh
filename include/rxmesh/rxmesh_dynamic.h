@@ -146,7 +146,7 @@ __global__ static void slice_patches(Context        context,
 
         __shared__ uint32_t s_new_patch_id;
         if (threadIdx.x == 0) {
-            // printf("\n*** slicing %u", pi.patch_id);
+            //printf("\n*** slicing %u\n", pi.patch_id);
             s_new_patch_id = ::atomicAdd(context.m_num_patches, uint32_t(1));
             assert(s_new_patch_id < context.m_max_num_patches);
         }

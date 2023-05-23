@@ -22,7 +22,7 @@ struct CavityManager
     __device__ __inline__ CavityManager()
         : m_write_to_gmem(true),
           m_s_num_cavities(nullptr),
-          m_s_cavity_size_prefix(nullptr),          
+          m_s_cavity_size_prefix(nullptr),
           m_s_readd_to_queue(nullptr),
           m_s_ev(nullptr),
           m_s_fe(nullptr),
@@ -195,7 +195,7 @@ struct CavityManager
      */
     __device__ __inline__ void alloc_shared_memory(
         cooperative_groups::thread_block& block,
-        ShmemAllocator&                   shrd_alloc);    
+        ShmemAllocator&                   shrd_alloc);
 
     /**
      * @brief load hashtable into shared memory
@@ -287,9 +287,23 @@ struct CavityManager
      * @brief find the index of the next element to add. We do this by
      * atomically attempting to set the active_bitmask until we find an element
      * where we successfully flipped its status from inactive to active.
+     * If we fail, we just atomically increment num_elements and set the
+     * corresponding bit in active_bitmask. There is a special case when it
+     * comes to fill in spots of in-cavity elements that are not-owned. We need
+     * to left this spots clear since we use them as a key in the hashtable
+     * in order to change their ownership. If we filled them in, and added an
+     * element (which are initially not-owned), we will pollute the hashtable
+     * and won't be able to get the owner element in order to change their
+     * ownership flag during ownership_change(). However, after
+     * ownership_change, all sports are available to be reactivated
+     *
      */
-    __device__ __inline__ uint16_t add_element(Bitmask        active_bitmask,
-                                               const uint16_t num_elements);
+    __device__ __inline__ uint16_t add_element(Bitmask&       active_bitmask,
+                                               uint16_t*      num_elements,
+                                               const uint16_t capacity,
+                                               const Bitmask& in_cavity,
+                                               const Bitmask& owned,
+                                               bool avoid_not_owned_in_cavity);
 
     /**
      * @brief enqueue patch in the patch scheduler so that it can be scheduled
