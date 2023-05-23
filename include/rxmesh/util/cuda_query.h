@@ -49,8 +49,8 @@ inline int convert_SMV_to_cores(int major, int minor)
 
     // If we don't find the values, we default use the previous one to run
     // properly
-    printf(
-        "MapSMtoCores for SM %d.%d is undefined.  Default to use %d Cores/SM\n",
+    RXMESH_WARN(
+        "MapSMtoCores for SM {}.{} is undefined.  Default to use {} Cores/SM\n",
         major,
         minor,
         nGpuArchCoresPerSM[index - 1].Cores);
