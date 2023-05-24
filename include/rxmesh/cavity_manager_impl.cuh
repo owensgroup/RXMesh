@@ -891,7 +891,10 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::add_element(
 {
     const uint16_t count = num_elements[0];
     for (uint16_t i = 0; i < count; ++i) {
-        if (avoid_not_owned_in_cavity && in_cavity(i) && !owned(i)) {
+        if (!avoid_not_owned_in_cavity && in_cavity(i) && !owned(i)) {
+            continue;
+        }
+        if (avoid_not_owned_in_cavity && in_cavity(i) /*&& !owned(i)*/) {
             continue;
         }
         if (active_bitmask.try_set(i)) {
@@ -1930,6 +1933,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
     for (uint16_t vp = threadIdx.x; vp < num_elements; vp += blockThreads) {
 
         if (s_ownership_change(vp)) {
+            m_s_readd_to_queue[0] = true;
             assert(!s_owned_bitmask(vp));
 
             const HandleT h = m_patch_info.find<HandleT>(
@@ -2064,9 +2068,9 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
                 m_context.m_patches_info[q].patch_stash.insert_patch(
                     m_patch_info.patch_id);
             }
-        }*/
+        }
 
-        block.sync();
+        block.sync();*/
         // unlock any neighbor patch we have locked
         unlock_locked_patches();
 
@@ -2081,7 +2085,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
         // cleanup the hashtable by removing the vertices/edges/faces that has
         // changed their ownership to be in this patch (p) and thus should not
         // be in the hashtable
-        for (uint32_t vp = threadIdx.x; vp < m_s_num_vertices[0];
+        /*for (uint32_t vp = threadIdx.x; vp < m_s_num_vertices[0];
              vp += blockThreads) {
             if (m_s_ownership_change_mask_v(vp)) {
                 m_s_readd_to_queue[0] = true;
@@ -2103,7 +2107,8 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
                 m_s_readd_to_queue[0] = true;
                 m_patch_info.lp_f.remove(fp, m_s_table_f, m_s_table_stash_f);
             }
-        }
+        }*/
+        block.sync();
 
         ::atomicMax(m_context.m_max_num_vertices, m_s_num_vertices[0]);
         ::atomicMax(m_context.m_max_num_edges, m_s_num_edges[0]);
