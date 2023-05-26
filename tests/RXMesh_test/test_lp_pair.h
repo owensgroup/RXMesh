@@ -76,8 +76,7 @@ TEST(RXMesh, LPHashTable)
 TEST(RXMesh, DISABLED_BenchmarkLPHashTable)
 {
     using namespace rxmesh;
-
-    std::cout << "size, cap, num_failed\n";
+        
     const float    load_factor = 0.9;
     const uint32_t low_size    = 128;
     const uint32_t high_size   = 2048;
@@ -141,6 +140,7 @@ TEST(RXMesh, DISABLED_BenchmarkLPHashTable)
             }
             table.free();
         }
-        std::cout << size << ", " << cap << ", " << num_failed << "\n";
+        RXMESH_INFO(
+            "size= {}, cap= {}, num_failed = {}", size, cap, num_failed);
     }
 }
