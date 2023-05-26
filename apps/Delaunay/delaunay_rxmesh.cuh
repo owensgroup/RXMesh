@@ -2,6 +2,9 @@
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
+
+#include "../common/openmesh_trimesh.h"
+
 template <typename T, uint32_t blockThreads>
 __global__ static void delaunay_edge_flip(rxmesh::Context            context,
                                           rxmesh::VertexAttribute<T> coords)
@@ -117,7 +120,47 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
     cavity.epilogue(block);
 }
 
-inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
+
+inline bool is_delaunay(TriMesh& mesh)
+{
+    // verify that mesh is a delaunay mesh
+
+    for (TriMesh::FaceIter f_it = mesh.faces_begin(); f_it != mesh.faces_end();
+         ++f_it) {
+
+        TriMesh::FaceHandle face = *f_it;
+
+        TriMesh::HalfedgeHandle heh = mesh.halfedge_handle(face);
+        TriMesh::VertexHandle   v0  = mesh.to_vertex_handle(heh);
+        TriMesh::VertexHandle   v1 =
+            mesh.to_vertex_handle(mesh.next_halfedge_handle(heh));
+        TriMesh::VertexHandle v2 = mesh.to_vertex_handle(
+            mesh.next_halfedge_handle(mesh.next_halfedge_handle(heh)));
+
+        TriMesh::Point p0 = mesh.point(v0);
+        TriMesh::Point p1 = mesh.point(v1);
+        TriMesh::Point p2 = mesh.point(v2);
+
+        // Compute the squared edge lengths
+        auto l0_sq = (p1 - p2).sqrnorm();
+        auto l1_sq = (p0 - p2).sqrnorm();
+        auto l2_sq = (p0 - p1).sqrnorm();
+
+        // Compute the cosine of each angle
+        auto cos0 = (l1_sq + l2_sq - l0_sq) / (2.0 * std::sqrt(l1_sq * l2_sq));
+        auto cos1 = (l0_sq + l2_sq - l1_sq) / (2.0 * std::sqrt(l0_sq * l2_sq));
+        auto cos2 = (l0_sq + l1_sq - l2_sq) / (2.0 * std::sqrt(l0_sq * l1_sq));
+
+        // Check if any angle is larger than 90 degrees
+        if (cos0 < 0.0 || cos1 < 0.0 || cos2 < 0.0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -151,6 +194,7 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
                launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords);
         rx.slice_patches(*coords);
         rx.cleanup();
+        rx.update_host();
     }
 
     timer.stop();
@@ -169,6 +213,13 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     EXPECT_TRUE(rx.validate());
 
+    rx.export_obj(STRINGIFY(OUTPUT_DIR) "temp.obj", *coords);
+
+    TriMesh tri_mesh;
+    ASSERT_TRUE(
+        OpenMesh::IO::read_mesh(tri_mesh, STRINGIFY(OUTPUT_DIR) "temp.obj"));
+
+    EXPECT_TRUE(is_delaunay(tri_mesh));
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
@@ -183,6 +234,4 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     polyscope::show();
 #endif
-
-    return true;
 }

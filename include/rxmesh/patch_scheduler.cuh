@@ -84,6 +84,7 @@ struct PatchScheduler
     {
         std::vector<uint32_t> h_list(capacity);
         fill_with_sequential_numbers(h_list.data(), capacity);
+        random_shuffle(h_list.data(), h_list.size());
         CUDA_ERROR(cudaMemcpy(list,
                               h_list.data(),
                               h_list.size() * sizeof(uint32_t),

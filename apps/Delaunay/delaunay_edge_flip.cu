@@ -30,7 +30,7 @@ TEST(Apps, DelaunayEdgeFlip)
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
-    ASSERT_TRUE(delaunay_rxmesh(rx));
+    delaunay_rxmesh(rx);
 }
 
 
