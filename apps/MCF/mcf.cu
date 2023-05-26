@@ -38,7 +38,7 @@ TEST(App, MCF)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshStatic rxmesh(Arg.obj_file_name, false);
+    RXMeshStatic rxmesh(Arg.obj_file_name);
 
     TriMesh input_mesh;
     ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));

@@ -24,7 +24,7 @@ void filtering_rxmesh(const std::string                  file_path,
            "greater than maxVVSize. Should increase maxVVSize to "
         << max_neighbour_size << " to avoid illegal memory access";
 
-    RXMeshStatic rxmesh(file_path, false);
+    RXMeshStatic rxmesh(file_path);
 
     // Report
     Report report("Filtering_RXMesh");

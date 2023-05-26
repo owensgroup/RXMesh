@@ -24,7 +24,7 @@ void gaussian_curvature_rxmesh(const std::vector<T>& gaussian_curvature_gold)
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
-    RXMeshStatic rx(Arg.obj_file_name, false);
+    RXMeshStatic rx(Arg.obj_file_name);
 
     // input coordinates
     auto coords = *rx.get_input_vertex_coordinates();
