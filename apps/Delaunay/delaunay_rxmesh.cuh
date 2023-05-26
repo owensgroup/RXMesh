@@ -113,10 +113,6 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
                             cavity.get_cavity_edge(c, 2),
                             new_edge.get_flip_dedge());
         });
-
-        if (threadIdx.x == 0) {
-            printf("\n p= %u", cavity.patch_id());
-        }
     }
     cavity.epilogue(block);
 }
@@ -144,11 +140,11 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
     timer.start();
     int iter = 0;
     while (!rx.is_queue_empty()) {
-        RXMESH_INFO("\niter = {}", iter++);
+        // RXMESH_INFO("\niter = {}", iter++);
         LaunchBox<blockThreads> launch_box;
-        rx.prepare_launch_box({Op::EVDiamond},
-                              launch_box,
-                              (void*)delaunay_edge_flip<float, blockThreads>);
+        rx.update_launch_box({Op::EVDiamond},
+                             launch_box,
+                             (void*)delaunay_edge_flip<float, blockThreads>);
         delaunay_edge_flip<float, blockThreads>
             <<<launch_box.blocks,
                launch_box.num_threads,

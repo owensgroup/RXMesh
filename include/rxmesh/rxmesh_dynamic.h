@@ -364,6 +364,43 @@ class RXMeshDynamic : public RXMeshStatic
                             const bool               oriented = false,
                             const bool with_vertex_valence    = false) const
     {
+        update_launch_box(
+            op, launch_box, kernel, oriented, with_vertex_valence);
+
+        RXMESH_TRACE(
+            "RXMeshDynamic::calc_shared_memory() launching {} blocks with "
+            "{} threads on the device",
+            launch_box.blocks,
+            blockThreads);
+
+
+        check_shared_memory(launch_box.smem_bytes_dyn,
+                            launch_box.smem_bytes_static,
+                            launch_box.num_registers_per_thread,
+                            blockThreads,
+                            kernel);
+    }
+
+
+     /**
+     * @brief populate the launch_box with grid size and dynamic shared memory
+     * needed for a kernel that may use dynamic and query operations. Similar 
+     * to prepare_launch_box but here we don't do any checks to verify that 
+     * the amount of shared memory is okay and we don't print any info. This
+     * function can be used to update the launch box in a loop where priniting
+     * out info could impact the timing 
+     * @param op List of query operations done inside the kernel
+     * @param launch_box input launch box to be populated
+     * @param kernel The kernel to be launched
+     * @param oriented if the query is oriented. Valid only for Op::VV queries
+     */
+    template <uint32_t blockThreads>
+    void update_launch_box(const std::vector<Op>    op,
+                           LaunchBox<blockThreads>& launch_box,
+                           const void*              kernel,
+                           const bool               oriented = false,
+                           const bool with_vertex_valence    = false) const
+    {
 
         launch_box.blocks = this->m_num_patches;
 
@@ -446,19 +483,6 @@ class RXMeshDynamic : public RXMeshStatic
                 this->m_max_vertices_per_patch * sizeof(uint8_t) +
                 ShmemAllocator::default_alignment;
         }
-
-        RXMESH_TRACE(
-            "RXMeshDynamic::calc_shared_memory() launching {} blocks with "
-            "{} threads on the device",
-            launch_box.blocks,
-            blockThreads);
-
-
-        check_shared_memory(launch_box.smem_bytes_dyn,
-                            launch_box.smem_bytes_static,
-                            launch_box.num_registers_per_thread,
-                            blockThreads,
-                            kernel);
     }
 
     virtual ~RXMeshDynamic() = default;
