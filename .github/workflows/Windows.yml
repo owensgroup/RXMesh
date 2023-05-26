@@ -2,7 +2,8 @@ name: Windows
 on: [push, pull_request, workflow_dispatch]
 jobs:
   WindowsRun:
-    runs-on: windows-2019
+    #runs-on: windows-2019
+    runs-on: self-hosted
     steps:
       - uses: Jimver/cuda-toolkit@v0.2.8
         id: cuda-toolkit
