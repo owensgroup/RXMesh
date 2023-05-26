@@ -119,7 +119,7 @@ TEST(Apps, VertexNormal)
     ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
 
 
-    RXMeshStatic rxmesh(Faces, false);
+    RXMeshStatic rxmesh(Faces);
 
     // Serial reference
     std::vector<dataT> vertex_normal_gold(3 * Verts.size());

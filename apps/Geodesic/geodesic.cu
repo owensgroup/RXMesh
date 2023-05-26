@@ -36,7 +36,7 @@ TEST(App, Geodesic)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshStatic rxmesh(Arg.obj_file_name, false);
+    RXMeshStatic rxmesh(Arg.obj_file_name);
     ASSERT_TRUE(rxmesh.is_closed())
         << "Geodesic only works on watertight/closed manifold mesh without "
            "boundaries";
