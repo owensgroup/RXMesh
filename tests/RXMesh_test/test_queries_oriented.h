@@ -16,7 +16,7 @@ TEST(RXMeshStatic, Oriented_VV_Open)
     using namespace rxmesh;
 
     // Select device
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
@@ -35,10 +35,10 @@ TEST(RXMeshStatic, Oriented_VV_Open)
 
 
     ASSERT_TRUE(
-        import_obj(STRINGIFY(INPUT_DIR) "plane.obj", Verts, Faces, true));
+        import_obj(STRINGIFY(INPUT_DIR) "plane.obj", Verts, Faces));
 
     // RXMesh
-    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh(Faces);
 
     EXPECT_FALSE(rxmesh.is_closed())
         << " Expected input to be open with boundaries";
@@ -78,7 +78,7 @@ TEST(RXMeshStatic, Oriented_VV_Open)
     output->move(rxmesh::DEVICE, rxmesh::HOST);
     input->move(rxmesh::DEVICE, rxmesh::HOST);
 
-    RXMeshTest tester(rxmesh, Faces, rxmesh_args.quite);
+    RXMeshTest tester(rxmesh, Faces);
     EXPECT_TRUE(tester.run_test(rxmesh, Faces, *input, *output));
 
     auto vector_length = [](const dataT x, const dataT y, const dataT z) {
@@ -138,16 +138,16 @@ TEST(RXMeshStatic, Oriented_VV_Closed)
     using namespace rxmesh;
 
     // Select device
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
     ASSERT_TRUE(
-        import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces, true));
+        import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces));
 
     // RXMesh
-    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh(Faces);
 
     EXPECT_TRUE(rxmesh.is_closed())
         << " Expecting input to be closed without boundaries";
@@ -187,7 +187,7 @@ TEST(RXMeshStatic, Oriented_VV_Closed)
     output->move(rxmesh::DEVICE, rxmesh::HOST);
     input->move(rxmesh::DEVICE, rxmesh::HOST);
 
-    RXMeshTest tester(rxmesh, Faces, rxmesh_args.quite);
+    RXMeshTest tester(rxmesh, Faces);
     EXPECT_TRUE(tester.run_test(rxmesh, Faces, *input, *output));
 
 

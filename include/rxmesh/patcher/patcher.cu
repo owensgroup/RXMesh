@@ -21,15 +21,12 @@ namespace rxmesh {
 
 namespace patcher {
 
-Patcher::Patcher(std::string filename, const bool quite)
+Patcher::Patcher(std::string filename)
 {
     std::ifstream                      is(filename, std::ios::binary);
     cereal::PortableBinaryInputArchive archive(is);
     archive(*this);
-
-    if (!quite) {
-        print_statistics();
-    }
+    print_statistics();
 }
 
 Patcher::Patcher(uint32_t                                        patch_size,
@@ -40,8 +37,7 @@ Patcher::Patcher(uint32_t                                        patch_size,
                                           uint32_t,
                                           detail::edge_key_hash> edges_map,
                  const uint32_t                                  num_vertices,
-                 const uint32_t                                  num_edges,
-                 const bool                                      quite)
+                 const uint32_t                                  num_edges)
     : m_patch_size(patch_size),
       m_num_patches(0),
       m_num_vertices(num_vertices),
@@ -151,9 +147,9 @@ Patcher::Patcher(uint32_t                                        patch_size,
         assign_patch(fv, edges_map);
     }
 
-    if (!quite) {
-        print_statistics();
-    }
+    
+    print_statistics();
+    
     GPU_FREE(d_face_patch);
     GPU_FREE(d_queue);
     GPU_FREE(d_queue_ptr);

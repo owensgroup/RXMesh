@@ -153,43 +153,40 @@ inline bool delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
             <<<launch_box.blocks,
                launch_box.num_threads,
                launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords);
-
-        CUDA_ERROR(cudaDeviceSynchronize());
-
         rx.slice_patches(*coords);
         rx.cleanup();
+    }
 
-        timer.stop();
-        CUDA_ERROR(cudaDeviceSynchronize());
-        CUDA_ERROR(cudaGetLastError());
-        // RXMESH_TRACE("delaunay_rxmesh() RXMesh Delaunay Edge Flip took {}
-        // (ms)", timer.elapsed_millis());
+    timer.stop();
+    CUDA_ERROR(cudaDeviceSynchronize());
+    CUDA_ERROR(cudaGetLastError());
+    RXMESH_TRACE("delaunay_rxmesh() RXMesh Delaunay Edge Flip took {} (ms)",
+                 timer.elapsed_millis());
 
-        rx.update_host();
+    rx.update_host();
 
-        coords->move(DEVICE, HOST);
-        
-        EXPECT_EQ(num_vertices, rx.get_num_vertices());
-        EXPECT_EQ(num_edges, rx.get_num_edges());
-        EXPECT_EQ(num_faces, rx.get_num_faces());
+    coords->move(DEVICE, HOST);
 
-        EXPECT_TRUE(rx.validate());
-        CUDA_ERROR(cudaGetLastError());
+    EXPECT_EQ(num_vertices, rx.get_num_vertices());
+    EXPECT_EQ(num_edges, rx.get_num_edges());
+    EXPECT_EQ(num_faces, rx.get_num_faces());
+
+    EXPECT_TRUE(rx.validate());
 
 
 #if USE_POLYSCOPE
-        rx.update_polyscope();
+    rx.update_polyscope();
 
-        auto ps_mesh = rx.get_polyscope_mesh();
-        ps_mesh->updateVertexPositions(*coords);
-        ps_mesh->setEnabled(false);
+    auto ps_mesh = rx.get_polyscope_mesh();
+    ps_mesh->updateVertexPositions(*coords);
+    ps_mesh->setEnabled(false);
 
-        rx.polyscope_render_vertex_patch();
-        rx.polyscope_render_edge_patch();
-        rx.polyscope_render_face_patch();
+    rx.polyscope_render_vertex_patch();
+    rx.polyscope_render_edge_patch();
+    rx.polyscope_render_face_patch();
 
-        // polyscope::show();
+    polyscope::show();
 #endif
-    }
+
     return true;
 }

@@ -24,7 +24,6 @@ RXMesh::RXMesh()
       m_patch_size(512),
       m_is_input_edge_manifold(true),
       m_is_input_closed(true),
-      m_quite(false),
       m_h_vertex_prefix(nullptr),
       m_h_edge_prefix(nullptr),
       m_h_face_prefix(nullptr),
@@ -44,12 +43,10 @@ RXMesh::RXMesh()
 
 void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                   const std::string                         patcher_file,
-                  const bool                                quite,
                   const float                               capacity_factor,
                   const float                               patch_alloc_factor,
                   const float lp_hashtable_load_factor)
 {
-    m_quite                    = quite;
     m_capacity_factor          = capacity_factor;
     m_lp_hashtable_load_factor = lp_hashtable_load_factor;
     m_patch_alloc_factor       = patch_alloc_factor;
@@ -100,32 +97,28 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                           sch);
 
 
-    if (!m_quite) {
-        RXMESH_TRACE("#Vertices = {}, #Faces= {}, #Edges= {}",
-                     m_num_vertices,
-                     m_num_faces,
-                     m_num_edges);
-        RXMESH_TRACE("Input is{} edge manifold",
-                     ((m_is_input_edge_manifold) ? "" : " Not"));
-        RXMESH_TRACE("Input is{} closed", ((m_is_input_closed) ? "" : " Not"));
-        RXMESH_TRACE("Input max valence = {}", m_input_max_valence);
-        RXMESH_TRACE("max edge incident faces = {}",
-                     m_input_max_edge_incident_faces);
-        RXMESH_TRACE("max face adjacent faces = {}",
-                     m_input_max_face_adjacent_faces);
-        RXMESH_TRACE("per-patch maximum face count = {}",
-                     m_max_faces_per_patch);
-        RXMESH_TRACE("per-patch maximum edge count = {}",
-                     m_max_edges_per_patch);
-        RXMESH_TRACE("per-patch maximum vertex count = {}",
-                     m_max_vertices_per_patch);
-        // RXMESH_TRACE("per-patch maximum not-owned face count = {}",
-        //              m_max_not_owned_faces);
-        // RXMESH_TRACE("per-patch maximum not-owned edge count = {}",
-        //              m_max_not_owned_edges);
-        // RXMESH_TRACE("per-patch maximum not-owned vertex count = {}",
-        //              m_max_not_owned_vertices);
-    }
+    RXMESH_TRACE("#Vertices = {}, #Faces= {}, #Edges= {}",
+                 m_num_vertices,
+                 m_num_faces,
+                 m_num_edges);
+    RXMESH_TRACE("Input is{} edge manifold",
+                 ((m_is_input_edge_manifold) ? "" : " Not"));
+    RXMESH_TRACE("Input is{} closed", ((m_is_input_closed) ? "" : " Not"));
+    RXMESH_TRACE("Input max valence = {}", m_input_max_valence);
+    RXMESH_TRACE("max edge incident faces = {}",
+                 m_input_max_edge_incident_faces);
+    RXMESH_TRACE("max face adjacent faces = {}",
+                 m_input_max_face_adjacent_faces);
+    RXMESH_TRACE("per-patch maximum face count = {}", m_max_faces_per_patch);
+    RXMESH_TRACE("per-patch maximum edge count = {}", m_max_edges_per_patch);
+    RXMESH_TRACE("per-patch maximum vertex count = {}",
+                 m_max_vertices_per_patch);
+    // RXMESH_TRACE("per-patch maximum not-owned face count = {}",
+    //              m_max_not_owned_faces);
+    // RXMESH_TRACE("per-patch maximum not-owned edge count = {}",
+    //              m_max_not_owned_edges);
+    // RXMESH_TRACE("per-patch maximum not-owned vertex count = {}",
+    //              m_max_not_owned_vertices);
 }
 
 RXMesh::~RXMesh()
@@ -201,7 +194,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     build_supporting_structures(fv, ef, ff_offset, ff_values);
 
     if (!patcher_file.empty()) {
-        m_patcher = std::make_unique<patcher::Patcher>(patcher_file, m_quite);
+        m_patcher = std::make_unique<patcher::Patcher>(patcher_file);
     } else {
         m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
                                                        ff_offset,
@@ -209,8 +202,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
                                                        fv,
                                                        m_edges_map,
                                                        m_num_vertices,
-                                                       m_num_edges,
-                                                       m_quite);
+                                                       m_num_edges);
     }
 
 

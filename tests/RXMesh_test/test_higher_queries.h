@@ -10,15 +10,15 @@ TEST(RXMeshStatic, DISABLED_HigherQueries)
     using namespace rxmesh;
 
     // Select device
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
     ASSERT_TRUE(import_obj(
-        STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces, rxmesh_args.quite));
+        STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces));
 
     // RXMesh
-    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh(Faces);
 
 
     // input/output container
@@ -38,7 +38,7 @@ TEST(RXMeshStatic, DISABLED_HigherQueries)
         {Op::VV}, launch_box, (void*)higher_query<blockThreads, Op::VV>, false);
 
 
-    RXMeshTest tester(rxmesh, Faces, true);
+    RXMeshTest tester(rxmesh, Faces);
 
     // launch
     higher_query<blockThreads, Op::VV>

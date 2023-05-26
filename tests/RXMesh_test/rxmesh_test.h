@@ -12,15 +12,12 @@
 class RXMeshTest
 {
    private:
-    bool                               m_quite;
     std::vector<std::vector<uint32_t>> m_h_FE;
 
    public:
     RXMeshTest(const RXMeshTest&) = delete;
-    RXMeshTest(const rxmesh::RXMeshStatic&               rxmesh,
-               const std::vector<std::vector<uint32_t>>& fv,
-               bool                                      quite = true)
-        : m_quite(quite)
+    explicit RXMeshTest(const rxmesh::RXMeshStatic&               rxmesh,
+                        const std::vector<std::vector<uint32_t>>& fv)
     {
         assert(rxmesh.m_edges_map.size() != 0);
 
@@ -507,18 +504,16 @@ class RXMeshTest
             try {
                 e_g = rxmesh.m_edges_map.at(my_edge);
             } catch (const std::out_of_range&) {
-                if (!m_quite) {
-                    RXMESH_ERROR(
-                        "RXMeshTest::check_mapping_edges() can not "
-                        "find the corresponding edge between global vertices "
-                        "{} and {} with local id {} and in patch {} of "
-                        "converted to global vertices",
-                        v0_ltog,
-                        v1_ltog,
-                        v0_l,
-                        v1_l,
-                        patch_id);
-                }
+                RXMESH_ERROR(
+                    "RXMeshTest::check_mapping_edges() can not "
+                    "find the corresponding edge between global vertices "
+                    "{} and {} with local id {} and in patch {} of "
+                    "converted to global vertices",
+                    v0_ltog,
+                    v1_ltog,
+                    v0_l,
+                    v1_l,
+                    patch_id);
                 return false;
             }
 
@@ -528,22 +523,21 @@ class RXMeshTest
             // vertices matche the edge obtain from just mapping the local
             // edge to global one
             if (e_g != e_ltog) {
-                if (!m_quite) {
-                    RXMESH_ERROR(
-                        "RXMeshTest::check_mapping_edges() Edge mapping "
-                        "results do not match. Output summary: patch id = "
-                        "{}, local edge id = {}, mapped to = {}, local "
-                        "vertices id = ({}, {}) mapped to= ({}, {}), global "
-                        "edge connecting the mapped global vertices = {}",
-                        patch_id,
-                        e_l,
-                        e_ltog,
-                        v0_l,
-                        v1_l,
-                        v0_ltog,
-                        v1_ltog,
-                        e_g);
-                }
+                RXMESH_ERROR(
+                    "RXMeshTest::check_mapping_edges() Edge mapping "
+                    "results do not match. Output summary: patch id = "
+                    "{}, local edge id = {}, mapped to = {}, local "
+                    "vertices id = ({}, {}) mapped to= ({}, {}), global "
+                    "edge connecting the mapped global vertices = {}",
+                    patch_id,
+                    e_l,
+                    e_ltog,
+                    v0_l,
+                    v1_l,
+                    v0_ltog,
+                    v1_ltog,
+                    e_g);
+
                 return false;
             }
         }
@@ -602,27 +596,26 @@ class RXMeshTest
             // check if the global edges matches the mapping edges
             for (uint32_t i = 0; i < 3; ++i) {
                 if (e_g[i] != e_ltog[i]) {
-                    if (!m_quite) {
-                        RXMESH_ERROR(
-                            "RXMeshTest::check_mapping_faces() Face mapping "
-                            "results does not match. Output summary: patch id "
-                            "= {}, local edge id = {}, mapped to = {}, local "
-                            "edges id = ({}, {}, {}), mapped to = ({}, {}, "
-                            "{}), global edges obtained from the mapped global "
-                            "face= ({}, {}, {})",
-                            patch_id,
-                            f_l,
-                            f_ltog,
-                            e_l[0],
-                            e_l[1],
-                            e_l[2],
-                            e_ltog[0],
-                            e_ltog[1],
-                            e_ltog[2],
-                            e_ltog[0],
-                            e_ltog[1],
-                            e_ltog[2]);
-                    }
+                    RXMESH_ERROR(
+                        "RXMeshTest::check_mapping_faces() Face mapping "
+                        "results does not match. Output summary: patch id "
+                        "= {}, local edge id = {}, mapped to = {}, local "
+                        "edges id = ({}, {}, {}), mapped to = ({}, {}, "
+                        "{}), global edges obtained from the mapped global "
+                        "face= ({}, {}, {})",
+                        patch_id,
+                        f_l,
+                        f_ltog,
+                        e_l[0],
+                        e_l[1],
+                        e_l[2],
+                        e_ltog[0],
+                        e_ltog[1],
+                        e_ltog[2],
+                        e_ltog[0],
+                        e_ltog[1],
+                        e_ltog[2]);
+
                     return false;
                 }
             }

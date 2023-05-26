@@ -12,7 +12,6 @@ struct RXMeshTestArg
     uint32_t    device_id     = 0;
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    bool        quite         = false;
     int         argc          = argc;
     char**      argv          = argv;
 } rxmesh_args;
@@ -35,7 +34,7 @@ struct RXMeshTestArg
 int main(int argc, char** argv)
 {
     using namespace rxmesh;
-    Log::init();
+    Log::init();    
 
     ::testing::InitGoogleTest(&argc, argv);
     rxmesh_args.argc = argc;
@@ -49,8 +48,7 @@ int main(int argc, char** argv)
                         "              Default is {} \n"
                         "              Hint: Only accept OBJ files\n"
                         " -o:          JSON file output folder. Default is {} \n"
-                        " -num_run:    Number of iterations for performance testing. Default is {} \n"                        
-                        " -q:          Run in quite mode. Default is false\n"
+                        " -num_run:    Number of iterations for performance testing. Default is {} \n"
                         " -device_id:  GPU device ID. Default is {}",
             rxmesh_args.obj_file_name, rxmesh_args.output_folder ,rxmesh_args.num_run,rxmesh_args.device_id);
             // clang-format on
@@ -75,16 +73,13 @@ int main(int argc, char** argv)
             rxmesh_args.device_id =
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
         }
-        if (cmd_option_exists(argv, argc + argv, "-q")) {
-            rxmesh_args.quite = true;
-        }
     }
 
-    if (!rxmesh_args.quite) {
-        RXMESH_TRACE("input= {}", rxmesh_args.obj_file_name);
-        RXMESH_TRACE("output_folder= {}", rxmesh_args.output_folder);
-        RXMESH_TRACE("num_run= {}", rxmesh_args.num_run);
-        RXMESH_TRACE("device_id= {}", rxmesh_args.device_id);
-    }
+
+    RXMESH_TRACE("input= {}", rxmesh_args.obj_file_name);
+    RXMESH_TRACE("output_folder= {}", rxmesh_args.output_folder);
+    RXMESH_TRACE("num_run= {}", rxmesh_args.num_run);
+    RXMESH_TRACE("device_id= {}", rxmesh_args.device_id);
+
     return RUN_ALL_TESTS();
 }

@@ -84,12 +84,11 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
     EXPECT_TRUE(passed) << "Testing: " << td.test_name;
 
     report.add_test(td);
-    if (!rxmesh_args.quite) {
-        RXMESH_TRACE(" {} {} time = {} (ms) \n",
-                     td.test_name.c_str(),
-                     (passed ? " passed " : " failed "),
-                     total_time / float(rxmesh_args.num_run));
-    }
+
+    RXMESH_TRACE(" {} {} time = {} (ms) \n",
+                 td.test_name.c_str(),
+                 (passed ? " passed " : " failed "),
+                 total_time / float(rxmesh_args.num_run));
 }
 
 TEST(RXMeshStatic, Queries)
@@ -99,16 +98,16 @@ TEST(RXMeshStatic, Queries)
     bool oriented = false;
 
     // Select device
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
     ASSERT_TRUE(
-        import_obj(rxmesh_args.obj_file_name, Verts, Faces, rxmesh_args.quite));
+        import_obj(rxmesh_args.obj_file_name, Verts, Faces));
 
     // RXMesh
-    RXMeshStatic rxmesh(Faces, rxmesh_args.quite);
+    RXMeshStatic rxmesh(Faces);
 
 
     // Report
@@ -122,7 +121,7 @@ TEST(RXMeshStatic, Queries)
 
 
     // Tester to verify all queries
-    ::RXMeshTest tester(rxmesh, Faces, rxmesh_args.quite);
+    ::RXMeshTest tester(rxmesh, Faces);
     EXPECT_TRUE(tester.run_ltog_mapping_test(rxmesh, Faces))
         << "Local-to-global mapping test failed";
 

@@ -33,7 +33,7 @@ TEST(RXMeshDynamic, PatchScheduler)
 {
     using namespace rxmesh;
 
-    auto prop = cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    auto prop = cuda_query(rxmesh_args.device_id);
 
     uint32_t* d_status;
     CUDA_ERROR(cudaMalloc((void**)&d_status, sizeof(uint32_t)));

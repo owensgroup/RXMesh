@@ -10,10 +10,9 @@ TEST(RXMeshStatic, ForEach)
 {
     using namespace rxmesh;
 
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
-    RXMeshStatic rxmesh_static(STRINGIFY(INPUT_DIR) "cube.obj",
-                               rxmesh_args.quite);
+    RXMeshStatic rxmesh_static(STRINGIFY(INPUT_DIR) "cube.obj");
 
     std::atomic_uint32_t num_v = 0;
     std::atomic_uint32_t num_e = 0;
@@ -50,12 +49,12 @@ TEST(RXMeshStatic, ForEachOnDevice)
 {
     using namespace rxmesh;
 
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     rx.prepare_launch_box(
         {Op::V},

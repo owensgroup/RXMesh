@@ -60,9 +60,9 @@ TEST(Attribute, Norm2)
 
     CUDA_ERROR(cudaDeviceReset());
 
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
-    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto attr = rxmesh.add_vertex_attribute<float>("v", 3, rxmesh::DEVICE);
 
@@ -86,9 +86,9 @@ TEST(Attribute, Dot)
 {
     using namespace rxmesh;
 
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
-    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto v1_attr = rxmesh.add_vertex_attribute<float>("v1", 3, rxmesh::DEVICE);
     auto v2_attr = rxmesh.add_vertex_attribute<float>("v2", 3, rxmesh::DEVICE);
@@ -113,9 +113,9 @@ TEST(Attribute, Reduce)
 
     CUDA_ERROR(cudaDeviceReset());
 
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
-    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto attr = rxmesh.add_edge_attribute<uint32_t>("e", 3, rxmesh::DEVICE);
 
@@ -145,9 +145,9 @@ TEST(Attribute, CopyFrom)
 {
     using namespace rxmesh;
 
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
-    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto f_device = rxmesh.add_face_attribute<uint32_t>("d", 3, DEVICE);
 
@@ -167,9 +167,9 @@ TEST(Attribute, AddingAndRemoving)
 {
     using namespace rxmesh;
 
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
-    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj", rxmesh_args.quite);
+    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     std::string attr_name = "v_attr";
 

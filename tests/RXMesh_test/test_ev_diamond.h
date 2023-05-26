@@ -10,10 +10,10 @@ TEST(RXMeshStatic, EVDiamond)
     using namespace rxmesh;
 
     // Select device
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
     // RXMesh
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "plane_5.obj", rxmesh_args.quite);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "plane_5.obj");
 
     // input/output container
     auto input  = *rx.add_edge_attribute<EdgeHandle>("input", 1);

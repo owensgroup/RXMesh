@@ -276,7 +276,6 @@ class RXMesh
      * @brief init all the data structures
      * @param fv the mesh connectivity as an index triangle
      * @param patcher_file optional file to load the patches
-     * @param quite run in quite mode
      * @param capacity_factor capacity factor the determine the max allocation
      * size of a patch as a fraction of its size. For example, a patch with x
      * faces will be allocated with size that fits capactiy_factor*x faces
@@ -288,7 +287,6 @@ class RXMesh
      */
     void init(const std::vector<std::vector<uint32_t>>& fv,
               const std::string                         patcher_file    = "",
-              const bool                                quite           = false,
               const float                               capacity_factor = 1.2,
               const float patch_alloc_factor                            = 2.0,
               const float lp_hashtable_load_factor                      = 0.5);
@@ -443,7 +441,6 @@ class RXMesh
     // Should be updated with update_host
     uint32_t m_num_edges, m_num_faces, m_num_vertices;
 
-    bool     m_quite;
     uint32_t m_input_max_valence, m_input_max_edge_incident_faces,
         m_input_max_face_adjacent_faces;
     bool m_is_input_edge_manifold;
@@ -460,7 +457,7 @@ class RXMesh
     // the number of owned mesh elements per patch
     std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;
 
-    //uint16_t m_max_not_owned_vertices, m_max_not_owned_edges,
+    // uint16_t m_max_not_owned_vertices, m_max_not_owned_edges,
     //    m_max_not_owned_faces;
 
     uint16_t m_max_capacity_lp_v, m_max_capacity_lp_e, m_max_capacity_lp_f;

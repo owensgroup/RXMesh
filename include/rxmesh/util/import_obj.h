@@ -15,7 +15,6 @@
  * @param face_tex faces index to the tex array (3*#faces)
  * @param normals face normal coordinates (3*#normal)
  * @param face_normal faces index to the Normals array (3*faces)
- * @param quite run in quite mode
  * @return true if reading the file is successful
  */
 template <typename DataT, typename IndexT>
@@ -25,8 +24,7 @@ bool import_obj(const std::string                 file_name,
                 std::vector<std::vector<DataT>>&  tex,
                 std::vector<std::vector<IndexT>>& face_tex,
                 std::vector<std::vector<DataT>>&  normals,
-                std::vector<std::vector<IndexT>>& face_normal,
-                bool                              quite = false)
+                std::vector<std::vector<IndexT>>& face_normal)
 {
 
     FILE* Objfile = fopen(file_name.c_str(), "r");
@@ -34,9 +32,7 @@ bool import_obj(const std::string                 file_name,
         RXMESH_ERROR("importOBJ() can not open {}", file_name);
         return false;
     } else {
-        if (!quite) {
-            RXMESH_TRACE("Reading {}", file_name);
-        }
+        RXMESH_TRACE("Reading {}", file_name);
     }
 
 
@@ -183,14 +179,14 @@ bool import_obj(const std::string                 file_name,
     }
     fclose(Objfile);
 
-    if (!quite) {
-        RXMESH_TRACE("import_obj() #vertices= {} ", vertices.size());
-        RXMESH_TRACE("import_obj() #faces= {} ", faces.size());
-        RXMESH_TRACE("import_obj() #tex= {} ", tex.size());
-        RXMESH_TRACE("import_obj() #face_tex= {} ", face_tex.size());
-        RXMESH_TRACE("import_obj() #normals = {} ", normals.size());
-        RXMESH_TRACE("import_obj() #face_normal= {} ", face_normal.size());
-    }
+
+    RXMESH_TRACE("import_obj() #vertices= {} ", vertices.size());
+    RXMESH_TRACE("import_obj() #faces= {} ", faces.size());
+    RXMESH_TRACE("import_obj() #tex= {} ", tex.size());
+    RXMESH_TRACE("import_obj() #face_tex= {} ", face_tex.size());
+    RXMESH_TRACE("import_obj() #normals = {} ", normals.size());
+    RXMESH_TRACE("import_obj() #face_normal= {} ", face_normal.size());
+
     return true;
 }
 
@@ -200,15 +196,13 @@ bool import_obj(const std::string                 file_name,
  * @tparam IndexT indices type
  * @param file_name path to the obj file
  * @param vertices 3d vertices (3*#vertices)
- * @param faces face index to the Vert array (3*#faces)
- * @param quite run in quite mode
+ * @param faces face index to the Vert array (3*#faces) 
  * @return true if reading the file is successful
  */
 template <typename DataT, typename IndexT>
 bool import_obj(const std::string                 file_name,
                 std::vector<std::vector<DataT>>&  vertices,
-                std::vector<std::vector<IndexT>>& faces,
-                bool                              quite = false)
+                std::vector<std::vector<IndexT>>& faces)
 {
 
     std::vector<std::vector<DataT>>  tex;
@@ -217,5 +211,5 @@ bool import_obj(const std::string                 file_name,
     std::vector<std::vector<IndexT>> face_normal;
 
     return import_obj(
-        file_name, vertices, faces, tex, face_tex, normals, face_normal, quite);
+        file_name, vertices, faces, tex, face_tex, normals, face_normal);
 }

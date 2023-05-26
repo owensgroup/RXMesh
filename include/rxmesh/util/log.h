@@ -35,6 +35,11 @@ class Log
         return m_logger;
     }
 
+    inline static void set_level(spdlog::level::level_enum level)
+    {
+        m_logger->set_level(level);
+        m_logger->flush_on(level);
+    }
 
    private:
     inline static std::shared_ptr<spdlog::logger> m_logger;

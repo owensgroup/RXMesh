@@ -40,10 +40,9 @@ class Patcher
                                      uint32_t,
                                      ::rxmesh::detail::edge_key_hash> edges_map,
             const uint32_t num_vertices,
-            const uint32_t num_edges,
-            const bool     quite);
+            const uint32_t num_edges);
 
-    Patcher(std::string filename, const bool quite);
+    Patcher(std::string filename);
 
     ~Patcher();
 

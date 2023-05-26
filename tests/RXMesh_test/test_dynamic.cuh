@@ -90,13 +90,12 @@ __global__ static void random_flips(rxmesh::Context                context,
 TEST(RXMeshDynamic, RandomFlips)
 {
     using namespace rxmesh;
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
-    // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
-    // rxmesh_args.quite); rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches");
+    // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    // rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches");
 
     RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
-                     rxmesh_args.quite,
                      STRINGIFY(INPUT_DIR) "sphere3_patches");
 
     // rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches_0");
@@ -243,7 +242,7 @@ TEST(RXMeshDynamic, RandomFlips)
     for (uint32_t p = 0; p < rx.get_num_patches(); ++p) {
         rx.render_patch(p)->setEnabled(false);
     }
-    //polyscope::show();
+    // polyscope::show();
 #endif
 
 
@@ -306,13 +305,12 @@ TEST(RXMeshDynamic, RandomFlips)
 TEST(RXMeshDynamic, PatchSlicing)
 {
     using namespace rxmesh;
-    cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    cuda_query(rxmesh_args.device_id);
 
-    // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
-    // rxmesh_args.quite); rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches");
+    // RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    // rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches");
 
     RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
-                     rxmesh_args.quite,
                      STRINGIFY(INPUT_DIR) "sphere3_patches");
 
     auto coords = rx.get_input_vertex_coordinates();

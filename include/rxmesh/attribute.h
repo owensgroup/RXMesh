@@ -92,11 +92,11 @@ class Attribute : public AttributeBase
      * @param location where the attribute to be allocated
      * @param layout memory layout in case of num_attributes>1
      */
-    Attribute(const char*    name,
-              const uint32_t num_attributes,
-              locationT      location,
-              const layoutT  layout,
-              const RXMesh*  rxmesh)
+    explicit Attribute(const char*    name,
+                       const uint32_t num_attributes,
+                       locationT      location,
+                       const layoutT  layout,
+                       const RXMesh*  rxmesh)
         : AttributeBase(),
           m_rxmesh(rxmesh),
           m_h_patches_info(rxmesh->m_h_patches_info),

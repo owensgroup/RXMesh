@@ -146,7 +146,7 @@ __global__ static void slice_patches(Context        context,
 
         __shared__ uint32_t s_new_patch_id;
         if (threadIdx.x == 0) {
-            //printf("\n*** slicing %u\n", pi.patch_id);
+            // printf("\n*** slicing %u\n", pi.patch_id);
             s_new_patch_id = ::atomicAdd(context.m_num_patches, uint32_t(1));
             assert(s_new_patch_id < context.m_max_num_patches);
         }
@@ -326,24 +326,20 @@ class RXMeshDynamic : public RXMeshStatic
     /**
      * @brief Constructor using path to obj file
      * @param file_path path to an obj file
-     * @param quite run in quite mode
      */
-    RXMeshDynamic(const std::string file_path,
-                  const bool        quite        = false,
-                  const std::string patcher_file = "")
-        : RXMeshStatic(file_path, quite, patcher_file)
+    explicit RXMeshDynamic(const std::string file_path,
+                           const std::string patcher_file = "")
+        : RXMeshStatic(file_path, patcher_file)
     {
     }
 
     /**
      * @brief Constructor using triangles and vertices
      * @param fv Face incident vertices as read from an obj file
-     * @param quite run in quite mode
      */
-    RXMeshDynamic(std::vector<std::vector<uint32_t>>& fv,
-                  const bool                          quite        = false,
-                  const std::string                   patcher_file = "")
-        : RXMeshStatic(fv, quite, patcher_file)
+    explicit RXMeshDynamic(std::vector<std::vector<uint32_t>>& fv,
+                           const std::string patcher_file = "")
+        : RXMeshStatic(fv, patcher_file)
     {
     }
 
@@ -451,13 +447,12 @@ class RXMeshDynamic : public RXMeshStatic
                 ShmemAllocator::default_alignment;
         }
 
-        if (!this->m_quite) {
-            RXMESH_TRACE(
-                "RXMeshDynamic::calc_shared_memory() launching {} blocks with "
-                "{} threads on the device",
-                launch_box.blocks,
-                blockThreads);
-        }
+        RXMESH_TRACE(
+            "RXMeshDynamic::calc_shared_memory() launching {} blocks with "
+            "{} threads on the device",
+            launch_box.blocks,
+            blockThreads);
+
 
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,

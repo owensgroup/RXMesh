@@ -35,11 +35,9 @@ class RXMeshStatic : public RXMesh
     /**
      * @brief Constructor using path to obj file
      * @param file_path path to an obj file
-     * @param quite run in quite mode
      */
-    RXMeshStatic(const std::string file_path,
-                 const bool        quite        = false,
-                 const std::string patcher_file = "")
+    explicit RXMeshStatic(const std::string file_path,
+                          const std::string patcher_file = "")
         : RXMesh()
     {
         std::vector<std::vector<uint32_t>> fv;
@@ -51,7 +49,7 @@ class RXMeshStatic : public RXMesh
             exit(EXIT_FAILURE);
         }
 
-        this->init(fv, patcher_file, quite);
+        this->init(fv, patcher_file);
 
         m_attr_container = std::make_shared<AttributeContainer>();
 
@@ -72,14 +70,12 @@ class RXMeshStatic : public RXMesh
     /**
      * @brief Constructor using triangles and vertices
      * @param fv Face incident vertices as read from an obj file
-     * @param quite run in quite mode
      */
-    RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
-                 const bool                          quite        = false,
-                 const std::string                   patcher_file = "")
+    explicit RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
+                          const std::string                   patcher_file = "")
         : RXMesh(), m_input_vertex_coordinates(nullptr)
     {
-        this->init(fv, patcher_file, quite);
+        this->init(fv, patcher_file);
         m_attr_container = std::make_shared<AttributeContainer>();
     };
 
@@ -525,13 +521,13 @@ class RXMeshStatic : public RXMesh
                 ShmemAllocator::default_alignment;
         }
 
-        if (!this->m_quite) {
-            RXMESH_TRACE(
-                "RXMeshStatic::calc_shared_memory() launching {} blocks with "
-                "{} threads on the device",
-                launch_box.blocks,
-                blockThreads);
-        }
+
+        RXMESH_TRACE(
+            "RXMeshStatic::calc_shared_memory() launching {} blocks with "
+            "{} threads on the device",
+            launch_box.blocks,
+            blockThreads);
+
 
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,
@@ -1352,30 +1348,27 @@ class RXMeshStatic : public RXMesh
         cudaDeviceProp devProp;
         CUDA_ERROR(cudaGetDeviceProperties(&devProp, device_id));
 
-        if (!this->m_quite) {
-            int num_blocks_per_sm = 0;
-            CUDA_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-                &num_blocks_per_sm,
-                kernel,
-                num_threads_per_block,
-                smem_bytes_dyn));
 
-            RXMESH_TRACE(
-                "RXMeshStatic::check_shared_memory() user function requires "
-                "shared memory = {} (dynamic) + {} (static) = {} (bytes) and "
-                "{} registers per thread with occupancy of {} blocks/SM",
-                smem_bytes_dyn,
-                smem_bytes_static,
-                smem_bytes_dyn + smem_bytes_static,
-                num_reg_per_thread,
-                num_blocks_per_sm);
+        int num_blocks_per_sm = 0;
+        CUDA_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+            &num_blocks_per_sm, kernel, num_threads_per_block, smem_bytes_dyn));
 
-            RXMESH_TRACE(
-                "RXMeshStatic::check_shared_memory() available total shared "
-                "memory per block = {} (bytes) = {} (Kb)",
-                devProp.sharedMemPerBlock,
-                float(devProp.sharedMemPerBlock) / 1024.0f);
-        }
+        RXMESH_TRACE(
+            "RXMeshStatic::check_shared_memory() user function requires "
+            "shared memory = {} (dynamic) + {} (static) = {} (bytes) and "
+            "{} registers per thread with occupancy of {} blocks/SM",
+            smem_bytes_dyn,
+            smem_bytes_static,
+            smem_bytes_dyn + smem_bytes_static,
+            num_reg_per_thread,
+            num_blocks_per_sm);
+
+        RXMESH_TRACE(
+            "RXMeshStatic::check_shared_memory() available total shared "
+            "memory per block = {} (bytes) = {} (Kb)",
+            devProp.sharedMemPerBlock,
+            float(devProp.sharedMemPerBlock) / 1024.0f);
+
 
         if (smem_bytes_static + smem_bytes_dyn > devProp.sharedMemPerBlock) {
             RXMESH_ERROR(

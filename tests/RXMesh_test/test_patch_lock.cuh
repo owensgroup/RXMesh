@@ -62,9 +62,9 @@ TEST(RXMeshDynamic, PatchLock)
 {
     using namespace rxmesh;
 
-    auto prop = cuda_query(rxmesh_args.device_id, rxmesh_args.quite);
+    auto prop = cuda_query(rxmesh_args.device_id);
 
-    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "cloth.obj", rxmesh_args.quite);
+    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "cloth.obj");
 
     ASSERT_GE(prop.multiProcessorCount, rx.get_num_patches());
 
