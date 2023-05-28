@@ -35,7 +35,7 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
         // if not a boundary edge
         if (v2.is_valid() && v3.is_valid()) {
 
-            constexpr double PII = 3.14159265358979323f;
+            constexpr T PII = 3.14159265358979323f;
 
             const Vector<3, T> V0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
             const Vector<3, T> V1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
@@ -125,35 +125,47 @@ inline bool is_delaunay(TriMesh& mesh)
 {
     // verify that mesh is a delaunay mesh
 
-    for (TriMesh::FaceIter f_it = mesh.faces_begin(); f_it != mesh.faces_end();
-         ++f_it) {
-
-        TriMesh::FaceHandle face = *f_it;
-
-        TriMesh::HalfedgeHandle heh = mesh.halfedge_handle(face);
-        TriMesh::VertexHandle   v0  = mesh.to_vertex_handle(heh);
-        TriMesh::VertexHandle   v1 =
-            mesh.to_vertex_handle(mesh.next_halfedge_handle(heh));
-        TriMesh::VertexHandle v2 = mesh.to_vertex_handle(
-            mesh.next_halfedge_handle(mesh.next_halfedge_handle(heh)));
+    for (TriMesh::VertexIter v0_it = mesh.vertices_begin();
+         v0_it != mesh.vertices_end();
+         ++v0_it) {
+        //    0
+        //  / | \
+        // 3  |  2
+        // \  |  /
+        //    1
+        TriMesh::VertexHandle v0 = *v0_it;
 
         TriMesh::Point p0 = mesh.point(v0);
-        TriMesh::Point p1 = mesh.point(v1);
-        TriMesh::Point p2 = mesh.point(v2);
 
-        // Compute the squared edge lengths
-        auto l0_sq = (p1 - p2).sqrnorm();
-        auto l1_sq = (p0 - p2).sqrnorm();
-        auto l2_sq = (p0 - p1).sqrnorm();
+        for (auto v1_it = mesh.vv_iter(*v0_it); v1_it.is_valid(); ++v1_it) {
+            TriMesh::VertexHandle v1 = *v1_it;
 
-        // Compute the cosine of each angle
-        auto cos0 = (l1_sq + l2_sq - l0_sq) / (2.0 * std::sqrt(l1_sq * l2_sq));
-        auto cos1 = (l0_sq + l2_sq - l1_sq) / (2.0 * std::sqrt(l0_sq * l2_sq));
-        auto cos2 = (l0_sq + l1_sq - l2_sq) / (2.0 * std::sqrt(l0_sq * l1_sq));
+            TriMesh::VertexHandle v2 = *(++v1_it);
+            --v1_it;  // reset
 
-        // Check if any angle is larger than 90 degrees
-        if (cos0 < 0.0 || cos1 < 0.0 || cos2 < 0.0) {
-            return false;
+            TriMesh::VertexHandle v3 = *(--v1_it);
+            ++v1_it;  // reset
+
+
+            TriMesh::Point p1 = mesh.point(v1);
+            TriMesh::Point p2 = mesh.point(v2);
+            TriMesh::Point p3 = mesh.point(v3);
+
+            auto angle_between_three_vertices =
+                [](TriMesh::Point a, TriMesh::Point b, TriMesh::Point c) {
+                    auto la_sq = (b - c).sqrnorm();
+                    auto lb_sq = (a - c).sqrnorm();
+                    auto lc_sq = (a - b).sqrnorm();
+
+                    return (la_sq + lc_sq - lb_sq) /
+                           (2.0 * std::sqrt(la_sq * lc_sq));
+                };
+
+            float lambda = angle_between_three_vertices(p0, p2, p1);
+            float gamma  = angle_between_three_vertices(p1, p2, p0);
+            if (lambda + gamma > M_PI) {
+                return false;
+            }
         }
     }
 

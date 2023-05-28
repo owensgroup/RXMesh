@@ -1712,6 +1712,7 @@ void RXMeshDynamic::save(std::string filename)
 bool RXMeshDynamic::validate()
 {
     CUDA_ERROR(cudaDeviceSynchronize());
+    RXMESH_TRACE("RXMeshDynamic validatation started");
 
     uint32_t num_patches;
     CUDA_ERROR(cudaMemcpy(&num_patches,
@@ -2025,6 +2026,7 @@ bool RXMeshDynamic::validate()
 
     CUDA_ERROR(cudaFree(d_check));
 
+    RXMESH_TRACE("RXMeshDynamic validatation finished");
     return success;
 }
 
