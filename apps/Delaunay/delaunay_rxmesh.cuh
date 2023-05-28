@@ -162,7 +162,7 @@ inline bool is_delaunay(TriMesh& mesh)
                 };
 
             float lambda = angle_between_three_vertices(p0, p2, p1);
-            float gamma  = angle_between_three_vertices(p1, p2, p0);
+            float gamma  = angle_between_three_vertices(p1, p3, p0);
             if (lambda + gamma > M_PI) {
                 return false;
             }

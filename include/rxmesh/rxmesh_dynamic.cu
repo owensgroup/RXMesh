@@ -339,14 +339,16 @@ template <uint32_t blockThreads>
 __inline__ __device__ void remove_idle_elements(
     cooperative_groups::thread_block& block,
     LPPair*                           s_table,
+    uint32_t*                         s_patch_stash,
     LPHashTable&                      table,
+    const PatchStash&                 patch_stash,
     const uint16_t                    num_elements,
     const Bitmask&                    is_owned,
     const Bitmask&                    is_active)
 
 {
     // mesh elements in the patch that are deleted/inactive but not removed from
-    // the hashtable (i.e., replaced by sentinel_pair) dont allow inserting in
+    // the hashtable (i.e., replaced by sentinel_pair) prevent inserting in
     // their place and need to be removed.
     //
     // remove idle elements from the hashtable by query the table from
@@ -365,6 +367,13 @@ __inline__ __device__ void remove_idle_elements(
             uint32_t bucket_id;
             bool     in_stash;
             LPPair pair = table.find(e, bucket_id, in_stash, nullptr, nullptr);
+            assert(pair.patch_stash_id() < PatchStash::stash_size);
+
+            // this will show up as race condition but even when multiple
+            // threads try to write at the same location, they write the same
+            // value
+            s_patch_stash[pair.patch_stash_id()] =
+                patch_stash.m_stash[pair.patch_stash_id()];
             assert(!pair.is_sentinel());
             if (in_stash) {
                 s_stash[bucket_id] = pair;
@@ -487,10 +496,16 @@ __global__ static void remove_surplus_elements(const Context context)
 
     LPPair* s_table = shrd_alloc.alloc<LPPair>(max_hash_table_cap);
 
+    __shared__ uint32_t s_patch_stash[PatchStash::stash_size];
+    fill_n<blockThreads>(
+        s_patch_stash, uint16_t(LPHashTable::stash_size), INVALID32);
+
     block.sync();
     remove_idle_elements<blockThreads>(block,
                                        s_table,
+                                       s_patch_stash,
                                        pi.get_lp<VertexHandle>(),
+                                       pi.patch_stash,
                                        num_vertices,
                                        s_owned_v,
                                        s_vert_tag);
@@ -498,7 +513,9 @@ __global__ static void remove_surplus_elements(const Context context)
 
     remove_idle_elements<blockThreads>(block,
                                        s_table,
+                                       s_patch_stash,
                                        pi.get_lp<EdgeHandle>(),
+                                       pi.patch_stash,
                                        num_edges,
                                        s_owned_e,
                                        s_edge_tag);
@@ -506,10 +523,26 @@ __global__ static void remove_surplus_elements(const Context context)
 
     remove_idle_elements<blockThreads>(block,
                                        s_table,
+                                       s_patch_stash,
                                        pi.get_lp<FaceHandle>(),
+                                       pi.patch_stash,
                                        num_faces,
                                        s_owned_f,
                                        s_face_tag);
+    block.sync();
+    for (uint32_t i = threadIdx.x; i < uint16_t(PatchStash::stash_size);
+         i += blockThreads) {
+        if (s_patch_stash[i] != pi.patch_stash.m_stash[i]) {
+            printf("\n ****** b=%u i=%u, s=%u, g=%u",
+                   blockIdx.x,
+                   i,
+                   s_patch_stash[i],
+                   pi.patch_stash.m_stash[i]);
+        }
+    }
+    store<blockThreads>(s_patch_stash,
+                        uint16_t(PatchStash::stash_size),
+                        pi.patch_stash.m_stash);
 }
 
 template <uint32_t blockThreads, typename HandleT>
