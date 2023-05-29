@@ -407,6 +407,26 @@ __host__ __device__ __forceinline__ T dist(const Vector<N, T>& u,
     return sqrt(dist2(u, v));
 }
 
+template <uint32_t N, typename T>
+__host__ __device__ __forceinline__ Vector<N, T> min(const Vector<N, T>& u,
+                                                     const Vector<N, T>& v)
+{
+    Vector<N, T> ret;
+    for (uint32_t i = 0; i < N; ++i) {
+        ret[i] = std::min(u[i], v[i]);
+    }
+    return ret;
+}
+template <uint32_t N, typename T>
+__host__ __device__ __forceinline__ Vector<N, T> max(const Vector<N, T>& u,
+                                                     const Vector<N, T>& v)
+{
+    Vector<N, T> ret;
+    for (uint32_t i = 0; i < N; ++i) {
+        ret[i] = std::max(u[i], v[i]);
+    }
+    return ret;
+}
 
 template <uint32_t N, typename T>
 inline std::string to_string(const Vector<N, T>& v)
