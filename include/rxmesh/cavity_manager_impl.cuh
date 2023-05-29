@@ -1852,10 +1852,13 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
     // First check if lid is owned by src_patch. If not, then map it to its
     // owner patch and local index in it
 
-    auto owner = m_context.get_owner_handle(HandleT(src_patch, {lid}));
-
-    src_patch = owner.patch_id();
-    lid       = owner.local_id();
+    // HandleT owner = m_context.get_owner_handle(HandleT(src_patch, {lid}));
+    if (!m_context.m_patches_info[src_patch].is_owned(HandleT::LocalT(lid))) {
+        HandleT owner =
+            m_context.m_patches_info[src_patch].find<HandleT>({lid});
+        src_patch = owner.patch_id();
+        lid       = owner.local_id();
+    }
 
 
     // if the owner src_patch is the same as the patch associated with this
