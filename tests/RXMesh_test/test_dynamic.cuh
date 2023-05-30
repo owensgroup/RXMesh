@@ -228,11 +228,10 @@ TEST(RXMeshDynamic, RandomFlips)
     EXPECT_TRUE(rx.validate());
     coords->move(DEVICE, HOST);
     to_flip->move(DEVICE, HOST);
-    rx.update_polyscope();
-    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-
 
 #if USE_POLYSCOPE
+    rx.update_polyscope();
+    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
     rx.polyscope_render_vertex_patch();
     rx.polyscope_render_edge_patch();
     rx.polyscope_render_face_patch();

@@ -6,6 +6,7 @@ input/*
 !input/bumpy-cube.obj
 !input/sphere3_patches
 !input/torus_patches
+!input/torus.obj
 !input/cloth.obj
 !input/plane_5.obj
 build/
