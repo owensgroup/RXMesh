@@ -5,6 +5,8 @@
 
 #include "../common/openmesh_trimesh.h"
 
+#include <cmath>
+
 template <typename T, uint32_t blockThreads>
 __global__ static void delaunay_edge_flip(rxmesh::Context            context,
                                           rxmesh::VertexAttribute<T> coords)
@@ -157,8 +159,8 @@ inline bool is_delaunay(TriMesh& mesh)
                     auto lb_sq = (a - c).sqrnorm();
                     auto lc_sq = (a - b).sqrnorm();
 
-                    return (la_sq + lc_sq - lb_sq) /
-                           (2.0 * std::sqrt(la_sq * lc_sq));
+                    return std::acos((la_sq + lc_sq - lb_sq) /
+                                     (2.0 * std::sqrt(la_sq * lc_sq)));
                 };
 
             float lambda = angle_between_three_vertices(p0, p2, p1);
@@ -172,7 +174,7 @@ inline bool is_delaunay(TriMesh& mesh)
     return true;
 }
 
-inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
+inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -225,13 +227,13 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     EXPECT_TRUE(rx.validate());
 
-    rx.export_obj(STRINGIFY(OUTPUT_DIR) "temp.obj", *coords);
-
-    TriMesh tri_mesh;
-    ASSERT_TRUE(
-        OpenMesh::IO::read_mesh(tri_mesh, STRINGIFY(OUTPUT_DIR) "temp.obj"));
-
-    EXPECT_TRUE(is_delaunay(tri_mesh));
+    if (with_verify) {
+        rx.export_obj(STRINGIFY(OUTPUT_DIR) "temp.obj", *coords);
+        TriMesh tri_mesh;
+        ASSERT_TRUE(OpenMesh::IO::read_mesh(tri_mesh,
+                                            STRINGIFY(OUTPUT_DIR) "temp.obj"));
+        EXPECT_TRUE(is_delaunay(tri_mesh));
+    }
 
 #if USE_POLYSCOPE
     rx.update_polyscope();

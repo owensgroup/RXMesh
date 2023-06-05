@@ -6,6 +6,7 @@ struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "torus.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
+    bool        verify        = true;
     uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
@@ -22,15 +23,14 @@ TEST(Apps, DelaunayEdgeFlip)
     cuda_query(Arg.device_id);
 
     RXMeshDynamic rx(Arg.obj_file_name);
-
     // rx.save(STRINGIFY(OUTPUT_DIR) "torus_patches");
 
-    // RXMeshDynamic rx(
-    //     Arg.obj_file_name, false, STRINGIFY(INPUT_DIR) "torus_patches");
+    // RXMeshDynamic rx(Arg.obj_file_name, STRINGIFY(INPUT_DIR)
+    // "torus_patches");
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
-    delaunay_rxmesh(rx);
+    delaunay_rxmesh(rx, Arg.verify);
 }
 
 
@@ -52,6 +52,7 @@ int main(int argc, char** argv)
                         " -input:      Input file. Input file should be under the input/ subdirectory\n"
                         "              Default is {} \n"
                         "              Hint: Only accept OBJ files\n"
+                        " -no_verify:  Do not verify the output using OpenMesh. By default the results are verified\n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -device_id:  GPU device ID. Default is {}",
             Arg.obj_file_name, Arg.output_folder, Arg.device_id);
@@ -71,11 +72,15 @@ int main(int argc, char** argv)
             Arg.device_id =
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
         }
+        if (cmd_option_exists(argv, argc + argv, "-no_verify")) {
+            Arg.verify = false;
+        }
     }
 
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
+    RXMESH_TRACE("verify= {}", Arg.verify);
 
     return RUN_ALL_TESTS();
 }
