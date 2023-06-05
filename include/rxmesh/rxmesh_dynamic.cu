@@ -530,16 +530,39 @@ __global__ static void remove_surplus_elements(const Context context)
                                        s_owned_f,
                                        s_face_tag);
     block.sync();
-    for (uint32_t i = threadIdx.x; i < uint16_t(PatchStash::stash_size);
-         i += blockThreads) {
-        if (s_patch_stash[i] != pi.patch_stash.m_stash[i]) {
-            printf("\n ****** b=%u i=%u, s=%u, g=%u",
-                   blockIdx.x,
-                   i,
-                   s_patch_stash[i],
-                   pi.patch_stash.m_stash[i]);
+    /*if (threadIdx.x == 0) {
+        bool seen_invalid = false;
+        bool has_gap      = false;
+        bool changed      = false;
+        for (uint32_t i = 0; i < uint16_t(PatchStash::stash_size); ++i) {
+            if (s_patch_stash[i] != pi.patch_stash.m_stash[i]) {
+                changed = true;
+            }
+            if (!seen_invalid) {
+                if (s_patch_stash[i] == INVALID32) {
+                    seen_invalid = true;
+                }
+            } else {
+                if (s_patch_stash[i] != INVALID32) {
+                    has_gap = true;
+                }
+            }
         }
-    }
+
+        if (changed) {
+            printf("\npatch %u has changed", pid);
+        }
+        if (has_gap) {
+            printf("\npatch %u has gap", pid);
+        }
+        if (pid == 0) {
+            for (uint32_t i = 0; i < uint16_t(PatchStash::stash_size); ++i) {
+                printf(
+                    "\n b= %u, stash[%u]=%u ", blockIdx.x, i, s_patch_stash[i]);
+            }
+        }
+    }*/
+    block.sync();
     store<blockThreads>(s_patch_stash,
                         uint16_t(PatchStash::stash_size),
                         pi.patch_stash.m_stash);

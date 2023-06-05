@@ -195,7 +195,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx)
     timer.start();
     int iter = 0;
     while (!rx.is_queue_empty()) {
-        // RXMESH_INFO("\niter = {}", iter++);
+        RXMESH_INFO("\niter = {}", iter++);
         LaunchBox<blockThreads> launch_box;
         rx.update_launch_box({Op::EVDiamond},
                              launch_box,

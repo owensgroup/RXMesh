@@ -100,6 +100,8 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     cooperative_groups::thread_block& block,
     ShmemAllocator&                   shrd_alloc)
 {
+    m_s_patch_stash_mutex.alloc();
+
     const uint16_t vert_cap = m_patch_info.vertices_capacity[0];
     const uint16_t edge_cap = m_patch_info.edges_capacity[0];
     const uint16_t face_cap = m_patch_info.faces_capacity[0];
@@ -1547,7 +1549,9 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
 
                 // insert the patch in the patch stash and return its
                 // id in the stash
-                const uint8_t owner_stash_id = m_s_patch_stash.insert_patch(o);
+                const uint8_t owner_stash_id =
+                    m_s_patch_stash.insert_patch(o, m_s_patch_stash_mutex);
+
                 assert(owner_stash_id != INVALID8);
                 ret = LPPair(vp, vq, owner_stash_id);
 
@@ -1650,7 +1654,9 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
                 // since it is owned by some other patch
                 m_s_owned_mask_e.reset(ep, true);
 
-                const uint8_t owner_stash_id = m_s_patch_stash.insert_patch(o);
+                const uint8_t owner_stash_id =
+                    m_s_patch_stash.insert_patch(o, m_s_patch_stash_mutex);
+
                 assert(owner_stash_id != INVALID8);
                 ret = LPPair(ep, eq, owner_stash_id);
 
@@ -1760,7 +1766,9 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
                 // since it is owned by some other patch
                 m_s_owned_mask_f.reset(fp, true);
 
-                const uint8_t owner_stash_id = m_s_patch_stash.insert_patch(o);
+                const uint8_t owner_stash_id =
+                    m_s_patch_stash.insert_patch(o, m_s_patch_stash_mutex);
+
                 assert(owner_stash_id != INVALID8);
                 ret = LPPair(fp, fq, owner_stash_id);
 
@@ -1851,15 +1859,17 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
 
     // First check if lid is owned by src_patch. If not, then map it to its
     // owner patch and local index in it
-
-    // HandleT owner = m_context.get_owner_handle(HandleT(src_patch, {lid}));
-    if (!m_context.m_patches_info[src_patch].is_owned(HandleT::LocalT(lid))) {
+        
+    /*if (!m_context.m_patches_info[src_patch].is_owned(HandleT::LocalT(lid))) {
         HandleT owner =
             m_context.m_patches_info[src_patch].find<HandleT>({lid});
         src_patch = owner.patch_id();
         lid       = owner.local_id();
-    }
+    }*/
 
+    HandleT owner = m_context.get_owner_handle(HandleT(src_patch, {lid}));
+    src_patch     = owner.patch_id();
+    lid           = owner.local_id();
 
     // if the owner src_patch is the same as the patch associated with this
     // cavity, the lid is the local index we are looking for
@@ -1971,7 +1981,8 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
             // add this patch (p) to the owner's patch stash
             const uint8_t stash_id =
                 m_context.m_patches_info[q].patch_stash.insert_patch(
-                    m_patch_info.patch_id);
+                    m_patch_info.patch_id, m_s_patch_stash_mutex);
+
             assert(stash_id != INVALID8);
 
             // clear the bitmask of the owner's patch

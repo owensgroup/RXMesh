@@ -48,11 +48,11 @@ struct ALIGN(16) PatchInfo
           faces_capacity(nullptr),
           patch_id(INVALID32){};
 
-    __device__ __host__            PatchInfo(const PatchInfo& other) = default;
-    __device__ __host__            PatchInfo(PatchInfo&&)            = default;
-    __device__ __host__ PatchInfo& operator=(const PatchInfo&)       = default;
-    __device__ __host__ PatchInfo& operator=(PatchInfo&&)            = default;
-    __device__                     __host__ ~PatchInfo()             = default;
+    __device__ __host__ PatchInfo(const PatchInfo& other) = default;
+    __device__ __host__ PatchInfo(PatchInfo&&)            = default;
+    __device__ __host__ PatchInfo& operator=(const PatchInfo&) = default;
+    __device__ __host__ PatchInfo& operator=(PatchInfo&&) = default;
+    __device__                     __host__ ~PatchInfo()  = default;
 
     // The topology information: edge incident vertices and face incident edges
     LocalVertexT* ev;
@@ -360,6 +360,7 @@ struct ALIGN(16) PatchInfo
      */
     __device__ __host__ __inline__ const bool is_owned(LocalVertexT vh) const
     {
+        assert(vh.id != INVALID16);
         return detail::is_owned(vh.id, get_owned_mask<VertexHandle>());
     }
 
@@ -368,6 +369,7 @@ struct ALIGN(16) PatchInfo
      */
     __device__ __host__ __inline__ const bool is_owned(LocalEdgeT eh) const
     {
+        assert(eh.id != INVALID16);
         return detail::is_owned(eh.id, get_owned_mask<EdgeHandle>());
     }
 
@@ -376,6 +378,7 @@ struct ALIGN(16) PatchInfo
      */
     __device__ __host__ __inline__ const bool is_owned(LocalFaceT fh) const
     {
+        assert(fh.id != INVALID16);
         return detail::is_owned(fh.id, get_owned_mask<FaceHandle>());
     }
 
@@ -384,6 +387,7 @@ struct ALIGN(16) PatchInfo
      */
     __device__ __host__ __inline__ const bool is_deleted(LocalVertexT vh) const
     {
+        assert(vh.id != INVALID16);
         return detail::is_deleted(vh.id, get_active_mask<VertexHandle>());
     }
 
@@ -392,6 +396,7 @@ struct ALIGN(16) PatchInfo
      */
     __device__ __host__ __inline__ const bool is_deleted(LocalEdgeT eh) const
     {
+        assert(eh.id != INVALID16);
         return detail::is_deleted(eh.id, get_active_mask<EdgeHandle>());
     }
 
@@ -400,6 +405,7 @@ struct ALIGN(16) PatchInfo
      */
     __device__ __host__ __inline__ const bool is_deleted(LocalFaceT fh) const
     {
+        assert(fh.id != INVALID16);
         return detail::is_deleted(fh.id, get_active_mask<FaceHandle>());
     }
 

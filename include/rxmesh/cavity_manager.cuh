@@ -10,6 +10,7 @@
 
 #include "rxmesh/attribute.h"
 
+#include "rxmesh/kernels/shmem_mutex.cuh"
 
 namespace rxmesh {
 
@@ -555,7 +556,8 @@ struct CavityManager
     PatchInfo m_patch_info;
     Context   m_context;
 
-    bool* m_s_should_slice;
+    bool*      m_s_should_slice;
+    ShmemMutex m_s_patch_stash_mutex;
 };
 
 }  // namespace rxmesh
