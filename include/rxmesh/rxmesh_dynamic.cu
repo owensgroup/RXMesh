@@ -22,7 +22,8 @@ namespace rxmesh {
 namespace detail {
 template <uint32_t blockThreads, typename HandleT>
 __device__ __inline__ void hashtable_calibration(const Context context,
-                                                 PatchInfo&    pi)
+                                                 PatchInfo&    pi,
+                                                 ShmemMutex& patch_stash_mutex)
 {
     // TODO load the hashtable in shared memory
     using LocalT = typename HandleT::LocalT;
@@ -120,7 +121,8 @@ __device__ __inline__ void hashtable_calibration(const Context context,
 
         if (replace) {
 
-            uint8_t o = pi.patch_stash.insert_patch(handle.patch_id());
+            uint8_t o = pi.patch_stash.insert_patch(handle.patch_id(),
+                                                    patch_stash_mutex);
 
             LPPair lp(i, handle.local_id(), o);
 
@@ -137,11 +139,16 @@ __global__ static void hashtable_calibration(const Context context)
         return;
     }
 
+    ShmemMutex patch_stash_mutex;
+    patch_stash_mutex.alloc();
     PatchInfo pi = context.m_patches_info[pid];
 
-    hashtable_calibration<blockThreads, VertexHandle>(context, pi);
-    hashtable_calibration<blockThreads, EdgeHandle>(context, pi);
-    hashtable_calibration<blockThreads, FaceHandle>(context, pi);
+    hashtable_calibration<blockThreads, VertexHandle>(
+        context, pi, patch_stash_mutex);
+    hashtable_calibration<blockThreads, EdgeHandle>(
+        context, pi, patch_stash_mutex);
+    hashtable_calibration<blockThreads, FaceHandle>(
+        context, pi, patch_stash_mutex);
 }
 
 template <uint32_t blockThreads>
@@ -406,7 +413,6 @@ __inline__ __device__ void remove_idle_elements(
 template <uint32_t blockThreads>
 __global__ static void remove_surplus_elements(const Context context)
 {
-    // TODO cleanup patch stash
     auto block = cooperative_groups::this_thread_block();
 
     const uint32_t pid = blockIdx.x;
@@ -575,7 +581,8 @@ __inline__ __device__ void copy_to_hashtable(const PatchInfo& pi,
                                              const Bitmask&   s_new_p_active,
                                              const Bitmask&   s_new_p_owned,
                                              const Bitmask&   s_owned,
-                                             PatchStash&      new_patch_stash)
+                                             PatchStash&      new_patch_stash,
+                                             ShmemMutex&      patch_stash_mutex)
 {
 
     for (uint16_t v = threadIdx.x; v < num_elements; v += blockThreads) {
@@ -588,7 +595,8 @@ __inline__ __device__ void copy_to_hashtable(const PatchInfo& pi,
             } else {
                 HandleT vh = pi.find<HandleT>(v);
 
-                uint8_t st = new_patch_stash.insert_patch(vh.patch_id());
+                uint8_t st = new_patch_stash.insert_patch(vh.patch_id(),
+                                                          patch_stash_mutex);
 
                 lp = LPPair(v, vh.local_id(), st);
             }
@@ -670,6 +678,8 @@ __inline__ __device__ void slice(Context&                          context,
 
     block.sync();
 
+    ShmemMutex patch_stash_mutex;
+    patch_stash_mutex.alloc();
     PatchInfo new_patch = context.m_patches_info[new_patch_id];
 
     // evluate active elements of the new patch
@@ -697,21 +707,24 @@ __inline__ __device__ void slice(Context&                          context,
                                                   s_new_p_active_v,
                                                   s_new_p_owned_v,
                                                   s_owned_v,
-                                                  s_new_patch_stash);
+                                                  s_new_patch_stash,
+                                                  patch_stash_mutex);
     copy_to_hashtable<blockThreads, EdgeHandle>(pi,
                                                 new_patch,
                                                 num_edges,
                                                 s_new_p_active_e,
                                                 s_new_p_owned_e,
                                                 s_owned_e,
-                                                s_new_patch_stash);
+                                                s_new_patch_stash,
+                                                patch_stash_mutex);
     copy_to_hashtable<blockThreads, FaceHandle>(pi,
                                                 new_patch,
                                                 num_faces,
                                                 s_new_p_active_f,
                                                 s_new_p_owned_f,
                                                 s_owned_f,
-                                                s_new_patch_stash);
+                                                s_new_patch_stash,
+                                                patch_stash_mutex);
 
     // store new patch to global memory
     if (threadIdx.x == 0) {
@@ -739,6 +752,7 @@ __inline__ __device__ void slice(Context&                          context,
         s_fe, 3 * num_faces, reinterpret_cast<uint16_t*>(new_patch.fe));
 
     // patch stash
+    block.sync();
     detail::store<blockThreads>(s_new_patch_stash.m_stash,
                                 PatchStash::stash_size,
                                 new_patch.patch_stash.m_stash);
