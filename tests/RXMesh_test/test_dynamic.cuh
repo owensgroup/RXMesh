@@ -298,6 +298,8 @@ TEST(RXMeshDynamic, RandomFlips)
     ps_mesh->setEnabled(false);
     // polyscope::show();
 #endif
+
+    // polyscope::removeAllStructures();
 }
 
 

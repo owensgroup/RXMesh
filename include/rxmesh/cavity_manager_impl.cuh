@@ -1268,10 +1268,10 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
 
 
     if (s_ok_q == 0) {
-        if (!was_locked) {
-            // we should not keep q locked only if it was not locked before
-            unlock(q_stash_id, q);
-        }
+        // if (!was_locked) {
+        //    // we should not keep q locked only if it was not locked before
+        //    unlock(q_stash_id, q);
+        //}
     } else {
 
         // In every call to migrate_vertex/edge/face, threads make sure that
@@ -1564,7 +1564,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
 
             if (require_ownership_change && !m_s_owned_mask_v(vp)) {
                 m_s_ownership_change_mask_v.set(vp, true);
-                if (o != patch_id() && o != q) {
+                if (o != patch_id()) {
                     assert(m_s_patches_to_lock_mask(
                         m_s_patch_stash.find_patch_index(o)));
                 }
@@ -1669,7 +1669,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
 
             if (require_ownership_change && !m_s_owned_mask_e(ep)) {
                 m_s_ownership_change_mask_e.set(ep, true);
-                if (o != patch_id() && o != q) {
+                if (o != patch_id()) {
                     assert(m_s_patches_to_lock_mask(
                         m_s_patch_stash.find_patch_index(o)));
                 }
@@ -1781,7 +1781,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
 
             if (require_ownership_change && !m_s_owned_mask_f(fp)) {
                 m_s_ownership_change_mask_f.set(fp, true);
-                if (o != patch_id() && o != q) {
+                if (o != patch_id()) {
                     assert(m_s_patches_to_lock_mask(
                         m_s_patch_stash.find_patch_index(o)));
                 }
