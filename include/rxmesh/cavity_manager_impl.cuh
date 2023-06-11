@@ -1149,6 +1149,25 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
             }
         }
     }
+    block.sync();
+
+    if (!ensure_ownership<VertexHandle>(block,
+                                        m_s_num_vertices[0],
+                                        m_s_ownership_change_mask_v,
+                                        m_s_table_v,
+                                        m_s_table_stash_v) ||
+        !ensure_ownership<EdgeHandle>(block,
+                                      m_s_num_edges[0],
+                                      m_s_ownership_change_mask_e,
+                                      m_s_table_e,
+                                      m_s_table_stash_e) ||
+        !ensure_ownership<FaceHandle>(block,
+                                      m_s_num_faces[0],
+                                      m_s_ownership_change_mask_f,
+                                      m_s_table_f,
+                                      m_s_table_stash_f)) {
+        return false;
+    }
 
     return true;
 }
@@ -1238,14 +1257,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             assert(m_s_active_mask_v(v));
             assert(!m_s_owned_mask_v(v));
 
-            // const VertexHandle v_owner =
-            //    m_context.get_owner_handle<VertexHandle>(
-            //        {m_patch_info.patch_id, {v}},
-            //        nullptr,
-            //        m_s_table_v,
-            //        false,
-            //        false);
-
             const VertexHandle v_owner = m_patch_info.find<VertexHandle>(
                 v, m_s_table_v, m_s_table_stash_v, m_s_patch_stash);
 
@@ -1255,9 +1266,12 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
 
             if (v_owner.patch_id() == q) {
 
-                // make sure that q is the actual owner of of v
-                assert(m_context.m_patches_info[q].is_owned(
-                    LocalVertexT(v_owner.local_id())));
+
+                // we no longer check if q is the actual owner
+                // if it turned up that q is no longer the owner (after locking
+                // q) we just quite. This check happens at the end of migrate
+                // assert(m_context.m_patches_info[q].is_owned(
+                //    LocalVertexT(v_owner.local_id())));
 
                 ::atomicAdd(&s_ok_q, 1);
                 m_s_src_mask_v.set(v_owner.local_id(), true);
@@ -1526,8 +1540,8 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
             uint32_t o  = q;
             uint16_t vp = find_copy_vertex(vq, o);
 
-            assert(!m_context.m_patches_info[o].is_deleted(LocalVertexT(vq)));
-            assert(m_context.m_patches_info[o].is_owned(LocalVertexT(vq)));
+            // assert(!m_context.m_patches_info[o].is_deleted(LocalVertexT(vq)));
+            // assert(m_context.m_patches_info[o].is_owned(LocalVertexT(vq)));
 
             if (vp == INVALID16) {
                 vp = add_element(m_s_active_mask_v,
@@ -1602,8 +1616,8 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
             uint32_t o  = q;
             uint16_t ep = find_copy_edge(eq, o);
 
-            assert(!m_context.m_patches_info[o].is_deleted(LocalEdgeT(eq)));
-            assert(m_context.m_patches_info[o].is_owned(LocalEdgeT(eq)));
+            // assert(!m_context.m_patches_info[o].is_deleted(LocalEdgeT(eq)));
+            // assert(m_context.m_patches_info[o].is_owned(LocalEdgeT(eq)));
 
             if (ep == INVALID16) {
                 ep = add_element(m_s_active_mask_e,
@@ -1628,15 +1642,15 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
                 uint16_t v0p = find_copy_vertex(v0q, o0);
                 uint16_t v1p = find_copy_vertex(v1q, o1);
 
-                assert(!m_context.m_patches_info[o0].is_deleted(
-                    LocalVertexT(v0q)));
-                assert(
-                    m_context.m_patches_info[o0].is_owned(LocalVertexT(v0q)));
-
-                assert(!m_context.m_patches_info[o1].is_deleted(
-                    LocalVertexT(v1q)));
-                assert(
-                    m_context.m_patches_info[o1].is_owned(LocalVertexT(v1q)));
+                // assert(!m_context.m_patches_info[o0].is_deleted(
+                //    LocalVertexT(v0q)));
+                // assert(
+                //    m_context.m_patches_info[o0].is_owned(LocalVertexT(v0q)));
+                //
+                // assert(!m_context.m_patches_info[o1].is_deleted(
+                //    LocalVertexT(v1q)));
+                // assert(
+                //    m_context.m_patches_info[o1].is_owned(LocalVertexT(v1q)));
 
 
                 // since any vertex in m_s_src_mask_v has been
@@ -1712,8 +1726,8 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
             uint16_t fp = find_copy_face(fq, o);
 
 
-            assert(!m_context.m_patches_info[o].is_deleted(LocalFaceT(fq)));
-            assert(m_context.m_patches_info[o].is_owned(LocalFaceT(fq)));
+            // assert(!m_context.m_patches_info[o].is_deleted(LocalFaceT(fq)));
+            // assert(m_context.m_patches_info[o].is_owned(LocalFaceT(fq)));
 
             if (fp == INVALID16) {
                 fp = add_element(m_s_active_mask_f,
@@ -1738,17 +1752,17 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
                 const uint16_t e1p = find_copy_edge(e1q, o1);
                 const uint16_t e2p = find_copy_edge(e2q, o2);
 
-                assert(
-                    !m_context.m_patches_info[o0].is_deleted(LocalEdgeT(e0q)));
-                assert(m_context.m_patches_info[o0].is_owned(LocalEdgeT(e0q)));
-
-                assert(
-                    !m_context.m_patches_info[o1].is_deleted(LocalEdgeT(e1q)));
-                assert(m_context.m_patches_info[o1].is_owned(LocalEdgeT(e1q)));
-
-                assert(
-                    !m_context.m_patches_info[o2].is_deleted(LocalEdgeT(e2q)));
-                assert(m_context.m_patches_info[o2].is_owned(LocalEdgeT(e2q)));
+                // assert(
+                //    !m_context.m_patches_info[o0].is_deleted(LocalEdgeT(e0q)));
+                // assert(m_context.m_patches_info[o0].is_owned(LocalEdgeT(e0q)));
+                //
+                // assert(
+                //    !m_context.m_patches_info[o1].is_deleted(LocalEdgeT(e1q)));
+                // assert(m_context.m_patches_info[o1].is_owned(LocalEdgeT(e1q)));
+                //
+                // assert(
+                //    !m_context.m_patches_info[o2].is_deleted(LocalEdgeT(e2q)));
+                // assert(m_context.m_patches_info[o2].is_owned(LocalEdgeT(e2q)));
 
                 // since any edge in m_s_src_mask_e has been
                 // added already to p, then we should find the
@@ -1859,17 +1873,17 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
 
     // First check if lid is owned by src_patch. If not, then map it to its
     // owner patch and local index in it
-        
-    /*if (!m_context.m_patches_info[src_patch].is_owned(HandleT::LocalT(lid))) {
+
+    if (!m_context.m_patches_info[src_patch].is_owned(HandleT::LocalT(lid))) {
         HandleT owner =
             m_context.m_patches_info[src_patch].find<HandleT>({lid});
         src_patch = owner.patch_id();
         lid       = owner.local_id();
-    }*/
+    }
 
-    HandleT owner = m_context.get_owner_handle(HandleT(src_patch, {lid}));
-    src_patch     = owner.patch_id();
-    lid           = owner.local_id();
+    // HandleT owner = m_context.get_owner_handle(HandleT(src_patch, {lid}));
+    // src_patch     = owner.patch_id();
+    // lid           = owner.local_id();
 
     // if the owner src_patch is the same as the patch associated with this
     // cavity, the lid is the local index we are looking for
@@ -1903,6 +1917,42 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
         }
     }
     return INVALID16;
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+template <typename HandleT>
+__device__ __inline__ bool CavityManager<blockThreads, cop>::ensure_ownership(
+    cooperative_groups::thread_block& block,
+    const uint16_t                    num_elements,
+    const Bitmask&                    s_ownership_change,
+    const LPPair*                     s_table,
+    const LPPair*                     s_stash)
+{
+    __shared__ bool s_all_good;
+    if (threadIdx.x == 0) {
+        s_all_good = true;
+    }
+    block.sync();
+
+    for (uint16_t vp = threadIdx.x; vp < num_elements; vp += blockThreads) {
+
+        if (s_ownership_change(vp)) {
+            const HandleT h = m_patch_info.find<HandleT>(
+                vp, s_table, s_stash, m_s_patch_stash);
+            assert(h.patch_id() != INVALID32);
+            assert(h.local_id() != INVALID16);
+
+            const uint32_t q  = h.patch_id();
+            const uint16_t vq = h.local_id();
+
+            if (!m_context.m_patches_info[q].is_owned(HandleT::LocalT(vq))) {
+                s_all_good = false;
+            }
+        }
+    }
+    block.sync();
+    return s_all_good;
 }
 
 
@@ -2192,6 +2242,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
             //    m_patch_info.num_faces[0],
             //    m_s_num_faces[0],
             //    m_patch_info.faces_capacity[0]);
+            // printf("\n should slice =%u", patch_id());
             m_context.m_patches_info[patch_id()].should_slice = true;
         }
     }

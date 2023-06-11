@@ -480,6 +480,25 @@ struct CavityManager
     __device__ __inline__ bool lock_patches_to_lock(
         cooperative_groups::thread_block& block);
 
+    /**
+     * @brief for each element we ask to change their ownership (to be owned
+     * by this patch m_patch_info), we store the owner patch in the hashtable.
+     * This happens during migrate(). Here, we make sure that the owner patch
+     * stored in the hashtable is 1. locked 2. the actual owner. The reason
+     * behind this check is we want to always read from locked patches. In
+     * find_copy(), the other patch q may have given up the ownership of the
+     * element earlier. Thus, we need to jump from q to the other new owner s.
+     * However, s is no longer locked and we can not read it from it. In this
+     * cases, we need a hashtable_calibration first.
+     */
+    template <typename HandleT>
+    __device__ __inline__ bool ensure_ownership(
+        cooperative_groups::thread_block& block,
+        const uint16_t                    num_elements,
+        const Bitmask&                    s_ownership_change,
+        const LPPair*                     s_table,
+        const LPPair*                     s_stash);
+
     // indicate if this block can write its updates to global memory during
     // epilogue
     bool m_write_to_gmem;
