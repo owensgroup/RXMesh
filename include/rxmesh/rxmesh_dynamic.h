@@ -502,7 +502,7 @@ class RXMeshDynamic : public RXMeshStatic
      * queue is initialized during the construction so the user does not to call
      * this
      */
-    void reset_queue()
+    void reset_scheduler()
     {
         this->m_rxmesh_context.m_patch_scheduler.refill();
     }

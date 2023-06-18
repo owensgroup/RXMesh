@@ -82,7 +82,7 @@ struct PatchScheduler
      */
     __host__ void refill()
     {
-        std::vector<uint32_t> h_list(capacity);
+        static std::vector<uint32_t> h_list(capacity);
         fill_with_sequential_numbers(h_list.data(), capacity);
         random_shuffle(h_list.data(), h_list.size());
         CUDA_ERROR(cudaMemcpy(list,
