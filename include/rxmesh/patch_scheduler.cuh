@@ -123,20 +123,28 @@ struct PatchScheduler
     }
 
     /**
+     * @brief return the size of the queue (that is not the capacity)
+     */
+    __host__ __device__ __inline__ int size(cudaStream_t stream = NULL)
+    {
+#ifdef __CUDA_ARCH__
+        return count[0];
+#else
+        int h_count = 0;
+        CUDA_ERROR(cudaMemcpyAsync(
+            &h_count, count, sizeof(int), cudaMemcpyDeviceToHost, stream));
+        return h_count;
+#endif
+    }
+
+    /**
      * @brief check if the list empty. On the host, the check need to move data
      * from device to host
      * @return
      */
     __host__ __device__ __inline__ bool is_empty(cudaStream_t stream = NULL)
     {
-#ifdef __CUDA_ARCH__
-        return count[0] == 0;
-#else
-        int h_count = 0;
-        CUDA_ERROR(cudaMemcpyAsync(
-            &h_count, count, sizeof(int), cudaMemcpyDeviceToHost, stream));
-        return h_count == 0;
-#endif
+        return size(stream) == 0;
     }
 
     int*      count;

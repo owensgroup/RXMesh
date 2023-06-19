@@ -28,7 +28,9 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
         // iter[0] and iter[2] are the edge two vertices
         // iter[1] and iter[3] are the two opposite vertices
 
-
+        if (iter.size() != 4) {
+            return;
+        }
         auto v0 = iter[0];
         auto v1 = iter[2];
 
@@ -138,6 +140,10 @@ inline bool is_delaunay(TriMesh& mesh)
         // \  |  /
         //    1
         TriMesh::VertexHandle v0 = *v0_it;
+
+        if (mesh.is_boundary(v0)) {
+            continue;
+        }
 
         TriMesh::Point p0 = mesh.point(v0);
 
@@ -259,7 +265,6 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
         EXPECT_TRUE(is_delaunay(tri_mesh));
     }
     
-    CUDA_ERROR(cudaFree(d_flipped));
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
@@ -273,4 +278,5 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     rx.polyscope_render_face_patch();
     polyscope::show();
 #endif
+    CUDA_ERROR(cudaFree(d_flipped));
 }
