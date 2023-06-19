@@ -9,7 +9,8 @@
 
 template <typename T, uint32_t blockThreads>
 __global__ static void delaunay_edge_flip(rxmesh::Context            context,
-                                          rxmesh::VertexAttribute<T> coords)
+                                          rxmesh::VertexAttribute<T> coords,
+                                          int*                       d_flipped)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -117,6 +118,7 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
             cavity.add_face(cavity.get_cavity_edge(c, 1),
                             cavity.get_cavity_edge(c, 2),
                             new_edge.get_flip_dedge());
+            d_flipped[0] = 1;
         });
     }
     cavity.epilogue(block);
@@ -193,38 +195,61 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 
     EXPECT_TRUE(rx.validate());
 
+    int* d_flipped = nullptr;
+    CUDA_ERROR(cudaMalloc((void**)&d_flipped, sizeof(int)));
+
+    int h_flipped = 1;
+
     GPUTimer timer;
     timer.start();
     int iter = 0;
-        RXMESH_INFO("\niter = {}", iter++);
-        LaunchBox<blockThreads> launch_box;
-        rx.update_launch_box({Op::EVDiamond},
-                             launch_box,
-                             (void*)delaunay_edge_flip<float, blockThreads>);
-        delaunay_edge_flip<float, blockThreads>
-            <<<launch_box.blocks,
-               launch_box.num_threads,
-               launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords);
-        rx.slice_patches(*coords);
-        rx.cleanup();
-        rx.update_host();
+
+    while (h_flipped != 0) {
+        CUDA_ERROR(cudaMemset(d_flipped, 0, sizeof(int)));
+
+        h_flipped = 0;
+        rx.reset_scheduler();
+        while (!rx.is_queue_empty()) {
+            RXMESH_INFO("\niter = {}", iter++);
+            LaunchBox<blockThreads> launch_box;
+            rx.prepare_launch_box(
+                {Op::EVDiamond},
+                launch_box,
+                (void*)delaunay_edge_flip<float, blockThreads>);
+            delaunay_edge_flip<float, blockThreads>
+                <<<launch_box.blocks,
+                   launch_box.num_threads,
+                   launch_box.smem_bytes_dyn>>>(
+                    rx.get_context(), *coords, d_flipped);
+            CUDA_ERROR(cudaDeviceSynchronize());
+            rx.slice_patches(*coords);
+            CUDA_ERROR(cudaDeviceSynchronize());
+
+            rx.cleanup();
+            CUDA_ERROR(cudaDeviceSynchronize());
+
+            rx.update_host();
+            CUDA_ERROR(cudaDeviceSynchronize());
+
+
+            timer.stop();
+            CUDA_ERROR(cudaDeviceSynchronize());
+            CUDA_ERROR(cudaGetLastError());
+            RXMESH_TRACE(
+                "delaunay_rxmesh() RXMesh Delaunay Edge Flip took {} (ms)",
+                timer.elapsed_millis());
+
+            EXPECT_TRUE(rx.validate());
+        }
+        CUDA_ERROR(cudaMemcpy(
+            &h_flipped, d_flipped, sizeof(int), cudaMemcpyDeviceToHost));
     }
-
-    timer.stop();
-    CUDA_ERROR(cudaDeviceSynchronize());
-    CUDA_ERROR(cudaGetLastError());
-    RXMESH_TRACE("delaunay_rxmesh() RXMesh Delaunay Edge Flip took {} (ms)",
-                 timer.elapsed_millis());
-
-    rx.update_host();
 
     coords->move(DEVICE, HOST);
 
     EXPECT_EQ(num_vertices, rx.get_num_vertices());
     EXPECT_EQ(num_edges, rx.get_num_edges());
     EXPECT_EQ(num_faces, rx.get_num_faces());
-
-    EXPECT_TRUE(rx.validate());
 
     if (with_verify) {
         rx.export_obj(STRINGIFY(OUTPUT_DIR) "temp.obj", *coords);
@@ -233,6 +258,8 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
                                             STRINGIFY(OUTPUT_DIR) "temp.obj"));
         EXPECT_TRUE(is_delaunay(tri_mesh));
     }
+    
+    CUDA_ERROR(cudaFree(d_flipped));
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
@@ -244,7 +271,6 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     rx.polyscope_render_vertex_patch();
     rx.polyscope_render_edge_patch();
     rx.polyscope_render_face_patch();
-
     polyscope::show();
 #endif
 }
