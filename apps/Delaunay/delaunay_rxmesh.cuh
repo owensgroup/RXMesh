@@ -196,7 +196,6 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     GPUTimer timer;
     timer.start();
     int iter = 0;
-    while (!rx.is_queue_empty()) {
         RXMESH_INFO("\niter = {}", iter++);
         LaunchBox<blockThreads> launch_box;
         rx.update_launch_box({Op::EVDiamond},

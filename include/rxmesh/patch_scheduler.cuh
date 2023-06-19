@@ -40,6 +40,7 @@ struct PatchScheduler
             // conflict, the block push the same patch again. So at all times
             // count is less than capacity if capacity is total number of
             // patches
+            assert(0);
             return false;
         }
 
