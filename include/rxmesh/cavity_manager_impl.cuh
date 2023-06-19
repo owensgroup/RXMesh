@@ -5,7 +5,7 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     cooperative_groups::thread_block& block,
     Context&                          context,
     ShmemAllocator&                   shrd_alloc)
-    : m_write_to_gmem(true), m_context(context)
+    : m_write_to_gmem(false), m_context(context)
 {
     __shared__ uint32_t s_patch_id;
 
@@ -371,6 +371,10 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     cooperative_groups::thread_block& block,
     ShmemAllocator&                   shrd_alloc)
 {
+    if (get_num_cavities() == 0) {
+        return false;
+    }
+
     // allocate shared memory
     alloc_shared_memory(block, shrd_alloc);
 
@@ -408,6 +412,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
         unlock_locked_patches();
         return false;
     }
+    m_write_to_gmem = true;
     block.sync();
 
     change_ownership(block);
@@ -2250,7 +2255,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
     // re-add the patch to the queue if there is ownership change
     // or we could not lock all neighbor patches (and thus could not write to
     // global memory)
-    if (m_s_readd_to_queue[0] || !m_write_to_gmem) {
+    if ((m_s_readd_to_queue[0] || !m_write_to_gmem) && get_num_cavities() > 0) {
         push();
     }
 
