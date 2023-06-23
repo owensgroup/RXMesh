@@ -125,7 +125,7 @@ struct PatchScheduler
     /**
      * @brief return the size of the queue (that is not the capacity)
      */
-    __host__ __device__ __inline__ int size(cudaStream_t stream = NULL)
+    __host__ __device__ __inline__ int size(cudaStream_t stream = NULL) const
     {
 #ifdef __CUDA_ARCH__
         return count[0];
