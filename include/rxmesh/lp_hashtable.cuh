@@ -61,11 +61,11 @@ struct LPHashTable
           m_is_on_device(false)
     {
     }
-    LPHashTable(const LPHashTable& other)      = default;
-    LPHashTable(LPHashTable&&)                 = default;
+    LPHashTable(const LPHashTable& other) = default;
+    LPHashTable(LPHashTable&&)            = default;
     LPHashTable& operator=(const LPHashTable&) = default;
-    LPHashTable& operator=(LPHashTable&&)      = default;
-    ~LPHashTable()                             = default;
+    LPHashTable& operator=(LPHashTable&&) = default;
+    ~LPHashTable()                        = default;
 
     /**
      * @brief Constructor using the hash table capacity.This is used as
@@ -180,6 +180,57 @@ struct LPHashTable
         m_hasher2 = initialize_hf<HashT>(rng);
         m_hasher3 = initialize_hf<HashT>(rng);
     }
+
+
+    /**
+     * @brief compute current load factor
+     */
+    __host__ __device__ __inline__ float compute_load_factor(LPPair* s_table)
+    {
+        auto lf = [&]() {
+            uint32_t m = 0;
+            for (uint32_t i = 0; i < m_capacity; ++i) {
+                if (s_table != nullptr) {
+                    if (!s_table[i].is_sentinel()) {
+                        ++m;
+                    }
+                } else {
+                    if (!m_table[i].is_sentinel()) {
+                        ++m;
+                    }
+                }
+            };
+            return m;
+        };
+
+        return static_cast<float>(lf()) / static_cast<float>(m_capacity);
+    }
+
+    /**
+     * @brief compute current load factor for the stash 
+     */
+    __host__ __device__ __inline__ float compute_stash_load_factor(
+        LPPair* s_stash)
+    {
+        auto lf = [&]() {
+            uint32_t m = 0;
+            for (uint32_t i = 0; i < stash_size; ++i) {
+                if (s_stash != nullptr) {
+                    if (!s_stash[i].is_sentinel()) {
+                        ++m;
+                    }
+                } else {
+                    if (!m_stash[i].is_sentinel()) {
+                        ++m;
+                    }
+                }
+            };
+            return m;
+        };
+
+        return static_cast<float>(lf()) / static_cast<float>(stash_size);
+    }
+
 
 
     /**
