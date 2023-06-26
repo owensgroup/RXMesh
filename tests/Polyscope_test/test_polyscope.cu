@@ -71,9 +71,9 @@ int main(int argc, char** argv)
 
     polyscope_mesh->addVertexColorQuantity("vColor", vertex_color);
 
-    // rx.polyscope_render_face_patch();
-    // rx.polyscope_render_vertex_patch();
-    // rx.polyscope_render_edge_patch();
+    // rx.render_face_patch();
+    // rx.render_vertex_patch();
+    // rx.render_edge_patch();
 
     // Vertex Normal
     auto vertex_normals = rx.add_vertex_attribute<float>("vNormals", 3);

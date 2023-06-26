@@ -61,9 +61,9 @@ class RXMeshStatic : public RXMesh
         m_polyscope_mesh_name = polyscope::guessNiceNameFromPath(file_path);
         m_polyscope_mesh_name += std::to_string(rand());
         this->register_polyscope();
-        polyscope_render_vertex_patch();
-        polyscope_render_edge_patch();
-        polyscope_render_face_patch();
+        render_vertex_patch();
+        render_edge_patch();
+        render_face_patch();
 #endif
     };
 
@@ -99,11 +99,11 @@ class RXMeshStatic : public RXMesh
      * patch is added along with its ribbon which could be helpful for debugging
      * @param p the patch id which will be added
      * @param with_vertex_patch add a vertex color quantity that show the vertex
-     * patch
+     * patch and local ID
      * @param with_edge_patch add an edge color quantity that show the edge
-     * patch
+     * patch and local ID
      * @param with_face_patch add a face color quantity that show the face
-     * patch
+     * patch and local ID
      */
     polyscope::SurfaceMesh* render_patch(const uint32_t p,
                                          bool with_vertex_patch = true,
@@ -121,32 +121,33 @@ class RXMeshStatic : public RXMesh
             m_polyscope_edges_map);
 
         if (with_vertex_patch) {
-            polyscope_render_vertex_patch(p, ps);
+            render_vertex_patch_and_local_id(p, ps);
         }
         if (with_edge_patch) {
-            polyscope_render_edge_patch(p, ps);
+            render_edge_patch_and_local_id(p, ps);
         }
         if (with_face_patch) {
-            polyscope_render_face_patch(p, ps);
+            render_face_patch_and_local_id(p, ps);
         }
 
         return ps;
     }
 
     /**
-     * @brief add the face's patch scalar quantity to a polyscope instance
-     * (polyscope_mesh) for specific patch. polyscope_mesh should be the one
-     * returned from render_patch call with the same input patch (p)
+     * @brief add the face's patch and local ID scalar quantities to a polyscope
+     * instance (polyscope_mesh) for specific patch. polyscope_mesh should be
+     * the one returned from render_patch call with the same input patch (p)
      * @param p patch id for which the face patch will be added
      * @param polyscope_mesh the SurfaceMesh pointer returned by calling
      * render_patch with the same input patch
      */
-    polyscope::SurfaceFaceScalarQuantity* polyscope_render_face_patch(
-        const uint32_t          p,
-        polyscope::SurfaceMesh* polyscope_mesh)
+    void render_face_patch_and_local_id(const uint32_t          p,
+                                        polyscope::SurfaceMesh* polyscope_mesh)
     {
-        std::string      name = "rx:FPatch" + std::to_string(p);
+        std::string      p_name = "rx:FPatch" + std::to_string(p);
+        std::string      l_name = "rx:FLocal" + std::to_string(p);
         std::vector<int> patch_id(m_h_patches_info[p].num_faces[0], -1);
+        std::vector<int> local_id(m_h_patches_info[p].num_faces[0], -1);
 
         for (uint16_t f = 0; f < this->m_h_patches_info[p].num_faces[0]; ++f) {
             const LocalFaceT lf(f);
@@ -155,83 +156,102 @@ class RXMeshStatic : public RXMesh
                 const FaceHandle fh = get_owner_handle<FaceHandle>({p, lf});
 
                 patch_id[f] = fh.patch_id();
+                local_id[f] = fh.local_id();
             }
         }
 
         patch_id.erase(std::remove(patch_id.begin(), patch_id.end(), -1),
                        patch_id.end());
-        auto ret = polyscope_mesh->addFaceScalarQuantity(name, patch_id);
+        std::pair<double, double> p_range(0.0, double(get_num_patches() - 1));
+        polyscope_mesh->addFaceScalarQuantity(p_name, patch_id)
+            ->setMapRange(p_range);
 
-        std::pair<double, double> range(0.0, double(get_num_patches() - 1));
-        ret->setMapRange(range);
 
-        return ret;
+        local_id.erase(std::remove(local_id.begin(), local_id.end(), -1),
+                       local_id.end());
+        std::pair<double, double> l_range(
+            0.0,
+            double(*std::max_element(local_id.begin(), local_id.end()) - 1));
+        polyscope_mesh->addFaceScalarQuantity(l_name, local_id)
+            ->setMapRange(l_range);
     }
 
     /**
-     * @brief add the edge's patch scalar quantity to a polyscope instance
-     * (polyscope_mesh) for specific patch. polyscope_mesh should be the one
-     * returned from render_patch call with the same input patch (p)
+     * @brief add the edge's patch and local ID scalar quantities to a polyscope
+     * instance (polyscope_mesh) for specific patch. polyscope_mesh should be
+     * the one returned from render_patch call with the same input patch (p)
      * @param p patch id for which the face patch will be added
      * @param polyscope_mesh the SurfaceMesh pointer returned by calling
      * render_patch with the same input patch
      */
-    polyscope::SurfaceEdgeScalarQuantity* polyscope_render_edge_patch(
-        const uint32_t          p,
-        polyscope::SurfaceMesh* polyscope_mesh)
+    void render_edge_patch_and_local_id(const uint32_t          p,
+                                        polyscope::SurfaceMesh* polyscope_mesh)
     {
-        std::string name = "rx:EPatch" + std::to_string(p);
-        // unlike polyscope_render_face_patch and  where the size of this
+        std::string p_name = "rx:EPatch" + std::to_string(p);
+        std::string l_name = "rx:ELocal" + std::to_string(p);
+        // unlike render_face_patch and  where the size of this
         // std::vector is the size of number faces in patch, here we
         // use the total number of edges since we pass to polyscope the edge map
         // for the whole mesh (not just for this patch) (see render_patch) and
         // thus it expects the size of this quantity to be the same size i.e.,
         // total number of edges
         std::vector<int> patch_id(get_num_edges(), -(p + 1));
+        std::vector<int> local_id(get_num_edges(), -(p + 1));
 
         for_each_edge(HOST, [&](EdgeHandle eh) {
             patch_id[linear_id(eh)] = eh.patch_id();
+            local_id[linear_id(eh)] = eh.local_id();
         });
 
-        auto ret = polyscope_mesh->addEdgeScalarQuantity(name, patch_id);
+        std::pair<double, double> p_range(0.0, double(get_num_patches() - 1));
+        polyscope_mesh->addEdgeScalarQuantity(p_name, patch_id)
+            ->setMapRange(p_range);
 
-        std::pair<double, double> range(0.0, double(get_num_patches() - 1));
-        ret->setMapRange(range);
-
-        return ret;
+        std::pair<double, double> l_range(
+            0.0,
+            double(*std::max_element(local_id.begin(), local_id.end()) - 1));
+        polyscope_mesh->addEdgeScalarQuantity(l_name, local_id)
+            ->setMapRange(l_range);
     }
 
     /**
-     * @brief add the vertex's patch scalar quantity to a polyscope instance
-     * (polyscope_mesh) for specific patch. polyscope_mesh should be the one
-     * returned from render_patch call with the same input patch (p)
+     * @brief add the vertex's patch and local ID scalar quantities to a
+     * polyscope instance (polyscope_mesh) for specific patch. polyscope_mesh
+     * should be the one returned from render_patch call with the same input
+     * patch (p)
      * @param p patch id for which the face patch will be added
      * @param polyscope_mesh the SurfaceMesh pointer returned by calling
      * render_patch with the same input patch
      */
-    polyscope::SurfaceVertexScalarQuantity* polyscope_render_vertex_patch(
+    void render_vertex_patch_and_local_id(
         const uint32_t          p,
         polyscope::SurfaceMesh* polyscope_mesh)
     {
-        std::string name = "rx:VPatch" + std::to_string(p);
-        // unlike polyscope_render_face_patch and  where the size of this
+        std::string p_name = "rx:VPatch" + std::to_string(p);
+        std::string l_name = "rx:VLocal" + std::to_string(p);
+        // unlike render_face_patch and  where the size of this
         // std::vector is the size of number faces in patch, here we
         // use the total number of vertices since we pass to polyscope the
         // vertex position for the whole mesh (not just for this patch) (see
         // render_patch) and thus it expects the size of this quantity to be the
         // same size i.e., total number of vertices
         std::vector<int> patch_id(get_num_vertices(), -(p + 1));
+        std::vector<int> local_id(get_num_vertices(), -(p + 1));
 
         for_each_vertex(HOST, [&](VertexHandle vh) {
             patch_id[linear_id(vh)] = vh.patch_id();
+            local_id[linear_id(vh)] = vh.local_id();
         });
 
-        std::pair<double, double> range(0.0, double(get_num_patches() - 1));
+        std::pair<double, double> p_range(0.0, double(get_num_patches() - 1));
+        polyscope_mesh->addVertexScalarQuantity(p_name, patch_id)
+            ->setMapRange(p_range);
 
-        auto ret = polyscope_mesh->addVertexScalarQuantity(name, patch_id);
-        ret->setMapRange(range);
-
-        return ret;
+        std::pair<double, double> l_range(
+            0.0,
+            double(*std::max_element(local_id.begin(), local_id.end()) - 1));
+        polyscope_mesh->addVertexScalarQuantity(l_name, local_id)
+            ->setMapRange(l_range);
     }
 
 
@@ -240,7 +260,7 @@ class RXMeshStatic : public RXMesh
      * associated RXMeshStatic
      * @return pointer to polyscope's face scalar quantity
      */
-    polyscope::SurfaceFaceScalarQuantity* polyscope_render_face_patch()
+    polyscope::SurfaceFaceScalarQuantity* render_face_patch()
     {
         std::string name = "rx:FPatch";
         auto face_patch  = this->add_face_attribute<uint32_t>(name, 1, HOST);
@@ -260,7 +280,7 @@ class RXMeshStatic : public RXMesh
      * associated RXMeshStatic
      * @return pointer to polyscope's edge scalar quantity
      */
-    polyscope::SurfaceEdgeScalarQuantity* polyscope_render_edge_patch()
+    polyscope::SurfaceEdgeScalarQuantity* render_edge_patch()
     {
         std::string name = "rx:EPatch";
         auto edge_patch  = this->add_edge_attribute<uint32_t>(name, 1, HOST);
@@ -281,7 +301,7 @@ class RXMeshStatic : public RXMesh
      * associated RXMeshStatic
      * @return pointer to polyscope's vertex scalar quantity
      */
-    polyscope::SurfaceVertexScalarQuantity* polyscope_render_vertex_patch()
+    polyscope::SurfaceVertexScalarQuantity* render_vertex_patch()
     {
         std::string name  = "rx:VPatch";
         auto vertex_patch = this->add_vertex_attribute<uint32_t>(name, 1, HOST);
@@ -294,6 +314,71 @@ class RXMeshStatic : public RXMesh
         return ret;
     }
 
+
+    /**
+     * @brief add the face's local ID scalar quantity to the polyscope instance
+     * associated RXMeshStatic
+     * @return pointer to polyscope's face scalar quantity
+     */
+    polyscope::SurfaceFaceScalarQuantity* render_face_local_id()
+    {
+        std::string name = "rx:FLocal";
+
+        auto f_local = add_face_attribute<uint16_t>(name, 1);
+
+        for_each_face(
+            HOST, [&](const FaceHandle fh) { (*f_local)(fh) = fh.local_id(); });
+
+        auto ret = m_polyscope_mesh->addFaceScalarQuantity(name, *f_local);
+
+        remove_attribute(name);
+
+        return ret;
+    }
+
+
+    /**
+     * @brief add the edge's local ID scalar quantity to the polyscope instance
+     * associated RXMeshStatic
+     * @return pointer to polyscope's edge scalar quantity
+     */
+    polyscope::SurfaceEdgeScalarQuantity* render_edge_local_id()
+    {
+        std::string name = "rx:ELocal";
+
+        auto e_local = add_edge_attribute<uint16_t>(name, 1);
+
+        for_each_edge(
+            HOST, [&](const EdgeHandle eh) { (*e_local)(eh) = eh.local_id(); });
+
+        auto ret = m_polyscope_mesh->addEdgeScalarQuantity(name, *e_local);
+
+        remove_attribute(name);
+
+        return ret;
+    }
+
+    /**
+     * @brief add the vertex's local ID scalar quantity to the polyscope
+     * instance associated RXMeshStatic
+     * @return pointer to polyscope's vertex scalar quantity
+     */
+    polyscope::SurfaceVertexScalarQuantity* render_vertex_local_id()
+    {
+        std::string name = "rx:VLocal";
+
+        auto v_local = add_vertex_attribute<uint16_t>(name, 1);
+
+        for_each_vertex(HOST, [&](const VertexHandle vh) {
+            (*v_local)(vh) = vh.local_id();
+        });
+
+        auto ret = m_polyscope_mesh->addVertexScalarQuantity(name, *v_local);
+
+        remove_attribute(name);
+
+        return ret;
+    }
 #endif
 
     /**
@@ -1447,6 +1532,7 @@ class RXMeshStatic : public RXMesh
             }
         }
     }
+
     void register_polyscope()
     {
         update_polyscope_edge_map();

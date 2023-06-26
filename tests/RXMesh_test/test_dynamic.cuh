@@ -232,9 +232,9 @@ TEST(RXMeshDynamic, RandomFlips)
 #if USE_POLYSCOPE
     rx.update_polyscope();
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-    rx.polyscope_render_vertex_patch();
-    rx.polyscope_render_edge_patch();
-    rx.polyscope_render_face_patch();
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();
     rx.get_polyscope_mesh()
         ->addEdgeScalarQuantity("toFlip", *to_flip)
         ->setMapRange({0, 2});
@@ -284,9 +284,9 @@ TEST(RXMeshDynamic, RandomFlips)
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
-    rx.polyscope_render_vertex_patch();
-    rx.polyscope_render_edge_patch();
-    rx.polyscope_render_face_patch();
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();
 
     for (uint32_t p = 0; p < rx.get_num_patches(); ++p) {
         rx.render_patch(p)->setEnabled(false);
@@ -317,9 +317,9 @@ TEST(RXMeshDynamic, PatchSlicing)
     auto coords = rx.get_input_vertex_coordinates();
 
 #if USE_POLYSCOPE
-    rx.polyscope_render_vertex_patch();
-    rx.polyscope_render_edge_patch();
-    rx.polyscope_render_face_patch();
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();
     rx.render_patch(0)->setEnabled(false);
     rx.render_patch(1)->setEnabled(false);
 #endif
@@ -339,9 +339,9 @@ TEST(RXMeshDynamic, PatchSlicing)
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
-    rx.polyscope_render_vertex_patch();
-    rx.polyscope_render_edge_patch();
-    rx.polyscope_render_face_patch();
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();
 
     for (uint32_t p = 0; p < rx.get_num_patches(); ++p) {
         rx.render_patch(p)->setEnabled(false);
