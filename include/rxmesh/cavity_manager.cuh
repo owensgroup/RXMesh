@@ -124,6 +124,7 @@ struct CavityManager
      */
     __device__ __inline__ uint16_t get_cavity_size(uint16_t c) const
     {
+        assert(c < m_s_num_cavities[0]);
         return m_s_cavity_size_prefix[c + 1] - m_s_cavity_size_prefix[c];
     }
 
@@ -252,7 +253,8 @@ struct CavityManager
      */
     __device__ __inline__ void deactivate_conflicting_cavities(
         const uint16_t num_elements,
-        uint16_t*      element_cavity_id);
+        uint16_t*      element_cavity_id,
+        const Bitmask& active_bitmask);
 
 
     /**
@@ -291,13 +293,14 @@ struct CavityManager
      * If we fail, we just atomically increment num_elements and set the
      * corresponding bit in active_bitmask. There is a special case when it
      * comes to fill in spots of in-cavity elements that are not-owned. We need
-     * to left this spots clear since we use them as a key in the hashtable
+     * to leave these spots clear since we use them as a key in the hashtable
      * in order to change their ownership. If we filled them in, and added an
      * element (which are initially not-owned), we will pollute the hashtable
      * and won't be able to get the owner element in order to change their
      * ownership flag during ownership_change(). However, after
-     * ownership_change, all sports are available to be reactivated
-     *
+     * ownership_change, we should leave only spots that are in-cavity and
+     * not-owned since we use the corresponding entries in the hashtable of
+     * these spots in hashtable calibration
      */
     __device__ __inline__ uint16_t add_element(Bitmask&       active_bitmask,
                                                uint16_t*      num_elements,

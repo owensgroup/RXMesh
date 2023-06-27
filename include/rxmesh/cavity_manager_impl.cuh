@@ -32,6 +32,7 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
 
         // get a patch
         s_patch_id = m_context.m_patch_scheduler.pop();
+        // s_patch_id = blockIdx.x;
 
         if (s_patch_id != INVALID32) {
             if (m_context.m_patches_info[s_patch_id].patch_id == INVALID32) {
@@ -389,7 +390,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
 
     // Clear bitmask for elements in the (active) cavity to indicate that
     // they are deleted (but only in shared memory)
-    // TODO optimize this based on CavityOp
     clear_bitmask_if_in_cavity();
     block.sync();
 
@@ -528,11 +528,14 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void
 CavityManager<blockThreads, cop>::deactivate_conflicting_cavities()
 {
-    deactivate_conflicting_cavities(m_s_num_vertices[0], m_s_cavity_id_v);
+    deactivate_conflicting_cavities(
+        m_s_num_vertices[0], m_s_cavity_id_v, m_s_active_mask_v);
 
-    deactivate_conflicting_cavities(m_s_num_edges[0], m_s_cavity_id_e);
+    deactivate_conflicting_cavities(
+        m_s_num_edges[0], m_s_cavity_id_e, m_s_active_mask_e);
 
-    deactivate_conflicting_cavities(m_s_num_faces[0], m_s_cavity_id_f);
+    deactivate_conflicting_cavities(
+        m_s_num_faces[0], m_s_cavity_id_f, m_s_active_mask_f);
 }
 
 
@@ -540,11 +543,13 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void
 CavityManager<blockThreads, cop>::deactivate_conflicting_cavities(
     const uint16_t num_elements,
-    uint16_t*      element_cavity_id)
+    uint16_t*      element_cavity_id,
+    const Bitmask& active_bitmask)
 {
     for (uint16_t i = threadIdx.x; i < num_elements; i += blockThreads) {
         const uint32_t c = element_cavity_id[i];
         if (c != INVALID16) {
+            assert(active_bitmask(i));
             if (!m_s_active_cavity_bitmask(c)) {
                 element_cavity_id[i] = INVALID16;
             }
@@ -654,6 +659,49 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
                                                        m_s_num_cavities[0]);
     block.sync();
 
+
+    // we have allocated m_s_cavity_boundary_edges with size equal to number of
+    // edges in the patch. However, total number of edges that represent all
+    // cavities boundary could be larger than the number of edges in the patch
+    // since one edge could be on the boundary of two cavities.
+    // Thus we prune out cavities that could have overflown
+    // m_s_cavity_boundary_edges
+
+    // deactivate the cavities
+    for (uint16_t c = threadIdx.x; c < m_s_num_cavities[0]; c += blockThreads) {
+        if (m_s_cavity_size_prefix[c + 1] >= m_s_num_edges[0]) {
+            m_s_active_cavity_bitmask.reset(c, true);
+        }
+    }
+    block.sync();
+
+    // reactivate elements that now fall in a deactivated cavity
+    auto reactivate_elements = [&](Bitmask&       active_bitmask,
+                                   Bitmask&       in_cavity,
+                                   uint16_t*      element_cavity_id,
+                                   const uint16_t num_elements) {
+        for (uint16_t b = threadIdx.x; b < num_elements; b += blockThreads) {
+            const uint16_t c = element_cavity_id[b];
+            if (c != INVALID16) {
+                if (!m_s_active_cavity_bitmask(c)) {
+                    active_bitmask.set(b, true);
+                    in_cavity.reset(b, true);
+                    element_cavity_id[b] = INVALID16;
+                }
+            }
+        }
+    };
+    reactivate_elements(m_s_active_mask_v,
+                        m_s_in_cavity_v,
+                        m_s_cavity_id_v,
+                        m_s_num_vertices[0]);
+    reactivate_elements(
+        m_s_active_mask_e, m_s_in_cavity_e, m_s_cavity_id_e, m_s_num_edges[0]);
+    reactivate_elements(
+        m_s_active_mask_f, m_s_in_cavity_f, m_s_cavity_id_f, m_s_num_faces[0]);
+
+    block.sync();
+
     for (uint16_t i = 0; i < itemPerThread; ++i) {
         if (local_offset[i] != INVALID16) {
 
@@ -661,32 +709,35 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
 
             const uint16_t face_cavity = m_s_cavity_id_f[f];
 
-            int num_added = 0;
+            if (face_cavity != INVALID16) {
 
-            const uint16_t e0 = m_s_fe[3 * f + 0];
-            const uint16_t e1 = m_s_fe[3 * f + 1];
-            const uint16_t e2 = m_s_fe[3 * f + 2];
+                int num_added = 0;
 
-            const uint16_t c0 = m_s_cavity_id_e[e0 >> 1];
-            const uint16_t c1 = m_s_cavity_id_e[e1 >> 1];
-            const uint16_t c2 = m_s_cavity_id_e[e2 >> 1];
+                const uint16_t e0 = m_s_fe[3 * f + 0];
+                const uint16_t e1 = m_s_fe[3 * f + 1];
+                const uint16_t e2 = m_s_fe[3 * f + 2];
+
+                const uint16_t c0 = m_s_cavity_id_e[e0 >> 1];
+                const uint16_t c1 = m_s_cavity_id_e[e1 >> 1];
+                const uint16_t c2 = m_s_cavity_id_e[e2 >> 1];
 
 
-            auto check_and_add = [&](const uint16_t c, const uint16_t e) {
-                if (c == INVALID16) {
-                    uint16_t offset = m_s_cavity_size_prefix[face_cavity] +
-                                      local_offset[i] + num_added;
-                    m_s_cavity_boundary_edges[offset] = e;
-                    num_added++;
-                }
-            };
+                auto check_and_add = [&](const uint16_t c, const uint16_t e) {
+                    if (c == INVALID16) {
+                        uint16_t offset = m_s_cavity_size_prefix[face_cavity] +
+                                          local_offset[i] + num_added;
+                        assert(offset < m_s_num_edges[0]);
+                        m_s_cavity_boundary_edges[offset] = e;
+                        num_added++;
+                    }
+                };
 
-            check_and_add(c0, e0);
-            check_and_add(c1, e1);
-            check_and_add(c2, e2);
+                check_and_add(c0, e0);
+                check_and_add(c1, e1);
+                check_and_add(c2, e2);
+            }
         }
     }
-    block.sync();
 }
 
 
@@ -698,58 +749,63 @@ CavityManager<blockThreads, cop>::sort_cavities_edge_loop()
     // TODO need to increase the parallelism in this part. It should be at
     // least one warp processing one cavity
     for (uint16_t c = threadIdx.x; c < m_s_num_cavities[0]; c += blockThreads) {
+        if (m_s_active_cavity_bitmask(c)) {
+            // Specify the starting edge of the cavity before sorting everything
+            // TODO this may be tuned for different CavityOp's
+            static_assert(cop == CavityOp::E);
 
-        // Specify the starting edge of the cavity before sorting everything
-        // TODO this may be tuned for different CavityOp's
-        static_assert(cop == CavityOp::E);
-
-        uint16_t cavity_edge_src_vertex;
-        for (uint16_t e = 0; e < m_s_num_edges[0]; ++e) {
-            if (m_s_cavity_id_e[e] == c) {
-                cavity_edge_src_vertex = m_s_ev[2 * e];
-                break;
-            }
-        }
-
-        const uint16_t start = m_s_cavity_size_prefix[c];
-        const uint16_t end   = m_s_cavity_size_prefix[c + 1];
-
-        for (uint16_t e = start; e < end; ++e) {
-            uint32_t edge = m_s_cavity_boundary_edges[e];
-
-            assert(m_s_active_mask_e((edge >> 1)));
-            if (get_cavity_vertex(c, e - start).local_id() ==
-                cavity_edge_src_vertex) {
-                uint16_t temp = m_s_cavity_boundary_edges[start];
-                m_s_cavity_boundary_edges[start] = edge;
-                m_s_cavity_boundary_edges[e]     = temp;
-                break;
-            }
-        }
-
-
-        for (uint16_t e = start; e < end; ++e) {
-            uint16_t edge;
-            uint8_t  dir;
-            Context::unpack_edge_dir(m_s_cavity_boundary_edges[e], edge, dir);
-            uint16_t end_vertex = m_s_ev[2 * edge + 1];
-            if (dir) {
-                end_vertex = m_s_ev[2 * edge];
-            }
-
-            for (uint16_t i = e + 1; i < end; ++i) {
-                uint32_t ee = m_s_cavity_boundary_edges[i] >> 1;
-                uint32_t v0 = m_s_ev[2 * ee + 0];
-                uint32_t v1 = m_s_ev[2 * ee + 1];
-
-                assert(m_s_active_mask_v(v0));
-                assert(m_s_active_mask_v(v1));
-                if (v0 == end_vertex || v1 == end_vertex) {
-                    uint16_t temp = m_s_cavity_boundary_edges[e + 1];
-                    m_s_cavity_boundary_edges[e + 1] =
-                        m_s_cavity_boundary_edges[i];
-                    m_s_cavity_boundary_edges[i] = temp;
+            uint16_t cavity_edge_src_vertex;
+            for (uint16_t e = 0; e < m_s_num_edges[0]; ++e) {
+                if (m_s_cavity_id_e[e] == c) {
+                    cavity_edge_src_vertex = m_s_ev[2 * e];
                     break;
+                }
+            }
+
+            const uint16_t start = m_s_cavity_size_prefix[c];
+            const uint16_t end   = m_s_cavity_size_prefix[c + 1];
+
+            assert(end >= start);
+
+
+            for (uint16_t e = start; e < end; ++e) {
+                uint32_t edge = m_s_cavity_boundary_edges[e];
+
+                assert(m_s_active_mask_e((edge >> 1)));
+                if (get_cavity_vertex(c, e - start).local_id() ==
+                    cavity_edge_src_vertex) {
+                    uint16_t temp = m_s_cavity_boundary_edges[start];
+                    m_s_cavity_boundary_edges[start] = edge;
+                    m_s_cavity_boundary_edges[e]     = temp;
+                    break;
+                }
+            }
+
+
+            for (uint16_t e = start; e < end; ++e) {
+                uint16_t edge;
+                uint8_t  dir;
+                Context::unpack_edge_dir(
+                    m_s_cavity_boundary_edges[e], edge, dir);
+                uint16_t end_vertex = m_s_ev[2 * edge + 1];
+                if (dir) {
+                    end_vertex = m_s_ev[2 * edge];
+                }
+
+                for (uint16_t i = e + 1; i < end; ++i) {
+                    uint32_t ee = m_s_cavity_boundary_edges[i] >> 1;
+                    uint32_t v0 = m_s_ev[2 * ee + 0];
+                    uint32_t v1 = m_s_ev[2 * ee + 1];
+
+                    assert(m_s_active_mask_v(v0));
+                    assert(m_s_active_mask_v(v1));
+                    if (v0 == end_vertex || v1 == end_vertex) {
+                        uint16_t temp = m_s_cavity_boundary_edges[e + 1];
+                        m_s_cavity_boundary_edges[e + 1] =
+                            m_s_cavity_boundary_edges[i];
+                        m_s_cavity_boundary_edges[i] = temp;
+                        break;
+                    }
                 }
             }
         }
@@ -766,9 +822,11 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::for_each_cavity(
     // TODO need to increase the parallelism in this part. It should be at
     // least one warp processing one cavity
     for (uint16_t c = threadIdx.x; c < m_s_num_cavities[0]; c += blockThreads) {
-        const uint16_t size = get_cavity_size(c);
-        if (size > 0) {
-            FillInFunc(c, size);
+        if (m_s_active_cavity_bitmask(c)) {
+            const uint16_t size = get_cavity_size(c);
+            if (size > 0) {
+                FillInFunc(c, size);
+            }
         }
     }
 
@@ -782,6 +840,7 @@ CavityManager<blockThreads, cop>::get_cavity_edge(uint16_t c, uint16_t i) const
 {
     assert(c < m_s_num_cavities[0]);
     assert(i < get_cavity_size(c));
+    assert(m_s_active_cavity_bitmask(c));
     return DEdgeHandle(
         m_patch_info.patch_id,
         m_s_cavity_boundary_edges[m_s_cavity_size_prefix[c] + i]);
@@ -795,6 +854,7 @@ CavityManager<blockThreads, cop>::get_cavity_vertex(uint16_t c,
 {
     assert(c < m_s_num_cavities[0]);
     assert(i < get_cavity_size(c));
+    assert(m_s_active_cavity_bitmask(c));
 
     uint16_t edge;
     flag_t   dir;
@@ -1886,10 +1946,6 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
         lid       = owner.local_id();
     }
 
-    // HandleT owner = m_context.get_owner_handle(HandleT(src_patch, {lid}));
-    // src_patch     = owner.patch_id();
-    // lid           = owner.local_id();
-
     // if the owner src_patch is the same as the patch associated with this
     // cavity, the lid is the local index we are looking for
     if (src_patch == m_patch_info.patch_id) {
@@ -2076,6 +2132,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::update_attribute(
             assert(h.patch_id() != p);
             assert(h.patch_id() != INVALID32);
             assert(h.local_id() != INVALID16);
+            assert(h.patch_id() < m_context.m_max_num_patches);
 
             for (uint32_t attr = 0; attr < num_attr; ++attr) {
                 attribute(p, vp, attr) = attribute(h, attr);

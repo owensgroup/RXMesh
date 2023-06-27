@@ -132,7 +132,7 @@ __device__ __forceinline__ void e_v_diamond(
         s_output_value[4 * e + 0] = src;
         s_output_value[4 * e + 2] = dst;
     }
-
+    block.sync();
 
     for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
 
@@ -143,9 +143,11 @@ __device__ __forceinline__ void e_v_diamond(
             for (int i = 0; i < 3; ++i) {
                 f_e[i] = s_fe[3 * f + i];
                 Context::unpack_edge_dir(f_e[i], f_e[i], f_dir[i]);
+                assert(f_e[i] < num_edges);
                 uint16_t id = (4 * f_e[i]) + (2 * f_dir[i]);
                 assert(id < 4 * num_edges);
                 f_v[i] = s_output_value[id];
+                assert(f_v[i] < patch_info.num_vertices[0]);
             }
 
             for (int i = 0; i < 3; ++i) {
