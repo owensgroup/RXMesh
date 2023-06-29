@@ -536,38 +536,7 @@ __global__ static void remove_surplus_elements(const Context context)
                                        s_owned_f,
                                        s_face_tag);
     block.sync();
-    /*if (threadIdx.x == 0) {
-        bool seen_invalid = false;
-        bool has_gap      = false;
-        bool changed      = false;
-        for (uint32_t i = 0; i < uint16_t(PatchStash::stash_size); ++i) {
-            if (s_patch_stash[i] != pi.patch_stash.m_stash[i]) {
-                changed = true;
-            }
-            if (!seen_invalid) {
-                if (s_patch_stash[i] == INVALID32) {
-                    seen_invalid = true;
-                }
-            } else {
-                if (s_patch_stash[i] != INVALID32) {
-                    has_gap = true;
-                }
-            }
-        }
 
-        if (changed) {
-            printf("\npatch %u has changed", pid);
-        }
-        if (has_gap) {
-            printf("\npatch %u has gap", pid);
-        }
-        if (pid == 0) {
-            for (uint32_t i = 0; i < uint16_t(PatchStash::stash_size); ++i) {
-                printf(
-                    "\n b= %u, stash[%u]=%u ", blockIdx.x, i, s_patch_stash[i]);
-            }
-        }
-    }*/
     block.sync();
     store<blockThreads>(s_patch_stash,
                         uint16_t(PatchStash::stash_size),
@@ -2168,6 +2137,8 @@ void RXMeshDynamic::copy_patch_debug(const uint32_t                  pid,
 
 void RXMeshDynamic::update_host()
 {
+    RXMESH_TRACE("RXMeshDynamic updating host started");
+
     auto resize_masks = [&](uint16_t   size,
                             uint16_t&  capacity,
                             uint32_t*& active_mask,
@@ -2376,6 +2347,8 @@ void RXMeshDynamic::update_host()
                           cudaMemcpyHostToDevice));
 
     this->calc_max_elements();
+
+    RXMESH_TRACE("RXMeshDynamic updating host finished");
 }
 
 void RXMeshDynamic::update_polyscope()
