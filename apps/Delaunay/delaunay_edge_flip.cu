@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/macros.h"
+#include "rxmesh/util/util.h"
 
 struct arg
 {
@@ -23,10 +24,12 @@ TEST(Apps, DelaunayEdgeFlip)
     cuda_query(Arg.device_id);
 
     RXMeshDynamic rx(Arg.obj_file_name);
-    // rx.save(STRINGIFY(OUTPUT_DIR) "torus_patches");
+    // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
+    //        "_patches");
 
-    // RXMeshDynamic rx(Arg.obj_file_name, STRINGIFY(INPUT_DIR)
-    // "torus_patches");
+    // RXMeshDynamic rx(Arg.obj_file_name,
+    //                 STRINGIFY(OUTPUT_DIR) +
+    //                     extract_file_name(Arg.obj_file_name) + "_patches");
 
     ASSERT_TRUE(rx.is_edge_manifold());
 

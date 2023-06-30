@@ -23,19 +23,18 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
         return;
     }
 
+
     // edge diamond query to and calc delaunay condition
     auto is_delaunay = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         // iter[0] and iter[2] are the edge two vertices
         // iter[1] and iter[3] are the two opposite vertices
 
-        if (iter.size() != 4) {
-            return;
-        }
         auto v0 = iter[0];
         auto v1 = iter[2];
 
         auto v2 = iter[1];
         auto v3 = iter[3];
+
 
         // if not a boundary edge
         if (v2.is_valid() && v3.is_valid()) {
@@ -65,16 +64,16 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
             // where v2 and v3 are the opposite vertices to the edge
             //    0
             //  / | \
-            // 3  |  2
+                // 3  |  2
             // \  |  /
             //    1
             // if not delaunay, then we check if flipping it won't create a
             // foldover The case below would create a fold over
             //      0
             //    / | \
-            //   /  1  \
-            //  / /  \  \
-            //  2       3
+                //   /  1  \
+                //  / /  \  \
+                //  2       3
 
 
             T lambda = angle_between_three_vertices(V0, V2, V1);
@@ -101,6 +100,7 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
     query.dispatch<Op::EVDiamond>(block, shrd_alloc, is_delaunay);
     block.sync();
 
+
     // create the cavity
     if (cavity.prologue(block, shrd_alloc)) {
 
@@ -121,8 +121,12 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
                             cavity.get_cavity_edge(c, 2),
                             new_edge.get_flip_dedge());
             d_flipped[0] = 1;
+            // if (threadIdx.x == 0) {
+            //    printf("\n patch= %u passed", cavity.patch_id());
+            //}
         });
     }
+
     cavity.epilogue(block);
 }
 
@@ -192,9 +196,9 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     const uint32_t num_faces    = rx.get_num_faces();
 
 #if USE_POLYSCOPE
-    rx.polyscope_render_vertex_patch();
-    rx.polyscope_render_edge_patch();
-    rx.polyscope_render_face_patch();
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();
 #endif
 
     auto coords = rx.get_input_vertex_coordinates();
@@ -206,50 +210,56 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 
     int h_flipped = 1;
 
-    GPUTimer timer;
-    timer.start();
     int iter = 0;
 
+    float total_time = 0;
+
+    bool validate = false;
     while (h_flipped != 0) {
         CUDA_ERROR(cudaMemset(d_flipped, 0, sizeof(int)));
 
         h_flipped = 0;
         rx.reset_scheduler();
         while (!rx.is_queue_empty()) {
-            RXMESH_INFO("\niter = {}", iter++);
+            RXMESH_INFO("\niter = {}, queue size= {}",
+                        iter++,
+                        rx.get_context().m_patch_scheduler.size());
+
+            GPUTimer timer;
+            timer.start();
+
             LaunchBox<blockThreads> launch_box;
-            rx.prepare_launch_box(
+            rx.update_launch_box(
                 {Op::EVDiamond},
                 launch_box,
                 (void*)delaunay_edge_flip<float, blockThreads>);
+
+
             delaunay_edge_flip<float, blockThreads>
                 <<<launch_box.blocks,
                    launch_box.num_threads,
                    launch_box.smem_bytes_dyn>>>(
                     rx.get_context(), *coords, d_flipped);
-            CUDA_ERROR(cudaDeviceSynchronize());
             rx.slice_patches(*coords);
-            CUDA_ERROR(cudaDeviceSynchronize());
-
             rx.cleanup();
-            CUDA_ERROR(cudaDeviceSynchronize());
-
-            rx.update_host();
-            CUDA_ERROR(cudaDeviceSynchronize());
-
 
             timer.stop();
             CUDA_ERROR(cudaDeviceSynchronize());
             CUDA_ERROR(cudaGetLastError());
-            RXMESH_TRACE(
-                "delaunay_rxmesh() RXMesh Delaunay Edge Flip took {} (ms)",
-                timer.elapsed_millis());
+
+            total_time += timer.elapsed_millis();
+
+            rx.update_host();
+            CUDA_ERROR(cudaDeviceSynchronize());
 
             EXPECT_TRUE(rx.validate());
         }
         CUDA_ERROR(cudaMemcpy(
             &h_flipped, d_flipped, sizeof(int), cudaMemcpyDeviceToHost));
     }
+
+    RXMESH_TRACE("delaunay_rxmesh() RXMesh Delaunay Edge Flip took {} (ms)",
+                 total_time);
 
     coords->move(DEVICE, HOST);
 
@@ -264,7 +274,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
                                             STRINGIFY(OUTPUT_DIR) "temp.obj"));
         EXPECT_TRUE(is_delaunay(tri_mesh));
     }
-    
+
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
@@ -273,9 +283,9 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     ps_mesh->updateVertexPositions(*coords);
     ps_mesh->setEnabled(false);
 
-    rx.polyscope_render_vertex_patch();
-    rx.polyscope_render_edge_patch();
-    rx.polyscope_render_face_patch();
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();
     polyscope::show();
 #endif
     CUDA_ERROR(cudaFree(d_flipped));
