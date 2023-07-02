@@ -401,6 +401,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     sort_cavities_edge_loop();
     block.sync();
 
+    // deactivate a cavity it may leave an imprint on a neighbor patch
+    // deactivate_boundary_cavities(block);
+    // block.sync();
 
     // load hashtables
     load_hashtable(block);
@@ -560,6 +563,98 @@ CavityManager<blockThreads, cop>::deactivate_conflicting_cavities(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void
+CavityManager<blockThreads, cop>::reactivate_elements()
+{
+    reactivate_elements(m_s_active_mask_v,
+                        m_s_in_cavity_v,
+                        m_s_cavity_id_v,
+                        m_s_num_vertices[0]);
+    reactivate_elements(
+        m_s_active_mask_e, m_s_in_cavity_e, m_s_cavity_id_e, m_s_num_edges[0]);
+    reactivate_elements(
+        m_s_active_mask_f, m_s_in_cavity_f, m_s_cavity_id_f, m_s_num_faces[0]);
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::reactivate_elements(
+    Bitmask&       active_bitmask,
+    Bitmask&       in_cavity,
+    uint16_t*      element_cavity_id,
+    const uint16_t num_elements)
+{
+    for (uint16_t b = threadIdx.x; b < num_elements; b += blockThreads) {
+        const uint16_t c = element_cavity_id[b];
+        if (c != INVALID16) {
+            if (!m_s_active_cavity_bitmask(c)) {
+                active_bitmask.set(b, true);
+                in_cavity.reset(b, true);
+                element_cavity_id[b] = INVALID16;
+            }
+        }
+    }
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::deactivate_boundary_cavities(
+    cooperative_groups::thread_block& block)
+{
+    m_s_owned_cavity_bdry_v.reset(block);
+    block.sync();
+
+    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+        if (m_s_active_mask_f(f) ||
+            (!m_s_active_mask_f(f) && m_s_in_cavity_f(f))) {
+
+            const uint16_t edges[3] = {m_s_fe[3 * f + 0] >> 1,
+                                       m_s_fe[3 * f + 1] >> 1,
+                                       m_s_fe[3 * f + 2] >> 1};
+
+            for (int i = 0; i < 3; ++i) {
+                const uint16_t e = edges[i];
+                assert(m_s_active_mask_e(e) || m_s_in_cavity_e(e));
+
+                const uint16_t v0 = m_s_ev[2 * e + 0];
+                const uint16_t v1 = m_s_ev[2 * e + 1];
+
+                assert(m_s_active_mask_v(v0) || m_s_in_cavity_v(v0));
+                assert(m_s_active_mask_v(v1) || m_s_in_cavity_v(v1));
+
+                if (!m_s_owned_mask_f(f) || !m_s_owned_mask_e(e)) {
+                    m_s_owned_cavity_bdry_v.set(v0, true);
+                    m_s_owned_cavity_bdry_v.set(v1, true);
+                }
+            }
+        }
+    }
+    block.sync();
+
+
+    bool     deactivate = false;
+    uint16_t cavity_id  = INVALID16;
+    for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+        for (uint16_t i = 0; i < size; ++i) {
+            uint16_t vertex = get_cavity_vertex(c, i).local_id();
+
+            if (m_s_owned_cavity_bdry_v(vertex)) {
+                deactivate = true;
+                cavity_id  = c;
+            }
+        }
+    });
+
+    if (deactivate) {
+        m_s_active_cavity_bitmask.reset(cavity_id, true);
+    }
+    block.sync();
+
+    reactivate_elements();
+    block.sync();
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
 CavityManager<blockThreads, cop>::clear_bitmask_if_in_cavity()
 {
     clear_bitmask_if_in_cavity(m_s_active_mask_v,
@@ -676,30 +771,7 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
     block.sync();
 
     // reactivate elements that now fall in a deactivated cavity
-    auto reactivate_elements = [&](Bitmask&       active_bitmask,
-                                   Bitmask&       in_cavity,
-                                   uint16_t*      element_cavity_id,
-                                   const uint16_t num_elements) {
-        for (uint16_t b = threadIdx.x; b < num_elements; b += blockThreads) {
-            const uint16_t c = element_cavity_id[b];
-            if (c != INVALID16) {
-                if (!m_s_active_cavity_bitmask(c)) {
-                    active_bitmask.set(b, true);
-                    in_cavity.reset(b, true);
-                    element_cavity_id[b] = INVALID16;
-                }
-            }
-        }
-    };
-    reactivate_elements(m_s_active_mask_v,
-                        m_s_in_cavity_v,
-                        m_s_cavity_id_v,
-                        m_s_num_vertices[0]);
-    reactivate_elements(
-        m_s_active_mask_e, m_s_in_cavity_e, m_s_cavity_id_e, m_s_num_edges[0]);
-    reactivate_elements(
-        m_s_active_mask_f, m_s_in_cavity_f, m_s_cavity_id_f, m_s_num_faces[0]);
-
+    reactivate_elements();
     block.sync();
 
     for (uint16_t i = 0; i < itemPerThread; ++i) {
@@ -1001,7 +1073,8 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::push()
 {
     if (threadIdx.x == 0) {
-        m_context.m_patch_scheduler.push(m_patch_info.patch_id);
+        // bool ret = m_context.m_patch_scheduler.push(m_patch_info.patch_id);
+        // assert(ret);
     }
 }
 
@@ -1084,6 +1157,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     m_s_migrate_mask_v.reset(block);
     m_s_patches_to_lock_mask.reset(block);
     m_s_locked_patches_mask.reset(block);
+    m_s_ownership_change_mask_v.reset(block);
     block.sync();
 
     // Mark vertices on the boundary of all active cavities in this patch
@@ -1424,6 +1498,18 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_v.insert(
                     lp, m_s_table_v, m_s_table_stash_v);
+
+                // if (!inserted) {
+                //    printf("\n T= %u, p= %u, v_load_factor = %f",
+                //           threadIdx.x,
+                //           patch_id(),
+                //           m_patch_info.lp_v.compute_load_factor(m_s_table_v));
+                //    printf("\n T= %u, p= %u, v_stash_load_factor = %f",
+                //           threadIdx.x,
+                //           patch_id(),
+                //           m_patch_info.lp_v.compute_stash_load_factor(
+                //               m_s_table_stash_v));
+                //}
                 assert(inserted);
             }
             block.sync();
@@ -1468,6 +1554,18 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_e.insert(
                     lp, m_s_table_e, m_s_table_stash_e);
+
+                // if (!inserted) {
+                //    printf("\n T= %u, p= %u, e_load_factor = %f",
+                //           threadIdx.x,
+                //           patch_id(),
+                //           m_patch_info.lp_e.compute_load_factor(m_s_table_e));
+                //    printf("\n T= %u, p= %u, e_stash_load_factor = %f",
+                //           threadIdx.x,
+                //           patch_id(),
+                //           m_patch_info.lp_e.compute_stash_load_factor(
+                //               m_s_table_stash_e));
+                //}
                 assert(inserted);
             }
             block.sync();
@@ -1537,6 +1635,18 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_e.insert(
                     lp, m_s_table_e, m_s_table_stash_e);
+
+                // if (!inserted) {
+                //    printf("\n T= %u, p= %u, e_load_factor = %f",
+                //           threadIdx.x,
+                //           patch_id(),
+                //           m_patch_info.lp_e.compute_load_factor(m_s_table_e));
+                //    printf("\n T= %u, p= %u, e_stash_load_factor = %f",
+                //           threadIdx.x,
+                //           patch_id(),
+                //           m_patch_info.lp_e.compute_stash_load_factor(
+                //               m_s_table_stash_e));
+                //}
                 assert(inserted);
             }
             block.sync();
@@ -1572,6 +1682,18 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_f.insert(
                     lp, m_s_table_f, m_s_table_stash_f);
+
+                // if (!inserted) {
+                //    printf("\n T= %u, p= %u, f_load_factor = %f",
+                //           threadIdx.x,
+                //           patch_id(),
+                //           m_patch_info.lp_f.compute_load_factor(m_s_table_f));
+                //    printf("\n T= %u, p= %u, f_stash_load_factor = %f",
+                //           threadIdx.x,
+                //           patch_id(),
+                //           m_patch_info.lp_f.compute_stash_load_factor(
+                //               m_s_table_stash_f));
+                //}
                 assert(inserted);
             }
             block.sync();
@@ -2291,20 +2413,6 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
         }
     } else if (m_s_should_slice[0]) {
         if (threadIdx.x == 0) {
-            // printf(
-            //    "\n should slice =%u, Vertices g(%u), s(%u), cap(%u), Edges "
-            //    "g(%u), s(%u), cap(%u), Face g(%u), s(%u), cap(%u), ",
-            //    patch_id(),
-            //    m_patch_info.num_vertices[0],
-            //    m_s_num_vertices[0],
-            //    m_patch_info.vertices_capacity[0],
-            //    m_patch_info.num_edges[0],
-            //    m_s_num_edges[0],
-            //    m_patch_info.edges_capacity[0],
-            //    m_patch_info.num_faces[0],
-            //    m_s_num_faces[0],
-            //    m_patch_info.faces_capacity[0]);
-            // printf("\n should slice =%u", patch_id());
             m_context.m_patches_info[patch_id()].should_slice = true;
         }
     }

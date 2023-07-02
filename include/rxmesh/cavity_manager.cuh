@@ -190,6 +190,13 @@ struct CavityManager
     __device__ __inline__ void epilogue(
         cooperative_groups::thread_block& block);
 
+    /**
+     * @brief should this patch be sliced. Populated after calling prologue()
+     */
+    __device__ __inline__ bool should_slice() const
+    {
+        return m_s_should_slice[0];
+    }
 
    private:
     /**
@@ -247,6 +254,13 @@ struct CavityManager
 
 
     /**
+     * @brief deactivate a cavity if it requires changing ownership of elements
+     * from another patch
+     */
+    __device__ __inline__ void deactivate_boundary_cavities(
+        cooperative_groups::thread_block& block);
+
+    /**
      * @brief revert the element cavity ID to INVALID16 if the element's cavity
      * ID is a cavity that has been marked as inactive in
      * m_s_active_cavity_bitmask
@@ -255,6 +269,17 @@ struct CavityManager
         const uint16_t num_elements,
         uint16_t*      element_cavity_id,
         const Bitmask& active_bitmask);
+
+    /**
+     * @brief reactivate (set to active) elements if they have been to fall in a
+     * cavity that has been deactivated
+     */
+    __device__ __inline__ void reactivate_elements();
+
+    __device__ __inline__ void reactivate_elements(Bitmask&  active_bitmask,
+                                                   Bitmask&  in_cavity,
+                                                   uint16_t* element_cavity_id,
+                                                   const uint16_t num_elements);
 
 
     /**
@@ -516,7 +541,7 @@ struct CavityManager
     int* m_s_cavity_size_prefix;
 
 
-    // some cavities are inactive since they overlap without cavities.
+    // some cavities are inactive since they overlap with other cavities.
     // we use this bitmask to indicate if the cavity is active or not
     Bitmask m_s_active_cavity_bitmask;
 
