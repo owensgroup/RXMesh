@@ -1073,8 +1073,8 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::push()
 {
     if (threadIdx.x == 0) {
-        // bool ret = m_context.m_patch_scheduler.push(m_patch_info.patch_id);
-        // assert(ret);
+        bool ret = m_context.m_patch_scheduler.push(m_patch_info.patch_id);
+        assert(ret);
     }
 }
 
