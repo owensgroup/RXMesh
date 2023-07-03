@@ -1149,7 +1149,7 @@ __device__ __forceinline__ void CavityManager<blockThreads, cop>::unlock(
 }
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
+__device__ __inline__ void CavityManager<blockThreads, cop>::pre_migrate(
     cooperative_groups::thread_block& block)
 {
     // Some vertices on the boundary of the cavity are owned and other are
@@ -1234,22 +1234,12 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
             }
         }
     }
-    block.sync();
+}
 
-
-    // construct protection zone
-    for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
-        const uint32_t q = m_s_patch_stash.get_patch(st);
-        if (q != INVALID32) {
-            if (!migrate_from_patch(block, st, q, m_s_migrate_mask_v, true)) {
-                return false;
-            }
-        }
-    }
-    block.sync();
-
-
-    // ribbonize protection zone
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void CavityManager<blockThreads, cop>::pre_ribbonize(
+    cooperative_groups::thread_block& block)
+{
     for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
         if (m_s_active_mask_e(e) || m_s_in_cavity_e(e)) {
 
@@ -1287,7 +1277,32 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
             }
         }
     }
+}
 
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
+    cooperative_groups::thread_block& block)
+{
+
+    // prepare vertices that will trigger migration
+    pre_migrate(block);
+    block.sync();
+
+
+    // construct protection zone
+    for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
+        const uint32_t q = m_s_patch_stash.get_patch(st);
+        if (q != INVALID32) {
+            if (!migrate_from_patch(block, st, q, m_s_migrate_mask_v, true)) {
+                return false;
+            }
+        }
+    }
+    block.sync();
+
+
+    // ribbonize protection zone
+    pre_ribbonize(block);
     block.sync();
 
     for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
@@ -1300,6 +1315,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     }
     block.sync();
 
+    // make sure that we locked the owner (not a proxy for the owner)
     if (!ensure_ownership<VertexHandle>(block,
                                         m_s_num_vertices[0],
                                         m_s_ownership_change_mask_v,
@@ -1436,7 +1452,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         //    unlock(q_stash_id, q);
         //}
     } else {
-
         // In every call to migrate_vertex/edge/face, threads make sure that
         // they mark patches they read from in m_s_patches_to_lock_mask.
         // At the end of every round, one thread make sure make sure that all

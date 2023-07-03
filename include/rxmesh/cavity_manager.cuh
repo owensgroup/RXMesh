@@ -370,6 +370,15 @@ struct CavityManager
     __device__ __inline__ void unlock_locked_patches();
 
     /**
+     * @brief prepare m_s_migrate_mask_v, m_s_owned_cavity_bdry_v,
+     * m_s_ownership_change_mask_v, m_s_ownership_change_mask_f,
+     * m_s_ownership_change_mask_e with vertices/edge/faces that on the boundary
+     * or inside a cavity but not owned by this patch
+     */
+    __device__ __inline__ void pre_migrate(
+        cooperative_groups::thread_block& block);
+
+    /**
      * @brief migrate vertices/edges/faces from neighbor patches to this patch
      */
     __device__ __inline__ bool migrate(cooperative_groups::thread_block& block);
@@ -506,6 +515,12 @@ struct CavityManager
      * if all patches were locked and false otherwise. Update
      */
     __device__ __inline__ bool lock_patches_to_lock(
+        cooperative_groups::thread_block& block);
+
+    /**
+     * @brief prepare m_s_ribbonize_v with vertices that need to be ribbonize
+     */
+    __device__ __inline__ void pre_ribbonize(
         cooperative_groups::thread_block& block);
 
     /**
