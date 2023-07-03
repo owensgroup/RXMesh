@@ -604,8 +604,7 @@ CavityManager<blockThreads, cop>::deactivate_boundary_cavities(
     block.sync();
 
     for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
-        if (m_s_active_mask_f(f) ||
-            (!m_s_active_mask_f(f) && m_s_in_cavity_f(f))) {
+        if (m_s_active_mask_f(f) || m_s_in_cavity_f(f)) {
 
             const uint16_t edges[3] = {m_s_fe[3 * f + 0] >> 1,
                                        m_s_fe[3 * f + 1] >> 1,
@@ -630,23 +629,34 @@ CavityManager<blockThreads, cop>::deactivate_boundary_cavities(
     }
     block.sync();
 
+    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+        if (m_s_active_mask_e(e) || m_s_in_cavity_e(e)) {
 
-    bool     deactivate = false;
-    uint16_t cavity_id  = INVALID16;
+            const uint16_t v0 = m_s_ev[2 * e + 0];
+            const uint16_t v1 = m_s_ev[2 * e + 1];
+
+            assert(m_s_active_mask_v(v0) || m_s_in_cavity_v(v0));
+            assert(m_s_active_mask_v(v1) || m_s_in_cavity_v(v1));
+
+            if (!m_s_owned_mask_v(v0) || !m_s_owned_mask_v(v1) ||
+                !m_s_owned_mask_e(e)) {
+                m_s_owned_cavity_bdry_v.set(v0, true);
+                m_s_owned_cavity_bdry_v.set(v1, true);
+            }
+        }
+    }
+    block.sync();
+
     for_each_cavity(block, [&](uint16_t c, uint16_t size) {
         for (uint16_t i = 0; i < size; ++i) {
             uint16_t vertex = get_cavity_vertex(c, i).local_id();
 
-            if (m_s_owned_cavity_bdry_v(vertex)) {
-                deactivate = true;
-                cavity_id  = c;
+            if (m_s_owned_cavity_bdry_v(vertex) || !m_s_owned_mask_v(vertex)) {
+                m_s_active_cavity_bitmask.reset(c, true);
+                break;
             }
         }
     });
-
-    if (deactivate) {
-        m_s_active_cavity_bitmask.reset(cavity_id, true);
-    }
     block.sync();
 
     reactivate_elements();
