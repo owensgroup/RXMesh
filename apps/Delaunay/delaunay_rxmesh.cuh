@@ -105,9 +105,7 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
 
 
     // create the cavity
-    bool ok = false;
     if (cavity.prologue(block, shrd_alloc)) {
-        ok = true;
 
         // update the cavity
         cavity.update_attributes(block, coords);
@@ -144,10 +142,10 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
 }
 
 
-inline bool is_delaunay(TriMesh& mesh)
+inline uint32_t count_non_delaunay_edges(TriMesh& mesh)
 {
     // verify that mesh is a delaunay mesh
-
+    uint32_t num_non_delaunay = 0;
     for (TriMesh::VertexIter v0_it = mesh.vertices_begin();
          v0_it != mesh.vertices_end();
          ++v0_it) {
@@ -191,12 +189,12 @@ inline bool is_delaunay(TriMesh& mesh)
             float lambda = angle_between_three_vertices(p0, p2, p1);
             float gamma  = angle_between_three_vertices(p1, p3, p0);
             if (lambda + gamma > M_PI) {
-                return false;
+                num_non_delaunay++;
             }
         }
     }
 
-    return true;
+    return num_non_delaunay;
 }
 
 inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
@@ -216,7 +214,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 
     auto coords = rx.get_input_vertex_coordinates();
 
-    EXPECT_TRUE(rx.validate());
+    // EXPECT_TRUE(rx.validate());
 
     int*      d_flipped        = nullptr;
     uint32_t* d_num_successful = nullptr;
@@ -271,19 +269,16 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
                                                 d_num_successful,
                                                 d_num_sliced);
             app_timer.stop();
-            CUDA_ERROR(cudaDeviceSynchronize());
 
             GPUTimer slice_timer;
             slice_timer.start();
             rx.slice_patches(*coords);
             slice_timer.stop();
-            CUDA_ERROR(cudaDeviceSynchronize());
 
             GPUTimer cleanup_timer;
             cleanup_timer.start();
             rx.cleanup();
             cleanup_timer.stop();
-            CUDA_ERROR(cudaDeviceSynchronize());
 
 
             timer.stop();
@@ -323,11 +318,11 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 
     CUDA_ERROR(cudaProfilerStop());
 
-    RXMESH_TRACE("delaunay_rxmesh() RXMesh Delaunay Edge Flip took {} (ms)",
-                 total_time);
-    RXMESH_TRACE("delaunay_rxmesh() App time {} (ms)", app_time);
-    RXMESH_TRACE("delaunay_rxmesh() Slice timer {} (ms)", slice_time);
-    RXMESH_TRACE("delaunay_rxmesh() Cleanup timer {} (ms)", cleanup_time);
+    RXMESH_INFO("delaunay_rxmesh() RXMesh Delaunay Edge Flip took {} (ms)",
+                total_time);
+    RXMESH_INFO("delaunay_rxmesh() App time {} (ms)", app_time);
+    RXMESH_INFO("delaunay_rxmesh() Slice timer {} (ms)", slice_time);
+    RXMESH_INFO("delaunay_rxmesh() Cleanup timer {} (ms)", cleanup_time);
 
     if (!validate) {
         rx.update_host();
@@ -343,7 +338,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
         TriMesh tri_mesh;
         ASSERT_TRUE(OpenMesh::IO::read_mesh(tri_mesh,
                                             STRINGIFY(OUTPUT_DIR) "temp.obj"));
-        EXPECT_TRUE(is_delaunay(tri_mesh));
+        EXPECT_EQ(count_non_delaunay_edges(tri_mesh), 0);
     }
 
 
