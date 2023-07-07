@@ -542,6 +542,18 @@ struct CavityManager
         const LPPair*                     s_table,
         const LPPair*                     s_stash);
 
+    /**
+     * @brief give a patch q, set a bit in s_in_patch if element x appears in
+     * s_table/s_stash.
+     */
+    template <typename HandleT>
+    __device__ __inline__ void populate_in_patch(
+        cooperative_groups::thread_block& block,
+        uint8_t                           q_stash,
+        Bitmask&                          s_in_patch,
+        const LPPair*                     s_table,
+        const LPPair*                     s_stash);
+
     // indicate if this block can write its updates to global memory during
     // epilogue
     bool m_write_to_gmem;
@@ -590,6 +602,11 @@ struct CavityManager
 
     // indicate if the mesh element is in the interior of the cavity
     Bitmask m_s_in_cavity_v, m_s_in_cavity_e, m_s_in_cavity_f;
+
+    // given a patch q, this bitmask store whether a vertex/edge/face in q is
+    // stored in the hashtable of this patch (p). Thus, this bitmask used the
+    // index space of q
+    Bitmask m_s_in_patch_v, m_s_in_patch_e, m_s_in_patch_f;
 
     bool* m_s_readd_to_queue;
 

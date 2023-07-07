@@ -382,13 +382,13 @@ class RXMeshDynamic : public RXMeshStatic
     }
 
 
-     /**
+    /**
      * @brief populate the launch_box with grid size and dynamic shared memory
-     * needed for a kernel that may use dynamic and query operations. Similar 
-     * to prepare_launch_box but here we don't do any checks to verify that 
+     * needed for a kernel that may use dynamic and query operations. Similar
+     * to prepare_launch_box but here we don't do any checks to verify that
      * the amount of shared memory is okay and we don't print any info. This
      * function can be used to update the launch box in a loop where priniting
-     * out info could impact the timing 
+     * out info could impact the timing
      * @param op List of query operations done inside the kernel
      * @param launch_box input launch box to be populated
      * @param kernel The kernel to be launched
@@ -459,12 +459,12 @@ class RXMeshDynamic : public RXMeshStatic
         // owned_cavity_bdry (for vertices only), ribbonize (for vertices only)
         // added_to_lp, in_cavity
         size_t bitmasks_shmem = 0;
-        bitmasks_shmem += 10 * detail::mask_num_bytes(vertex_cap) +
-                          10 * ShmemAllocator::default_alignment;
-        bitmasks_shmem += 7 * detail::mask_num_bytes(edge_cap) +
-                          7 * ShmemAllocator::default_alignment;
-        bitmasks_shmem += 5 * detail::mask_num_bytes(face_cap) +
-                          5 * ShmemAllocator::default_alignment;
+        bitmasks_shmem += 11 * detail::mask_num_bytes(vertex_cap) +
+                          11 * ShmemAllocator::default_alignment;
+        bitmasks_shmem += 8 * detail::mask_num_bytes(edge_cap) +
+                          8 * ShmemAllocator::default_alignment;
+        bitmasks_shmem += 6 * detail::mask_num_bytes(face_cap) +
+                          6 * ShmemAllocator::default_alignment;
 
         // active cavity bitmask
         bitmasks_shmem += detail::mask_num_bytes(face_cap / 2);
