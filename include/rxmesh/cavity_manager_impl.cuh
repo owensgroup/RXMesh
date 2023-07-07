@@ -1446,12 +1446,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
     block.sync();
 
 
-    if (s_ok_q == 0) {
-        // if (!was_locked) {
-        //    // we should not keep q locked only if it was not locked before
-        //    unlock(q_stash_id, q);
-        //}
-    } else {
+    if (s_ok_q != 0) {
         // In every call to migrate_vertex/edge/face, threads make sure that
         // they mark patches they read from in m_s_patches_to_lock_mask.
         // At the end of every round, one thread make sure make sure that all
@@ -1523,18 +1518,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_v.insert(
                     lp, m_s_table_v, m_s_table_stash_v);
-
-                // if (!inserted) {
-                //    printf("\n T= %u, p= %u, v_load_factor = %f",
-                //           threadIdx.x,
-                //           patch_id(),
-                //           m_patch_info.lp_v.compute_load_factor(m_s_table_v));
-                //    printf("\n T= %u, p= %u, v_stash_load_factor = %f",
-                //           threadIdx.x,
-                //           patch_id(),
-                //           m_patch_info.lp_v.compute_stash_load_factor(
-                //               m_s_table_stash_v));
-                //}
                 assert(inserted);
             }
             block.sync();
@@ -1579,18 +1562,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_e.insert(
                     lp, m_s_table_e, m_s_table_stash_e);
-
-                // if (!inserted) {
-                //    printf("\n T= %u, p= %u, e_load_factor = %f",
-                //           threadIdx.x,
-                //           patch_id(),
-                //           m_patch_info.lp_e.compute_load_factor(m_s_table_e));
-                //    printf("\n T= %u, p= %u, e_stash_load_factor = %f",
-                //           threadIdx.x,
-                //           patch_id(),
-                //           m_patch_info.lp_e.compute_stash_load_factor(
-                //               m_s_table_stash_e));
-                //}
                 assert(inserted);
             }
             block.sync();
@@ -1660,18 +1631,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_e.insert(
                     lp, m_s_table_e, m_s_table_stash_e);
-
-                // if (!inserted) {
-                //    printf("\n T= %u, p= %u, e_load_factor = %f",
-                //           threadIdx.x,
-                //           patch_id(),
-                //           m_patch_info.lp_e.compute_load_factor(m_s_table_e));
-                //    printf("\n T= %u, p= %u, e_stash_load_factor = %f",
-                //           threadIdx.x,
-                //           patch_id(),
-                //           m_patch_info.lp_e.compute_stash_load_factor(
-                //               m_s_table_stash_e));
-                //}
                 assert(inserted);
             }
             block.sync();
@@ -1707,18 +1666,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_f.insert(
                     lp, m_s_table_f, m_s_table_stash_f);
-
-                // if (!inserted) {
-                //    printf("\n T= %u, p= %u, f_load_factor = %f",
-                //           threadIdx.x,
-                //           patch_id(),
-                //           m_patch_info.lp_f.compute_load_factor(m_s_table_f));
-                //    printf("\n T= %u, p= %u, f_stash_load_factor = %f",
-                //           threadIdx.x,
-                //           patch_id(),
-                //           m_patch_info.lp_f.compute_stash_load_factor(
-                //               m_s_table_stash_f));
-                //}
                 assert(inserted);
             }
             block.sync();
