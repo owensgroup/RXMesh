@@ -24,6 +24,10 @@ struct CavityManager
         : m_write_to_gmem(true),
           m_s_num_cavities(nullptr),
           m_s_cavity_size_prefix(nullptr),
+          m_s_q_correspondence_e(nullptr),
+          m_s_q_correspondence_vf(nullptr),
+          m_correspondence_size_e(0),
+          m_correspondence_size_vf(0),
           m_s_readd_to_queue(nullptr),
           m_s_ev(nullptr),
           m_s_fe(nullptr),
@@ -543,16 +547,18 @@ struct CavityManager
         const LPPair*                     s_stash);
 
     /**
-     * @brief give a patch q, set a bit in s_in_patch if element x appears in
-     * s_table/s_stash.
+     * @brief give a patch q, we store the corresponding element in p in
+     * s_correspondence. Thus, s_correspondence is indexing via q's index space
      */
     template <typename HandleT>
-    __device__ __inline__ void populate_in_patch(
+    __device__ __inline__ void populate_correspondence(
         cooperative_groups::thread_block& block,
-        uint8_t                           q_stash,
-        Bitmask&                          s_in_patch,
+        const uint8_t                     q_stash,
+        uint16_t*                         s_correspondence,
+        const uint16_t                    s_correspondence_size,
         const LPPair*                     s_table,
         const LPPair*                     s_stash);
+
 
     // indicate if this block can write its updates to global memory during
     // epilogue
@@ -603,10 +609,15 @@ struct CavityManager
     // indicate if the mesh element is in the interior of the cavity
     Bitmask m_s_in_cavity_v, m_s_in_cavity_e, m_s_in_cavity_f;
 
-    // given a patch q, this bitmask store whether a vertex/edge/face in q is
-    // stored in the hashtable of this patch (p). Thus, this bitmask used the
-    // index space of q
-    Bitmask m_s_in_patch_v, m_s_in_patch_e, m_s_in_patch_f;
+    // given a patch q, this buffer stores the p's local index corresponding to
+    // an element in q. Thus, this buffer is indexed using q's index space.
+    // We either need this for (vertices and edges) or (edges and faces) at the
+    // same time. Thus, the buffer use for vertices/faces is being recycled to
+    // serve both
+    uint16_t* m_s_q_correspondence_e;
+    uint16_t* m_s_q_correspondence_vf;
+    uint16_t  m_correspondence_size_e;
+    uint16_t  m_correspondence_size_vf;
 
     bool* m_s_readd_to_queue;
 

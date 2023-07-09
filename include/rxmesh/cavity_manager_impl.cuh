@@ -107,6 +107,16 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     const uint16_t edge_cap = m_patch_info.edges_capacity[0];
     const uint16_t face_cap = m_patch_info.faces_capacity[0];
 
+    const uint16_t max_vertex_cap = static_cast<uint16_t>(
+        m_context.m_capacity_factor *
+        static_cast<float>(m_context.m_max_num_vertices[0]));
+    const uint16_t max_edge_cap =
+        static_cast<uint16_t>(m_context.m_capacity_factor *
+                              static_cast<float>(m_context.m_max_num_edges[0]));
+    const uint16_t max_face_cap =
+        static_cast<uint16_t>(m_context.m_capacity_factor *
+                              static_cast<float>(m_context.m_max_num_faces[0]));
+
     // load EV and FE
     m_s_ev = shrd_alloc.alloc<uint16_t>(2 * edge_cap);
     m_s_fe = shrd_alloc.alloc<uint16_t>(3 * face_cap);
@@ -169,7 +179,6 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     m_s_src_mask_v = Bitmask(m_context.m_max_num_vertices[0], shrd_alloc);
     m_s_src_connect_mask_v =
         Bitmask(m_context.m_max_num_vertices[0], shrd_alloc);
-    m_s_in_patch_v = Bitmask(m_context.m_max_num_vertices[0], shrd_alloc);
 
 
     // edges masks
@@ -180,12 +189,8 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                 m_s_in_cavity_e,
                 m_patch_info.owned_mask_e,
                 m_patch_info.active_mask_e);
-    const uint16_t max_edge_cap =
-        static_cast<uint16_t>(m_context.m_capacity_factor *
-                              static_cast<float>(m_context.m_max_num_edges[0]));
     m_s_src_mask_e = Bitmask(std::max(max_edge_cap, edge_cap), shrd_alloc);
     m_s_src_connect_mask_e = Bitmask(m_context.m_max_num_edges[0], shrd_alloc);
-    m_s_in_patch_e         = Bitmask(m_context.m_max_num_edges[0], shrd_alloc);
 
     // faces masks
     alloc_masks(face_cap,
@@ -195,7 +200,14 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                 m_s_in_cavity_f,
                 m_patch_info.owned_mask_f,
                 m_patch_info.active_mask_f);
-    m_s_in_patch_f = Bitmask(m_context.m_max_num_faces[0], shrd_alloc);
+
+    // correspondence
+    m_correspondence_size_e = max_edge_cap;
+    m_s_q_correspondence_e =
+        shrd_alloc.alloc<uint16_t>(m_correspondence_size_e);
+    m_correspondence_size_vf = std::max(max_face_cap, max_vertex_cap);
+    m_s_q_correspondence_vf =
+        shrd_alloc.alloc<uint16_t>(m_correspondence_size_vf);
 
     // patch to lock
     __shared__ uint32_t p_to_lock[PatchStash::stash_size];
@@ -1459,20 +1471,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         // they mark patches they read from in m_s_patches_to_lock_mask.
         // At the end of every round, one thread make sure make sure that all
         // patches marked in m_s_patches_to_lock_mask are actually locked.
-        assert(m_s_in_patch_v.m_bitmask != nullptr);
-        assert(m_s_in_patch_e.m_bitmask != nullptr);
-        assert(m_s_in_patch_f.m_bitmask != nullptr);
-        m_s_in_patch_v.reset(block);
-        m_s_in_patch_e.reset(block);
-        m_s_in_patch_f.reset(block);
-        block.sync();
-
-        populate_in_patch<VertexHandle>(
-            block, q_stash_id, m_s_in_patch_v, m_s_table_v, m_s_table_stash_v);
-        populate_in_patch<EdgeHandle>(
-            block, q_stash_id, m_s_in_patch_e, m_s_table_e, m_s_table_stash_e);
-        populate_in_patch<FaceHandle>(
-            block, q_stash_id, m_s_in_patch_f, m_s_table_f, m_s_table_stash_f);
 
         PatchInfo q_patch_info = m_context.m_patches_info[q];
 
@@ -1504,6 +1502,13 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 }
             }
         }
+
+        populate_correspondence<VertexHandle>(block,
+                                              q_stash_id,
+                                              m_s_q_correspondence_vf,
+                                              m_correspondence_size_vf,
+                                              m_s_table_v,
+                                              m_s_table_stash_v);
         block.sync();
 
         // 3. make sure there is a copy in p for any vertex in
@@ -1542,8 +1547,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                     lp, m_s_table_v, m_s_table_stash_v);
                 if (lp.patch_stash_id() == q_stash_id) {
                     assert(lp.local_id_in_owner_patch() <
-                           m_s_in_patch_v.size());
-                    m_s_in_patch_v.set(lp.local_id_in_owner_patch(), true);
+                           m_correspondence_size_vf);
+                    m_s_q_correspondence_vf[lp.local_id_in_owner_patch()] =
+                        lp.key();
                 }
                 assert(inserted);
             }
@@ -1554,6 +1560,14 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         if (!lock_patches_to_lock(block)) {
             return false;
         }
+
+        populate_correspondence<EdgeHandle>(block,
+                                            q_stash_id,
+                                            m_s_q_correspondence_e,
+                                            m_correspondence_size_e,
+                                            m_s_table_e,
+                                            m_s_table_stash_e);
+        block.sync();
 
         // same story as with the loop that adds vertices
         const uint16_t q_num_edges_up =
@@ -1591,8 +1605,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                     lp, m_s_table_e, m_s_table_stash_e);
                 if (lp.patch_stash_id() == q_stash_id) {
                     assert(lp.local_id_in_owner_patch() <
-                           m_s_in_patch_e.size());
-                    m_s_in_patch_e.set(lp.local_id_in_owner_patch(), true);
+                           m_correspondence_size_e);
+                    m_s_q_correspondence_e[lp.local_id_in_owner_patch()] =
+                        lp.key();
                 }
                 assert(inserted);
             }
@@ -1665,8 +1680,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                     lp, m_s_table_e, m_s_table_stash_e);
                 if (lp.patch_stash_id() == q_stash_id) {
                     assert(lp.local_id_in_owner_patch() <
-                           m_s_in_patch_e.size());
-                    m_s_in_patch_e.set(lp.local_id_in_owner_patch(), true);
+                           m_correspondence_size_e);
+                    m_s_q_correspondence_e[lp.local_id_in_owner_patch()] =
+                        lp.key();
                 }
                 assert(inserted);
             }
@@ -1676,6 +1692,14 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         if (!lock_patches_to_lock(block)) {
             return false;
         }
+
+        populate_correspondence<FaceHandle>(block,
+                                            q_stash_id,
+                                            m_s_q_correspondence_vf,
+                                            m_correspondence_size_vf,
+                                            m_s_table_f,
+                                            m_s_table_stash_f);
+        block.sync();
 
         // same story as with the loop that adds vertices
         const uint16_t q_num_faces_up =
@@ -1705,8 +1729,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                     lp, m_s_table_f, m_s_table_stash_f);
                 if (lp.patch_stash_id() == q_stash_id) {
                     assert(lp.local_id_in_owner_patch() <
-                           m_s_in_patch_f.size());
-                    m_s_in_patch_f.set(lp.local_id_in_owner_patch(), true);
+                           m_correspondence_size_vf);
+                    m_s_q_correspondence_vf[lp.local_id_in_owner_patch()] =
+                        lp.key();
                 }
                 assert(inserted);
             }
@@ -2082,22 +2107,12 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
         src_patch = owner.patch_id();
         lid       = owner.local_id();
     } else {
-        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            if (!m_s_in_patch_v(lid)) {
-                return INVALID16;
-            }
-        }
-
         if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            if (!m_s_in_patch_e(lid)) {
-                return INVALID16;
-            }
-        }
-
-        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            if (!m_s_in_patch_f(lid)) {
-                return INVALID16;
-            }
+            assert(lid < m_correspondence_size_e);
+            return m_s_q_correspondence_e[lid];
+        } else {
+            assert(lid < m_correspondence_size_vf);
+            return m_s_q_correspondence_vf[lid];
         }
     }
 
@@ -2137,19 +2152,27 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
-__device__ __inline__ void CavityManager<blockThreads, cop>::populate_in_patch(
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::populate_correspondence(
     cooperative_groups::thread_block& block,
-    uint8_t                           q_stash,
-    Bitmask&                          s_in_patch,
+    const uint8_t                     q_stash,
+    uint16_t*                         s_correspondence,
+    const uint16_t                    s_correspondence_size,
     const LPPair*                     s_table,
     const LPPair*                     s_stash)
 {
+
+    fill_n<blockThreads>(
+        s_correspondence, s_correspondence_size, uint16_t(INVALID16));
+    block.sync();
+
     LPHashTable lp = m_patch_info.get_lp<HandleT>();
 
     for (uint16_t b = threadIdx.x; b < lp.m_capacity; b += blockThreads) {
         const auto pair = s_table[b];
         if (pair.patch_stash_id() == q_stash) {
-            s_in_patch.set(pair.local_id_in_owner_patch(), true);
+            assert(pair.local_id_in_owner_patch() < s_correspondence_size);
+            s_correspondence[pair.local_id_in_owner_patch()] = pair.key();
         }
     }
 
@@ -2158,10 +2181,12 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::populate_in_patch(
          b += blockThreads) {
         auto pair = s_stash[b];
         if (pair.patch_stash_id() == q_stash) {
-            s_in_patch.set(pair.local_id_in_owner_patch(), true);
+            assert(pair.local_id_in_owner_patch() < s_correspondence_size);
+            s_correspondence[pair.local_id_in_owner_patch()] = pair.key();
         }
     }
 }
+
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>

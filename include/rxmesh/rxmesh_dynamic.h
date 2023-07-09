@@ -459,15 +459,23 @@ class RXMeshDynamic : public RXMeshStatic
         // owned_cavity_bdry (for vertices only), ribbonize (for vertices only)
         // added_to_lp, in_cavity
         size_t bitmasks_shmem = 0;
-        bitmasks_shmem += 11 * detail::mask_num_bytes(vertex_cap) +
-                          11 * ShmemAllocator::default_alignment;
-        bitmasks_shmem += 8 * detail::mask_num_bytes(edge_cap) +
-                          8 * ShmemAllocator::default_alignment;
-        bitmasks_shmem += 6 * detail::mask_num_bytes(face_cap) +
-                          6 * ShmemAllocator::default_alignment;
+        bitmasks_shmem += 10 * detail::mask_num_bytes(vertex_cap) +
+                          10 * ShmemAllocator::default_alignment;
+        bitmasks_shmem += 7 * detail::mask_num_bytes(edge_cap) +
+                          7 * ShmemAllocator::default_alignment;
+        bitmasks_shmem += 5 * detail::mask_num_bytes(face_cap) +
+                          5 * ShmemAllocator::default_alignment;
 
         // active cavity bitmask
         bitmasks_shmem += detail::mask_num_bytes(face_cap / 2);
+
+
+        // correspondence buffer
+        size_t cv = sizeof(uint16_t) * vertex_cap;
+        size_t ce = sizeof(uint16_t) * edge_cap;
+        size_t cf = sizeof(uint16_t) * face_cap;
+        size_t correspond_shmem =
+            std::max(cv + ce, ce + cf) + 2 * ShmemAllocator::default_alignment;
 
         // shared memory is the max of 1. static query shared memory + the
         // cavity ID shared memory (since we need to mark seed elements) 2.
@@ -475,7 +483,7 @@ class RXMeshDynamic : public RXMeshStatic
         // and other things
         launch_box.smem_bytes_dyn =
             std::max(connectivity_shmem + cavity_id_shmem + cavity_bdr_shmem +
-                         cavity_size_shmem + bitmasks_shmem,
+                         cavity_size_shmem + bitmasks_shmem + correspond_shmem,
                      static_shmem + cavity_id_shmem);
 
         if (with_vertex_valence) {

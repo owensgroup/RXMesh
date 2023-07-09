@@ -56,6 +56,7 @@ struct LPHashTable
 
     __device__ __host__ LPHashTable()
         : m_table(nullptr),
+          m_stash(nullptr),
           m_capacity(0),
           m_max_cuckoo_chains(0),
           m_is_on_device(false)
