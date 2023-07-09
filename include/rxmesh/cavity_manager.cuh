@@ -382,6 +382,9 @@ struct CavityManager
     __device__ __inline__ void pre_migrate(
         cooperative_groups::thread_block& block);
 
+    __device__ __inline__ void set_ownership_change_bitmask(
+        cooperative_groups::thread_block& block);
+
     /**
      * @brief migrate vertices/edges/faces from neighbor patches to this patch
      */
@@ -396,21 +399,28 @@ struct CavityManager
         cooperative_groups::thread_block& block,
         const uint8_t                     q_stash_id,
         const uint32_t                    q,
-        const Bitmask&                    migrate_mask_v,
-        const bool                        change_ownership);
+        const Bitmask&                    migrate_mask_v);
+
+    /**
+     * @brief given a neighbor patch (q), migrate vertices (and edges and faces
+     * connected to these vertices) marked in m_s_migrate_mask_v and
+     * m_s_ribbonize_v to the patch managed by this cavity manager
+     */
+    __device__ __inline__ bool migrate_from_patch(
+        cooperative_groups::thread_block& block,
+        const uint8_t                     q_stash_id,
+        const uint32_t                    q);
 
     /**
      * @brief give a neighbor patch q and a vertex in it q_vertex, find the copy
      * of q_vertex in this patch. If it does not exist, create such a copy.
      */
     template <typename FuncT>
-    __device__ __inline__ LPPair migrate_vertex(
-        const uint32_t q,
-        const uint16_t q_num_vertices,
-        const uint16_t q_vertex,
-        const bool     require_ownership_change,
-        PatchInfo&     q_patch_info,
-        FuncT          should_migrate);
+    __device__ __inline__ LPPair migrate_vertex(const uint32_t q,
+                                                const uint16_t q_num_vertices,
+                                                const uint16_t q_vertex,
+                                                PatchInfo&     q_patch_info,
+                                                FuncT          should_migrate);
 
 
     /**
@@ -418,13 +428,11 @@ struct CavityManager
      * of q_edge in this patch. If it does not exist, create such a copy.
      */
     template <typename FuncT>
-    __device__ __inline__ LPPair migrate_edge(
-        const uint32_t q,
-        const uint16_t q_num_edges,
-        const uint16_t q_edge,
-        const bool     require_ownership_change,
-        PatchInfo&     q_patch_info,
-        FuncT          should_migrate);
+    __device__ __inline__ LPPair migrate_edge(const uint32_t q,
+                                              const uint16_t q_num_edges,
+                                              const uint16_t q_edge,
+                                              PatchInfo&     q_patch_info,
+                                              FuncT          should_migrate);
 
 
     /**
@@ -432,13 +440,12 @@ struct CavityManager
      * of q_face in this patch. If it does not exist, create such a copy.
      */
     template <typename FuncT>
-    __device__ __inline__ LPPair migrate_face(
-        const uint32_t q,
-        const uint16_t q_num_faces,
-        const uint16_t q_face,
-        const bool     require_ownership_change,
-        PatchInfo&     q_patch_info,
-        FuncT          should_migrate);
+    __device__ __inline__ LPPair migrate_face(const uint32_t q,
+                                              const uint16_t q_num_faces,
+                                              const uint16_t q_face,
+
+                                              PatchInfo& q_patch_info,
+                                              FuncT      should_migrate);
 
     /**
      * @brief given a local vertex in a patch, find its corresponding local

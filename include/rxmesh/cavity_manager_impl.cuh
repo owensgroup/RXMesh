@@ -33,6 +33,9 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
         // get a patch
         s_patch_id = m_context.m_patch_scheduler.pop();
         // s_patch_id = blockIdx.x;
+        // if (s_patch_id != 0) {
+        //    s_patch_id = INVALID32;
+        //}
 
         if (s_patch_id != INVALID32) {
             if (m_context.m_patches_info[s_patch_id].patch_id == INVALID32) {
@@ -1185,7 +1188,6 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::pre_migrate(
     m_s_migrate_mask_v.reset(block);
     m_s_patches_to_lock_mask.reset(block);
     m_s_locked_patches_mask.reset(block);
-    m_s_ownership_change_mask_v.reset(block);
     block.sync();
 
     // Mark vertices on the boundary of all active cavities in this patch
@@ -1202,56 +1204,10 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::pre_migrate(
                 m_s_owned_cavity_bdry_v.set(vertex, true);
             } else {
                 m_s_migrate_mask_v.set(vertex, true);
-                m_s_ownership_change_mask_v.set(vertex, true);
             }
         }
     });
     block.sync();
-
-
-    // Mark a face in the ownership change (m_s_ownership_change_mask_f) if
-    // one of its edges is connected to a vertex that is marked in
-    // m_s_owned_cavity_bdry_v. Then mark that face's three edges in the
-    // ownership change (m_s_ownership_change_mask_e)
-    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
-        if (!m_s_owned_mask_f(f) &&
-            (m_s_active_mask_f(f) || m_s_in_cavity_f(f))) {
-            bool change = false;
-
-            const uint16_t edges[3] = {m_s_fe[3 * f + 0] >> 1,
-                                       m_s_fe[3 * f + 1] >> 1,
-                                       m_s_fe[3 * f + 2] >> 1};
-            for (int i = 0; i < 3; ++i) {
-                const uint16_t e = edges[i];
-
-                assert(m_s_active_mask_e(e) || m_s_in_cavity_e(e));
-
-                const uint16_t v0 = m_s_ev[2 * e + 0];
-                const uint16_t v1 = m_s_ev[2 * e + 1];
-
-                assert(m_s_active_mask_v(v0) || m_s_in_cavity_v(v0));
-                assert(m_s_active_mask_v(v1) || m_s_in_cavity_v(v1));
-
-                if (m_s_owned_cavity_bdry_v(v0) ||
-                    m_s_owned_cavity_bdry_v(v1) || m_s_migrate_mask_v(v0) ||
-                    m_s_migrate_mask_v(v1)) {
-                    change = true;
-                    m_s_ownership_change_mask_f.set(f, true);
-                    break;
-                }
-            }
-
-            if (change) {
-                for (int i = 0; i < 3; ++i) {
-                    const uint16_t e = edges[i];
-                    if (!m_s_owned_mask_e(e)) {
-                        assert(m_s_active_mask_e(e) || m_s_in_cavity_e(e));
-                        m_s_ownership_change_mask_e.set(e, true);
-                    }
-                }
-            }
-        }
-    }
 }
 
 template <uint32_t blockThreads, CavityOp cop>
@@ -1300,6 +1256,70 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::pre_ribbonize(
 }
 
 template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
+    cooperative_groups::thread_block& block)
+{
+
+    m_s_ownership_change_mask_v.reset(block);
+    m_s_ownership_change_mask_e.reset(block);
+    m_s_ownership_change_mask_f.reset(block);
+    block.sync();
+
+    for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+        for (uint16_t i = 0; i < size; ++i) {
+            uint16_t vertex = get_cavity_vertex(c, i).local_id();
+            assert(m_s_active_mask_v(vertex));
+            if (!m_s_owned_mask_v(vertex)) {
+                m_s_ownership_change_mask_v.set(vertex, true);
+            }
+        }
+    });
+    block.sync();
+
+
+    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+        if (!m_s_owned_mask_f(f) &&
+            (m_s_active_mask_f(f) || m_s_in_cavity_f(f))) {
+            bool change = false;
+
+            const uint16_t edges[3] = {m_s_fe[3 * f + 0] >> 1,
+                                       m_s_fe[3 * f + 1] >> 1,
+                                       m_s_fe[3 * f + 2] >> 1};
+            for (int i = 0; i < 3; ++i) {
+                const uint16_t e = edges[i];
+
+                assert(m_s_active_mask_e(e) || m_s_in_cavity_e(e));
+
+                const uint16_t v0 = m_s_ev[2 * e + 0];
+                const uint16_t v1 = m_s_ev[2 * e + 1];
+
+                assert(m_s_active_mask_v(v0) || m_s_in_cavity_v(v0));
+                assert(m_s_active_mask_v(v1) || m_s_in_cavity_v(v1));
+
+                if (m_s_owned_cavity_bdry_v(v0) ||
+                    m_s_owned_cavity_bdry_v(v1) || m_s_migrate_mask_v(v0) ||
+                    m_s_migrate_mask_v(v1)) {
+                    change = true;
+                    m_s_ownership_change_mask_f.set(f, true);
+                    break;
+                }
+            }
+
+            if (change) {
+                for (int i = 0; i < 3; ++i) {
+                    const uint16_t e = edges[i];
+                    if (!m_s_owned_mask_e(e)) {
+                        assert(m_s_active_mask_e(e) || m_s_in_cavity_e(e));
+                        m_s_ownership_change_mask_e.set(e, true);
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     cooperative_groups::thread_block& block)
 {
@@ -1313,7 +1333,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
         const uint32_t q = m_s_patch_stash.get_patch(st);
         if (q != INVALID32) {
-            if (!migrate_from_patch(block, st, q, m_s_migrate_mask_v, true)) {
+            if (!migrate_from_patch(block, st, q, m_s_migrate_mask_v)) {
                 return false;
             }
         }
@@ -1324,15 +1344,17 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     // ribbonize protection zone
     pre_ribbonize(block);
     block.sync();
-
     for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
         const uint32_t q = m_s_patch_stash.get_patch(st);
         if (q != INVALID32) {
-            if (!migrate_from_patch(block, st, q, m_s_ribbonize_v, false)) {
+            if (!migrate_from_patch(block, st, q, m_s_ribbonize_v)) {
                 return false;
             }
         }
     }
+    block.sync();
+
+    set_ownership_change_bitmask(block);
     block.sync();
 
     // make sure that we locked the owner (not a proxy for the owner)
@@ -1382,8 +1404,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
     cooperative_groups::thread_block& block,
     const uint8_t                     q_stash_id,
     const uint32_t                    q,
-    const Bitmask&                    migrate_mask_v,
-    const bool                        change_ownership)
+    const Bitmask&                    migrate_mask_v)
 {
     // migrate_mask_v uses the index space of p
     // m_s_src_mask_v and m_s_src_connect_mask_v use the index space of q
@@ -1526,15 +1547,10 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         for (uint16_t v = threadIdx.x; v < q_num_vertices_up;
              v += blockThreads) {
 
-            LPPair lp =
-                migrate_vertex(q,
-                               q_num_vertices,
-                               v,
-                               change_ownership,
-                               q_patch_info,
-                               [&](const uint16_t vertex) {
-                                   return m_s_src_connect_mask_v(vertex);
-                               });
+            LPPair lp = migrate_vertex(
+                q, q_num_vertices, v, q_patch_info, [&](const uint16_t vertex) {
+                    return m_s_src_connect_mask_v(vertex);
+                });
             // we need to make sure that no other
             // thread is querying the hashtable while we
             // insert in it
@@ -1579,7 +1595,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 q,
                 q_num_edges,
                 e,
-                change_ownership,
                 q_patch_info,
                 [&](const uint16_t edge,
                     const uint16_t v0q,
@@ -1664,7 +1679,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             LPPair lp = migrate_edge(q,
                                      q_num_edges,
                                      e,
-                                     change_ownership,
                                      q_patch_info,
                                      [&](const uint16_t edge,
                                          const uint16_t v0q,
@@ -1710,7 +1724,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             LPPair lp = migrate_face(q,
                                      q_num_faces,
                                      f,
-                                     change_ownership,
                                      q_patch_info,
                                      [&](const uint16_t face,
                                          const uint16_t e0q,
@@ -1753,7 +1766,6 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
     const uint32_t q,
     const uint16_t q_num_vertices,
     const uint16_t q_vertex,
-    const bool     require_ownership_change,
     PatchInfo&     q_patch_info,
     FuncT          should_migrate)
 {
@@ -1802,14 +1814,6 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
                 assert(st != INVALID8);
                 m_s_patches_to_lock_mask.set(st, true);
             }
-
-            if (require_ownership_change && !m_s_owned_mask_v(vp)) {
-                m_s_ownership_change_mask_v.set(vp, true);
-                if (o != patch_id()) {
-                    assert(m_s_patches_to_lock_mask(
-                        m_s_patch_stash.find_patch_index(o)));
-                }
-            }
         }
     }
     return ret;
@@ -1822,7 +1826,6 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
     const uint32_t q,
     const uint16_t q_num_edges,
     const uint16_t q_edge,
-    const bool     require_ownership_change,
     PatchInfo&     q_patch_info,
     FuncT          should_migrate)
 {
@@ -1907,14 +1910,6 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
                 assert(st != INVALID8);
                 m_s_patches_to_lock_mask.set(st, true);
             }
-
-            if (require_ownership_change && !m_s_owned_mask_e(ep)) {
-                m_s_ownership_change_mask_e.set(ep, true);
-                if (o != patch_id()) {
-                    assert(m_s_patches_to_lock_mask(
-                        m_s_patch_stash.find_patch_index(o)));
-                }
-            }
         }
     }
 
@@ -1929,7 +1924,6 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
     const uint32_t q,
     const uint16_t q_num_faces,
     const uint16_t q_face,
-    const bool     require_ownership_change,
     PatchInfo&     q_patch_info,
     FuncT          should_migrate)
 {
@@ -2018,14 +2012,6 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
                 uint8_t st = m_s_patch_stash.find_patch_index(o);
                 assert(st != INVALID8);
                 m_s_patches_to_lock_mask.set(st, true);
-            }
-
-            if (require_ownership_change && !m_s_owned_mask_f(fp)) {
-                m_s_ownership_change_mask_f.set(fp, true);
-                if (o != patch_id()) {
-                    assert(m_s_patches_to_lock_mask(
-                        m_s_patch_stash.find_patch_index(o)));
-                }
             }
         }
     }
