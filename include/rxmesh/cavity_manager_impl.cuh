@@ -10,7 +10,7 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     __shared__ uint32_t s_patch_id;
 
 
-    __shared__ uint16_t counts[3];
+    __shared__ uint32_t counts[3];
     m_s_num_vertices = counts + 0;
     m_s_num_edges    = counts + 1;
     m_s_num_faces    = counts + 2;
@@ -1050,15 +1050,16 @@ __device__ __inline__ FaceHandle CavityManager<blockThreads, cop>::add_face(
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::add_element(
     Bitmask&       active_bitmask,
-    uint16_t*      num_elements,
+    uint32_t*      num_elements,
     const uint16_t capacity,
     const Bitmask& in_cavity,
     const Bitmask& owned,
     bool           avoid_not_owned_in_cavity)
 {
-    // for (uint16_t i = 0; i < capacity; ++i) {
-    const uint16_t count = num_elements[0];
-    for (uint16_t i = 0; i < count; ++i) {
+    assert(capacity == in_cavity.size());
+
+    uint16_t found = INVALID16;
+    for (uint16_t i = 0; i < capacity; ++i) {
         if (!avoid_not_owned_in_cavity && in_cavity(i) && !owned(i)) {
             continue;
         }
@@ -1066,19 +1067,18 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::add_element(
             continue;
         }
         if (active_bitmask.try_set(i)) {
-            return i;
+            found = i;
+            break;
         }
     }
 
-    // TODO there is a race condition here w.r.t active_bitmask
-    uint16_t ret = atomicAdd(num_elements, uint16_t(1));
-    if (ret >= capacity) {
-        return INVALID16;
-    } else {
-        assert(ret < active_bitmask.size());
-        active_bitmask.set(ret, true);
-        return ret;
+
+    if (found != INVALID16) {
+        ::atomicMax(num_elements, found + 1);
+        assert(found < active_bitmask.size());
     }
+
+    return found;
 }
 
 

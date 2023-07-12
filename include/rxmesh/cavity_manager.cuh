@@ -332,7 +332,7 @@ struct CavityManager
      * these spots in hashtable calibration
      */
     __device__ __inline__ uint16_t add_element(Bitmask&       active_bitmask,
-                                               uint16_t*      num_elements,
+                                               uint32_t*      num_elements,
                                                const uint16_t capacity,
                                                const Bitmask& in_cavity,
                                                const Bitmask& owned,
@@ -641,7 +641,9 @@ struct CavityManager
 
     // store the number of elements. we use pointers since the number of mesh
     // elements could change
-    uint16_t *m_s_num_vertices, *m_s_num_edges, *m_s_num_faces;
+    // while they should be represented using uint16_t, we use uint32_t since we
+    // need to use atomicMax which is only supported 32 and 64 bit
+    uint32_t *m_s_num_vertices, *m_s_num_edges, *m_s_num_faces;
 
     // store the boundary edges of all cavities in compact format (similar to
     // CSR for sparse matrices using m_s_cavity_size_prefix but no value ptr)
