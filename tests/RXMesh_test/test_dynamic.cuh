@@ -100,21 +100,6 @@ TEST(RXMeshDynamic, RandomFlips)
 
     // rx.save(STRINGIFY(OUTPUT_DIR) "sphere3_patches_0");
 
-    /*
-    auto v_attr = rx.add_vertex_attribute<int>("v_attr", 1);
-    auto e_attr = rx.add_edge_attribute<int>("e_attr", 1);
-    auto f_attr = rx.add_face_attribute<int>("f_attr", 1);
-    rx.for_each_vertex(
-        HOST, [&](const VertexHandle vh) { (*v_attr)(vh) = vh.local_id();
-    }); rx.for_each_edge( HOST, [&](const EdgeHandle eh) { (*e_attr)(eh) =
-    eh.local_id(); }); rx.for_each_face( HOST, [&](const FaceHandle fh) {
-    (*f_attr)(fh) = fh.local_id(); });
-
-    rx.get_polyscope_mesh()->addVertexScalarQuantity("v_attr", *v_attr);
-    rx.get_polyscope_mesh()->addEdgeScalarQuantity("e_attr", *e_attr);
-    rx.get_polyscope_mesh()->addFaceScalarQuantity("f_attr", *f_attr);*/
-
-
     const uint32_t num_vertices = rx.get_num_vertices();
     const uint32_t num_edges    = rx.get_num_edges();
     const uint32_t num_faces    = rx.get_num_faces();

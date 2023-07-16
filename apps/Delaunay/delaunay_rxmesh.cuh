@@ -138,7 +138,6 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
     }
 
     cavity.epilogue(block);
-    block.sync();
 }
 
 
@@ -210,6 +209,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     rx.render_vertex_patch();
     rx.render_edge_patch();
     rx.render_face_patch();
+    // polyscope::show();
 #endif
 
     auto coords = rx.get_input_vertex_coordinates();

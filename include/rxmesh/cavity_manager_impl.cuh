@@ -1188,6 +1188,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::pre_migrate(
     m_s_migrate_mask_v.reset(block);
     m_s_patches_to_lock_mask.reset(block);
     m_s_locked_patches_mask.reset(block);
+    m_s_ownership_change_mask_v.reset(block);
     block.sync();
 
     // Mark vertices on the boundary of all active cavities in this patch
@@ -1204,6 +1205,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::pre_migrate(
                 m_s_owned_cavity_bdry_v.set(vertex, true);
             } else {
                 m_s_migrate_mask_v.set(vertex, true);
+                m_s_ownership_change_mask_v.set(vertex, true);
             }
         }
     });
@@ -1261,27 +1263,14 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
     cooperative_groups::thread_block& block)
 {
 
-    m_s_ownership_change_mask_v.reset(block);
     m_s_ownership_change_mask_e.reset(block);
     m_s_ownership_change_mask_f.reset(block);
-    block.sync();
-
-    for_each_cavity(block, [&](uint16_t c, uint16_t size) {
-        for (uint16_t i = 0; i < size; ++i) {
-            uint16_t vertex = get_cavity_vertex(c, i).local_id();
-            assert(m_s_active_mask_v(vertex));
-            if (!m_s_owned_mask_v(vertex)) {
-                m_s_ownership_change_mask_v.set(vertex, true);
-            }
-        }
-    });
     block.sync();
 
 
     for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
         if (!m_s_owned_mask_f(f) &&
             (m_s_active_mask_f(f) || m_s_in_cavity_f(f))) {
-            bool change = false;
 
             const uint16_t edges[3] = {m_s_fe[3 * f + 0] >> 1,
                                        m_s_fe[3 * f + 1] >> 1,
@@ -1300,19 +1289,24 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
                 if (m_s_owned_cavity_bdry_v(v0) ||
                     m_s_owned_cavity_bdry_v(v1) || m_s_migrate_mask_v(v0) ||
                     m_s_migrate_mask_v(v1)) {
-                    change = true;
                     m_s_ownership_change_mask_f.set(f, true);
                     break;
                 }
             }
+        }
+    }
 
-            if (change) {
-                for (int i = 0; i < 3; ++i) {
-                    const uint16_t e = edges[i];
-                    if (!m_s_owned_mask_e(e)) {
-                        assert(m_s_active_mask_e(e) || m_s_in_cavity_e(e));
-                        m_s_ownership_change_mask_e.set(e, true);
-                    }
+
+    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+        if (!m_s_owned_mask_e(e) &&
+            (m_s_active_mask_e(e) || m_s_in_cavity_e(e))) {
+
+            for (int i = 0; i < 2; ++i) {
+                const uint16_t v = m_s_ev[2 * e + i];
+                assert(m_s_active_mask_v(v) || m_s_in_cavity_v(v));
+                if (m_s_owned_cavity_bdry_v(v) || m_s_migrate_mask_v(v)) {
+                    m_s_ownership_change_mask_e.set(e, true);
+                    break;
                 }
             }
         }

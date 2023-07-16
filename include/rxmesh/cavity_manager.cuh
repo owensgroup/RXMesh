@@ -81,8 +81,6 @@ struct CavityManager
      * in these cavities, update the patch layout for subsequent cavity fill-in.
      * In the event of failure (due to failure of locking neighbor patches),
      * this function returns false.
-     * @param block
-     * @param shrd_alloc
      * @return
      */
     __device__ __inline__ bool prologue(cooperative_groups::thread_block& block,
@@ -382,6 +380,11 @@ struct CavityManager
     __device__ __inline__ void pre_migrate(
         cooperative_groups::thread_block& block);
 
+    /**
+     * @brief set the ownership change bitmask for edges and faces such that any
+     * edge or face touches a vertex on the cavity boundary should change
+     * ownership
+     */
     __device__ __inline__ void set_ownership_change_bitmask(
         cooperative_groups::thread_block& block);
 
@@ -443,9 +446,8 @@ struct CavityManager
     __device__ __inline__ LPPair migrate_face(const uint32_t q,
                                               const uint16_t q_num_faces,
                                               const uint16_t q_face,
-
-                                              PatchInfo& q_patch_info,
-                                              FuncT      should_migrate);
+                                              PatchInfo&     q_patch_info,
+                                              FuncT          should_migrate);
 
     /**
      * @brief given a local vertex in a patch, find its corresponding local
