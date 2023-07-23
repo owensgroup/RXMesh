@@ -187,7 +187,7 @@ inline uint32_t count_non_delaunay_edges(TriMesh& mesh)
 
             float lambda = angle_between_three_vertices(p0, p2, p1);
             float gamma  = angle_between_three_vertices(p1, p3, p0);
-            if (lambda + gamma > M_PI) {
+            if (lambda + gamma - 0.00001 > M_PI) {
                 num_non_delaunay++;
             }
         }
@@ -314,6 +314,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
         }
         CUDA_ERROR(cudaMemcpy(
             &h_flipped, d_flipped, sizeof(int), cudaMemcpyDeviceToHost));
+        // break;
     }
 
     CUDA_ERROR(cudaProfilerStop());

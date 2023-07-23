@@ -394,6 +394,12 @@ struct CavityManager
     __device__ __inline__ bool migrate(cooperative_groups::thread_block& block);
 
     /**
+     * @brief migrate vertices/edges/faces from neighbor patches to this patch
+     */
+    __device__ __inline__ bool migrate_v2(
+        cooperative_groups::thread_block& block);
+
+    /**
      * @brief given a neighbor patch (q), migrate vertices (and edges and faces
      * connected to these vertices) marked in migrate_mask_v to the patch
      * managed by this cavity manager
@@ -404,12 +410,13 @@ struct CavityManager
         const uint32_t                    q,
         const Bitmask&                    migrate_mask_v);
 
-    /**
-     * @brief given a neighbor patch (q), migrate vertices (and edges and faces
-     * connected to these vertices) marked in m_s_migrate_mask_v and
-     * m_s_ribbonize_v to the patch managed by this cavity manager
-     */
-    __device__ __inline__ bool migrate_from_patch(
+    __device__ __inline__ bool migrate_from_patch_v2(
+        cooperative_groups::thread_block& block,
+        const uint8_t                     q_stash_id,
+        const uint32_t                    q);
+
+
+    __device__ __inline__ bool soft_migrate_from_patch(
         cooperative_groups::thread_block& block,
         const uint8_t                     q_stash_id,
         const uint32_t                    q);
@@ -419,11 +426,13 @@ struct CavityManager
      * of q_vertex in this patch. If it does not exist, create such a copy.
      */
     template <typename FuncT>
-    __device__ __inline__ LPPair migrate_vertex(const uint32_t q,
-                                                const uint16_t q_num_vertices,
-                                                const uint16_t q_vertex,
-                                                PatchInfo&     q_patch_info,
-                                                FuncT          should_migrate);
+    __device__ __inline__ LPPair migrate_vertex(
+        const uint32_t q,
+        const uint16_t q_num_vertices,
+        const uint16_t q_vertex,
+        PatchInfo&     q_patch_info,
+        FuncT          should_migrate,
+        bool           add_to_connect_cavity_bdry_v = false);
 
 
     /**
@@ -593,9 +602,6 @@ struct CavityManager
     // active elements bitmask
     Bitmask m_s_active_mask_v, m_s_active_mask_e, m_s_active_mask_f;
 
-    // indicate if a the vertex should be migrated
-    Bitmask m_s_migrate_mask_v;
-
     Bitmask m_s_src_mask_v, m_s_src_mask_e;
     Bitmask m_s_src_connect_mask_v, m_s_src_connect_mask_e;
 
@@ -603,10 +609,16 @@ struct CavityManager
     Bitmask m_s_ownership_change_mask_v, m_s_ownership_change_mask_e,
         m_s_ownership_change_mask_f;
 
+    // indicate if the vertex is on the cavity boundary and is owned
     Bitmask m_s_owned_cavity_bdry_v;
 
-    // indicate if the vertex should be ribbonized
-    Bitmask m_s_ribbonize_v;
+    // indicate if the vertex is on the cavity boundary and not owned i.e.,
+    // the vertex should be migrated
+    Bitmask m_s_not_owned_cavity_bdry_v;
+
+    // indicate if the vertex is connected to a vertex on the cavity boundary
+    // i.e., need to be ribbonized
+    Bitmask m_s_connect_cavity_bdry_v;
 
     // indicate which patch (in the patch stash) should be locked
     Bitmask m_s_patches_to_lock_mask;
