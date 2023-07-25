@@ -144,6 +144,7 @@ Patcher::Patcher(uint32_t                                        patch_size,
                   d_patches_val);
 
         postprocess(fv, ff_offset, ff_values);
+        //bfs(ff_offset, ff_values);
         assign_patch(fv, edges_map);
     }
 
@@ -467,6 +468,65 @@ void Patcher::get_multi_components(
 
             components.push_back(current_component);
         }
+    }
+}
+
+void Patcher::bfs(const std::vector<uint32_t>& ff_offset,
+                  const std::vector<uint32_t>& ff_values)
+{
+    // BFS renumbering
+    std::vector<uint32_t> bfs_patch_id(m_num_patches);
+
+    std::vector<std::vector<uint32_t>> patch_neighbour;
+    for (uint32_t p = 0; p < m_num_patches; ++p) {
+        std::vector<uint32_t> np;
+        for (uint32_t f = (p == 0) ? 0 : m_patches_offset[p - 1];
+             f < m_patches_offset[p];
+             ++f) {
+            uint32_t face = m_patches_val[f];
+            for (uint32_t n = (face == 0) ? 0 : ff_offset[face - 1];
+                 n < ff_offset[face];
+                 ++n) {
+                uint32_t n_face  = ff_values[n];
+                uint32_t n_patch = m_face_patch[n_face];
+                if (n_patch != p) {
+                    if (find_index(n_patch, np) ==
+                        std::numeric_limits<uint32_t>::max()) {
+                        np.push_back(n_patch);
+                    }
+                }
+            }
+        }
+        patch_neighbour.push_back(np);
+    }
+    std::vector<uint32_t> qu(1, 0);
+    qu.reserve(m_num_patches);
+    for (uint32_t p = 0; p < qu.size(); p++) {
+        uint32_t patch      = qu[p];
+        bfs_patch_id[patch] = p;
+        for (uint32_t i = 0; i < patch_neighbour[patch].size(); i++) {
+            uint32_t pn = patch_neighbour[patch][i];
+            if (find_index(pn, qu) == std::numeric_limits<uint32_t>::max()) {
+                qu.push_back(pn);
+            }
+        }
+    }
+    std::fill(m_patches_offset.begin(), m_patches_offset.end(), 0);
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        m_face_patch[f] = bfs_patch_id[m_face_patch[f]];
+        m_patches_offset[m_face_patch[f]]++;
+    }
+    uint32_t acc = 0;
+    for (uint32_t p = 0; p < m_num_patches; ++p) {
+        acc += m_patches_offset[p];
+        m_patches_offset[p] = acc;
+    }
+    std::vector<uint32_t> temp_offset(m_num_patches, 0);
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        uint32_t p     = m_face_patch[f];
+        uint32_t start = (p == 0) ? p : m_patches_offset[p - 1];
+        m_patches_val[start + temp_offset[p]] = f;
+        temp_offset[p]++;
     }
 }
 
