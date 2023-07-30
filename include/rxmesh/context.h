@@ -30,7 +30,10 @@ class Context
           m_edge_prefix(nullptr),
           m_face_prefix(nullptr),
           m_capacity_factor(0.0f),
-          m_patches_info(nullptr)
+          m_patches_info(nullptr),
+          m_max_lp_capacity_v(0),
+          m_max_lp_capacity_e(0),
+          m_max_lp_capacity_f(0)
     {
     }
 
@@ -158,6 +161,9 @@ class Context
               uint32_t*      vertex_prefix,
               uint32_t*      edge_prefix,
               uint32_t*      face_prefix,
+              uint16_t       max_lp_capacity_v,
+              uint16_t       max_lp_capacity_e,
+              uint16_t       max_lp_capacity_f,
               PatchInfo*     d_patches,
               PatchScheduler scheduler)
     {
@@ -203,6 +209,10 @@ class Context
         m_edge_prefix   = edge_prefix;
         m_face_prefix   = face_prefix;
 
+        m_max_lp_capacity_v = max_lp_capacity_v;
+        m_max_lp_capacity_e = max_lp_capacity_e;
+        m_max_lp_capacity_f = max_lp_capacity_f;
+
         m_patches_info = d_patches;
 
         m_patch_scheduler = scheduler;
@@ -214,12 +224,13 @@ class Context
     }
 
 
-    uint32_t *     m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;
-    uint32_t *     m_max_num_vertices, *m_max_num_edges, *m_max_num_faces;
-    uint32_t *     m_vertex_prefix, *m_edge_prefix, *m_face_prefix;
-    PatchInfo*     m_patches_info;
-    float          m_capacity_factor;
-    uint32_t       m_max_num_patches;
+    uint32_t * m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;
+    uint32_t * m_max_num_vertices, *m_max_num_edges, *m_max_num_faces;
+    uint32_t * m_vertex_prefix, *m_edge_prefix, *m_face_prefix;
+    uint16_t   m_max_lp_capacity_v, m_max_lp_capacity_e, m_max_lp_capacity_f;
+    PatchInfo* m_patches_info;
+    float      m_capacity_factor;
+    uint32_t   m_max_num_patches;
     PatchScheduler m_patch_scheduler;
 };
 }  // namespace rxmesh

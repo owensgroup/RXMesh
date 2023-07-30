@@ -23,6 +23,7 @@ namespace patcher {
 
 Patcher::Patcher(std::string filename)
 {
+    RXMESH_TRACE("Patcher: Reading {}", filename);
     std::ifstream                      is(filename, std::ios::binary);
     cereal::PortableBinaryInputArchive archive(is);
     archive(*this);

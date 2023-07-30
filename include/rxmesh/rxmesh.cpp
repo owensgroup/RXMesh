@@ -93,6 +93,9 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                           m_d_vertex_prefix,
                           m_d_edge_prefix,
                           m_d_face_prefix,
+                          max_lp_hashtable_capacity<LocalVertexT>(),
+                          max_lp_hashtable_capacity<LocalEdgeT>(),
+                          max_lp_hashtable_capacity<LocalFaceT>(),
                           m_d_patches_info,
                           sch);
 
@@ -1082,10 +1085,9 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.patch_stash,
              h_patch_info.lp_v,
              d_patch.lp_v);
-    if (patch_id != INVALID32) {
-        m_max_capacity_lp_v =
-            std::max(m_max_capacity_lp_v, h_patch_info.lp_v.get_capacity());
-    }
+    m_max_capacity_lp_v =
+        std::max(m_max_capacity_lp_v, h_patch_info.lp_v.get_capacity());
+
 
 #ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
     const uint16_t lp_cap_e = p_edges_capacity;
@@ -1102,10 +1104,9 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.patch_stash,
              h_patch_info.lp_e,
              d_patch.lp_e);
-    if (patch_id != INVALID32) {
-        m_max_capacity_lp_e =
-            std::max(m_max_capacity_lp_e, h_patch_info.lp_e.get_capacity());
-    }
+    m_max_capacity_lp_e =
+        std::max(m_max_capacity_lp_e, h_patch_info.lp_e.get_capacity());
+
 
 #ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
     const uint16_t lp_cap_f = p_faces_capacity;
@@ -1122,10 +1123,9 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.patch_stash,
              h_patch_info.lp_f,
              d_patch.lp_f);
-    if (patch_id != INVALID32) {
-        m_max_capacity_lp_f =
-            std::max(m_max_capacity_lp_f, h_patch_info.lp_f.get_capacity());
-    }
+    m_max_capacity_lp_f =
+        std::max(m_max_capacity_lp_f, h_patch_info.lp_f.get_capacity());
+
 
     CUDA_ERROR(cudaMemcpy(
         &d_patch_info, &d_patch, sizeof(PatchInfo), cudaMemcpyHostToDevice));

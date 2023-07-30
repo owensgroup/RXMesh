@@ -4,7 +4,8 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     cooperative_groups::thread_block& block,
     Context&                          context,
-    ShmemAllocator&                   shrd_alloc)
+    ShmemAllocator&                   shrd_alloc,
+    uint32_t                          current_p)
     : m_write_to_gmem(false), m_context(context)
 {
     __shared__ uint32_t s_patch_id;
@@ -224,7 +225,6 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
 
     // cavity boundary edges
     m_s_cavity_boundary_edges = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
-
 
     // lp stash
     __shared__ LPPair st_v[LPHashTable::stash_size];
@@ -980,7 +980,9 @@ CavityManager<blockThreads, cop>::add_vertex()
                                 m_patch_info.vertices_capacity[0],
                                 m_s_in_cavity_v,
                                 m_s_owned_mask_v,
-                                false);
+                                false,
+                                true);
+    assert(v_id < m_patch_info.vertices_capacity[0]);
     assert(m_s_active_mask_v(v_id));
     m_s_owned_mask_v.set(v_id, true);
     return {m_patch_info.patch_id, v_id};
@@ -1000,8 +1002,9 @@ __device__ __inline__ DEdgeHandle CavityManager<blockThreads, cop>::add_edge(
                                 m_patch_info.edges_capacity[0],
                                 m_s_in_cavity_e,
                                 m_s_owned_mask_e,
-                                false);
-
+                                false,
+                                true);
+    assert(e_id < m_patch_info.edges_capacity[0]);
     assert(m_s_active_mask_e(e_id));
     assert(m_s_active_mask_v(src.local_id()));
     assert(m_s_active_mask_v(dest.local_id()));
@@ -1028,8 +1031,9 @@ __device__ __inline__ FaceHandle CavityManager<blockThreads, cop>::add_face(
                                 m_patch_info.faces_capacity[0],
                                 m_s_in_cavity_f,
                                 m_s_owned_mask_f,
-                                false);
-
+                                false,
+                                true);
+    assert(f_id < m_patch_info.faces_capacity[0]);
     assert(m_s_active_mask_f(f_id));
 
     m_s_fe[3 * f_id + 0] = e0.local_id();
@@ -1054,23 +1058,64 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::add_element(
     const uint16_t capacity,
     const Bitmask& in_cavity,
     const Bitmask& owned,
+    bool           avoid_in_cavity,
     bool           avoid_not_owned_in_cavity)
 {
     assert(capacity == in_cavity.size());
+    assert(capacity == active_bitmask.size());
+    assert(capacity == owned.size());
 
     uint16_t found = INVALID16;
-    for (uint16_t i = 0; i < capacity; ++i) {
-        if (!avoid_not_owned_in_cavity && in_cavity(i) && !owned(i)) {
-            continue;
-        }
-        if (avoid_not_owned_in_cavity && in_cavity(i) /*&& !owned(i)*/) {
-            continue;
-        }
-        if (active_bitmask.try_set(i)) {
-            found = i;
-            break;
+
+    // number of 32-bit unsigned int used in the bit mask
+    const uint32_t num32 = DIVIDE_UP(capacity, 32);
+
+    for (uint32_t i = 0; i < num32 && found == INVALID16; ++i) {
+        // flip the bits so that we are not looking for an element whose bit is
+        // set
+        uint32_t mask = ~active_bitmask.m_bitmask[i];
+        // if there is at least one element that is not active in this 32
+        // elements i.e., its bit is set
+        if (mask != 0) {
+            if (avoid_not_owned_in_cavity) {
+                mask &= (~in_cavity.m_bitmask[i] | owned.m_bitmask[i]);
+            }
+
+            if (avoid_in_cavity) {
+                mask &= ~in_cavity.m_bitmask[i];
+            }
+            while (mask != 0) {
+                // find the first set bit
+                // ffs finds the position of the least significant bit set to 1
+                uint32_t first = __ffs(mask) - 1;
+
+                // now this is the element that meet all the requirements
+                uint32_t pos = 32 * i + first;
+
+                // try to set its bit
+                if (active_bitmask.try_set(pos)) {
+                    found = pos;
+                    break;
+                }
+                // if not successful, then we mask out this elements and try the
+                // next one in this `mask` until we turn it all to zero
+                mask &= ~(1 << first);
+            }
         }
     }
+
+    // for (uint16_t i = 0; i < capacity; ++i) {
+    //    if (avoid_not_owned_in_cavity && in_cavity(i) && !owned(i)) {
+    //        continue;
+    //    }
+    //    if (avoid_in_cavity && in_cavity(i)) {
+    //        continue;
+    //    }
+    //    if (active_bitmask.try_set(i)) {
+    //        found = i;
+    //        break;
+    //    }
+    //}
 
 
     if (found != INVALID16) {
@@ -1122,7 +1167,7 @@ __device__ __forceinline__ bool CavityManager<blockThreads, cop>::lock(
         if (!okay) {
             okay = m_context.m_patches_info[q].lock.acquire_lock(blockIdx.x);
             if (okay) {
-                m_s_locked_patches_mask.set(stash_id, true);
+                m_s_locked_patches_mask.set(stash_id);
             }
         }
         s_success = okay;
@@ -1165,7 +1210,7 @@ __device__ __forceinline__ void CavityManager<blockThreads, cop>::unlock(
     if (threadIdx.x == 0) {
         assert(m_s_locked_patches_mask(stash_id));
         m_context.m_patches_info[q].lock.release_lock();
-        m_s_locked_patches_mask.reset(stash_id, true);
+        m_s_locked_patches_mask.reset(stash_id);
     }
 }
 
@@ -1313,7 +1358,7 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
     }
 }
 
-template <uint32_t blockThreads, CavityOp cop>
+/*template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     cooperative_groups::thread_block& block)
 {
@@ -1372,7 +1417,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     }
 
     return true;
-}
+}*/
 
 
 template <uint32_t blockThreads, CavityOp cop>
@@ -1949,7 +1994,7 @@ CavityManager<blockThreads, cop>::migrate_from_patch_v2(
     return true;
 }
 
-template <uint32_t blockThreads, CavityOp cop>
+/*template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
     cooperative_groups::thread_block& block,
     const uint8_t                     q_stash_id,
@@ -2307,7 +2352,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
     }
 
     return true;
-}
+}*/
 
 
 template <uint32_t blockThreads, CavityOp cop>
@@ -2338,11 +2383,13 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
                                  m_patch_info.vertices_capacity[0],
                                  m_s_in_cavity_v,
                                  m_s_owned_mask_v,
-                                 true);
+                                 true,
+                                 false);
                 if (vp == INVALID16) {
                     m_s_should_slice[0] = true;
                     return ret;
                 }
+                assert(vp < m_patch_info.vertices_capacity[0]);
 
                 // active bitmask is set in add_element
 
@@ -2409,7 +2456,8 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
                                  m_patch_info.edges_capacity[0],
                                  m_s_in_cavity_e,
                                  m_s_owned_mask_e,
-                                 true);
+                                 true,
+                                 false);
                 if (ep == INVALID16) {
                     m_s_should_slice[0] = true;
                     return ret;
@@ -2425,17 +2473,6 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
                 // mapped to the corresponding local index in p
                 uint16_t v0p = find_copy_vertex(v0q, o0);
                 uint16_t v1p = find_copy_vertex(v1q, o1);
-
-                // assert(!m_context.m_patches_info[o0].is_deleted(
-                //    LocalVertexT(v0q)));
-                // assert(
-                //    m_context.m_patches_info[o0].is_owned(LocalVertexT(v0q)));
-                //
-                // assert(!m_context.m_patches_info[o1].is_deleted(
-                //    LocalVertexT(v1q)));
-                // assert(
-                //    m_context.m_patches_info[o1].is_owned(LocalVertexT(v1q)));
-
 
                 // since any vertex in m_s_src_mask_v has been
                 // added already to p, then we should find the
@@ -2501,22 +2538,20 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
             uint16_t fp = find_copy_face(fq, o);
 
 
-            // assert(!m_context.m_patches_info[o].is_deleted(LocalFaceT(fq)));
-            // assert(m_context.m_patches_info[o].is_owned(LocalFaceT(fq)));
-
             if (fp == INVALID16) {
                 fp = add_element(m_s_active_mask_f,
                                  m_s_num_faces,
                                  m_patch_info.faces_capacity[0],
                                  m_s_in_cavity_f,
                                  m_s_owned_mask_f,
-                                 true);
+                                 true,
+                                 false);
 
                 if (fp == INVALID16) {
                     m_s_should_slice[0] = true;
                     return ret;
                 }
-                // assert(fp < m_patch_info.faces_capacity[0]);
+                assert(fp < m_patch_info.faces_capacity[0]);
 
                 uint32_t o0(q), o1(q), o2(q);
 

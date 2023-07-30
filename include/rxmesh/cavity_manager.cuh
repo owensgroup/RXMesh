@@ -54,7 +54,8 @@ struct CavityManager
      */
     __device__ __inline__ CavityManager(cooperative_groups::thread_block& block,
                                         Context&        context,
-                                        ShmemAllocator& shrd_alloc);
+                                        ShmemAllocator& shrd_alloc,
+                                        uint32_t        current_p = 0);
 
     /**
      * @brief create new cavity from a seed element. The seed element type
@@ -319,21 +320,32 @@ struct CavityManager
      * where we successfully flipped its status from inactive to active.
      * If we fail, we just atomically increment num_elements and set the
      * corresponding bit in active_bitmask. There is a special case when it
-     * comes to fill in spots of in-cavity elements that are not-owned. We need
-     * to leave these spots clear since we use them as a key in the hashtable
-     * in order to change their ownership. If we filled them in, and added an
-     * element (which are initially not-owned), we will pollute the hashtable
-     * and won't be able to get the owner element in order to change their
-     * ownership flag during ownership_change(). However, after
-     * ownership_change, we should leave only spots that are in-cavity and
-     * not-owned since we use the corresponding entries in the hashtable of
-     * these spots in hashtable calibration
+     * comes to fill in spots of in-cavity elements. These elements are not
+     * really deleted (only in shared memory) and we use the fact that there are
+     * in cavity to check if there were active during migration. If we activate
+     * them, we will lose these information. For example if we have a face
+     * in-cavity that is shared with two other patches q0 and q1. During
+     * migration from q0, we may reactivate the face by flipping its bit mask
+     * but now it refers to different face with different connectivity. Next,
+     * during migration from q1, we may need to check if this face has been in p
+     * before so we don't copy. But now, its bit mask refers to a different face
+     * and we lost this info. We also need to leave these spots clear since we
+     * use them as a key in the hashtable in order to change their ownership. If
+     * we filled them in, and added an element (which are initially not-owned),
+     * we will pollute the hashtable and won't be able to get the owner element
+     * in order to change their ownership flag during ownership_change().
+     * However, after ownership_change, we should leave only spots that are
+     * in-cavity AND not-owned since we use the corresponding entries in the
+     * hashtable of these spots in hashtable calibration. After a full round
+     * i.e., after hashtable calibration, these deactivate spot can be use in
+     * subsequent iterations
      */
     __device__ __inline__ uint16_t add_element(Bitmask&       active_bitmask,
                                                uint32_t*      num_elements,
                                                const uint16_t capacity,
                                                const Bitmask& in_cavity,
                                                const Bitmask& owned,
+                                               bool           avoid_in_cavity,
                                                bool avoid_not_owned_in_cavity);
 
     /**
