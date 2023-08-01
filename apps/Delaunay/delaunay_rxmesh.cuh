@@ -14,12 +14,14 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
                                           rxmesh::VertexAttribute<T> coords,
                                           int*                       d_flipped,
                                           uint32_t* num_successful,
-                                          uint32_t* num_sliced)
+                                          uint32_t* num_sliced,
+                                          uint32_t  current_p)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CavityManager<blockThreads, CavityOp::E> cavity(block, context, shrd_alloc);
+    CavityManager<blockThreads, CavityOp::E> cavity(
+        block, context, shrd_alloc, current_p);
 
     const uint32_t pid = cavity.patch_id();
 
@@ -225,7 +227,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 
     int h_flipped = 1;
 
-    int iter = 0;
+    int outer_iter = 0;
 
     float total_time = 0;
 
@@ -243,20 +245,22 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 
         h_flipped = 0;
         rx.reset_scheduler();
-        while (!rx.is_queue_empty() /*&& iter <= 0*/) {
-            RXMESH_INFO("\niter = {}, queue size= {}",
-                        iter++,
+        int inner_iter = 0;
+        while (!rx.is_queue_empty()) {
+            RXMESH_INFO("\n outer_iter= {}, inner_iter = {}, queue size= {}",
+                        outer_iter,
+                        inner_iter++,
                         rx.get_context().m_patch_scheduler.size());
 
-            GPUTimer timer;
-            timer.start();
 
             LaunchBox<blockThreads> launch_box;
-            rx.update_launch_box(
+            rx.prepare_launch_box(
                 {Op::EVDiamond},
                 launch_box,
                 (void*)delaunay_edge_flip<float, blockThreads>);
 
+            GPUTimer timer;
+            timer.start();
 
             GPUTimer app_timer;
             app_timer.start();
@@ -267,7 +271,8 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
                                                 *coords,
                                                 d_flipped,
                                                 d_num_successful,
-                                                d_num_sliced);
+                                                d_num_sliced,
+                                                0);
             app_timer.stop();
 
             GPUTimer slice_timer;
@@ -315,6 +320,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
         CUDA_ERROR(cudaMemcpy(
             &h_flipped, d_flipped, sizeof(int), cudaMemcpyDeviceToHost));
         // break;
+        outer_iter++;
     }
 
     CUDA_ERROR(cudaProfilerStop());

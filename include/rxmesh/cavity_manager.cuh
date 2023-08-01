@@ -379,9 +379,13 @@ struct CavityManager
 
     /**
      * @brief unlock all locked patches done by this cavity manager
-     * @return
      */
     __device__ __inline__ void unlock_locked_patches();
+
+    /**
+     * @brief set the dirty bit for locked patches
+     */
+    __device__ __inline__ void set_dirty_for_locked_patches();
 
     /**
      * @brief prepare m_s_migrate_mask_v, m_s_owned_cavity_bdry_v,
@@ -405,24 +409,7 @@ struct CavityManager
      */
     __device__ __inline__ bool migrate(cooperative_groups::thread_block& block);
 
-    /**
-     * @brief migrate vertices/edges/faces from neighbor patches to this patch
-     */
-    __device__ __inline__ bool migrate_v2(
-        cooperative_groups::thread_block& block);
-
-    /**
-     * @brief given a neighbor patch (q), migrate vertices (and edges and faces
-     * connected to these vertices) marked in migrate_mask_v to the patch
-     * managed by this cavity manager
-     */
     __device__ __inline__ bool migrate_from_patch(
-        cooperative_groups::thread_block& block,
-        const uint8_t                     q_stash_id,
-        const uint32_t                    q,
-        const Bitmask&                    migrate_mask_v);
-
-    __device__ __inline__ bool migrate_from_patch_v2(
         cooperative_groups::thread_block& block,
         const uint8_t                     q_stash_id,
         const uint32_t                    q);

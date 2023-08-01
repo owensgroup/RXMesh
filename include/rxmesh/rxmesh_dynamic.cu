@@ -541,6 +541,8 @@ __global__ static void remove_surplus_elements(const Context context)
     store<blockThreads>(s_patch_stash,
                         uint16_t(PatchStash::stash_size),
                         pi.patch_stash.m_stash);
+
+    pi.clear_dirty();
 }
 
 template <uint32_t blockThreads, typename HandleT>
