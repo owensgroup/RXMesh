@@ -52,7 +52,7 @@ struct LPHashTable
     using HashT = universal_hash;
     // using HashT = MurmurHash3_32;
 
-    static constexpr uint8_t stash_size = 32;
+    static constexpr uint8_t stash_size = 64;
 
     __device__ __host__ LPHashTable()
         : m_table(nullptr),
@@ -208,7 +208,7 @@ struct LPHashTable
     }
 
     /**
-     * @brief compute current load factor for the stash 
+     * @brief compute current load factor for the stash
      */
     __host__ __device__ __inline__ float compute_stash_load_factor(
         LPPair* s_stash)

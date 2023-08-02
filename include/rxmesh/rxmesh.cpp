@@ -791,6 +791,17 @@ void RXMesh::build_device()
                                   m_d_patches_info[p]);
     }
 
+     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
+        m_max_capacity_lp_v = std::max(m_max_capacity_lp_v,
+                                       m_h_patches_info[p].lp_v.get_capacity());
+
+        m_max_capacity_lp_e = std::max(m_max_capacity_lp_e,
+                                       m_h_patches_info[p].lp_e.get_capacity());
+
+        m_max_capacity_lp_f = std::max(m_max_capacity_lp_f,
+                                       m_h_patches_info[p].lp_f.get_capacity());
+    }
+
     // make sure that if a patch stash of patch p has patch q, then q's patch
     // stash should have p in it
     /* for (uint32_t p = 0; p < get_num_patches(); ++p) {
@@ -1084,9 +1095,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              lp_cap_v,
              h_patch_info.patch_stash,
              h_patch_info.lp_v,
-             d_patch.lp_v);
-    m_max_capacity_lp_v =
-        std::max(m_max_capacity_lp_v, h_patch_info.lp_v.get_capacity());
+             d_patch.lp_v);  
 
 
 #ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
@@ -1104,8 +1113,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.patch_stash,
              h_patch_info.lp_e,
              d_patch.lp_e);
-    m_max_capacity_lp_e =
-        std::max(m_max_capacity_lp_e, h_patch_info.lp_e.get_capacity());
+    
 
 
 #ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
@@ -1123,8 +1131,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.patch_stash,
              h_patch_info.lp_f,
              d_patch.lp_f);
-    m_max_capacity_lp_f =
-        std::max(m_max_capacity_lp_f, h_patch_info.lp_f.get_capacity());
+    
 
 
     CUDA_ERROR(cudaMemcpy(
