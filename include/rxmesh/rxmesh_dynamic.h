@@ -387,7 +387,7 @@ class RXMeshDynamic : public RXMeshStatic
      * needed for a kernel that may use dynamic and query operations. Similar
      * to prepare_launch_box but here we don't do any checks to verify that
      * the amount of shared memory is okay and we don't print any info. This
-     * function can be used to update the launch box in a loop where priniting
+     * function can be used to update the launch box in a loop where printing
      * out info could impact the timing
      * @param op List of query operations done inside the kernel
      * @param launch_box input launch box to be populated

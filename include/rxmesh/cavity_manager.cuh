@@ -427,6 +427,7 @@ struct CavityManager
     template <typename FuncT>
     __device__ __inline__ LPPair migrate_vertex(
         const uint32_t q,
+        const uint8_t  q_stash_id,
         const uint16_t q_num_vertices,
         const uint16_t q_vertex,
         PatchInfo&     q_patch_info,
@@ -440,6 +441,7 @@ struct CavityManager
      */
     template <typename FuncT>
     __device__ __inline__ LPPair migrate_edge(const uint32_t q,
+                                              const uint8_t  q_stash_id,
                                               const uint16_t q_num_edges,
                                               const uint16_t q_edge,
                                               PatchInfo&     q_patch_info,
@@ -452,6 +454,7 @@ struct CavityManager
      */
     template <typename FuncT>
     __device__ __inline__ LPPair migrate_face(const uint32_t q,
+                                              const uint8_t  q_stash_id,
                                               const uint16_t q_num_faces,
                                               const uint16_t q_face,
                                               PatchInfo&     q_patch_info,
@@ -464,7 +467,8 @@ struct CavityManager
      * be mapped to their owner patch and local index in the owner patch.
      */
     __device__ __inline__ uint16_t find_copy_vertex(uint16_t& local_id,
-                                                    uint32_t& patch);
+                                                    uint32_t& patch,
+                                                    uint8_t&  patch_stash_id);
 
     /**
      * @brief given a local edge in a patch, find its corresponding local
@@ -473,7 +477,8 @@ struct CavityManager
      * be mapped to their owner patch and local index in the owner patch
      */
     __device__ __inline__ uint16_t find_copy_edge(uint16_t& local_id,
-                                                  uint32_t& patch);
+                                                  uint32_t& patch,
+                                                  uint8_t&  patch_stash_id);
 
     /**
      * @brief given a local face in a patch, find its corresponding local
@@ -482,7 +487,8 @@ struct CavityManager
      * be mapped to their owner patch and local index in the owner patch
      */
     __device__ __inline__ uint16_t find_copy_face(uint16_t& local_id,
-                                                  uint32_t& patch);
+                                                  uint32_t& patch,
+                                                  uint8_t&  patch_stash_id);
 
 
     /**
@@ -494,6 +500,20 @@ struct CavityManager
     __device__ __inline__ uint16_t find_copy(
         uint16_t&      lid,
         uint32_t&      src_patch,
+        const uint16_t dest_patch_num_elements,
+        const Bitmask& dest_patch_owned_mask,
+        const Bitmask& dest_patch_active_mask,
+        const Bitmask& dest_in_cavity,
+        const LPPair*  s_table,
+        const LPPair*  s_stash);
+
+
+    template <typename HandleT>
+    __device__ __inline__ uint16_t find_copy(
+        uint16_t&      lid,
+        uint32_t&      src_patch,
+        uint8_t&       src_patch_stash_id,
+        uint16_t*      q_correspondence,
         const uint16_t dest_patch_num_elements,
         const Bitmask& dest_patch_owned_mask,
         const Bitmask& dest_patch_active_mask,

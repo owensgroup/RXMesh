@@ -153,15 +153,20 @@ constexpr __device__ __host__ __forceinline__ bool is_owned(
 }
 
 template <uint16_t NumBits, typename T>
-constexpr __device__ __host__ __forceinline__ uint16_t
-extract_low_bits(const T input)
+constexpr __device__ __host__ __forceinline__ T extract_low_bits(const T input)
 {
     static_assert(std::is_same_v<T, uint16_t> || std::is_same_v<T, uint32_t>);
 
     return input & ((1 << NumBits) - 1);
 }
 
+template <uint16_t NumBits, typename T>
+constexpr __device__ __host__ __forceinline__ T extract_high_bits(const T input)
+{
+    static_assert(std::is_same_v<T, uint16_t> || std::is_same_v<T, uint32_t>);
 
+    return input >> (sizeof(T) * 8 - NumBits);
+}
 
 }  // namespace detail
 }  // namespace rxmesh

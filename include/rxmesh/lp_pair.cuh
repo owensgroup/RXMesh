@@ -57,13 +57,10 @@ struct LPPair
         assert(owner_patch == INVALID8 ||
                owner_patch <= (1 << PatchStashNumBits));
 
-        uint32_t pv  = local_id_in_owner_patch;
-        uint16_t p16 = static_cast<uint16_t>(owner_patch);
-        p16          = p16 << 12;
-        pv |= p16;
 
-        m_pair = local_id;
-        m_pair = m_pair << 16;
+        ValueT pv = make_value(local_id_in_owner_patch, owner_patch);
+        m_pair    = local_id;
+        m_pair    = m_pair << LIDNumBits;
         m_pair |= pv;
     }
 
@@ -81,6 +78,22 @@ struct LPPair
     LPPair& operator=(const LPPair&) = default;
     LPPair& operator=(LPPair&&) = default;
     ~LPPair()                   = default;
+
+    /**
+     * @brief concatenate the lid and stash_id into a single uint16_t where the
+     * lid take the lower 12 bits and stash_id takes the high 4 bits
+     */
+    __host__ __device__ static ValueT make_value(const uint16_t lid,
+                                                 const uint8_t  stash_id)
+    {
+        // assert that the high 4 bits are zeros
+        assert(lid == INVALID16 ||
+               detail::extract_high_bits<PatchStashNumBits>(lid) == 0);
+
+        uint16_t p16 = static_cast<uint16_t>(stash_id);
+        p16          = p16 << LIDOwnerNumBits;
+        return (lid | p16);
+    }
 
     /**
      * @brief Construct and return a tombstone pair

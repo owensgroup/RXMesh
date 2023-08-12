@@ -28,6 +28,9 @@ constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 9;
 // unsigned 8-bit
 #define INVALID8 0xFFu
 
+// 4-bit
+#define INVALID4 0xFu
+
 
 // http://www.decompile.com/cpp/faq/file_and_line_error_string.htm
 #define STRINGIFY(x) TOSTRING(x)

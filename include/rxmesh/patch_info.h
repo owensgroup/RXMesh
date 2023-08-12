@@ -135,18 +135,7 @@ struct ALIGN(16) PatchInfo
                                                 const LPPair*      stash,
                                                 const PatchStash&  pstash) const
     {
-        LPPair lp;
-        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            lp = lp_v.find(key, table, stash);
-        }
-        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            lp = lp_e.find(key, table, stash);
-        }
-        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            lp = lp_f.find(key, table, stash);
-        }
-
-        // assert(!lp.is_sentinel());
+        LPPair lp = get_lp<HandleT>().find(key, table, stash);
         if (lp.is_sentinel()) {
             return HandleT();
         } else {
