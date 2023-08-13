@@ -33,10 +33,12 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
 
         // get a patch
         s_patch_id = m_context.m_patch_scheduler.pop();
-        // s_patch_id = blockIdx.x;
-        // if (s_patch_id != current_p) {
-        //    s_patch_id = INVALID32;
-        //}
+#ifdef PROCESS_SINGLE_PATCH
+        if (s_patch_id != current_p) {
+            s_patch_id = INVALID32;
+        }
+#endif
+
 
         if (s_patch_id != INVALID32) {
             if (m_context.m_patches_info[s_patch_id].patch_id == INVALID32) {
@@ -1493,7 +1495,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     // full migrate
     for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
         const uint32_t q = m_s_patch_stash.get_patch(st);
-        if (q != INVALID32 /*&& q == 13*/) {
+        if (q != INVALID32) {
             if (!migrate_from_patch(block, st, q)) {
                 return false;
             }
@@ -2496,22 +2498,25 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
     if (corres != INVALID16) {
         src_patch_stash_id =
             detail::extract_high_bits<LPPair::PatchStashNumBits>(corres);
-        return detail::extract_low_bits<LPPair::LIDOwnerNumBits>(corres);
+        src_patch = m_s_patch_stash.get_patch(src_patch_stash_id);
+        uint16_t ret =
+            detail::extract_low_bits<LPPair::LIDOwnerNumBits>(corres);
+        return ret;
     }
 
-    HandleT owner;
+    const uint16_t lid_in(lid);
+    HandleT        owner;
     if (!m_context.m_patches_info[src_patch].is_owned(HandleT::LocalT(lid))) {
         owner = m_context.m_patches_info[src_patch].find<HandleT>({lid});
         // if the owner src_patch is the same as the patch associated with this
         // cavity, the lid is the local index we are looking for
         src_patch = owner.patch_id();
+        lid       = owner.local_id();
         if (src_patch == m_patch_info.patch_id) {
-            q_correspondence[lid] =
+            q_correspondence[lid_in] =
                 LPPair::make_value(owner.local_id(), INVALID4);
-            lid = owner.local_id();
-            return owner.local_id();
+            return lid;
         }
-        lid = owner.local_id();
     } else {
         // if lid is owned by q then there is no need to check the lp table
         // (because if it existed in p, then it would have shown up in the
@@ -2532,13 +2537,12 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
             const LPPair lp =
                 m_patch_info.get_lp<HandleT>().find(i, s_table, s_stash);
 
-            m_s_patch_stash.get_patch(lp);
-
             if (m_s_patch_stash.get_patch(lp) == src_patch &&
                 lp.local_id_in_owner_patch() == lid) {
-                q_correspondence[lid] =
+                q_correspondence[lid_in] =
                     LPPair::make_value(i, lp.patch_stash_id());
                 src_patch_stash_id = lp.patch_stash_id();
+                src_patch = m_s_patch_stash.get_patch(src_patch_stash_id);
                 return i;
             }
         }

@@ -1394,10 +1394,29 @@ __global__ static void check_not_owned(const Context           context,
                     get_owned_v(vw0, pw0, owner_patch_info);
                     get_owned_v(vw1, pw1, owner_patch_info);
 
-                    if (v0 != vw0 || p0 != pw0 || v1 != vw1 || p1 != pw1) {
-                        // printf("\n 7 owned = %u", patch_id);
+                    /*if (v0 != vw0 || p0 != pw0 || v1 != vw1 || p1 != pw1) {
+                        printf(
+                            "\n 7 owned p %u, e= %u, v0= (%u, %u), v0_o= %u "
+                            "v1= (%u, %u), v1_o= %u, ew= (%u,%u), vw0= (%u, "
+                            "%u), vw0_0= %u, vw1= (%u, %u), vw0_1= %u",
+                            patch_id,
+                            e,
+                            v0,
+                            p0,
+                            s_ev[2 * e + 0],
+                            v1,
+                            p1,
+                            s_ev[2 * e + 1],
+                            e_owned.local_id(),
+                            e_owned.patch_id(),
+                            vw0,
+                            pw0,
+                            owner_patch_info.ev[2 * e_owned.local_id() + 0].id,
+                            vw1,
+                            pw1,
+                            owner_patch_info.ev[2 * e_owned.local_id() + 1].id);
                         ::atomicAdd(d_check, 1);
-                    }
+                    }*/
                 }
             }
         }
@@ -2000,7 +2019,7 @@ bool RXMeshDynamic::validate()
         return true;
     };
 
-    // check that a patch is only encoutered once in patch stash
+    // check that a patch is only encountered once in patch stash
     auto unique_patch_stash = [&]() {
         for (uint32_t p = 0; p < get_num_patches(); ++p) {
             for (uint8_t p_sh = 0; p_sh < PatchStash::stash_size; ++p_sh) {

@@ -1,4 +1,9 @@
 #pragma once
+
+// for debugging, this macro let the scheduler only generate one valid patch
+// (corresponding to the blockIdx.x)
+#define PROCESS_SINGLE_PATCH
+
 // inpsired/taken from
 // https://github.com/GPUPeople/Ouroboros/blob/9153c55abffb3bceb5aea4028dfcc00439b046d5/include/device/queues/Queue.h
 
@@ -23,6 +28,9 @@ struct PatchScheduler
     __device__ __inline__ bool push(const uint32_t pid)
     {
 #ifdef __CUDA_ARCH__
+#ifdef PROCESS_SINGLE_PATCH
+        return true;
+#else
         if (::atomicAdd(count, 1) < static_cast<int>(capacity)) {
             int pos = ::atomicAdd(back, 1) % capacity;
 
@@ -46,6 +54,7 @@ struct PatchScheduler
 
 
 #endif
+#endif
     }
 
     /**
@@ -54,6 +63,9 @@ struct PatchScheduler
     __device__ __inline__ uint32_t pop()
     {
 #ifdef __CUDA_ARCH__
+#ifdef PROCESS_SINGLE_PATCH
+        return blockIdx.x;
+#else
         int readable = ::atomicSub(count, 1);
 
         uint32_t pid = INVALID32;
@@ -74,7 +86,7 @@ struct PatchScheduler
             }
         }
         return pid;
-
+#endif
 #endif
     }
 
