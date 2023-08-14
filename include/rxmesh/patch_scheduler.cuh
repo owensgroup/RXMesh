@@ -2,7 +2,7 @@
 
 // for debugging, this macro let the scheduler only generate one valid patch
 // (corresponding to the blockIdx.x)
-#define PROCESS_SINGLE_PATCH
+//#define PROCESS_SINGLE_PATCH
 
 // inpsired/taken from
 // https://github.com/GPUPeople/Ouroboros/blob/9153c55abffb3bceb5aea4028dfcc00439b046d5/include/device/queues/Queue.h
