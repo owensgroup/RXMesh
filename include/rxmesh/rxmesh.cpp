@@ -791,7 +791,8 @@ void RXMesh::build_device()
                                   m_d_patches_info[p]);
     }
 
-     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
+
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
         m_max_capacity_lp_v = std::max(m_max_capacity_lp_v,
                                        m_h_patches_info[p].lp_v.get_capacity());
 
@@ -1174,6 +1175,18 @@ void RXMesh::allocate_extra_patches()
                                   m_h_patches_ltog_f[0],
                                   m_h_patches_info[p],
                                   m_d_patches_info[p]);
+    }
+
+
+    for (uint32_t p = get_num_patches(); p < get_max_num_patches(); ++p) {
+        m_max_capacity_lp_v = std::max(m_max_capacity_lp_v,
+                                       m_h_patches_info[p].lp_v.get_capacity());
+
+        m_max_capacity_lp_e = std::max(m_max_capacity_lp_e,
+                                       m_h_patches_info[p].lp_e.get_capacity());
+
+        m_max_capacity_lp_f = std::max(m_max_capacity_lp_f,
+                                       m_h_patches_info[p].lp_f.get_capacity());
     }
 }
 }  // namespace rxmesh

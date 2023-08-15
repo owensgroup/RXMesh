@@ -43,11 +43,7 @@ inline void HandleError(cudaError_t err, const char* file, int line)
     if (err != cudaSuccess) {
         Log::get_logger()->error("Line {} File {}", line, file);
         Log::get_logger()->error("CUDA ERROR: {}", cudaGetErrorString(err));
-#ifdef _WIN32
-        system("pause");
-#else
         exit(EXIT_FAILURE);
-#endif
     }
 }
 #define CUDA_ERROR(err) (HandleError(err, __FILE__, __LINE__))

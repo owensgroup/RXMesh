@@ -500,18 +500,6 @@ struct CavityManager
     __device__ __inline__ uint16_t find_copy(
         uint16_t&      lid,
         uint32_t&      src_patch,
-        const uint16_t dest_patch_num_elements,
-        const Bitmask& dest_patch_owned_mask,
-        const Bitmask& dest_patch_active_mask,
-        const Bitmask& dest_in_cavity,
-        const LPPair*  s_table,
-        const LPPair*  s_stash);
-
-
-    template <typename HandleT>
-    __device__ __inline__ uint16_t find_copy(
-        uint16_t&      lid,
-        uint32_t&      src_patch,
         uint8_t&       src_patch_stash_id,
         uint16_t*      q_correspondence,
         const uint16_t dest_patch_num_elements,
@@ -690,6 +678,10 @@ struct CavityManager
 
     bool*      m_s_should_slice;
     ShmemMutex m_s_patch_stash_mutex;
+
+    //LPPair*  m_s_table_q;
+    //LPPair*  m_s_table_stash_q;
+    //uint32_t m_s_table_q_size;    
 };
 
 }  // namespace rxmesh

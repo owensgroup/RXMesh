@@ -453,6 +453,12 @@ class RXMeshDynamic : public RXMeshStatic
         cavity_size_shmem += (this->m_max_faces_per_patch / 2) * sizeof(int) +
                              ShmemAllocator::default_alignment;
 
+        size_t q_lp_shmem = std::max(max_lp_hashtable_capacity<LocalVertexT>(),
+                                     max_lp_hashtable_capacity<LocalEdgeT>());
+
+        q_lp_shmem = std::max(q_lp_shmem,
+                              size_t(max_lp_hashtable_capacity<LocalFaceT>())) *
+                     sizeof(LPPair);
 
         // active, owned, migrate(for vertices only), src bitmask (for vertices
         // and edges only), src connect (for vertices and edges only), ownership

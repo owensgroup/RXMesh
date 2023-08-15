@@ -48,11 +48,11 @@ struct ALIGN(16) PatchInfo
           faces_capacity(nullptr),
           patch_id(INVALID32){};
 
-    __device__ __host__ PatchInfo(const PatchInfo& other) = default;
-    __device__ __host__ PatchInfo(PatchInfo&&)            = default;
-    __device__ __host__ PatchInfo& operator=(const PatchInfo&) = default;
-    __device__ __host__ PatchInfo& operator=(PatchInfo&&) = default;
-    __device__                     __host__ ~PatchInfo()  = default;
+    __device__ __host__            PatchInfo(const PatchInfo& other) = default;
+    __device__ __host__            PatchInfo(PatchInfo&&)            = default;
+    __device__ __host__ PatchInfo& operator=(const PatchInfo&)       = default;
+    __device__ __host__ PatchInfo& operator=(PatchInfo&&)            = default;
+    __device__                     __host__ ~PatchInfo()             = default;
 
     // The topology information: edge incident vertices and face incident edges
     LocalVertexT* ev;
@@ -145,17 +145,20 @@ struct ALIGN(16) PatchInfo
     }
 
     template <typename HandleT>
-    __device__ __host__ __inline__ HandleT find(const LPPair::KeyT key) const
+    __device__ __host__ __inline__ HandleT find(
+        const LPPair::KeyT key,
+        const LPPair*      table = nullptr,
+        const LPPair*      stash = nullptr) const
     {
         LPPair lp;
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            lp = lp_v.find(key, nullptr, nullptr);
+            lp = lp_v.find(key, table, stash);
         }
         if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            lp = lp_e.find(key, nullptr, nullptr);
+            lp = lp_e.find(key, table, stash);
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            lp = lp_f.find(key, nullptr, nullptr);
+            lp = lp_f.find(key, table, stash);
         }
 
         // assert(!lp.is_sentinel());

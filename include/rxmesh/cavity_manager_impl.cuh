@@ -228,6 +228,17 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     // cavity boundary edges
     m_s_cavity_boundary_edges = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
 
+    // q hash table
+    // m_s_table_q_size = std::max(
+    //    std::max(m_context.m_max_lp_capacity_v,
+    //    m_context.m_max_lp_capacity_e), m_context.m_max_lp_capacity_f);
+    // m_s_table_q = shrd_alloc.alloc<LPPair>(m_s_table_q_size);
+
+    //__shared__ LPPair st_q[LPHashTable::stash_size];
+    //m_s_table_stash_q = st_q;
+    //fill_n<blockThreads>(
+    //    m_s_table_stash_q, uint16_t(LPHashTable::stash_size), LPPair());
+
     // lp stash
     __shared__ LPPair st_v[LPHashTable::stash_size];
     m_s_table_stash_v = st_v;
@@ -1681,6 +1692,12 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
                                               m_correspondence_size_vf,
                                               m_s_table_v,
                                               m_s_table_stash_v);
+
+        // assert(m_s_table_q_size >=
+        //        m_context.m_patches_info[q].lp_v.get_capacity());
+        // m_context.m_patches_info[q].lp_v.load_in_shared_memory(
+        //     m_s_table_q, true, m_s_table_stash_q);
+
         block.sync();
 
         // make sure there is a copy in p for any vertex in
@@ -1842,6 +1859,12 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                                               m_correspondence_size_vf,
                                               m_s_table_v,
                                               m_s_table_stash_v);
+
+        // assert(m_s_table_q_size >=
+        //        m_context.m_patches_info[q].lp_v.get_capacity());
+        // m_context.m_patches_info[q].lp_v.load_in_shared_memory(
+        //     m_s_table_q, true, m_s_table_stash_q);
+
         block.sync();
 
         // 3. make sure there is a copy in p for any vertex in
@@ -1895,6 +1918,11 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                                             m_correspondence_size_e,
                                             m_s_table_e,
                                             m_s_table_stash_e);
+        // assert(m_s_table_q_size >=
+        //        m_context.m_patches_info[q].lp_e.get_capacity());
+        // m_context.m_patches_info[q].lp_e.load_in_shared_memory(
+        //     m_s_table_q, true, m_s_table_stash_q);
+
         block.sync();
 
         // same story as with the loop that adds vertices
@@ -2027,6 +2055,12 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                                             m_correspondence_size_vf,
                                             m_s_table_f,
                                             m_s_table_stash_f);
+
+        // assert(m_s_table_q_size >=
+        //        m_context.m_patches_info[q].lp_f.get_capacity());
+        // m_context.m_patches_info[q].lp_f.load_in_shared_memory(
+        //     m_s_table_q, true, m_s_table_stash_q);
+
         block.sync();
 
         // same story as with the loop that adds vertices
@@ -2408,77 +2442,6 @@ template <typename HandleT>
 __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
     uint16_t&      lid,
     uint32_t&      src_patch,
-    const uint16_t dest_patch_num_elements,
-    const Bitmask& dest_patch_owned_mask,
-    const Bitmask& dest_patch_active_mask,
-    const Bitmask& dest_in_cavity,
-    const LPPair*  s_table,
-    const LPPair*  s_stash)
-{
-
-    assert(
-        !m_context.m_patches_info[src_patch].is_deleted(HandleT::LocalT(lid)));
-
-    // First check if lid is owned by src_patch. If not, then map it to its
-    // owner patch and local index in it
-
-    if (!m_context.m_patches_info[src_patch].is_owned(HandleT::LocalT(lid))) {
-        HandleT owner =
-            m_context.m_patches_info[src_patch].find<HandleT>({lid});
-        src_patch = owner.patch_id();
-        lid       = owner.local_id();
-    } else {
-        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            assert(lid < m_correspondence_size_e);
-            return m_s_q_correspondence_e[lid];
-        } else {
-            assert(lid < m_correspondence_size_vf);
-            return m_s_q_correspondence_vf[lid];
-        }
-    }
-
-    // if the owner src_patch is the same as the patch associated with this
-    // cavity, the lid is the local index we are looking for
-    if (src_patch == m_patch_info.patch_id) {
-        return lid;
-    }
-
-    // otherwise, we do a search over the not-owned elements in the dest
-    // patch. For every not-owned element, we map it to its owner patch and
-    // check against lid-src_patch pair
-    for (uint16_t i = 0; i < dest_patch_num_elements; ++i) {
-        assert(i < dest_patch_owned_mask.size());
-        assert(i < dest_patch_active_mask.size());
-        assert(i < dest_in_cavity.size());
-        if (!dest_patch_owned_mask(i) &&
-            (dest_patch_active_mask(i) || dest_in_cavity(i))) {
-
-            const HandleT handle = m_patch_info.find<HandleT>(
-                i, s_table, s_stash, m_s_patch_stash);
-
-            // These assertion does not work any more since we change the
-            // active and owned mask when we add new elements. So, a thread
-            // A might set the bit for the active mask and reset the owned
-            // for element X before adding it to the hashtable leading to
-            // another thread B looking for it without finding it
-
-            // assert(handle.is_valid());
-            // assert(handle.patch_id() != INVALID32);
-            // assert(handle.local_id() != INVALID16);
-
-            if (handle.patch_id() == src_patch && handle.local_id() == lid) {
-                return i;
-            }
-        }
-    }
-    return INVALID16;
-}
-
-template <uint32_t blockThreads, CavityOp cop>
-template <typename HandleT>
-__device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
-    uint16_t&      lid,
-    uint32_t&      src_patch,
     uint8_t&       src_patch_stash_id,
     uint16_t*      q_correspondence,
     const uint16_t dest_patch_num_elements,
@@ -2507,7 +2470,11 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
     const uint16_t lid_in(lid);
     HandleT        owner;
     if (!m_context.m_patches_info[src_patch].is_owned(HandleT::LocalT(lid))) {
-        owner = m_context.m_patches_info[src_patch].find<HandleT>({lid});
+        owner = m_context.m_patches_info[src_patch].find<HandleT>(
+            {lid} /*, m_s_table_q, m_s_table_stash_q */);
+
+        assert(owner.is_valid());
+
         // if the owner src_patch is the same as the patch associated with this
         // cavity, the lid is the local index we are looking for
         src_patch = owner.patch_id();
