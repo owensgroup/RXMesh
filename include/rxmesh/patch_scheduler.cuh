@@ -31,6 +31,7 @@ struct PatchScheduler
 #ifdef PROCESS_SINGLE_PATCH
         return true;
 #else
+        assert(pid != INVALID32);
         if (::atomicAdd(count, 1) < static_cast<int>(capacity)) {
             int pos = ::atomicAdd(back, 1) % capacity;
 
@@ -122,6 +123,19 @@ struct PatchScheduler
         CUDA_ERROR(cudaMalloc((void**)&back, sizeof(int)));
         CUDA_ERROR(cudaMalloc((void**)&list, sizeof(uint32_t) * capacity));
     }
+
+    __host__ void print_list() const
+    {
+        std::vector<uint32_t> h_list(capacity);
+        CUDA_ERROR(cudaMemcpy(h_list.data(),
+                              list,
+                              h_list.size() * sizeof(uint32_t),
+                              cudaMemcpyDeviceToHost));
+        for (uint32_t i = 0; i < h_list.size(); ++i) {
+            printf("\n list[%u]= %u", i, h_list[i]);
+        }
+    }
+
 
     /**
      * @brief free all the memories

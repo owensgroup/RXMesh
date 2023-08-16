@@ -54,7 +54,7 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
 
             if (!locked) {
                 // if we can not, we add it again to the queue
-                push();
+                push(s_patch_id);
 
                 // and signal other threads to also exit
                 s_patch_id = INVALID32;
@@ -235,8 +235,8 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     // m_s_table_q = shrd_alloc.alloc<LPPair>(m_s_table_q_size);
 
     //__shared__ LPPair st_q[LPHashTable::stash_size];
-    //m_s_table_stash_q = st_q;
-    //fill_n<blockThreads>(
+    // m_s_table_stash_q = st_q;
+    // fill_n<blockThreads>(
     //    m_s_table_stash_q, uint16_t(LPHashTable::stash_size), LPPair());
 
     // lp stash
@@ -1211,6 +1211,16 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::push()
 {
     if (threadIdx.x == 0) {
         bool ret = m_context.m_patch_scheduler.push(m_patch_info.patch_id);
+        assert(ret);
+    }
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void CavityManager<blockThreads, cop>::push(
+    const uint32_t pid)
+{
+    if (threadIdx.x == 0) {
+        bool ret = m_context.m_patch_scheduler.push(pid);
         assert(ret);
     }
 }

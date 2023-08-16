@@ -354,6 +354,8 @@ struct CavityManager
      */
     __device__ __inline__ void push();
 
+    __device__ __inline__ void push(const uint32_t pid);
+
     /**
      * @brief release the lock of this patch
      */
@@ -679,9 +681,9 @@ struct CavityManager
     bool*      m_s_should_slice;
     ShmemMutex m_s_patch_stash_mutex;
 
-    //LPPair*  m_s_table_q;
-    //LPPair*  m_s_table_stash_q;
-    //uint32_t m_s_table_q_size;    
+    // LPPair*  m_s_table_q;
+    // LPPair*  m_s_table_stash_q;
+    // uint32_t m_s_table_q_size;
 };
 
 }  // namespace rxmesh
