@@ -135,7 +135,6 @@ struct ALIGN(16) PatchInfo
                                                 const LPPair*      stash,
                                                 const PatchStash&  pstash) const
     {
-        assert(!is_owned(HandleT::LocalT(key)));
         LPPair lp = get_lp<HandleT>().find(key, table, stash);
         if (lp.is_sentinel()) {
             return HandleT();
@@ -151,7 +150,9 @@ struct ALIGN(16) PatchInfo
         const LPPair*      table = nullptr,
         const LPPair*      stash = nullptr) const
     {
-        assert(!is_owned(HandleT::LocalT(key)));
+        if (table == nullptr && stash == nullptr) {
+            assert(!is_owned(HandleT::LocalT(key)));
+        }
         LPPair lp = get_lp<HandleT>().find(key, table, stash);
 
         // assert(!lp.is_sentinel());

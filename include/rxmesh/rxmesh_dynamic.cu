@@ -2085,6 +2085,11 @@ bool RXMeshDynamic::validate()
         success = false;
     }
 
+    if (!check_hashtable()) {
+        RXMESH_ERROR("RXMeshDynamic::validate() check_hashtable failed");
+        success = false;
+    }
+
     if (!check_uniqueness()) {
         RXMESH_ERROR("RXMeshDynamic::validate() check_uniqueness failed");
         success = false;
@@ -2092,11 +2097,6 @@ bool RXMeshDynamic::validate()
 
     if (!check_not_owned()) {
         RXMESH_ERROR("RXMeshDynamic::validate() check_not_owned failed");
-        success = false;
-    }
-
-    if (!check_hashtable()) {
-        RXMESH_ERROR("RXMeshDynamic::validate() check_hashtable failed");
         success = false;
     }
 
