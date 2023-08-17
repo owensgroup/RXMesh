@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <omp.h>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <numeric>
@@ -197,7 +198,21 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     build_supporting_structures(fv, ef, ff_offset, ff_values);
 
     if (!patcher_file.empty()) {
-        m_patcher = std::make_unique<patcher::Patcher>(patcher_file);
+        if (!std::filesystem::exists(patcher_file)) {
+            RXMESH_ERROR(
+                "RXMesh::build patch file {} does not exit. Building unique "
+                "patches.",
+                patcher_file);
+            m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
+                                                           ff_offset,
+                                                           ff_values,
+                                                           fv,
+                                                           m_edges_map,
+                                                           m_num_vertices,
+                                                           m_num_edges);
+        } else {
+            m_patcher = std::make_unique<patcher::Patcher>(patcher_file);
+        }
     } else {
         m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
                                                        ff_offset,
@@ -1096,7 +1111,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              lp_cap_v,
              h_patch_info.patch_stash,
              h_patch_info.lp_v,
-             d_patch.lp_v);  
+             d_patch.lp_v);
 
 
 #ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
@@ -1114,7 +1129,6 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.patch_stash,
              h_patch_info.lp_e,
              d_patch.lp_e);
-    
 
 
 #ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
@@ -1132,7 +1146,6 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.patch_stash,
              h_patch_info.lp_f,
              d_patch.lp_f);
-    
 
 
     CUDA_ERROR(cudaMemcpy(

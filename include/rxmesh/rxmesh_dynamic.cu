@@ -1950,19 +1950,30 @@ bool RXMeshDynamic::validate()
     };
 
 
-    // every mesh element in the ribbon of a patch should be mapped to an owner
-    // that lives in a different. otherwise, the ribbon element is actually
-    // duplicated. We check on this here
-    auto check_unique_ribbon = [&]() {
+    // Every mesh element in the hash table of a patch should be mapped to an
+    // owner that lives in a different patch. Otherwise, the mesh element is
+    // actually duplicated. We check on this here. We also check that when we
+    // query the hashtable for a (not-owned) mesh element, what we get is a mesh
+    // element that is owned by the owner patch
+    auto check_hashtable = [&]() {
         for (uint32_t p = 0; p < get_num_patches(); ++p) {
             PatchInfo pi = m_h_patches_info[p];
 
             for (uint32_t v = 0; v < pi.num_vertices[0]; v++) {
                 const LocalVertexT vl(v);
                 if (!pi.is_deleted(vl) && !pi.is_owned(vl)) {
-                    const VertexHandle vh =
-                        get_owner_handle<VertexHandle>({p, vl});
+                    const VertexHandle vh = pi.find<VertexHandle>(v);
+                    if (!vh.is_valid()) {
+                        return false;
+                    }
                     if (vh.patch_id() == p) {
+                        return false;
+                    }
+                    if (vh.patch_id() > get_num_patches()) {
+                        return false;
+                    }
+                    if (!m_h_patches_info[vh.patch_id()].is_owned(
+                            LocalVertexT(vh.local_id()))) {
                         return false;
                     }
                 }
@@ -1972,8 +1983,18 @@ bool RXMeshDynamic::validate()
             for (uint32_t e = 0; e < pi.num_edges[0]; e++) {
                 const LocalEdgeT el(e);
                 if (!pi.is_deleted(el) && !pi.is_owned(el)) {
-                    const EdgeHandle eh = get_owner_handle<EdgeHandle>({p, el});
+                    const EdgeHandle eh = pi.find<EdgeHandle>(e);
+                    if (!eh.is_valid()) {
+                        return false;
+                    }
                     if (eh.patch_id() == p) {
+                        return false;
+                    }
+                    if (eh.patch_id() > get_num_patches()) {
+                        return false;
+                    }
+                    if (!m_h_patches_info[eh.patch_id()].is_owned(
+                            LocalEdgeT(eh.local_id()))) {
                         return false;
                     }
                 }
@@ -1983,8 +2004,18 @@ bool RXMeshDynamic::validate()
             for (uint32_t f = 0; f < pi.num_faces[0]; f++) {
                 const LocalFaceT fl(f);
                 if (!pi.is_deleted(fl) && !pi.is_owned(fl)) {
-                    const FaceHandle fh = get_owner_handle<FaceHandle>({p, fl});
+                    const FaceHandle fh = pi.find<FaceHandle>(f);
+                    if (!fh.is_valid()) {
+                        return false;
+                    }
                     if (fh.patch_id() == p) {
+                        return false;
+                    }
+                    if (fh.patch_id() > get_num_patches()) {
+                        return false;
+                    }
+                    if (!m_h_patches_info[fh.patch_id()].is_owned(
+                            LocalFaceT(fh.local_id()))) {
                         return false;
                     }
                 }
@@ -2064,8 +2095,8 @@ bool RXMeshDynamic::validate()
         success = false;
     }
 
-    if (!check_unique_ribbon()) {
-        RXMESH_ERROR("RXMeshDynamic::validate() check_unique_ribbon failed");
+    if (!check_hashtable()) {
+        RXMESH_ERROR("RXMeshDynamic::validate() check_hashtable failed");
         success = false;
     }
 
