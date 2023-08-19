@@ -445,13 +445,14 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
 
     // change patch layout to accommodate all cavities created in the patch
     if (!migrate(block)) {
+        block.sync();
         m_write_to_gmem = false;
         unlock_locked_patches();
         return false;
     }
 
-    // m_patch_info.set_dirty();
-    // set_dirty_for_locked_patches();
+    m_patch_info.set_dirty();
+    set_dirty_for_locked_patches();
 
     m_write_to_gmem = true;
     block.sync();
@@ -1526,15 +1527,15 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
 
 
     // make sure non of the q patches are dirty
-    // for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
-    //    assert(st < m_s_locked_patches_mask.size());
-    //    if (m_s_locked_patches_mask(st)) {
-    //        const uint32_t q = m_s_patch_stash.get_patch(st);
-    //        if (m_context.m_patches_info[q].is_dirty()) {
-    //            return false;
-    //        }
-    //    }
-    //}
+    for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
+        assert(st < m_s_locked_patches_mask.size());
+        if (m_s_locked_patches_mask(st)) {
+            const uint32_t q = m_s_patch_stash.get_patch(st);
+            if (m_context.m_patches_info[q].is_dirty()) {
+                return false;
+            }
+        }
+    }
 
 
     set_ownership_change_bitmask(block);

@@ -146,9 +146,27 @@ __global__ static void slice_patches(Context        context,
 
         __shared__ uint32_t s_new_patch_id;
         if (threadIdx.x == 0) {
-            // printf("\n*** slicing %u\n", pi.patch_id);
-            s_new_patch_id = ::atomicAdd(context.m_num_patches, uint32_t(1));
-            assert(s_new_patch_id < context.m_max_num_patches);
+            // check if any of the neighbor patches are dirty. If so, we don't
+            // slice because it messes the connectivity of other neighbor
+            // patches
+            bool ok = true;
+            for (uint32_t i = 0; i < PatchStash::stash_size; ++i) {
+                uint32_t q = pi.patch_stash.get_patch(i);
+                if (q != INVALID32) {
+                    if (context.m_patches_info[q].is_dirty()) {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            if (ok) {
+                s_new_patch_id =
+                    ::atomicAdd(context.m_num_patches, uint32_t(1));
+                assert(s_new_patch_id < context.m_max_num_patches);
+            } else {
+                s_new_patch_id  = INVALID32;
+                pi.should_slice = false;
+            }
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
         Bitmask s_active_v, s_active_e, s_active_f;
@@ -156,6 +174,10 @@ __global__ static void slice_patches(Context        context,
         Bitmask s_new_p_active_v, s_new_p_active_e, s_new_p_active_f;
         Bitmask s_ribbon_v, s_ribbon_e, s_ribbon_f;
 
+        block.sync();
+        if (s_new_patch_id == INVALID32) {
+            return;
+        }
 
         uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * num_edges);
         detail::load_async(block,

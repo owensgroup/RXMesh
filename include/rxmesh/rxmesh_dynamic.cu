@@ -329,7 +329,7 @@ __device__ __inline__ void reevaluate_active_elements(
                                                       s_face_tag);
     block.sync();
 
-    // tage vertices throgg edges
+    // tag vertices through edges
     // and tag edges if there are owned
     tag_vertices_through_edges<blockThreads>(num_vertices,
                                              num_edges,
@@ -360,7 +360,7 @@ __inline__ __device__ void remove_idle_elements(
     //
     // remove idle elements from the hashtable by query the table from
     // global memory, write the results to shared memory buffer, then
-    // copy the shared memory buffer to gloabl memory
+    // copy the shared memory buffer to global memory
 
     __shared__ LPPair s_stash[LPHashTable::stash_size];
 
@@ -535,8 +535,6 @@ __global__ static void remove_surplus_elements(const Context context)
                                        num_faces,
                                        s_owned_f,
                                        s_face_tag);
-    block.sync();
-
     block.sync();
     store<blockThreads>(s_patch_stash,
                         uint16_t(PatchStash::stash_size),
@@ -1972,6 +1970,10 @@ bool RXMeshDynamic::validate()
                     if (vh.patch_id() > get_num_patches()) {
                         return false;
                     }
+                    if (m_h_patches_info[vh.patch_id()].is_deleted(
+                            LocalVertexT(vh.local_id()))) {
+                        return false;
+                    }
                     if (!m_h_patches_info[vh.patch_id()].is_owned(
                             LocalVertexT(vh.local_id()))) {
                         return false;
@@ -1993,6 +1995,10 @@ bool RXMeshDynamic::validate()
                     if (eh.patch_id() > get_num_patches()) {
                         return false;
                     }
+                    if (m_h_patches_info[eh.patch_id()].is_deleted(
+                            LocalEdgeT(eh.local_id()))) {
+                        return false;
+                    }
                     if (!m_h_patches_info[eh.patch_id()].is_owned(
                             LocalEdgeT(eh.local_id()))) {
                         return false;
@@ -2012,6 +2018,10 @@ bool RXMeshDynamic::validate()
                         return false;
                     }
                     if (fh.patch_id() > get_num_patches()) {
+                        return false;
+                    }
+                    if (m_h_patches_info[fh.patch_id()].is_deleted(
+                            LocalFaceT(fh.local_id()))) {
                         return false;
                     }
                     if (!m_h_patches_info[fh.patch_id()].is_owned(
@@ -2131,6 +2141,14 @@ void RXMeshDynamic::cleanup()
     constexpr uint32_t block_size = 256;
     const uint32_t     grid_size  = get_num_patches();
 
+    // for (uint32_t p = 0; p < m_num_patches; ++p) {
+    //     PatchInfo d_patch;
+    //     CUDA_ERROR(cudaMemcpy(&d_patch,
+    //                           m_d_patches_info + p,
+    //                           sizeof(PatchInfo),
+    //                           cudaMemcpyDeviceToHost));
+    //     m_h_patches_info[p].child_id = d_patch.child_id;
+    // }
     CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
                           this->m_rxmesh_context.m_max_num_vertices,
                           sizeof(uint32_t),
@@ -2323,6 +2341,17 @@ void RXMeshDynamic::update_host()
                               d_patch.patch_stash.m_stash,
                               PatchStash::stash_size * sizeof(uint32_t),
                               cudaMemcpyDeviceToHost));
+        // dirty
+        CUDA_ERROR(cudaMemcpy(m_h_patches_info[p].dirty,
+                              d_patch.dirty,
+                              sizeof(int),
+                              cudaMemcpyDeviceToHost));
+
+        // child id
+        m_h_patches_info[p].child_id = d_patch.child_id;
+
+        // should slice
+        m_h_patches_info[p].should_slice = d_patch.should_slice;
 
         // copy lp hashtable
         m_h_patches_info[p].lp_v.move(d_patch.lp_v);
