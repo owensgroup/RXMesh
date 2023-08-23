@@ -55,6 +55,14 @@ FetchContent_Declare(spdlog
 )
 FetchContent_Populate(spdlog)
 
+# glm
+FetchContent_Declare(glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG        master
+)
+FetchContent_Populate(glm)
+add_subdirectory(${glm_SOURCE_DIR})
+
 # polyscope
 if(USE_POLYSCOPE)
 FetchContent_Declare(polyscope
@@ -143,7 +151,7 @@ target_compile_options(developer_flags INTERFACE
 )
 
 target_link_libraries(RXMesh_header_lib INTERFACE $<BUILD_INTERFACE:developer_flags>)
-
+target_link_libraries(RXMesh_header_lib INTERFACE glm::glm)
 if (USE_POLYSCOPE)
 	target_link_libraries(RXMesh_header_lib INTERFACE polyscope)	
 endif()

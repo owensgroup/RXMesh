@@ -1,5 +1,5 @@
 #include <cuda_profiler_api.h>
-
+#include <glm/glm.hpp>
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
@@ -18,6 +18,7 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
                                           uint32_t  current_p)
 {
     using namespace rxmesh;
+    using VecT           = glm::vec<3, T, glm::defaultp>;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
     CavityManager<blockThreads, CavityOp::E> cavity(
@@ -46,22 +47,22 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
 
             constexpr T PII = 3.14159265358979323f;
 
-            const Vector<3, T> V0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-            const Vector<3, T> V1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-            const Vector<3, T> V2(coords(v2, 0), coords(v2, 1), coords(v2, 2));
-            const Vector<3, T> V3(coords(v3, 0), coords(v3, 1), coords(v3, 2));
+            const VecT V0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+            const VecT V1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+            const VecT V2(coords(v2, 0), coords(v2, 1), coords(v2, 2));
+            const VecT V3(coords(v3, 0), coords(v3, 1), coords(v3, 2));
 
             // find the angle between S, M, Q vertices (i.e., angle at M)
-            auto angle_between_three_vertices = [](const Vector<3, T>& S,
-                                                   const Vector<3, T>& M,
-                                                   const Vector<3, T>& Q) {
-                Vector<3, T> p1      = S - M;
-                Vector<3, T> p2      = Q - M;
-                T            dot_pro = dot(p1, p2);
+            auto angle_between_three_vertices = [](const VecT& S,
+                                                   const VecT& M,
+                                                   const VecT& Q) {
+                VecT p1      = S - M;
+                VecT p2      = Q - M;
+                T    dot_pro = glm::dot(p1, p2);
                 if constexpr (std::is_same_v<T, float>) {
-                    return acosf(dot_pro / (p1.norm() * p2.norm()));
+                    return acosf(dot_pro / (glm::length(p1) * glm::length(p2)));
                 } else {
-                    return acos(dot_pro / (p1.norm() * p2.norm()));
+                    return acos(dot_pro / (glm::length(p1) * glm::length(p2)));
                 }
             };
 
@@ -216,7 +217,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 
     auto coords = rx.get_input_vertex_coordinates();
 
-    // EXPECT_TRUE(rx.validate());
+    EXPECT_TRUE(rx.validate());
 
     int*      d_flipped        = nullptr;
     uint32_t* d_num_successful = nullptr;
@@ -237,7 +238,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 
     CUDA_ERROR(cudaProfilerStart());
 
-    bool validate = true;
+    bool validate = false;
     while (h_flipped != 0) {
         CUDA_ERROR(cudaMemset(d_flipped, 0, sizeof(int)));
         CUDA_ERROR(cudaMemset(d_num_successful, 0, sizeof(uint32_t)));
@@ -298,6 +299,10 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
             if (validate) {
                 rx.update_host();
                 EXPECT_TRUE(rx.validate());
+
+                EXPECT_EQ(num_vertices, rx.get_num_vertices());
+                EXPECT_EQ(num_edges, rx.get_num_edges());
+                EXPECT_EQ(num_faces, rx.get_num_faces());
             }
 
             uint32_t h_num_successful, h_num_sliced;
