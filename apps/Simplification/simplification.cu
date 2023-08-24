@@ -18,7 +18,6 @@ struct arg
 TEST(Apps, Simplification)
 {
     using namespace rxmesh;
-    using dataT = float;
 
     // Select device
     cuda_query(Arg.device_id);
