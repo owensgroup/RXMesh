@@ -482,6 +482,14 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::propagate(
         mark_faces_through_edges();
     }
 
+    if constexpr (cop == CavityOp::EV) {
+        // mark_vertices_through_edges();
+        block.sync();
+        mark_edges_through_vertices();
+        block.sync();
+        mark_faces_through_edges();
+    }
+
     if constexpr (cop == CavityOp::E) {
         mark_faces_through_edges();
     }
