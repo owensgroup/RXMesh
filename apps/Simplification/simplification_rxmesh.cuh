@@ -21,30 +21,31 @@ __device__ __inline__ T compute_cost(const Mat4<T>& quadric,
                                      const T        z)
 {
     // clang-format off
-    return     quadric(0, 0) * x * x + 
-           2 * quadric(0, 1) * x * y +
-           2 * quadric(0, 2) * x * z + 
-           2 * quadric(0, 3) * x +
+    return     quadric[0][0] * x * x + 
+           2 * quadric[0][1] * x * y +
+           2 * quadric[0][2] * x * z + 
+           2 * quadric[0][3] * x +
 
-               quadric(1, 1) * y * y + 
-           2 * quadric(1, 2) * y * z +
-           2 * quadric(1, 3) * y +
+               quadric[1][1] * y * y + 
+           2 * quadric[1][2] * y * z +
+           2 * quadric[1][3] * y +
 
-               quadric(2, 2) * z * z + 
-           2 * quadric(2, 3) * z +
+               quadric[2][2] * z * z + 
+           2 * quadric[2][3] * z +
 
-               quadric(3, 3);
+               quadric[3][3];
     // clang-format on
 }
 
 template <typename T>
-void compute_edge_cost(const rxmesh::EdgeHandle&         e,
-                       const rxmesh::VertexHandle&       v0,
-                       const rxmesh::VertexHandle&       v1,
-                       const rxmesh::VertexAttribute<T>& vertex_quadrics,
-                       const rxmesh::VertexAttribute<T>& coords,
-                       rxmesh::EdgeAttribute<T>&         edge_cost,
-                       rxmesh::EdgeAttribute<T>&         edge_col_coord)
+__device__ __inline__ void calc_edge_cost(
+    const rxmesh::EdgeHandle&         e,
+    const rxmesh::VertexHandle&       v0,
+    const rxmesh::VertexHandle&       v1,
+    const rxmesh::VertexAttribute<T>& coords,
+    const rxmesh::VertexAttribute<T>& vertex_quadrics,
+    rxmesh::EdgeAttribute<T>&         edge_cost,
+    rxmesh::EdgeAttribute<T>&         edge_col_coord)
 {
     Mat4<T> edge_quadric;
     for (int i = 0; i < 4; ++i) {
@@ -77,7 +78,7 @@ void compute_edge_cost(const rxmesh::EdgeHandle&         e,
     } else {
         const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
         const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-        const Vec3<T> p2 = 0.5 * (p0 + p1);
+        const Vec3<T> p2 = T(0.5) * (p0 + p1);
 
         const T e0 = compute_cost(edge_quadric, p0[0], p0[1], p0[2]);
         const T e1 = compute_cost(edge_quadric, p1[0], p1[1], p1[2]);
@@ -116,6 +117,37 @@ __device__ __inline__ Vec4<T> compute_face_plane(const Vec3<T>& v0,
     Vec4<T> ret(n[0], n[1], n[2], -glm::dot(n, v0));
 
     return ret;
+}
+
+template <typename T, uint32_t blockThreads>
+__global__ static void compute_edge_cost(
+    rxmesh::Context            context,
+    rxmesh::VertexAttribute<T> coords,
+    rxmesh::VertexAttribute<T> vertex_quadrics,
+    rxmesh::EdgeAttribute<T>   edge_cost,
+    rxmesh::EdgeAttribute<T>   edge_col_coord)
+{
+    using namespace rxmesh;
+
+    auto block = cooperative_groups::this_thread_block();
+
+    ShmemAllocator shrd_alloc;
+
+    auto cost = [&](const EdgeHandle edge_id, const VertexIterator& ev) {
+        const VertexHandle v0 = ev[0];
+        const VertexHandle v1 = ev[0];
+
+        calc_edge_cost(edge_id,
+                       v0,
+                       v1,
+                       coords,
+                       vertex_quadrics,
+                       edge_cost,
+                       edge_col_coord);
+    };
+
+    Query<blockThreads> query(context);
+    query.dispatch<Op::EV>(block, shrd_alloc, cost);
 }
 
 template <typename T, uint32_t blockThreads>
@@ -256,6 +288,12 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
     auto vertex_quadrics = rx.add_vertex_attribute<float>("quadrics", 16);
     vertex_quadrics->reset(0, DEVICE);
 
+    auto edge_cost = rx.add_edge_attribute<float>("cost", 1);
+    edge_cost->reset(0, DEVICE);
+
+    auto edge_col_coord = rx.add_edge_attribute<float>("cost", 3);
+    edge_col_coord->reset(0, DEVICE);
+
     float total_time = 0;
 
     float app_time     = 0;
@@ -272,6 +310,21 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
            launch_box.num_threads,
            launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, *vertex_quadrics);
+
+
+    rx.prepare_launch_box({Op::EV},
+                          launch_box,
+                          (void*)compute_edge_cost<float, blockThreads>,
+                          false);
+    compute_edge_cost<float, blockThreads>
+        <<<launch_box.blocks,
+           launch_box.num_threads,
+           launch_box.smem_bytes_dyn>>>(rx.get_context(),
+                                        *coords,
+                                        *vertex_quadrics,
+                                        *edge_cost,
+                                        *edge_col_coord);
+
 
     bool validate = true;
 
