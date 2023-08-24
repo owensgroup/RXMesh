@@ -15,6 +15,96 @@ template <typename T>
 using Mat4 = glm::mat<4, 4, T, glm::defaultp>;
 
 template <typename T>
+__device__ __inline__ T compute_cost(const Mat4<T>& quadric,
+                                     const T        x,
+                                     const T        y,
+                                     const T        z)
+{
+    // clang-format off
+    return     quadric(0, 0) * x * x + 
+           2 * quadric(0, 1) * x * y +
+           2 * quadric(0, 2) * x * z + 
+           2 * quadric(0, 3) * x +
+
+               quadric(1, 1) * y * y + 
+           2 * quadric(1, 2) * y * z +
+           2 * quadric(1, 3) * y +
+
+               quadric(2, 2) * z * z + 
+           2 * quadric(2, 3) * z +
+
+               quadric(3, 3);
+    // clang-format on
+}
+
+template <typename T>
+void compute_edge_cost(const rxmesh::EdgeHandle&         e,
+                       const rxmesh::VertexHandle&       v0,
+                       const rxmesh::VertexHandle&       v1,
+                       const rxmesh::VertexAttribute<T>& vertex_quadrics,
+                       const rxmesh::VertexAttribute<T>& coords,
+                       rxmesh::EdgeAttribute<T>&         edge_cost,
+                       rxmesh::EdgeAttribute<T>&         edge_col_coord)
+{
+    Mat4<T> edge_quadric;
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            edge_quadric[i][j] =
+                vertex_quadrics(v0, i * 4 + j) + vertex_quadrics(v1, i * 4 + j);
+        }
+    }
+
+    // the edge_quadric but with 4th row is identity
+    Mat4<T> edge_quadric_3x3 = edge_quadric;
+    edge_quadric_3x3[3][0]   = 0;
+    edge_quadric_3x3[3][1]   = 0;
+    edge_quadric_3x3[3][2]   = 0;
+    edge_quadric_3x3[3][3]   = 1;
+
+    if (std::abs(glm::determinant(edge_quadric_3x3)) >
+        std::numeric_limits<T>::epsilon()) {
+
+        Vec4<T> b(0, 0, 0, 1);
+
+        Vec4<T> x = glm::inverse(edge_quadric_3x3) * b;
+
+        edge_col_coord(e, 0) = x[0];
+        edge_col_coord(e, 1) = x[1];
+        edge_col_coord(e, 2) = x[2];
+
+        edge_cost(e) =
+            std::max(T(0.0), compute_cost(edge_quadric, x[0], x[1], x[2]));
+    } else {
+        const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+        const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+        const Vec3<T> p2 = 0.5 * (p0 + p1);
+
+        const T e0 = compute_cost(edge_quadric, p0[0], p0[1], p0[2]);
+        const T e1 = compute_cost(edge_quadric, p1[0], p1[1], p1[2]);
+        const T e2 = compute_cost(edge_quadric, p2[0], p2[1], p2[2]);
+
+        if (e0 < e1 && e1 < e2) {
+            edge_cost(e)         = std::max(T(0.0), e0);
+            edge_col_coord(e, 0) = p0[0];
+            edge_col_coord(e, 1) = p0[1];
+            edge_col_coord(e, 2) = p0[2];
+
+        } else if (e1 < e2) {
+            edge_cost(e)         = std::max(T(0.0), e1);
+            edge_col_coord(e, 0) = p1[0];
+            edge_col_coord(e, 1) = p1[1];
+            edge_col_coord(e, 2) = p1[2];
+
+        } else {
+            edge_cost(e)         = std::max(T(0.0), e2);
+            edge_col_coord(e, 0) = p2[0];
+            edge_col_coord(e, 1) = p2[1];
+            edge_col_coord(e, 2) = p2[2];
+        }
+    }
+}
+
+template <typename T>
 __device__ __inline__ Vec4<T> compute_face_plane(const Vec3<T>& v0,
                                                  const Vec3<T>& v1,
                                                  const Vec3<T>& v2)
