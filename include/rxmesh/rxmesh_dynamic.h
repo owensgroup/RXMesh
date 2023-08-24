@@ -431,17 +431,19 @@ class RXMeshDynamic : public RXMeshStatic
      * @param op List of query operations done inside the kernel
      * @param launch_box input launch box to be populated
      * @param kernel The kernel to be launched
+     * @param is_dyn if there will be dynamic updates
      * @param oriented if the query is oriented. Valid only for Op::VV queries
      */
     template <uint32_t blockThreads>
     void prepare_launch_box(const std::vector<Op>    op,
                             LaunchBox<blockThreads>& launch_box,
                             const void*              kernel,
+                            const bool               is_dyn   = true,
                             const bool               oriented = false,
                             const bool with_vertex_valence    = false) const
     {
         update_launch_box(
-            op, launch_box, kernel, oriented, with_vertex_valence);
+            op, launch_box, kernel, is_dyn, oriented, with_vertex_valence);
 
         RXMESH_TRACE(
             "RXMeshDynamic::calc_shared_memory() launching {} blocks with "
@@ -468,12 +470,14 @@ class RXMeshDynamic : public RXMeshStatic
      * @param op List of query operations done inside the kernel
      * @param launch_box input launch box to be populated
      * @param kernel The kernel to be launched
+     * @param is_dyn if there will be dynamic updates
      * @param oriented if the query is oriented. Valid only for Op::VV queries
      */
     template <uint32_t blockThreads>
     void update_launch_box(const std::vector<Op>    op,
                            LaunchBox<blockThreads>& launch_box,
                            const void*              kernel,
+                           const bool               is_dyn   = true,
                            const bool               oriented = false,
                            const bool with_vertex_valence    = false) const
     {
@@ -488,85 +492,93 @@ class RXMeshDynamic : public RXMeshStatic
                          this->calc_shared_memory<blockThreads>(o, oriented));
         }
 
-        uint16_t vertex_cap = static_cast<uint16_t>(
-            this->m_capacity_factor *
-            static_cast<float>(this->m_max_vertices_per_patch));
+        if (is_dyn) {
+            uint16_t vertex_cap = static_cast<uint16_t>(
+                this->m_capacity_factor *
+                static_cast<float>(this->m_max_vertices_per_patch));
 
-        uint16_t edge_cap = static_cast<uint16_t>(
-            this->m_capacity_factor *
-            static_cast<float>(this->m_max_edges_per_patch));
+            uint16_t edge_cap = static_cast<uint16_t>(
+                this->m_capacity_factor *
+                static_cast<float>(this->m_max_edges_per_patch));
 
-        uint16_t face_cap = static_cast<uint16_t>(
-            this->m_capacity_factor *
-            static_cast<float>(this->m_max_faces_per_patch));
+            uint16_t face_cap = static_cast<uint16_t>(
+                this->m_capacity_factor *
+                static_cast<float>(this->m_max_faces_per_patch));
 
-        // connecivity (FE and EV) shared memory
-        size_t connectivity_shmem = 0;
-        connectivity_shmem += 3 * face_cap * sizeof(uint16_t) +
-                              2 * edge_cap * sizeof(uint16_t) +
-                              2 * ShmemAllocator::default_alignment;
+            // connecivity (FE and EV) shared memory
+            size_t connectivity_shmem = 0;
+            connectivity_shmem += 3 * face_cap * sizeof(uint16_t) +
+                                  2 * edge_cap * sizeof(uint16_t) +
+                                  2 * ShmemAllocator::default_alignment;
 
-        // cavity ID (which overlapped with hashtable shared memory)
-        size_t cavity_id_shmem = 0;
-        cavity_id_shmem += std::max(
-            vertex_cap * sizeof(uint16_t),
-            max_lp_hashtable_capacity<LocalVertexT>() * sizeof(LPPair));
-        cavity_id_shmem +=
-            std::max(edge_cap * sizeof(uint16_t),
-                     max_lp_hashtable_capacity<LocalEdgeT>() * sizeof(LPPair));
-        cavity_id_shmem +=
-            std::max(face_cap * sizeof(uint16_t),
-                     max_lp_hashtable_capacity<LocalFaceT>() * sizeof(LPPair));
-        cavity_id_shmem += 3 * ShmemAllocator::default_alignment;
+            // cavity ID (which overlapped with hashtable shared memory)
+            size_t cavity_id_shmem = 0;
+            cavity_id_shmem += std::max(
+                vertex_cap * sizeof(uint16_t),
+                max_lp_hashtable_capacity<LocalVertexT>() * sizeof(LPPair));
+            cavity_id_shmem += std::max(
+                edge_cap * sizeof(uint16_t),
+                max_lp_hashtable_capacity<LocalEdgeT>() * sizeof(LPPair));
+            cavity_id_shmem += std::max(
+                face_cap * sizeof(uint16_t),
+                max_lp_hashtable_capacity<LocalFaceT>() * sizeof(LPPair));
+            cavity_id_shmem += 3 * ShmemAllocator::default_alignment;
 
-        // cavity boundary edges
-        size_t cavity_bdr_shmem = 0;
-        cavity_bdr_shmem += this->m_max_edges_per_patch * sizeof(uint16_t) +
-                            ShmemAllocator::default_alignment;
+            // cavity boundary edges
+            size_t cavity_bdr_shmem = 0;
+            cavity_bdr_shmem += this->m_max_edges_per_patch * sizeof(uint16_t) +
+                                ShmemAllocator::default_alignment;
 
-        // store cavity size (assume number of cavities is half the patch size)
-        size_t cavity_size_shmem = 0;
-        cavity_size_shmem += (this->m_max_faces_per_patch / 2) * sizeof(int) +
-                             ShmemAllocator::default_alignment;
+            // store cavity size (assume number of cavities is half the patch
+            // size)
+            size_t cavity_size_shmem = 0;
+            cavity_size_shmem +=
+                (this->m_max_faces_per_patch / 2) * sizeof(int) +
+                ShmemAllocator::default_alignment;
 
-        size_t q_lp_shmem = std::max(max_lp_hashtable_capacity<LocalVertexT>(),
-                                     max_lp_hashtable_capacity<LocalEdgeT>());
+            size_t q_lp_shmem =
+                std::max(max_lp_hashtable_capacity<LocalVertexT>(),
+                         max_lp_hashtable_capacity<LocalEdgeT>());
 
-        q_lp_shmem = std::max(q_lp_shmem,
-                              size_t(max_lp_hashtable_capacity<LocalFaceT>())) *
-                     sizeof(LPPair);
+            q_lp_shmem =
+                std::max(q_lp_shmem,
+                         size_t(max_lp_hashtable_capacity<LocalFaceT>())) *
+                sizeof(LPPair);
 
-        // active, owned, migrate(for vertices only), src bitmask (for vertices
-        // and edges only), src connect (for vertices and edges only), ownership
-        // owned_cavity_bdry (for vertices only), ribbonize (for vertices only)
-        // added_to_lp, in_cavity
-        size_t bitmasks_shmem = 0;
-        bitmasks_shmem += 10 * detail::mask_num_bytes(vertex_cap) +
-                          10 * ShmemAllocator::default_alignment;
-        bitmasks_shmem += 7 * detail::mask_num_bytes(edge_cap) +
-                          7 * ShmemAllocator::default_alignment;
-        bitmasks_shmem += 5 * detail::mask_num_bytes(face_cap) +
-                          5 * ShmemAllocator::default_alignment;
+            // active, owned, migrate(for vertices only), src bitmask (for
+            // vertices and edges only), src connect (for vertices and edges
+            // only), ownership owned_cavity_bdry (for vertices only), ribbonize
+            // (for vertices only) added_to_lp, in_cavity
+            size_t bitmasks_shmem = 0;
+            bitmasks_shmem += 10 * detail::mask_num_bytes(vertex_cap) +
+                              10 * ShmemAllocator::default_alignment;
+            bitmasks_shmem += 7 * detail::mask_num_bytes(edge_cap) +
+                              7 * ShmemAllocator::default_alignment;
+            bitmasks_shmem += 5 * detail::mask_num_bytes(face_cap) +
+                              5 * ShmemAllocator::default_alignment;
 
-        // active cavity bitmask
-        bitmasks_shmem += detail::mask_num_bytes(face_cap / 2);
+            // active cavity bitmask
+            bitmasks_shmem += detail::mask_num_bytes(face_cap / 2);
 
 
-        // correspondence buffer
-        size_t cv = sizeof(uint16_t) * vertex_cap;
-        size_t ce = sizeof(uint16_t) * edge_cap;
-        size_t cf = sizeof(uint16_t) * face_cap;
-        size_t correspond_shmem =
-            std::max(cv + ce, ce + cf) + 2 * ShmemAllocator::default_alignment;
+            // correspondence buffer
+            size_t cv               = sizeof(uint16_t) * vertex_cap;
+            size_t ce               = sizeof(uint16_t) * edge_cap;
+            size_t cf               = sizeof(uint16_t) * face_cap;
+            size_t correspond_shmem = std::max(cv + ce, ce + cf) +
+                                      2 * ShmemAllocator::default_alignment;
 
-        // shared memory is the max of 1. static query shared memory + the
-        // cavity ID shared memory (since we need to mark seed elements) 2.
-        // dynamic rxmesh shared memory which includes cavity ID shared memory
-        // and other things
-        launch_box.smem_bytes_dyn =
-            std::max(connectivity_shmem + cavity_id_shmem + cavity_bdr_shmem +
-                         cavity_size_shmem + bitmasks_shmem + correspond_shmem,
-                     static_shmem + cavity_id_shmem);
+            // shared memory is the max of 1. static query shared memory + the
+            // cavity ID shared memory (since we need to mark seed elements) 2.
+            // dynamic rxmesh shared memory which includes cavity ID shared
+            // memory and other things
+            launch_box.smem_bytes_dyn = std::max(
+                connectivity_shmem + cavity_id_shmem + cavity_bdr_shmem +
+                    cavity_size_shmem + bitmasks_shmem + correspond_shmem,
+                static_shmem + cavity_id_shmem);
+        } else {
+            launch_box.smem_bytes_dyn = static_shmem;
+        }
 
         if (with_vertex_valence) {
             launch_box.smem_bytes_dyn +=
