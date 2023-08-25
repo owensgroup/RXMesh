@@ -483,7 +483,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::propagate(
     }
 
     if constexpr (cop == CavityOp::EV) {
-        // mark_vertices_through_edges();
+        mark_vertices_through_edges();
         block.sync();
         mark_edges_through_vertices();
         block.sync();
@@ -492,6 +492,47 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::propagate(
 
     if constexpr (cop == CavityOp::E) {
         mark_faces_through_edges();
+    }
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::mark_vertices_through_edges()
+{
+    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+        assert(e < m_s_active_mask_e.size());
+        if (m_s_active_mask_e(e)) {
+
+            const uint16_t e_cavity = m_s_cavity_id_e[e];
+
+
+            const uint16_t v0 = m_s_ev[2 * e + 0];
+            const uint16_t v1 = m_s_ev[2 * e + 1];
+
+            mark_element_scatter(m_s_cavity_id_v, v0, e_cavity);
+            mark_element_scatter(m_s_cavity_id_v, v1, e_cavity);
+        }
+    }
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::mark_edges_through_faces()
+{
+    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+        assert(f < m_s_active_mask_f.size());
+        if (m_s_active_mask_f(f)) {
+
+            const uint16_t f_cavity = m_s_cavity_id_f[f];
+
+            const uint16_t e0 = m_s_fe[3 * e + 0] >> 1;
+            const uint16_t e1 = m_s_fe[3 * e + 1] >> 1;
+            const uint16_t e2 = m_s_fe[3 * e + 2] >> 1;
+
+            mark_element_scatter(m_s_cavity_id_e, e0, f_cavity);
+            mark_element_scatter(m_s_cavity_id_e, e1, f_cavity);
+            mark_element_scatter(m_s_cavity_id_e, e2, f_cavity);
+        }
     }
 }
 
@@ -511,8 +552,8 @@ CavityManager<blockThreads, cop>::mark_edges_through_vertices()
             const uint16_t c0 = m_s_cavity_id_v[v0];
             const uint16_t c1 = m_s_cavity_id_v[v1];
 
-            mark_element(m_s_cavity_id_e, e, c0);
-            mark_element(m_s_cavity_id_e, e, c1);
+            mark_element_gather(m_s_cavity_id_e, e, c0);
+            mark_element_gather(m_s_cavity_id_e, e, c1);
         }
     }
 }
@@ -535,16 +576,44 @@ CavityManager<blockThreads, cop>::mark_faces_through_edges()
             const uint16_t c1 = m_s_cavity_id_e[e1];
             const uint16_t c2 = m_s_cavity_id_e[e2];
 
-            mark_element(m_s_cavity_id_f, f, c0);
-            mark_element(m_s_cavity_id_f, f, c1);
-            mark_element(m_s_cavity_id_f, f, c2);
+            mark_element_gather(m_s_cavity_id_f, f, c0);
+            mark_element_gather(m_s_cavity_id_f, f, c1);
+            mark_element_gather(m_s_cavity_id_f, f, c2);
+        }
+    }
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::mark_element_scatter(
+    uint16_t*      element_cavity_id,
+    const uint16_t element_id,
+    const uint16_t cavity_id)
+{
+    if (cavity_id != INVALID16) {
+        uint16_t prv_cavity =
+            atomicMin(&element_cavity_id[element_id], cavity_id);
+
+
+        if (prv_cavity == cavity_id) {
+            return;
+        }
+
+        if (prv_cavity < cavity_id) {
+            // the vertex was marked with a cavity with lower id
+            // thne we deactiavate this edge cavity
+            m_s_active_cavity_bitmask.reset(cavity_id, true);
+        } else if (prv_cavity != INVALID16) {
+            // otherwise, we deactiavate the vertex cavity
+            m_s_active_cavity_bitmask.reset(prv_cavity, true);
         }
     }
 }
 
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __inline__ void CavityManager<blockThreads, cop>::mark_element(
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::mark_element_gather(
     uint16_t*      element_cavity_id,
     const uint16_t element_id,
     const uint16_t cavity_id)

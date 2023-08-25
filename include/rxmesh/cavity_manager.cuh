@@ -227,6 +227,17 @@ struct CavityManager
      */
     __device__ __inline__ void mark_edges_through_vertices();
 
+    /**
+     * @brief propagate the cavity tag from edges to their incident vertices
+     */
+    __device__ __inline__ void mark_vertices_through_edges();
+
+
+    /**
+     * @brief propagate the cavity tag from face to their incident edges
+     */
+    __device__ __inline__ void mark_edges_through_faces();
+
 
     /**
      * @brief propagate the cavity tag from edges to their incident faces
@@ -244,9 +255,13 @@ struct CavityManager
      * This function assumes no other thread is trying to update element_id's
      * cavity ID
      */
-    __device__ __inline__ void mark_element(uint16_t*      element_cavity_id,
-                                            const uint16_t element_id,
-                                            const uint16_t cavity_id);
+    __device__ __inline__ void mark_element_gather(uint16_t* element_cavity_id,
+                                                   const uint16_t element_id,
+                                                   const uint16_t cavity_id);
+
+    __device__ __inline__ void mark_element_scatter(uint16_t* element_cavity_id,
+                                                    const uint16_t element_id,
+                                                    const uint16_t cavity_id);
 
     /**
      * @brief deactivate the cavities that has been marked as inactivate in the
