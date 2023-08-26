@@ -93,6 +93,11 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     m_s_cavity_id_f = reinterpret_cast<uint16_t*>(shrd_alloc.alloc(
         std::max(face_cap_bytes, m_patch_info.lp_f.num_bytes())));
 
+    const uint16_t assumed_num_cavities = m_context.m_max_num_faces[0] / 2;
+    m_s_cavity_creator = shrd_alloc.alloc<uint16_t>(assumed_num_cavities);
+    fill_n<blockThreads>(
+        m_s_cavity_creator, assumed_num_cavities, uint16_t(INVALID16));
+
     fill_n<blockThreads>(m_s_cavity_id_v, vert_cap, uint16_t(INVALID16));
     fill_n<blockThreads>(m_s_cavity_id_e, edge_cap, uint16_t(INVALID16));
     fill_n<blockThreads>(m_s_cavity_id_f, face_cap, uint16_t(INVALID16));
@@ -272,7 +277,6 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     m_s_cavity_size_prefix = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
     fill_n<blockThreads>(m_s_cavity_size_prefix, m_s_num_cavities[0] + 1, 0);
 
-
     // active cavity bitmask
     m_s_active_cavity_bitmask = Bitmask(m_s_num_cavities[0], shrd_alloc);
     m_s_active_cavity_bitmask.set(block);
@@ -317,6 +321,8 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::create(
 
     int id = ::atomicAdd(m_s_num_cavities, 1);
 
+    assert(id < (m_context.m_max_num_faces[0] / 2));
+
     // there is no race condition in here since each thread is assigned to
     // one element
     if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
@@ -326,6 +332,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::create(
         assert(m_context.m_patches_info[patch_id()].is_owned(
             LocalVertexT(seed.local_id())));
         m_s_cavity_id_v[seed.local_id()] = id;
+        m_s_cavity_creator[id]           = seed.local_id();
     }
 
     if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
@@ -335,6 +342,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::create(
         assert(m_context.m_patches_info[patch_id()].is_owned(
             LocalEdgeT(seed.local_id())));
         m_s_cavity_id_e[seed.local_id()] = id;
+        m_s_cavity_creator[id]           = seed.local_id();
     }
 
 
@@ -345,8 +353,47 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::create(
         assert(m_context.m_patches_info[patch_id()].is_owned(
             LocalFaceT(seed.local_id())));
         m_s_cavity_id_f[seed.local_id()] = id;
+        m_s_cavity_creator[id]           = seed.local_id();
     }
 }
+
+template <uint32_t blockThreads, CavityOp cop>
+template <typename HandleT>
+__device__ __inline__ HandleT CavityManager<blockThreads, cop>::get_creator(
+    const uint16_t cavity_id)
+{
+    if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
+                  cop == CavityOp::VE || cop == CavityOp::VF) {
+        static_assert(std::is_same_v<HandleT, VertexHandle>,
+                      "CavityManager::get_creator() since CavityManager's "
+                      "template parameter operation is "
+                      "CavityOp::V/CavityOp::VV/CavityOp::VE/CavityOp::VF, "
+                      "get_creator() should return a VertexHandle");
+    }
+
+    if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
+                  cop == CavityOp::EE || cop == CavityOp::EF) {
+        static_assert(std::is_same_v<HandleT, EdgeHandle>,
+                      "CavityManager::get_creator() since CavityManager's "
+                      "template parameter operation is "
+                      "CavityOp::E/CavityOp::EV/CavityOp::EE/CavityOp::EF, "
+                      "get_creator() should return an EdgeHandle");
+    }
+
+    if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
+                  cop == CavityOp::FE || cop == CavityOp::FF) {
+        static_assert(std::is_same_v<HandleT, FaceHandle>,
+                      "CavityManager::get_creator() since CavityManager's "
+                      "template parameter operation is "
+                      "CavityOp::F/CavityOp::FV/CavityOp::FE/CavityOp::FF, "
+                      "get_creator() should return a FaceHandle");
+    }
+
+    assert(cavity_id < m_s_num_cavities[0]);
+
+    return HandleT(m_patch_info.patch_id, m_s_cavity_creator[cavity_id]);
+}
+
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
@@ -601,11 +648,11 @@ CavityManager<blockThreads, cop>::mark_element_scatter(
 
         if (prv_cavity < cavity_id) {
             // the vertex was marked with a cavity with lower id
-            // thne we deactiavate this edge cavity
-            m_s_active_cavity_bitmask.reset(cavity_id, true);
+            // than we deactivate this edge cavity
+            deactivate_cavity(cavity_id);
         } else if (prv_cavity != INVALID16) {
-            // otherwise, we deactiavate the vertex cavity
-            m_s_active_cavity_bitmask.reset(prv_cavity, true);
+            // otherwise, we deactivate the vertex cavity
+            deactivate_cavity(prv_cavity);
         }
     }
 }
@@ -633,17 +680,25 @@ CavityManager<blockThreads, cop>::mark_element_gather(
 
         if (prv_element_cavity_id > cavity_id) {
             // deactivate previous element cavity ID
-            m_s_active_cavity_bitmask.reset(prv_element_cavity_id, true);
+            deactivate_cavity(prv_element_cavity_id);
             element_cavity_id[element_id] = cavity_id;
         }
 
         if (prv_element_cavity_id < cavity_id) {
             // deactivate cavity ID
-            m_s_active_cavity_bitmask.reset(cavity_id, true);
+            deactivate_cavity(cavity_id);
         }
     }
 }
 
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void CavityManager<blockThreads, cop>::deactivate_cavity(
+    uint16_t c)
+{
+    assert(c < m_s_num_cavities[0]);
+    m_s_active_cavity_bitmask.reset(c, true);
+    m_s_cavity_creator[c] = INVALID16;
+}
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void
@@ -800,7 +855,7 @@ CavityManager<blockThreads, cop>::deactivate_boundary_cavities(
             assert(vertex < m_s_owned_cavity_bdry_v.size());
             if (m_s_owned_cavity_bdry_v(vertex) || !m_s_owned_mask_v(vertex)) {
                 assert(c < m_s_active_cavity_bitmask.size());
-                m_s_active_cavity_bitmask.reset(c, true);
+                deactivate_cavity(c);
                 break;
             }
         }
@@ -926,7 +981,7 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
     for (uint16_t c = threadIdx.x; c < m_s_num_cavities[0]; c += blockThreads) {
         if (m_s_cavity_size_prefix[c + 1] >= m_s_num_edges[0]) {
             assert(c < m_s_active_cavity_bitmask.size());
-            m_s_active_cavity_bitmask.reset(c, true);
+            deactivate_cavity(c);
         }
     }
     block.sync();

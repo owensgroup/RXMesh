@@ -536,6 +536,12 @@ class RXMeshDynamic : public RXMeshStatic
                 (this->m_max_faces_per_patch / 2) * sizeof(int) +
                 ShmemAllocator::default_alignment;
 
+            // cavity src element
+            size_t cavity_creator_shmem = 0;
+            cavity_creator_shmem =
+                (this->m_max_faces_per_patch / 2) * sizeof(uint16_t) +
+                ShmemAllocator::default_alignment;
+
             size_t q_lp_shmem =
                 std::max(max_lp_hashtable_capacity<LocalVertexT>(),
                          max_lp_hashtable_capacity<LocalEdgeT>());
@@ -575,7 +581,7 @@ class RXMeshDynamic : public RXMeshStatic
             launch_box.smem_bytes_dyn = std::max(
                 connectivity_shmem + cavity_id_shmem + cavity_bdr_shmem +
                     cavity_size_shmem + bitmasks_shmem + correspond_shmem,
-                static_shmem + cavity_id_shmem);
+                static_shmem + cavity_id_shmem + cavity_creator_shmem);
         } else {
             launch_box.smem_bytes_dyn = static_shmem;
         }

@@ -77,6 +77,15 @@ struct CavityManager
     template <typename HandleT>
     __device__ __inline__ bool is_successful(HandleT seed);
 
+
+    /**
+     * @brief returns a handle to the mesh element that has created a give
+     * cavity
+     */
+    template <typename HandleT>
+    __device__ __inline__ HandleT get_creator(const uint16_t cavity_id);
+
+
     /**
      * @brief processes all cavities created using create() by removing elements
      * in these cavities, update the patch layout for subsequent cavity fill-in.
@@ -270,6 +279,10 @@ struct CavityManager
      */
     __device__ __inline__ void deactivate_conflicting_cavities();
 
+    /**
+     * @brief deactivate a single cavity
+     */
+    __device__ __inline__ void deactivate_cavity(uint16_t c);
 
     /**
      * @brief deactivate a cavity if it requires changing ownership of elements
@@ -695,6 +708,9 @@ struct CavityManager
 
     bool*      m_s_should_slice;
     ShmemMutex m_s_patch_stash_mutex;
+
+    // what mesh element (depending on CavityOp) generated this cavity
+    uint16_t* m_s_cavity_creator;
 
     // LPPair*  m_s_table_q;
     // LPPair*  m_s_table_stash_q;
