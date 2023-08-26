@@ -986,32 +986,34 @@ CavityManager<blockThreads, cop>::sort_cavities_edge_loop()
         if (m_s_active_cavity_bitmask(c)) {
             // Specify the starting edge of the cavity before sorting everything
             // TODO this may be tuned for different CavityOp's
-            static_assert(cop == CavityOp::E);
-
-            uint16_t cavity_edge_src_vertex;
-            for (uint16_t e = 0; e < m_s_num_edges[0]; ++e) {
-                if (m_s_cavity_id_e[e] == c) {
-                    cavity_edge_src_vertex = m_s_ev[2 * e];
-                    break;
-                }
-            }
 
             const uint16_t start = m_s_cavity_size_prefix[c];
             const uint16_t end   = m_s_cavity_size_prefix[c + 1];
 
             assert(end >= start);
 
+            if constexpr (cop == CavityOp::E) {                
+                // we pick one end vertex of the edge to be the starting point
+                // of the cavity boundary loop
+                uint16_t cavity_edge_src_vertex;
+                for (uint16_t e = 0; e < m_s_num_edges[0]; ++e) {
+                    if (m_s_cavity_id_e[e] == c) {
+                        cavity_edge_src_vertex = m_s_ev[2 * e];
+                        break;
+                    }
+                }
 
-            for (uint16_t e = start; e < end; ++e) {
-                uint32_t edge = m_s_cavity_boundary_edges[e];
-                assert((edge >> 1) < m_s_active_mask_e.size());
-                assert(m_s_active_mask_e((edge >> 1)));
-                if (get_cavity_vertex(c, e - start).local_id() ==
-                    cavity_edge_src_vertex) {
-                    uint16_t temp = m_s_cavity_boundary_edges[start];
-                    m_s_cavity_boundary_edges[start] = edge;
-                    m_s_cavity_boundary_edges[e]     = temp;
-                    break;
+                for (uint16_t e = start; e < end; ++e) {
+                    uint32_t edge = m_s_cavity_boundary_edges[e];
+                    assert((edge >> 1) < m_s_active_mask_e.size());
+                    assert(m_s_active_mask_e((edge >> 1)));
+                    if (get_cavity_vertex(c, e - start).local_id() ==
+                        cavity_edge_src_vertex) {
+                        uint16_t temp = m_s_cavity_boundary_edges[start];
+                        m_s_cavity_boundary_edges[start] = edge;
+                        m_s_cavity_boundary_edges[e]     = temp;
+                        break;
+                    }
                 }
             }
 

@@ -211,14 +211,15 @@ __global__ static void compute_vertex_quadric_fv(
 }
 
 template <typename T, uint32_t blockThreads>
-__global__ static void simp(rxmesh::Context            context,
-                            rxmesh::VertexAttribute<T> coords,
-                            rxmesh::VertexAttribute<T> vertex_quadrics)
+__global__ static void simplify(rxmesh::Context            context,
+                                rxmesh::VertexAttribute<T> coords,
+                                rxmesh::VertexAttribute<T> vertex_quadrics)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CavityManager<blockThreads, CavityOp::E> cavity(block, context, shrd_alloc);
+    CavityManager<blockThreads, CavityOp::EV> cavity(
+        block, context, shrd_alloc);
 
     const uint32_t pid = cavity.patch_id();
 
@@ -274,12 +275,6 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
     const uint32_t num_edges    = rx.get_num_edges();
     const uint32_t num_faces    = rx.get_num_faces();
 
-#if USE_POLYSCOPE
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
-    // polyscope::show();
-#endif
 
     auto coords = rx.get_input_vertex_coordinates();
 
@@ -325,6 +320,15 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
                                         *edge_cost,
                                         *edge_col_coord);
 
+    edge_cost->move(DEVICE, HOST);
+#if USE_POLYSCOPE
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();
+    rx.get_polyscope_mesh()->addEdgeScalarQuantity("edgeCost", *edge_cost);
+    polyscope::show();
+#endif
+
 
     bool validate = true;
 
@@ -335,17 +339,18 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
         int inner_iter = 0;
         while (!rx.is_queue_empty() && rx.get_num_faces() > final_num_faces) {
 
-            rx.prepare_launch_box(
-                {Op::EVDiamond}, launch_box, (void*)simp<float, blockThreads>);
+            rx.prepare_launch_box({Op::EVDiamond},
+                                  launch_box,
+                                  (void*)simplify<float, blockThreads>);
 
             GPUTimer timer;
             timer.start();
 
             GPUTimer app_timer;
             app_timer.start();
-            simp<float, blockThreads><<<launch_box.blocks,
-                                        launch_box.num_threads,
-                                        launch_box.smem_bytes_dyn>>>(
+            simplify<float, blockThreads><<<launch_box.blocks,
+                                            launch_box.num_threads,
+                                            launch_box.smem_bytes_dyn>>>(
                 rx.get_context(), *coords, *vertex_quadrics);
             app_timer.stop();
 
