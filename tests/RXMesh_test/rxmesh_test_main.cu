@@ -29,12 +29,13 @@ struct RXMeshTestArg
 #include "test_sparse_matrix.cuh"
 #include "test_patch_lock.cuh"
 #include "test_patch_scheduler.cuh"
+#include "test_patch_slicing.cuh"
 // clang-format on
 
 int main(int argc, char** argv)
 {
     using namespace rxmesh;
-    Log::init();    
+    Log::init();
 
     ::testing::InitGoogleTest(&argc, argv);
     rxmesh_args.argc = argc;

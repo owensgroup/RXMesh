@@ -992,7 +992,7 @@ CavityManager<blockThreads, cop>::sort_cavities_edge_loop()
 
             assert(end >= start);
 
-            if constexpr (cop == CavityOp::E) {                
+            if constexpr (cop == CavityOp::E) {
                 // we pick one end vertex of the edge to be the starting point
                 // of the cavity boundary loop
                 uint16_t cavity_edge_src_vertex;

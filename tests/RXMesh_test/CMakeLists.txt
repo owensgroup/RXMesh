@@ -20,6 +20,7 @@ set( SOURCE_LIST
 	test_sparse_matrix.cuh
 	test_patch_lock.cuh
 	test_patch_scheduler.cuh
+	test_patch_slicing.cuh
 )
 
 target_sources( RXMesh_test 

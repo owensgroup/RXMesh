@@ -97,11 +97,14 @@ struct PatchScheduler
     __host__ void refill()
     {
         static std::vector<uint32_t> h_list(capacity);
+        if (h_list.size() < capacity) {
+            h_list.resize(capacity);
+        }
         fill_with_sequential_numbers(h_list.data(), capacity);
-        random_shuffle(h_list.data(), h_list.size());
+        random_shuffle(h_list.data(), capacity);
         CUDA_ERROR(cudaMemcpy(list,
                               h_list.data(),
-                              h_list.size() * sizeof(uint32_t),
+                              capacity * sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
         CUDA_ERROR(
             cudaMemcpy(count, &capacity, sizeof(int), cudaMemcpyHostToDevice));
