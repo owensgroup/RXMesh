@@ -619,7 +619,8 @@ class RXMeshDynamic : public RXMeshStatic
 
     /**
      * @brief cleanup after topology changes by removing surplus elements
-     * and make sure that hashtable store owner patches
+     * and make sure that hashtable store owner patches. Also, reset the number
+     * of vertices/edges/faces
      */
     void cleanup();
 
@@ -657,8 +658,6 @@ class RXMeshDynamic : public RXMeshStatic
             this->m_rxmesh_context, get_num_patches(), attributes...);
     }
 
-    void copy_patch_debug(const uint32_t                  pid,
-                          rxmesh::VertexAttribute<float>& coords);
 
     /**
      * @brief update the host side. Use this function to update the host side

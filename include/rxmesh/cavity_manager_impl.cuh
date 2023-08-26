@@ -525,9 +525,9 @@ CavityManager<blockThreads, cop>::mark_edges_through_faces()
 
             const uint16_t f_cavity = m_s_cavity_id_f[f];
 
-            const uint16_t e0 = m_s_fe[3 * e + 0] >> 1;
-            const uint16_t e1 = m_s_fe[3 * e + 1] >> 1;
-            const uint16_t e2 = m_s_fe[3 * e + 2] >> 1;
+            const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
+            const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
+            const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
 
             mark_element_scatter(m_s_cavity_id_e, e0, f_cavity);
             mark_element_scatter(m_s_cavity_id_e, e1, f_cavity);
@@ -1451,8 +1451,8 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::pre_ribbonize(
 
             assert(v0 < m_s_num_vertices[0]);
             assert(v1 < m_s_num_vertices[0]);
-            assert(m_s_active_mask_v(v0));
-            assert(m_s_active_mask_v(v1));
+            assert(m_s_active_mask_v(v0) || m_s_in_cavity_v(v0));
+            assert(m_s_active_mask_v(v1) || m_s_in_cavity_v(v1));
 
             assert(v0 < m_s_owned_cavity_bdry_v.size());
             assert(v0 < m_s_not_owned_cavity_bdry_v.size());
