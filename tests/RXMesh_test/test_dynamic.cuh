@@ -91,14 +91,17 @@ __global__ static void random_flips(rxmesh::Context                context,
 template <uint32_t blockThreads>
 __global__ static void random_collapses(rxmesh::Context                context,
                                         rxmesh::VertexAttribute<float> coords,
-                                        rxmesh::EdgeAttribute<int> to_collapse)
+                                        rxmesh::EdgeAttribute<int> to_collapse,
+                                        rxmesh::VertexAttribute<int> v_attr,
+                                        rxmesh::EdgeAttribute<int>   e_attr,
+                                        rxmesh::FaceAttribute<int>   f_attr)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
 
     CavityManager<blockThreads, CavityOp::EV> cavity(
-        block, context, shrd_alloc);
+        block, context, shrd_alloc, 1);
 
 
     if (cavity.patch_id() == INVALID32) {
@@ -117,27 +120,32 @@ __global__ static void random_collapses(rxmesh::Context                context,
     block.sync();
 
     if (cavity.prologue(block, shrd_alloc)) {
-        cavity.update_attributes(block, coords, to_collapse);
 
-        // so that we don't flip them again
-        // detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
-        //    if (to_collapse(eh) == 1) {
-        //        to_collapse(eh) = 2;
-        //    }
-        //});
+        cavity.update_attributes(
+            block, coords, to_collapse, v_attr, e_attr, f_attr);
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
-            // DEdgeHandle new_edge = cavity.add_edge(
-            //     cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c,
-            //     3));
-            //
-            // cavity.add_face(cavity.get_cavity_edge(c, 0),
-            //                 new_edge,
-            //                 cavity.get_cavity_edge(c, 3));
-            //
-            // cavity.add_face(cavity.get_cavity_edge(c, 1),
-            //                 cavity.get_cavity_edge(c, 2),
-            //                 new_edge.get_flip_dedge());
+            const EdgeHandle src = cavity.template get_creator<EdgeHandle>(c);
+
+            VertexHandle v0, v1;
+
+            cavity.get_vertices(src, v0, v1);
+
+            const VertexHandle new_v = cavity.add_vertex();
+
+            coords(new_v, 0) = (coords(v0, 0) + coords(v1, 0)) / 2.0f;
+            coords(new_v, 1) = (coords(v0, 1) + coords(v1, 1)) / 2.0f;
+            coords(new_v, 2) = (coords(v0, 2) + coords(v1, 2)) / 2.0f;
+
+            DEdgeHandle e0 =
+                cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
+            for (uint16_t i = 0; i < size; ++i) {
+                const DEdgeHandle e1 = cavity.add_edge(
+                    cavity.get_cavity_vertex(c, (i + 1) % size), new_v);
+
+                cavity.add_face(e0, cavity.get_cavity_edge(c, i), e1);
+                e0 = e1;
+            }
         });
     }
 
@@ -358,6 +366,15 @@ TEST(RXMeshDynamic, RandomCollapse)
     auto to_collapse = rx.add_edge_attribute<int>("to_collapse", 1);
     to_collapse->reset(0, HOST);
 
+    auto v_attr = rx.add_vertex_attribute<int>("vAttr", 1);
+    v_attr->reset(0, HOST);
+
+    auto e_attr = rx.add_edge_attribute<int>("eAttr", 1);
+    e_attr->reset(0, HOST);
+
+    auto f_attr = rx.add_face_attribute<int>("fAttr", 1);
+    f_attr->reset(0, HOST);
+
     const Config config = InteriorNotConflicting | InteriorConflicting |
                           OnRibbonNotConflicting | OnRibbonConflicting;
 
@@ -368,20 +385,9 @@ TEST(RXMeshDynamic, RandomCollapse)
 
     to_collapse->move(HOST, DEVICE);
 
-
-    // set_should_slice<<<rx.get_num_patches(), 1>>>(rx.get_context());
-    // rx.slice_patches(*coords, *to_collapse);
-    // rx.cleanup();
-    // CUDA_ERROR(cudaDeviceSynchronize());
-    // rx.update_host();
-
-    // EXPECT_TRUE(rx.validate());
-    // coords->move(DEVICE, HOST);
-    // to_collapse->move(DEVICE, HOST);
+    EXPECT_TRUE(rx.validate());
 
 #if USE_POLYSCOPE
-    // rx.update_polyscope();
-    // rx.get_polyscope_mesh()->updateVertexPositions(*coords);
     rx.render_vertex_patch();
     rx.render_edge_patch();
     rx.render_face_patch();
@@ -406,10 +412,11 @@ TEST(RXMeshDynamic, RandomCollapse)
         random_collapses<blockThreads><<<launch_box.blocks,
                                          launch_box.num_threads,
                                          launch_box.smem_bytes_dyn>>>(
-            rx.get_context(), *coords, *to_collapse);
+            rx.get_context(), *coords, *to_collapse, *v_attr, *e_attr, *f_attr);
 
         rx.slice_patches(*coords, *to_collapse);
         rx.cleanup();
+        break;
     }
 
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -417,10 +424,15 @@ TEST(RXMeshDynamic, RandomCollapse)
     rx.update_host();
 
     coords->move(DEVICE, HOST);
-    to_collapse->move(DEVICE, HOST);
+
+    v_attr->move(DEVICE, HOST);
+    e_attr->move(DEVICE, HOST);
+    f_attr->move(DEVICE, HOST);
+
 
     EXPECT_TRUE(rx.validate());
 
+    rx.export_obj(STRINGIFY(OUTPUT_DIR) "sphere3_33.obj", *coords);
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
@@ -435,7 +447,10 @@ TEST(RXMeshDynamic, RandomCollapse)
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(*coords);
     ps_mesh->setEnabled(false);
-    // polyscope::show();
+    ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
+    ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
+    ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
+    polyscope::show();
 #endif
 
     // polyscope::removeAllStructures();
