@@ -1324,6 +1324,53 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::add_element(
 
 
 template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void CavityManager<blockThreads, cop>::get_vertices(
+    const EdgeHandle eh,
+    VertexHandle&    v0,
+    VertexHandle&    v1)
+{
+    // actually 
+    assert(eh.patch_id() == m_patch_info.patch_id);
+    assert(eh.local_id() < m_s_num_edges[0]);
+    // assert(m_s_active_mask_e(eh.local_id()));
+    assert(m_s_owned_mask_e(eh.local_id()));
+
+    v0 = VertexHandle(m_patch_info.patch_id, m_s_ev[2 * eh.local_id() + 0]);
+    v1 = VertexHandle(m_patch_info.patch_id, m_s_ev[2 * eh.local_id() + 1]);
+
+    // assert(m_s_active_mask_v(v0.local_id()));
+    // assert(m_s_active_mask_v(v1.local_id()));
+
+    assert(m_s_owned_mask_v(v0.local_id()));
+    assert(m_s_owned_mask_v(v1.local_id()));
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void CavityManager<blockThreads, cop>::get_edges(
+    const FaceHandle fh,
+    EdgeHandle&      e0,
+    EdgeHandle&      e1,
+    EdgeHandle&      e2)
+{
+    assert(fh.patch_id() == m_patch_info.patch_id);
+    assert(fh.local_id() < m_s_num_faces[0]);
+    //assert(m_s_active_mask_e(fh.local_id()));
+    assert(m_s_owned_mask_e(fh.local_id()));
+
+    e0 = EdgeHandle(m_patch_info.patch_id, m_s_fe[3 * fh.local_id() + 0]);
+    e1 = EdgeHandle(m_patch_info.patch_id, m_s_fe[3 * fh.local_id() + 1]);
+    e2 = EdgeHandle(m_patch_info.patch_id, m_s_fe[3 * fh.local_id() + 2]);
+
+    //assert(m_s_active_mask_e(e0.local_id()));
+    //assert(m_s_active_mask_e(e1.local_id()));
+    //assert(m_s_active_mask_e(e2.local_id()));
+
+    assert(m_s_owned_mask_e(e0.local_id()));
+    assert(m_s_owned_mask_e(e1.local_id()));
+    assert(m_s_owned_mask_e(e2.local_id()));
+}
+
+template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::load_hashtable(
     cooperative_groups::thread_block& block)
 {

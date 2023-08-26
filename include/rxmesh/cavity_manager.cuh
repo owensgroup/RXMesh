@@ -87,6 +87,23 @@ struct CavityManager
 
 
     /**
+     * @brief given an edge, return its two end vertices. eh and the returned v0
+     * and v1 may not be active since they could be in the cavity
+     */
+    __device__ __inline__ void get_vertices(const EdgeHandle eh,
+                                            VertexHandle&    v0,
+                                            VertexHandle&    v1);
+
+    /**
+     * @brief given a face, return its three edges. fh and the returned e0, e1,
+     * and e2 may not be active since they could be in the cavity
+     */
+    __device__ __inline__ void get_edges(const FaceHandle fh,
+                                         EdgeHandle&      e0,
+                                         EdgeHandle&      e1,
+                                         EdgeHandle&      e2);
+
+    /**
      * @brief processes all cavities created using create() by removing elements
      * in these cavities, update the patch layout for subsequent cavity fill-in.
      * In the event of failure (due to failure of locking neighbor patches),
