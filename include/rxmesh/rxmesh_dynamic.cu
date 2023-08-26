@@ -431,10 +431,17 @@ __global__ static void remove_surplus_elements(Context context)
     __shared__ uint32_t s_num_owned_vertices;
     __shared__ uint32_t s_num_owned_edges;
     __shared__ uint32_t s_num_owned_faces;
+
+    __shared__ uint32_t s_num_vertices;
+    __shared__ uint32_t s_num_edges;
+    __shared__ uint32_t s_num_faces;
     if (threadIdx.x == 0) {
         s_num_owned_vertices = 0;
         s_num_owned_edges    = 0;
         s_num_owned_faces    = 0;
+        s_num_vertices       = 0;
+        s_num_edges          = 0;
+        s_num_faces          = 0;
     }
 
     ShmemAllocator shrd_alloc;
@@ -549,9 +556,12 @@ __global__ static void remove_surplus_elements(Context context)
                         uint16_t(PatchStash::stash_size),
                         pi.patch_stash.m_stash);
 
-    for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+    for (uint32_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
         if (s_vert_tag(v) && s_owned_v(v)) {
             ::atomicAdd(&s_num_owned_vertices, uint32_t(1));
+        }
+        if (s_vert_tag(v)) {
+            ::atomicMax(&s_num_vertices, v + 1);
         }
     }
 
@@ -559,11 +569,17 @@ __global__ static void remove_surplus_elements(Context context)
         if (s_edge_tag(e) && s_owned_e(e)) {
             ::atomicAdd(&s_num_owned_edges, uint32_t(1));
         }
+        if (s_edge_tag(e)) {
+            ::atomicMax(&s_num_edges, e + 1);
+        }
     }
 
     for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
         if (s_face_tag(f) && s_owned_f(f)) {
             ::atomicAdd(&s_num_owned_faces, uint32_t(1));
+        }
+        if (s_face_tag(f)) {
+            ::atomicMax(&s_num_faces, f + 1);
         }
     }
 
@@ -573,6 +589,14 @@ __global__ static void remove_surplus_elements(Context context)
         ::atomicAdd(context.m_num_vertices, s_num_owned_vertices);
         ::atomicAdd(context.m_num_edges, s_num_owned_edges);
         ::atomicAdd(context.m_num_faces, s_num_owned_faces);
+
+        pi.num_vertices[0] = s_num_vertices;
+        pi.num_edges[0]    = s_num_edges;
+        pi.num_faces[0]    = s_num_faces;
+
+        ::atomicMax(context.m_max_num_vertices, s_num_vertices);
+        ::atomicMax(context.m_max_num_edges, s_num_edges);
+        ::atomicMax(context.m_max_num_faces, s_num_faces);
     }
 
     pi.clear_dirty();
@@ -2075,6 +2099,13 @@ void RXMeshDynamic::cleanup()
     CUDA_ERROR(cudaMemset(m_rxmesh_context.m_num_edges, 0, sizeof(uint32_t)));
     CUDA_ERROR(cudaMemset(m_rxmesh_context.m_num_faces, 0, sizeof(uint32_t)));
 
+    CUDA_ERROR(
+        cudaMemset(m_rxmesh_context.m_max_num_vertices, 0, sizeof(uint32_t)));
+    CUDA_ERROR(
+        cudaMemset(m_rxmesh_context.m_max_num_edges, 0, sizeof(uint32_t)));
+    CUDA_ERROR(
+        cudaMemset(m_rxmesh_context.m_max_num_faces, 0, sizeof(uint32_t)));
+
 
     uint32_t dyn_shmem = 0;
 
@@ -2107,6 +2138,21 @@ void RXMeshDynamic::cleanup()
 
     detail::remove_surplus_elements<block_size>
         <<<grid_size, block_size, dyn_shmem>>>(this->m_rxmesh_context);
+
+    CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
+                          this->m_rxmesh_context.m_max_num_vertices,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+
+    CUDA_ERROR(cudaMemcpy(&this->m_max_edges_per_patch,
+                          this->m_rxmesh_context.m_max_num_edges,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+
+    CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
+                          this->m_rxmesh_context.m_max_num_faces,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
 }
 
 void RXMeshDynamic::update_host()
@@ -2274,6 +2320,19 @@ void RXMeshDynamic::update_host()
                           cudaMemcpyDeviceToHost));
     CUDA_ERROR(cudaMemcpy(&this->m_num_faces,
                           m_rxmesh_context.m_num_faces,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+
+    CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
+                          this->m_rxmesh_context.m_max_num_vertices,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+    CUDA_ERROR(cudaMemcpy(&this->m_max_edges_per_patch,
+                          this->m_rxmesh_context.m_max_num_edges,
+                          sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+    CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
+                          this->m_rxmesh_context.m_max_num_faces,
                           sizeof(uint32_t),
                           cudaMemcpyDeviceToHost));
 

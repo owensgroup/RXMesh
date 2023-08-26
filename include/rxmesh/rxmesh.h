@@ -151,7 +151,7 @@ class RXMesh
     /**
      * @brief Maximum number of vertices in a patch
      */
-    uint16_t get_per_patch_max_vertices() const
+    uint32_t get_per_patch_max_vertices() const
     {
         return m_max_vertices_per_patch;
     }
@@ -159,7 +159,7 @@ class RXMesh
     /**
      * @brief Maximum number of edges in a patch
      */
-    uint16_t get_per_patch_max_edges() const
+    uint32_t get_per_patch_max_edges() const
     {
         return m_max_edges_per_patch;
     }
@@ -167,7 +167,7 @@ class RXMesh
     /**
      * @brief Maximum number of faces in a patch
      */
-    uint16_t get_per_patch_max_faces() const
+    uint32_t get_per_patch_max_faces() const
     {
         return m_max_faces_per_patch;
     }
@@ -462,7 +462,7 @@ class RXMesh
 
     uint16_t m_max_capacity_lp_v, m_max_capacity_lp_e, m_max_capacity_lp_f;
 
-    uint16_t m_max_vertices_per_patch, m_max_edges_per_patch,
+    uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
         m_max_faces_per_patch;
 
     // mappings
