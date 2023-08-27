@@ -276,7 +276,8 @@ struct DEdgeHandle
      */
     constexpr __device__ __host__ __inline__ DEdgeHandle get_flip_dedge() const
     {
-        return {patch_id(), uint16_t(local_id() ^ 1)};
+        // extract and flip the lowest bit
+        return DEdgeHandle(patch_id(), local_id(), ((unpack().second & 1) ^ 1));
     }
 
     /**
@@ -284,7 +285,7 @@ struct DEdgeHandle
      */
     constexpr __device__ __host__ __inline__ EdgeHandle get_edge_handle() const
     {
-        return {patch_id(), uint16_t(local_id() >> 1)};
+        return {patch_id(), local_id()};
     }
 
 
@@ -293,9 +294,8 @@ struct DEdgeHandle
      */
     constexpr __device__ __host__ __inline__ bool operator==(
         const EdgeHandle& rhs) const
-    {       
-        return unpack().first == rhs.patch_id() &&
-               (unpack().second >> 1) == rhs.local_id();
+    {
+        return patch_id() == rhs.patch_id() && local_id() == rhs.local_id();
     }
 
 
@@ -367,7 +367,7 @@ struct DEdgeHandle
      */
     constexpr __device__ __host__ __inline__ uint16_t local_id() const
     {
-        return unpack().second;
+        return unpack().second >> 1;
     }
 
    private:

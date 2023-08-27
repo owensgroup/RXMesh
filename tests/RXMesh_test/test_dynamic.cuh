@@ -3,6 +3,7 @@
 
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/kernels/for_each.cuh"
+#include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
 using Config = uint32_t;
@@ -140,11 +141,11 @@ __global__ static void random_collapses(rxmesh::Context                context,
             DEdgeHandle e0 =
                 cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
             for (uint16_t i = 0; i < size; ++i) {
+                const DEdgeHandle e  = cavity.get_cavity_edge(c, i);
                 const DEdgeHandle e1 = cavity.add_edge(
                     cavity.get_cavity_vertex(c, (i + 1) % size), new_v);
-
-                cavity.add_face(e0, cavity.get_cavity_edge(c, i), e1);
-                e0 = e1;
+                cavity.add_face(e0, e, e1);
+                e0 = e1.get_flip_dedge();
             }
         });
     }
@@ -379,9 +380,7 @@ TEST(RXMeshDynamic, RandomCollapse)
                           OnRibbonNotConflicting | OnRibbonConflicting;
 
 
-    // set_edge_tag(rx, *to_collapse, config);
-
-    (*to_collapse)({1, 103}) = 1;
+    set_edge_tag(rx, *to_collapse, config);
 
     to_collapse->move(HOST, DEVICE);
 
@@ -416,7 +415,6 @@ TEST(RXMeshDynamic, RandomCollapse)
 
         rx.slice_patches(*coords, *to_collapse);
         rx.cleanup();
-        break;
     }
 
     CUDA_ERROR(cudaDeviceSynchronize());

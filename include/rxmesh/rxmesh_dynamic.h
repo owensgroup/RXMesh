@@ -4,6 +4,7 @@
 #include <cooperative_groups.h>
 
 #include "rxmesh/bitmask.cuh"
+#include "rxmesh/kernels/rxmesh_queries.cuh"
 
 namespace rxmesh {
 namespace detail {

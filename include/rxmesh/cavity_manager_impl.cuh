@@ -1234,9 +1234,9 @@ __device__ __inline__ FaceHandle CavityManager<blockThreads, cop>::add_face(
     assert(f_id < m_s_active_mask_f.size());
     assert(m_s_active_mask_f(f_id));
 
-    m_s_fe[3 * f_id + 0] = e0.local_id();
-    m_s_fe[3 * f_id + 1] = e1.local_id();
-    m_s_fe[3 * f_id + 2] = e2.local_id();
+    m_s_fe[3 * f_id + 0] = e0.unpack().second;
+    m_s_fe[3 * f_id + 1] = e1.unpack().second;
+    m_s_fe[3 * f_id + 2] = e2.unpack().second;
 
 
     assert(e0.get_edge_handle().local_id() < m_s_active_mask_e.size());
@@ -1329,7 +1329,6 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::get_vertices(
     VertexHandle&    v0,
     VertexHandle&    v1)
 {
-    // actually 
     assert(eh.patch_id() == m_patch_info.patch_id);
     assert(eh.local_id() < m_s_num_edges[0]);
     // assert(m_s_active_mask_e(eh.local_id()));
@@ -1354,16 +1353,16 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::get_edges(
 {
     assert(fh.patch_id() == m_patch_info.patch_id);
     assert(fh.local_id() < m_s_num_faces[0]);
-    //assert(m_s_active_mask_e(fh.local_id()));
+    // assert(m_s_active_mask_e(fh.local_id()));
     assert(m_s_owned_mask_e(fh.local_id()));
 
     e0 = EdgeHandle(m_patch_info.patch_id, m_s_fe[3 * fh.local_id() + 0]);
     e1 = EdgeHandle(m_patch_info.patch_id, m_s_fe[3 * fh.local_id() + 1]);
     e2 = EdgeHandle(m_patch_info.patch_id, m_s_fe[3 * fh.local_id() + 2]);
 
-    //assert(m_s_active_mask_e(e0.local_id()));
-    //assert(m_s_active_mask_e(e1.local_id()));
-    //assert(m_s_active_mask_e(e2.local_id()));
+    // assert(m_s_active_mask_e(e0.local_id()));
+    // assert(m_s_active_mask_e(e1.local_id()));
+    // assert(m_s_active_mask_e(e2.local_id()));
 
     assert(m_s_owned_mask_e(e0.local_id()));
     assert(m_s_owned_mask_e(e1.local_id()));
