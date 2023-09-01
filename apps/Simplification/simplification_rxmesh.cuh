@@ -67,7 +67,9 @@ __device__ __inline__ void calc_edge_cost(
 
         Vec4<T> b(0, 0, 0, 1);
 
-        Vec4<T> x = glm::inverse(edge_quadric_3x3) * b;
+        auto invvv = glm::inverse(edge_quadric_3x3);
+
+        Vec4<T> x = glm::transpose(glm::inverse(edge_quadric_3x3)) * b;
 
         edge_col_coord(e, 0) = x[0];
         edge_col_coord(e, 1) = x[1];
@@ -112,7 +114,7 @@ __device__ __inline__ Vec4<T> compute_face_plane(const Vec3<T>& v0,
 {
     Vec3<T> n = glm::cross(v1 - v0, v2 - v0);
 
-    glm::normalize(n);
+    n = glm::normalize(n);
 
     Vec4<T> ret(n[0], n[1], n[2], -glm::dot(n, v0));
 
@@ -121,11 +123,11 @@ __device__ __inline__ Vec4<T> compute_face_plane(const Vec3<T>& v0,
 
 template <typename T, uint32_t blockThreads>
 __global__ static void compute_edge_cost(
-    rxmesh::Context            context,
-    rxmesh::VertexAttribute<T> coords,
-    rxmesh::VertexAttribute<T> vertex_quadrics,
-    rxmesh::EdgeAttribute<T>   edge_cost,
-    rxmesh::EdgeAttribute<T>   edge_col_coord)
+    const rxmesh::Context            context,
+    const rxmesh::VertexAttribute<T> coords,
+    const rxmesh::VertexAttribute<T> vertex_quadrics,
+    rxmesh::EdgeAttribute<T>         edge_cost,
+    rxmesh::EdgeAttribute<T>         edge_col_coord)
 {
     using namespace rxmesh;
 
@@ -135,7 +137,7 @@ __global__ static void compute_edge_cost(
 
     auto cost = [&](const EdgeHandle edge_id, const VertexIterator& ev) {
         const VertexHandle v0 = ev[0];
-        const VertexHandle v1 = ev[0];
+        const VertexHandle v1 = ev[1];
 
         calc_edge_cost(edge_id,
                        v0,
@@ -152,9 +154,9 @@ __global__ static void compute_edge_cost(
 
 template <typename T, uint32_t blockThreads>
 __global__ static void compute_vertex_quadric_fv(
-    rxmesh::Context            context,
-    rxmesh::VertexAttribute<T> coords,
-    rxmesh::VertexAttribute<T> vertex_quadrics)
+    const rxmesh::Context            context,
+    const rxmesh::VertexAttribute<T> coords,
+    rxmesh::VertexAttribute<T>       vertex_quadrics)
 {
     using namespace rxmesh;
 
@@ -286,7 +288,7 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
     auto edge_cost = rx.add_edge_attribute<float>("cost", 1);
     edge_cost->reset(0, DEVICE);
 
-    auto edge_col_coord = rx.add_edge_attribute<float>("cost", 3);
+    auto edge_col_coord = rx.add_edge_attribute<float>("eCoord", 3);
     edge_col_coord->reset(0, DEVICE);
 
     float total_time = 0;
@@ -320,12 +322,10 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
                                         *edge_cost,
                                         *edge_col_coord);
 
-    edge_cost->move(DEVICE, HOST);
 #if USE_POLYSCOPE
     rx.render_vertex_patch();
     rx.render_edge_patch();
     rx.render_face_patch();
-    rx.get_polyscope_mesh()->addEdgeScalarQuantity("edgeCost", *edge_cost);
     polyscope::show();
 #endif
 
