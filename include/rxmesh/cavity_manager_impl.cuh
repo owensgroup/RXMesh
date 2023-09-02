@@ -506,11 +506,11 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
 
     change_ownership(block);
 
-    if (threadIdx.x == 0) {
-        m_patch_info.num_vertices[0] = m_s_num_vertices[0];
-        m_patch_info.num_edges[0]    = m_s_num_edges[0];
-        m_patch_info.num_faces[0]    = m_s_num_faces[0];
-    }
+    // if (threadIdx.x == 0) {
+    //     m_patch_info.num_vertices[0] = m_s_num_vertices[0];
+    //     m_patch_info.num_edges[0]    = m_s_num_edges[0];
+    //     m_patch_info.num_faces[0]    = m_s_num_faces[0];
+    // }
 
     block.sync();
 
@@ -1267,9 +1267,6 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::add_element(
     assert(capacity == active_bitmask.size());
     assert(capacity == owned.size());
 
-    // if (capacity == 730) {
-    //    return uint16_t(::atomicAdd(num_elements, 1));
-    //}
     uint16_t found = INVALID16;
 
     // number of 32-bit unsigned int used in the bit mask
@@ -1545,7 +1542,8 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::pre_ribbonize(
             // an edge on the cavity and we don't to ribbonize any of these
             // two vertices. Only when one of the vertices are on the cavity
             // boundaries and the other is not, we then want to ribbonize
-            // the other one
+            // the other one. Additionaly, if the other vertex is inside the
+            // cavity, we don't want to ribbonize it (it will be migrated)
 
             const uint16_t v0 = m_s_ev[2 * e + 0];
             const uint16_t v1 = m_s_ev[2 * e + 1];
@@ -1566,21 +1564,16 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::pre_ribbonize(
                 m_s_not_owned_cavity_bdry_v(v1) || m_s_owned_cavity_bdry_v(v1);
 
             assert(v1 < m_s_owned_mask_v.size());
-            if (b0 && !b1 && !m_s_owned_mask_v(v1)) {
-                // The vertex we want to ribbonize should not be inside the
-                // cavity. we assert this here and if this fails then maybe we
-                // should look into this case to understand if this makes sense
+            if (b0 && !b1 && !m_s_owned_mask_v(v1) && !m_s_in_cavity_v(v1)) {
                 assert(v1 < m_s_connect_cavity_bdry_v.size());
                 assert(v1 < m_s_in_cavity_v.size());
-                assert(!m_s_in_cavity_v(v1));
                 m_s_connect_cavity_bdry_v.set(v1, true);
             }
 
             assert(v0 < m_s_owned_mask_v.size());
-            if (b1 && !b0 && !m_s_owned_mask_v(v0)) {
+            if (b1 && !b0 && !m_s_owned_mask_v(v0) && !m_s_in_cavity_v(v0)) {
                 assert(v0 < m_s_connect_cavity_bdry_v.size());
                 assert(v0 < m_s_in_cavity_v.size());
-                assert(!m_s_in_cavity_v(v0));
                 m_s_connect_cavity_bdry_v.set(v0, true);
             }
         }
@@ -1964,13 +1957,15 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
 
 
     for (uint32_t v = threadIdx.x; v < m_s_num_vertices[0]; v += blockThreads) {
-        // migrate a vertex if it is not owned and either on the cavity boundary
-        // or connected to a cavity boundary vertex
+        // migrate a vertex if it is not owned and either 1) on the cavity
+        // boundary, 2) connected to a cavity boundary vertex, or 3) inside the
+        // cavity
         assert(v < m_s_owned_mask_v.size());
         assert(v < m_s_not_owned_cavity_bdry_v.size());
         assert(v < m_s_connect_cavity_bdry_v.size());
         if ((!m_s_owned_mask_v(v) && m_s_connect_cavity_bdry_v(v)) ||
-            m_s_not_owned_cavity_bdry_v(v)) {
+            m_s_not_owned_cavity_bdry_v(v) ||
+            (!m_s_owned_mask_v(v) && m_s_in_cavity_v(v))) {
             // get the owner patch of v
 
             // we don't check if this vertex is active in global memory
