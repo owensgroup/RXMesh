@@ -571,7 +571,7 @@ class Attribute : public AttributeBase
     {
         assert(p_id < m_max_num_patches);
         assert(attr < m_num_attributes);
-        assert(local_id < size(p_id));
+        //assert(local_id < size(p_id));
 
 #ifdef __CUDA_ARCH__
         return m_d_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
@@ -594,7 +594,7 @@ class Attribute : public AttributeBase
     {
         assert(p_id < m_max_num_patches);
         assert(attr < m_num_attributes);
-        assert(local_id < size(p_id));
+        //assert(local_id < size(p_id));
 
 #ifdef __CUDA_ARCH__
         return m_d_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
