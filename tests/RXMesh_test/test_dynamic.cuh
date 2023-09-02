@@ -140,10 +140,15 @@ __global__ static void random_collapses(rxmesh::Context                context,
 
             DEdgeHandle e0 =
                 cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
+            const DEdgeHandle e_init = e0;
+
             for (uint16_t i = 0; i < size; ++i) {
-                const DEdgeHandle e  = cavity.get_cavity_edge(c, i);
-                const DEdgeHandle e1 = cavity.add_edge(
-                    cavity.get_cavity_vertex(c, (i + 1) % size), new_v);
+                const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+                const DEdgeHandle e1 =
+                    (i == size - 1) ?
+                        e_init.get_flip_dedge() :
+                        cavity.add_edge(cavity.get_cavity_vertex(c, i + 1),
+                                        new_v);
                 cavity.add_face(e0, e, e1);
                 e0 = e1.get_flip_dedge();
             }
@@ -376,6 +381,9 @@ TEST(RXMeshDynamic, RandomCollapse)
     auto f_attr = rx.add_face_attribute<int>("fAttr", 1);
     f_attr->reset(0, HOST);
 
+    // these config names makes better sense for edge flips but it is possible
+    // that some of the non-conflicting cavities becomes conflicting for edge
+    // collapse
     const Config config = InteriorNotConflicting | InteriorConflicting |
                           OnRibbonNotConflicting | OnRibbonConflicting;
 
@@ -430,7 +438,7 @@ TEST(RXMeshDynamic, RandomCollapse)
 
     EXPECT_TRUE(rx.validate());
 
-    rx.export_obj(STRINGIFY(OUTPUT_DIR) "sphere3_33.obj", *coords);
+    // rx.export_obj(STRINGIFY(OUTPUT_DIR) "sphere3_33.obj", *coords);
 
 #if USE_POLYSCOPE
     rx.update_polyscope();

@@ -283,13 +283,19 @@ __global__ static void simplify(rxmesh::Context            context,
 
             DEdgeHandle e0 =
                 cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
+            const DEdgeHandle e_init = e0;
+
             for (uint16_t i = 0; i < size; ++i) {
                 const DEdgeHandle e = cavity.get_cavity_edge(c, i);
 
                 const VertexHandle v_end =
                     cavity.get_cavity_vertex(c, (i + 1) % size);
 
-                const DEdgeHandle e1 = cavity.add_edge(v_end, new_v);
+                const DEdgeHandle e1 =
+                    (i == size - 1) ?
+                        e_init.get_flip_dedge() :
+                        cavity.add_edge(cavity.get_cavity_vertex(c, i + 1),
+                                        new_v);
 
                 calc_edge_cost(e1.get_edge_handle(),
                                v_end,
