@@ -215,7 +215,9 @@ __global__ static void compute_vertex_quadric_fv(
 template <typename T, uint32_t blockThreads>
 __global__ static void simplify(rxmesh::Context            context,
                                 rxmesh::VertexAttribute<T> coords,
-                                rxmesh::VertexAttribute<T> vertex_quadrics)
+                                rxmesh::VertexAttribute<T> vertex_quadrics,
+                                rxmesh::EdgeAttribute<T>   edge_cost,
+                                rxmesh::EdgeAttribute<T>   edge_col_coord)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -245,6 +247,8 @@ __global__ static void simplify(rxmesh::Context            context,
         if (v2.is_valid() && v3.is_valid()) {
             // TODO
         }
+
+        // TODO edge selection
     };
 
     Query<blockThreads> query(context, pid);
@@ -256,10 +260,48 @@ __global__ static void simplify(rxmesh::Context            context,
     if (cavity.prologue(block, shrd_alloc)) {
 
         // update the cavity
-        cavity.update_attributes(block, coords, vertex_quadrics);
+        cavity.update_attributes(
+            block, coords, vertex_quadrics, edge_cost, edge_col_coord);
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+            const EdgeHandle src = cavity.template get_creator<EdgeHandle>(c);
 
+            VertexHandle v0, v1;
+
+            cavity.get_vertices(src, v0, v1);
+
+            const VertexHandle new_v = cavity.add_vertex();
+
+            coords(new_v, 0) = edge_col_coord(src, 0);
+            coords(new_v, 1) = edge_col_coord(src, 1);
+            coords(new_v, 2) = edge_col_coord(src, 2);
+
+            for (int i = 0; i < 16; ++i) {
+                vertex_quadrics(new_v, i) =
+                    vertex_quadrics(v0, i) + vertex_quadrics(v1, i);
+            }
+
+            DEdgeHandle e0 =
+                cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
+            for (uint16_t i = 0; i < size; ++i) {
+                const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+
+                const VertexHandle v_end =
+                    cavity.get_cavity_vertex(c, (i + 1) % size);
+
+                const DEdgeHandle e1 = cavity.add_edge(v_end, new_v);
+
+                calc_edge_cost(e1.get_edge_handle(),
+                               v_end,
+                               new_v,
+                               coords,
+                               vertex_quadrics,
+                               edge_cost,
+                               edge_col_coord);
+
+                cavity.add_face(e0, e, e1);
+                e0 = e1.get_flip_dedge();
+            }
         });
     }
 
@@ -326,7 +368,7 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
     rx.render_vertex_patch();
     rx.render_edge_patch();
     rx.render_face_patch();
-    polyscope::show();
+    // polyscope::show();
 #endif
 
 
@@ -348,10 +390,14 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
 
             GPUTimer app_timer;
             app_timer.start();
-            simplify<float, blockThreads><<<launch_box.blocks,
-                                            launch_box.num_threads,
-                                            launch_box.smem_bytes_dyn>>>(
-                rx.get_context(), *coords, *vertex_quadrics);
+            simplify<float, blockThreads>
+                <<<launch_box.blocks,
+                   launch_box.num_threads,
+                   launch_box.smem_bytes_dyn>>>(rx.get_context(),
+                                                *coords,
+                                                *vertex_quadrics,
+                                                *edge_cost,
+                                                *edge_col_coord);
             app_timer.stop();
 
             GPUTimer slice_timer;
