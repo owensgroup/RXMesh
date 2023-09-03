@@ -1590,13 +1590,20 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
     m_s_ownership_change_mask_f.reset(block);
     block.sync();
 
+    for (uint16_t v = threadIdx.x; v < m_s_num_vertices[0]; v += blockThreads) {
+        if (!m_s_owned_mask_v(v) && m_s_in_cavity_v(v)) {
+            m_s_ownership_change_mask_v.set(v, true);
+        }
+    }
 
     for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
         assert(f < m_s_owned_mask_f.size());
         assert(f < m_s_active_mask_f.size());
         assert(f < m_s_in_cavity_f.size());
-        if (!m_s_owned_mask_f(f) &&
-            (m_s_active_mask_f(f) || m_s_in_cavity_f(f))) {
+        if (!m_s_owned_mask_f(f) && m_s_in_cavity_f(f)) {
+            m_s_ownership_change_mask_f.set(f, true);
+        }
+        if (!m_s_owned_mask_f(f) && m_s_active_mask_f(f)) {
 
             const uint16_t edges[3] = {m_s_fe[3 * f + 0] >> 1,
                                        m_s_fe[3 * f + 1] >> 1,
@@ -1636,8 +1643,10 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
         assert(e < m_s_owned_mask_e.size());
         assert(e < m_s_active_mask_e.size());
         assert(e < m_s_in_cavity_e.size());
-        if (!m_s_owned_mask_e(e) &&
-            (m_s_active_mask_e(e) || m_s_in_cavity_e(e))) {
+        if (!m_s_owned_mask_e(e) && m_s_in_cavity_e(e)) {
+            m_s_ownership_change_mask_e.set(e, true);
+        }
+        if (!m_s_owned_mask_e(e) && m_s_active_mask_e(e)) {
 
             for (int i = 0; i < 2; ++i) {
                 const uint16_t v = m_s_ev[2 * e + i];
