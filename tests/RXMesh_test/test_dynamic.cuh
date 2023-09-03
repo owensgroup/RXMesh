@@ -102,15 +102,12 @@ __global__ static void random_collapses(rxmesh::Context                context,
     ShmemAllocator shrd_alloc;
 
     CavityManager<blockThreads, CavityOp::EV> cavity(
-        block, context, shrd_alloc, 1);
+        block, context, shrd_alloc);
 
 
     if (cavity.patch_id() == INVALID32) {
         return;
     }
-
-    Query<blockThreads> query(context, cavity.patch_id());
-    query.compute_vertex_valence(block, shrd_alloc);
 
     detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
         if (to_collapse(eh) == 1) {
@@ -121,6 +118,12 @@ __global__ static void random_collapses(rxmesh::Context                context,
     block.sync();
 
     if (cavity.prologue(block, shrd_alloc)) {
+
+        detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
+            if (cavity.is_successful(eh)) {
+                to_collapse(eh) = 0;
+            }
+        });
 
         cavity.update_attributes(
             block, coords, to_collapse, v_attr, e_attr, f_attr);
@@ -186,20 +189,20 @@ inline void set_edge_tag(rxmesh::RXMeshDynamic&      rx,
 
 
             if ((config & InteriorNotConflicting) == InteriorNotConflicting) {
-                if (eh.local_id() == 26 || eh.local_id() == 174 ||
-                    eh.local_id() == 184 || eh.local_id() == 94 ||
-                    eh.local_id() == 58 || eh.local_id() == 362 ||
-                    eh.local_id() == 70 || eh.local_id() == 420) {
+                if (eh.local_id() == 174 || eh.local_id() == 184 ||
+                    eh.local_id() == 94 || eh.local_id() == 58 ||
+                    eh.local_id() == 362 || eh.local_id() == 70 ||
+                    eh.local_id() == 420) {
                     edge_tag(eh) = 1;
                 }
             }
 
             if ((config & InteriorConflicting) == InteriorConflicting) {
-                if (eh.local_id() == 26 || eh.local_id() == 22 ||
-                    eh.local_id() == 29 || eh.local_id() == 156 ||
-                    eh.local_id() == 23 || eh.local_id() == 389 ||
-                    eh.local_id() == 39 || eh.local_id() == 40 ||
-                    eh.local_id() == 41 || eh.local_id() == 16) {
+                if (eh.local_id() == 22 || eh.local_id() == 29 ||
+                    eh.local_id() == 156 || eh.local_id() == 23 ||
+                    eh.local_id() == 389 || eh.local_id() == 39 ||
+                    eh.local_id() == 40 || eh.local_id() == 41 ||
+                    eh.local_id() == 16) {
                     edge_tag(eh) = 1;
                 }
             }
@@ -238,7 +241,7 @@ inline void set_edge_tag(rxmesh::RXMeshDynamic&      rx,
             }
 
             if ((config & InteriorConflicting) == InteriorConflicting) {
-                if (eh.local_id() == 527 || eh.local_id() == 209 ||
+                if (eh.local_id() == 527 || eh.local_id() == 630 ||
                     eh.local_id() == 44 || eh.local_id() == 525 ||
                     eh.local_id() == 212 || eh.local_id() == 47 ||
                     eh.local_id() == 46 || eh.local_id() == 58 ||
