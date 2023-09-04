@@ -734,6 +734,10 @@ struct CavityManager
     bool*      m_s_should_slice;
     ShmemMutex m_s_patch_stash_mutex;
 
+    // indicates if we should remove user fill-in elements before writing
+    // to global memory
+    bool* m_s_remove_fill_in;
+
     // what mesh element (depending on CavityOp) generated this cavity
     uint16_t* m_s_cavity_creator;
 

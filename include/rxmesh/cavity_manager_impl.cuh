@@ -22,6 +22,9 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     __shared__ bool slice[1];
     m_s_should_slice = slice;
 
+    __shared__ bool fill[1];
+    m_s_remove_fill_in = fill;
+
     __shared__ int num_cavities[1];
     m_s_num_cavities = num_cavities;
 
@@ -29,6 +32,7 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     if (threadIdx.x == 0) {
         m_s_readd_to_queue[0] = false;
         m_s_should_slice[0]   = false;
+        m_s_remove_fill_in[0] = false;
         m_s_num_cavities[0]   = 0;
 
         // get a patch
@@ -1185,16 +1189,22 @@ CavityManager<blockThreads, cop>::add_vertex()
                                 m_patch_info.vertices_capacity[0],
                                 m_s_in_cavity_v,
                                 m_s_owned_mask_v,
-                                false,
-                                true);
-    // if (v_id == INVALID16) {
-    //     m_s_should_slice[0] = true;
-    //     m_write_to_gmem     = false;
-    //     return VertexHandle();
-    // }
+                                true,
+                                false);
+    if (v_id == INVALID16) {
+        m_s_should_slice[0]   = true;
+        m_s_remove_fill_in[0] = true;
+        m_s_readd_to_queue[0] = true;
+        return VertexHandle();
+    }
     assert(v_id < m_patch_info.vertices_capacity[0]);
     assert(m_s_active_mask_v(v_id));
     assert(v_id < m_s_owned_mask_v.size());
+
+    assert(v_id < m_s_fill_in_v.size());
+
+    m_s_fill_in_v.set(v_id, true);
+
     m_s_owned_mask_v.set(v_id, true);
     return {m_patch_info.patch_id, v_id};
 }
@@ -1213,18 +1223,24 @@ __device__ __inline__ DEdgeHandle CavityManager<blockThreads, cop>::add_edge(
                                 m_patch_info.edges_capacity[0],
                                 m_s_in_cavity_e,
                                 m_s_owned_mask_e,
-                                false,
-                                true);
-    // if (e_id == INVALID16) {
-    //     m_s_should_slice[0] = true;
-    //     m_write_to_gmem     = false;
-    //     return DEdgeHandle();
-    // }
+                                true,
+                                false);
+
+    if (e_id == INVALID16) {
+        m_s_should_slice[0]   = true;
+        m_s_remove_fill_in[0] = true;
+        m_s_readd_to_queue[0] = true;
+        return DEdgeHandle();
+    }
     assert(e_id < m_patch_info.edges_capacity[0]);
     assert(e_id < m_s_active_mask_e.size());
     assert(m_s_active_mask_e(e_id));
     assert(m_s_active_mask_v(src.local_id()));
     assert(m_s_active_mask_v(dest.local_id()));
+
+    assert(e_id < m_s_fill_in_e.size());
+
+    m_s_fill_in_e.set(e_id, true);
 
     m_s_ev[2 * e_id + 0] = src.local_id();
     m_s_ev[2 * e_id + 1] = dest.local_id();
@@ -1249,16 +1265,20 @@ __device__ __inline__ FaceHandle CavityManager<blockThreads, cop>::add_face(
                                 m_patch_info.faces_capacity[0],
                                 m_s_in_cavity_f,
                                 m_s_owned_mask_f,
-                                false,
-                                true);
-    // if (f_id == INVALID16) {
-    //     m_s_should_slice[0] = true;
-    //     m_write_to_gmem     = false;
-    //     return FaceHandle();
-    // }
+                                true,
+                                false);
+    if (f_id == INVALID16) {
+        m_s_should_slice[0]   = true;
+        m_s_remove_fill_in[0] = true;
+        m_s_readd_to_queue[0] = true;
+        return FaceHandle();
+    }
     assert(f_id < m_patch_info.faces_capacity[0]);
     assert(f_id < m_s_active_mask_f.size());
     assert(m_s_active_mask_f(f_id));
+    assert(f_id < m_s_fill_in_f.size());
+
+    m_s_fill_in_f.set(f_id, true);
 
     m_s_fe[3 * f_id + 0] = e0.unpack().second;
     m_s_fe[3 * f_id + 1] = e1.unpack().second;
@@ -3021,7 +3041,75 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
             3 * m_s_num_faces[0],
             reinterpret_cast<uint16_t*>(m_patch_info.fe));
 
+#ifndef NDEBUG
+        for (uint16_t v = threadIdx.x; v < m_s_active_mask_v.size();
+             v += blockThreads) {
+            if (m_s_in_cavity_v(v)) {
+                assert(!m_s_active_mask_v(v));
+            }
+            if (m_s_fill_in_v(v)) {
+                assert(m_s_active_mask_v(v));
+            }
+        }
+        for (uint16_t e = threadIdx.x; e < m_s_active_mask_e.size();
+             e += blockThreads) {
+            if (m_s_in_cavity_e(e)) {
+                assert(!m_s_active_mask_e(e));
+            }
+            if (m_s_fill_in_e(e)) {
+                assert(m_s_active_mask_e(e));
+            }
+        }
+        for (uint16_t f = threadIdx.x; f < m_s_active_mask_f.size();
+             f += blockThreads) {
+            if (m_s_in_cavity_f(f)) {
+                assert(!m_s_active_mask_f(f));
+            }
+            if (m_s_fill_in_f(f)) {
+                assert(m_s_active_mask_f(f));
+            }
+        }
+#endif
+
         // store bitmask
+        if (m_s_remove_fill_in[0]) {
+            // TODO optimize this by working on whole 32-bit mask
+            //
+            //  removing fill-in elements since we were not successful in adding
+            //  all of them. Thus, we need to preserve the original mesh by
+            //  removing these elements and re-activating the in-cavity ones
+            for (uint16_t v = threadIdx.x; v < m_s_active_mask_v.size();
+                 v += blockThreads) {
+                if (m_s_in_cavity_v(v)) {
+                    m_s_active_mask_v.set(v, true);
+                }
+                if (m_s_fill_in_v(v)) {
+                    m_s_active_mask_v.reset(v, true);
+                }
+            }
+
+            for (uint16_t e = threadIdx.x; e < m_s_active_mask_e.size();
+                 e += blockThreads) {
+                if (m_s_in_cavity_e(e)) {
+                    m_s_active_mask_e.set(e, true);
+                }
+                if (m_s_fill_in_e(e)) {
+                    m_s_active_mask_e.reset(e, true);
+                }
+            }
+
+
+            for (uint16_t f = threadIdx.x; f < m_s_active_mask_f.size();
+                 f += blockThreads) {
+                if (m_s_in_cavity_f(f)) {
+                    m_s_active_mask_f.set(f, true);
+                }
+                if (m_s_fill_in_f(f)) {
+                    m_s_active_mask_f.reset(f, true);
+                }
+            }
+        }
+        block.sync();
         detail::store<blockThreads>(m_s_owned_mask_v.m_bitmask,
                                     DIVIDE_UP(m_s_num_vertices[0], 32),
                                     m_patch_info.owned_mask_v);
@@ -3059,7 +3147,9 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
              i += blockThreads) {
             m_patch_info.patch_stash.m_stash[i] = m_s_patch_stash.m_stash[i];
         }
-    } else if (m_s_should_slice[0]) {
+    }
+
+    if (m_s_should_slice[0]) {
         if (threadIdx.x == 0) {
             m_context.m_patches_info[patch_id()].should_slice = true;
         }
