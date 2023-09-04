@@ -449,9 +449,11 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::is_successful(
 
 
 template <uint32_t blockThreads, CavityOp cop>
+template <typename... AttributesT>
 __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     cooperative_groups::thread_block& block,
-    ShmemAllocator&                   shrd_alloc)
+    ShmemAllocator&                   shrd_alloc,
+    AttributesT&&... attributes)
 {
     if (get_num_cavities() == 0) {
         return false;
@@ -494,24 +496,21 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     if (!migrate(block)) {
         block.sync();
         m_write_to_gmem = false;
-        unlock_locked_patches();
         return false;
     }
 
+    // mark this patch and locked patches as dirty
     m_patch_info.set_dirty();
     set_dirty_for_locked_patches();
 
     m_write_to_gmem = true;
+
+    // do ownership change
+    change_ownership(block);
     block.sync();
 
-    change_ownership(block);
-
-    // if (threadIdx.x == 0) {
-    //     m_patch_info.num_vertices[0] = m_s_num_vertices[0];
-    //     m_patch_info.num_edges[0]    = m_s_num_edges[0];
-    //     m_patch_info.num_faces[0]    = m_s_num_faces[0];
-    // }
-
+    // update attributes
+    update_attributes(block, attributes...);
     block.sync();
 
     return true;
@@ -1176,6 +1175,11 @@ CavityManager<blockThreads, cop>::add_vertex()
                                 m_s_owned_mask_v,
                                 false,
                                 true);
+    // if (v_id == INVALID16) {
+    //     m_s_should_slice[0] = true;
+    //     m_write_to_gmem     = false;
+    //     return VertexHandle();
+    // }
     assert(v_id < m_patch_info.vertices_capacity[0]);
     assert(m_s_active_mask_v(v_id));
     assert(v_id < m_s_owned_mask_v.size());
@@ -1199,6 +1203,11 @@ __device__ __inline__ DEdgeHandle CavityManager<blockThreads, cop>::add_edge(
                                 m_s_owned_mask_e,
                                 false,
                                 true);
+    // if (e_id == INVALID16) {
+    //     m_s_should_slice[0] = true;
+    //     m_write_to_gmem     = false;
+    //     return DEdgeHandle();
+    // }
     assert(e_id < m_patch_info.edges_capacity[0]);
     assert(e_id < m_s_active_mask_e.size());
     assert(m_s_active_mask_e(e_id));
@@ -1230,6 +1239,11 @@ __device__ __inline__ FaceHandle CavityManager<blockThreads, cop>::add_face(
                                 m_s_owned_mask_f,
                                 false,
                                 true);
+    // if (f_id == INVALID16) {
+    //     m_s_should_slice[0] = true;
+    //     m_write_to_gmem     = false;
+    //     return FaceHandle();
+    // }
     assert(f_id < m_patch_info.faces_capacity[0]);
     assert(f_id < m_s_active_mask_f.size());
     assert(m_s_active_mask_f(f_id));
@@ -1457,8 +1471,7 @@ __device__ __inline__ void
 CavityManager<blockThreads, cop>::unlock_locked_patches()
 {
     if (threadIdx.x == 0) {
-        for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
-            assert(st < m_s_locked_patches_mask.size());
+        for (uint8_t st = 0; st < m_s_locked_patches_mask.size(); ++st) {
             if (m_s_locked_patches_mask(st)) {
                 uint32_t q = m_s_patch_stash.get_patch(st);
                 assert(q != INVALID32);
@@ -2970,20 +2983,6 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
     // make sure all writes are done
     block.sync();
     if (m_write_to_gmem) {
-        // enforce patch stash inclusion
-        /*for (uint32_t st = threadIdx.x; st < PatchStash::stash_size;
-             st += blockThreads) {
-            if (m_s_locked_patches_mask(st)) {
-                uint32_t q = m_s_patch_stash.get_patch(st);
-                assert(q != INVALID32);
-                m_context.m_patches_info[q].patch_stash.insert_patch(
-                    m_patch_info.patch_id);
-            }
-        }
-
-        block.sync();*/
-        // unlock any neighbor patch we have locked
-        unlock_locked_patches();
 
         // update number of elements again since add_vertex/edge/face could have
         // changed it
@@ -3061,6 +3060,8 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
         push();
     }
 
+    // unlock any neighbor patch we have locked
+    unlock_locked_patches();
 
     // unlock this patch
     unlock();

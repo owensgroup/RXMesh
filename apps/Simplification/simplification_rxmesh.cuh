@@ -257,11 +257,12 @@ __global__ static void simplify(rxmesh::Context            context,
 
 
     // create the cavity
-    if (cavity.prologue(block, shrd_alloc)) {
-
-        // update the cavity
-        cavity.update_attributes(
-            block, coords, vertex_quadrics, edge_cost, edge_col_coord);
+    if (cavity.prologue(block,
+                        shrd_alloc,
+                        coords,
+                        vertex_quadrics,
+                        edge_cost,
+                        edge_col_coord)) {
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             const EdgeHandle src = cavity.template get_creator<EdgeHandle>(c);

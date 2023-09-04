@@ -110,8 +110,10 @@ struct CavityManager
      * this function returns false.
      * @return
      */
+    template <typename... AttributesT>
     __device__ __inline__ bool prologue(cooperative_groups::thread_block& block,
-                                        ShmemAllocator& shrd_alloc);
+                                        ShmemAllocator& shrd_alloc,
+                                        AttributesT&&... attributes);
 
     /**
      * @brief return the patch id that this cavity manager operates on
@@ -197,21 +199,6 @@ struct CavityManager
 
 
     /**
-     * @brief update all attributes such that it can be used after the topology
-     * changes. This function takes as many attributes as you want
-     */
-    template <typename... AttributesT>
-    __device__ __inline__ void update_attributes(
-        cooperative_groups::thread_block& block,
-        AttributesT&&... attributes)
-    {
-        // use fold expersion to iterate over each attribute
-        // https://stackoverflow.com/a/60136761
-        ([&] { update_attribute(attributes); }(), ...);
-        block.sync();
-    }
-
-    /**
      * @brief cleanup and store updated patch to global memory
      * @param block
      * @return
@@ -228,6 +215,21 @@ struct CavityManager
     }
 
    private:
+    /**
+     * @brief update all attributes such that it can be used after the topology
+     * changes. This function takes as many attributes as you want
+     */
+    template <typename... AttributesT>
+    __device__ __inline__ void update_attributes(
+        cooperative_groups::thread_block& block,
+        AttributesT&&... attributes)
+    {
+        // use fold expersion to iterate over each attribute
+        // https://stackoverflow.com/a/60136761
+        ([&] { update_attribute(attributes); }(), ...);
+        block.sync();
+    }
+
     /**
      * @brief allocate shared memory
      */

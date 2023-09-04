@@ -108,10 +108,7 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
 
 
     // create the cavity
-    if (cavity.prologue(block, shrd_alloc)) {
-
-        // update the cavity
-        cavity.update_attributes(block, coords);
+    if (cavity.prologue(block, shrd_alloc, coords)) {
 
         if (threadIdx.x == 0) {
             ::atomicAdd(num_successful, 1);

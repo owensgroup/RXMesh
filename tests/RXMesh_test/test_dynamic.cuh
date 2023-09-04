@@ -59,8 +59,7 @@ __global__ static void random_flips(rxmesh::Context                context,
 
     block.sync();
 
-    if (cavity.prologue(block, shrd_alloc)) {
-        cavity.update_attributes(block, coords, to_flip);
+    if (cavity.prologue(block, shrd_alloc, coords, to_flip)) {
 
         // so that we don't flip them again
         detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
@@ -75,13 +74,16 @@ __global__ static void random_flips(rxmesh::Context                context,
             DEdgeHandle new_edge = cavity.add_edge(
                 cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c, 3));
 
-            cavity.add_face(cavity.get_cavity_edge(c, 0),
-                            new_edge,
-                            cavity.get_cavity_edge(c, 3));
+            if (new_edge.is_valid()) {
+                cavity.add_face(cavity.get_cavity_edge(c, 0),
+                                new_edge,
+                                cavity.get_cavity_edge(c, 3));
 
-            cavity.add_face(cavity.get_cavity_edge(c, 1),
-                            cavity.get_cavity_edge(c, 2),
-                            new_edge.get_flip_dedge());
+
+                cavity.add_face(cavity.get_cavity_edge(c, 1),
+                                cavity.get_cavity_edge(c, 2),
+                                new_edge.get_flip_dedge());
+            }
         });
     }
 
@@ -117,16 +119,14 @@ __global__ static void random_collapses(rxmesh::Context                context,
 
     block.sync();
 
-    if (cavity.prologue(block, shrd_alloc)) {
+    if (cavity.prologue(
+            block, shrd_alloc, coords, to_collapse, v_attr, e_attr, f_attr)) {
 
         detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
             if (cavity.is_successful(eh)) {
                 to_collapse(eh) = 0;
             }
         });
-
-        cavity.update_attributes(
-            block, coords, to_collapse, v_attr, e_attr, f_attr);
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             const EdgeHandle src = cavity.template get_creator<EdgeHandle>(c);
@@ -145,15 +145,23 @@ __global__ static void random_collapses(rxmesh::Context                context,
                 cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
             const DEdgeHandle e_init = e0;
 
-            for (uint16_t i = 0; i < size; ++i) {
-                const DEdgeHandle e = cavity.get_cavity_edge(c, i);
-                const DEdgeHandle e1 =
-                    (i == size - 1) ?
-                        e_init.get_flip_dedge() :
-                        cavity.add_edge(cavity.get_cavity_vertex(c, i + 1),
-                                        new_v);
-                cavity.add_face(e0, e, e1);
-                e0 = e1.get_flip_dedge();
+            if (e0.is_valid()) {
+                for (uint16_t i = 0; i < size; ++i) {
+                    const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+                    const DEdgeHandle e1 =
+                        (i == size - 1) ?
+                            e_init.get_flip_dedge() :
+                            cavity.add_edge(cavity.get_cavity_vertex(c, i + 1),
+                                            new_v);
+                    if (!e1.is_valid()) {
+                        break;
+                    }
+                    const FaceHandle f = cavity.add_face(e0, e, e1);
+                    if (!f.is_valid()) {
+                        break;
+                    }
+                    e0 = e1.get_flip_dedge();
+                }
             }
         });
     }
