@@ -665,6 +665,12 @@ struct CavityManager
     Bitmask m_s_ownership_change_mask_v, m_s_ownership_change_mask_e,
         m_s_ownership_change_mask_f;
 
+    // indicate if the mesh element is added by the user
+    // This bit mask overlap with m_s_ownership_change_mask_v/e/f i.e., we reuse
+    // the same memory for both since we use m_s_fill_in_v/e/f during the cavity
+    // fill-in and thus we no longer need m_s_ownership_change_mask_v/e/f
+    Bitmask m_s_fill_in_v, m_s_fill_in_e, m_s_fill_in_f;
+
     // indicate if the vertex is on the cavity boundary and is owned
     Bitmask m_s_owned_cavity_bdry_v;
 

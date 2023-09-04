@@ -147,6 +147,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                            Bitmask&        owned,
                            Bitmask&        active,
                            Bitmask&        ownership,
+                           Bitmask&        fill_in,
                            Bitmask&        in_cavity,
                            const uint32_t* g_owned,
                            const uint32_t* g_active) {
@@ -154,6 +155,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
         active    = Bitmask(num_elements, shrd_alloc);
         ownership = Bitmask(num_elements, shrd_alloc);
         in_cavity = Bitmask(num_elements, shrd_alloc);
+        fill_in   = Bitmask(num_elements, ownership.m_bitmask);
 
         owned.reset(block);
         active.reset(block);
@@ -181,6 +183,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                 m_s_owned_mask_v,
                 m_s_active_mask_v,
                 m_s_ownership_change_mask_v,
+                m_s_fill_in_v,
                 m_s_in_cavity_v,
                 m_patch_info.owned_mask_v,
                 m_patch_info.active_mask_v);
@@ -197,6 +200,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                 m_s_owned_mask_e,
                 m_s_active_mask_e,
                 m_s_ownership_change_mask_e,
+                m_s_fill_in_e,
                 m_s_in_cavity_e,
                 m_patch_info.owned_mask_e,
                 m_patch_info.active_mask_e);
@@ -208,6 +212,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                 m_s_owned_mask_f,
                 m_s_active_mask_f,
                 m_s_ownership_change_mask_f,
+                m_s_fill_in_f,
                 m_s_in_cavity_f,
                 m_patch_info.owned_mask_f,
                 m_patch_info.active_mask_f);
@@ -511,6 +516,13 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
 
     // update attributes
     update_attributes(block, attributes...);
+    block.sync();
+
+
+    // reset the fill-in bitmask so we can use it during the cavity fill-in
+    m_s_fill_in_v.reset(block);
+    m_s_fill_in_e.reset(block);
+    m_s_fill_in_f.reset(block);
     block.sync();
 
     return true;
