@@ -48,13 +48,21 @@ struct CavityManager
     /**
      * @brief constructor
      * @param block
-     * @param context
-     * @param shrd_alloc
+     * @param context RXMesh context
+     * @param shrd_alloc shared memory allocator used all across the kernel
+     * execution. Should be the same for any RXMesh API called during the kernel
+     * execution
+     * @param preserve_cavity set this to true if access cavity information
+     * (topology/geometry) is needed during cavity fill-in
+     * @param current_p used for debugging such that only one patch is
+     * processed. PROCESS_SINGLE_PATCH (top of patch_scheduler.cuh file) should
+     * be defined in order to process only one patch
      * @return
      */
     __device__ __inline__ CavityManager(cooperative_groups::thread_block& block,
                                         Context&        context,
                                         ShmemAllocator& shrd_alloc,
+                                        bool            preserve_cavity,
                                         uint32_t        current_p = 0);
 
     /**
@@ -740,6 +748,12 @@ struct CavityManager
 
     // what mesh element (depending on CavityOp) generated this cavity
     uint16_t* m_s_cavity_creator;
+
+    // indicate that the cavity (deleted elements) should be preserved during
+    // the cavity fill-in; mostly because the user needs to access the deleted
+    // elements information (either topology or geometry) while filling-in the
+    // cavity
+    bool m_preserve_cavity;
 
     // LPPair*  m_s_table_q;
     // LPPair*  m_s_table_stash_q;

@@ -5,8 +5,11 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     cooperative_groups::thread_block& block,
     Context&                          context,
     ShmemAllocator&                   shrd_alloc,
+    bool                              preserve_cavity,
     uint32_t                          current_p)
-    : m_write_to_gmem(false), m_context(context)
+    : m_write_to_gmem(false),
+      m_context(context),
+      m_preserve_cavity(preserve_cavity)
 {
     __shared__ uint32_t s_patch_id;
 
@@ -1189,8 +1192,8 @@ CavityManager<blockThreads, cop>::add_vertex()
                                 m_patch_info.vertices_capacity[0],
                                 m_s_in_cavity_v,
                                 m_s_owned_mask_v,
-                                true,
-                                false);
+                                m_preserve_cavity,
+                                !m_preserve_cavity);
     if (v_id == INVALID16) {
         m_s_should_slice[0]   = true;
         m_s_remove_fill_in[0] = true;
@@ -1223,8 +1226,8 @@ __device__ __inline__ DEdgeHandle CavityManager<blockThreads, cop>::add_edge(
                                 m_patch_info.edges_capacity[0],
                                 m_s_in_cavity_e,
                                 m_s_owned_mask_e,
-                                true,
-                                false);
+                                m_preserve_cavity,
+                                !m_preserve_cavity);
 
     if (e_id == INVALID16) {
         m_s_should_slice[0]   = true;
@@ -1265,8 +1268,8 @@ __device__ __inline__ FaceHandle CavityManager<blockThreads, cop>::add_face(
                                 m_patch_info.faces_capacity[0],
                                 m_s_in_cavity_f,
                                 m_s_owned_mask_f,
-                                true,
-                                false);
+                                m_preserve_cavity,
+                                !m_preserve_cavity);
     if (f_id == INVALID16) {
         m_s_should_slice[0]   = true;
         m_s_remove_fill_in[0] = true;
@@ -3042,31 +3045,33 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
             reinterpret_cast<uint16_t*>(m_patch_info.fe));
 
 #ifndef NDEBUG
-        for (uint16_t v = threadIdx.x; v < m_s_active_mask_v.size();
-             v += blockThreads) {
-            if (m_s_in_cavity_v(v)) {
-                assert(!m_s_active_mask_v(v));
+        if (m_preserve_cavity) {
+            for (uint16_t v = threadIdx.x; v < m_s_active_mask_v.size();
+                 v += blockThreads) {
+                if (m_s_in_cavity_v(v)) {
+                    assert(!m_s_active_mask_v(v));
+                }
+                if (m_s_fill_in_v(v)) {
+                    assert(m_s_active_mask_v(v));
+                }
             }
-            if (m_s_fill_in_v(v)) {
-                assert(m_s_active_mask_v(v));
+            for (uint16_t e = threadIdx.x; e < m_s_active_mask_e.size();
+                 e += blockThreads) {
+                if (m_s_in_cavity_e(e)) {
+                    assert(!m_s_active_mask_e(e));
+                }
+                if (m_s_fill_in_e(e)) {
+                    assert(m_s_active_mask_e(e));
+                }
             }
-        }
-        for (uint16_t e = threadIdx.x; e < m_s_active_mask_e.size();
-             e += blockThreads) {
-            if (m_s_in_cavity_e(e)) {
-                assert(!m_s_active_mask_e(e));
-            }
-            if (m_s_fill_in_e(e)) {
-                assert(m_s_active_mask_e(e));
-            }
-        }
-        for (uint16_t f = threadIdx.x; f < m_s_active_mask_f.size();
-             f += blockThreads) {
-            if (m_s_in_cavity_f(f)) {
-                assert(!m_s_active_mask_f(f));
-            }
-            if (m_s_fill_in_f(f)) {
-                assert(m_s_active_mask_f(f));
+            for (uint16_t f = threadIdx.x; f < m_s_active_mask_f.size();
+                 f += blockThreads) {
+                if (m_s_in_cavity_f(f)) {
+                    assert(!m_s_active_mask_f(f));
+                }
+                if (m_s_fill_in_f(f)) {
+                    assert(m_s_active_mask_f(f));
+                }
             }
         }
 #endif

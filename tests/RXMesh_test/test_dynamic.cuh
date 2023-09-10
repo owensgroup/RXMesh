@@ -34,7 +34,8 @@ __global__ static void random_flips(rxmesh::Context                context,
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
 
-    CavityManager<blockThreads, CavityOp::E> cavity(block, context, shrd_alloc);
+    CavityManager<blockThreads, CavityOp::E> cavity(
+        block, context, shrd_alloc, false);
 
 
     if (cavity.patch_id() == INVALID32) {
@@ -104,7 +105,7 @@ __global__ static void random_collapses(rxmesh::Context                context,
     ShmemAllocator shrd_alloc;
 
     CavityManager<blockThreads, CavityOp::EV> cavity(
-        block, context, shrd_alloc);
+        block, context, shrd_alloc, true);
 
 
     if (cavity.patch_id() == INVALID32) {

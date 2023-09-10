@@ -14,15 +14,14 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
                                           rxmesh::VertexAttribute<T> coords,
                                           int*                       d_flipped,
                                           uint32_t* num_successful,
-                                          uint32_t* num_sliced,
-                                          uint32_t  current_p)
+                                          uint32_t* num_sliced)
 {
     using namespace rxmesh;
     using VecT           = glm::vec<3, T, glm::defaultp>;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
     CavityManager<blockThreads, CavityOp::E> cavity(
-        block, context, shrd_alloc, current_p);
+        block, context, shrd_alloc, false);
 
     const uint32_t pid = cavity.patch_id();
 
@@ -120,13 +119,17 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
             DEdgeHandle new_edge = cavity.add_edge(
                 cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c, 3));
 
-            cavity.add_face(cavity.get_cavity_edge(c, 0),
-                            new_edge,
-                            cavity.get_cavity_edge(c, 3));
+            if (new_edge.is_valid()) {
+                cavity.add_face(cavity.get_cavity_edge(c, 0),
+                                new_edge,
+                                cavity.get_cavity_edge(c, 3));
 
-            cavity.add_face(cavity.get_cavity_edge(c, 1),
-                            cavity.get_cavity_edge(c, 2),
-                            new_edge.get_flip_dedge());
+
+                cavity.add_face(cavity.get_cavity_edge(c, 1),
+                                cavity.get_cavity_edge(c, 2),
+                                new_edge.get_flip_dedge());
+            }
+
             d_flipped[0] = 1;
         });
     }
@@ -269,8 +272,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
                                                 *coords,
                                                 d_flipped,
                                                 d_num_successful,
-                                                d_num_sliced,
-                                                0);
+                                                d_num_sliced);
             app_timer.stop();
 
             GPUTimer slice_timer;
