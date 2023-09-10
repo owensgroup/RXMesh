@@ -3073,6 +3073,40 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
                     assert(m_s_active_mask_f(f));
                 }
             }
+        } else if (m_s_remove_fill_in[0]) {
+            // if we are not preserving cavity and we have to back off, then
+            // we have to check if the mesh element is either in-cavity or
+            // fill-in. If there is an element that is both (in-cavity and
+            // fill-in), that means we have lost its topology/geometry info.
+            // A potential solution is to selectively update global memory such
+            // that we don't update global memory with these elements
+            for (uint16_t v = threadIdx.x; v < m_s_active_mask_v.size();
+                 v += blockThreads) {
+                if (m_s_in_cavity_v(v)) {
+                    assert(!m_s_fill_in_v(v));
+                }
+                if (m_s_fill_in_v(v)) {
+                    assert(!m_s_in_cavity_v(v));
+                }
+            }
+            for (uint16_t e = threadIdx.x; e < m_s_active_mask_e.size();
+                 e += blockThreads) {
+                if (m_s_in_cavity_e(e)) {
+                    assert(!m_s_fill_in_e(e));
+                }
+                if (m_s_fill_in_e(e)) {
+                    assert(!m_s_in_cavity_e(e));
+                }
+            }
+            for (uint16_t f = threadIdx.x; f < m_s_active_mask_f.size();
+                 f += blockThreads) {
+                if (m_s_in_cavity_f(f)) {
+                    assert(!m_s_fill_in_f(f));
+                }
+                if (m_s_fill_in_f(f)) {
+                    assert(!m_s_in_cavity_f(f));
+                }
+            }
         }
 #endif
 
