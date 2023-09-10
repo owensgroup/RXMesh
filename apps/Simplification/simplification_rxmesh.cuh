@@ -249,6 +249,7 @@ __global__ static void simplify(rxmesh::Context            context,
         }
 
         // TODO edge selection
+        // cavity.create(eh);
     };
 
     Query<blockThreads> query(context, pid);
@@ -273,41 +274,55 @@ __global__ static void simplify(rxmesh::Context            context,
 
             const VertexHandle new_v = cavity.add_vertex();
 
-            coords(new_v, 0) = edge_col_coord(src, 0);
-            coords(new_v, 1) = edge_col_coord(src, 1);
-            coords(new_v, 2) = edge_col_coord(src, 2);
+            if (new_v.is_valid()) {
 
-            for (int i = 0; i < 16; ++i) {
-                vertex_quadrics(new_v, i) =
-                    vertex_quadrics(v0, i) + vertex_quadrics(v1, i);
-            }
+                coords(new_v, 0) = edge_col_coord(src, 0);
+                coords(new_v, 1) = edge_col_coord(src, 1);
+                coords(new_v, 2) = edge_col_coord(src, 2);
 
-            DEdgeHandle e0 =
-                cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
-            const DEdgeHandle e_init = e0;
+                for (int i = 0; i < 16; ++i) {
+                    vertex_quadrics(new_v, i) =
+                        vertex_quadrics(v0, i) + vertex_quadrics(v1, i);
+                }
 
-            for (uint16_t i = 0; i < size; ++i) {
-                const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+                DEdgeHandle e0 =
+                    cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
 
-                const VertexHandle v_end =
-                    cavity.get_cavity_vertex(c, (i + 1) % size);
+                if (e0.is_valid()) {
+                    const DEdgeHandle e_init = e0;
 
-                const DEdgeHandle e1 =
-                    (i == size - 1) ?
-                        e_init.get_flip_dedge() :
-                        cavity.add_edge(cavity.get_cavity_vertex(c, i + 1),
-                                        new_v);
+                    for (uint16_t i = 0; i < size; ++i) {
+                        const DEdgeHandle e = cavity.get_cavity_edge(c, i);
 
-                calc_edge_cost(e1.get_edge_handle(),
-                               v_end,
-                               new_v,
-                               coords,
-                               vertex_quadrics,
-                               edge_cost,
-                               edge_col_coord);
+                        const VertexHandle v_end =
+                            cavity.get_cavity_vertex(c, (i + 1) % size);
 
-                cavity.add_face(e0, e, e1);
-                e0 = e1.get_flip_dedge();
+                        const DEdgeHandle e1 =
+                            (i == size - 1) ?
+                                e_init.get_flip_dedge() :
+                                cavity.add_edge(
+                                    cavity.get_cavity_vertex(c, i + 1), new_v);
+
+                        if (!e1.is_valid()) {
+                            break;
+                        }
+
+                        calc_edge_cost(e1.get_edge_handle(),
+                                       v_end,
+                                       new_v,
+                                       coords,
+                                       vertex_quadrics,
+                                       edge_cost,
+                                       edge_col_coord);
+
+                        const FaceHandle new_f = cavity.add_face(e0, e, e1);
+
+                        if (!new_f.is_valid()) {
+                            break;
+                        }
+                        e0 = e1.get_flip_dedge();
+                    }
+                }
             }
         });
     }
@@ -375,7 +390,12 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
     rx.render_vertex_patch();
     rx.render_edge_patch();
     rx.render_face_patch();
-    // polyscope::show();
+    edge_cost->move(DEVICE, HOST);
+    // rx.get_polyscope_mesh()->addEdgeScalarQuantity("ECost", *edge_cost);
+    // for (uint32_t p = 0; p < rx.get_num_patches(); ++p) {
+    //     rx.render_patch(p)->setEnabled(false);
+    // }
+    polyscope::show();
 #endif
 
 
