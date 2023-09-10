@@ -223,7 +223,7 @@ __global__ static void simplify(rxmesh::Context            context,
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
     CavityManager<blockThreads, CavityOp::EV> cavity(
-        block, context, shrd_alloc);
+        block, context, shrd_alloc, true);
 
     const uint32_t pid = cavity.patch_id();
 
