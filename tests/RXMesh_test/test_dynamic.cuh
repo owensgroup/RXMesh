@@ -207,10 +207,9 @@ inline void set_edge_tag(rxmesh::RXMeshDynamic&      rx,
 
             if ((config & InteriorConflicting) == InteriorConflicting) {
                 if (eh.local_id() == 22 || eh.local_id() == 29 ||
-                    eh.local_id() == 156 || eh.local_id() == 23 ||
-                    eh.local_id() == 389 || eh.local_id() == 39 ||
-                    eh.local_id() == 40 || eh.local_id() == 41 ||
-                    eh.local_id() == 16) {
+                    eh.local_id() == 23 || eh.local_id() == 389 ||
+                    eh.local_id() == 39 || eh.local_id() == 40 ||
+                    eh.local_id() == 41 || eh.local_id() == 16) {
                     edge_tag(eh) = 1;
                 }
             }
@@ -249,8 +248,7 @@ inline void set_edge_tag(rxmesh::RXMeshDynamic&      rx,
             }
 
             if ((config & InteriorConflicting) == InteriorConflicting) {
-                if (eh.local_id() == 527 || eh.local_id() == 630 ||
-                    eh.local_id() == 44 || eh.local_id() == 525 ||
+                if (eh.local_id() == 630 || eh.local_id() == 525 ||
                     eh.local_id() == 212 || eh.local_id() == 47 ||
                     eh.local_id() == 46 || eh.local_id() == 58 ||
                     eh.local_id() == 59 || eh.local_id() == 57 ||
@@ -283,6 +281,18 @@ TEST(RXMeshDynamic, RandomFlips)
 
     const Config config = InteriorNotConflicting | InteriorConflicting |
                           OnRibbonNotConflicting | OnRibbonConflicting;
+
+    // adding couple more edges
+    if ((config & InteriorConflicting) == InteriorConflicting) {
+        (*to_flip)({0, 156}) = 1;
+        (*to_flip)({0, 26})  = 1;
+        (*to_flip)({1, 527}) = 1;
+        (*to_flip)({1, 44})  = 1;
+        (*to_flip)({1, 209}) = 1;
+    }
+    if ((config & InteriorNotConflicting) == InteriorNotConflicting) {
+        (*to_flip)({0, 26}) = 1;
+    }
 
     set_edge_tag(rx, *to_flip, config);
 
@@ -363,7 +373,7 @@ TEST(RXMeshDynamic, RandomFlips)
     ps_mesh->updateVertexPositions(*coords);
     ps_mesh->addEdgeScalarQuantity("toFlip", *to_flip)->setMapRange({0, 2});
     ps_mesh->setEnabled(false);
-    // polyscope::show();
+    polyscope::show();
 #endif
 
     // polyscope::removeAllStructures();
