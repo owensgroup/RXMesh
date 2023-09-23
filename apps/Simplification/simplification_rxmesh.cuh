@@ -251,7 +251,7 @@ __global__ static void simplify(rxmesh::Context            context,
             T cost = edge_cost(iter[e]);
             if (cost < min_cost) {
                 cost          = min_cost;
-                min_cost_edge = e;
+                min_cost_edge = iter[e].local_id();
             }
         }
 
