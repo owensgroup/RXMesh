@@ -15,10 +15,8 @@ template <typename T>
 using Mat4 = glm::mat<4, 4, T, glm::defaultp>;
 
 template <typename T>
-__device__ __inline__ T compute_cost(const Mat4<T>& quadric,
-                                     const T        x,
-                                     const T        y,
-                                     const T        z)
+__device__ __inline__ __host__ T
+compute_cost(const Mat4<T>& quadric, const T x, const T y, const T z)
 {
     // clang-format off
     return     quadric[0][0] * x * x + 
@@ -231,29 +229,48 @@ __global__ static void simplify(rxmesh::Context            context,
         return;
     }
 
-    // edge diamond query to and calc delaunay condition
-    auto collapse = [&](const EdgeHandle& eh, const VertexIterator& iter) {
-        // iter[0] and iter[2] are the edge two vertices
-        // iter[1] and iter[3] are the two opposite vertices
+    uint16_t num_edges = cavity.patch_info().num_edges[0];
 
-        auto v0 = iter[0];
-        auto v1 = iter[2];
+    uint8_t* edge_predicate = shrd_alloc.alloc<uint8_t>(num_edges);
 
-        auto v2 = iter[1];
-        auto v3 = iter[3];
+    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        edge_predicate[e] = 0;
+    }
+    block.sync();
 
+    // following the same edge selection as "Instant Level-of-Detail" paper
+    auto collapse = [&](const VertexHandle& vh, const EdgeIterator& iter) {
+        // TODO handle boundary edges
 
-        // if not a boundary edge
-        if (v2.is_valid() && v3.is_valid()) {
-            // TODO
+        T   min_cost      = std::numeric_limits<T>::max();
+        int min_cost_edge = -1;
+        for (int e = 0; e < iter.size(); ++e) {
+            if (iter[e].patch_id() != pid) {
+                continue;
+            }
+            T cost = edge_cost(iter[e]);
+            if (cost < min_cost) {
+                cost          = min_cost;
+                min_cost_edge = e;
+            }
         }
 
-        // TODO edge selection
-        // cavity.create(eh);
+        if (min_cost_edge != -1) {
+            atomicAdd(edge_predicate + min_cost_edge, 1);
+        }
     };
 
     Query<blockThreads> query(context, pid);
-    query.dispatch<Op::EVDiamond>(block, shrd_alloc, collapse);
+    query.dispatch<Op::VE>(block, shrd_alloc, collapse);
+    block.sync();
+
+    detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
+        // if two vertices says that this edge is the edge with min cost
+        // connected to them, then this edge is eligible for collapse
+        if (edge_predicate[eh.local_id()] == 2) {
+            cavity.create(eh);
+        }
+    });
     block.sync();
 
 
@@ -408,9 +425,15 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
         int inner_iter = 0;
         while (!rx.is_queue_empty() && rx.get_num_faces() > final_num_faces) {
 
-            rx.prepare_launch_box({Op::EVDiamond},
+            rx.prepare_launch_box({Op::VE},
                                   launch_box,
-                                  (void*)simplify<float, blockThreads>);
+                                  (void*)simplify<float, blockThreads>,
+                                  true,
+                                  false,
+                                  false,
+                                  [](uint32_t v, uint32_t e, uint32_t f) {
+                                      return e * sizeof(uint8_t);
+                                  });
 
             GPUTimer timer;
             timer.start();

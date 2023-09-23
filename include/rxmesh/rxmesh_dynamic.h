@@ -448,7 +448,7 @@ class RXMeshDynamic : public RXMeshStatic
         const bool               is_dyn              = true,
         const bool               oriented            = false,
         const bool               with_vertex_valence = false,
-        const std::function<uint32_t(uint32_t, uint32_t, uint32_t)> user_shmem =
+        std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem =
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const
     {
         update_launch_box(op,
@@ -500,7 +500,7 @@ class RXMeshDynamic : public RXMeshStatic
         const bool               is_dyn              = true,
         const bool               oriented            = false,
         const bool               with_vertex_valence = false,
-        const std::function<uint32_t(uint32_t, uint32_t, uint32_t)> user_shmem =
+        std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem =
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const
     {
 
