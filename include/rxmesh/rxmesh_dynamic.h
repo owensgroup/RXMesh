@@ -434,17 +434,30 @@ class RXMeshDynamic : public RXMeshStatic
      * @param kernel The kernel to be launched
      * @param is_dyn if there will be dynamic updates
      * @param oriented if the query is oriented. Valid only for Op::VV queries
+     * @param with_vertex_valence if vertex valence is requested to be
+     * pre-computed and stored in shared memory
+     * @param user_shmem a (lambda) function that takes the number of vertices,
+     * edges, and faces and returns additional user-desired shared memory in
+     * bytes
      */
     template <uint32_t blockThreads>
-    void prepare_launch_box(const std::vector<Op>    op,
-                            LaunchBox<blockThreads>& launch_box,
-                            const void*              kernel,
-                            const bool               is_dyn   = true,
-                            const bool               oriented = false,
-                            const bool with_vertex_valence    = false) const
+    void prepare_launch_box(
+        const std::vector<Op>    op,
+        LaunchBox<blockThreads>& launch_box,
+        const void*              kernel,
+        const bool               is_dyn              = true,
+        const bool               oriented            = false,
+        const bool               with_vertex_valence = false,
+        const std::function<uint32_t(uint32_t, uint32_t, uint32_t)> user_shmem =
+            [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const
     {
-        update_launch_box(
-            op, launch_box, kernel, is_dyn, oriented, with_vertex_valence);
+        update_launch_box(op,
+                          launch_box,
+                          kernel,
+                          is_dyn,
+                          oriented,
+                          with_vertex_valence,
+                          user_shmem);
 
         RXMESH_TRACE(
             "RXMeshDynamic::calc_shared_memory() launching {} blocks with "
@@ -473,14 +486,22 @@ class RXMeshDynamic : public RXMeshStatic
      * @param kernel The kernel to be launched
      * @param is_dyn if there will be dynamic updates
      * @param oriented if the query is oriented. Valid only for Op::VV queries
+     * @param with_vertex_valence if vertex valence is requested to be
+     * pre-computed and stored in shared memory
+     * @param user_shmem a (lambda) function that takes the number of vertices,
+     * edges, and faces and returns additional user-desired shared memory in
+     * bytes
      */
     template <uint32_t blockThreads>
-    void update_launch_box(const std::vector<Op>    op,
-                           LaunchBox<blockThreads>& launch_box,
-                           const void*              kernel,
-                           const bool               is_dyn   = true,
-                           const bool               oriented = false,
-                           const bool with_vertex_valence    = false) const
+    void update_launch_box(
+        const std::vector<Op>    op,
+        LaunchBox<blockThreads>& launch_box,
+        const void*              kernel,
+        const bool               is_dyn              = true,
+        const bool               oriented            = false,
+        const bool               with_vertex_valence = false,
+        const std::function<uint32_t(uint32_t, uint32_t, uint32_t)> user_shmem =
+            [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const
     {
 
         launch_box.blocks = this->m_num_patches;
@@ -587,7 +608,17 @@ class RXMeshDynamic : public RXMeshStatic
             launch_box.smem_bytes_dyn = static_shmem;
         }
 
+        launch_box.smem_bytes_dyn += user_shmem(m_max_vertices_per_patch,
+                                                m_max_edges_per_patch,
+                                                m_max_faces_per_patch);
+
         if (with_vertex_valence) {
+            if (get_input_max_valence() > 256) {
+                RXMESH_ERROR(
+                    "RXMeshDynamic::prepare_launch_box() input max valence if "
+                    "greater than 256 and thus using uint8_t to store the "
+                    "vertex valence will lead to overflow");
+            }
             launch_box.smem_bytes_dyn +=
                 this->m_max_vertices_per_patch * sizeof(uint8_t) +
                 ShmemAllocator::default_alignment;
