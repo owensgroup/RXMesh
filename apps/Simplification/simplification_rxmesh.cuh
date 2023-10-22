@@ -125,7 +125,8 @@ __global__ static void compute_edge_cost(
     const rxmesh::VertexAttribute<T> coords,
     const rxmesh::VertexAttribute<T> vertex_quadrics,
     rxmesh::EdgeAttribute<T>         edge_cost,
-    rxmesh::EdgeAttribute<T>         edge_col_coord)
+    rxmesh::EdgeAttribute<T>         edge_col_coord,
+    float*                           average_cost)
 {
     using namespace rxmesh;
 
@@ -144,6 +145,7 @@ __global__ static void compute_edge_cost(
                        vertex_quadrics,
                        edge_cost,
                        edge_col_coord);
+        ::atomicAdd(average_cost, edge_cost(edge_id));
     };
 
     Query<blockThreads> query(context);
@@ -378,6 +380,9 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
     float slice_time   = 0;
     float cleanup_time = 0;
 
+    float* average_cost;
+    CUDA_ERROR(cudaMallocManaged((void**)&average_cost, sizeof(float)));
+
     LaunchBox<blockThreads> launch_box;
     rx.prepare_launch_box({Op::FV},
                           launch_box,
@@ -401,7 +406,12 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
                                         *coords,
                                         *vertex_quadrics,
                                         *edge_cost,
-                                        *edge_col_coord);
+                                        *edge_col_coord,
+                                        average_cost);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+    average_cost[0] /= rx.get_num_edges();
 
 #if USE_POLYSCOPE
     rx.render_vertex_patch();
