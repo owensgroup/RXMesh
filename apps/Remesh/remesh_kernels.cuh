@@ -31,3 +31,11 @@ __global__ static void compute_average_edge_length(
     Query<blockThreads> query(context);
     query.dispatch<Op::EV>(block, shrd_alloc, sum_edge_len);
 }
+
+
+template <typename T, uint32_t blockThreads>
+__global__ static void edge_split(const rxmesh::Context            context,
+                                  const rxmesh::VertexAttribute<T> coords,
+                                  const T high_edge_len_sq)
+{
+}

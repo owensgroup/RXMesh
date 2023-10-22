@@ -4,20 +4,57 @@
 
 #include "remesh_kernels.cuh"
 
-inline void split_long_edges(float high_edge_len_sq)
+template <typename T>
+inline void split_long_edges(rxmesh::RXMeshDynamic&      rx,
+                             rxmesh::VertexAttribute<T>* coords,
+                             const T                     high_edge_len_sq)
 {
+    using namespace rxmesh;
+
+    constexpr uint32_t blockThreads = 256;
+
+    rx.reset_scheduler();
+    while (!rx.is_queue_empty()) {
+        LaunchBox<blockThreads> launch_box;
+        rx.prepare_launch_box(
+            {Op::EV}, launch_box, (void*)edge_split<T, blockThreads>);
+
+        edge_split<float, blockThreads><<<launch_box.blocks,
+                                          launch_box.num_threads,
+                                          launch_box.smem_bytes_dyn>>>(
+            rx.get_context(), *coords, high_edge_len_sq);
+
+        rx.slice_patches(*coords);
+
+        rx.cleanup();
+
+        // rx.update_host();
+        // EXPECT_TRUE(rx.validate());
+    }
 }
 
-inline void collapse_short_edges(float low_edge_len_sq, float high_edge_len_sq)
+template <typename T>
+inline void collapse_short_edges(rxmesh::RXMeshDynamic& rx,
+                                 const T                low_edge_len_sq,
+                                 const T                high_edge_len_sq)
 {
+    // TODO
+    rx.reset_scheduler();
+    while (!rx.is_queue_empty()) {
+    }
 }
 
-inline void equalize_valences()
+inline void equalize_valences(rxmesh::RXMeshDynamic& rx)
 {
+    // TODO
+    rx.reset_scheduler();
+    while (!rx.is_queue_empty()) {
+    }
 }
 
-inline void tangential_relaxation()
+inline void tangential_relaxation(rxmesh::RXMeshDynamic& rx)
 {
+    // TODO
 }
 
 inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
@@ -55,19 +92,21 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     // 4.0/5.0 * targe_edge_len
     const float low_edge_len =
         (4.f / 5.f) * Arg.relative_len * average_edge_len[0];
+    const float low_edge_len_sq = low_edge_len * low_edge_len;
 
     // 4.0/3.0 * targe_edge_len
     const float high_edge_len =
         (4.f / 3.f) * Arg.relative_len * average_edge_len[0];
+    const float high_edge_len_sq = high_edge_len * high_edge_len;
 
     bool validate = false;
 
 
     for (uint32_t iter = 0; iter < Arg.num_iter; ++iter) {
-        split_long_edges(high_edge_len);
-        collapse_short_edges(low_edge_len, high_edge_len);
-        equalize_valences();
-        tangential_relaxation();
+        split_long_edges(rx, coords.get(), high_edge_len_sq);
+        collapse_short_edges(rx, low_edge_len_sq, high_edge_len_sq);
+        equalize_valences(rx);
+        tangential_relaxation(rx);
     }
 
     rx.update_host();
