@@ -34,9 +34,40 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&      rx,
 }
 
 template <typename T>
-inline void collapse_short_edges(rxmesh::RXMeshDynamic& rx,
-                                 const T                low_edge_len_sq,
-                                 const T                high_edge_len_sq)
+inline void collapse_short_edges(rxmesh::RXMeshDynamic&      rx,
+                                 rxmesh::VertexAttribute<T>* coords,
+                                 const T                     low_edge_len_sq,
+                                 const T                     high_edge_len_sq)
+{
+    // TODO
+    using namespace rxmesh;
+
+    constexpr uint32_t blockThreads = 256;
+
+    rx.reset_scheduler();
+    while (!rx.is_queue_empty()) {
+        LaunchBox<blockThreads> launch_box;
+        rx.prepare_launch_box({Op::VE, Op::EV},
+                              launch_box,
+                              (void*)edge_collapse<T, blockThreads>);
+
+        edge_collapse<float, blockThreads><<<launch_box.blocks,
+                                             launch_box.num_threads,
+                                             launch_box.smem_bytes_dyn>>>(
+            rx.get_context(), *coords, low_edge_len_sq, high_edge_len_sq);
+
+        rx.slice_patches(*coords);
+
+        rx.cleanup();
+
+        // rx.update_host();
+        // EXPECT_TRUE(rx.validate());
+    }
+}
+
+template <typename T>
+inline void equalize_valences(rxmesh::RXMeshDynamic&      rx,
+                              rxmesh::VertexAttribute<T>* coords)
 {
     // TODO
     rx.reset_scheduler();
@@ -44,15 +75,9 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic& rx,
     }
 }
 
-inline void equalize_valences(rxmesh::RXMeshDynamic& rx)
-{
-    // TODO
-    rx.reset_scheduler();
-    while (!rx.is_queue_empty()) {
-    }
-}
-
-inline void tangential_relaxation(rxmesh::RXMeshDynamic& rx)
+template <typename T>
+inline void tangential_relaxation(rxmesh::RXMeshDynamic&      rx,
+                                  rxmesh::VertexAttribute<T>* coords)
 {
     // TODO
 }
@@ -104,9 +129,10 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     for (uint32_t iter = 0; iter < Arg.num_iter; ++iter) {
         split_long_edges(rx, coords.get(), high_edge_len_sq);
-        collapse_short_edges(rx, low_edge_len_sq, high_edge_len_sq);
-        equalize_valences(rx);
-        tangential_relaxation(rx);
+        collapse_short_edges(
+            rx, coords.get(), low_edge_len_sq, high_edge_len_sq);
+        equalize_valences(rx, coords.get());
+        tangential_relaxation(rx, coords.get());
     }
 
     rx.update_host();

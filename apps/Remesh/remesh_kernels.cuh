@@ -38,4 +38,17 @@ __global__ static void edge_split(const rxmesh::Context            context,
                                   const rxmesh::VertexAttribute<T> coords,
                                   const T high_edge_len_sq)
 {
+    //EV for calc edge len
+}
+
+template <typename T, uint32_t blockThreads>
+__global__ static void edge_collapse(const rxmesh::Context            context,
+                                     const rxmesh::VertexAttribute<T> coords,
+                                     const T low_edge_len_sq,
+                                     const T high_edge_len_sq)
+{
+    //edge len EV
+    //is valid collapse VE
+    
+
 }
