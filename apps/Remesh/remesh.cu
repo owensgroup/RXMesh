@@ -5,7 +5,7 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "torus.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     float       relative_len  = 0.9;
     uint32_t    num_iter      = 3;
@@ -23,13 +23,13 @@ TEST(Apps, Remesh)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshDynamic rx(Arg.obj_file_name);
+    // RXMeshDynamic rx(Arg.obj_file_name);
     // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
     //        "_patches");
 
-    // RXMeshDynamic rx(Arg.obj_file_name,
-    //                 STRINGIFY(OUTPUT_DIR) +
-    //                     extract_file_name(Arg.obj_file_name) + "_patches");
+    RXMeshDynamic rx(Arg.obj_file_name,
+                     STRINGIFY(OUTPUT_DIR) +
+                         extract_file_name(Arg.obj_file_name) + "_patches");
 
     remesh_rxmesh(rx);
 }
