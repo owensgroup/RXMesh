@@ -19,9 +19,9 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&      rx,
         rx.prepare_launch_box(
             {Op::EV}, launch_box, (void*)edge_split<T, blockThreads>);
 
-        edge_split<float, blockThreads><<<launch_box.blocks,
-                                          launch_box.num_threads,
-                                          launch_box.smem_bytes_dyn>>>(
+        edge_split<T, blockThreads><<<launch_box.blocks,
+                                      launch_box.num_threads,
+                                      launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, high_edge_len_sq);
 
         rx.slice_patches(*coords);
@@ -51,9 +51,9 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&      rx,
                               launch_box,
                               (void*)edge_collapse<T, blockThreads>);
 
-        edge_collapse<float, blockThreads><<<launch_box.blocks,
-                                             launch_box.num_threads,
-                                             launch_box.smem_bytes_dyn>>>(
+        edge_collapse<T, blockThreads><<<launch_box.blocks,
+                                         launch_box.num_threads,
+                                         launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, low_edge_len_sq, high_edge_len_sq);
 
         rx.slice_patches(*coords);
@@ -83,7 +83,7 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&      rx,
                               false,
                               true);
 
-        edge_flip<float, blockThreads>
+        edge_flip<T, blockThreads>
             <<<launch_box.blocks,
                launch_box.num_threads,
                launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords);
@@ -99,9 +99,24 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&      rx,
 
 template <typename T>
 inline void tangential_relaxation(rxmesh::RXMeshDynamic&      rx,
-                                  rxmesh::VertexAttribute<T>* coords)
+                                  rxmesh::VertexAttribute<T>* coords,
+                                  rxmesh::VertexAttribute<T>* new_coords)
 {
-    // TODO
+    using namespace rxmesh;
+
+    constexpr uint32_t blockThreads = 256;
+
+    LaunchBox<blockThreads> launch_box;
+    rx.prepare_launch_box({Op::VV},
+                          launch_box,
+                          (void*)vertex_smoothing<T, blockThreads>,
+                          false,
+                          true);
+
+    vertex_smoothing<T, blockThreads>
+        <<<launch_box.blocks,
+           launch_box.num_threads,
+           launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords, *new_coords);
 }
 
 inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
@@ -116,7 +131,8 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     // polyscope::show();
 #endif
 
-    auto coords = rx.get_input_vertex_coordinates();
+    auto coords     = rx.get_input_vertex_coordinates();
+    auto new_coords = rx.add_vertex_attribute<float>("newCoords", 3);
 
     // compute average edge length
     float* average_edge_len;
@@ -148,17 +164,29 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     bool validate = false;
 
+    GPUTimer timer;
+    timer.start();
 
     for (uint32_t iter = 0; iter < Arg.num_iter; ++iter) {
         split_long_edges(rx, coords.get(), high_edge_len_sq);
         collapse_short_edges(
             rx, coords.get(), low_edge_len_sq, high_edge_len_sq);
         equalize_valences(rx, coords.get());
-        tangential_relaxation(rx, coords.get());
+        tangential_relaxation(rx, coords.get(), new_coords.get());
+        std::swap(new_coords, coords);
     }
+    timer.stop();
+    CUDA_ERROR(cudaDeviceSynchronize());
+    CUDA_ERROR(cudaGetLastError());
 
     rx.update_host();
     coords->move(DEVICE, HOST);
+
+    RXMESH_INFO("remesh_rxmesh() took {} (ms)", timer.elapsed_millis());
+    RXMESH_INFO("Output mesh #Vertices", rx.get_num_vertices());
+    RXMESH_INFO("Output mesh #Edges", rx.get_num_edges());
+    RXMESH_INFO("Output mesh #Faces", rx.get_num_faces());
+
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
