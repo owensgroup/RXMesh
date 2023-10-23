@@ -61,6 +61,14 @@ struct Iterator
         }
     }
 
+    __device__ uint16_t local(const uint16_t i) const
+    {
+        assert(m_patch_output);
+        assert(i + m_begin < m_end);
+        uint16_t lid = (m_patch_output[m_begin + i].id) >> m_shift;
+        return lid;
+    }
+
     __device__ HandleT operator*() const
     {
         assert(m_patch_output);

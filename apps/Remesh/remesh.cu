@@ -31,6 +31,8 @@ TEST(Apps, Remesh)
                      STRINGIFY(OUTPUT_DIR) +
                          extract_file_name(Arg.obj_file_name) + "_patches");
 
+    ASSERT_TRUE(rx.is_closed());
+
     remesh_rxmesh(rx);
 }
 

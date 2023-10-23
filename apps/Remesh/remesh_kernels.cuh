@@ -34,7 +34,7 @@ __global__ static void compute_average_edge_length(
 
 
 template <typename T, uint32_t blockThreads>
-__global__ static void edge_split(const rxmesh::Context            context,
+__global__ static void edge_split(rxmesh::Context                  context,
                                   const rxmesh::VertexAttribute<T> coords,
                                   const T high_edge_len_sq)
 {
@@ -42,7 +42,7 @@ __global__ static void edge_split(const rxmesh::Context            context,
 }
 
 template <typename T, uint32_t blockThreads>
-__global__ static void edge_collapse(const rxmesh::Context            context,
+__global__ static void edge_collapse(rxmesh::Context                  context,
                                      const rxmesh::VertexAttribute<T> coords,
                                      const T low_edge_len_sq,
                                      const T high_edge_len_sq)
@@ -52,10 +52,93 @@ __global__ static void edge_collapse(const rxmesh::Context            context,
 }
 
 template <typename T, uint32_t blockThreads>
-__global__ static void edge_flip(const rxmesh::Context            context,
+__global__ static void edge_flip(rxmesh::Context                  context,
                                  const rxmesh::VertexAttribute<T> coords)
 {
     // EVDiamond and valence
+    using namespace rxmesh;
+
+    auto block = cooperative_groups::this_thread_block();
+
+    ShmemAllocator shrd_alloc;
+
+    CavityManager<blockThreads, CavityOp::E> cavity(
+        block, context, shrd_alloc, false);
+
+
+    if (cavity.patch_id() == INVALID32) {
+        return;
+    }
+
+    Query<blockThreads> query(context, cavity.patch_id());
+    query.compute_vertex_valence(block, shrd_alloc);
+
+    auto should_flip = [&](const EdgeHandle& eh, const VertexIterator& iter) {
+        // iter[0] and iter[2] are the edge two vertices
+        // iter[1] and iter[3] are the two opposite vertices
+
+
+        // we use the local index since we are only interested in the valence
+        // which computed on the local index space
+        const uint16_t va = iter.local(0);
+        const uint16_t vb = iter.local(2);
+
+        const uint16_t vc = iter.local(1);
+        const uint16_t vd = iter.local(3);
+
+        // since we only deal with closed meshes without boundaries
+        constexpr int target_valence = 6;
+
+        // we don't deal with boundary edges
+        assert(vc != INVALID16 && vd != INVALID16);
+
+        const int valence_a = query.vertex_valence(va);
+        const int valence_b = query.vertex_valence(vb);
+        const int valence_c = query.vertex_valence(vc);
+        const int valence_d = query.vertex_valence(vd);
+
+
+        const int deviation_pre = std::abs(valence_a - target_valence) +
+                                  std::abs(valence_b - target_valence) +
+                                  std::abs(valence_c - target_valence) +
+                                  std::abs(valence_d - target_valence);
+
+
+        const int deviation_post = std::abs(valence_a - 1 - target_valence) +
+                                   std::abs(valence_b - 1 - target_valence) +
+                                   std::abs(valence_c + 1 - target_valence) +
+                                   std::abs(valence_d + 1 - target_valence);
+        if (deviation_pre > deviation_post) {
+            cavity.create(eh);
+        }
+    };
+
+
+    query.dispatch<Op::EVDiamond>(block, shrd_alloc, should_flip);
+    block.sync();
+
+    if (cavity.prologue(block, shrd_alloc, coords)) {
+
+        cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+            assert(size == 4);
+
+            DEdgeHandle new_edge = cavity.add_edge(
+                cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c, 3));
+
+            if (new_edge.is_valid()) {
+                cavity.add_face(cavity.get_cavity_edge(c, 0),
+                                new_edge,
+                                cavity.get_cavity_edge(c, 3));
+
+
+                cavity.add_face(cavity.get_cavity_edge(c, 1),
+                                cavity.get_cavity_edge(c, 2),
+                                new_edge.get_flip_dedge());
+            }
+        });
+    }
+
+    cavity.epilogue(block);
 }
 
 template <typename T, uint32_t blockThreads>

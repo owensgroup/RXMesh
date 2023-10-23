@@ -183,9 +183,9 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     coords->move(DEVICE, HOST);
 
     RXMESH_INFO("remesh_rxmesh() took {} (ms)", timer.elapsed_millis());
-    RXMESH_INFO("Output mesh #Vertices", rx.get_num_vertices());
-    RXMESH_INFO("Output mesh #Edges", rx.get_num_edges());
-    RXMESH_INFO("Output mesh #Faces", rx.get_num_faces());
+    RXMESH_INFO("Output mesh #Vertices {}", rx.get_num_vertices());
+    RXMESH_INFO("Output mesh #Edges {}", rx.get_num_edges());
+    RXMESH_INFO("Output mesh #Faces {}", rx.get_num_faces());
 
 
 #if USE_POLYSCOPE
