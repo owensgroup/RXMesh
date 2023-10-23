@@ -69,9 +69,31 @@ template <typename T>
 inline void equalize_valences(rxmesh::RXMeshDynamic&      rx,
                               rxmesh::VertexAttribute<T>* coords)
 {
-    // TODO
+    using namespace rxmesh;
+
+    constexpr uint32_t blockThreads = 256;
+
     rx.reset_scheduler();
     while (!rx.is_queue_empty()) {
+        LaunchBox<blockThreads> launch_box;
+        rx.prepare_launch_box({Op::EVDiamond},
+                              launch_box,
+                              (void*)edge_flip<T, blockThreads>,
+                              true,
+                              false,
+                              true);
+
+        edge_flip<float, blockThreads>
+            <<<launch_box.blocks,
+               launch_box.num_threads,
+               launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords);
+
+        rx.slice_patches(*coords);
+
+        rx.cleanup();
+
+        // rx.update_host();
+        // EXPECT_TRUE(rx.validate());
     }
 }
 
