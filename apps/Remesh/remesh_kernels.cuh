@@ -63,10 +63,7 @@ __global__ static void edge_split(rxmesh::Context                  context,
 
         const T edge_len = glm::distance2(v0, v1);
 
-        // if (edge_len > high_edge_len_sq) {
-        //    cavity.create(eh);
-        //}
-        if (eh.local_id() == 0 && eh.patch_id() == 0) {
+        if (edge_len > high_edge_len_sq) {
             cavity.create(eh);
         }
     };
@@ -85,30 +82,33 @@ __global__ static void edge_split(rxmesh::Context                  context,
 
             const VertexHandle new_v = cavity.add_vertex();
 
-            coords(new_v, 0) = (coords(v0, 0) + coords(v1, 0)) / 2.0f;
-            coords(new_v, 1) = (coords(v0, 1) + coords(v1, 1)) / 2.0f;
-            coords(new_v, 2) = (coords(v0, 2) + coords(v1, 2)) / 2.0f;
+            if (new_v.is_valid()) {
 
-            DEdgeHandle e0 =
-                cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
-            const DEdgeHandle e_init = e0;
+                coords(new_v, 0) = (coords(v0, 0) + coords(v1, 0)) / 2.0f;
+                coords(new_v, 1) = (coords(v0, 1) + coords(v1, 1)) / 2.0f;
+                coords(new_v, 2) = (coords(v0, 2) + coords(v1, 2)) / 2.0f;
 
-            if (e0.is_valid()) {
-                for (uint16_t i = 0; i < size; ++i) {
-                    const DEdgeHandle e = cavity.get_cavity_edge(c, i);
-                    const DEdgeHandle e1 =
-                        (i == size - 1) ?
-                            e_init.get_flip_dedge() :
-                            cavity.add_edge(cavity.get_cavity_vertex(c, i + 1),
-                                            new_v);
-                    if (!e1.is_valid()) {
-                        break;
+                DEdgeHandle e0 =
+                    cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
+                const DEdgeHandle e_init = e0;
+
+                if (e0.is_valid()) {
+                    for (uint16_t i = 0; i < size; ++i) {
+                        const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+                        const DEdgeHandle e1 =
+                            (i == size - 1) ?
+                                e_init.get_flip_dedge() :
+                                cavity.add_edge(
+                                    cavity.get_cavity_vertex(c, i + 1), new_v);
+                        if (!e1.is_valid()) {
+                            break;
+                        }
+                        const FaceHandle f = cavity.add_face(e0, e, e1);
+                        if (!f.is_valid()) {
+                            break;
+                        }
+                        e0 = e1.get_flip_dedge();
                     }
-                    const FaceHandle f = cavity.add_face(e0, e, e1);
-                    if (!f.is_valid()) {
-                        break;
-                    }
-                    e0 = e1.get_flip_dedge();
                 }
             }
         });
@@ -125,6 +125,82 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 {
     // edge len EV
     // is valid collapse VE
+
+    using namespace rxmesh;
+    auto           block = cooperative_groups::this_thread_block();
+    ShmemAllocator shrd_alloc;
+    CavityManager<blockThreads, CavityOp::EV> cavity(
+        block, context, shrd_alloc, true);
+
+    const uint32_t pid = cavity.patch_id();
+
+    if (pid == INVALID32) {
+        return;
+    }
+
+    auto should_collapse = [&](const VertexHandle& vh,
+                               const EdgeIterator& iter) {
+        // TODO
+    };
+
+    Query<blockThreads> query(context, pid);
+    query.dispatch<Op::VE>(block, shrd_alloc, should_collapse);
+    block.sync();
+
+
+    // create the cavity
+    if (cavity.prologue(block, shrd_alloc, coords)) {
+
+        cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+            const EdgeHandle src = cavity.template get_creator<EdgeHandle>(c);
+
+            VertexHandle v0, v1;
+
+            cavity.get_vertices(src, v0, v1);
+
+            const VertexHandle new_v = cavity.add_vertex();
+
+            if (new_v.is_valid()) {
+
+                coords(new_v, 0) = coords(v0, 0);
+                coords(new_v, 1) = coords(v0, 1);
+                coords(new_v, 2) = coords(v0, 2);
+
+                DEdgeHandle e0 =
+                    cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
+
+                if (e0.is_valid()) {
+                    const DEdgeHandle e_init = e0;
+
+                    for (uint16_t i = 0; i < size; ++i) {
+                        const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+
+                        const VertexHandle v_end =
+                            cavity.get_cavity_vertex(c, (i + 1) % size);
+
+                        const DEdgeHandle e1 =
+                            (i == size - 1) ?
+                                e_init.get_flip_dedge() :
+                                cavity.add_edge(
+                                    cavity.get_cavity_vertex(c, i + 1), new_v);
+
+                        if (!e1.is_valid()) {
+                            break;
+                        }
+
+                        const FaceHandle new_f = cavity.add_face(e0, e, e1);
+
+                        if (!new_f.is_valid()) {
+                            break;
+                        }
+                        e0 = e1.get_flip_dedge();
+                    }
+                }
+            }
+        });
+    }
+
+    cavity.epilogue(block);
 }
 
 template <typename T, uint32_t blockThreads>

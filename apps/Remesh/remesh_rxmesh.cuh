@@ -182,6 +182,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     rx.update_host();
     coords->move(DEVICE, HOST);
 
+    rx.export_obj("remesh.obj", *coords);
     RXMESH_INFO("remesh_rxmesh() took {} (ms)", timer.elapsed_millis());
     RXMESH_INFO("Output mesh #Vertices {}", rx.get_num_vertices());
     RXMESH_INFO("Output mesh #Edges {}", rx.get_num_edges());
