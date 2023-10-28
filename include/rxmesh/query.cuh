@@ -67,6 +67,7 @@ struct Query
     __device__ __inline__ uint16_t vertex_valence(uint16_t v) const
     {
         assert(m_s_valence);
+        assert(v < m_patch_info.num_vertices[0]);
         return m_s_valence[v];
     }
 
@@ -78,6 +79,8 @@ struct Query
     __device__ __inline__ uint16_t vertex_valence(VertexHandle vh) const
     {
         assert(m_s_valence);
+        assert(vh.patch_id() == m_patch_info.patch_id);
+        assert(vh.local_id() < m_patch_info.num_vertices[0]);
         return m_s_valence[vh.local_id()];
     }
 

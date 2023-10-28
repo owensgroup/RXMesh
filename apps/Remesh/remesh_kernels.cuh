@@ -123,8 +123,6 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
                                      const T low_edge_len_sq,
                                      const T high_edge_len_sq)
 {
-    // edge len EV
-    // is valid collapse VE
 
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -138,15 +136,41 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
         return;
     }
 
-    auto should_collapse = [&](const VertexHandle& vh,
-                               const EdgeIterator& iter) {
-        // TODO
-    };
+    Bitmask is_tri_valent(cavity.patch_info().num_vertices[0], shrd_alloc);
+    is_tri_valent.reset(block);
 
     Query<blockThreads> query(context, pid);
-    query.dispatch<Op::VE>(block, shrd_alloc, should_collapse);
+    query.compute_vertex_valence(block, shrd_alloc);
+
+    // mark tri-valent vertices through edges
+    auto mark_vertices = [&](const EdgeHandle& eh, const VertexIterator& iter) {
+        const uint16_t v0(iter.local(0)), v1(iter.local(1));
+        if (query.vertex_valence(v0) <= 3 || query.vertex_valence(v1) <= 3) {
+            is_tri_valent.set(v0, true);
+            is_tri_valent.set(v1, true);
+        }
+    };
+    query.dispatch<Op::EV>(block, shrd_alloc, mark_vertices);
     block.sync();
 
+    // TODO this could be optimized by re-running the compute lambda function
+    // on the same query rather than re-doing the query again
+    // check if the edge is short and should be collapsed
+    auto should_collapse = [&](const EdgeHandle&     eh,
+                               const VertexIterator& iter) {
+        const VertexHandle v0(iter[0]), v1(iter[1]);
+
+        const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+        const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+        const T       edge_len_sq = glm::distance2(p0, p1);
+        if (edge_len_sq < low_edge_len_sq) {
+            cavity.create(eh);
+        }
+    };
+    query.dispatch<Op::EV>(block, shrd_alloc, should_collapse);
+    block.sync();
+
+    // TODO check if created edges will be too long
 
     // create the cavity
     if (cavity.prologue(block, shrd_alloc, coords)) {

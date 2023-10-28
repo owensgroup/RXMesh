@@ -467,7 +467,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     ShmemAllocator&                   shrd_alloc,
     AttributesT&&... attributes)
 {
-    if (get_num_cavities() == 0) {
+    if (get_num_cavities() <= 0) {
         return false;
     }
 
