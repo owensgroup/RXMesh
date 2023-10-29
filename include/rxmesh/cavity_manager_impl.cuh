@@ -333,39 +333,49 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::create(
 
     int id = ::atomicAdd(m_s_num_cavities, 1);
 
-    assert(id < (m_context.m_max_num_faces[0] / 2));
+    // assert(id < (m_context.m_max_num_faces[0] / 2));
 
-    // there is no race condition in here since each thread is assigned to
-    // one element
-    if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
-                  cop == CavityOp::VE || cop == CavityOp::VF) {
-        assert(!m_context.m_patches_info[patch_id()].is_deleted(
-            LocalVertexT(seed.local_id())));
-        assert(m_context.m_patches_info[patch_id()].is_owned(
-            LocalVertexT(seed.local_id())));
-        m_s_cavity_id_v[seed.local_id()] = id;
-        m_s_cavity_creator[id]           = seed.local_id();
-    }
+    // we assume that the number of cavities is at max the number of faces/2
+    // an more cavities is practically a conflicting cavity. so, the user gotta
+    // attempt in next iteration or something
+    // this is "practically" makes sense for all types of cavities unless the
+    // cavity is created by deleting a face.
+    if (id < (m_context.m_max_num_faces[0] / 2)) {
 
-    if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
-                  cop == CavityOp::EE || cop == CavityOp::EF) {
-        assert(!m_context.m_patches_info[patch_id()].is_deleted(
-            LocalEdgeT(seed.local_id())));
-        assert(m_context.m_patches_info[patch_id()].is_owned(
-            LocalEdgeT(seed.local_id())));
-        m_s_cavity_id_e[seed.local_id()] = id;
-        m_s_cavity_creator[id]           = seed.local_id();
-    }
+        // there is no race condition in here since each thread is assigned to
+        // one element
+        if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
+                      cop == CavityOp::VE || cop == CavityOp::VF) {
+            assert(!m_context.m_patches_info[patch_id()].is_deleted(
+                LocalVertexT(seed.local_id())));
+            assert(m_context.m_patches_info[patch_id()].is_owned(
+                LocalVertexT(seed.local_id())));
+            m_s_cavity_id_v[seed.local_id()] = id;
+            m_s_cavity_creator[id]           = seed.local_id();
+        }
+
+        if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
+                      cop == CavityOp::EE || cop == CavityOp::EF) {
+            assert(!m_context.m_patches_info[patch_id()].is_deleted(
+                LocalEdgeT(seed.local_id())));
+            assert(m_context.m_patches_info[patch_id()].is_owned(
+                LocalEdgeT(seed.local_id())));
+            m_s_cavity_id_e[seed.local_id()] = id;
+            m_s_cavity_creator[id]           = seed.local_id();
+        }
 
 
-    if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
-                  cop == CavityOp::FE || cop == CavityOp::FF) {
-        assert(!m_context.m_patches_info[patch_id()].is_deleted(
-            LocalFaceT(seed.local_id())));
-        assert(m_context.m_patches_info[patch_id()].is_owned(
-            LocalFaceT(seed.local_id())));
-        m_s_cavity_id_f[seed.local_id()] = id;
-        m_s_cavity_creator[id]           = seed.local_id();
+        if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
+                      cop == CavityOp::FE || cop == CavityOp::FF) {
+            assert(!m_context.m_patches_info[patch_id()].is_deleted(
+                LocalFaceT(seed.local_id())));
+            assert(m_context.m_patches_info[patch_id()].is_owned(
+                LocalFaceT(seed.local_id())));
+            m_s_cavity_id_f[seed.local_id()] = id;
+            m_s_cavity_creator[id]           = seed.local_id();
+        }
+    } else {
+        ::atomicAdd(m_s_num_cavities, -1);
     }
 }
 
