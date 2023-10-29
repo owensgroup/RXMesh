@@ -913,13 +913,26 @@ __inline__ __device__ void bi_assignment(
     __shared__ uint16_t s_num_1_faces;
     if (threadIdx.x == 0) {
         // we bootstrap the assignment by assigning a ribbon face to 1
+        s_num_1_faces = 0;
         for (uint16_t f = 0; f < num_faces; ++f) {
             if (s_active_f(f) && !s_owned_f(f)) {
                 s_new_p_owned_f.set(f);
+                s_num_1_faces++;
                 break;
             }
         }
-        s_num_1_faces = 1;
+
+        if (s_num_1_faces == 0) {
+            // in case it is isolated patch without ribbon, then any face active
+            // would work
+            for (uint16_t f = 0; f < num_faces; ++f) {
+                if (s_active_f(f)) {
+                    s_new_p_owned_f.set(f);
+                    s_num_1_faces++;
+                    break;
+                }
+            }
+        }
     }
     block.sync();
 
