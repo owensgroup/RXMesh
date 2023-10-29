@@ -3017,6 +3017,9 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
 {
     // make sure all writes are done
     block.sync();
+    if (m_s_should_slice[0]) {
+        m_write_to_gmem = false;
+    }
     if (m_write_to_gmem) {
 
         // update number of elements again since add_vertex/edge/face could have
