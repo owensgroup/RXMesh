@@ -285,7 +285,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     // this assertion is because when we allocated dynamic shared memory
     // during kernel launch we assumed the number of cavities is at most
     // half the number of faces in the patch
-    assert(m_s_num_cavities[0] <= face_cap / 2);
+    assert(m_s_num_cavities[0] <= m_s_num_faces[0] / 2);
     m_s_cavity_size_prefix = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
     fill_n<blockThreads>(m_s_cavity_size_prefix, m_s_num_cavities[0] + 1, 0);
 
@@ -333,15 +333,14 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::create(
 
     int id = ::atomicAdd(m_s_num_cavities, 1);
 
-    // assert(id < (m_context.m_max_num_faces[0] / 2));
+    // assert(id < (m_s_num_faces[0] / 2));
 
     // we assume that the number of cavities is at max the number of faces/2
     // an more cavities is practically a conflicting cavity. so, the user gotta
     // attempt in next iteration or something
     // this is "practically" makes sense for all types of cavities unless the
     // cavity is created by deleting a face.
-    if (id < (m_context.m_max_num_faces[0] / 2)) {
-
+    if (id < (m_s_num_faces[0] / 2)) {
         // there is no race condition in here since each thread is assigned to
         // one element
         if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
