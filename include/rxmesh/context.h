@@ -37,7 +37,10 @@ class Context
     {
     }
 
-    Context(const Context&) = default;
+    __device__ Context(const Context&) = default;
+    __device__ Context(Context&&)      = default;
+    __device__ Context& operator=(const Context&) = default;
+    __device__ Context& operator=(Context&&) = default;
 
     /**
      * @brief Total number of edges in mesh
@@ -224,8 +227,8 @@ class Context
     }
 
 
-    uint32_t * m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;
-    //per-patch max v/e/f
+    uint32_t *m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;
+    // per-patch max v/e/f
     uint32_t * m_max_num_vertices, *m_max_num_edges, *m_max_num_faces;
     uint32_t * m_vertex_prefix, *m_edge_prefix, *m_face_prefix;
     uint16_t   m_max_lp_capacity_v, m_max_lp_capacity_e, m_max_lp_capacity_f;

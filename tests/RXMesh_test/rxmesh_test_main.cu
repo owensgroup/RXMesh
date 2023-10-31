@@ -30,6 +30,7 @@ struct RXMeshTestArg
 #include "test_patch_lock.cuh"
 #include "test_patch_scheduler.cuh"
 #include "test_patch_slicing.cuh"
+#include "test_multi_queries.cuh"
 // clang-format on
 
 int main(int argc, char** argv)

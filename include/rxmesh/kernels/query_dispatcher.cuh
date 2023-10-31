@@ -37,7 +37,8 @@ __device__ __inline__ void query_block_dispatcher(
     uint32_t*&                        s_participant_bitmask,
     uint32_t*&                        s_output_owned_bitmask,
     LPHashTable&                      output_lp_hashtable,
-    LPPair*&                          s_table)
+    LPPair*&                          s_table,
+    bool                              allow_not_owned = false)
 {
     static_assert(op != Op::EE, "Op::EE is not supported!");
 
@@ -130,7 +131,8 @@ __device__ __inline__ void query_block_dispatcher(
         bool is_par = false;
         if (local_id < num_src_in_patch) {
             bool is_del = is_deleted(local_id, input_active_mask);
-            bool is_own = is_owned(local_id, input_owned_mask);
+            bool is_own =
+                allow_not_owned || is_owned(local_id, input_owned_mask);
             bool is_act = compute_active_set({patch_info.patch_id, local_id});
             is_par      = !is_del && is_own && is_act;
         }
