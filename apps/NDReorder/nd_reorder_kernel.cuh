@@ -17,7 +17,7 @@ __global__ static void init_attribute(const rxmesh::Context context,
 
     auto nd_lambda = [&](VertexHandle vh, EdgeIterator& ve_iter) {
         T ewgt_sum = 0;
-        for (uint32_t e = 0; v < ve_iter.size(); ++e) {
+        for (uint32_t e = 0; e < ve_iter.size(); ++e) {
             ewgt_sum += ewgt(ve_iter[e]);
         }
 
@@ -28,5 +28,5 @@ __global__ static void init_attribute(const rxmesh::Context context,
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VE>(block, shrd_alloc, gc_lambda);
+    query.dispatch<Op::VE>(block, shrd_alloc, nd_lambda);
 }

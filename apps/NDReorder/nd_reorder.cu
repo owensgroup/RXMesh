@@ -54,7 +54,7 @@ void nd_reorder()
     // nedges: compute later
     // adjwgt: compute later
     cewgt.reset(0, rxmesh::DEVICE);
-    vpair.reset(-1, rxmesh::DEVICE)
+    vpair.reset(-1, rxmesh::DEVICE);
     ewgt.reset(1, rxmesh::DEVICE);
 
     // launch box
@@ -79,7 +79,7 @@ TEST(Apps, NDReorder)
     cuda_query(Arg.device_id);
 
     // nd reorder implementation
-    nd_reorder();
+    nd_reorder<int>();
 }
 
 int main(int argc, char** argv)
