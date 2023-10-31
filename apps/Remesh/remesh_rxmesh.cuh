@@ -39,7 +39,6 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&      rx,
                                  const T                     low_edge_len_sq,
                                  const T                     high_edge_len_sq)
 {
-    // TODO
     using namespace rxmesh;
 
     constexpr uint32_t blockThreads = 256;
@@ -47,9 +46,16 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&      rx,
     rx.reset_scheduler();
     while (!rx.is_queue_empty()) {
         LaunchBox<blockThreads> launch_box;
-        rx.prepare_launch_box({Op::VE, Op::EV},
+        rx.prepare_launch_box({Op::VE},
                               launch_box,
-                              (void*)edge_collapse<T, blockThreads>);
+                              (void*)edge_collapse<T, blockThreads>,
+                              true,
+                              false,
+                              true,
+                              [=](uint32_t v, uint32_t e, uint32_t f) {
+                                  return detail::mask_num_bytes(e) +
+                                         ShmemAllocator::default_alignment;
+                              });
 
         edge_collapse<T, blockThreads><<<launch_box.blocks,
                                          launch_box.num_threads,
@@ -182,6 +188,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     rx.update_host();
     coords->move(DEVICE, HOST);
 
+    rx.export_obj("remesh.obj", *coords);
     RXMESH_INFO("remesh_rxmesh() took {} (ms)", timer.elapsed_millis());
     RXMESH_INFO("Output mesh #Vertices {}", rx.get_num_vertices());
     RXMESH_INFO("Output mesh #Edges {}", rx.get_num_edges());

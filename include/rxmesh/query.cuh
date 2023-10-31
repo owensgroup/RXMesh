@@ -15,7 +15,7 @@ namespace rxmesh {
 template <uint32_t blockThreads>
 struct Query
 {
-    Query(const Query&)            = delete;
+    Query(const Query&) = delete;
     Query& operator=(const Query&) = delete;
 
     __device__ __inline__ Query(const Context& context,
@@ -67,6 +67,7 @@ struct Query
     __device__ __inline__ uint16_t vertex_valence(uint16_t v) const
     {
         assert(m_s_valence);
+        assert(v < m_patch_info.num_vertices[0]);
         return m_s_valence[v];
     }
 
@@ -78,6 +79,8 @@ struct Query
     __device__ __inline__ uint16_t vertex_valence(VertexHandle vh) const
     {
         assert(m_s_valence);
+        assert(vh.patch_id() == m_patch_info.patch_id);
+        assert(vh.local_id() < m_patch_info.num_vertices[0]);
         return m_s_valence[vh.local_id()];
     }
 
@@ -235,6 +238,62 @@ struct Query
                            shmem_before);
     }
 
+
+    template <Op op>
+    __device__ __inline__ void prologue(cooperative_groups::thread_block& block,
+                                        ShmemAllocator& shrd_alloc,
+                                        const bool      oriented = false)
+    {
+        static_assert(op != Op::EE, "Op::EE is not supported!");
+
+
+        m_op = op;
+        detail::query_block_dispatcher<op, blockThreads>(
+            block,
+            shrd_alloc,
+            m_patch_info,
+            [](VertexHandle) { return true; },
+            oriented,
+            m_num_src_in_patch,
+            m_s_output_offset,
+            m_s_output_value,
+            m_s_participant_bitmask,
+            m_s_output_owned_bitmask,
+            m_output_lp_hashtable,
+            m_s_table,
+            true);
+    }
+
+
+    template <typename IteratorT>
+    __device__ __inline__ IteratorT get_iterator(uint16_t local_id) const
+    {
+        const uint32_t fixed_offset =
+            ((m_op == Op::EV) ? 2 :
+                                ((m_op == Op::FV || m_op == Op::FE) ?
+                                     3 :
+                                     ((m_op == Op::EVDiamond) ? 4 : 0)));
+
+        using LocalT = typename IteratorT::LocalT;
+
+        if (detail::is_set_bit(local_id, m_s_participant_bitmask)) {
+            return IteratorT(m_context,
+                             local_id,
+                             reinterpret_cast<LocalT*>(m_s_output_value),
+                             m_s_output_offset,
+                             fixed_offset,
+                             m_patch_info.patch_id,
+                             m_s_output_owned_bitmask,
+                             m_output_lp_hashtable,
+                             m_s_table,
+                             m_patch_info.patch_stash,
+                             int(m_op == Op::FE));
+        } else {
+            return IteratorT(m_context, local_id, m_patch_info.patch_id);
+        }
+    }
+
+
    private:
     const Context&   m_context;
     const PatchInfo& m_patch_info;
@@ -246,5 +305,6 @@ struct Query
     uint8_t*         m_s_valence;
     LPHashTable      m_output_lp_hashtable;
     LPPair*          m_s_table;
+    Op               m_op;
 };
 }  // namespace rxmesh

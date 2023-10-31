@@ -285,7 +285,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     // this assertion is because when we allocated dynamic shared memory
     // during kernel launch we assumed the number of cavities is at most
     // half the number of faces in the patch
-    assert(m_s_num_cavities[0] <= face_cap / 2);
+    assert(m_s_num_cavities[0] <= m_s_num_faces[0] / 2);
     m_s_cavity_size_prefix = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
     fill_n<blockThreads>(m_s_cavity_size_prefix, m_s_num_cavities[0] + 1, 0);
 
@@ -333,39 +333,48 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::create(
 
     int id = ::atomicAdd(m_s_num_cavities, 1);
 
-    assert(id < (m_context.m_max_num_faces[0] / 2));
+    // assert(id < (m_s_num_faces[0] / 2));
 
-    // there is no race condition in here since each thread is assigned to
-    // one element
-    if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
-                  cop == CavityOp::VE || cop == CavityOp::VF) {
-        assert(!m_context.m_patches_info[patch_id()].is_deleted(
-            LocalVertexT(seed.local_id())));
-        assert(m_context.m_patches_info[patch_id()].is_owned(
-            LocalVertexT(seed.local_id())));
-        m_s_cavity_id_v[seed.local_id()] = id;
-        m_s_cavity_creator[id]           = seed.local_id();
-    }
+    // we assume that the number of cavities is at max the number of faces/2
+    // an more cavities is practically a conflicting cavity. so, the user gotta
+    // attempt in next iteration or something
+    // this is "practically" makes sense for all types of cavities unless the
+    // cavity is created by deleting a face.
+    if (id < (m_s_num_faces[0] / 2)) {
+        // there is no race condition in here since each thread is assigned to
+        // one element
+        if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
+                      cop == CavityOp::VE || cop == CavityOp::VF) {
+            assert(!m_context.m_patches_info[patch_id()].is_deleted(
+                LocalVertexT(seed.local_id())));
+            assert(m_context.m_patches_info[patch_id()].is_owned(
+                LocalVertexT(seed.local_id())));
+            m_s_cavity_id_v[seed.local_id()] = id;
+            m_s_cavity_creator[id]           = seed.local_id();
+        }
 
-    if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
-                  cop == CavityOp::EE || cop == CavityOp::EF) {
-        assert(!m_context.m_patches_info[patch_id()].is_deleted(
-            LocalEdgeT(seed.local_id())));
-        assert(m_context.m_patches_info[patch_id()].is_owned(
-            LocalEdgeT(seed.local_id())));
-        m_s_cavity_id_e[seed.local_id()] = id;
-        m_s_cavity_creator[id]           = seed.local_id();
-    }
+        if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
+                      cop == CavityOp::EE || cop == CavityOp::EF) {
+            assert(!m_context.m_patches_info[patch_id()].is_deleted(
+                LocalEdgeT(seed.local_id())));
+            assert(m_context.m_patches_info[patch_id()].is_owned(
+                LocalEdgeT(seed.local_id())));
+            m_s_cavity_id_e[seed.local_id()] = id;
+            m_s_cavity_creator[id]           = seed.local_id();
+        }
 
 
-    if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
-                  cop == CavityOp::FE || cop == CavityOp::FF) {
-        assert(!m_context.m_patches_info[patch_id()].is_deleted(
-            LocalFaceT(seed.local_id())));
-        assert(m_context.m_patches_info[patch_id()].is_owned(
-            LocalFaceT(seed.local_id())));
-        m_s_cavity_id_f[seed.local_id()] = id;
-        m_s_cavity_creator[id]           = seed.local_id();
+        if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
+                      cop == CavityOp::FE || cop == CavityOp::FF) {
+            assert(!m_context.m_patches_info[patch_id()].is_deleted(
+                LocalFaceT(seed.local_id())));
+            assert(m_context.m_patches_info[patch_id()].is_owned(
+                LocalFaceT(seed.local_id())));
+            m_s_cavity_id_f[seed.local_id()] = id;
+            m_s_cavity_creator[id]           = seed.local_id();
+        }
+    } else {
+        ::atomicAdd(m_s_num_cavities, -1);
     }
 }
 
@@ -467,7 +476,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     ShmemAllocator&                   shrd_alloc,
     AttributesT&&... attributes)
 {
-    if (get_num_cavities() == 0) {
+    if (get_num_cavities() <= 0) {
         return false;
     }
 

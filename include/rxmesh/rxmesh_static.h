@@ -579,6 +579,8 @@ class RXMeshStatic : public RXMesh
      * Op::VE queries
      * @param with_vertex_valence if vertex valence is requested to be
      * pre-computed and stored in shared memory
+     * @param is_concurrent: in case of multiple queries (i.e., op.size() > 1),
+     * this parameter indicates if queries needs to be access at the same time
      * @param user_shmem a (lambda) function that takes the number of vertices,
      * edges, and faces and returns additional user-desired shared memory in
      * bytes
@@ -590,6 +592,7 @@ class RXMeshStatic : public RXMesh
         const void*              kernel,
         const bool               oriented            = false,
         const bool               with_vertex_valence = false,
+        const bool               is_concurrent       = false,
         std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem =
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const
     {
@@ -598,9 +601,14 @@ class RXMeshStatic : public RXMesh
         launch_box.smem_bytes_dyn = 0;
 
         for (auto o : op) {
-            launch_box.smem_bytes_dyn = std::max(
-                launch_box.smem_bytes_dyn,
-                this->template calc_shared_memory<blockThreads>(o, oriented));
+            size_t sh =
+                this->template calc_shared_memory<blockThreads>(o, oriented);
+            if (is_concurrent) {
+                launch_box.smem_bytes_dyn += sh;
+            } else {
+                launch_box.smem_bytes_dyn =
+                    std::max(launch_box.smem_bytes_dyn, sh);
+            }
         }
 
         launch_box.smem_bytes_dyn += user_shmem(m_max_vertices_per_patch,

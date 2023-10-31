@@ -13,6 +13,40 @@ struct Iterator
 {
     using LocalT = typename HandleT::LocalT;
 
+    __device__ Iterator()
+        : m_context(Context()),
+          m_local_id(INVALID16),
+          m_patch_output(nullptr),
+          m_patch_id(INVALID32),
+          m_output_owned_bitmask(nullptr),
+          m_output_lp_hashtable(LPHashTable()),
+          m_s_table(nullptr),
+          m_patch_stash(PatchStash()),
+          m_begin(0),
+          m_end(0),
+          m_current(0),
+          m_shift(0)
+    {
+    }
+
+    __device__ Iterator(const Context& context,
+                        const uint16_t local_id,
+                        const uint32_t patch_id)
+        : m_context(context),
+          m_local_id(local_id),
+          m_patch_output(nullptr),
+          m_patch_id(patch_id),
+          m_output_owned_bitmask(nullptr),
+          m_output_lp_hashtable(LPHashTable()),
+          m_s_table(nullptr),
+          m_patch_stash(PatchStash()),
+          m_begin(0),
+          m_end(0),
+          m_current(0),
+          m_shift(0)
+    {
+    }
+
     __device__ Iterator(const Context&     context,
                         const uint16_t     local_id,
                         const LocalT*      patch_output,
@@ -25,6 +59,7 @@ struct Iterator
                         const PatchStash   patch_stash,
                         int                shift = 0)
         : m_context(context),
+          m_local_id(local_id),
           m_patch_output(patch_output),
           m_patch_id(patch_id),
           m_output_owned_bitmask(output_owned_bitmask),
@@ -46,6 +81,9 @@ struct Iterator
 
     __device__ HandleT operator[](const uint16_t i) const
     {
+        if (i + m_begin >= m_end) {
+            return HandleT();
+        }
         assert(m_patch_output);
         assert(i + m_begin < m_end);
         uint16_t lid = (m_patch_output[m_begin + i].id) >> m_shift;
@@ -63,6 +101,9 @@ struct Iterator
 
     __device__ uint16_t local(const uint16_t i) const
     {
+        if (i + m_begin >= m_end) {
+            return INVALID16;
+        }
         assert(m_patch_output);
         assert(i + m_begin < m_end);
         uint16_t lid = (m_patch_output[m_begin + i].id) >> m_shift;
@@ -144,8 +185,7 @@ struct Iterator
                         const uint32_t  offset_size,
                         const uint16_t* patch_offset)
     {
-        m_current  = 0;
-        m_local_id = local_id;
+        m_current = 0;
         if (offset_size == 0) {
             m_begin = patch_offset[m_local_id];
             m_end   = patch_offset[m_local_id + 1];

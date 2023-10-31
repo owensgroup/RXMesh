@@ -21,6 +21,7 @@ set( SOURCE_LIST
 	test_patch_lock.cuh
 	test_patch_scheduler.cuh
 	test_patch_slicing.cuh
+	test_multi_queries.cuh
 )
 
 target_sources( RXMesh_test 
