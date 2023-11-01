@@ -40,7 +40,7 @@ void nd_reorder()
 
     // the sum of the edge weight that is around a vertex
     auto vpair =
-        *rx.add_vertex_attribute<T>("vpair", 1, rxmesh::LOCATION_ALL);
+        *rx.add_vertex_attribute<VertexHandle>("vpair", 1, rxmesh::LOCATION_ALL);
 
     // the sum of edge weight that has been contracted into the vertex (HCM)
     auto cewgt = *rx.add_vertex_attribute<T>("cewgt", 1, rxmesh::LOCATION_ALL);
@@ -54,7 +54,7 @@ void nd_reorder()
     // nedges: compute later
     // adjwgt: compute later
     cewgt.reset(0, rxmesh::DEVICE);
-    vpair.reset(-1, rxmesh::DEVICE);
+    vpair.reset(1<<15, rxmesh::DEVICE); // for a VertexHandle doesn't exist
     ewgt.reset(1, rxmesh::DEVICE);
 
     // launch box
