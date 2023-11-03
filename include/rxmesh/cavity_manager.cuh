@@ -252,6 +252,12 @@ struct CavityManager
         cooperative_groups::thread_block& block);
 
     /**
+     * @brief store all hashtable from shared memory to global memory
+     */
+    __device__ __inline__ void store_hashtable(
+        cooperative_groups::thread_block& block);
+
+    /**
      * @brief propage the cavity ID from the seeds to indicent/adjacent elements
      * based on CavityOp
      */
