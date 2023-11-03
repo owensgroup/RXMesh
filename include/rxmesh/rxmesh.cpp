@@ -70,9 +70,26 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     }
 
     build(fv, patcher_file);
+
+    // calc max elements for use in build_device (which populates
+    // m_h_patches_info and thus we can not use calc_max_elements now)
+    m_max_vertices_per_patch = 0;
+    m_max_edges_per_patch    = 0;
+    m_max_faces_per_patch    = 0;
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
+        m_max_vertices_per_patch =
+            std::max(m_max_vertices_per_patch,
+                     static_cast<uint32_t>(m_h_patches_ltog_v[p].size()));
+        m_max_edges_per_patch =
+            std::max(m_max_edges_per_patch,
+                     static_cast<uint32_t>(m_h_patches_ltog_e[p].size()));
+        m_max_faces_per_patch =
+            std::max(m_max_faces_per_patch,
+                     static_cast<uint32_t>(m_h_patches_ltog_f[p].size()));
+    }
+
     build_device();
 
-    calc_max_elements();
 
     PatchScheduler sch;
     sch.init(get_max_num_patches());
@@ -117,12 +134,6 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     RXMESH_TRACE("per-patch maximum edge count = {}", m_max_edges_per_patch);
     RXMESH_TRACE("per-patch maximum vertex count = {}",
                  m_max_vertices_per_patch);
-    // RXMESH_TRACE("per-patch maximum not-owned face count = {}",
-    //              m_max_not_owned_faces);
-    // RXMESH_TRACE("per-patch maximum not-owned edge count = {}",
-    //              m_max_not_owned_edges);
-    // RXMESH_TRACE("per-patch maximum not-owned vertex count = {}",
-    //              m_max_not_owned_vertices);
 }
 
 RXMesh::~RXMesh()
@@ -425,9 +436,6 @@ void RXMesh::calc_input_statistics(const std::vector<std::vector<uint32_t>>& fv,
 
 void RXMesh::calc_max_elements()
 {
-    // m_max_not_owned_vertices = 0;
-    // m_max_not_owned_edges    = 0;
-    // m_max_not_owned_faces    = 0;
     m_max_vertices_per_patch = 0;
     m_max_edges_per_patch    = 0;
     m_max_faces_per_patch    = 0;
@@ -437,28 +445,10 @@ void RXMesh::calc_max_elements()
         m_max_vertices_per_patch =
             std::max(m_max_vertices_per_patch,
                      uint32_t(m_h_patches_info[p].num_vertices[0]));
-
         m_max_edges_per_patch = std::max(
             m_max_edges_per_patch, uint32_t(m_h_patches_info[p].num_edges[0]));
-
         m_max_faces_per_patch = std::max(
             m_max_faces_per_patch, uint32_t(m_h_patches_info[p].num_faces[0]));
-
-
-        // m_max_not_owned_vertices = std::max(
-        //     m_max_not_owned_vertices,
-        //     detail::count_zero_bits(m_h_patches_info[p].num_vertices[0],
-        //                             m_h_patches_info[p].owned_mask_v));
-        //
-        // m_max_not_owned_edges =
-        //     std::max(m_max_not_owned_edges,
-        //              detail::count_zero_bits(m_h_patches_info[p].num_edges[0],
-        //                                      m_h_patches_info[p].owned_mask_e));
-        //
-        // m_max_not_owned_faces =
-        //     std::max(m_max_not_owned_faces,
-        //              detail::count_zero_bits(m_h_patches_info[p].num_faces[0],
-        //                                      m_h_patches_info[p].owned_mask_f));
     }
 }
 
@@ -768,10 +758,53 @@ uint32_t RXMesh::get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const
     return edge_id;
 }
 
+uint32_t RXMesh::get_standard_patch_num_vertices() const
+{
+    return DIVIDE_UP(get_standard_patch_num_faces(), 2);
+}
+uint32_t RXMesh::get_standard_patch_num_edges() const
+{
+    return 3 * get_standard_patch_num_vertices();
+}
+uint32_t RXMesh::get_standard_patch_num_faces() const
+{
+    return m_patch_size;
+}
+
+uint16_t RXMesh::get_per_patch_max_vertex_capacity() const
+{
+    // the capacity size of a patch is based on the maximum of
+    // 1. the standard patch
+    // 2. the per-patch max number of elements
+    // we then pre-multiply this number by the capacity factor increase
+
+    const float max_cap_vertices = static_cast<float>(std::max(
+        get_standard_patch_num_vertices(), get_per_patch_max_vertices()));
+
+    return static_cast<uint16_t>(
+        std::ceil(m_capacity_factor * max_cap_vertices));
+}
+uint16_t RXMesh::get_per_patch_max_edge_capacity() const
+{
+    const float max_cap_edges = static_cast<float>(
+        std::max(get_standard_patch_num_edges(), get_per_patch_max_edges()));
+
+    return static_cast<uint16_t>(std::ceil(m_capacity_factor * max_cap_edges));
+}
+uint16_t RXMesh::get_per_patch_max_face_capacity() const
+{
+    const float max_cap_faces = static_cast<float>(
+        std::max(get_standard_patch_num_faces(), get_per_patch_max_faces()));
+
+    return static_cast<uint16_t>(std::ceil(m_capacity_factor * max_cap_faces));
+}
+
+
 void RXMesh::build_device()
 {
     CUDA_ERROR(cudaMalloc((void**)&m_d_patches_info,
                           get_max_num_patches() * sizeof(PatchInfo)));
+
 
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
@@ -783,20 +816,13 @@ void RXMesh::build_device()
         const uint16_t p_num_faces =
             static_cast<uint16_t>(m_h_patches_ltog_f[p].size());
 
-        const uint16_t p_vertices_capacity = static_cast<uint16_t>(
-            std::ceil(m_capacity_factor * static_cast<float>(p_num_vertices)));
-        const uint16_t p_edges_capacity = static_cast<uint16_t>(
-            std::ceil(m_capacity_factor * static_cast<float>(p_num_edges)));
-        const uint16_t p_faces_capacity = static_cast<uint16_t>(
-            std::ceil(m_capacity_factor * static_cast<float>(p_num_faces)));
-
         build_device_single_patch(p,
                                   p_num_vertices,
                                   p_num_edges,
                                   p_num_faces,
-                                  p_vertices_capacity,
-                                  p_edges_capacity,
-                                  p_faces_capacity,
+                                  get_per_patch_max_vertex_capacity(),
+                                  get_per_patch_max_edge_capacity(),
+                                  get_per_patch_max_face_capacity(),
                                   m_h_num_owned_v[p],
                                   m_h_num_owned_e[p],
                                   m_h_num_owned_f[p],
@@ -921,8 +947,13 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
                           cudaMemcpyHostToDevice));
 
     // allocate and copy patch topology to the device
+    // we realloc the host h_patch_info EV and FE to ensure that both host and
+    // device has the same capacity
     CUDA_ERROR(cudaMalloc((void**)&d_patch.ev,
                           p_edges_capacity * 2 * sizeof(LocalVertexT)));
+    h_patch_info.ev = (LocalVertexT*)realloc(
+        h_patch_info.ev, p_edges_capacity * 2 * sizeof(LocalVertexT));
+
     if (p_num_edges > 0) {
         CUDA_ERROR(cudaMemcpy(d_patch.ev,
                               h_patch_info.ev,
@@ -932,6 +963,9 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
 
     CUDA_ERROR(cudaMalloc((void**)&d_patch.fe,
                           p_faces_capacity * 3 * sizeof(LocalEdgeT)));
+    h_patch_info.fe = (LocalEdgeT*)realloc(
+        h_patch_info.fe, p_faces_capacity * 3 * sizeof(LocalEdgeT));
+
     if (p_num_faces > 0) {
         CUDA_ERROR(cudaMemcpy(d_patch.fe,
                               h_patch_info.fe,
@@ -1156,6 +1190,10 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
 void RXMesh::allocate_extra_patches()
 {
 
+    const uint16_t p_vertices_capacity = get_per_patch_max_vertex_capacity();
+    const uint16_t p_edges_capacity    = get_per_patch_max_edge_capacity();
+    const uint16_t p_faces_capacity    = get_per_patch_max_face_capacity();
+
 #pragma omp parallel for
     for (int p = get_num_patches(); p < static_cast<int>(get_max_num_patches());
          ++p) {
@@ -1163,11 +1201,6 @@ void RXMesh::allocate_extra_patches()
         const uint16_t p_num_vertices = 0;
         const uint16_t p_num_edges    = 0;
         const uint16_t p_num_faces    = 0;
-
-        const uint16_t p_vertices_capacity =
-            get_per_patch_max_vertices_capacity();
-        const uint16_t p_edges_capacity = get_per_patch_max_edges_capacity();
-        const uint16_t p_faces_capacity = get_per_patch_max_faces_capacity();
 
         m_h_patches_info[p].ev =
             (LocalVertexT*)malloc(2 * p_edges_capacity * sizeof(LocalVertexT));

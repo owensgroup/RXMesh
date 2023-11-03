@@ -165,8 +165,8 @@ __global__ static void slice_patches(Context        context,
                     ::atomicAdd(context.m_num_patches, uint32_t(1));
                 assert(s_new_patch_id < context.m_max_num_patches);
             } else {
-                s_new_patch_id  = INVALID32;
-                pi.should_slice = false;
+                s_new_patch_id                           = INVALID32;
+                context.m_patches_info[pid].should_slice = false;
             }
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
@@ -515,17 +515,9 @@ class RXMeshDynamic : public RXMeshStatic
         }
 
         if (is_dyn) {
-            uint16_t vertex_cap = static_cast<uint16_t>(
-                this->m_capacity_factor *
-                static_cast<float>(this->m_max_vertices_per_patch));
-
-            uint16_t edge_cap = static_cast<uint16_t>(
-                this->m_capacity_factor *
-                static_cast<float>(this->m_max_edges_per_patch));
-
-            uint16_t face_cap = static_cast<uint16_t>(
-                this->m_capacity_factor *
-                static_cast<float>(this->m_max_faces_per_patch));
+            uint16_t vertex_cap = get_per_patch_max_vertex_capacity();
+            uint16_t edge_cap   = get_per_patch_max_edge_capacity();
+            uint16_t face_cap   = get_per_patch_max_face_capacity();
 
             // connecivity (FE and EV) shared memory
             size_t connectivity_shmem = 0;
@@ -602,7 +594,8 @@ class RXMeshDynamic : public RXMeshStatic
             // memory and other things
             launch_box.smem_bytes_dyn = std::max(
                 connectivity_shmem + cavity_id_shmem + cavity_bdr_shmem +
-                    cavity_size_shmem + bitmasks_shmem + correspond_shmem,
+                    cavity_size_shmem + bitmasks_shmem + correspond_shmem +
+                    cavity_creator_shmem,
                 static_shmem + cavity_id_shmem + cavity_creator_shmem);
         } else {
             launch_box.smem_bytes_dyn = static_shmem;
@@ -672,6 +665,18 @@ class RXMeshDynamic : public RXMeshStatic
         constexpr uint32_t block_size = 256;
         const uint32_t     grid_size  = get_num_patches();
 
+        CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
+                              this->m_rxmesh_context.m_max_num_vertices,
+                              sizeof(uint32_t),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(&this->m_max_edges_per_patch,
+                              this->m_rxmesh_context.m_max_num_edges,
+                              sizeof(uint32_t),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
+                              this->m_rxmesh_context.m_max_num_faces,
+                              sizeof(uint32_t),
+                              cudaMemcpyDeviceToHost));
 
         // ev, fe
         uint32_t dyn_shmem =
