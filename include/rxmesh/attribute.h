@@ -448,8 +448,8 @@ class Attribute : public AttributeBase
             }
 
             for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
-                std::memcpy(m_h_ptr_on_device[p],
-                            source.m_h_ptr_on_device[p],
+                std::memcpy(m_h_attr[p],
+                            source.m_h_attr[p],
                             sizeof(T) * capacity(p) * m_num_attributes);
             }
         }
