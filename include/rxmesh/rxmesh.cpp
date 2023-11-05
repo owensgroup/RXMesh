@@ -93,7 +93,7 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
 
     PatchScheduler sch;
     sch.init(get_max_num_patches());
-    sch.refill();
+    sch.refill(get_num_patches());
 
     // Allocate  extra patches
     allocate_extra_patches();

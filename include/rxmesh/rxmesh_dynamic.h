@@ -164,6 +164,7 @@ __global__ static void slice_patches(Context        context,
                 s_new_patch_id =
                     ::atomicAdd(context.m_num_patches, uint32_t(1));
                 assert(s_new_patch_id < context.m_max_num_patches);
+                context.m_patch_scheduler.push(s_new_patch_id);
             } else {
                 s_new_patch_id                           = INVALID32;
                 context.m_patches_info[pid].should_slice = false;
@@ -637,7 +638,7 @@ class RXMeshDynamic : public RXMeshStatic
      */
     void reset_scheduler()
     {
-        this->m_rxmesh_context.m_patch_scheduler.refill();
+        this->m_rxmesh_context.m_patch_scheduler.refill(get_num_patches());
     }
 
     /**

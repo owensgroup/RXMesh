@@ -15,21 +15,44 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&      rx,
 
     rx.reset_scheduler();
     while (!rx.is_queue_empty()) {
+        // RXMESH_INFO("*** queue size= {}",
+        //            rx.get_context().m_patch_scheduler.size());
+        // rx.get_context().m_patch_scheduler.print_list();
+
         LaunchBox<blockThreads> launch_box;
         rx.prepare_launch_box(
             {Op::EV}, launch_box, (void*)edge_split<T, blockThreads>);
 
-        edge_split<T, blockThreads><<<launch_box.blocks,
+        edge_split<T, blockThreads><<<DIVIDE_UP(launch_box.blocks, 2),
                                       launch_box.num_threads,
                                       launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, high_edge_len_sq);
 
+        rx.cleanup();
         rx.slice_patches(*coords);
-
         rx.cleanup();
 
+        // RXMESH_TRACE(" ");
         // rx.update_host();
-        // EXPECT_TRUE(rx.validate());
+        // RXMESH_INFO(" ");
+        // RXMESH_INFO("#Vertices {}", rx.get_num_vertices());
+        // RXMESH_INFO("#Edges {}", rx.get_num_edges());
+        // RXMESH_INFO("#Faces {}", rx.get_num_faces());
+        // RXMESH_INFO("#Patches {}", rx.get_num_patches());
+        //
+        // bool show = true;
+        // if (show) {
+        //    coords->move(DEVICE, HOST);
+        //    rx.update_polyscope();
+        //    auto ps_mesh = rx.get_polyscope_mesh();
+        //    ps_mesh->updateVertexPositions(*coords);
+        //    ps_mesh->setEnabled(false);
+        //
+        //    rx.render_vertex_patch();
+        //    rx.render_edge_patch();
+        //    rx.render_face_patch();
+        //    polyscope::show();
+        //}
     }
 }
 
@@ -62,12 +85,9 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&      rx,
                                          launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, low_edge_len_sq, high_edge_len_sq);
 
-        rx.slice_patches(*coords);
-
         rx.cleanup();
-
-        // rx.update_host();
-        // EXPECT_TRUE(rx.validate());
+        rx.slice_patches(*coords);
+        rx.cleanup();
     }
 }
 
@@ -94,12 +114,9 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&      rx,
                launch_box.num_threads,
                launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords);
 
-        rx.slice_patches(*coords);
-
         rx.cleanup();
-
-        // rx.update_host();
-        // EXPECT_TRUE(rx.validate());
+        rx.slice_patches(*coords);
+        rx.cleanup();
     }
 }
 
@@ -145,7 +162,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     CUDA_ERROR(cudaMallocManaged((void**)&average_edge_len, sizeof(float)));
 
     LaunchBox<blockThreads> launch_box;
-    rx.prepare_launch_box(
+    rx.update_launch_box(
         {Op::EV},
         launch_box,
         (void*)compute_average_edge_length<float, blockThreads>,
@@ -168,8 +185,6 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
         (4.f / 3.f) * Arg.relative_len * average_edge_len[0];
     const float high_edge_len_sq = high_edge_len * high_edge_len;
 
-    bool validate = false;
-
     GPUTimer timer;
     timer.start();
 
@@ -186,13 +201,18 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     CUDA_ERROR(cudaGetLastError());
 
     rx.update_host();
+    new_coords->move(DEVICE, HOST);
     coords->move(DEVICE, HOST);
+    coords->copy_from(*new_coords, HOST, HOST);
+
+    EXPECT_TRUE(rx.validate());
 
     rx.export_obj("remesh.obj", *coords);
     RXMESH_INFO("remesh_rxmesh() took {} (ms)", timer.elapsed_millis());
     RXMESH_INFO("Output mesh #Vertices {}", rx.get_num_vertices());
     RXMESH_INFO("Output mesh #Edges {}", rx.get_num_edges());
     RXMESH_INFO("Output mesh #Faces {}", rx.get_num_faces());
+    RXMESH_INFO("Output mesh #Patches {}", rx.get_num_patches());
 
 
 #if USE_POLYSCOPE
