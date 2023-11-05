@@ -5,9 +5,10 @@
 #include "remesh_kernels.cuh"
 
 template <typename T>
-inline void split_long_edges(rxmesh::RXMeshDynamic&      rx,
-                             rxmesh::VertexAttribute<T>* coords,
-                             const T                     high_edge_len_sq)
+inline void split_long_edges(rxmesh::RXMeshDynamic&         rx,
+                             rxmesh::VertexAttribute<T>*    coords,
+                             rxmesh::EdgeAttribute<int8_t>* updated,
+                             const T                        high_edge_len_sq)
 {
     using namespace rxmesh;
 
@@ -20,16 +21,24 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&      rx,
         // rx.get_context().m_patch_scheduler.print_list();
 
         LaunchBox<blockThreads> launch_box;
-        rx.prepare_launch_box(
-            {Op::EV}, launch_box, (void*)edge_split<T, blockThreads>);
+        rx.prepare_launch_box({Op::EV},
+                              launch_box,
+                              (void*)edge_split<T, blockThreads>,
+                              true,
+                              false,
+                              false,
+                              [&](uint32_t v, uint32_t e, uint32_t f) {
+                                  return detail::mask_num_bytes(e) +
+                                         ShmemAllocator::default_alignment;
+                              });
 
         edge_split<T, blockThreads><<<DIVIDE_UP(launch_box.blocks, 2),
                                       launch_box.num_threads,
                                       launch_box.smem_bytes_dyn>>>(
-            rx.get_context(), *coords, high_edge_len_sq);
+            rx.get_context(), *coords, *updated, high_edge_len_sq);
 
         rx.cleanup();
-        rx.slice_patches(*coords);
+        rx.slice_patches(*coords, *updated);
         rx.cleanup();
 
         // RXMESH_TRACE(" ");
@@ -43,10 +52,13 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&      rx,
         // bool show = true;
         // if (show) {
         //    coords->move(DEVICE, HOST);
+        //    updated->move(DEVICE, HOST);
         //    rx.update_polyscope();
         //    auto ps_mesh = rx.get_polyscope_mesh();
         //    ps_mesh->updateVertexPositions(*coords);
         //    ps_mesh->setEnabled(false);
+        //
+        //    ps_mesh->addEdgeScalarQuantity("updated", *updated);
         //
         //    rx.render_vertex_patch();
         //    rx.render_edge_patch();
@@ -57,10 +69,11 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&      rx,
 }
 
 template <typename T>
-inline void collapse_short_edges(rxmesh::RXMeshDynamic&      rx,
-                                 rxmesh::VertexAttribute<T>* coords,
-                                 const T                     low_edge_len_sq,
-                                 const T                     high_edge_len_sq)
+inline void collapse_short_edges(rxmesh::RXMeshDynamic&         rx,
+                                 rxmesh::VertexAttribute<T>*    coords,
+                                 rxmesh::EdgeAttribute<int8_t>* updated,
+                                 const T                        low_edge_len_sq,
+                                 const T high_edge_len_sq)
 {
     using namespace rxmesh;
 
@@ -76,7 +89,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&      rx,
                               false,
                               true,
                               [=](uint32_t v, uint32_t e, uint32_t f) {
-                                  return detail::mask_num_bytes(e) +
+                                  return detail::mask_num_bytes(v) +
                                          ShmemAllocator::default_alignment;
                               });
 
@@ -86,14 +99,15 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&      rx,
             rx.get_context(), *coords, low_edge_len_sq, high_edge_len_sq);
 
         rx.cleanup();
-        rx.slice_patches(*coords);
+        rx.slice_patches(*coords, *updated);
         rx.cleanup();
     }
 }
 
 template <typename T>
-inline void equalize_valences(rxmesh::RXMeshDynamic&      rx,
-                              rxmesh::VertexAttribute<T>* coords)
+inline void equalize_valences(rxmesh::RXMeshDynamic&         rx,
+                              rxmesh::EdgeAttribute<int8_t>* updated,
+                              rxmesh::VertexAttribute<T>*    coords)
 {
     using namespace rxmesh;
 
@@ -115,7 +129,7 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&      rx,
                launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords);
 
         rx.cleanup();
-        rx.slice_patches(*coords);
+        rx.slice_patches(*coords, *updated);
         rx.cleanup();
     }
 }
@@ -156,6 +170,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     auto coords     = rx.get_input_vertex_coordinates();
     auto new_coords = rx.add_vertex_attribute<float>("newCoords", 3);
+    auto updated    = rx.add_edge_attribute<int8_t>("Updated", 1);
 
     // compute average edge length
     float* average_edge_len;
@@ -189,10 +204,11 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     timer.start();
 
     for (uint32_t iter = 0; iter < Arg.num_iter; ++iter) {
-        split_long_edges(rx, coords.get(), high_edge_len_sq);
+        updated->reset(0, DEVICE);
+        split_long_edges(rx, coords.get(), updated.get(), high_edge_len_sq);
         collapse_short_edges(
-            rx, coords.get(), low_edge_len_sq, high_edge_len_sq);
-        equalize_valences(rx, coords.get());
+            rx, coords.get(), updated.get(), low_edge_len_sq, high_edge_len_sq);
+        equalize_valences(rx, updated.get(), coords.get());
         tangential_relaxation(rx, coords.get(), new_coords.get());
         std::swap(new_coords, coords);
     }

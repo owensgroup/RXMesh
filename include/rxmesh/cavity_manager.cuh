@@ -87,6 +87,15 @@ struct CavityManager
 
 
     /**
+     * @brief check if all cavities created in this CavityManager will be
+     * written to global memory
+     */
+    __device__ __inline__ bool is_successful()
+    {
+        return m_write_to_gmem && !m_s_remove_fill_in[0];
+    }
+
+    /**
      * @brief returns a handle to the mesh element that has created a give
      * cavity
      */

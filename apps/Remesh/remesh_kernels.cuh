@@ -36,6 +36,7 @@ __global__ static void compute_average_edge_length(
 template <typename T, uint32_t blockThreads>
 __global__ static void edge_split(rxmesh::Context                  context,
                                   const rxmesh::VertexAttribute<T> coords,
+                                  rxmesh::EdgeAttribute<int8_t>    updated,
                                   const T high_edge_len_sq)
 {
     // EV for calc edge len
@@ -54,17 +55,20 @@ __global__ static void edge_split(rxmesh::Context                  context,
         return;
     }
 
+    Bitmask is_updated(cavity.patch_info().edges_capacity[0], shrd_alloc);
 
     auto should_split = [&](const EdgeHandle& eh, const VertexIterator& iter) {
-        const Vec3<T> v0(
-            coords(iter[0], 0), coords(iter[0], 1), coords(iter[0], 2));
-        const Vec3<T> v1(
-            coords(iter[1], 0), coords(iter[1], 1), coords(iter[1], 2));
+        if (updated(eh) == 0) {
+            const Vec3<T> v0(
+                coords(iter[0], 0), coords(iter[0], 1), coords(iter[0], 2));
+            const Vec3<T> v1(
+                coords(iter[1], 0), coords(iter[1], 1), coords(iter[1], 2));
 
-        const T edge_len = glm::distance2(v0, v1);
+            const T edge_len = glm::distance2(v0, v1);
 
-        if (edge_len > high_edge_len_sq) {
-            cavity.create(eh);
+            if (edge_len > high_edge_len_sq) {
+                cavity.create(eh);
+            }
         }
     };
 
@@ -72,7 +76,9 @@ __global__ static void edge_split(rxmesh::Context                  context,
     query.dispatch<Op::EV>(block, shrd_alloc, should_split);
     block.sync();
 
-    if (cavity.prologue(block, shrd_alloc, coords)) {
+    if (cavity.prologue(block, shrd_alloc, coords, updated)) {
+
+        is_updated.reset(block);
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
@@ -92,14 +98,22 @@ __global__ static void edge_split(rxmesh::Context                  context,
                     cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
                 const DEdgeHandle e_init = e0;
 
+                is_updated.set(e0.local_id(), true);
+
                 if (e0.is_valid()) {
                     for (uint16_t i = 0; i < size; ++i) {
                         const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+
+                        is_updated.set(e.local_id(), true);
+
                         const DEdgeHandle e1 =
                             (i == size - 1) ?
                                 e_init.get_flip_dedge() :
                                 cavity.add_edge(
                                     cavity.get_cavity_vertex(c, i + 1), new_v);
+
+                        is_updated.set(e1.local_id(), true);
+
                         if (!e1.is_valid()) {
                             break;
                         }
@@ -115,6 +129,14 @@ __global__ static void edge_split(rxmesh::Context                  context,
     }
 
     cavity.epilogue(block);
+
+    if (cavity.is_successful()) {
+        detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+            if (is_updated(eh.local_id())) {
+                updated(eh) = 1;
+            }
+        });
+    }
 }
 
 template <typename T, uint32_t blockThreads>
@@ -158,13 +180,18 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
     // check if the edge is short and should be collapsed
     auto should_collapse = [&](const EdgeHandle&     eh,
                                const VertexIterator& iter) {
-        const VertexHandle v0(iter[0]), v1(iter[1]);
+        // only when both the two end of the edge are not tri-valent, we may do
+        // the collapse. Otherwise, we will run into inconsistent topology
+        // problem i.e., foldover
+        if (!is_tri_valent(iter.local(0)) && !is_tri_valent(iter.local(1))) {
+            const VertexHandle v0(iter[0]), v1(iter[1]);
 
-        const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-        const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-        const T       edge_len_sq = glm::distance2(p0, p1);
-        if (edge_len_sq < low_edge_len_sq) {
-            cavity.create(eh);
+            const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+            const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+            const T       edge_len_sq = glm::distance2(p0, p1);
+            if (edge_len_sq < low_edge_len_sq) {
+                cavity.create(eh);
+            }
         }
     };
     query.dispatch<Op::EV>(block, shrd_alloc, should_collapse);
