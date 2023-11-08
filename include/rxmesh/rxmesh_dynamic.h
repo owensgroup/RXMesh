@@ -437,6 +437,8 @@ class RXMeshDynamic : public RXMeshStatic
      * @param oriented if the query is oriented. Valid only for Op::VV queries
      * @param with_vertex_valence if vertex valence is requested to be
      * pre-computed and stored in shared memory
+     * @param is_concurrent: in case of multiple queries (i.e., op.size() > 1),
+     * this parameter indicates if queries needs to be access at the same time
      * @param user_shmem a (lambda) function that takes the number of vertices,
      * edges, and faces and returns additional user-desired shared memory in
      * bytes
@@ -449,6 +451,7 @@ class RXMeshDynamic : public RXMeshStatic
         const bool               is_dyn              = true,
         const bool               oriented            = false,
         const bool               with_vertex_valence = false,
+        const bool               is_concurrent       = false,
         std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem =
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const
     {
@@ -458,6 +461,7 @@ class RXMeshDynamic : public RXMeshStatic
                           is_dyn,
                           oriented,
                           with_vertex_valence,
+                          is_concurrent,
                           user_shmem);
 
         RXMESH_TRACE(
@@ -489,6 +493,8 @@ class RXMeshDynamic : public RXMeshStatic
      * @param oriented if the query is oriented. Valid only for Op::VV queries
      * @param with_vertex_valence if vertex valence is requested to be
      * pre-computed and stored in shared memory
+     * @param is_concurrent: in case of multiple queries (i.e., op.size() > 1),
+     * this parameter indicates if queries needs to be access at the same time
      * @param user_shmem a (lambda) function that takes the number of vertices,
      * edges, and faces and returns additional user-desired shared memory in
      * bytes
@@ -501,6 +507,7 @@ class RXMeshDynamic : public RXMeshStatic
         const bool               is_dyn              = true,
         const bool               oriented            = false,
         const bool               with_vertex_valence = false,
+        const bool               is_concurrent       = false,
         std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem =
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const
     {
@@ -510,9 +517,12 @@ class RXMeshDynamic : public RXMeshStatic
         // static query shared memory
         size_t static_shmem = 0;
         for (auto o : op) {
-            static_shmem =
-                std::max(static_shmem,
-                         this->calc_shared_memory<blockThreads>(o, oriented));
+            size_t sh = this->calc_shared_memory<blockThreads>(o, oriented);
+            if (is_concurrent) {
+                static_shmem += sh;
+            } else {
+                static_shmem = std::max(static_shmem, sh);
+            }
         }
 
         if (is_dyn) {
