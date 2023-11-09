@@ -160,7 +160,8 @@ struct Query
                                         ShmemAllocator& shrd_alloc,
                                         computeT        compute_op,
                                         activeSetT      compute_active_set,
-                                        const bool      oriented = false)
+                                        const bool      oriented        = false,
+                                        const bool      allow_not_owned = false)
     {
         static_assert(op != Op::EE, "Op::EE is not supported!");
 
@@ -184,7 +185,48 @@ struct Query
             "First argument of compute_op lambda function should "
             "match the first argument of active_set lambda function ");
 
-        const uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
+        prologue<op>(
+            block, shrd_alloc, compute_active_set, oriented, allow_not_owned);
+
+        run_compute(block, compute_op);
+
+        epilogue(block, shrd_alloc);
+    }
+
+    /**
+     * @brief run the query and prepare internal data structure to run the
+     * computation on top of the queries
+     */
+    template <Op op>
+    __device__ __inline__ void prologue(cooperative_groups::thread_block& block,
+                                        ShmemAllocator& shrd_alloc,
+                                        const bool      oriented        = false,
+                                        const bool      allow_not_owned = true)
+    {
+        prologue<op>(
+            block,
+            shrd_alloc,
+            [](VertexHandle) { return true; },
+            oriented,
+            allow_not_owned);
+    }
+
+
+    /**
+     * @brief run the query and prepare internal data structure to run the
+     * computation on top of the queries
+     */
+    template <Op op, typename activeSetT>
+    __device__ __inline__ void prologue(cooperative_groups::thread_block& block,
+                                        ShmemAllocator& shrd_alloc,
+                                        activeSetT      compute_active_set,
+                                        const bool      oriented        = false,
+                                        const bool      allow_not_owned = true)
+    {
+        static_assert(op != Op::EE, "Op::EE is not supported!");
+
+        m_op           = op;
+        m_shmem_before = shrd_alloc.get_allocated_size_bytes();
 
         detail::query_block_dispatcher<op, blockThreads>(
             block,
@@ -198,73 +240,45 @@ struct Query
             m_s_participant_bitmask,
             m_s_output_owned_bitmask,
             m_output_lp_hashtable,
-            m_s_table);
+            m_s_table,
+            allow_not_owned);
+    }
 
-        constexpr uint32_t fixed_offset =
-            ((op == Op::EV) ? 2 :
-                              ((op == Op::FV || op == Op::FE) ?
-                                   3 :
-                                   ((op == Op::EVDiamond) ? 4 : 0)));
 
-        const uint32_t patch_id = m_patch_info.patch_id;
+    /**
+     * @brief run the computation on the query operations. Should be done after
+     * calling prologue() and it should be called by the whole block where every
+     * thread will be assigned to one element
+     */
+    template <typename computeT>
+    __device__ __inline__ void run_compute(
+        cooperative_groups::thread_block& block,
+        computeT                          compute_op)
+    {
+        using ComputeTraits    = detail::FunctionTraits<computeT>;
+        using ComputeHandleT   = typename ComputeTraits::template arg<0>::type;
+        using ComputeIteratorT = typename ComputeTraits::template arg<1>::type;
+
+        assert(m_s_output_value);
 
         for (uint16_t local_id = threadIdx.x; local_id < m_num_src_in_patch;
              local_id += blockThreads) {
 
-            assert(m_s_output_value);
-
             if (detail::is_set_bit(local_id, m_s_participant_bitmask)) {
 
-                ComputeHandleT   handle(patch_id, local_id);
-                ComputeIteratorT iter(
-                    m_context,
-                    local_id,
-                    reinterpret_cast<LocalT*>(m_s_output_value),
-                    m_s_output_offset,
-                    fixed_offset,
-                    patch_id,
-                    m_s_output_owned_bitmask,
-                    m_output_lp_hashtable,
-                    m_s_table,
-                    m_patch_info.patch_stash,
-                    int(op == Op::FE));
-
+                ComputeHandleT   handle(m_patch_info.patch_id, local_id);
+                ComputeIteratorT iter =
+                    get_iterator<ComputeIteratorT>(local_id);
                 compute_op(handle, iter);
             }
         }
-
-        // cleanup shared memory allocation
-        shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() -
-                           shmem_before);
     }
 
 
-    template <Op op>
-    __device__ __inline__ void prologue(cooperative_groups::thread_block& block,
-                                        ShmemAllocator& shrd_alloc,
-                                        const bool      oriented = false)
-    {
-        static_assert(op != Op::EE, "Op::EE is not supported!");
-
-
-        m_op = op;
-        detail::query_block_dispatcher<op, blockThreads>(
-            block,
-            shrd_alloc,
-            m_patch_info,
-            [](VertexHandle) { return true; },
-            oriented,
-            m_num_src_in_patch,
-            m_s_output_offset,
-            m_s_output_value,
-            m_s_participant_bitmask,
-            m_s_output_owned_bitmask,
-            m_output_lp_hashtable,
-            m_s_table,
-            true);
-    }
-
-
+    /**
+     * @brief return an iterator over the queries elements give a local index of
+     * a source element
+     */
     template <typename IteratorT>
     __device__ __inline__ IteratorT get_iterator(uint16_t local_id) const
     {
@@ -294,9 +308,21 @@ struct Query
     }
 
 
+    /**
+     * @brief free up shared memory allocated to store the query operations.
+     */
+    __device__ __inline__ void epilogue(cooperative_groups::thread_block& block,
+                                        ShmemAllocator& shrd_alloc)
+    {
+        // cleanup shared memory allocation
+        shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() -
+                           m_shmem_before);
+    }
+
    private:
     const Context&   m_context;
     const PatchInfo& m_patch_info;
+    uint32_t         m_shmem_before;
     uint32_t         m_num_src_in_patch;
     uint32_t*        m_s_participant_bitmask;
     uint32_t*        m_s_output_owned_bitmask;
