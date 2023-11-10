@@ -155,6 +155,9 @@ __global__ static void slice_patches(Context        context,
                 uint32_t q = pi.patch_stash.get_patch(i);
                 if (q != INVALID32) {
                     if (context.m_patches_info[q].is_dirty()) {
+                        // printf("\n slicing: patch %u finds %u dirty",
+                        //       pi.patch_id,
+                        //       q);
                         ok = false;
                         break;
                     }
@@ -169,6 +172,8 @@ __global__ static void slice_patches(Context        context,
                 s_new_patch_id                           = INVALID32;
                 context.m_patches_info[pid].should_slice = false;
             }
+
+            // printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
         Bitmask s_active_v, s_active_e, s_active_f;
@@ -288,7 +293,7 @@ __global__ static void slice_patches(Context        context,
 
         // assign edges through faces
         for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-            if (s_active_f(f) && s_new_p_owned_f(f)) {
+            if (s_active_f(f) && s_new_p_owned_f(f) && s_owned_f(f)) {
                 const uint16_t e0(s_fe[3 * f + 0] >> 1),
                     e1(s_fe[3 * f + 1] >> 1), e2(s_fe[3 * f + 2] >> 1);
                 assert(e0 < num_edges);
