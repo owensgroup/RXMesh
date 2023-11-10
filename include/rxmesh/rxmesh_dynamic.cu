@@ -984,7 +984,7 @@ __inline__ __device__ void bi_assignment(
 
 
     // finally we assign edges
-    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+    /*for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
         if (s_active_e(e)) {
             const uint16_t v0(s_ev[2 * e + 0]), v1(s_ev[2 * e + 1]);
             assert(v0 < num_vertices);
@@ -993,7 +993,7 @@ __inline__ __device__ void bi_assignment(
                 s_new_p_owned_e.set(e, true);
             }
         }
-    }
+    }*/
 }
 
 template <uint32_t blockThreads>

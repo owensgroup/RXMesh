@@ -284,7 +284,21 @@ __global__ static void slice_patches(Context        context,
                            3 * num_faces,
                            s_fe,
                            true);
+        block.sync();
 
+        // assign edges through faces
+        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+            if (s_active_f(f) && s_new_p_owned_f(f)) {
+                const uint16_t e0(s_fe[3 * f + 0] >> 1),
+                    e1(s_fe[3 * f + 1] >> 1), e2(s_fe[3 * f + 2] >> 1);
+                assert(e0 < num_edges);
+                assert(e1 < num_edges);
+                assert(e2 < num_edges);
+                s_new_p_owned_e.set(e0, true);
+                s_new_p_owned_e.set(e1, true);
+                s_new_p_owned_e.set(e2, true);
+            }
+        }
         block.sync();
 
         slice<blockThreads>(context,
