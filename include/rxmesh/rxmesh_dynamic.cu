@@ -1846,7 +1846,8 @@ bool RXMeshDynamic::validate()
 
         if (!is_okay()) {
             RXMESH_WARN("RXMeshDynamic::validate() check_ribbon_edges failed");
-            CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
+            return false;
+            //CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
         }
 
         uint32_t* d_max_valence;

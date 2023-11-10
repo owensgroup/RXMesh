@@ -1682,6 +1682,11 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
         assert(f < m_s_owned_mask_f.size());
         assert(f < m_s_active_mask_f.size());
         assert(f < m_s_in_cavity_f.size());
+
+        const uint16_t edges[3] = {m_s_fe[3 * f + 0] >> 1,
+                                   m_s_fe[3 * f + 1] >> 1,
+                                   m_s_fe[3 * f + 2] >> 1};
+
         if (!m_s_owned_mask_f(f) && m_s_in_cavity_f(f)) {
             m_s_ownership_change_mask_f.set(f, true);
         }
@@ -1717,6 +1722,16 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
                     break;
                 }
             }
+        }
+
+        if (m_s_ownership_change_mask_f(f)) {
+            for (uint16_t e = 0; e < 3; ++e) {
+                if (!m_s_owned_mask_e(edges[e]) &&
+                    m_s_active_mask_e(edges[e])) {
+                    m_s_ownership_change_mask_e.set(edges[e], true);
+                }
+            }
+            
         }
     }
 

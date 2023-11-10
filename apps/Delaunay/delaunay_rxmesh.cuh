@@ -236,6 +236,11 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     float slice_time   = 0;
     float cleanup_time = 0;
 
+    RXMESH_INFO("Input mesh #Vertices {}", rx.get_num_vertices());
+    RXMESH_INFO("Input mesh #Edges {}", rx.get_num_edges());
+    RXMESH_INFO("Input mesh #Faces {}", rx.get_num_faces());
+    RXMESH_INFO("Input mesh #Patches {}", rx.get_num_patches());
+
     CUDA_ERROR(cudaProfilerStart());
 
     bool validate = false;
@@ -343,6 +348,11 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     EXPECT_EQ(num_vertices, rx.get_num_vertices());
     EXPECT_EQ(num_edges, rx.get_num_edges());
     EXPECT_EQ(num_faces, rx.get_num_faces());
+
+    RXMESH_INFO("Output mesh #Vertices {}", rx.get_num_vertices());
+    RXMESH_INFO("Output mesh #Edges {}", rx.get_num_edges());
+    RXMESH_INFO("Output mesh #Faces {}", rx.get_num_faces());
+    RXMESH_INFO("Output mesh #Patches {}", rx.get_num_patches());
 
     if (with_verify) {
         rx.export_obj(STRINGIFY(OUTPUT_DIR) "temp.obj", *coords);

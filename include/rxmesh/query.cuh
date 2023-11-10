@@ -259,12 +259,12 @@ struct Query
         using ComputeHandleT   = typename ComputeTraits::template arg<0>::type;
         using ComputeIteratorT = typename ComputeTraits::template arg<1>::type;
 
-        assert(m_s_output_value);
-
         for (uint16_t local_id = threadIdx.x; local_id < m_num_src_in_patch;
              local_id += blockThreads) {
 
             if (detail::is_set_bit(local_id, m_s_participant_bitmask)) {
+
+                assert(m_s_output_value);
 
                 ComputeHandleT   handle(m_patch_info.patch_id, local_id);
                 ComputeIteratorT iter =
