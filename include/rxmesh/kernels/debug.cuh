@@ -1,10 +1,23 @@
 #pragma once
 
+#include <cooperative_groups.h>
+
 #include <stdint.h>
 #include <stdio.h>
 #include "cuda_runtime.h"
 
 namespace rxmesh {
+
+__device__ __inline__ void block_print(cooperative_groups::thread_block& block,
+                                       char                              msg[])
+{
+    block.sync();
+    if (threadIdx.x == 0) {
+        printf("\n Block= %d: %s \n", blockIdx.x, msg);
+    }
+    block.sync();
+}
+
 
 /**
  * print_arr_uint()

@@ -3,6 +3,8 @@
 
 #include <glm/glm.hpp>
 
+#include "rxmesh/kernels/debug.cuh"
+
 template <typename T>
 using Vec3 = glm::vec<3, T, glm::defaultp>;
 
@@ -108,9 +110,8 @@ __global__ static void edge_split(rxmesh::Context                  context,
                     cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
                 const DEdgeHandle e_init = e0;
 
-                is_updated.set(e0.local_id(), true);
-
                 if (e0.is_valid()) {
+                    is_updated.set(e0.local_id(), true);
                     for (uint16_t i = 0; i < size; ++i) {
                         const DEdgeHandle e = cavity.get_cavity_edge(c, i);
 
@@ -121,12 +122,12 @@ __global__ static void edge_split(rxmesh::Context                  context,
                                 e_init.get_flip_dedge() :
                                 cavity.add_edge(
                                     cavity.get_cavity_vertex(c, i + 1), new_v);
-
-                        is_updated.set(e1.local_id(), true);
-
                         if (!e1.is_valid()) {
                             break;
                         }
+
+                        is_updated.set(e1.local_id(), true);
+
                         const FaceHandle f = cavity.add_face(e0, e, e1);
                         if (!f.is_valid()) {
                             break;
@@ -330,9 +331,9 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
                 DEdgeHandle e0 =
                     cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
 
-                is_updated.set(e0.local_id(), true);
-
                 if (e0.is_valid()) {
+                    is_updated.set(e0.local_id(), true);
+
                     const DEdgeHandle e_init = e0;
 
                     for (uint16_t i = 0; i < size; ++i) {
@@ -349,11 +350,11 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
                                 cavity.add_edge(
                                     cavity.get_cavity_vertex(c, i + 1), new_v);
 
-                        is_updated.set(e1.local_id(), true);
-
                         if (!e1.is_valid()) {
                             break;
                         }
+
+                        is_updated.set(e1.local_id(), true);
 
                         const FaceHandle new_f = cavity.add_face(e0, e, e1);
 
@@ -474,9 +475,9 @@ __global__ static void edge_flip(rxmesh::Context                  context,
             DEdgeHandle new_edge = cavity.add_edge(
                 cavity.get_cavity_vertex(c, 1), cavity.get_cavity_vertex(c, 3));
 
-            is_updated.set(new_edge.local_id(), true);
 
             if (new_edge.is_valid()) {
+                is_updated.set(new_edge.local_id(), true);
                 cavity.add_face(cavity.get_cavity_edge(c, 0),
                                 new_edge,
                                 cavity.get_cavity_edge(c, 3));

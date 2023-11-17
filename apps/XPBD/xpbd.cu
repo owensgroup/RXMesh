@@ -211,7 +211,7 @@ int main(int argc, char** argv)
     const bool     XPBD               = true;
 
     // fixtures paramters
-    const float    box_len  = 0.01;
+    const float    box_len  = 0.001;
     const Vector3f boxes[4] = {{0.25, 0.75, 0.75},
                                {0.75, 0.75, 0.75},
                                {0.25, 0.25, 0.75},
@@ -270,6 +270,8 @@ int main(int argc, char** argv)
 
     // solve
     auto polyscope_callback = [&]() mutable {
+        GPUTimer timer;
+        timer.start();
         float frame_time_left = frame_dt;
         while (frame_time_left > 0.0) {
             float dt0 = std::min(dt, frame_time_left);
@@ -362,6 +364,8 @@ int main(int argc, char** argv)
                 });
         }
 
+        timer.stop();
+        RXMESH_INFO("Frame {}, time= {}(ms)", frame, timer.elapsed_millis());
 #if USE_POLYSCOPE
         x->move(DEVICE, HOST);
         rx.get_polyscope_mesh()->updateVertexPositions(*x);

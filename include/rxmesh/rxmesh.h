@@ -227,6 +227,55 @@ class RXMesh
      */
     const FaceHandle map_to_local_face(uint32_t i) const;
 
+    /**
+     * @brief return the number of owned vertices in a patch
+     */
+    const uint16_t get_num_owned_vertices(const uint32_t p) const
+    {
+        return m_h_num_owned_v[p];
+    }
+
+    /**
+     * @brief return the number of owned edges in a patch
+     */
+    const uint16_t get_num_owned_edges(const uint32_t p) const
+    {
+        return m_h_num_owned_e[p];
+    }
+
+    /**
+     * @brief return the number of owned faces in a patch
+     */
+    const uint16_t get_num_owned_faces(const uint32_t p) const
+    {
+        return m_h_num_owned_f[p];
+    }
+
+
+    /**
+     * @brief return the number of vertices in a patch
+     */
+    const uint16_t get_num_vertices(const uint32_t p) const
+    {
+        return m_h_patches_info[p].num_vertices[0];
+    }
+
+    /**
+     * @brief return the number of edges in a patch
+     */
+    const uint16_t get_num_edges(const uint32_t p) const
+    {
+        return m_h_patches_info[p].num_edges[0];
+    }
+
+    /**
+     * @brief return the number of faces in a patch
+     */
+    const uint16_t get_num_faces(const uint32_t p) const
+    {
+        return m_h_patches_info[p].num_faces[0];
+    }
+
     const PatchInfo& get_patch(uint32_t p) const
     {
         assert(p < get_num_patches());
