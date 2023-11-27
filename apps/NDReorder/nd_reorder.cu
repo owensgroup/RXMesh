@@ -54,7 +54,7 @@ void nd_reorder()
     // nedges: compute later
     // adjwgt: compute later
     cewgt.reset(0, rxmesh::DEVICE);
-    vpair.reset(1<<10, rxmesh::DEVICE); // for a VertexHandle doesn't exist
+    vpair.reset(VertexHandle(0, 10000), rxmesh::DEVICE); // for a VertexHandle doesn't exist
     ewgt.reset(1, rxmesh::DEVICE);
 
     // launch box

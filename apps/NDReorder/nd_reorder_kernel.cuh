@@ -106,7 +106,7 @@ __global__ static void heavy_edge_matching(const rxmesh::Context      context,
 
             if (vpair(paired_v) == vertex) {
                 // write success
-                if (vpair(vertex) == paired_v || vpair(vertex) == 1 << 10) {
+                if (vpair(vertex) == paired_v || vpair(vertex) == VertexHandle(0, 10000)) {
                     // pick each other or not in the middle of a chain
                     vpair(vertex) = paired_v;
                     break;
@@ -117,7 +117,7 @@ __global__ static void heavy_edge_matching(const rxmesh::Context      context,
             } else {
                 // write fail
                 // accept the incoming scuuessful write
-                if (vpair(vertex) != 1 << 10) {
+                if (vpair(vertex) != VertexHandle(0, 10000)) {
                     paired_v        = vpair(vertex);
                     vpair(paired_v) = vertex;
                 }
