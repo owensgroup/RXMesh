@@ -38,7 +38,7 @@ void nd_reorder()
     auto adjwgt =
         *rx.add_vertex_attribute<T>("adjwgt", 1, rxmesh::LOCATION_ALL);
 
-    // the sum of the edge weight that is around a vertex
+    // the pairing VertexHandle
     auto vpair =
         *rx.add_vertex_attribute<VertexHandle>("vpair", 1, rxmesh::LOCATION_ALL);
 
@@ -54,7 +54,7 @@ void nd_reorder()
     // nedges: compute later
     // adjwgt: compute later
     cewgt.reset(0, rxmesh::DEVICE);
-    vpair.reset(1<<15, rxmesh::DEVICE); // for a VertexHandle doesn't exist
+    vpair.reset(1<<10, rxmesh::DEVICE); // for a VertexHandle doesn't exist
     ewgt.reset(1, rxmesh::DEVICE);
 
     // launch box
@@ -67,6 +67,14 @@ void nd_reorder()
            launch_box.num_threads,
            launch_box.smem_bytes_dyn>>>(rx.get_context(), nedges, adjwgt, ewgt);
 
+
+    rx.prepare_launch_box(
+        {rxmesh::Op::VE}, launch_box, (void*)heavy_edge_matching<T, blockThreads>);
+
+    heavy_edge_matching<T, blockThreads>
+        <<<launch_box.blocks,
+           launch_box.num_threads,
+           launch_box.smem_bytes_dyn>>>(rx.get_context(), vpair, ewgt);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 }
@@ -119,3 +127,6 @@ int main(int argc, char** argv)
 
     return RUN_ALL_TESTS();
 }
+
+
+// batch info file
