@@ -441,6 +441,7 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
                                   true,
                                   false,
                                   false,
+                                  false,
                                   [](uint32_t v, uint32_t e, uint32_t f) {
                                       return e * sizeof(uint8_t);
                                   });

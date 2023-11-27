@@ -114,11 +114,11 @@ TEST(RXMeshStatic, MultiQueries)
     const auto coords = rx.get_input_vertex_coordinates();
 
     auto vertex_sum = rx.add_vertex_attribute<float>("vertex_sum", 1);
-    vertex_sum->reset(0, LOCALE_ALL);
+    vertex_sum->reset(0, LOCATION_ALL);
 
     // ground truth
     auto vertex_sum_gt = rx.add_vertex_attribute<float>("vertex_sum_gt", 1);
-    vertex_sum_gt->reset(0, LOCALE_ALL);
+    vertex_sum_gt->reset(0, LOCATION_ALL);
 
     LaunchBox<blockThreads> launch_box;
 

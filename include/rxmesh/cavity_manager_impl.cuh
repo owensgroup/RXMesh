@@ -541,6 +541,11 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     m_s_fill_in_f.reset(block);
     block.sync();
 
+    // store hashtable now so we could re-use the shared memory
+    // overlap this memcpy with the user operations that mostly happens in
+    // shared memory
+    store_hashtable(block);
+
     return true;
 }
 
@@ -1441,6 +1446,26 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::load_hashtable(
         m_s_table_f, true, m_s_table_stash_f);
 }
 
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void CavityManager<blockThreads, cop>::store_hashtable(
+    cooperative_groups::thread_block& block)
+{
+
+    // store hashtable
+    m_patch_info.lp_v.write_to_global_memory<blockThreads>(m_s_table_v,
+                                                           m_s_table_stash_v);
+    m_patch_info.lp_e.write_to_global_memory<blockThreads>(m_s_table_e,
+                                                           m_s_table_stash_e);
+    m_patch_info.lp_f.write_to_global_memory<blockThreads>(m_s_table_f,
+                                                           m_s_table_stash_f);
+
+    // patch stash
+    for (uint32_t i = threadIdx.x; i < PatchStash::stash_size;
+         i += blockThreads) {
+        m_patch_info.patch_stash.m_stash[i] = m_s_patch_stash.m_stash[i];
+    }
+}
+
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::push()
@@ -1657,6 +1682,11 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
         assert(f < m_s_owned_mask_f.size());
         assert(f < m_s_active_mask_f.size());
         assert(f < m_s_in_cavity_f.size());
+
+        const uint16_t edges[3] = {m_s_fe[3 * f + 0] >> 1,
+                                   m_s_fe[3 * f + 1] >> 1,
+                                   m_s_fe[3 * f + 2] >> 1};
+
         if (!m_s_owned_mask_f(f) && m_s_in_cavity_f(f)) {
             m_s_ownership_change_mask_f.set(f, true);
         }
@@ -1692,6 +1722,16 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
                     break;
                 }
             }
+        }
+
+        if (m_s_ownership_change_mask_f(f)) {
+            for (uint16_t e = 0; e < 3; ++e) {
+                if (!m_s_owned_mask_e(edges[e]) &&
+                    m_s_active_mask_e(edges[e])) {
+                    m_s_ownership_change_mask_e.set(edges[e], true);
+                }
+            }
+            
         }
     }
 
@@ -3181,20 +3221,6 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
         detail::store<blockThreads>(m_s_active_mask_f.m_bitmask,
                                     DIVIDE_UP(m_s_num_faces[0], 32),
                                     m_patch_info.active_mask_f);
-
-        // store hashtable
-        m_patch_info.lp_v.write_to_global_memory<blockThreads>(
-            m_s_table_v, m_s_table_stash_v);
-        m_patch_info.lp_e.write_to_global_memory<blockThreads>(
-            m_s_table_e, m_s_table_stash_e);
-        m_patch_info.lp_f.write_to_global_memory<blockThreads>(
-            m_s_table_f, m_s_table_stash_f);
-
-        // patch stash
-        for (uint32_t i = threadIdx.x; i < PatchStash::stash_size;
-             i += blockThreads) {
-            m_patch_info.patch_stash.m_stash[i] = m_s_patch_stash.m_stash[i];
-        }
     }
 
     if (m_s_should_slice[0]) {

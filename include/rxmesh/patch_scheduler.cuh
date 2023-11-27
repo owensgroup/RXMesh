@@ -4,7 +4,7 @@
 // (corresponding to the blockIdx.x)
 // #define PROCESS_SINGLE_PATCH
 
-// inpsired/taken from
+// inspired/taken from
 // https://github.com/GPUPeople/Ouroboros/blob/9153c55abffb3bceb5aea4028dfcc00439b046d5/include/device/queues/Queue.h
 
 #include "rxmesh/util/util.h"
@@ -94,23 +94,24 @@ struct PatchScheduler
     /**
      * @brief fill the list by sequential numbers
      */
-    __host__ void refill()
+    __host__ void refill(const uint32_t size)
     {
         static std::vector<uint32_t> h_list(capacity);
         if (h_list.size() < capacity) {
             h_list.resize(capacity);
         }
-        fill_with_sequential_numbers(h_list.data(), capacity);
-        random_shuffle(h_list.data(), capacity);
+        fill_with_sequential_numbers(h_list.data(), size);
+        random_shuffle(h_list.data(), size);
+        std::fill(h_list.begin() + size, h_list.end(), INVALID32);
         CUDA_ERROR(cudaMemcpy(list,
                               h_list.data(),
                               capacity * sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
         CUDA_ERROR(
-            cudaMemcpy(count, &capacity, sizeof(int), cudaMemcpyHostToDevice));
+            cudaMemcpy(count, &size, sizeof(int), cudaMemcpyHostToDevice));
 
         CUDA_ERROR(
-            cudaMemcpy(back, &capacity, sizeof(int), cudaMemcpyHostToDevice));
+            cudaMemcpy(back, &size, sizeof(int), cudaMemcpyHostToDevice));
 
         CUDA_ERROR(cudaMemset(front, 0, sizeof(int)));
     }
@@ -118,9 +119,9 @@ struct PatchScheduler
     /**
      * @brief initialize all the memories
      */
-    __host__ void init(uint32_t num_patches)
+    __host__ void init(uint32_t cap)
     {
-        capacity = num_patches;
+        capacity = cap;
         CUDA_ERROR(cudaMalloc((void**)&count, sizeof(int)));
         CUDA_ERROR(cudaMalloc((void**)&front, sizeof(int)));
         CUDA_ERROR(cudaMalloc((void**)&back, sizeof(int)));

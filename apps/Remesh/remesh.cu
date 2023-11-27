@@ -82,7 +82,7 @@ int main(int argc, char** argv)
         }
         if (cmd_option_exists(argv, argc + argv, "-relative_len")) {
             Arg.relative_len =
-                atoi(get_cmd_option(argv, argv + argc, "-relative_len"));
+                std::stof(get_cmd_option(argv, argv + argc, "-relative_len"));
         }
     }
 

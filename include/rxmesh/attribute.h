@@ -227,7 +227,10 @@ class Attribute : public AttributeBase
 
     Attribute(const Attribute& rhs) = default;
 
-    virtual ~Attribute() = default;
+    virtual ~Attribute()
+    {
+        free(m_name);
+    }
 
     /**
      * @brief Get the name of the attribute
@@ -298,7 +301,7 @@ class Attribute : public AttributeBase
 #pragma omp parallel for
             for (int p = 0; p < static_cast<int>(m_rxmesh->get_num_patches());
                  ++p) {
-                for (int e = 0; e < size(p); ++e) {
+                for (int e = 0; e < capacity(p); ++e) {
                     m_h_attr[p][e] = value;
                 }
             }
@@ -448,8 +451,8 @@ class Attribute : public AttributeBase
             }
 
             for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
-                std::memcpy(m_h_ptr_on_device[p],
-                            source.m_h_ptr_on_device[p],
+                std::memcpy(m_h_attr[p],
+                            source.m_h_attr[p],
                             sizeof(T) * capacity(p) * m_num_attributes);
             }
         }
@@ -571,11 +574,12 @@ class Attribute : public AttributeBase
     {
         assert(p_id < m_max_num_patches);
         assert(attr < m_num_attributes);
-        //assert(local_id < size(p_id));
 
 #ifdef __CUDA_ARCH__
+        assert(local_id < capacity(p_id));
         return m_d_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
 #else
+        assert(local_id < size(p_id));
         return m_h_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
 #endif
     }
@@ -594,11 +598,12 @@ class Attribute : public AttributeBase
     {
         assert(p_id < m_max_num_patches);
         assert(attr < m_num_attributes);
-        //assert(local_id < size(p_id));
 
 #ifdef __CUDA_ARCH__
+        assert(local_id < capacity(p_id));
         return m_d_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
 #else
+        assert(local_id < size(p_id));
         return m_h_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
 #endif
     }

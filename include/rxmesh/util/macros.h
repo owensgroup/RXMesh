@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cuda_runtime_api.h>
+#include <cusolverSp.h>
+#include <cusparse.h>
 #include <stdint.h>
 #include "rxmesh/util/log.h"
 
@@ -47,6 +49,67 @@ inline void HandleError(cudaError_t err, const char* file, int line)
     }
 }
 #define CUDA_ERROR(err) (HandleError(err, __FILE__, __LINE__))
+
+inline void cusparseHandleError(cusparseStatus_t status,
+                                const char*      file,
+                                const int        line)
+{
+    if (status != CUSPARSE_STATUS_SUCCESS) {
+        Log::get_logger()->error("Line {} File {}", line, file);
+        Log::get_logger()->error("CUSPARSE ERROR: {}",
+                                 cusparseGetErrorString(status));
+#ifdef _WIN32
+        system("pause");
+#else
+        exit(EXIT_FAILURE);
+#endif
+    }
+    return;
+}
+#define CUSPARSE_ERROR(err) (cusparseHandleError(err, __FILE__, __LINE__))
+
+
+static inline void cusolverHandleError(cusolverStatus_t status,
+                                       const char*      file,
+                                       const int        line)
+{
+    if (status != CUSOLVER_STATUS_SUCCESS) {
+        auto cusolverGetErrorString = [](cusolverStatus_t status) {
+            switch (status) {
+                case CUSOLVER_STATUS_SUCCESS:
+                    return "CUSOLVER_STATUS_SUCCESS";
+                case CUSOLVER_STATUS_NOT_INITIALIZED:
+                    return "CUSOLVER_STATUS_NOT_INITIALIZED";
+                case CUSOLVER_STATUS_ALLOC_FAILED:
+                    return "CUSOLVER_STATUS_ALLOC_FAILED";
+                case CUSOLVER_STATUS_INVALID_VALUE:
+                    return "CUSOLVER_STATUS_INVALID_VALUE";
+                case CUSOLVER_STATUS_ARCH_MISMATCH:
+                    return "CUSOLVER_STATUS_ARCH_MISMATCH";
+                case CUSOLVER_STATUS_EXECUTION_FAILED:
+                    return "CUSOLVER_STATUS_EXECUTION_FAILED";
+                case CUSOLVER_STATUS_INTERNAL_ERROR:
+                    return "CUSOLVER_STATUS_INTERNAL_ERROR";
+                case CUSOLVER_STATUS_MATRIX_TYPE_NOT_SUPPORTED:
+                    return "CUSOLVER_STATUS_MATRIX_TYPE_NOT_SUPPORTED";
+                default:
+                    return "UNKNOWN_ERROR";
+            }
+        };
+
+        Log::get_logger()->error("Line {} File {}", line, file);
+        Log::get_logger()->error("CUSOLVER ERROR: {}",
+                                 cusolverGetErrorString(status));
+#ifdef _WIN32
+        system("pause");
+#else
+        exit(EXIT_FAILURE);
+#endif
+    }
+    return;
+}
+#define CUSOLVER_ERROR(err) (cusolverHandleError(err, __FILE__, __LINE__))
+
 
 // GPU_FREE
 #define GPU_FREE(ptr)              \

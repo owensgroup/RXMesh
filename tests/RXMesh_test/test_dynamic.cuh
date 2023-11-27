@@ -374,7 +374,7 @@ TEST(RXMeshDynamic, RandomFlips)
     ps_mesh->updateVertexPositions(*coords);
     ps_mesh->addEdgeScalarQuantity("toFlip", *to_flip)->setMapRange({0, 2});
     ps_mesh->setEnabled(false);
-    polyscope::show();
+    // polyscope::show();
 #endif
 
     // polyscope::removeAllStructures();
@@ -478,7 +478,7 @@ TEST(RXMeshDynamic, RandomCollapse)
     ps_mesh->addVertexScalarQuantity("vAttr", *v_attr);
     ps_mesh->addEdgeScalarQuantity("eAttr", *e_attr);
     ps_mesh->addFaceScalarQuantity("fAttr", *f_attr);
-    polyscope::show();
+    // polyscope::show();
 #endif
 
     // polyscope::removeAllStructures();

@@ -186,7 +186,8 @@ struct LPHashTable
     /**
      * @brief compute current load factor
      */
-    __host__ __device__ __inline__ float compute_load_factor(LPPair* s_table)
+    __host__ __device__ __inline__ float compute_load_factor(
+        LPPair* s_table = nullptr)const 
     {
         auto lf = [&]() {
             uint32_t m = 0;
@@ -211,7 +212,7 @@ struct LPHashTable
      * @brief compute current load factor for the stash
      */
     __host__ __device__ __inline__ float compute_stash_load_factor(
-        LPPair* s_stash)
+        LPPair* s_stash = nullptr)const 
     {
         auto lf = [&]() {
             uint32_t m = 0;
@@ -231,7 +232,6 @@ struct LPHashTable
 
         return static_cast<float>(lf()) / static_cast<float>(stash_size);
     }
-
 
 
     /**

@@ -155,6 +155,9 @@ __global__ static void slice_patches(Context        context,
                 uint32_t q = pi.patch_stash.get_patch(i);
                 if (q != INVALID32) {
                     if (context.m_patches_info[q].is_dirty()) {
+                        // printf("\n slicing: patch %u finds %u dirty",
+                        //       pi.patch_id,
+                        //       q);
                         ok = false;
                         break;
                     }
@@ -164,10 +167,13 @@ __global__ static void slice_patches(Context        context,
                 s_new_patch_id =
                     ::atomicAdd(context.m_num_patches, uint32_t(1));
                 assert(s_new_patch_id < context.m_max_num_patches);
+                context.m_patch_scheduler.push(s_new_patch_id);
             } else {
-                s_new_patch_id  = INVALID32;
-                pi.should_slice = false;
+                s_new_patch_id                           = INVALID32;
+                context.m_patches_info[pid].should_slice = false;
             }
+
+            // printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
         Bitmask s_active_v, s_active_e, s_active_f;
@@ -283,7 +289,21 @@ __global__ static void slice_patches(Context        context,
                            3 * num_faces,
                            s_fe,
                            true);
+        block.sync();
 
+        // assign edges through faces
+        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+            if (s_active_f(f) && s_new_p_owned_f(f) && s_owned_f(f)) {
+                const uint16_t e0(s_fe[3 * f + 0] >> 1),
+                    e1(s_fe[3 * f + 1] >> 1), e2(s_fe[3 * f + 2] >> 1);
+                assert(e0 < num_edges);
+                assert(e1 < num_edges);
+                assert(e2 < num_edges);
+                s_new_p_owned_e.set(e0, true);
+                s_new_p_owned_e.set(e1, true);
+                s_new_p_owned_e.set(e2, true);
+            }
+        }
         block.sync();
 
         slice<blockThreads>(context,
@@ -436,6 +456,8 @@ class RXMeshDynamic : public RXMeshStatic
      * @param oriented if the query is oriented. Valid only for Op::VV queries
      * @param with_vertex_valence if vertex valence is requested to be
      * pre-computed and stored in shared memory
+     * @param is_concurrent: in case of multiple queries (i.e., op.size() > 1),
+     * this parameter indicates if queries needs to be access at the same time
      * @param user_shmem a (lambda) function that takes the number of vertices,
      * edges, and faces and returns additional user-desired shared memory in
      * bytes
@@ -448,6 +470,7 @@ class RXMeshDynamic : public RXMeshStatic
         const bool               is_dyn              = true,
         const bool               oriented            = false,
         const bool               with_vertex_valence = false,
+        const bool               is_concurrent       = false,
         std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem =
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const
     {
@@ -457,6 +480,7 @@ class RXMeshDynamic : public RXMeshStatic
                           is_dyn,
                           oriented,
                           with_vertex_valence,
+                          is_concurrent,
                           user_shmem);
 
         RXMESH_TRACE(
@@ -488,6 +512,8 @@ class RXMeshDynamic : public RXMeshStatic
      * @param oriented if the query is oriented. Valid only for Op::VV queries
      * @param with_vertex_valence if vertex valence is requested to be
      * pre-computed and stored in shared memory
+     * @param is_concurrent: in case of multiple queries (i.e., op.size() > 1),
+     * this parameter indicates if queries needs to be access at the same time
      * @param user_shmem a (lambda) function that takes the number of vertices,
      * edges, and faces and returns additional user-desired shared memory in
      * bytes
@@ -500,6 +526,7 @@ class RXMeshDynamic : public RXMeshStatic
         const bool               is_dyn              = true,
         const bool               oriented            = false,
         const bool               with_vertex_valence = false,
+        const bool               is_concurrent       = false,
         std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem =
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const
     {
@@ -509,23 +536,18 @@ class RXMeshDynamic : public RXMeshStatic
         // static query shared memory
         size_t static_shmem = 0;
         for (auto o : op) {
-            static_shmem =
-                std::max(static_shmem,
-                         this->calc_shared_memory<blockThreads>(o, oriented));
+            size_t sh = this->calc_shared_memory<blockThreads>(o, oriented);
+            if (is_concurrent) {
+                static_shmem += sh;
+            } else {
+                static_shmem = std::max(static_shmem, sh);
+            }
         }
 
         if (is_dyn) {
-            uint16_t vertex_cap = static_cast<uint16_t>(
-                this->m_capacity_factor *
-                static_cast<float>(this->m_max_vertices_per_patch));
-
-            uint16_t edge_cap = static_cast<uint16_t>(
-                this->m_capacity_factor *
-                static_cast<float>(this->m_max_edges_per_patch));
-
-            uint16_t face_cap = static_cast<uint16_t>(
-                this->m_capacity_factor *
-                static_cast<float>(this->m_max_faces_per_patch));
+            uint16_t vertex_cap = get_per_patch_max_vertex_capacity();
+            uint16_t edge_cap   = get_per_patch_max_edge_capacity();
+            uint16_t face_cap   = get_per_patch_max_face_capacity();
 
             // connecivity (FE and EV) shared memory
             size_t connectivity_shmem = 0;
@@ -602,7 +624,8 @@ class RXMeshDynamic : public RXMeshStatic
             // memory and other things
             launch_box.smem_bytes_dyn = std::max(
                 connectivity_shmem + cavity_id_shmem + cavity_bdr_shmem +
-                    cavity_size_shmem + bitmasks_shmem + correspond_shmem,
+                    cavity_size_shmem + bitmasks_shmem + correspond_shmem +
+                    cavity_creator_shmem,
                 static_shmem + cavity_id_shmem + cavity_creator_shmem);
         } else {
             launch_box.smem_bytes_dyn = static_shmem;
@@ -644,7 +667,7 @@ class RXMeshDynamic : public RXMeshStatic
      */
     void reset_scheduler()
     {
-        this->m_rxmesh_context.m_patch_scheduler.refill();
+        this->m_rxmesh_context.m_patch_scheduler.refill(get_num_patches());
     }
 
     /**
@@ -672,6 +695,18 @@ class RXMeshDynamic : public RXMeshStatic
         constexpr uint32_t block_size = 256;
         const uint32_t     grid_size  = get_num_patches();
 
+        CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
+                              this->m_rxmesh_context.m_max_num_vertices,
+                              sizeof(uint32_t),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(&this->m_max_edges_per_patch,
+                              this->m_rxmesh_context.m_max_num_edges,
+                              sizeof(uint32_t),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
+                              this->m_rxmesh_context.m_max_num_faces,
+                              sizeof(uint32_t),
+                              cudaMemcpyDeviceToHost));
 
         // ev, fe
         uint32_t dyn_shmem =

@@ -172,13 +172,20 @@ void copy(const std::vector<T>& src, std::vector<T>& tar, int tar_start = 0)
  * @brief Compute the average and standard deviation of an input array
  */
 template <typename T>
-inline void compute_avg_stddev(const T* arr,
-                               uint32_t size,
-                               double&  avg,
-                               double&  stddev)
+inline void compute_avg_stddev_max_min(const T* arr,
+                                       uint32_t size,
+                                       double&  avg,
+                                       double&  stddev,
+                                       T&       max,
+                                       T&       min)
 {
+    max = std::numeric_limits<T>::min();
+    min = std::numeric_limits<T>::max();
+
     if (size == 1) {
         avg    = arr[0];
+        max    = arr[0];
+        min    = arr[0];
         stddev = 0;
         return;
     }
@@ -186,6 +193,9 @@ inline void compute_avg_stddev(const T* arr,
     // compute avg
     for (uint32_t i = 0; i < size; i++) {
         avg += arr[i];
+
+        max = std::max(max, arr[i]);
+        min = std::min(min, arr[i]);
     }
     avg /= size;
 

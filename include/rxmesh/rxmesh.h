@@ -173,33 +173,6 @@ class RXMesh
     }
 
     /**
-     * @brief Maximum capacity number of vertices in a patch
-     */
-    uint16_t get_per_patch_max_vertices_capacity() const
-    {
-        return static_cast<uint16_t>(std::ceil(
-            m_capacity_factor * static_cast<float>(m_max_vertices_per_patch)));
-    }
-
-    /**
-     * @brief Maximum capacity number of edges in a patch
-     */
-    uint32_t get_per_patch_max_edges_capacity() const
-    {
-        return static_cast<uint16_t>(std::ceil(
-            m_capacity_factor * static_cast<float>(m_max_edges_per_patch)));
-    }
-
-    /**
-     * @brief Maximum capacity number of faces in a patch
-     */
-    uint32_t get_per_patch_max_faces_capacity() const
-    {
-        return static_cast<uint16_t>(std::ceil(
-            m_capacity_factor * static_cast<float>(m_max_faces_per_patch)));
-    }
-
-    /**
      * @brief The time used to construct the patches on the GPU
      */
     float get_patching_time() const
@@ -253,6 +226,55 @@ class RXMesh
      * @param i global face index
      */
     const FaceHandle map_to_local_face(uint32_t i) const;
+
+    /**
+     * @brief return the number of owned vertices in a patch
+     */
+    const uint16_t get_num_owned_vertices(const uint32_t p) const
+    {
+        return m_h_num_owned_v[p];
+    }
+
+    /**
+     * @brief return the number of owned edges in a patch
+     */
+    const uint16_t get_num_owned_edges(const uint32_t p) const
+    {
+        return m_h_num_owned_e[p];
+    }
+
+    /**
+     * @brief return the number of owned faces in a patch
+     */
+    const uint16_t get_num_owned_faces(const uint32_t p) const
+    {
+        return m_h_num_owned_f[p];
+    }
+
+
+    /**
+     * @brief return the number of vertices in a patch
+     */
+    const uint16_t get_num_vertices(const uint32_t p) const
+    {
+        return m_h_patches_info[p].num_vertices[0];
+    }
+
+    /**
+     * @brief return the number of edges in a patch
+     */
+    const uint16_t get_num_edges(const uint32_t p) const
+    {
+        return m_h_patches_info[p].num_edges[0];
+    }
+
+    /**
+     * @brief return the number of faces in a patch
+     */
+    const uint16_t get_num_faces(const uint32_t p) const
+    {
+        return m_h_patches_info[p].num_faces[0];
+    }
 
     const PatchInfo& get_patch(uint32_t p) const
     {
@@ -409,6 +431,18 @@ class RXMesh
         const std::vector<std::vector<uint32_t>>& fv,
         const uint32_t                            patch_id);
 
+    // standard patch is a patch that has m_patch_size faces
+    // we apply Euler characteristic to get the number of vertices and edges in
+    // such a patch
+    uint32_t get_standard_patch_num_vertices() const;
+    uint32_t get_standard_patch_num_edges() const;
+    uint32_t get_standard_patch_num_faces() const;
+
+    // get the max vertex/edge/face capacity i.e., the max number of
+    // vertices/edges/faces allowed in a patch (for allocation purposes)
+    uint16_t get_per_patch_max_vertex_capacity() const;
+    uint16_t get_per_patch_max_edge_capacity() const;
+    uint16_t get_per_patch_max_face_capacity() const;
 
     void build_device();
     void build_device_single_patch(const uint32_t patch_id,

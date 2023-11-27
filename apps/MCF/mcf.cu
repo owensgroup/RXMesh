@@ -28,6 +28,7 @@ struct arg
 
 #include "mcf_openmesh.h"
 #include "mcf_rxmesh.h"
+#include "mcf_sparse_matrix.cuh"
 
 
 TEST(App, MCF)
@@ -52,7 +53,10 @@ TEST(App, MCF)
     mcf_openmesh(omp_get_max_threads(), input_mesh, ground_truth);
 
     // RXMesh Impl
-    mcf_rxmesh(rxmesh, ground_truth);
+    mcf_rxmesh_cg(rxmesh, ground_truth);  
+
+    // RXMesh cusolver Impl
+    mcf_rxmesh_cusolver_chol(rxmesh, ground_truth); 
 }
 
 int main(int argc, char** argv)

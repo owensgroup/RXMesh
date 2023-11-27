@@ -45,7 +45,7 @@ TEST(RXMeshDynamic, PatchScheduler)
 
     PatchScheduler sch;
     sch.init(num_patches);
-    sch.refill();
+    sch.refill(num_patches);
 
     for (int i = 0; i < 1000; ++i) {
 
