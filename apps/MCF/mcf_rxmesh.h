@@ -49,7 +49,7 @@ void init_PR(rxmesh::RXMeshStatic&             rxmesh,
 }
 
 template <typename T>
-void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
+void mcf_rxmesh_cg(rxmesh::RXMeshStatic&              rxmesh,
                 const std::vector<std::vector<T>>& ground_truth)
 {
     using namespace rxmesh;
@@ -106,11 +106,11 @@ void mcf_rxmesh(rxmesh::RXMeshStatic&              rxmesh,
     rxmesh.prepare_launch_box({rxmesh::Op::VV},
                               launch_box_init_B,
                               (void*)init_B<T, blockThreads>,
-                              true);
+                              !Arg.use_uniform_laplace);
     rxmesh.prepare_launch_box({rxmesh::Op::VV},
                               launch_box_matvec,
                               (void*)rxmesh_matvec<T, blockThreads>,
-                              true);
+                              !Arg.use_uniform_laplace);
 
 
     // init kernel to initialize RHS (B)
