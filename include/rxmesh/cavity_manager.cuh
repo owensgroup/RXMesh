@@ -231,7 +231,7 @@ struct CavityManager
         return m_s_should_slice[0];
     }
 
-   private:
+    // private:
     /**
      * @brief update all attributes such that it can be used after the topology
      * changes. This function takes as many attributes as you want

@@ -40,8 +40,6 @@ __device__ __inline__ void query_block_dispatcher(
     LPPair*&                          s_table,
     bool                              allow_not_owned = false)
 {
-    static_assert(op != Op::EE, "Op::EE is not supported!");
-
     num_src_in_patch                = 0;
     uint16_t    num_output_in_patch = 0;
     uint32_t *  input_active_mask, *input_owned_mask;
@@ -51,7 +49,8 @@ __device__ __inline__ void query_block_dispatcher(
         input_active_mask = patch_info.active_mask_v;
         input_owned_mask  = patch_info.owned_mask_v;
     }
-    if constexpr (op == Op::EV || op == Op::EF || op == Op::EVDiamond) {
+    if constexpr (op == Op::EV || op == Op::EE || op == Op::EF ||
+                  op == Op::EVDiamond) {
         num_src_in_patch  = patch_info.num_edges[0];
         input_active_mask = patch_info.active_mask_e;
         input_owned_mask  = patch_info.owned_mask_e;
@@ -205,8 +204,6 @@ __device__ __inline__ void query_block_dispatcher(
         std::is_same_v<ActiveSetHandleT, ComputeHandleT>,
         "First argument of compute_op lambda function should match the first "
         "argument of active_set lambda function ");
-
-    static_assert(op != Op::EE, "Op::EE is not supported!");
 
 
     assert(patch_id < context.m_num_patches[0]);

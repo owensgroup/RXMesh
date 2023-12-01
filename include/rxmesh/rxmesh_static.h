@@ -1165,10 +1165,12 @@ class RXMeshStatic : public RXMesh
                 op_to_string(op));
         }
 
-        if (op == Op::EVDiamond && !m_is_input_edge_manifold) {
+        if ((op == Op::EVDiamond || op == Op::EE) &&
+            !m_is_input_edge_manifold) {
             RXMESH_ERROR(
-                "RXMeshStatic::calc_shared_memory() Op::EVDiamond only works "
-                "on edge manifold mesh. The input mesh is not edge manifold");
+                "RXMeshStatic::calc_shared_memory() Op::EVDiamond and Op::EE "
+                "only works on edge manifold mesh. The input mesh is not edge "
+                "manifold");
         }
 
         size_t dynamic_smem = 0;
@@ -1413,6 +1415,24 @@ class RXMeshStatic : public RXMesh
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
             dynamic_smem += ShmemAllocator::default_alignment * 5;
+        } else if (op == Op::EE) {
+            // to store the results i.e., 4 edges for each edge
+            dynamic_smem = 4 * this->m_max_edges_per_patch * sizeof(uint16_t);
+
+            // store participant bitmask
+            dynamic_smem += max_bitmask_size<LocalEdgeT>();
+
+            // store not-owned bitmask
+            dynamic_smem += max_bitmask_size<LocalEdgeT>();
+
+            // stores vertex LP hashtable
+            uint32_t lp_smem =
+                sizeof(LPPair) * max_lp_hashtable_capacity<LocalEdgeT>();
+
+
+            // for possible padding for alignment
+            // 4 since there are 4 calls for ShmemAllocator.alloc
+            dynamic_smem += ShmemAllocator::default_alignment * 4;
         }
 
         if (oriented) {

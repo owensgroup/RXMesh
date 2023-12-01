@@ -1059,14 +1059,13 @@ __global__ static void check_uniqueness(const Context           context,
 
                 if (v0 >= patch_info.num_vertices[0] ||
                     v1 >= patch_info.num_vertices[0] || v0 == v1) {
-                    // printf("\n 1 unqiuness = %u", patch_id);
+                    printf("\n 1 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
                 if (patch_info.is_deleted(LocalVertexT(v0)) ||
                     patch_info.is_deleted(LocalVertexT(v1))) {
-
-                    // printf("\n 2 unqiuness = %u", patch_id);
+                    printf("\n 2 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -1090,14 +1089,14 @@ __global__ static void check_uniqueness(const Context           context,
                     e1 >= patch_info.num_edges[0] ||
                     e2 >= patch_info.num_edges[0] || e0 == e1 || e0 == e2 ||
                     e1 == e2) {
-                    // printf("\n 3 unqiuness = %u", patch_id);
+                    printf("\n 3 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
                 if (patch_info.is_deleted(LocalEdgeT(e0)) ||
                     patch_info.is_deleted(LocalEdgeT(e1)) ||
                     patch_info.is_deleted(LocalEdgeT(e2))) {
-                    // printf("\n 4 unqiuness = %u, f= %u", patch_id, f);
+                    printf("\n 4 unqiuness = %u, f= %u", patch_id, f);
                     ::atomicAdd(d_check, 1);
                 }
 
@@ -1111,14 +1110,14 @@ __global__ static void check_uniqueness(const Context           context,
                     v1 >= patch_info.num_vertices[0] ||
                     v2 >= patch_info.num_vertices[0] || v0 == v1 || v0 == v2 ||
                     v1 == v2) {
-                    // printf("\n 5 unqiuness = %u", patch_id);
+                    printf("\n 5 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
 
                 if (patch_info.is_deleted(LocalVertexT(v0)) ||
                     patch_info.is_deleted(LocalVertexT(v1)) ||
                     patch_info.is_deleted(LocalVertexT(v2))) {
-                    // printf("\n 6 unqiuness = %u, f=%u", patch_id, f);
+                    printf("\n 6 unqiuness = %u, f=%u", patch_id, f);
                     ::atomicAdd(d_check, 1);
                 }
             }
@@ -1847,7 +1846,8 @@ bool RXMeshDynamic::validate()
         if (!is_okay()) {
             RXMESH_WARN("RXMeshDynamic::validate() check_ribbon_edges failed");
             return false;
-            //CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
+            // CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long
+            // int)));
         }
 
         uint32_t* d_max_valence;

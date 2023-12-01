@@ -48,12 +48,14 @@ struct Query
         block.sync();
 
         for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-            const uint16_t v0 = m_patch_info.ev[2 * e + 0].id;
-            const uint16_t v1 = m_patch_info.ev[2 * e + 1].id;
-            atomicAdd(m_s_valence + v0, uint8_t(1));
-            atomicAdd(m_s_valence + v1, uint8_t(1));
-            assert(m_s_valence[v0] < 255);
-            assert(m_s_valence[v1] < 255);
+            if (!m_patch_info.is_deleted(LocalEdgeT(e))) {
+                const uint16_t v0 = m_patch_info.ev[2 * e + 0].id;
+                const uint16_t v1 = m_patch_info.ev[2 * e + 1].id;
+                atomicAdd(m_s_valence + v0, uint8_t(1));
+                atomicAdd(m_s_valence + v1, uint8_t(1));
+                assert(m_s_valence[v0] < 255);
+                assert(m_s_valence[v1] < 255);
+            }
         }
         block.sync();
     }
@@ -163,7 +165,6 @@ struct Query
                                         const bool      oriented        = false,
                                         const bool      allow_not_owned = false)
     {
-        static_assert(op != Op::EE, "Op::EE is not supported!");
 
         // Extract the type of the input parameters of the compute lambda
         // function.
@@ -223,8 +224,6 @@ struct Query
                                         const bool      oriented        = false,
                                         const bool      allow_not_owned = true)
     {
-        static_assert(op != Op::EE, "Op::EE is not supported!");
-
         m_op           = op;
         m_shmem_before = shrd_alloc.get_allocated_size_bytes();
 

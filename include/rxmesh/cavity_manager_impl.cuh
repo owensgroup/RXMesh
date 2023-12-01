@@ -1731,7 +1731,6 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
                     m_s_ownership_change_mask_e.set(edges[e], true);
                 }
             }
-            
         }
     }
 
@@ -2004,7 +2003,9 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
         // non-existing vertices
         for (uint16_t v = threadIdx.x; v < q_num_vertices_up;
              v += blockThreads) {
-
+            if (m_s_should_slice[0]) {
+                return false;
+            }
             LPPair lp = migrate_vertex(
                 q,
                 q_stash_id,
@@ -2026,9 +2027,22 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_v.insert(
                     lp, m_s_table_v, m_s_table_stash_v);
-                assert(inserted);
+                if (!inserted) {
+                    m_s_should_slice[0] = true;
+                }
+                if (!inserted) {
+                    printf("\n p= %u, load factor = %f, stash load factor = %f",
+                           patch_id(),
+                           m_patch_info.lp_v.compute_load_factor(m_s_table_v),
+                           m_patch_info.lp_v.compute_load_factor(
+                               m_s_table_stash_v));
+                }
+                // assert(inserted);
             }
             block.sync();
+        }
+        if (m_s_should_slice[0]) {
+            return false;
         }
 
 
@@ -2173,7 +2187,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         // non-existing vertices
         for (uint16_t v = threadIdx.x; v < q_num_vertices_up;
              v += blockThreads) {
-
+            if (m_s_should_slice[0]) {
+                return false;
+            }
             LPPair lp = migrate_vertex(
                 q,
                 q_stash_id,
@@ -2194,11 +2210,23 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_v.insert(
                     lp, m_s_table_v, m_s_table_stash_v);
-                assert(inserted);
+                if (!inserted) {
+                    m_s_should_slice[0] = true;
+                }
+                if (!inserted) {
+                    printf("\n p= %u, load factor = %f, stash load factor = %f",
+                           patch_id(),
+                           m_patch_info.lp_v.compute_load_factor(m_s_table_v),
+                           m_patch_info.lp_v.compute_load_factor(
+                               m_s_table_stash_v));
+                }
+                // assert(inserted);
             }
             block.sync();
         }
-
+        if (m_s_should_slice[0]) {
+            return false;
+        }
 
         if (!lock_patches_to_lock(block)) {
             return false;
@@ -2223,6 +2251,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
 
         // 4. move edges since we now have a copy of the vertices in p
         for (uint16_t e = threadIdx.x; e < q_num_edges_up; e += blockThreads) {
+            if (m_s_should_slice[0]) {
+                return false;
+            }
             LPPair lp = migrate_edge(
                 q,
                 q_stash_id,
@@ -2254,11 +2285,23 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_e.insert(
                     lp, m_s_table_e, m_s_table_stash_e);
-                assert(inserted);
+                if (!inserted) {
+                    m_s_should_slice[0] = true;
+                }
+                if (!inserted) {
+                    printf("\n p= %u, load factor = %f, stash load factor = %f",
+                           patch_id(),
+                           m_patch_info.lp_e.compute_load_factor(m_s_table_e),
+                           m_patch_info.lp_e.compute_load_factor(
+                               m_s_table_stash_e));
+                }
+                // assert(inserted);
             }
             block.sync();
         }
-
+        if (m_s_should_slice[0]) {
+            return false;
+        }
 
         if (!lock_patches_to_lock(block)) {
             return false;
@@ -2312,7 +2355,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         // make sure that there is a copy of edge in
         // m_s_src_connect_mask_e in q
         for (uint16_t e = threadIdx.x; e < q_num_edges_up; e += blockThreads) {
-
+            if (m_s_should_slice[0]) {
+                return false;
+            }
             LPPair lp =
                 migrate_edge(q,
                              q_stash_id,
@@ -2332,9 +2377,22 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_e.insert(
                     lp, m_s_table_e, m_s_table_stash_e);
-                assert(inserted);
+                if (!inserted) {
+                    m_s_should_slice[0] = true;
+                }
+                if (!inserted) {
+                    printf("\n p= %u, load factor = %f, stash load factor = %f",
+                           patch_id(),
+                           m_patch_info.lp_e.compute_load_factor(m_s_table_e),
+                           m_patch_info.lp_e.compute_load_factor(
+                               m_s_table_stash_e));
+                }
+                // assert(inserted);
             }
             block.sync();
+        }
+        if (m_s_should_slice[0]) {
+            return false;
         }
 
         if (!lock_patches_to_lock(block)) {
@@ -2361,6 +2419,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
 
         // 6.  move face since we now have a copy of the edges in p
         for (uint16_t f = threadIdx.x; f < q_num_faces_up; f += blockThreads) {
+            if (m_s_should_slice[0]) {
+                return false;
+            }
             LPPair lp = migrate_face(q,
                                      q_stash_id,
                                      q_num_faces,
@@ -2385,9 +2446,22 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (!lp.is_sentinel()) {
                 bool inserted = m_patch_info.lp_f.insert(
                     lp, m_s_table_f, m_s_table_stash_f);
-                assert(inserted);
+                if (!inserted) {
+                    m_s_should_slice[0] = true;
+                }
+                if (!inserted) {
+                    printf("\n p= %u, load factor = %f, stash load factor = %f",
+                           patch_id(),
+                           m_patch_info.lp_f.compute_load_factor(m_s_table_f),
+                           m_patch_info.lp_f.compute_load_factor(
+                               m_s_table_stash_f));
+                }
+                // assert(inserted);
             }
             block.sync();
+        }
+        if (m_s_should_slice[0]) {
+            return false;
         }
 
         if (!lock_patches_to_lock(block)) {
