@@ -155,9 +155,9 @@ __global__ static void slice_patches(Context        context,
                 uint32_t q = pi.patch_stash.get_patch(i);
                 if (q != INVALID32) {
                     if (context.m_patches_info[q].is_dirty()) {
-                        printf("\n slicing: patch %u finds %u dirty",
-                               pi.patch_id,
-                               q);
+                        // printf("\n slicing: patch %u finds %u dirty",
+                        //        pi.patch_id,
+                        //        q);
                         ok = false;
                         break;
                     }
@@ -173,7 +173,7 @@ __global__ static void slice_patches(Context        context,
                 context.m_patches_info[pid].should_slice = false;
             }
 
-            printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
+            // printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
         Bitmask s_active_v, s_active_e, s_active_f;

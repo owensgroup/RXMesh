@@ -2030,14 +2030,15 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
                 if (!inserted) {
                     m_s_should_slice[0] = true;
                 }
-                if (!inserted) {
-                    printf("\n p= %u, load factor = %f, stash load factor = %f",
-                           patch_id(),
-                           m_patch_info.lp_v.compute_load_factor(m_s_table_v),
-                           m_patch_info.lp_v.compute_load_factor(
-                               m_s_table_stash_v));
-                }
-                // assert(inserted);
+                // if (!inserted) {
+                //     printf("\n p= %u, load factor = %f, stash load factor =
+                //     %f",
+                //            patch_id(),
+                //            m_patch_info.lp_v.compute_load_factor(m_s_table_v),
+                //            m_patch_info.lp_v.compute_load_factor(
+                //                m_s_table_stash_v));
+                // }
+                //  assert(inserted);
             }
             block.sync();
         }
@@ -2213,14 +2214,15 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 if (!inserted) {
                     m_s_should_slice[0] = true;
                 }
-                if (!inserted) {
-                    printf("\n p= %u, load factor = %f, stash load factor = %f",
-                           patch_id(),
-                           m_patch_info.lp_v.compute_load_factor(m_s_table_v),
-                           m_patch_info.lp_v.compute_load_factor(
-                               m_s_table_stash_v));
-                }
-                // assert(inserted);
+                // if (!inserted) {
+                //     printf("\n p= %u, load factor = %f, stash load factor =
+                //     %f",
+                //            patch_id(),
+                //            m_patch_info.lp_v.compute_load_factor(m_s_table_v),
+                //            m_patch_info.lp_v.compute_load_factor(
+                //                m_s_table_stash_v));
+                // }
+                //  assert(inserted);
             }
             block.sync();
         }
@@ -2288,14 +2290,15 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 if (!inserted) {
                     m_s_should_slice[0] = true;
                 }
-                if (!inserted) {
-                    printf("\n p= %u, load factor = %f, stash load factor = %f",
-                           patch_id(),
-                           m_patch_info.lp_e.compute_load_factor(m_s_table_e),
-                           m_patch_info.lp_e.compute_load_factor(
-                               m_s_table_stash_e));
-                }
-                // assert(inserted);
+                // if (!inserted) {
+                //     printf("\n p= %u, load factor = %f, stash load factor =
+                //     %f",
+                //            patch_id(),
+                //            m_patch_info.lp_e.compute_load_factor(m_s_table_e),
+                //            m_patch_info.lp_e.compute_load_factor(
+                //                m_s_table_stash_e));
+                // }
+                //  assert(inserted);
             }
             block.sync();
         }
@@ -2380,14 +2383,15 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 if (!inserted) {
                     m_s_should_slice[0] = true;
                 }
-                if (!inserted) {
-                    printf("\n p= %u, load factor = %f, stash load factor = %f",
-                           patch_id(),
-                           m_patch_info.lp_e.compute_load_factor(m_s_table_e),
-                           m_patch_info.lp_e.compute_load_factor(
-                               m_s_table_stash_e));
-                }
-                // assert(inserted);
+                // if (!inserted) {
+                //     printf("\n p= %u, load factor = %f, stash load factor =
+                //     %f",
+                //            patch_id(),
+                //            m_patch_info.lp_e.compute_load_factor(m_s_table_e),
+                //            m_patch_info.lp_e.compute_load_factor(
+                //                m_s_table_stash_e));
+                // }
+                //  assert(inserted);
             }
             block.sync();
         }
@@ -2449,14 +2453,15 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 if (!inserted) {
                     m_s_should_slice[0] = true;
                 }
-                if (!inserted) {
-                    printf("\n p= %u, load factor = %f, stash load factor = %f",
-                           patch_id(),
-                           m_patch_info.lp_f.compute_load_factor(m_s_table_f),
-                           m_patch_info.lp_f.compute_load_factor(
-                               m_s_table_stash_f));
-                }
-                // assert(inserted);
+                // if (!inserted) {
+                //     printf("\n p= %u, load factor = %f, stash load factor =
+                //     %f",
+                //            patch_id(),
+                //            m_patch_info.lp_f.compute_load_factor(m_s_table_f),
+                //            m_patch_info.lp_f.compute_load_factor(
+                //                m_s_table_stash_f));
+                // }
+                //  assert(inserted);
             }
             block.sync();
         }

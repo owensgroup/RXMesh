@@ -11,7 +11,7 @@ namespace rxmesh {
 typedef uint8_t flag_t;
 
 // TRANSPOSE_ITEM_PER_THREAD
-constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 15;
+constexpr uint32_t TRANSPOSE_ITEM_PER_THREAD = 9;
 
 // used for integer rounding
 #define DIVIDE_UP(num, divisor) (num + divisor - 1) / (divisor)
