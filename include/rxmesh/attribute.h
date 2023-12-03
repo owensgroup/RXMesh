@@ -227,10 +227,7 @@ class Attribute : public AttributeBase
 
     Attribute(const Attribute& rhs) = default;
 
-    virtual ~Attribute()
-    {
-        free(m_name);
-    }
+    virtual ~Attribute() = default;
 
     /**
      * @brief Get the name of the attribute
