@@ -598,14 +598,14 @@ class RXMeshDynamic : public RXMeshStatic
             // active, owned, migrate(for vertices only), src bitmask (for
             // vertices and edges only), src connect (for vertices and edges
             // only), ownership owned_cavity_bdry (for vertices only), ribbonize
-            // (for vertices only) added_to_lp, in_cavity
+            // (for vertices only) added_to_lp, in_cavity, recover
             size_t bitmasks_shmem = 0;
-            bitmasks_shmem += 10 * detail::mask_num_bytes(vertex_cap) +
-                              10 * ShmemAllocator::default_alignment;
-            bitmasks_shmem += 7 * detail::mask_num_bytes(edge_cap) +
-                              7 * ShmemAllocator::default_alignment;
-            bitmasks_shmem += 5 * detail::mask_num_bytes(face_cap) +
-                              5 * ShmemAllocator::default_alignment;
+            bitmasks_shmem += 11 * detail::mask_num_bytes(vertex_cap) +
+                              11 * ShmemAllocator::default_alignment;
+            bitmasks_shmem += 8 * detail::mask_num_bytes(edge_cap) +
+                              8 * ShmemAllocator::default_alignment;
+            bitmasks_shmem += 6 * detail::mask_num_bytes(face_cap) +
+                              6 * ShmemAllocator::default_alignment;
 
             // active cavity bitmask
             bitmasks_shmem += detail::mask_num_bytes(face_cap / 2);

@@ -73,6 +73,13 @@ struct CavityManager
     template <typename HandleT>
     __device__ __inline__ void create(HandleT seed);
 
+
+    /**
+     * @brief recover a cavity i.e., roll back. This can be used during fill-in
+     */
+    template <typename HandleT>
+    __device__ __inline__ void recover(HandleT seed);
+
     /**
      * @brief check if a seed was successful in creating its cavity
      * Note that not all cavities can be created (by calling create()) since
@@ -688,6 +695,13 @@ struct CavityManager
     Bitmask m_s_ownership_change_mask_v, m_s_ownership_change_mask_e,
         m_s_ownership_change_mask_f;
 
+    // bitmask that indicate if a vertex/edge/face should be recovered i.e.,
+    //  if the element is deleted in shared memory (because it is inside a
+    //  cavity) but it is active in global memory, then we should set it to
+    //  active in shared memory. This is only used during fill-in when the user
+    // want to rollback on a certain cavity
+    Bitmask m_s_recover_v, m_s_recover_e, m_s_recover_f;
+
     // indicate if the mesh element is added by the user
     // This bit mask overlap with m_s_ownership_change_mask_v/e/f i.e., we reuse
     // the same memory for both since we use m_s_fill_in_v/e/f during the cavity
@@ -760,6 +774,9 @@ struct CavityManager
     // indicates if we should remove user fill-in elements before writing
     // to global memory
     bool* m_s_remove_fill_in;
+
+    // indicate if we need to recover one of the created cavities
+    bool* m_s_recover;
 
     // what mesh element (depending on CavityOp) generated this cavity
     uint16_t* m_s_cavity_creator;

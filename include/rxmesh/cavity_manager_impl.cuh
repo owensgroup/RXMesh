@@ -31,11 +31,14 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     __shared__ int num_cavities[1];
     m_s_num_cavities = num_cavities;
 
+    __shared__ bool recover[1];
+    m_s_recover = recover;
 
     if (threadIdx.x == 0) {
         m_s_readd_to_queue[0] = false;
         m_s_should_slice[0]   = false;
         m_s_remove_fill_in[0] = false;
+        m_s_recover[0]        = false;
         m_s_num_cavities[0]   = 0;
 
         // get a patch
@@ -154,6 +157,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                            Bitmask&        owned,
                            Bitmask&        active,
                            Bitmask&        ownership,
+                           Bitmask&        recover,
                            Bitmask&        fill_in,
                            Bitmask&        in_cavity,
                            const uint32_t* g_owned,
@@ -163,6 +167,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
         ownership = Bitmask(num_elements, shrd_alloc);
         in_cavity = Bitmask(num_elements, shrd_alloc);
         fill_in   = Bitmask(num_elements, ownership.m_bitmask);
+        recover   = Bitmask(num_elements, shrd_alloc);
 
         owned.reset(block);
         active.reset(block);
@@ -190,6 +195,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                 m_s_owned_mask_v,
                 m_s_active_mask_v,
                 m_s_ownership_change_mask_v,
+                m_s_recover_v,
                 m_s_fill_in_v,
                 m_s_in_cavity_v,
                 m_patch_info.owned_mask_v,
@@ -207,6 +213,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                 m_s_owned_mask_e,
                 m_s_active_mask_e,
                 m_s_ownership_change_mask_e,
+                m_s_recover_e,
                 m_s_fill_in_e,
                 m_s_in_cavity_e,
                 m_patch_info.owned_mask_e,
@@ -219,6 +226,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                 m_s_owned_mask_f,
                 m_s_active_mask_f,
                 m_s_ownership_change_mask_f,
+                m_s_recover_f,
                 m_s_fill_in_f,
                 m_s_in_cavity_f,
                 m_patch_info.owned_mask_f,
@@ -377,6 +385,78 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::create(
         ::atomicAdd(m_s_num_cavities, -1);
     }
 }
+
+
+template <uint32_t blockThreads, CavityOp cop>
+template <typename HandleT>
+__device__ __inline__ void CavityManager<blockThreads, cop>::recover(
+    HandleT seed)
+{
+    if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
+                  cop == CavityOp::VE || cop == CavityOp::VF) {
+        static_assert(std::is_same_v<HandleT, VertexHandle>,
+                      "CavityManager::recover() since CavityManager's "
+                      "template parameter operation is "
+                      "CavityOp::V/CavityOp::VV/CavityOp::VE/CavityOp::VF, "
+                      "recover() should take VertexHandle as an input");
+    }
+
+    if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
+                  cop == CavityOp::EE || cop == CavityOp::EF) {
+        static_assert(std::is_same_v<HandleT, EdgeHandle>,
+                      "CavityManager::recover() since CavityManager's "
+                      "template parameter operation is "
+                      "CavityOp::E/CavityOp::EV/CavityOp::EE/CavityOp::EF, "
+                      "recover() should take EdgeHandle as an input");
+    }
+
+    if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
+                  cop == CavityOp::FE || cop == CavityOp::FF) {
+        static_assert(std::is_same_v<HandleT, FaceHandle>,
+                      "CavityManager::recover() since CavityManager's "
+                      "template parameter operation is "
+                      "CavityOp::F/CavityOp::FV/CavityOp::FE/CavityOp::FF, "
+                      "recover() should take FaceHandle as an input");
+    }
+
+    assert(seed.patch_id() == patch_id());
+
+    // we can not recover if the cavity topology is not preserverd
+    assert(m_preserve_cavity);
+
+
+    if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
+                  cop == CavityOp::VE || cop == CavityOp::VF) {
+        assert(!m_context.m_patches_info[patch_id()].is_deleted(
+            LocalVertexT(seed.local_id())));
+        assert(m_context.m_patches_info[patch_id()].is_owned(
+            LocalVertexT(seed.local_id())));
+        m_s_recover_v.set(seed.local_id(), true);
+        m_s_recover[0] = true;
+    }
+
+    if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
+                  cop == CavityOp::EE || cop == CavityOp::EF) {
+        assert(!m_context.m_patches_info[patch_id()].is_deleted(
+            LocalEdgeT(seed.local_id())));
+        assert(m_context.m_patches_info[patch_id()].is_owned(
+            LocalEdgeT(seed.local_id())));
+        m_s_recover_e.set(seed.local_id(), true);
+        m_s_recover[0] = true;
+    }
+
+
+    if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
+                  cop == CavityOp::FE || cop == CavityOp::FF) {
+        assert(!m_context.m_patches_info[patch_id()].is_deleted(
+            LocalFaceT(seed.local_id())));
+        assert(m_context.m_patches_info[patch_id()].is_owned(
+            LocalFaceT(seed.local_id())));
+        m_s_recover_f.set(seed.local_id(), true);
+        m_s_recover[0] = true;
+    }
+}
+
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
@@ -539,6 +619,12 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     m_s_fill_in_v.reset(block);
     m_s_fill_in_e.reset(block);
     m_s_fill_in_f.reset(block);
+
+    // reset the recover bitmake which maybe used during the fill-in
+    m_s_recover_v.reset(block);
+    m_s_recover_e.reset(block);
+    m_s_recover_f.reset(block);
+
     block.sync();
 
     // store hashtable now so we could re-use the shared memory
