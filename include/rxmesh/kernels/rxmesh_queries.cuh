@@ -167,6 +167,80 @@ __device__ __forceinline__ void e_v_diamond(
 
 
 template <uint32_t blockThreads>
+__device__ __forceinline__ void e_e_manifold(
+    cooperative_groups::thread_block& block,
+    const PatchInfo&                  patch_info,
+    ShmemAllocator&                   shrd_alloc,
+    uint16_t*&                        s_output_value)
+{
+
+    // works for edge-manifold as we assume that each edge is incident to
+    // only 4 other edges (or 2 in case of boundary edges).
+    const uint16_t num_edges(patch_info.num_edges[0]),
+        num_faces(patch_info.num_faces[0]);
+
+    s_output_value = shrd_alloc.alloc<uint16_t>(4 * num_edges);
+
+    for (uint16_t e = threadIdx.x; e < 4 * num_edges; e += blockThreads) {
+        s_output_value[e] = INVALID16;
+    }
+    block.sync();
+
+    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+
+        if (!is_deleted(f, patch_info.active_mask_f)) {
+
+            uint16_t f_e[3];
+            flag_t   f_dir[3];
+            for (int i = 0; i < 3; ++i) {
+                f_e[i] = patch_info.fe[3 * f + i].id;
+                Context::unpack_edge_dir(f_e[i], f_e[i], f_dir[i]);
+                assert(f_e[i] < num_edges);
+                assert(!is_deleted(f_e[i], patch_info.active_mask_e));
+            }
+
+
+            for (int cur = 0; cur < 3; ++cur) {
+                const int nxt = (cur + 1) % 3;
+                const int prv = (cur - 1) % 3;
+
+                const uint16_t cur_e = f_e[cur];
+                const uint16_t nxt_e = f_e[nxt];
+                const uint16_t prv_e = f_e[prv];
+
+                // in case of oriented faces, we use the edge direction to guide
+                // where we should write the edges
+                int nxt_i = 4 * cur_e + 2 * f_dir[i] + 0;
+                int prv_i = 4 * cur_e + 2 * f_dir[i] + 1;
+
+                uint16_t ret_n =
+                    ::atomicCAS(s_output_value + nxt_i, INVALID16, nxt_e);
+
+                uint16_t ret_p =
+                    ::atomicCAS(s_output_value + prv_i, INVALID16, prv_e);
+
+                if (ret_n != INVALID16) {
+                    assert(ret_p == INVALID16);
+
+                    int nxt_i = 4 * cur_e + 2 * (f_dir[i] ^ 1) + 0;
+                    int prv_i = 4 * cur_e + 2 * (f_dir[i] ^ 1) + 1;
+
+                    ret_n =
+                        ::atomicCAS(s_output_value + nxt_i, INVALID16, nxt_e);
+
+                    ret_p =
+                        ::atomicCAS(s_output_value + prv_i, INVALID16, prv_e);
+
+                    assert(ret_p == INVALID16);
+                    assert(ret_n == INVALID16);
+                }
+            }
+        }
+    }
+}
+
+
+template <uint32_t blockThreads>
 __device__ __forceinline__ void e_f_manifold(const uint16_t  num_edges,
                                              const uint16_t  num_faces,
                                              const uint16_t* s_fe,
@@ -734,6 +808,11 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
 
     if constexpr (op == Op::EVDiamond) {
         e_v_diamond<blockThreads>(
+            block, patch_info, shrd_alloc, s_output_value);
+    }
+
+    if constexpr (op == Op::EE) {
+        e_e_manifold<blockThreads>(
             block, patch_info, shrd_alloc, s_output_value);
     }
 }

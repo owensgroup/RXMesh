@@ -93,7 +93,7 @@ int main(int argc, char** argv)
 
     polyscope_mesh->addVertexVectorQuantity("vNormal", *vertex_normals);
 
-    polyscope::show();
+    //polyscope::show();
 
     return 0;
 }

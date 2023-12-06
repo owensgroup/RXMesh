@@ -194,11 +194,34 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 
     Bitmask is_updated(cavity.patch_info().edges_capacity[0], shrd_alloc);
 
+    uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
+
     Bitmask to_collapse(cavity.patch_info().edges_capacity[0], shrd_alloc);
 
     Bitmask is_tri_valent(cavity.patch_info().num_vertices[0], shrd_alloc);
     is_tri_valent.reset(block);
     to_collapse.reset(block);
+
+    uint8_t* edge_valence =
+        shrd_alloc.alloc<uint8_t>(cavity.patch_info().num_edges[0]);
+
+    fill_n<blockThreads>(
+        edge_valence, cavity.patch_info().num_edges[0], uint8_t(0));
+    block.sync();
+
+    for (uint16_t f = threadIdx.x; f < cavity.patch_info().num_faces[0];
+         f += blockThreads) {
+        if (!cavity.patch_info().is_deleted(LocalFaceT(f))) {
+            uint16_t e0 = cavity.patch_info().fe[3 * f + 0].id >> 1;
+            uint16_t e1 = cavity.patch_info().fe[3 * f + 1].id >> 1;
+            uint16_t e2 = cavity.patch_info().fe[3 * f + 2].id >> 1;
+
+            atomicAdd(edge_valence + e0, 1);
+            atomicAdd(edge_valence + e1, 1);
+            atomicAdd(edge_valence + e2, 1);
+        }
+    }
+    block.sync();
 
 
     Query<blockThreads> ev_query(context, pid);
@@ -232,7 +255,8 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
             const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
             const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
             const T       edge_len_sq = glm::distance2(p0, p1);
-            if (edge_len_sq < low_edge_len_sq) {
+            if (edge_len_sq < low_edge_len_sq &&
+                edge_valence[eh.local_id()] < 3) {
                 to_collapse.set(eh.local_id(), true);
             }
         }
@@ -242,7 +266,7 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 
 
     // check long edges
-    /*auto long_edges = [&](const VertexHandle& vertex,
+    auto long_edges = [&](const VertexHandle& vertex,
                           const EdgeIterator& eiter) {
         // check if there is an edge incident to vertex that should be collapsed
         for (uint16_t c = 0; c < eiter.size(); ++c) {
@@ -286,7 +310,8 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 
                         const T edge_len = glm::distance2(p0, p1);
                         if (edge_len > high_edge_len_sq) {
-                            to_collapse.reset(c, true);
+                            to_collapse.reset(eiter.local(c), true);
+                            break;
                         }
                     }
                 }
@@ -295,7 +320,7 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
     };
 
     Query<blockThreads> ve_query(context, pid);
-    ve_query.dispatch<Op::VE>(block, shrd_alloc, long_edges);*/
+    ve_query.dispatch<Op::VE>(block, shrd_alloc, long_edges);
     ev_query.epilogue(block, shrd_alloc);
 
     block.sync();
@@ -308,10 +333,13 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 
     block.sync();
 
+    shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
+
     // create the cavity
     if (cavity.prologue(block, shrd_alloc, coords, updated)) {
 
         is_updated.reset(block);
+        block.sync();
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             const EdgeHandle src = cavity.template get_creator<EdgeHandle>(c);
@@ -324,9 +352,20 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 
             if (new_v.is_valid()) {
 
-                coords(new_v, 0) = 0.5f * (coords(v0, 0) + coords(v1, 0));
-                coords(new_v, 1) = 0.5f * (coords(v0, 1) + coords(v1, 1));
-                coords(new_v, 2) = 0.5f * (coords(v0, 2) + coords(v1, 2));
+                // printf("\n src = %u", src.local_id());
+
+                // printf("\n v0 = %f, %f, %f",
+                //       coords(v0, 0),
+                //       coords(v0, 1),
+                //       coords(v0, 2));
+                // printf("\n v1 = %f, %f, %f",
+                //       coords(v1, 0),
+                //       coords(v1, 1),
+                //       coords(v1, 2));
+
+                coords(new_v, 0) = coords(v0, 0);
+                coords(new_v, 1) = coords(v0, 1);
+                coords(new_v, 2) = coords(v0, 2);
 
                 DEdgeHandle e0 =
                     cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
@@ -369,6 +408,7 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
     }
 
     cavity.epilogue(block);
+    block.sync();
 
     if (cavity.is_successful()) {
         detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
@@ -396,7 +436,8 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 template <typename T, uint32_t blockThreads>
 __global__ static void edge_flip(rxmesh::Context                  context,
                                  const rxmesh::VertexAttribute<T> coords,
-                                 rxmesh::EdgeAttribute<int8_t>    updated)
+                                 rxmesh::EdgeAttribute<int8_t>    updated,
+                                 rxmesh::VertexAttribute<int>     v_valence)
 {
     // EVDiamond and valence
     using namespace rxmesh;
@@ -417,15 +458,23 @@ __global__ static void edge_flip(rxmesh::Context                  context,
 
     Query<blockThreads> query(context, cavity.patch_id());
     query.compute_vertex_valence(block, shrd_alloc);
+    block.sync();
+
+    detail::for_each_vertex(cavity.patch_info(), [&](VertexHandle vh) {
+        v_valence(vh) = query.vertex_valence(vh.local_id());
+    });
+
+    block.sync();
+
 
     auto should_flip = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         // iter[0] and iter[2] are the edge two vertices
         // iter[1] and iter[3] are the two opposite vertices
 
 
-        // we use the local index since we are only interested in the valence
-        // which computed on the local index space
-        if (updated(eh) == 0) {
+        // we use the local index since we are only interested in the
+        // valence which computed on the local index space
+        if (updated(eh) == 0 && iter[1].is_valid() && iter[3].is_valid()) {
             const uint16_t va = iter.local(0);
             const uint16_t vb = iter.local(2);
 
@@ -465,9 +514,11 @@ __global__ static void edge_flip(rxmesh::Context                  context,
     query.dispatch<Op::EVDiamond>(block, shrd_alloc, should_flip);
     block.sync();
 
-    if (cavity.prologue(block, shrd_alloc, coords, updated)) {
+
+    if (cavity.prologue(block, shrd_alloc, coords, updated, v_valence)) {
 
         is_updated.reset(block);
+        block.sync();
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
@@ -491,6 +542,7 @@ __global__ static void edge_flip(rxmesh::Context                  context,
     }
 
     cavity.epilogue(block);
+    block.sync();
 
     if (cavity.is_successful()) {
         detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {

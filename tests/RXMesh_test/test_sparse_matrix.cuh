@@ -209,7 +209,7 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
     cuda_query(0);
 
     // generate rxmesh obj
-    RXMeshStatic rxmesh(rxmesh_args.obj_file_name, rxmesh_args.quite);
+    RXMeshStatic rxmesh(rxmesh_args.obj_file_name);
 
     uint32_t num_vertices = rxmesh.get_num_vertices();
 
@@ -282,7 +282,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 
     // generate rxmesh obj
     std::string  obj_path = rxmesh_args.obj_file_name;
-    RXMeshStatic rxmesh(obj_path, rxmesh_args.quite);
+    RXMeshStatic rxmesh(obj_path);
 
     uint32_t num_vertices = rxmesh.get_num_vertices();
 
@@ -345,7 +345,7 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 
     // generate rxmesh obj
     std::string  obj_path = rxmesh_args.obj_file_name;
-    RXMeshStatic rxmesh(obj_path, rxmesh_args.quite);
+    RXMeshStatic rxmesh(obj_path);
 
     uint32_t num_vertices = rxmesh.get_num_vertices();
 

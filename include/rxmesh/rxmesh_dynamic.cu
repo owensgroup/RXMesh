@@ -1065,7 +1065,6 @@ __global__ static void check_uniqueness(const Context           context,
 
                 if (patch_info.is_deleted(LocalVertexT(v0)) ||
                     patch_info.is_deleted(LocalVertexT(v1))) {
-
                     // printf("\n 2 unqiuness = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 }
@@ -1847,7 +1846,8 @@ bool RXMeshDynamic::validate()
         if (!is_okay()) {
             RXMESH_WARN("RXMeshDynamic::validate() check_ribbon_edges failed");
             return false;
-            //CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long int)));
+            // CUDA_ERROR(cudaMemset(d_check, 0, sizeof(unsigned long long
+            // int)));
         }
 
         uint32_t* d_max_valence;
