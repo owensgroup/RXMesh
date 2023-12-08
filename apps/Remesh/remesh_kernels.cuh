@@ -224,7 +224,7 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
     Query<blockThreads> ev_query(context, pid);
     ev_query.compute_vertex_valence(block, shrd_alloc);
 
-    ev_query.prologue<Op::EV>(block, shrd_alloc);
+    ev_query.prologue<Op::EV>(block, shrd_alloc, false, false);
 
     // mark a vertex if it is connected to a tri-valent vertex by an edge
     auto mark_vertices = [&](const EdgeHandle& eh, const VertexIterator& iter) {
