@@ -196,11 +196,8 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
-    Bitmask to_collapse(cavity.patch_info().edges_capacity[0], shrd_alloc);
-
     Bitmask is_tri_valent(cavity.patch_info().num_vertices[0], shrd_alloc);
     is_tri_valent.reset(block);
-    to_collapse.reset(block);
 
     uint8_t* edge_valence =
         shrd_alloc.alloc<uint8_t>(cavity.patch_info().num_edges[0]);
@@ -229,14 +226,15 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 
     ev_query.prologue<Op::EV>(block, shrd_alloc);
 
-    // mark tri-valent vertices through edges
+    // mark a vertex if it is connected to a tri-valent vertex by an edge
     auto mark_vertices = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         if (eh.patch_id() == pid) {
             const uint16_t v0(iter.local(0)), v1(iter.local(1));
-            if (ev_query.vertex_valence(v0) <= 3 ||
-                ev_query.vertex_valence(v1) <= 3) {
-                is_tri_valent.set(v0, true);
+            if (ev_query.vertex_valence(v0) == 3) {
                 is_tri_valent.set(v1, true);
+            }
+            if (ev_query.vertex_valence(v1) == 3) {
+                is_tri_valent.set(v0, true);
             }
         }
     };
@@ -249,7 +247,7 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
         // the collapse. Otherwise, we will run into inconsistent topology
         // problem i.e., fold over
         if (eh.patch_id() == pid && updated(eh) == 0 &&
-            !is_tri_valent(iter.local(0)) && !is_tri_valent(iter.local(1))) {
+            !(is_tri_valent(iter.local(0)) && is_tri_valent(iter.local(1)))) {
             const VertexHandle v0(iter[0]), v1(iter[1]);
 
             const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
@@ -257,81 +255,16 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
             const T       edge_len_sq = glm::distance2(p0, p1);
             if (edge_len_sq < low_edge_len_sq &&
                 edge_valence[eh.local_id()] < 3) {
-                to_collapse.set(eh.local_id(), true);
+                cavity.create(eh);
             }
         }
     };
     ev_query.run_compute(block, should_collapse);
     block.sync();
 
-
-    // check long edges
-    auto long_edges = [&](const VertexHandle& vertex,
-                          const EdgeIterator& eiter) {
-        // check if there is an edge incident to vertex that should be collapsed
-        for (uint16_t c = 0; c < eiter.size(); ++c) {
-            if (to_collapse(eiter.local(c))) {
-
-                // iterator over the two vertices incident to c
-                VertexIterator viter =
-                    ev_query.template get_iterator<VertexIterator>(
-                        eiter.local(c));
-
-                assert(viter.size() == 2);
-                assert(viter[0] == vertex || viter[1] == vertex);
-
-                // if vertex is the one will be deleted
-                if (viter[1] == vertex) {
-                    const Vec3<T> p0(coords(viter[0], 0),
-                                     coords(viter[0], 1),
-                                     coords(viter[0], 2));
-
-                    for (uint16_t i = 0; i < eiter.size(); ++i) {
-                        if (i == c) {
-                            continue;
-                        }
-                        VertexIterator vviter =
-                            ev_query.template get_iterator<VertexIterator>(
-                                eiter.local(i));
-
-                        assert(vviter.size() == 2);
-                        assert(vviter[0] == vertex || vviter[1] == vertex);
-
-                        Vec3<T> p1;
-                        if (vertex != vviter[0]) {
-                            p1 = Vec3<T>(coords(vviter[0], 0),
-                                         coords(vviter[0], 1),
-                                         coords(vviter[0], 2));
-                        } else {
-                            p1 = Vec3<T>(coords(vviter[1], 0),
-                                         coords(vviter[1], 1),
-                                         coords(vviter[1], 2));
-                        }
-
-                        const T edge_len = glm::distance2(p0, p1);
-                        if (edge_len > high_edge_len_sq) {
-                            to_collapse.reset(eiter.local(c), true);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    };
-
-    Query<blockThreads> ve_query(context, pid);
-    ve_query.dispatch<Op::VE>(block, shrd_alloc, long_edges);
     ev_query.epilogue(block, shrd_alloc);
-
     block.sync();
 
-    detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
-        if (to_collapse(eh.local_id())) {
-            cavity.create(eh);
-        }
-    });
-
-    block.sync();
 
     shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
 
@@ -348,59 +281,71 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 
             cavity.get_vertices(src, v0, v1);
 
-            const VertexHandle new_v = cavity.add_vertex();
+            const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
 
-            if (new_v.is_valid()) {
 
-                // printf("\n src = %u", src.local_id());
+            // check if we will create a long edge
+            bool long_edge = false;
 
-                // printf("\n v0 = %f, %f, %f",
-                //       coords(v0, 0),
-                //       coords(v0, 1),
-                //       coords(v0, 2));
-                // printf("\n v1 = %f, %f, %f",
-                //       coords(v1, 0),
-                //       coords(v1, 1),
-                //       coords(v1, 2));
+            for (uint16_t i = 0; i < size; ++i) {
+                const VertexHandle v1 = cavity.get_cavity_vertex(c, i);
+                const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+                const T       edge_len_sq = glm::distance2(p0, p1);
+                if (edge_len_sq > high_edge_len_sq) {
+                    long_edge = true;
+                    break;
+                }
+            }
 
-                coords(new_v, 0) = coords(v0, 0);
-                coords(new_v, 1) = coords(v0, 1);
-                coords(new_v, 2) = coords(v0, 2);
+            if (long_edge) {
+                // roll back
+                cavity.recover(src);
+            } else {
 
-                DEdgeHandle e0 =
-                    cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
+                const VertexHandle new_v = cavity.add_vertex();
 
-                if (e0.is_valid()) {
-                    is_updated.set(e0.local_id(), true);
+                if (new_v.is_valid()) {
 
-                    const DEdgeHandle e_init = e0;
+                    coords(new_v, 0) = p0[0];
+                    coords(new_v, 1) = p0[1];
+                    coords(new_v, 2) = p0[2];
 
-                    for (uint16_t i = 0; i < size; ++i) {
-                        const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+                    DEdgeHandle e0 =
+                        cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
 
-                        is_updated.set(e.local_id(), true);
+                    if (e0.is_valid()) {
+                        is_updated.set(e0.local_id(), true);
 
-                        const VertexHandle v_end =
-                            cavity.get_cavity_vertex(c, (i + 1) % size);
+                        const DEdgeHandle e_init = e0;
 
-                        const DEdgeHandle e1 =
-                            (i == size - 1) ?
-                                e_init.get_flip_dedge() :
-                                cavity.add_edge(
-                                    cavity.get_cavity_vertex(c, i + 1), new_v);
+                        for (uint16_t i = 0; i < size; ++i) {
+                            const DEdgeHandle e = cavity.get_cavity_edge(c, i);
 
-                        if (!e1.is_valid()) {
-                            break;
+                            is_updated.set(e.local_id(), true);
+
+                            const VertexHandle v_end =
+                                cavity.get_cavity_vertex(c, (i + 1) % size);
+
+                            const DEdgeHandle e1 =
+                                (i == size - 1) ?
+                                    e_init.get_flip_dedge() :
+                                    cavity.add_edge(
+                                        cavity.get_cavity_vertex(c, i + 1),
+                                        new_v);
+
+                            if (!e1.is_valid()) {
+                                break;
+                            }
+
+                            is_updated.set(e1.local_id(), true);
+
+                            const FaceHandle new_f = cavity.add_face(e0, e, e1);
+
+                            if (!new_f.is_valid()) {
+                                break;
+                            }
+                            e0 = e1.get_flip_dedge();
                         }
-
-                        is_updated.set(e1.local_id(), true);
-
-                        const FaceHandle new_f = cavity.add_face(e0, e, e1);
-
-                        if (!new_f.is_valid()) {
-                            break;
-                        }
-                        e0 = e1.get_flip_dedge();
                     }
                 }
             }
