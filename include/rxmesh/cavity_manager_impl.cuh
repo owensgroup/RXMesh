@@ -3226,6 +3226,147 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::update_attribute(
 
 
 template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void CavityManager<blockThreads, cop>::recover_faces()
+{
+    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+        if (m_s_recover_f(f)) {
+            if (!m_patch_info.is_deleted(LocalFaceT(f))) {
+                m_s_active_mask_f.set(f, true);
+#ifndef NDEBUG
+                for (int i = 0; i < 3; ++i) {
+                    const uint16_t e = m_s_fe[3 * f + i] >> 1;
+                    assert(m_s_recover_e(e) || m_s_active_mask_e(e));
+                }
+#endif
+            }
+        }
+    }
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void CavityManager<blockThreads, cop>::recover_edges()
+{
+    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+        if (m_s_recover_e(e)) {
+            if (!m_patch_info.is_deleted(LocalEdgeT(e))) {
+                m_s_active_mask_e.set(e, true);
+#ifndef NDEBUG
+                for (int i = 0; i < 2; ++i) {
+                    const uint16_t v = m_s_ev[2 * e + i];
+                    assert(m_s_recover_v(v) || m_s_active_mask_v(v));
+                }
+#endif
+            }
+        }
+    }
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void CavityManager<blockThreads, cop>::recover_vertices()
+{
+    for (uint16_t v = threadIdx.x; v < m_s_num_vertices[0]; v += blockThreads) {
+        if (m_s_recover_v(v)) {
+            if (!m_patch_info.is_deleted(LocalVertexT(v))) {
+                m_s_active_mask_v.set(v, true);
+            }
+        }
+    }
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::recover_vertices_through_edges()
+{
+    // scatter
+    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+        if (m_s_recover_e(e)) {
+            for (int i = 0; i < 2; ++i) {
+                const uint16_t v = m_s_ev[2 * e + i];
+                assert(v < m_s_num_vertices[0]);
+                assert(!m_patch_info.is_deleted(LocalVertexT(v)));
+                m_s_recover_v.set(v, true);
+                m_s_active_mask_v.set(v, true);
+            }
+        }
+    }
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::recover_edges_through_faces()
+{
+    // scatter
+    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+        if (m_s_recover_f(f)) {
+            for (int i = 0; i < 3; ++i) {
+                const uint16_t e = m_s_fe[3 * f + i] >> 1;
+                assert(e < m_s_num_edges[0]);
+                assert(!m_patch_info.is_deleted(LocalEdgeT(e)));
+                m_s_recover_e.set(e, true);
+                m_s_active_mask_e.set(e, true);
+            }
+        }
+    }
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::recover_edges_through_vertices()
+{
+    // gather
+    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+        if (!m_s_active_mask_e(e) && !m_patch_info.is_deleted(LocalEdgeT(e))) {
+            bool recover = false;
+
+            for (int i = 0; i < 2; ++i) {
+                const uint16_t v = m_s_ev[2 * e + i];
+                if (v < m_s_num_vertices[0]) {
+                    if (m_s_recover_v(v)) {
+                        recover = true;
+                        break;
+                    }
+                }
+            }
+            if (recover) {
+                m_s_recover_e.set(e, true);
+                m_s_active_mask_e.set(e, true);
+            }
+        }
+    }
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::recover_faces_through_edges()
+{
+    // gather
+    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+
+        if (!m_s_active_mask_f(f) && !m_patch_info.is_deleted(LocalFaceT(f))) {
+
+            bool recover = false;
+
+            for (int i = 0; i < 3; ++i) {
+                const uint16_t e = m_s_fe[3 * f + i] >> 1;
+                if (e < m_s_num_edges[0]) {
+                    if (m_s_recover_e(e)) {
+                        recover = true;
+                        break;
+                    }
+                }
+            }
+
+            if (recover) {
+                m_s_recover_f.set(f, true);
+                m_s_active_mask_f.set(f, true);
+            }
+        }
+    }
+}
+
+template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
     cooperative_groups::thread_block& block)
 {
@@ -3323,6 +3464,28 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
             }
         }
 #endif
+        if (m_s_recover[0]) {
+            if constexpr (cop == CavityOp::V) {
+                recover_vertices();
+                recover_edges_through_vertices();
+                block.sync();
+                recover_faces_through_edges();
+            }
+
+            if constexpr (cop == CavityOp::EV) {
+                recover_vertices_through_edges();
+                block.sync();
+                recover_edges_through_vertices();
+                block.sync();
+                recover_faces_through_edges();
+            }
+
+            if constexpr (cop == CavityOp::E) {
+                recover_edges();
+                recover_faces_through_edges();
+            }
+            block.sync();
+        }
 
         // store bitmask
         if (m_s_remove_fill_in[0]) {

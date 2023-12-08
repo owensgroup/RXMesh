@@ -664,6 +664,51 @@ struct CavityManager
         const LPPair*                     s_stash);
 
 
+    /**
+     * @brief recover faces by setting their bit in m_s_active_mask_f if their
+     * bit is set in m_s_recover_f and they are active in global memory
+     */
+    __device__ __inline__ void recover_faces();
+
+    /**
+     * @brief recover edges by setting their bit in m_s_active_mask_e if their
+     * bit is set in m_s_recover_e and they are active in global memory
+     */
+    __device__ __inline__ void recover_edges();
+
+    /**
+     * @brief recover vertices by setting their bit in m_s_active_mask_v if
+     * their bit is set in m_s_recover_v and they are active in global memory
+     */
+    __device__ __inline__ void recover_vertices();
+
+
+    /**
+     * @brief set the bit for a vertex in m_s_recover_v if it is incident to an
+     * edge that has its bit set in m_s_recover_e
+     */
+    __device__ __inline__ void recover_vertices_through_edges();
+
+    /**
+     * @brief set the bit for an edge in m_s_recover_e if it is incident to a
+     * face that has its bit set in m_s_recover_f
+     */
+    __device__ __inline__ void recover_edges_through_faces();
+
+
+    /**
+     * @brief set the bit for an edge in m_s_recover_e if it is incident to an
+     * vertex that has its bit set in m_s_recover_v
+     */
+    __device__ __inline__ void recover_edges_through_vertices();
+
+    /**
+     * @brief set the bit for a face in m_s_recover_f if it is incident to an
+     * edge that has its bit set in m_s_recover_e
+     */
+    __device__ __inline__ void recover_faces_through_edges();
+
+
     // indicate if this block can write its updates to global memory during
     // epilogue
     bool m_write_to_gmem;
