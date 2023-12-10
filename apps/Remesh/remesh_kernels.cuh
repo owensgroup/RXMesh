@@ -392,7 +392,7 @@ __global__ static void edge_flip(rxmesh::Context                  context,
     ShmemAllocator shrd_alloc;
 
     CavityManager<blockThreads, CavityOp::E> cavity(
-        block, context, shrd_alloc, false);
+        block, context, shrd_alloc, false, false);
 
 
     if (cavity.patch_id() == INVALID32) {
