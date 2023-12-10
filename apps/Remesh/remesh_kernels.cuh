@@ -381,8 +381,7 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 template <typename T, uint32_t blockThreads>
 __global__ static void edge_flip(rxmesh::Context                  context,
                                  const rxmesh::VertexAttribute<T> coords,
-                                 rxmesh::EdgeAttribute<int8_t>    updated,
-                                 rxmesh::VertexAttribute<int>     v_valence)
+                                 rxmesh::EdgeAttribute<int8_t>    updated)
 {
     // EVDiamond and valence
     using namespace rxmesh;
@@ -404,10 +403,6 @@ __global__ static void edge_flip(rxmesh::Context                  context,
     Query<blockThreads> query(context, cavity.patch_id());
     query.compute_vertex_valence(block, shrd_alloc);
     block.sync();
-
-    detail::for_each_vertex(cavity.patch_info(), [&](VertexHandle vh) {
-        v_valence(vh) = query.vertex_valence(vh.local_id());
-    });
 
     block.sync();
 
@@ -460,7 +455,7 @@ __global__ static void edge_flip(rxmesh::Context                  context,
     block.sync();
 
 
-    if (cavity.prologue(block, shrd_alloc, coords, updated, v_valence)) {
+    if (cavity.prologue(block, shrd_alloc, coords, updated)) {
 
         is_updated.reset(block);
         block.sync();

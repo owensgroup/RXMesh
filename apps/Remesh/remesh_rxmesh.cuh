@@ -164,9 +164,9 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&         rx,
 
             ps_mesh->addEdgeScalarQuantity("updated", *updated);
 
-            rx.render_vertex_patch();
-            rx.render_edge_patch();
-            rx.render_face_patch();
+            // rx.render_vertex_patch();
+            // rx.render_edge_patch();
+            rx.render_face_patch()->setEnabled(false);
 
             // uint32_t cc = 0;
             // rx.render_patch(cc)->setEnabled(false);
@@ -192,7 +192,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&         rx,
     rx.reset_scheduler();
     while (!rx.is_queue_empty()) {
         LaunchBox<blockThreads> launch_box;
-        rx.prepare_launch_box({Op::VE, Op::EV},
+        rx.prepare_launch_box({Op::EV},
                               launch_box,
                               (void*)edge_collapse<T, blockThreads>,
                               true,
@@ -201,9 +201,9 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&         rx,
                               true,
                               [=](uint32_t v, uint32_t e, uint32_t f) {
                                   return detail::mask_num_bytes(v) +
-                                         2 * detail::mask_num_bytes(e) +
+                                         detail::mask_num_bytes(e) +
                                          e * sizeof(uint8_t) +
-                                         4 * ShmemAllocator::default_alignment;
+                                         3 * ShmemAllocator::default_alignment;
                               });
 
         edge_collapse<T, blockThreads>
@@ -234,6 +234,8 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&         rx,
 
         bool show = false;
         if (show) {
+            // polyscope::removeAllStructures();
+
             coords->move(DEVICE, HOST);
             rx.export_obj("collaspse_" + std::to_string(++iter) + ".obj",
                           *coords);
@@ -248,6 +250,15 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&         rx,
             rx.render_vertex_patch();
             rx.render_edge_patch();
             rx.render_face_patch();
+
+            // rx.render_patch(0);
+            // rx.render_patch(1);
+
+            polyscope::show();
+
+            int p_red = 0;
+            rx.render_patch(p_red);
+
             polyscope::show();
         }
     }
@@ -256,8 +267,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&         rx,
 template <typename T>
 inline void equalize_valences(rxmesh::RXMeshDynamic&         rx,
                               rxmesh::VertexAttribute<T>*    coords,
-                              rxmesh::EdgeAttribute<int8_t>* updated,
-                              rxmesh::VertexAttribute<int>*  v_valence)
+                              rxmesh::EdgeAttribute<int8_t>* updated)
 {
     using namespace rxmesh;
 
@@ -278,13 +288,12 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&         rx,
         edge_flip<T, blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
                                      launch_box.smem_bytes_dyn>>>(
-            rx.get_context(), *coords, *updated, *v_valence);
+            rx.get_context(), *coords, *updated);
 
         rx.cleanup();
-        rx.slice_patches(*coords, *updated, *v_valence);
+        rx.slice_patches(*coords, *updated);
         rx.cleanup();
         // stats(rx);
-        break;
     }
 }
 
@@ -327,9 +336,6 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     new_coords->reset(LOCATION_ALL, 0);
     auto updated = rx.add_edge_attribute<int8_t>("Updated", 1);
 
-    auto v_valence = rx.add_vertex_attribute<int>("vValence", 1);
-    v_valence->reset(LOCATION_ALL, 0);
-
     // compute average edge length
     float* average_edge_len;
     CUDA_ERROR(cudaMallocManaged((void**)&average_edge_len, sizeof(float)));
@@ -358,56 +364,53 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
         (4.f / 3.f) * Arg.relative_len * average_edge_len[0];
     const float high_edge_len_sq = high_edge_len * high_edge_len;
 
+    // stats(rx);
+
     GPUTimer timer;
     timer.start();
-
-    stats(rx);
-
 
     for (uint32_t iter = 0; iter < Arg.num_iter; ++iter) {
         split_long_edges(rx, coords.get(), updated.get(), high_edge_len_sq);
         collapse_short_edges(
             rx, coords.get(), updated.get(), low_edge_len_sq, high_edge_len_sq);
-        equalize_valences(rx, coords.get(), updated.get(), v_valence.get());
+        equalize_valences(rx, coords.get(), updated.get());
         tangential_relaxation(rx, coords.get(), new_coords.get());
         std::swap(new_coords, coords);
+    }
 
-        timer.stop();
-        CUDA_ERROR(cudaDeviceSynchronize());
-        CUDA_ERROR(cudaGetLastError());
+    timer.stop();
+    CUDA_ERROR(cudaDeviceSynchronize());
+    CUDA_ERROR(cudaGetLastError());
 
-        rx.update_host();
-        coords->move(DEVICE, HOST);
-        new_coords->move(DEVICE, HOST);
+    rx.update_host();
+    coords->move(DEVICE, HOST);
+    new_coords->move(DEVICE, HOST);
 
-        v_valence->move(DEVICE, HOST);
+    EXPECT_TRUE(rx.validate());
 
-        EXPECT_TRUE(rx.validate());
-
-        rx.export_obj("remesh.obj", *coords);
-        RXMESH_INFO("remesh_rxmesh() took {} (ms)", timer.elapsed_millis());
-        RXMESH_INFO("Output mesh #Vertices {}", rx.get_num_vertices());
-        RXMESH_INFO("Output mesh #Edges {}", rx.get_num_edges());
-        RXMESH_INFO("Output mesh #Faces {}", rx.get_num_faces());
-        RXMESH_INFO("Output mesh #Patches {}", rx.get_num_patches());
+    //rx.export_obj("remesh.obj", *coords);
+    RXMESH_INFO("remesh_rxmesh() took {} (ms)", timer.elapsed_millis());
+    RXMESH_INFO("Output mesh #Vertices {}", rx.get_num_vertices());
+    RXMESH_INFO("Output mesh #Edges {}", rx.get_num_edges());
+    RXMESH_INFO("Output mesh #Faces {}", rx.get_num_faces());
+    RXMESH_INFO("Output mesh #Patches {}", rx.get_num_patches());
 
 
 #if USE_POLYSCOPE
-        rx.update_polyscope();
+    rx.update_polyscope();
 
-        auto ps_mesh = rx.get_polyscope_mesh();
-        ps_mesh->updateVertexPositions(*coords);
-        ps_mesh->setEnabled(false);
+    auto ps_mesh = rx.get_polyscope_mesh();
+    ps_mesh->updateVertexPositions(*coords);
+    ps_mesh->setEnabled(false);
 
-        ps_mesh->addVertexScalarQuantity("vValence", *v_valence);
-
-        // rx.render_patch(0);
-        rx.render_vertex_patch();
-        rx.render_edge_patch();
-        rx.render_face_patch();
-        polyscope::show();
+    // rx.render_patch(0);
+    // rx.render_patch(1);
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();
+    polyscope::show();
 #endif
-    }
+
 
     CUDA_ERROR(cudaFree(average_edge_len));
 }
