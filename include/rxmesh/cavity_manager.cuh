@@ -63,7 +63,8 @@ struct CavityManager
                                         Context&        context,
                                         ShmemAllocator& shrd_alloc,
                                         bool            preserve_cavity,
-                                        uint32_t        current_p = 0);
+                                        bool     allow_touching_cavities = true,
+                                        uint32_t current_p               = 0);
 
     /**
      * @brief create new cavity from a seed element. The seed element type
@@ -783,6 +784,16 @@ struct CavityManager
     uint16_t* m_s_q_correspondence_vf;
     uint16_t  m_correspondence_size_e;
     uint16_t  m_correspondence_size_vf;
+
+    // For an edge on the boundary of a cavity, here we store the cavity ID of
+    // such edges (only the boundary ones). We then use this to filter out
+    // cavities if they are touching when they user does not want cavities to
+    // shared edges
+    //  This buffer overlap with m_s_q_correspondence_e
+    int16_t* m_s_boudary_edges_cavity_id;
+
+    // if cavities that share an edge are allowed
+    bool m_allow_touching_cavities;
 
     bool* m_s_readd_to_queue;
 

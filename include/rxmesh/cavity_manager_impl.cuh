@@ -6,10 +6,12 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     Context&                          context,
     ShmemAllocator&                   shrd_alloc,
     bool                              preserve_cavity,
+    bool                              allow_touching_cavities,
     uint32_t                          current_p)
     : m_write_to_gmem(false),
       m_context(context),
-      m_preserve_cavity(preserve_cavity)
+      m_preserve_cavity(preserve_cavity),
+      m_allow_touching_cavities(allow_touching_cavities)
 {
     __shared__ uint32_t s_patch_id;
 
@@ -236,6 +238,8 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     m_correspondence_size_e = max_edge_cap;
     m_s_q_correspondence_e =
         shrd_alloc.alloc<uint16_t>(m_correspondence_size_e);
+    m_s_boudary_edges_cavity_id =
+        reinterpret_cast<int16_t*>(m_s_q_correspondence_e);
     m_correspondence_size_vf = std::max(max_face_cap, max_vertex_cap);
     m_s_q_correspondence_vf =
         shrd_alloc.alloc<uint16_t>(m_correspondence_size_vf);
@@ -1026,6 +1030,13 @@ __device__ __inline__ void
 CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
     cooperative_groups::thread_block& block)
 {
+    constexpr int16_t invalid_cavity = 0x7FFF;
+
+    if (!m_allow_touching_cavities) {
+        fill_n<blockThreads>(
+            m_s_boudary_edges_cavity_id, m_s_num_edges[0], invalid_cavity);
+        block.sync();
+    }
 
     assert(itemPerThread * blockThreads >= m_s_num_faces[0]);
 
@@ -1054,9 +1065,13 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
         // we could check on if the face is deleted but we only mark faces
         // that are not deleted so no need to double check this
         if (face_cavity != INVALID16) {
-            const uint16_t c0 = m_s_cavity_id_e[m_s_fe[3 * f + 0] >> 1];
-            const uint16_t c1 = m_s_cavity_id_e[m_s_fe[3 * f + 1] >> 1];
-            const uint16_t c2 = m_s_cavity_id_e[m_s_fe[3 * f + 2] >> 1];
+            const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
+            const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
+            const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
+
+            const uint16_t c0 = m_s_cavity_id_e[e0];
+            const uint16_t c1 = m_s_cavity_id_e[e1];
+            const uint16_t c2 = m_s_cavity_id_e[e2];
 
             // the edge tag is supposed to be the same as the face tag
             assert(c0 == INVALID16 || c0 == face_cavity);
@@ -1077,6 +1092,19 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
                 local_offset[i] =
                     ::atomicAdd(m_s_cavity_size_prefix + face_cavity,
                                 num_edges_on_boundary);
+
+                if (!m_allow_touching_cavities) {
+
+                    if (c0 == INVALID16) {
+                        m_s_boudary_edges_cavity_id[e0] = face_cavity;
+                    }
+                    if (c1 == INVALID16) {
+                        m_s_boudary_edges_cavity_id[e1] = face_cavity;
+                    }
+                    if (c2 == INVALID16) {
+                        m_s_boudary_edges_cavity_id[e2] = face_cavity;
+                    }
+                }
             }
         }
     }
@@ -1087,6 +1115,27 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
                                                        m_s_num_cavities[0]);
     block.sync();
 
+
+    if (!m_allow_touching_cavities) {
+        for (uint16_t f = threadIdx.x; f < m_s_num_faces[0];
+             f += blockThreads) {
+            uint16_t face_cavity = m_s_cavity_id_f[f];
+            if (face_cavity != INVALID16) {
+                for (int i = 0; i < 3; ++i) {
+
+                    const uint16_t e = m_s_fe[3 * f + i] >> 1;
+
+                    const int e_bd_cavity_id = m_s_boudary_edges_cavity_id[e];
+
+                    if (e_bd_cavity_id != invalid_cavity &&
+                        e_bd_cavity_id != face_cavity) {
+                        deactivate_cavity(face_cavity);
+                    }
+                }
+            }
+        }
+    }
+    block.sync();
 
     // we have allocated m_s_cavity_boundary_edges with size equal to number of
     // edges in the patch. However, total number of edges that represent all
