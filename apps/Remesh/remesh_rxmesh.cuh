@@ -113,22 +113,19 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&         rx,
 
     rx.reset_scheduler();
     while (!rx.is_queue_empty()) {
-        // RXMESH_INFO("*** queue size= {}",
-        //            rx.get_context().m_patch_scheduler.size());
-        // rx.get_context().m_patch_scheduler.print_list();
 
         LaunchBox<blockThreads> launch_box;
-        rx.prepare_launch_box({Op::EV},
-                              launch_box,
-                              (void*)edge_split<T, blockThreads>,
-                              true,
-                              false,
-                              false,
-                              false,
-                              [&](uint32_t v, uint32_t e, uint32_t f) {
-                                  return detail::mask_num_bytes(e) +
-                                         ShmemAllocator::default_alignment;
-                              });
+        rx.update_launch_box({Op::EV},
+                             launch_box,
+                             (void*)edge_split<T, blockThreads>,
+                             true,
+                             false,
+                             false,
+                             false,
+                             [&](uint32_t v, uint32_t e, uint32_t f) {
+                                 return detail::mask_num_bytes(e) +
+                                        ShmemAllocator::default_alignment;
+                             });
 
         edge_split<T, blockThreads><<<DIVIDE_UP(launch_box.blocks, 2),
                                       launch_box.num_threads,
@@ -142,7 +139,7 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&         rx,
         rx.cleanup();
 
 
-        RXMESH_TRACE(" ");
+        /*RXMESH_TRACE(" ");
         rx.update_host();
         if (!rx.validate()) {
             polyscope::show();
@@ -172,7 +169,7 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&         rx,
             // rx.render_patch(cc)->setEnabled(false);
 
             polyscope::show();
-        }
+        }*/
     }
 }
 
@@ -192,19 +189,19 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&         rx,
     rx.reset_scheduler();
     while (!rx.is_queue_empty()) {
         LaunchBox<blockThreads> launch_box;
-        rx.prepare_launch_box({Op::EV},
-                              launch_box,
-                              (void*)edge_collapse<T, blockThreads>,
-                              true,
-                              false,
-                              true,
-                              true,
-                              [=](uint32_t v, uint32_t e, uint32_t f) {
-                                  return detail::mask_num_bytes(v) +
-                                         detail::mask_num_bytes(e) +
-                                         e * sizeof(uint8_t) +
-                                         3 * ShmemAllocator::default_alignment;
-                              });
+        rx.update_launch_box({Op::EV},
+                             launch_box,
+                             (void*)edge_collapse<T, blockThreads>,
+                             true,
+                             false,
+                             true,
+                             true,
+                             [=](uint32_t v, uint32_t e, uint32_t f) {
+                                 return detail::mask_num_bytes(v) +
+                                        detail::mask_num_bytes(e) +
+                                        e * sizeof(uint8_t) +
+                                        3 * ShmemAllocator::default_alignment;
+                             });
 
         edge_collapse<T, blockThreads>
             <<<launch_box.blocks,
@@ -222,7 +219,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&         rx,
         rx.cleanup();
 
         // stats(rx);
-        rx.update_host();
+        /*rx.update_host();
         if (!rx.validate()) {
             polyscope::show();
         }
@@ -251,16 +248,11 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&         rx,
             rx.render_edge_patch();
             rx.render_face_patch();
 
-            // rx.render_patch(0);
-            // rx.render_patch(1);
-
-            polyscope::show();
-
             int p_red = 0;
             rx.render_patch(p_red);
 
             polyscope::show();
-        }
+        }*/
     }
 }
 
@@ -278,12 +270,12 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&         rx,
     rx.reset_scheduler();
     while (!rx.is_queue_empty()) {
         LaunchBox<blockThreads> launch_box;
-        rx.prepare_launch_box({Op::EVDiamond},
-                              launch_box,
-                              (void*)edge_flip<T, blockThreads>,
-                              true,
-                              false,
-                              true);
+        rx.update_launch_box({Op::EVDiamond},
+                             launch_box,
+                             (void*)edge_flip<T, blockThreads>,
+                             true,
+                             false,
+                             true);
 
         edge_flip<T, blockThreads><<<launch_box.blocks,
                                      launch_box.num_threads,
@@ -304,7 +296,7 @@ inline void tangential_relaxation(rxmesh::RXMeshDynamic&      rx,
 {
     using namespace rxmesh;
 
-    constexpr uint32_t blockThreads = 256;
+    constexpr uint32_t blockThreads = 384;
 
     LaunchBox<blockThreads> launch_box;
     rx.prepare_launch_box({Op::VV},
@@ -325,9 +317,9 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     constexpr uint32_t blockThreads = 256;
 
 #if USE_POLYSCOPE
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
+    //rx.render_vertex_patch();
+    //rx.render_edge_patch();
+    //rx.render_face_patch();
     // polyscope::show();
 #endif
 
@@ -388,7 +380,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     EXPECT_TRUE(rx.validate());
 
-    //rx.export_obj("remesh.obj", *coords);
+    rx.export_obj("remesh.obj", *coords);
     RXMESH_INFO("remesh_rxmesh() took {} (ms)", timer.elapsed_millis());
     RXMESH_INFO("Output mesh #Vertices {}", rx.get_num_vertices());
     RXMESH_INFO("Output mesh #Edges {}", rx.get_num_edges());

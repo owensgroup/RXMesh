@@ -3139,7 +3139,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
     for (uint16_t vp = threadIdx.x; vp < num_elements; vp += blockThreads) {
         assert(vp < s_ownership_change.size());
         if (s_ownership_change(vp)) {
-            m_s_readd_to_queue[0] = true;
+            // m_s_readd_to_queue[0] = true;
             assert(vp < s_owned_bitmask.size());
             assert(!s_owned_bitmask(vp));
 
