@@ -72,7 +72,7 @@ struct CavityManager
      * @param seed
      */
     template <typename HandleT>
-    __device__ __inline__ void create(HandleT seed);
+    __device__ __inline__ uint32_t create(HandleT seed);
 
 
     /**

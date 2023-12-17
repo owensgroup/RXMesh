@@ -311,7 +311,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
-__device__ __inline__ void CavityManager<blockThreads, cop>::create(
+__device__ __inline__ uint32_t CavityManager<blockThreads, cop>::create(
     HandleT seed)
 {
     if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
@@ -385,8 +385,10 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::create(
             m_s_cavity_id_f[seed.local_id()] = id;
             m_s_cavity_creator[id]           = seed.local_id();
         }
+        return id;
     } else {
         ::atomicAdd(m_s_num_cavities, -1);
+        return INVALID32;
     }
 }
 

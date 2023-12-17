@@ -6,8 +6,6 @@
 
 #include "rxmesh/util/util.h"
 
-uint32_t iter = 0;
-
 inline void stats(rxmesh::RXMeshDynamic& rx)
 {
     rx.update_host();
@@ -127,7 +125,7 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&         rx,
                                         ShmemAllocator::default_alignment;
                              });
 
-        edge_split<T, blockThreads><<<DIVIDE_UP(launch_box.blocks, 2),
+        edge_split<T, blockThreads><<<launch_box.blocks,
                                       launch_box.num_threads,
                                       launch_box.smem_bytes_dyn>>>(
             rx.get_context(), *coords, *updated, high_edge_len_sq);
@@ -317,10 +315,11 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     constexpr uint32_t blockThreads = 256;
 
 #if USE_POLYSCOPE
-    //rx.render_vertex_patch();
-    //rx.render_edge_patch();
-    //rx.render_face_patch();
-    // polyscope::show();
+    // rx.render_vertex_patch();
+    // rx.render_edge_patch();
+    // rx.render_face_patch();
+    //  polyscope::show();
+    rx.render_patch(7);
 #endif
 
     auto coords     = rx.get_input_vertex_coordinates();
@@ -394,9 +393,6 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(*coords);
     ps_mesh->setEnabled(false);
-
-    // rx.render_patch(0);
-    // rx.render_patch(1);
     rx.render_vertex_patch();
     rx.render_edge_patch();
     rx.render_face_patch();
