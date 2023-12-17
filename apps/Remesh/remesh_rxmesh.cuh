@@ -361,10 +361,17 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     timer.start();
 
     for (uint32_t iter = 0; iter < Arg.num_iter; ++iter) {
+        RXMESH_TRACE(" Edge Split -- iter {}", iter);
         split_long_edges(rx, coords.get(), updated.get(), high_edge_len_sq);
+
+        RXMESH_TRACE(" Edge Collapse -- iter {}", iter);
         collapse_short_edges(
             rx, coords.get(), updated.get(), low_edge_len_sq, high_edge_len_sq);
+
+        RXMESH_TRACE(" Edge Flip -- iter {}", iter);
         equalize_valences(rx, coords.get(), updated.get());
+
+        RXMESH_TRACE(" Vertex Smoothing -- iter {}", iter);
         tangential_relaxation(rx, coords.get(), new_coords.get());
         std::swap(new_coords, coords);
     }
