@@ -208,34 +208,6 @@ inline void compute_avg_stddev_max_min(const T* arr,
     stddev = std::sqrt(double(sum) / double(size - 1));
     return;
 }
-/**
- * @brief computes the average and stddev where the input is running sum (output
- * of exclusive sum) the input size is actually size + 1
- */
-template <typename T>
-inline void compute_avg_stddev_max_min_rs(const T* arr_rs,
-                                          uint32_t size,
-                                          double&  avg,
-                                          double&  stddev,
-                                          T&       max,
-                                          T&       min)
-{
-    uint32_t* arr = (uint32_t*)malloc(size * sizeof(uint32_t));
-    max           = std::numeric_limits<T>::min();
-    min           = std::numeric_limits<T>::max();
-    for (uint32_t i = 0; i < size; i++) {
-        // arr[i] = arr_rs[i + 1] - arr_rs[i];
-        uint32_t start = (i == 0) ? 0 : arr_rs[i - 1];
-        uint32_t end   = arr_rs[i];
-        arr[i]         = end - start;
-        max            = std::max(max, arr[i]);
-        min            = std::min(min, arr[i]);
-    }
-
-    compute_avg_stddev(arr, size, avg, stddev);
-
-    free(arr);
-}
 
 /**
  * @brief binary search in a vector (has to be sorted --- not checked)
