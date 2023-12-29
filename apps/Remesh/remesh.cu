@@ -7,7 +7,7 @@ struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    float       relative_len  = 0.9;
+    float       relative_len  = 1.0;
     uint32_t    num_iter      = 3;
     uint32_t    device_id     = 0;
     char**      argv;

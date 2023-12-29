@@ -11,6 +11,7 @@
 #include "rxmesh/attribute.h"
 
 #include "rxmesh/kernels/shmem_mutex.cuh"
+#include "rxmesh/kernels/shmem_mutex_array.cuh"
 
 namespace rxmesh {
 
@@ -275,11 +276,34 @@ struct CavityManager
         cooperative_groups::thread_block& block);
 
     /**
-     * @brief propage the cavity ID from the seeds to indicent/adjacent elements
+     * @brief propage the cavity ID from the seeds to incident/adjacent elements
      * based on CavityOp
      */
     __device__ __inline__ void propagate(
         cooperative_groups::thread_block& block);
+
+    /**
+     * @brief construct a graph where nodes are cavities and two nodes form an
+     * edge if the cavities they represent are overlapping
+     */
+    __device__ __inline__ void construct_cavity_graph(
+        cooperative_groups::thread_block& block);
+
+    /**
+     * @brief calculate a maximal independent set of cavities and deactivate the
+     * rest
+     */
+    __device__ __inline__ void calc_cavity_maximal_independent_set(
+        cooperative_groups::thread_block& block);
+
+    /**
+     * @brief try to add an edge in the cavity graph that connects the two nodes
+     * that represents the cavities c0 and c1. If we can not add the edge
+     * (because if the space constraints), we deactivate the cavity with more
+     * overlaps
+     */
+    __device__ __inline__ void add_edge_to_cavity_graph(const uint16_t c0,
+                                                        const uint16_t c1);
 
     /**
      * @brief propagate the cavity tag from vertices to their incident edges
@@ -846,6 +870,30 @@ struct CavityManager
     // LPPair*  m_s_table_q;
     // LPPair*  m_s_table_stash_q;
     // uint32_t m_s_table_q_size;
+
+    // Cavity graph is a graph where cavities are nodes and two nodes forms an
+    // edge if the two cavities they represent are overlapping. We use this
+    // graph to compute maximal independent set of cavities to process.
+    // The graph assumes that a cavity/node in this graph is connected at a
+    // maximum of MAX_OVERLAP_CAVITIES other cavities.
+    // This pointer overlaps m_s_q_correspondence_e
+    uint16_t* m_s_cavity_graph;
+
+    // array of mutex with size equal to the number of cavities. We use this
+    // mutex array when we construct the cavity graph to solve the problem of
+    // having multiple threads update the connectivity of the same cavity points
+    // inside this array points to the same location as m_s_cavity_size_prefix
+    ShmemMutexArray m_s_cavity_graph_mutex;
+
+    // current set of active cavities to be considered for maximal independent
+    // set calculation. This one overlaps m_s_in_cavity_f
+    Bitmask m_s_active_cavity_mis;
+
+    // indicate if a cavity is a candidate to be in the maximal independent set
+    Bitmask m_s_candidate_cavity_mis;
+
+    // indicate if a cavity is in the maximal independent set
+    Bitmask m_s_cavity_mis;
 };
 
 }  // namespace rxmesh

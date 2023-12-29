@@ -244,6 +244,23 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     m_s_q_correspondence_vf =
         shrd_alloc.alloc<uint16_t>(m_correspondence_size_vf);
 
+    // cavity graph
+    m_s_cavity_graph = m_s_q_correspondence_e;
+
+    assert(MAX_OVERLAP_CAVITIES * get_num_cavities() <=
+           m_correspondence_size_vf + m_correspondence_size_e);
+
+    // bitmask used for maximal independent set calculation
+    assert(get_num_cavities() <= m_s_in_cavity_f.size());
+    m_s_active_cavity_mis =
+        Bitmask(get_num_cavities(), m_s_in_cavity_f.m_bitmask);
+
+    m_s_cavity_mis =
+        Bitmask(get_num_cavities(), m_s_ownership_change_mask_f.m_bitmask);
+
+    m_s_candidate_cavity_mis =
+        Bitmask(get_num_cavities(), m_s_recover_f.m_bitmask);
+
     // patch to lock
     __shared__ uint32_t p_to_lock[PatchStash::stash_size];
     m_s_patches_to_lock_mask = Bitmask(PatchStash::stash_size, p_to_lock);
@@ -299,7 +316,10 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     // half the number of faces in the patch
     assert(m_s_num_cavities[0] <= m_s_num_faces[0] / 2);
     m_s_cavity_size_prefix = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
-    fill_n<blockThreads>(m_s_cavity_size_prefix, m_s_num_cavities[0] + 1, 0);
+
+
+    m_s_cavity_graph_mutex =
+        ShmemMutexArray(block, m_s_num_cavities[0], m_s_cavity_size_prefix);
 
     // active cavity bitmask
     m_s_active_cavity_bitmask = Bitmask(m_s_num_cavities[0], shrd_alloc);
@@ -569,6 +589,13 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     // allocate shared memory
     alloc_shared_memory(block, shrd_alloc);
 
+    // construct cavity graph
+    construct_cavity_graph(block);
+    block.sync();
+
+    // calculate a maximal independent set of non-overlapping cavities
+    calc_cavity_maximal_independent_set(block);
+    block.sync();
 
     // propagate the cavity ID
     propagate(block);
@@ -639,6 +666,220 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     store_hashtable(block);
 
     return true;
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::construct_cavity_graph(
+    cooperative_groups::thread_block& block)
+{
+
+    fill_n<blockThreads>(m_s_cavity_graph,
+                         MAX_OVERLAP_CAVITIES * get_num_cavities(),
+                         uint16_t(INVALID16));
+    block.sync();
+
+
+    // try to add an edge between c_a and c_b
+    // if we fail (
+    auto add_edge = [&](const uint16_t c_a, const uint16_t c_b) {
+        if (c_a != INVALID16 && c_b != INVALID16 && c_a != c_b) {
+            if (m_s_active_cavity_bitmask(c_a) &&
+                m_s_active_cavity_bitmask(c_b)) {
+                add_edge_to_cavity_graph(c_a, c_b);
+            }
+        }
+    };
+
+    // mark_faces_through_edges
+    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+        assert(f < m_s_active_mask_f.size());
+        if (m_s_active_mask_f(f)) {
+
+            uint16_t cavities[3];
+            // edges tag
+            const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
+            const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
+            const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
+
+            const uint16_t c0 = m_s_cavity_id_e[e0];
+            const uint16_t c1 = m_s_cavity_id_e[e1];
+            const uint16_t c2 = m_s_cavity_id_e[e2];
+
+            add_edge(c0, c1);
+            add_edge(c1, c2);
+            add_edge(c2, c0);
+        }
+    }
+}
+
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
+    cooperative_groups::thread_block& block)
+{
+    int num_cavities = get_num_cavities();
+
+    __shared__ int s_num_active_cavitites_mis[1];
+    if (threadIdx.x == 0) {
+        s_num_active_cavitites_mis[0] = 0;
+    }
+
+    m_s_active_cavity_mis.copy(block, m_s_active_cavity_bitmask);
+
+    m_s_cavity_mis.reset(block);
+
+    block.sync();
+
+    while (true) {
+        // calc number of current active cavities
+        // active here means active to be considered for MIS calculation
+        // for (int c = threadIdx.x; c < DIVIDE_UP(num_cavities, 32);
+        //     c += blockThreads) {
+        //    uint32_t mask = m_s_active_cavity_mis.m_bitmask[c];
+        //    ::atomicAdd(s_num_active_cavitites_mis, __popc(mask));
+        //}
+
+
+        for (int c = threadIdx.x; c < num_cavities; c += blockThreads) {
+            if (m_s_active_cavity_mis(c)) {
+                ::atomicAdd(s_num_active_cavitites_mis, 1);
+            }
+        }
+
+        // reset the candidate cavities
+        m_s_candidate_cavity_mis.reset(block);
+        block.sync();
+        // if (threadIdx.x == 0) {
+        //     printf("\n s_num_active_cavitites_mis= %u",
+        //            s_num_active_cavitites_mis[0]);
+        // }
+        if (s_num_active_cavitites_mis[0] == 0) {
+            break;
+        }
+
+
+        for (int c = threadIdx.x; c < num_cavities; c += blockThreads) {
+            // if the cavity is one of the active cavities for MIS calculation
+            if (m_s_active_cavity_mis(c)) {
+                bool add_c = true;
+                for (int i = 0; i < MAX_OVERLAP_CAVITIES; ++i) {
+                    const uint16_t neighbour_c =
+                        m_s_cavity_graph[MAX_OVERLAP_CAVITIES * c + i];
+                    if (neighbour_c != INVALID16) {
+
+                        if (m_s_active_cavity_mis(neighbour_c) &&
+                            neighbour_c > c) {
+                            add_c = false;
+                            break;
+                        }
+                    }
+                }
+                if (add_c) {
+                    m_s_candidate_cavity_mis.set(c, true);
+                }
+            }
+        }
+        block.sync();
+
+
+        // add the candidate to the MIS and remove them from the active set
+        for (int c = threadIdx.x; c < num_cavities; c += blockThreads) {
+            if (m_s_candidate_cavity_mis(c)) {
+                m_s_active_cavity_mis.reset(c, true);
+                m_s_cavity_mis.set(c, true);
+
+                // remove the neighbour from the active set
+                for (int i = 0; i < MAX_OVERLAP_CAVITIES; ++i) {
+                    const uint16_t neighbour_c =
+                        m_s_cavity_graph[MAX_OVERLAP_CAVITIES * c + i];
+                    if (neighbour_c != INVALID16) {
+                        assert(!m_s_cavity_mis(neighbour_c));
+                        m_s_active_cavity_mis.reset(neighbour_c, true);
+                    }
+                }
+            }
+        }
+
+        if (threadIdx.x == 0) {
+            s_num_active_cavitites_mis[0] = 0;
+        }
+        block.sync();
+    }
+
+
+    // deactivaye cavities that are not in the MIS
+    for (int c = threadIdx.x; c < num_cavities; c += blockThreads) {
+        if (!m_s_cavity_mis(c)) {
+            deactivate_cavity(c);
+        } /* else {
+            ::atomicAdd(s_num_active_cavitites_mis, 1);
+        }*/
+    }
+    block.sync();
+
+    deactivate_conflicting_cavities();
+
+    m_s_active_cavity_mis.reset(block);
+    m_s_candidate_cavity_mis.reset(block);
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::add_edge_to_cavity_graph(const uint16_t c0,
+                                                           const uint16_t c1)
+{
+    auto add_edge = [&](const uint16_t from_c,
+                        const uint16_t to_c) -> uint16_t {
+        int i;
+        m_s_cavity_graph_mutex.lock(from_c);
+
+        for (i = 0; i < MAX_OVERLAP_CAVITIES; ++i) {
+            int index = from_c * MAX_OVERLAP_CAVITIES + i;
+
+            if (m_s_cavity_graph[index] == to_c) {
+                break;
+            }
+
+            if (m_s_cavity_graph[index] == INVALID16) {
+                m_s_cavity_graph[index] = to_c;
+                break;
+            }
+        }
+
+        m_s_cavity_graph_mutex.unlock(from_c);
+
+        return i;
+    };
+
+    auto clear = [&](const uint16_t c, const uint16_t index) {
+        m_s_cavity_graph_mutex.lock(c);
+        m_s_cavity_graph[c * MAX_OVERLAP_CAVITIES + index] = INVALID16;
+        m_s_cavity_graph_mutex.unlock(c);
+    };
+
+    // add c0 to c1
+    uint16_t c0_id = add_edge(c0, c1);
+
+    // add c1 to c0
+    uint16_t c1_id = add_edge(c1, c0);
+
+    if (c0_id < MAX_OVERLAP_CAVITIES && c1_id < MAX_OVERLAP_CAVITIES) {
+        return;
+    }
+
+    // decide which cavity to deactivate
+    // we choose the one with more overlaps
+    printf("\n deactiaving !!!!!!!!!!! ");
+    if (c0_id > c1_id) {
+        m_s_active_cavity_bitmask.reset(c0, true);
+        clear(c1, c1_id);
+    } else {
+        m_s_active_cavity_bitmask.reset(c1, true);
+        clear(c0, c0_id);
+    }
 }
 
 
@@ -747,6 +988,8 @@ CavityManager<blockThreads, cop>::mark_faces_through_edges()
             const uint16_t c1 = m_s_cavity_id_e[e1];
             const uint16_t c2 = m_s_cavity_id_e[e2];
 
+            // printf("\n F= %u - cavities= %u, %u, %u", f, c0, c1, c2);
+
             mark_element_gather(m_s_cavity_id_f, f, c0);
             mark_element_gather(m_s_cavity_id_f, f, c1);
             mark_element_gather(m_s_cavity_id_f, f, c2);
@@ -762,21 +1005,23 @@ CavityManager<blockThreads, cop>::mark_element_scatter(
     const uint16_t cavity_id)
 {
     if (cavity_id != INVALID16) {
-        uint16_t prv_cavity =
-            atomicMin(&element_cavity_id[element_id], cavity_id);
+        if (m_s_active_cavity_bitmask(cavity_id)) {
+            uint16_t prv_cavity =
+                atomicMin(&element_cavity_id[element_id], cavity_id);
 
 
-        if (prv_cavity == cavity_id) {
-            return;
-        }
+            if (prv_cavity == cavity_id) {
+                return;
+            }
 
-        if (prv_cavity < cavity_id) {
-            // the vertex was marked with a cavity with lower id
-            // than we deactivate this edge cavity
-            deactivate_cavity(cavity_id);
-        } else if (prv_cavity != INVALID16) {
-            // otherwise, we deactivate the vertex cavity
-            deactivate_cavity(prv_cavity);
+            if (prv_cavity < cavity_id) {
+                // the vertex was marked with a cavity with lower id
+                // than we deactivate this edge cavity
+                deactivate_cavity(cavity_id);
+            } else if (prv_cavity != INVALID16) {
+                // otherwise, we deactivate the vertex cavity
+                deactivate_cavity(prv_cavity);
+            }
         }
     }
 }
@@ -790,27 +1035,40 @@ CavityManager<blockThreads, cop>::mark_element_gather(
     const uint16_t cavity_id)
 {
     if (cavity_id != INVALID16) {
-        const uint16_t prv_element_cavity_id = element_cavity_id[element_id];
+        if (m_s_active_cavity_bitmask(cavity_id)) {
+            const uint16_t prv_element_cavity_id =
+                element_cavity_id[element_id];
 
 
-        if (prv_element_cavity_id == cavity_id) {
-            return;
-        }
+            if (prv_element_cavity_id == cavity_id) {
+                return;
+            }
 
-        if (prv_element_cavity_id == INVALID16) {
-            element_cavity_id[element_id] = cavity_id;
-            return;
-        }
+            if (prv_element_cavity_id == INVALID16) {
+                element_cavity_id[element_id] = cavity_id;
+                return;
+            }
 
-        if (prv_element_cavity_id > cavity_id) {
-            // deactivate previous element cavity ID
-            deactivate_cavity(prv_element_cavity_id);
-            element_cavity_id[element_id] = cavity_id;
-        }
+            if (prv_element_cavity_id > cavity_id) {
+                // deactivate previous element cavity ID
+                deactivate_cavity(prv_element_cavity_id);
+                element_cavity_id[element_id] = cavity_id;
+                // printf("\n A T= %u, F= %u - %u deactivated %u",
+                //        threadIdx.x,
+                //        element_id,
+                //        cavity_id,
+                //        prv_element_cavity_id);
+            }
 
-        if (prv_element_cavity_id < cavity_id) {
-            // deactivate cavity ID
-            deactivate_cavity(cavity_id);
+            if (prv_element_cavity_id < cavity_id) {
+                // deactivate cavity ID
+                deactivate_cavity(cavity_id);
+                // printf("\n B T= %u, F= %u - %u deactivated %u",
+                //        threadIdx.x,
+                //        element_id,
+                //        prv_element_cavity_id,
+                //        cavity_id);
+            }
         }
     }
 }
@@ -1037,8 +1295,10 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
     if (!m_allow_touching_cavities) {
         fill_n<blockThreads>(
             m_s_boudary_edges_cavity_id, m_s_num_edges[0], invalid_cavity);
-        block.sync();
     }
+
+    fill_n<blockThreads>(m_s_cavity_size_prefix, m_s_num_cavities[0] + 1, 0);
+    block.sync();
 
     assert(itemPerThread * blockThreads >= m_s_num_faces[0]);
 
