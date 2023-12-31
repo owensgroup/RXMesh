@@ -13,6 +13,8 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
       m_preserve_cavity(preserve_cavity),
       m_allow_touching_cavities(allow_touching_cavities)
 {
+    static_assert(cop == CavityOp::EV || cop == CavityOp::E);
+
     __shared__ uint32_t s_patch_id;
 
 
@@ -590,12 +592,12 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     alloc_shared_memory(block, shrd_alloc);
 
     // construct cavity graph
-    construct_cavity_graph(block);
-    block.sync();
+    //construct_cavity_graph(block);
+    //block.sync();
 
     // calculate a maximal independent set of non-overlapping cavities
-    calc_cavity_maximal_independent_set(block);
-    block.sync();
+    //calc_cavity_maximal_independent_set(block);
+    //block.sync();
 
     // propagate the cavity ID
     propagate(block);
@@ -682,8 +684,7 @@ CavityManager<blockThreads, cop>::construct_cavity_graph(
 
 
     // try to add an edge between c_a and c_b
-    // if we fail (
-    auto add_edge = [&](const uint16_t c_a, const uint16_t c_b) {
+    auto add_edge_gather = [&](const uint16_t c_a, const uint16_t c_b) {
         if (c_a != INVALID16 && c_b != INVALID16 && c_a != c_b) {
             if (m_s_active_cavity_bitmask(c_a) &&
                 m_s_active_cavity_bitmask(c_b)) {
@@ -692,25 +693,141 @@ CavityManager<blockThreads, cop>::construct_cavity_graph(
         }
     };
 
-    // mark_faces_through_edges
-    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
-        assert(f < m_s_active_mask_f.size());
-        if (m_s_active_mask_f(f)) {
+    auto add_edge_scatter = [&](uint16_t*      element_cavity_id,
+                                const uint16_t element_id,
+                                const uint16_t cavity_id) {
+        if (cavity_id != INVALID16) {
+            if (m_s_active_cavity_bitmask(cavity_id)) {
+                uint16_t prv_cavity =
+                    atomicMin(&element_cavity_id[element_id], cavity_id);
 
-            uint16_t cavities[3];
-            // edges tag
-            const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
-            const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
-            const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
-
-            const uint16_t c0 = m_s_cavity_id_e[e0];
-            const uint16_t c1 = m_s_cavity_id_e[e1];
-            const uint16_t c2 = m_s_cavity_id_e[e2];
-
-            add_edge(c0, c1);
-            add_edge(c1, c2);
-            add_edge(c2, c0);
+                if (prv_cavity == cavity_id) {
+                    return;
+                }
+                if (prv_cavity != INVALID16) {
+                    add_edge_to_cavity_graph(prv_cavity, cavity_id);
+                }
+            }
         }
+    };
+
+    auto is_active_cavity = [&](const uint16_t cavity_id) -> bool {
+        if (cavity_id != INVALID16) {
+            if (m_s_active_cavity_bitmask(cavity_id)) {
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    };
+
+    auto add_graph_edge_by_faces_through_edges = [&]() {
+        for (uint16_t f = threadIdx.x; f < m_s_num_faces[0];
+             f += blockThreads) {
+            assert(f < m_s_active_mask_f.size());
+            if (m_s_active_mask_f(f)) {
+
+                // edges tag
+                const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
+                const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
+                const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
+
+                const uint16_t c0 = m_s_cavity_id_e[e0];
+                const uint16_t c1 = m_s_cavity_id_e[e1];
+                const uint16_t c2 = m_s_cavity_id_e[e2];
+
+                add_edge_gather(c0, c1);
+                add_edge_gather(c1, c2);
+                add_edge_gather(c2, c0);
+
+                if (is_active_cavity(c0)) {
+                    m_s_cavity_id_f[f] = c0;
+                } else if (is_active_cavity(c1)) {
+                    m_s_cavity_id_f[f] = c1;
+                } else if (is_active_cavity(c2)) {
+                    m_s_cavity_id_f[f] = c2;
+                }
+            }
+        }
+    };
+
+
+    auto add_graph_edge_by_edges_through_vertices = [&]() {
+        for (uint16_t e = threadIdx.x; e < m_s_num_edges[0];
+             e += blockThreads) {
+            assert(e < m_s_active_mask_e.size());
+            if (m_s_active_mask_e(e)) {
+
+                // vertices tag
+                const uint16_t v0 = m_s_ev[2 * e + 0];
+                const uint16_t v1 = m_s_ev[2 * e + 1];
+
+                const uint16_t c0 = m_s_cavity_id_v[v0];
+                const uint16_t c1 = m_s_cavity_id_v[v1];
+
+                add_edge_gather(c0, c1);
+
+                if (is_active_cavity(c0)) {
+                    m_s_cavity_id_e[e] = c0;
+                } else if (is_active_cavity(c1)) {
+                    m_s_cavity_id_e[e] = c1;
+                }
+            }
+        }
+    };
+
+
+    auto add_graph_edge_by_vertices_through_edges = [&]() {
+        for (uint16_t e = threadIdx.x; e < m_s_num_edges[0];
+             e += blockThreads) {
+            assert(e < m_s_active_mask_e.size());
+            if (m_s_active_mask_e(e)) {
+
+                const uint16_t e_cavity = m_s_cavity_id_e[e];
+
+
+                const uint16_t v0 = m_s_ev[2 * e + 0];
+                const uint16_t v1 = m_s_ev[2 * e + 1];
+
+                add_edge_scatter(m_s_cavity_id_v, v0, e_cavity);
+                add_edge_scatter(m_s_cavity_id_v, v1, e_cavity);
+            }
+        }
+    };
+
+
+    auto add_graph_edge_by_edges_through_faces = [&]() {
+        for (uint16_t f = threadIdx.x; f < m_s_num_faces[0];
+             f += blockThreads) {
+            assert(f < m_s_active_mask_f.size());
+            if (m_s_active_mask_f(f)) {
+
+                const uint16_t f_cavity = m_s_cavity_id_f[f];
+
+                const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
+                const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
+                const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
+
+                add_edge_scatter(m_s_cavity_id_e, e0, f_cavity);
+                add_edge_scatter(m_s_cavity_id_e, e1, f_cavity);
+                add_edge_scatter(m_s_cavity_id_e, e2, f_cavity);
+            }
+        }
+    };
+
+
+    if constexpr (cop == CavityOp::EV) {
+        add_graph_edge_by_vertices_through_edges();
+        block.sync();        
+        add_graph_edge_by_edges_through_vertices();
+        block.sync();
+        add_graph_edge_by_faces_through_edges();
+    }
+
+    if constexpr (cop == CavityOp::E) {
+        add_graph_edge_by_faces_through_edges();
     }
 }
 
@@ -814,16 +931,51 @@ CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
     for (int c = threadIdx.x; c < num_cavities; c += blockThreads) {
         if (!m_s_cavity_mis(c)) {
             deactivate_cavity(c);
-        } /* else {
-            ::atomicAdd(s_num_active_cavitites_mis, 1);
-        }*/
+        }
     }
     block.sync();
 
-    deactivate_conflicting_cavities();
+    // clean up
+    // deactivate_conflicting_cavities();
 
     m_s_active_cavity_mis.reset(block);
     m_s_candidate_cavity_mis.reset(block);
+    m_s_cavity_mis.reset(block);
+
+    fill_n<blockThreads>(m_s_cavity_id_v,
+                         m_patch_info.vertices_capacity[0],
+                         uint16_t(INVALID16));
+    fill_n<blockThreads>(
+        m_s_cavity_id_e, m_patch_info.edges_capacity[0], uint16_t(INVALID16));
+    fill_n<blockThreads>(
+        m_s_cavity_id_f, m_patch_info.faces_capacity[0], uint16_t(INVALID16));
+
+    block.sync();
+
+    for (int c = threadIdx.x; c < num_cavities; c += blockThreads) {
+        if (m_s_active_cavity_bitmask(c)) {
+            const uint16_t creator = m_s_cavity_creator[c];
+            assert(creator != INVALID16);
+            if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
+                          cop == CavityOp::VE || cop == CavityOp::VF) {
+                assert(m_s_active_mask_v(creator));
+                m_s_cavity_id_v[creator] = c;
+            }
+
+            if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
+                          cop == CavityOp::EE || cop == CavityOp::EF) {
+                assert(m_s_active_mask_e(creator));
+                m_s_cavity_id_e[creator] = c;
+            }
+
+            if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
+                          cop == CavityOp::FE || cop == CavityOp::FF) {
+                assert(m_s_active_mask_f(creator));
+                m_s_cavity_id_f[creator] = c;
+            }
+        }
+    }
+ 
 }
 
 template <uint32_t blockThreads, CavityOp cop>
@@ -856,6 +1008,7 @@ CavityManager<blockThreads, cop>::add_edge_to_cavity_graph(const uint16_t c0,
 
     auto clear = [&](const uint16_t c, const uint16_t index) {
         m_s_cavity_graph_mutex.lock(c);
+        m_s_active_cavity_bitmask.reset(c, true);
         m_s_cavity_graph[c * MAX_OVERLAP_CAVITIES + index] = INVALID16;
         m_s_cavity_graph_mutex.unlock(c);
     };
@@ -872,13 +1025,11 @@ CavityManager<blockThreads, cop>::add_edge_to_cavity_graph(const uint16_t c0,
 
     // decide which cavity to deactivate
     // we choose the one with more overlaps
-    printf("\n deactiaving !!!!!!!!!!! ");
+    // printf("\n deactiaving !!!!!!!!!!! ");
     if (c0_id > c1_id) {
-        m_s_active_cavity_bitmask.reset(c0, true);
-        clear(c1, c1_id);
-    } else {
-        m_s_active_cavity_bitmask.reset(c1, true);
         clear(c0, c0_id);
+    } else {
+        clear(c1, c1_id);
     }
 }
 
