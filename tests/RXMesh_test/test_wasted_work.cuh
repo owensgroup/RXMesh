@@ -42,13 +42,13 @@ __global__ static void measure_wasted_work_kernel(rxmesh::Context context,
 
             if (patch_info.patch_id != INVALID32) {
                 // try to lock this patch
-                ::atomicAdd(d_scheduled, 1u);
+
                 if (!patch_info.lock.acquire_lock(block_id)) {
                     // if we can not, we add it again to the queue
                     context.m_patch_scheduler.push(patch_id);
-                    ::atomicAdd(d_wasted, 1u);
                 } else {
 
+                    ::atomicAdd(d_scheduled, 1u);
                     // loop over all neighbor patches to this patch (patch_id)
                     for (uint8_t n = 0; n < PatchStash::stash_size; ++n) {
                         uint32_t q = patch_info.patch_stash.get_patch(n);
