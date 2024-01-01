@@ -4,6 +4,8 @@
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
+#include "rxmesh/util/report.h"
+
 template <uint32_t blockThreads>
 __global__ static void measure_wasted_work_kernel(rxmesh::Context context,
                                                   uint32_t*       d_scheduled,
@@ -40,11 +42,12 @@ __global__ static void measure_wasted_work_kernel(rxmesh::Context context,
 
             if (patch_info.patch_id != INVALID32) {
                 // try to lock this patch
+                ::atomicAdd(d_scheduled, 1u);
                 if (!patch_info.lock.acquire_lock(block_id)) {
                     // if we can not, we add it again to the queue
                     context.m_patch_scheduler.push(patch_id);
+                    ::atomicAdd(d_wasted, 1u);
                 } else {
-                    ::atomicAdd(d_scheduled, 1u);
 
                     // loop over all neighbor patches to this patch (patch_id)
                     for (uint8_t n = 0; n < PatchStash::stash_size; ++n) {
@@ -119,7 +122,13 @@ TEST(RXMeshDynamic, MeasureWastedWork)
 
     RXMeshDynamic rx(rxmesh_args.obj_file_name);
 
-    ASSERT_GE(prop.multiProcessorCount, rx.get_num_patches());
+
+    Report report("MeasureWastedWork");
+    report.command_line(rxmesh_args.argc, rxmesh_args.argv);
+    report.device();
+    report.system();
+    report.model_data(rxmesh_args.obj_file_name, rx);
+
 
     uint32_t* d_scheduled;
     CUDA_ERROR(cudaMalloc((void**)&d_scheduled, sizeof(uint32_t)));
@@ -140,6 +149,9 @@ TEST(RXMeshDynamic, MeasureWastedWork)
         blockThreads,
         launch_box.smem_bytes_dyn));
     num_blocks *= prop.multiProcessorCount;
+
+    uint32_t            done_patches = 0;
+    std::vector<double> ratio;
 
     while (!rx.is_queue_empty()) {
 
@@ -162,9 +174,18 @@ TEST(RXMeshDynamic, MeasureWastedWork)
         CUDA_ERROR(cudaMemcpy(
             &h_wasted, d_wasted, sizeof(uint32_t), cudaMemcpyDeviceToHost));
 
+        done_patches += h_scheduled - h_wasted;
         RXMESH_INFO("Scheduled {}, Wasted= {}", h_scheduled, h_wasted);
+        ratio.push_back(double(h_wasted) / double(h_scheduled));
     }
+
+    ASSERT_EQ(done_patches, rx.get_num_patches());
 
     GPU_FREE(d_scheduled);
     GPU_FREE(d_wasted);
+
+    report.add_member("WastedWorkRatio", ratio);
+
+    report.write(rxmesh_args.output_folder + "/WastedWork",
+                 extract_file_name(rxmesh_args.obj_file_name));
 }
