@@ -26,6 +26,23 @@ __inline__ __device__ void bi_assignment(
     Bitmask&                          s_new_p_owned_v,
     Bitmask&                          s_new_p_owned_e,
     Bitmask&                          s_new_p_owned_f);
+
+
+template <uint32_t blockThreads>
+__inline__ __device__ void bi_assignment_ggp(
+    cooperative_groups::thread_block& block,
+    const uint16_t                    num_vertices,
+    const Bitmask&                    s_owned_v,
+    const Bitmask&                    s_active_v,
+    const uint16_t*                   m_s_vv_offset,
+    const uint16_t*                   m_s_vv,
+    Bitmask&                          s_assigned_v,
+    Bitmask&                          s_current_frontier_v,
+    Bitmask&                          s_next_frontier_set_v,
+    Bitmask&                          s_partition_a_v,
+    Bitmask&                          s_partition_b_v,
+    int                               num_iter);
+
 template <uint32_t blockThreads>
 __inline__ __device__ void slice(Context&                          context,
                                  cooperative_groups::thread_block& block,
@@ -109,20 +126,17 @@ __global__ static void slice_patches(Context        context,
                            Bitmask&        active,
                            Bitmask&        new_active,
                            Bitmask&        patch,
-                           Bitmask&        ribbon,
                            const uint32_t* g_owned,
                            const uint32_t* g_active) {
         owned      = Bitmask(num_elements, shrd_alloc);
         active     = Bitmask(num_elements, shrd_alloc);
         new_active = Bitmask(num_elements, shrd_alloc);
         patch      = Bitmask(num_elements, shrd_alloc);
-        ribbon     = Bitmask(num_elements, shrd_alloc);
 
         owned.reset(block);
         active.reset(block);
         new_active.reset(block);
         patch.reset(block);
-        ribbon.reset(block);
 
         // to remove the racecheck hazard report due to WAW on owned and active
         block.sync();
@@ -179,26 +193,24 @@ __global__ static void slice_patches(Context        context,
         Bitmask s_active_v, s_active_e, s_active_f;
         Bitmask s_new_p_owned_v, s_new_p_owned_e, s_new_p_owned_f;
         Bitmask s_new_p_active_v, s_new_p_active_e, s_new_p_active_f;
-        Bitmask s_ribbon_v, s_ribbon_e, s_ribbon_f;
+
+        Bitmask s_assigned_v          = Bitmask(num_vertices, shrd_alloc);
+        Bitmask s_current_frontier_v  = Bitmask(num_vertices, shrd_alloc);
+        Bitmask s_next_frontier_set_v = Bitmask(num_vertices, shrd_alloc);
 
         block.sync();
         if (s_new_patch_id == INVALID32) {
             return;
         }
 
-        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * num_edges);
+
+        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * 2 * num_edges);
         detail::load_async(block,
                            reinterpret_cast<uint16_t*>(pi.ev),
                            2 * num_edges,
                            s_ev,
                            false);
-        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
-        uint16_t* s_fv = s_fe;
-        detail::load_async(block,
-                           reinterpret_cast<uint16_t*>(pi.fe),
-                           3 * num_faces,
-                           s_fe,
-                           true);
+
 
         PatchStash s_new_patch_stash;
         s_new_patch_stash.m_stash =
@@ -209,7 +221,6 @@ __global__ static void slice_patches(Context        context,
                     s_active_v,
                     s_new_p_active_v,
                     s_new_p_owned_v,
-                    s_ribbon_v,
                     pi.owned_mask_v,
                     pi.active_mask_v);
         alloc_masks(num_edges,
@@ -217,7 +228,6 @@ __global__ static void slice_patches(Context        context,
                     s_active_e,
                     s_new_p_active_e,
                     s_new_p_owned_e,
-                    s_ribbon_e,
                     pi.owned_mask_e,
                     pi.active_mask_e);
         alloc_masks(num_faces,
@@ -225,14 +235,10 @@ __global__ static void slice_patches(Context        context,
                     s_active_f,
                     s_new_p_active_f,
                     s_new_p_owned_f,
-                    s_ribbon_f,
                     pi.owned_mask_f,
                     pi.active_mask_f);
 
         cooperative_groups::wait(block);
-        block.sync();
-        f_v<blockThreads>(
-            num_edges, s_ev, num_faces, s_fv, s_active_f.m_bitmask);
         block.sync();
 
 #ifndef NDEBUG
@@ -240,50 +246,121 @@ __global__ static void slice_patches(Context        context,
         // then we make sure that the number of vertices/edges/faces that are
         // active and owned by the two patches (old and new sliced one) are
         // equal the old number of vertices/edges/faces
-        __shared__ uint32_t s_old_num_vertices, s_old_num_edges,
-            s_old_num_faces;
+        __shared__ uint32_t s_total_num_vertices, s_total_num_edges,
+            s_total_num_faces;
         if (threadIdx.x == 0) {
-            s_old_num_vertices = 0;
-            s_old_num_edges    = 0;
-            s_old_num_faces    = 0;
+            s_total_num_vertices = 0;
+            s_total_num_edges    = 0;
+            s_total_num_faces    = 0;
         }
         block.sync();
         for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
             if (s_active_v(v) && s_owned_v(v)) {
-                ::atomicAdd(&s_old_num_vertices, uint32_t(1));
+                ::atomicAdd(&s_total_num_vertices, uint32_t(1));
             }
         }
         for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
             if (s_active_e(e) && s_owned_e(e)) {
-                ::atomicAdd(&s_old_num_edges, uint32_t(1));
+                ::atomicAdd(&s_total_num_edges, uint32_t(1));
             }
         }
         for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
             if (s_active_f(f) && s_owned_f(f)) {
-                ::atomicAdd(&s_old_num_faces, uint32_t(1));
+                ::atomicAdd(&s_total_num_faces, uint32_t(1));
             }
         }
         block.sync();
 #endif
 
-        bi_assignment<blockThreads>(block,
-                                    num_vertices,
-                                    num_edges,
-                                    num_faces,
-                                    s_owned_v,
-                                    s_owned_e,
-                                    s_owned_f,
-                                    s_active_v,
-                                    s_active_e,
-                                    s_active_f,
-                                    s_ev,
-                                    s_fv,
-                                    s_new_p_owned_v,
-                                    s_new_p_owned_e,
-                                    s_new_p_owned_f);
+        // compute VV
+        uint16_t* s_vv        = &s_ev[num_vertices + 1];
+        uint16_t* s_vv_offset = s_ev;
+        v_e<blockThreads>(
+            num_vertices, num_edges, s_ev, s_vv, s_active_e.m_bitmask);
+        block.sync();
+        for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+            uint16_t start = s_vv_offset[v];
+            uint16_t end   = s_vv_offset[v + 1];
+
+            for (uint16_t e = start; e < end; ++e) {
+                uint16_t edge = s_vv[e];
+                uint16_t v0   = pi.ev[2 * edge].id;
+                uint16_t v1   = pi.ev[2 * edge + 1].id;
+                assert(v0 != INVALID16 && v1 != INVALID16);
+                assert(v0 == v || v1 == v);
+                s_vv[e] = (v0 == v) * v1 + (v1 == v) * v0;
+            }
+        }
+
+        // slice
+        bi_assignment_ggp<blockThreads>(block,
+                                        num_vertices,
+                                        s_owned_v,
+                                        s_active_v,
+                                        s_vv_offset,
+                                        s_vv,
+                                        s_assigned_v,
+                                        s_current_frontier_v,
+                                        s_next_frontier_set_v,
+                                        s_new_p_active_v,  // reuse
+                                        s_new_p_owned_v,
+                                        10);
         block.sync();
 
+        // load FE and EV
+        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
+        uint16_t* s_fv = s_fe;
+        detail::load_async(block,
+                           reinterpret_cast<uint16_t*>(pi.ev),
+                           2 * num_edges,
+                           s_ev,
+                           false);
+        detail::load_async(block,
+                           reinterpret_cast<uint16_t*>(pi.fe),
+                           3 * num_faces,
+                           s_fe,
+                           true);
+        block.sync();
 
+        // compute FV
+        f_v<blockThreads>(
+            num_edges, s_ev, num_faces, s_fv, s_active_f.m_bitmask);
+        block.sync();
+
+        // bi_assignment<blockThreads>(block,
+        //                             num_vertices,
+        //                             num_edges,
+        //                             num_faces,
+        //                             s_owned_v,
+        //                             s_owned_e,
+        //                             s_owned_f,
+        //                             s_active_v,
+        //                             s_active_e,
+        //                             s_active_f,
+        //                             s_ev,
+        //                             s_fv,
+        //                             s_new_p_owned_v,
+        //                             s_new_p_owned_e,
+        //                             s_new_p_owned_f);
+        //
+
+        // Assign faces through vertices
+        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+            if (s_active_f(f)) {
+                const uint16_t v0(s_fv[3 * f + 0]), v1(s_fv[3 * f + 1]),
+                    v2(s_fv[3 * f + 2]);
+                assert(v0 < num_vertices);
+                assert(v1 < num_vertices);
+                assert(v2 < num_vertices);
+                if (s_new_p_owned_v(v0) || s_new_p_owned_v(v1) ||
+                    s_new_p_owned_v(v2)) {
+                    s_new_p_owned_f.set(f, true);
+                }
+            }
+        }
+        block.sync();
+
+        /// Load FE
         detail::load_async(block,
                            reinterpret_cast<uint16_t*>(pi.fe),
                            3 * num_faces,
@@ -304,6 +381,8 @@ __global__ static void slice_patches(Context        context,
                 s_new_p_owned_e.set(e2, true);
             }
         }
+
+        s_new_p_active_v.reset(block);
         block.sync();
 
         slice<blockThreads>(context,
@@ -345,11 +424,15 @@ __global__ static void slice_patches(Context        context,
 #ifndef NDEBUG
         block.sync();
         __shared__ uint32_t s_new_num_vertices, s_new_num_edges,
-            s_new_num_faces;
+            s_new_num_faces, s_old_num_vertices, s_old_num_edges,
+            s_old_num_faces;
         if (threadIdx.x == 0) {
             s_new_num_vertices = 0;
             s_new_num_edges    = 0;
             s_new_num_faces    = 0;
+            s_old_num_vertices = 0;
+            s_old_num_edges    = 0;
+            s_old_num_faces    = 0;
         }
         block.sync();
         PatchInfo old_pi = context.m_patches_info[pid];
@@ -359,7 +442,7 @@ __global__ static void slice_patches(Context        context,
              v += blockThreads) {
             if (!old_pi.is_deleted(LocalVertexT(v)) &&
                 old_pi.is_owned(LocalVertexT(v))) {
-                ::atomicAdd(&s_new_num_vertices, uint32_t(1));
+                ::atomicAdd(&s_old_num_vertices, uint32_t(1));
             }
         }
         for (uint16_t v = threadIdx.x; v < new_pi.num_vertices[0];
@@ -375,7 +458,7 @@ __global__ static void slice_patches(Context        context,
              e += blockThreads) {
             if (!old_pi.is_deleted(LocalEdgeT(e)) &&
                 old_pi.is_owned(LocalEdgeT(e))) {
-                ::atomicAdd(&s_new_num_edges, uint32_t(1));
+                ::atomicAdd(&s_old_num_edges, uint32_t(1));
             }
         }
         for (uint16_t e = threadIdx.x; e < new_pi.num_edges[0];
@@ -391,7 +474,7 @@ __global__ static void slice_patches(Context        context,
              f += blockThreads) {
             if (!old_pi.is_deleted(LocalFaceT(f)) &&
                 old_pi.is_owned(LocalFaceT(f))) {
-                ::atomicAdd(&s_new_num_faces, uint32_t(1));
+                ::atomicAdd(&s_old_num_faces, uint32_t(1));
             }
         }
         for (uint16_t f = threadIdx.x; f < new_pi.num_faces[0];
@@ -404,9 +487,24 @@ __global__ static void slice_patches(Context        context,
         block.sync();
 
         if (threadIdx.x == 0) {
-            assert(s_old_num_vertices == s_new_num_vertices);
-            assert(s_old_num_edges == s_new_num_edges);
-            assert(s_old_num_faces == s_new_num_faces);
+            assert(s_total_num_vertices ==
+                   s_new_num_vertices + s_old_num_vertices);
+            assert(s_total_num_edges == s_new_num_edges + s_old_num_edges);
+            assert(s_total_num_faces == s_new_num_faces + s_old_num_faces);
+            // printf(
+            //     "\n slicing %u into %u, #Vt= %u, #Vo= %u, #Vn= %u, #Et= %u, "
+            //     "#Eo= %u, #En= %u, #Ft= %u, #Fo= %u, #Fn= %u",
+            //     pi.patch_id,
+            //     s_new_patch_id,
+            //     s_total_num_vertices,
+            //     s_old_num_vertices,
+            //     s_new_num_vertices,
+            //     s_total_num_edges,
+            //     s_old_num_edges,
+            //     s_new_num_edges,
+            //     s_total_num_faces,
+            //     s_old_num_faces,
+            //     s_new_num_faces);
         }
 
 #endif
@@ -712,18 +810,18 @@ class RXMeshDynamic : public RXMeshStatic
         uint32_t dyn_shmem =
             2 * ShmemAllocator::default_alignment +
             (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
-            (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
         // active_v/e/f, owned_v/e/f, patch_v/e/f
         dyn_shmem +=
-            5 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
-            5 * ShmemAllocator::default_alignment;
+            7 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
+            7 * ShmemAllocator::default_alignment;
 
-        dyn_shmem += 5 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
-                     5 * ShmemAllocator::default_alignment;
+        dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
+                     4 * ShmemAllocator::default_alignment;
 
-        dyn_shmem += 5 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
-                     5 * ShmemAllocator::default_alignment;
+        dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
+                     4 * ShmemAllocator::default_alignment;
 
         dyn_shmem += PatchStash::stash_size * sizeof(uint32_t);
 
