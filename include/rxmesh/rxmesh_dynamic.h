@@ -790,8 +790,8 @@ class RXMeshDynamic : public RXMeshStatic
     template <typename... AttributesT>
     void slice_patches(AttributesT... attributes)
     {
-        constexpr uint32_t block_size = 256;
-        const uint32_t     grid_size  = get_num_patches();
+
+        const uint32_t grid_size = get_num_patches();
 
         CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
                               this->m_rxmesh_context.m_max_num_vertices,
@@ -825,8 +825,37 @@ class RXMeshDynamic : public RXMeshStatic
 
         dyn_shmem += PatchStash::stash_size * sizeof(uint32_t);
 
-        detail::slice_patches<block_size><<<grid_size, block_size, dyn_shmem>>>(
-            this->m_rxmesh_context, get_num_patches(), attributes...);
+        if (2 * this->m_max_edges_per_patch <=
+            256 * TRANSPOSE_ITEM_PER_THREAD) {
+            detail::slice_patches<256><<<grid_size, 256, dyn_shmem>>>(
+                this->m_rxmesh_context, get_num_patches(), attributes...);
+        } else if (2 * this->m_max_edges_per_patch <=
+                   384 * TRANSPOSE_ITEM_PER_THREAD) {
+
+            detail::slice_patches<384><<<grid_size, 384, dyn_shmem>>>(
+                this->m_rxmesh_context, get_num_patches(), attributes...);
+
+        } else if (2 * this->m_max_edges_per_patch <=
+                   512 * TRANSPOSE_ITEM_PER_THREAD) {
+
+            detail::slice_patches<512><<<grid_size, 512, dyn_shmem>>>(
+                this->m_rxmesh_context, get_num_patches(), attributes...);
+        } else if (2 * this->m_max_edges_per_patch <=
+                   640 * TRANSPOSE_ITEM_PER_THREAD) {
+
+            detail::slice_patches<640><<<grid_size, 640, dyn_shmem>>>(
+                this->m_rxmesh_context, get_num_patches(), attributes...);
+        } else if (2 * this->m_max_edges_per_patch <=
+                   768 * TRANSPOSE_ITEM_PER_THREAD) {
+
+            detail::slice_patches<768><<<grid_size, 768, dyn_shmem>>>(
+                this->m_rxmesh_context, get_num_patches(), attributes...);
+        } else {
+            RXMESH_ERROR(
+                "RXMeshDynamic::slice_patches() can not find block size to "
+                "run slice_patches kernel");
+        }
+        CUDA_ERROR(cudaGetLastError());
     }
 
 

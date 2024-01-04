@@ -1085,6 +1085,8 @@ __inline__ __device__ void bi_assignment_ggp(
 
     // init region growing by populating the current frontier with the seeds
     auto init_region_growing = [&]() {
+        assert(s_seed_a != s_seed_b);
+
         s_partition_a_v.reset(block);
         s_partition_b_v.reset(block);
         s_assigned_v.reset(block);
@@ -2859,6 +2861,106 @@ template __inline__ __device__ void detail::slice<256>(
     Bitmask&,
     Bitmask&);
 
+
+template __inline__ __device__ void detail::slice<384>(
+    Context&,
+    cooperative_groups::thread_block&,
+    PatchInfo&,
+    const uint32_t,
+    const uint16_t,
+    const uint16_t,
+    const uint16_t,
+    PatchStash&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    const Bitmask&,
+    const Bitmask&,
+    const Bitmask&,
+    const uint16_t*,
+    const uint16_t*,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&);
+
+
+template __inline__ __device__ void detail::slice<512>(
+    Context&,
+    cooperative_groups::thread_block&,
+    PatchInfo&,
+    const uint32_t,
+    const uint16_t,
+    const uint16_t,
+    const uint16_t,
+    PatchStash&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    const Bitmask&,
+    const Bitmask&,
+    const Bitmask&,
+    const uint16_t*,
+    const uint16_t*,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&);
+
+
+template __inline__ __device__ void detail::slice<640>(
+    Context&,
+    cooperative_groups::thread_block&,
+    PatchInfo&,
+    const uint32_t,
+    const uint16_t,
+    const uint16_t,
+    const uint16_t,
+    PatchStash&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    const Bitmask&,
+    const Bitmask&,
+    const Bitmask&,
+    const uint16_t*,
+    const uint16_t*,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&);
+
+
+template __inline__ __device__ void detail::slice<768>(
+    Context&,
+    cooperative_groups::thread_block&,
+    PatchInfo&,
+    const uint32_t,
+    const uint16_t,
+    const uint16_t,
+    const uint16_t,
+    PatchStash&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    const Bitmask&,
+    const Bitmask&,
+    const Bitmask&,
+    const uint16_t*,
+    const uint16_t*,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&);
+
 template __inline__ __device__ void detail::bi_assignment<256>(
     cooperative_groups::thread_block&,
     const uint16_t,
@@ -2877,6 +2979,58 @@ template __inline__ __device__ void detail::bi_assignment<256>(
     Bitmask&);
 
 template __inline__ __device__ void detail::bi_assignment_ggp<256>(
+    cooperative_groups::thread_block&,
+    const uint16_t,
+    const Bitmask&,
+    const Bitmask&,
+    const uint16_t*,
+    const uint16_t*,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    int);
+template __inline__ __device__ void detail::bi_assignment_ggp<384>(
+    cooperative_groups::thread_block&,
+    const uint16_t,
+    const Bitmask&,
+    const Bitmask&,
+    const uint16_t*,
+    const uint16_t*,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    int);
+template __inline__ __device__ void detail::bi_assignment_ggp<512>(
+    cooperative_groups::thread_block&,
+    const uint16_t,
+    const Bitmask&,
+    const Bitmask&,
+    const uint16_t*,
+    const uint16_t*,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    int);
+template __inline__ __device__ void detail::bi_assignment_ggp<640>(
+    cooperative_groups::thread_block&,
+    const uint16_t,
+    const Bitmask&,
+    const Bitmask&,
+    const uint16_t*,
+    const uint16_t*,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    int);
+template __inline__ __device__ void detail::bi_assignment_ggp<768>(
     cooperative_groups::thread_block&,
     const uint16_t,
     const Bitmask&,

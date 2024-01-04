@@ -24,6 +24,8 @@ __device__ __forceinline__ void block_mat_transpose(
     const uint32_t* row_active_mask,
     int             shift)
 {
+    assert(num_rows * rowOffset <= itemPerThread * blockThreads);
+
     // 1) Load mat into registers and zero out mat
     uint16_t thread_data[itemPerThread];
     uint16_t local_offset[itemPerThread];
