@@ -1007,7 +1007,7 @@ __inline__ __device__ void bi_assignment_ggp(
     const uint16_t*                   s_vv,
     Bitmask&                          s_assigned_v,
     Bitmask&                          s_current_frontier_v,
-    Bitmask&                          s_next_frontier_set_v,
+    Bitmask&                          s_next_frontier_v,
     Bitmask&                          s_partition_a_v,
     Bitmask&                          s_partition_b_v,
     int                               num_iter)
@@ -1018,8 +1018,7 @@ __inline__ __device__ void bi_assignment_ggp(
     __shared__ int      s_num_active_vertices;
     __shared__ int      s_num_A_vertices, s_num_B_vertices;
     __shared__ uint16_t s_seed_a, s_seed_b;
-    block.sync();
-
+    
 
     // compute the total number of active vertices (including not-owned)
     auto compute_num_active_vertices = [&]() {
@@ -1063,7 +1062,7 @@ __inline__ __device__ void bi_assignment_ggp(
         assert(found_a);
 
         for (uint16_t v = num_vertices - 1; v > 1; --v) {
-            if (s_active_v(v) && !s_owned_v(v) && !s_assigned_v(v)) {
+            if (s_active_v(v) && !s_owned_v(v) && v != s_seed_a) {
                 s_seed_b = v;
                 found_b  = true;
                 break;
@@ -1072,7 +1071,7 @@ __inline__ __device__ void bi_assignment_ggp(
 
         if (!found_b) {
             for (uint16_t v = num_vertices - 1; v > 1; --v) {
-                if (s_active_v(v) && !s_assigned_v(v)) {
+                if (s_active_v(v) && v != s_seed_a) {
                     s_seed_b = v;
                     found_b  = true;
                     break;
@@ -1091,6 +1090,7 @@ __inline__ __device__ void bi_assignment_ggp(
         s_partition_b_v.reset(block);
         s_assigned_v.reset(block);
         s_current_frontier_v.reset(block);
+        s_next_frontier_v.reset(block);
         block.sync();
 
         if (threadIdx.x == 0) {
@@ -1140,13 +1140,15 @@ __inline__ __device__ void bi_assignment_ggp(
                         if (!s_assigned_v(nv)) {
                             if (s_partition_a_v(v)) {
                                 if (s_partition_a_v.try_set(nv)) {
-                                    s_next_frontier_set_v.set(nv, true);
+                                    s_next_frontier_v.set(nv, true);
+                                    assert(s_partition_a_v(nv));
                                     ::atomicAdd(&s_num_A_vertices, 1);
                                 }
                             }
                             if (s_partition_b_v(v)) {
                                 if (s_partition_b_v.try_set(nv)) {
-                                    s_next_frontier_set_v.set(nv, true);
+                                    s_next_frontier_v.set(nv, true);
+                                    assert(s_partition_b_v(nv));
                                     ::atomicAdd(&s_num_B_vertices, 1);
                                 }
                             }
@@ -1159,15 +1161,15 @@ __inline__ __device__ void bi_assignment_ggp(
 
             for (uint16_t v = threadIdx.x; v < num_vertices;
                  v += blockThreads) {
-                if (s_next_frontier_set_v(v)) {
+                if (s_next_frontier_v(v)) {
                     ::atomicAdd(&s_num_assigned_vertices, 1);
                     s_assigned_v.set(v, true);
                 }
             }
 
-            s_current_frontier_v.copy(block, s_next_frontier_set_v);
+            s_current_frontier_v.copy(block, s_next_frontier_v);
             block.sync();
-            s_next_frontier_set_v.reset(block);
+            s_next_frontier_v.reset(block);
         }
     };
 
@@ -1267,7 +1269,7 @@ __inline__ __device__ void bi_assignment_ggp(
                         if (!s_assigned_v(nv)) {
                             if (is_a) {
                                 if (s_partition_a_v(nv)) {
-                                    if (s_next_frontier_set_v.try_set(nv)) {
+                                    if (s_next_frontier_v.try_set(nv)) {
                                         ::atomicAdd(&s_num_assigned_vertices,
                                                     1);
                                         s_seed_a = nv;
@@ -1275,7 +1277,7 @@ __inline__ __device__ void bi_assignment_ggp(
                                 }
                             } else {
                                 if (s_partition_b_v(nv)) {
-                                    if (s_next_frontier_set_v.try_set(nv)) {
+                                    if (s_next_frontier_v.try_set(nv)) {
                                         ::atomicAdd(&s_num_assigned_vertices,
                                                     1);
                                         s_seed_b = nv;
@@ -1291,14 +1293,14 @@ __inline__ __device__ void bi_assignment_ggp(
 
             for (uint16_t v = threadIdx.x; v < num_vertices;
                  v += blockThreads) {
-                if (s_next_frontier_set_v(v)) {
+                if (s_next_frontier_v(v)) {
                     s_assigned_v.set(v, true);
                 }
             }
 
-            s_current_frontier_v.copy(block, s_next_frontier_set_v);
+            s_current_frontier_v.copy(block, s_next_frontier_v);
             block.sync();
-            s_next_frontier_set_v.reset(block);
+            s_next_frontier_v.reset(block);
         }
     };
 
@@ -1315,83 +1317,27 @@ __inline__ __device__ void bi_assignment_ggp(
         init_region_growing();
         block.sync();
 
-
-        // if (threadIdx.x == 0) {
-        //     printf("\n GGP Done init_region_growing -- it = %u", it);
-        //     printf("\n seed_a = %u, owned= %d, seed_b= %u, owned= %d",
-        //            s_seed_a,
-        //            int(s_owned_v(s_seed_a)),
-        //            s_seed_b,
-        //            int(s_owned_v(s_seed_b)));
-        // }
-
-
         region_growing();
         block.sync();
-
-        // if (threadIdx.x == 0) {
-        //     printf(
-        //         "\n GGP Done region_growing -- it = %u, s_num_A_vertices= %u,
-        //         " "s_num_B_vertices= %u, s_num_assigned_vertices= %u, "
-        //         "num_vertices= %u, num_active_vertices= %u",
-        //         it,
-        //         s_num_A_vertices,
-        //         s_num_B_vertices,
-        //         s_num_assigned_vertices,
-        //         num_vertices,
-        //         s_num_active_vertices);
-        // }
-
 
         impose_constraints();
         block.sync();
 
-        // if (threadIdx.x == 0) {
-        //     printf(
-        //         "\n GGP Done impose_constraints -- it = %u, s_num_A_vertices=
-        //         "
-        //         "%u, "
-        //         "s_num_B_vertices= %u",
-        //         it,
-        //         s_num_A_vertices,
-        //         s_num_B_vertices);
-        // }
 
         // if we have reached good balance, then terminate early
         float ratio = float(std::abs(s_num_A_vertices - s_num_B_vertices)) /
                       float(s_num_active_vertices);
         if (ratio < 0.1f) {
-            // if (threadIdx.x == 0) {
-            //     printf("\n ratio = %f", ratio);
-            // }
             break;
         }
 
         assert(s_num_A_vertices + s_num_B_vertices == s_num_active_vertices);
 
-        // if (threadIdx.x == 0) {
-        //     printf(
-        //         "\n GGP Done impose_constraints -- it = %u, s_num_A_vertices=
-        //         "
-        //         "%u, s_num_A_vertices= %u",
-        //         it,
-        //         s_num_A_vertices,
-        //         s_num_B_vertices);
-        // }
-
         init_interior();
         block.sync();
 
-        // if (threadIdx.x == 0) {
-        //     printf("\n GGP Done init_interior -- it = %u", it);
-        // }
-
         compute_interior();
         block.sync();
-
-        // if (threadIdx.x == 0) {
-        //     printf("\n GGP Done compute_interior -- it = %u", it);
-        // }
     }
 
 #ifndef NDEBUG

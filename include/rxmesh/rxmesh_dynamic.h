@@ -38,7 +38,7 @@ __inline__ __device__ void bi_assignment_ggp(
     const uint16_t*                   m_s_vv,
     Bitmask&                          s_assigned_v,
     Bitmask&                          s_current_frontier_v,
-    Bitmask&                          s_next_frontier_set_v,
+    Bitmask&                          s_next_frontier_v,
     Bitmask&                          s_partition_a_v,
     Bitmask&                          s_partition_b_v,
     int                               num_iter);
@@ -189,16 +189,16 @@ __global__ static void slice_patches(Context        context,
                 context.m_patches_info[pid].should_slice = false;
             }
 
-            // printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
+            //printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
         Bitmask s_active_v, s_active_e, s_active_f;
         Bitmask s_new_p_owned_v, s_new_p_owned_e, s_new_p_owned_f;
         Bitmask s_new_p_active_v, s_new_p_active_e, s_new_p_active_f;
 
-        Bitmask s_assigned_v          = Bitmask(num_vertices, shrd_alloc);
-        Bitmask s_current_frontier_v  = Bitmask(num_vertices, shrd_alloc);
-        Bitmask s_next_frontier_set_v = Bitmask(num_vertices, shrd_alloc);
+        Bitmask s_assigned_v         = Bitmask(num_vertices, shrd_alloc);
+        Bitmask s_current_frontier_v = Bitmask(num_vertices, shrd_alloc);
+        Bitmask s_next_frontier_v    = Bitmask(num_vertices, shrd_alloc);
 
         block.sync();
         if (s_new_patch_id == INVALID32) {
@@ -293,6 +293,7 @@ __global__ static void slice_patches(Context        context,
                 s_vv[e] = (v0 == v) * v1 + (v1 == v) * v0;
             }
         }
+        block.sync();
 
         // slice
         bi_assignment_ggp<blockThreads>(block,
@@ -303,7 +304,7 @@ __global__ static void slice_patches(Context        context,
                                         s_vv,
                                         s_assigned_v,
                                         s_current_frontier_v,
-                                        s_next_frontier_set_v,
+                                        s_next_frontier_v,
                                         s_new_p_active_v,  // reuse
                                         s_new_p_owned_v,
                                         10);
@@ -808,12 +809,19 @@ class RXMeshDynamic : public RXMeshStatic
         dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
                      4 * ShmemAllocator::default_alignment;
 
-        dyn_shmem += PatchStash::stash_size * sizeof(uint32_t);
+        dyn_shmem += PatchStash::stash_size * sizeof(uint32_t) +
+                     ShmemAllocator::default_alignment;
 
         constexpr uint32_t block_size = 256;
 
         auto launch = [&](int add_item) {
-            if (add_item == 1) {
+            if (add_item == 0) {
+                detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD>
+                    <<<grid_size, block_size, dyn_shmem>>>(
+                        this->m_rxmesh_context,
+                        get_num_patches(),
+                        attributes...);
+            } else if (add_item == 1) {
                 detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD + 1>
                     <<<grid_size, block_size, dyn_shmem>>>(
                         this->m_rxmesh_context,
@@ -855,7 +863,15 @@ class RXMeshDynamic : public RXMeshStatic
             size_t   smem_bytes_static;
             uint32_t num_reg_per_thread;
 
-            if (add_item == 1) {
+            if (add_item == 0) {
+                check_shared_memory(
+                    dyn_shmem,
+                    smem_bytes_static,
+                    num_reg_per_thread,
+                    block_size,
+                    detail::slice_patches<block_size,
+                                          TRANSPOSE_ITEM_PER_THREAD + 0>);
+            } else if (add_item == 1) {
                 check_shared_memory(
                     dyn_shmem,
                     smem_bytes_static,
@@ -902,14 +918,14 @@ class RXMeshDynamic : public RXMeshStatic
             }
         };
 
-        for (uint32_t it = 1; it < 6; ++it) {
+        for (uint32_t it = 0; it < 6; ++it) {
             if (2 * this->m_max_edges_per_patch <=
                 block_size * (TRANSPOSE_ITEM_PER_THREAD + it)) {
                 check(it);
                 launch(it);
                 break;
             }
-        }       
+        }
         CUDA_ERROR(cudaGetLastError());
     }
 
