@@ -385,7 +385,8 @@ __device__ __forceinline__ void orient_edges_around_vertices(
     shrd_alloc.dealloc<uint16_t>(2 * 3 * num_faces);
 }
 
-template <uint32_t blockThreads>
+template <uint32_t blockThreads,
+          uint32_t itemPerThread = TRANSPOSE_ITEM_PER_THREAD>
 __device__ __forceinline__ void v_e(const uint16_t  num_vertices,
                                     const uint16_t  num_edges,
                                     uint16_t*       d_edges,
@@ -400,7 +401,7 @@ __device__ __forceinline__ void v_e(const uint16_t  num_vertices,
     // num_edges*2 (zero is stored and the end can be inferred). Thus,
     // d_output should be allocated to size = num_edges*2
 
-    block_mat_transpose<2u, blockThreads>(
+    block_mat_transpose<2u, blockThreads, itemPerThread>(
         num_edges, num_vertices, d_edges, d_output, active_mask_e, 0);
 }
 

@@ -1505,6 +1505,18 @@ class RXMeshStatic : public RXMesh
                 devProp.sharedMemPerBlock);
             exit(EXIT_FAILURE);
         }
+
+        if (num_blocks_per_sm == 0) {
+            RXMESH_ERROR(
+                "RXMeshStatic::check_shared_memory() This kernel will not run "
+                "since it asks for too many resources i.e., shared memory "
+                "and/or registers. If you are in Debug mode, try to switch to "
+                "Release. Otherwise, you may try to change the block size "
+                "and/or break the kernel into such that the number of "
+                "registers is less. You may also try reducing the amount of "
+                "additional shared memory you requested");
+            exit(EXIT_FAILURE);
+        }
     }
 
 #if USE_POLYSCOPE

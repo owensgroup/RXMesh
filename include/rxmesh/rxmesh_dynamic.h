@@ -106,7 +106,9 @@ __inline__ __device__ void post_slicing_update_attributes(
 }
 
 
-template <uint32_t blockThreads, typename... AttributesT>
+template <uint32_t blockThreads,
+          uint32_t itemPerThread,
+          typename... AttributesT>
 __global__ static void slice_patches(Context        context,
                                      const uint32_t current_num_patches,
                                      AttributesT... attributes)
@@ -275,7 +277,7 @@ __global__ static void slice_patches(Context        context,
         // compute VV
         uint16_t* s_vv        = &s_ev[num_vertices + 1];
         uint16_t* s_vv_offset = s_ev;
-        v_e<blockThreads>(
+        v_e<blockThreads, itemPerThread>(
             num_vertices, num_edges, s_ev, s_vv, s_active_e.m_bitmask);
         block.sync();
         for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
@@ -326,23 +328,6 @@ __global__ static void slice_patches(Context        context,
         f_v<blockThreads>(
             num_edges, s_ev, num_faces, s_fv, s_active_f.m_bitmask);
         block.sync();
-
-        // bi_assignment<blockThreads>(block,
-        //                             num_vertices,
-        //                             num_edges,
-        //                             num_faces,
-        //                             s_owned_v,
-        //                             s_owned_e,
-        //                             s_owned_f,
-        //                             s_active_v,
-        //                             s_active_e,
-        //                             s_active_f,
-        //                             s_ev,
-        //                             s_fv,
-        //                             s_new_p_owned_v,
-        //                             s_new_p_owned_e,
-        //                             s_new_p_owned_f);
-        //
 
         // Assign faces through vertices
         for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
@@ -825,36 +810,106 @@ class RXMeshDynamic : public RXMeshStatic
 
         dyn_shmem += PatchStash::stash_size * sizeof(uint32_t);
 
-        if (2 * this->m_max_edges_per_patch <=
-            256 * TRANSPOSE_ITEM_PER_THREAD) {
-            detail::slice_patches<256><<<grid_size, 256, dyn_shmem>>>(
-                this->m_rxmesh_context, get_num_patches(), attributes...);
-        } else if (2 * this->m_max_edges_per_patch <=
-                   384 * TRANSPOSE_ITEM_PER_THREAD) {
+        constexpr uint32_t block_size = 256;
 
-            detail::slice_patches<384><<<grid_size, 384, dyn_shmem>>>(
-                this->m_rxmesh_context, get_num_patches(), attributes...);
+        auto launch = [&](int add_item) {
+            if (add_item == 1) {
+                detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD + 1>
+                    <<<grid_size, block_size, dyn_shmem>>>(
+                        this->m_rxmesh_context,
+                        get_num_patches(),
+                        attributes...);
+            } else if (add_item == 2) {
+                detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD + 2>
+                    <<<grid_size, block_size, dyn_shmem>>>(
+                        this->m_rxmesh_context,
+                        get_num_patches(),
+                        attributes...);
+            } else if (add_item == 3) {
+                detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD + 3>
+                    <<<grid_size, block_size, dyn_shmem>>>(
+                        this->m_rxmesh_context,
+                        get_num_patches(),
+                        attributes...);
+            } else if (add_item == 4) {
+                detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD + 4>
+                    <<<grid_size, block_size, dyn_shmem>>>(
+                        this->m_rxmesh_context,
+                        get_num_patches(),
+                        attributes...);
+            } else if (add_item == 5) {
+                detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD + 5>
+                    <<<grid_size, block_size, dyn_shmem>>>(
+                        this->m_rxmesh_context,
+                        get_num_patches(),
+                        attributes...);
+            } else {
+                RXMESH_ERROR(
+                    "RXMeshDynamic::slice_patches() can not find good "
+                    "configuration to  run slice_patches kernel");
+            }
+        };
 
-        } else if (2 * this->m_max_edges_per_patch <=
-                   512 * TRANSPOSE_ITEM_PER_THREAD) {
 
-            detail::slice_patches<512><<<grid_size, 512, dyn_shmem>>>(
-                this->m_rxmesh_context, get_num_patches(), attributes...);
-        } else if (2 * this->m_max_edges_per_patch <=
-                   640 * TRANSPOSE_ITEM_PER_THREAD) {
+        auto check = [&](int add_item) {
+            size_t   smem_bytes_static;
+            uint32_t num_reg_per_thread;
 
-            detail::slice_patches<640><<<grid_size, 640, dyn_shmem>>>(
-                this->m_rxmesh_context, get_num_patches(), attributes...);
-        } else if (2 * this->m_max_edges_per_patch <=
-                   768 * TRANSPOSE_ITEM_PER_THREAD) {
+            if (add_item == 1) {
+                check_shared_memory(
+                    dyn_shmem,
+                    smem_bytes_static,
+                    num_reg_per_thread,
+                    block_size,
+                    detail::slice_patches<block_size,
+                                          TRANSPOSE_ITEM_PER_THREAD + 1>);
+            } else if (add_item == 2) {
+                check_shared_memory(
+                    dyn_shmem,
+                    smem_bytes_static,
+                    num_reg_per_thread,
+                    block_size,
+                    detail::slice_patches<block_size,
+                                          TRANSPOSE_ITEM_PER_THREAD + 2>);
+            } else if (add_item == 3) {
+                check_shared_memory(
+                    dyn_shmem,
+                    smem_bytes_static,
+                    num_reg_per_thread,
+                    block_size,
+                    detail::slice_patches<block_size,
+                                          TRANSPOSE_ITEM_PER_THREAD + 3>);
+            } else if (add_item == 4) {
+                check_shared_memory(
+                    dyn_shmem,
+                    smem_bytes_static,
+                    num_reg_per_thread,
+                    block_size,
+                    detail::slice_patches<block_size,
+                                          TRANSPOSE_ITEM_PER_THREAD + 4>);
+            } else if (add_item == 5) {
+                check_shared_memory(
+                    dyn_shmem,
+                    smem_bytes_static,
+                    num_reg_per_thread,
+                    block_size,
+                    detail::slice_patches<block_size,
+                                          TRANSPOSE_ITEM_PER_THREAD + 5>);
+            } else {
+                RXMESH_ERROR(
+                    "RXMeshDynamic::slice_patches() can not find good "
+                    "configuration to run slice_patches kernel");
+            }
+        };
 
-            detail::slice_patches<768><<<grid_size, 768, dyn_shmem>>>(
-                this->m_rxmesh_context, get_num_patches(), attributes...);
-        } else {
-            RXMESH_ERROR(
-                "RXMeshDynamic::slice_patches() can not find block size to "
-                "run slice_patches kernel");
-        }
+        for (uint32_t it = 1; it < 6; ++it) {
+            if (2 * this->m_max_edges_per_patch <=
+                block_size * (TRANSPOSE_ITEM_PER_THREAD + it)) {
+                check(it);
+                launch(it);
+                break;
+            }
+        }       
         CUDA_ERROR(cudaGetLastError());
     }
 
