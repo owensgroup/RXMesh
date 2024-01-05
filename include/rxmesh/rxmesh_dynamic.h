@@ -6,6 +6,8 @@
 #include "rxmesh/bitmask.cuh"
 #include "rxmesh/kernels/rxmesh_queries.cuh"
 
+#define SLICE_GGP
+
 namespace rxmesh {
 namespace detail {
 
@@ -189,7 +191,7 @@ __global__ static void slice_patches(Context        context,
                 context.m_patches_info[pid].should_slice = false;
             }
 
-            //printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
+            // printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
         Bitmask s_active_v, s_active_e, s_active_f;
@@ -207,6 +209,9 @@ __global__ static void slice_patches(Context        context,
 
 
         uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * 2 * num_edges);
+        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
+        uint16_t* s_fv = s_fe;
+
         detail::load_async(block,
                            reinterpret_cast<uint16_t*>(pi.ev),
                            2 * num_edges,
@@ -243,37 +248,7 @@ __global__ static void slice_patches(Context        context,
         cooperative_groups::wait(block);
         block.sync();
 
-#ifndef NDEBUG
-        // record the number of vertices/edges/faces that are active and owned
-        // then we make sure that the number of vertices/edges/faces that are
-        // active and owned by the two patches (old and new sliced one) are
-        // equal the old number of vertices/edges/faces
-        __shared__ uint32_t s_total_num_vertices, s_total_num_edges,
-            s_total_num_faces;
-        if (threadIdx.x == 0) {
-            s_total_num_vertices = 0;
-            s_total_num_edges    = 0;
-            s_total_num_faces    = 0;
-        }
-        block.sync();
-        for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
-            if (s_active_v(v) && s_owned_v(v)) {
-                ::atomicAdd(&s_total_num_vertices, uint32_t(1));
-            }
-        }
-        for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-            if (s_active_e(e) && s_owned_e(e)) {
-                ::atomicAdd(&s_total_num_edges, uint32_t(1));
-            }
-        }
-        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
-            if (s_active_f(f) && s_owned_f(f)) {
-                ::atomicAdd(&s_total_num_faces, uint32_t(1));
-            }
-        }
-        block.sync();
-#endif
-
+#ifdef SLICE_GGP
         // compute VV
         uint16_t* s_vv        = &s_ev[num_vertices + 1];
         uint16_t* s_vv_offset = s_ev;
@@ -310,9 +285,9 @@ __global__ static void slice_patches(Context        context,
                                         10);
         block.sync();
 
-        // load FE and EV
-        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
-        uint16_t* s_fv = s_fe;
+        s_new_p_active_v.reset(block);
+
+        // load FE and EV(again)
         detail::load_async(block,
                            reinterpret_cast<uint16_t*>(pi.ev),
                            2 * num_edges,
@@ -346,6 +321,36 @@ __global__ static void slice_patches(Context        context,
         }
         block.sync();
 
+
+#else
+        detail::load_async(block,
+                           reinterpret_cast<uint16_t*>(pi.fe),
+                           3 * num_faces,
+                           s_fe,
+                           true);
+        block.sync();
+        f_v<blockThreads>(
+            num_edges, s_ev, num_faces, s_fv, s_active_f.m_bitmask);
+        block.sync();
+
+        bi_assignment<blockThreads>(block,
+                                    num_vertices,
+                                    num_edges,
+                                    num_faces,
+                                    s_owned_v,
+                                    s_owned_e,
+                                    s_owned_f,
+                                    s_active_v,
+                                    s_active_e,
+                                    s_active_f,
+                                    s_ev,
+                                    s_fv,
+                                    s_new_p_owned_v,
+                                    s_new_p_owned_e,
+                                    s_new_p_owned_f);
+        block.sync();
+#endif
+
         /// Load FE
         detail::load_async(block,
                            reinterpret_cast<uint16_t*>(pi.fe),
@@ -368,8 +373,36 @@ __global__ static void slice_patches(Context        context,
             }
         }
 
-        s_new_p_active_v.reset(block);
+#ifndef NDEBUG
+        // record the number of vertices/edges/faces that are active and owned
+        // then we make sure that the number of vertices/edges/faces that are
+        // active and owned by the two patches (old and new sliced one) are
+        // equal the old number of vertices/edges/faces
+        __shared__ uint32_t s_total_num_vertices, s_total_num_edges,
+            s_total_num_faces;
+        if (threadIdx.x == 0) {
+            s_total_num_vertices = 0;
+            s_total_num_edges    = 0;
+            s_total_num_faces    = 0;
+        }
         block.sync();
+        for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+            if (s_active_v(v) && s_owned_v(v)) {
+                ::atomicAdd(&s_total_num_vertices, uint32_t(1));
+            }
+        }
+        for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+            if (s_active_e(e) && s_owned_e(e)) {
+                ::atomicAdd(&s_total_num_edges, uint32_t(1));
+            }
+        }
+        for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+            if (s_active_f(f) && s_owned_f(f)) {
+                ::atomicAdd(&s_total_num_faces, uint32_t(1));
+            }
+        }
+        block.sync();
+#endif
 
         slice<blockThreads>(context,
                             block,
