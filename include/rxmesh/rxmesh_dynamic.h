@@ -902,54 +902,54 @@ class RXMeshDynamic : public RXMeshStatic
                     smem_bytes_static,
                     num_reg_per_thread,
                     block_size,
-                    (void*)
-                        detail::slice_patches<block_size,
-                                              TRANSPOSE_ITEM_PER_THREAD + 0>);
+                    (void*)detail::slice_patches<block_size,
+                                                 TRANSPOSE_ITEM_PER_THREAD + 0>,
+                    false);
             } else if (add_item == 1) {
                 check_shared_memory(
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
                     block_size,
-                    (void*)
-                        detail::slice_patches<block_size,
-                                              TRANSPOSE_ITEM_PER_THREAD + 1>);
+                    (void*)detail::slice_patches<block_size,
+                                                 TRANSPOSE_ITEM_PER_THREAD + 1>,
+                    false);
             } else if (add_item == 2) {
                 check_shared_memory(
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
                     block_size,
-                    (void*)
-                        detail::slice_patches<block_size,
-                                              TRANSPOSE_ITEM_PER_THREAD + 2>);
+                    (void*)detail::slice_patches<block_size,
+                                                 TRANSPOSE_ITEM_PER_THREAD + 2>,
+                    false);
             } else if (add_item == 3) {
                 check_shared_memory(
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
                     block_size,
-                    (void*)
-                        detail::slice_patches<block_size,
-                                              TRANSPOSE_ITEM_PER_THREAD + 3>);
+                    (void*)detail::slice_patches<block_size,
+                                                 TRANSPOSE_ITEM_PER_THREAD + 3>,
+                    false);
             } else if (add_item == 4) {
                 check_shared_memory(
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
                     block_size,
-                    (void*)
-                        detail::slice_patches<block_size,
-                                              TRANSPOSE_ITEM_PER_THREAD + 4>);
+                    (void*)detail::slice_patches<block_size,
+                                                 TRANSPOSE_ITEM_PER_THREAD + 4>,
+                    false);
             } else if (add_item == 5) {
                 check_shared_memory(
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
                     block_size,
-                    (void*)
-                        detail::slice_patches<block_size,
-                                              TRANSPOSE_ITEM_PER_THREAD + 5>);
+                    (void*)detail::slice_patches<block_size,
+                                                 TRANSPOSE_ITEM_PER_THREAD + 5>,
+                    false);
             } else {
                 RXMESH_ERROR(
                     "RXMeshDynamic::slice_patches() can not find good "

@@ -1460,7 +1460,8 @@ class RXMeshStatic : public RXMesh
                              size_t&        smem_bytes_static,
                              uint32_t&      num_reg_per_thread,
                              const uint32_t num_threads_per_block,
-                             const void*    kernel) const
+                             const void*    kernel,
+                             bool           print = true) const
     {
         // check if total shared memory (static + dynamic) consumed by
         // k_base_query are less than the max shared per block
@@ -1479,22 +1480,23 @@ class RXMeshStatic : public RXMesh
         CUDA_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
             &num_blocks_per_sm, kernel, num_threads_per_block, smem_bytes_dyn));
 
-        RXMESH_TRACE(
-            "RXMeshStatic::check_shared_memory() user function requires "
-            "shared memory = {} (dynamic) + {} (static) = {} (bytes) and "
-            "{} registers per thread with occupancy of {} blocks/SM",
-            smem_bytes_dyn,
-            smem_bytes_static,
-            smem_bytes_dyn + smem_bytes_static,
-            num_reg_per_thread,
-            num_blocks_per_sm);
+        if (print) {
+            RXMESH_TRACE(
+                "RXMeshStatic::check_shared_memory() user function requires "
+                "shared memory = {} (dynamic) + {} (static) = {} (bytes) and "
+                "{} registers per thread with occupancy of {} blocks/SM",
+                smem_bytes_dyn,
+                smem_bytes_static,
+                smem_bytes_dyn + smem_bytes_static,
+                num_reg_per_thread,
+                num_blocks_per_sm);
 
-        RXMESH_TRACE(
-            "RXMeshStatic::check_shared_memory() available total shared "
-            "memory per block = {} (bytes) = {} (Kb)",
-            devProp.sharedMemPerBlock,
-            float(devProp.sharedMemPerBlock) / 1024.0f);
-
+            RXMESH_TRACE(
+                "RXMeshStatic::check_shared_memory() available total shared "
+                "memory per block = {} (bytes) = {} (Kb)",
+                devProp.sharedMemPerBlock,
+                float(devProp.sharedMemPerBlock) / 1024.0f);
+        }
 
         if (smem_bytes_static + smem_bytes_dyn > devProp.sharedMemPerBlock) {
             RXMESH_ERROR(
