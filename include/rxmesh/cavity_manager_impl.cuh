@@ -592,12 +592,12 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     alloc_shared_memory(block, shrd_alloc);
 
     // construct cavity graph
-    //construct_cavity_graph(block);
-    //block.sync();
+    // construct_cavity_graph(block);
+    // block.sync();
 
     // calculate a maximal independent set of non-overlapping cavities
-    //calc_cavity_maximal_independent_set(block);
-    //block.sync();
+    // calc_cavity_maximal_independent_set(block);
+    // block.sync();
 
     // propagate the cavity ID
     propagate(block);
@@ -2339,6 +2339,17 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     }
     block.sync();
 
+    // make sure non of the q patches are dirty
+    for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
+        assert(st < m_s_locked_patches_mask.size());
+        if (m_s_locked_patches_mask(st)) {
+            const uint32_t q = m_s_patch_stash.get_patch(st);
+            if (m_context.m_patches_info[q].is_dirty()) {
+                return false;
+            }
+        }
+    }
+    block.sync();
 
     // full migrate
     for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
@@ -2352,7 +2363,8 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     block.sync();
 
 
-    // make sure non of the q patches are dirty
+    // since we may have added new patches during dull migration, make sure non
+    // of the q patches are dirty
     for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
         assert(st < m_s_locked_patches_mask.size());
         if (m_s_locked_patches_mask(st)) {

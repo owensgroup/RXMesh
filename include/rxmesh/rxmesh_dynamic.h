@@ -53,7 +53,8 @@ __inline__ __device__ void slice(Context&                          context,
                                  const uint16_t                    num_vertices,
                                  const uint16_t                    num_edges,
                                  const uint16_t                    num_faces,
-                                 PatchStash&     s_new_patch_stash,
+                                 PatchStash& s_new_patch_stash,
+                                 // PatchStash&     s_original_patch_stash,
                                  Bitmask&        s_owned_v,
                                  Bitmask&        s_owned_e,
                                  Bitmask&        s_owned_f,
@@ -223,6 +224,10 @@ __global__ static void slice_patches(Context        context,
         s_new_patch_stash.m_stash =
             shrd_alloc.alloc<uint32_t>(PatchStash::stash_size);
 
+        // PatchStash s_original_patch_stash;
+        // s_original_patch_stash.m_stash =
+        //     shrd_alloc.alloc<uint32_t>(PatchStash::stash_size);
+
         alloc_masks(num_vertices,
                     s_owned_v,
                     s_active_v,
@@ -372,6 +377,7 @@ __global__ static void slice_patches(Context        context,
                 s_new_p_owned_e.set(e2, true);
             }
         }
+        block.sync();
 
 #ifndef NDEBUG
         // record the number of vertices/edges/faces that are active and owned
@@ -412,6 +418,7 @@ __global__ static void slice_patches(Context        context,
                             num_edges,
                             num_faces,
                             s_new_patch_stash,
+                            // ls_original_patch_stash,
                             s_owned_v,
                             s_owned_e,
                             s_owned_f,

@@ -123,7 +123,7 @@ __device__ __inline__ void hashtable_calibration(const Context context,
 
             uint8_t o = pi.patch_stash.insert_patch(handle.patch_id(),
                                                     patch_stash_mutex);
-
+            assert(o != INVALID8);
             LPPair lp(i, handle.local_id(), o);
 
             pi.get_lp<HandleT>().replace(lp);
@@ -603,28 +603,56 @@ __global__ static void remove_surplus_elements(Context context)
 }
 
 template <uint32_t blockThreads, typename HandleT>
-__inline__ __device__ void copy_to_hashtable(const PatchInfo& pi,
-                                             PatchInfo&       new_pi,
-                                             const uint16_t   num_elements,
-                                             const Bitmask&   s_new_p_active,
-                                             const Bitmask&   s_new_p_owned,
-                                             const Bitmask&   s_owned,
-                                             PatchStash&      new_patch_stash,
-                                             ShmemMutex&      patch_stash_mutex)
+__inline__ __device__ void copy_to_hashtable(
+    const PatchInfo& pi,
+    PatchInfo&       new_pi,
+    const uint16_t   num_elements,
+    const Bitmask&   s_new_p_active,
+    const Bitmask&   s_new_p_owned,
+    const Bitmask&   s_active,
+    const Bitmask&   s_owned,
+    PatchStash&      new_patch_stash,
+    // PatchStash&      original_patch_stash,
+    ShmemMutex& new_patch_stash_mutex)
 {
 
     for (uint16_t v = threadIdx.x; v < num_elements; v += blockThreads) {
-        // if the element is acitve but not owned in the new patch
+        // if the element is active but not owned in the new patch
+        /* HandleT vh;
+        if (s_active(v) && !s_owned(v) && !s_new_p_active(v)) {
+            // vh = pi.find<HandleT>(v);
+
+            uint32_t bucket_id;
+
+            bool in_stash;
+
+            LPPair pair = pi.get_lp<HandleT>().find(
+                v, bucket_id, in_stash, nullptr, nullptr);
+
+            assert(pair.patch_stash_id() < PatchStash::stash_size);
+
+            vh = HandleT(pi.patch_stash.get_patch(pair),
+                         {pair.local_id_in_owner_patch()});
+
+            original_patch_stash.m_stash[pair.patch_stash_id()] = vh.patch_id();
+        }*/
+
         if (s_new_p_active(v) && !s_new_p_owned(v)) {
             LPPair lp;
             // if the element is originally owned by the patch
             if (s_owned(v)) {
                 lp = LPPair(v, v, 0);
             } else {
+                /* if (!vh.is_valid()) {
+                    vh = pi.find<HandleT>(v);
+                }*/
+
                 HandleT vh = pi.find<HandleT>(v);
 
-                uint8_t st = new_patch_stash.insert_patch(vh.patch_id(),
-                                                          patch_stash_mutex);
+                uint8_t st = new_patch_stash.insert_patch(
+                    vh.patch_id(), new_patch_stash_mutex);
+
+                assert(st != INVALID8);
 
                 lp = LPPair(v, vh.local_id(), st);
             }
@@ -642,7 +670,8 @@ __inline__ __device__ void slice(Context&                          context,
                                  const uint16_t                    num_vertices,
                                  const uint16_t                    num_edges,
                                  const uint16_t                    num_faces,
-                                 PatchStash&     s_new_patch_stash,
+                                 PatchStash& s_new_patch_stash,
+                                 // PatchStash&     s_original_patch_stash,
                                  Bitmask&        s_owned_v,
                                  Bitmask&        s_owned_e,
                                  Bitmask&        s_owned_f,
@@ -701,13 +730,15 @@ __inline__ __device__ void slice(Context&                          context,
         } else {
             s_new_patch_stash.m_stash[i] = INVALID32;
         }
+        // s_original_patch_stash.m_stash[i] = INVALID32;
     }
 
 
     block.sync();
 
-    ShmemMutex patch_stash_mutex;
-    patch_stash_mutex.alloc();
+    ShmemMutex new_patch_stash_mutex;
+    new_patch_stash_mutex.alloc();
+
     PatchInfo new_patch = context.m_patches_info[new_patch_id];
 
     // evluate active elements of the new patch
@@ -734,25 +765,33 @@ __inline__ __device__ void slice(Context&                          context,
                                                   num_vertices,
                                                   s_new_p_active_v,
                                                   s_new_p_owned_v,
+                                                  s_active_v,
                                                   s_owned_v,
                                                   s_new_patch_stash,
-                                                  patch_stash_mutex);
+                                                  // s_original_patch_stash,
+                                                  new_patch_stash_mutex);
+
     copy_to_hashtable<blockThreads, EdgeHandle>(pi,
                                                 new_patch,
                                                 num_edges,
                                                 s_new_p_active_e,
                                                 s_new_p_owned_e,
+                                                s_active_e,
                                                 s_owned_e,
                                                 s_new_patch_stash,
-                                                patch_stash_mutex);
+                                                // s_original_patch_stash,
+                                                new_patch_stash_mutex);
+
     copy_to_hashtable<blockThreads, FaceHandle>(pi,
                                                 new_patch,
                                                 num_faces,
                                                 s_new_p_active_f,
                                                 s_new_p_owned_f,
+                                                s_active_f,
                                                 s_owned_f,
                                                 s_new_patch_stash,
-                                                patch_stash_mutex);
+                                                // s_original_patch_stash,
+                                                new_patch_stash_mutex);
 
     // store new patch to global memory
     if (threadIdx.x == 0) {
@@ -818,6 +857,8 @@ __inline__ __device__ void slice(Context&                          context,
     __shared__ uint8_t s_new_patch_stash_id;
     if (threadIdx.x == 0) {
         s_new_patch_stash_id = pi.patch_stash.insert_patch(new_patch_id);
+        // s_new_patch_stash_id =
+        //     s_original_patch_stash.insert_patch(new_patch_id);
         assert(s_new_patch_stash_id != INVALID8);
     }
 
@@ -840,6 +881,13 @@ __inline__ __device__ void slice(Context&                          context,
                                              s_new_p_active_e,
                                              s_new_p_active_f);
     block.sync();
+
+    // store original patch's filtered patch stash
+
+    // detail::store<blockThreads>(s_original_patch_stash.m_stash,
+    //                             PatchStash::stash_size,
+    //                             pi.patch_stash.m_stash);
+
 
     // store owned mask
     s_owned_v.store<blockThreads>(pi.owned_mask_v);
@@ -2792,6 +2840,7 @@ template __inline__ __device__ void detail::slice<256>(
     const uint16_t,
     const uint16_t,
     PatchStash&,
+    // PatchStash&,
     Bitmask&,
     Bitmask&,
     Bitmask&,
