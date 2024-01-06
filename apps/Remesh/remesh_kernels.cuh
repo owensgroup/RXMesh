@@ -148,16 +148,17 @@ __global__ static void edge_split(rxmesh::Context                  context,
             }
         });
     }
+
     //{
-    //    if (threadIdx.x == 0) {
+    //    if (threadIdx.x == 0 && cavity.get_num_cavities() > 0) {
     //        printf(
-    //            "\n S patch= %u, after num_edges= %u, should_slice = %d, "
-    //            "m_write_to_gmem= %d, is_dirty= %d",
+    //            "\n S patch= %u, should_slice = %d, "
+    //            "m_write_to_gmem= %d, is_dirty= %d, readd_to_queue= %d\n",
     //            cavity.patch_id(),
-    //            context.m_patches_info[cavity.patch_id()].num_edges[0],
     //            int(context.m_patches_info[cavity.patch_id()].should_slice),
     //            int(cavity.m_write_to_gmem),
-    //            int(context.m_patches_info[cavity.patch_id()].is_dirty()));
+    //            int(context.m_patches_info[cavity.patch_id()].is_dirty()),
+    //            int(cavity.m_s_readd_to_queue[0]));
     //    }
     //}
 }
@@ -516,18 +517,23 @@ __global__ static void vertex_smoothing(const rxmesh::Context context,
         VertexHandle q_id = iter.back();
         Vec3<T>      q(coords(q_id, 0), coords(q_id, 1), coords(q_id, 2));
 
-        T vq = glm::distance(v, q);
-
         Vec3<T> new_v(0.0, 0.0, 0.0);
         Vec3<T> v_normal(0.0, 0.0, 0.0);
+
+        T w = 0.0;
 
         for (uint32_t i = 0; i < iter.size(); ++i) {
             // the current one ring vertex
             const VertexHandle r_id = iter[i];
-            const Vec3<T> r(coords(r_id, 0), coords(r_id, 1), coords(r_id, 2));
-            const T       vr = glm::distance(v, r);
 
-            const Vec3<T> n = glm::cross(q - v, r - v) / (vr + vq);
+            const Vec3<T> r(coords(r_id, 0), coords(r_id, 1), coords(r_id, 2));
+
+            const Vec3<T> c = glm::cross(q - v, r - v);
+
+            const T area = glm::length(c) / T(2.0);
+            w += area;
+
+            const Vec3<T> n = glm::normalize(c) * area;
 
             v_normal += n;
 
@@ -535,13 +541,18 @@ __global__ static void vertex_smoothing(const rxmesh::Context context,
 
             q_id = r_id;
             q    = r;
-            vq   = vr;
         }
         new_v /= T(iter.size());
 
-        v_normal = glm::normalize(v_normal);
+        v_normal /= w;
 
-        new_v = new_v + glm::dot(v_normal, (v - new_v)) * v_normal;
+        if (glm::length2(v_normal) < 1e-6) {
+            new_v = v;
+        } else {
+            v_normal = glm::normalize(v_normal);
+
+            new_v = new_v + (glm::dot(v_normal, (v - new_v)) * v_normal);
+        }
 
         new_coords(v_id, 0) = new_v[0];
         new_coords(v_id, 1) = new_v[1];
