@@ -438,17 +438,20 @@ __global__ static void edge_flip(rxmesh::Context                  context,
             const int valence_d = query.vertex_valence(vd);
 
 
-            const int deviation_pre = std::abs(valence_a - target_valence) +
-                                      std::abs(valence_b - target_valence) +
-                                      std::abs(valence_c - target_valence) +
-                                      std::abs(valence_d - target_valence);
+            const int deviation_pre =
+                (valence_a - target_valence) * (valence_a - target_valence) +
+                (valence_b - target_valence) * (valence_b - target_valence) +
+                (valence_c - target_valence) * (valence_c - target_valence) +
+                (valence_d - target_valence) * (valence_d - target_valence);
 
-
+            // clang-format off
             const int deviation_post =
-                std::abs(valence_a - 1 - target_valence) +
-                std::abs(valence_b - 1 - target_valence) +
-                std::abs(valence_c + 1 - target_valence) +
-                std::abs(valence_d + 1 - target_valence);
+                (valence_a - 1 - target_valence)*(valence_a - 1 - target_valence) +
+                (valence_b - 1 - target_valence)*(valence_b - 1 - target_valence) +
+                (valence_c + 1 - target_valence)*(valence_c + 1 - target_valence) +
+                (valence_d + 1 - target_valence)*(valence_d + 1 - target_valence);
+            // clang-format on
+
             if (deviation_pre > deviation_post) {
                 cavity.create(eh);
             }
