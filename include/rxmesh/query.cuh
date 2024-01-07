@@ -15,7 +15,7 @@ namespace rxmesh {
 template <uint32_t blockThreads>
 struct Query
 {
-    Query(const Query&) = delete;
+    Query(const Query&)            = delete;
     Query& operator=(const Query&) = delete;
 
     __device__ __inline__ Query(const Context& context,
@@ -30,6 +30,14 @@ struct Query
           m_s_valence(nullptr),
           m_s_table(nullptr)
     {
+    }
+
+    /**
+     * @brief return the patch info associated with this instance
+     */
+    __device__ __inline__ const PatchInfo& get_patch_info() const
+    {
+        return m_patch_info;
     }
 
     /**

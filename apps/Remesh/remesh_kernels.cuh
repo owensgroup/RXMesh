@@ -9,10 +9,10 @@ template <typename T>
 using Vec3 = glm::vec<3, T, glm::defaultp>;
 
 template <typename T, uint32_t blockThreads>
-__global__ static void compute_average_edge_length(
-    const rxmesh::Context            context,
-    const rxmesh::VertexAttribute<T> coords,
-    T*                               average_edge_length)
+__global__ static void stats_kernel(const rxmesh::Context            context,
+                                    const rxmesh::VertexAttribute<T> coords,
+                                    rxmesh::EdgeAttribute<T>         edge_len,
+                                    rxmesh::VertexAttribute<int> vertex_valence)
 {
     using namespace rxmesh;
 
@@ -20,18 +20,22 @@ __global__ static void compute_average_edge_length(
 
     ShmemAllocator shrd_alloc;
 
-    auto sum_edge_len = [&](const EdgeHandle      edge_id,
-                            const VertexIterator& ev) {
+    auto compute_edge_len = [&](const EdgeHandle eh, const VertexIterator& ev) {
         const Vec3<T> v0(coords(ev[0], 0), coords(ev[0], 1), coords(ev[0], 2));
         const Vec3<T> v1(coords(ev[1], 0), coords(ev[1], 1), coords(ev[1], 2));
 
-        T edge_len = glm::distance(v0, v1);
+        T len = glm::distance(v0, v1);
 
-        ::atomicAdd(average_edge_length, edge_len);
+        edge_len(eh) = len;
     };
 
     Query<blockThreads> query(context);
-    query.dispatch<Op::EV>(block, shrd_alloc, sum_edge_len);
+    query.compute_vertex_valence(block, shrd_alloc);
+    query.dispatch<Op::EV>(block, shrd_alloc, compute_edge_len);
+
+    detail::for_each_vertex(query.get_patch_info(), [&](const VertexHandle vh) {
+        vertex_valence(vh) = query.vertex_valence(vh);
+    });
 }
 
 
