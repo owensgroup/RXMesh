@@ -40,9 +40,9 @@ __global__ static void stats_kernel(const rxmesh::Context            context,
 
 
 template <typename T, uint32_t blockThreads>
-__global__ static void edge_split(rxmesh::Context                  context,
-                                  const rxmesh::VertexAttribute<T> coords,
-                                  rxmesh::EdgeAttribute<int8_t>    updated,
+__global__ static void edge_split(rxmesh::Context                   context,
+                                  const rxmesh::VertexAttribute<T>  coords,
+                                  rxmesh::EdgeAttribute<EdgeStatus> edge_status,
                                   const T high_edge_len_sq)
 {
     // EV for calc edge len
@@ -74,7 +74,9 @@ __global__ static void edge_split(rxmesh::Context                  context,
     Bitmask is_updated(cavity.patch_info().edges_capacity[0], shrd_alloc);
 
     auto should_split = [&](const EdgeHandle& eh, const VertexIterator& iter) {
-        if (updated(eh) == 0) {
+        if (edge_status(eh) == UPDATE) {
+            cavity.create(eh);
+        } else if (edge_status(eh) == UNSEEN) {
             const Vec3<T> v0(
                 coords(iter[0], 0), coords(iter[0], 1), coords(iter[0], 2));
             const Vec3<T> v1(
@@ -83,7 +85,10 @@ __global__ static void edge_split(rxmesh::Context                  context,
             const T edge_len = glm::distance2(v0, v1);
 
             if (edge_len > high_edge_len_sq) {
+                edge_status(eh) = UPDATE;
                 cavity.create(eh);
+            } else {
+                edge_status(eh) = OKAY;
             }
         }
     };
@@ -92,7 +97,7 @@ __global__ static void edge_split(rxmesh::Context                  context,
     query.dispatch<Op::EV>(block, shrd_alloc, should_split);
     block.sync();
 
-    if (cavity.prologue(block, shrd_alloc, coords, updated)) {
+    if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
 
         is_updated.reset(block);
 
@@ -119,7 +124,7 @@ __global__ static void edge_split(rxmesh::Context                  context,
                     for (uint16_t i = 0; i < size; ++i) {
                         const DEdgeHandle e = cavity.get_cavity_edge(c, i);
 
-                        is_updated.set(e.local_id(), true);
+                        // is_updated.set(e.local_id(), true);
 
                         const DEdgeHandle e1 =
                             (i == size - 1) ?
@@ -129,8 +134,9 @@ __global__ static void edge_split(rxmesh::Context                  context,
                         if (!e1.is_valid()) {
                             break;
                         }
-
-                        is_updated.set(e1.local_id(), true);
+                        if (i != size - 1) {
+                            is_updated.set(e1.local_id(), true);
+                        }
 
                         const FaceHandle f = cavity.add_face(e0, e, e1);
                         if (!f.is_valid()) {
@@ -148,7 +154,7 @@ __global__ static void edge_split(rxmesh::Context                  context,
     if (cavity.is_successful()) {
         detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (is_updated(eh.local_id())) {
-                updated(eh) = 1;
+                edge_status(eh) = ADDED;
             }
         });
     }
@@ -168,11 +174,12 @@ __global__ static void edge_split(rxmesh::Context                  context,
 }
 
 template <typename T, uint32_t blockThreads>
-__global__ static void edge_collapse(rxmesh::Context                  context,
-                                     const rxmesh::VertexAttribute<T> coords,
-                                     rxmesh::EdgeAttribute<int8_t>    updated,
-                                     const T low_edge_len_sq,
-                                     const T high_edge_len_sq)
+__global__ static void edge_collapse(
+    rxmesh::Context                   context,
+    const rxmesh::VertexAttribute<T>  coords,
+    rxmesh::EdgeAttribute<EdgeStatus> edge_status,
+    const T                           low_edge_len_sq,
+    const T                           high_edge_len_sq)
 {
 
     using namespace rxmesh;
@@ -251,16 +258,20 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
         // only when both the two end of the edge are not tri-valent, we may do
         // the collapse. Otherwise, we will run into inconsistent topology
         // problem i.e., fold over
-        if (eh.patch_id() == pid && updated(eh) == 0 &&
-            !(is_tri_valent(iter.local(0)) && is_tri_valent(iter.local(1)))) {
-            const VertexHandle v0(iter[0]), v1(iter[1]);
+        if (edge_status(eh) == UNSEEN) {
+            if (eh.patch_id() == pid && !(is_tri_valent(iter.local(0)) &&
+                                          is_tri_valent(iter.local(1)))) {
+                const VertexHandle v0(iter[0]), v1(iter[1]);
 
-            const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-            const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-            const T       edge_len_sq = glm::distance2(p0, p1);
-            if (edge_len_sq < low_edge_len_sq &&
-                edge_valence[eh.local_id()] < 3) {
-                cavity.create(eh);
+                const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+                const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+                const T       edge_len_sq = glm::distance2(p0, p1);
+                if (edge_len_sq < low_edge_len_sq &&
+                    edge_valence[eh.local_id()] < 3) {
+                    cavity.create(eh);
+                } else {
+                    edge_status(eh) = OKAY;
+                }
             }
         }
     };
@@ -274,7 +285,7 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
     shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
 
     // create the cavity
-    if (cavity.prologue(block, shrd_alloc, coords, updated)) {
+    if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
 
         is_updated.reset(block);
         block.sync();
@@ -290,70 +301,71 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 
 
             // check if we will create a long edge
-            bool long_edge = false;
+            // bool long_edge = false;
+            //
+            // for (uint16_t i = 0; i < size; ++i) {
+            //    const VertexHandle v1 = cavity.get_cavity_vertex(c, i);
+            //    const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+            //    const T       edge_len_sq = glm::distance2(p0, p1);
+            //    if (edge_len_sq > high_edge_len_sq) {
+            //        long_edge = true;
+            //        break;
+            //    }
+            //}
+            //
+            // if (long_edge) {
+            //    // roll back
+            //    cavity.recover(src);
+            //} else {
 
-            for (uint16_t i = 0; i < size; ++i) {
-                const VertexHandle v1 = cavity.get_cavity_vertex(c, i);
-                const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-                const T       edge_len_sq = glm::distance2(p0, p1);
-                if (edge_len_sq > high_edge_len_sq) {
-                    long_edge = true;
-                    break;
-                }
-            }
+            const VertexHandle new_v = cavity.add_vertex();
 
-            if (long_edge) {
-                // roll back
-                cavity.recover(src);
-            } else {
+            if (new_v.is_valid()) {
 
-                const VertexHandle new_v = cavity.add_vertex();
+                coords(new_v, 0) = p0[0];
+                coords(new_v, 1) = p0[1];
+                coords(new_v, 2) = p0[2];
 
-                if (new_v.is_valid()) {
+                DEdgeHandle e0 =
+                    cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
 
-                    coords(new_v, 0) = p0[0];
-                    coords(new_v, 1) = p0[1];
-                    coords(new_v, 2) = p0[2];
+                if (e0.is_valid()) {
+                    is_updated.set(e0.local_id(), true);
 
-                    DEdgeHandle e0 =
-                        cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
+                    const DEdgeHandle e_init = e0;
 
-                    if (e0.is_valid()) {
-                        is_updated.set(e0.local_id(), true);
+                    for (uint16_t i = 0; i < size; ++i) {
+                        const DEdgeHandle e = cavity.get_cavity_edge(c, i);
 
-                        const DEdgeHandle e_init = e0;
+                        // is_updated.set(e.local_id(), true);
 
-                        for (uint16_t i = 0; i < size; ++i) {
-                            const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+                        const VertexHandle v_end =
+                            cavity.get_cavity_vertex(c, (i + 1) % size);
 
-                            is_updated.set(e.local_id(), true);
+                        const DEdgeHandle e1 =
+                            (i == size - 1) ?
+                                e_init.get_flip_dedge() :
+                                cavity.add_edge(
+                                    cavity.get_cavity_vertex(c, i + 1), new_v);
 
-                            const VertexHandle v_end =
-                                cavity.get_cavity_vertex(c, (i + 1) % size);
-
-                            const DEdgeHandle e1 =
-                                (i == size - 1) ?
-                                    e_init.get_flip_dedge() :
-                                    cavity.add_edge(
-                                        cavity.get_cavity_vertex(c, i + 1),
-                                        new_v);
-
-                            if (!e1.is_valid()) {
-                                break;
-                            }
-
-                            is_updated.set(e1.local_id(), true);
-
-                            const FaceHandle new_f = cavity.add_face(e0, e, e1);
-
-                            if (!new_f.is_valid()) {
-                                break;
-                            }
-                            e0 = e1.get_flip_dedge();
+                        if (!e1.is_valid()) {
+                            break;
                         }
+
+                        if (i != size - 1) {
+                            is_updated.set(e1.local_id(), true);
+                        }
+
+                        const FaceHandle new_f = cavity.add_face(e0, e, e1);
+
+                        if (!new_f.is_valid()) {
+                            break;
+                        }
+                        e0 = e1.get_flip_dedge();
                     }
                 }
             }
+            //}
         });
     }
 
@@ -363,7 +375,7 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
     if (cavity.is_successful()) {
         detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (is_updated(eh.local_id())) {
-                updated(eh) = 1;
+                edge_status(eh) = ADDED;
             }
         });
     }
@@ -384,9 +396,9 @@ __global__ static void edge_collapse(rxmesh::Context                  context,
 }
 
 template <typename T, uint32_t blockThreads>
-__global__ static void edge_flip(rxmesh::Context                  context,
-                                 const rxmesh::VertexAttribute<T> coords,
-                                 rxmesh::EdgeAttribute<int8_t>    updated)
+__global__ static void edge_flip(rxmesh::Context                   context,
+                                 const rxmesh::VertexAttribute<T>  coords,
+                                 rxmesh::EdgeAttribute<EdgeStatus> edge_status)
 {
     // EVDiamond and valence
     using namespace rxmesh;
@@ -419,41 +431,48 @@ __global__ static void edge_flip(rxmesh::Context                  context,
 
         // we use the local index since we are only interested in the
         // valence which computed on the local index space
-        if (updated(eh) == 0 && iter[1].is_valid() && iter[3].is_valid()) {
-            const uint16_t va = iter.local(0);
-            const uint16_t vb = iter.local(2);
+        if (edge_status(eh) == UNSEEN) {
+            if (iter[1].is_valid() && iter[3].is_valid()) {
+                const uint16_t va = iter.local(0);
+                const uint16_t vb = iter.local(2);
 
-            const uint16_t vc = iter.local(1);
-            const uint16_t vd = iter.local(3);
+                const uint16_t vc = iter.local(1);
+                const uint16_t vd = iter.local(3);
 
-            // since we only deal with closed meshes without boundaries
-            constexpr int target_valence = 6;
+                // since we only deal with closed meshes without boundaries
+                constexpr int target_valence = 6;
 
-            // we don't deal with boundary edges
-            assert(vc != INVALID16 && vd != INVALID16);
+                // we don't deal with boundary edges
+                assert(vc != INVALID16 && vd != INVALID16);
 
-            const int valence_a = query.vertex_valence(va);
-            const int valence_b = query.vertex_valence(vb);
-            const int valence_c = query.vertex_valence(vc);
-            const int valence_d = query.vertex_valence(vd);
+                const int valence_a = query.vertex_valence(va);
+                const int valence_b = query.vertex_valence(vb);
+                const int valence_c = query.vertex_valence(vc);
+                const int valence_d = query.vertex_valence(vd);
 
 
-            const int deviation_pre =
-                (valence_a - target_valence) * (valence_a - target_valence) +
-                (valence_b - target_valence) * (valence_b - target_valence) +
-                (valence_c - target_valence) * (valence_c - target_valence) +
-                (valence_d - target_valence) * (valence_d - target_valence);
+                const int deviation_pre =
+                    (valence_a - target_valence) *
+                        (valence_a - target_valence) +
+                    (valence_b - target_valence) *
+                        (valence_b - target_valence) +
+                    (valence_c - target_valence) *
+                        (valence_c - target_valence) +
+                    (valence_d - target_valence) * (valence_d - target_valence);
 
-            // clang-format off
+                // clang-format off
             const int deviation_post =
                 (valence_a - 1 - target_valence)*(valence_a - 1 - target_valence) +
                 (valence_b - 1 - target_valence)*(valence_b - 1 - target_valence) +
                 (valence_c + 1 - target_valence)*(valence_c + 1 - target_valence) +
                 (valence_d + 1 - target_valence)*(valence_d + 1 - target_valence);
-            // clang-format on
+                // clang-format on
 
-            if (deviation_pre > deviation_post) {
-                cavity.create(eh);
+                if (deviation_pre > deviation_post) {
+                    cavity.create(eh);
+                } else {
+                    edge_status(eh) = OKAY;
+                }
             }
         }
     };
@@ -463,7 +482,7 @@ __global__ static void edge_flip(rxmesh::Context                  context,
     block.sync();
 
 
-    if (cavity.prologue(block, shrd_alloc, coords, updated)) {
+    if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
 
         is_updated.reset(block);
         block.sync();
@@ -495,7 +514,7 @@ __global__ static void edge_flip(rxmesh::Context                  context,
     if (cavity.is_successful()) {
         detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (is_updated(eh.local_id())) {
-                updated(eh) = 1;
+                edge_status(eh) = ADDED;
             }
         });
     }
