@@ -1161,9 +1161,8 @@ __inline__ __device__ void bi_assignment_ggp(
     // other vertices such that vertices are tagged to the closer seed. We do
     // this as a scatter operation using VV
     auto region_growing = [&]() {
-        int itr = 0;
+        int num_assigned_prv_iter = 0;
         while (s_num_assigned_vertices < s_num_active_vertices) {
-            itr++;
 
             block.sync();
 
@@ -1218,6 +1217,33 @@ __inline__ __device__ void bi_assignment_ggp(
             s_current_frontier_v.copy(block, s_next_frontier_v);
             block.sync();
             s_next_frontier_v.reset(block);
+
+            if (s_num_assigned_vertices == num_assigned_prv_iter) {
+                // means that we have not no made any progress in this iteration
+                // probably because we have a disconnected patch
+                break;
+            }
+            num_assigned_prv_iter = s_num_assigned_vertices;
+        }
+
+        if (s_num_assigned_vertices < s_num_active_vertices) {
+            // fix for disconnected patches by assigning them to the small
+            // partition
+            bool is_a_bigger = s_num_A_vertices > s_num_B_vertices;
+            block.sync();
+            for (uint16_t v = threadIdx.x; v < num_vertices;
+                 v += blockThreads) {
+                if (s_active_v(v) && !s_assigned_v(v)) {
+                    if (is_a_bigger) {
+                        s_partition_b_v.set(v, true);
+                        ::atomicAdd(&s_num_B_vertices, 1);
+                    } else {
+                        s_partition_a_v.set(v, true);
+                        ::atomicAdd(&s_num_A_vertices, 1);
+                    }
+                    s_assigned_v.set(v, true);
+                }
+            }
         }
     };
 

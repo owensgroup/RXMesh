@@ -592,12 +592,12 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     alloc_shared_memory(block, shrd_alloc);
 
     // construct cavity graph
-    // construct_cavity_graph(block);
-    // block.sync();
+    construct_cavity_graph(block);
+    block.sync();
 
     // calculate a maximal independent set of non-overlapping cavities
-    // calc_cavity_maximal_independent_set(block);
-    // block.sync();
+    calc_cavity_maximal_independent_set(block);
+    block.sync();
 
     // propagate the cavity ID
     propagate(block);
@@ -820,7 +820,7 @@ CavityManager<blockThreads, cop>::construct_cavity_graph(
 
     if constexpr (cop == CavityOp::EV) {
         add_graph_edge_by_vertices_through_edges();
-        block.sync();        
+        block.sync();
         add_graph_edge_by_edges_through_vertices();
         block.sync();
         add_graph_edge_by_faces_through_edges();
@@ -975,7 +975,6 @@ CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
             }
         }
     }
- 
 }
 
 template <uint32_t blockThreads, CavityOp cop>
@@ -3467,8 +3466,8 @@ CavityManager<blockThreads, cop>::populate_correspondence(
     LPHashTable lp = m_patch_info.get_lp<HandleT>();
 
     for (uint16_t b = threadIdx.x; b < lp.m_capacity; b += blockThreads) {
-        const auto pair = s_table[b];
-        if (pair.patch_stash_id() == q_stash) {
+        const LPPair pair = s_table[b];
+        if (!pair.is_sentinel() && pair.patch_stash_id() == q_stash) {
             assert(pair.local_id_in_owner_patch() < s_correspondence_size);
             s_correspondence[pair.local_id_in_owner_patch()] =
                 LPPair::make_value(pair.key(), q_stash);
@@ -3479,7 +3478,7 @@ CavityManager<blockThreads, cop>::populate_correspondence(
     for (uint16_t b = threadIdx.x; b < LPHashTable::stash_size;
          b += blockThreads) {
         auto pair = s_stash[b];
-        if (pair.patch_stash_id() == q_stash) {
+        if (!pair.is_sentinel() && pair.patch_stash_id() == q_stash) {
             assert(pair.local_id_in_owner_patch() < s_correspondence_size);
             s_correspondence[pair.local_id_in_owner_patch()] =
                 LPPair::make_value(pair.key(), q_stash);

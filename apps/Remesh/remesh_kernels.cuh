@@ -485,6 +485,8 @@ __global__ static void edge_flip(
                 } else {
                     edge_status(eh) = OKAY;
                 }
+            } else {
+                edge_status(eh) = OKAY;
             }
         }
     };
