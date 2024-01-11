@@ -231,8 +231,6 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
                                           launch_box.smem_bytes_dyn>>>(
                 rx.get_context(), *coords, *edge_status, high_edge_len_sq);
 
-            CUDA_ERROR(cudaDeviceSynchronize());
-
             rx.cleanup();
             rx.slice_patches(*coords, *edge_status);
             rx.cleanup();
@@ -261,7 +259,6 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
             //    rx.render_face_patch()->setEnabled(false);
             //
             //    rx.render_patch(0);
-            //    rx.render_patch(1);
             //
             //    polyscope::show();
             //}
@@ -314,9 +311,6 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
                                                 *edge_status,
                                                 low_edge_len_sq,
                                                 high_edge_len_sq);
-
-            CUDA_ERROR(cudaDeviceSynchronize());
-
             rx.cleanup();
             rx.slice_patches(*coords, *edge_status);
             rx.cleanup();
@@ -357,6 +351,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
 template <typename T>
 inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
                               rxmesh::VertexAttribute<T>*        coords,
+                              rxmesh::VertexAttribute<uint8_t>*  v_valence,
                               rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
                               int*                               d_buffer)
 {
@@ -371,6 +366,19 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
         rx.reset_scheduler();
         while (!rx.is_queue_empty()) {
             LaunchBox<blockThreads> launch_box;
+
+            rx.update_launch_box({},
+                                 launch_box,
+                                 (void*)compute_valence<blockThreads>,
+                                 false,
+                                 false,
+                                 true);
+
+            compute_valence<blockThreads>
+                <<<launch_box.blocks,
+                   launch_box.num_threads,
+                   launch_box.smem_bytes_dyn>>>(rx.get_context(), *v_valence);
+
             rx.update_launch_box({Op::EVDiamond},
                                  launch_box,
                                  (void*)edge_flip<T, blockThreads>,
@@ -381,7 +389,7 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
             edge_flip<T, blockThreads><<<launch_box.blocks,
                                          launch_box.num_threads,
                                          launch_box.smem_bytes_dyn>>>(
-                rx.get_context(), *coords, *edge_status);
+                rx.get_context(), *coords, *v_valence, *edge_status);
 
             rx.cleanup();
             rx.slice_patches(*coords, *edge_status);
@@ -459,6 +467,8 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     new_coords->reset(LOCATION_ALL, 0);
     auto edge_status = rx.add_edge_attribute<EdgeStatus>("EdgeStatus", 1);
 
+    auto v_valence = rx.add_vertex_attribute<uint8_t>("Valence", 1);
+
 
     auto edge_len       = rx.add_edge_attribute<float>("edgeLen", 1);
     auto vertex_valence = rx.add_vertex_attribute<int>("vertexValence", 1);
@@ -517,7 +527,8 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
 
 
         RXMESH_TRACE(" Edge Flip -- iter {}", iter);
-        equalize_valences(rx, coords.get(), edge_status.get(), d_buffer);
+        equalize_valences(
+            rx, coords.get(), v_valence.get(), edge_status.get(), d_buffer);
 
         RXMESH_TRACE(" Vertex Smoothing -- iter {}", iter);
         tangential_relaxation(rx, coords.get(), new_coords.get());
@@ -554,6 +565,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
         stats.avg_vertex_valence,
         stats.max_vertex_valence,
         stats.min_vertex_valence);
+
 
 #if USE_POLYSCOPE
     rx.update_polyscope();

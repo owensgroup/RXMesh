@@ -173,6 +173,27 @@ __global__ static void edge_split(rxmesh::Context                   context,
     //}
 }
 
+
+template <uint32_t blockThreads>
+__global__ static void compute_valence(
+    rxmesh::Context                        context,
+    const rxmesh::VertexAttribute<uint8_t> v_valence)
+{
+    using namespace rxmesh;
+
+    auto block = cooperative_groups::this_thread_block();
+
+    ShmemAllocator shrd_alloc;
+
+    Query<blockThreads> query(context);
+    query.compute_vertex_valence(block, shrd_alloc);
+    block.sync();
+
+    detail::for_each_vertex(query.get_patch_info(), [&](VertexHandle vh) {
+        v_valence(vh) = query.vertex_valence(vh);
+    });
+}
+
 template <typename T, uint32_t blockThreads>
 __global__ static void edge_collapse(
     rxmesh::Context                   context,
@@ -258,9 +279,9 @@ __global__ static void edge_collapse(
         // only when both the two end of the edge are not tri-valent, we may do
         // the collapse. Otherwise, we will run into inconsistent topology
         // problem i.e., fold over
-        if (edge_status(eh) == UNSEEN) {
-            if (eh.patch_id() == pid && !(is_tri_valent(iter.local(0)) &&
-                                          is_tri_valent(iter.local(1)))) {
+        if (edge_status(eh) == UNSEEN && eh.patch_id() == pid) {
+            if (!(is_tri_valent(iter.local(0)) &&
+                  is_tri_valent(iter.local(1)))) {
                 const VertexHandle v0(iter[0]), v1(iter[1]);
 
                 const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
@@ -272,6 +293,8 @@ __global__ static void edge_collapse(
                 } else {
                     edge_status(eh) = OKAY;
                 }
+            } else {
+                edge_status(eh) = OKAY;
             }
         }
     };
@@ -298,6 +321,7 @@ __global__ static void edge_collapse(
             cavity.get_vertices(src, v0, v1);
 
             const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+            const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
 
 
             // check if we will create a long edge
@@ -322,9 +346,9 @@ __global__ static void edge_collapse(
 
             if (new_v.is_valid()) {
 
-                coords(new_v, 0) = p0[0];
-                coords(new_v, 1) = p0[1];
-                coords(new_v, 2) = p0[2];
+                coords(new_v, 0) = (p0[0] + p1[0]) * T(0.5);
+                coords(new_v, 1) = (p0[1] + p1[1]) * T(0.5);
+                coords(new_v, 2) = (p0[2] + p1[2]) * T(0.5);
 
                 DEdgeHandle e0 =
                     cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
@@ -396,11 +420,12 @@ __global__ static void edge_collapse(
 }
 
 template <typename T, uint32_t blockThreads>
-__global__ static void edge_flip(rxmesh::Context                   context,
-                                 const rxmesh::VertexAttribute<T>  coords,
-                                 rxmesh::EdgeAttribute<EdgeStatus> edge_status)
+__global__ static void edge_flip(
+    rxmesh::Context                        context,
+    const rxmesh::VertexAttribute<T>       coords,
+    const rxmesh::VertexAttribute<uint8_t> v_valence,
+    rxmesh::EdgeAttribute<EdgeStatus>      edge_status)
 {
-    // EVDiamond and valence
     using namespace rxmesh;
 
     auto block = cooperative_groups::this_thread_block();
@@ -417,12 +442,6 @@ __global__ static void edge_flip(rxmesh::Context                   context,
 
     Bitmask is_updated(cavity.patch_info().edges_capacity[0], shrd_alloc);
 
-    Query<blockThreads> query(context, cavity.patch_id());
-    query.compute_vertex_valence(block, shrd_alloc);
-    block.sync();
-
-    block.sync();
-
 
     auto should_flip = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         // iter[0] and iter[2] are the edge two vertices
@@ -433,22 +452,15 @@ __global__ static void edge_flip(rxmesh::Context                   context,
         // valence which computed on the local index space
         if (edge_status(eh) == UNSEEN) {
             if (iter[1].is_valid() && iter[3].is_valid()) {
-                const uint16_t va = iter.local(0);
-                const uint16_t vb = iter.local(2);
-
-                const uint16_t vc = iter.local(1);
-                const uint16_t vd = iter.local(3);
 
                 // since we only deal with closed meshes without boundaries
                 constexpr int target_valence = 6;
 
-                // we don't deal with boundary edges
-                assert(vc != INVALID16 && vd != INVALID16);
 
-                const int valence_a = query.vertex_valence(va);
-                const int valence_b = query.vertex_valence(vb);
-                const int valence_c = query.vertex_valence(vc);
-                const int valence_d = query.vertex_valence(vd);
+                const int valence_a = v_valence(iter[0]);
+                const int valence_b = v_valence(iter[2]);
+                const int valence_c = v_valence(iter[1]);
+                const int valence_d = v_valence(iter[3]);
 
 
                 const int deviation_pre =
@@ -476,8 +488,10 @@ __global__ static void edge_flip(rxmesh::Context                   context,
             }
         }
     };
+    // TODO check that there is no edge between the two opposite vertices of the
+    // flipped edge
 
-
+    Query<blockThreads> query(context, cavity.patch_id());
     query.dispatch<Op::EVDiamond>(block, shrd_alloc, should_flip);
     block.sync();
 
