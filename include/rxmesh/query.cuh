@@ -324,6 +324,12 @@ struct Query
         // cleanup shared memory allocation
         shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() -
                            m_shmem_before);
+        m_num_src_in_patch       = 0;
+        m_s_participant_bitmask  = nullptr;
+        m_s_output_owned_bitmask = nullptr;
+        m_s_output_offset        = nullptr;
+        m_s_output_value         = nullptr;
+        m_s_table                = nullptr;
     }
 
    private:

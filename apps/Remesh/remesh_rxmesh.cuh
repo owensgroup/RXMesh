@@ -301,17 +301,17 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
         while (!rx.is_queue_empty()) {
             LaunchBox<blockThreads> launch_box;
             rx.update_launch_box(
-                {Op::EV},
+                {Op::EV, Op::VV},
                 launch_box,
                 (void*)edge_collapse<T, blockThreads>,
                 true,
                 false,
-                true,
-                true,
-                [=](uint32_t v, uint32_t e, uint32_t f) {
-                    return detail::mask_num_bytes(v) +
-                           detail::mask_num_bytes(e) + e * sizeof(uint8_t) +
-                           3 * ShmemAllocator::default_alignment;
+                false,
+                false,
+                [&](uint32_t v, uint32_t e, uint32_t f) {
+                    return detail::mask_num_bytes(e) +
+                           2 * v * sizeof(uint16_t) +
+                           2 * ShmemAllocator::default_alignment;
                 });
 
             edge_collapse<T, blockThreads>
@@ -395,12 +395,19 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
                    launch_box.num_threads,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(), *v_valence);
 
-            rx.update_launch_box({Op::EVDiamond},
-                                 launch_box,
-                                 (void*)edge_flip<T, blockThreads>,
-                                 true,
-                                 false,
-                                 true);
+            rx.update_launch_box(
+                {Op::EVDiamond, Op::VV},
+                launch_box,
+                (void*)edge_flip<T, blockThreads>,
+                true,
+                false,
+                false,
+                false,
+                [&](uint32_t v, uint32_t e, uint32_t f) {
+                    return detail::mask_num_bytes(e) +
+                           2 * v * sizeof(uint16_t) +
+                           2 * ShmemAllocator::default_alignment;
+                });
 
             edge_flip<T, blockThreads><<<launch_box.blocks,
                                          launch_box.num_threads,

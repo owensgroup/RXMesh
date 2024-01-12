@@ -215,95 +215,103 @@ __global__ static void edge_collapse(
         return;
     }
 
-    //{
-    //    if (threadIdx.x == 0) {
-    //        printf("\n C patch= %u, before num_edges= %u, is_dirty= %d",
-    //               cavity.patch_id(),
-    //               context.m_patches_info[cavity.patch_id()].num_edges[0],
-    //               int(context.m_patches_info[cavity.patch_id()].is_dirty()));
-    //    }
-    //    block.sync();
-    //}
 
     Bitmask is_updated(cavity.patch_info().edges_capacity[0], shrd_alloc);
 
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
-    Bitmask is_tri_valent(cavity.patch_info().num_vertices[0], shrd_alloc);
-    is_tri_valent.reset(block);
 
-    uint8_t* edge_valence =
-        shrd_alloc.alloc<uint8_t>(cavity.patch_info().num_edges[0]);
-
+    // for each edge we want to flip, we its id in one of its opposite vertices
+    // along with the other opposite vertex
+    uint16_t* v_info =
+        shrd_alloc.alloc<uint16_t>(2 * cavity.patch_info().num_vertices[0]);
     fill_n<blockThreads>(
-        edge_valence, cavity.patch_info().num_edges[0], uint8_t(0));
-    block.sync();
+        v_info, 2 * cavity.patch_info().num_vertices[0], uint16_t(INVALID16));
 
-    for (uint16_t f = threadIdx.x; f < cavity.patch_info().num_faces[0];
-         f += blockThreads) {
-        if (!cavity.patch_info().is_deleted(LocalFaceT(f))) {
-            uint16_t e0 = cavity.patch_info().fe[3 * f + 0].id >> 1;
-            uint16_t e1 = cavity.patch_info().fe[3 * f + 1].id >> 1;
-            uint16_t e2 = cavity.patch_info().fe[3 * f + 2].id >> 1;
-
-            atomicAdd(edge_valence + e0, 1);
-            atomicAdd(edge_valence + e1, 1);
-            atomicAdd(edge_valence + e2, 1);
-        }
-    }
-    block.sync();
-
-
-    Query<blockThreads> ev_query(context, pid);
-    ev_query.compute_vertex_valence(block, shrd_alloc);
-
-    ev_query.prologue<Op::EV>(block, shrd_alloc, false, false);
-
-    // mark a vertex if it is connected to a tri-valent vertex by an edge
-    auto mark_vertices = [&](const EdgeHandle& eh, const VertexIterator& iter) {
-        if (eh.patch_id() == pid) {
-            const uint16_t v0(iter.local(0)), v1(iter.local(1));
-            if (ev_query.vertex_valence(v0) == 3) {
-                is_tri_valent.set(v1, true);
-            }
-            if (ev_query.vertex_valence(v1) == 3) {
-                is_tri_valent.set(v0, true);
-            }
-        }
-    };
-    ev_query.run_compute(block, mark_vertices);
+    // a bitmask that indicates which edge we want to flip
+    Bitmask e_collapse(cavity.patch_info().num_edges[0], shrd_alloc);
+    e_collapse.reset(block);
     block.sync();
 
     auto should_collapse = [&](const EdgeHandle&     eh,
                                const VertexIterator& iter) {
-        // only when both the two end of the edge are not tri-valent, we may do
-        // the collapse. Otherwise, we will run into inconsistent topology
-        // problem i.e., fold over
-        if (edge_status(eh) == UNSEEN && eh.patch_id() == pid) {
-            if (!(is_tri_valent(iter.local(0)) &&
-                  is_tri_valent(iter.local(1)))) {
-                const VertexHandle v0(iter[0]), v1(iter[1]);
+        if (edge_status(eh) == UNSEEN) {
 
-                const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-                const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-                const T       edge_len_sq = glm::distance2(p0, p1);
-                if (edge_len_sq < low_edge_len_sq &&
-                    edge_valence[eh.local_id()] < 3) {
-                    cavity.create(eh);
+            const VertexHandle v0(iter[0]), v1(iter[1]);
+
+            const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+            const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+            const T       edge_len_sq = glm::distance2(p0, p1);
+
+            if (edge_len_sq < low_edge_len_sq) {
+
+                const uint16_t c0(iter.local(0)), c1(iter.local(1));
+
+                uint16_t ret = ::atomicCAS(v_info + 2 * c0, INVALID16, c1);
+                if (ret == INVALID16) {
+                    v_info[2 * c0 + 1] = eh.local_id();
+                    e_collapse.set(eh.local_id(), true);
                 } else {
-                    edge_status(eh) = OKAY;
+                    ret = ::atomicCAS(v_info + 2 * c1, INVALID16, c0);
+                    if (ret == INVALID16) {
+                        v_info[2 * c1 + 1] = eh.local_id();
+                        e_collapse.set(eh.local_id(), true);
+                    }
                 }
-            } else {
-                edge_status(eh) = OKAY;
             }
         }
     };
-    ev_query.run_compute(block, should_collapse);
+
+    // 1. mark edge that we want to collapse based on the edge lenght
+    Query<blockThreads> query(context, cavity.patch_id());
+    query.dispatch<Op::EV>(block, shrd_alloc, should_collapse);
     block.sync();
 
-    ev_query.epilogue(block, shrd_alloc);
+
+    auto check_edges = [&](const VertexHandle& vh, const VertexIterator& iter) {
+        uint16_t opposite_v = v_info[2 * vh.local_id()];
+        if (opposite_v != INVALID16) {
+            int num_shared_v = 0;
+
+            const VertexIterator opp_iter =
+                query.template get_iterator<VertexIterator>(opposite_v);
+
+            for (uint16_t v = 0; v < iter.size(); ++v) {
+
+                for (uint16_t ov = 0; ov < opp_iter.size(); ++ov) {
+                    if (iter.local(v) == opp_iter.local(ov)) {
+                        num_shared_v++;
+                        break;
+                    }
+                }
+            }
+
+            if (num_shared_v > 2) {
+                e_collapse.reset(v_info[2 * vh.local_id() + 1], true);
+            }
+        }
+    };
+    // 2. make sure that the two vertices opposite to a flipped edge are not
+    // connected
+    query.dispatch<Op::VV>(
+        block,
+        shrd_alloc,
+        check_edges,
+        [](VertexHandle) { return true; },
+        false,
+        true);
     block.sync();
 
+
+    // 3. create cavity for the surviving edges
+    detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+        if (e_collapse(eh.local_id())) {
+            cavity.create(eh);
+        } else {
+            edge_status(eh) = OKAY;
+        }
+    });
+    block.sync();
 
     shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
 
@@ -442,6 +450,19 @@ __global__ static void edge_flip(
 
     Bitmask is_updated(cavity.patch_info().edges_capacity[0], shrd_alloc);
 
+    uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
+
+    // for each edge we want to flip, we its id in one of its opposite vertices
+    // along with the other opposite vertex
+    uint16_t* v_info =
+        shrd_alloc.alloc<uint16_t>(2 * cavity.patch_info().num_vertices[0]);
+    fill_n<blockThreads>(
+        v_info, 2 * cavity.patch_info().num_vertices[0], uint16_t(INVALID16));
+
+    // a bitmask that indicates which edge we want to flip
+    Bitmask e_flip(cavity.patch_info().num_edges[0], shrd_alloc);
+    e_flip.reset(block);
+
 
     auto should_flip = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         // iter[0] and iter[2] are the edge two vertices
@@ -462,42 +483,89 @@ __global__ static void edge_flip(
                 const int valence_c = v_valence(iter[1]);
                 const int valence_d = v_valence(iter[3]);
 
-
-                const int deviation_pre =
-                    (valence_a - target_valence) *
-                        (valence_a - target_valence) +
-                    (valence_b - target_valence) *
-                        (valence_b - target_valence) +
-                    (valence_c - target_valence) *
-                        (valence_c - target_valence) +
-                    (valence_d - target_valence) * (valence_d - target_valence);
-
                 // clang-format off
-            const int deviation_post =
-                (valence_a - 1 - target_valence)*(valence_a - 1 - target_valence) +
-                (valence_b - 1 - target_valence)*(valence_b - 1 - target_valence) +
-                (valence_c + 1 - target_valence)*(valence_c + 1 - target_valence) +
-                (valence_d + 1 - target_valence)*(valence_d + 1 - target_valence);
+                const int deviation_pre =
+                    (valence_a - target_valence) * (valence_a - target_valence) +
+                    (valence_b - target_valence) * (valence_b - target_valence) +
+                    (valence_c - target_valence) * (valence_c - target_valence) +
+                    (valence_d - target_valence) * (valence_d - target_valence);
                 // clang-format on
 
-                if (deviation_pre > deviation_post && valence_a > 3 &&
-                    valence_b > 3) {
-                    cavity.create(eh);
-                } else {
-                    edge_status(eh) = OKAY;
+                // clang-format off
+                const int deviation_post =
+                    (valence_a - 1 - target_valence)*(valence_a - 1 - target_valence) +
+                    (valence_b - 1 - target_valence)*(valence_b - 1 - target_valence) +
+                    (valence_c + 1 - target_valence)*(valence_c + 1 - target_valence) +
+                    (valence_d + 1 - target_valence)*(valence_d + 1 - target_valence);
+                // clang-format on
+
+                if (deviation_pre > deviation_post) {
+                    uint16_t v_c(iter.local(1)), v_d(iter.local(3));
+
+                    bool added = false;
+
+                    if (iter[1].patch_id() == cavity.patch_id()) {
+                        uint16_t ret =
+                            ::atomicCAS(v_info + 2 * v_c, INVALID16, v_d);
+                        if (ret == INVALID16) {
+                            added               = true;
+                            v_info[2 * v_c + 1] = eh.local_id();
+                            e_flip.set(eh.local_id(), true);
+                        }
+                    }
+
+                    if (iter[3].patch_id() == cavity.patch_id() && !added) {
+                        uint16_t ret =
+                            ::atomicCAS(v_info + 2 * v_d, INVALID16, v_c);
+                        if (ret == INVALID16) {
+                            v_info[2 * v_d + 1] = eh.local_id();
+                            e_flip.set(eh.local_id(), true);
+                        }
+                    }
                 }
             } else {
                 edge_status(eh) = OKAY;
             }
         }
     };
-    // TODO check that there is no edge between the two opposite vertices of the
-    // flipped edge
 
+    // 1. mark edge that we want to flip
     Query<blockThreads> query(context, cavity.patch_id());
     query.dispatch<Op::EVDiamond>(block, shrd_alloc, should_flip);
     block.sync();
 
+
+    // 2. make sure that the two vertices opposite to a flipped edge are not
+    // connected
+    auto check_edges = [&](const VertexHandle& vh, const VertexIterator& iter) {
+        uint16_t opposite_v = v_info[2 * vh.local_id()];
+        if (opposite_v != INVALID16) {
+            bool is_valid = true;
+            for (uint16_t v = 0; v < iter.size(); ++v) {
+                if (iter.local(v) == opposite_v) {
+                    is_valid = false;
+                    break;
+                }
+            }
+            if (!is_valid) {
+                e_flip.reset(v_info[2 * vh.local_id() + 1], true);
+            }
+        }
+    };
+    query.dispatch<Op::VV>(block, shrd_alloc, check_edges);
+    block.sync();
+
+    // 3. create cavity for the surviving edges
+    detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+        if (e_flip(eh.local_id())) {
+            cavity.create(eh);
+        } else {
+            edge_status(eh) = OKAY;
+        }
+    });
+    block.sync();
+
+    shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
 
     if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
 
