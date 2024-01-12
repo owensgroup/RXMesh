@@ -291,7 +291,8 @@ struct CavityManager
 
     /**
      * @brief calculate a maximal independent set of cavities and deactivate the
-     * rest
+     * rest. MIS based on Algo 3 in
+     * https://web.mit.edu/jeshi/www/public/papers/parallel_MIS_survey.pdf
      */
     __device__ __inline__ void calc_cavity_maximal_independent_set(
         cooperative_groups::thread_block& block);

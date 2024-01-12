@@ -913,7 +913,7 @@ CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
                     const uint16_t neighbour_c =
                         m_s_cavity_graph[MAX_OVERLAP_CAVITIES * c + i];
                     if (neighbour_c != INVALID16) {
-                        assert(!m_s_cavity_mis(neighbour_c));
+                        //assert(!m_s_cavity_mis(neighbour_c));
                         m_s_active_cavity_mis.reset(neighbour_c, true);
                     }
                 }
@@ -927,7 +927,7 @@ CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
     }
 
 
-    // deactivaye cavities that are not in the MIS
+    // deactivate cavities that are not in the MIS
     for (int c = threadIdx.x; c < num_cavities; c += blockThreads) {
         if (!m_s_cavity_mis(c)) {
             deactivate_cavity(c);

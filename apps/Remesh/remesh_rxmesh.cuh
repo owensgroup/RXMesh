@@ -174,9 +174,9 @@ inline void compute_stats(rxmesh::RXMeshDynamic&                rx,
     stats.avg_edge_len /= rx.get_num_edges();
 }
 
-bool is_done(const rxmesh::RXMeshDynamic&             rx,
-             const rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
-             int*                                     d_buffer)
+int is_done(const rxmesh::RXMeshDynamic&             rx,
+            const rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
+            int*                                     d_buffer)
 {
     using namespace rxmesh;
 
@@ -187,12 +187,12 @@ bool is_done(const rxmesh::RXMeshDynamic&             rx,
         DEVICE,
         [edge_status = *edge_status, d_buffer] __device__(const EdgeHandle eh) {
             if (edge_status(eh) == UNSEEN || edge_status(eh) == UPDATE) {
-                d_buffer[0] = 1;
+                ::atomicAdd(d_buffer, 1);
             }
         });
 
     CUDA_ERROR(cudaDeviceSynchronize());
-    return d_buffer[0] == 0;
+    return d_buffer[0];
 }
 
 template <typename T>
@@ -209,8 +209,11 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
 
     edge_status->reset(UNSEEN, DEVICE);
 
+    int prv_remaining_work = rx.get_num_edges();
+
     while (true) {
         rx.reset_scheduler();
+
         while (!rx.is_queue_empty()) {
 
             LaunchBox<blockThreads> launch_box;
@@ -234,6 +237,9 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
             rx.cleanup();
             rx.slice_patches(*coords, *edge_status);
             rx.cleanup();
+
+            // rx.update_host();
+            // EXPECT_TRUE(rx.validate());
 
             // stats(rx);
             // bool show = false;
@@ -264,9 +270,12 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
             //}
         }
 
-        if (is_done(rx, edge_status, d_buffer)) {
+        int remaining_work = is_done(rx, edge_status, d_buffer);
+
+        if (remaining_work == 0 || prv_remaining_work == remaining_work) {
             break;
         }
+        prv_remaining_work = remaining_work;
     }
 }
 
@@ -283,6 +292,8 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
     constexpr uint32_t blockThreads = 256;
 
     edge_status->reset(UNSEEN, DEVICE);
+
+    int prv_remaining_work = rx.get_num_edges();
 
     while (true) {
 
@@ -342,9 +353,12 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
             //}
         }
 
-        if (is_done(rx, edge_status, d_buffer)) {
+        int remaining_work = is_done(rx, edge_status, d_buffer);
+
+        if (remaining_work == 0 || prv_remaining_work == remaining_work) {
             break;
         }
+        prv_remaining_work = remaining_work;
     }
 }
 
@@ -360,6 +374,8 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
     constexpr uint32_t blockThreads = 256;
 
     edge_status->reset(UNSEEN, DEVICE);
+
+    int prv_remaining_work = rx.get_num_edges();
 
     while (true) {
 
@@ -422,9 +438,12 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
             //}
         }
 
-        if (is_done(rx, edge_status, d_buffer)) {
+        int remaining_work = is_done(rx, edge_status, d_buffer);
+
+        if (remaining_work == 0 || prv_remaining_work == remaining_work) {
             break;
         }
+        prv_remaining_work = remaining_work;
     }
 }
 

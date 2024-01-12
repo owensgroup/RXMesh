@@ -162,7 +162,7 @@ __global__ static void edge_split(rxmesh::Context                   context,
     //{
     //    if (threadIdx.x == 0 && cavity.get_num_cavities() > 0) {
     //        printf(
-    //            "\n S patch= %u, should_slice = %d, "
+    //            "\n Split patch= %u, should_slice = %d, "
     //            "m_write_to_gmem= %d, is_dirty= %d, readd_to_queue= %d\n",
     //            cavity.patch_id(),
     //            int(context.m_patches_info[cavity.patch_id()].should_slice),
@@ -480,7 +480,8 @@ __global__ static void edge_flip(
                 (valence_d + 1 - target_valence)*(valence_d + 1 - target_valence);
                 // clang-format on
 
-                if (deviation_pre > deviation_post) {
+                if (deviation_pre > deviation_post && valence_a > 3 &&
+                    valence_b > 3) {
                     cavity.create(eh);
                 } else {
                     edge_status(eh) = OKAY;
