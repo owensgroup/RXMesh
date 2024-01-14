@@ -668,10 +668,11 @@ class RXMeshDynamic : public RXMeshStatic
             }
         }
 
+        const uint16_t vertex_cap = get_per_patch_max_vertex_capacity();
+        const uint16_t edge_cap   = get_per_patch_max_edge_capacity();
+        const uint16_t face_cap   = get_per_patch_max_face_capacity();
+
         if (is_dyn) {
-            uint16_t vertex_cap = get_per_patch_max_vertex_capacity();
-            uint16_t edge_cap   = get_per_patch_max_edge_capacity();
-            uint16_t face_cap   = get_per_patch_max_face_capacity();
 
             // connecivity (FE and EV) shared memory
             size_t connectivity_shmem = 0;
@@ -736,11 +737,14 @@ class RXMeshDynamic : public RXMeshStatic
 
 
             // correspondence buffer
-            size_t cv               = sizeof(uint16_t) * vertex_cap;
-            size_t ce               = sizeof(uint16_t) * edge_cap;
-            size_t cf               = sizeof(uint16_t) * face_cap;
-            size_t correspond_shmem = std::max(cv + ce, ce + cf) +
-                                      2 * ShmemAllocator::default_alignment;
+            static_assert(LPPair::PatchStashNumBits <= 8);
+
+            const size_t cv = (sizeof(uint16_t) + sizeof(uint8_t)) * vertex_cap;
+            const size_t ce = (sizeof(uint16_t) + sizeof(uint8_t)) * edge_cap;
+            const size_t cf = (sizeof(uint16_t) + sizeof(uint8_t)) * face_cap;
+            const size_t correspond_shmem =
+                std::max(cv + ce, ce + cf) +
+                2 * ShmemAllocator::default_alignment;
 
             // shared memory is the max of 1. static query shared memory + the
             // cavity ID shared memory (since we need to mark seed elements) 2.
@@ -755,9 +759,7 @@ class RXMeshDynamic : public RXMeshStatic
             launch_box.smem_bytes_dyn = static_shmem;
         }
 
-        launch_box.smem_bytes_dyn += user_shmem(m_max_vertices_per_patch,
-                                                m_max_edges_per_patch,
-                                                m_max_faces_per_patch);
+        launch_box.smem_bytes_dyn += user_shmem(vertex_cap, edge_cap, face_cap);
 
         if (with_vertex_valence) {
             if (get_input_max_valence() > 256) {
