@@ -8,7 +8,7 @@ TEST(RXMesh, LPPair)
 
     uint16_t local_id             = 5;
     uint16_t local_id_owner_patch = 10;
-    uint8_t  patch                = 7;
+    uint8_t  patch                = 17;
     LPPair   pair(local_id, local_id_owner_patch, patch);
     EXPECT_EQ(pair.local_id(), local_id);
     EXPECT_EQ(pair.local_id_in_owner_patch(), local_id_owner_patch);

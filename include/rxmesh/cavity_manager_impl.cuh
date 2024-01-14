@@ -240,11 +240,16 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     m_correspondence_size_e = max_edge_cap;
     m_s_q_correspondence_e =
         shrd_alloc.alloc<uint16_t>(m_correspondence_size_e);
+    m_s_q_correspondence_stash_e =
+        shrd_alloc.alloc<uint8_t>(m_correspondence_size_e);
+
     m_s_boudary_edges_cavity_id =
         reinterpret_cast<int16_t*>(m_s_q_correspondence_e);
     m_correspondence_size_vf = std::max(max_face_cap, max_vertex_cap);
     m_s_q_correspondence_vf =
         shrd_alloc.alloc<uint16_t>(m_correspondence_size_vf);
+    m_s_q_correspondence_stash_vf =
+        shrd_alloc.alloc<uint8_t>(m_correspondence_size_vf);
 
     // cavity graph
     m_s_cavity_graph = m_s_q_correspondence_e;
@@ -913,7 +918,7 @@ CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
                     const uint16_t neighbour_c =
                         m_s_cavity_graph[MAX_OVERLAP_CAVITIES * c + i];
                     if (neighbour_c != INVALID16) {
-                        //assert(!m_s_cavity_mis(neighbour_c));
+                        // assert(!m_s_cavity_mis(neighbour_c));
                         m_s_active_cavity_mis.reset(neighbour_c, true);
                     }
                 }
@@ -2537,6 +2542,7 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
         populate_correspondence<VertexHandle>(block,
                                               q_stash_id,
                                               m_s_q_correspondence_vf,
+                                              m_s_q_correspondence_stash_vf,
                                               m_correspondence_size_vf,
                                               m_s_table_v,
                                               m_s_table_stash_v);
@@ -2722,6 +2728,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         populate_correspondence<VertexHandle>(block,
                                               q_stash_id,
                                               m_s_q_correspondence_vf,
+                                              m_s_q_correspondence_stash_vf,
                                               m_correspondence_size_vf,
                                               m_s_table_v,
                                               m_s_table_stash_v);
@@ -2796,6 +2803,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         populate_correspondence<EdgeHandle>(block,
                                             q_stash_id,
                                             m_s_q_correspondence_e,
+                                            m_s_q_correspondence_stash_e,
                                             m_correspondence_size_e,
                                             m_s_table_e,
                                             m_s_table_stash_e);
@@ -2965,6 +2973,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         populate_correspondence<FaceHandle>(block,
                                             q_stash_id,
                                             m_s_q_correspondence_vf,
+                                            m_s_q_correspondence_stash_vf,
                                             m_correspondence_size_vf,
                                             m_s_table_f,
                                             m_s_table_stash_f);
@@ -3092,8 +3101,8 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
                 ret = LPPair(vp, vq, owner_stash_id);
 
                 assert(q_vertex < m_correspondence_size_vf);
-                m_s_q_correspondence_vf[q_vertex] =
-                    LPPair::make_value(vp, owner_stash_id);
+                m_s_q_correspondence_vf[q_vertex]       = vp;
+                m_s_q_correspondence_stash_vf[q_vertex] = owner_stash_id;
 
                 assert(owner_stash_id < m_s_patches_to_lock_mask.size());
                 m_s_patches_to_lock_mask.set(owner_stash_id, true);
@@ -3188,8 +3197,8 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
                     m_s_patch_stash.insert_patch(o, m_s_patch_stash_mutex);
 
                 assert(q_edge < m_correspondence_size_e);
-                m_s_q_correspondence_e[q_edge] =
-                    LPPair::make_value(ep, owner_stash_id);
+                m_s_q_correspondence_e[q_edge]       = ep;
+                m_s_q_correspondence_stash_e[q_edge] = owner_stash_id;
 
                 assert(owner_stash_id != INVALID8);
                 ret = LPPair(ep, eq, owner_stash_id);
@@ -3290,8 +3299,8 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
                 assert(owner_stash_id != INVALID8);
 
                 assert(q_face < m_correspondence_size_vf);
-                m_s_q_correspondence_vf[q_face] =
-                    LPPair::make_value(fp, owner_stash_id);
+                m_s_q_correspondence_vf[q_face]       = fp;
+                m_s_q_correspondence_stash_vf[q_face] = owner_stash_id;
 
                 ret = LPPair(fp, fq, owner_stash_id);
 
@@ -3320,6 +3329,7 @@ CavityManager<blockThreads, cop>::find_copy_vertex(uint16_t& local_id,
                                    patch,
                                    patch_stash_id,
                                    m_s_q_correspondence_vf,
+                                   m_s_q_correspondence_stash_vf,
                                    m_s_num_vertices[0],
                                    m_s_owned_mask_v,
                                    m_s_active_mask_v,
@@ -3339,6 +3349,7 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy_edge(
                                  patch,
                                  patch_stash_id,
                                  m_s_q_correspondence_e,
+                                 m_s_q_correspondence_stash_e,
                                  m_s_num_edges[0],
                                  m_s_owned_mask_e,
                                  m_s_active_mask_e,
@@ -3358,6 +3369,7 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy_face(
                                  patch,
                                  patch_stash_id,
                                  m_s_q_correspondence_vf,
+                                 m_s_q_correspondence_stash_vf,
                                  m_s_num_faces[0],
                                  m_s_owned_mask_f,
                                  m_s_active_mask_f,
@@ -3374,6 +3386,7 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
     uint32_t&      src_patch,
     uint8_t&       src_patch_stash_id,
     uint16_t*      q_correspondence,
+    uint8_t*       q_correspondence_stash,
     const uint16_t dest_patch_num_elements,
     const Bitmask& dest_patch_owned_mask,
     const Bitmask& dest_patch_active_mask,
@@ -3389,12 +3402,10 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
 
     // we have cached this lid before
     if (corres != INVALID16) {
-        src_patch_stash_id =
-            detail::extract_high_bits<LPPair::PatchStashNumBits>(corres);
+        src_patch_stash_id = q_correspondence_stash[lid];
+        assert(src_patch_stash_id < PatchStash::stash_size);
         src_patch = m_s_patch_stash.get_patch(src_patch_stash_id);
-        uint16_t ret =
-            detail::extract_low_bits<LPPair::LIDOwnerNumBits>(corres);
-        return ret;
+        return corres;
     }
 
     const uint16_t lid_in(lid);
@@ -3410,8 +3421,8 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
         src_patch = owner.patch_id();
         lid       = owner.local_id();
         if (src_patch == m_patch_info.patch_id) {
-            q_correspondence[lid_in] =
-                LPPair::make_value(owner.local_id(), INVALID4);
+            q_correspondence[lid_in]       = owner.local_id();
+            q_correspondence_stash[lid_in] = INVALID8;
             return lid;
         }
     } else {
@@ -3436,9 +3447,9 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
 
             if (m_s_patch_stash.get_patch(lp) == src_patch &&
                 lp.local_id_in_owner_patch() == lid) {
-                q_correspondence[lid_in] =
-                    LPPair::make_value(i, lp.patch_stash_id());
-                src_patch_stash_id = lp.patch_stash_id();
+                q_correspondence[lid_in]       = i;
+                q_correspondence_stash[lid_in] = lp.patch_stash_id();
+                src_patch_stash_id             = lp.patch_stash_id();
                 src_patch = m_s_patch_stash.get_patch(src_patch_stash_id);
                 return i;
             }
@@ -3454,6 +3465,7 @@ CavityManager<blockThreads, cop>::populate_correspondence(
     cooperative_groups::thread_block& block,
     const uint8_t                     q_stash,
     uint16_t*                         s_correspondence,
+    uint8_t*                          s_correspondence_stash,
     const uint16_t                    s_correspondence_size,
     const LPPair*                     s_table,
     const LPPair*                     s_stash)
@@ -3469,8 +3481,9 @@ CavityManager<blockThreads, cop>::populate_correspondence(
         const LPPair pair = s_table[b];
         if (!pair.is_sentinel() && pair.patch_stash_id() == q_stash) {
             assert(pair.local_id_in_owner_patch() < s_correspondence_size);
-            s_correspondence[pair.local_id_in_owner_patch()] =
-                LPPair::make_value(pair.key(), q_stash);
+            s_correspondence[pair.local_id_in_owner_patch()] = pair.local_id();
+            s_correspondence_stash[pair.local_id_in_owner_patch()] =
+                pair.patch_stash_id();
         }
     }
 
@@ -3480,8 +3493,9 @@ CavityManager<blockThreads, cop>::populate_correspondence(
         auto pair = s_stash[b];
         if (!pair.is_sentinel() && pair.patch_stash_id() == q_stash) {
             assert(pair.local_id_in_owner_patch() < s_correspondence_size);
-            s_correspondence[pair.local_id_in_owner_patch()] =
-                LPPair::make_value(pair.key(), q_stash);
+            s_correspondence[pair.local_id_in_owner_patch()] = pair.local_id();
+            s_correspondence_stash[pair.local_id_in_owner_patch()] =
+                pair.patch_stash_id();
         }
     }
 }

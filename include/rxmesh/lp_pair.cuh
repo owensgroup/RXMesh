@@ -28,13 +28,13 @@ struct LPPair
     using ValueT = uint16_t;
 
     // Local index (high) number of bits within the patch
-    constexpr static uint32_t LIDNumBits = 16;
+    constexpr static uint32_t LIDNumBits = 13;
 
     // Local index (low) number of bits bit within the owner patch
-    constexpr static uint32_t LIDOwnerNumBits = 12;
+    constexpr static uint32_t LIDOwnerNumBits = 13;
 
     // Number of bits reserved for the owner patch ID in the PatchStash
-    constexpr static uint32_t PatchStashNumBits = 4;
+    constexpr static uint32_t PatchStashNumBits = 6;
 
     /**
      * @brief Constructor using the local ID (key),
@@ -58,42 +58,30 @@ struct LPPair
                owner_patch <= (1 << PatchStashNumBits));
 
 
-        ValueT pv = make_value(local_id_in_owner_patch, owner_patch);
-        m_pair    = local_id;
-        m_pair    = m_pair << LIDNumBits;
+        // ValueT pv = make_value(local_id_in_owner_patch, owner_patch);
+        uint32_t pv = static_cast<uint16_t>(owner_patch);
+        pv          = pv << LIDOwnerNumBits;
+        pv |= local_id_in_owner_patch;
+        m_pair = local_id;
+        m_pair = m_pair << (LIDOwnerNumBits + PatchStashNumBits);
         m_pair |= pv;
     }
 
-    __host__ __device__ LPPair(KeyT key, ValueT value)
-    {
-        m_pair = key;
-        m_pair = m_pair << 16;
-        m_pair |= value;
-    }
+    //__host__ __device__ LPPair(KeyT key, ValueT value)
+    //{
+    //    m_pair = key;
+    //    m_pair = m_pair << 16;
+    //    m_pair |= value;
+    //}
 
     __host__ __device__ LPPair() : m_pair(INVALID32){};
     __host__ __device__ LPPair(uint32_t p) : m_pair(p){};
-    LPPair(const LPPair& other) = default;
-    LPPair(LPPair&&)            = default;
+    LPPair(const LPPair& other)      = default;
+    LPPair(LPPair&&)                 = default;
     LPPair& operator=(const LPPair&) = default;
-    LPPair& operator=(LPPair&&) = default;
-    ~LPPair()                   = default;
-
-    /**
-     * @brief concatenate the lid and stash_id into a single uint16_t where the
-     * lid take the lower 12 bits and stash_id takes the high 4 bits
-     */
-    __host__ __device__ static ValueT make_value(const uint16_t lid,
-                                                 const uint8_t  stash_id)
-    {
-        // assert that the high 4 bits are zeros
-        assert(lid == INVALID16 ||
-               detail::extract_high_bits<PatchStashNumBits>(lid) == 0);
-
-        uint16_t p16 = static_cast<uint16_t>(stash_id);
-        p16          = p16 << LIDOwnerNumBits;
-        return (lid | p16);
-    }
+    LPPair& operator=(LPPair&&)      = default;
+    ~LPPair()                        = default;
+ 
 
     /**
      * @brief Construct and return a tombstone pair
@@ -129,16 +117,7 @@ struct LPPair
         // get the high 16 bits by shift right
         return local_id();
     }
-
-
-    /**
-     * @brief the value associated with the key
-     */
-    __device__ __host__ __inline__ ValueT value() const
-    {
-        // get the low 16 bits
-        return m_pair & INVALID16;
-    }
+        
 
     /**
      * @brief returns the local index in the owner patch

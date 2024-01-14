@@ -607,6 +607,7 @@ struct CavityManager
         uint32_t&      src_patch,
         uint8_t&       src_patch_stash_id,
         uint16_t*      q_correspondence,
+        uint8_t*       q_correspondence_stash,
         const uint16_t dest_patch_num_elements,
         const Bitmask& dest_patch_owned_mask,
         const Bitmask& dest_patch_active_mask,
@@ -685,6 +686,7 @@ struct CavityManager
         cooperative_groups::thread_block& block,
         const uint8_t                     q_stash,
         uint16_t*                         s_correspondence,
+        uint8_t*                          s_correspondence_stash,
         const uint16_t                    s_correspondence_size,
         const LPPair*                     s_table,
         const LPPair*                     s_stash);
@@ -807,6 +809,8 @@ struct CavityManager
     // serve both
     uint16_t* m_s_q_correspondence_e;
     uint16_t* m_s_q_correspondence_vf;
+    uint8_t*  m_s_q_correspondence_stash_e;
+    uint8_t*  m_s_q_correspondence_stash_vf;
     uint16_t  m_correspondence_size_e;
     uint16_t  m_correspondence_size_vf;
 
