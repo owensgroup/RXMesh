@@ -646,9 +646,11 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
 {
 
     if constexpr (op == Op::VV) {
-        assert(patch_info.num_vertices[0] <= 2 * patch_info.num_edges[0]);
+        // assert(patch_info.num_vertices[0] <= 2 * patch_info.num_edges[0]);
         uint16_t* s_ev =
-            shrd_alloc.alloc<uint16_t>(2 * 2 * patch_info.num_edges[0]);
+            shrd_alloc.alloc<uint16_t>(std::max(patch_info.num_vertices[0] + 1,
+                                                2 * patch_info.num_edges[0]) +
+                                       2 * patch_info.num_edges[0]);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
                    2 * patch_info.num_edges[0],
@@ -665,9 +667,11 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
     }
 
     if constexpr (op == Op::VE) {
-        assert(patch_info.num_vertices[0] <= 2 * patch_info.num_edges[0]);
+        // assert(patch_info.num_vertices[0] <= 2 * patch_info.num_edges[0]);
         uint16_t* s_ev =
-            shrd_alloc.alloc<uint16_t>(2 * 2 * patch_info.num_edges[0]);
+            shrd_alloc.alloc<uint16_t>(std::max(patch_info.num_vertices[0] + 1,
+                                                2 * patch_info.num_edges[0]) +
+                                       2 * patch_info.num_edges[0]);
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
                    2 * patch_info.num_edges[0],

@@ -1247,8 +1247,16 @@ class RXMeshStatic : public RXMesh
             // The output will be stored in another buffer with size equal to
             // the EV (i.e., 2*#edges) since this output buffer will stored the
             // nnz and the nnz of a matrix the same before/after transpose
-            dynamic_smem =
-                (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            // Normally, the number of vertices is way less than 2*#E but in
+            // dynamic mesh, we can not predicate these numbers since some
+            // of these edges could be deleted (marked deleted in the bitmask)
+            // so, we allocate the buffer that hold EV (which will also hold the
+            // offset) to be the max of #V and 2#E
+            dynamic_smem = std::max(this->m_max_vertices_per_patch,
+                                    2 * this->m_max_edges_per_patch) *
+                           sizeof(uint16_t);
+            dynamic_smem +=
+                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalVertexT>();
@@ -1330,8 +1338,11 @@ class RXMeshStatic : public RXMesh
             // similar to VE but we also need to store the EV even after
             // we do the transpose. After that, we can throw EV away and load
             // the hash table
-            dynamic_smem =
-                (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            dynamic_smem = std::max(this->m_max_vertices_per_patch,
+                                    2 * this->m_max_edges_per_patch) *
+                           sizeof(uint16_t);
+            dynamic_smem +=
+                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalVertexT>();
