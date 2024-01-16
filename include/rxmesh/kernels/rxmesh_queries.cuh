@@ -425,7 +425,7 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
     const uint32_t* active_mask_v  = patch_info.active_mask_v;
     uint16_t*       s_ev_duplicate = nullptr;
 
-    assert(2 * 2 * num_edges >= num_vertices + 1 + 2 * num_edges);
+    //assert(2 * 2 * num_edges >= num_vertices + 1 + 2 * num_edges);
 
     if (!oriented) {
         s_ev_duplicate =

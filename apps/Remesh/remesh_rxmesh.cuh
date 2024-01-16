@@ -4,6 +4,7 @@
 
 #include "rxmesh/util/util.h"
 
+int iddd = 0;
 
 using EdgeStatus = int8_t;
 enum : EdgeStatus
@@ -196,6 +197,31 @@ int is_done(const rxmesh::RXMeshDynamic&             rx,
 }
 
 template <typename T>
+void screen_shot(rxmesh::RXMeshDynamic&      rx,
+                 rxmesh::VertexAttribute<T>* coords,
+                 std::string                 app)
+{
+    using namespace rxmesh;
+
+    rx.update_host();
+    coords->move(DEVICE, HOST);
+    rx.update_polyscope();
+
+    auto ps_mesh = rx.get_polyscope_mesh();
+    ps_mesh->updateVertexPositions(*coords);
+    ps_mesh->setEdgeWidth(1.0);
+    ps_mesh->setEnabled(true);
+    rx.render_face_patch()->setEnabled(true);
+
+    polyscope::screenshot(app + "_" + std::to_string(iddd) + ".png");
+    iddd++;
+
+    // polyscope::show();
+
+    ps_mesh->setEnabled(false);
+}
+
+template <typename T>
 inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
                              rxmesh::VertexAttribute<T>*        coords,
                              rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
@@ -204,7 +230,7 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
 {
     using namespace rxmesh;
 
-    constexpr uint32_t blockThreads = 256;
+    constexpr uint32_t blockThreads = 384;
 
 
     edge_status->reset(UNSEEN, DEVICE);
@@ -240,6 +266,8 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
 
             // rx.update_host();
             // EXPECT_TRUE(rx.validate());
+
+            // screen_shot(rx, coords, "Split");
 
             // stats(rx);
             // bool show = false;
@@ -289,7 +317,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
 {
     using namespace rxmesh;
 
-    constexpr uint32_t blockThreads = 256;
+    constexpr uint32_t blockThreads = 384;
 
     edge_status->reset(UNSEEN, DEVICE);
 
@@ -325,6 +353,9 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
             rx.cleanup();
             rx.slice_patches(*coords, *edge_status);
             rx.cleanup();
+
+
+            // screen_shot(rx, coords, "Collapse");
 
             // stats(rx);
             // bool show = false;
@@ -371,7 +402,7 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
 {
     using namespace rxmesh;
 
-    constexpr uint32_t blockThreads = 256;
+    constexpr uint32_t blockThreads = 384;
 
     edge_status->reset(UNSEEN, DEVICE);
 
@@ -417,6 +448,8 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
             rx.cleanup();
             rx.slice_patches(*coords, *edge_status);
             rx.cleanup();
+
+            // screen_shot(rx, coords, "Flip");
 
             // stats(rx);
             // bool show = false;
@@ -485,6 +518,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     rx.render_vertex_patch();
     rx.render_edge_patch();
     rx.render_face_patch();
+    rx.get_polyscope_mesh();
     // polyscope::show();
 #endif
 

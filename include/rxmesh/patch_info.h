@@ -122,7 +122,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if the patch is dirty (ew!)
      */
-    __device__ __inline__ bool is_dirty()
+    __device__ __inline__ bool is_dirty() const
     {
 #ifdef __CUDA_ARCH__
         return atomic_read(dirty) != 0;

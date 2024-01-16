@@ -695,45 +695,44 @@ class RXMeshDynamic : public RXMeshStatic
 
             // cavity boundary edges
             size_t cavity_bdr_shmem = 0;
-            cavity_bdr_shmem += this->m_max_edges_per_patch * sizeof(uint16_t) +
-                                ShmemAllocator::default_alignment;
+            cavity_bdr_shmem +=
+                edge_cap * sizeof(uint16_t) + ShmemAllocator::default_alignment;
 
             // store cavity size (assume number of cavities is half the patch
             // size)
+            const uint16_t half_face_cap = DIVIDE_UP(face_cap, 2);
+
             size_t cavity_size_shmem = 0;
             cavity_size_shmem +=
-                (this->m_max_faces_per_patch / 2) * sizeof(int) +
-                ShmemAllocator::default_alignment;
+                half_face_cap * sizeof(int) + ShmemAllocator::default_alignment;
 
             // cavity src element
-            size_t cavity_creator_shmem = 0;
-            cavity_creator_shmem =
-                (this->m_max_faces_per_patch / 2) * sizeof(uint16_t) +
-                ShmemAllocator::default_alignment;
+            size_t cavity_creator_shmem = half_face_cap * sizeof(uint16_t) +
+                                          ShmemAllocator::default_alignment;
 
-            size_t q_lp_shmem =
-                std::max(max_lp_hashtable_capacity<LocalVertexT>(),
-                         max_lp_hashtable_capacity<LocalEdgeT>());
-
-            q_lp_shmem =
-                std::max(q_lp_shmem,
-                         size_t(max_lp_hashtable_capacity<LocalFaceT>())) *
-                sizeof(LPPair);
+            // size_t q_lp_shmem =
+            //     std::max(max_lp_hashtable_capacity<LocalVertexT>(),
+            //              max_lp_hashtable_capacity<LocalEdgeT>());
+            //
+            // q_lp_shmem =
+            //     std::max(q_lp_shmem,
+            //              size_t(max_lp_hashtable_capacity<LocalFaceT>())) *
+            //     sizeof(LPPair);
 
             // active, owned, migrate(for vertices only), src bitmask (for
             // vertices and edges only), src connect (for vertices and edges
             // only), ownership owned_cavity_bdry (for vertices only), ribbonize
             // (for vertices only) added_to_lp, in_cavity, recover
             size_t bitmasks_shmem = 0;
-            bitmasks_shmem += 11 * detail::mask_num_bytes(vertex_cap) +
-                              11 * ShmemAllocator::default_alignment;
-            bitmasks_shmem += 8 * detail::mask_num_bytes(edge_cap) +
-                              8 * ShmemAllocator::default_alignment;
-            bitmasks_shmem += 6 * detail::mask_num_bytes(face_cap) +
-                              6 * ShmemAllocator::default_alignment;
+            bitmasks_shmem += 10 * detail::mask_num_bytes(vertex_cap) +
+                              10 * ShmemAllocator::default_alignment;
+            bitmasks_shmem += 7 * detail::mask_num_bytes(edge_cap) +
+                              7 * ShmemAllocator::default_alignment;
+            bitmasks_shmem += 5 * detail::mask_num_bytes(face_cap) +
+                              5 * ShmemAllocator::default_alignment;
 
             // active cavity bitmask
-            bitmasks_shmem += detail::mask_num_bytes(face_cap / 2);
+            bitmasks_shmem += detail::mask_num_bytes(face_cap);
 
 
             // correspondence buffer
@@ -743,8 +742,7 @@ class RXMeshDynamic : public RXMeshStatic
             const size_t ce = (sizeof(uint16_t) + sizeof(uint8_t)) * edge_cap;
             const size_t cf = (sizeof(uint16_t) + sizeof(uint8_t)) * face_cap;
             const size_t correspond_shmem =
-                std::max(cv + ce, ce + cf) +
-                2 * ShmemAllocator::default_alignment;
+                ce + std::max(cv, cf) + 4 * ShmemAllocator::default_alignment;
 
             // shared memory is the max of 1. static query shared memory + the
             // cavity ID shared memory (since we need to mark seed elements) 2.

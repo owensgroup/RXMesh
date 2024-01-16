@@ -60,18 +60,9 @@ __global__ static void edge_split(rxmesh::Context                   context,
     if (cavity.patch_id() == INVALID32) {
         return;
     }
-
-    //{
-    //    if (threadIdx.x == 0) {
-    //        printf("\n S patch= %u, before num_edges= %u, is_dirty= %d",
-    //               cavity.patch_id(),
-    //               context.m_patches_info[cavity.patch_id()].num_edges[0],
-    //               int(context.m_patches_info[cavity.patch_id()].is_dirty()));
-    //    }
-    //    block.sync();
-    //}
-
     Bitmask is_updated(cavity.patch_info().edges_capacity[0], shrd_alloc);
+
+    uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
     auto should_split = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         if (edge_status(eh) == UPDATE) {
@@ -96,6 +87,9 @@ __global__ static void edge_split(rxmesh::Context                   context,
     Query<blockThreads> query(context, cavity.patch_id());
     query.dispatch<Op::EV>(block, shrd_alloc, should_split);
     block.sync();
+
+    shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
+
 
     if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
 
@@ -158,19 +152,6 @@ __global__ static void edge_split(rxmesh::Context                   context,
             }
         });
     }
-
-    //{
-    //    if (threadIdx.x == 0 && cavity.get_num_cavities() > 0) {
-    //        printf(
-    //            "\n Split patch= %u, should_slice = %d, "
-    //            "m_write_to_gmem= %d, is_dirty= %d, readd_to_queue= %d\n",
-    //            cavity.patch_id(),
-    //            int(context.m_patches_info[cavity.patch_id()].should_slice),
-    //            int(cavity.m_write_to_gmem),
-    //            int(context.m_patches_info[cavity.patch_id()].is_dirty()),
-    //            int(cavity.m_s_readd_to_queue[0]));
-    //    }
-    //}
 }
 
 
@@ -411,20 +392,6 @@ __global__ static void edge_collapse(
             }
         });
     }
-
-    //{
-    //    if (threadIdx.x == 0) {
-    //        printf(
-    //            "\n C patch= %u, after num_edges= %u, should_slice = %d, "
-    //            "m_write_to_gmem= %d, is_dirty= %d",
-    //            cavity.patch_id(),
-    //            context.m_patches_info[cavity.patch_id()].num_edges[0],
-    //            int(context.m_patches_info[cavity.patch_id()].should_slice),
-    //            int(cavity.m_write_to_gmem),
-    //            int(context.m_patches_info[cavity.patch_id()].is_dirty()));
-    //    }
-    //    block.sync();
-    //}
 }
 
 template <typename T, uint32_t blockThreads>

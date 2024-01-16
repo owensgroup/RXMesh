@@ -59,6 +59,9 @@ struct ShmemAllocator
         char* ret = m_ptr;
         m_ptr     = m_ptr + num_bytes;
         assert(get_allocated_size_bytes() <= get_max_size_bytes());
+        if (get_allocated_size_bytes() > get_max_size_bytes()) {
+            return nullptr;
+        }
         return ret;
     }
 

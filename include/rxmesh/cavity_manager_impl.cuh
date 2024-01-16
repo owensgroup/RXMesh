@@ -102,13 +102,19 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
 
     m_s_cavity_id_v = reinterpret_cast<uint16_t*>(shrd_alloc.alloc(
         std::max(vert_cap_bytes, m_patch_info.lp_v.num_bytes())));
+    assert(m_s_cavity_id_v);
+
     m_s_cavity_id_e = reinterpret_cast<uint16_t*>(shrd_alloc.alloc(
         std::max(edge_cap_bytes, m_patch_info.lp_e.num_bytes())));
+    assert(m_s_cavity_id_e);
+
     m_s_cavity_id_f = reinterpret_cast<uint16_t*>(shrd_alloc.alloc(
         std::max(face_cap_bytes, m_patch_info.lp_f.num_bytes())));
+    assert(m_s_cavity_id_f);
 
     const uint16_t assumed_num_cavities = m_context.m_max_num_faces[0] / 2;
     m_s_cavity_creator = shrd_alloc.alloc<uint16_t>(assumed_num_cavities);
+    assert(m_s_cavity_creator);
     fill_n<blockThreads>(
         m_s_cavity_creator, assumed_num_cavities, uint16_t(INVALID16));
 
@@ -132,19 +138,18 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     const uint16_t edge_cap = m_patch_info.edges_capacity[0];
     const uint16_t face_cap = m_patch_info.faces_capacity[0];
 
-    const uint16_t max_vertex_cap = static_cast<uint16_t>(
-        m_context.m_capacity_factor *
-        static_cast<float>(m_context.m_max_num_vertices[0]));
+    const uint16_t max_vertex_cap =
+        static_cast<uint16_t>(m_context.m_max_num_vertices[0]);
     const uint16_t max_edge_cap =
-        static_cast<uint16_t>(m_context.m_capacity_factor *
-                              static_cast<float>(m_context.m_max_num_edges[0]));
+        static_cast<uint16_t>(m_context.m_max_num_edges[0]);
     const uint16_t max_face_cap =
-        static_cast<uint16_t>(m_context.m_capacity_factor *
-                              static_cast<float>(m_context.m_max_num_faces[0]));
+        static_cast<uint16_t>(m_context.m_max_num_faces[0]);
 
     // load EV and FE
     m_s_ev = shrd_alloc.alloc<uint16_t>(2 * edge_cap);
+    assert(m_s_ev);
     m_s_fe = shrd_alloc.alloc<uint16_t>(3 * face_cap);
+    assert(m_s_fe);
     detail::load_async(block,
                        reinterpret_cast<uint16_t*>(m_patch_info.ev),
                        2 * m_s_num_edges[0],
@@ -172,6 +177,13 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
         in_cavity = Bitmask(num_elements, shrd_alloc);
         fill_in   = Bitmask(num_elements, ownership.m_bitmask);
         recover   = Bitmask(num_elements, shrd_alloc);
+
+        assert(owned.m_bitmask);
+        assert(active.m_bitmask);
+        assert(ownership.m_bitmask);
+        assert(in_cavity.m_bitmask);
+        assert(fill_in.m_bitmask);
+        assert(recover.m_bitmask);
 
         owned.reset(block);
         active.reset(block);
@@ -205,11 +217,16 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                 m_patch_info.owned_mask_v,
                 m_patch_info.active_mask_v);
     m_s_not_owned_cavity_bdry_v = Bitmask(vert_cap, shrd_alloc);
-    m_s_owned_cavity_bdry_v     = Bitmask(vert_cap, shrd_alloc);
-    m_s_connect_cavity_bdry_v   = Bitmask(vert_cap, shrd_alloc);
+    assert(m_s_not_owned_cavity_bdry_v.m_bitmask);
+    m_s_owned_cavity_bdry_v = Bitmask(vert_cap, shrd_alloc);
+    assert(m_s_owned_cavity_bdry_v.m_bitmask);
+    m_s_connect_cavity_bdry_v = Bitmask(vert_cap, shrd_alloc);
+    assert(m_s_connect_cavity_bdry_v.m_bitmask);
     m_s_src_mask_v = Bitmask(m_context.m_max_num_vertices[0], shrd_alloc);
+    assert(m_s_src_mask_v.m_bitmask);
     m_s_src_connect_mask_v =
         Bitmask(m_context.m_max_num_vertices[0], shrd_alloc);
+    assert(m_s_src_connect_mask_v.m_bitmask);
 
 
     // edges masks
@@ -223,7 +240,9 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                 m_patch_info.owned_mask_e,
                 m_patch_info.active_mask_e);
     m_s_src_mask_e = Bitmask(std::max(max_edge_cap, edge_cap), shrd_alloc);
+    assert(m_s_src_mask_e.m_bitmask);
     m_s_src_connect_mask_e = Bitmask(m_context.m_max_num_edges[0], shrd_alloc);
+    assert(m_s_src_connect_mask_e.m_bitmask);
 
     // faces masks
     alloc_masks(face_cap,
@@ -240,16 +259,20 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     m_correspondence_size_e = max_edge_cap;
     m_s_q_correspondence_e =
         shrd_alloc.alloc<uint16_t>(m_correspondence_size_e);
+    assert(m_s_q_correspondence_e);
     m_s_q_correspondence_stash_e =
         shrd_alloc.alloc<uint8_t>(m_correspondence_size_e);
+    assert(m_s_q_correspondence_stash_e);
 
     m_s_boudary_edges_cavity_id =
         reinterpret_cast<int16_t*>(m_s_q_correspondence_e);
     m_correspondence_size_vf = std::max(max_face_cap, max_vertex_cap);
     m_s_q_correspondence_vf =
         shrd_alloc.alloc<uint16_t>(m_correspondence_size_vf);
+    assert(m_s_q_correspondence_vf);
     m_s_q_correspondence_stash_vf =
         shrd_alloc.alloc<uint8_t>(m_correspondence_size_vf);
+    assert(m_s_q_correspondence_stash_vf);
 
     // cavity graph
     m_s_cavity_graph = m_s_q_correspondence_e;
@@ -280,6 +303,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
 
     // cavity boundary edges
     m_s_cavity_boundary_edges = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
+    assert(m_s_cavity_boundary_edges);
 
     // q hash table
     // m_s_table_q_size = std::max(
@@ -323,6 +347,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     // half the number of faces in the patch
     assert(m_s_num_cavities[0] <= m_s_num_faces[0] / 2);
     m_s_cavity_size_prefix = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
+    assert(m_s_cavity_size_prefix);
 
 
     m_s_cavity_graph_mutex =
@@ -330,6 +355,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
 
     // active cavity bitmask
     m_s_active_cavity_bitmask = Bitmask(m_s_num_cavities[0], shrd_alloc);
+    assert(m_s_active_cavity_bitmask.m_bitmask);
     m_s_active_cavity_bitmask.set(block);
 
     cooperative_groups::wait(block);

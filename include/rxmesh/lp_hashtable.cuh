@@ -52,7 +52,7 @@ struct LPHashTable
     using HashT = universal_hash;
     // using HashT = MurmurHash3_32;
 
-    static constexpr uint8_t stash_size = 64;
+    static constexpr uint8_t stash_size = 128;
 
     __device__ __host__ LPHashTable()
         : m_table(nullptr),
