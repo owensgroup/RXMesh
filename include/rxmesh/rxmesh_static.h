@@ -1310,11 +1310,13 @@ class RXMeshStatic : public RXMesh
             dynamic_smem += ShmemAllocator::default_alignment * 4;
 
         } else if (op == Op::VF) {
-            // load EV and FE simultaneously. changes FE to FV using EV. Then
+            // load EV and FE simultaneously. Changes FE to FV using EV. Then
             // transpose FV in place and use EV to store the values/output while
             // using FV to store the prefix sum. Thus, the space used to store
             // EV should be max(3*#faces, 2*#edges)
-            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
+            dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
+                                    1 + this->m_max_vertices_per_patch) *
+                           sizeof(uint16_t);
             dynamic_smem += std::max(3 * this->m_max_faces_per_patch,
                                      2 * this->m_max_edges_per_patch) *
                                 sizeof(uint16_t) +

@@ -425,7 +425,7 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
     const uint32_t* active_mask_v  = patch_info.active_mask_v;
     uint16_t*       s_ev_duplicate = nullptr;
 
-    //assert(2 * 2 * num_edges >= num_vertices + 1 + 2 * num_edges);
+    // assert(2 * 2 * num_edges >= num_vertices + 1 + 2 * num_edges);
 
     if (!oriented) {
         s_ev_duplicate =
@@ -691,11 +691,11 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
     }
 
     if constexpr (op == Op::VF) {
-        assert(patch_info.num_vertices[0] <= 2 * patch_info.num_edges[0]);
-        uint16_t* s_fe =
-            shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
-        uint16_t* s_ev =
-            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
+        // assert(patch_info.num_vertices[0] <= 2 * patch_info.num_edges[0]);
+        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(std::max(
+            3 * patch_info.num_faces[0], 1 + patch_info.num_vertices[0]));
+        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(
+            std::max(2 * patch_info.num_edges[0], 3 * patch_info.num_faces[0]));
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.fe),
                    3 * patch_info.num_faces[0],
