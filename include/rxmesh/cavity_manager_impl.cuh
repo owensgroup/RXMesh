@@ -189,6 +189,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
         active.reset(block);
         ownership.reset(block);
         in_cavity.reset(block);
+        recover.reset(block);
 
         // to remove the racecheck hazard report due to WAW on owned and active
         block.sync();
@@ -256,6 +257,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                 m_patch_info.active_mask_f);
 
     // correspondence
+    assert(max_edge_cap >= m_s_num_edges[0]);
     m_correspondence_size_e = max_edge_cap;
     m_s_q_correspondence_e =
         shrd_alloc.alloc<uint16_t>(m_correspondence_size_e);
@@ -615,12 +617,12 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     ShmemAllocator&                   shrd_alloc,
     AttributesT&&... attributes)
 {
+    // allocate shared memory
+    alloc_shared_memory(block, shrd_alloc);
+
     if (get_num_cavities() <= 0) {
         return false;
     }
-
-    // allocate shared memory
-    alloc_shared_memory(block, shrd_alloc);
 
     // construct cavity graph
     construct_cavity_graph(block);
@@ -969,8 +971,16 @@ CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
     // clean up
     // deactivate_conflicting_cavities();
 
+    // because it overlaps with m_s_active_cavity_mis
+    m_s_in_cavity_f.reset(block);
     m_s_active_cavity_mis.reset(block);
+            
+    // because it overlaps with m_s_candidate_cavity_mis
+    m_s_recover_f.reset(block);
     m_s_candidate_cavity_mis.reset(block);
+    
+    // because it overlaps with m_s_cavity_mis
+    m_s_ownership_change_mask_f.reset(block);
     m_s_cavity_mis.reset(block);
 
     fill_n<blockThreads>(m_s_cavity_id_v,
@@ -3499,6 +3509,8 @@ CavityManager<blockThreads, cop>::populate_correspondence(
 
     fill_n<blockThreads>(
         s_correspondence, s_correspondence_size, uint16_t(INVALID16));
+    fill_n<blockThreads>(
+        s_correspondence_stash, s_correspondence_size, uint8_t(INVALID8));
     block.sync();
 
     LPHashTable lp = m_patch_info.get_lp<HandleT>();

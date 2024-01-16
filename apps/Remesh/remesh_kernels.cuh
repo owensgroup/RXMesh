@@ -40,10 +40,11 @@ __global__ static void stats_kernel(const rxmesh::Context            context,
 
 
 template <typename T, uint32_t blockThreads>
-__global__ static void edge_split(rxmesh::Context                   context,
-                                  const rxmesh::VertexAttribute<T>  coords,
-                                  rxmesh::EdgeAttribute<EdgeStatus> edge_status,
-                                  const T high_edge_len_sq)
+__global__ static void __launch_bounds__(blockThreads)
+    edge_split(rxmesh::Context                   context,
+               const rxmesh::VertexAttribute<T>  coords,
+               rxmesh::EdgeAttribute<EdgeStatus> edge_status,
+               const T                           high_edge_len_sq)
 {
     // EV for calc edge len
 
@@ -156,9 +157,9 @@ __global__ static void edge_split(rxmesh::Context                   context,
 
 
 template <uint32_t blockThreads>
-__global__ static void compute_valence(
-    rxmesh::Context                        context,
-    const rxmesh::VertexAttribute<uint8_t> v_valence)
+__global__ static void __launch_bounds__(blockThreads)
+    compute_valence(rxmesh::Context                        context,
+                    const rxmesh::VertexAttribute<uint8_t> v_valence)
 {
     using namespace rxmesh;
 
@@ -175,13 +176,14 @@ __global__ static void compute_valence(
     });
 }
 
+
 template <typename T, uint32_t blockThreads>
-__global__ static void edge_collapse(
-    rxmesh::Context                   context,
-    const rxmesh::VertexAttribute<T>  coords,
-    rxmesh::EdgeAttribute<EdgeStatus> edge_status,
-    const T                           low_edge_len_sq,
-    const T                           high_edge_len_sq)
+__global__ static void __launch_bounds__(blockThreads)
+    edge_collapse(rxmesh::Context                   context,
+                  const rxmesh::VertexAttribute<T>  coords,
+                  rxmesh::EdgeAttribute<EdgeStatus> edge_status,
+                  const T                           low_edge_len_sq,
+                  const T                           high_edge_len_sq)
 {
 
     using namespace rxmesh;
@@ -381,6 +383,7 @@ __global__ static void edge_collapse(
             //}
         });
     }
+    block.sync();
 
     cavity.epilogue(block);
     block.sync();
@@ -395,11 +398,11 @@ __global__ static void edge_collapse(
 }
 
 template <typename T, uint32_t blockThreads>
-__global__ static void edge_flip(
-    rxmesh::Context                        context,
-    const rxmesh::VertexAttribute<T>       coords,
-    const rxmesh::VertexAttribute<uint8_t> v_valence,
-    rxmesh::EdgeAttribute<EdgeStatus>      edge_status)
+__global__ static void __launch_bounds__(blockThreads)
+    edge_flip(rxmesh::Context                        context,
+              const rxmesh::VertexAttribute<T>       coords,
+              const rxmesh::VertexAttribute<uint8_t> v_valence,
+              rxmesh::EdgeAttribute<EdgeStatus>      edge_status)
 {
     using namespace rxmesh;
 
@@ -573,9 +576,10 @@ __global__ static void edge_flip(
 }
 
 template <typename T, uint32_t blockThreads>
-__global__ static void vertex_smoothing(const rxmesh::Context context,
-                                        const rxmesh::VertexAttribute<T> coords,
-                                        rxmesh::VertexAttribute<T> new_coords)
+__global__ static void __launch_bounds__(blockThreads)
+    vertex_smoothing(const rxmesh::Context            context,
+                     const rxmesh::VertexAttribute<T> coords,
+                     rxmesh::VertexAttribute<T>       new_coords)
 {
     // VV to compute vertex sum and normal
     using namespace rxmesh;
