@@ -2,6 +2,7 @@
 #include "rxmesh/query.cuh"
 
 #include <glm/glm.hpp>
+#include <glm/gtx/norm.hpp>
 
 #include "rxmesh/kernels/debug.cuh"
 
