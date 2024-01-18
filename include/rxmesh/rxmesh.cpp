@@ -38,7 +38,10 @@ RXMesh::RXMesh()
       m_max_capacity_lp_v(0),
       m_max_capacity_lp_e(0),
       m_max_capacity_lp_f(0),
-      m_patch_alloc_factor(0)
+      m_patch_alloc_factor(0),
+      m_max_edge_capacity(0),
+      m_max_face_capacity(0),
+      m_max_vertex_capacity(0)
 {
 }
 
@@ -70,23 +73,6 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     }
 
     build(fv, patcher_file);
-
-    // calc max elements for use in build_device (which populates
-    // m_h_patches_info and thus we can not use calc_max_elements now)
-    m_max_vertices_per_patch = 0;
-    m_max_edges_per_patch    = 0;
-    m_max_faces_per_patch    = 0;
-    for (uint32_t p = 0; p < get_num_patches(); ++p) {
-        m_max_vertices_per_patch =
-            std::max(m_max_vertices_per_patch,
-                     static_cast<uint32_t>(m_h_patches_ltog_v[p].size()));
-        m_max_edges_per_patch =
-            std::max(m_max_edges_per_patch,
-                     static_cast<uint32_t>(m_h_patches_ltog_e[p].size()));
-        m_max_faces_per_patch =
-            std::max(m_max_faces_per_patch,
-                     static_cast<uint32_t>(m_h_patches_ltog_f[p].size()));
-    }
 
     build_device();
 
@@ -248,10 +234,40 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     m_h_num_owned_v.resize(get_max_num_patches(), 0);
     m_h_num_owned_e.resize(get_max_num_patches(), 0);
 
+#pragma omp parallel for
+    for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
+        build_single_patch_ltog(fv, p);
+    }
+
+    // calc max elements for use in build_device (which populates
+    // m_h_patches_info and thus we can not use calc_max_elements now)
+    m_max_vertices_per_patch = 0;
+    m_max_edges_per_patch    = 0;
+    m_max_faces_per_patch    = 0;
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
+        m_max_vertices_per_patch =
+            std::max(m_max_vertices_per_patch,
+                     static_cast<uint32_t>(m_h_patches_ltog_v[p].size()));
+        m_max_edges_per_patch =
+            std::max(m_max_edges_per_patch,
+                     static_cast<uint32_t>(m_h_patches_ltog_e[p].size()));
+        m_max_faces_per_patch =
+            std::max(m_max_faces_per_patch,
+                     static_cast<uint32_t>(m_h_patches_ltog_f[p].size()));
+    }
+
+    m_max_vertex_capacity = static_cast<uint16_t>(std::ceil(
+        m_capacity_factor * static_cast<float>(m_max_vertices_per_patch)));
+
+    m_max_edge_capacity = static_cast<uint16_t>(std::ceil(
+        m_capacity_factor * static_cast<float>(m_max_edges_per_patch)));
+
+    m_max_face_capacity = static_cast<uint16_t>(std::ceil(
+        m_capacity_factor * static_cast<float>(m_max_faces_per_patch)));
 
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
-        build_single_patch(fv, p);
+        build_single_patch_topology(fv, p);
     }
 
     const uint32_t patches_1_bytes =
@@ -452,23 +468,6 @@ void RXMesh::calc_max_elements()
     }
 }
 
-void RXMesh::build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
-                                const uint32_t patch_id)
-{
-    // Build the patch local index space
-    // This is the two small matrices defining incident relation between
-    // edge-vertices and faces-edges (i.e., the topology) along with the mapping
-    // from local to global space for vertices, edge, and faces
-
-    // When we create a new patch, we make sure that the elements owned by the
-    // patch will have local indices lower than any other elements (of the same
-    // type) that is not owned by the patch.
-
-    build_single_patch_ltog(fv, patch_id);
-
-    build_single_patch_topology(fv, patch_id);
-}
-
 void RXMesh::build_single_patch_ltog(
     const std::vector<std::vector<uint32_t>>& fv,
     const uint32_t                            patch_id)
@@ -561,11 +560,9 @@ void RXMesh::build_single_patch_topology(
     const uint16_t patch_num_edges = m_h_patches_ltog_e[patch_id].size();
     const uint16_t patch_num_faces = m_h_patches_ltog_f[patch_id].size();
 
-    const uint32_t edges_cap = static_cast<uint16_t>(
-        m_capacity_factor * static_cast<float>(patch_num_edges));
+    const uint32_t edges_cap = m_max_edge_capacity;
 
-    const uint32_t faces_cap = static_cast<uint16_t>(
-        m_capacity_factor * static_cast<float>(patch_num_faces));
+    const uint32_t faces_cap = m_max_face_capacity;
 
     m_h_patches_info[patch_id].ev =
         (LocalVertexT*)malloc(edges_cap * 2 * sizeof(LocalVertexT));
@@ -758,45 +755,17 @@ uint32_t RXMesh::get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const
     return edge_id;
 }
 
-uint32_t RXMesh::get_standard_patch_num_vertices() const
-{
-    return DIVIDE_UP(get_standard_patch_num_faces(), 2);
-}
-uint32_t RXMesh::get_standard_patch_num_edges() const
-{
-    return 3 * get_standard_patch_num_vertices();
-}
-uint32_t RXMesh::get_standard_patch_num_faces() const
-{
-    return m_patch_size;
-}
-
 uint16_t RXMesh::get_per_patch_max_vertex_capacity() const
 {
-    // the capacity size of a patch is based on the maximum of
-    // 1. the standard patch
-    // 2. the per-patch max number of elements
-    // we then pre-multiply this number by the capacity factor increase
-
-    const float max_cap_vertices = static_cast<float>(std::max(
-        get_standard_patch_num_vertices(), get_per_patch_max_vertices()));
-
-    return static_cast<uint16_t>(
-        std::ceil(m_capacity_factor * max_cap_vertices));
+    return m_max_vertex_capacity;
 }
 uint16_t RXMesh::get_per_patch_max_edge_capacity() const
 {
-    const float max_cap_edges = static_cast<float>(
-        std::max(get_standard_patch_num_edges(), get_per_patch_max_edges()));
-
-    return static_cast<uint16_t>(std::ceil(m_capacity_factor * max_cap_edges));
+    return m_max_edge_capacity;
 }
 uint16_t RXMesh::get_per_patch_max_face_capacity() const
 {
-    const float max_cap_faces = static_cast<float>(
-        std::max(get_standard_patch_num_faces(), get_per_patch_max_faces()));
-
-    return static_cast<uint16_t>(std::ceil(m_capacity_factor * max_cap_faces));
+    return m_max_face_capacity;
 }
 
 

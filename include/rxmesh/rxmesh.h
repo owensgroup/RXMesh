@@ -309,7 +309,7 @@ class RXMesh
      */
     void init(const std::vector<std::vector<uint32_t>>& fv,
               const std::string                         patcher_file    = "",
-              const float                               capacity_factor = 1.2,
+              const float                               capacity_factor = 1.8,
               const float patch_alloc_factor                            = 5.0,
               const float lp_hashtable_load_factor                      = 0.5);
 
@@ -421,8 +421,6 @@ class RXMesh
 
     void build(const std::vector<std::vector<uint32_t>>& fv,
                const std::string                         patcher_file);
-    void build_single_patch(const std::vector<std::vector<uint32_t>>& fv,
-                            const uint32_t                            patch_id);
 
     void build_single_patch_ltog(const std::vector<std::vector<uint32_t>>& fv,
                                  const uint32_t patch_id);
@@ -430,13 +428,6 @@ class RXMesh
     void build_single_patch_topology(
         const std::vector<std::vector<uint32_t>>& fv,
         const uint32_t                            patch_id);
-
-    // standard patch is a patch that has m_patch_size faces
-    // we apply Euler characteristic to get the number of vertices and edges in
-    // such a patch
-    uint32_t get_standard_patch_num_vertices() const;
-    uint32_t get_standard_patch_num_edges() const;
-    uint32_t get_standard_patch_num_faces() const;
 
     // get the max vertex/edge/face capacity i.e., the max number of
     // vertices/edges/faces allowed in a patch (for allocation purposes)
@@ -474,6 +465,8 @@ class RXMesh
 
     // Should be updated with update_host
     uint32_t m_num_edges, m_num_faces, m_num_vertices;
+
+    uint32_t m_max_edge_capacity, m_max_face_capacity, m_max_vertex_capacity;
 
     uint32_t m_input_max_valence, m_input_max_edge_incident_faces,
         m_input_max_face_adjacent_faces;
