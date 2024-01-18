@@ -151,7 +151,7 @@ struct ALIGN(16) PatchInfo
         const LPPair*      stash = nullptr) const
     {
         if (table == nullptr && stash == nullptr) {
-            assert(!is_owned(HandleT::LocalT(key)));
+            assert(!is_owned(typename HandleT::LocalT(key)));            
         }
         LPPair lp = get_lp<HandleT>().find(key, table, stash);
 
