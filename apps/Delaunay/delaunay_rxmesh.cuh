@@ -271,7 +271,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
             GPUTimer app_timer;
             app_timer.start();
             delaunay_edge_flip<float, blockThreads>
-                <<<launch_box.blocks,
+                <<<DIVIDE_UP(launch_box.blocks, 8),
                    launch_box.num_threads,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(),
                                                 *coords,

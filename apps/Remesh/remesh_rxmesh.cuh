@@ -272,7 +272,7 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
             GPUTimer app_timer;
             app_timer.start();
             edge_split<T, blockThreads>
-                <<<launch_box.blocks / 8,
+                <<<DIVIDE_UP(launch_box.blocks, 8),
                    launch_box.num_threads,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(),
                                                 *coords,
@@ -408,7 +408,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
             GPUTimer app_timer;
             app_timer.start();
             edge_collapse<T, blockThreads>
-                <<<launch_box.blocks / 8,
+                <<<DIVIDE_UP(launch_box.blocks, 8),
                    launch_box.num_threads,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(),
                                                 *coords,
@@ -549,7 +549,7 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
 
             // CUDA_ERROR(cudaMemset(d_buffer, 0, sizeof(int)));
 
-            edge_flip<T, blockThreads><<<launch_box.blocks / 8,
+            edge_flip<T, blockThreads><<<DIVIDE_UP(launch_box.blocks, 8),
                                          launch_box.num_threads,
                                          launch_box.smem_bytes_dyn>>>(
                 rx.get_context(), *coords, *v_valence, *edge_status, d_buffer);
