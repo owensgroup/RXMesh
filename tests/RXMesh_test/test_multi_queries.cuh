@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 
 #include <glm/glm.hpp>
+#include <glm/gtx/norm.hpp>
 
 #include "rxmesh/rxmesh_static.h"
 
