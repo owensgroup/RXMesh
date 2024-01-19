@@ -151,7 +151,7 @@ struct ALIGN(16) PatchInfo
         const LPPair*      stash = nullptr) const
     {
         if (table == nullptr && stash == nullptr) {
-            assert(!is_owned(typename HandleT::LocalT(key)));            
+            assert(!is_owned(typename HandleT::LocalT(key)));
         }
         LPPair lp = get_lp<HandleT>().find(key, table, stash);
 
@@ -400,7 +400,7 @@ struct ALIGN(16) PatchInfo
      * @brief count number of owned active elements with type HandleT
      */
     template <typename HandleT>
-    __host__ __inline__ uint16_t get_num_owned() const
+    __host__ __device__ __inline__ uint16_t get_num_owned() const
     {
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             return count_num_owned(
@@ -417,9 +417,10 @@ struct ALIGN(16) PatchInfo
     }
 
 
-    __host__ __inline__ uint16_t count_num_owned(const uint32_t* owned_bitmask,
-                                                 const uint32_t* active_bitmask,
-                                                 const uint16_t  size) const
+    __host__ __device__ __inline__ uint16_t count_num_owned(
+        const uint32_t* owned_bitmask,
+        const uint32_t* active_bitmask,
+        const uint16_t  size) const
     {
         uint16_t ret = 0;
         for (uint16_t i = 0; i < size; ++i) {

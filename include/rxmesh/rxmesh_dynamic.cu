@@ -1066,7 +1066,7 @@ __inline__ __device__ void bi_assignment_ggp(
     __shared__ int      s_num_active_vertices;
     __shared__ int      s_num_A_vertices, s_num_B_vertices;
     __shared__ uint16_t s_seed_a, s_seed_b;
-    
+
 
     // compute the total number of active vertices (including not-owned)
     auto compute_num_active_vertices = [&]() {
@@ -1931,12 +1931,13 @@ __global__ static void check_ribbon_faces(const Context               context,
         PatchInfo patch_info = context.m_patches_info[patch_id];
 
         ShmemAllocator shrd_alloc;
-        uint16_t*      s_fv =
+
+        uint16_t* s_fv =
             shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
-        uint16_t* s_fe =
-            shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
-        uint16_t* s_ev =
-            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
+        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(std::max(
+            3 * patch_info.num_faces[0], 1 + patch_info.num_vertices[0]));
+        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(
+            std::max(2 * patch_info.num_edges[0], 3 * patch_info.num_faces[0]));
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
                    2 * patch_info.num_edges[0],
@@ -2000,12 +2001,13 @@ __global__ static void check_ribbon_faces(const Context               context,
                     for (uint16_t i = 0; i < global_vf.get_num_attributes();
                          ++i) {
 
-                        const auto fvh_global = global_vf(vh, i);
+                        const FaceHandle fvh_global = global_vf(vh, i);
 
                         if (fvh_global.is_valid()) {
 
                             // look for the face incident to the vertex in local
                             // VF
+                            assert(s_vf_offset[v_id + 1] > s_vf_offset[v_id]);
                             bool found = false;
                             for (uint16_t j = s_vf_offset[v_id];
                                  j < s_vf_offset[v_id + 1];
@@ -2025,14 +2027,27 @@ __global__ static void check_ribbon_faces(const Context               context,
 
                             if (!found) {
                                 // printf(
-                                //     "\n T=%u, ribbon face = %u, f= %u, v_id=
-                                //     "
-                                //     "%u ",
+                                //     "\n T=%u, p = %u, #F=%u, #F_owned= %u, "
+                                //     "#E=%u, #E_owned= %u, #V=%u, #V_owned=
+                                //     %u, " "fvh_global=%u, %u, vh=%u, %u, s_vf
+                                //     =%u, "
+                                //     "%u",
                                 //     threadIdx.x,
                                 //     patch_id,
-                                //     f,
-                                //     v_id);
+                                //     patch_info.num_faces[0],
+                                //     patch_info.get_num_owned<FaceHandle>(),
+                                //     patch_info.num_edges[0],
+                                //     patch_info.get_num_owned<EdgeHandle>(),
+                                //     patch_info.num_vertices[0],
+                                //     patch_info.get_num_owned<VertexHandle>(),
+                                //     fvh_global.patch_id(),
+                                //     fvh_global.local_id(),
+                                //     vh.patch_id(),
+                                //     vh.local_id(),
+                                //     s_vf_offset[v_id],
+                                //     s_vf_offset[v_id + 1]);
                                 ::atomicAdd(d_check, 1);
+                                ppp[0] = patch_id;
                                 break;
                             }
                         }

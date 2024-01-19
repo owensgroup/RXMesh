@@ -883,6 +883,8 @@ CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
 
     block.sync();
 
+    int iter = 0;
+
     while (true) {
         // calc number of current active cavities
         // active here means active to be considered for MIS calculation
@@ -906,7 +908,7 @@ CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
         //     printf("\n s_num_active_cavitites_mis= %u",
         //            s_num_active_cavitites_mis[0]);
         // }
-        if (s_num_active_cavitites_mis[0] == 0) {
+        if (s_num_active_cavitites_mis[0] == 0 || iter++ > 100) {
             break;
         }
 
