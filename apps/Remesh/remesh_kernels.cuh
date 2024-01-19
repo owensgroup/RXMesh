@@ -45,7 +45,8 @@ __global__ static void __launch_bounds__(blockThreads)
     edge_split(rxmesh::Context                   context,
                const rxmesh::VertexAttribute<T>  coords,
                rxmesh::EdgeAttribute<EdgeStatus> edge_status,
-               const T                           high_edge_len_sq)
+               const T                           high_edge_len_sq,
+               int*                              d_buffer)
 {
     // EV for calc edge len
 
@@ -59,6 +60,10 @@ __global__ static void __launch_bounds__(blockThreads)
         block, context, shrd_alloc, true);
 
 
+    //__shared__ int s_num_splits;
+    //if (threadIdx.x == 0) {
+    //    s_num_splits = 0;
+    //}
     if (cavity.patch_id() == INVALID32) {
         return;
     }
@@ -117,6 +122,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
                 if (e0.is_valid()) {
                     is_updated.set(e0.local_id(), true);
+                    //::atomicAdd(&s_num_splits, 1);
                     for (uint16_t i = 0; i < size; ++i) {
                         const DEdgeHandle e = cavity.get_cavity_edge(c, i);
 
@@ -148,6 +154,9 @@ __global__ static void __launch_bounds__(blockThreads)
     cavity.epilogue(block);
 
     if (cavity.is_successful()) {
+        //if (threadIdx.x == 0) {
+        //    ::atomicAdd(d_buffer, s_num_splits);
+        //}
         detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (is_updated(eh.local_id())) {
                 edge_status(eh) = ADDED;
@@ -184,7 +193,8 @@ __global__ static void __launch_bounds__(blockThreads)
                   const rxmesh::VertexAttribute<T>  coords,
                   rxmesh::EdgeAttribute<EdgeStatus> edge_status,
                   const T                           low_edge_len_sq,
-                  const T                           high_edge_len_sq)
+                  const T                           high_edge_len_sq,
+                  int*                              d_buffer)
 {
 
     using namespace rxmesh;
@@ -194,6 +204,12 @@ __global__ static void __launch_bounds__(blockThreads)
         block, context, shrd_alloc, true);
 
     const uint32_t pid = cavity.patch_id();
+
+
+    //__shared__ int s_num_collapses;
+    //if (threadIdx.x == 0) {
+    //    s_num_collapses = 0;
+    //}
 
     if (pid == INVALID32) {
         return;
@@ -306,6 +322,7 @@ __global__ static void __launch_bounds__(blockThreads)
         block.sync();
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+            //::atomicAdd(&s_num_collapses, 1);
             const EdgeHandle src = cavity.template get_creator<EdgeHandle>(c);
 
             VertexHandle v0, v1;
@@ -390,6 +407,9 @@ __global__ static void __launch_bounds__(blockThreads)
     block.sync();
 
     if (cavity.is_successful()) {
+        //if (threadIdx.x == 0) {
+        //    ::atomicAdd(d_buffer, s_num_collapses);
+        //}
         detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (is_updated(eh.local_id())) {
                 edge_status(eh) = ADDED;
@@ -403,7 +423,8 @@ __global__ static void __launch_bounds__(blockThreads)
     edge_flip(rxmesh::Context                        context,
               const rxmesh::VertexAttribute<T>       coords,
               const rxmesh::VertexAttribute<uint8_t> v_valence,
-              rxmesh::EdgeAttribute<EdgeStatus>      edge_status)
+              rxmesh::EdgeAttribute<EdgeStatus>      edge_status,
+              int*                                   d_buffer)
 {
     using namespace rxmesh;
 
@@ -415,6 +436,10 @@ __global__ static void __launch_bounds__(blockThreads)
         block, context, shrd_alloc, false, false);
 
 
+    //__shared__ int s_num_flips;
+    //if (threadIdx.x == 0) {
+    //    s_num_flips = 0;
+    //}
     if (cavity.patch_id() == INVALID32) {
         return;
     }
@@ -544,6 +569,7 @@ __global__ static void __launch_bounds__(blockThreads)
         block.sync();
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+            //::atomicAdd(&s_num_flips, 1);
             assert(size == 4);
 
             DEdgeHandle new_edge = cavity.add_edge(
@@ -568,6 +594,9 @@ __global__ static void __launch_bounds__(blockThreads)
     block.sync();
 
     if (cavity.is_successful()) {
+        //if (threadIdx.x == 0) {
+        //    ::atomicAdd(d_buffer, s_num_flips);
+        //}
         detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (is_updated(eh.local_id())) {
                 edge_status(eh) = ADDED;

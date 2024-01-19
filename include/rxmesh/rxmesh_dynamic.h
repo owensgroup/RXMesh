@@ -187,12 +187,11 @@ __global__ static void slice_patches(Context        context,
                     ::atomicAdd(context.m_num_patches, uint32_t(1));
                 assert(s_new_patch_id < context.m_max_num_patches);
                 context.m_patch_scheduler.push(s_new_patch_id);
+                //printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
             } else {
                 s_new_patch_id                           = INVALID32;
                 context.m_patches_info[pid].should_slice = false;
-            }
-
-            // printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
+            }            
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
         Bitmask s_active_v, s_active_e, s_active_f;
