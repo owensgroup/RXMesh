@@ -10,11 +10,12 @@
 #include <cmath>
 
 template <typename T, uint32_t blockThreads>
-__global__ static void delaunay_edge_flip(rxmesh::Context            context,
-                                          rxmesh::VertexAttribute<T> coords,
-                                          int*                       d_flipped,
-                                          uint32_t* num_successful,
-                                          uint32_t* num_sliced)
+__global__ static void __launch_bounds__(blockThreads)
+    delaunay_edge_flip(rxmesh::Context            context,
+                       rxmesh::VertexAttribute<T> coords,
+                       int*                       d_flipped,
+                       uint32_t*                  num_successful,
+                       uint32_t*                  num_sliced)
 {
     using namespace rxmesh;
     using VecT           = glm::vec<3, T, glm::defaultp>;
@@ -28,6 +29,19 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
     if (pid == INVALID32) {
         return;
     }
+
+    uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
+
+    // for each edge we want to flip, we its id in one of its opposite vertices
+    // along with the other opposite vertex
+    uint16_t* v_info =
+        shrd_alloc.alloc<uint16_t>(2 * cavity.patch_info().num_vertices[0]);
+    fill_n<blockThreads>(
+        v_info, 2 * cavity.patch_info().num_vertices[0], uint16_t(INVALID16));
+
+    // a bitmask that indicates which edge we want to flip
+    Bitmask e_flip(cavity.patch_info().num_edges[0], shrd_alloc);
+    e_flip.reset(block);
 
     // edge diamond query to and calc delaunay condition
     auto is_delaunay = [&](const EdgeHandle& eh, const VertexIterator& iter) {
@@ -95,18 +109,49 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
 
                 if (alpha0 + beta0 < PII - std::numeric_limits<T>::epsilon() &&
                     alpha1 + beta1 < PII - std::numeric_limits<T>::epsilon()) {
-                    cavity.create(eh);
+                    // cavity.create(eh);
+                    e_flip.set(eh.local_id(), true);
                 }
             }
         }
     };
 
+    // 1. mark edge that we want to flip
     Query<blockThreads> query(context, pid);
     query.dispatch<Op::EVDiamond>(block, shrd_alloc, is_delaunay);
     block.sync();
 
+    // 2. make sure that the two vertices opposite to a flipped edge are not
+    // connected
+    auto check_edges = [&](const VertexHandle& vh, const VertexIterator& iter) {
+        uint16_t opposite_v = v_info[2 * vh.local_id()];
+        if (opposite_v != INVALID16) {
+            bool is_valid = true;
+            for (uint16_t v = 0; v < iter.size(); ++v) {
+                if (iter.local(v) == opposite_v) {
+                    is_valid = false;
+                    break;
+                }
+            }
+            if (!is_valid) {
+                e_flip.reset(v_info[2 * vh.local_id() + 1], true);
+            }
+        }
+    };
+    query.dispatch<Op::VV>(block, shrd_alloc, check_edges);
+    block.sync();
 
-    // create the cavity
+    // 3. create cavity for the surviving edges
+    detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+        if (e_flip(eh.local_id())) {
+            cavity.create(eh);
+        }
+    });
+    block.sync();
+
+    shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
+
+    // create cavities
     if (cavity.prologue(block, shrd_alloc, coords)) {
 
         if (threadIdx.x == 0) {
@@ -134,11 +179,11 @@ __global__ static void delaunay_edge_flip(rxmesh::Context            context,
         });
     }
 
-    if (threadIdx.x == 0) {
-        if (cavity.should_slice()) {
-            ::atomicAdd(num_sliced, 1);
-        }
-    }
+    // if (threadIdx.x == 0) {
+    //     if (cavity.should_slice()) {
+    //         ::atomicAdd(num_sliced, 1);
+    //     }
+    // }
 
     cavity.epilogue(block);
 }
@@ -243,11 +288,14 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 
     CUDA_ERROR(cudaProfilerStart());
 
+    GPUTimer timer;
+    timer.start();
+
     bool validate = false;
     while (h_flipped != 0) {
         CUDA_ERROR(cudaMemset(d_flipped, 0, sizeof(int)));
-        CUDA_ERROR(cudaMemset(d_num_successful, 0, sizeof(uint32_t)));
-        CUDA_ERROR(cudaMemset(d_num_sliced, 0, sizeof(uint32_t)));
+        // CUDA_ERROR(cudaMemset(d_num_successful, 0, sizeof(uint32_t)));
+        // CUDA_ERROR(cudaMemset(d_num_sliced, 0, sizeof(uint32_t)));
 
         h_flipped = 0;
         rx.reset_scheduler();
@@ -261,12 +309,19 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 
             LaunchBox<blockThreads> launch_box;
             rx.prepare_launch_box(
-                {Op::EVDiamond},
+                {Op::EVDiamond, Op::VV},
                 launch_box,
-                (void*)delaunay_edge_flip<float, blockThreads>);
+                (void*)delaunay_edge_flip<float, blockThreads>,
+                true,
+                false,
+                false,
+                false,
+                [&](uint32_t v, uint32_t e, uint32_t f) {
+                    return detail::mask_num_bytes(e) +
+                           2 * v * sizeof(uint16_t) +
+                           2 * ShmemAllocator::default_alignment;
+                });
 
-            GPUTimer timer;
-            timer.start();
 
             GPUTimer app_timer;
             app_timer.start();
@@ -290,12 +345,6 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
             rx.cleanup();
             cleanup_timer.stop();
 
-
-            timer.stop();
-            CUDA_ERROR(cudaDeviceSynchronize());
-            CUDA_ERROR(cudaGetLastError());
-
-            total_time += timer.elapsed_millis();
             app_time += app_timer.elapsed_millis();
             slice_time += slice_timer.elapsed_millis();
             cleanup_time += cleanup_timer.elapsed_millis();
@@ -309,29 +358,34 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
                 EXPECT_EQ(num_faces, rx.get_num_faces());
             }
 
-            uint32_t h_num_successful, h_num_sliced;
-            CUDA_ERROR(cudaMemcpy(&h_num_successful,
-                                  d_num_successful,
-                                  sizeof(uint32_t),
-                                  cudaMemcpyDeviceToHost));
-
-            CUDA_ERROR(cudaMemcpy(&h_num_sliced,
-                                  d_num_sliced,
-                                  sizeof(uint32_t),
-                                  cudaMemcpyDeviceToHost));
-
-            RXMESH_INFO("num_patches = {}, num_successful= {}, num_sliced = {}",
-                        rx.get_num_patches(),
-                        h_num_successful,
-                        h_num_sliced);
-            // break;
+            // uint32_t h_num_successful, h_num_sliced;
+            // CUDA_ERROR(cudaMemcpy(&h_num_successful,
+            //                       d_num_successful,
+            //                       sizeof(uint32_t),
+            //                       cudaMemcpyDeviceToHost));
+            //
+            // CUDA_ERROR(cudaMemcpy(&h_num_sliced,
+            //                       d_num_sliced,
+            //                       sizeof(uint32_t),
+            //                       cudaMemcpyDeviceToHost));
+            //
+            // RXMESH_INFO("num_patches = {}, num_successful= {}, num_sliced =
+            // {}",
+            //             rx.get_num_patches(),
+            //             h_num_successful,
+            //             h_num_sliced);
+            //  break;
         }
         CUDA_ERROR(cudaMemcpy(
             &h_flipped, d_flipped, sizeof(int), cudaMemcpyDeviceToHost));
         // break;
         outer_iter++;
     }
+    timer.stop();
+    total_time = timer.elapsed_millis();
 
+    CUDA_ERROR(cudaDeviceSynchronize());
+    CUDA_ERROR(cudaGetLastError());
     CUDA_ERROR(cudaProfilerStop());
 
     RXMESH_INFO("delaunay_rxmesh() RXMesh Delaunay Edge Flip took {} (ms)",
