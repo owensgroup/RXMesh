@@ -2046,8 +2046,7 @@ __global__ static void check_ribbon_faces(const Context               context,
                                 //     vh.local_id(),
                                 //     s_vf_offset[v_id],
                                 //     s_vf_offset[v_id + 1]);
-                                ::atomicAdd(d_check, 1);
-                                ppp[0] = patch_id;
+                                ::atomicAdd(d_check, 1);                                
                                 break;
                             }
                         }

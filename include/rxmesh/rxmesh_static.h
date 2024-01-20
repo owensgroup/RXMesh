@@ -38,7 +38,10 @@ class RXMeshStatic : public RXMesh
      * @param file_path path to an obj file
      */
     explicit RXMeshStatic(const std::string file_path,
-                          const std::string patcher_file = "")
+                          const std::string patcher_file = "",
+                          const float       capacity_factor          = 1.8,
+                          const float       patch_alloc_factor       = 5.0,
+                          const float       lp_hashtable_load_factor = 0.5)
         : RXMesh()
     {
         std::vector<std::vector<uint32_t>> fv;
@@ -50,7 +53,11 @@ class RXMeshStatic : public RXMesh
             exit(EXIT_FAILURE);
         }
 
-        this->init(fv, patcher_file);
+        this->init(fv,
+                   patcher_file,
+                   capacity_factor,
+                   patch_alloc_factor,
+                   lp_hashtable_load_factor);
 
         m_attr_container = std::make_shared<AttributeContainer>();
 

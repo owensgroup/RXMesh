@@ -548,8 +548,15 @@ class RXMeshDynamic : public RXMeshStatic
      * @param file_path path to an obj file
      */
     explicit RXMeshDynamic(const std::string file_path,
-                           const std::string patcher_file = "")
-        : RXMeshStatic(file_path, patcher_file)
+                           const std::string patcher_file             = "",
+                           const float       capacity_factor          = 1.8,
+                           const float       patch_alloc_factor       = 5.0,
+                           const float       lp_hashtable_load_factor = 0.5)
+        : RXMeshStatic(file_path,
+                       patcher_file,
+                       capacity_factor,
+                       patch_alloc_factor,
+                       lp_hashtable_load_factor)
     {
     }
 
