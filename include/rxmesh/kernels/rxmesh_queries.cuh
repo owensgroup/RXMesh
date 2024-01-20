@@ -253,12 +253,19 @@ __device__ __forceinline__ void e_f_manifold(const uint16_t  num_edges,
     for (uint16_t e = threadIdx.x; e < 3 * num_faces; e += blockThreads) {
         uint16_t face_id = e / 3;
 
+        assert(face_id < num_faces);
+
         if (!is_deleted(face_id, active_mask_f)) {
             uint16_t edge = s_fe[e] >> 1;
+
+            assert(edge < num_edges);
 
             auto ret = atomicCAS(s_ef + 2 * edge, INVALID16, face_id);
             if (ret != INVALID16) {
                 ret = atomicCAS(s_ef + 2 * edge + 1, INVALID16, face_id);
+                if (ret != INVALID16) {
+                    printf("\n B= %u", blockIdx.x);
+                }
                 assert(ret == INVALID16);
             }
         }
@@ -278,15 +285,16 @@ __device__ __forceinline__ void orient_edges_around_vertices(
 
     // start by loading the faces while also doing transposing EV
     uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
-    uint16_t* s_ef = shrd_alloc.alloc<uint16_t>(3 * num_faces);
-    load_async(reinterpret_cast<const uint16_t*>(patch_info.fe),
-               3 * num_faces,
-               reinterpret_cast<uint16_t*>(s_fe),
-               false);
-
+    uint16_t* s_ef = shrd_alloc.alloc<uint16_t>(2 * num_edges);
+    
     for (uint32_t i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
         s_ef[i] = INVALID16;
     }
+
+    load_async(reinterpret_cast<const uint16_t*>(patch_info.fe),
+               3 * num_faces,
+               reinterpret_cast<uint16_t*>(s_fe),
+               true);    
 
     // We could have used block_mat_transpose to transpose FE so we can look
     // up the "two" faces sharing an edge. But we can do better because we know
@@ -382,7 +390,8 @@ __device__ __forceinline__ void orient_edges_around_vertices(
         }
     }
 
-    shrd_alloc.dealloc<uint16_t>(2 * 3 * num_faces);
+    shrd_alloc.dealloc<uint16_t>(2 * num_edges);
+    shrd_alloc.dealloc<uint16_t>(3 * num_faces);
 }
 
 template <uint32_t blockThreads,

@@ -1347,7 +1347,7 @@ class RXMeshStatic : public RXMesh
             // similar to VE but we also need to store the EV even after
             // we do the transpose. After that, we can throw EV away and load
             // the hash table
-            dynamic_smem = std::max(this->m_max_vertices_per_patch,
+            dynamic_smem = std::max(this->m_max_vertices_per_patch+1,
                                     2 * this->m_max_edges_per_patch) *
                            sizeof(uint16_t);
             dynamic_smem +=
