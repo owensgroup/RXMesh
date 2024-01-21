@@ -1,6 +1,7 @@
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/query.cuh"
 
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 
