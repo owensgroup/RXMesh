@@ -232,7 +232,8 @@ inline void compute_avg_stddev_max_min_rs(const T* arr_rs,
         min            = std::min(min, arr[i]);
     }
 
-    compute_avg_stddev(arr, size, avg, stddev);
+    // Eric: quick fix
+    // compute_avg_stddev(arr, size, avg, stddev);
 
     free(arr);
 }

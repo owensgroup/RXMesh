@@ -210,8 +210,9 @@ __device__ __forceinline__ void e_e_manifold(
 
                 // in case of oriented faces, we use the edge direction to guide
                 // where we should write the edges
-                int nxt_i = 4 * cur_e + 2 * f_dir[i] + 0;
-                int prv_i = 4 * cur_e + 2 * f_dir[i] + 1;
+                // Eric: quick fix
+                int nxt_i = 4 * cur_e + 2 * f_dir[cur] + 0;
+                int prv_i = 4 * cur_e + 2 * f_dir[cur] + 1;
 
                 uint16_t ret_n =
                     ::atomicCAS(s_output_value + nxt_i, INVALID16, nxt_e);
@@ -222,8 +223,9 @@ __device__ __forceinline__ void e_e_manifold(
                 if (ret_n != INVALID16) {
                     assert(ret_p == INVALID16);
 
-                    int nxt_i = 4 * cur_e + 2 * (f_dir[i] ^ 1) + 0;
-                    int prv_i = 4 * cur_e + 2 * (f_dir[i] ^ 1) + 1;
+                    // Eric: quick fix
+                    int nxt_i = 4 * cur_e + 2 * (f_dir[cur] ^ 1) + 0;
+                    int prv_i = 4 * cur_e + 2 * (f_dir[cur] ^ 1) + 1;
 
                     ret_n =
                         ::atomicCAS(s_output_value + nxt_i, INVALID16, nxt_e);

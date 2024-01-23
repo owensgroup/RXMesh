@@ -3,6 +3,7 @@ add_executable(NDReorder)
 set(SOURCE_LIST
     nd_reorder.cu 
     nd_reorder_kernel.cuh
+    nd_coarsen_manager.cuh
 )
 
 target_sources(NDReorder 
