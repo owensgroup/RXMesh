@@ -14,11 +14,11 @@ struct Bitmask
     {
     }
 
-    __device__ __host__ Bitmask(const Bitmask& other) = default;
-    __device__ __host__ Bitmask(Bitmask&&)            = default;
-    __device__ __host__ Bitmask& operator=(const Bitmask&) = default;
-    __device__ __host__ Bitmask& operator=(Bitmask&&) = default;
-    __device__                   __host__ ~Bitmask()  = default;
+    __device__ __host__          Bitmask(const Bitmask& other) = default;
+    __device__ __host__          Bitmask(Bitmask&&)            = default;
+    __device__ __host__ Bitmask& operator=(const Bitmask&)     = default;
+    __device__ __host__ Bitmask& operator=(Bitmask&&)          = default;
+    __device__                   __host__ ~Bitmask()           = default;
 
     /**
      * @brief constructor that works when the bitmask pointer is allocated
@@ -161,6 +161,22 @@ struct Bitmask
         for (uint16_t i = g.thread_rank(); i < mask_num_elements;
              i += g.size()) {
             m_bitmask[i] = INVALID32;
+        }
+    }
+
+
+    /**
+     * @brief copy from another bitmask
+     */
+    __device__ __inline__ void copy(cooperative_groups::thread_group& g,
+                                    Bitmask&                          other)
+    {
+        assert(m_bitmask != nullptr);
+        assert(size() == other.size());
+        const uint16_t mask_num_elements = DIVIDE_UP(size(), 32);
+        for (uint16_t i = g.thread_rank(); i < mask_num_elements;
+             i += g.size()) {
+            m_bitmask[i] = other.m_bitmask[i];
         }
     }
 

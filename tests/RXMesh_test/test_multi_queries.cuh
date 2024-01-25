@@ -1,6 +1,8 @@
 #include "gtest/gtest.h"
 
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
+#include <glm/gtx/norm.hpp>
 
 #include "rxmesh/rxmesh_static.h"
 

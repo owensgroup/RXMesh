@@ -38,7 +38,10 @@ class RXMeshStatic : public RXMesh
      * @param file_path path to an obj file
      */
     explicit RXMeshStatic(const std::string file_path,
-                          const std::string patcher_file = "")
+                          const std::string patcher_file = "",
+                          const float       capacity_factor          = 1.8,
+                          const float       patch_alloc_factor       = 5.0,
+                          const float       lp_hashtable_load_factor = 0.5)
         : RXMesh()
     {
         std::vector<std::vector<uint32_t>> fv;
@@ -50,7 +53,11 @@ class RXMeshStatic : public RXMesh
             exit(EXIT_FAILURE);
         }
 
-        this->init(fv, patcher_file);
+        this->init(fv,
+                   patcher_file,
+                   capacity_factor,
+                   patch_alloc_factor,
+                   lp_hashtable_load_factor);
 
         m_attr_container = std::make_shared<AttributeContainer>();
 
@@ -1247,8 +1254,16 @@ class RXMeshStatic : public RXMesh
             // The output will be stored in another buffer with size equal to
             // the EV (i.e., 2*#edges) since this output buffer will stored the
             // nnz and the nnz of a matrix the same before/after transpose
-            dynamic_smem =
-                (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            // Normally, the number of vertices is way less than 2*#E but in
+            // dynamic mesh, we can not predicate these numbers since some
+            // of these edges could be deleted (marked deleted in the bitmask)
+            // so, we allocate the buffer that hold EV (which will also hold the
+            // offset) to be the max of #V and 2#E
+            dynamic_smem = std::max(this->m_max_vertices_per_patch,
+                                    2 * this->m_max_edges_per_patch) *
+                           sizeof(uint16_t);
+            dynamic_smem +=
+                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalVertexT>();
@@ -1302,11 +1317,13 @@ class RXMeshStatic : public RXMesh
             dynamic_smem += ShmemAllocator::default_alignment * 4;
 
         } else if (op == Op::VF) {
-            // load EV and FE simultaneously. changes FE to FV using EV. Then
+            // load EV and FE simultaneously. Changes FE to FV using EV. Then
             // transpose FV in place and use EV to store the values/output while
             // using FV to store the prefix sum. Thus, the space used to store
             // EV should be max(3*#faces, 2*#edges)
-            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
+            dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
+                                    1 + this->m_max_vertices_per_patch) *
+                           sizeof(uint16_t);
             dynamic_smem += std::max(3 * this->m_max_faces_per_patch,
                                      2 * this->m_max_edges_per_patch) *
                                 sizeof(uint16_t) +
@@ -1330,8 +1347,11 @@ class RXMeshStatic : public RXMesh
             // similar to VE but we also need to store the EV even after
             // we do the transpose. After that, we can throw EV away and load
             // the hash table
-            dynamic_smem =
-                (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            dynamic_smem = std::max(this->m_max_vertices_per_patch+1,
+                                    2 * this->m_max_edges_per_patch) *
+                           sizeof(uint16_t);
+            dynamic_smem +=
+                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalVertexT>();
@@ -1460,7 +1480,8 @@ class RXMeshStatic : public RXMesh
                              size_t&        smem_bytes_static,
                              uint32_t&      num_reg_per_thread,
                              const uint32_t num_threads_per_block,
-                             const void*    kernel) const
+                             const void*    kernel,
+                             bool           print = true) const
     {
         // check if total shared memory (static + dynamic) consumed by
         // k_base_query are less than the max shared per block
@@ -1479,22 +1500,23 @@ class RXMeshStatic : public RXMesh
         CUDA_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
             &num_blocks_per_sm, kernel, num_threads_per_block, smem_bytes_dyn));
 
-        RXMESH_TRACE(
-            "RXMeshStatic::check_shared_memory() user function requires "
-            "shared memory = {} (dynamic) + {} (static) = {} (bytes) and "
-            "{} registers per thread with occupancy of {} blocks/SM",
-            smem_bytes_dyn,
-            smem_bytes_static,
-            smem_bytes_dyn + smem_bytes_static,
-            num_reg_per_thread,
-            num_blocks_per_sm);
+        if (print) {
+            RXMESH_TRACE(
+                "RXMeshStatic::check_shared_memory() user function requires "
+                "shared memory = {} (dynamic) + {} (static) = {} (bytes) and "
+                "{} registers per thread with occupancy of {} blocks/SM",
+                smem_bytes_dyn,
+                smem_bytes_static,
+                smem_bytes_dyn + smem_bytes_static,
+                num_reg_per_thread,
+                num_blocks_per_sm);
 
-        RXMESH_TRACE(
-            "RXMeshStatic::check_shared_memory() available total shared "
-            "memory per block = {} (bytes) = {} (Kb)",
-            devProp.sharedMemPerBlock,
-            float(devProp.sharedMemPerBlock) / 1024.0f);
-
+            RXMESH_TRACE(
+                "RXMeshStatic::check_shared_memory() available total shared "
+                "memory per block = {} (bytes) = {} (Kb)",
+                devProp.sharedMemPerBlock,
+                float(devProp.sharedMemPerBlock) / 1024.0f);
+        }
 
         if (smem_bytes_static + smem_bytes_dyn > devProp.sharedMemPerBlock) {
             RXMESH_ERROR(
@@ -1503,6 +1525,18 @@ class RXMeshStatic : public RXMesh
                 "per block on the current device ({} bytes)",
                 smem_bytes_static + smem_bytes_dyn,
                 devProp.sharedMemPerBlock);
+            exit(EXIT_FAILURE);
+        }
+
+        if (num_blocks_per_sm == 0) {
+            RXMESH_ERROR(
+                "RXMeshStatic::check_shared_memory() This kernel will not run "
+                "since it asks for too many resources i.e., shared memory "
+                "and/or registers. If you are in Debug mode, try to switch to "
+                "Release. Otherwise, you may try to change the block size "
+                "and/or break the kernel into such that the number of "
+                "registers is less. You may also try reducing the amount of "
+                "additional shared memory you requested");
             exit(EXIT_FAILURE);
         }
     }

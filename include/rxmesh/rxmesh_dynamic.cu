@@ -123,7 +123,7 @@ __device__ __inline__ void hashtable_calibration(const Context context,
 
             uint8_t o = pi.patch_stash.insert_patch(handle.patch_id(),
                                                     patch_stash_mutex);
-
+            assert(o != INVALID8);
             LPPair lp(i, handle.local_id(), o);
 
             pi.get_lp<HandleT>().replace(lp);
@@ -603,28 +603,56 @@ __global__ static void remove_surplus_elements(Context context)
 }
 
 template <uint32_t blockThreads, typename HandleT>
-__inline__ __device__ void copy_to_hashtable(const PatchInfo& pi,
-                                             PatchInfo&       new_pi,
-                                             const uint16_t   num_elements,
-                                             const Bitmask&   s_new_p_active,
-                                             const Bitmask&   s_new_p_owned,
-                                             const Bitmask&   s_owned,
-                                             PatchStash&      new_patch_stash,
-                                             ShmemMutex&      patch_stash_mutex)
+__inline__ __device__ void copy_to_hashtable(
+    const PatchInfo& pi,
+    PatchInfo&       new_pi,
+    const uint16_t   num_elements,
+    const Bitmask&   s_new_p_active,
+    const Bitmask&   s_new_p_owned,
+    const Bitmask&   s_active,
+    const Bitmask&   s_owned,
+    PatchStash&      new_patch_stash,
+    // PatchStash&      original_patch_stash,
+    ShmemMutex& new_patch_stash_mutex)
 {
 
     for (uint16_t v = threadIdx.x; v < num_elements; v += blockThreads) {
-        // if the element is acitve but not owned in the new patch
+        // if the element is active but not owned in the new patch
+        /* HandleT vh;
+        if (s_active(v) && !s_owned(v) && !s_new_p_active(v)) {
+            // vh = pi.find<HandleT>(v);
+
+            uint32_t bucket_id;
+
+            bool in_stash;
+
+            LPPair pair = pi.get_lp<HandleT>().find(
+                v, bucket_id, in_stash, nullptr, nullptr);
+
+            assert(pair.patch_stash_id() < PatchStash::stash_size);
+
+            vh = HandleT(pi.patch_stash.get_patch(pair),
+                         {pair.local_id_in_owner_patch()});
+
+            original_patch_stash.m_stash[pair.patch_stash_id()] = vh.patch_id();
+        }*/
+
         if (s_new_p_active(v) && !s_new_p_owned(v)) {
             LPPair lp;
             // if the element is originally owned by the patch
             if (s_owned(v)) {
                 lp = LPPair(v, v, 0);
             } else {
+                /* if (!vh.is_valid()) {
+                    vh = pi.find<HandleT>(v);
+                }*/
+
                 HandleT vh = pi.find<HandleT>(v);
 
-                uint8_t st = new_patch_stash.insert_patch(vh.patch_id(),
-                                                          patch_stash_mutex);
+                uint8_t st = new_patch_stash.insert_patch(
+                    vh.patch_id(), new_patch_stash_mutex);
+
+                assert(st != INVALID8);
 
                 lp = LPPair(v, vh.local_id(), st);
             }
@@ -642,7 +670,8 @@ __inline__ __device__ void slice(Context&                          context,
                                  const uint16_t                    num_vertices,
                                  const uint16_t                    num_edges,
                                  const uint16_t                    num_faces,
-                                 PatchStash&     s_new_patch_stash,
+                                 PatchStash& s_new_patch_stash,
+                                 // PatchStash&     s_original_patch_stash,
                                  Bitmask&        s_owned_v,
                                  Bitmask&        s_owned_e,
                                  Bitmask&        s_owned_f,
@@ -701,13 +730,15 @@ __inline__ __device__ void slice(Context&                          context,
         } else {
             s_new_patch_stash.m_stash[i] = INVALID32;
         }
+        // s_original_patch_stash.m_stash[i] = INVALID32;
     }
 
 
     block.sync();
 
-    ShmemMutex patch_stash_mutex;
-    patch_stash_mutex.alloc();
+    ShmemMutex new_patch_stash_mutex;
+    new_patch_stash_mutex.alloc();
+
     PatchInfo new_patch = context.m_patches_info[new_patch_id];
 
     // evluate active elements of the new patch
@@ -734,25 +765,33 @@ __inline__ __device__ void slice(Context&                          context,
                                                   num_vertices,
                                                   s_new_p_active_v,
                                                   s_new_p_owned_v,
+                                                  s_active_v,
                                                   s_owned_v,
                                                   s_new_patch_stash,
-                                                  patch_stash_mutex);
+                                                  // s_original_patch_stash,
+                                                  new_patch_stash_mutex);
+
     copy_to_hashtable<blockThreads, EdgeHandle>(pi,
                                                 new_patch,
                                                 num_edges,
                                                 s_new_p_active_e,
                                                 s_new_p_owned_e,
+                                                s_active_e,
                                                 s_owned_e,
                                                 s_new_patch_stash,
-                                                patch_stash_mutex);
+                                                // s_original_patch_stash,
+                                                new_patch_stash_mutex);
+
     copy_to_hashtable<blockThreads, FaceHandle>(pi,
                                                 new_patch,
                                                 num_faces,
                                                 s_new_p_active_f,
                                                 s_new_p_owned_f,
+                                                s_active_f,
                                                 s_owned_f,
                                                 s_new_patch_stash,
-                                                patch_stash_mutex);
+                                                // s_original_patch_stash,
+                                                new_patch_stash_mutex);
 
     // store new patch to global memory
     if (threadIdx.x == 0) {
@@ -818,6 +857,8 @@ __inline__ __device__ void slice(Context&                          context,
     __shared__ uint8_t s_new_patch_stash_id;
     if (threadIdx.x == 0) {
         s_new_patch_stash_id = pi.patch_stash.insert_patch(new_patch_id);
+        // s_new_patch_stash_id =
+        //     s_original_patch_stash.insert_patch(new_patch_id);
         assert(s_new_patch_stash_id != INVALID8);
     }
 
@@ -840,6 +881,13 @@ __inline__ __device__ void slice(Context&                          context,
                                              s_new_p_active_e,
                                              s_new_p_active_f);
     block.sync();
+
+    // store original patch's filtered patch stash
+
+    // detail::store<blockThreads>(s_original_patch_stash.m_stash,
+    //                             PatchStash::stash_size,
+    //                             pi.patch_stash.m_stash);
+
 
     // store owned mask
     s_owned_v.store<blockThreads>(pi.owned_mask_v);
@@ -995,6 +1043,392 @@ __inline__ __device__ void bi_assignment(
         }
     }*/
 }
+
+
+template <uint32_t blockThreads>
+__inline__ __device__ void bi_assignment_ggp(
+    cooperative_groups::thread_block& block,
+    const uint16_t                    num_vertices,
+    const Bitmask&                    s_owned_v,
+    const Bitmask&                    s_active_v,
+    const uint16_t*                   s_vv_offset,
+    const uint16_t*                   s_vv,
+    Bitmask&                          s_assigned_v,
+    Bitmask&                          s_current_frontier_v,
+    Bitmask&                          s_next_frontier_v,
+    Bitmask&                          s_partition_a_v,
+    Bitmask&                          s_partition_b_v,
+    int                               num_iter)
+{
+
+
+    __shared__ int      s_num_assigned_vertices;
+    __shared__ int      s_num_active_vertices;
+    __shared__ int      s_num_A_vertices, s_num_B_vertices;
+    __shared__ uint16_t s_seed_a, s_seed_b;
+
+
+    // compute the total number of active vertices (including not-owned)
+    auto compute_num_active_vertices = [&]() {
+        if (threadIdx.x == 0) {
+            s_num_active_vertices = 0;
+        }
+        block.sync();
+
+
+        for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+            if (s_active_v(v)) {
+                ::atomicAdd(&s_num_active_vertices, 1);
+            }
+        }
+    };
+
+    // pick two vertices and set them as the seeds
+    // we do this by picking two vertices that are on the ribbon and far
+    // a part. If we did not find any (because the patch is isolated) we
+    // pick any two active vertices
+    auto bootstrap = [&]() {
+        s_num_assigned_vertices = 0;
+
+        bool found_a(false), found_b(false);
+        for (uint16_t v = 0; v < num_vertices; ++v) {
+            if (s_active_v(v) && !s_owned_v(v)) {
+                s_seed_a = v;
+                found_a  = true;
+                break;
+            }
+        }
+        if (!found_a) {
+            for (uint16_t v = 0; v < num_vertices; ++v) {
+                if (s_active_v(v)) {
+                    s_seed_a = v;
+                    found_a  = true;
+                    break;
+                }
+            }
+        }
+        assert(found_a);
+
+        for (uint16_t v = num_vertices - 1; v > 1; --v) {
+            if (s_active_v(v) && !s_owned_v(v) && v != s_seed_a) {
+                s_seed_b = v;
+                found_b  = true;
+                break;
+            }
+        }
+
+        if (!found_b) {
+            for (uint16_t v = num_vertices - 1; v > 1; --v) {
+                if (s_active_v(v) && v != s_seed_a) {
+                    s_seed_b = v;
+                    found_b  = true;
+                    break;
+                }
+            }
+        }
+        assert(found_b);
+    };
+
+
+    // init region growing by populating the current frontier with the seeds
+    auto init_region_growing = [&]() {
+        assert(s_seed_a != s_seed_b);
+
+        s_partition_a_v.reset(block);
+        s_partition_b_v.reset(block);
+        s_assigned_v.reset(block);
+        s_current_frontier_v.reset(block);
+        s_next_frontier_v.reset(block);
+        block.sync();
+
+        if (threadIdx.x == 0) {
+            s_assigned_v.set(s_seed_a);
+            s_partition_a_v.set(s_seed_a);
+            s_current_frontier_v.set(s_seed_a);
+            s_num_A_vertices = 1;
+
+            s_assigned_v.set(s_seed_b);
+            s_partition_b_v.set(s_seed_b);
+            s_current_frontier_v.set(s_seed_b);
+            s_num_B_vertices = 1;
+
+            s_num_assigned_vertices = 2;
+        }
+    };
+
+
+    // region growing. Starting with two seed vertices in each partition, we tag
+    // other vertices such that vertices are tagged to the closer seed. We do
+    // this as a scatter operation using VV
+    auto region_growing = [&]() {
+        int num_assigned_prv_iter = 0;
+        while (s_num_assigned_vertices < s_num_active_vertices) {
+
+            block.sync();
+
+            for (uint16_t v = threadIdx.x; v < num_vertices;
+                 v += blockThreads) {
+
+                if (s_current_frontier_v(v)) {
+
+                    assert(s_active_v(v));
+                    assert(s_assigned_v(v));
+                    assert(s_partition_a_v(v) || s_partition_b_v(v));
+
+                    const uint16_t start = s_vv_offset[v];
+                    const uint16_t end   = s_vv_offset[v + 1];
+
+                    for (uint16_t vv = start; vv < end; ++vv) {
+
+                        const uint16_t nv = s_vv[vv];
+
+                        assert(s_active_v(nv));
+
+                        if (!s_assigned_v(nv)) {
+                            if (s_partition_a_v(v)) {
+                                if (s_partition_a_v.try_set(nv)) {
+                                    s_next_frontier_v.set(nv, true);
+                                    assert(s_partition_a_v(nv));
+                                    ::atomicAdd(&s_num_A_vertices, 1);
+                                }
+                            }
+                            if (s_partition_b_v(v)) {
+                                if (s_partition_b_v.try_set(nv)) {
+                                    s_next_frontier_v.set(nv, true);
+                                    assert(s_partition_b_v(nv));
+                                    ::atomicAdd(&s_num_B_vertices, 1);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            block.sync();
+
+            for (uint16_t v = threadIdx.x; v < num_vertices;
+                 v += blockThreads) {
+                if (s_next_frontier_v(v)) {
+                    ::atomicAdd(&s_num_assigned_vertices, 1);
+                    s_assigned_v.set(v, true);
+                }
+            }
+
+            s_current_frontier_v.copy(block, s_next_frontier_v);
+            block.sync();
+            s_next_frontier_v.reset(block);
+
+            if (s_num_assigned_vertices == num_assigned_prv_iter) {
+                // means that we have not no made any progress in this iteration
+                // probably because we have a disconnected patch
+                break;
+            }
+            num_assigned_prv_iter = s_num_assigned_vertices;
+        }
+
+        if (s_num_assigned_vertices < s_num_active_vertices) {
+            // fix for disconnected patches by assigning them to the small
+            // partition
+            bool is_a_bigger = s_num_A_vertices > s_num_B_vertices;
+            block.sync();
+            for (uint16_t v = threadIdx.x; v < num_vertices;
+                 v += blockThreads) {
+                if (s_active_v(v) && !s_assigned_v(v)) {
+                    if (is_a_bigger) {
+                        s_partition_b_v.set(v, true);
+                        ::atomicAdd(&s_num_B_vertices, 1);
+                    } else {
+                        s_partition_a_v.set(v, true);
+                        ::atomicAdd(&s_num_A_vertices, 1);
+                    }
+                    s_assigned_v.set(v, true);
+                }
+            }
+        }
+    };
+
+
+    // vertices on the boundary might be assigned to both region, here we
+    // restrict that every vertex to be assigned to one region and we make
+    // this in a way that balance out both regions
+    auto impose_constraints = [&]() {
+        for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+            if (s_partition_a_v(v) && s_partition_b_v(v)) {
+                assert(s_active_v(v));
+                if (atomic_read(&s_num_A_vertices) >
+                    atomic_read(&s_num_B_vertices)) {
+                    s_partition_a_v.reset(v, true);
+                    ::atomicAdd(&s_num_A_vertices, -1);
+                } else {
+                    s_partition_b_v.reset(v, true);
+                    ::atomicAdd(&s_num_B_vertices, -1);
+                }
+            }
+        }
+    };
+
+    // inite the frontier for each region/partition. the frontier means vertices
+    // on partition X that are connected to vertices in partition Y or a vertex
+    // in the ribbon
+    auto init_interior = [&]() {
+        s_current_frontier_v.reset(block);
+        s_assigned_v.reset(block);
+        if (threadIdx.x == 0) {
+            s_num_assigned_vertices = 0;
+        }
+        block.sync();
+
+        for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+            if (s_active_v(v)) {
+                bool is_a(s_partition_a_v(v));
+                bool on_frontier = !s_owned_v(v);
+
+                if (!on_frontier) {
+                    const uint16_t start = s_vv_offset[v];
+                    const uint16_t end   = s_vv_offset[v + 1];
+
+                    for (uint16_t vv = start; vv < end; ++vv) {
+                        const uint16_t nv = s_vv[vv];
+                        if (is_a) {
+                            if (s_partition_b_v(nv)) {
+                                on_frontier = true;
+                                break;
+                            }
+                        } else {
+                            if (s_partition_a_v(nv)) {
+                                on_frontier = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (on_frontier) {
+                    s_current_frontier_v.set(v, true);
+                    s_assigned_v.set(v, true);
+                    ::atomicAdd(&s_num_assigned_vertices, 1);
+                    if (is_a) {
+                        s_seed_a = v;
+                    } else {
+                        s_seed_b = v;
+                    }
+                }
+            }
+        }
+    };
+
+
+    // find the most interior vertex in each partition starting from the
+    // frontier and moving to the interior. While we do this, we keep re-writing
+    // s_seed_a and s_seed_b. In the last iteration in this while loop, (one of)
+    // the most interior seed will be finally written
+    auto compute_interior = [&]() {
+        while (s_num_assigned_vertices < s_num_active_vertices) {
+            block.sync();
+            for (uint16_t v = threadIdx.x; v < num_vertices;
+                 v += blockThreads) {
+
+                if (s_current_frontier_v(v)) {
+
+                    assert(s_assigned_v(v));
+                    assert(s_partition_a_v(v) || s_partition_b_v(v));
+
+                    bool is_a(s_partition_a_v(v));
+
+                    const uint16_t start = s_vv_offset[v];
+                    const uint16_t end   = s_vv_offset[v + 1];
+
+                    for (uint16_t vv = start; vv < end; ++vv) {
+
+                        const uint16_t nv = s_vv[vv];
+                        if (!s_assigned_v(nv)) {
+                            if (is_a) {
+                                if (s_partition_a_v(nv)) {
+                                    if (s_next_frontier_v.try_set(nv)) {
+                                        ::atomicAdd(&s_num_assigned_vertices,
+                                                    1);
+                                        s_seed_a = nv;
+                                    }
+                                }
+                            } else {
+                                if (s_partition_b_v(nv)) {
+                                    if (s_next_frontier_v.try_set(nv)) {
+                                        ::atomicAdd(&s_num_assigned_vertices,
+                                                    1);
+                                        s_seed_b = nv;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            block.sync();
+
+            for (uint16_t v = threadIdx.x; v < num_vertices;
+                 v += blockThreads) {
+                if (s_next_frontier_v(v)) {
+                    s_assigned_v.set(v, true);
+                }
+            }
+
+            s_current_frontier_v.copy(block, s_next_frontier_v);
+            block.sync();
+            s_next_frontier_v.reset(block);
+        }
+    };
+
+
+    if (threadIdx.x == 0) {
+        bootstrap();
+    }
+    compute_num_active_vertices();
+    block.sync();
+
+
+    for (int it = 0; it < num_iter; ++it) {
+
+        init_region_growing();
+        block.sync();
+
+        region_growing();
+        block.sync();
+
+        impose_constraints();
+        block.sync();
+
+
+        // if we have reached good balance, then terminate early
+        float ratio = float(std::abs(s_num_A_vertices - s_num_B_vertices)) /
+                      float(s_num_active_vertices);
+        if (ratio < 0.1f) {
+            break;
+        }
+
+        assert(s_num_A_vertices + s_num_B_vertices == s_num_active_vertices);
+
+        init_interior();
+        block.sync();
+
+        compute_interior();
+        block.sync();
+    }
+
+#ifndef NDEBUG
+    // sanity check that an active vertex is either assigned to single partition
+    for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+        if (s_active_v(v)) {
+            if (s_partition_a_v(v)) {
+                assert(!s_partition_b_v(v));
+            }
+            if (s_partition_b_v(v)) {
+                assert(!s_partition_a_v(v));
+            }
+        }
+    }
+#endif
+}
+
 
 template <uint32_t blockThreads>
 __global__ static void calc_num_elements(const Context context,
@@ -1497,12 +1931,13 @@ __global__ static void check_ribbon_faces(const Context               context,
         PatchInfo patch_info = context.m_patches_info[patch_id];
 
         ShmemAllocator shrd_alloc;
-        uint16_t*      s_fv =
+
+        uint16_t* s_fv =
             shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
-        uint16_t* s_fe =
-            shrd_alloc.alloc<uint16_t>(3 * patch_info.num_faces[0]);
-        uint16_t* s_ev =
-            shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
+        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(std::max(
+            3 * patch_info.num_faces[0], 1 + patch_info.num_vertices[0]));
+        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(
+            std::max(2 * patch_info.num_edges[0], 3 * patch_info.num_faces[0]));
         load_async(block,
                    reinterpret_cast<uint16_t*>(patch_info.ev),
                    2 * patch_info.num_edges[0],
@@ -1566,12 +2001,13 @@ __global__ static void check_ribbon_faces(const Context               context,
                     for (uint16_t i = 0; i < global_vf.get_num_attributes();
                          ++i) {
 
-                        const auto fvh_global = global_vf(vh, i);
+                        const FaceHandle fvh_global = global_vf(vh, i);
 
                         if (fvh_global.is_valid()) {
 
                             // look for the face incident to the vertex in local
                             // VF
+                            assert(s_vf_offset[v_id + 1] > s_vf_offset[v_id]);
                             bool found = false;
                             for (uint16_t j = s_vf_offset[v_id];
                                  j < s_vf_offset[v_id + 1];
@@ -1591,14 +2027,26 @@ __global__ static void check_ribbon_faces(const Context               context,
 
                             if (!found) {
                                 // printf(
-                                //     "\n T=%u, ribbon face = %u, f= %u, v_id=
-                                //     "
-                                //     "%u ",
+                                //     "\n T=%u, p = %u, #F=%u, #F_owned= %u, "
+                                //     "#E=%u, #E_owned= %u, #V=%u, #V_owned=
+                                //     %u, " "fvh_global=%u, %u, vh=%u, %u, s_vf
+                                //     =%u, "
+                                //     "%u",
                                 //     threadIdx.x,
                                 //     patch_id,
-                                //     f,
-                                //     v_id);
-                                ::atomicAdd(d_check, 1);
+                                //     patch_info.num_faces[0],
+                                //     patch_info.get_num_owned<FaceHandle>(),
+                                //     patch_info.num_edges[0],
+                                //     patch_info.get_num_owned<EdgeHandle>(),
+                                //     patch_info.num_vertices[0],
+                                //     patch_info.get_num_owned<VertexHandle>(),
+                                //     fvh_global.patch_id(),
+                                //     fvh_global.local_id(),
+                                //     vh.patch_id(),
+                                //     vh.local_id(),
+                                //     s_vf_offset[v_id],
+                                //     s_vf_offset[v_id + 1]);
+                                ::atomicAdd(d_check, 1);                                
                                 break;
                             }
                         }
@@ -2432,6 +2880,7 @@ template __inline__ __device__ void detail::slice<256>(
     const uint16_t,
     const uint16_t,
     PatchStash&,
+    // PatchStash&,
     Bitmask&,
     Bitmask&,
     Bitmask&,
@@ -2463,4 +2912,18 @@ template __inline__ __device__ void detail::bi_assignment<256>(
     Bitmask&,
     Bitmask&,
     Bitmask&);
+
+template __inline__ __device__ void detail::bi_assignment_ggp<256>(
+    cooperative_groups::thread_block&,
+    const uint16_t,
+    const Bitmask&,
+    const Bitmask&,
+    const uint16_t*,
+    const uint16_t*,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    Bitmask&,
+    int);
 }  // namespace rxmesh

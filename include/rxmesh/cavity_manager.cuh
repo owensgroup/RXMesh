@@ -11,6 +11,7 @@
 #include "rxmesh/attribute.h"
 
 #include "rxmesh/kernels/shmem_mutex.cuh"
+#include "rxmesh/kernels/shmem_mutex_array.cuh"
 
 namespace rxmesh {
 
@@ -63,7 +64,8 @@ struct CavityManager
                                         Context&        context,
                                         ShmemAllocator& shrd_alloc,
                                         bool            preserve_cavity,
-                                        uint32_t        current_p = 0);
+                                        bool     allow_touching_cavities = true,
+                                        uint32_t current_p               = 0);
 
     /**
      * @brief create new cavity from a seed element. The seed element type
@@ -71,7 +73,7 @@ struct CavityManager
      * @param seed
      */
     template <typename HandleT>
-    __device__ __inline__ void create(HandleT seed);
+    __device__ __inline__ uint32_t create(HandleT seed);
 
 
     /**
@@ -274,11 +276,35 @@ struct CavityManager
         cooperative_groups::thread_block& block);
 
     /**
-     * @brief propage the cavity ID from the seeds to indicent/adjacent elements
+     * @brief propage the cavity ID from the seeds to incident/adjacent elements
      * based on CavityOp
      */
     __device__ __inline__ void propagate(
         cooperative_groups::thread_block& block);
+
+    /**
+     * @brief construct a graph where nodes are cavities and two nodes form an
+     * edge if the cavities they represent are overlapping
+     */
+    __device__ __inline__ void construct_cavity_graph(
+        cooperative_groups::thread_block& block);
+
+    /**
+     * @brief calculate a maximal independent set of cavities and deactivate the
+     * rest. MIS based on Algo 3 in
+     * https://web.mit.edu/jeshi/www/public/papers/parallel_MIS_survey.pdf
+     */
+    __device__ __inline__ void calc_cavity_maximal_independent_set(
+        cooperative_groups::thread_block& block);
+
+    /**
+     * @brief try to add an edge in the cavity graph that connects the two nodes
+     * that represents the cavities c0 and c1. If we can not add the edge
+     * (because if the space constraints), we deactivate the cavity with more
+     * overlaps
+     */
+    __device__ __inline__ void add_edge_to_cavity_graph(const uint16_t c0,
+                                                        const uint16_t c1);
 
     /**
      * @brief propagate the cavity tag from vertices to their incident edges
@@ -581,6 +607,7 @@ struct CavityManager
         uint32_t&      src_patch,
         uint8_t&       src_patch_stash_id,
         uint16_t*      q_correspondence,
+        uint8_t*       q_correspondence_stash,
         const uint16_t dest_patch_num_elements,
         const Bitmask& dest_patch_owned_mask,
         const Bitmask& dest_patch_active_mask,
@@ -659,9 +686,55 @@ struct CavityManager
         cooperative_groups::thread_block& block,
         const uint8_t                     q_stash,
         uint16_t*                         s_correspondence,
+        uint8_t*                          s_correspondence_stash,
         const uint16_t                    s_correspondence_size,
         const LPPair*                     s_table,
         const LPPair*                     s_stash);
+
+
+    /**
+     * @brief recover faces by setting their bit in m_s_active_mask_f if their
+     * bit is set in m_s_recover_f and they are active in global memory
+     */
+    __device__ __inline__ void recover_faces();
+
+    /**
+     * @brief recover edges by setting their bit in m_s_active_mask_e if their
+     * bit is set in m_s_recover_e and they are active in global memory
+     */
+    __device__ __inline__ void recover_edges();
+
+    /**
+     * @brief recover vertices by setting their bit in m_s_active_mask_v if
+     * their bit is set in m_s_recover_v and they are active in global memory
+     */
+    __device__ __inline__ void recover_vertices();
+
+
+    /**
+     * @brief set the bit for a vertex in m_s_recover_v if it is incident to an
+     * edge that has its bit set in m_s_recover_e
+     */
+    __device__ __inline__ void recover_vertices_through_edges();
+
+    /**
+     * @brief set the bit for an edge in m_s_recover_e if it is incident to a
+     * face that has its bit set in m_s_recover_f
+     */
+    __device__ __inline__ void recover_edges_through_faces();
+
+
+    /**
+     * @brief set the bit for an edge in m_s_recover_e if it is incident to an
+     * vertex that has its bit set in m_s_recover_v
+     */
+    __device__ __inline__ void recover_edges_through_vertices();
+
+    /**
+     * @brief set the bit for a face in m_s_recover_f if it is incident to an
+     * edge that has its bit set in m_s_recover_e
+     */
+    __device__ __inline__ void recover_faces_through_edges();
 
 
     // indicate if this block can write its updates to global memory during
@@ -736,8 +809,20 @@ struct CavityManager
     // serve both
     uint16_t* m_s_q_correspondence_e;
     uint16_t* m_s_q_correspondence_vf;
+    uint8_t*  m_s_q_correspondence_stash_e;
+    uint8_t*  m_s_q_correspondence_stash_vf;
     uint16_t  m_correspondence_size_e;
     uint16_t  m_correspondence_size_vf;
+
+    // For an edge on the boundary of a cavity, here we store the cavity ID of
+    // such edges (only the boundary ones). We then use this to filter out
+    // cavities if they are touching when they user does not want cavities to
+    // shared edges
+    //  This buffer overlap with m_s_q_correspondence_e
+    int16_t* m_s_boudary_edges_cavity_id;
+
+    // if cavities that share an edge are allowed
+    bool m_allow_touching_cavities;
 
     bool* m_s_readd_to_queue;
 
@@ -790,6 +875,30 @@ struct CavityManager
     // LPPair*  m_s_table_q;
     // LPPair*  m_s_table_stash_q;
     // uint32_t m_s_table_q_size;
+
+    // Cavity graph is a graph where cavities are nodes and two nodes forms an
+    // edge if the two cavities they represent are overlapping. We use this
+    // graph to compute maximal independent set of cavities to process.
+    // The graph assumes that a cavity/node in this graph is connected at a
+    // maximum of MAX_OVERLAP_CAVITIES other cavities.
+    // This pointer overlaps m_s_q_correspondence_e
+    uint16_t* m_s_cavity_graph;
+
+    // array of mutex with size equal to the number of cavities. We use this
+    // mutex array when we construct the cavity graph to solve the problem of
+    // having multiple threads update the connectivity of the same cavity points
+    // inside this array points to the same location as m_s_cavity_size_prefix
+    ShmemMutexArray m_s_cavity_graph_mutex;
+
+    // current set of active cavities to be considered for maximal independent
+    // set calculation. This one overlaps m_s_in_cavity_f
+    Bitmask m_s_active_cavity_mis;
+
+    // indicate if a cavity is a candidate to be in the maximal independent set
+    Bitmask m_s_candidate_cavity_mis;
+
+    // indicate if a cavity is in the maximal independent set
+    Bitmask m_s_cavity_mis;
 };
 
 }  // namespace rxmesh

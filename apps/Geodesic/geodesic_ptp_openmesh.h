@@ -265,17 +265,17 @@ void geodesic_ptp_openmesh(const std::vector<uint32_t>& h_seeds,
     ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
 
     // Report
-    OpenMeshReport report("Geodesic_OpenMesh");
-    report.command_line(Arg.argc, Arg.argv);
-    report.system();
-    report.model_data(Arg.obj_file_name, input_mesh);
-    report.add_member("seeds", h_seeds);
-    std::string method = "OpenMeshSingleCore";
-    report.add_member("method", method);
+    //OpenMeshReport report("Geodesic_OpenMesh");
+    //report.command_line(Arg.argc, Arg.argv);
+    //report.system();
+    //report.model_data(Arg.obj_file_name, input_mesh);
+    //report.add_member("seeds", h_seeds);
+    //std::string method = "OpenMeshSingleCore";
+    //report.add_member("method", method);
 
 
-    std::vector<T> geo_distance(input_mesh.n_vertices(),
-                                std::numeric_limits<T>::infinity());
+    //std::vector<T> geo_distance(input_mesh.n_vertices(),
+    //                            std::numeric_limits<T>::infinity());
 
     // sorted indices for toplesets
     sorted_index.clear();
@@ -290,23 +290,23 @@ void geodesic_ptp_openmesh(const std::vector<uint32_t>& h_seeds,
     RXMESH_TRACE("OpenMesh: Computing toplesets took {} (ms)",
                  compute_toplesets_time);
 
-    report.add_member("compute_toplesets_time", compute_toplesets_time);
-
-    // compute geodesic distance
-    uint32_t iter            = 0;
-    float    processing_time = toplesets_propagation(
-        input_mesh, h_seeds, limits, sorted_index, geo_distance, iter);
-    RXMESH_TRACE("geodesic_ptp_openmesh() took {} (ms)", processing_time);
-
-    // Finalize report
-    report.add_member("num_iter_taken", iter);
-    rxmesh::TestData td;
-    td.test_name   = "Geodesic";
-    td.num_threads = 1;
-    td.time_ms.push_back(processing_time);
-    td.passed.push_back(true);
-    report.add_test(td);
-    report.write(
-        Arg.output_folder + "/openmesh",
-        "Geodesic_OpenMesh" + rxmesh::extract_file_name(Arg.obj_file_name));
+    //report.add_member("compute_toplesets_time", compute_toplesets_time);
+    //
+    //// compute geodesic distance
+    //uint32_t iter            = 0;
+    //float    processing_time = toplesets_propagation(
+    //    input_mesh, h_seeds, limits, sorted_index, geo_distance, iter);
+    //RXMESH_TRACE("geodesic_ptp_openmesh() took {} (ms)", processing_time);
+    //
+    //// Finalize report
+    //report.add_member("num_iter_taken", iter);
+    //rxmesh::TestData td;
+    //td.test_name   = "Geodesic";
+    //td.num_threads = 1;
+    //td.time_ms.push_back(processing_time);
+    //td.passed.push_back(true);
+    //report.add_test(td);
+    //report.write(
+    //    Arg.output_folder + "/openmesh",
+    //    "Geodesic_OpenMesh" + rxmesh::extract_file_name(Arg.obj_file_name));
 }
