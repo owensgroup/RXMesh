@@ -47,7 +47,7 @@ __global__ static void random_flips(rxmesh::Context                context,
 
     const LocalVertexT* ev = cavity.patch_info().ev;
 
-    detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
+    for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
         const uint16_t v0 = ev[2 * eh.local_id() + 0].id;
         const uint16_t v1 = ev[2 * eh.local_id() + 1].id;
 
@@ -63,7 +63,7 @@ __global__ static void random_flips(rxmesh::Context                context,
     if (cavity.prologue(block, shrd_alloc, coords, to_flip)) {
 
         // so that we don't flip them again
-        detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
+        for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
             if (to_flip(eh) == 1) {
                 to_flip(eh) = 2;
             }
@@ -112,7 +112,7 @@ __global__ static void random_collapses(rxmesh::Context                context,
         return;
     }
 
-    detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
+    for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
         if (to_collapse(eh) == 1) {
             cavity.create(eh);
         }
@@ -123,7 +123,7 @@ __global__ static void random_collapses(rxmesh::Context                context,
     if (cavity.prologue(
             block, shrd_alloc, coords, to_collapse, v_attr, e_attr, f_attr)) {
 
-        detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
+        for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
             if (cavity.is_successful(eh)) {
                 to_collapse(eh) = 0;
             }

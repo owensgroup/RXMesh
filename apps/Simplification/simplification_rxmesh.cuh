@@ -266,7 +266,7 @@ __global__ static void simplify(rxmesh::Context            context,
     query.dispatch<Op::VE>(block, shrd_alloc, collapse);
     block.sync();
 
-    detail::for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
+    for_each_edge(cavity.patch_info(), [&](const EdgeHandle eh) {
         // if two vertices says that this edge is the edge with min cost
         // connected to them, then this edge is eligible for collapse
         if (edge_predicate[eh.local_id()] == 2) {
