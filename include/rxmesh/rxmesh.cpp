@@ -1053,13 +1053,11 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
 
         uint16_t capacity = cap;
 
-#ifndef FLAT_ARRAY_FOR_LP_HASHTABLE
         if (patch_id != INVALID32) {
             capacity = static_cast<uint16_t>(std::ceil(
                 m_capacity_factor * static_cast<float>(num_not_owned) /
                 m_lp_hashtable_load_factor));
         }
-#endif
 
         h_hashtable = LPHashTable(capacity, false);
         d_hashtable = LPHashTable(capacity, true);
@@ -1101,11 +1099,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
         d_hashtable.move(h_hashtable);
     };
 
-#ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
-    const uint16_t lp_cap_v = p_vertices_capacity;
-#else
     const uint16_t lp_cap_v = max_lp_hashtable_capacity<LocalVertexT>();
-#endif
     build_ht(m_h_patches_ltog_v,
              ltog_v,
              m_patcher->get_vertex_patch(),
@@ -1117,12 +1111,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.lp_v,
              d_patch.lp_v);
 
-
-#ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
-    const uint16_t lp_cap_e = p_edges_capacity;
-#else
     const uint16_t lp_cap_e = max_lp_hashtable_capacity<LocalEdgeT>();
-#endif
     build_ht(m_h_patches_ltog_e,
              ltog_e,
              m_patcher->get_edge_patch(),
@@ -1134,12 +1123,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.lp_e,
              d_patch.lp_e);
 
-
-#ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
-    const uint16_t lp_cap_f = p_faces_capacity;
-#else
     const uint16_t lp_cap_f = max_lp_hashtable_capacity<LocalFaceT>();
-#endif
     build_ht(m_h_patches_ltog_f,
              ltog_f,
              m_patcher->get_face_patch(),

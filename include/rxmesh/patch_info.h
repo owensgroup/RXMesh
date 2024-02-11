@@ -1,7 +1,5 @@
 #pragma once
 
-// #define FLAT_ARRAY_FOR_LP_HASHTABLE
-
 #include <stdint.h>
 
 #include "rxmesh/handle.h"
@@ -11,11 +9,8 @@
 #include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/macros.h"
 
-#ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
-#include "rxmesh/lp_array.cuh"
-#else
 #include "rxmesh/lp_hashtable.cuh"
-#endif
+
 
 
 #ifdef __CUDA_ARCH__

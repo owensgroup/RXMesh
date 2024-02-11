@@ -125,7 +125,7 @@ __device__ __forceinline__ void e_v_diamond(
                reinterpret_cast<uint16_t*>(patch_info.fe),
                3 * num_faces,
                s_fe,
-               false);
+               true);
 
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
         const uint16_t src = patch_info.ev[2 * e + 0].id;
