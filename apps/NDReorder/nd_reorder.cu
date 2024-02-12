@@ -11,7 +11,6 @@ struct arg
     uint32_t    device_id     = 0;
 } Arg;
 
-template <typename T>
 void nd_reorder()
 {
     using namespace rxmesh;
@@ -29,9 +28,9 @@ void nd_reorder()
     rx.prepare_launch_box(
         {rxmesh::Op::VE},
         launch_box,
-        (void*)nd_main<T, blockThreads>);
+        (void*)nd_main<blockThreads>);
 
-    nd_main<float, blockThreads><<<launch_box.blocks,
+    nd_main<blockThreads><<<launch_box.blocks,
                                launch_box.num_threads,
                                launch_box.smem_bytes_dyn>>>(rx.get_context());
 
@@ -46,7 +45,7 @@ TEST(Apps, NDReorder)
     cuda_query(Arg.device_id);
 
     // nd reorder implementation
-    nd_reorder<int>();
+    nd_reorder();
 }
 
 int main(int argc, char** argv)
