@@ -38,7 +38,7 @@ class RXMeshStatic : public RXMesh
      * @param file_path path to an obj file
      */
     explicit RXMeshStatic(const std::string file_path,
-                          const std::string patcher_file = "",
+                          const std::string patcher_file             = "",
                           const float       capacity_factor          = 1.8,
                           const float       patch_alloc_factor       = 5.0,
                           const float       lp_hashtable_load_factor = 0.5)
@@ -65,6 +65,10 @@ class RXMeshStatic : public RXMesh
             this->add_vertex_attribute<float>(vertices, "rx:vertices");
 
 #if USE_POLYSCOPE
+        polyscope::options::autocenterStructures = true;
+        polyscope::options::autoscaleStructures  = true;
+        polyscope::options::automaticallyComputeSceneExtents = true;
+
         polyscope::init();
         m_polyscope_mesh_name = polyscope::guessNiceNameFromPath(file_path);
         m_polyscope_mesh_name += std::to_string(rand());
@@ -990,6 +994,84 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
+     * @brief scale the mesh so that it fits inside a bounding box defined by
+     * the box lower and upper. Results are reflected on the coordinates
+     * returned by get_input_vertex_coordinates()
+     * @param lower bounding box lower corner
+     * @param upper bounding box upper corner
+     */
+    void scale(Vector3f lower, Vector3f upper)
+    {
+        if (lower[0] > upper[0] || lower[1] > upper[1] || lower[2] > upper[2]) {
+            RXMESH_ERROR(
+                "RXMeshStatic::scale() can not scale the mesh since the lower "
+                "corner ({},{},{}) is higher than upper corner ({},{},{}).",
+                lower[0],
+                lower[1],
+                lower[2],
+                upper[0],
+                upper[1],
+                upper[2]);
+            return;
+        }
+
+        Vector3f bb_lower, bb_upper;
+
+        bounding_box(bb_lower, bb_upper);
+
+        Vector3f factor;
+        for (int i = 0; i < 3; ++i) {
+            factor[i] =
+                (upper[i] - lower[i]) / ((bb_upper[i] - bb_lower[i]) +
+                                         std::numeric_limits<float>::epsilon());
+        }
+
+        float the_factor = std::min(std::min(factor[0], factor[1]), factor[2]);
+
+        auto coord = *get_input_vertex_coordinates();
+
+        for_each_vertex(HOST, [&](const VertexHandle vh) {
+            for (int i = 0; i < 3; ++i) {
+                coord(vh, i) += (lower[i] - bb_lower[i]);
+                coord(vh, i) *= the_factor;
+            }
+        });
+
+        coord.move(HOST, DEVICE);
+    }
+
+    /**
+     * @brief compute the mesh bounding box using coordinates returned by
+     * get_input_vertex_coordinates()
+     * @param lower
+     * @param upper
+     */
+    void bounding_box(Vector3f& lower, Vector3f& upper)
+    {
+        lower[0] = std::numeric_limits<float>::max();
+        lower[1] = std::numeric_limits<float>::max();
+        lower[2] = std::numeric_limits<float>::max();
+
+        upper[0] = std::numeric_limits<float>::lowest();
+        upper[1] = std::numeric_limits<float>::lowest();
+        upper[2] = std::numeric_limits<float>::lowest();
+
+        auto coord = *get_input_vertex_coordinates();
+
+        for_each_vertex(
+            HOST,
+            [&](const VertexHandle vh) {
+                Vector3f v(coord(vh, 0), coord(vh, 1), coord(vh, 2));
+                for (int i = 0; i < 3; ++i) {
+                    lower[i] = std::min(lower[i], v[i]);
+                    upper[i] = std::max(upper[i], v[i]);
+                }
+            },
+            NULL,
+            false);
+    }
+
+    /**
      * @brief Map a vertex handle into a global index as seen in the input
      * to RXMeshStatic
      * @param vh input vertex handle
@@ -1347,7 +1429,7 @@ class RXMeshStatic : public RXMesh
             // similar to VE but we also need to store the EV even after
             // we do the transpose. After that, we can throw EV away and load
             // the hash table
-            dynamic_smem = std::max(this->m_max_vertices_per_patch+1,
+            dynamic_smem = std::max(this->m_max_vertices_per_patch + 1,
                                     2 * this->m_max_edges_per_patch) *
                            sizeof(uint16_t);
             dynamic_smem +=
