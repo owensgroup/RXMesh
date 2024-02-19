@@ -39,9 +39,9 @@ class RXMeshStatic : public RXMesh
      */
     explicit RXMeshStatic(const std::string file_path,
                           const std::string patcher_file             = "",
-                          const float       capacity_factor          = 1.8,
-                          const float       patch_alloc_factor       = 5.0,
-                          const float       lp_hashtable_load_factor = 0.5)
+                          const float       capacity_factor          = 1.0,
+                          const float       patch_alloc_factor       = 1.0,
+                          const float       lp_hashtable_load_factor = 0.8)
         : RXMesh()
     {
         std::vector<std::vector<uint32_t>> fv;
