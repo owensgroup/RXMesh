@@ -4,11 +4,9 @@
 #include "rxmesh/util/macros.h"
 
 template <typename T>
-void populate(rxmesh::RXMeshStatic&       rxmesh,
-              rxmesh::VertexAttribute<T>& v,
-              T                           val)
+void populate(rxmesh::RXMeshStatic& rx, rxmesh::VertexAttribute<T>& v, T val)
 {
-    rxmesh.for_each_vertex(
+    rx.for_each_vertex(
         rxmesh::DEVICE,
         [v, val] __device__(const rxmesh::VertexHandle vh) { v(vh) = val; });
 
@@ -17,9 +15,9 @@ void populate(rxmesh::RXMeshStatic&       rxmesh,
 
 
 template <typename T>
-void populate(rxmesh::RXMeshStatic& rxmesh, rxmesh::FaceAttribute<T>& f, T val)
+void populate(rxmesh::RXMeshStatic& rx, rxmesh::FaceAttribute<T>& f, T val)
 {
-    rxmesh.for_each_face(
+    rx.for_each_face(
         rxmesh::DEVICE,
         [f, val] __device__(const rxmesh::FaceHandle fh) { f(fh) = val; });
 
@@ -27,25 +25,25 @@ void populate(rxmesh::RXMeshStatic& rxmesh, rxmesh::FaceAttribute<T>& f, T val)
 }
 
 template <typename T>
-void populate(rxmesh::RXMeshStatic& rxmesh, rxmesh::EdgeAttribute<T>& e, T val)
+void populate(rxmesh::RXMeshStatic& rx, rxmesh::EdgeAttribute<T>& e, T val)
 {
-    rxmesh.for_each_edge(rxmesh::DEVICE,
-                         [e, val] __device__(const rxmesh::EdgeHandle eh) {
-                             auto pl = eh.unpack();
-                             e(eh)   = pl.first * pl.second;
-                         });
+    rx.for_each_edge(rxmesh::DEVICE,
+                     [e, val] __device__(const rxmesh::EdgeHandle eh) {
+                         auto pl = eh.unpack();
+                         e(eh)   = pl.first * pl.second;
+                     });
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 }
 
 template <typename T>
-void populate(rxmesh::RXMeshStatic&       rxmesh,
+void populate(rxmesh::RXMeshStatic&       rx,
               rxmesh::VertexAttribute<T>& v1,
               rxmesh::VertexAttribute<T>& v2,
               T                           v1_val,
               T                           v2_val)
 {
-    rxmesh.for_each_vertex(
+    rx.for_each_vertex(
         rxmesh::DEVICE,
         [v1, v2, v1_val, v2_val] __device__(const rxmesh::VertexHandle vh) {
             v1(vh) = v1_val;
@@ -62,13 +60,13 @@ TEST(Attribute, Norm2)
 
     cuda_query(rxmesh_args.device_id);
 
-    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    auto attr = rxmesh.add_vertex_attribute<float>("v", 3, rxmesh::DEVICE);
+    auto attr = rx.add_vertex_attribute<float>("v", 3, rxmesh::DEVICE);
 
     const float val(2.0);
 
-    populate<float>(rxmesh, *attr, val);
+    populate<float>(rx, *attr, val);
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
@@ -78,7 +76,7 @@ TEST(Attribute, Norm2)
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
-    EXPECT_FLOAT_EQ(output, std::sqrt(val * val * rxmesh.get_num_vertices()));
+    EXPECT_FLOAT_EQ(output, std::sqrt(val * val * rx.get_num_vertices()));
 }
 
 
@@ -88,15 +86,15 @@ TEST(Attribute, Dot)
 
     cuda_query(rxmesh_args.device_id);
 
-    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    auto v1_attr = rxmesh.add_vertex_attribute<float>("v1", 3, rxmesh::DEVICE);
-    auto v2_attr = rxmesh.add_vertex_attribute<float>("v2", 3, rxmesh::DEVICE);
+    auto v1_attr = rx.add_vertex_attribute<float>("v1", 3, rxmesh::DEVICE);
+    auto v2_attr = rx.add_vertex_attribute<float>("v2", 3, rxmesh::DEVICE);
 
     const float v1_val(2.0);
     const float v2_val(3.0);
 
-    populate<float>(rxmesh, *v1_attr, *v2_attr, v1_val, v2_val);
+    populate<float>(rx, *v1_attr, *v2_attr, v1_val, v2_val);
 
     ReduceHandle reduce_handle(*v1_attr);
 
@@ -104,7 +102,7 @@ TEST(Attribute, Dot)
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
-    EXPECT_FLOAT_EQ(output, v1_val * v2_val * rxmesh.get_num_vertices());
+    EXPECT_FLOAT_EQ(output, v1_val * v2_val * rx.get_num_vertices());
 }
 
 TEST(Attribute, Reduce)
@@ -115,13 +113,13 @@ TEST(Attribute, Reduce)
 
     cuda_query(rxmesh_args.device_id);
 
-    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    auto attr = rxmesh.add_edge_attribute<uint32_t>("e", 3, rxmesh::DEVICE);
+    auto attr = rx.add_edge_attribute<uint32_t>("e", 3, rxmesh::DEVICE);
 
     const uint32_t val(2.0);
 
-    populate<uint32_t>(rxmesh, *attr, val);
+    populate<uint32_t>(rx, *attr, val);
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
@@ -132,7 +130,7 @@ TEST(Attribute, Reduce)
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
     uint32_t result = 0;
-    rxmesh.for_each_edge(rxmesh::HOST, [&](const rxmesh::EdgeHandle eh) {
+    rx.for_each_edge(rxmesh::HOST, [&](const rxmesh::EdgeHandle eh) {
         auto pl = eh.unpack();
         result  = std::max(result, pl.first * pl.second);
     });
@@ -147,19 +145,19 @@ TEST(Attribute, CopyFrom)
 
     cuda_query(rxmesh_args.device_id);
 
-    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    auto f_device = rxmesh.add_face_attribute<uint32_t>("d", 3, DEVICE);
+    auto f_device = rx.add_face_attribute<uint32_t>("d", 3, DEVICE);
 
-    auto f_host = rxmesh.add_face_attribute<uint32_t>("h", 3, HOST);
+    auto f_host = rx.add_face_attribute<uint32_t>("h", 3, HOST);
 
     uint32_t val = 99;
 
-    populate<uint32_t>(rxmesh, *f_device, val);
+    populate<uint32_t>(rx, *f_device, val);
 
     f_host->copy_from(*f_device, DEVICE, HOST);
 
-    rxmesh.for_each_face(
+    rx.for_each_face(
         HOST, [&](const FaceHandle fh) { EXPECT_EQ((*f_host)(fh), val); });
 }
 
@@ -169,14 +167,14 @@ TEST(Attribute, AddingAndRemoving)
 
     cuda_query(rxmesh_args.device_id);
 
-    RXMeshStatic rxmesh(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     std::string attr_name = "v_attr";
 
     auto vertex_attr =
-        rxmesh.add_vertex_attribute<float>(attr_name, 3, rxmesh::LOCATION_ALL);
+        rx.add_vertex_attribute<float>(attr_name, 3, rxmesh::LOCATION_ALL);
 
-    EXPECT_TRUE(rxmesh.does_attribute_exist(attr_name));
+    EXPECT_TRUE(rx.does_attribute_exist(attr_name));
 
 
     vertex_attr->move(rxmesh::HOST, rxmesh::DEVICE);
@@ -185,5 +183,5 @@ TEST(Attribute, AddingAndRemoving)
 
     // this is not neccessary in general but we are just testing the
     // functionality here
-    rxmesh.remove_attribute(attr_name);
+    rx.remove_attribute(attr_name);
 }

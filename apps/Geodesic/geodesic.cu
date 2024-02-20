@@ -36,11 +36,11 @@ TEST(App, Geodesic)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshStatic rxmesh(Arg.obj_file_name);
-    ASSERT_TRUE(rxmesh.is_closed())
+    RXMeshStatic rx(Arg.obj_file_name);
+    ASSERT_TRUE(rx.is_closed())
         << "Geodesic only works on watertight/closed manifold mesh without "
            "boundaries";
-    ASSERT_TRUE(rxmesh.is_edge_manifold())
+    ASSERT_TRUE(rx.is_edge_manifold())
         << "Geodesic only works on watertight/closed manifold mesh without "
            "boundaries";
 
@@ -50,7 +50,7 @@ TEST(App, Geodesic)
     std::random_device    dev;
     std::mt19937          rng(dev());
     std::uniform_int_distribution<std::mt19937::result_type> dist(
-        0, rxmesh.get_num_vertices());
+        0, rx.get_num_vertices());
     for (auto& s : h_seeds) {
         s = dist(rng);
         // s = 0;
@@ -62,13 +62,13 @@ TEST(App, Geodesic)
     // sorted_index and limit. We keep it for RXMesh because it is
     // used to quickly determine whether or not a vertex is within
     // the "update band".
-    std::vector<uint32_t> toplesets(rxmesh.get_num_vertices(), 1u);
+    std::vector<uint32_t> toplesets(rx.get_num_vertices(), 1u);
     std::vector<uint32_t> sorted_index;
     std::vector<uint32_t> limits;
     geodesic_ptp_openmesh<dataT>(h_seeds, sorted_index, limits, toplesets);
 
     // RXMesh Impl
-    geodesic_rxmesh<dataT>(rxmesh, h_seeds, sorted_index, limits, toplesets);
+    geodesic_rxmesh<dataT>(rx, h_seeds, sorted_index, limits, toplesets);
 }
 
 int main(int argc, char** argv)

@@ -140,9 +140,9 @@ TEST(RXMeshStatic, SparseMatrix)
 
     // generate rxmesh obj
     std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
-    RXMeshStatic rxmesh(obj_path);
+    RXMeshStatic rx(obj_path);
 
-    uint32_t num_vertices = rxmesh.get_num_vertices();
+    uint32_t num_vertices = rx.get_num_vertices();
 
     const uint32_t threads = 256;
     const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
@@ -159,7 +159,7 @@ TEST(RXMeshStatic, SparseMatrix)
 
     CUDA_ERROR(cudaMalloc((void**)&d_result, (num_vertices) * sizeof(int)));
 
-    SparseMatrix<int> spmat(rxmesh);
+    SparseMatrix<int> spmat(rx);
     spmat.set_ones();
 
     spmat_multi_hardwired_kernel<<<blocks, threads>>>(
@@ -174,14 +174,14 @@ TEST(RXMeshStatic, SparseMatrix)
     CUDA_ERROR(cudaMalloc((void**)&vet_degree, (num_vertices) * sizeof(int)));
 
     LaunchBox<threads> launch_box;
-    rxmesh.prepare_launch_box(
+    rx.prepare_launch_box(
         {Op::VV}, launch_box, (void*)sparse_mat_test<threads>);
 
     // test kernel
     sparse_mat_test<threads>
         <<<launch_box.blocks,
            launch_box.num_threads,
-           launch_box.smem_bytes_dyn>>>(rxmesh.get_context(), vet_degree);
+           launch_box.smem_bytes_dyn>>>(rx.get_context(), vet_degree);
 
     std::vector<int> h_vet_degree(num_vertices);
     CUDA_ERROR(cudaMemcpy(
@@ -209,14 +209,14 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
     cuda_query(0);
 
     // generate rxmesh obj
-    RXMeshStatic rxmesh(rxmesh_args.obj_file_name);
+    RXMeshStatic rx(rxmesh_args.obj_file_name);
 
-    uint32_t num_vertices = rxmesh.get_num_vertices();
+    uint32_t num_vertices = rx.get_num_vertices();
 
     const uint32_t threads = 256;
     const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
 
-    auto coords = rxmesh.get_input_vertex_coordinates();
+    auto coords = rx.get_input_vertex_coordinates();
 
     float* d_arr_ones;
 
@@ -227,7 +227,7 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
                           num_vertices * sizeof(float),
                           cudaMemcpyHostToDevice));
 
-    SparseMatrix<float> spmat(rxmesh);
+    SparseMatrix<float> spmat(rx);
 
     float* d_arr_ref;
     float* d_result;
@@ -236,13 +236,13 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
     CUDA_ERROR(cudaMalloc((void**)&d_result, (num_vertices) * sizeof(float)));
 
     LaunchBox<threads> launch_box;
-    rxmesh.prepare_launch_box(
+    rx.prepare_launch_box(
         {Op::VV}, launch_box, (void*)sparse_mat_edge_len_test<float, threads>);
 
     sparse_mat_edge_len_test<float, threads><<<launch_box.blocks,
                                                launch_box.num_threads,
                                                launch_box.smem_bytes_dyn>>>(
-        rxmesh.get_context(), *coords, spmat, d_arr_ref);
+        rx.get_context(), *coords, spmat, d_arr_ref);
 
     spmat.arr_mul(d_arr_ones, d_result);
 
@@ -282,15 +282,15 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 
     // generate rxmesh obj
     std::string  obj_path = rxmesh_args.obj_file_name;
-    RXMeshStatic rxmesh(obj_path);
+    RXMeshStatic rx(obj_path);
 
-    uint32_t num_vertices = rxmesh.get_num_vertices();
+    uint32_t num_vertices = rx.get_num_vertices();
 
     const uint32_t threads = 256;
     const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
 
-    auto                coords = rxmesh.get_input_vertex_coordinates();
-    SparseMatrix<float> A_mat(rxmesh);
+    auto                coords = rx.get_input_vertex_coordinates();
+    SparseMatrix<float> A_mat(rx);
     DenseMatrix<float>  X_mat(num_vertices, 3);
     DenseMatrix<float>  B_mat(num_vertices, 3);
     DenseMatrix<float>  ret_mat(num_vertices, 3);
@@ -298,13 +298,13 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
     float time_step = 1.f;
 
     LaunchBox<threads> launch_box;
-    rxmesh.prepare_launch_box(
+    rx.prepare_launch_box(
         {Op::VV}, launch_box, (void*)simple_A_X_B_setup<float, threads>);
 
     simple_A_X_B_setup<float, threads><<<launch_box.blocks,
                                          launch_box.num_threads,
                                          launch_box.smem_bytes_dyn>>>(
-        rxmesh.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
+        rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
     A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
 
@@ -345,15 +345,15 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 
     // generate rxmesh obj
     std::string  obj_path = rxmesh_args.obj_file_name;
-    RXMeshStatic rxmesh(obj_path);
+    RXMeshStatic rx(obj_path);
 
-    uint32_t num_vertices = rxmesh.get_num_vertices();
+    uint32_t num_vertices = rx.get_num_vertices();
 
     const uint32_t threads = 256;
     const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
 
-    auto                coords = rxmesh.get_input_vertex_coordinates();
-    SparseMatrix<float> A_mat(rxmesh);
+    auto                coords = rx.get_input_vertex_coordinates();
+    SparseMatrix<float> A_mat(rx);
     DenseMatrix<float>  X_mat(num_vertices, 3);
     DenseMatrix<float>  B_mat(num_vertices, 3);
     DenseMatrix<float>  ret_mat(num_vertices, 3);
@@ -361,13 +361,13 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
     float time_step = 1.f;
 
     LaunchBox<threads> launch_box;
-    rxmesh.prepare_launch_box(
+    rx.prepare_launch_box(
         {Op::VV}, launch_box, (void*)simple_A_X_B_setup<float, threads>);
 
     simple_A_X_B_setup<float, threads><<<launch_box.blocks,
                                          launch_box.num_threads,
                                          launch_box.smem_bytes_dyn>>>(
-        rxmesh.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
+        rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
     // A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
 

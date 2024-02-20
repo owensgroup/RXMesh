@@ -34,21 +34,20 @@ TEST(RXMeshStatic, Oriented_VV_Open)
     //
 
 
-    ASSERT_TRUE(
-        import_obj(STRINGIFY(INPUT_DIR) "plane.obj", Verts, Faces));
+    ASSERT_TRUE(import_obj(STRINGIFY(INPUT_DIR) "plane.obj", Verts, Faces));
 
     // RXMesh
-    RXMeshStatic rxmesh(Faces);
+    RXMeshStatic rx(Faces);
 
-    EXPECT_FALSE(rxmesh.is_closed())
+    EXPECT_FALSE(rx.is_closed())
         << " Expected input to be open with boundaries";
 
-    auto coordinates = rxmesh.add_vertex_attribute<dataT>(Verts, "coordinates");
+    auto coordinates = rx.add_vertex_attribute<dataT>(Verts, "coordinates");
 
     // input/output container
-    auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
-    auto output = rxmesh.add_vertex_attribute<VertexHandle>(
-        "output", rxmesh.get_input_max_valence());
+    auto input  = rx.add_vertex_attribute<VertexHandle>("input", 1);
+    auto output = rx.add_vertex_attribute<VertexHandle>(
+        "output", rx.get_input_max_valence());
 
     input->reset(VertexHandle(), rxmesh::DEVICE);
     output->reset(VertexHandle(), rxmesh::DEVICE);
@@ -56,21 +55,20 @@ TEST(RXMeshStatic, Oriented_VV_Open)
     // launch box
     constexpr uint32_t      blockThreads = 320;
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(
-        {Op::VV},
-        launch_box,
-        (void*)query_kernel<blockThreads,
-                            Op::VV,
-                            VertexHandle,
-                            VertexHandle,
-                            VertexAttribute<VertexHandle>,
-                            VertexAttribute<VertexHandle>>,
-        true);
+    rx.prepare_launch_box({Op::VV},
+                          launch_box,
+                          (void*)query_kernel<blockThreads,
+                                              Op::VV,
+                                              VertexHandle,
+                                              VertexHandle,
+                                              VertexAttribute<VertexHandle>,
+                                              VertexAttribute<VertexHandle>>,
+                          true);
 
     // query
     query_kernel<blockThreads, Op::VV, VertexHandle, VertexHandle>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh.get_context(), *input, *output, true);
+            rx.get_context(), *input, *output, true);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
@@ -78,8 +76,8 @@ TEST(RXMeshStatic, Oriented_VV_Open)
     output->move(rxmesh::DEVICE, rxmesh::HOST);
     input->move(rxmesh::DEVICE, rxmesh::HOST);
 
-    RXMeshTest tester(rxmesh, Faces);
-    EXPECT_TRUE(tester.run_test(rxmesh, Faces, *input, *output));
+    RXMeshTest tester(rx, Faces);
+    EXPECT_TRUE(tester.run_test(rx, Faces, *input, *output));
 
     auto vector_length = [](const dataT x, const dataT y, const dataT z) {
         return std::sqrt(x * x + y * y + z * z);
@@ -90,10 +88,10 @@ TEST(RXMeshStatic, Oriented_VV_Open)
             std::begin(u), std::end(u), std::begin(v), 0.0);
     };
 
-    rxmesh.for_each_vertex(HOST, [&](const VertexHandle& vertex) {
+    rx.for_each_vertex(HOST, [&](const VertexHandle& vertex) {
         // the vertex 4 is the center vertex that is not boundary vertex
         // and the sum angle around it is 360
-        if (rxmesh.map_to_global(vertex) != 4) {
+        if (rx.map_to_global(vertex) != 4) {
 
             dataT sum_angles = 0;
 
@@ -143,21 +141,20 @@ TEST(RXMeshStatic, Oriented_VV_Closed)
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
-    ASSERT_TRUE(
-        import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces));
+    ASSERT_TRUE(import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces));
 
     // RXMesh
-    RXMeshStatic rxmesh(Faces);
+    RXMeshStatic rx(Faces);
 
-    EXPECT_TRUE(rxmesh.is_closed())
+    EXPECT_TRUE(rx.is_closed())
         << " Expecting input to be closed without boundaries";
 
-    auto coordinates = rxmesh.add_vertex_attribute<dataT>(Verts, "coordinates");
+    auto coordinates = rx.add_vertex_attribute<dataT>(Verts, "coordinates");
 
     // input/output container
-    auto input  = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
-    auto output = rxmesh.add_vertex_attribute<VertexHandle>(
-        "output", rxmesh.get_input_max_valence());
+    auto input  = rx.add_vertex_attribute<VertexHandle>("input", 1);
+    auto output = rx.add_vertex_attribute<VertexHandle>(
+        "output", rx.get_input_max_valence());
 
     input->reset(VertexHandle(), rxmesh::DEVICE);
     output->reset(VertexHandle(), rxmesh::DEVICE);
@@ -165,21 +162,20 @@ TEST(RXMeshStatic, Oriented_VV_Closed)
     // launch box
     constexpr uint32_t      blockThreads = 320;
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(
-        {Op::VV},
-        launch_box,
-        (void*)query_kernel<blockThreads,
-                            Op::VV,
-                            VertexHandle,
-                            VertexHandle,
-                            VertexAttribute<VertexHandle>,
-                            VertexAttribute<VertexHandle>>,
-        true);
+    rx.prepare_launch_box({Op::VV},
+                          launch_box,
+                          (void*)query_kernel<blockThreads,
+                                              Op::VV,
+                                              VertexHandle,
+                                              VertexHandle,
+                                              VertexAttribute<VertexHandle>,
+                                              VertexAttribute<VertexHandle>>,
+                          true);
 
     // query
     query_kernel<blockThreads, Op::VV, VertexHandle, VertexHandle>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh.get_context(), *input, *output, true);
+            rx.get_context(), *input, *output, true);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
@@ -187,8 +183,8 @@ TEST(RXMeshStatic, Oriented_VV_Closed)
     output->move(rxmesh::DEVICE, rxmesh::HOST);
     input->move(rxmesh::DEVICE, rxmesh::HOST);
 
-    RXMeshTest tester(rxmesh, Faces);
-    EXPECT_TRUE(tester.run_test(rxmesh, Faces, *input, *output));
+    RXMeshTest tester(rx, Faces);
+    EXPECT_TRUE(tester.run_test(rx, Faces, *input, *output));
 
 
     // Make sure orientation is accurate
@@ -203,7 +199,7 @@ TEST(RXMeshStatic, Oriented_VV_Closed)
             std::begin(u), std::end(u), std::begin(v), 0.0);
     };
 
-    rxmesh.for_each_vertex(HOST, [&](const VertexHandle& vertex) {
+    rx.for_each_vertex(HOST, [&](const VertexHandle& vertex) {
         for (uint32_t i = 0; i < (*output).get_num_attributes(); ++i) {
 
             uint32_t j = (i + 1) % output->get_num_attributes();

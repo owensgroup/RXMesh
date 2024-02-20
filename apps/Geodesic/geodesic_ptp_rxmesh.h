@@ -7,7 +7,7 @@
 constexpr float EPS = 10e-6;
 
 template <typename T>
-inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rxmesh,
+inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rx,
                             const std::vector<uint32_t>& h_seeds,
                             const std::vector<uint32_t>& h_sorted_index,
                             const std::vector<uint32_t>& h_limits,
@@ -21,31 +21,31 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rxmesh,
     report.command_line(Arg.argc, Arg.argv);
     report.device();
     report.system();
-    report.model_data(Arg.obj_file_name, rxmesh);
+    report.model_data(Arg.obj_file_name, rx);
     report.add_member("seeds", h_seeds);
     report.add_member("method", std::string("RXMesh"));
 
     // input coords
-    auto input_coord = rxmesh.get_input_vertex_coordinates();
+    auto input_coord = rx.get_input_vertex_coordinates();
 
     // toplesets
-    auto d_toplesets = rxmesh.add_vertex_attribute(toplesets, "topleset");
+    auto d_toplesets = rx.add_vertex_attribute(toplesets, "topleset");
 
 
     // RXMesh launch box
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box({rxmesh::Op::VV},
-                              launch_box,
-                              (void*)relax_ptp_rxmesh<T, blockThreads>,
-                              true);
+    rx.prepare_launch_box({rxmesh::Op::VV},
+                          launch_box,
+                          (void*)relax_ptp_rxmesh<T, blockThreads>,
+                          true);
 
 
     // Geodesic distance attribute for all vertices (seeds set to zero
     // and infinity otherwise)
-    auto rxmesh_geo = rxmesh.add_vertex_attribute<T>("geo", 1u);
+    auto rxmesh_geo = rx.add_vertex_attribute<T>("geo", 1u);
     rxmesh_geo->reset(std::numeric_limits<T>::infinity(), rxmesh::HOST);
-    rxmesh.for_each_vertex(rxmesh::HOST, [&](const VertexHandle vh) {
-        uint32_t v_id = rxmesh.map_to_global(vh);
+    rx.for_each_vertex(rxmesh::HOST, [&](const VertexHandle vh) {
+        uint32_t v_id = rx.map_to_global(vh);
         for (uint32_t s : h_seeds) {
             if (s == v_id) {
                 (*rxmesh_geo)(vh) = 0;
@@ -56,8 +56,7 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rxmesh,
     rxmesh_geo->move(rxmesh::HOST, rxmesh::DEVICE);
 
     // second buffer for geodesic distance for double buffering
-    auto rxmesh_geo_2 =
-        rxmesh.add_vertex_attribute<T>("geo2", 1u, rxmesh::DEVICE);
+    auto rxmesh_geo_2 = rx.add_vertex_attribute<T>("geo2", 1u, rxmesh::DEVICE);
 
     rxmesh_geo_2->copy_from(*rxmesh_geo, rxmesh::DEVICE, rxmesh::DEVICE);
 
@@ -88,7 +87,7 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rxmesh,
         // compute new geodesic
         relax_ptp_rxmesh<T, blockThreads>
             <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-                rxmesh.get_context(),
+                rx.get_context(),
                 *input_coord,
                 *double_buffer[!d],
                 *double_buffer[d],
@@ -128,7 +127,7 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rxmesh,
                  iter);
 
 #if USE_POLYSCOPE
-    auto ps_mesh = rxmesh.get_polyscope_mesh();
+    auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->addVertexScalarQuantity("geodesic", *rxmesh_geo);
     polyscope::show();
 #endif
