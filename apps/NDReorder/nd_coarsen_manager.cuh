@@ -23,9 +23,9 @@ namespace rxmesh {
 // less shared memory use
 
 template <uint32_t blockThreads>
-struct ALIGN(16) CoarsePatchinfo
+struct ALIGN(16) PartitionManager
 {
-    __device__ __inline__ CoarsePatchinfo()
+    __device__ __inline__ PartitionManager()
         : m_s_ev(nullptr),
           m_s_vwgt(nullptr),
           m_s_vdegree(nullptr),
@@ -38,17 +38,17 @@ struct ALIGN(16) CoarsePatchinfo
     {
     }
 
-    __device__ __inline__ CoarsePatchinfo(
+    __device__ __inline__ PartitionManager(
         cooperative_groups::thread_block& block,
         Context&                          context,
         ShmemAllocator&                   shrd_alloc,
-        uint16_t                         req_level);
+        uint16_t                          req_level);
 
     __device__ __inline__ uint16_t* num_vertices_at(uint16_t curr_level)
     {
         return m_num_vertices[curr_level];
-    }    
-    
+    }
+
     __device__ __inline__ uint16_t* num_edges_at(uint16_t curr_level)
     {
         return m_num_edges[curr_level];
@@ -64,12 +64,14 @@ struct ALIGN(16) CoarsePatchinfo
         return m_s_mapping + (m_num_vertices * curr_level);
     }
 
-    __device__ __inline__ Bitmask& get_matched_edges_bitmask(uint16_t curr_level)
+    __device__ __inline__ Bitmask& get_matched_edges_bitmask(
+        uint16_t curr_level)
     {
         return matched_bitmask_arr[curr_level];
     }
 
-    __device__ __inline__ Bitmask& get_matched_vertices_bitmask(uint16_t curr_level)
+    __device__ __inline__ Bitmask& get_matched_vertices_bitmask(
+        uint16_t curr_level)
     {
         return matched_bitmask_arr[curr_level];
     }
@@ -84,9 +86,10 @@ struct ALIGN(16) CoarsePatchinfo
         return m_s_p1_vertices[curr_level];
     }
 
-    __device__ __inline__ Bitmask& get_frontier_vertices_bitmask(uint16_t curr_level)
+    __device__ __inline__ Bitmask& get_separator_vertices_bitmask(
+        uint16_t curr_level)
     {
-        return m_s_frontier_vertices[curr_level];
+        return m_s_separator_vertices[curr_level];
     }
 
    private:
@@ -110,7 +113,6 @@ struct ALIGN(16) CoarsePatchinfo
 
     // TODO: use public for variable temporary
    public:
-
     // The topology information: edge incident vertices and face incident
     // edges from the index in the original patchinfo ev
     uint16_t* m_s_ev;
@@ -144,7 +146,7 @@ struct ALIGN(16) CoarsePatchinfo
     // for partition
     std::array<Bitmask, max_arr_size> m_s_p0_vertices;
     std::array<Bitmask, max_arr_size> m_s_p1_vertices;
-    std::array<Bitmask, max_arr_size> m_s_frontier_vertices;
+    std::array<Bitmask, max_arr_size> m_s_separator_vertices;
 
 
     // basic rxmesh info
@@ -152,11 +154,11 @@ struct ALIGN(16) CoarsePatchinfo
     Context   m_context;
 };
 
-//TODO: destroyer
+// TODO: destroyer
 
 // TODO: check all the member variable are initialized
 template <uint32_t blockThreads>
-__device__ __inline__ CoarsePatchinfo<blockThreads>::CoarsePatchinfo(
+__device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
     cooperative_groups::thread_block& block,
     Context&                          context,
     ShmemAllocator&                   shrd_alloc,
@@ -177,7 +179,7 @@ __device__ __inline__ CoarsePatchinfo<blockThreads>::CoarsePatchinfo(
     m_patch_info = m_context.m_patches_info[s_patch_id];
 
     m_s_num_vertices = shrd_alloc.alloc<uint16_t>(req_level);
-    m_s_num_edges = shrd_alloc.alloc<uint16_t>(req_level);
+    m_s_num_edges    = shrd_alloc.alloc<uint16_t>(req_level);
 
     m_s_num_vertices[0] = m_patch_info.num_vertices;
     m_s_num_edges[0]    = m_patch_info.num_edges;
@@ -207,9 +209,10 @@ __device__ __inline__ CoarsePatchinfo<blockThreads>::CoarsePatchinfo(
     m_s_matched_vertices = alloc_bm_arr(shrd_alloc, req_level, m_num_vertices);
 
     // partition bitmask
-    m_s_p0_vertices       = alloc_bm_arr(shrd_alloc, req_level, m_num_vertices);
-    m_s_p1_vertices       = alloc_bm_arr(shrd_alloc, req_level, m_num_vertices);
-    m_s_frontier_vertices = alloc_bm_arr(shrd_alloc, req_level, m_num_vertices);
+    m_s_p0_vertices = alloc_bm_arr(shrd_alloc, req_level, m_num_vertices);
+    m_s_p1_vertices = alloc_bm_arr(shrd_alloc, req_level, m_num_vertices);
+    m_s_separator_vertices =
+        alloc_bm_arr(shrd_alloc, req_level, m_num_vertices);
 
     // alloc shared memory for mapping array
     m_s_mapping = shrd_alloc.alloc<uint16_t>(req_vertex_cap);

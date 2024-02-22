@@ -24,6 +24,7 @@ void nd_reorder()
     // discard the use of attribute and use coarsen_manager instead
 
     // launch box
+    // TODO: remove the launch box and calculate the shared mem
     LaunchBox<blockThreads> launch_box;
     rx.prepare_launch_box(
         {rxmesh::Op::VE},

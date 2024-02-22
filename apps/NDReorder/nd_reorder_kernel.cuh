@@ -202,12 +202,12 @@ __device__ __inline__ void coarsening(cooperative_groups::thread_block& block,
                                       rxmesh::ShmemAllocator&  shrd_alloc,
                                       const rxmesh::PatchInfo& patch_info,
                                       uint16_t*                s_ev,
-                                      uint16_t*  s_mapping,
+                                      uint16_t*                s_mapping,
                                       rxmesh::Bitmask&         matched_edges,
                                       rxmesh::Bitmask&         matched_vertices,
-                                      uint16_t num_vertices,
-                                      uint16_t num_edges,
-                                      uint16_t curr_level)
+                                      uint16_t                 num_vertices,
+                                      uint16_t                 num_edges,
+                                      uint16_t                 curr_level)
 {
     // EV operation
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
@@ -218,7 +218,8 @@ __device__ __inline__ void coarsening(cooperative_groups::thread_block& block,
             assert(matched_vertices(v0_local_id));
             assert(matched_vertices(v1_local_id));
 
-            uint16_t coarse_id = v0_local_id < v1_local_id ? v0_local_id : v1_local_id;
+            uint16_t coarse_id =
+                v0_local_id < v1_local_id ? v0_local_id : v1_local_id;
             s_mapping[v0_local_id] = coarse_id;
             s_mapping[v1_local_id] = coarse_id;
         } else {
@@ -292,9 +293,9 @@ template <uint32_t blockThreads>
 __device__ __inline__ void uncoarsening(cooperative_groups::thread_block& block,
                                         rxmesh::ShmemAllocator& shrd_alloc,
                                         uint16_t*               s_ev,
-                                        uint16_t*  s_mapping,
+                                        uint16_t*               s_mapping,
                                         rxmesh::Bitmask&        matched_edges,
-                                        rxmesh::Bitmask&    matched_vertices,
+                                        rxmesh::Bitmask& matched_vertices,
                                         rxmesh::Bitmask& s_partition_a_v,
                                         rxmesh::Bitmask& s_partition_b_v,
                                         rxmesh::Bitmask& s_separator_v,
@@ -304,7 +305,8 @@ __device__ __inline__ void uncoarsening(cooperative_groups::thread_block& block,
                                         uint16_t         num_vertices,
                                         uint16_t         num_edges)
 {
-
+    //TODO: make this a coarsen manager
+    //TODO: all the calculation for shared mem in one place
     uint16_t* s_ve_offset = shrd_alloc.alloc<uint16_t>(num_edges * 2);
     uint16_t* s_ve_output = shrd_alloc.alloc<uint16_t>(num_edges * 2);
 
@@ -324,10 +326,12 @@ __device__ __inline__ void uncoarsening(cooperative_groups::thread_block& block,
 
         s_partition_a_v(v) = s_coarse_partition_a_v(s_mapping(v));
         s_partition_b_v(v) = s_coarse_partition_b_v(s_mapping(v));
-        s_separator_v(v) = s_coarse_separator_v(s_mapping(v));
+        s_separator_v(v)   = s_coarse_separator_v(s_mapping(v));
     }
 
     block.sync();
+
+    
 }
 
 
@@ -341,13 +345,13 @@ __global__ static void nd_main(rxmesh::Context                   context,
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CoarsePatchinfo<blockThreads> coarsen_graph(
+    PartitionManager<blockThreads> coarsen_graph(
         block, context, shrd_alloc, req_levels);
 
     // iteration num known before kernel -> shared mem known before kernel
     int i = 0;
     while (i < req_levels) {
-        // device matching query specifically on CoarsePatchinfo
+        // device matching query specifically on PartitionManager
 
         // shared mem preprocessing here
         // calculating VE
