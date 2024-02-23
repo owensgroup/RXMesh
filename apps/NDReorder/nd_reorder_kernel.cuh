@@ -10,39 +10,6 @@
 
 // TODO: create a branch in main repo and sync with this
 
-// TODO: could be a coarsen manager member function, but that would require
-__device__ __inline__ bool coarsen_owned(rxmesh::LocalEdgeT       v_handle,
-                                         uint16_t                 level,
-                                         const rxmesh::PatchInfo& patch_info)
-{
-    assert(level >= 0);
-
-    if (level > 0) {
-        return true;
-    } else {
-        return patch_info.is_owned(v_handle);
-    }
-
-    assert(1 == 0);
-    return true;
-}
-
-__device__ __inline__ bool coarsen_owned(rxmesh::LocalVertexT     e_handle,
-                                         uint16_t                 level,
-                                         const rxmesh::PatchInfo& patch_info)
-{
-    assert(level >= 0);
-
-    if (level > 0) {
-        return true;
-    } else {
-        return patch_info.is_owned(e_handle);
-    }
-
-    assert(1 == 0);
-    return true;
-}
-
 // VE query example computed from EV (s_ev)
 // 1. Copy s_ev into s_ve_offset
 // 2. call v_e(num_vertices, num_edges, s_ve_offset, s_ve_output, nullptr);
@@ -68,7 +35,6 @@ __device__ __inline__ void matching(cooperative_groups::thread_block& block,
                                     uint16_t*                s_ev,
                                     rxmesh::Bitmask&         matched_edges,
                                     rxmesh::Bitmask&         matched_vertices,
-
                                     uint16_t num_vertices,
                                     uint16_t num_edges,
                                     uint16_t curr_level)
