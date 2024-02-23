@@ -2,6 +2,8 @@ add_executable(XPBD)
 
 set(SOURCE_LIST
     xpbd.cu
+	remesh.cuh
+	svd.cuh
 )
 
 target_sources(XPBD 

@@ -382,19 +382,6 @@ class RXMesh
     template <typename LocalT>
     uint16_t max_lp_hashtable_capacity() const
     {
-#ifdef FLAT_ARRAY_FOR_LP_HASHTABLE
-        if constexpr (std::is_same_v<LocalT, LocalVertexT>) {
-            return get_per_patch_max_vertices_capacity();
-        }
-
-        if constexpr (std::is_same_v<LocalT, LocalEdgeT>) {
-            return get_per_patch_max_edges_capacity();
-        }
-
-        if constexpr (std::is_same_v<LocalT, LocalFaceT>) {
-            return get_per_patch_max_faces_capacity();
-        }
-#else
         if constexpr (std::is_same_v<LocalT, LocalVertexT>) {
             // return find_next_prime_number(static_cast<uint16_t>(
             //     std::ceil(m_capacity_factor *
@@ -416,7 +403,6 @@ class RXMesh
             //     / m_lp_hashtable_load_factor)));
             return m_max_capacity_lp_f;
         }
-#endif
     }
 
     void build(const std::vector<std::vector<uint32_t>>& fv,

@@ -24,43 +24,42 @@ void filtering_rxmesh(const std::string                  file_path,
            "greater than maxVVSize. Should increase maxVVSize to "
         << max_neighbour_size << " to avoid illegal memory access";
 
-    RXMeshStatic rxmesh(file_path);
+    RXMeshStatic rx(file_path);
 
     // Report
     Report report("Filtering_RXMesh");
     report.command_line(Arg.argc, Arg.argv);
     report.device();
     report.system();
-    report.model_data(Arg.obj_file_name, rxmesh);
+    report.model_data(Arg.obj_file_name, rx);
     report.add_member("method", std::string("RXMesh"));
     report.add_member("num_filter_iter", Arg.num_filter_iter);
 
 
     // input coords
-    auto coords = rxmesh.get_input_vertex_coordinates();
+    auto coords = rx.get_input_vertex_coordinates();
 
     // Vertex normals (only on device)
-    auto vertex_normal = rxmesh.add_vertex_attribute<T>("vn", 3, DEVICE);
+    auto vertex_normal = rx.add_vertex_attribute<T>("vn", 3, DEVICE);
     vertex_normal->reset(0, DEVICE);
 
 
     // Filtered coordinates
     auto filtered_coord =
-        rxmesh.add_vertex_attribute<T>("filtered", 3, LOCATION_ALL);
+        rx.add_vertex_attribute<T>("filtered", 3, LOCATION_ALL);
     filtered_coord->reset(0, LOCATION_ALL);
 
     // vertex normal launch box
     constexpr uint32_t          vn_block_threads = 256;
     LaunchBox<vn_block_threads> vn_launch_box;
-    rxmesh.prepare_launch_box(
-        {rxmesh::Op::FV},
-        vn_launch_box,
-        (void*)compute_vertex_normal<T, vn_block_threads>);
+    rx.prepare_launch_box({rxmesh::Op::FV},
+                          vn_launch_box,
+                          (void*)compute_vertex_normal<T, vn_block_threads>);
 
     // filter launch box
     constexpr uint32_t              filter_block_threads = 256;
     LaunchBox<filter_block_threads> filter_launch_box;
-    rxmesh.prepare_launch_box(
+    rx.prepare_launch_box(
         {rxmesh::Op::VV},
         filter_launch_box,
         (void*)bilateral_filtering<T, filter_block_threads, maxVVSize>);
@@ -81,12 +80,12 @@ void filtering_rxmesh(const std::string                  file_path,
             <<<vn_launch_box.blocks,
                vn_block_threads,
                vn_launch_box.smem_bytes_dyn>>>(
-                rxmesh.get_context(), *double_buffer[d], *vertex_normal);
+                rx.get_context(), *double_buffer[d], *vertex_normal);
 
         bilateral_filtering<T, filter_block_threads, maxVVSize>
             <<<filter_launch_box.blocks,
                filter_block_threads,
-               filter_launch_box.smem_bytes_dyn>>>(rxmesh.get_context(),
+               filter_launch_box.smem_bytes_dyn>>>(rx.get_context(),
                                                    *double_buffer[d],
                                                    *double_buffer[!d],
                                                    *vertex_normal);
@@ -106,15 +105,15 @@ void filtering_rxmesh(const std::string                  file_path,
     coords->copy_from(*double_buffer[d], rxmesh::DEVICE, rxmesh::HOST);
 
     // output to obj
-    // rxmesh.export_obj(STRINGIFY(OUTPUT_DIR) "output_rxmesh" +
-    //                      std::to_string(Arg.num_filter_iter) + ".obj",
-    //                  *coords);
+    // rx.export_obj(STRINGIFY(OUTPUT_DIR) "output_rxmesh" +
+    //                  std::to_string(Arg.num_filter_iter) + ".obj",
+    //              *coords);
 
 
     // Verify
     const T tol = 0.01;
-    rxmesh.for_each_vertex(HOST, [&](const VertexHandle& vh) {
-        uint32_t           v_id = rxmesh.map_to_global(vh);
+    rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
+        uint32_t           v_id = rx.map_to_global(vh);
         const Vector<3, T> gt(ground_truth[v_id][0],
                               ground_truth[v_id][1],
                               ground_truth[v_id][2]);

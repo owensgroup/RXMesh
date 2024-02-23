@@ -35,7 +35,7 @@ __global__ static void stats_kernel(const rxmesh::Context            context,
     query.compute_vertex_valence(block, shrd_alloc);
     query.dispatch<Op::EV>(block, shrd_alloc, compute_edge_len);
 
-    detail::for_each_vertex(query.get_patch_info(), [&](const VertexHandle vh) {
+    for_each_vertex(query.get_patch_info(), [&](const VertexHandle vh) {
         vertex_valence(vh) = query.vertex_valence(vh);
     });
 }
@@ -62,7 +62,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
 
     //__shared__ int s_num_splits;
-    //if (threadIdx.x == 0) {
+    // if (threadIdx.x == 0) {
     //    s_num_splits = 0;
     //}
     if (cavity.patch_id() == INVALID32) {
@@ -155,10 +155,10 @@ __global__ static void __launch_bounds__(blockThreads)
     cavity.epilogue(block);
 
     if (cavity.is_successful()) {
-        //if (threadIdx.x == 0) {
+        // if (threadIdx.x == 0) {
         //    ::atomicAdd(d_buffer, s_num_splits);
         //}
-        detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+        for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (is_updated(eh.local_id())) {
                 edge_status(eh) = ADDED;
             }
@@ -182,7 +182,7 @@ __global__ static void __launch_bounds__(blockThreads)
     query.compute_vertex_valence(block, shrd_alloc);
     block.sync();
 
-    detail::for_each_vertex(query.get_patch_info(), [&](VertexHandle vh) {
+    for_each_vertex(query.get_patch_info(), [&](VertexHandle vh) {
         v_valence(vh) = query.vertex_valence(vh);
     });
 }
@@ -208,7 +208,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
 
     //__shared__ int s_num_collapses;
-    //if (threadIdx.x == 0) {
+    // if (threadIdx.x == 0) {
     //    s_num_collapses = 0;
     //}
 
@@ -305,7 +305,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
 
     // 3. create cavity for the surviving edges
-    detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+    for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
         if (e_collapse(eh.local_id())) {
             cavity.create(eh);
         } else {
@@ -408,10 +408,10 @@ __global__ static void __launch_bounds__(blockThreads)
     block.sync();
 
     if (cavity.is_successful()) {
-        //if (threadIdx.x == 0) {
+        // if (threadIdx.x == 0) {
         //    ::atomicAdd(d_buffer, s_num_collapses);
         //}
-        detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+        for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (is_updated(eh.local_id())) {
                 edge_status(eh) = ADDED;
             }
@@ -438,7 +438,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
 
     //__shared__ int s_num_flips;
-    //if (threadIdx.x == 0) {
+    // if (threadIdx.x == 0) {
     //    s_num_flips = 0;
     //}
     if (cavity.patch_id() == INVALID32) {
@@ -553,7 +553,7 @@ __global__ static void __launch_bounds__(blockThreads)
     block.sync();
 
     // 3. create cavity for the surviving edges
-    detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+    for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
         if (e_flip(eh.local_id())) {
             cavity.create(eh);
         } else {
@@ -595,10 +595,10 @@ __global__ static void __launch_bounds__(blockThreads)
     block.sync();
 
     if (cavity.is_successful()) {
-        //if (threadIdx.x == 0) {
+        // if (threadIdx.x == 0) {
         //    ::atomicAdd(d_buffer, s_num_flips);
         //}
-        detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+        for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (is_updated(eh.local_id())) {
                 edge_status(eh) = ADDED;
             }

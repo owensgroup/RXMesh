@@ -6,7 +6,7 @@
 #include "rxmesh/util/meta.h"
 
 namespace rxmesh {
-namespace detail {
+
 template <typename LambdaT>
 __device__ __inline__ void for_each_vertex(const PatchInfo patch_info,
                                            LambdaT         apply)
@@ -21,6 +21,7 @@ __device__ __inline__ void for_each_vertex(const PatchInfo patch_info,
         }
     }
 }
+namespace detail {
 template <typename LambdaT>
 __global__ void for_each_vertex(const uint32_t   num_patches,
                                 const PatchInfo* patch_info,
@@ -31,6 +32,7 @@ __global__ void for_each_vertex(const uint32_t   num_patches,
         for_each_vertex(patch_info[p_id], apply);
     }
 }
+}  // namespace detail
 
 
 template <typename LambdaT>
@@ -47,6 +49,7 @@ __device__ __inline__ void for_each_edge(const PatchInfo patch_info,
         }
     }
 }
+namespace detail {
 template <typename LambdaT>
 __global__ void for_each_edge(const uint32_t   num_patches,
                               const PatchInfo* patch_info,
@@ -57,6 +60,7 @@ __global__ void for_each_edge(const uint32_t   num_patches,
         for_each_edge(patch_info[p_id], apply);
     }
 }
+}  // namespace detail
 
 
 template <typename LambdaT>
@@ -72,6 +76,8 @@ __device__ __inline__ void for_each_face(const PatchInfo patch_info,
         }
     }
 }
+
+namespace detail {
 template <typename LambdaT>
 __global__ void for_each_face(const uint32_t   num_patches,
                               const PatchInfo* patch_info,
@@ -82,7 +88,6 @@ __global__ void for_each_face(const uint32_t   num_patches,
         for_each_face(patch_info[p_id], apply);
     }
 }
-
 }  // namespace detail
 
 
@@ -121,14 +126,14 @@ __device__ __inline__ void for_each(const Context& context, computeT compute_op)
                 "for_each() since input template parameter operation is Op::V, "
                 "the "
                 "lambda function should take VertexHandle as an input");
-            detail::for_each_vertex(context.m_patches_info[p_id], compute_op);
+            for_each_vertex(context.m_patches_info[p_id], compute_op);
         }
         if constexpr (op == Op::E) {
             static_assert(std::is_same_v<ComputeHandleT, EdgeHandle>,
                           "for_each() since input template parameter operation "
                           "is Op::E, the "
                           "lambda function should take EdgeHandle as an input");
-            detail::for_each_edge(context.m_patches_info[p_id], compute_op);
+            for_each_edge(context.m_patches_info[p_id], compute_op);
         }
         if constexpr (op == Op::F) {
             static_assert(
@@ -136,7 +141,7 @@ __device__ __inline__ void for_each(const Context& context, computeT compute_op)
                 "for_each() since input template parameter operation is "
                 "Op::F, the lambda function should take FaceHandle as an "
                 "input");
-            detail::for_each_face(context.m_patches_info[p_id], compute_op);
+            for_each_face(context.m_patches_info[p_id], compute_op);
         }
     }
     __syncthreads();

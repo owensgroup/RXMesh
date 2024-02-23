@@ -187,7 +187,7 @@ int main(int argc, char** argv)
 
 #if USE_POLYSCOPE
     polyscope::view::upDir                             = polyscope::UpDir::ZUp;
-    polyscope::options::groundPlaneHeightFactor        = 0.2;
+    polyscope::options::groundPlaneHeightFactor        = 1.5;
     polyscope::options::openImGuiWindowForUserCallback = false;
 #endif
     // set device
@@ -195,6 +195,10 @@ int main(int argc, char** argv)
     cuda_query(device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cloth.obj");
+
+    // scale mesh info unit bounding box
+    rx.scale({0.f, 0.f, 0.f}, {1.f, 1.f, 1.f});
+
 
     constexpr uint32_t blockThreads = 256;
 
@@ -208,14 +212,13 @@ int main(int argc, char** argv)
     const float    stretch_compliance = 1e-7;
     const float    bending_compliance = 1e-6;
     const float    mass               = 1.0;
-    const bool     XPBD               = true;
+    const bool     XPBD               = false;
 
     // fixtures paramters
-    const float    box_len  = 0.001;
-    const Vector3f boxes[4] = {{0.25, 0.75, 0.75},
-                               {0.75, 0.75, 0.75},
-                               {0.25, 0.25, 0.75},
-                               {0.75, 0.25, 0.75}};
+    const Vector4f fixure_spheres[4] = {{0.f, 1.f, 0.f, 0.004},
+                                        {1.f, 1.f, 0.f, 0.004},
+                                        {0.f, 0.f, 0.f, 0.004},
+                                        {1.f, 0.f, 0.f, 0.004}};
 
     // mesh data
     auto x     = rx.get_input_vertex_coordinates();
@@ -230,19 +233,20 @@ int main(int argc, char** argv)
 
 
     // initialize
-    rx.for_each_vertex(DEVICE,
-                       [mass, boxes, box_len, invM = *invM, x = *x] __device__(
-                           VertexHandle vh) {
-                           invM(vh, 0) = mass;
-                           Vector3f v(x(vh, 0), x(vh, 1), x(vh, 2));
-                           float    eps = std::numeric_limits<float>::epsilon();
-                           if ((v - boxes[0]).norm2() - box_len < eps ||
-                               (v - boxes[1]).norm2() - box_len < eps ||
-                               (v - boxes[2]).norm2() - box_len < eps ||
-                               (v - boxes[3]).norm2() - box_len < eps) {
-                               invM(vh, 0) = 0;
-                           }
-                       });
+    rx.for_each_vertex(
+        DEVICE,
+        [mass, fixure_spheres, invM = *invM, x = *x] __device__(
+            VertexHandle vh) {
+            invM(vh, 0) = mass;
+            Vector4f v(x(vh, 0), x(vh, 1), x(vh, 2), 0.f);
+            float    eps = std::numeric_limits<float>::epsilon();
+            if ((v - fixure_spheres[0]).norm2() - fixure_spheres[0][3] < eps ||
+                (v - fixure_spheres[1]).norm2() - fixure_spheres[1][3] < eps ||
+                (v - fixure_spheres[2]).norm2() - fixure_spheres[2][3] < eps ||
+                (v - fixure_spheres[3]).norm2() - fixure_spheres[3][3] < eps) {
+                invM(vh, 0) = 0;
+            }
+        });
 
     LaunchBox<blockThreads> init_edges_lb;
     LaunchBox<blockThreads> solve_stretch_lb;

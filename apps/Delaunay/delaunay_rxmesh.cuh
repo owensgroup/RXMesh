@@ -142,7 +142,7 @@ __global__ static void __launch_bounds__(blockThreads)
     block.sync();
 
     // 3. create cavity for the surviving edges
-    detail::for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+    for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
         if (e_flip(eh.local_id())) {
             cavity.create(eh);
         }

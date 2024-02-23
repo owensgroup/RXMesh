@@ -83,8 +83,8 @@ __global__ static void measure_wasted_work_kernel(rxmesh::Context context,
         CavityManager<blockThreads, CavityOp::E> cavity(
             block, context, shrd_alloc, false);
 
-        detail::for_each_edge(cavity.patch_info(),
-                              [&](const EdgeHandle eh) { cavity.create(eh); });
+        for_each_edge(cavity.patch_info(),
+                      [&](const EdgeHandle eh) { cavity.create(eh); });
 
         block.sync();
 

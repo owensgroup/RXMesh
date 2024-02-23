@@ -14,36 +14,35 @@ TEST(RXMeshStatic, DISABLED_HigherQueries)
 
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
-    ASSERT_TRUE(import_obj(
-        STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces));
+    ASSERT_TRUE(import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces));
 
     // RXMesh
-    RXMeshStatic rxmesh(Faces);
+    RXMeshStatic rx(Faces);
 
 
     // input/output container
-    auto input = rxmesh.add_vertex_attribute<VertexHandle>("input", 1);
+    auto input = rx.add_vertex_attribute<VertexHandle>("input", 1);
     input->reset(VertexHandle(), rxmesh::DEVICE);
 
     // we assume that every vertex could store up to num_vertices as its
     // neighbor vertices which is a bit excessive
-    auto output = rxmesh.add_vertex_attribute<VertexHandle>(
-        "output", rxmesh.get_num_vertices());
+    auto output =
+        rx.add_vertex_attribute<VertexHandle>("output", rx.get_num_vertices());
     output->reset(VertexHandle(), rxmesh::DEVICE);
 
     // launch box
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;
-    rxmesh.prepare_launch_box(
+    rx.prepare_launch_box(
         {Op::VV}, launch_box, (void*)higher_query<blockThreads, Op::VV>, false);
 
 
-    RXMeshTest tester(rxmesh, Faces);
+    RXMeshTest tester(rx, Faces);
 
     // launch
     higher_query<blockThreads, Op::VV>
         <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-            rxmesh.get_context(), *input, *output);
+            rx.get_context(), *input, *output);
 
     CUDA_ERROR(cudaGetLastError());
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -53,5 +52,5 @@ TEST(RXMeshStatic, DISABLED_HigherQueries)
     input->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // verify
-    EXPECT_TRUE(tester.run_test(rxmesh, Faces, *input, *output, true));
+    EXPECT_TRUE(tester.run_test(rx, Faces, *input, *output, true));
 }

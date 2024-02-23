@@ -12,24 +12,23 @@ TEST(RXMeshStatic, ForEach)
 
     cuda_query(rxmesh_args.device_id);
 
-    RXMeshStatic rxmesh_static(STRINGIFY(INPUT_DIR) "cube.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cube.obj");
 
     std::atomic_uint32_t num_v = 0;
     std::atomic_uint32_t num_e = 0;
     std::atomic_uint32_t num_f = 0;
 
-    rxmesh_static.for_each_vertex(HOST,
-                                  [&](const VertexHandle vh) { num_v++; });
+    rx.for_each_vertex(HOST, [&](const VertexHandle vh) { num_v++; });
 
-    rxmesh_static.for_each_edge(HOST, [&](const EdgeHandle eh) { num_e++; });
+    rx.for_each_edge(HOST, [&](const EdgeHandle eh) { num_e++; });
 
-    rxmesh_static.for_each_face(HOST, [&](const FaceHandle fh) { num_f++; });
+    rx.for_each_face(HOST, [&](const FaceHandle fh) { num_f++; });
 
-    EXPECT_EQ(num_v, rxmesh_static.get_num_vertices());
+    EXPECT_EQ(num_v, rx.get_num_vertices());
 
-    EXPECT_EQ(num_e, rxmesh_static.get_num_edges());
+    EXPECT_EQ(num_e, rx.get_num_edges());
 
-    EXPECT_EQ(num_f, rxmesh_static.get_num_faces());
+    EXPECT_EQ(num_f, rx.get_num_faces());
 }
 
 

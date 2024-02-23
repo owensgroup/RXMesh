@@ -146,48 +146,48 @@ __global__ static void mcf_A_X_setup(
 }
 
 template <typename T>
-void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rxmesh,
+void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
                               const std::vector<std::vector<T>>& ground_truth)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
-    uint32_t num_vertices = rxmesh.get_num_vertices();
-    auto     coords       = rxmesh.get_input_vertex_coordinates();
+    uint32_t num_vertices = rx.get_num_vertices();
+    auto     coords       = rx.get_input_vertex_coordinates();
 
-    SparseMatrix<float> A_mat(rxmesh);
+    SparseMatrix<float> A_mat(rx);
     DenseMatrix<float>  X_mat(num_vertices, 3);
     DenseMatrix<float>  B_mat(num_vertices, 3);
 
     RXMESH_INFO("use_uniform_laplace: {}, time_step: {}",
-           Arg.use_uniform_laplace,
-           Arg.time_step);
+                Arg.use_uniform_laplace,
+                Arg.time_step);
 
     // B set up
     LaunchBox<blockThreads> launch_box_B;
-    rxmesh.prepare_launch_box({Op::VV},
-                              launch_box_B,
-                              (void*)mcf_B_setup<float, blockThreads>,
-                              !Arg.use_uniform_laplace);
+    rx.prepare_launch_box({Op::VV},
+                          launch_box_B,
+                          (void*)mcf_B_setup<float, blockThreads>,
+                          !Arg.use_uniform_laplace);
 
     mcf_B_setup<float, blockThreads><<<launch_box_B.blocks,
                                        launch_box_B.num_threads,
                                        launch_box_B.smem_bytes_dyn>>>(
-        rxmesh.get_context(), *coords, B_mat, Arg.use_uniform_laplace);
+        rx.get_context(), *coords, B_mat, Arg.use_uniform_laplace);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
     // A and X set up
     LaunchBox<blockThreads> launch_box_A_X;
-    rxmesh.prepare_launch_box({Op::VV},
-                              launch_box_A_X,
-                              (void*)mcf_A_X_setup<float, blockThreads>,
-                              !Arg.use_uniform_laplace);
+    rx.prepare_launch_box({Op::VV},
+                          launch_box_A_X,
+                          (void*)mcf_A_X_setup<float, blockThreads>,
+                          !Arg.use_uniform_laplace);
 
     mcf_A_X_setup<float, blockThreads>
         <<<launch_box_A_X.blocks,
            launch_box_A_X.num_threads,
-           launch_box_A_X.smem_bytes_dyn>>>(rxmesh.get_context(),
+           launch_box_A_X.smem_bytes_dyn>>>(rx.get_context(),
                                             *coords,
                                             A_mat,
                                             X_mat,
@@ -202,9 +202,9 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rxmesh,
     const T tol     = 0.001;
     T       tmp_tol = tol;
     bool    passed  = true;
-    rxmesh.for_each_vertex(HOST, [&](const VertexHandle vh) {
-        uint32_t v_id = rxmesh.map_to_global(vh);
-        uint32_t v_linear_id = rxmesh.linear_id(vh);
+    rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
+        uint32_t v_id        = rx.map_to_global(vh);
+        uint32_t v_linear_id = rx.linear_id(vh);
 
         T a = X_mat(v_linear_id, 0);
 
@@ -214,9 +214,9 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rxmesh,
 
             if (tmp_tol > tol) {
                 RXMESH_WARN("val: {}, truth: {}, tol: {}\n",
-                       X_mat(v_linear_id, i),
-                       ground_truth[v_id][i],
-                       tmp_tol);
+                            X_mat(v_linear_id, i),
+                            ground_truth[v_id][i],
+                            tmp_tol);
                 passed = false;
                 break;
             }

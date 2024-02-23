@@ -155,6 +155,7 @@ struct SparseMatrix
           m_spmm_buffer_size(0),
           m_spmv_buffer_size(0),
           m_use_reorder(false),
+          m_reorder_allocated(false),
           m_allocated(LOCATION_NONE)
     {
         using namespace rxmesh;
