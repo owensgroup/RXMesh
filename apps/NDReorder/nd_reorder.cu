@@ -18,8 +18,10 @@ void nd_reorder()
 
     RXMeshStatic rx(Arg.obj_file_name);
 
-    // input coordinates
-    auto coords = *rx.get_input_vertex_coordinates();
+    auto v_reorder =
+        rx.add_vertex_attribute<uint16_t>("v_reorder", 1, rxmesh::LOCATION_ALL);
+
+    uint16_t req_levels = 5;
 
     // discard the use of attribute and use coarsen_manager instead
 
@@ -27,13 +29,15 @@ void nd_reorder()
     // TODO: remove the launch box and calculate the shared mem
     LaunchBox<blockThreads> launch_box;
     rx.prepare_launch_box(
-        {rxmesh::Op::VE},
-        launch_box,
-        (void*)nd_main<blockThreads>);
+        {rxmesh::Op::VE}, launch_box, (void*)nd_main<blockThreads>);
 
-    nd_main<blockThreads><<<launch_box.blocks,
-                               launch_box.num_threads,
-                               launch_box.smem_bytes_dyn>>>(rx.get_context());
+    uint32_t blocks         = rx.get_num_patches();
+    uint32_t threads        = blockThreads;
+    size_t   smem_bytes_dyn = 0;
+
+
+    nd_main<blockThreads><<<blocks, threads, smem_bytes_dyn>>>(
+        rx.get_context(), *v_reorder, req_levels);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 }
