@@ -43,6 +43,24 @@ struct ALIGN(16) PartitionManager
         ShmemAllocator&                   shrd_alloc,
         uint16_t                          req_level);
 
+    // VE query example computed from EV (s_ev)
+    // 1. Copy s_ev into s_ve_offset
+    // 2. call v_e(num_vertices, num_edges, s_ve_offset, s_ve_output, nullptr);
+    // for(uint16_t v=threadIdx.x; v<num_vertices; v+=blockthreads){
+    //     uint16_t start = s_ve_offset[v];
+    //     uint16_t end = s_ve_offset[v+1];
+    //     for(uint16_t e=start; e<end;e++){
+    //         uint16_t edge = s_ve_output[e];
+    //
+    //     }
+    // }
+
+    // EV query example
+    // for(uint16_t e=threadIdx.x; e< num_edges; e+= blockThreads){
+    //     uint16_t v0_local_id = s_ev[2*e];
+    //     uint16_t v1_local_id = s_ev[2*e+1];
+    // }
+
 
     __device__ __inline__ void matching(cooperative_groups::thread_block& block,
                                         rxmesh::ShmemAllocator& shrd_alloc,
@@ -500,30 +518,36 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
     block.sync();
 }
 
-// template <uint32_t blockThreads>
-// __device__ __inline__ void
-// PartitionManager<blockThreads>::partition(cooperative_groups::thread_block&
-// block,
-//                                      rxmesh::Context& context,
-//                                      rxmesh::ShmemAllocator& shrd_alloc)
-// {
-//     // TODO: use the active bitmask for non-continuous v_id
-//     // TODO: check the size indicating
+template <uint32_t blockThreads>
+__device__ __inline__ void
+PartitionManager<blockThreads>::partition(cooperative_groups::thread_block& block,
+                                     rxmesh::ShmemAllocator& shrd_alloc, 
+                                     uint16_t curr_level)
+{
+    // TODO: use the active bitmask for non-continuous v_id
+    // TODO: check the size indicating
+    uint16_t  num_vertices       = m_s_num_vertices[curr_level];
+    Bitmask&  coarse_p0_vertices = get_p0_vertices_bitmask(curr_level + 1);
+    Bitmask&  coarse_p1_vertices = get_p1_vertices_bitmask(curr_level + 1);
 
-//     // bi_assignment_ggp(
-//     //     /*cooperative_groups::thread_block& */ block,
-//     //     /* const uint16_t                   */ num_vertices,
-//     //     /* const Bitmask&                   */ s_owned_v,
-//     //     /* const Bitmask&                   */ s_active_v,
-//     //     /* const uint16_t*                  */ m_s_vv_offset,
-//     //     /* const uint16_t*                  */ m_s_vv,
-//     //     /* Bitmask&                         */ s_assigned_v,
-//     //     /* Bitmask&                         */ s_current_frontier_v,
-//     //     /* Bitmask&                         */ s_next_frontier_v,
-//     //     /* Bitmask&                         */ s_partition_a_v,
-//     //     /* Bitmask&                         */ s_partition_b_v,
-//     //     /* int                              */ num_iter);
-// }
+    
+    int num_iter = 100;
+
+
+    bi_assignment_ggp(
+        /*cooperative_groups::thread_block& */ block,
+        /* const uint16_t                   */ num_vertices,
+        /* const Bitmask&                   */ s_owned_v,
+        /* const Bitmask&                   */ s_active_v,
+        /* const uint16_t*                  */ m_s_vv_offset,
+        /* const uint16_t*                  */ m_s_vv,
+        /* Bitmask&                         */ s_assigned_v,
+        /* Bitmask&                         */ s_current_frontier_v,
+        /* Bitmask&                         */ s_next_frontier_v,
+        /* Bitmask&                         */ coarse_p0_vertices,
+        /* Bitmask&                         */ coarse_p1_vertices,
+        /* int                              */ num_iter);
+}
 
 template <uint32_t blockThreads>
 __device__ __inline__ void PartitionManager<blockThreads>::uncoarsening(
