@@ -20,7 +20,7 @@ __global__ static void nd_main(rxmesh::Context                   context,
     PartitionManager<blockThreads> coarsen_graph(
         block, context, shrd_alloc, req_levels);
 
-    iteration num known before kernel -> shared mem known before kernel
+    // iteration num known before kernel -> shared mem known before kernel
     int i = 0;
     while (i < req_levels) {
         coarsen_graph.matching(block, shared_alloc, i);
@@ -29,7 +29,7 @@ __global__ static void nd_main(rxmesh::Context                   context,
     }
 
     // multi-level bipartition one block per patch
-    partition(block, shared_alloc, i);
+    coarsen_graph.partition(block, shared_alloc, i);
 
     i -= 1;
     while (i > 0) {
