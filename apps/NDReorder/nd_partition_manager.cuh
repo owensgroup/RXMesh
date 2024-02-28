@@ -9,6 +9,7 @@
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/util.cuh"
 #include "rxmesh/patch_info.h"
+#include "rxmesh/rxmesh_dynamic.h"
 
 #include "rxmesh/attribute.h"
 
@@ -43,7 +44,6 @@ struct ALIGN(16) PartitionManager
         uint16_t                          req_level);
 
     __device__ __inline__ void matching(cooperative_groups::thread_block& block,
-                                        rxmesh::ShmemAllocator& shrd_alloc,
                                         uint16_t                curr_level);
 
     __device__ __inline__ void coarsening(
@@ -51,6 +51,10 @@ struct ALIGN(16) PartitionManager
         uint16_t                          curr_level);
 
     __device__ __inline__ void uncoarsening(
+        cooperative_groups::thread_block& block,
+        uint16_t                          curr_level);
+
+    __device__ __inline__ void partition(
         cooperative_groups::thread_block& block,
         uint16_t                          curr_level);
 
@@ -210,15 +214,23 @@ struct ALIGN(16) PartitionManager
     }
 
     // set as max v size
-    __device__ __inline__ Bitmask& get_new_tmp_bitmask_active_v() {
+    __device__ __inline__ Bitmask& get_new_tmp_bitmask_active_v(cooperative_groups::thread_block& block) {
         m_tmp_active_vertices.reset(block);
         return m_tmp_active_vertices;
     }
 
     // set as max e size
-    __device__ __inline__ Bitmask& get_new_tmp_bitmask_active_e() {
+    __device__ __inline__ Bitmask& get_new_tmp_bitmask_active_e(cooperative_groups::thread_block& block) {
         m_tmp_active_edges.reset(block);
         return m_tmp_active_edges;
+    }
+
+    __device__ __inline__ void get_new_temp_partition_bitmask(cooperative_groups::thread_block& block) {
+        m_tmp_assigned_v.reset(block);         
+        m_tmp_current_frontier_v.reset(block); 
+        m_tmp_next_frontier_v.reset(block);    
+        m_tmp_coarse_p0_v.reset(block);        
+        m_tmp_coarse_p1_v.reset(block);        
     }
 
     // TODO: use public for variable temporary
@@ -403,13 +415,13 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
     // TODO: use edge priority to replace the id for selecting edges
     // TODO: allocate all the shared mem in the constructor
 
-    rxmesh::Bitmask& active_edges = get_new_tmp_bitmask_active_e();
+    rxmesh::Bitmask& active_edges = get_new_tmp_bitmask_active_e(block);
 
     // Get VE data here to avoid redundant computation
     get_new_temp_ve(block, s_ev, num_vertices, num_edges);
 
     while (float(s_num_active_vertices[0]) / float(num_vertices) > 0.25) {
-        uint16_t* s_e_chosen_by_v = get_init_attribute_v_arr(num_vertices);
+        uint16_t* s_e_chosen_by_v = get_new_tmp_attribute_v_arr(num_vertices);
         block.sync();
 
         // VE operation
@@ -576,11 +588,12 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
 {
     // TODO: use the active bitmask for non-continuous v_id
     // TODO: check the size indicating
-    uint16_t num_vertices       = m_s_num_vertices[curr_level];
-    uint16_t num_edges  = m_s_num_edges[curr_level];
+    const uint16_t num_vertices       = m_s_num_vertices[curr_level];
+    const uint16_t num_edges  = m_s_num_edges[curr_level];
+    uint16_t* s_ev             = get_ev(curr_level);
     Bitmask& coarse_p0_vertices = get_p0_vertices_bitmask(curr_level + 1);
     Bitmask& coarse_p1_vertices = get_p1_vertices_bitmask(curr_level + 1);
-    Bitmask& active_vertices = get_new_tmp_bitmask_active_v();
+    Bitmask& active_vertices = get_new_tmp_bitmask_active_v(block);
     
     int num_iter = 100;
 
@@ -594,15 +607,18 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
 
     // VV operation from VE operation
     get_new_temp_ve(block, s_ev, num_vertices, num_edges);
-    get_new_temp_partition_bitmask();
+    get_new_temp_partition_bitmask(block);
 
-    detail::bi_assignment_ggp(
+    const uint16_t* s_vv_offset = m_s_tmp_offset;
+    const uint16_t* s_vv_value = m_s_tmp_value;
+
+    detail::bi_assignment_ggp<blockThreads>(
         /*cooperative_groups::thread_block& */ block,
         /* const uint16_t                   */ num_vertices,
         /* const Bitmask& s_owned_v         */ active_vertices,
         /* const Bitmask& s_active_v        */ active_vertices,
-        /* const uint16_t*                  */ m_s_tmp_offset,
-        /* const uint16_t*                  */ m_s_tmp_value,
+        /* const uint16_t*                  */ s_vv_offset,
+        /* const uint16_t*                  */ s_vv_value,
         /* Bitmask&                         */ m_tmp_assigned_v,
         /* Bitmask&                         */ m_tmp_current_frontier_v,   
         /* Bitmask&                         */ m_tmp_next_frontier_v,      

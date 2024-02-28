@@ -23,13 +23,13 @@ __global__ static void nd_main(rxmesh::Context                   context,
     // iteration num known before kernel -> shared mem known before kernel
     int i = 0;
     while (i < req_levels) {
-        coarsen_graph.matching(block, shared_alloc, i);
+        coarsen_graph.matching(block, i);
         coarsen_graph.coarsening(block, i);
         ++i;
     }
 
     // multi-level bipartition one block per patch
-    coarsen_graph.partition(block, shared_alloc, i);
+    coarsen_graph.partition(block, i);
 
     i -= 1;
     while (i > 0) {
