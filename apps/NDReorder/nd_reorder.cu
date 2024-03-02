@@ -28,6 +28,12 @@ void nd_reorder()
     uint32_t threads        = blockThreads;
     size_t   smem_bytes_dyn = 0;
 
+    smem_bytes_dyn += (1 + 1 * 10) * rx.max_bitmask_size<LocalEdgeT>();
+    smem_bytes_dyn += (6 + 4 * 10) * rx.max_bitmask_size<LocalVertexT>();
+    smem_bytes_dyn += (1 + 4 * 10) * rx.get_per_patch_max_edges() * sizeof(uint16_t);
+    smem_bytes_dyn += (1 + 4 * 10) * rx.get_per_patch_max_vertices() * sizeof(uint16_t);
+    smem_bytes_dyn += 22 * ShmemAllocator::default_alignment;
+
     nd_main<blockThreads><<<blocks, threads, smem_bytes_dyn>>>(
         rx.get_context(), *v_reorder, req_levels);
 

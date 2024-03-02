@@ -22,6 +22,7 @@ namespace rxmesh {
 
 // TODO: change the uniform shared memory allocation to per level allocation for
 // less shared memory use
+// TODO: update the init list
 template <uint32_t blockThreads>
 struct ALIGN(16) PartitionManager
 {
@@ -44,7 +45,7 @@ struct ALIGN(16) PartitionManager
         uint16_t                          req_level);
 
     __device__ __inline__ void matching(cooperative_groups::thread_block& block,
-                                        uint16_t                curr_level);
+                                        uint16_t curr_level);
 
     __device__ __inline__ void coarsening(
         cooperative_groups::thread_block& block,
@@ -57,6 +58,10 @@ struct ALIGN(16) PartitionManager
     __device__ __inline__ void partition(
         cooperative_groups::thread_block& block,
         uint16_t                          curr_level);
+
+    __device__ __inline__ void genrate_reordering(
+        cooperative_groups::thread_block& block,
+        rxmesh::VertexAttribute<uint16_t> v_ordering);
 
     __device__ __inline__ uint16_t* num_vertices_at(uint16_t curr_level)
     {
@@ -138,7 +143,7 @@ struct ALIGN(16) PartitionManager
    private:
     static constexpr int max_level_size = 10;
 
-    // use bitmask to replace bm, use full name 
+    // use bitmask to replace bm, use full name
     __device__ __inline__ std::array<Bitmask, max_level_size> alloc_bm_arr(
         cooperative_groups::thread_block& block,
         ShmemAllocator&                   shrd_alloc,
@@ -156,7 +161,7 @@ struct ALIGN(16) PartitionManager
         return bm_arr;
     }
 
-    __device__ __inline__ void get_new_temp_ve(
+    __device__ __inline__ void calc_new_temp_ve(
         cooperative_groups::thread_block& block,
         uint16_t*                         s_ev,
         uint16_t                          num_vertices,
@@ -182,13 +187,13 @@ struct ALIGN(16) PartitionManager
         block.sync();
     }
 
-    __device__ __inline__ void get_new_temp_vv(
+    __device__ __inline__ void calc_new_temp_vv(
         cooperative_groups::thread_block& block,
         uint16_t*                         s_ev,
         uint16_t                          num_vertices,
         uint16_t                          num_edges)
     {
-        get_new_temp_ve(block, s_ev, num_vertices, num_edges);
+        calc_new_temp_ve(block, s_ev, num_vertices, num_edges);
 
         for (uint32_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
             uint32_t start = m_s_tmp_offset[v];
@@ -207,30 +212,41 @@ struct ALIGN(16) PartitionManager
         }
     }
 
-
-    __device__ __inline__ uint16_t* get_new_tmp_attribute_v_arr(uint16_t num_vertices, uint16_t init_val = 0) {
+    __device__ __inline__ uint16_t* get_new_tmp_attribute_v_arr(
+        uint16_t num_vertices,
+        uint16_t init_val = 0)
+    {
         fill_n<blockThreads>(m_tmp_attribute_v, num_vertices, init_val);
         return m_tmp_attribute_v;
     }
 
+    // TODO: barrier using block and memory access
     // set as max v size
-    __device__ __inline__ Bitmask& get_new_tmp_bitmask_active_v(cooperative_groups::thread_block& block) {
+    __device__ __inline__ Bitmask& get_new_tmp_bitmask_active_v(
+        cooperative_groups::thread_block& block)
+    {
         m_tmp_active_vertices.reset(block);
+        block.sync();
         return m_tmp_active_vertices;
     }
 
     // set as max e size
-    __device__ __inline__ Bitmask& get_new_tmp_bitmask_active_e(cooperative_groups::thread_block& block) {
+    __device__ __inline__ Bitmask& get_new_tmp_bitmask_active_e(
+        cooperative_groups::thread_block& block)
+    {
         m_tmp_active_edges.reset(block);
+        block.sync();
         return m_tmp_active_edges;
     }
 
-    __device__ __inline__ void get_new_temp_partition_bitmask(cooperative_groups::thread_block& block) {
-        m_tmp_assigned_v.reset(block);         
-        m_tmp_current_frontier_v.reset(block); 
-        m_tmp_next_frontier_v.reset(block);    
-        m_tmp_coarse_p0_v.reset(block);        
-        m_tmp_coarse_p1_v.reset(block);        
+    __device__ __inline__ void reset_temp_partition_bitmask(
+        cooperative_groups::thread_block& block)
+    {
+        m_tmp_assigned_v.reset(block);
+        m_tmp_current_frontier_v.reset(block);
+        m_tmp_next_frontier_v.reset(block);
+        m_tmp_coarse_p0_v.reset(block);
+        m_tmp_coarse_p1_v.reset(block);
     }
 
     // TODO: use public for variable temporary
@@ -238,6 +254,7 @@ struct ALIGN(16) PartitionManager
     // reference of the basic rxmesh info
     PatchInfo m_patch_info;
     Context   m_context;
+    uint16_t  m_patch_id;
 
     // The topology information: edge incident vertices and face incident
     // edges from the index in the original patchinfo ev
@@ -274,20 +291,20 @@ struct ALIGN(16) PartitionManager
     std::array<Bitmask, max_level_size> m_s_p1_vertices;
     std::array<Bitmask, max_level_size> m_s_separator_vertices;
 
-    //tmp variable for VE query
+    // tmp variable for VE query
     uint16_t* m_s_tmp_offset;
     uint16_t* m_s_tmp_value;
 
-    //tmp variable for vertex attribute
+    // tmp variable for vertex attribute
     uint16_t* m_tmp_attribute_v;
 
-    //tmp variable for active vertices
+    // tmp variable for active vertices
     Bitmask m_tmp_active_edges;
 
-    //tmp variable for active vertices
+    // tmp variable for active vertices
     Bitmask m_tmp_active_vertices;
 
-    //tmp bitmask used by partition
+    // tmp bitmask used by partition
     Bitmask m_tmp_assigned_v;
     Bitmask m_tmp_current_frontier_v;
     Bitmask m_tmp_next_frontier_v;
@@ -297,23 +314,23 @@ struct ALIGN(16) PartitionManager
 
 // TODO: destroyer
 
-    // VE query example computed from EV (s_ev)
-    // 1. Copy s_ev into s_ve_offset
-    // 2. call v_e(num_vertices, num_edges, s_ve_offset, s_ve_output, nullptr);
-    // for(uint16_t v=threadIdx.x; v<num_vertices; v+=blockthreads){
-    //     uint16_t start = s_ve_offset[v];
-    //     uint16_t end = s_ve_offset[v+1];
-    //     for(uint16_t e=start; e<end;e++){
-    //         uint16_t edge = s_ve_output[e];
-    //
-    //     }
-    // }
+// VE query example computed from EV (s_ev)
+// 1. Copy s_ev into s_ve_offset
+// 2. call v_e(num_vertices, num_edges, s_ve_offset, s_ve_output, nullptr);
+// for(uint16_t v=threadIdx.x; v<num_vertices; v+=blockthreads){
+//     uint16_t start = s_ve_offset[v];
+//     uint16_t end = s_ve_offset[v+1];
+//     for(uint16_t e=start; e<end;e++){
+//         uint16_t edge = s_ve_output[e];
+//
+//     }
+// }
 
-    // EV query example
-    // for(uint16_t e=threadIdx.x; e< num_edges; e+= blockThreads){
-    //     uint16_t v0_local_id = s_ev[2*e];
-    //     uint16_t v1_local_id = s_ev[2*e+1];
-    // }
+// EV query example
+// for(uint16_t e=threadIdx.x; e< num_edges; e+= blockThreads){
+//     uint16_t v0_local_id = s_ev[2*e];
+//     uint16_t v1_local_id = s_ev[2*e+1];
+// }
 
 
 template <uint32_t blockThreads>
@@ -325,14 +342,12 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
 {
     m_context = context;
 
-    uint32_t s_patch_id;
-
     __shared__ uint16_t level_count[1];
     m_s_req_level = level_count[0];
 
-    s_patch_id = blockIdx.x;
+    m_patch_id = blockIdx.x;
 
-    m_patch_info = m_context.m_patches_info[s_patch_id];
+    m_patch_info = m_context.m_patches_info[m_patch_id];
 
     m_s_num_vertices = shrd_alloc.alloc<uint16_t>(req_level);
     m_s_num_edges    = shrd_alloc.alloc<uint16_t>(req_level);
@@ -344,7 +359,7 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
     const uint16_t req_vertex_cap = m_s_num_vertices[0] * req_level;
     const uint16_t req_edge_cap   = m_s_num_edges[0] * req_level;
 
-    // copy ev to shared memory
+    // copy ev to shared memory - 10*2*max_e
     m_s_ev = shrd_alloc.alloc<uint16_t>(2 * req_edge_cap);
     detail::load_async(block,
                        reinterpret_cast<uint16_t*>(m_patch_info.ev),
@@ -352,15 +367,15 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
                        m_s_ev,
                        false);
 
-    // alloc shared memory for all vertex attributes
+    // alloc shared memory for all vertex attributes - 10*3*max_v
     m_s_vwgt     = shrd_alloc.alloc<uint16_t>(req_vertex_cap);
     m_s_vdegree  = shrd_alloc.alloc<uint16_t>(req_vertex_cap);
     m_s_vadjewgt = shrd_alloc.alloc<uint16_t>(req_vertex_cap);
 
-    // alloc shared memory for edge attrobutes
+    // alloc shared memory for edge attributes - 10*1*max_e
     m_s_ewgt = shrd_alloc.alloc<uint16_t>(req_edge_cap);
 
-    // edges chosen or vertex chosen
+    // edges chosen or vertex chosen 10*5*max_bitmask
     m_s_matched_vertices =
         alloc_bm_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
     m_s_matched_edges =
@@ -374,20 +389,22 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
     m_s_separator_vertices =
         alloc_bm_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
 
-    // alloc shared memory for mapping array
+    // alloc shared memory for mapping array 1*max_v
     m_s_mapping = shrd_alloc.alloc<uint16_t>(req_vertex_cap);
 
     // tmp VE operation array which will be reused for multiple times
+    // 2*max_bitmask
     m_s_tmp_offset = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0] * 2);
-    m_s_tmp_value = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0] * 2);
+    m_s_tmp_value  = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0] * 2);
 
-    // tmp vertex attribute array
+    // tmp vertex attribute array 1*max_v
     m_tmp_attribute_v = shrd_alloc.alloc<uint16_t>(m_s_num_vertices[0]);
 
-    m_tmp_active_edges = Bitmask(m_s_num_edges[0], shrd_alloc);
+    // tmp active e/v bitmask 2*max_bitmask
+    m_tmp_active_edges    = Bitmask(m_s_num_edges[0], shrd_alloc);
     m_tmp_active_vertices = Bitmask(m_s_num_vertices[0], shrd_alloc);
 
-    // partition used tmp bitmasks
+    // partition used tmp bitmasks 5*max_bitmask
     m_tmp_assigned_v         = Bitmask(m_s_num_vertices[0], shrd_alloc);
     m_tmp_current_frontier_v = Bitmask(m_s_num_vertices[0], shrd_alloc);
     m_tmp_next_frontier_v    = Bitmask(m_s_num_vertices[0], shrd_alloc);
@@ -413,12 +430,13 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
     s_num_active_vertices[0] = num_vertices;
 
     // TODO: use edge priority to replace the id for selecting edges
-    // TODO: allocate all the shared mem in the constructor
 
     rxmesh::Bitmask& active_edges = get_new_tmp_bitmask_active_e(block);
 
     // Get VE data here to avoid redundant computation
-    get_new_temp_ve(block, s_ev, num_vertices, num_edges);
+    calc_new_temp_ve(block, s_ev, num_vertices, num_edges);
+    const uint16_t* s_ve_offset = m_s_tmp_offset;
+    const uint16_t* s_ve_value  = m_s_tmp_value;
 
     while (float(s_num_active_vertices[0]) / float(num_vertices) > 0.25) {
         uint16_t* s_e_chosen_by_v = get_new_tmp_attribute_v_arr(num_vertices);
@@ -426,8 +444,8 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
 
         // VE operation
         for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
-            uint16_t start = m_s_tmp_offset[v];
-            uint16_t end   = m_s_tmp_offset[v + 1];
+            uint16_t start = s_ve_offset[v];
+            uint16_t end   = s_ve_offset[v + 1];
 
             if (!coarsen_owned(LocalVertexT(v), curr_level)) {
                 continue;
@@ -437,7 +455,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
 
             // query for one ring edges
             for (uint16_t e = start; e < end; e++) {
-                uint16_t e_local_id = m_s_tmp_value[e];
+                uint16_t e_local_id = s_ve_value[e];
 
                 if (!coarsen_owned(LocalEdgeT(e), curr_level)) {
                     continue;
@@ -478,8 +496,8 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
 
         // VE operation
         for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
-            uint16_t start = m_s_tmp_offset[v];
-            uint16_t end   = m_s_tmp_offset[v + 1];
+            uint16_t start = s_ve_offset[v];
+            uint16_t end   = s_ve_offset[v + 1];
 
             if (!coarsen_owned(LocalEdgeT(v), curr_level)) {
                 continue;
@@ -487,7 +505,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
 
             if (matched_vertices(v)) {
                 for (uint16_t e = start; e < end; e++) {
-                    uint16_t e_local_id = m_s_tmp_value[e];
+                    uint16_t e_local_id = s_ve_value[e];
 
                     if (coarsen_owned(LocalEdgeT(e_local_id), curr_level)) {
                         active_edges.set(e_local_id, false);
@@ -568,8 +586,6 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
         uint16_t tmp_coarse_edge_id =
             v0_coarse_id * num_vertices + v1_coarse_id;
 
-        // TODO: needs extra mapping array for uncoarsening, may be solved just
-        // using bitmask
         // TODO: sort and reduction for tmp_coarse_edge_id
         // look at /rxmesh/kernels/collective.cuh
         uint16_t coarse_edge_id = tmp_coarse_edge_id;
@@ -586,31 +602,30 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
     cooperative_groups::thread_block& block,
     uint16_t                          curr_level)
 {
-    // TODO: use the active bitmask for non-continuous v_id
-    // TODO: check the size indicating
     const uint16_t num_vertices       = m_s_num_vertices[curr_level];
-    const uint16_t num_edges  = m_s_num_edges[curr_level];
-    uint16_t* s_ev             = get_ev(curr_level);
-    Bitmask& coarse_p0_vertices = get_p0_vertices_bitmask(curr_level + 1);
-    Bitmask& coarse_p1_vertices = get_p1_vertices_bitmask(curr_level + 1);
-    Bitmask& active_vertices = get_new_tmp_bitmask_active_v(block);
-    
-    int num_iter = 100;
+    const uint16_t num_edges          = m_s_num_edges[curr_level];
+    uint16_t*      s_ev               = get_ev(curr_level);
+    Bitmask&       coarse_p0_vertices = get_p0_vertices_bitmask(curr_level + 1);
+    Bitmask&       coarse_p1_vertices = get_p1_vertices_bitmask(curr_level + 1);
+    Bitmask&       active_vertices    = get_new_tmp_bitmask_active_v(block);
+    int            num_iter           = 10;
 
-    //EV operation setting active vertices
-    for(uint16_t e=threadIdx.x; e < num_edges; e += blockThreads){
-        uint16_t v0_local_id = s_ev[2*e];
-        uint16_t v1_local_id = s_ev[2*e+1];
+    // EV operation setting active vertices
+    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        uint16_t v0_local_id = s_ev[2 * e];
+        uint16_t v1_local_id = s_ev[2 * e + 1];
         active_vertices.set(v0_local_id, true);
         active_vertices.set(v1_local_id, true);
     }
 
     // VV operation from VE operation
-    get_new_temp_ve(block, s_ev, num_vertices, num_edges);
-    get_new_temp_partition_bitmask(block);
+    calc_new_temp_vv(block, s_ev, num_vertices, num_edges);
+    reset_temp_partition_bitmask(block);
+
+    block.sync();
 
     const uint16_t* s_vv_offset = m_s_tmp_offset;
-    const uint16_t* s_vv_value = m_s_tmp_value;
+    const uint16_t* s_vv_value  = m_s_tmp_value;
 
     detail::bi_assignment_ggp<blockThreads>(
         /*cooperative_groups::thread_block& */ block,
@@ -620,10 +635,10 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
         /* const uint16_t*                  */ s_vv_offset,
         /* const uint16_t*                  */ s_vv_value,
         /* Bitmask&                         */ m_tmp_assigned_v,
-        /* Bitmask&                         */ m_tmp_current_frontier_v,   
-        /* Bitmask&                         */ m_tmp_next_frontier_v,      
-        /* Bitmask&                         */ m_tmp_coarse_p0_v,          
-        /* Bitmask&                         */ m_tmp_coarse_p1_v,          
+        /* Bitmask&                         */ m_tmp_current_frontier_v,
+        /* Bitmask&                         */ m_tmp_next_frontier_v,
+        /* Bitmask&                         */ m_tmp_coarse_p0_v,
+        /* Bitmask&                         */ m_tmp_coarse_p1_v,
         /* int                              */ num_iter);
 }
 
@@ -647,15 +662,72 @@ __device__ __inline__ void PartitionManager<blockThreads>::uncoarsening(
         get_separator_vertices_bitmask(curr_level + 1);
 
     // Get VE data here to avoid redundant computation
-    get_new_temp_ve(block, s_ev, num_vertices, num_edges);
+    // calc_new_temp_ve(block, s_ev, num_vertices, num_edges);
 
     for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
-        uint16_t start = m_s_tmp_offset[v];
-        uint16_t end   = m_s_tmp_offset[v + 1];
+        // uint16_t start = m_s_tmp_offset[v];
+        // uint16_t end   = m_s_tmp_offset[v + 1];
 
         p0_vertices.set(v, coarse_p0_vertices(s_mapping[v]));
         p1_vertices.set(v, coarse_p1_vertices(s_mapping[v]));
         separator_v.set(v, coarse_separator_v(s_mapping[v]));
+    }
+
+    block.sync();
+}
+
+template <uint32_t blockThreads>
+__device__ __inline__ void PartitionManager<blockThreads>::genrate_reordering(
+    cooperative_groups::thread_block& block,
+    VertexAttribute<uint16_t>         v_ordering)
+{
+    // Get level 0 param
+    uint16_t  num_vertices = m_s_num_vertices[0];
+    uint16_t  num_edges    = m_s_num_edges[0];
+    uint16_t* s_ev         = get_ev(0);
+    Bitmask&  p0_vertices  = get_p0_vertices_bitmask(0);
+    Bitmask&  p1_vertices  = get_p1_vertices_bitmask(0);
+    Bitmask&  separator_v  = get_separator_vertices_bitmask(0);
+
+    __shared__ int counter[1];
+
+    // calc_new_temp_ve(block, s_ev, num_vertices, num_edges);
+
+    for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+        // uint16_t start = m_s_tmp_offset[v];
+        // uint16_t end   = m_s_tmp_offset[v + 1];
+
+        if (p0_vertices(v)) {
+            int          curr_idx = ::atomicAdd(&counter[0], 1);
+            VertexHandle curr_v(m_patch_id, v);
+            v_ordering(curr_v, 0) = curr_idx;
+        }
+    }
+
+    block.sync();
+
+    for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+        // uint16_t start = m_s_tmp_offset[v];
+        // uint16_t end   = m_s_tmp_offset[v + 1];
+
+        if (p1_vertices(v)) {
+            int          curr_idx = ::atomicAdd(&counter[0], 1);
+            VertexHandle curr_v(m_patch_id, v);
+            v_ordering(curr_v, 0) = curr_idx;
+        }
+    }
+
+    block.sync();
+
+    for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+        // uint16_t start = m_s_tmp_offset[v];
+        // uint16_t end   = m_s_tmp_offset[v + 1];
+
+        if (separator_v(v)) {
+            int          curr_idx = ::atomicAdd(&counter[0], 1);
+            VertexHandle curr_v(m_patch_id, v);
+            v_ordering(curr_v, 0) = curr_idx;
+        }
     }
 
     block.sync();

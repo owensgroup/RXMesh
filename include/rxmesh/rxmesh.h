@@ -282,6 +282,23 @@ class RXMesh
         return m_h_patches_info[p];
     }
 
+    //TODO: tmp fix by eric, should move later
+    template <typename LocalT>
+    uint32_t max_bitmask_size() const
+    {
+        if constexpr (std::is_same_v<LocalT, LocalVertexT>) {
+            return detail::mask_num_bytes(this->m_max_vertices_per_patch);
+        }
+
+        if constexpr (std::is_same_v<LocalT, LocalEdgeT>) {
+            return detail::mask_num_bytes(this->m_max_edges_per_patch);
+        }
+
+        if constexpr (std::is_same_v<LocalT, LocalFaceT>) {
+            return detail::mask_num_bytes(this->m_max_faces_per_patch);
+        }
+    }
+
    protected:
     // Edge hash map that takes two vertices and return their edge id
     using EdgeMapT = std::unordered_map<std::pair<uint32_t, uint32_t>,
@@ -362,22 +379,6 @@ class RXMesh
     const std::pair<uint32_t, uint16_t> map_to_local(
         const uint32_t  i,
         const uint32_t* element_prefix) const;
-
-    template <typename LocalT>
-    uint32_t max_bitmask_size() const
-    {
-        if constexpr (std::is_same_v<LocalT, LocalVertexT>) {
-            return detail::mask_num_bytes(this->m_max_vertices_per_patch);
-        }
-
-        if constexpr (std::is_same_v<LocalT, LocalEdgeT>) {
-            return detail::mask_num_bytes(this->m_max_edges_per_patch);
-        }
-
-        if constexpr (std::is_same_v<LocalT, LocalFaceT>) {
-            return detail::mask_num_bytes(this->m_max_faces_per_patch);
-        }
-    }
 
     template <typename LocalT>
     uint16_t max_lp_hashtable_capacity() const

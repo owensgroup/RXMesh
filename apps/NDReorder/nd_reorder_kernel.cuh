@@ -17,6 +17,8 @@ __global__ static void nd_main(rxmesh::Context                   context,
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
+
+    // TODO: test constructor
     PartitionManager<blockThreads> coarsen_graph(
         block, context, shrd_alloc, req_levels);
 
@@ -33,11 +35,12 @@ __global__ static void nd_main(rxmesh::Context                   context,
 
     i -= 1;
     while (i > 0) {
-        coarsen_graph.uncoarsening(block,
-                     i);
+        coarsen_graph.uncoarsening(block, i);
         // TODO: refinement 
         // refinement(block, shared_alloc, i);
 
         --i;
     }
+
+    coarsen_graph.genrate_reordering(block, v_ordering);
 }
