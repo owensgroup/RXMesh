@@ -143,8 +143,7 @@ struct ALIGN(16) PartitionManager
    private:
     static constexpr int max_level_size = 10;
 
-    // use bitmask to replace bm, use full name
-    __device__ __inline__ std::array<Bitmask, max_level_size> alloc_bm_arr(
+    __device__ __inline__ std::array<Bitmask, max_level_size> alloc_bitmask_arr(
         cooperative_groups::thread_block& block,
         ShmemAllocator&                   shrd_alloc,
         uint16_t                          req_arr_size,
@@ -167,10 +166,6 @@ struct ALIGN(16) PartitionManager
         uint16_t                          num_vertices,
         uint16_t                          num_edges)
     {
-        // reset the offset
-        fill_n<blockThreads>(m_s_tmp_offset, num_edges * 2, uint16_t(0));
-        block.sync();
-
         // Copy EV to offset array
         for (uint16_t i = threadIdx.x; i < num_edges * 2; i += blockThreads) {
             m_s_tmp_offset[i] = s_ev[i];
@@ -213,14 +208,15 @@ struct ALIGN(16) PartitionManager
     }
 
     __device__ __inline__ uint16_t* get_new_tmp_attribute_v_arr(
+        cooperative_groups::thread_block& block,
         uint16_t num_vertices,
         uint16_t init_val = 0)
     {
         fill_n<blockThreads>(m_tmp_attribute_v, num_vertices, init_val);
+        block.sync();
         return m_tmp_attribute_v;
     }
 
-    // TODO: barrier using block and memory access
     // set as max v size
     __device__ __inline__ Bitmask& get_new_tmp_bitmask_active_v(
         cooperative_groups::thread_block& block)
@@ -247,6 +243,7 @@ struct ALIGN(16) PartitionManager
         m_tmp_next_frontier_v.reset(block);
         m_tmp_coarse_p0_v.reset(block);
         m_tmp_coarse_p1_v.reset(block);
+        block.sync();
     }
 
     // TODO: use public for variable temporary
@@ -377,23 +374,23 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
 
     // edges chosen or vertex chosen 10*5*max_bitmask
     m_s_matched_vertices =
-        alloc_bm_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
+        alloc_bitmask_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
     m_s_matched_edges =
-        alloc_bm_arr(block, shrd_alloc, req_level, m_s_num_edges[0]);
+        alloc_bitmask_arr(block, shrd_alloc, req_level, m_s_num_edges[0]);
 
     // partition bitmask
     m_s_p0_vertices =
-        alloc_bm_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
+        alloc_bitmask_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
     m_s_p1_vertices =
-        alloc_bm_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
+        alloc_bitmask_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
     m_s_separator_vertices =
-        alloc_bm_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
+        alloc_bitmask_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
 
     // alloc shared memory for mapping array 1*max_v
     m_s_mapping = shrd_alloc.alloc<uint16_t>(req_vertex_cap);
 
     // tmp VE operation array which will be reused for multiple times
-    // 2*max_bitmask
+    // 2*max_e
     m_s_tmp_offset = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0] * 2);
     m_s_tmp_value  = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0] * 2);
 
@@ -439,7 +436,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
     const uint16_t* s_ve_value  = m_s_tmp_value;
 
     while (float(s_num_active_vertices[0]) / float(num_vertices) > 0.25) {
-        uint16_t* s_e_chosen_by_v = get_new_tmp_attribute_v_arr(num_vertices);
+        uint16_t* s_e_chosen_by_v = get_new_tmp_attribute_v_arr(block, num_vertices);
         block.sync();
 
         // VE operation
@@ -580,8 +577,8 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
                 s_mapping[v1_local_id];
         uint16_t v1_coarse_id =
             s_mapping[v0_local_id] < s_mapping[v1_local_id] ?
-                s_mapping[v0_local_id] :
-                s_mapping[v1_local_id];
+                s_mapping[v1_local_id] :
+                s_mapping[v0_local_id];
 
         uint16_t tmp_coarse_edge_id =
             v0_coarse_id * num_vertices + v1_coarse_id;

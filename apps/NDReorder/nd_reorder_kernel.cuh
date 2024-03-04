@@ -21,26 +21,28 @@ __global__ static void nd_main(rxmesh::Context                   context,
     // TODO: test constructor
     PartitionManager<blockThreads> coarsen_graph(
         block, context, shrd_alloc, req_levels);
+    
+    coarsen_graph.matching(block, i);
 
-    // iteration num known before kernel -> shared mem known before kernel
-    int i = 0;
-    while (i < req_levels) {
-        coarsen_graph.matching(block, i);
-        coarsen_graph.coarsening(block, i);
-        ++i;
-    }
+    // // iteration num known before kernel -> shared mem known before kernel
+    // int i = 0;
+    // while (i < req_levels) {
+    //     coarsen_graph.matching(block, i);
+    //     coarsen_graph.coarsening(block, i);
+    //     ++i;
+    // }
 
-    // multi-level bipartition one block per patch
-    coarsen_graph.partition(block, i);
+    // // multi-level bipartition one block per patch
+    // coarsen_graph.partition(block, i);
 
-    i -= 1;
-    while (i > 0) {
-        coarsen_graph.uncoarsening(block, i);
-        // TODO: refinement 
-        // refinement(block, shared_alloc, i);
+    // i -= 1;
+    // while (i > 0) {
+    //     coarsen_graph.uncoarsening(block, i);
+    //     // TODO: refinement 
+    //     // refinement(block, shared_alloc, i);
 
-        --i;
-    }
+    //     --i;
+    // }
 
-    coarsen_graph.genrate_reordering(block, v_ordering);
+    // coarsen_graph.genrate_reordering(block, v_ordering);
 }
