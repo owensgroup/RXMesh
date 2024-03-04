@@ -16,16 +16,17 @@ using mat3x2 = glm::mat<3, 2, T, glm::defaultp>;
 template <typename T = float>
 using mat2x3 = glm::mat<2, 3, T, glm::defaultp>;
 
+
 template <typename T>
-__device__ vec3<T> normal(const vec3<T>& x0,
-                          const vec3<T>& x1,
-                          const vec3<T>& x2)
+__inline__ __device__ vec3<T> normal(const vec3<T>& x0,
+                                     const vec3<T>& x1,
+                                     const vec3<T>& x2)
 {
     return glm::normalize(glm::cross(x1 - x0, x2 - x0));
 }
 
 template <typename T>
-mat3x3<T> local_base(const vec3<T>& n)
+__inline__ __device__ mat3x3<T> local_base(const vec3<T>& n)
 {
     vec3<T> u =
         (glm::dot(n, vec3<T>(1, 0, 0)) > glm::dot(n, vec3<T>(0, 0, 1))) ?
@@ -41,17 +42,17 @@ mat3x3<T> local_base(const vec3<T>& n)
 
 
 template <typename T>
-vec2<T> perp(const vec2<T>& u)
+__inline__ __device__ vec2<T> perp(const vec2<T>& u)
 {
     return vec2<T>(-u[1], u[0]);
 }
 
 template <typename T>
-mat2x2<T> projected_curvature(const vec3<T>&   m0,
-                              const vec3<T>&   m1,
-                              const vec3<T>&   m2,
-                              const mat2x2<T>& base,
-                              const T&         area)
+__inline__ __device__ mat2x2<T> projected_curvature(const vec3<T>&   m0,
+                                                    const vec3<T>&   m1,
+                                                    const vec3<T>&   m2,
+                                                    const mat2x3<T>& base,
+                                                    const T&         area)
 {
     mat2x2<T> S;
 
@@ -80,14 +81,49 @@ mat2x2<T> projected_curvature(const vec3<T>&   m0,
     return S;
 }
 
+template <typename T>
+__inline__ __device__ mat3x3<T> derivative(const vec3<T>&   w0,
+                                           const vec3<T>&   w1,
+                                           const vec3<T>&   w2,
+                                           const vec3<T>&   dz,
+                                           const mat3x3<T>& invDm)
+{
+    return mat3x3<T>(w1 - w0, w2 - w0, dz) * invDm;
+}
+
+
+// template <typename T>
+//__inline__ __device__ mat3x3<T> deformation_gradient(const Face* face)
+//{
+//     return derivative(pos<s>(face->v[0]->node),
+//                       pos<s>(face->v[1]->node),
+//                       pos<s>(face->v[2]->node),
+//                       normal<s>(face),
+//                       face) *
+//            face->Sp_str;
+// }
+
+template <typename T>
+__inline__ __device__ mat2x2<T> compression_metric(  // const Face*      face,
+    const mat3x3<T>& S2,
+    const mat3x2<T>& UV,
+    T                c)
+{
+    // TODO
+}
 
 template <uint32_t blockThreads, typename T>
-void __global__ compute_face_sizing(const Context      context,
-                                    VertexAttribute<T> w_coord,
-                                    VertexAttribute<T> m_coord,
-                                    VertexAttribute<T> v_normal,
-                                    FaceAttribute<T>   face_sizing,
-                                    const T            remeshing_size_min)
+void __global__ compute_face_sizing(
+    const Context            context,
+    const VertexAttribute<T> w_coord,
+    const VertexAttribute<T> m_coord,
+    const VertexAttribute<T> v_normal,  // using world coordinates
+    FaceAttribute<T>         face_sizing,
+    const T                  remeshing_size_min,
+    const T                  material_density,
+    const T                  refine_angle,
+    const T                  refine_velocity,
+    const T                  refine_compression)
 {
 
     auto calc_sizing = [&](const FaceHandle& fh, const VertexIterator& iter) {
@@ -105,28 +141,36 @@ void __global__ compute_face_sizing(const Context      context,
         const vec3<T> w1(w_coord(v1, 0), w_coord(v1, 1), w_coord(v1, 2));
         const vec3<T> w2(w_coord(v2, 0), w_coord(v2, 1), w_coord(v2, 2));
 
+        // project to in-plane 2D
+
         // local normal
         const vec3<T> fn = normal(m0, m1, m2);
+
+        // local base
+        const mat3x3<T> base = local_base(fn);
+
+        const mat3x2<T> UV(base.col(0), base.col(1));
+        const mat2x3<T> UVt = glm::transpose(UV);
+
+
+        // compute_ms_data
+        mat3x3<T> invDm;  // finite element matrix
 
         const vec3<T> d0 = m1 - m0;
         const vec3<T> d1 = m2 - m0;
         const vec3<T> d2 = glm::cross(d0, d1);
 
-        // compute_ms_data
-        //
         //  face area
         const T area = 0.5 * glm::length(d2);
 
-        mat3x3<T> Dm, invDm;  // finite element matrix
+        // mass
+        const T mass = area * material_density;
 
-        mat3x3<T> Dm3(d0, d1, d2 / (2.f * area));
-
-        // TODO
-        //  face->m = face->material ? face->a * face->material->density : 0;
 
         if (area < std::numeric_limits<T>::epsilon()) {
             invDm = mat3x3<T>(0);
         } else {
+            const mat3x3<T> Dm3(d0, d1, d2 / (2.f * area));
             invDm = glm::inverse(Dm3);
 
             // clamp
@@ -141,17 +185,34 @@ void __global__ compute_face_sizing(const Context      context,
         }
 
 
-        const mat3x3<T> base = local_base(fn);
+        const mat2x2<T> sw1 = projected_curvature(m0, m1, m2, UVt, area);
 
-        const mat3x2<T> UV(base.col(0), base.col(1));
+        const vec3<T> n0(v_normal(v0, 0), v_normal(v0, 1), v_normal(v0, 2));
+        const vec3<T> n1(v_normal(v1, 0), v_normal(v1, 1), v_normal(v1, 2));
+        const vec3<T> n2(v_normal(v2, 0), v_normal(v2, 1), v_normal(v2, 2));
 
-        const mat2x3<T> UVt = UV.t();
+        const mat3x3<T> sw2 = derivative(n0, n1, n2, vec3<T>(0), invDm);
 
+        const mat2x2<T> Mcurvw1 =
+            (glm::transpose(sw1) * sw1) / (refine_angle * refine_angle);
 
-        mat2x2<T> sw1 = projected_curvature(m0, m1, m2, UVt, area);
+        const mat2x2<T> Mcurvw2 = UVt * (glm::transpose(sw2) * sw2) * UV /
+                                  (refine_angle * refine_angle);
 
-        //mat3x3<T> sw2 =
-        //    derivative(v_normal(v0), v_normal(v1), v_normal(v2), vec3<T>(0), face);
+        const mat3x3<T> V = derivative(w0, w1, w2, vec3<T>(0), invDm);
+
+        const mat2x2<T> Mvel = UVt * (glm::transpose(V) * V) * UV /
+                               (refine_velocity * refine_velocity);
+
+        const mat2x2<T> Mcomp = compression_metric(
+            // face,
+            glm::transpose(sw2) * sw2,
+            UV,
+            refine_compression);
+
+        const mat2x2<T> Mobs = mat2x2<T>(0);
+
+        const mat2x2<T> Mfrac = mat2x2<T>(0);
 
         mat3x3<T> f_sizing;
     };

@@ -18,7 +18,7 @@ struct SVD
 
 
 /**************************************************************************
-**
+** https://github.com/ericjang/svd3/tree/master/svd3_cuda
 **  svd3
 **
 ** Quick singular value decomposition as described by:
