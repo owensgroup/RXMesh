@@ -356,7 +356,7 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
     const uint16_t req_vertex_cap = m_s_num_vertices[0] * req_level;
     const uint16_t req_edge_cap   = m_s_num_edges[0] * req_level;
 
-    // copy ev to shared memory - 10*2*max_e
+    // copy ev to shared memory - 10*4*max_e
     m_s_ev = shrd_alloc.alloc<uint16_t>(2 * req_edge_cap);
     detail::load_async(block,
                        reinterpret_cast<uint16_t*>(m_patch_info.ev),
@@ -372,13 +372,13 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
     // alloc shared memory for edge attributes - 10*1*max_e
     m_s_ewgt = shrd_alloc.alloc<uint16_t>(req_edge_cap);
 
-    // edges chosen or vertex chosen 10*5*max_bitmask
+    // edges chosen or vertex chosen 10*2*max_bitmask
     m_s_matched_vertices =
         alloc_bitmask_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
     m_s_matched_edges =
         alloc_bitmask_arr(block, shrd_alloc, req_level, m_s_num_edges[0]);
 
-    // partition bitmask
+    // partition bitmask 10*3*max_bitmask
     m_s_p0_vertices =
         alloc_bitmask_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
     m_s_p1_vertices =
@@ -386,11 +386,11 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
     m_s_separator_vertices =
         alloc_bitmask_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
 
-    // alloc shared memory for mapping array 1*max_v
+    // alloc shared memory for mapping array 10*1*max_v
     m_s_mapping = shrd_alloc.alloc<uint16_t>(req_vertex_cap);
 
     // tmp VE operation array which will be reused for multiple times
-    // 2*max_e
+    // 4*max_e
     m_s_tmp_offset = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0] * 2);
     m_s_tmp_value  = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0] * 2);
 
@@ -592,6 +592,8 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
     }
 
     block.sync();
+
+    //TODO update num_edges
 }
 
 template <uint32_t blockThreads>

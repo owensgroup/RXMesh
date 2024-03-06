@@ -21,23 +21,27 @@ void nd_reorder()
     auto v_reorder =
         rx.add_vertex_attribute<uint16_t>("v_reorder", 1, rxmesh::LOCATION_ALL);
 
-    uint16_t req_levels = 5;
+    uint16_t req_levels = 1;
 
     // TODO: prepare kernel required variable
     uint32_t blocks         = rx.get_num_patches();
     uint32_t threads        = blockThreads;
     size_t   smem_bytes_dyn = 0;
 
-    smem_bytes_dyn += (1 + 1 * 10) * rx.max_bitmask_size<LocalEdgeT>();
-    smem_bytes_dyn += (6 + 4 * 10) * rx.max_bitmask_size<LocalVertexT>();
-    smem_bytes_dyn += (2 + 3 * 10) * rx.get_per_patch_max_edges() * sizeof(uint16_t);
-    smem_bytes_dyn += (2 + 3 * 10) * rx.get_per_patch_max_vertices() * sizeof(uint16_t);
+    smem_bytes_dyn += (1 + 1 * req_levels) * rx.max_bitmask_size<LocalEdgeT>();
+    smem_bytes_dyn += (6 + 4 * req_levels) * rx.max_bitmask_size<LocalVertexT>();
+    smem_bytes_dyn += (4 + 5 * req_levels) * rx.get_per_patch_max_edges() * sizeof(uint16_t);
+    smem_bytes_dyn += (2 + 3 * req_levels) * rx.get_per_patch_max_vertices() * sizeof(uint16_t);
     smem_bytes_dyn += (11 + 11 * req_levels) * ShmemAllocator::default_alignment;
+
+    RXMESH_TRACE("blocks: {}, threads: {}, smem_bytes: {}", blocks, threads, smem_bytes_dyn);
 
     nd_main<blockThreads><<<blocks, threads, smem_bytes_dyn>>>(
         rx.get_context(), *v_reorder, req_levels);
 
     CUDA_ERROR(cudaDeviceSynchronize());
+
+    RXMESH_TRACE("DONE!!!!!!!!!!!!!!");
 }
 
 TEST(Apps, NDReorder)
