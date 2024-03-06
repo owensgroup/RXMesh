@@ -45,7 +45,7 @@ __global__ static void nd_main(rxmesh::Context                   context,
     if (idx == 0)
         printf("total shmem: %u dyn shmem: %u\n", total_shmem_size(), dynamic_shmem_size());
     
-    // coarsen_graph.matching(block, 0);
+    coarsen_graph.matching(block, 0);
 
     // // iteration num known before kernel -> shared mem known before kernel
     // int i = 0;

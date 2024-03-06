@@ -31,7 +31,7 @@ void nd_reorder()
     smem_bytes_dyn += (1 + 1 * req_levels) * rx.max_bitmask_size<LocalEdgeT>();
     smem_bytes_dyn += (6 + 4 * req_levels) * rx.max_bitmask_size<LocalVertexT>();
     smem_bytes_dyn += (4 + 5 * req_levels) * rx.get_per_patch_max_edges() * sizeof(uint16_t);
-    smem_bytes_dyn += (2 + 3 * req_levels) * rx.get_per_patch_max_vertices() * sizeof(uint16_t);
+    smem_bytes_dyn += (1 + 4 * req_levels) * rx.get_per_patch_max_vertices() * sizeof(uint16_t);
     smem_bytes_dyn += (11 + 11 * req_levels) * ShmemAllocator::default_alignment;
 
     RXMESH_TRACE("blocks: {}, threads: {}, smem_bytes: {}", blocks, threads, smem_bytes_dyn);
