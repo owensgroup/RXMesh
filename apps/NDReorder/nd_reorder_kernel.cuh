@@ -27,6 +27,7 @@ __forceinline__ __device__ unsigned total_shmem_size()
 template <uint32_t blockThreads>
 __global__ static void nd_main(rxmesh::Context                   context,
                                rxmesh::VertexAttribute<uint16_t> v_ordering,
+                               rxmesh::VertexAttribute<float> vertex_color,
                                uint16_t                          req_levels)
 {
     using namespace rxmesh;

@@ -18,6 +18,10 @@ void nd_reorder()
 
     RXMeshStatic rx(Arg.obj_file_name);
 
+    // Tests using coloring
+    //vertex color attribute 
+    auto vertex_color = rx.add_vertex_attribute<float>("vColor", 3);
+    
     auto v_reorder =
         rx.add_vertex_attribute<uint16_t>("v_reorder", 1, rxmesh::LOCATION_ALL);
 
@@ -37,9 +41,23 @@ void nd_reorder()
     RXMESH_TRACE("blocks: {}, threads: {}, smem_bytes: {}", blocks, threads, smem_bytes_dyn);
 
     nd_main<blockThreads><<<blocks, threads, smem_bytes_dyn>>>(
-        rx.get_context(), *v_reorder, req_levels);
+        rx.get_context(), *v_reorder, *vertex_color, req_levels);
 
     CUDA_ERROR(cudaDeviceSynchronize());
+
+    // Tests using coloring
+    //Move vertex color to the host 
+    vertex_color.move(DEVICE, HOST);
+
+    //polyscope instance associated with rx 
+    auto polyscope_mesh = rx.get_polyscope_mesh();
+
+    //pass vertex color to polyscope 
+    polyscope_mesh->addVertexColorQuantity("vColor", vertex_color);
+    polyscope_mesh->addVertexScalarQuantity("vGaussianCurv", v_gc);
+
+    //render 
+    polyscope::show();
 
     RXMESH_TRACE("DONE!!!!!!!!!!!!!!");
 }
