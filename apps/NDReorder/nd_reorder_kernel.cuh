@@ -5,8 +5,6 @@
 #include "rxmesh/util/vector.h"
 
 #include "nd_partition_manager.cuh"
-#include "rxmesh/cavity_manager.cuh"
-#include "rxmesh/rxmesh_dynamic.h"
 
 // TODO: test function for shared mem allocated
 __forceinline__ __device__ unsigned dynamic_shmem_size()
@@ -27,7 +25,8 @@ __forceinline__ __device__ unsigned total_shmem_size()
 template <uint32_t blockThreads>
 __global__ static void nd_main(rxmesh::Context                   context,
                                rxmesh::VertexAttribute<uint16_t> v_ordering,
-                               rxmesh::VertexAttribute<float> vertex_color,
+                               rxmesh::VertexAttribute<uint16_t> attr_matched_v,
+                               rxmesh::EdgeAttribute<uint16_t> attr_active_e,
                                uint16_t                          req_levels)
 {
     using namespace rxmesh;
@@ -46,7 +45,7 @@ __global__ static void nd_main(rxmesh::Context                   context,
     if (idx == 0)
         printf("total shmem: %u dyn shmem: %u\n", total_shmem_size(), dynamic_shmem_size());
     
-    coarsen_graph.matching(block, 0);
+    coarsen_graph.matching(block, attr_matched_v, attr_active_e, 0);
 
     // // iteration num known before kernel -> shared mem known before kernel
     // int i = 0;

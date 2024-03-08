@@ -7,7 +7,7 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "bumpy-cube.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere1.obj";
     uint32_t    device_id     = 0;
 } Arg;
 
@@ -20,7 +20,8 @@ void nd_reorder()
 
     // Tests using coloring
     //vertex color attribute 
-    auto vertex_color = rx.add_vertex_attribute<float>("vColor", 3);
+    auto attr_matched_v = rx.add_vertex_attribute<uint16_t>("attr_matched_v", 1);
+    auto attr_active_e = rx.add_edge_attribute<uint16_t>("attr_active_e", 1);
     
     auto v_reorder =
         rx.add_vertex_attribute<uint16_t>("v_reorder", 1, rxmesh::LOCATION_ALL);
@@ -41,20 +42,21 @@ void nd_reorder()
     RXMESH_TRACE("blocks: {}, threads: {}, smem_bytes: {}", blocks, threads, smem_bytes_dyn);
 
     nd_main<blockThreads><<<blocks, threads, smem_bytes_dyn>>>(
-        rx.get_context(), *v_reorder, *vertex_color, req_levels);
+        rx.get_context(), *v_reorder, *attr_matched_v, *attr_active_e, req_levels);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
     // Tests using coloring
     //Move vertex color to the host 
-    vertex_color.move(DEVICE, HOST);
+    attr_matched_v->move(rxmesh::DEVICE, rxmesh::HOST);
+    attr_active_e->move(rxmesh::DEVICE, rxmesh::HOST);
 
     //polyscope instance associated with rx 
     auto polyscope_mesh = rx.get_polyscope_mesh();
 
     //pass vertex color to polyscope 
-    polyscope_mesh->addVertexColorQuantity("vColor", vertex_color);
-    polyscope_mesh->addVertexScalarQuantity("vGaussianCurv", v_gc);
+    polyscope_mesh->addVertexScalarQuantity("attr_matched_v", *attr_matched_v);
+    polyscope_mesh->addEdgeScalarQuantity("attr_active_e", *attr_active_e);
 
     //render 
     polyscope::show();

@@ -9,14 +9,11 @@
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/util.cuh"
 #include "rxmesh/patch_info.h"
-#include "rxmesh/rxmesh_dynamic.h"
 
 #include "rxmesh/attribute.h"
 
 #include "rxmesh/query.cuh"
 #include "rxmesh/util/vector.h"
-
-#include "rxmesh/kernels/shmem_mutex.cuh"
 
 namespace rxmesh {
 
@@ -44,8 +41,11 @@ struct ALIGN(16) PartitionManager
         ShmemAllocator&                   shrd_alloc,
         uint16_t                          req_level);
 
-    __device__ __inline__ void matching(cooperative_groups::thread_block& block,
-                                        uint16_t curr_level);
+    __device__ __inline__ void matching(
+        cooperative_groups::thread_block& block,
+        rxmesh::VertexAttribute<uint16_t> attr_matched_v,
+        rxmesh::EdgeAttribute<uint16_t>   attr_active_e,
+        uint16_t                          curr_level);
 
     __device__ __inline__ void coarsening(
         cooperative_groups::thread_block& block,
@@ -97,10 +97,10 @@ struct ALIGN(16) PartitionManager
         return m_s_matched_edges[curr_level];
     }
 
-    __device__ __inline__ Bitmask& get_matched_vertices_bitmask(
+    __device__ __inline__ Bitmask& get_attr_matched_vertices_bitmask(
         uint16_t curr_level)
     {
-        return m_s_matched_vertices[curr_level];
+        return m_s_attr_matched_vertices[curr_level];
     }
 
     __device__ __inline__ Bitmask& get_p0_vertices_bitmask(uint16_t curr_level)
@@ -172,8 +172,9 @@ struct ALIGN(16) PartitionManager
         }
         block.sync();
 
-        // TODO: below is for passing compile only, remove later
-        const uint32_t* active_mask_e;
+        // TODO: may use new API later
+        const uint32_t* active_mask_e =
+            m_patch_info.get_owned_mask<EdgeHandle>();
         detail::v_e<blockThreads>(num_vertices,
                                   num_edges,
                                   m_s_tmp_offset,
@@ -209,8 +210,8 @@ struct ALIGN(16) PartitionManager
 
     __device__ __inline__ uint16_t* get_new_tmp_attribute_v_arr(
         cooperative_groups::thread_block& block,
-        uint16_t num_vertices,
-        uint16_t init_val = 0)
+        uint16_t                          num_vertices,
+        uint16_t                          init_val = 0)
     {
         fill_n<blockThreads>(m_tmp_attribute_v, num_vertices, init_val);
         block.sync();
@@ -281,7 +282,7 @@ struct ALIGN(16) PartitionManager
     uint16_t m_s_req_level;
 
     std::array<Bitmask, max_level_size> m_s_matched_edges;
-    std::array<Bitmask, max_level_size> m_s_matched_vertices;
+    std::array<Bitmask, max_level_size> m_s_attr_matched_vertices;
 
     // for partition
     std::array<Bitmask, max_level_size> m_s_p0_vertices;
@@ -373,7 +374,7 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
     m_s_ewgt = shrd_alloc.alloc<uint16_t>(req_edge_cap);
 
     // edges chosen or vertex chosen 10*2*max_bitmask
-    m_s_matched_vertices =
+    m_s_attr_matched_vertices =
         alloc_bitmask_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
     m_s_matched_edges =
         alloc_bitmask_arr(block, shrd_alloc, req_level, m_s_num_edges[0]);
@@ -414,14 +415,16 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
 template <uint32_t blockThreads>
 __device__ __inline__ void PartitionManager<blockThreads>::matching(
     cooperative_groups::thread_block& block,
+    rxmesh::VertexAttribute<uint16_t> attr_matched_v,
+    rxmesh::EdgeAttribute<uint16_t>   attr_active_e,
     uint16_t                          curr_level)
 {
     // Get level by level parameter
-    const uint16_t num_vertices     = m_s_num_vertices[curr_level];
-    const uint16_t num_edges        = m_s_num_edges[curr_level];
-    uint16_t*      s_ev             = get_ev(curr_level);
-    Bitmask&       matched_edges    = get_matched_edges_bitmask(curr_level);
-    Bitmask&       matched_vertices = get_matched_edges_bitmask(curr_level);
+    const uint16_t num_vertices    = m_s_num_vertices[curr_level];
+    const uint16_t num_edges       = m_s_num_edges[curr_level];
+    uint16_t*      s_ev            = get_ev(curr_level);
+    Bitmask&       matched_edges   = get_matched_edges_bitmask(curr_level);
+    Bitmask& attr_matched_vertices = get_matched_edges_bitmask(curr_level);
 
     __shared__ uint16_t s_num_active_vertices[1];
     s_num_active_vertices[0] = num_vertices;
@@ -429,14 +432,22 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
     // TODO: use edge priority to replace the id for selecting edges
 
     rxmesh::Bitmask& active_edges = get_new_tmp_bitmask_active_e(block);
+    active_edges.set(block);
 
     // Get VE data here to avoid redundant computation
     calc_new_temp_ve(block, s_ev, num_vertices, num_edges);
     const uint16_t* s_ve_offset = m_s_tmp_offset;
     const uint16_t* s_ve_value  = m_s_tmp_value;
 
-    while (float(s_num_active_vertices[0]) / float(num_vertices) > 0.25) {
-        uint16_t* s_e_chosen_by_v = get_new_tmp_attribute_v_arr(block, num_vertices);
+
+    // TODO_HEAD: loop 1 runs perfectly, check the param change for following loops
+    int tmp_count = 0;
+    // while (float(s_num_active_vertices[0]) / float(num_vertices) > 0.5) {
+    while (tmp_count < 5) {
+        tmp_count++;
+
+        uint16_t* s_e_chosen_by_v =
+            get_new_tmp_attribute_v_arr(block, num_vertices);
         block.sync();
 
         // VE operation
@@ -454,11 +465,12 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
             for (uint16_t e = start; e < end; e++) {
                 uint16_t e_local_id = s_ve_value[e];
 
-                if (!coarsen_owned(LocalEdgeT(e), curr_level)) {
+                if (!coarsen_owned(LocalEdgeT(e_local_id), curr_level) ||
+                    !active_edges(e_local_id)) {
                     continue;
                 }
 
-                if (active_edges(e_local_id) && e_local_id > tgt_e_id) {
+                if (e_local_id > tgt_e_id) {
                     tgt_e_id = e_local_id;
                 }
             }
@@ -472,19 +484,29 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
 
         // EV operation
         for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+            if (!coarsen_owned(LocalEdgeT(e), curr_level) || !active_edges(e)) {
+                continue;
+            }
+
             uint16_t v0_local_id = s_ev[2 * e];
             uint16_t v1_local_id = s_ev[2 * e + 1];
 
             uint16_t v0_chosen_id = s_e_chosen_by_v[v0_local_id];
             uint16_t v1_chosen_id = s_e_chosen_by_v[v1_local_id];
 
-            if (!coarsen_owned(LocalEdgeT(e), curr_level)) {
-                continue;
-            }
-
             if (e == v1_chosen_id && e == v0_chosen_id) {
-                matched_vertices.set(v0_local_id, true);
-                matched_vertices.set(v1_local_id, true);
+                if (coarsen_owned(LocalEdgeT(v0_local_id), curr_level)) {
+                    attr_matched_vertices.set(v0_local_id, true);
+                    VertexHandle v0(m_patch_id, v0_local_id);
+                    attr_matched_v(v0) = 10;
+                }
+
+                if (coarsen_owned(LocalEdgeT(v1_local_id), curr_level)) {
+                    attr_matched_vertices.set(v1_local_id, true);
+                    VertexHandle v1(m_patch_id, v1_local_id);
+                    attr_matched_v(v1) = 10;
+                }
+
                 matched_edges.set(e, true);
             }
         }
@@ -500,21 +522,35 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
                 continue;
             }
 
-            if (matched_vertices(v)) {
+            if (attr_matched_vertices(v)) {
                 for (uint16_t e = start; e < end; e++) {
                     uint16_t e_local_id = s_ve_value[e];
 
-                    if (coarsen_owned(LocalEdgeT(e_local_id), curr_level)) {
-                        active_edges.set(e_local_id, false);
+                    if (!coarsen_owned(LocalEdgeT(e_local_id), curr_level) ||
+                        !active_edges(e_local_id)) {
+                        continue;
                     }
+
+                    active_edges.set(e_local_id, false);
+
+                    EdgeHandle e0(m_patch_id, e_local_id);
+                    attr_active_e(e0) = 5;
                 }
 
                 // count active vertices
-                atomicAdd(&s_num_active_vertices[0], 1);
+                atomicAdd(&s_num_active_vertices[0], -1);
             }
         }
 
         block.sync();
+    }
+
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx == 0) {
+        printf("tmp_count: %u, \n num_v: %u, active_u: %u \n",
+               tmp_count,
+               num_vertices,
+               s_num_active_vertices[0]);
     }
 
     // 1. two hop implementation
@@ -534,12 +570,12 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
     uint16_t                          curr_level)
 {
     // Get level by level param
-    uint16_t  num_vertices     = m_s_num_vertices[curr_level];
-    uint16_t  num_edges        = m_s_num_edges[curr_level];
-    uint16_t* s_ev             = get_ev(curr_level);
-    uint16_t* s_mapping        = get_mapping(curr_level);
-    Bitmask&  matched_edges    = get_matched_edges_bitmask(curr_level);
-    Bitmask&  matched_vertices = get_matched_edges_bitmask(curr_level);
+    uint16_t  num_vertices          = m_s_num_vertices[curr_level];
+    uint16_t  num_edges             = m_s_num_edges[curr_level];
+    uint16_t* s_ev                  = get_ev(curr_level);
+    uint16_t* s_mapping             = get_mapping(curr_level);
+    Bitmask&  matched_edges         = get_matched_edges_bitmask(curr_level);
+    Bitmask&  attr_matched_vertices = get_matched_edges_bitmask(curr_level);
 
     // EV operation
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
@@ -547,19 +583,19 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
         uint16_t v1_local_id = s_ev[2 * e + 1];
 
         if (matched_edges(e)) {
-            assert(matched_vertices(v0_local_id));
-            assert(matched_vertices(v1_local_id));
+            assert(attr_matched_vertices(v0_local_id));
+            assert(attr_matched_vertices(v1_local_id));
 
             uint16_t coarse_id =
                 v0_local_id < v1_local_id ? v0_local_id : v1_local_id;
             s_mapping[v0_local_id] = coarse_id;
             s_mapping[v1_local_id] = coarse_id;
         } else {
-            if (!matched_vertices(v0_local_id)) {
+            if (!attr_matched_vertices(v0_local_id)) {
                 atomicCAS(&s_mapping[v0_local_id], INVALID16, v0_local_id);
             }
 
-            if (!matched_vertices(v1_local_id)) {
+            if (!attr_matched_vertices(v1_local_id)) {
                 atomicCAS(&s_mapping[v1_local_id], INVALID16, v1_local_id);
             }
         }
@@ -593,7 +629,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
 
     block.sync();
 
-    //TODO update num_edges
+    // TODO update num_edges
 }
 
 template <uint32_t blockThreads>
@@ -626,19 +662,19 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
     const uint16_t* s_vv_offset = m_s_tmp_offset;
     const uint16_t* s_vv_value  = m_s_tmp_value;
 
-    detail::bi_assignment_ggp<blockThreads>(
-        /*cooperative_groups::thread_block& */ block,
-        /* const uint16_t                   */ num_vertices,
-        /* const Bitmask& s_owned_v         */ active_vertices,
-        /* const Bitmask& s_active_v        */ active_vertices,
-        /* const uint16_t*                  */ s_vv_offset,
-        /* const uint16_t*                  */ s_vv_value,
-        /* Bitmask&                         */ m_tmp_assigned_v,
-        /* Bitmask&                         */ m_tmp_current_frontier_v,
-        /* Bitmask&                         */ m_tmp_next_frontier_v,
-        /* Bitmask&                         */ m_tmp_coarse_p0_v,
-        /* Bitmask&                         */ m_tmp_coarse_p1_v,
-        /* int                              */ num_iter);
+    // detail::bi_assignment_ggp<blockThreads>(
+    //     /*cooperative_groups::thread_block& */ block,
+    //     /* const uint16_t                   */ num_vertices,
+    //     /* const Bitmask& s_owned_v         */ active_vertices,
+    //     /* const Bitmask& s_active_v        */ active_vertices,
+    //     /* const uint16_t*                  */ s_vv_offset,
+    //     /* const uint16_t*                  */ s_vv_value,
+    //     /* Bitmask&                         */ m_tmp_assigned_v,
+    //     /* Bitmask&                         */ m_tmp_current_frontier_v,
+    //     /* Bitmask&                         */ m_tmp_next_frontier_v,
+    //     /* Bitmask&                         */ m_tmp_coarse_p0_v,
+    //     /* Bitmask&                         */ m_tmp_coarse_p1_v,
+    //     /* int                              */ num_iter);
 }
 
 template <uint32_t blockThreads>
@@ -647,16 +683,16 @@ __device__ __inline__ void PartitionManager<blockThreads>::uncoarsening(
     uint16_t                          curr_level)
 {
     // Get level by level param
-    uint16_t  num_vertices       = m_s_num_vertices[curr_level];
-    uint16_t  num_edges          = m_s_num_edges[curr_level];
-    uint16_t* s_ev               = get_ev(curr_level);
-    uint16_t* s_mapping          = get_mapping(curr_level);
-    Bitmask&  matched_vertices   = get_matched_edges_bitmask(curr_level);
-    Bitmask&  p0_vertices        = get_p0_vertices_bitmask(curr_level);
-    Bitmask&  p1_vertices        = get_p1_vertices_bitmask(curr_level);
-    Bitmask&  coarse_p0_vertices = get_p0_vertices_bitmask(curr_level + 1);
-    Bitmask&  coarse_p1_vertices = get_p1_vertices_bitmask(curr_level + 1);
-    Bitmask&  separator_v        = get_separator_vertices_bitmask(curr_level);
+    uint16_t  num_vertices          = m_s_num_vertices[curr_level];
+    uint16_t  num_edges             = m_s_num_edges[curr_level];
+    uint16_t* s_ev                  = get_ev(curr_level);
+    uint16_t* s_mapping             = get_mapping(curr_level);
+    Bitmask&  attr_matched_vertices = get_matched_edges_bitmask(curr_level);
+    Bitmask&  p0_vertices           = get_p0_vertices_bitmask(curr_level);
+    Bitmask&  p1_vertices           = get_p1_vertices_bitmask(curr_level);
+    Bitmask&  coarse_p0_vertices    = get_p0_vertices_bitmask(curr_level + 1);
+    Bitmask&  coarse_p1_vertices    = get_p1_vertices_bitmask(curr_level + 1);
+    Bitmask&  separator_v = get_separator_vertices_bitmask(curr_level);
     Bitmask&  coarse_separator_v =
         get_separator_vertices_bitmask(curr_level + 1);
 
