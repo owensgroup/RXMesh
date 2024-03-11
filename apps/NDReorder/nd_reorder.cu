@@ -7,7 +7,7 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere1.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     uint32_t    device_id     = 0;
 } Arg;
 
