@@ -8,6 +8,7 @@
 #include "rxmesh/handle.h"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/util.cuh"
+#include "rxmesh/rxmesh_dynamic.h"
 #include "rxmesh/patch_info.h"
 
 #include "rxmesh/attribute.h"
@@ -677,6 +678,16 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
     // TODO update num_edges
 }
 
+/**
+ * @brief Performs the partition operation in the multilevel graph partitioning process.
+ *
+ * This function performs the partitioning process for the coarsest level of the graph.
+ * 
+ * It takes s_ev as input and output the partitioned vertices into p0 and p1, and the separator vertices.
+ *
+ * @param block A reference to the cooperative_groups::thread_block object representing the CUDA thread block.
+ * @param curr_level The current level of the partitioning process.
+ */
 template <uint32_t blockThreads>
 __device__ __inline__ void PartitionManager<blockThreads>::partition(
     cooperative_groups::thread_block& block,
@@ -707,20 +718,31 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
     const uint16_t* s_vv_offset = m_s_tmp_offset;
     const uint16_t* s_vv_value  = m_s_tmp_value;
 
-    // detail::bi_assignment_ggp<blockThreads>(
-    //     /*cooperative_groups::thread_block& */ block,
-    //     /* const uint16_t                   */ num_vertices,
-    //     /* const Bitmask& s_owned_v         */ active_vertices,
-    //     /* const Bitmask& s_active_v        */ active_vertices,
-    //     /* const uint16_t*                  */ s_vv_offset,
-    //     /* const uint16_t*                  */ s_vv_value,
-    //     /* Bitmask&                         */ m_tmp_assigned_v,
-    //     /* Bitmask&                         */ m_tmp_current_frontier_v,
-    //     /* Bitmask&                         */ m_tmp_next_frontier_v,
-    //     /* Bitmask&                         */ m_tmp_coarse_p0_v,
-    //     /* Bitmask&                         */ m_tmp_coarse_p1_v,
-    //     /* int                              */ num_iter);
+    detail::bi_assignment_ggp<blockThreads>(
+        /*cooperative_groups::thread_block& */ block,
+        /* const uint16_t                   */ num_vertices,
+        /* const Bitmask& s_owned_v         */ active_vertices,
+        /* const Bitmask& s_active_v        */ active_vertices,
+        /* const uint16_t*                  */ s_vv_offset,
+        /* const uint16_t*                  */ s_vv_value,
+        /* Bitmask&                         */ m_tmp_assigned_v,
+        /* Bitmask&                         */ m_tmp_current_frontier_v,
+        /* Bitmask&                         */ m_tmp_next_frontier_v,
+        /* Bitmask&                         */ m_tmp_coarse_p0_v,
+        /* Bitmask&                         */ m_tmp_coarse_p1_v,
+        /* int                              */ num_iter);
+
+    // TODO get separator from p1 and p0
 }
+
+/**
+ * @brief Performs the uncoarsening operation in the multilevel graph partitioning process.
+ *
+ * The function then sets the bitmasks for the partitions and separator vertices at the current level based on the corresponding bitmasks at the next level.
+ *
+ * @param block A reference to the cooperative_groups::thread_block object representing the CUDA thread block.
+ * @param curr_level The current level of the partitioning process.
+ */
 
 template <uint32_t blockThreads>
 __device__ __inline__ void PartitionManager<blockThreads>::uncoarsening(
@@ -756,6 +778,18 @@ __device__ __inline__ void PartitionManager<blockThreads>::uncoarsening(
     block.sync();
 }
 
+/**
+ * @brief Generates a reordering of vertices in the graph.
+ *
+ * This function generates a reordering of vertices based on the partitioning of the graph.
+ * It first retrieves the number of vertices and edges at level 0, as well as the edge vertices and the bitmasks for the two partitions and the separator vertices.
+ * It then initializes a shared counter.
+ * The function then iterates over the vertices in the graph. For each vertex in the first partition, it increments the counter and assigns the counter value as the new order of the vertex.
+ * The function then synchronizes the thread block and repeats the process for the vertices in the second partition and the separator vertices.
+ *
+ * @param block A reference to the cooperative_groups::thread_block object representing the CUDA thread block.
+ * @param v_ordering A VertexAttribute object representing the new ordering of the vertices.
+ */
 template <uint32_t blockThreads>
 __device__ __inline__ void PartitionManager<blockThreads>::genrate_reordering(
     cooperative_groups::thread_block& block,
