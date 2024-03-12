@@ -33,18 +33,11 @@ __global__ static void nd_main(rxmesh::Context                   context,
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
 
-    //TMP: check the shared mem given by the driver vs the actual used
-    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx == 0)
-        printf("total shmem: %u dyn shmem: %u\n", total_shmem_size(), dynamic_shmem_size());
-
-    // TODO: test constructor
+    // Init the struct and alloc the shared memory
     PartitionManager<blockThreads> coarsen_graph(
         block, context, shrd_alloc, req_levels);
-
-    if (idx == 0)
-        printf("total shmem: %u dyn shmem: %u\n", total_shmem_size(), dynamic_shmem_size());
     
+    // Start the matching process and the result are saved in bit masks
     coarsen_graph.matching(block, attr_matched_v, attr_active_e, 0);
 
     // // iteration num known before kernel -> shared mem known before kernel

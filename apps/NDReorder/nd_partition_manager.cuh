@@ -23,6 +23,11 @@ namespace rxmesh {
 template <uint32_t blockThreads>
 struct ALIGN(16) PartitionManager
 {
+    /**
+     * @brief Default constructor for PartitionManager.
+     *
+     * This constructor initializes all member pointers to nullptr.
+     */
     __device__ __inline__ PartitionManager()
         : m_s_ev(nullptr),
           m_s_vwgt(nullptr),
@@ -331,6 +336,18 @@ struct ALIGN(16) PartitionManager
 // }
 
 
+/**
+ * @brief Constructor for the PartitionManager struct.
+ *
+ * This constructor initializes the PartitionManager with the given context, shared memory allocator, and requested level.
+ * It allocates shared memory for various attributes related to vertices and edges, such as weights, degrees, and adjacency weights.
+ *
+ * @param block A reference to the cooperative_groups::thread_block object representing the CUDA thread block.
+ * @param context A reference to the Context object containing information about the graph or mesh to be partitioned.
+ * @param shrd_alloc A reference to the ShmemAllocator object used to allocate shared memory.
+ * @param req_level The requested level of the partitioning process.
+ */
+
 template <uint32_t blockThreads>
 __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
     cooperative_groups::thread_block& block,
@@ -412,6 +429,17 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
     block.sync();
 }
 
+/**
+ * @brief Performs the matching operation in the coarsening phase of the multilevel graph partitioning process.
+ *
+ * The matching process is performed in a loop until 75% of the vertices are matched or hit 10 iterations.
+ * 
+ *
+ * @param block A reference to the cooperative_groups::thread_block object representing the CUDA thread block
+ * @param attr_matched_v tmp test vertex attribute
+ * @param attr_active_e  tmp test edge attribute
+ * @param curr_level The current level of the partitioning process
+ */
 template <uint32_t blockThreads>
 __device__ __inline__ void PartitionManager<blockThreads>::matching(
     cooperative_groups::thread_block& block,
@@ -439,8 +467,6 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
     const uint16_t* s_ve_offset = m_s_tmp_offset;
     const uint16_t* s_ve_value  = m_s_tmp_value;
 
-
-    // TODO_HEAD: loop 1 runs perfectly, check the param change for following loops
     int tmp_count = 0;
     // while (float(s_num_active_vertices[0]) / float(num_vertices) > 0.5) {
     while (tmp_count < 5) {
@@ -552,16 +578,6 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
                num_vertices,
                s_num_active_vertices[0]);
     }
-
-    // 1. two hop implementation
-    //    -> traditional MIS/MM
-    // 2. admed implementation
-    //    -> priority function pi
-    //    -> CAS to resolve conflict
-    //    ->
-    // 3. the kamesh parallel HEM implementation
-    //    ->
-    //    ->
 }
 
 template <uint32_t blockThreads>
