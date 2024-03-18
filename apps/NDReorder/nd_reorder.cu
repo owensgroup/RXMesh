@@ -50,6 +50,7 @@ void nd_reorder()
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
+#if USE_POLYSCOPE
     // Tests using coloring
     //Move vertex color to the host 
     attr_matched_v->move(rxmesh::DEVICE, rxmesh::HOST);
@@ -64,6 +65,7 @@ void nd_reorder()
 
     //render 
     polyscope::show();
+#endif
 
     RXMESH_TRACE("DONE!!!!!!!!!!!!!!");
 }

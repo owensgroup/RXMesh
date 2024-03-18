@@ -8,6 +8,7 @@
 #include "rxmesh/handle.h"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/util.cuh"
+#include "rxmesh/patch_info.h"
 #include "rxmesh/rxmesh_dynamic.h"
 #include "rxmesh/patch_info.h"
 
@@ -219,37 +220,47 @@ struct ALIGN(16) PartitionManager
         uint16_t                          num_vertices,
         uint16_t                          init_val = 0)
     {
-        fill_n<blockThreads>(m_tmp_attribute_v, num_vertices, init_val);
+        fill_n<blockThreads>(m_s_tmp_attribute_v, num_vertices, init_val);
         block.sync();
-        return m_tmp_attribute_v;
+        return m_s_tmp_attribute_v;
+    }
+
+    __device__ __inline__ uint16_t* get_new_tmp_attribute_e_arr(
+        cooperative_groups::thread_block& block,
+        uint16_t                          num_edges,
+        uint16_t                          init_val = 0)
+    {
+        fill_n<blockThreads>(m_s_tmp_attribute_e, num_edges, init_val);
+        block.sync();
+        return m_s_tmp_attribute_e;
     }
 
     // set as max v size
     __device__ __inline__ Bitmask& get_new_tmp_bitmask_active_v(
         cooperative_groups::thread_block& block)
     {
-        m_tmp_active_vertices.reset(block);
+        m_s_tmp_active_vertices.reset(block);
         block.sync();
-        return m_tmp_active_vertices;
+        return m_s_tmp_active_vertices;
     }
 
     // set as max e size
     __device__ __inline__ Bitmask& get_new_tmp_bitmask_active_e(
         cooperative_groups::thread_block& block)
     {
-        m_tmp_active_edges.reset(block);
+        m_s_tmp_active_edges.reset(block);
         block.sync();
-        return m_tmp_active_edges;
+        return m_s_tmp_active_edges;
     }
 
     __device__ __inline__ void reset_temp_partition_bitmask(
         cooperative_groups::thread_block& block)
     {
-        m_tmp_assigned_v.reset(block);
-        m_tmp_current_frontier_v.reset(block);
-        m_tmp_next_frontier_v.reset(block);
-        m_tmp_coarse_p0_v.reset(block);
-        m_tmp_coarse_p1_v.reset(block);
+        m_s_tmp_assigned_v.reset(block);
+        m_s_tmp_current_frontier_v.reset(block);
+        m_s_tmp_next_frontier_v.reset(block);
+        m_s_tmp_coarse_p0_v.reset(block);
+        m_s_tmp_coarse_p1_v.reset(block);
         block.sync();
     }
 
@@ -300,20 +311,23 @@ struct ALIGN(16) PartitionManager
     uint16_t* m_s_tmp_value;
 
     // tmp variable for vertex attribute
-    uint16_t* m_tmp_attribute_v;
+    uint16_t* m_s_tmp_attribute_v;
+
+    // tmp variable for edge attribute
+    uint16_t* m_s_tmp_attribute_e;
 
     // tmp variable for active edges
-    Bitmask m_tmp_active_edges;
+    Bitmask m_s_tmp_active_edges;
 
     // tmp variable for active vertices
-    Bitmask m_tmp_active_vertices;
+    Bitmask m_s_tmp_active_vertices;
 
     // tmp bitmask used by partition
-    Bitmask m_tmp_assigned_v;
-    Bitmask m_tmp_current_frontier_v;
-    Bitmask m_tmp_next_frontier_v;
-    Bitmask m_tmp_coarse_p0_v;
-    Bitmask m_tmp_coarse_p1_v;
+    Bitmask m_s_tmp_assigned_v;
+    Bitmask m_s_tmp_current_frontier_v;
+    Bitmask m_s_tmp_next_frontier_v;
+    Bitmask m_s_tmp_coarse_p0_v;
+    Bitmask m_s_tmp_coarse_p1_v;
 };
 
 // TODO: destroyer
@@ -340,12 +354,17 @@ struct ALIGN(16) PartitionManager
 /**
  * @brief Constructor for the PartitionManager struct.
  *
- * This constructor initializes the PartitionManager with the given context, shared memory allocator, and requested level.
- * It allocates shared memory for various attributes related to vertices and edges, such as weights, degrees, and adjacency weights.
+ * This constructor initializes the PartitionManager with the given context,
+ * shared memory allocator, and requested level. It allocates shared memory for
+ * various attributes related to vertices and edges, such as weights, degrees,
+ * and adjacency weights.
  *
- * @param block A reference to the cooperative_groups::thread_block object representing the CUDA thread block.
- * @param context A reference to the Context object containing information about the graph or mesh to be partitioned.
- * @param shrd_alloc A reference to the ShmemAllocator object used to allocate shared memory.
+ * @param block A reference to the cooperative_groups::thread_block object
+ * representing the CUDA thread block.
+ * @param context A reference to the Context object containing information about
+ * the graph or mesh to be partitioned.
+ * @param shrd_alloc A reference to the ShmemAllocator object used to allocate
+ * shared memory.
  * @param req_level The requested level of the partitioning process.
  */
 
@@ -405,8 +424,9 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
     m_s_separator_vertices =
         alloc_bitmask_arr(block, shrd_alloc, req_level, m_s_num_vertices[0]);
 
-    // alloc shared memory for mapping array 10*1*max_v
+    // alloc shared memory for mapping array 10*1*max_v and set to invalid
     m_s_mapping = shrd_alloc.alloc<uint16_t>(req_vertex_cap);
+    fill_n<blockThreads>(m_s_mapping, req_vertex_cap, (uint16_t)INVALID16);
 
     // tmp VE operation array which will be reused for multiple times
     // 4*max_e
@@ -414,33 +434,37 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
     m_s_tmp_value  = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0] * 2);
 
     // tmp vertex attribute array 1*max_v
-    m_tmp_attribute_v = shrd_alloc.alloc<uint16_t>(m_s_num_vertices[0]);
+    m_s_tmp_attribute_v = shrd_alloc.alloc<uint16_t>(m_s_num_vertices[0]);
 
     // tmp active e/v bitmask 2*max_bitmask
-    m_tmp_active_edges    = Bitmask(m_s_num_edges[0], shrd_alloc);
-    m_tmp_active_vertices = Bitmask(m_s_num_vertices[0], shrd_alloc);
+    m_s_tmp_active_edges    = Bitmask(m_s_num_edges[0], shrd_alloc);
+    m_s_tmp_active_vertices = Bitmask(m_s_num_vertices[0], shrd_alloc);
 
     // partition used tmp bitmasks 5*max_bitmask
-    m_tmp_assigned_v         = Bitmask(m_s_num_vertices[0], shrd_alloc);
-    m_tmp_current_frontier_v = Bitmask(m_s_num_vertices[0], shrd_alloc);
-    m_tmp_next_frontier_v    = Bitmask(m_s_num_vertices[0], shrd_alloc);
-    m_tmp_coarse_p0_v        = Bitmask(m_s_num_vertices[0], shrd_alloc);
-    m_tmp_coarse_p1_v        = Bitmask(m_s_num_vertices[0], shrd_alloc);
+    m_s_tmp_assigned_v         = Bitmask(m_s_num_vertices[0], shrd_alloc);
+    m_s_tmp_current_frontier_v = Bitmask(m_s_num_vertices[0], shrd_alloc);
+    m_s_tmp_next_frontier_v    = Bitmask(m_s_num_vertices[0], shrd_alloc);
+    m_s_tmp_coarse_p0_v        = Bitmask(m_s_num_vertices[0], shrd_alloc);
+    m_s_tmp_coarse_p1_v        = Bitmask(m_s_num_vertices[0], shrd_alloc);
 
     block.sync();
 }
 
 /**
- * @brief Performs the matching operation in the coarsening phase of the multilevel graph partitioning process.
+ * @brief Performs the matching operation in the coarsening phase of the
+ * multilevel graph partitioning process.
  *
- * The matching process is performed in a loop until 75% of the vertices are matched or hit 10 iterations.
- * First the vertex would pick an active edge with highest id, then the edge would check if the two vertices are matched.
- * If yes, the edge is matched and the two vertices are marked as matched. The one ring edges of the matched vertices are then deactivated.
- * This process is repeated until the termination condition is met.
- * 
+ * The matching process is performed in a loop until 75% of the vertices are
+ * matched or hit 10 iterations. First the vertex would pick an active edge with
+ * highest id, then the edge would check if the two vertices are matched. If
+ * yes, the edge is matched and the two vertices are marked as matched. The one
+ * ring edges of the matched vertices are then deactivated. This process is
+ * repeated until the termination condition is met.
+ *
  * It take s_ev as input and output the matched vertices and edges.
  *
- * @param block A reference to the cooperative_groups::thread_block object representing the CUDA thread block
+ * @param block A reference to the cooperative_groups::thread_block object
+ * representing the CUDA thread block
  * @param attr_matched_v tmp test vertex attribute
  * @param attr_active_e  tmp test edge attribute
  * @param curr_level The current level of the partitioning process
@@ -472,12 +496,10 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
     const uint16_t* s_ve_offset = m_s_tmp_offset;
     const uint16_t* s_ve_value  = m_s_tmp_value;
 
-    // TODO: cuDSS
-    // TODO: application: Heat_flow
-    // TODO_HEAD: add documentation
+    // TODO: don't count boundary edges
     s_num_matched_vertices[0] = num_vertices;
     int iter_count            = 0;
-    int inactive_edges_count = 0;
+    int inactive_edges_count  = 0;
     while (float(s_num_matched_vertices[0]) / float(num_vertices) > 0.75 &&
            iter_count < 10) {
         iter_count++;
@@ -599,15 +621,19 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
 
 
 /**
- * @brief Performs the coarsening operation in the multilevel graph partitioning process.
+ * @brief Performs the coarsening operation in the multilevel graph partitioning
+ * process.
  *
- * This function performs coarsen the graph into ev format. 
- * For a pair of vertices, if they are matched, they are coarsened into a single vertex choosing the smaller id as the representative.
- * Then the edges are coarsened into a single edge with the representative vertices.
- * 
- * The input is s_ev and matched_edges, and the output is the coarsened s_ev for the next level.
+ * This function performs coarsen the graph into ev format.
+ * For a pair of vertices, if they are matched, they are coarsened into a single
+ * vertex choosing the smaller id as the representative. Then the edges are
+ * coarsened into a single edge with the representative vertices.
  *
- * @param block A reference to the cooperative_groups::thread_block object representing the CUDA thread block.
+ * The input is s_ev and matched_edges, and the output is the coarsened s_ev for
+ * the next level.
+ *
+ * @param block A reference to the cooperative_groups::thread_block object
+ * representing the CUDA thread block.
  * @param curr_level The current level of the partitioning process.
  */
 template <uint32_t blockThreads>
@@ -619,29 +645,31 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
     uint16_t  num_vertices          = m_s_num_vertices[curr_level];
     uint16_t  num_edges             = m_s_num_edges[curr_level];
     uint16_t* s_ev                  = get_ev(curr_level);
+    uint16_t* s_ev_coarse           = get_ev(curr_level + 1);
     uint16_t* s_mapping             = get_mapping(curr_level);
     Bitmask&  matched_edges         = get_matched_edges_bitmask(curr_level);
-    Bitmask&  attr_matched_vertices = get_matched_edges_bitmask(curr_level);
+    Bitmask&  matched_vertices = get_matched_edges_bitmask(curr_level);
 
-    // EV operation
+    // EV operation: set matched vertices' coarsen id to the lower vertex id and
+    // remain the unmatched vertices' coarsen id as unchanged.
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
         uint16_t v0_local_id = s_ev[2 * e];
         uint16_t v1_local_id = s_ev[2 * e + 1];
 
         if (matched_edges(e)) {
-            assert(attr_matched_vertices(v0_local_id));
-            assert(attr_matched_vertices(v1_local_id));
+            assert(matched_vertices(v0_local_id));
+            assert(matched_vertices(v1_local_id));
 
             uint16_t coarse_id =
                 v0_local_id < v1_local_id ? v0_local_id : v1_local_id;
             s_mapping[v0_local_id] = coarse_id;
             s_mapping[v1_local_id] = coarse_id;
         } else {
-            if (!attr_matched_vertices(v0_local_id)) {
+            if (!matched_vertices(v0_local_id)) {
                 atomicCAS(&s_mapping[v0_local_id], INVALID16, v0_local_id);
             }
 
-            if (!attr_matched_vertices(v1_local_id)) {
+            if (!matched_vertices(v1_local_id)) {
                 atomicCAS(&s_mapping[v1_local_id], INVALID16, v1_local_id);
             }
         }
@@ -649,43 +677,117 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
 
     block.sync();
 
+    // e_id counter on shared memory
+    __shared__ uint16_t s_e_id_counter[1];
+
+    calc_new_temp_ve(block, s_ev, num_vertices, num_edges);
+    const uint16_t* s_ve_offset = m_s_tmp_offset;
+    const uint16_t* s_ve_value  = m_s_tmp_value;
+
+    auto unique_edge_id = [](uint16_t v0, uint16_t v1, uint16_t num_vertices) {
+        v0 = v0 < v1 ? v0 : v1;
+        v1 = v0 < v1 ? v1 : v0;
+        return v0 * num_vertices + v1;
+    };
+
+
+    // EV operation: determine whether choose an edge or not
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        // matched edges are not preserved
+        if (matched_edges(e)) {
+            continue;
+        }
+
+        bool edge_chosen = true;
+
         uint16_t v0_local_id = s_ev[2 * e];
         uint16_t v1_local_id = s_ev[2 * e + 1];
 
-        uint16_t v0_coarse_id =
-            s_mapping[v0_local_id] < s_mapping[v1_local_id] ?
-                s_mapping[v0_local_id] :
-                s_mapping[v1_local_id];
-        uint16_t v1_coarse_id =
-            s_mapping[v0_local_id] < s_mapping[v1_local_id] ?
-                s_mapping[v1_local_id] :
-                s_mapping[v0_local_id];
+        uint32_t current_unique_eid =
+            unique_edge_id(v0_local_id, v1_local_id, num_vertices);
+        uint32_t coarse_unique_eid = unique_edge_id(
+            s_mapping[v0_local_id], s_mapping[v1_local_id], num_vertices);
 
-        uint16_t tmp_coarse_edge_id =
-            v0_coarse_id * num_vertices + v1_coarse_id;
+        uint16_t priority_v =
+            v0_local_id < v1_local_id ? v0_local_id : v1_local_id;
 
-        // TODO: sort and reduction for tmp_coarse_edge_id
-        // look at /rxmesh/kernels/collective.cuh
-        uint16_t coarse_edge_id = tmp_coarse_edge_id;
+        // request one ring edge of priority_v
+        uint16_t start = s_ve_offset[priority_v];
+        uint16_t end   = s_ve_offset[priority_v + 1];
+        for (uint16_t e = start; e < end; e++) {
+            uint16_t priority_local_e = s_ve_value[e];
 
-        atomicCAS(&s_ev[2 * coarse_edge_id + 0], 0, v0_coarse_id);
-        atomicCAS(&s_ev[2 * coarse_edge_id + 1], 0, v1_coarse_id);
+            // skip current edge
+            if (priority_local_e == e) {
+                continue;
+            }
+
+            uint16_t priority_local_v0 = s_ev[2 * priority_local_e];
+            uint16_t priority_local_v1 = s_ev[2 * priority_local_e + 1];
+
+            uint32_t priority_current_unique_eid =
+                unique_edge_id(priority_local_v0, priority_local_v1, num_vertices);
+            uint32_t priority_coarse_unique_eid = unique_edge_id(
+                s_mapping[priority_local_v0], s_mapping[priority_local_v1], num_vertices);
+
+            // edge not chosen due to merged to other edge
+            if (priority_coarse_unique_eid == coarse_unique_eid && 
+                priority_current_unique_eid < current_unique_eid) {
+                edge_chosen = false;
+            }
+        }
+
+        // checked the matched vertex for duplicate edge
+        if (edge_chosen && matched_vertices(priority_v) && s_mapping[priority_v] != priority_v) {
+            uint16_t matched_priority_v = s_mapping[priority_v];
+            
+            // request one ring edge of mached_priority_v
+            uint16_t start = s_ve_offset[matched_priority_v];
+            uint16_t end   = s_ve_offset[matched_priority_v + 1];
+            for (uint16_t e = start; e < end; e++) {
+                uint16_t matched_priority_local_e = s_ve_value[e];
+
+                assert(matched_priority_local_e != e);
+
+                uint16_t matched_priority_local_v0 = s_ev[2 * matched_priority_local_e];
+                uint16_t matched_priority_local_v1 = s_ev[2 * matched_priority_local_e + 1];
+
+                uint32_t matched_priority_current_unique_eid =
+                    unique_edge_id(matched_priority_local_v0, matched_priority_local_v1, num_vertices);
+                uint32_t matched_priority_coarse_unique_eid = unique_edge_id(
+                    s_mapping[matched_priority_local_v0], s_mapping[matched_priority_local_v1], num_vertices);
+
+                // edge not chosen due to merged to other edge
+                if (matched_priority_coarse_unique_eid == coarse_unique_eid && 
+                    matched_priority_current_unique_eid < current_unique_eid) {
+                    edge_chosen = false;
+                }
+            }
+        }
+
+        if (edge_chosen) {
+            uint16_t curr_idx = atomicAdd(&s_e_id_counter[0], 1);
+            s_ev_coarse[2 * s_e_id_counter[0]] = s_mapping[v0_local_id];
+            s_ev_coarse[2 * s_e_id_counter[0] + 1] = s_mapping[v1_local_id];
+        }
     }
 
-    block.sync();
-
     // TODO update num_edges
+    // TODO update num_vertices
 }
 
 /**
- * @brief Performs the partition operation in the multilevel graph partitioning process.
+ * @brief Performs the partition operation in the multilevel graph partitioning
+ * process.
  *
- * This function performs the partitioning process for the coarsest level of the graph.
- * 
- * It takes s_ev as input and output the partitioned vertices into p0 and p1, and the separator vertices.
+ * This function performs the partitioning process for the coarsest level of the
+ * graph.
  *
- * @param block A reference to the cooperative_groups::thread_block object representing the CUDA thread block.
+ * It takes s_ev as input and output the partitioned vertices into p0 and p1,
+ * and the separator vertices.
+ *
+ * @param block A reference to the cooperative_groups::thread_block object
+ * representing the CUDA thread block.
  * @param curr_level The current level of the partitioning process.
  */
 template <uint32_t blockThreads>
@@ -725,22 +827,25 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
         /* const Bitmask& s_active_v        */ active_vertices,
         /* const uint16_t*                  */ s_vv_offset,
         /* const uint16_t*                  */ s_vv_value,
-        /* Bitmask&                         */ m_tmp_assigned_v,
-        /* Bitmask&                         */ m_tmp_current_frontier_v,
-        /* Bitmask&                         */ m_tmp_next_frontier_v,
-        /* Bitmask&                         */ m_tmp_coarse_p0_v,
-        /* Bitmask&                         */ m_tmp_coarse_p1_v,
+        /* Bitmask&                         */ m_s_tmp_assigned_v,
+        /* Bitmask&                         */ m_s_tmp_current_frontier_v,
+        /* Bitmask&                         */ m_s_tmp_next_frontier_v,
+        /* Bitmask&                         */ m_s_tmp_coarse_p0_v,
+        /* Bitmask&                         */ m_s_tmp_coarse_p1_v,
         /* int                              */ num_iter);
 
     // TODO get separator from p1 and p0
 }
 
 /**
- * @brief Performs the uncoarsening operation in the multilevel graph partitioning process.
+ * @brief Performs the uncoarsening operation in the multilevel graph
+ * partitioning process.
  *
- * The function then sets the bitmasks for the partitions and separator vertices at the current level based on the corresponding bitmasks at the next level.
+ * The function then sets the bitmasks for the partitions and separator vertices
+ * at the current level based on the corresponding bitmasks at the next level.
  *
- * @param block A reference to the cooperative_groups::thread_block object representing the CUDA thread block.
+ * @param block A reference to the cooperative_groups::thread_block object
+ * representing the CUDA thread block.
  * @param curr_level The current level of the partitioning process.
  */
 
@@ -754,7 +859,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::uncoarsening(
     uint16_t  num_edges             = m_s_num_edges[curr_level];
     uint16_t* s_ev                  = get_ev(curr_level);
     uint16_t* s_mapping             = get_mapping(curr_level);
-    Bitmask&  attr_matched_vertices = get_matched_edges_bitmask(curr_level);
+    Bitmask&  matched_vertices = get_matched_edges_bitmask(curr_level);
     Bitmask&  p0_vertices           = get_p0_vertices_bitmask(curr_level);
     Bitmask&  p1_vertices           = get_p1_vertices_bitmask(curr_level);
     Bitmask&  coarse_p0_vertices    = get_p0_vertices_bitmask(curr_level + 1);
@@ -781,14 +886,20 @@ __device__ __inline__ void PartitionManager<blockThreads>::uncoarsening(
 /**
  * @brief Generates a reordering of vertices in the graph.
  *
- * This function generates a reordering of vertices based on the partitioning of the graph.
- * It first retrieves the number of vertices and edges at level 0, as well as the edge vertices and the bitmasks for the two partitions and the separator vertices.
- * It then initializes a shared counter.
- * The function then iterates over the vertices in the graph. For each vertex in the first partition, it increments the counter and assigns the counter value as the new order of the vertex.
- * The function then synchronizes the thread block and repeats the process for the vertices in the second partition and the separator vertices.
+ * This function generates a reordering of vertices based on the partitioning of
+ * the graph. It first retrieves the number of vertices and edges at level 0, as
+ * well as the edge vertices and the bitmasks for the two partitions and the
+ * separator vertices. It then initializes a shared counter. The function then
+ * iterates over the vertices in the graph. For each vertex in the first
+ * partition, it increments the counter and assigns the counter value as the new
+ * order of the vertex. The function then synchronizes the thread block and
+ * repeats the process for the vertices in the second partition and the
+ * separator vertices.
  *
- * @param block A reference to the cooperative_groups::thread_block object representing the CUDA thread block.
- * @param v_ordering A VertexAttribute object representing the new ordering of the vertices.
+ * @param block A reference to the cooperative_groups::thread_block object
+ * representing the CUDA thread block.
+ * @param v_ordering A VertexAttribute object representing the new ordering of
+ * the vertices.
  */
 template <uint32_t blockThreads>
 __device__ __inline__ void PartitionManager<blockThreads>::genrate_reordering(
