@@ -785,7 +785,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
     }
 
     m_s_num_vertices[curr_level + 1] = s_coarse_v_counter[0];
-    m_s_num_edges[curr_level + 1] = s_e_id_counter[0];
+    m_s_num_edges[curr_level + 1] = s_e_id_counter[0] + 1;
 }
 
 /**
