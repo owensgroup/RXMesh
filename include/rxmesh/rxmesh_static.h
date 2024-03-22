@@ -65,9 +65,9 @@ class RXMeshStatic : public RXMesh
             this->add_vertex_attribute<float>(vertices, "rx:vertices");
 
 #if USE_POLYSCOPE
-        polyscope::options::autocenterStructures = true;
-        polyscope::options::autoscaleStructures  = true;
-        polyscope::options::automaticallyComputeSceneExtents = true;
+        //polyscope::options::autocenterStructures = true;
+        //polyscope::options::autoscaleStructures  = true;
+        //polyscope::options::automaticallyComputeSceneExtents = true;
 
         polyscope::init();
         m_polyscope_mesh_name = polyscope::guessNiceNameFromPath(file_path);
