@@ -696,8 +696,8 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
         // }
 
         if (matched_edges(e)) {
-            // assert(matched_vertices(v0_local_id));
-            // assert(matched_vertices(v1_local_id));
+            assert(matched_vertices(v0_local_id));
+            assert(matched_vertices(v1_local_id));
 
             uint16_t coarse_id =
                 v0_local_id < v1_local_id ? v0_local_id : v1_local_id;
@@ -715,13 +715,6 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
     }
 
     block.sync();
-
-    for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
-        if (matched_vertices(v) && coarsen_owned(LocalVertexT(v), curr_level) &&
-            blockIdx.x == 0) {
-            printf("v:  %u, s_mapping[v]: %u\n", v, s_mapping[v]);
-        }
-    }
 
     // e_id counter on shared memory
     __shared__ uint16_t s_e_id_counter[1];
@@ -808,36 +801,35 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
                        matched_priority_v);
             }
 
+            // request one ring edge of mached_priority_v
+            uint16_t start = s_ve_offset[matched_priority_v];
+            uint16_t end   = s_ve_offset[matched_priority_v + 1];
+            for (uint16_t e = start; e < end; e++) {
+                uint16_t matched_priority_local_e = s_ve_value[e];
 
-            // // request one ring edge of mached_priority_v
-            // uint16_t start = s_ve_offset[matched_priority_v];
-            // uint16_t end   = s_ve_offset[matched_priority_v + 1];
-            // for (uint16_t e = start; e < end; e++) {
-            //     uint16_t matched_priority_local_e = s_ve_value[e];
+                assert(matched_priority_local_e != e);
 
-            //     assert(matched_priority_local_e != e);
+                uint16_t matched_priority_local_v0 =
+                    s_ev[2 * matched_priority_local_e];
+                uint16_t matched_priority_local_v1 =
+                    s_ev[2 * matched_priority_local_e + 1];
 
-            //     uint16_t matched_priority_local_v0 =
-            //         s_ev[2 * matched_priority_local_e];
-            //     uint16_t matched_priority_local_v1 =
-            //         s_ev[2 * matched_priority_local_e + 1];
+                uint32_t matched_priority_current_unique_eid =
+                    unique_edge_id(matched_priority_local_v0,
+                                   matched_priority_local_v1,
+                                   num_vertices);
+                uint32_t matched_priority_coarse_unique_eid =
+                    unique_edge_id(s_mapping[matched_priority_local_v0],
+                                   s_mapping[matched_priority_local_v1],
+                                   num_vertices);
 
-            //     uint32_t matched_priority_current_unique_eid =
-            //         unique_edge_id(matched_priority_local_v0,
-            //                        matched_priority_local_v1,
-            //                        num_vertices);
-            //     uint32_t matched_priority_coarse_unique_eid =
-            //         unique_edge_id(s_mapping[matched_priority_local_v0],
-            //                        s_mapping[matched_priority_local_v1],
-            //                        num_vertices);
-
-            //     // edge not chosen due to merged to other edge
-            //     if (matched_priority_coarse_unique_eid == coarse_unique_eid
-            //     &&
-            //         matched_priority_current_unique_eid < current_unique_eid)
-            //         { edge_chosen = false;
-            //     }
-            // }
+                // edge not chosen due to merged to other edge
+                if (matched_priority_coarse_unique_eid == coarse_unique_eid
+                &&
+                    matched_priority_current_unique_eid < current_unique_eid)
+                    { edge_chosen = false;
+                }
+            }
         }
 
         if (edge_chosen) {
