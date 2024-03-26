@@ -3,6 +3,7 @@ add_executable(Simplification)
 set(SOURCE_LIST
     simplification.cu  
 	simplification_rxmesh.cuh	
+	simplification_kernels.cuh
 )
 
 set(COMMON_LIST    
