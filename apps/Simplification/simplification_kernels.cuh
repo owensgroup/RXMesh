@@ -14,6 +14,19 @@ template <typename T>
 using Mat4 = glm::mat<4, 4, T, glm::defaultp>;
 
 template <typename T>
+__device__ __host__ __inline__ int bin_id(const T   cost,
+                                          const T*  d_min_max_edge_cost,
+                                          const int num_bins)
+{
+    const T min_v = d_min_max_edge_cost[0];
+    const T max_v = d_min_max_edge_cost[1];
+
+    const int id = std::floor(((cost - min_v) * num_bins) / (max_v - min_v));
+
+    return std::min(id, num_bins - 1);
+}
+
+template <typename T>
 __device__ __inline__ __host__ T
 compute_cost(const Mat4<T>& quadric, const T x, const T y, const T z)
 {
@@ -214,6 +227,7 @@ __global__ static void compute_vertex_quadric_fv(
 
 template <typename T, uint32_t blockThreads>
 __global__ static void simplify(rxmesh::Context            context,
+                                const CostHistogram<T>     histo,
                                 rxmesh::VertexAttribute<T> coords,
                                 rxmesh::VertexAttribute<T> vertex_quadrics,
                                 rxmesh::EdgeAttribute<T>   edge_cost,
@@ -240,7 +254,7 @@ __global__ static void simplify(rxmesh::Context            context,
     }
     block.sync();
 
-    // following the same edge selection as "Instant Level-of-Detail" paper
+    
     auto collapse = [&](const VertexHandle& vh, const EdgeIterator& iter) {
         // TODO handle boundary edges
 

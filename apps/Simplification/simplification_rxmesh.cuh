@@ -4,19 +4,66 @@
 
 #include "rxmesh/rxmesh_dynamic.h"
 
+#include "cub/device/device_scan.cuh"
+
+template <typename T>
+struct CostHistogram
+{
+    CostHistogram(int num)
+        : num_bins(num),
+          d_bins(nullptr),
+          d_min_max_edge_cost(nullptr),
+          d_scan_temp_storage(nullptr),
+          temp_storage_bytes(0)
+    {
+        using namespace rxmesh;
+        CUDA_ERROR(cudaMalloc((void**)&d_bins, num_bins * sizeof(int)));
+        cub::DeviceScan::ExclusiveSum(
+            d_scan_temp_storage, temp_storage_bytes, d_bins, num_bins);
+        CUDA_ERROR(
+            cudaMalloc((void**)&d_scan_temp_storage, temp_storage_bytes));
+        CUDA_ERROR(cudaMalloc((void**)&d_min_max_edge_cost, 2 * sizeof(T)));
+    }
+
+    void scan()
+    {
+        cub::DeviceScan::ExclusiveSum(
+            d_scan_temp_storage, temp_storage_bytes, d_bins, num_bins);
+    }
+
+    void free()
+    {
+        using namespace rxmesh;
+        CUDA_ERROR(cudaFree(d_min_max_edge_cost));
+        CUDA_ERROR(cudaFree(d_bins));
+        CUDA_ERROR(cudaFree(d_scan_temp_storage));
+    }
+
+    int    num_bins;
+    T*     d_min_max_edge_cost;
+    int*   d_bins;
+    void*  d_scan_temp_storage;
+    size_t temp_storage_bytes;
+};
+
+
 #include "simplification_kernels.cuh"
 
 template <typename T>
-inline void populate_bins(const rxmesh::RXMeshDynamic&   rx,
-                          const rxmesh::EdgeAttribute<T> edge_cost,
-                          const int                      num_bins,
-                          const T*                       d_min_max_edge_cost,
-                          int*                           d_bins)
+inline void populate_bins(const rxmesh::RXMeshDynamic&    rx,
+                          const rxmesh::EdgeAttribute<T>& edge_cost,
+                          CostHistogram<T>                histo)
 {
     using namespace rxmesh;
 
-    rx.for_each_edge(DEVICE,
-                     [=](EdgeHandle eh) { float cost = edge_cost(eh); });
+    CUDA_ERROR(cudaMemset(histo.d_bins, 0, histo.num_bins * sizeof(int)));
+
+    rx.for_each_edge(DEVICE, [=] __device__(EdgeHandle eh) {
+        float cost = edge_cost(eh);
+        int   id   = bin_id(cost, histo.d_min_max_edge_cost, histo.num_bins);
+
+        ::atomicAdd(histo.d_bins + id, 1);
+    });
 }
 
 template <typename T>
@@ -93,13 +140,8 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
     auto edge_col_coord = rx.add_edge_attribute<float>("eCoord", 3);
     edge_col_coord->reset(0, DEVICE);
 
-    float* d_min_max_edge_cost = nullptr;
-    CUDA_ERROR(cudaMalloc((void**)&d_min_max_edge_cost, 2 * sizeof(float)));
+    CostHistogram<float> histo(256);
 
-
-    const int num_bins = 256;
-    int*      d_bins   = nullptr;
-    CUDA_ERROR(cudaMalloc((void**)&d_bins, num_bins * sizeof(int)));
 
     float total_time   = 0;
     float app_time     = 0;
@@ -130,9 +172,12 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
                        vertex_quadrics.get(),
                        edge_cost.get(),
                        edge_col_coord.get(),
-                       d_min_max_edge_cost);
+                       histo.d_min_max_edge_cost);
 
-        populate_bins(rx, edge_cost, num_bins, d_min_max_edge_cost, d_bins);
+        populate_bins(rx, *edge_cost, histo);
+
+        histo.scan();
+
 
         rx.reset_scheduler();
         int inner_iter = 0;
@@ -159,6 +204,7 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
                 <<<launch_box.blocks,
                    launch_box.num_threads,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(),
+                                                histo,
                                                 *coords,
                                                 *vertex_quadrics,
                                                 *edge_cost,
@@ -218,6 +264,5 @@ inline void simplification_rxmesh(rxmesh::RXMeshDynamic& rx,
     polyscope::show();
 #endif
 
-    CUDA_ERROR(cudaFree(d_min_max_edge_cost));
-    CUDA_ERROR(cudaFree(d_bins));
+    histo.free();
 }
