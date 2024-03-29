@@ -65,28 +65,29 @@ __device__ __forceinline__ void block_mat_transpose(
     }*/
     __syncthreads();
 
-#if __CUDA_ARCH__ >= 700
+// #if __CUDA_ARCH__ >= 700
     // 2) compute the number of items in each bucket/col
-    __half* mat_half = (__half*)(mat);
-    for (uint32_t i = 0; i < itemPerThread; ++i) {
-        if (thread_data[i] != INVALID16) {
-            local_offset[i] = ::atomicAdd(&mat_half[thread_data[i]], 1);
-        }
-    }
-    __syncthreads();
-    for (uint32_t i = threadIdx.x; i < num_cols; i += blockThreads) {
-        uint16_t val = uint16_t(mat_half[i]);
-        mat[i]       = val;
-    }
-#else
+    // __half* mat_half = (__half*)(mat);
+    // for (uint32_t i = 0; i < itemPerThread; ++i) {
+    //     if (thread_data[i] != INVALID16) {
+    //         local_offset[i] = ::atomicAdd(&mat_half[thread_data[i]], 1);
+    //     }
+    // }
+    // __syncthreads();
+    // for (uint32_t i = threadIdx.x; i < num_cols; i += blockThreads) {
+    //     uint16_t val = uint16_t(mat_half[i]);
+    //     mat[i]       = val;
+
+    //     printf("\n i= %u, mat[i]= %u", i, mat[i]);
+    // }
+// #else
     for (uint32_t i = 0; i < itemPerThread; ++i) {
         if (thread_data[i] != INVALID16) {
             local_offset[i] = atomicAdd(&mat[thread_data[i]], 1u);
         }
     }
     __syncthreads();
-#endif
-
+// #endif
 
     // 3) exclusive scan on mat to compute the offset
     cub_block_exclusive_sum<uint16_t, blockThreads>(mat, num_cols);

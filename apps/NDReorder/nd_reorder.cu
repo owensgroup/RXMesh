@@ -30,7 +30,7 @@ void nd_reorder()
     auto v_reorder =
         rx.add_vertex_attribute<uint16_t>("v_reorder", 1, rxmesh::LOCATION_ALL);
 
-    uint16_t req_levels = 1;
+    uint16_t req_levels = 5;
 
     // TODO: prepare kernel required variable
     uint32_t blocks         = rx.get_num_patches();

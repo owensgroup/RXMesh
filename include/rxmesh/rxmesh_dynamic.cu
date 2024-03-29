@@ -1092,7 +1092,7 @@ __inline__ __device__ void bi_assignment_ggp(
 
         bool found_a(false), found_b(false);
         for (uint16_t v = 0; v < num_vertices; ++v) {
-            if (s_active_v(v) && !s_owned_v(v)) {
+            if (s_active_v(v)/* && !s_owned_v(v)*/) {
                 s_seed_a = v;
                 found_a  = true;
                 break;
@@ -1110,7 +1110,7 @@ __inline__ __device__ void bi_assignment_ggp(
         assert(found_a);
 
         for (uint16_t v = num_vertices - 1; v > 1; --v) {
-            if (s_active_v(v) && !s_owned_v(v) && v != s_seed_a) {
+            if (s_active_v(v) /*&& !s_owned_v(v)*/ && v != s_seed_a) {
                 s_seed_b = v;
                 found_b  = true;
                 break;
@@ -1281,7 +1281,7 @@ __inline__ __device__ void bi_assignment_ggp(
         for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
             if (s_active_v(v)) {
                 bool is_a(s_partition_a_v(v));
-                bool on_frontier = !s_owned_v(v);
+                bool on_frontier = false; // !s_owned_v(v);
 
                 if (!on_frontier) {
                     const uint16_t start = s_vv_offset[v];

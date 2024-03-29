@@ -41,6 +41,15 @@ __global__ static void nd_main(rxmesh::Context                   context,
     coarsen_graph.matching(block, attr_matched_v, attr_active_e, 0);
     coarsen_graph.coarsening(block, 0);
 
+    coarsen_graph.matching_test(block, attr_matched_v, attr_active_e, 1);
+    coarsen_graph.coarsening(block, 1);
+
+    coarsen_graph.matching_test(block, attr_matched_v, attr_active_e, 2);
+    coarsen_graph.coarsening(block, 2);
+
+    // coarsen_graph.matching_test(block, attr_matched_v, attr_active_e, 2);
+    // coarsen_graph.coarsening(block, 2);
+
     // // iteration num known before kernel -> shared mem known before kernel
     // int i = 0;
     // while (i < req_levels) {
