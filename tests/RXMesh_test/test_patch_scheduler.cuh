@@ -3,6 +3,7 @@
 #include <numeric>
 
 #include "rxmesh/patch_scheduler.cuh"
+#include "rxmesh/priority_patch_scheduler.cuh"
 
 __global__ void schedule_kernel(uint32_t* d_status, rxmesh::PatchScheduler sch)
 {
@@ -40,7 +41,7 @@ TEST(RXMeshDynamic, PatchScheduler)
     CUDA_ERROR(cudaMemset(d_status, 0, sizeof(uint32_t)));
 
     // make sure to have more blocks launched than number of SM we have
-    // on the GPU just as a stress test 
+    // on the GPU just as a stress test
     const uint32_t num_patches = prop.multiProcessorCount * 5;
 
     PatchScheduler sch;
@@ -65,4 +66,9 @@ TEST(RXMeshDynamic, PatchScheduler)
 
     GPU_FREE(d_status);
     sch.free();
+}
+
+
+TEST(RXMeshDynamic, PriorityPatchScheduler)
+{
 }
