@@ -46,7 +46,12 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
         m_s_num_cavities[0]   = 0;
 
         // get a patch
-        s_patch_id = m_context.m_patch_scheduler.pop();
+        if (m_context.use_priority_scheduler) {
+            s_patch_id = m_context.m_priority_patch_scheduler.pop();
+        } else {
+            s_patch_id = m_context.m_patch_scheduler.pop();
+        }
+
 #ifdef PROCESS_SINGLE_PATCH
         if (s_patch_id != current_p) {
             s_patch_id = INVALID32;
@@ -2061,8 +2066,14 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::push()
 {
     if (threadIdx.x == 0) {
-        bool ret = m_context.m_patch_scheduler.push(m_patch_info.patch_id);
-        assert(ret);
+        if (m_context.use_priority_scheduler) {
+            bool ret = m_context.m_priority_patch_scheduler.push(
+                m_patch_info.patch_id);
+            assert(ret);
+        } else {
+            bool ret = m_context.m_patch_scheduler.push(m_patch_info.patch_id);
+            assert(ret);
+        }
     }
 }
 
@@ -2071,8 +2082,13 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::push(
     const uint32_t pid)
 {
     if (threadIdx.x == 0) {
-        bool ret = m_context.m_patch_scheduler.push(pid);
-        assert(ret);
+        if (m_context.use_priority_scheduler) {
+            bool ret = m_context.m_priority_patch_scheduler.push(pid);
+            assert(ret);
+        } else {
+            bool ret = m_context.m_patch_scheduler.push(pid);
+            assert(ret);
+        }
     }
 }
 

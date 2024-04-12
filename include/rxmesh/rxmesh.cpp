@@ -49,7 +49,8 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                   const std::string                         patcher_file,
                   const float                               capacity_factor,
                   const float                               patch_alloc_factor,
-                  const float lp_hashtable_load_factor)
+                  const float lp_hashtable_load_factor,
+                  bool        use_priority_scheduler)
 {
     m_capacity_factor          = capacity_factor;
     m_lp_hashtable_load_factor = lp_hashtable_load_factor;
@@ -81,6 +82,10 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     sch.init(get_max_num_patches());
     sch.refill(get_num_patches());
 
+    PriorityPatchScheduler priority_sch;
+    priority_sch.init(get_max_num_patches());
+    priority_sch.refill(get_num_patches());
+
     // Allocate  extra patches
     allocate_extra_patches();
 
@@ -101,7 +106,9 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                           max_lp_hashtable_capacity<LocalEdgeT>(),
                           max_lp_hashtable_capacity<LocalFaceT>(),
                           m_d_patches_info,
-                          sch);
+                          sch,
+                          priority_sch,
+                          use_priority_scheduler);
 
 
     RXMESH_TRACE("#Vertices = {}, #Faces= {}, #Edges= {}",
@@ -125,6 +132,7 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
 RXMesh::~RXMesh()
 {
     m_rxmesh_context.m_patch_scheduler.free();
+    m_rxmesh_context.m_priority_patch_scheduler.free();
 
     for (uint32_t p = 0; p < get_num_patches(); ++p) {
         free(m_h_patches_info[p].active_mask_v);
@@ -775,7 +783,7 @@ void RXMesh::build_device()
                           get_max_num_patches() * sizeof(PatchInfo)));
 
 
-//#pragma omp parallel for
+    // #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
 
         const uint16_t p_num_vertices =
@@ -1147,7 +1155,7 @@ void RXMesh::allocate_extra_patches()
     const uint16_t p_edges_capacity    = get_per_patch_max_edge_capacity();
     const uint16_t p_faces_capacity    = get_per_patch_max_face_capacity();
 
-//#pragma omp parallel for  
+    // #pragma omp parallel for
     for (int p = get_num_patches(); p < static_cast<int>(get_max_num_patches());
          ++p) {
 

@@ -5,7 +5,7 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "torus.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "Fennec_Fox.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     uint32_t    target        = 0;
     uint32_t    device_id     = 0;
@@ -22,13 +22,14 @@ TEST(Apps, Simplification)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshDynamic rx(Arg.obj_file_name);
+    RXMeshDynamic rx(Arg.obj_file_name, "", true);
     // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
     //        "_patches");
 
     // RXMeshDynamic rx(Arg.obj_file_name,
-    //                 STRINGIFY(OUTPUT_DIR) +
-    //                     extract_file_name(Arg.obj_file_name) + "_patches");
+    //                  STRINGIFY(OUTPUT_DIR) +
+    //                      extract_file_name(Arg.obj_file_name) + "_patches",
+    //                  true);
 
     ASSERT_TRUE(rx.is_edge_manifold());
 

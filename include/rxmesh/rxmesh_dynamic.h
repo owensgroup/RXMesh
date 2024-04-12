@@ -186,12 +186,16 @@ __global__ static void slice_patches(Context        context,
                 s_new_patch_id =
                     ::atomicAdd(context.m_num_patches, uint32_t(1));
                 assert(s_new_patch_id < context.m_max_num_patches);
-                context.m_patch_scheduler.push(s_new_patch_id);
-                //printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
+                if (context.use_priority_scheduler) {
+                    context.m_priority_patch_scheduler.push(s_new_patch_id);
+                } else {
+                    context.m_patch_scheduler.push(s_new_patch_id);
+                }
+                // printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
             } else {
                 s_new_patch_id                           = INVALID32;
                 context.m_patches_info[pid].should_slice = false;
-            }            
+            }
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
         Bitmask s_active_v, s_active_e, s_active_f;
@@ -549,6 +553,7 @@ class RXMeshDynamic : public RXMeshStatic
      */
     explicit RXMeshDynamic(const std::string file_path,
                            const std::string patcher_file             = "",
+                           bool              use_priority_scheduler   = false,
                            const float       capacity_factor          = 1.8,
                            const float       patch_alloc_factor       = 5.0,
                            const float       lp_hashtable_load_factor = 0.5)
@@ -556,7 +561,8 @@ class RXMeshDynamic : public RXMeshStatic
                        patcher_file,
                        capacity_factor,
                        patch_alloc_factor,
-                       lp_hashtable_load_factor)
+                       lp_hashtable_load_factor,
+                       use_priority_scheduler)
     {
     }
 
@@ -785,7 +791,12 @@ class RXMeshDynamic : public RXMeshStatic
      */
     bool is_queue_empty(cudaStream_t stream = NULL)
     {
-        return this->m_rxmesh_context.m_patch_scheduler.is_empty(stream);
+        if (this->m_rxmesh_context.use_priority_scheduler) {
+            return this->m_rxmesh_context.m_priority_patch_scheduler.is_empty(
+                stream);
+        } else {
+            return this->m_rxmesh_context.m_patch_scheduler.is_empty(stream);
+        }
     }
 
 
@@ -797,7 +808,12 @@ class RXMeshDynamic : public RXMeshStatic
      */
     void reset_scheduler()
     {
-        this->m_rxmesh_context.m_patch_scheduler.refill(get_num_patches());
+        if (this->m_rxmesh_context.use_priority_scheduler) {
+            this->m_rxmesh_context.m_priority_patch_scheduler.refill(
+                get_num_patches());
+        } else {
+            this->m_rxmesh_context.m_patch_scheduler.refill(get_num_patches());
+        }
     }
 
     /**

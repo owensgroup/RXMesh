@@ -41,7 +41,8 @@ class RXMeshStatic : public RXMesh
                           const std::string patcher_file             = "",
                           const float       capacity_factor          = 1.0,
                           const float       patch_alloc_factor       = 1.0,
-                          const float       lp_hashtable_load_factor = 0.8)
+                          const float       lp_hashtable_load_factor = 0.8,
+                          bool              use_priority_scheduler   = false)
         : RXMesh()
     {
         std::vector<std::vector<uint32_t>> fv;
@@ -57,7 +58,8 @@ class RXMeshStatic : public RXMesh
                    patcher_file,
                    capacity_factor,
                    patch_alloc_factor,
-                   lp_hashtable_load_factor);
+                   lp_hashtable_load_factor,
+                   use_priority_scheduler);
 
         m_attr_container = std::make_shared<AttributeContainer>();
 
@@ -65,9 +67,9 @@ class RXMeshStatic : public RXMesh
             this->add_vertex_attribute<float>(vertices, "rx:vertices");
 
 #if USE_POLYSCOPE
-        //polyscope::options::autocenterStructures = true;
-        //polyscope::options::autoscaleStructures  = true;
-        //polyscope::options::automaticallyComputeSceneExtents = true;
+        // polyscope::options::autocenterStructures = true;
+        // polyscope::options::autoscaleStructures  = true;
+        // polyscope::options::automaticallyComputeSceneExtents = true;
 
         polyscope::init();
         m_polyscope_mesh_name = polyscope::guessNiceNameFromPath(file_path);

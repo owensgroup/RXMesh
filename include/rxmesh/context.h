@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "rxmesh/patch_info.h"
 #include "rxmesh/patch_scheduler.cuh"
+#include "rxmesh/priority_patch_scheduler.cuh"
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
@@ -33,14 +34,15 @@ class Context
           m_patches_info(nullptr),
           m_max_lp_capacity_v(0),
           m_max_lp_capacity_e(0),
-          m_max_lp_capacity_f(0)
+          m_max_lp_capacity_f(0),
+          use_priority_scheduler(false)
     {
     }
 
-    __device__ Context(const Context&) = default;
-    __device__ Context(Context&&)      = default;
+    __device__          Context(const Context&)   = default;
+    __device__          Context(Context&&)        = default;
     __device__ Context& operator=(const Context&) = default;
-    __device__ Context& operator=(Context&&) = default;
+    __device__ Context& operator=(Context&&)      = default;
 
     /**
      * @brief Total number of edges in mesh
@@ -152,23 +154,25 @@ class Context
      * @param patches pointer to PatchInfo that contains different info about
      * the patches
      */
-    void init(const uint32_t num_vertices,
-              const uint32_t num_edges,
-              const uint32_t num_faces,
-              const uint32_t max_num_vertices,
-              const uint32_t max_num_edges,
-              const uint32_t max_num_faces,
-              const uint32_t num_patches,
-              const uint32_t max_num_patches,
-              const float    capacity_factor,
-              uint32_t*      vertex_prefix,
-              uint32_t*      edge_prefix,
-              uint32_t*      face_prefix,
-              uint16_t       max_lp_capacity_v,
-              uint16_t       max_lp_capacity_e,
-              uint16_t       max_lp_capacity_f,
-              PatchInfo*     d_patches,
-              PatchScheduler scheduler)
+    void init(const uint32_t         num_vertices,
+              const uint32_t         num_edges,
+              const uint32_t         num_faces,
+              const uint32_t         max_num_vertices,
+              const uint32_t         max_num_edges,
+              const uint32_t         max_num_faces,
+              const uint32_t         num_patches,
+              const uint32_t         max_num_patches,
+              const float            capacity_factor,
+              uint32_t*              vertex_prefix,
+              uint32_t*              edge_prefix,
+              uint32_t*              face_prefix,
+              uint16_t               max_lp_capacity_v,
+              uint16_t               max_lp_capacity_e,
+              uint16_t               max_lp_capacity_f,
+              PatchInfo*             d_patches,
+              PatchScheduler         scheduler,
+              PriorityPatchScheduler priority_scheduler,
+              bool                   use_priority)
     {
         uint32_t* buffer = nullptr;
         CUDA_ERROR(cudaMalloc((void**)&buffer, 7 * sizeof(uint32_t)));
@@ -218,7 +222,9 @@ class Context
 
         m_patches_info = d_patches;
 
-        m_patch_scheduler = scheduler;
+        use_priority_scheduler     = use_priority;
+        m_patch_scheduler          = scheduler;
+        m_priority_patch_scheduler = priority_scheduler;
     }
 
     void release()
@@ -235,6 +241,9 @@ class Context
     PatchInfo* m_patches_info;
     float      m_capacity_factor;
     uint32_t   m_max_num_patches;
-    PatchScheduler m_patch_scheduler;
+
+    bool                   use_priority_scheduler;
+    PatchScheduler         m_patch_scheduler;
+    PriorityPatchScheduler m_priority_patch_scheduler;
 };
 }  // namespace rxmesh
