@@ -301,12 +301,6 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
         rx.reset_scheduler();
         int inner_iter = 0;
         while (!rx.is_queue_empty()) {
-            RXMESH_INFO("outer_iter= {}, inner_iter = {}, queue size= {}",
-                        outer_iter,
-                        inner_iter++,
-                        rx.get_context().m_patch_scheduler.size());
-
-
             LaunchBox<blockThreads> launch_box;
             rx.prepare_launch_box(
                 {Op::EVDiamond, Op::VV},
