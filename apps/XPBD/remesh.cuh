@@ -48,6 +48,12 @@ __inline__ __device__ vec2<T> perp(const vec2<T>& u)
 }
 
 template <typename T>
+__inline__ __device__ mat2x2<T> perp(const mat2x2<T>& A)
+{
+    return mat2x2<T>(vec2<T>(A(1, 1), -A(1, 0)), vec2<T>(-A(0, 1), A(0, 0)));
+}
+
+template <typename T>
 __inline__ __device__ mat2x2<T> projected_curvature(const vec3<T>&   m0,
                                                     const vec3<T>&   m1,
                                                     const vec3<T>&   m2,
@@ -92,24 +98,39 @@ __inline__ __device__ mat3x3<T> derivative(const vec3<T>&   w0,
 }
 
 
-// template <typename T>
-//__inline__ __device__ mat3x3<T> deformation_gradient(const Face* face)
-//{
-//     return derivative(pos<s>(face->v[0]->node),
-//                       pos<s>(face->v[1]->node),
-//                       pos<s>(face->v[2]->node),
-//                       normal<s>(face),
-//                       face) *
-//            face->Sp_str;
-// }
+template <typename T>
+__inline__ __device__ mat3x3<T> deformation_gradient(const vec3<T>&   v0,
+                                                     const vec3<T>&   v1,
+                                                     const vec3<T>&   v2,
+                                                     const vec3<T>&   n,
+                                                     const mat3x3<T>& invDm,
+                                                     const mat3x3<T>& Sp_str)
+{
+    return derivative(v0, v1, v2, n, invDm) * Sp_str;
+}
 
 template <typename T>
-__inline__ __device__ mat2x2<T> compression_metric(  // const Face*      face,
-    const mat3x3<T>& S2,
-    const mat3x2<T>& UV,
-    T                c)
+__inline__ __device__ mat2x2<T> compression_metric(const vec3<T>&   w0,
+                                                   const vec3<T>&   w1,
+                                                   const vec3<T>&   w2,
+                                                   const vec3<T>&   n,
+                                                   const mat3x3<T>& invDm,
+                                                   const mat3x3<T>& Sp_str,
+                                                   const mat3x3<T>& S2,
+                                                   const mat3x2<T>& UV,
+                                                   const T          c)
 {
-    // TODO
+    mat3x3<T> F   = deformation_gradient(w0, w1, w2, n, invDm, Sp_str);
+    mat3x3<T> G   = glm::transpose(F) * F - mat3x3<T>(1);
+    mat2x2<T> e   = glm::transpose(UV) * G * UV;
+    mat2x2<T> e2  = glm::transpose(UV) * glm::transpose(G) * G * UV;
+    mat2x2<T> Sw2 = glm::transpose(UV) * S2 * UV;
+    mat2x2<T> D   = e2 - 4.0 * c * c * perp(Sw2);
+
+    //TODO
+    //https://github.com/taichi-dev/taichi/blob/master/python/taichi/_funcs.py
+    //return get_positive(-e + sqrt(D)) / (2.0 * sq(c));
+    return mat2x2<T>(0);
 }
 
 template <uint32_t blockThreads, typename T>
@@ -143,11 +164,15 @@ void __global__ compute_face_sizing(
 
         // project to in-plane 2D
 
+        // TODO plastic stretching
+        const mat3x3<T> Sp_str;
+
         // local normal
-        const vec3<T> fn = normal(m0, m1, m2);
+        const vec3<T> fn_m = normal(m0, m1, m2);
+        const vec3<T> fn_w = normal(w0, w1, w2);
 
         // local base
-        const mat3x3<T> base = local_base(fn);
+        const mat3x3<T> base = local_base(fn_m);
 
         const mat3x2<T> UV(base.col(0), base.col(1));
         const mat2x3<T> UVt = glm::transpose(UV);
@@ -204,11 +229,15 @@ void __global__ compute_face_sizing(
         const mat2x2<T> Mvel = UVt * (glm::transpose(V) * V) * UV /
                                (refine_velocity * refine_velocity);
 
-        const mat2x2<T> Mcomp = compression_metric(
-            // face,
-            glm::transpose(sw2) * sw2,
-            UV,
-            refine_compression);
+        const mat2x2<T> Mcomp = compression_metric(w0,
+                                                   w1,
+                                                   w2,
+                                                   fn_w,
+                                                   invDm,
+                                                   Sp_str,
+                                                   glm::transpose(sw2) * sw2,
+                                                   UV,
+                                                   refine_compression);
 
         const mat2x2<T> Mobs = mat2x2<T>(0);
 
