@@ -3,6 +3,7 @@
 #include <numeric>
 
 #include "rxmesh/patch_scheduler.cuh"
+#include "rxmesh/priority_patch_scheduler.cuh"
 
 __global__ void schedule_kernel(uint32_t* d_status, rxmesh::PatchScheduler sch)
 {
@@ -65,4 +66,9 @@ TEST(RXMeshDynamic, PatchScheduler)
 
     GPU_FREE(d_status);
     sch.free();
+}
+
+
+TEST(RXMeshDynamic, PriorityPatchScheduler)
+{
 }

@@ -80,10 +80,6 @@ class RXMesh
     {
         return m_rxmesh_context;
     }
-    Context& get_context()
-    {
-        return m_rxmesh_context;
-    }
 
     /**
      * @brief returns true if the input mesh is manifold
@@ -315,8 +311,7 @@ class RXMesh
               const std::string                         patcher_file    = "",
               const float                               capacity_factor = 1.8,
               const float patch_alloc_factor                            = 5.0,
-              const float lp_hashtable_load_factor                      = 0.5,
-              bool        use_priority_scheduler = false);
+              const float lp_hashtable_load_factor                      = 0.5);
 
     /**
      * @brief build different supporting data structure used to build RXMesh
