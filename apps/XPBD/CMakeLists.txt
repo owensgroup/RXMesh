@@ -17,9 +17,8 @@ set_property(TARGET XPBD PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "XPBD" FILES ${SOURCE_LIST})
 
-target_link_libraries(XPBD 
-    PRIVATE RXMesh_header_lib 
-    PRIVATE RXMesh_lib    
+target_link_libraries(XPBD     
+    PRIVATE RXMesh
 )
 
 #gtest_discover_tests( XPBD )

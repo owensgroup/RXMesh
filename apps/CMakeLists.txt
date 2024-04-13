@@ -5,6 +5,7 @@ add_subdirectory( Geodesic )
 add_subdirectory( Delaunay )
 add_subdirectory( GaussianCurvature )
 add_subdirectory( XPBD )
-add_subdirectory( Simplification )
+#add_subdirectory( Simplification )
+#add_subdirectory( ShortestEdgeCollapse )
 add_subdirectory( Remesh )
 

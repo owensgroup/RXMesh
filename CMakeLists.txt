@@ -96,26 +96,33 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/git_sha1.cpp.in" "${CMAKE_CURR
 # Enable IDE folder support
 set_property(GLOBAL PROPERTY USE_FOLDERS ON) 
 
-# RXMesh: could think of this as just the header library, so name RXMesh_header_lib
-add_library(RXMesh_header_lib INTERFACE) 
-target_compile_features(RXMesh_header_lib INTERFACE cxx_std_17)
-target_compile_definitions(RXMesh_header_lib
+# RXMesh: could think of this as just the header library, so name RXMesh
+file(GLOB_RECURSE RXMESH_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/include/*.*")
+add_library(RXMesh INTERFACE) 
+
+target_sources(RXMesh
+    INTERFACE ${RXMESH_SOURCES}
+)
+
+# shows headers only once 
+#add_custom_target(RXMeshSrc 
+#	SOURCES ${RXMESH_SOURCES}
+#) 
+
+target_compile_features(RXMesh INTERFACE cxx_std_17)
+target_compile_definitions(RXMesh
     INTERFACE INPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/input/
     INTERFACE OUTPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/output/
 )
 if (USE_POLYSCOPE)
-	target_compile_definitions(RXMesh_header_lib INTERFACE USE_POLYSCOPE)
+	target_compile_definitions(RXMesh INTERFACE USE_POLYSCOPE)
 endif()
-target_include_directories( RXMesh_header_lib 
+target_include_directories(RXMesh 
     INTERFACE "include"
 	INTERFACE "${rapidjson_SOURCE_DIR}/include"
 	INTERFACE "${spdlog_SOURCE_DIR}/include"
 	INTERFACE "${cereal_SOURCE_DIR}/include"
     INTERFACE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
-)
-
-target_sources(RXMesh_header_lib
-    INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include/rxmesh/util/git_sha1.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/include/rxmesh/util/git_sha1.h"
 )
 
 # CUDA and C++ compiler flags
@@ -144,31 +151,25 @@ set(cuda_flags
 )
 
 
-add_library(developer_flags INTERFACE)
-target_compile_options(developer_flags INTERFACE
+target_compile_options(RXMesh INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:${cxx_flags}>
     $<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>
 )
 
-target_link_libraries(RXMesh_header_lib INTERFACE $<BUILD_INTERFACE:developer_flags>)
-target_link_libraries(RXMesh_header_lib INTERFACE glm::glm)
+target_link_libraries(RXMesh INTERFACE glm::glm)
 if (USE_POLYSCOPE)
-	target_link_libraries(RXMesh_header_lib INTERFACE polyscope)	
+	target_link_libraries(RXMesh INTERFACE polyscope)	
 endif()
 
 #OpenMP
 find_package(OpenMP)
 if (OpenMP_CXX_FOUND)
-    target_link_libraries(RXMesh_header_lib INTERFACE OpenMP::OpenMP_CXX)
+    target_link_libraries(RXMesh INTERFACE OpenMP::OpenMP_CXX)
 endif()
 
 find_package(CUDAToolkit REQUIRED)
-target_link_libraries(RXMesh_header_lib INTERFACE CUDA::cusparse)
-target_link_libraries(RXMesh_header_lib INTERFACE CUDA::cusolver)
-
-add_subdirectory("include")
-
-
+target_link_libraries(RXMesh INTERFACE CUDA::cusparse)
+target_link_libraries(RXMesh INTERFACE CUDA::cusolver)
 
 include(GoogleTest)
 add_subdirectory(apps)

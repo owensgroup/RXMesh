@@ -36,9 +36,8 @@ set_property(TARGET RXMesh_test PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "RXMesh_test" FILES ${SOURCE_LIST})
 
-target_link_libraries( RXMesh_test
-    PRIVATE RXMesh_header_lib 
-    PRIVATE RXMesh_lib
+target_link_libraries( RXMesh_test    
+    PRIVATE RXMesh
 	PRIVATE gtest_main
 )
 
