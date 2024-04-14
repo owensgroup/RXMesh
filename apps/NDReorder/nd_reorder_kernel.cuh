@@ -36,9 +36,11 @@ __global__ static void nd_main(rxmesh::Context                   context,
     // Init the struct and alloc the shared memory
     PartitionManager<blockThreads> coarsen_graph(
         block, context, shrd_alloc, req_levels);
+
+    // TODO: partition quality and the matching quality analysis 
     
     // Start the matching process and the result are saved in bit masks
-    coarsen_graph.matching(block, attr_matched_v, attr_active_e, 0);
+    coarsen_graph.matching_test(block, attr_matched_v, attr_active_e, 0);
     coarsen_graph.coarsening(block, 0);
 
     coarsen_graph.matching_test(block, attr_matched_v, attr_active_e, 1);
@@ -47,8 +49,7 @@ __global__ static void nd_main(rxmesh::Context                   context,
     coarsen_graph.matching_test(block, attr_matched_v, attr_active_e, 2);
     coarsen_graph.coarsening(block, 2);
 
-    // coarsen_graph.matching_test(block, attr_matched_v, attr_active_e, 2);
-    // coarsen_graph.coarsening(block, 2);
+    // coarsen_graph.partition(block, 3);
 
     // // iteration num known before kernel -> shared mem known before kernel
     // int i = 0;

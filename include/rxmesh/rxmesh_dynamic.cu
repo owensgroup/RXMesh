@@ -1060,7 +1060,7 @@ __inline__ __device__ void bi_assignment_ggp(
     Bitmask&                          s_partition_b_v,
     int                               num_iter)
 {
-
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     __shared__ int      s_num_assigned_vertices;
     __shared__ int      s_num_active_vertices;
@@ -1092,7 +1092,7 @@ __inline__ __device__ void bi_assignment_ggp(
 
         bool found_a(false), found_b(false);
         for (uint16_t v = 0; v < num_vertices; ++v) {
-            if (s_active_v(v)/* && !s_owned_v(v)*/) {
+            if (s_active_v(v) /* && !s_owned_v(v)*/) {
                 s_seed_a = v;
                 found_a  = true;
                 break;
@@ -1281,7 +1281,8 @@ __inline__ __device__ void bi_assignment_ggp(
         for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
             if (s_active_v(v)) {
                 bool is_a(s_partition_a_v(v));
-                bool on_frontier = false; // !s_owned_v(v);
+                // TODO: line frontier of separators, double check the logic
+                bool on_frontier = false;  // !s_owned_v(v);
 
                 if (!on_frontier) {
                     const uint16_t start = s_vv_offset[v];
@@ -1323,6 +1324,12 @@ __inline__ __device__ void bi_assignment_ggp(
     // the most interior seed will be finally written
     auto compute_interior = [&]() {
         while (s_num_assigned_vertices < s_num_active_vertices) {
+            // if (threadIdx.x == 0) {
+            //     printf("num_assigned_vertices: %d, num_active_vertices: %d \n",
+            //            s_num_assigned_vertices,
+            //            s_num_active_vertices);
+            // }
+
             block.sync();
             for (uint16_t v = threadIdx.x; v < num_vertices;
                  v += blockThreads) {
@@ -1378,6 +1385,9 @@ __inline__ __device__ void bi_assignment_ggp(
         }
     };
 
+    if (idx == 0) {
+        printf("start checking \n");
+    }
 
     if (threadIdx.x == 0) {
         bootstrap();
@@ -1385,8 +1395,15 @@ __inline__ __device__ void bi_assignment_ggp(
     compute_num_active_vertices();
     block.sync();
 
+    if (idx == 0) {
+        printf("start loop \n");
+    }
 
     for (int it = 0; it < num_iter; ++it) {
+
+        if (idx == 0) {
+            printf("loop it: %d \n", it);
+        }
 
         init_region_growing();
         block.sync();
@@ -1397,6 +1414,10 @@ __inline__ __device__ void bi_assignment_ggp(
         impose_constraints();
         block.sync();
 
+        if (idx == 0) {
+            printf("check 0, loop: %d \n", it);
+        }
+
 
         // if we have reached good balance, then terminate early
         float ratio = float(std::abs(s_num_A_vertices - s_num_B_vertices)) /
@@ -1405,13 +1426,25 @@ __inline__ __device__ void bi_assignment_ggp(
             break;
         }
 
+        if (idx == 0) {
+            printf("check 1, loop: %d \n", it);
+        }
+
         assert(s_num_A_vertices + s_num_B_vertices == s_num_active_vertices);
 
         init_interior();
         block.sync();
 
+        if (idx == 0) {
+            printf("check 2, loop: %d \n", it);
+        }
+
         compute_interior();
         block.sync();
+
+        if (idx == 0) {
+            printf("check 3, loop: %d \n", it);
+        }
     }
 
 #ifndef NDEBUG
@@ -2046,7 +2079,7 @@ __global__ static void check_ribbon_faces(const Context               context,
                                 //     vh.local_id(),
                                 //     s_vf_offset[v_id],
                                 //     s_vf_offset[v_id + 1]);
-                                ::atomicAdd(d_check, 1);                                
+                                ::atomicAdd(d_check, 1);
                                 break;
                             }
                         }

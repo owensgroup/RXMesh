@@ -47,7 +47,7 @@ struct ALIGN(16) PartitionManager
         ShmemAllocator&                   shrd_alloc,
         uint16_t                          req_level);
 
-    __device__ __inline__ void matching(
+    __device__ __inline__ void matching_test(
         cooperative_groups::thread_block& block,
         rxmesh::VertexAttribute<uint16_t> attr_matched_v,
         rxmesh::EdgeAttribute<uint16_t>   attr_active_e,
@@ -69,204 +69,6 @@ struct ALIGN(16) PartitionManager
         cooperative_groups::thread_block& block,
         rxmesh::VertexAttribute<uint16_t> v_ordering);
 
-
-    __device__ __inline__ void matching_test(
-        cooperative_groups::thread_block& block,
-        rxmesh::VertexAttribute<uint16_t> attr_matched_v,
-        rxmesh::EdgeAttribute<uint16_t>   attr_active_e,
-        uint16_t                          curr_level)
-    {
-        uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-        // Get level by level parameter
-        const uint16_t num_vertices       = m_s_num_vertices[curr_level];
-        const uint16_t num_edges          = m_s_num_edges[curr_level];
-        const uint16_t num_vertices_limit = m_s_num_vertices[0];
-        const uint16_t num_edges_limit    = m_s_num_edges[0];
-        uint16_t*      s_ev               = get_ev(curr_level);
-        Bitmask&       matched_edges = get_matched_edges_bitmask(curr_level);
-        Bitmask& matched_vertices    = get_matched_vertices_bitmask(curr_level);
-        Bitmask& active_edges        = get_new_tmp_bitmask_active_e(block);
-        active_edges.set(block);
-
-        // if (idx == 0) {
-        //     printf("num_v: %u, num_e: %u, level: %u \n",
-        //         num_vertices,
-        //         num_edges,
-        //         curr_level);
-        // printf("num_v_coarse: %u, num_e_coarse: %u \n",
-        //        m_s_num_vertices[curr_level + 1],
-        //        m_s_num_edges[curr_level + 1]);
-        // }
-
-        __shared__ uint16_t s_num_matched_vertices[1];
-
-        __shared__ uint16_t matched_edges_counter[1];
-        matched_edges_counter[0] = 0;
-
-        // TODO: use edge priority to replace the id for selecting edges
-        // TODO: choose edge priority as the surrounding avtive edges
-
-        for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-            uint16_t v0_local_id = s_ev[2 * e];
-            uint16_t v1_local_id = s_ev[2 * e + 1];
-
-            printf("e: %u, v0: %u, v1: %u \n", e, v0_local_id, v1_local_id);
-        }
-
-        // Get VE data here to avoid redundant computation
-        calc_new_temp_ve(
-            block, s_ev, num_vertices_limit, num_edges, curr_level);
-        const uint16_t* s_ve_offset = m_s_tmp_offset;
-        const uint16_t* s_ve_value  = m_s_tmp_value;
-
-        s_num_matched_vertices[0] = 0;
-        int iter_count            = 0;
-        while (float(s_num_matched_vertices[0]) / float(num_vertices) < 0.75 &&
-               iter_count < 10) {
-            iter_count++;
-
-            if (idx == 0) {
-                printf(
-                    "iter_count: %u, \n num_v: %u, active_v: %u, num_e: %u \n",
-                    iter_count,
-                    num_vertices,
-                    s_num_matched_vertices[0],
-                    num_edges);
-            }
-
-            // use limit?
-            uint16_t* s_e_chosen_by_v =
-                get_new_tmp_attribute_v_arr(block, num_vertices_limit);
-            block.sync();
-            s_num_matched_vertices[0] = 0;
-
-            // VE operation
-            for (uint16_t v = threadIdx.x; v < num_vertices_limit;
-                 v += blockThreads) {
-                uint16_t start = s_ve_offset[v];
-                uint16_t end   = s_ve_offset[v + 1];
-
-                if (!coarsen_owned(LocalVertexT(v), curr_level) ||
-                    start == end) {
-                    continue;
-                }
-
-                // printf("v: %u, start: %u, end: %u \n", v, start, end);
-
-                uint16_t tgt_e_id = 0;
-
-                // query for one ring edges
-                for (uint16_t e = start; e < end; e++) {
-                    uint16_t e_local_id = s_ve_value[e];
-
-                    // printf("1 v: %u, e: %u \n", v, e_local_id);
-
-                    if (!coarsen_owned(LocalEdgeT(e_local_id), curr_level) ||
-                        !active_edges(e_local_id)) {
-                        continue;
-                    }
-
-                    if (e_local_id > tgt_e_id) {
-                        tgt_e_id = e_local_id;
-                    }
-                }
-
-                // TODO: assert memory access
-                assert(v < num_vertices_limit);
-                s_e_chosen_by_v[v] = tgt_e_id;
-            }
-
-            block.sync();
-
-            // EV operation -  find the matching edges
-            for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-                uint16_t v0_local_id = s_ev[2 * e];
-                uint16_t v1_local_id = s_ev[2 * e + 1];
-
-                if (!coarsen_owned(LocalEdgeT(e), curr_level) ||
-                    !active_edges(e) || matched_edges(e) ||
-                    !coarsen_owned(LocalVertexT(v0_local_id), curr_level) ||
-                    !coarsen_owned(LocalVertexT(v1_local_id), curr_level)) {
-                    continue;
-                }
-
-                uint16_t v0_chosen_e_id = s_e_chosen_by_v[v0_local_id];
-                uint16_t v1_chosen_e_id = s_e_chosen_by_v[v1_local_id];
-
-                // printf("test 1 e: %u, v0: %u, v0_chosen_e_id: %u, v1: %u, "
-                //        "v1_chosen_e_id: %u \n",
-                //        e,
-                //        v0_local_id,
-                //        v0_chosen_e_id,
-                //        v1_local_id,
-                //        v1_chosen_e_id);
-
-                if (e == v1_chosen_e_id && e == v0_chosen_e_id) {
-                    atomicAdd(&matched_edges_counter[0], 1);
-
-                    matched_vertices.set(v0_local_id, true);
-                    matched_vertices.set(v1_local_id, true);
-                    matched_edges.set(e, true);
-
-                    // for matching visualization
-                    VertexHandle v0(m_patch_id, v0_local_id);
-                    attr_matched_v(v0) = iter_count;
-                    VertexHandle v1(m_patch_id, v1_local_id);
-                    attr_matched_v(v1) = iter_count;
-                    EdgeHandle e0(m_patch_id, e);
-                    attr_active_e(e0) = 10;
-                }
-            }
-
-            block.sync();
-
-            // VE operation - deactive the surrounding edges of a matched edge
-            for (uint16_t v = threadIdx.x; v < num_vertices_limit;
-                 v += blockThreads) {
-                uint16_t start = s_ve_offset[v];
-                uint16_t end   = s_ve_offset[v + 1];
-
-                // printf("test 2 e: %u, v0: %u, v1: %u \n", e, v0_local_id,
-                // v1_local_id);
-                // printf("v: %u, start: %u, end: %u \n", v, start, end);
-
-                if (!coarsen_owned(LocalVertexT(v), curr_level)) {
-                    continue;
-                }
-
-                if (matched_vertices(v)) {
-                    for (uint16_t e = start; e < end; e++) {
-                        uint16_t e_local_id = s_ve_value[e];
-
-                        // printf("2: v: %u, e: %u \n", v, e_local_id);
-                        if (!coarsen_owned(LocalEdgeT(e_local_id),
-                                           curr_level) ||
-                            !active_edges(e_local_id)) {
-                            continue;
-                        }
-
-                        active_edges.reset(e_local_id, true);
-                        if (!matched_edges(e_local_id)) {
-                            EdgeHandle e0(m_patch_id, e_local_id);
-                            attr_active_e(e0) = 5;
-                        }
-                    }
-
-                    // count active vertices
-                    atomicAdd(&s_num_matched_vertices[0], 1);
-                }
-            }
-
-            block.sync();
-        }
-
-        if (idx == 0) {
-            printf("num_matched_edges: %u, num_matched_vertices: %u \n",
-                   matched_edges_counter[0],
-                   s_num_matched_vertices[0]);
-        }
-    }
 
     __device__ __inline__ uint16_t* num_vertices_at(uint16_t curr_level)
     {
@@ -695,7 +497,7 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
  * @param curr_level The current level of the partitioning process
  */
 template <uint32_t blockThreads>
-__device__ __inline__ void PartitionManager<blockThreads>::matching(
+__device__ __inline__ void PartitionManager<blockThreads>::matching_test(
     cooperative_groups::thread_block& block,
     rxmesh::VertexAttribute<uint16_t> attr_matched_v,
     rxmesh::EdgeAttribute<uint16_t>   attr_active_e,
@@ -704,11 +506,15 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     // Get level by level parameter
-    const uint16_t num_vertices     = m_s_num_vertices[curr_level];
-    const uint16_t num_edges        = m_s_num_edges[curr_level];
-    uint16_t*      s_ev             = get_ev(curr_level);
-    Bitmask&       matched_edges    = get_matched_edges_bitmask(curr_level);
+    const uint16_t num_vertices       = m_s_num_vertices[curr_level];
+    const uint16_t num_edges          = m_s_num_edges[curr_level];
+    const uint16_t num_vertices_limit = m_s_num_vertices[0];
+    const uint16_t num_edges_limit    = m_s_num_edges[0];
+    uint16_t*      s_ev               = get_ev(curr_level);
+    Bitmask&       matched_edges      = get_matched_edges_bitmask(curr_level);
     Bitmask&       matched_vertices = get_matched_vertices_bitmask(curr_level);
+    Bitmask&       active_edges     = get_new_tmp_bitmask_active_e(block);
+    active_edges.set(block);
 
     __shared__ uint16_t s_num_matched_vertices[1];
 
@@ -717,11 +523,9 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
 
     // TODO: use edge priority to replace the id for selecting edges
     // TODO: choose edge priority as the surrounding avtive edges
-    Bitmask& active_edges = get_new_tmp_bitmask_active_e(block);
-    active_edges.set(block);
 
     // Get VE data here to avoid redundant computation
-    calc_new_temp_ve(block, s_ev, num_vertices, num_edges, curr_level);
+    calc_new_temp_ve(block, s_ev, num_vertices_limit, num_edges, curr_level);
     const uint16_t* s_ve_offset = m_s_tmp_offset;
     const uint16_t* s_ve_value  = m_s_tmp_value;
 
@@ -731,24 +535,27 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
            iter_count < 10) {
         iter_count++;
 
-        if (idx == 0) {
-            printf("iter_count: %u, \n num_v: %u, active_v: %u \n",
-                   iter_count,
-                   num_vertices,
-                   s_num_matched_vertices[0]);
-        }
+        // if (idx == 0) {
+        //     printf(
+        //         "iter_count: %u, \n num_v: %u, active_v: %u, num_e: %u \n",
+        //         iter_count,
+        //         num_vertices,
+        //         s_num_matched_vertices[0],
+        //         num_edges);
+        // }
 
         uint16_t* s_e_chosen_by_v =
-            get_new_tmp_attribute_v_arr(block, num_vertices);
+            get_new_tmp_attribute_v_arr(block, num_vertices_limit);
         block.sync();
         s_num_matched_vertices[0] = 0;
 
         // VE operation
-        for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+        for (uint16_t v = threadIdx.x; v < num_vertices_limit;
+             v += blockThreads) {
             uint16_t start = s_ve_offset[v];
             uint16_t end   = s_ve_offset[v + 1];
 
-            if (!coarsen_owned(LocalVertexT(v), curr_level)) {
+            if (!coarsen_owned(LocalVertexT(v), curr_level) || start == end) {
                 continue;
             }
 
@@ -769,7 +576,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
             }
 
             // TODO: assert memory access
-            assert(v < num_vertices);
+            assert(v < num_vertices_limit);
             s_e_chosen_by_v[v] = tgt_e_id;
         }
 
@@ -786,7 +593,6 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
                 !coarsen_owned(LocalVertexT(v1_local_id), curr_level)) {
                 continue;
             }
-
 
             uint16_t v0_chosen_e_id = s_e_chosen_by_v[v0_local_id];
             uint16_t v1_chosen_e_id = s_e_chosen_by_v[v1_local_id];
@@ -811,7 +617,8 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
         block.sync();
 
         // VE operation - deactive the surrounding edges of a matched edge
-        for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+        for (uint16_t v = threadIdx.x; v < num_vertices_limit;
+             v += blockThreads) {
             uint16_t start = s_ve_offset[v];
             uint16_t end   = s_ve_offset[v + 1];
 
@@ -849,7 +656,6 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
                s_num_matched_vertices[0]);
     }
 }
-
 
 /**
  * @brief Performs the coarsening operation in the multilevel graph partitioning
@@ -995,20 +801,23 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
             s_mapping[priority_v] != priority_v) {
             uint16_t matched_priority_v = s_mapping[priority_v];
 
-            printf("priority_v: %u, matched_priority_v: %u \n",
-                   priority_v,
-                   matched_priority_v);
+            // printf("priority_v: %u, matched_priority_v: %u \n",
+            //        priority_v,
+            //        matched_priority_v);
 
             // request one ring edge of mached_priority_v
             uint16_t start = s_ve_offset[matched_priority_v];
             uint16_t end   = s_ve_offset[matched_priority_v + 1];
-            for (uint16_t matched_priority_e_idx = start; matched_priority_e_idx < end; matched_priority_e_idx++) {
-                uint16_t matched_priority_e = s_ve_value[matched_priority_e_idx];
+            for (uint16_t matched_priority_e_idx = start;
+                 matched_priority_e_idx < end;
+                 matched_priority_e_idx++) {
+                uint16_t matched_priority_e =
+                    s_ve_value[matched_priority_e_idx];
 
-                printf("e: %u, matched_priority_e: %u, matched(e): %d \n",
-                       e,
-                       matched_priority_e,
-                       matched_edges(e));
+                // printf("e: %u, matched_priority_e: %u, matched(e): %d \n",
+                //        e,
+                //        matched_priority_e,
+                //        matched_edges(e));
                 assert(matched_priority_e != e);
 
                 uint16_t matched_priority_local_v0 =
@@ -1078,13 +887,22 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
     cooperative_groups::thread_block& block,
     uint16_t                          curr_level)
 {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+
     const uint16_t num_vertices       = m_s_num_vertices[curr_level];
     const uint16_t num_edges          = m_s_num_edges[curr_level];
     uint16_t*      s_ev               = get_ev(curr_level);
-    Bitmask&       coarse_p0_vertices = get_p0_vertices_bitmask(curr_level + 1);
-    Bitmask&       coarse_p1_vertices = get_p1_vertices_bitmask(curr_level + 1);
-    Bitmask&       active_vertices    = get_new_tmp_bitmask_active_v(block);
-    int            num_iter           = 10;
+    Bitmask&       coarse_p0_vertices = get_p0_vertices_bitmask(curr_level);
+    Bitmask&       coarse_p1_vertices = get_p1_vertices_bitmask(curr_level);
+    Bitmask&       separator_v     = get_separator_vertices_bitmask(curr_level);
+    Bitmask&       active_vertices = get_new_tmp_bitmask_active_v(block);
+    int            num_iter        = 10;
+
+    if (idx == 0) {
+        for (int i = 0; i < num_edges; ++i) {
+            printf("s_ev[%d]: %d, %d \n", i, s_ev[2 * i], s_ev[2 * i + 1]);
+        }
+    }
 
     // EV operation setting active vertices
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
@@ -1103,8 +921,15 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
     const uint16_t* s_vv_offset = m_s_tmp_offset;
     const uint16_t* s_vv_value  = m_s_tmp_value;
 
+    // TODO: double check vv result here
+
+    if (idx == 0) {
+        printf("start partitioning \n");
+    }
+
+
     detail::bi_assignment_ggp<blockThreads>(
-        /*cooperative_groups::thread_block& */ block,
+        /* cooperative_groups::thread_block& */ block,
         /* const uint16_t                   */ num_vertices,
         /* const Bitmask& s_owned_v         */ active_vertices,
         /* const Bitmask& s_active_v        */ active_vertices,
@@ -1117,7 +942,37 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
         /* Bitmask&                         */ m_s_tmp_coarse_p1_v,
         /* int                              */ num_iter);
 
-    // TODO get separator from p1 and p0
+    // Get separator from p1 and p0
+    for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+        if (m_s_tmp_assigned_v(v)) {
+            if (m_s_tmp_coarse_p0_v(v)) {
+                coarse_p0_vertices.set(v, true);
+            } else {
+                coarse_p1_vertices.set(v, true);
+            }
+        }
+    }
+
+    block.sync();
+
+    // choose the separator vertices from p0 coundary vertices
+    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        uint16_t v0_local_id = s_ev[2 * e];
+        uint16_t v1_local_id = s_ev[2 * e + 1];
+
+        if (coarse_p0_vertices(v0_local_id) !=
+            coarse_p1_vertices(v1_local_id)) {
+            if (coarse_p0_vertices(v0_local_id)) {
+                separator_v.set(v0_local_id, true);
+                coarse_p0_vertices.reset(v0_local_id, true);
+            }
+
+            if (coarse_p0_vertices(v1_local_id)) {
+                separator_v.set(v1_local_id, true);
+                coarse_p0_vertices.reset(v1_local_id, true);
+            }
+        }
+    }
 }
 
 /**
