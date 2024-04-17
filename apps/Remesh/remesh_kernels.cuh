@@ -222,8 +222,8 @@ __global__ static void __launch_bounds__(blockThreads)
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
 
-    // for each edge we want to flip, we its id in one of its opposite vertices
-    // along with the other opposite vertex
+    // for each edge we want to collapse, we store its id in one of its opposite
+    // vertices along with the other opposite vertex
     uint16_t* v_info =
         shrd_alloc.alloc<uint16_t>(2 * cavity.patch_info().num_vertices[0]);
     fill_n<blockThreads>(

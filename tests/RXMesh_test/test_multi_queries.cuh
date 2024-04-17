@@ -91,6 +91,8 @@ __global__ static void sum_edges_multi_queries(
     // the primary query
     Query<blockThreads> ve_query(context);
     ve_query.dispatch<Op::VE>(block, shrd_alloc, sum_edges);
+
+    ev_query.epilogue(block, shrd_alloc);
 }
 
 TEST(RXMeshStatic, MultiQueries)

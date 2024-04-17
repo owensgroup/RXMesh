@@ -3,6 +3,7 @@ add_executable(ShortestEdgeCollapse)
 set(SOURCE_LIST
     sec.cu  
 	sec_rxmesh.cuh
+	sec_kernels.cuh
 	histogram.cuh
 )
 

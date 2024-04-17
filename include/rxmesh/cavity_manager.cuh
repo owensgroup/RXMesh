@@ -830,7 +830,7 @@ struct CavityManager
     uint16_t *m_s_ev, *m_s_fe;
 
     // store the cavity ID each mesh element belong to. If the mesh element
-    // does not belong to any cavity, then it stores INVALID32
+    // does not belong to any cavity, then it stores INVALID16
     uint16_t *m_s_cavity_id_v, *m_s_cavity_id_e, *m_s_cavity_id_f;
 
     // the hashtable (this memory overlaps with m_s_cavity_id_v/e/f)
