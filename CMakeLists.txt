@@ -79,6 +79,22 @@ FetchContent_Declare(cereal
 )
 FetchContent_Populate(cereal)
 
+# Package Management
+# TODO: Consider using CPM for the various libraries above 
+include(cmake/CPM.cmake) 
+
+# Add cuCollection with priority queue. This should eventually come from
+# NVIDIA.
+CPMAddPackage(
+    NAME cuco
+    GITHUB_REPOSITORY andrewbriand/cuCollections
+    GIT_TAG d58dd9fedde721a264c8ae960f7393a3a3b08c58
+    OPTIONS
+       "BUILD_TESTS OFF"
+       "BUILD_BENCHMARKS OFF"
+       "BUILD_EXAMPLES OFF"
+)
+
 # Auto-detect GPU architecture
 include("cmake/AutoDetectCudaArch.cmake")
 
