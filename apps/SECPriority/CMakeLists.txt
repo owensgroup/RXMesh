@@ -1,7 +1,8 @@
 add_executable(SECPriority)
 
 set(SOURCE_LIST
-    main.cu
+    #main.cu
+    secp.cu
 )
 
 set(COMMON_LIST    
