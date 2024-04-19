@@ -22,6 +22,14 @@ void nd_reorder()
 
     RXMeshStatic rx(Arg.obj_file_name);
 
+    //rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
+    //        "_nd_patches");
+
+    // RXMeshDynamic rx(Arg.obj_file_name,
+    //                  STRINGIFY(OUTPUT_DIR) +
+    //                      extract_file_name(Arg.obj_file_name) + "_nd_patches");
+
+
     // Tests using coloring
     //vertex color attribute 
     auto attr_matched_v = rx.add_vertex_attribute<uint16_t>("attr_matched_v", 1);
