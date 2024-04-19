@@ -58,11 +58,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     // polyscope::show();
 #endif
 
-    bool validate = false;
-
-    int* d_num_cavities = nullptr;
-    CUDA_ERROR(cudaMalloc((void**)&d_num_cavities, 2 * sizeof(int)));
-    CUDA_ERROR(cudaMemset(d_num_cavities, 0, 2 * sizeof(int)));
+    bool validate = true;
 
     float reduce_ratio = 0.05;
 
@@ -100,8 +96,10 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
         reduce_ratio = reduce_ratio + 0.05;
 
         // loop over the mesh, and try to collapse
+        const int num_edges_before = int(rx.get_num_edges());
+
         const int reduce_threshold =
-            std::max(1, int(reduce_ratio * float(rx.get_num_edges())));
+            std::max(1, int(reduce_ratio * float(num_edges_before)));
 
         // reset edge status
         edge_status->reset(UNSEEN, DEVICE);
@@ -111,7 +109,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
             RXMESH_INFO(" Queue size = {}",
                         rx.get_context().m_patch_scheduler.size());
 
-            rx.prepare_launch_box(
+            rx.update_launch_box(
                 {Op::EV},
                 launch_box,
                 (void*)sec<float, blockThreads>,
@@ -137,8 +135,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
                                                 histo,
                                                 reduce_threshold,
                                                 *edge_status,
-                                                *e_attr,
-                                                d_num_cavities);
+                                                *e_attr);
 
             app_timer.stop();
 
@@ -170,35 +167,31 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
             if (validate) {
                 rx.update_host();
                 EXPECT_TRUE(rx.validate());
-                RXMESH_INFO(" num_vertices = {}, num_edges= {}, num_faces= {}",
-                            rx.get_num_vertices(),
-                            rx.get_num_edges(),
-                            rx.get_num_faces());
             }
         }
 
         {
-            int h_num_cavities[2];
-            CUDA_ERROR(cudaMemcpy(&h_num_cavities,
-                                  d_num_cavities,
-                                  2 * sizeof(int),
-                                  cudaMemcpyDeviceToHost));
-            RXMESH_INFO(" Requested cavities = {}, executed cavities  = {}",
-                        h_num_cavities[1],
-                        h_num_cavities[0]);
-
             coords->move(DEVICE, HOST);
             e_attr->move(DEVICE, HOST);
             rx.update_host();
-            rx.update_polyscope();
-            auto ps_mesh = rx.get_polyscope_mesh();
-            ps_mesh->updateVertexPositions(*coords);
-            ps_mesh->setEnabled(false);
-            ps_mesh->addEdgeScalarQuantity("eMark", *e_attr);
-            rx.render_vertex_patch();
-            rx.render_edge_patch();
-            rx.render_face_patch();
-            polyscope::show();
+
+            RXMESH_INFO("#Vertices {}", rx.get_num_vertices());
+            RXMESH_INFO("#Edges {}", rx.get_num_edges());
+            RXMESH_INFO("#Faces {}", rx.get_num_faces());
+            RXMESH_INFO("#Patches {}", rx.get_num_patches());
+            RXMESH_INFO("request reduction = {}, achieved reduction= {}",
+                        reduce_threshold,
+                        num_edges_before - int(rx.get_num_edges()));
+
+            // rx.update_polyscope();
+            // auto ps_mesh = rx.get_polyscope_mesh();
+            // ps_mesh->updateVertexPositions(*coords);
+            // ps_mesh->setEnabled(false);
+            // ps_mesh->addEdgeScalarQuantity("eMark", *e_attr);
+            // rx.render_vertex_patch();
+            // rx.render_edge_patch();
+            // rx.render_face_patch();
+            // polyscope::show();
         }
     }
     timer.stop();

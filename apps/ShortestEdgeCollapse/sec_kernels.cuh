@@ -7,8 +7,7 @@ __global__ static void sec(rxmesh::Context                   context,
                            const CostHistogram<T>            histo,
                            const int                         reduce_threshold,
                            rxmesh::EdgeAttribute<EdgeStatus> edge_status,
-                           rxmesh::EdgeAttribute<T>          e_attr,
-                           int*                              d_num_cavities)
+                           rxmesh::EdgeAttribute<T>          e_attr)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -26,6 +25,7 @@ __global__ static void sec(rxmesh::Context                   context,
     // filter them). Then after cavity.prologue, we reuse this bitmask to mark
     // the newly added edges
     Bitmask edge_mask(cavity.patch_info().edges_capacity[0], shrd_alloc);
+    edge_mask.reset(block);
 
     // we use this bitmask to mark the other end of to-be-collapse edge during
     // checking for the link condition
@@ -57,8 +57,6 @@ __global__ static void sec(rxmesh::Context                   context,
         T len2 = glm::distance2(p0, p1);
 
         if (histo.get_bin(len2) <= reduce_threshold) {
-            //::atomicAdd(d_num_cavities + 1, 1);
-            // cavity.create(eh);
             edge_mask.set(eh.local_id(), true);
         }
     });
