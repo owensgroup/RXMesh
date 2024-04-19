@@ -71,9 +71,9 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
         histo.init();
 
         rx.update_launch_box({Op::EV},
-                              launch_box,
-                              (void*)compute_min_max_cost<float, blockThreads>,
-                              false);
+                             launch_box,
+                             (void*)compute_min_max_cost<float, blockThreads>,
+                             false);
         compute_min_max_cost<float, blockThreads>
             <<<launch_box.blocks,
                launch_box.num_threads,
@@ -81,9 +81,9 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
         // compute histogram bins
         rx.update_launch_box({Op::EV},
-                              launch_box,
-                              (void*)populate_histogram<float, blockThreads>,
-                              false);
+                             launch_box,
+                             (void*)populate_histogram<float, blockThreads>,
+                             false);
         populate_histogram<float, blockThreads>
             <<<launch_box.blocks,
                launch_box.num_threads,
@@ -107,8 +107,8 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
         rx.reset_scheduler();
         while (!rx.is_queue_empty() &&
                rx.get_num_vertices() > final_num_vertices) {
-            //RXMESH_INFO(" Queue size = {}",
-            //            rx.get_context().m_patch_scheduler.size());
+            // RXMESH_INFO(" Queue size = {}",
+            //             rx.get_context().m_patch_scheduler.size());
 
             rx.update_launch_box(
                 {Op::EV},
@@ -171,7 +171,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
             }
         }
 
-        {
+        if (false) {
             coords->move(DEVICE, HOST);
             e_attr->move(DEVICE, HOST);
             rx.update_host();
