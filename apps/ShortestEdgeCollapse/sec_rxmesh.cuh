@@ -25,7 +25,7 @@ enum : EdgeStatus
 
 
 inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
-                       const uint32_t         final_num_faces)
+                       const uint32_t         final_num_vertices)
 {
     EXPECT_TRUE(rx.validate());
 
@@ -58,19 +58,19 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     // polyscope::show();
 #endif
 
-    bool validate = true;
+    bool validate = false;
 
     float reduce_ratio = 0.05;
 
     CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
     timer.start();
-    while (rx.get_num_faces() > final_num_faces) {
+    while (rx.get_num_vertices() > final_num_vertices) {
 
         // compute max-min histogram
         histo.init();
 
-        rx.prepare_launch_box({Op::EV},
+        rx.update_launch_box({Op::EV},
                               launch_box,
                               (void*)compute_min_max_cost<float, blockThreads>,
                               false);
@@ -80,7 +80,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
                launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords, histo);
 
         // compute histogram bins
-        rx.prepare_launch_box({Op::EV},
+        rx.update_launch_box({Op::EV},
                               launch_box,
                               (void*)populate_histogram<float, blockThreads>,
                               false);
@@ -105,9 +105,10 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
         edge_status->reset(UNSEEN, DEVICE);
 
         rx.reset_scheduler();
-        while (!rx.is_queue_empty() && rx.get_num_faces() > final_num_faces) {
-            RXMESH_INFO(" Queue size = {}",
-                        rx.get_context().m_patch_scheduler.size());
+        while (!rx.is_queue_empty() &&
+               rx.get_num_vertices() > final_num_vertices) {
+            //RXMESH_INFO(" Queue size = {}",
+            //            rx.get_context().m_patch_scheduler.size());
 
             rx.update_launch_box(
                 {Op::EV},

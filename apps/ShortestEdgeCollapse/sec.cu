@@ -5,9 +5,9 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "compound_j68_color_2.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    target        = 0;
+    float       target        = 0.1;
     uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
@@ -24,7 +24,7 @@ TEST(Apps, Simplification)
 
     RXMeshDynamic rx(Arg.obj_file_name);
     rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
-           "_patches");
+            "_patches");
 
     // RXMeshDynamic rx(Arg.obj_file_name,
     //                  STRINGIFY(OUTPUT_DIR) +
@@ -33,7 +33,9 @@ TEST(Apps, Simplification)
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
-    sec_rxmesh(rx, Arg.target);
+    uint32_t final_num_vertices = Arg.target * rx.get_num_vertices();
+
+    sec_rxmesh(rx, final_num_vertices);
 }
 
 
@@ -55,7 +57,7 @@ int main(int argc, char** argv)
                         " -input:      Input file. Input file should be under the input/ subdirectory\n"
                         "              Default is {} \n"
                         "              Hint: Only accept OBJ files\n"
-                        " -target:     The final/target number of faces in the output mesh\n"
+                        " -target:     The fraction of output #vertices from the input\n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -device_id:  GPU device ID. Default is {}",
             Arg.obj_file_name, Arg.output_folder, Arg.device_id);
@@ -76,7 +78,7 @@ int main(int argc, char** argv)
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
         }
         if (cmd_option_exists(argv, argc + argv, "-target")) {
-            Arg.target = false;
+            Arg.target = atof(get_cmd_option(argv, argv + argc, "-target"));
         }
     }
 
