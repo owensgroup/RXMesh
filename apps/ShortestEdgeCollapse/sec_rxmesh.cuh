@@ -60,7 +60,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
     bool validate = false;
 
-    float reduce_ratio = 0.05;
+    float reduce_ratio = 0.1;
 
     CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
@@ -84,17 +84,22 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
                              launch_box,
                              (void*)populate_histogram<float, blockThreads>,
                              false);
-        populate_histogram<float, blockThreads>
-            <<<launch_box.blocks,
-               launch_box.num_threads,
-               launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords, histo);
+        populate_histogram<float, blockThreads><<<launch_box.blocks,
+                                                  launch_box.num_threads,
+                                                  launch_box.smem_bytes_dyn>>>(
+            rx.get_context(), *coords, histo, *e_attr);
 
         histo.scan();
 
+#if USE_POLYSCOPE
+        // e_attr->move(DEVICE, HOST);
+        // auto ps_mesh = rx.get_polyscope_mesh();
+        // ps_mesh->addEdgeScalarQuantity("eMark", *e_attr);
+        // polyscope::show();
+#endif
 
         // how much we can reduce the number of edge at each iterations
-        reduce_ratio = reduce_ratio + 0.05;
-
+        
         // loop over the mesh, and try to collapse
         const int num_edges_before = int(rx.get_num_edges());
 
@@ -171,7 +176,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
             }
         }
 
-        if (false) {
+        if (true) {
             coords->move(DEVICE, HOST);
             e_attr->move(DEVICE, HOST);
             rx.update_host();
@@ -184,15 +189,18 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
                         reduce_threshold,
                         num_edges_before - int(rx.get_num_edges()));
 
-            // rx.update_polyscope();
-            // auto ps_mesh = rx.get_polyscope_mesh();
-            // ps_mesh->updateVertexPositions(*coords);
-            // ps_mesh->setEnabled(false);
-            // ps_mesh->addEdgeScalarQuantity("eMark", *e_attr);
-            // rx.render_vertex_patch();
-            // rx.render_edge_patch();
-            // rx.render_face_patch();
-            // polyscope::show();
+            if (num_edges_before == rx.get_num_edges()) {
+                rx.update_polyscope();
+                auto ps_mesh = rx.get_polyscope_mesh();
+                ps_mesh->updateVertexPositions(*coords);
+                ps_mesh->setEnabled(false);
+                // ps_mesh->addEdgeScalarQuantity("eMark", *e_attr);
+                // rx.render_vertex_patch();
+                // rx.render_edge_patch();
+                // rx.render_face_patch();
+
+                polyscope::show();
+            }
         }
     }
     timer.stop();

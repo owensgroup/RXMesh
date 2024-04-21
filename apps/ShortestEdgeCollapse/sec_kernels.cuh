@@ -54,7 +54,7 @@ __global__ static void sec(rxmesh::Context                   context,
         const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
         const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
 
-        T len2 = glm::distance2(p0, p1);
+        T len2 = logf(glm::distance2(p0, p1));
 
         if (histo.get_bin(len2) <= reduce_threshold) {
             edge_mask.set(eh.local_id(), true);
@@ -250,7 +250,7 @@ __global__ static void compute_min_max_cost(
         const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
         const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
 
-        T len2 = glm::distance2(p0, p1);
+        T len2 = logf(glm::distance2(p0, p1));
 
         atomicMin(histo.min_value(), len2);
         atomicMax(histo.max_value(), len2);
@@ -267,7 +267,8 @@ template <typename T, uint32_t blockThreads>
 __global__ static void populate_histogram(
     rxmesh::Context                  context,
     const rxmesh::VertexAttribute<T> coords,
-    CostHistogram<T>                 histo)
+    CostHistogram<T>                 histo,
+    rxmesh::EdgeAttribute<T>         e_attr)
 {
     using namespace rxmesh;
 
@@ -278,7 +279,10 @@ __global__ static void populate_histogram(
         const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
         const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
 
-        T len2 = glm::distance2(p0, p1);
+        T len2 = logf(glm::distance2(p0, p1));
+
+
+        // e_attr(eh) = T(histo.bin_id(len2));
 
         histo.insert(len2);
     };
