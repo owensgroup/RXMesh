@@ -242,6 +242,9 @@ struct Bitmask
      */
     __device__ __host__ __inline__ bool operator()(const uint16_t bit) const
     {
+        if (bit > size()) {
+            printf("size: %d, bit: %d\n", size(), bit);
+        }
         assert(bit < size());
         return detail::is_set_bit(bit, m_bitmask);
     }

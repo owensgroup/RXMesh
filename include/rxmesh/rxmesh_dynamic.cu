@@ -1060,8 +1060,6 @@ __inline__ __device__ void bi_assignment_ggp(
     Bitmask&                          s_partition_b_v,
     int                               num_iter)
 {
-    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-
     __shared__ int      s_num_assigned_vertices;
     __shared__ int      s_num_active_vertices;
     __shared__ int      s_num_A_vertices, s_num_B_vertices;
@@ -1385,25 +1383,13 @@ __inline__ __device__ void bi_assignment_ggp(
         }
     };
 
-    if (idx == 0) {
-        printf("start checking \n");
-    }
-
     if (threadIdx.x == 0) {
         bootstrap();
     }
     compute_num_active_vertices();
     block.sync();
 
-    if (idx == 0) {
-        printf("start loop \n");
-    }
-
     for (int it = 0; it < num_iter; ++it) {
-
-        if (idx == 0) {
-            printf("loop it: %d \n", it);
-        }
 
         init_region_growing();
         block.sync();
@@ -1414,10 +1400,6 @@ __inline__ __device__ void bi_assignment_ggp(
         impose_constraints();
         block.sync();
 
-        if (idx == 0) {
-            printf("check 0, loop: %d \n", it);
-        }
-
 
         // if we have reached good balance, then terminate early
         float ratio = float(std::abs(s_num_A_vertices - s_num_B_vertices)) /
@@ -1426,25 +1408,13 @@ __inline__ __device__ void bi_assignment_ggp(
             break;
         }
 
-        if (idx == 0) {
-            printf("check 1, loop: %d \n", it);
-        }
-
         assert(s_num_A_vertices + s_num_B_vertices == s_num_active_vertices);
 
         init_interior();
         block.sync();
 
-        if (idx == 0) {
-            printf("check 2, loop: %d \n", it);
-        }
-
         compute_interior();
         block.sync();
-
-        if (idx == 0) {
-            printf("check 3, loop: %d \n", it);
-        }
     }
 
 #ifndef NDEBUG
