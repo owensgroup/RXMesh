@@ -65,7 +65,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
     timer.start();
-    while (rx.get_num_vertices() > final_num_vertices) {
+    while (rx.get_num_vertices(true) > final_num_vertices) {
 
         // compute max-min histogram
         histo.init();
@@ -111,9 +111,9 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
         rx.reset_scheduler();
         while (!rx.is_queue_empty() &&
-               rx.get_num_vertices() > final_num_vertices) {
-            // RXMESH_INFO(" Queue size = {}",
-            //             rx.get_context().m_patch_scheduler.size());
+               rx.get_num_vertices(true) > final_num_vertices) {
+            RXMESH_INFO(" Queue size = {}",
+                        rx.get_context().m_patch_scheduler.size());
 
             rx.update_launch_box(
                 {Op::EV},
@@ -176,20 +176,20 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
             }
         }
 
-        if (true) {
-            coords->move(DEVICE, HOST);
-            e_attr->move(DEVICE, HOST);
-            rx.update_host();
+        if (false) {
 
-            RXMESH_INFO("#Vertices {}", rx.get_num_vertices());
-            RXMESH_INFO("#Edges {}", rx.get_num_edges());
-            RXMESH_INFO("#Faces {}", rx.get_num_faces());
-            RXMESH_INFO("#Patches {}", rx.get_num_patches());
+            RXMESH_INFO("#Vertices {}", rx.get_num_vertices(true));
+            RXMESH_INFO("#Edges {}", rx.get_num_edges(true));
+            RXMESH_INFO("#Faces {}", rx.get_num_faces(true));
+            RXMESH_INFO("#Patches {}", rx.get_num_patches(true));
             RXMESH_INFO("request reduction = {}, achieved reduction= {}",
                         reduce_threshold,
-                        num_edges_before - int(rx.get_num_edges()));
+                        num_edges_before - int(rx.get_num_edges(true)));
 
-            if (num_edges_before == rx.get_num_edges()) {
+            if (false) {
+                rx.update_host();
+                coords->move(DEVICE, HOST);
+                e_attr->move(DEVICE, HOST);
                 rx.update_polyscope();
                 auto ps_mesh = rx.get_polyscope_mesh();
                 ps_mesh->updateVertexPositions(*coords);
