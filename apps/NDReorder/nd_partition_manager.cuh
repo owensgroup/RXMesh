@@ -568,7 +568,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
     // would connect to it extreme cases v0-e0-v1 v1-e1-v2, v1-e2-v3, is it
     // possible that e0 and v0 are in the patch but v1 is not?
     if (curr_level == 0) {
-        for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        for (uint16_t e = threadIdx.x; e < num_edges_query; e += blockThreads) {
             uint16_t v0_local_id = s_ev[2 * e];
             uint16_t v1_local_id = s_ev[2 * e + 1];
 
@@ -596,7 +596,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
         get_new_tmp_attribute_e_arr(block, m_num_edges_limit);
 
     // Get VE data here to avoid redundant computation
-    calc_new_temp_ve(block, s_ev, m_num_vertices_limit, num_edges, curr_level);
+    calc_new_temp_ve(block, s_ev, m_num_vertices_limit, num_edges_query, curr_level);
     const uint16_t* s_ve_offset = m_s_tmp_offset;
     const uint16_t* s_ve_value  = m_s_tmp_value;
 
@@ -889,7 +889,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
     m_s_num_vertices[curr_level + 1] = 0;
     m_s_num_edges[curr_level + 1]    = 0;
 
-    calc_new_temp_ve(block, s_ev, m_num_vertices_limit, num_edges, curr_level);
+    calc_new_temp_ve(block, s_ev, m_num_vertices_limit, num_edges_query, curr_level);
     const uint16_t* s_ve_offset = m_s_tmp_offset;
     const uint16_t* s_ve_value  = m_s_tmp_value;
 
@@ -1014,7 +1014,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
                         s_ev[2 * e],
                         s_ev[2 * e + 1]);
                 }
-                // assert(matched_priority_e != e);
+                assert(matched_priority_e != e);
 
                 uint16_t matched_priority_local_v0 =
                     s_ev[2 * matched_priority_e];
@@ -1044,20 +1044,6 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
             s_ev_coarse[2 * curr_idx + 1] = s_mapping[v1_local_id];
         }
     }
-
-
-
-
-
-
-
-
-// TODO: duplicate edges for coarsening
-
-
-
-
-
     block.sync();
 
     // EV operation: mark the vertices available for the next level
@@ -1066,7 +1052,8 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
         uint16_t v0_local_id = s_ev_coarse[2 * e];
         uint16_t v1_local_id = s_ev_coarse[2 * e + 1];
 
-        printf("coarse_e: %u, %u, %u \n", e, v0_local_id, v1_local_id);
+        //check: check for duplicate edges
+        // printf("coarse_e: %u, %u, %u \n", e, v0_local_id, v1_local_id);
 
         coarse_vertices.set(v0_local_id, true);
         coarse_vertices.set(v1_local_id, true);
@@ -1169,7 +1156,10 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
     //         }
     //     }
     // }
-
+    
+    if (idx == 0) { 
+        printf("start partitioning \n");
+    }
 
     detail::bi_assignment_ggp<blockThreads>(
         /* cooperative_groups::thread_block& */ block,
@@ -1187,24 +1177,43 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
 
     block.sync();
 
-    // // choose the separator vertices from p0 coundary vertices
-    // for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-    //     uint16_t v0_local_id = s_ev[2 * e];
-    //     uint16_t v1_local_id = s_ev[2 * e + 1];
+    if (idx == 0) {
+        printf("end partitioning \n");
+    }
+    
 
-    //     if (coarse_p0_vertices(v0_local_id) !=
-    //         coarse_p1_vertices(v1_local_id)) {
-    //         if (coarse_p0_vertices(v0_local_id)) {
-    //             separator_v.set(v0_local_id, true);
-    //             coarse_p0_vertices.reset(v0_local_id, true);
-    //         }
+    // choose the separator vertices from p0 coundary vertices
+    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        uint16_t v0_local_id = s_ev[2 * e];
+        uint16_t v1_local_id = s_ev[2 * e + 1];
 
-    //         if (coarse_p0_vertices(v1_local_id)) {
-    //             separator_v.set(v1_local_id, true);
-    //             coarse_p0_vertices.reset(v1_local_id, true);
-    //         }
-    //     }
-    // }
+        if (coarse_p0_vertices(v0_local_id) !=
+            coarse_p1_vertices(v1_local_id)) {
+            if (coarse_p0_vertices(v0_local_id)) {
+                separator_v.set(v0_local_id, true);
+                coarse_p0_vertices.reset(v0_local_id, true);
+            }
+
+            if (coarse_p0_vertices(v1_local_id)) {
+                separator_v.set(v1_local_id, true);
+                coarse_p0_vertices.reset(v1_local_id, true);
+            }
+        }
+    }
+
+    if (idx == 0) {
+        for (uint16_t v = 0; v < m_num_vertices_limit; v += 1) {
+            if (m_s_tmp_coarse_p0_v(v) && current_vertices(v)) {
+                printf("coarse_p0_vertices: %u \n", v);
+            }
+        }
+
+        for (uint16_t v = 0; v < m_num_vertices_limit; v += 1) {
+            if (m_s_tmp_coarse_p1_v(v) && current_vertices(v)) {
+                printf("coarse_p1_vertices: %u \n", v);
+            }
+        }
+    }
 }
 
 /**
