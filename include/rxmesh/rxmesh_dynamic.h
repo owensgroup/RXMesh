@@ -187,11 +187,11 @@ __global__ static void slice_patches(Context        context,
                     ::atomicAdd(context.m_num_patches, uint32_t(1));
                 assert(s_new_patch_id < context.m_max_num_patches);
                 context.m_patch_scheduler.push(s_new_patch_id);
-                //printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
+                // printf("\n slicing %u into %u", pi.patch_id, s_new_patch_id);
             } else {
                 s_new_patch_id                           = INVALID32;
                 context.m_patches_info[pid].should_slice = false;
-            }            
+            }
         }
         Bitmask s_owned_v, s_owned_e, s_owned_f;
         Bitmask s_active_v, s_active_e, s_active_f;
@@ -565,8 +565,15 @@ class RXMeshDynamic : public RXMeshStatic
      * @param fv Face incident vertices as read from an obj file
      */
     explicit RXMeshDynamic(std::vector<std::vector<uint32_t>>& fv,
-                           const std::string patcher_file = "")
-        : RXMeshStatic(fv, patcher_file)
+                           const std::string patcher_file             = "",
+                           const float       capacity_factor          = 1.8,
+                           const float       patch_alloc_factor       = 5.0,
+                           const float       lp_hashtable_load_factor = 0.5)
+        : RXMeshStatic(fv,
+                       patcher_file,
+                       capacity_factor,
+                       patch_alloc_factor,
+                       lp_hashtable_load_factor)
     {
     }
 

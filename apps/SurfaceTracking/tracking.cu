@@ -1,4 +1,5 @@
 #include "gtest/gtest.h"
+#include "rxmesh/geometry_factory.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
@@ -20,7 +21,15 @@ TEST(Apps, SurfaceTracking)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshDynamic rx("");
+    std::vector<std::vector<float>> verts;
+
+    std::vector<std::vector<uint32_t>> fv;
+
+    create_plane(verts, fv, 60, 60);
+
+    RXMeshDynamic rx(fv);
+
+    rx.add_vertex_coordinates(verts, "plane");
     // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
     //         "_patches");
 
