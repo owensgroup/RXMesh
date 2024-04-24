@@ -20,10 +20,20 @@ struct PatchStash
                 cudaMalloc((void**)&m_stash, stash_size * sizeof(uint32_t)));
             CUDA_ERROR(
                 cudaMemset(m_stash, INVALID8, stash_size * sizeof(uint32_t)));
+
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_edge_weight, stash_size * sizeof(uint32_t)));
+            CUDA_ERROR(
+                cudaMemset(m_edge_weight, INVALID32, stash_size * sizeof(uint32_t)));
         } else {
             m_stash = (uint32_t*)malloc(stash_size * sizeof(uint32_t));
             for (uint8_t i = 0; i < stash_size; ++i) {
                 m_stash[i] = INVALID32;
+            }
+
+            m_edge_weight = (uint32_t*)malloc(stash_size * sizeof(uint32_t));
+            for (uint8_t i = 0; i < stash_size; ++i) {
+                m_edge_weight[i] = INVALID32;
             }
         }
     }
@@ -55,6 +65,27 @@ struct PatchStash
     __host__ __device__ __inline__ uint32_t& get_patch(const LPPair p)
     {
         return get_patch(p.patch_stash_id());
+    }
+
+        __host__ __device__ __inline__ uint32_t get_edge_weight(uint8_t id) const
+    {
+        assert(id >= 0 && id < stash_size);
+        assert(m_edge_weight[id] != INVALID32);
+        return m_edge_weight[id];
+    }
+
+    __host__ __device__ __inline__ uint32_t& get_edge_weight(uint8_t id)
+    {
+        assert(id >= 0 && id < stash_size);
+        assert(m_edge_weight[id] != INVALID32);
+        return m_edge_weight[id];
+    }
+
+    __host__ __device__ __inline__ void set_edge_weight(uint8_t id, uint32_t weight)
+    {
+        assert(id >= 0 && id < stash_size);
+        assert(m_edge_weight[id] == INVALID32);
+        m_edge_weight[id] = weight;
     }
 
     /*__host__ __device__ __inline__ uint8_t insert_patch(uint32_t patch)
@@ -145,12 +176,15 @@ struct PatchStash
     {
         if (m_is_on_device) {
             GPU_FREE(m_stash);
+            GPU_FREE(m_edge_weight);
         } else {
             ::free(m_stash);
+            ::free(m_edge_weight);
         }
     }
 
     uint32_t* m_stash;
+    uint32_t* m_edge_weight;
     bool      m_is_on_device;
 };
 }  // namespace rxmesh

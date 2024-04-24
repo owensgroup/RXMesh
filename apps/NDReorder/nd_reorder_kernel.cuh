@@ -6,22 +6,6 @@
 
 #include "nd_partition_manager.cuh"
 
-// TODO: test function for shared mem allocated
-__forceinline__ __device__ unsigned dynamic_shmem_size()
-{
-    unsigned ret; 
-    asm volatile ("mov.u32 %0, %dynamic_smem_size;" : "=r"(ret));
-    return ret;
-}
-
-__forceinline__ __device__ unsigned total_shmem_size()
-{
-    unsigned ret; 
-    asm volatile ("mov.u32 %0, %total_smem_size;" : "=r"(ret));
-    return ret;
-}
-
-// TODO: max levels = shared memory / patch size
 template <uint32_t blockThreads>
 __global__ static void nd_main(rxmesh::Context                   context,
                                rxmesh::VertexAttribute<uint16_t> v_ordering,
