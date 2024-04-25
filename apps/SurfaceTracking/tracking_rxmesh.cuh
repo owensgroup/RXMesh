@@ -5,7 +5,6 @@
 #include <glm/gtx/norm.hpp>
 
 
-#include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
 template <typename T>
@@ -20,12 +19,10 @@ enum : EdgeStatus
     ADDED  = 3,  // means it has been added to during the split/flip/collapse
 };
 
-#include "histogram.cuh"
-#include "sec_kernels.cuh"
+#include "tracking_kernels.cuh"
 
 
-inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
-                       const uint32_t         final_num_vertices)
+inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
 {
     EXPECT_TRUE(rx.validate());
 
@@ -44,13 +41,6 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     float slice_time   = 0;
     float cleanup_time = 0;
 
-    const int num_bins = 256;
-
-    CostHistogram<float> histo(num_bins);
-
-    auto e_attr = rx.add_edge_attribute<float>("eMark", 1);
-
-
 #if USE_POLYSCOPE
     rx.render_vertex_patch();
     rx.render_edge_patch();
@@ -60,88 +50,45 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
     bool validate = false;
 
-    float reduce_ratio = 0.1;
 
     CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
     timer.start();
-    while (rx.get_num_vertices(true) > final_num_vertices) {
-
-        // compute max-min histogram
-        histo.init();
-
-        rx.update_launch_box({Op::EV},
-                             launch_box,
-                             (void*)compute_min_max_cost<float, blockThreads>,
-                             false);
-        compute_min_max_cost<float, blockThreads>
-            <<<launch_box.blocks,
-               launch_box.num_threads,
-               launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords, histo);
-
-        // compute histogram bins
-        rx.update_launch_box({Op::EV},
-                             launch_box,
-                             (void*)populate_histogram<float, blockThreads>,
-                             false);
-        populate_histogram<float, blockThreads><<<launch_box.blocks,
-                                                  launch_box.num_threads,
-                                                  launch_box.smem_bytes_dyn>>>(
-            rx.get_context(), *coords, histo, *e_attr);
-
-        histo.scan();
-
-#if USE_POLYSCOPE
-        // e_attr->move(DEVICE, HOST);
-        // auto ps_mesh = rx.get_polyscope_mesh();
-        // ps_mesh->addEdgeScalarQuantity("eMark", *e_attr);
-        // polyscope::show();
-#endif
-
-        // how much we can reduce the number of edge at each iterations
-        
-        // loop over the mesh, and try to collapse
-        const int num_edges_before = int(rx.get_num_edges());
-
-        const int reduce_threshold =
-            std::max(1, int(reduce_ratio * float(num_edges_before)));
+    while (true) {
 
         // reset edge status
         edge_status->reset(UNSEEN, DEVICE);
 
         rx.reset_scheduler();
-        while (!rx.is_queue_empty() &&
-               rx.get_num_vertices(true) > final_num_vertices) {
-            RXMESH_INFO(" Queue size = {}",
-                        rx.get_context().m_patch_scheduler.size());
+        while (!rx.is_queue_empty()) {
 
-            rx.update_launch_box(
-                {Op::EV},
-                launch_box,
-                (void*)sec<float, blockThreads>,
-                true,
-                false,
-                false,
-                false,
-                [&](uint32_t v, uint32_t e, uint32_t f) {
-                    return detail::mask_num_bytes(e) +
-                           2 * detail::mask_num_bytes(v) +
-                           3 * ShmemAllocator::default_alignment;
-                });
+            // RXMESH_INFO(" Queue size = {}",
+            //             rx.get_context().m_patch_scheduler.size());
 
-            e_attr->reset(0, DEVICE);
+            // rx.update_launch_box(
+            //     {Op::EV},
+            //     launch_box,
+            //     (void*)sec<float, blockThreads>,
+            //     true,
+            //     false,
+            //     false,
+            //     false,
+            //     [&](uint32_t v, uint32_t e, uint32_t f) {
+            //         return detail::mask_num_bytes(e) +
+            //                2 * detail::mask_num_bytes(v) +
+            //                3 * ShmemAllocator::default_alignment;
+            //     });
 
             GPUTimer app_timer;
             app_timer.start();
-            sec<float, blockThreads>
-                <<<launch_box.blocks,
-                   launch_box.num_threads,
-                   launch_box.smem_bytes_dyn>>>(rx.get_context(),
-                                                *coords,
-                                                histo,
-                                                reduce_threshold,
-                                                *edge_status,
-                                                *e_attr);
+            // sec<float, blockThreads>
+            //     <<<launch_box.blocks,
+            //        launch_box.num_threads,
+            //        launch_box.smem_bytes_dyn>>>(rx.get_context(),
+            //                                     *coords,
+            //                                     histo,
+            //                                     reduce_threshold,
+            //                                     *edge_status);
 
             app_timer.stop();
 
@@ -152,7 +99,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
             GPUTimer slice_timer;
             slice_timer.start();
-            rx.slice_patches(*coords, *edge_status, *e_attr);
+            rx.slice_patches(*coords, *edge_status);
             slice_timer.stop();
 
             GPUTimer cleanup_timer2;
@@ -182,14 +129,10 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
             RXMESH_INFO("#Edges {}", rx.get_num_edges(true));
             RXMESH_INFO("#Faces {}", rx.get_num_faces(true));
             RXMESH_INFO("#Patches {}", rx.get_num_patches(true));
-            RXMESH_INFO("request reduction = {}, achieved reduction= {}",
-                        reduce_threshold,
-                        num_edges_before - int(rx.get_num_edges(true)));
 
             if (false) {
                 rx.update_host();
                 coords->move(DEVICE, HOST);
-                e_attr->move(DEVICE, HOST);
                 rx.update_polyscope();
                 auto ps_mesh = rx.get_polyscope_mesh();
                 ps_mesh->updateVertexPositions(*coords);
@@ -207,7 +150,8 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     total_time += timer.elapsed_millis();
     CUDA_ERROR(cudaProfilerStop());
 
-    RXMESH_INFO("sec_rxmesh() RXMesh simplification took {} (ms)", total_time);
+    RXMESH_INFO("sec_rxmesh() RXMesh surface tracking took {} (ms)",
+                total_time);
     RXMESH_INFO("sec_rxmesh() App time {} (ms)", app_time);
     RXMESH_INFO("sec_rxmesh() Slice timer {} (ms)", slice_time);
     RXMESH_INFO("sec_rxmesh() Cleanup timer {} (ms)", cleanup_time);
@@ -229,6 +173,5 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     rx.render_face_patch();
     polyscope::show();
 #endif
-
-    histo.free();
+    
 }

@@ -7,8 +7,7 @@ __global__ static void sec(rxmesh::Context                   context,
                            const CostHistogram<T>            histo,
                            const int                         reduce_threshold,
                            rxmesh::EdgeAttribute<EdgeStatus> edge_status,
-                           rxmesh::EdgeAttribute<T>          e_attr,
-                           int*                              d_num_cavities)
+                           rxmesh::EdgeAttribute<T>          e_attr)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -26,6 +25,7 @@ __global__ static void sec(rxmesh::Context                   context,
     // filter them). Then after cavity.prologue, we reuse this bitmask to mark
     // the newly added edges
     Bitmask edge_mask(cavity.patch_info().edges_capacity[0], shrd_alloc);
+    edge_mask.reset(block);
 
     // we use this bitmask to mark the other end of to-be-collapse edge during
     // checking for the link condition
@@ -54,11 +54,9 @@ __global__ static void sec(rxmesh::Context                   context,
         const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
         const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
 
-        T len2 = glm::distance2(p0, p1);
+        T len2 = logf(glm::distance2(p0, p1));
 
         if (histo.get_bin(len2) <= reduce_threshold) {
-            //::atomicAdd(d_num_cavities + 1, 1);
-            // cavity.create(eh);
             edge_mask.set(eh.local_id(), true);
         }
     });
@@ -252,7 +250,7 @@ __global__ static void compute_min_max_cost(
         const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
         const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
 
-        T len2 = glm::distance2(p0, p1);
+        T len2 = logf(glm::distance2(p0, p1));
 
         atomicMin(histo.min_value(), len2);
         atomicMax(histo.max_value(), len2);
@@ -269,7 +267,8 @@ template <typename T, uint32_t blockThreads>
 __global__ static void populate_histogram(
     rxmesh::Context                  context,
     const rxmesh::VertexAttribute<T> coords,
-    CostHistogram<T>                 histo)
+    CostHistogram<T>                 histo,
+    rxmesh::EdgeAttribute<T>         e_attr)
 {
     using namespace rxmesh;
 
@@ -280,7 +279,10 @@ __global__ static void populate_histogram(
         const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
         const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
 
-        T len2 = glm::distance2(p0, p1);
+        T len2 = logf(glm::distance2(p0, p1));
+
+
+        // e_attr(eh) = T(histo.bin_id(len2));
 
         histo.insert(len2);
     };
