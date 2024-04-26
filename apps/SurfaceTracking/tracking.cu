@@ -6,8 +6,17 @@
 
 struct arg
 {
-    std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    device_id     = 0;
+    std::string output_folder              = STRINGIFY(OUTPUT_DIR);
+    uint32_t    device_id                  = 0;
+    float       frame_dt                   = 0.05;
+    float       sim_dt                     = 0.05;
+    float       end_sim_t                  = 20.0;
+    float       m_max_volume_change        = 0.0005;
+    float       m_min_edge_length          = 0.5;
+    float       m_max_edge_length          = 1.5;
+    float       m_min_curvature_multiplier = 1.0;
+    float       m_max_curvature_multiplier = 1.0;
+    float       m_friction_coefficient     = 0.0;
     char**      argv;
     int         argc;
 } Arg;
@@ -25,17 +34,17 @@ TEST(Apps, SurfaceTracking)
 
     std::vector<std::vector<uint32_t>> fv;
 
-    create_plane(verts, fv, 60, 60);
+    const Vector<3, float> lower_corner(-3.0, 0.0, -3.0);
+
+    create_plane(verts, fv, 60, 60, 0.1f, lower_corner);
 
     RXMeshDynamic rx(fv);
+    //  rx.save(STRINGIFY(OUTPUT_DIR) + std::string("plane_patches"));
+
+    // RXMeshDynamic rx(fv, STRINGIFY(OUTPUT_DIR) +
+    // std::string("plane_patches"));
 
     rx.add_vertex_coordinates(verts, "plane");
-    // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
-    //         "_patches");
-
-    // RXMeshDynamic rx(Arg.obj_file_name,
-    //                  STRINGIFY(OUTPUT_DIR) +
-    //                      extract_file_name(Arg.obj_file_name) + "_patches");
 
     tracking_rxmesh(rx);
 }
@@ -62,7 +71,7 @@ int main(int argc, char** argv)
             // clang-format on
             exit(EXIT_SUCCESS);
         }
-                
+
         if (cmd_option_exists(argv, argc + argv, "-o")) {
             Arg.output_folder =
                 std::string(get_cmd_option(argv, argv + argc, "-o"));

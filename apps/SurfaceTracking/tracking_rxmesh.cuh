@@ -4,8 +4,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 
-
+#include "frame_stepper.h"
 #include "rxmesh/rxmesh_dynamic.h"
+#include "simulation.h"
 
 template <typename T>
 using Vec3 = glm::vec<3, T, glm::defaultp>;
@@ -19,7 +20,119 @@ enum : EdgeStatus
     ADDED  = 3,  // means it has been added to during the split/flip/collapse
 };
 
+#include "noise.h"
 #include "tracking_kernels.cuh"
+
+
+template <typename T>
+void update_polyscope(rxmesh::RXMeshDynamic&      rx,
+                      rxmesh::VertexAttribute<T>& coords)
+{
+#if USE_POLYSCOPE
+    using namespace rxmesh;
+
+    rx.update_host();
+    coords.move(DEVICE, HOST);
+
+    rx.update_polyscope();
+
+    auto ps_mesh = rx.get_polyscope_mesh();
+    ps_mesh->updateVertexPositions(coords);
+    ps_mesh->setEnabled(true);
+
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();
+    polyscope::show();
+    ps_mesh->setEnabled(false);
+#endif
+}
+
+template <typename T>
+void improve_mesh()
+{
+    // TODO
+}
+
+template <typename T>
+void advance_sim(T                           sim_dt,
+                 Simulation<T>&              sim,
+                 FrameStepper<T>&            frame_stepper,
+                 const FlowNoise3<T>&        noise,
+                 rxmesh::RXMeshDynamic&      rx,
+                 rxmesh::VertexAttribute<T>* position)
+{
+    using namespace rxmesh;
+
+    T accum_dt = 0;
+
+    while ((accum_dt < 0.99 * sim_dt) &&
+           (sim.m_curr_t + accum_dt < sim.m_max_t)) {
+
+        // TODO
+        // improve_mesh();
+
+        T curr_dt = sim_dt - accum_dt;
+        curr_dt   = std::min(curr_dt, sim.m_max_t - sim.m_curr_t - accum_dt);
+
+        // move
+        curl_noise_predicate_new_position(
+            rx, noise, *position, sim.m_curr_t + accum_dt, curr_dt);
+        accum_dt += curr_dt;
+
+        CUDA_ERROR(cudaDeviceSynchronize());
+
+        // update polyscope
+        update_polyscope(rx, *position);
+    }
+
+    sim.m_curr_t += accum_dt;
+
+
+    // check if max time is reached
+    if (sim.done_simulation()) {
+        sim.m_running = false;
+    }
+}
+
+template <typename T>
+void advance_frame(Simulation<T>&              sim,
+                   FrameStepper<T>&            frame_stepper,
+                   FlowNoise3<T>&              noise,
+                   rxmesh::RXMeshDynamic&      rx,
+                   rxmesh::VertexAttribute<T>* position)
+{
+    if (!sim.m_currently_advancing_simulation) {
+        sim.m_currently_advancing_simulation = true;
+
+
+        // Advance frame
+        while (!(frame_stepper.done_frame())) {
+            T dt = frame_stepper.get_step_length(sim.m_dt);
+            advance_sim(dt, sim, frame_stepper, noise, rx, position);
+            frame_stepper.advance_step(dt);
+        }
+
+        // update frame stepper
+        frame_stepper.next_frame();
+
+        sim.m_currently_advancing_simulation = false;
+    }
+}
+
+template <typename T>
+void run_simulation(Simulation<T>&              sim,
+                    FrameStepper<T>&            frame_stepper,
+                    FlowNoise3<T>&              noise,
+                    rxmesh::RXMeshDynamic&      rx,
+                    rxmesh::VertexAttribute<T>* position)
+{
+    sim.m_running = true;
+    while (sim.m_running) {
+        advance_frame(sim, frame_stepper, noise, rx, position);
+    }
+    sim.m_running = false;
+}
 
 
 inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
@@ -30,11 +143,17 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     constexpr uint32_t blockThreads = 256;
 
 
-    auto coords = rx.get_input_vertex_coordinates();
+    auto position = rx.get_input_vertex_coordinates();
 
     auto edge_status = rx.add_edge_attribute<EdgeStatus>("EdgeStatus", 1);
 
     LaunchBox<blockThreads> launch_box;
+
+    FrameStepper<float> frame_stepper(Arg.frame_dt);
+
+    Simulation<float> sim(Arg.sim_dt, Arg.end_sim_t);
+
+    FlowNoise3<float> noise;
 
     float total_time   = 0;
     float app_time     = 0;
@@ -48,130 +167,21 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     // polyscope::show();
 #endif
 
-    bool validate = false;
-
 
     CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
     timer.start();
-    while (true) {
 
-        // reset edge status
-        edge_status->reset(UNSEEN, DEVICE);
+    run_simulation(sim, frame_stepper, noise, rx, position.get());
 
-        rx.reset_scheduler();
-        while (!rx.is_queue_empty()) {
-
-            // RXMESH_INFO(" Queue size = {}",
-            //             rx.get_context().m_patch_scheduler.size());
-
-            // rx.update_launch_box(
-            //     {Op::EV},
-            //     launch_box,
-            //     (void*)sec<float, blockThreads>,
-            //     true,
-            //     false,
-            //     false,
-            //     false,
-            //     [&](uint32_t v, uint32_t e, uint32_t f) {
-            //         return detail::mask_num_bytes(e) +
-            //                2 * detail::mask_num_bytes(v) +
-            //                3 * ShmemAllocator::default_alignment;
-            //     });
-
-            GPUTimer app_timer;
-            app_timer.start();
-            // sec<float, blockThreads>
-            //     <<<launch_box.blocks,
-            //        launch_box.num_threads,
-            //        launch_box.smem_bytes_dyn>>>(rx.get_context(),
-            //                                     *coords,
-            //                                     histo,
-            //                                     reduce_threshold,
-            //                                     *edge_status);
-
-            app_timer.stop();
-
-            GPUTimer cleanup_timer;
-            cleanup_timer.start();
-            rx.cleanup();
-            cleanup_timer.stop();
-
-            GPUTimer slice_timer;
-            slice_timer.start();
-            rx.slice_patches(*coords, *edge_status);
-            slice_timer.stop();
-
-            GPUTimer cleanup_timer2;
-            cleanup_timer2.start();
-            rx.cleanup();
-            cleanup_timer2.stop();
-
-
-            CUDA_ERROR(cudaDeviceSynchronize());
-            CUDA_ERROR(cudaGetLastError());
-
-            app_time += app_timer.elapsed_millis();
-            slice_time += slice_timer.elapsed_millis();
-            cleanup_time += cleanup_timer.elapsed_millis();
-            cleanup_time += cleanup_timer2.elapsed_millis();
-
-
-            if (validate) {
-                rx.update_host();
-                EXPECT_TRUE(rx.validate());
-            }
-        }
-
-        if (false) {
-
-            RXMESH_INFO("#Vertices {}", rx.get_num_vertices(true));
-            RXMESH_INFO("#Edges {}", rx.get_num_edges(true));
-            RXMESH_INFO("#Faces {}", rx.get_num_faces(true));
-            RXMESH_INFO("#Patches {}", rx.get_num_patches(true));
-
-            if (false) {
-                rx.update_host();
-                coords->move(DEVICE, HOST);
-                rx.update_polyscope();
-                auto ps_mesh = rx.get_polyscope_mesh();
-                ps_mesh->updateVertexPositions(*coords);
-                ps_mesh->setEnabled(false);
-                // ps_mesh->addEdgeScalarQuantity("eMark", *e_attr);
-                // rx.render_vertex_patch();
-                // rx.render_edge_patch();
-                // rx.render_face_patch();
-
-                polyscope::show();
-            }
-        }
-    }
     timer.stop();
     total_time += timer.elapsed_millis();
     CUDA_ERROR(cudaProfilerStop());
 
-    RXMESH_INFO("sec_rxmesh() RXMesh surface tracking took {} (ms)",
+    RXMESH_INFO("tracking_rxmesh() RXMesh surface tracking took {} (ms)",
                 total_time);
-    RXMESH_INFO("sec_rxmesh() App time {} (ms)", app_time);
-    RXMESH_INFO("sec_rxmesh() Slice timer {} (ms)", slice_time);
-    RXMESH_INFO("sec_rxmesh() Cleanup timer {} (ms)", cleanup_time);
 
-    if (!validate) {
-        rx.update_host();
-    }
-    coords->move(DEVICE, HOST);
+    update_polyscope(rx, *position);
 
-#if USE_POLYSCOPE
-    rx.update_polyscope();
-
-    auto ps_mesh = rx.get_polyscope_mesh();
-    ps_mesh->updateVertexPositions(*coords);
-    ps_mesh->setEnabled(false);
-
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
-    polyscope::show();
-#endif
-    
+    noise.free();
 }

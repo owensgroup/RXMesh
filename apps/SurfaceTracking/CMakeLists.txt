@@ -3,7 +3,10 @@ add_executable(SurfaceTracking)
 set(SOURCE_LIST
     tracking.cu  
 	tracking_rxmesh.cuh
-	tracking_kernels.cuh	
+	tracking_kernels.cuh
+	frame_stepper.h
+	simulation.h
+	noise.h
 )
 
 
