@@ -20,6 +20,7 @@ enum : EdgeStatus
     ADDED  = 3,  // means it has been added to during the split/flip/collapse
 };
 
+#include "improving_kernels.cuh"
 #include "noise.h"
 #include "tracking_kernels.cuh"
 
@@ -49,9 +50,66 @@ void update_polyscope(rxmesh::RXMeshDynamic&      rx,
 }
 
 template <typename T>
-void improve_mesh()
+void splitter(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>* position)
 {
-    // TODO
+}
+
+
+template <typename T>
+void flipper(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>* position)
+{
+}
+
+
+template <typename T>
+void collapser(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>* position)
+{
+}
+
+
+template <typename T>
+void smoother(rxmesh::RXMeshDynamic&            rx,
+              const rxmesh::VertexAttribute<T>* current_position,
+              rxmesh::VertexAttribute<T>*       new_position)
+{
+    using namespace rxmesh;
+
+    constexpr uint32_t blockThreads = 384;
+
+    LaunchBox<blockThreads> launch_box;
+    rx.update_launch_box({Op::VV},
+                         launch_box,
+                         (void*)null_space_smooth_vertex<T, blockThreads>,
+                         false,
+                         true);
+
+    GPUTimer app_timer;
+    app_timer.start();
+    null_space_smooth_vertex<T, blockThreads><<<launch_box.blocks,
+                                                launch_box.num_threads,
+                                                launch_box.smem_bytes_dyn>>>(
+        rx.get_context(), *current_position, *new_position);
+    app_timer.stop();
+    RXMESH_INFO("Smoother time {} (ms)", app_timer.elapsed_millis());
+}
+
+
+template <typename T>
+void improve_mesh(rxmesh::RXMeshDynamic&      rx,
+                  rxmesh::VertexAttribute<T>* current_position,
+                  rxmesh::VertexAttribute<T>* new_position)
+{
+    // edge splitting
+    splitter(rx, current_position);
+
+    // edge flippingl
+    flipper(rx, current_position);
+
+    // edge collapsing
+    collapser(rx, current_position);
+
+    // null-space smoothing
+    smoother(rx, current_position, new_position);
 }
 
 template <typename T>
@@ -60,7 +118,8 @@ void advance_sim(T                           sim_dt,
                  FrameStepper<T>&            frame_stepper,
                  const FlowNoise3<T>&        noise,
                  rxmesh::RXMeshDynamic&      rx,
-                 rxmesh::VertexAttribute<T>* position)
+                 rxmesh::VertexAttribute<T>*& current_position,
+                 rxmesh::VertexAttribute<T>*& new_position)
 {
     using namespace rxmesh;
 
@@ -69,21 +128,22 @@ void advance_sim(T                           sim_dt,
     while ((accum_dt < 0.99 * sim_dt) &&
            (sim.m_curr_t + accum_dt < sim.m_max_t)) {
 
-        // TODO
-        // improve_mesh();
+        // improve the mesh (also update new_position)
+        improve_mesh(rx, current_position, new_position);
+        std::swap(current_position, new_position);
 
         T curr_dt = sim_dt - accum_dt;
         curr_dt   = std::min(curr_dt, sim.m_max_t - sim.m_curr_t - accum_dt);
 
-        // move
+        // move the mesh (update current_position)
         curl_noise_predicate_new_position(
-            rx, noise, *position, sim.m_curr_t + accum_dt, curr_dt);
+            rx, noise, *current_position, sim.m_curr_t + accum_dt, curr_dt);
         accum_dt += curr_dt;
 
         CUDA_ERROR(cudaDeviceSynchronize());
 
         // update polyscope
-        update_polyscope(rx, *position);
+        update_polyscope(rx, *current_position);
     }
 
     sim.m_curr_t += accum_dt;
@@ -100,7 +160,8 @@ void advance_frame(Simulation<T>&              sim,
                    FrameStepper<T>&            frame_stepper,
                    FlowNoise3<T>&              noise,
                    rxmesh::RXMeshDynamic&      rx,
-                   rxmesh::VertexAttribute<T>* position)
+                   rxmesh::VertexAttribute<T>*& current_position,
+                   rxmesh::VertexAttribute<T>*& new_position)
 {
     if (!sim.m_currently_advancing_simulation) {
         sim.m_currently_advancing_simulation = true;
@@ -109,7 +170,13 @@ void advance_frame(Simulation<T>&              sim,
         // Advance frame
         while (!(frame_stepper.done_frame())) {
             T dt = frame_stepper.get_step_length(sim.m_dt);
-            advance_sim(dt, sim, frame_stepper, noise, rx, position);
+            advance_sim(dt,
+                        sim,
+                        frame_stepper,
+                        noise,
+                        rx,
+                        current_position,
+                        new_position);
             frame_stepper.advance_step(dt);
         }
 
@@ -125,11 +192,13 @@ void run_simulation(Simulation<T>&              sim,
                     FrameStepper<T>&            frame_stepper,
                     FlowNoise3<T>&              noise,
                     rxmesh::RXMeshDynamic&      rx,
-                    rxmesh::VertexAttribute<T>* position)
+                    rxmesh::VertexAttribute<T>* current_position,
+                    rxmesh::VertexAttribute<T>* new_position)
 {
     sim.m_running = true;
     while (sim.m_running) {
-        advance_frame(sim, frame_stepper, noise, rx, position);
+        advance_frame(
+            sim, frame_stepper, noise, rx, current_position, new_position);
     }
     sim.m_running = false;
 }
@@ -142,10 +211,12 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
-
-    auto position = rx.get_input_vertex_coordinates();
+    auto current_position = rx.get_input_vertex_coordinates();
 
     auto edge_status = rx.add_edge_attribute<EdgeStatus>("EdgeStatus", 1);
+
+    auto new_position = rx.add_vertex_attribute<float>("NewPosition", 3);
+    new_position->reset(0, LOCALE_ALL);
 
     LaunchBox<blockThreads> launch_box;
 
@@ -172,7 +243,12 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     GPUTimer timer;
     timer.start();
 
-    run_simulation(sim, frame_stepper, noise, rx, position.get());
+    run_simulation(sim,
+                   frame_stepper,
+                   noise,
+                   rx,
+                   current_position.get(),
+                   new_position.get());
 
     timer.stop();
     total_time += timer.elapsed_millis();
@@ -181,7 +257,7 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     RXMESH_INFO("tracking_rxmesh() RXMesh surface tracking took {} (ms)",
                 total_time);
 
-    update_polyscope(rx, *position);
+    update_polyscope(rx, *current_position);
 
     noise.free();
 }

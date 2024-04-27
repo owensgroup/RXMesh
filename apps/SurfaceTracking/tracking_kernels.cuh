@@ -1,6 +1,5 @@
 #pragma once
-#include "rxmesh/cavity_manager.cuh"
-#include "rxmesh/query.cuh"
+#include "rxmesh/rxmesh_dynamic.h"
 
 template <typename T>
 constexpr __inline__ __device__ T
@@ -74,19 +73,19 @@ void curl_noise_predicate_new_position(rxmesh::RXMeshDynamic&      rx,
 
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle vh) {
         const Vec3<T> p(position(vh, 0), position(vh, 1), position(vh, 2));
-            
+
         Vec3<T> v;
 
         get_velocity(noise, p, v);
         Vec3<T> k1 = adaptive_dt * v;
-                
+
         get_velocity(noise, p + T(0.5) * k1, v);
         Vec3<T> k2 = adaptive_dt * v;
-                
+
         get_velocity(noise, p + T(0.5) * k2, v);
         Vec3<T> k3 = adaptive_dt * v;
 
-        
+
         get_velocity(noise, p + T(0.5) * k3, v);
         Vec3<T> k4 = adaptive_dt * v;
 
