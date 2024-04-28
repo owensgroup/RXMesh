@@ -4,19 +4,30 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
 
+inline float deg2rad(float deg)
+{
+    // r = PI*d / 180
+    return deg * M_PI / 180.f;
+}
+
+
 struct arg
 {
-    std::string output_folder              = STRINGIFY(OUTPUT_DIR);
-    uint32_t    device_id                  = 0;
-    float       frame_dt                   = 0.05;
-    float       sim_dt                     = 0.05;
-    float       end_sim_t                  = 20.0;
-    float       m_max_volume_change        = 0.0005;
-    float       m_min_edge_length          = 0.5;
-    float       m_max_edge_length          = 1.5;
-    float       m_min_curvature_multiplier = 1.0;
-    float       m_max_curvature_multiplier = 1.0;
-    float       m_friction_coefficient     = 0.0;
+    std::string output_folder               = STRINGIFY(OUTPUT_DIR);
+    uint32_t    device_id                   = 0;
+    float       frame_dt                    = 0.05;
+    float       sim_dt                      = 0.05;
+    float       end_sim_t                   = 20.0;
+    float       max_volume_change           = 0.0005;
+    float       min_edge_length             = 0.5;
+    float       max_edge_length             = 1.5;
+    float       min_curvature_multiplier    = 1.0;
+    float       max_curvature_multiplier    = 1.0;
+    float       friction_coefficient        = 0.0;
+    float       edge_flip_min_length_change = 1e-8;
+    float       min_triangle_area           = 1e-7;
+    float       min_triangle_angle          = deg2rad(0.f);
+    float       max_triangle_angle          = deg2rad(180.f);
     char**      argv;
     int         argc;
 } Arg;

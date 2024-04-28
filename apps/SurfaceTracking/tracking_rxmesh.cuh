@@ -20,6 +20,8 @@ enum : EdgeStatus
     ADDED  = 3,  // means it has been added to during the split/flip/collapse
 };
 
+int* d_buffer;
+
 #include "improving_kernels.cuh"
 #include "noise.h"
 #include "tracking_kernels.cuh"
@@ -49,15 +51,123 @@ void update_polyscope(rxmesh::RXMeshDynamic&      rx,
 #endif
 }
 
+int is_done(const rxmesh::RXMeshDynamic&             rx,
+            const rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
+            int*                                     d_buffer)
+{
+    using namespace rxmesh;
+
+    // if there is at least one edge that is UNSEEN or UPDATE (i.e. newly
+    // added), then we are not done yet
+    CUDA_ERROR(cudaMemset(d_buffer, 0, sizeof(int)));
+
+    rx.for_each_edge(
+        DEVICE,
+        [edge_status = *edge_status, d_buffer] __device__(const EdgeHandle eh) {
+            if (edge_status(eh) == UNSEEN || edge_status(eh) == UPDATE) {
+                ::atomicAdd(d_buffer, 1);
+            }
+        });
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+    return d_buffer[0];
+}
+
+
 template <typename T>
 void splitter(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>* position)
 {
 }
 
+template <typename T>
+void classify_vertices(rxmesh::RXMeshDynamic&            rx,
+                       const rxmesh::VertexAttribute<T>* position,
+                       rxmesh::VertexAttribute<int8_t>*  vertex_rank)
+{
+    using namespace rxmesh;
+
+    constexpr uint32_t blockThreads = 384;
+
+    vertex_rank->reset(0, DEVICE);
+
+    LaunchBox<blockThreads> launch_box;
+    rx.update_launch_box({Op::VV},
+                         launch_box,
+                         (void*)classify_vertex<T, blockThreads>,
+                         false,
+                         true);
+
+    classify_vertex<T, blockThreads><<<launch_box.blocks,
+                                       launch_box.num_threads,
+                                       launch_box.smem_bytes_dyn>>>(
+        rx.get_context(), *position, *vertex_rank);
+}
 
 template <typename T>
-void flipper(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>* position)
+void flipper(rxmesh::RXMeshDynamic&             rx,
+             rxmesh::VertexAttribute<T>*        position,
+             rxmesh::VertexAttribute<int8_t>*   vertex_rank,
+             rxmesh::EdgeAttribute<EdgeStatus>* edge_status)
 {
+    classify_vertices(rx, position, vertex_rank);
+
+    using namespace rxmesh;
+
+    constexpr uint32_t blockThreads = 512;
+
+    const uint32_t MAX_NUM_FLIP_PASSES = 5;
+
+    uint32_t num_flip_passes = 0;
+
+    edge_status->reset(UNSEEN, DEVICE);
+
+    int prv_remaining_work = rx.get_num_edges();
+
+    while (num_flip_passes++ < MAX_NUM_FLIP_PASSES) {
+        rx.reset_scheduler();
+        while (!rx.is_queue_empty()) {
+
+            LaunchBox<blockThreads> launch_box;
+
+            rx.update_launch_box(
+                {Op::EVDiamond, Op::VV},
+                launch_box,
+                (void*)edge_flip<T, blockThreads>,
+                true,
+                false,
+                false,
+                false,
+                [&](uint32_t v, uint32_t e, uint32_t f) {
+                    return detail::mask_num_bytes(e) +
+                           2 * v * sizeof(uint16_t) +
+                           2 * ShmemAllocator::default_alignment;
+                });
+
+            edge_flip<T, blockThreads>
+                <<<DIVIDE_UP(launch_box.blocks, 8),
+                   launch_box.num_threads,
+                   launch_box.smem_bytes_dyn>>>(rx.get_context(),
+                                                *position,
+                                                *vertex_rank,
+                                                *edge_status,
+                                                Arg.edge_flip_min_length_change,
+                                                Arg.max_volume_change,
+                                                Arg.min_triangle_area,
+                                                Arg.min_triangle_angle,
+                                                Arg.max_triangle_angle);
+
+            rx.cleanup();
+            rx.slice_patches(*position, *vertex_rank, *edge_status);
+            rx.cleanup();
+        }
+
+        int remaining_work = is_done(rx, edge_status, d_buffer);
+
+        if (remaining_work == 0 || prv_remaining_work == remaining_work) {
+            break;
+        }
+        prv_remaining_work = remaining_work;
+    }
 }
 
 
@@ -95,15 +205,17 @@ void smoother(rxmesh::RXMeshDynamic&            rx,
 
 
 template <typename T>
-void improve_mesh(rxmesh::RXMeshDynamic&      rx,
-                  rxmesh::VertexAttribute<T>* current_position,
-                  rxmesh::VertexAttribute<T>* new_position)
+void improve_mesh(rxmesh::RXMeshDynamic&             rx,
+                  rxmesh::VertexAttribute<T>*        current_position,
+                  rxmesh::VertexAttribute<T>*        new_position,
+                  rxmesh::VertexAttribute<int8_t>*   vertex_rank,
+                  rxmesh::EdgeAttribute<EdgeStatus>* edge_status)
 {
     // edge splitting
     splitter(rx, current_position);
 
     // edge flippingl
-    flipper(rx, current_position);
+    flipper(rx, current_position, vertex_rank, edge_status);
 
     // edge collapsing
     collapser(rx, current_position);
@@ -113,13 +225,15 @@ void improve_mesh(rxmesh::RXMeshDynamic&      rx,
 }
 
 template <typename T>
-void advance_sim(T                           sim_dt,
-                 Simulation<T>&              sim,
-                 FrameStepper<T>&            frame_stepper,
-                 const FlowNoise3<T>&        noise,
-                 rxmesh::RXMeshDynamic&      rx,
-                 rxmesh::VertexAttribute<T>*& current_position,
-                 rxmesh::VertexAttribute<T>*& new_position)
+void advance_sim(T                                  sim_dt,
+                 Simulation<T>&                     sim,
+                 FrameStepper<T>&                   frame_stepper,
+                 const FlowNoise3<T>&               noise,
+                 rxmesh::RXMeshDynamic&             rx,
+                 rxmesh::VertexAttribute<T>*&       current_position,
+                 rxmesh::VertexAttribute<T>*&       new_position,
+                 rxmesh::VertexAttribute<int8_t>*   vertex_rank,
+                 rxmesh::EdgeAttribute<EdgeStatus>* edge_status)
 {
     using namespace rxmesh;
 
@@ -129,7 +243,8 @@ void advance_sim(T                           sim_dt,
            (sim.m_curr_t + accum_dt < sim.m_max_t)) {
 
         // improve the mesh (also update new_position)
-        improve_mesh(rx, current_position, new_position);
+        improve_mesh(
+            rx, current_position, new_position, vertex_rank, edge_status);
         std::swap(current_position, new_position);
 
         T curr_dt = sim_dt - accum_dt;
@@ -156,12 +271,14 @@ void advance_sim(T                           sim_dt,
 }
 
 template <typename T>
-void advance_frame(Simulation<T>&              sim,
-                   FrameStepper<T>&            frame_stepper,
-                   FlowNoise3<T>&              noise,
-                   rxmesh::RXMeshDynamic&      rx,
-                   rxmesh::VertexAttribute<T>*& current_position,
-                   rxmesh::VertexAttribute<T>*& new_position)
+void advance_frame(Simulation<T>&                     sim,
+                   FrameStepper<T>&                   frame_stepper,
+                   FlowNoise3<T>&                     noise,
+                   rxmesh::RXMeshDynamic&             rx,
+                   rxmesh::VertexAttribute<T>*&       current_position,
+                   rxmesh::VertexAttribute<T>*&       new_position,
+                   rxmesh::VertexAttribute<int8_t>*   vertex_rank,
+                   rxmesh::EdgeAttribute<EdgeStatus>* edge_status)
 {
     if (!sim.m_currently_advancing_simulation) {
         sim.m_currently_advancing_simulation = true;
@@ -176,7 +293,9 @@ void advance_frame(Simulation<T>&              sim,
                         noise,
                         rx,
                         current_position,
-                        new_position);
+                        new_position,
+                        vertex_rank,
+                        edge_status);
             frame_stepper.advance_step(dt);
         }
 
@@ -188,17 +307,25 @@ void advance_frame(Simulation<T>&              sim,
 }
 
 template <typename T>
-void run_simulation(Simulation<T>&              sim,
-                    FrameStepper<T>&            frame_stepper,
-                    FlowNoise3<T>&              noise,
-                    rxmesh::RXMeshDynamic&      rx,
-                    rxmesh::VertexAttribute<T>* current_position,
-                    rxmesh::VertexAttribute<T>* new_position)
+void run_simulation(Simulation<T>&                     sim,
+                    FrameStepper<T>&                   frame_stepper,
+                    FlowNoise3<T>&                     noise,
+                    rxmesh::RXMeshDynamic&             rx,
+                    rxmesh::VertexAttribute<T>*        current_position,
+                    rxmesh::VertexAttribute<T>*        new_position,
+                    rxmesh::VertexAttribute<int8_t>*   vertex_rank,
+                    rxmesh::EdgeAttribute<EdgeStatus>* edge_status)
 {
     sim.m_running = true;
     while (sim.m_running) {
-        advance_frame(
-            sim, frame_stepper, noise, rx, current_position, new_position);
+        advance_frame(sim,
+                      frame_stepper,
+                      noise,
+                      rx,
+                      current_position,
+                      new_position,
+                      vertex_rank,
+                      edge_status);
     }
     sim.m_running = false;
 }
@@ -218,6 +345,9 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     auto new_position = rx.add_vertex_attribute<float>("NewPosition", 3);
     new_position->reset(0, LOCALE_ALL);
 
+    auto vertex_rank = rx.add_vertex_attribute<int8_t>("vRank", 1);
+    vertex_rank->reset(0, LOCALE_ALL);
+
     LaunchBox<blockThreads> launch_box;
 
     FrameStepper<float> frame_stepper(Arg.frame_dt);
@@ -225,6 +355,8 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     Simulation<float> sim(Arg.sim_dt, Arg.end_sim_t);
 
     FlowNoise3<float> noise;
+
+    CUDA_ERROR(cudaMallocManaged((void**)&d_buffer, sizeof(int)));
 
     float total_time   = 0;
     float app_time     = 0;
@@ -248,7 +380,9 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
                    noise,
                    rx,
                    current_position.get(),
-                   new_position.get());
+                   new_position.get(),
+                   vertex_rank.get(),
+                   edge_status.get());
 
     timer.stop();
     total_time += timer.elapsed_millis();
