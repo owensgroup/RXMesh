@@ -20,7 +20,9 @@ struct arg
     float       end_sim_t                   = 20.0;
     float       max_volume_change           = 0.0005;
     float       min_edge_length             = 0.5;
+    float       collapser_min_edge_length   = 0;
     float       max_edge_length             = 1.5;
+    float       splitter_max_edge_length  = 0.0;
     float       min_curvature_multiplier    = 1.0;
     float       max_curvature_multiplier    = 1.0;
     float       friction_coefficient        = 0.0;
@@ -50,9 +52,10 @@ TEST(Apps, SurfaceTracking)
     create_plane(verts, fv, 60, 60, 0.1f, lower_corner);
 
     // RXMeshDynamic rx(fv);
-    //   rx.save(STRINGIFY(OUTPUT_DIR) + std::string("plane_patches"));
+    // rx.save(STRINGIFY(OUTPUT_DIR) + std::string("plane60x60_patches"));
 
-    RXMeshDynamic rx(fv, STRINGIFY(OUTPUT_DIR) + std::string("plane_patches"));
+    RXMeshDynamic rx(fv,
+                     STRINGIFY(OUTPUT_DIR) + std::string("plane60x60_patches"));
 
     rx.add_vertex_coordinates(verts, "plane");
 

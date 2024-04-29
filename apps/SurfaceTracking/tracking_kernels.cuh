@@ -1,6 +1,14 @@
 #pragma once
 #include "rxmesh/rxmesh_dynamic.h"
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm.hpp>
+#include <glm/gtx/norm.hpp>
+template <typename T>
+using Vec3 = glm::vec<3, T, glm::defaultp>;
+
+#include "rxmesh/query.cuh"
+
 template <typename T>
 constexpr __inline__ __device__ T
 noise_gen(const FlowNoise3<T>& noise, T x, T y, T z)
@@ -96,4 +104,62 @@ void curl_noise_predicate_new_position(rxmesh::RXMeshDynamic&      rx,
         position(vh, 1) = new_p[1];
         position(vh, 2) = new_p[2];
     });
+}
+
+
+template <typename T, uint32_t blockThreads>
+__global__ static void __launch_bounds__(blockThreads)
+    avg_edge_length(const rxmesh::Context            context,
+                    const rxmesh::VertexAttribute<T> position,
+                    T*                               d_sum_edge_len)
+{
+    using namespace rxmesh;
+    auto block = cooperative_groups::this_thread_block();
+
+    auto len = [&](EdgeHandle eh, VertexIterator& iter) {
+        const Vec3<T> v0(
+            position(iter[0], 0), position(iter[0], 1), position(iter[0], 2));
+
+        const Vec3<T> v1(
+            position(iter[1], 0), position(iter[1], 1), position(iter[1], 2));
+
+        ::atomicAdd(d_sum_edge_len, glm::distance(v0, v1));
+    };
+
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::EV>(block, shrd_alloc, len);
+}
+
+template <typename T>
+T compute_avg_edge_length(rxmesh::RXMeshDynamic&      rx,
+                          rxmesh::VertexAttribute<T>& position)
+{
+    using namespace rxmesh;
+
+    constexpr uint32_t blockThreads = 512;
+
+    T* d_sum_edge_len;
+
+    CUDA_ERROR(cudaMalloc((void**)&d_sum_edge_len, sizeof(T)));
+    CUDA_ERROR(cudaMemset(d_sum_edge_len, 0, sizeof(T)));
+
+
+    LaunchBox<blockThreads> launch_box;
+
+    rx.update_launch_box(
+        {Op::EV}, launch_box, (void*)avg_edge_length<T, blockThreads>, false);
+
+    avg_edge_length<T, blockThreads><<<launch_box.blocks,
+                                       launch_box.num_threads,
+                                       launch_box.smem_bytes_dyn>>>(
+        rx.get_context(), position, d_sum_edge_len);
+
+    T h_sum_edge_len;
+    CUDA_ERROR(cudaMemcpy(
+        &h_sum_edge_len, d_sum_edge_len, sizeof(T), cudaMemcpyDeviceToHost));
+
+    GPU_FREE(d_sum_edge_len);
+
+    return h_sum_edge_len / rx.get_num_edges();
 }

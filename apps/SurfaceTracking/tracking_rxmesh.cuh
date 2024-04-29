@@ -29,18 +29,22 @@ int* d_buffer;
 
 template <typename T>
 void update_polyscope(rxmesh::RXMeshDynamic&      rx,
-                      rxmesh::VertexAttribute<T>& coords)
+                      rxmesh::VertexAttribute<T>& current_position,
+                      rxmesh::VertexAttribute<T>& new_position)
 {
 #if USE_POLYSCOPE
     using namespace rxmesh;
 
     rx.update_host();
-    coords.move(DEVICE, HOST);
+    current_position.move(DEVICE, HOST);
+    new_position.move(DEVICE, HOST);
 
     rx.update_polyscope();
 
+    rx.export_obj("tracking.obj", current_position);
+
     auto ps_mesh = rx.get_polyscope_mesh();
-    ps_mesh->updateVertexPositions(coords);
+    ps_mesh->updateVertexPositions(current_position);
     ps_mesh->setEnabled(true);
 
     rx.render_vertex_patch();
@@ -109,9 +113,13 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
              rxmesh::VertexAttribute<int8_t>*   vertex_rank,
              rxmesh::EdgeAttribute<EdgeStatus>* edge_status)
 {
-    classify_vertices(rx, position, vertex_rank);
-
     using namespace rxmesh;
+
+    GPUTimer app_timer;
+    app_timer.start();
+    classify_vertices(rx, position, vertex_rank);
+    app_timer.stop();
+    RXMESH_INFO("Classify Vertices time {} (ms)", app_timer.elapsed_millis());
 
     constexpr uint32_t blockThreads = 512;
 
@@ -119,11 +127,13 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
 
     uint32_t num_flip_passes = 0;
 
+    app_timer.start();
     edge_status->reset(UNSEEN, DEVICE);
 
     int prv_remaining_work = rx.get_num_edges();
 
-    while (num_flip_passes++ < MAX_NUM_FLIP_PASSES) {
+    // while (num_flip_passes++ < MAX_NUM_FLIP_PASSES) {
+    while (true) {
         rx.reset_scheduler();
         while (!rx.is_queue_empty()) {
 
@@ -168,6 +178,8 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
         }
         prv_remaining_work = remaining_work;
     }
+    app_timer.stop();
+    RXMESH_INFO("Flipper time {} (ms)", app_timer.elapsed_millis());
 }
 
 
@@ -214,7 +226,7 @@ void improve_mesh(rxmesh::RXMeshDynamic&             rx,
     // edge splitting
     splitter(rx, current_position);
 
-    // edge flippingl
+    // edge flipping
     flipper(rx, current_position, vertex_rank, edge_status);
 
     // edge collapsing
@@ -258,7 +270,7 @@ void advance_sim(T                                  sim_dt,
         CUDA_ERROR(cudaDeviceSynchronize());
 
         // update polyscope
-        update_polyscope(rx, *current_position);
+        update_polyscope(rx, *current_position, *new_position);
     }
 
     sim.m_curr_t += accum_dt;
@@ -371,6 +383,15 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
 #endif
 
 
+    // compute avergae edge length
+    float avg_edge_len = compute_avg_edge_length(rx, *current_position);
+
+    Arg.max_volume_change *= avg_edge_len * avg_edge_len * avg_edge_len;
+
+    Arg.collapser_min_edge_length = Arg.min_edge_length * avg_edge_len;
+
+    Arg.splitter_max_edge_length = Arg.max_edge_length * avg_edge_len;
+
     CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
     timer.start();
@@ -391,7 +412,7 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     RXMESH_INFO("tracking_rxmesh() RXMesh surface tracking took {} (ms)",
                 total_time);
 
-    update_polyscope(rx, *current_position);
+    update_polyscope(rx, *current_position, *new_position);
 
     noise.free();
 }
