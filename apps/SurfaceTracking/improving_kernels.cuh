@@ -395,7 +395,7 @@ __global__ static void __launch_bounds__(blockThreads)
             // make sure it is not boundary edge
             if (iter[1].is_valid() && iter[3].is_valid()) {
 
-                assert(iter.size() == 0);
+                assert(iter.size() == 4);
 
                 const VertexHandle ah = iter[0];
                 const VertexHandle bh = iter[2];
@@ -445,20 +445,18 @@ __global__ static void __launch_bounds__(blockThreads)
                         flip_it = false;
                     }
                 }
+
+
                 // if both old triangle normals agree before flipping, make sure
                 // they agree after flipping
-
-                // TODO double check on the normal computation
-                assert(false);
-
                 if (flip_it) {
                     // old triangles normals
-                    const Vec3<T> n0 = tri_normal(va, vc, vb);
-                    const Vec3<T> n1 = tri_normal(va, vb, vd);
+                    const Vec3<T> n0 = tri_normal(va, vb, vc);
+                    const Vec3<T> n1 = tri_normal(va, vd, vb);
 
                     // new triangles normals
-                    const Vec3<T> n2 = tri_normal(vc, vb, vd);
-                    const Vec3<T> n3 = tri_normal(vc, vd, va);
+                    const Vec3<T> n2 = tri_normal(vc, vd, vb);
+                    const Vec3<T> n3 = tri_normal(vc, va, vd);
 
                     if (glm::dot(n0, n1) > T(0)) {
                         if (glm::dot(n2, n3) < T(0)) {
