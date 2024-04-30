@@ -21,10 +21,23 @@ struct PatchStash
             CUDA_ERROR(
                 cudaMemset(m_stash, INVALID8, stash_size * sizeof(uint32_t)));
 
-            CUDA_ERROR(
-                cudaMalloc((void**)&m_edge_weight, stash_size * sizeof(uint32_t)));
-            CUDA_ERROR(
-                cudaMemset(m_edge_weight, INVALID32, stash_size * sizeof(uint32_t)));
+            CUDA_ERROR(cudaMalloc((void**)&m_edge_weight,
+                                  stash_size * sizeof(uint32_t)));
+            CUDA_ERROR(cudaMemset(
+                m_edge_weight, INVALID32, stash_size * sizeof(uint32_t)));
+
+            CUDA_ERROR(cudaMalloc((void**)&m_coarse_level_id_list,
+                                  stash_size * sizeof(uint32_t)));
+            CUDA_ERROR(cudaMemset(
+                m_edge_weight, INVALID32, stash_size * sizeof(uint32_t)));
+
+            CUDA_ERROR(cudaMalloc((void**)&m_tmp_current_level_stash,
+                                  stash_size * sizeof(uint32_t)));
+
+            CUDA_ERROR(cudaMalloc((void**)&m_tmp_current_level_edge_weight,
+                                  stash_size * sizeof(uint32_t)));
+
+            m_tmp_is_active = true;
         } else {
             m_stash = (uint32_t*)malloc(stash_size * sizeof(uint32_t));
             for (uint8_t i = 0; i < stash_size; ++i) {
@@ -38,12 +51,12 @@ struct PatchStash
         }
     }
 
-    __device__ __host__ PatchStash()                        = default;
-    __device__ __host__ PatchStash(const PatchStash& other) = default;
-    __device__ __host__ PatchStash(PatchStash&&)            = default;
+    __device__ __host__ PatchStash()                             = default;
+    __device__ __host__ PatchStash(const PatchStash& other)      = default;
+    __device__ __host__ PatchStash(PatchStash&&)                 = default;
     __device__ __host__ PatchStash& operator=(const PatchStash&) = default;
-    __device__ __host__ PatchStash& operator=(PatchStash&&) = default;
-    __device__                      __host__ ~PatchStash()  = default;
+    __device__ __host__ PatchStash& operator=(PatchStash&&)      = default;
+    __device__                      __host__ ~PatchStash()       = default;
 
     __host__ __device__ __inline__ uint32_t get_patch(uint8_t id) const
     {
@@ -67,25 +80,26 @@ struct PatchStash
         return get_patch(p.patch_stash_id());
     }
 
-        __host__ __device__ __inline__ uint32_t get_edge_weight(uint8_t id) const
+    __host__ __device__ __inline__ uint32_t get_edge_weight(uint8_t id) const
     {
         assert(id >= 0 && id < stash_size);
-        assert(m_edge_weight[id] != INVALID32);
+
+        if (m_edge_weight[id] == INVALID32) {
+            m_edge_weight[id] = 0;
+        }
+
         return m_edge_weight[id];
     }
 
     __host__ __device__ __inline__ uint32_t& get_edge_weight(uint8_t id)
     {
         assert(id >= 0 && id < stash_size);
-        assert(m_edge_weight[id] != INVALID32);
-        return m_edge_weight[id];
-    }
 
-    __host__ __device__ __inline__ void set_edge_weight(uint8_t id, uint32_t weight)
-    {
-        assert(id >= 0 && id < stash_size);
-        assert(m_edge_weight[id] == INVALID32);
-        m_edge_weight[id] = weight;
+        if (m_edge_weight[id] == INVALID32) {
+            m_edge_weight[id] = 0;
+        }
+
+        return m_edge_weight[id];
     }
 
     /*__host__ __device__ __inline__ uint8_t insert_patch(uint32_t patch)
@@ -183,8 +197,22 @@ struct PatchStash
         }
     }
 
+    // store the stash level of the initial level of coarsening
     uint32_t* m_stash;
     uint32_t* m_edge_weight;
-    bool      m_is_on_device;
+
+    // store the patch id of each level of coarsening
+    uint32_t* m_coarse_level_id_list;
+
+    // store the stash info of the current level during coarsening
+    uint32_t  m_tmp_patch_choice;
+    uint32_t* m_tmp_current_level_stash;
+    uint32_t* m_tmp_current_level_edge_weight;
+
+    // store whether the current patch is active or not to do matching
+    // init as active
+    bool m_tmp_is_active;
+
+    bool m_is_on_device;
 };
 }  // namespace rxmesh

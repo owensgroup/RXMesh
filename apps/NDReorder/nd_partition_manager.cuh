@@ -18,9 +18,11 @@
 
 namespace rxmesh {
 
+// PartitionManager lives in shared memory and is used to manage the
+// partitioning. Every patch owns a PartitionManager like the patch_info
+
 // TODO: change the uniform shared memory allocation to per level allocation for
 // less shared memory use
-// TODO: update the init list
 template <uint32_t blockThreads>
 struct ALIGN(16) PartitionManager
 {
@@ -47,32 +49,27 @@ struct ALIGN(16) PartitionManager
         ShmemAllocator&                   shrd_alloc,
         uint16_t                          req_level);
 
-    __device__ __inline__ void matching(
+    __device__ __inline__ void local_matching(
         cooperative_groups::thread_block& block,
         rxmesh::VertexAttribute<uint16_t> attr_matched_v,
         rxmesh::EdgeAttribute<uint16_t>   attr_active_e,
         uint16_t                          curr_level);
 
-    __device__ __inline__ void coarsening(
+    __device__ __inline__ void local_coarsening(
         cooperative_groups::thread_block& block,
         uint16_t                          curr_level);
 
-    __device__ __inline__ void uncoarsening(
+    __device__ __inline__ void local_uncoarsening(
         cooperative_groups::thread_block& block,
         uint16_t                          curr_level);
 
-    __device__ __inline__ void partition(
+    __device__ __inline__ void local_partition(
         cooperative_groups::thread_block& block,
         uint16_t                          curr_level);
 
-    __device__ __inline__ void genrate_reordering(
+    __device__ __inline__ void local_genrate_reordering(
         cooperative_groups::thread_block& block,
         rxmesh::VertexAttribute<uint16_t> v_ordering);
-
-
-    __device__ __inline__ void update_patchstash_edge_weight(
-        cooperative_groups::thread_block& block);
-
 
     __device__ __inline__ uint16_t* num_vertices_at(uint16_t curr_level)
     {
@@ -355,7 +352,12 @@ struct ALIGN(16) PartitionManager
     Bitmask m_s_tmp_coarse_p0_v;
     Bitmask m_s_tmp_coarse_p1_v;
 
+    // for cross patch reordering
     PatchStash m_s_patch_stash;
+    // merging id
+    uint16_t* m_s_merge_id_list;
+    uint16_t* m_g_coarse_graph_ev;
+    uint16_t* m_g_coarse_graph_ewgt;
 };
 
 // TODO: destroyer
@@ -559,7 +561,7 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
  * @param curr_level The current level of the partitioning process
  */
 template <uint32_t blockThreads>
-__device__ __inline__ void PartitionManager<blockThreads>::matching(
+__device__ __inline__ void PartitionManager<blockThreads>::local_matching(
     cooperative_groups::thread_block& block,
     rxmesh::VertexAttribute<uint16_t> attr_matched_v,
     rxmesh::EdgeAttribute<uint16_t>   attr_active_e,
@@ -828,7 +830,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::matching(
  * @param curr_level The current level of the partitioning process.
  */
 template <uint32_t blockThreads>
-__device__ __inline__ void PartitionManager<blockThreads>::coarsening(
+__device__ __inline__ void PartitionManager<blockThreads>::local_coarsening(
     cooperative_groups::thread_block& block,
     uint16_t                          curr_level)
 {
@@ -1125,7 +1127,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::coarsening(
  * @param curr_level The current level of the partitioning process.
  */
 template <uint32_t blockThreads>
-__device__ __inline__ void PartitionManager<blockThreads>::partition(
+__device__ __inline__ void PartitionManager<blockThreads>::local_partition(
     cooperative_groups::thread_block& block,
     uint16_t                          curr_level)
 {
@@ -1250,7 +1252,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::partition(
  */
 
 template <uint32_t blockThreads>
-__device__ __inline__ void PartitionManager<blockThreads>::uncoarsening(
+__device__ __inline__ void PartitionManager<blockThreads>::local_uncoarsening(
     cooperative_groups::thread_block& block,
     uint16_t                          curr_level)
 {
@@ -1307,7 +1309,8 @@ __device__ __inline__ void PartitionManager<blockThreads>::uncoarsening(
  * the vertices.
  */
 template <uint32_t blockThreads>
-__device__ __inline__ void PartitionManager<blockThreads>::genrate_reordering(
+__device__ __inline__ void
+PartitionManager<blockThreads>::local_genrate_reordering(
     cooperative_groups::thread_block& block,
     VertexAttribute<uint16_t>         v_ordering)
 {
@@ -1362,40 +1365,5 @@ __device__ __inline__ void PartitionManager<blockThreads>::genrate_reordering(
 
     block.sync();
 }
-
-template <uint32_t blockThreads>
-__device__ __inline__ void
-PartitionManager<blockThreads>::update_patchstash_edge_weight(
-    cooperative_groups::thread_block& block)
-{
-    uint16_t* s_ev  = get_ev(0);
-
-    __shared__ uint16_t s_num_edges[1];
-    s_num_edges[0] = 0;
-
-    for (uint16_t e = threadIdx.x; e < m_num_edges_limit; e += blockThreads) {
-        uint16_t v0 = s_ev[2 * e];
-        uint16_t v1 = s_ev[2 * e + 1];
-
-        // XOR check to find the boundary edges
-        if (!coarsen_owned(LocalVertexT(v0), 0) !=
-            !coarsen_owned(LocalVertexT(v1), 0)) {
-
-            // use LPPair to get the vertex patch id
-            uint32_t adj_patch_id = INVALID32;
-            if (!coarsen_owned(LocalVertexT(v0), 0)) {
-                // TODO: magic to get patch id of v0
-            } else if (!coarsen_owned(LocalVertexT(v1), 0)) {
-                // TODO: magic to get patch id of v1
-            } else {
-                assert(false);
-            }
-
-            uint8_t stash_idx = m_s_patch_stash.find_patch_index(adj_patch_id);
-            ::atomicAdd(&(m_s_patch_stash.get_edge_weight(stash_idx)), 1);
-        }
-    }
-}
-
 
 }  // namespace rxmesh

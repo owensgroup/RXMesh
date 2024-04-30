@@ -7,7 +7,7 @@
 #include "nd_partition_manager.cuh"
 
 template <uint32_t blockThreads>
-__global__ static void nd_main(rxmesh::Context                   context,
+__global__ static void nd_single_patch_main(rxmesh::Context                   context,
                                rxmesh::VertexAttribute<uint16_t> v_ordering,
                                rxmesh::VertexAttribute<uint16_t> attr_matched_v,
                                rxmesh::EdgeAttribute<uint16_t> attr_active_e,
@@ -24,22 +24,22 @@ __global__ static void nd_main(rxmesh::Context                   context,
     // TODO: partition quality and the matching quality analysis 
     
     // Start the matching process and the result are saved in bit masks
-    coarsen_graph.matching(block, attr_matched_v, attr_active_e, 0);
-    coarsen_graph.coarsening(block, 0);
+    coarsen_graph.local_matching(block, attr_matched_v, attr_active_e, 0);
+    coarsen_graph.local_coarsening(block, 0);
 
-    coarsen_graph.matching(block, attr_matched_v, attr_active_e, 1);
-    coarsen_graph.coarsening(block, 1);
+    coarsen_graph.local_matching(block, attr_matched_v, attr_active_e, 1);
+    coarsen_graph.local_coarsening(block, 1);
 
-    coarsen_graph.matching(block, attr_matched_v, attr_active_e, 2);
-    coarsen_graph.coarsening(block, 2);
+    coarsen_graph.local_matching(block, attr_matched_v, attr_active_e, 2);
+    coarsen_graph.local_coarsening(block, 2);
 
-    coarsen_graph.matching(block, attr_matched_v, attr_active_e, 3);
-    coarsen_graph.coarsening(block, 3);
+    coarsen_graph.local_matching(block, attr_matched_v, attr_active_e, 3);
+    coarsen_graph.local_coarsening(block, 3);
 
-    coarsen_graph.matching(block, attr_matched_v, attr_active_e, 4);
-    coarsen_graph.coarsening(block, 4);
+    coarsen_graph.local_matching(block, attr_matched_v, attr_active_e, 4);
+    coarsen_graph.local_coarsening(block, 4);
 
-    coarsen_graph.partition(block, 5);
+    coarsen_graph.local_partition(block, 5);
 
     // // iteration num known before kernel -> shared mem known before kernel
     // int i = 0;
