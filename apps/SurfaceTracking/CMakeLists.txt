@@ -4,7 +4,8 @@ set(SOURCE_LIST
     tracking.cu  
 	tracking_rxmesh.cuh
 	tracking_kernels.cuh
-	improving_kernels.cuh
+	flipper.cuh
+	smoother.cuh
 	frame_stepper.h
 	simulation.h
 	noise.h

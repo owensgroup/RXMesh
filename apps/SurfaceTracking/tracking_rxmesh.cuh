@@ -1,5 +1,7 @@
 #pragma once
 
+#define G_EIGENVALUE_RANK_RATIO 0.03
+
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
@@ -22,8 +24,9 @@ enum : EdgeStatus
 
 int* d_buffer;
 
-#include "improving_kernels.cuh"
+#include "flipper.cuh"
 #include "noise.h"
+#include "smoother.cuh"
 #include "tracking_kernels.cuh"
 
 
@@ -41,7 +44,7 @@ void update_polyscope(rxmesh::RXMeshDynamic&      rx,
 
     rx.update_polyscope();
 
-    rx.export_obj("tracking.obj", current_position);
+    // rx.export_obj("tracking.obj", current_position);
 
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(current_position);
@@ -360,6 +363,12 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     auto vertex_rank = rx.add_vertex_attribute<int8_t>("vRank", 1);
     vertex_rank->reset(0, LOCALE_ALL);
 
+    auto is_vertex_bd = rx.add_vertex_attribute<int8_t>("vBoundary", 1);
+    is_vertex_bd->reset(0, LOCALE_ALL);
+
+    auto is_edge_bd = rx.add_edge_attribute<int8_t>("eBoundary", 1);
+    is_edge_bd->reset(0, LOCALE_ALL);
+
     LaunchBox<blockThreads> launch_box;
 
     FrameStepper<float> frame_stepper(Arg.frame_dt);
@@ -375,13 +384,6 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     float slice_time   = 0;
     float cleanup_time = 0;
 
-#if USE_POLYSCOPE
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
-    // polyscope::show();
-#endif
-
 
     // compute avergae edge length
     float avg_edge_len = compute_avg_edge_length(rx, *current_position);
@@ -391,6 +393,16 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     Arg.collapser_min_edge_length = Arg.min_edge_length * avg_edge_len;
 
     Arg.splitter_max_edge_length = Arg.max_edge_length * avg_edge_len;
+
+    // init boundary vertices and edges
+    init_boundary(rx, *is_vertex_bd, *is_edge_bd);
+
+#if USE_POLYSCOPE
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();    
+    //polyscope::show();
+#endif
 
     CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
