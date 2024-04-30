@@ -87,9 +87,10 @@ void splitter(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>* position)
 }
 
 template <typename T>
-void classify_vertices(rxmesh::RXMeshDynamic&            rx,
-                       const rxmesh::VertexAttribute<T>* position,
-                       rxmesh::VertexAttribute<int8_t>*  vertex_rank)
+void classify_vertices(rxmesh::RXMeshDynamic&                 rx,
+                       const rxmesh::VertexAttribute<T>*      position,
+                       const rxmesh::VertexAttribute<int8_t>* is_vertex_bd,
+                       rxmesh::VertexAttribute<int8_t>*       vertex_rank)
 {
     using namespace rxmesh;
 
@@ -107,20 +108,22 @@ void classify_vertices(rxmesh::RXMeshDynamic&            rx,
     classify_vertex<T, blockThreads><<<launch_box.blocks,
                                        launch_box.num_threads,
                                        launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *position, *vertex_rank);
+        rx.get_context(), *position, *is_vertex_bd, *vertex_rank);
 }
 
 template <typename T>
 void flipper(rxmesh::RXMeshDynamic&             rx,
              rxmesh::VertexAttribute<T>*        position,
              rxmesh::VertexAttribute<int8_t>*   vertex_rank,
-             rxmesh::EdgeAttribute<EdgeStatus>* edge_status)
+             rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
+             rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
+             rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
 {
     using namespace rxmesh;
 
     GPUTimer app_timer;
     app_timer.start();
-    classify_vertices(rx, position, vertex_rank);
+    classify_vertices(rx, position, is_vertex_bd, vertex_rank);
     app_timer.stop();
     RXMESH_INFO("Classify Vertices time {} (ms)", app_timer.elapsed_millis());
 
@@ -163,6 +166,8 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
                                                 *position,
                                                 *vertex_rank,
                                                 *edge_status,
+                                                *is_vertex_bd,
+                                                *is_edge_bd,
                                                 Arg.edge_flip_min_length_change,
                                                 Arg.max_volume_change,
                                                 Arg.min_triangle_area,
@@ -170,7 +175,11 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
                                                 Arg.max_triangle_angle);
 
             rx.cleanup();
-            rx.slice_patches(*position, *vertex_rank, *edge_status);
+            rx.slice_patches(*position,
+                             *vertex_rank,
+                             *edge_status,
+                             *is_vertex_bd,
+                             *is_edge_bd);
             rx.cleanup();
         }
 
@@ -193,9 +202,10 @@ void collapser(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>* position)
 
 
 template <typename T>
-void smoother(rxmesh::RXMeshDynamic&            rx,
-              const rxmesh::VertexAttribute<T>* current_position,
-              rxmesh::VertexAttribute<T>*       new_position)
+void smoother(rxmesh::RXMeshDynamic&                 rx,
+              const rxmesh::VertexAttribute<int8_t>* is_vertex_bd,
+              const rxmesh::VertexAttribute<T>*      current_position,
+              rxmesh::VertexAttribute<T>*            new_position)
 {
     using namespace rxmesh;
 
@@ -213,7 +223,7 @@ void smoother(rxmesh::RXMeshDynamic&            rx,
     null_space_smooth_vertex<T, blockThreads><<<launch_box.blocks,
                                                 launch_box.num_threads,
                                                 launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *current_position, *new_position);
+        rx.get_context(), *is_vertex_bd, *current_position, *new_position);
     app_timer.stop();
     RXMESH_INFO("Smoother time {} (ms)", app_timer.elapsed_millis());
 }
@@ -224,19 +234,26 @@ void improve_mesh(rxmesh::RXMeshDynamic&             rx,
                   rxmesh::VertexAttribute<T>*        current_position,
                   rxmesh::VertexAttribute<T>*        new_position,
                   rxmesh::VertexAttribute<int8_t>*   vertex_rank,
-                  rxmesh::EdgeAttribute<EdgeStatus>* edge_status)
+                  rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
+                  rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
+                  rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
 {
     // edge splitting
     splitter(rx, current_position);
 
     // edge flipping
-    flipper(rx, current_position, vertex_rank, edge_status);
+    flipper(rx,
+            current_position,
+            vertex_rank,
+            edge_status,
+            is_vertex_bd,
+            is_edge_bd);
 
     // edge collapsing
     collapser(rx, current_position);
 
     // null-space smoothing
-    smoother(rx, current_position, new_position);
+    smoother(rx, is_vertex_bd, current_position, new_position);
 }
 
 template <typename T>
@@ -248,7 +265,9 @@ void advance_sim(T                                  sim_dt,
                  rxmesh::VertexAttribute<T>*&       current_position,
                  rxmesh::VertexAttribute<T>*&       new_position,
                  rxmesh::VertexAttribute<int8_t>*   vertex_rank,
-                 rxmesh::EdgeAttribute<EdgeStatus>* edge_status)
+                 rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
+                 rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
+                 rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
 {
     using namespace rxmesh;
 
@@ -258,8 +277,13 @@ void advance_sim(T                                  sim_dt,
            (sim.m_curr_t + accum_dt < sim.m_max_t)) {
 
         // improve the mesh (also update new_position)
-        improve_mesh(
-            rx, current_position, new_position, vertex_rank, edge_status);
+        improve_mesh(rx,
+                     current_position,
+                     new_position,
+                     vertex_rank,
+                     edge_status,
+                     is_vertex_bd,
+                     is_edge_bd);
         std::swap(current_position, new_position);
 
         T curr_dt = sim_dt - accum_dt;
@@ -293,7 +317,9 @@ void advance_frame(Simulation<T>&                     sim,
                    rxmesh::VertexAttribute<T>*&       current_position,
                    rxmesh::VertexAttribute<T>*&       new_position,
                    rxmesh::VertexAttribute<int8_t>*   vertex_rank,
-                   rxmesh::EdgeAttribute<EdgeStatus>* edge_status)
+                   rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
+                   rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
+                   rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
 {
     if (!sim.m_currently_advancing_simulation) {
         sim.m_currently_advancing_simulation = true;
@@ -310,7 +336,9 @@ void advance_frame(Simulation<T>&                     sim,
                         current_position,
                         new_position,
                         vertex_rank,
-                        edge_status);
+                        edge_status,
+                        is_vertex_bd,
+                        is_edge_bd);
             frame_stepper.advance_step(dt);
         }
 
@@ -329,7 +357,9 @@ void run_simulation(Simulation<T>&                     sim,
                     rxmesh::VertexAttribute<T>*        current_position,
                     rxmesh::VertexAttribute<T>*        new_position,
                     rxmesh::VertexAttribute<int8_t>*   vertex_rank,
-                    rxmesh::EdgeAttribute<EdgeStatus>* edge_status)
+                    rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
+                    rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
+                    rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
 {
     sim.m_running = true;
     while (sim.m_running) {
@@ -340,7 +370,9 @@ void run_simulation(Simulation<T>&                     sim,
                       current_position,
                       new_position,
                       vertex_rank,
-                      edge_status);
+                      edge_status,
+                      is_vertex_bd,
+                      is_edge_bd);
     }
     sim.m_running = false;
 }
@@ -400,8 +432,8 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
 #if USE_POLYSCOPE
     rx.render_vertex_patch();
     rx.render_edge_patch();
-    rx.render_face_patch();    
-    //polyscope::show();
+    rx.render_face_patch();
+    // polyscope::show();
 #endif
 
     CUDA_ERROR(cudaProfilerStart());
@@ -415,7 +447,9 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
                    current_position.get(),
                    new_position.get(),
                    vertex_rank.get(),
-                   edge_status.get());
+                   edge_status.get(),
+                   is_vertex_bd.get(),
+                   is_edge_bd.get());
 
     timer.stop();
     total_time += timer.elapsed_millis();

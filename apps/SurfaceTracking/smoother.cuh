@@ -15,12 +15,12 @@ using Vec3 = glm::vec<3, T, glm::defaultp>;
 
 template <typename T, uint32_t blockThreads>
 __global__ static void __launch_bounds__(blockThreads)
-    null_space_smooth_vertex(const rxmesh::Context            context,
+    null_space_smooth_vertex(const rxmesh::Context                 context,
+                             const rxmesh::VertexAttribute<int8_t> is_vertex_bd,
                              const rxmesh::VertexAttribute<T> current_position,
                              rxmesh::VertexAttribute<T>       new_position)
 {
 
-    // TODO avoid moving boundary vertices
     using namespace rxmesh;
     auto block = cooperative_groups::this_thread_block();
 
@@ -28,6 +28,13 @@ __global__ static void __launch_bounds__(blockThreads)
         const Vec3<T> v(current_position(vh, 0),
                         current_position(vh, 1),
                         current_position(vh, 2));
+
+        if (is_vertex_bd(vh) == 1) {
+            new_position(vh, 0) = v[0];
+            new_position(vh, 1) = v[1];
+            new_position(vh, 2) = v[2];
+            return;
+        }
 
         VertexHandle qh = iter.back();
 
@@ -51,15 +58,6 @@ __global__ static void __launch_bounds__(blockThreads)
 
             // triangle normal
             const Vec3<T> c = glm::cross(q - v, r - v);
-
-            if (glm::length(c) <= std::numeric_limits<T>::min()) {
-                // TODO quick workaround boundary vertices. Should be removed
-                // when we properly filter out boundary vertices
-                qh = rh;
-                q  = r;
-                continue;
-            }
-
 
             assert(glm::length(c) >= std::numeric_limits<T>::min());
 
@@ -131,15 +129,6 @@ __global__ static void __launch_bounds__(blockThreads)
 
             // triangle normal
             const Vec3<T> c = glm::cross(p - v, r - v);
-
-            if (glm::length(c) <= std::numeric_limits<T>::min()) {
-                // TODO quick workaround boundary vertices. Should be removed
-                // when we properly filter out boundary vertices
-                ph = rh;
-                p  = r;
-                continue;
-            }
-
 
             assert(glm::length(c) >= std::numeric_limits<T>::min());
 

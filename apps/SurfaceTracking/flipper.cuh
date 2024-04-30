@@ -12,21 +12,32 @@ using Vec3 = glm::vec<3, T, glm::defaultp>;
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/query.cuh"
 
+#include "primitives.cuh"
+
 template <typename T, uint32_t blockThreads>
 __global__ static void __launch_bounds__(blockThreads)
-    classify_vertex(const rxmesh::Context            context,
-                    const rxmesh::VertexAttribute<T> position,
-                    rxmesh::VertexAttribute<int8_t>  vertex_rank)
+    classify_vertex(const rxmesh::Context                 context,
+                    const rxmesh::VertexAttribute<T>      position,
+                    const rxmesh::VertexAttribute<int8_t> is_vertex_bd,
+                    rxmesh::VertexAttribute<int8_t>       vertex_rank)
 {
     // Compute rank of the quadric metric tensor at a vertex Determine the rank
     // of the primary space at the given vertex(see Jiao07)
     // Rank{1, 2, 3} == { smooth, ridge, peak}
 
-    // TODO avoid moving boundary vertices
+
     using namespace rxmesh;
     auto block = cooperative_groups::this_thread_block();
 
     auto ranking = [&](VertexHandle vh, VertexIterator& iter) {
+        // since we don't flip or collapse boundary vertices, we could skip
+        // their rank computation
+        if (is_vertex_bd(vh)) {
+            vertex_rank(vh) = 4;
+            return;
+        }
+
+
         const Vec3<T> v(position(vh, 0), position(vh, 1), position(vh, 2));
 
         VertexHandle qh = iter.back();
@@ -35,8 +46,6 @@ __global__ static void __launch_bounds__(blockThreads)
 
         Eigen::Matrix<T, 3, 3> A;
         A << 0, 0, 0, 0, 0, 0, 0, 0, 0;
-
-        bool is_bd_vertex = false;
 
         // for each triangle q-v-r where v is the vertex we want to compute its
         // displacement
@@ -49,15 +58,7 @@ __global__ static void __launch_bounds__(blockThreads)
             // triangle normal
             const Vec3<T> c = glm::cross(q - v, r - v);
 
-            if (glm::length(c) <= std::numeric_limits<T>::min()) {
-                // TODO quick workaround boundary vertices. Should be removed
-                // when we properly filter out boundary vertices
-                is_bd_vertex = true;
-                break;
-            }
-
-
-            assert(glm::length(c) >= std::numeric_limits<T>::min());
+            assert(glm::length(c) > std::numeric_limits<T>::min());
 
             const Vec3<T> n = glm::normalize(c);
 
@@ -72,11 +73,6 @@ __global__ static void __launch_bounds__(blockThreads)
                 A(1, j) += n[1] * area * n[j];
                 A(2, j) += n[2] * area * n[j];
             }
-        }
-
-        if (is_bd_vertex) {
-            vertex_rank(vh) = 0;
-            return;
         }
 
         // eigen decomp
@@ -136,6 +132,8 @@ __global__ static void __launch_bounds__(blockThreads)
               const rxmesh::VertexAttribute<T>      position,
               const rxmesh::VertexAttribute<int8_t> vertex_rank,
               rxmesh::EdgeAttribute<EdgeStatus>     edge_status,
+              rxmesh::VertexAttribute<int8_t>       is_vertex_bd,
+              rxmesh::EdgeAttribute<int8_t>         is_edge_bd,
               const T                               edge_flip_min_length_change,
               const T                               max_volume_change,
               const T                               min_triangle_area,
@@ -171,50 +169,6 @@ __global__ static void __launch_bounds__(blockThreads)
     Bitmask e_flip(cavity.patch_info().num_edges[0], shrd_alloc);
     e_flip.reset(block);
 
-    auto tri_normal =
-        [](const Vec3<T>& p0, const Vec3<T>& p1, const Vec3<T>& p2) {
-            const Vec3<T> u = p1 - p0;
-            const Vec3<T> v = p2 - p0;
-            return glm::normalize(glm::cross(u, v));
-        };
-
-    auto tri_area =
-        [](const Vec3<T>& p0, const Vec3<T>& p1, const Vec3<T>& p2) {
-            const Vec3<T> u = p1 - p0;
-            const Vec3<T> v = p2 - p0;
-            return T(0.5) * glm::length(glm::cross(u, v));
-        };
-
-    auto angle = [](const Vec3<T>& l, const Vec3<T>& c, const Vec3<T>& r) {
-        glm::vec3 ll = glm::normalize(l - c);
-        glm::vec3 rr = glm::normalize(r - c);
-        return glm::acos(glm::dot(rr, ll));
-    };
-
-    auto triangle_angles = [&](const Vec3<T>& a,
-                               const Vec3<T>& b,
-                               const Vec3<T>& c,
-                               T&             angle_a,
-                               T&             angle_b,
-                               T&             angle_c) {
-        angle_a = angle(b, a, c);
-        angle_b = angle(c, b, a);
-        angle_c = angle(a, c, b);
-    };
-
-    auto triangle_min_max_angle = [&](const Vec3<T>& a,
-                                      const Vec3<T>& b,
-                                      const Vec3<T>& c,
-                                      T&             min_angle,
-                                      T&             max_angle) {
-        T angle_a, angle_b, angle_c;
-        triangle_angles(a, b, c, angle_a, angle_b, angle_c);
-        min_angle = std::min(angle_a, angle_b);
-        min_angle = std::min(min_angle, angle_c);
-
-        max_angle = std::max(angle_a, angle_b);
-        max_angle = std::max(max_angle, angle_c);
-    };
 
     auto should_flip = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         // iter[0] and iter[2] are the edge two vertices
@@ -227,6 +181,11 @@ __global__ static void __launch_bounds__(blockThreads)
 
         if (edge_status(eh) == UNSEEN) {
             // make sure it is not boundary edge
+
+            if (is_edge_bd(eh) == 1) {
+                return;
+            }
+
             if (iter[1].is_valid() && iter[3].is_valid()) {
 
                 assert(iter.size() == 4);
@@ -234,7 +193,11 @@ __global__ static void __launch_bounds__(blockThreads)
                 const VertexHandle ah = iter[0];
                 const VertexHandle bh = iter[2];
 
-                // TODO check if ah or bh is boundary
+                // check if ah or bh is boundary
+
+                if (is_vertex_bd(ah) == 1 || is_vertex_bd(bh) == 1) {
+                    return;
+                }
 
                 const VertexHandle ch = iter[1];
                 const VertexHandle dh = iter[3];
@@ -383,7 +346,7 @@ __global__ static void __launch_bounds__(blockThreads)
     query.dispatch<Op::EVDiamond>(block, shrd_alloc, should_flip);
     block.sync();
 
-    
+
     // 2. make sure that the two vertices opposite to a flipped edge are not
     // connected
     auto check_edges = [&](const VertexHandle& vh, const VertexIterator& iter) {
@@ -417,7 +380,12 @@ __global__ static void __launch_bounds__(blockThreads)
 
     shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
 
-    if (cavity.prologue(block, shrd_alloc, position, edge_status)) {
+    if (cavity.prologue(block,
+                        shrd_alloc,
+                        position,
+                        edge_status,
+                        is_vertex_bd,
+                        is_edge_bd)) {
 
         is_updated.reset(block);
         block.sync();

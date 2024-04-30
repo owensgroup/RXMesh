@@ -5,10 +5,12 @@ set(SOURCE_LIST
 	tracking_rxmesh.cuh
 	tracking_kernels.cuh
 	flipper.cuh
+	splitter.cuh
 	smoother.cuh
 	frame_stepper.h
 	simulation.h
 	noise.h
+	primitives.cuh
 )
 
 
