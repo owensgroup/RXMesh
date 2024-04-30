@@ -27,6 +27,7 @@ int* d_buffer;
 #include "flipper.cuh"
 #include "noise.h"
 #include "smoother.cuh"
+#include "splitter.cuh"
 #include "tracking_kernels.cuh"
 
 
@@ -82,8 +83,68 @@ int is_done(const rxmesh::RXMeshDynamic&             rx,
 
 
 template <typename T>
-void splitter(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>* position)
+void splitter(rxmesh::RXMeshDynamic&             rx,
+              rxmesh::VertexAttribute<T>*        position,
+              rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
+              rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
+              rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
 {
+    using namespace rxmesh;
+
+    constexpr uint32_t blockThreads = 512;
+
+    GPUTimer app_timer;
+    app_timer.start();
+    edge_status->reset(UNSEEN, DEVICE);
+
+    int prv_remaining_work = rx.get_num_edges();
+
+    while (true) {
+        rx.reset_scheduler();
+        while (!rx.is_queue_empty()) {
+
+            LaunchBox<blockThreads> launch_box;
+
+            rx.update_launch_box({Op::EVDiamond},
+                                 launch_box,
+                                 (void*)edge_long_split<T, blockThreads>,
+                                 true,
+                                 false,
+                                 false,
+                                 false,
+                                 [&](uint32_t v, uint32_t e, uint32_t f) {
+                                     return detail::mask_num_bytes(e) +
+                                            ShmemAllocator::default_alignment;
+                                 });
+
+            edge_long_split<T, blockThreads>
+                <<<DIVIDE_UP(launch_box.blocks, 8),
+                   launch_box.num_threads,
+                   launch_box.smem_bytes_dyn>>>(rx.get_context(),
+                                                *position,
+                                                *edge_status,
+                                                *is_vertex_bd,
+                                                *is_edge_bd,
+                                                Arg.splitter_max_edge_length,
+                                                Arg.min_triangle_area,
+                                                Arg.min_triangle_angle,
+                                                Arg.max_triangle_angle);
+
+            rx.cleanup();
+            rx.slice_patches(
+                *position, *edge_status, *is_vertex_bd, *is_edge_bd);
+            rx.cleanup();
+        }
+
+        int remaining_work = is_done(rx, edge_status, d_buffer);
+
+        if (remaining_work == 0 || prv_remaining_work == remaining_work) {
+            break;
+        }
+        prv_remaining_work = remaining_work;
+    }
+    app_timer.stop();
+    RXMESH_INFO("Splitter time {} (ms)", app_timer.elapsed_millis());
 }
 
 template <typename T>
@@ -239,7 +300,7 @@ void improve_mesh(rxmesh::RXMeshDynamic&             rx,
                   rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
 {
     // edge splitting
-    splitter(rx, current_position);
+    splitter(rx, current_position, edge_status, is_vertex_bd, is_edge_bd);
 
     // edge flipping
     flipper(rx,
@@ -423,8 +484,10 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     Arg.max_volume_change *= avg_edge_len * avg_edge_len * avg_edge_len;
 
     Arg.collapser_min_edge_length = Arg.min_edge_length * avg_edge_len;
+    Arg.collapser_min_edge_length *= Arg.collapser_min_edge_length;
 
     Arg.splitter_max_edge_length = Arg.max_edge_length * avg_edge_len;
+    Arg.splitter_max_edge_length *= Arg.splitter_max_edge_length;
 
     // init boundary vertices and edges
     init_boundary(rx, *is_vertex_bd, *is_edge_bd);

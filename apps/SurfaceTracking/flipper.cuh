@@ -97,35 +97,6 @@ __global__ static void __launch_bounds__(blockThreads)
 }
 
 
-/**
- * @brief Compute the signed volume of a tetrahedron.
- */
-template <typename T>
-__inline__ __device__ T signed_volume(const Vec3<T>& x0,
-                                      const Vec3<T>& x1,
-                                      const Vec3<T>& x2,
-                                      const Vec3<T>& x3)
-{
-    // Equivalent to triple(x1-x0, x2-x0, x3-x0), six times the signed volume of
-    // the tetrahedron. But, for robustness, we want the result (up to sign) to
-    // be independent of the ordering. And want it as accurate as possible..
-    // But all that stuff is hard, so let's just use the common assumption that
-    // all coordinates are >0, and do something reasonably accurate in fp.
-
-    // This formula does almost four times too much multiplication, but if the
-    // coordinates are non-negative it suffers in a minimal way from
-    // cancellation error.
-    return (x0[0] * (x1[1] * x3[2] + x3[1] * x2[2] + x2[1] * x1[2]) +
-            x1[0] * (x2[1] * x3[2] + x3[1] * x0[2] + x0[1] * x2[2]) +
-            x2[0] * (x3[1] * x1[2] + x1[1] * x0[2] + x0[1] * x3[2]) +
-            x3[0] * (x1[1] * x2[2] + x2[1] * x0[2] + x0[1] * x1[2]))
-
-           - (x0[0] * (x2[1] * x3[2] + x3[1] * x1[2] + x1[1] * x2[2]) +
-              x1[0] * (x3[1] * x2[2] + x2[1] * x0[2] + x0[1] * x3[2]) +
-              x2[0] * (x1[1] * x3[2] + x3[1] * x0[2] + x0[1] * x1[2]) +
-              x3[0] * (x2[1] * x1[2] + x1[1] * x0[2] + x0[1] * x2[2]));
-}
-
 template <typename T, uint32_t blockThreads>
 __global__ static void __launch_bounds__(blockThreads)
     edge_flip(rxmesh::Context                       context,
@@ -182,11 +153,8 @@ __global__ static void __launch_bounds__(blockThreads)
         if (edge_status(eh) == UNSEEN) {
             // make sure it is not boundary edge
 
-            if (is_edge_bd(eh) == 1) {
-                return;
-            }
-
-            if (iter[1].is_valid() && iter[3].is_valid()) {
+            if (iter[1].is_valid() && iter[3].is_valid() &&
+                is_edge_bd(eh) == 0) {
 
                 assert(iter.size() == 4);
 
@@ -196,6 +164,7 @@ __global__ static void __launch_bounds__(blockThreads)
                 // check if ah or bh is boundary
 
                 if (is_vertex_bd(ah) == 1 || is_vertex_bd(bh) == 1) {
+                    edge_status(eh) = OKAY;
                     return;
                 }
 
@@ -225,8 +194,8 @@ __global__ static void __launch_bounds__(blockThreads)
 
                 // change in length i.e., delaunay check
                 if (flip_it) {
-                    T current_length   = glm::length2(va - vb);
-                    T potential_length = glm::length2(vc - vd);
+                    T current_length   = glm::distance2(va, vb);
+                    T potential_length = glm::distance2(vc, vd);
 
                     if (potential_length >=
                         current_length - edge_flip_min_length_change) {

@@ -8,6 +8,35 @@ template <typename T>
 using Vec3 = glm::vec<3, T, glm::defaultp>;
 
 
+/**
+ * @brief Compute the signed volume of a tetrahedron.
+ */
+template <typename T>
+__inline__ __device__ T signed_volume(const Vec3<T>& x0,
+                                      const Vec3<T>& x1,
+                                      const Vec3<T>& x2,
+                                      const Vec3<T>& x3)
+{
+    // Equivalent to triple(x1-x0, x2-x0, x3-x0), six times the signed volume of
+    // the tetrahedron. But, for robustness, we want the result (up to sign) to
+    // be independent of the ordering. And want it as accurate as possible..
+    // But all that stuff is hard, so let's just use the common assumption that
+    // all coordinates are >0, and do something reasonably accurate in fp.
+
+    // This formula does almost four times too much multiplication, but if the
+    // coordinates are non-negative it suffers in a minimal way from
+    // cancellation error.
+    return (x0[0] * (x1[1] * x3[2] + x3[1] * x2[2] + x2[1] * x1[2]) +
+            x1[0] * (x2[1] * x3[2] + x3[1] * x0[2] + x0[1] * x2[2]) +
+            x2[0] * (x3[1] * x1[2] + x1[1] * x0[2] + x0[1] * x3[2]) +
+            x3[0] * (x1[1] * x2[2] + x2[1] * x0[2] + x0[1] * x1[2]))
+
+           - (x0[0] * (x2[1] * x3[2] + x3[1] * x1[2] + x1[1] * x2[2]) +
+              x1[0] * (x3[1] * x2[2] + x2[1] * x0[2] + x0[1] * x3[2]) +
+              x2[0] * (x1[1] * x3[2] + x3[1] * x0[2] + x0[1] * x1[2]) +
+              x3[0] * (x2[1] * x1[2] + x1[1] * x0[2] + x0[1] * x2[2]));
+}
+
 template <typename T>
 __device__ __inline__ Vec3<T> tri_normal(const Vec3<T>& p0,
                                          const Vec3<T>& p1,

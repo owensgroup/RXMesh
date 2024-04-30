@@ -102,6 +102,7 @@ __global__ static void __launch_bounds__(blockThreads)
     if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
 
         is_updated.reset(block);
+        block.sync();
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
@@ -153,6 +154,7 @@ __global__ static void __launch_bounds__(blockThreads)
     }
 
     cavity.epilogue(block);
+    block.sync();
 
     if (cavity.is_successful()) {
         // if (threadIdx.x == 0) {
