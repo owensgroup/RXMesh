@@ -49,6 +49,7 @@ void update_polyscope(rxmesh::RXMeshDynamic&      rx,
 
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(current_position);
+    ps_mesh->setEdgeWidth(1.0);
     ps_mesh->setEnabled(true);
 
     rx.render_vertex_patch();
@@ -93,6 +94,7 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
 
     constexpr uint32_t blockThreads = 512;
 
+    //=== long edges pass
     GPUTimer app_timer;
     app_timer.start();
     edge_status->reset(UNSEEN, DEVICE);
@@ -107,7 +109,7 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
 
             rx.update_launch_box({Op::EVDiamond},
                                  launch_box,
-                                 (void*)edge_long_split<T, blockThreads>,
+                                 (void*)split_edges<T, blockThreads>,
                                  true,
                                  false,
                                  false,
@@ -117,7 +119,7 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
                                             ShmemAllocator::default_alignment;
                                  });
 
-            edge_long_split<T, blockThreads>
+            split_edges<T, blockThreads>
                 <<<DIVIDE_UP(launch_box.blocks, 8),
                    launch_box.num_threads,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(),
@@ -128,7 +130,8 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
                                                 Arg.splitter_max_edge_length,
                                                 Arg.min_triangle_area,
                                                 Arg.min_triangle_angle,
-                                                Arg.max_triangle_angle);
+                                                Arg.max_triangle_angle,
+                                                EdgeSplitPredicate::Length);
 
             rx.cleanup();
             rx.slice_patches(
@@ -144,7 +147,63 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
         prv_remaining_work = remaining_work;
     }
     app_timer.stop();
-    RXMESH_INFO("Splitter time {} (ms)", app_timer.elapsed_millis());
+    RXMESH_INFO("Splitter (long edges) time {} (ms)",
+                app_timer.elapsed_millis());
+
+    //=== large angle pass
+    app_timer.start();
+    edge_status->reset(UNSEEN, DEVICE);
+
+    prv_remaining_work = rx.get_num_edges();
+
+    while (true) {
+        rx.reset_scheduler();
+        while (!rx.is_queue_empty()) {
+
+            LaunchBox<blockThreads> launch_box;
+
+            rx.update_launch_box({Op::EVDiamond},
+                                 launch_box,
+                                 (void*)split_edges<T, blockThreads>,
+                                 true,
+                                 false,
+                                 false,
+                                 false,
+                                 [&](uint32_t v, uint32_t e, uint32_t f) {
+                                     return detail::mask_num_bytes(e) +
+                                            ShmemAllocator::default_alignment;
+                                 });
+
+            split_edges<T, blockThreads>
+                <<<DIVIDE_UP(launch_box.blocks, 8),
+                   launch_box.num_threads,
+                   launch_box.smem_bytes_dyn>>>(rx.get_context(),
+                                                *position,
+                                                *edge_status,
+                                                *is_vertex_bd,
+                                                *is_edge_bd,
+                                                Arg.splitter_max_edge_length,
+                                                Arg.min_triangle_area,
+                                                Arg.min_triangle_angle,
+                                                Arg.max_triangle_angle,
+                                                EdgeSplitPredicate::Angle);
+
+            rx.cleanup();
+            rx.slice_patches(
+                *position, *edge_status, *is_vertex_bd, *is_edge_bd);
+            rx.cleanup();
+        }
+
+        int remaining_work = is_done(rx, edge_status, d_buffer);
+
+        if (remaining_work == 0 || prv_remaining_work == remaining_work) {
+            break;
+        }
+        prv_remaining_work = remaining_work;
+    }
+    app_timer.stop();
+    RXMESH_INFO("Splitter (large angles) time {} (ms)",
+                app_timer.elapsed_millis());
 }
 
 template <typename T>
@@ -493,6 +552,7 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     init_boundary(rx, *is_vertex_bd, *is_edge_bd);
 
 #if USE_POLYSCOPE
+    polyscope::options::groundPlaneHeightFactor = 0.2;
     rx.render_vertex_patch();
     rx.render_edge_patch();
     rx.render_face_patch();

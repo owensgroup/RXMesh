@@ -10,17 +10,26 @@ using Vec3 = glm::vec<3, T, glm::defaultp>;
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/query.cuh"
 
+enum class EdgeSplitPredicate
+{
+    Length = 0,  // split large edges
+    Angle  = 1,  // split large angles
+
+};
+
+
 template <typename T, uint32_t blockThreads>
 __global__ static void __launch_bounds__(blockThreads)
-    edge_long_split(rxmesh::Context                   context,
-                    const rxmesh::VertexAttribute<T>  position,
-                    rxmesh::EdgeAttribute<EdgeStatus> edge_status,
-                    rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
-                    rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
-                    const T                           splitter_max_edge_length,
-                    const T                           min_triangle_area,
-                    const T                           min_triangle_angle,
-                    const T                           max_triangle_angle)
+    split_edges(rxmesh::Context                   context,
+                const rxmesh::VertexAttribute<T>  position,
+                rxmesh::EdgeAttribute<EdgeStatus> edge_status,
+                rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
+                rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
+                const T                           splitter_max_edge_length,
+                const T                           min_triangle_area,
+                const T                           min_triangle_angle,
+                const T                           max_triangle_angle,
+                const EdgeSplitPredicate          predicate)
 {
     using namespace rxmesh;
 
@@ -90,10 +99,22 @@ __global__ static void __launch_bounds__(blockThreads)
                 const Vec3<T> vd(
                     position(dh, 0), position(dh, 1), position(dh, 2));
 
-                // is it a long edge
+
+                // test the predicate
                 if (split_it) {
-                    if (glm::distance2(va, vb) < splitter_max_edge_length) {
-                        split_it = false;
+                    if (predicate == EdgeSplitPredicate::Length) {
+                        // is it a long edge
+                        if (glm::distance2(va, vb) < splitter_max_edge_length) {
+                            split_it = false;
+                        }
+                    } else if (predicate == EdgeSplitPredicate::Angle) {
+                        // is it opposite to large angles
+                        if (tri_angle(va, vc, vb) < max_triangle_angle &&
+                            tri_angle(va, vd, vb) < max_triangle_angle) {
+                            split_it = false;
+                        }
+                    } else {
+                        assert(1 != 1);
                     }
                 }
 
@@ -107,7 +128,7 @@ __global__ static void __launch_bounds__(blockThreads)
                     }
                 }
 
-                // Check angles on new triangles
+                // Check angles of new triangles
                 if (split_it) {
                     // mid point (new) vertex
                     const Vec3<T> ve = T(0.5) * (va + vb);
