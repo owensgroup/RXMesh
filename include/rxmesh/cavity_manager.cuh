@@ -819,7 +819,7 @@ struct CavityManager
     // cavities if they are touching when they user does not want cavities to
     // shared edges
     //  This buffer overlap with m_s_q_correspondence_e
-    int16_t* m_s_boudary_edges_cavity_id;
+    uint16_t* m_s_boudary_edges_cavity_id;
 
     // if cavities that share an edge are allowed
     bool m_allow_touching_cavities;
