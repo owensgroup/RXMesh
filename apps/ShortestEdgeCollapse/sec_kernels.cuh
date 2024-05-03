@@ -1,6 +1,8 @@
 #pragma once
 #include "rxmesh/cavity_manager.cuh"
 
+#include "link_condition.cuh"
+
 template <typename T, uint32_t blockThreads>
 __global__ static void sec(rxmesh::Context                   context,
                            rxmesh::VertexAttribute<T>        coords,
@@ -63,73 +65,11 @@ __global__ static void sec(rxmesh::Context                   context,
     block.sync();
 
 
-    // 2) check edge link condition. Here, for each edge marked in edge_mask,
-    // all threads in the block collaborate to check the edge link condition of
-    // this edge
-    __shared__ int s_num_shared_one_ring;
-    for (uint16_t e = 0; e < edge_mask.size(); ++e) {
-
-        if (edge_mask(e)) {
-            // the edge two end vertices
-            const VertexIterator iter =
-                ev_query.template get_iterator<VertexIterator>(e);
-
-            const uint16_t v0 = iter.local(0);
-            const uint16_t v1 = iter.local(1);
-
-            if (threadIdx.x == 0) {
-                s_num_shared_one_ring = 0;
-            }
-
-            v0_mask.reset(block);
-            v1_mask.reset(block);
-            block.sync();
-
-            // each thread will be assigned to an edge (including not-owned one)
-            // and mark in v0_mask/v1_mask if one of its two ends are v0/v1
-            for_each_edge(
-                cavity.patch_info(),
-                [&](EdgeHandle eh) {
-                    if (eh.local_id() == e) {
-                        return;
-                    }
-                    const VertexIterator v_iter =
-                        ev_query.template get_iterator<VertexIterator>(
-                            eh.local_id());
-
-                    const uint16_t vv0 = v_iter.local(0);
-                    const uint16_t vv1 = v_iter.local(1);
+    // 2) check edge link condition.
+    link_condition(
+        block, cavity.patch_info(), ev_query, edge_mask, v0_mask, v1_mask);
 
 
-                    if (vv0 == v0) {
-                        v0_mask.set(vv1, true);
-                    }
-                    if (vv0 == v1) {
-                        v1_mask.set(vv1, true);
-                    }
-
-                    if (vv1 == v0) {
-                        v0_mask.set(vv0, true);
-                    }
-                    if (vv1 == v1) {
-                        v1_mask.set(vv0, true);
-                    }
-                },
-                true);
-            block.sync();
-
-            for (int v = threadIdx.x; v < v0_mask.size(); v += blockThreads) {
-                if (v0_mask(v) && v1_mask(v)) {
-                    ::atomicAdd(&s_num_shared_one_ring, 1);
-                }
-            }
-
-            block.sync();
-            if (s_num_shared_one_ring > 2) {
-                edge_mask.reset(e, true);
-            }
-        }
-    }
     block.sync();
 
     for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
