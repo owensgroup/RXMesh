@@ -8,8 +8,7 @@ __global__ static void sec(rxmesh::Context                   context,
                            rxmesh::VertexAttribute<T>        coords,
                            const CostHistogram<T>            histo,
                            const int                         reduce_threshold,
-                           rxmesh::EdgeAttribute<EdgeStatus> edge_status,
-                           rxmesh::EdgeAttribute<T>          e_attr)
+                           rxmesh::EdgeAttribute<EdgeStatus> edge_status)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -85,7 +84,7 @@ __global__ static void sec(rxmesh::Context                   context,
     ev_query.epilogue(block, shrd_alloc);
 
     // create the cavity
-    if (cavity.prologue(block, shrd_alloc, coords, edge_status, e_attr)) {
+    if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
 
         // if (threadIdx.x == 0) {
         //     uint16_t num_actual_cavities = 0;
@@ -121,8 +120,6 @@ __global__ static void sec(rxmesh::Context                   context,
 
                 DEdgeHandle e0 =
                     cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
-
-                e_attr(e0.get_edge_handle())++;
 
                 if (e0.is_valid()) {
                     edge_mask.set(e0.local_id(), true);
@@ -207,8 +204,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void populate_histogram(
     rxmesh::Context                  context,
     const rxmesh::VertexAttribute<T> coords,
-    CostHistogram<T>                 histo,
-    rxmesh::EdgeAttribute<T>         e_attr)
+    CostHistogram<T>                 histo)
 {
     using namespace rxmesh;
 
@@ -221,8 +217,6 @@ __global__ static void populate_histogram(
 
         T len2 = logf(glm::distance2(p0, p1));
 
-
-        // e_attr(eh) = T(histo.bin_id(len2));
 
         histo.insert(len2);
     };
