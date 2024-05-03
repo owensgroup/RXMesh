@@ -15,43 +15,84 @@ struct arg
 template <uint32_t blockThreads>
 void cross_patch_ordering(rxmesh::RXMeshStatic&             rx,
                           rxmesh::VertexAttribute<uint16_t> v_ordering,
-                          uint32_t smem_bytes_dyn)
+                          uint32_t                          smem_bytes_dyn)
 {
     using namespace rxmesh;
 
-    bool is_coarsen_flag = true;
+    uint16_t *num_node; 
+    cudaMallocManaged(&num_node, sizeof(int));
+    *num_node = rx.get_num_patches();
 
-    while (is_coarsen_flag) {
-        bool     is_matching_flag = true;
-        uint16_t level            = 0;
+    uint16_t level    = 0;
 
-        RXMESH_TRACE("Matching");
-        match_patches_init<blockThreads>
-            <<<rx.get_num_patches(), blockThreads, smem_bytes_dyn>>>(rx.get_context(), level);
-        CUDA_ERROR(cudaDeviceSynchronize());
+    RXMESH_TRACE("Matching");
+    match_patches_init_edge_weight<blockThreads>
+        <<<rx.get_num_patches(), blockThreads, smem_bytes_dyn>>>(
+            rx.get_context());
+    CUDA_ERROR(cudaDeviceSynchronize());
 
-        while (is_matching_flag) {
+    match_patches_init_param<blockThreads>
+        <<<rx.get_num_patches(), blockThreads, smem_bytes_dyn>>>(
+            rx.get_context());
+    CUDA_ERROR(cudaDeviceSynchronize());
 
+    while (*num_node > 1) {
+        *num_node = 1;
+        uint16_t is_matching_counter = 0;
+        while (is_matching_counter < 10) {
+            match_patches_select<blockThreads>
+                <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(),
+                                                         level);
+            CUDA_ERROR(cudaDeviceSynchronize());
 
-            // match_patches_confirm<blockThreads><<<rx.get_num_patches(),
-            // blockThreads>>>(
-            //     rx.get_context(), level);
-            // CUDA_ERROR(cudaDeviceSynchronize());
+            match_patches_confirm<blockThreads>
+                <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(),
+                                                         level);
+            CUDA_ERROR(cudaDeviceSynchronize());
 
             // update the is_matching_flag here
-            is_matching_flag = false;
+            ++is_matching_counter;
         }
 
-        // match_patches_result_update_level<blockThreads><<<rx.get_num_patches(),
-        // blockThreads>>>(
-        //         rx.get_context(), level);
-        //     CUDA_ERROR(cudaDeviceSynchronize());
+        match_patches_update_node<blockThreads>
+            <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(), level);
+        CUDA_ERROR(cudaDeviceSynchronize());
+
+        match_patches_update_not_node<blockThreads>
+            <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(), level);
+        CUDA_ERROR(cudaDeviceSynchronize());
+
+        match_patches_update_next_level<blockThreads>
+            <<<rx.get_num_patches(), blockThreads>>>(
+                rx.get_context(), level, num_node);
+        CUDA_ERROR(cudaDeviceSynchronize());
+
+        check<blockThreads>
+            <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(), level);
+        CUDA_ERROR(cudaDeviceSynchronize());
 
         // update level counter
         ++level;
 
-        // update the is_coarsen_flag here
-        is_coarsen_flag = false;
+        printf("level: %d, num_node: %d\n", level, *num_node);
+
+        // update the num_node here
+        if (level > 2) {
+            *num_node = 1;
+        }
+    }
+
+    while (level > 0) {
+        // match_patches_extract_vertices<blockThreads><<<rx.get_num_patches(),
+        // blockThreads>>>(
+        //         rx.get_context(), level);
+        //     CUDA_ERROR(cudaDeviceSynchronize());
+
+        // generate_patches_ordering<blockThreads><<<rx.get_num_patches(),
+        // blockThreads>>>(
+        //         rx.get_context(), level);
+        //     CUDA_ERROR(cudaDeviceSynchronize());
+        --level;
     }
 }
 

@@ -28,16 +28,35 @@ struct PatchStash
 
             CUDA_ERROR(cudaMalloc((void**)&m_coarse_level_id_list,
                                   stash_size * sizeof(uint32_t)));
-            CUDA_ERROR(cudaMemset(
-                m_edge_weight, INVALID32, stash_size * sizeof(uint32_t)));
-
-            CUDA_ERROR(cudaMalloc((void**)&m_tmp_current_level_stash,
+            CUDA_ERROR(cudaMemset(m_coarse_level_id_list,
+                                  INVALID32,
                                   stash_size * sizeof(uint32_t)));
 
-            CUDA_ERROR(cudaMalloc((void**)&m_tmp_current_level_edge_weight,
+            CUDA_ERROR(cudaMalloc((void**)&m_coarse_level_pair_list,
+                                  stash_size * sizeof(uint32_t)));
+            CUDA_ERROR(cudaMemset(m_coarse_level_pair_list,
+                                  INVALID32,
                                   stash_size * sizeof(uint32_t)));
 
-            m_tmp_is_active = true;
+            CUDA_ERROR(cudaMalloc((void**)&m_coarse_level_num_v,
+                                  stash_size * sizeof(uint32_t)));
+            CUDA_ERROR(cudaMemset(m_coarse_level_num_v,
+                                  INVALID32,
+                                  stash_size * sizeof(uint32_t)));
+
+            CUDA_ERROR(cudaMalloc((void**)&m_tmp_level_stash,
+                                  stash_size * sizeof(uint32_t)));
+            CUDA_ERROR(cudaMemset(m_tmp_level_stash, 
+                                  INVALID32, 
+                                  stash_size * sizeof(uint32_t)));
+
+            CUDA_ERROR(cudaMalloc((void**)&m_tmp_level_edge_weight,
+                                  stash_size * sizeof(uint32_t)));
+            CUDA_ERROR(cudaMemset(m_tmp_level_edge_weight,
+                                  INVALID32,
+                                  stash_size * sizeof(uint32_t)));
+
+            m_is_active = true;
         } else {
             m_stash = (uint32_t*)malloc(stash_size * sizeof(uint32_t));
             for (uint8_t i = 0; i < stash_size; ++i) {
@@ -100,6 +119,58 @@ struct PatchStash
         }
 
         return m_edge_weight[id];
+    }
+
+    __host__ __device__ __inline__ uint32_t get_coarse_level_id(
+        uint16_t level) const
+    {
+        assert(m_coarse_level_id_list[level] != INVALID32);
+        return m_coarse_level_id_list[level];
+    }
+
+    __host__ __device__ __inline__ uint32_t& get_level_patch_id(uint16_t level)
+    {
+        assert(m_coarse_level_id_list[level] != INVALID32);
+        return m_coarse_level_id_list[level];
+    }
+
+    __host__ __device__ __inline__ uint32_t get_tmp_level_patch(
+        uint8_t id) const
+    {
+        assert(id >= 0 && id < stash_size);
+        return m_tmp_level_stash[id];
+    }
+
+    __host__ __device__ __inline__ uint32_t& get_tmp_level_patch(uint8_t id)
+    {
+        assert(id >= 0 && id < stash_size);
+        return m_tmp_level_stash[id];
+    }
+
+    __host__ __device__ __inline__ uint32_t get_tmp_level_edge_weight(
+        uint8_t id) const
+    {
+        assert(id >= 0 && id < stash_size);
+        assert(m_tmp_level_stash[id] != INVALID32);
+
+        if (m_tmp_level_edge_weight[id] == INVALID32) {
+            m_tmp_level_edge_weight[id] = 0;
+        }
+
+        return m_tmp_level_edge_weight[id];
+    }
+
+    __host__ __device__ __inline__ uint32_t& get_tmp_level_edge_weight(
+        uint8_t id)
+    {
+        assert(id >= 0 && id < stash_size);
+        assert(m_tmp_level_stash[id] != INVALID32);
+
+        if (m_tmp_level_edge_weight[id] == INVALID32) {
+            m_tmp_level_edge_weight[id] = 0;
+        }
+
+        return m_tmp_level_edge_weight[id];
     }
 
     /*__host__ __device__ __inline__ uint8_t insert_patch(uint32_t patch)
@@ -185,6 +256,18 @@ struct PatchStash
         return INVALID8;
     }
 
+    __host__ __device__ __inline__ uint8_t find_tmp_level_patch_index(
+        uint32_t patch) const
+    {
+        assert(patch != INVALID32);
+        for (uint8_t i = 0; i < stash_size; ++i) {
+            if (m_tmp_level_stash[i] == patch) {
+                return i;
+            }
+        }
+        return INVALID8;
+    }
+
 
     __host__ void free()
     {
@@ -202,16 +285,17 @@ struct PatchStash
     uint32_t* m_edge_weight;
 
     // store the patch id of each level of coarsening
+    uint32_t* m_coarse_level_pair_list;
     uint32_t* m_coarse_level_id_list;
+    uint32_t* m_coarse_level_num_v;
+    bool m_is_node;  // determine whether the patch is a node or not(remained or
+                     // merged)
 
     // store the stash info of the current level during coarsening
-    uint32_t  m_tmp_patch_choice;
-    uint32_t* m_tmp_current_level_stash;
-    uint32_t* m_tmp_current_level_edge_weight;
-
-    // store whether the current patch is active or not to do matching
-    // init as active
-    bool m_tmp_is_active;
+    bool      m_is_active;
+    uint32_t  m_tmp_paired_patch;
+    uint32_t* m_tmp_level_stash;
+    uint32_t* m_tmp_level_edge_weight;
 
     bool m_is_on_device;
 };
