@@ -4,7 +4,7 @@
 
 #include "rxmesh/util/util.h"
 
-int iddd = 0;
+int ps_iddd = 0;
 
 using EdgeStatus = int8_t;
 enum : EdgeStatus
@@ -214,8 +214,8 @@ void screen_shot(rxmesh::RXMeshDynamic&      rx,
     ps_mesh->setEnabled(true);
     rx.render_face_patch()->setEnabled(true);
 
-    polyscope::screenshot(app + "_" + std::to_string(iddd) + ".png");
-    iddd++;
+    polyscope::screenshot(app + "_" + std::to_string(ps_iddd) + ".png");
+    ps_iddd++;
 
     // polyscope::show();
 
