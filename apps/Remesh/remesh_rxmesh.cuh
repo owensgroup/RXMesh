@@ -390,7 +390,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
 
             LaunchBox<blockThreads> launch_box;
             rx.update_launch_box(
-                {Op::EV, Op::VV},
+                {Op::EV},
                 launch_box,
                 (void*)edge_collapse<T, blockThreads>,
                 true,
@@ -399,8 +399,8 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
                 false,
                 [&](uint32_t v, uint32_t e, uint32_t f) {
                     return detail::mask_num_bytes(e) +
-                           2 * v * sizeof(uint16_t) +
-                           2 * ShmemAllocator::default_alignment;
+                           2 * detail::mask_num_bytes(v) +
+                           3 * ShmemAllocator::default_alignment;
                 });
 
             // CUDA_ERROR(cudaMemset(d_buffer, 0, sizeof(int)));
@@ -534,7 +534,7 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(), *v_valence);
 
             rx.update_launch_box(
-                {Op::EVDiamond, Op::VV},
+                {Op::EVDiamond},
                 launch_box,
                 (void*)edge_flip<T, blockThreads>,
                 true,
@@ -543,8 +543,8 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
                 false,
                 [&](uint32_t v, uint32_t e, uint32_t f) {
                     return detail::mask_num_bytes(e) +
-                           2 * v * sizeof(uint16_t) +
-                           2 * ShmemAllocator::default_alignment;
+                           2 * detail::mask_num_bytes(v) +
+                           3 * ShmemAllocator::default_alignment;
                 });
 
             // CUDA_ERROR(cudaMemset(d_buffer, 0, sizeof(int)));
@@ -781,6 +781,6 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     rx.render_vertex_patch();
     rx.render_edge_patch();
     rx.render_face_patch();
-    // polyscope::show();
+    polyscope::show();
 #endif
 }

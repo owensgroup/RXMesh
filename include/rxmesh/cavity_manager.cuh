@@ -240,6 +240,27 @@ struct CavityManager
         return m_s_should_slice[0];
     }
 
+    /**
+     * @brief when the user call recover() function, that will recover the src
+     * handle and all verteices/edges/faces that were deleted due to this
+     * cavity. Here we could check if a vertex/edge/face is recovered
+     */
+    template <typename HandleT>
+    __device__ __inline__ bool is_recovered(const HandleT handle)
+    {
+        assert(handle.patch_id() == patch_id());
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return m_s_recover_v(handle.local_id());
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return m_s_recover_e(handle.local_id());
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return m_s_recover_f(handle.local_id());
+        }
+    }
+
    private:
     /**
      * @brief update all attributes such that it can be used after the topology
