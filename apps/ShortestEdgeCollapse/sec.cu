@@ -3,6 +3,8 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
 
+#include <filesystem>
+
 struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
@@ -15,21 +17,22 @@ struct arg
 
 #include "sec_rxmesh.cuh"
 
-TEST(Apps, Simplification)
+TEST(Apps, SEC)
 {
     using namespace rxmesh;
 
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshDynamic rx(Arg.obj_file_name);
-    rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
-            "_patches");
+    // RXMeshDynamic rx(Arg.obj_file_name);
 
-    // RXMeshDynamic rx(Arg.obj_file_name,
-    //                  STRINGIFY(OUTPUT_DIR) +
-    //                      extract_file_name(Arg.obj_file_name) + "_patches",
-    //                  true);
+    const std::string p_file = STRINGIFY(OUTPUT_DIR) +
+                               extract_file_name(Arg.obj_file_name) +
+                               "_patches";
+    RXMeshDynamic rx(Arg.obj_file_name, p_file);
+    if (!std::filesystem::exists(p_file)) {
+        rx.save(p_file);
+    }
 
     ASSERT_TRUE(rx.is_edge_manifold());
 

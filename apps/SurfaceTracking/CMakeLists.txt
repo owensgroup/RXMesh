@@ -11,6 +11,8 @@ set(SOURCE_LIST
 	simulation.h
 	noise.h
 	primitives.cuh
+	collapser.cuh
+	link_condition.cuh
 )
 
 

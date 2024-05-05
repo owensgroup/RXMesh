@@ -12,6 +12,7 @@ using Vec3 = glm::vec<3, T, glm::defaultp>;
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/query.cuh"
 
+#include "link_condition.cuh"
 #include "primitives.cuh"
 
 template <typename T, uint32_t blockThreads>
@@ -99,17 +100,17 @@ __global__ static void __launch_bounds__(blockThreads)
 
 template <typename T, uint32_t blockThreads>
 __global__ static void __launch_bounds__(blockThreads)
-    edge_flip(rxmesh::Context                       context,
-              const rxmesh::VertexAttribute<T>      position,
-              const rxmesh::VertexAttribute<int8_t> vertex_rank,
-              rxmesh::EdgeAttribute<EdgeStatus>     edge_status,
-              rxmesh::VertexAttribute<int8_t>       is_vertex_bd,
-              rxmesh::EdgeAttribute<int8_t>         is_edge_bd,
-              const T                               edge_flip_min_length_change,
-              const T                               max_volume_change,
-              const T                               min_triangle_area,
-              const T                               min_triangle_angle,
-              const T                               max_triangle_angle)
+    edge_flip(rxmesh::Context                   context,
+              rxmesh::VertexAttribute<T>        position,
+              rxmesh::VertexAttribute<int8_t>   vertex_rank,
+              rxmesh::EdgeAttribute<EdgeStatus> edge_status,
+              rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
+              rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
+              const T                           edge_flip_min_length_change,
+              const T                           max_volume_change,
+              const T                           min_triangle_area,
+              const T                           min_triangle_angle,
+              const T                           max_triangle_angle)
 {
     using namespace rxmesh;
 
@@ -125,22 +126,26 @@ __global__ static void __launch_bounds__(blockThreads)
         return;
     }
 
-    Bitmask is_updated(cavity.patch_info().edges_capacity[0], shrd_alloc);
+    // a bitmask that indicates which edge we want to flip
+    // we also used it to mark the new edges
+    Bitmask edge_mask(cavity.patch_info().edges_capacity[0], shrd_alloc);
+    edge_mask.reset(block);
 
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
-    // for each edge we want to flip, we add its id in one of its opposite
-    // vertices along with the other opposite vertex
-    uint16_t* v_info =
-        shrd_alloc.alloc<uint16_t>(2 * cavity.patch_info().num_vertices[0]);
-    fill_n<blockThreads>(
-        v_info, 2 * cavity.patch_info().num_vertices[0], uint16_t(INVALID16));
 
-    // a bitmask that indicates which edge we want to flip
-    Bitmask e_flip(cavity.patch_info().num_edges[0], shrd_alloc);
-    e_flip.reset(block);
+    // we use this bitmask to mark the other end of to-be-collapse edge during
+    // checking for the link condition
+    Bitmask v0_mask(cavity.patch_info().num_vertices[0], shrd_alloc);
+    Bitmask v1_mask(cavity.patch_info().num_vertices[0], shrd_alloc);
 
 
+    // precompute EVDiamond
+    Query<blockThreads> query(context, cavity.patch_id());
+    query.prologue<Op::EVDiamond>(block, shrd_alloc);
+    block.sync();
+
+    // lambda function that check if the edge should be flipped
     auto should_flip = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         // iter[0] and iter[2] are the edge two vertices
         // iter[1] and iter[3] are the two opposite vertices
@@ -290,56 +295,34 @@ __global__ static void __launch_bounds__(blockThreads)
                 }
 
                 if (flip_it) {
-                    uint16_t v_c(iter.local(1)), v_d(iter.local(3));
-
-                    if (::atomicCAS(v_info + 2 * v_c, INVALID16, v_d) ==
-                        INVALID16) {
-                        v_info[2 * v_c + 1] = eh.local_id();
-                        e_flip.set(eh.local_id(), true);
-                    } else {
-                        if (::atomicCAS(v_info + 2 * v_d, INVALID16, v_c) ==
-                            INVALID16) {
-                            v_info[2 * v_d + 1] = eh.local_id();
-                            e_flip.set(eh.local_id(), true);
-                        }
-                    }
+                    edge_mask.set(eh.local_id(), true);
                 }
-            } else {
-                edge_status(eh) = OKAY;
             }
         }
     };
+
 
     // 1. mark edge that we want to flip
-    Query<blockThreads> query(context, cavity.patch_id());
-    query.dispatch<Op::EVDiamond>(block, shrd_alloc, should_flip);
+    for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+        assert(eh.local_id() < cavity.patch_info().num_edges[0]);
+
+        const VertexIterator iter =
+            query.template get_iterator<VertexIterator>(eh.local_id());
+
+        should_flip(eh, iter);
+    });
     block.sync();
 
-
     // 2. make sure that the two vertices opposite to a flipped edge are not
-    // connected
-    auto check_edges = [&](const VertexHandle& vh, const VertexIterator& iter) {
-        uint16_t opposite_v = v_info[2 * vh.local_id()];
-        if (opposite_v != INVALID16) {
-            bool is_valid = true;
-            for (uint16_t v = 0; v < iter.size(); ++v) {
-                if (iter.local(v) == opposite_v) {
-                    is_valid = false;
-                    break;
-                }
-            }
-            if (!is_valid) {
-                e_flip.reset(v_info[2 * vh.local_id() + 1], true);
-            }
-        }
-    };
-    query.dispatch<Op::VV>(block, shrd_alloc, check_edges);
+    // connected (link condition)
+    link_condition(
+        block, cavity.patch_info(), query, edge_mask, v0_mask, v1_mask, 0, 2);
     block.sync();
 
 
     // 3. create cavity for the surviving edges
     for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
-        if (e_flip(eh.local_id())) {
+        if (edge_mask(eh.local_id())) {
             cavity.create(eh);
         } else {
             edge_status(eh) = OKAY;
@@ -352,11 +335,12 @@ __global__ static void __launch_bounds__(blockThreads)
     if (cavity.prologue(block,
                         shrd_alloc,
                         position,
+                        vertex_rank,
                         edge_status,
                         is_vertex_bd,
                         is_edge_bd)) {
 
-        is_updated.reset(block);
+        edge_mask.reset(block);
         block.sync();
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
@@ -367,7 +351,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
 
             if (new_edge.is_valid()) {
-                is_updated.set(new_edge.local_id(), true);
+                edge_mask.set(new_edge.local_id(), true);
                 cavity.add_face(cavity.get_cavity_edge(c, 0),
                                 new_edge,
                                 cavity.get_cavity_edge(c, 3));
@@ -385,7 +369,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
     if (cavity.is_successful()) {
         for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
-            if (is_updated(eh.local_id())) {
+            if (edge_mask(eh.local_id())) {
                 edge_status(eh) = ADDED;
             }
         });

@@ -245,7 +245,8 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
     app_timer.start();
     classify_vertices(rx, position, is_vertex_bd, vertex_rank);
     app_timer.stop();
-    RXMESH_INFO("Classify Vertices time {} (ms)", app_timer.elapsed_millis());
+    RXMESH_INFO("Flipper Classify Vertices time {} (ms)",
+                app_timer.elapsed_millis());
 
     constexpr uint32_t blockThreads = 512;
 
@@ -266,7 +267,7 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
             LaunchBox<blockThreads> launch_box;
 
             rx.update_launch_box(
-                {Op::EVDiamond, Op::VV},
+                {Op::EVDiamond},
                 launch_box,
                 (void*)edge_flip<T, blockThreads>,
                 true,
@@ -275,8 +276,8 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
                 false,
                 [&](uint32_t v, uint32_t e, uint32_t f) {
                     return detail::mask_num_bytes(e) +
-                           2 * v * sizeof(uint16_t) +
-                           2 * ShmemAllocator::default_alignment;
+                           2 * detail::mask_num_bytes(v) +
+                           3 * ShmemAllocator::default_alignment;
                 });
 
             edge_flip<T, blockThreads>
@@ -318,6 +319,7 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
 template <typename T>
 void collapser(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>* position)
 {
+   
 }
 
 
