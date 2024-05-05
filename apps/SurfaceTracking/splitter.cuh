@@ -38,7 +38,7 @@ __global__ static void __launch_bounds__(blockThreads)
     ShmemAllocator shrd_alloc;
 
     CavityManager<blockThreads, CavityOp::E> cavity(
-        block, context, shrd_alloc, true);
+        block, context, shrd_alloc, true, false);
 
 
     if (cavity.patch_id() == INVALID32) {

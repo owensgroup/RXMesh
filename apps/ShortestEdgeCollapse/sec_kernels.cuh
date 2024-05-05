@@ -113,9 +113,9 @@ __global__ static void sec(rxmesh::Context                   context,
 
             if (new_v.is_valid()) {
 
-                coords(new_v, 0) = (coords(v0, 0) + coords(v1, 0)) * 0.5;
-                coords(new_v, 1) = (coords(v0, 1) + coords(v1, 1)) * 0.5;
-                coords(new_v, 2) = (coords(v0, 2) + coords(v1, 2)) * 0.5;
+                coords(new_v, 0) = (coords(v0, 0) + coords(v1, 0)) * T(0.5);
+                coords(new_v, 1) = (coords(v0, 1) + coords(v1, 1)) * T(0.5);
+                coords(new_v, 2) = (coords(v0, 2) + coords(v1, 2)) * T(0.5);
 
 
                 DEdgeHandle e0 =

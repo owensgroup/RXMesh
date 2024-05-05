@@ -24,6 +24,7 @@ enum : EdgeStatus
 
 int* d_buffer;
 
+#include "collapser.cuh"
 #include "flipper.cuh"
 #include "noise.h"
 #include "smoother.cuh"
@@ -317,9 +318,82 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
 
 
 template <typename T>
-void collapser(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>* position)
+void collapser(rxmesh::RXMeshDynamic&             rx,
+               rxmesh::VertexAttribute<T>*        position,
+               rxmesh::VertexAttribute<int8_t>*   vertex_rank,
+               rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
+               rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
+               rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
 {
-   
+    using namespace rxmesh;
+
+    GPUTimer app_timer;
+    app_timer.start();
+    classify_vertices(rx, position, is_vertex_bd, vertex_rank);
+    app_timer.stop();
+    RXMESH_INFO("Collapser Classify Vertices time {} (ms)",
+                app_timer.elapsed_millis());
+
+    constexpr uint32_t blockThreads = 512;
+
+    app_timer.start();
+    edge_status->reset(UNSEEN, DEVICE);
+
+    int prv_remaining_work = rx.get_num_edges();
+
+    while (true) {
+        rx.reset_scheduler();
+        while (!rx.is_queue_empty()) {
+
+            LaunchBox<blockThreads> launch_box;
+
+            rx.update_launch_box(
+                {Op::EVDiamond},
+                launch_box,
+                (void*)edge_collapse<T, blockThreads>,
+                true,
+                false,
+                false,
+                false,
+                [&](uint32_t v, uint32_t e, uint32_t f) {
+                    return detail::mask_num_bytes(e) +
+                           2 * detail::mask_num_bytes(v) +
+                           3 * ShmemAllocator::default_alignment;
+                });
+
+            edge_collapse<T, blockThreads>
+                <<<DIVIDE_UP(launch_box.blocks, 8),
+                   launch_box.num_threads,
+                   launch_box.smem_bytes_dyn>>>(rx.get_context(),
+                                                *position,
+                                                *vertex_rank,
+                                                *edge_status,
+                                                *is_vertex_bd,
+                                                *is_edge_bd,
+                                                Arg.collapser_min_edge_length,
+                                                Arg.max_volume_change,
+                                                Arg.min_triangle_area,
+                                                Arg.min_triangle_angle,
+                                                Arg.max_triangle_angle);
+
+            rx.cleanup();
+            rx.slice_patches(*position,
+                             *vertex_rank,
+                             *edge_status,
+                             *is_vertex_bd,
+                             *is_edge_bd);
+            rx.cleanup();
+        }
+
+        int remaining_work = is_done(rx, edge_status, d_buffer);
+
+        if (remaining_work == 0 || prv_remaining_work == remaining_work) {
+            break;
+        }
+        prv_remaining_work = remaining_work;
+    }
+    app_timer.stop();
+    RXMESH_INFO("Collapser time {} (ms)", app_timer.elapsed_millis());
 }
 
 
@@ -372,7 +446,12 @@ void improve_mesh(rxmesh::RXMeshDynamic&             rx,
             is_edge_bd);
 
     // edge collapsing
-    collapser(rx, current_position);
+    collapser(rx,
+              current_position,
+              vertex_rank,
+              edge_status,
+              is_vertex_bd,
+              is_edge_bd);
 
     // null-space smoothing
     smoother(rx, is_vertex_bd, current_position, new_position);
