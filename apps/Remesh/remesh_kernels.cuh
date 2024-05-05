@@ -306,7 +306,7 @@ __global__ static void __launch_bounds__(blockThreads)
                 const T edge_len_sq = glm::distance2(vp, new_p);
 
                 if (edge_len_sq >= low_edge_len_sq) {
-                    // long_edge = true;
+                    long_edge = true;
                     break;
                 }
             }
