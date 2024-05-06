@@ -75,9 +75,7 @@ __global__ static void __launch_bounds__(blockThreads)
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
     auto should_split = [&](const EdgeHandle& eh, const VertexIterator& iter) {
-        if (edge_status(eh) == UPDATE) {
-            cavity.create(eh);
-        } else if (edge_status(eh) == UNSEEN) {
+        if (edge_status(eh) == UNSEEN) {
             const Vec3<T> v0(
                 coords(iter[0], 0), coords(iter[0], 1), coords(iter[0], 2));
             const Vec3<T> v1(
@@ -86,7 +84,6 @@ __global__ static void __launch_bounds__(blockThreads)
             const T edge_len = glm::distance2(v0, v1);
 
             if (edge_len > high_edge_len_sq) {
-                edge_status(eh) = UPDATE;
                 cavity.create(eh);
             } else {
                 edge_status(eh) = OKAY;
@@ -116,9 +113,9 @@ __global__ static void __launch_bounds__(blockThreads)
 
             if (new_v.is_valid()) {
 
-                coords(new_v, 0) = (coords(v0, 0) + coords(v1, 0)) / 2.0f;
-                coords(new_v, 1) = (coords(v0, 1) + coords(v1, 1)) / 2.0f;
-                coords(new_v, 2) = (coords(v0, 2) + coords(v1, 2)) / 2.0f;
+                coords(new_v, 0) = (coords(v0, 0) + coords(v1, 0)) * T(0.5);
+                coords(new_v, 1) = (coords(v0, 1) + coords(v1, 1)) * T(0.5);
+                coords(new_v, 2) = (coords(v0, 2) + coords(v1, 2)) * T(0.5);
 
                 DEdgeHandle e0 =
                     cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
