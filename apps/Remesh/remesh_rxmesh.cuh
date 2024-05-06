@@ -702,6 +702,9 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
         stats.max_vertex_valence,
         stats.min_vertex_valence);
 
+    RXMESH_INFO("Target edge length = {}",
+                Arg.relative_len * stats.avg_edge_len);
+
     // 4.0/5.0 * targe_edge_len
     const float low_edge_len =
         (4.f / 5.f) * Arg.relative_len * stats.avg_edge_len;
