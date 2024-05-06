@@ -477,6 +477,9 @@ void advance_sim(T                                  sim_dt,
     while ((accum_dt < 0.99 * sim_dt) &&
            (sim.m_curr_t + accum_dt < sim.m_max_t)) {
 
+        GPUTimer timer;
+        timer.start();
+
         // improve the mesh (also update new_position)
         improve_mesh(rx,
                      current_position,
@@ -495,10 +498,12 @@ void advance_sim(T                                  sim_dt,
             rx, noise, *current_position, sim.m_curr_t + accum_dt, curr_dt);
         accum_dt += curr_dt;
 
-        CUDA_ERROR(cudaDeviceSynchronize());
+        // CUDA_ERROR(cudaDeviceSynchronize());
 
         // update polyscope
-        update_polyscope(rx, *current_position, *new_position);
+        // update_polyscope(rx, *current_position, *new_position);
+        timer.stop();
+        RXMESH_INFO("** Step time {} (ms)", timer.elapsed_millis());
     }
 
     sim.m_curr_t += accum_dt;
