@@ -15,6 +15,38 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
+/**
+ * @brief Return unique index of the local mesh element composed by the
+ * patch id and the local index
+ *
+ * @param local_id the local within-patch mesh element id
+ * @param patch_id the patch owning the mesh element
+ * @return
+ */
+constexpr __device__ __host__ __forceinline__ uint32_t
+unique_id32(const uint16_t local_id, const uint16_t patch_id)
+{
+    uint32_t ret = patch_id;
+    ret          = (ret << 16);
+    ret |= local_id;
+    return ret;
+}
+
+/**
+ * @brief unpack a 32 uint to its high and low 16 bits. 
+ * This is used to convert the unique id to its local id (16
+ * low bit) and patch id (high 16 bit)
+ * @param uid unique id
+ * @return a std::pair storing the patch id and local id
+ */
+constexpr __device__ __host__ __forceinline__ std::pair<uint16_t, uint16_t>
+                                              unpack32(uint32_t uid)
+{
+    uint16_t local_id = uid & ((1 << 16) - 1);
+    uint16_t patch_id = uid >> 16;
+    return std::make_pair(patch_id, local_id);
+}
+
 // Priority queue setup. Use 'pair_less' to prioritize smaller values.
 template <typename T>
 struct pair_less 
@@ -24,13 +56,8 @@ struct pair_less
         return a.first < b.first;
     }
 };
-//using PriorityPair_t        = cuco::pair<float, float>;
-//using PriorityPair_t        = cuco::pair<float, rxmesh::EdgeHandle>;
 
 using PriorityPair_t        = cuco::pair<float, uint32_t>;
-
-//using PriorityPair_t        = cuco::pair<float, uint64_t>; 
-//using PriorityPair_t        = cuco::pair<double, double>; 
 using PriorityCompare       = pair_less<PriorityPair_t>;
 using PriorityQueue_t       = cuco::priority_queue<PriorityPair_t, PriorityCompare>;
 using PQView_t              = PriorityQueue_t::device_mutable_view;
@@ -48,15 +75,14 @@ enum : EdgeStatus
     ADDED  = 3,  // means it has been added to during the split/flip/collapse
 };
 
-//#include "histogram.cuh"
 #include "secp_kernels.cuh"
 
 
 inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
                        const uint32_t         final_num_faces)
 {
-    //EXPECT_TRUE(rx.validate());
-//return;
+    EXPECT_TRUE(rx.validate());
+
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 32;
 
@@ -74,7 +100,6 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
 
     const int num_bins = 256;
 
-//    CostHistogram<float> histo(num_bins);
     PriorityQueue_t pq(rx.get_num_edges());
 
     auto e_attr = rx.add_edge_attribute<float>("eMark", 1);
@@ -95,12 +120,6 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
 
     float reduce_ratio = 0.05;
 
-    // Priority Queue Setup
-    //
-
-    //
-    // Priority Queue Setup End
-
     CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
     timer.start();
@@ -115,23 +134,14 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
                           false,
                           [&](uint32_t v, uint32_t e, uint32_t f){
                             // Allocate enough additional memory
-                            // for the priority queue.
-                            // SDP: not enough info here to
-                            //  determine the memory the
-                            //  priority queue needs. Probably don't
-                            //  want to use this. 
-                            //  See below.
-                            //return 0;//e*sizeof(PriorityPair_t);
+                            // for the priority queue and the intermediate
+                            // array of PriorityPait_t.
                             return pq.get_shmem_size(blockThreads) + (e*sizeof(PriorityPair_t));
                           });
-    //launch_box.smem_bytes_dyn += pq.get_shmem_size(blockThreads);
 
-    RXMESH_TRACE("hello serban 11111111\n");
     RXMESH_TRACE("pair_alignment<float, rxmesh::EdgeHandle>(){}", cuco::detail::pair_alignment<float, rxmesh::EdgeHandle>());
     RXMESH_TRACE("pair_alignment<float, uint32_t>(){}", cuco::detail::pair_alignment<float, uint32_t>());
     RXMESH_TRACE("pair_alignment<float, uint64_t>(){}", cuco::detail::pair_alignment<float, uint64_t>());
-    RXMESH_TRACE("pair_alignment<float, float>(){}", cuco::detail::pair_alignment<float, float>());
-    RXMESH_TRACE("pair_alignment<double, double>(){}", cuco::detail::pair_alignment<double, double>());
     RXMESH_TRACE("sizeof(PriorityPair_t){}", sizeof(PriorityPair_t));
     compute_edge_priorities<float, blockThreads>
         <<<launch_box.blocks,
@@ -139,21 +149,27 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
            launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords, pq.get_mutable_device_view(), pq.get_shmem_size(blockThreads));
 
     cudaDeviceSynchronize();
-    RXMESH_TRACE("hello serban 2222222\n");
     RXMESH_TRACE("launch_box.smem_bytes_dyn = {}", launch_box.smem_bytes_dyn);
     RXMESH_TRACE("pq.get_shmem_size = {}", pq.get_shmem_size(blockThreads));
 
-    // now pop all the elements
+    // next kernel needs to pop some percentage of the top
+    // elements in the priority queue and store popped elements
+    // to be used by the next kernel that actually does the collapses
+    //
+    // mark some sort of
+    // associated edge attribute
+
+    // now pop all the elements to ouput on host
     //
     thrust::device_vector<PriorityPair_t> d_popped(rx.get_num_edges());
     pq.pop(d_popped.begin(), d_popped.end());
     cudaDeviceSynchronize();
     const thrust::host_vector<PriorityPair_t> h_popped(d_popped);
-    for(size_t i = 0; i < h_popped.size(); i++)
-    {
-        std::cout << i << "\t" << h_popped[i].first
-            << "\t" << h_popped[i].second << "\n";
-    }
+   // for(size_t i = 0; i < h_popped.size(); i++)
+   // {
+   //     std::cout << i << "\t" << h_popped[i].first
+   //         << "\t" << h_popped[i].second << "\n";
+   // }
     return;
         // compute max-min histogram
         //histo.init();

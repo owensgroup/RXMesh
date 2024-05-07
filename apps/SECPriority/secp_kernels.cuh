@@ -248,18 +248,6 @@ __global__ static void  compute_edge_priorities(
     size_t                           pq_num_bytes)
 {
     using namespace rxmesh;
-
-    // shared mem variable
-    // Pair_t my_local_pair_array
-    // index into above
-    // sdp: needs to be the number of edges in the batch,
-    // which is not known at compile time
-    //__shared__ PriorityPair_t intermediatePairs[blockThreads];
-
-//    __shared__ int my_pair_count;
-    // some thread needs to initialize the above to 0
-    // sync
-    //extern __shared__ int shmem[];
     namespace cg = cooperative_groups;
     cg::thread_block g = cg::this_thread_block();
     ShmemAllocator      shrd_alloc;
@@ -269,12 +257,6 @@ __global__ static void  compute_edge_priorities(
     __shared__ int pair_counter;
     pair_counter = 0;
 
-/* 05/06
-    char * pq_shrd_mem = shrd_alloc.alloc(pq_num_bytes);
-    printf("blockThreads:%u\n", blockThreads);
-    printf("pq_shrd_mem:%p\t\n", (void*)pq_shrd_mem);
-    */
-
     auto edge_len = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         const VertexHandle v0 = iter[0];
         const VertexHandle v1 = iter[1];
@@ -284,97 +266,28 @@ __global__ static void  compute_edge_priorities(
 
         T len2 = glm::distance2(p0, p1);
 
-        //PriorityPair_t p{(double)len2, (double)len2};
-        //PriorityPair_t p{len2, len2};
         auto p_e = rxmesh::detail::unpack(eh.unique_id());
+        //printf("p_id:%u\te_id:%hu\n", p_e.first, p_e.second);
         //printf("e_id:%llu\t, len:%f\n", eh.unique_id(), len2);
-        PriorityPair_t p{len2, p_e.second};
+
+        // repack the EdgeHandle into smaller 32 bits for
+        // use with priority queue. Need to check elsewhere
+        // that there are less than 2^16 patches.
+        auto id32 = unique_id32(p_e.second, (uint16_t)p_e.first);
+        //auto p_e_32 = unpack32(id32);
+        //printf("32bit p_id:%hu\te_id:%hu\n", p_e_32.first, p_e_32.second);
+
+        PriorityPair_t p{len2, id32};
         //PriorityPair_t p{len2, eh};
 
         auto val_counter = atomicAdd(&pair_counter, 1);
         intermediatePairs[val_counter] = p;
-
-        //PriorityPair_t p{len2, eh};
-        //PriorityPair_t p{len2, eh.patch_id()};
-        //PriorityPair_t p{len2, eh.m_handle}; //same as just eh
-        //alignas(64) PriorityPair_t arr_p[1] = {p};
-        //PriorityPair_t p{len2, eh};
-        //PriorityPair_t p{len2, eh.patch_id()};
-        //PriorityPair_t p{len2, eh.m_handle}; //same as just eh
-        //alignas(64) PriorityPair_t arr_p[1] = {p};
-/* 05/06 
-        alignas(16) PriorityPair_t arr_p[1] = {p};
-        //pq_view.push(g, arr_p, *(&arr_p + 1), shmem);
-        pq_view.push(g, arr_p, arr_p + 1, pq_shrd_mem);
-        */
-        //SDP: looks like the push might need to happen outside of this
-        //lambda. I think I need a static array where a thread?/EdgeHandle
-        //can be stored. Then, after the query.dispatch<Op::EV> below,
-        //I can do a pq_view.push(cg, &array[0], &array[size], shmem)
-
-        //Alternatively, this kernel computes the edge_length for EdgeHandle
-        //and saves to a thrust::device_vector<PairType> d_pairs. Given an EdgeHandle,
-        //what's my index into the device_vector?
-        //Then, call pq_view.push(d_pairs.begin(), d_pairs.end()) from host side.
-//SDP remove for build        auto my_pair = {len2, eh};
-//SDP remove for build until can revisit        pq_view.push(cg, &my_pair[0], &my_pair[0]+1, <temp_storage_needed>);
-
-//SDP remove for build        pq_view.push();
-        //atomicMin(histo.min_value(), len2);
-        //atomicMax(histo.max_value(), len2);
-//        int old_value = atomicAdd(&my_pair_count, 1);
     };
 
     auto block = cooperative_groups::this_thread_block();
-
-    //ShmemAllocator      shrd_alloc;
-
-    // need to account for this when the kernel is launched
-//SDP remove for build    PriorityPair_t* my_local_array = shrd_alloc.alloc<PriorityPair_t>(query.patch_info().m_edge_capacity[0]);
-    // allocate memory for the priority_queue and keep that pointer to pass
     query.dispatch<Op::EV>(block, shrd_alloc, edge_len);
-    // sync just in case for now
-    // actually do the push to the queue
     block.sync();
-    //if(block.thread_rank() == 0) {
-     //  printf("iterators: begin = %p\t end = %p\n", (void*)intermediatePairs, (void*)(intermediatePairs + blockThreads));
 
-       char * pq_shrd_mem = shrd_alloc.alloc(pq_num_bytes);
-      // printf("blockThreads:%u\n", blockThreads);
-      // printf("pq_shrd_mem:%p\t\n", (void*)pq_shrd_mem);
-      // for(size_t i = 0; i < blockThreads; i++) {
-      //  printf("imp:%d\t%f\t%u\t%p\n", i, intermediatePairs[i].first, intermediatePairs[i].second, &(intermediatePairs[i]));
-      // }
-       pq_view.push(block, intermediatePairs, intermediatePairs + pair_counter, pq_shrd_mem);
-       //shrd_alloc.dealloc(pq_num_bytes);
-    //}
+    char * pq_shrd_mem = shrd_alloc.alloc(pq_num_bytes);
+    pq_view.push(block, intermediatePairs, intermediatePairs + pair_counter, pq_shrd_mem);
 }
-
-/*
-template <typename T, uint32_t blockThreads>
-__global__ static void populate_histogram(
-    rxmesh::Context                  context,
-    const rxmesh::VertexAttribute<T> coords,
-    CostHistogram<T>                 histo)
-{
-    using namespace rxmesh;
-
-    auto edge_len = [&](const EdgeHandle& eh, const VertexIterator& iter) {
-        const VertexHandle v0 = iter[0];
-        const VertexHandle v1 = iter[1];
-
-        const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-        const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-
-        T len2 = glm::distance2(p0, p1);
-
-        histo.insert(len2);
-    };
-
-    auto block = cooperative_groups::this_thread_block();
-
-    Query<blockThreads> query(context);
-    ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::EV>(block, shrd_alloc, edge_len);
-}
-*/
