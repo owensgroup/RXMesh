@@ -3,6 +3,8 @@ add_executable(DelaunayEdgeFlip)
 set(SOURCE_LIST
     delaunay_edge_flip.cu  
 	delaunay_rxmesh.cuh	
+	mcf_rxmesh.h
+	mcf_rxmesh_kernel.cuh
 )
 
 set(COMMON_LIST    

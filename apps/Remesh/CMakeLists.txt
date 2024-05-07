@@ -3,7 +3,8 @@ add_executable(Remesh)
 set(SOURCE_LIST
     remesh.cu  
 	remesh_rxmesh.cuh	
-	remesh_kernels.cuh
+	remesh_kernels.cuh	
+	link_condition.cuh
 )
 
 set(COMMON_LIST    

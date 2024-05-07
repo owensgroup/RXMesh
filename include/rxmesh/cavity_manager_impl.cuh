@@ -266,9 +266,8 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
         shrd_alloc.alloc<uint8_t>(m_correspondence_size_e);
     assert(m_s_q_correspondence_stash_e);
 
-    m_s_boudary_edges_cavity_id =
-        reinterpret_cast<int16_t*>(m_s_q_correspondence_e);
-    m_correspondence_size_vf = std::max(max_face_cap, max_vertex_cap);
+    m_s_boudary_edges_cavity_id = m_s_q_correspondence_e;
+    m_correspondence_size_vf    = std::max(max_face_cap, max_vertex_cap);
     m_s_q_correspondence_vf =
         shrd_alloc.alloc<uint16_t>(m_correspondence_size_vf);
     assert(m_s_q_correspondence_vf);
@@ -1483,11 +1482,9 @@ __device__ __inline__ void
 CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
     cooperative_groups::thread_block& block)
 {
-    constexpr int16_t invalid_cavity = 0x7FFF;
-
     if (!m_allow_touching_cavities) {
         fill_n<blockThreads>(
-            m_s_boudary_edges_cavity_id, m_s_num_edges[0], invalid_cavity);
+            m_s_boudary_edges_cavity_id, m_s_num_edges[0], uint16_t(INVALID16));
     }
 
     fill_n<blockThreads>(m_s_cavity_size_prefix, m_s_num_cavities[0] + 1, 0);
@@ -1550,14 +1547,22 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
 
                 if (!m_allow_touching_cavities) {
 
+                    // we use here atomicMin so at least one cavity will move on
+                    // if there is too many competing for the same edge
                     if (c0 == INVALID16) {
-                        m_s_boudary_edges_cavity_id[e0] = face_cavity;
+                        atomicMin(m_s_boudary_edges_cavity_id + e0,
+                                  face_cavity);
+                        // m_s_boudary_edges_cavity_id[e0] = face_cavity;
                     }
                     if (c1 == INVALID16) {
-                        m_s_boudary_edges_cavity_id[e1] = face_cavity;
+                        atomicMin(m_s_boudary_edges_cavity_id + e1,
+                                  face_cavity);
+                        // m_s_boudary_edges_cavity_id[e1] = face_cavity;
                     }
                     if (c2 == INVALID16) {
-                        m_s_boudary_edges_cavity_id[e2] = face_cavity;
+                        atomicMin(m_s_boudary_edges_cavity_id + e2,
+                                  face_cavity);
+                        // m_s_boudary_edges_cavity_id[e2] = face_cavity;
                     }
                 }
             }
@@ -1580,9 +1585,10 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
 
                     const uint16_t e = m_s_fe[3 * f + i] >> 1;
 
-                    const int e_bd_cavity_id = m_s_boudary_edges_cavity_id[e];
+                    const uint16_t e_bd_cavity_id =
+                        m_s_boudary_edges_cavity_id[e];
 
-                    if (e_bd_cavity_id != invalid_cavity &&
+                    if (e_bd_cavity_id != INVALID16 &&
                         e_bd_cavity_id != face_cavity) {
                         deactivate_cavity(face_cavity);
                     }

@@ -48,8 +48,6 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
     CostHistogram<float> histo(num_bins);
 
-    auto e_attr = rx.add_edge_attribute<float>("eMark", 1);
-
 
 #if USE_POLYSCOPE
     rx.render_vertex_patch();
@@ -84,22 +82,15 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
                              launch_box,
                              (void*)populate_histogram<float, blockThreads>,
                              false);
-        populate_histogram<float, blockThreads><<<launch_box.blocks,
-                                                  launch_box.num_threads,
-                                                  launch_box.smem_bytes_dyn>>>(
-            rx.get_context(), *coords, histo, *e_attr);
+        populate_histogram<float, blockThreads>
+            <<<launch_box.blocks,
+               launch_box.num_threads,
+               launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords, histo);
 
         histo.scan();
 
-#if USE_POLYSCOPE
-        // e_attr->move(DEVICE, HOST);
-        // auto ps_mesh = rx.get_polyscope_mesh();
-        // ps_mesh->addEdgeScalarQuantity("eMark", *e_attr);
-        // polyscope::show();
-#endif
-
         // how much we can reduce the number of edge at each iterations
-        
+
         // loop over the mesh, and try to collapse
         const int num_edges_before = int(rx.get_num_edges());
 
@@ -129,7 +120,6 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
                            3 * ShmemAllocator::default_alignment;
                 });
 
-            e_attr->reset(0, DEVICE);
 
             GPUTimer app_timer;
             app_timer.start();
@@ -140,8 +130,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
                                                 *coords,
                                                 histo,
                                                 reduce_threshold,
-                                                *edge_status,
-                                                *e_attr);
+                                                *edge_status);
 
             app_timer.stop();
 
@@ -152,7 +141,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
             GPUTimer slice_timer;
             slice_timer.start();
-            rx.slice_patches(*coords, *edge_status, *e_attr);
+            rx.slice_patches(*coords, *edge_status);
             slice_timer.stop();
 
             GPUTimer cleanup_timer2;
@@ -188,13 +177,11 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
             if (false) {
                 rx.update_host();
-                coords->move(DEVICE, HOST);
-                e_attr->move(DEVICE, HOST);
+                coords->move(DEVICE, HOST);                
                 rx.update_polyscope();
                 auto ps_mesh = rx.get_polyscope_mesh();
                 ps_mesh->updateVertexPositions(*coords);
-                ps_mesh->setEnabled(false);
-                // ps_mesh->addEdgeScalarQuantity("eMark", *e_attr);
+                ps_mesh->setEnabled(false);                
                 // rx.render_vertex_patch();
                 // rx.render_edge_patch();
                 // rx.render_face_patch();

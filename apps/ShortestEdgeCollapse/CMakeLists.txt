@@ -4,7 +4,8 @@ set(SOURCE_LIST
     sec.cu  
 	sec_rxmesh.cuh
 	sec_kernels.cuh
-	histogram.cuh
+	histogram.cuh	
+	link_condition.cuh
 )
 
 set(COMMON_LIST    

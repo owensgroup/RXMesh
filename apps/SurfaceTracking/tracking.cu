@@ -4,10 +4,32 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
 
+inline float deg2rad(float deg)
+{
+    // r = PI*d / 180
+    return deg * M_PI / 180.f;
+}
+
+
 struct arg
 {
-    std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    device_id     = 0;
+    std::string output_folder               = STRINGIFY(OUTPUT_DIR);
+    uint32_t    device_id                   = 0;
+    float       frame_dt                    = 0.05;
+    float       sim_dt                      = 0.05;
+    float       end_sim_t                   = 20.0;
+    float       max_volume_change           = 0.0005;
+    float       min_edge_length             = 0.5;
+    float       collapser_min_edge_length   = 0;
+    float       max_edge_length             = 1.5;
+    float       splitter_max_edge_length  = 0.0;
+    float       min_curvature_multiplier    = 1.0;
+    float       max_curvature_multiplier    = 1.0;
+    float       friction_coefficient        = 0.0;
+    float       edge_flip_min_length_change = 1e-8;
+    float       min_triangle_area           = 1e-7;
+    float       min_triangle_angle          = deg2rad(0.f);
+    float       max_triangle_angle          = deg2rad(180.f);
     char**      argv;
     int         argc;
 } Arg;
@@ -25,17 +47,17 @@ TEST(Apps, SurfaceTracking)
 
     std::vector<std::vector<uint32_t>> fv;
 
-    create_plane(verts, fv, 60, 60);
+    const Vector<3, float> lower_corner(-3.0, 0.0, -3.0);
 
-    RXMeshDynamic rx(fv);
+    create_plane(verts, fv, 60, 60, 0.1f, lower_corner);
+
+    // RXMeshDynamic rx(fv);
+    // rx.save(STRINGIFY(OUTPUT_DIR) + std::string("plane60x60_patches"));
+
+    RXMeshDynamic rx(fv,
+                     STRINGIFY(OUTPUT_DIR) + std::string("plane60x60_patches"));
 
     rx.add_vertex_coordinates(verts, "plane");
-    // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
-    //         "_patches");
-
-    // RXMeshDynamic rx(Arg.obj_file_name,
-    //                  STRINGIFY(OUTPUT_DIR) +
-    //                      extract_file_name(Arg.obj_file_name) + "_patches");
 
     tracking_rxmesh(rx);
 }
@@ -62,7 +84,7 @@ int main(int argc, char** argv)
             // clang-format on
             exit(EXIT_SUCCESS);
         }
-                
+
         if (cmd_option_exists(argv, argc + argv, "-o")) {
             Arg.output_folder =
                 std::string(get_cmd_option(argv, argv + argc, "-o"));

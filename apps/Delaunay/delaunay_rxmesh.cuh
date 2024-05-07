@@ -9,6 +9,8 @@
 
 #include <cmath>
 
+#include "mcf_rxmesh.h"
+
 template <typename T, uint32_t blockThreads>
 __global__ static void __launch_bounds__(blockThreads)
     delaunay_edge_flip(rxmesh::Context            context,
@@ -260,6 +262,8 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     // polyscope::show();
 #endif
 
+    mcf_rxmesh_cg<float>(rx, false);
+
     auto coords = rx.get_input_vertex_coordinates();
 
     EXPECT_TRUE(rx.validate());
@@ -302,7 +306,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
         int inner_iter = 0;
         while (!rx.is_queue_empty()) {
             LaunchBox<blockThreads> launch_box;
-            rx.prepare_launch_box(
+            rx.update_launch_box(
                 {Op::EVDiamond, Op::VV},
                 launch_box,
                 (void*)delaunay_edge_flip<float, blockThreads>,
@@ -410,13 +414,19 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
         EXPECT_EQ(count_non_delaunay_edges(tri_mesh), 0);
     }
 
+#if USE_POLYSCOPE
+    rx.update_polyscope();
+    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    rx.get_polyscope_mesh()->setEnabled(false);
+#endif
+
+    mcf_rxmesh_cg<float>(rx, true);
+    
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
-
-    auto ps_mesh = rx.get_polyscope_mesh();
-    ps_mesh->updateVertexPositions(*coords);
-    ps_mesh->setEnabled(false);
+    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    rx.get_polyscope_mesh()->setEnabled(false);
 
     rx.render_vertex_patch();
     rx.render_edge_patch();

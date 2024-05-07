@@ -4,7 +4,7 @@
 
 #include "rxmesh/util/util.h"
 
-int iddd = 0;
+int ps_iddd = 0;
 
 using EdgeStatus = int8_t;
 enum : EdgeStatus
@@ -214,8 +214,8 @@ void screen_shot(rxmesh::RXMeshDynamic&      rx,
     ps_mesh->setEnabled(true);
     rx.render_face_patch()->setEnabled(true);
 
-    polyscope::screenshot(app + "_" + std::to_string(iddd) + ".png");
-    iddd++;
+    polyscope::screenshot(app + "_" + std::to_string(ps_iddd) + ".png");
+    ps_iddd++;
 
     // polyscope::show();
 
@@ -390,7 +390,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
 
             LaunchBox<blockThreads> launch_box;
             rx.update_launch_box(
-                {Op::EV, Op::VV},
+                {Op::EV},
                 launch_box,
                 (void*)edge_collapse<T, blockThreads>,
                 true,
@@ -399,8 +399,8 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
                 false,
                 [&](uint32_t v, uint32_t e, uint32_t f) {
                     return detail::mask_num_bytes(e) +
-                           2 * v * sizeof(uint16_t) +
-                           2 * ShmemAllocator::default_alignment;
+                           2 * detail::mask_num_bytes(v) +
+                           3 * ShmemAllocator::default_alignment;
                 });
 
             // CUDA_ERROR(cudaMemset(d_buffer, 0, sizeof(int)));
@@ -534,7 +534,7 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(), *v_valence);
 
             rx.update_launch_box(
-                {Op::EVDiamond, Op::VV},
+                {Op::EVDiamond},
                 launch_box,
                 (void*)edge_flip<T, blockThreads>,
                 true,
@@ -543,8 +543,8 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
                 false,
                 [&](uint32_t v, uint32_t e, uint32_t f) {
                     return detail::mask_num_bytes(e) +
-                           2 * v * sizeof(uint16_t) +
-                           2 * ShmemAllocator::default_alignment;
+                           2 * detail::mask_num_bytes(v) +
+                           3 * ShmemAllocator::default_alignment;
                 });
 
             // CUDA_ERROR(cudaMemset(d_buffer, 0, sizeof(int)));
@@ -702,6 +702,9 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
         stats.max_vertex_valence,
         stats.min_vertex_valence);
 
+    RXMESH_INFO("Target edge length = {}",
+                Arg.relative_len * stats.avg_edge_len);
+
     // 4.0/5.0 * targe_edge_len
     const float low_edge_len =
         (4.f / 5.f) * Arg.relative_len * stats.avg_edge_len;
@@ -781,6 +784,6 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     rx.render_vertex_patch();
     rx.render_edge_patch();
     rx.render_face_patch();
-    // polyscope::show();
+    polyscope::show();
 #endif
 }
