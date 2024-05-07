@@ -11,15 +11,6 @@
 template <typename T>
 using Vec3 = glm::vec<3, T, glm::defaultp>;
 
-using EdgeStatus = int8_t;
-enum : EdgeStatus
-{
-    UNSEEN = 0,  // means we have not tested it before for e.g., split/flip/col
-    OKAY   = 1,  // means we have tested it and it is okay to skip
-    UPDATE = 2,  // means we should update it i.e., we have tested it before
-    ADDED  = 3,  // means it has been added to during the split/flip/collapse
-};
-
 #include "histogram.cuh"
 #include "sec_kernels.cuh"
 
@@ -35,15 +26,13 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
     auto coords = rx.get_input_vertex_coordinates();
 
-    auto edge_status = rx.add_edge_attribute<EdgeStatus>("EdgeStatus", 1);
-    edge_status->reset(UNSEEN, LOCATION_ALL);
-
     LaunchBox<blockThreads> launch_box;
 
     float total_time   = 0;
     float app_time     = 0;
     float slice_time   = 0;
     float cleanup_time = 0;
+    float histo_time   = 0;
 
     const int num_bins = 256;
 
@@ -61,7 +50,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     // polyscope::show();
 #endif
 
-    bool validate = true;
+    bool validate = false;
 
     float reduce_ratio = 0.1;
 
@@ -72,6 +61,9 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     timer.start();
     while (rx.get_num_vertices(true) > final_num_vertices) {
         ++num_passes;
+
+        GPUTimer histo_timer;
+        histo_timer.start();
 
         // compute max-min histogram
         histo.init();
@@ -105,14 +97,16 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
         const int reduce_threshold =
             std::max(1, int(reduce_ratio * float(num_edges_before)));
 
-        // reset edge status
-        edge_status->reset(UNSEEN, DEVICE);
+
+        histo_timer.stop();
+
+        histo_time += histo_timer.elapsed_millis();
 
         rx.reset_scheduler();
         while (!rx.is_queue_empty() &&
                rx.get_num_vertices(true) > final_num_vertices) {
-            RXMESH_INFO(" Queue size = {}",
-                        rx.get_context().m_patch_scheduler.size());
+            // RXMESH_INFO(" Queue size = {}",
+            //             rx.get_context().m_patch_scheduler.size());
 
             rx.update_launch_box(
                 {Op::EV},
@@ -131,14 +125,10 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
             GPUTimer app_timer;
             app_timer.start();
-            sec<float, blockThreads>
-                <<<launch_box.blocks,
-                   launch_box.num_threads,
-                   launch_box.smem_bytes_dyn>>>(rx.get_context(),
-                                                *coords,
-                                                histo,
-                                                reduce_threshold,
-                                                *edge_status);
+            sec<float, blockThreads><<<DIVIDE_UP(launch_box.blocks, 8),
+                                       launch_box.num_threads,
+                                       launch_box.smem_bytes_dyn>>>(
+                rx.get_context(), *coords, histo, reduce_threshold);
 
             app_timer.stop();
 
@@ -149,7 +139,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
             GPUTimer slice_timer;
             slice_timer.start();
-            rx.slice_patches(*coords, *edge_status);
+            rx.slice_patches(*coords);
             slice_timer.stop();
 
             GPUTimer cleanup_timer2;
@@ -189,8 +179,6 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
                 rx.update_polyscope();
                 auto ps_mesh = rx.get_polyscope_mesh();
                 ps_mesh->updateVertexPositions(*coords);
-                edge_status->move(DEVICE, HOST);
-                ps_mesh->addEdgeScalarQuantity("EdgeStatus", *edge_status);
                 ps_mesh->setEnabled(false);
                 rx.render_vertex_patch();
                 rx.render_edge_patch();
@@ -207,6 +195,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     RXMESH_INFO("sec_rxmesh() RXMesh SEC took {} (ms), num_passes= {}",
                 total_time,
                 num_passes);
+    RXMESH_INFO("sec_rxmesh() Histo time {} (ms)", histo_time);
     RXMESH_INFO("sec_rxmesh() App time {} (ms)", app_time);
     RXMESH_INFO("sec_rxmesh() Slice timer {} (ms)", slice_time);
     RXMESH_INFO("sec_rxmesh() Cleanup timer {} (ms)", cleanup_time);
