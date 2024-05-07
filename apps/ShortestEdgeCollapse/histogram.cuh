@@ -85,25 +85,42 @@ struct CostHistogram
         const int id =
             std::floor(((cost - min_v) * num_bins) / (max_v - min_v));
 
-        return std::min(id, num_bins - 1);
+        return std::min(std::max(0, id), num_bins - 1);
     }
 
     __device__ __inline__ void insert(const T value)
     {
         const int id = bin_id(value);
-
+        assert(id >= 0);
         ::atomicAdd(d_bins + id, 1);
     }
 
     __device__ __inline__ int get_bin(T value) const
     {
         int id = bin_id(value);
+        assert(id >= 0);
         return d_bins[id];
+    }
+
+    __device__ __inline__ bool below_threshold(T value, T threshold) const
+    {
+
+        if (get_bin(value) <= threshold) {
+            return true;
+        }
+        std::pair<int, int> bucket = get_bounds(value);
+
+        if (bucket.first <= threshold && bucket.second > threshold) {
+            return true;
+        }
+
+        return false;
     }
 
     __device__ __inline__ std::pair<int, int> get_bounds(T value) const
     {
-        int id       = bin_id(value);
+        int id = bin_id(value);
+        assert(id >= 0);
         int high_val = d_bins[id];
         int low_val  = (id == 0) ? 0 : d_bins[id - 1];
         return {low_val, high_val};

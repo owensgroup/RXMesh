@@ -57,7 +57,7 @@ __global__ static void sec(rxmesh::Context                   context,
 
         T len2 = logf(glm::distance2(p0, p1));
 
-        if (histo.get_bin(len2) <= reduce_threshold) {
+        if (histo.below_threshold(len2, reduce_threshold)) {
             edge_mask.set(eh.local_id(), true);
         }
     });
