@@ -36,6 +36,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     auto coords = rx.get_input_vertex_coordinates();
 
     auto edge_status = rx.add_edge_attribute<EdgeStatus>("EdgeStatus", 1);
+    edge_status->reset(UNSEEN, LOCATION_ALL);
 
     LaunchBox<blockThreads> launch_box;
 
@@ -48,6 +49,10 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
     CostHistogram<float> histo(num_bins);
 
+    RXMESH_INFO("#Vertices {}", rx.get_num_vertices());
+    RXMESH_INFO("#Edges {}", rx.get_num_edges());
+    RXMESH_INFO("#Faces {}", rx.get_num_faces());
+    RXMESH_INFO("#Patches {}", rx.get_num_patches());
 
 #if USE_POLYSCOPE
     rx.render_vertex_patch();
@@ -56,14 +61,17 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     // polyscope::show();
 #endif
 
-    bool validate = false;
+    bool validate = true;
 
     float reduce_ratio = 0.1;
+
+    int num_passes = 0;
 
     CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
     timer.start();
     while (rx.get_num_vertices(true) > final_num_vertices) {
+        ++num_passes;
 
         // compute max-min histogram
         histo.init();
@@ -92,7 +100,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
         // how much we can reduce the number of edge at each iterations
 
         // loop over the mesh, and try to collapse
-        const int num_edges_before = int(rx.get_num_edges());
+        const int num_edges_before = int(rx.get_num_edges(true));
 
         const int reduce_threshold =
             std::max(1, int(reduce_ratio * float(num_edges_before)));
@@ -177,14 +185,16 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
             if (false) {
                 rx.update_host();
-                coords->move(DEVICE, HOST);                
+                coords->move(DEVICE, HOST);
                 rx.update_polyscope();
                 auto ps_mesh = rx.get_polyscope_mesh();
                 ps_mesh->updateVertexPositions(*coords);
-                ps_mesh->setEnabled(false);                
-                // rx.render_vertex_patch();
-                // rx.render_edge_patch();
-                // rx.render_face_patch();
+                edge_status->move(DEVICE, HOST);
+                ps_mesh->addEdgeScalarQuantity("EdgeStatus", *edge_status);
+                ps_mesh->setEnabled(false);
+                rx.render_vertex_patch();
+                rx.render_edge_patch();
+                rx.render_face_patch();
 
                 polyscope::show();
             }
@@ -194,10 +204,18 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     total_time += timer.elapsed_millis();
     CUDA_ERROR(cudaProfilerStop());
 
-    RXMESH_INFO("sec_rxmesh() RXMesh simplification took {} (ms)", total_time);
+    RXMESH_INFO("sec_rxmesh() RXMesh SEC took {} (ms), num_passes= {}",
+                total_time,
+                num_passes);
     RXMESH_INFO("sec_rxmesh() App time {} (ms)", app_time);
     RXMESH_INFO("sec_rxmesh() Slice timer {} (ms)", slice_time);
     RXMESH_INFO("sec_rxmesh() Cleanup timer {} (ms)", cleanup_time);
+
+    RXMESH_INFO("#Vertices {}", rx.get_num_vertices(true));
+    RXMESH_INFO("#Edges {}", rx.get_num_edges(true));
+    RXMESH_INFO("#Faces {}", rx.get_num_faces(true));
+    RXMESH_INFO("#Patches {}", rx.get_num_patches(true));
+
 
     if (!validate) {
         rx.update_host();
