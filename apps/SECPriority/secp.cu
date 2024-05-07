@@ -15,7 +15,7 @@ struct arg
     int         argc;
 } Arg;
 
-//#include "secp_rxmesh.cuh"
+#include "secp_rxmesh.cuh"
 
 TEST(Apps, SECPriority)
 {
@@ -35,7 +35,7 @@ TEST(Apps, SECPriority)
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
-//    secp_rxmesh(rx, Arg.target);
+    secp_rxmesh(rx, Arg.target);
 }
 
 

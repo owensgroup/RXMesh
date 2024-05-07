@@ -3,6 +3,8 @@ add_executable(SECPriority)
 set(SOURCE_LIST
     #main.cu
     secp.cu
+	secp_rxmesh.cuh
+	secp_kernels.cuh
 )
 
 set(COMMON_LIST    
