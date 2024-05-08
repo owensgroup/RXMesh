@@ -14,6 +14,7 @@ using Vec3 = glm::vec<3, T, glm::defaultp>;
 #include "histogram.cuh"
 #include "sec_kernels.cuh"
 
+#include "rxmesh/util/report.h"
 
 inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
                        const uint32_t         final_num_vertices)
@@ -23,6 +24,13 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
+    rxmesh::Report report("ShortestEdgeCollapse_RXMesh");
+    report.command_line(Arg.argc, Arg.argv);
+    report.device();
+    report.system();
+    report.model_data(Arg.obj_file_name + "_before", rx, "model_before");
+    report.add_member("method", std::string("RXMesh"));
+    report.add_member("blockThreads", blockThreads);
 
     auto coords = rx.get_input_vertex_coordinates();
 
@@ -42,6 +50,11 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     RXMESH_INFO("#Edges {}", rx.get_num_edges());
     RXMESH_INFO("#Faces {}", rx.get_num_faces());
     RXMESH_INFO("#Patches {}", rx.get_num_patches());
+
+    size_t   max_smem_bytes_dyn           = 0;
+    size_t   max_smem_bytes_static        = 0;
+    uint32_t max_num_registers_per_thread = 0;
+    uint32_t max_num_blocks               = 0;
 
 #if USE_POLYSCOPE
     rx.render_vertex_patch();
@@ -123,6 +136,16 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
                 });
 
 
+            max_smem_bytes_dyn =
+                std::max(max_smem_bytes_dyn, launch_box.smem_bytes_dyn);
+            max_smem_bytes_static =
+                std::max(max_smem_bytes_static, launch_box.smem_bytes_static);
+            max_num_registers_per_thread =
+                std::max(max_num_registers_per_thread,
+                         launch_box.num_registers_per_thread);
+            max_num_blocks =
+                std::max(max_num_blocks, DIVIDE_UP(launch_box.blocks, 8));
+
             GPUTimer app_timer;
             app_timer.start();
             sec<float, blockThreads><<<DIVIDE_UP(launch_box.blocks, 8),
@@ -155,38 +178,6 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
             slice_time += slice_timer.elapsed_millis();
             cleanup_time += cleanup_timer.elapsed_millis();
             cleanup_time += cleanup_timer2.elapsed_millis();
-
-
-            if (validate) {
-                rx.update_host();
-                EXPECT_TRUE(rx.validate());
-            }
-        }
-
-        if (false) {
-
-            RXMESH_INFO("#Vertices {}", rx.get_num_vertices(true));
-            RXMESH_INFO("#Edges {}", rx.get_num_edges(true));
-            RXMESH_INFO("#Faces {}", rx.get_num_faces(true));
-            RXMESH_INFO("#Patches {}", rx.get_num_patches(true));
-            RXMESH_INFO("request reduction = {}, achieved reduction= {}",
-                        reduce_threshold,
-                        num_edges_before - int(rx.get_num_edges(true)));
-#if USE_POLYSCOPE
-            if (false) {
-                rx.update_host();
-                coords->move(DEVICE, HOST);
-                rx.update_polyscope();
-                auto ps_mesh = rx.get_polyscope_mesh();
-                ps_mesh->updateVertexPositions(*coords);
-                ps_mesh->setEnabled(false);
-                rx.render_vertex_patch();
-                rx.render_edge_patch();
-                rx.render_face_patch();
-
-                polyscope::show();
-            }
-#endif
         }
     }
     timer.stop();
@@ -207,10 +198,23 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     RXMESH_INFO("#Patches {}", rx.get_num_patches(true));
 
 
-    if (!validate) {
-        rx.update_host();
-    }
+    rx.update_host();
+
     coords->move(DEVICE, HOST);
+
+    report.add_member("num_passes", num_passes);
+    report.add_member("max_smem_bytes_dyn", max_smem_bytes_dyn);
+    report.add_member("max_smem_bytes_static", max_smem_bytes_static);
+    report.add_member("max_num_registers_per_thread",
+                      max_num_registers_per_thread);
+    report.add_member("max_num_blocks", max_num_blocks);
+    report.add_member("secs_remesh_time", total_time);
+    report.add_member("histogram_time", histo_time);
+    report.add_member("app_time", app_time);
+    report.add_member("slice_time", slice_time);
+    report.add_member("cleanup_time", cleanup_time);
+    report.add_member("attributes_memory_mg", coords->get_memory_mg());
+    report.model_data(Arg.obj_file_name + "_after", rx, "model_after");
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
@@ -226,4 +230,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 #endif
 
     histo.free();
+
+    report.write(Arg.output_folder + "/rxmesh_sec",
+                 "SEC_RXMesh_" + extract_file_name(Arg.obj_file_name));
 }
