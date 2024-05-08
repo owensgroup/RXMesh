@@ -596,16 +596,16 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     auto edge_status = rx.add_edge_attribute<EdgeStatus>("EdgeStatus", 1);
 
     auto new_position = rx.add_vertex_attribute<float>("NewPosition", 3);
-    new_position->reset(0, LOCALE_ALL);
+    new_position->reset(0, LOCATION_ALL);
 
     auto vertex_rank = rx.add_vertex_attribute<int8_t>("vRank", 1);
-    vertex_rank->reset(0, LOCALE_ALL);
+    vertex_rank->reset(0, LOCATION_ALL);
 
     auto is_vertex_bd = rx.add_vertex_attribute<int8_t>("vBoundary", 1);
-    is_vertex_bd->reset(0, LOCALE_ALL);
+    is_vertex_bd->reset(0, LOCATION_ALL);
 
     auto is_edge_bd = rx.add_edge_attribute<int8_t>("eBoundary", 1);
-    is_edge_bd->reset(0, LOCALE_ALL);
+    is_edge_bd->reset(0, LOCATION_ALL);
 
     LaunchBox<blockThreads> launch_box;
 

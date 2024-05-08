@@ -172,7 +172,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
             RXMESH_INFO("request reduction = {}, achieved reduction= {}",
                         reduce_threshold,
                         num_edges_before - int(rx.get_num_edges(true)));
-
+#if USE_POLYSCOPE
             if (false) {
                 rx.update_host();
                 coords->move(DEVICE, HOST);
@@ -186,6 +186,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
                 polyscope::show();
             }
+#endif
         }
     }
     timer.stop();

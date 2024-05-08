@@ -14,6 +14,8 @@ using Vec3 = glm::vec<3, T, glm::defaultp>;
 
 #include "primitives.cuh"
 
+#include "link_condition.cuh"
+
 
 template <typename T, uint32_t blockThreads>
 __global__ static void __launch_bounds__(blockThreads)
