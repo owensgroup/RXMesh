@@ -10,6 +10,8 @@
 #include "rxmesh/rxmesh_dynamic.h"
 #include "simulation.h"
 
+#include "rxmesh/util/report.h"
+
 template <typename T>
 using Vec3 = glm::vec<3, T, glm::defaultp>;
 
@@ -31,6 +33,10 @@ int* d_buffer;
 #include "splitter.cuh"
 #include "tracking_kernels.cuh"
 
+float split_time_ms, collapse_time_ms, flip_time_ms, smoothing_time_ms,
+    advect_time_ms;
+
+int total_num_iter;
 
 template <typename T>
 void update_polyscope(rxmesh::RXMeshDynamic&      rx,
@@ -148,8 +154,10 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
         prv_remaining_work = remaining_work;
     }
     app_timer.stop();
-    RXMESH_INFO("Splitter (long edges) time {} (ms)",
+    RXMESH_INFO("Step {} Splitter (long edges) time {} (ms)",
+                total_num_iter,
                 app_timer.elapsed_millis());
+    split_time_ms += app_timer.elapsed_millis();
 
     //=== large angle pass
     app_timer.start();
@@ -203,8 +211,10 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
         prv_remaining_work = remaining_work;
     }
     app_timer.stop();
-    RXMESH_INFO("Splitter (large angles) time {} (ms)",
+    RXMESH_INFO("Step {} Splitter (large angles) time {} (ms)",
+                total_num_iter,
                 app_timer.elapsed_millis());
+    split_time_ms += app_timer.elapsed_millis();
 }
 
 template <typename T>
@@ -246,8 +256,11 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
     app_timer.start();
     classify_vertices(rx, position, is_vertex_bd, vertex_rank);
     app_timer.stop();
-    RXMESH_INFO("Flipper Classify Vertices time {} (ms)",
+    RXMESH_INFO("Step{} Flipper Classify Vertices time {} (ms)",
+                total_num_iter,
                 app_timer.elapsed_millis());
+
+    flip_time_ms += app_timer.elapsed_millis();
 
     constexpr uint32_t blockThreads = 512;
 
@@ -313,7 +326,10 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
         prv_remaining_work = remaining_work;
     }
     app_timer.stop();
-    RXMESH_INFO("Flipper time {} (ms)", app_timer.elapsed_millis());
+    RXMESH_INFO("Step {} Flipper time {} (ms)",
+                total_num_iter,
+                app_timer.elapsed_millis());
+    flip_time_ms += app_timer.elapsed_millis();
 }
 
 
@@ -331,8 +347,11 @@ void collapser(rxmesh::RXMeshDynamic&             rx,
     app_timer.start();
     classify_vertices(rx, position, is_vertex_bd, vertex_rank);
     app_timer.stop();
-    RXMESH_INFO("Collapser Classify Vertices time {} (ms)",
+    RXMESH_INFO("Step {} Collapser Classify Vertices time {} (ms)",
+                total_num_iter,
                 app_timer.elapsed_millis());
+
+    collapse_time_ms += app_timer.elapsed_millis();
 
     constexpr uint32_t blockThreads = 512;
 
@@ -393,7 +412,10 @@ void collapser(rxmesh::RXMeshDynamic&             rx,
         prv_remaining_work = remaining_work;
     }
     app_timer.stop();
-    RXMESH_INFO("Collapser time {} (ms)", app_timer.elapsed_millis());
+    RXMESH_INFO("Step {} Collapser time {} (ms)",
+                total_num_iter,
+                app_timer.elapsed_millis());
+    collapse_time_ms += app_timer.elapsed_millis();
 }
 
 
@@ -421,7 +443,10 @@ void smoother(rxmesh::RXMeshDynamic&                 rx,
                                                 launch_box.smem_bytes_dyn>>>(
         rx.get_context(), *is_vertex_bd, *current_position, *new_position);
     app_timer.stop();
-    RXMESH_INFO("Smoother time {} (ms)", app_timer.elapsed_millis());
+    RXMESH_INFO("Step {} Smoother time {} (ms)",
+                total_num_iter,
+                app_timer.elapsed_millis());
+    smoothing_time_ms += app_timer.elapsed_millis();
 }
 
 
@@ -476,7 +501,7 @@ void advance_sim(T                                  sim_dt,
 
     while ((accum_dt < 0.99 * sim_dt) &&
            (sim.m_curr_t + accum_dt < sim.m_max_t)) {
-
+        total_num_iter++;
         GPUTimer timer;
         timer.start();
 
@@ -494,16 +519,20 @@ void advance_sim(T                                  sim_dt,
         curr_dt   = std::min(curr_dt, sim.m_max_t - sim.m_curr_t - accum_dt);
 
         // move the mesh (update current_position)
+        GPUTimer advect_timer;
+        advect_timer.start();
         curl_noise_predicate_new_position(
             rx, noise, *current_position, sim.m_curr_t + accum_dt, curr_dt);
         accum_dt += curr_dt;
-
+        advect_timer.stop();
+        advect_time_ms += advect_timer.elapsed_millis();
         // CUDA_ERROR(cudaDeviceSynchronize());
 
         // update polyscope
         // update_polyscope(rx, *current_position, *new_position);
         timer.stop();
-        RXMESH_INFO("** Step time {} (ms)", timer.elapsed_millis());
+        RXMESH_INFO(
+            "** Step {} time {} (ms)", total_num_iter, timer.elapsed_millis());
     }
 
     sim.m_curr_t += accum_dt;
@@ -589,7 +618,24 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     EXPECT_TRUE(rx.validate());
 
     using namespace rxmesh;
-    constexpr uint32_t blockThreads = 256;
+
+    rxmesh::Report report("Tracking_RXMesh");
+    report.command_line(Arg.argc, Arg.argv);
+    report.device();
+    report.system();
+    report.model_data(Arg.plane_name + "_before", rx, "model_before");
+    report.add_member("method", std::string("RXMesh"));
+
+    report.add_member("n", Arg.n);
+    report.add_member("frame_dt", Arg.frame_dt);
+    report.add_member("sim_dt", Arg.sim_dt);
+    report.add_member("end_sim_t", Arg.end_sim_t);
+    report.add_member("max_volume_change", Arg.max_volume_change);
+    report.add_member("min_edge_length", Arg.min_edge_length);
+    report.add_member("max_edge_length", Arg.max_edge_length);
+    report.add_member("min_triangle_area", Arg.min_triangle_area);
+    report.add_member("min_triangle_angle", Arg.min_triangle_angle);
+    report.add_member("max_triangle_angle", Arg.max_triangle_angle);
 
     auto current_position = rx.get_input_vertex_coordinates();
 
@@ -607,7 +653,6 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     auto is_edge_bd = rx.add_edge_attribute<int8_t>("eBoundary", 1);
     is_edge_bd->reset(0, LOCATION_ALL);
 
-    LaunchBox<blockThreads> launch_box;
 
     FrameStepper<float> frame_stepper(Arg.frame_dt);
 
@@ -616,11 +661,6 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     FlowNoise3<float> noise;
 
     CUDA_ERROR(cudaMallocManaged((void**)&d_buffer, sizeof(int)));
-
-    float total_time   = 0;
-    float app_time     = 0;
-    float slice_time   = 0;
-    float cleanup_time = 0;
 
 
     // compute avergae edge length
@@ -645,6 +685,13 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     // polyscope::show();
 #endif
 
+    split_time_ms     = 0;
+    collapse_time_ms  = 0;
+    flip_time_ms      = 0;
+    smoothing_time_ms = 0;
+    advect_time_ms    = 0;
+    total_num_iter    = 0;
+
     CUDA_ERROR(cudaProfilerStart());
     GPUTimer timer;
     timer.start();
@@ -661,13 +708,30 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
                    is_edge_bd.get());
 
     timer.stop();
-    total_time += timer.elapsed_millis();
+
     CUDA_ERROR(cudaProfilerStop());
 
     RXMESH_INFO("tracking_rxmesh() RXMesh surface tracking took {} (ms)",
-                total_time);
+                timer.elapsed_millis());
+
+    rx.update_host();
+
+    report.add_member("total_tracking_time", timer.elapsed_millis());
+    report.add_member("total_num_iter", total_num_iter);
+    report.add_member("time_per_iter",
+                      float(timer.elapsed_millis()) / float(total_num_iter));
+    report.model_data(Arg.plane_name + "_after", rx, "model_after");
+
+    report.add_member(
+        "attributes_memory_mg",
+        current_position->get_memory_mg() + edge_status->get_memory_mg() +
+            new_position->get_memory_mg() + vertex_rank->get_memory_mg() +
+            is_vertex_bd->get_memory_mg() + is_edge_bd->get_memory_mg());
 
     update_polyscope(rx, *current_position, *new_position);
+
+    report.write(Arg.output_folder + "/rxmesh_tracking",
+                 "Tracking_RXMesh_" + extract_file_name(Arg.plane_name));
 
     noise.free();
 }

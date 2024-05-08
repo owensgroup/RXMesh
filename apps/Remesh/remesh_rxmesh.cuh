@@ -20,8 +20,6 @@ enum : EdgeStatus
 
 #include "remesh_kernels.cuh"
 
-rxmesh::Report report("Remesh_RXMesh");
-
 float split_time_ms, collapse_time_ms, flip_time_ms, smoothing_time_ms;
 
 struct Stats
@@ -689,6 +687,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
+    rxmesh::Report report("Remesh_RXMesh");
     report.command_line(Arg.argc, Arg.argv);
     report.device();
     report.system();
