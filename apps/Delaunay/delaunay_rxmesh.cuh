@@ -3,7 +3,7 @@
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
-
+#include "rxmesh/util/report.h"
 
 #include "../common/openmesh_trimesh.h"
 
@@ -251,6 +251,15 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
+    // Report
+    Report report("Delaunay_RXMesh");
+    report.command_line(Arg.argc, Arg.argv);
+    report.device();
+    report.system();
+    report.model_data(Arg.obj_file_name + "_before", rx, "model_before");
+    report.add_member("method", std::string("RXMesh"));
+    report.add_member("blockThreads", blockThreads);
+
     const uint32_t num_vertices = rx.get_num_vertices();
     const uint32_t num_edges    = rx.get_num_edges();
     const uint32_t num_faces    = rx.get_num_faces();
@@ -262,7 +271,13 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     // polyscope::show();
 #endif
 
-    mcf_rxmesh_cg<float>(rx, false);
+    MCFData mcf_data_before = mcf_rxmesh_cg<float>(rx, false);
+    report.add_member("mcf_before_time", mcf_data_before.total_time);
+    report.add_member("mcf_before_num_iter", mcf_data_before.num_iter);
+    report.add_member("mcf_before_matvec_time", mcf_data_before.matvec_time);
+    report.add_member(
+        "mcf_before_time_per_iter",
+        mcf_data_before.total_time / float(mcf_data_before.num_iter));
 
     auto coords = rx.get_input_vertex_coordinates();
 
@@ -292,14 +307,16 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 
     CUDA_ERROR(cudaProfilerStart());
 
+    size_t   max_smem_bytes_dyn           = 0;
+    size_t   max_smem_bytes_static        = 0;
+    uint32_t max_num_registers_per_thread = 0;
+    uint32_t max_num_blocks               = 0;
+
     GPUTimer timer;
     timer.start();
 
-    bool validate = false;
     while (h_flipped != 0) {
         CUDA_ERROR(cudaMemset(d_flipped, 0, sizeof(int)));
-        // CUDA_ERROR(cudaMemset(d_num_successful, 0, sizeof(uint32_t)));
-        // CUDA_ERROR(cudaMemset(d_num_sliced, 0, sizeof(uint32_t)));
 
         h_flipped = 0;
         rx.reset_scheduler();
@@ -320,6 +337,15 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
                            2 * ShmemAllocator::default_alignment;
                 });
 
+            max_smem_bytes_dyn =
+                std::max(max_smem_bytes_dyn, launch_box.smem_bytes_dyn);
+            max_smem_bytes_static =
+                std::max(max_smem_bytes_static, launch_box.smem_bytes_static);
+            max_num_registers_per_thread =
+                std::max(max_num_registers_per_thread,
+                         launch_box.num_registers_per_thread);
+            max_num_blocks =
+                std::max(max_num_blocks, DIVIDE_UP(launch_box.blocks, 8));
 
             GPUTimer app_timer;
             app_timer.start();
@@ -346,15 +372,6 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
             app_time += app_timer.elapsed_millis();
             slice_time += slice_timer.elapsed_millis();
             cleanup_time += cleanup_timer.elapsed_millis();
-
-            if (validate) {
-                rx.update_host();
-                EXPECT_TRUE(rx.validate());
-
-                EXPECT_EQ(num_vertices, rx.get_num_vertices());
-                EXPECT_EQ(num_edges, rx.get_num_edges());
-                EXPECT_EQ(num_faces, rx.get_num_faces());
-            }
 
             // uint32_t h_num_successful, h_num_sliced;
             // CUDA_ERROR(cudaMemcpy(&h_num_successful,
@@ -392,9 +409,23 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     RXMESH_INFO("delaunay_rxmesh() Slice timer {} (ms)", slice_time);
     RXMESH_INFO("delaunay_rxmesh() Cleanup timer {} (ms)", cleanup_time);
 
-    if (!validate) {
-        rx.update_host();
-    }
+
+    rx.update_host();
+
+    report.add_member("delaunay_edge_flip_time", total_time);
+    report.add_member("delaunay_edge_flip_app_time", app_time);
+    report.add_member("delaunay_edge_flip_slice_time", slice_time);
+    report.add_member("delaunay_edge_flip_cleanup_time", cleanup_time);
+
+    report.add_member("max_smem_bytes_dyn", max_smem_bytes_dyn);
+    report.add_member("max_smem_bytes_static", max_smem_bytes_static);
+    report.add_member("max_num_registers_per_thread",
+                      max_num_registers_per_thread);
+    report.add_member("max_num_blocks", max_num_blocks);
+
+
+    report.model_data(Arg.obj_file_name + "_after", rx, "model_after");
+
     coords->move(DEVICE, HOST);
 
     EXPECT_EQ(num_vertices, rx.get_num_vertices());
@@ -411,7 +442,9 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
         TriMesh tri_mesh;
         ASSERT_TRUE(OpenMesh::IO::read_mesh(tri_mesh,
                                             STRINGIFY(OUTPUT_DIR) "temp.obj"));
-        EXPECT_EQ(count_non_delaunay_edges(tri_mesh), 0);
+        int num_non_del = count_non_delaunay_edges(tri_mesh);
+        EXPECT_EQ(num_non_del, 0);
+        report.add_member("after_num_non_delaunay_edges", num_non_del);
     }
 
 #if USE_POLYSCOPE
@@ -420,8 +453,14 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     rx.get_polyscope_mesh()->setEnabled(false);
 #endif
 
-    mcf_rxmesh_cg<float>(rx, true);
-    
+    MCFData mcf_data_after = mcf_rxmesh_cg<float>(rx, true);
+    report.add_member("mcf_after_time", mcf_data_after.total_time);
+    report.add_member("mcf_after_num_iter", mcf_data_after.num_iter);
+    report.add_member("mcf_after_matvec_time", mcf_data_after.matvec_time);
+    report.add_member(
+        "mcf_after_time_per_iter",
+        mcf_data_after.total_time / float(mcf_data_after.num_iter));
+
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
@@ -436,4 +475,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     CUDA_ERROR(cudaFree(d_flipped));
     CUDA_ERROR(cudaFree(d_num_successful));
     CUDA_ERROR(cudaFree(d_num_sliced));
+
+    report.write(Arg.output_folder + "/rxmesh_delaunay",
+                 "Delaunay_RXMesh_" + extract_file_name(Arg.obj_file_name));
 }

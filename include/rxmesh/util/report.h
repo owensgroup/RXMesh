@@ -283,7 +283,9 @@ struct Report
     }
 
     // get model data from RXMesh
-    void model_data(const std::string& model_name, const rxmesh::RXMesh& rxmesh)
+    void model_data(const std::string&    model_name,
+                    const rxmesh::RXMesh& rxmesh,
+                    const std::string     json_member_name = "Model")
     {
         rapidjson::Document subdoc(&m_doc.GetAllocator());
         subdoc.SetObject();
@@ -314,7 +316,9 @@ struct Report
         add_member(
             "per_patch_max_faces", rxmesh.get_per_patch_max_faces(), subdoc);
         add_member("ribbon_overhead (%)", rxmesh.get_ribbon_overhead(), subdoc);
-        m_doc.AddMember("Model", subdoc, m_doc.GetAllocator());
+
+        rapidjson::Value key(json_member_name.c_str(), subdoc.GetAllocator());
+        m_doc.AddMember(key, subdoc, m_doc.GetAllocator());
     }
 
     // add test using TestData
@@ -388,6 +392,14 @@ struct Report
         rapidjson::Value key(member_key.c_str(), doc.GetAllocator());
         doc.AddMember(
             key, rapidjson::Value().SetUint(member_val), doc.GetAllocator());
+    }
+
+    template <typename docT>
+    void add_member(std::string member_key, const size_t member_val, docT& doc)
+    {
+        rapidjson::Value key(member_key.c_str(), doc.GetAllocator());
+        doc.AddMember(
+            key, rapidjson::Value().SetUint64(member_val), doc.GetAllocator());
     }
 
     template <typename docT>
