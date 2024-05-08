@@ -437,6 +437,8 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     RXMESH_INFO("Output mesh #Faces {}", rx.get_num_faces());
     RXMESH_INFO("Output mesh #Patches {}", rx.get_num_patches());
 
+    report.add_member("attributes_memory_mg", coords->get_memory_mg());
+
     if (with_verify) {
         rx.export_obj(STRINGIFY(OUTPUT_DIR) "temp.obj", *coords);
         TriMesh tri_mesh;

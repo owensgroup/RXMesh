@@ -36,6 +36,8 @@ constexpr int MAX_OVERLAP_CAVITIES = 4;
 #define INVALID4 0xFu
 
 
+#define BYTES_TO_MEGABYTES(bytes) (double(bytes) / double(1024.0 * 1024.0))
+
 // http://www.decompile.com/cpp/faq/file_and_line_error_string.htm
 #define STRINGIFY(x) TOSTRING(x)
 #define TOSTRING(x) #x

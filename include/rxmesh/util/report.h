@@ -284,38 +284,37 @@ struct Report
 
     // get model data from RXMesh
     void model_data(const std::string&    model_name,
-                    const rxmesh::RXMesh& rxmesh,
+                    const rxmesh::RXMesh& rx,
                     const std::string     json_member_name = "Model")
     {
         rapidjson::Document subdoc(&m_doc.GetAllocator());
         subdoc.SetObject();
 
         add_member("model_name", model_name, subdoc);
-        add_member("num_vertices", rxmesh.get_num_vertices(), subdoc);
-        add_member("num_edges", rxmesh.get_num_edges(), subdoc);
-        add_member("num_faces", rxmesh.get_num_faces(), subdoc);
-        add_member("max_valence", rxmesh.get_input_max_valence(), subdoc);
-        add_member("is_edge_manifold", rxmesh.is_edge_manifold(), subdoc);
-        add_member("is_closed", rxmesh.is_closed(), subdoc);
-        add_member("patch_size", rxmesh.get_patch_size(), subdoc);
-        add_member("num_patches", rxmesh.get_num_patches(), subdoc);
-        add_member("num_components", rxmesh.get_num_components(), subdoc);
-        add_member("num_lloyd_run", rxmesh.get_num_lloyd_run(), subdoc);
-        add_member("patching_time", rxmesh.get_patching_time(), subdoc);
+        add_member("num_vertices", rx.get_num_vertices(), subdoc);
+        add_member("num_edges", rx.get_num_edges(), subdoc);
+        add_member("num_faces", rx.get_num_faces(), subdoc);
+        add_member("max_valence", rx.get_input_max_valence(), subdoc);
+        add_member("is_edge_manifold", rx.is_edge_manifold(), subdoc);
+        add_member("is_closed", rx.is_closed(), subdoc);
+        add_member("patch_size", rx.get_patch_size(), subdoc);
+        add_member("num_patches", rx.get_num_patches(), subdoc);
+        add_member("num_components", rx.get_num_components(), subdoc);
+        add_member("num_lloyd_run", rx.get_num_lloyd_run(), subdoc);
+        add_member("patching_time", rx.get_patching_time(), subdoc);
         uint32_t min_patch_size(0), max_patch_size(0), avg_patch_size(0);
-        rxmesh.get_max_min_avg_patch_size(
+        rx.get_max_min_avg_patch_size(
             min_patch_size, max_patch_size, avg_patch_size);
         add_member("min_patch_size", min_patch_size, subdoc);
         add_member("max_patch_size", max_patch_size, subdoc);
         add_member("avg_patch_size", avg_patch_size, subdoc);
-        add_member("per_patch_max_vertices",
-                   rxmesh.get_per_patch_max_vertices(),
-                   subdoc);
         add_member(
-            "per_patch_max_edges", rxmesh.get_per_patch_max_edges(), subdoc);
-        add_member(
-            "per_patch_max_faces", rxmesh.get_per_patch_max_faces(), subdoc);
-        add_member("ribbon_overhead (%)", rxmesh.get_ribbon_overhead(), subdoc);
+            "per_patch_max_vertices", rx.get_per_patch_max_vertices(), subdoc);
+        add_member("per_patch_max_edges", rx.get_per_patch_max_edges(), subdoc);
+        add_member("per_patch_max_faces", rx.get_per_patch_max_faces(), subdoc);
+        add_member("ribbon_overhead (%)", rx.get_ribbon_overhead(), subdoc);
+
+        add_member("topology_memory_mg", rx.get_topology_memory_mg(), subdoc);
 
         rapidjson::Value key(json_member_name.c_str(), subdoc.GetAllocator());
         m_doc.AddMember(key, subdoc, m_doc.GetAllocator());
