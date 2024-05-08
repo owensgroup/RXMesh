@@ -291,3 +291,38 @@ __global__ static void  compute_edge_priorities(
     char * pq_shrd_mem = shrd_alloc.alloc(pq_num_bytes);
     pq_view.push(block, intermediatePairs, intermediatePairs + pair_counter, pq_shrd_mem);
 }
+
+template <uint32_t blockThreads>
+__global__ static void pop_and_mark_edges_to_collapse(
+    PQView_t pq_view,
+    rxmesh::EdgeAttribute<bool> marked_edges,
+    uint32_t pop_num_edges)
+{
+    // setup shared memory array to store the popped pairs
+    // 
+    // device api pop pairs
+    namespace cg = cooperative_groups;
+    using namespace rxmesh;
+    ShmemAllocator      shrd_alloc;
+
+    auto intermediatePairs = shrd_alloc.alloc<PriorityPair_t>(blockThreads);
+    char * pq_shrd_mem = shrd_alloc.alloc(pq_view.get_shmem_size(blockThreads));
+    cg::thread_block g = cg::this_thread_block();
+    pq_view.pop(g, intermediatePairs, intermediatePairs + blockThreads, pq_shrd_mem);
+
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int local_tid = threadIdx.x;
+
+    // Make sure the index is within bounds
+    if(tid < pop_num_edges)
+    {
+        //printf("tid: %d\n", tid);
+        // unpack the uid to get the patch and edge ids
+        auto p_e = unpack32(intermediatePairs[local_tid].second);
+        //printf("32bit p_id:%hu\te_id:%hu\n", p_e.first, p_e.second);
+        rxmesh::EdgeHandle eh(p_e.first, rxmesh::LocalEdgeT(p_e.second));
+
+        //use the eh to index into a passed in edge attribute
+        marked_edges(eh) = true;
+    }
+}

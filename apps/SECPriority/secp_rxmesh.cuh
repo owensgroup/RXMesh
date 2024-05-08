@@ -84,8 +84,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
     EXPECT_TRUE(rx.validate());
 
     using namespace rxmesh;
-    constexpr uint32_t blockThreads = 32;
-
+    constexpr uint32_t blockThreads = 256;
 
     auto coords = rx.get_input_vertex_coordinates();
 
@@ -103,6 +102,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
     PriorityQueue_t pq(rx.get_num_edges());
 
     auto e_attr = rx.add_edge_attribute<float>("eMark", 1);
+    auto e_pop_attr = rx.add_edge_attribute<bool>("ePop", false);
 
 
 #if USE_POLYSCOPE
@@ -155,21 +155,30 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
     // next kernel needs to pop some percentage of the top
     // elements in the priority queue and store popped elements
     // to be used by the next kernel that actually does the collapses
-    //
-    // mark some sort of
-    // associated edge attribute
 
-    // now pop all the elements to ouput on host
-    //
-    thrust::device_vector<PriorityPair_t> d_popped(rx.get_num_edges());
-    pq.pop(d_popped.begin(), d_popped.end());
+    float reduce_ratio = 0.1f;
+
+    // Mark the edge attributes to be flipped
+    uint32_t pop_num_edges = reduce_ratio * rx.get_num_edges();
+    RXMESH_TRACE("pop_num_edges: {}", pop_num_edges);
+
+    constexpr uint32_t threads_per_block = 1024;
+    uint32_t number_of_blocks = (pop_num_edges + threads_per_block - 1) / threads_per_block;
+    int shared_mem_bytes = pq.get_shmem_size(threads_per_block) +
+                           (threads_per_block * sizeof(PriorityPair_t));
+    RXMESH_TRACE("threads_per_block: {}", threads_per_block);
+    RXMESH_TRACE("number_of_blocks: {}", number_of_blocks);
+    RXMESH_TRACE("shared_mem_bytes: {}", shared_mem_bytes);
+
+    pop_and_mark_edges_to_collapse<threads_per_block>
+        <<<number_of_blocks, threads_per_block, shared_mem_bytes>>>
+            (pq.get_mutable_device_view(),
+             *e_pop_attr,
+             pop_num_edges);
+
     cudaDeviceSynchronize();
-    const thrust::host_vector<PriorityPair_t> h_popped(d_popped);
-   // for(size_t i = 0; i < h_popped.size(); i++)
-   // {
-   //     std::cout << i << "\t" << h_popped[i].first
-   //         << "\t" << h_popped[i].second << "\n";
-   // }
+    RXMESH_TRACE("Made it past cudaDeviceSynchronize()");
+    
     return;
         // compute max-min histogram
         //histo.init();
