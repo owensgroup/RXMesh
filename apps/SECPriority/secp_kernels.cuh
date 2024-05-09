@@ -9,7 +9,6 @@ template <typename T, uint32_t blockThreads>
 __global__ static void secp(rxmesh::Context                   context,
                             rxmesh::VertexAttribute<T>        coords,
                             const int                         reduce_threshold,
-                            rxmesh::EdgeAttribute<EdgeStatus> edge_status,
                             rxmesh::EdgeAttribute<bool>       e_pop_attr)
 {
     using namespace rxmesh;
@@ -45,11 +44,7 @@ __global__ static void secp(rxmesh::Context                   context,
     for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
         assert(eh.local_id() < cavity.patch_info().num_edges[0]);
 
-        if (edge_status(eh) != UNSEEN) 
-        {
-            return;
-        }
-
+        //edge_mask.set(eh.local_id(), e_pop_attr(eh));
         if(true == e_pop_attr(eh))
         {
            edge_mask.set(eh.local_id(), true);
@@ -67,15 +62,14 @@ __global__ static void secp(rxmesh::Context                   context,
         assert(eh.local_id() < cavity.patch_info().num_edges[0]);
         if (edge_mask(eh.local_id())) {
             cavity.create(eh);
-        } else {
-            edge_status(eh) = OKAY;
-        }
+        } 
     });
     block.sync();
 
     ev_query.epilogue(block, shrd_alloc);
 
-    if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
+    // create the cavity
+    if (cavity.prologue(block, shrd_alloc, coords)) {
         edge_mask.reset(block);
         block.sync();
 
@@ -140,14 +134,6 @@ __global__ static void secp(rxmesh::Context                   context,
 
     cavity.epilogue(block);
     block.sync();
-
-    if (cavity.is_successful()) {
-        for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
-            if (edge_mask(eh.local_id())) {
-                edge_status(eh) = ADDED;
-            }
-        });
-    }
 }
 
 //template <typename View, typename InputIt>

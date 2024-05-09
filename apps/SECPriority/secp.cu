@@ -3,8 +3,6 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
 
-#include "rxmesh/rxmesh_dynamic.h"
-
 #include <filesystem>
 
 struct arg
@@ -38,6 +36,8 @@ TEST(Apps, SECPriority)
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
+    ASSERT_TRUE(rx.is_closed());
+
     uint32_t final_num_vertices = Arg.target * rx.get_num_vertices();
 
     secp_rxmesh(rx, final_num_vertices);
@@ -62,7 +62,7 @@ int main(int argc, char** argv)
                         " -input:      Input file. Input file should be under the input/ subdirectory\n"
                         "              Default is {} \n"
                         "              Hint: Only accept OBJ files\n"
-                        " -target:     The final/target number of faces in the output mesh\n"
+                        " -target:     The fraction of output #vertices from the input\n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -device_id:  GPU device ID. Default is {}",
             Arg.obj_file_name, Arg.output_folder, Arg.device_id);
@@ -83,7 +83,7 @@ int main(int argc, char** argv)
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
         }
         if (cmd_option_exists(argv, argc + argv, "-target")) {
-            Arg.target = false;
+            Arg.target = atof(get_cmd_option(argv, argv + argc, "-target"));
         }
     }
 
