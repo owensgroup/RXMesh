@@ -5,11 +5,13 @@
 
 #include "rxmesh/rxmesh_dynamic.h"
 
+#include <filesystem>
+
 struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "dragon.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    target        = 0;
+    float       target        = 0.1;
     uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
@@ -24,18 +26,21 @@ TEST(Apps, SECPriority)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshDynamic rx(Arg.obj_file_name);
-    rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
-           "_patches");
+    // RXMeshDynamic rx(Arg.obj_file_name);
 
-    // RXMeshDynamic rx(Arg.obj_file_name,
-    //                  STRINGIFY(OUTPUT_DIR) +
-    //                      extract_file_name(Arg.obj_file_name) + "_patches",
-    //                  true);
+    const std::string p_file = STRINGIFY(OUTPUT_DIR) +
+                               extract_file_name(Arg.obj_file_name) +
+                               "_patches";
+    RXMeshDynamic rx(Arg.obj_file_name, p_file);
+    if (!std::filesystem::exists(p_file)) {
+        rx.save(p_file);
+    }
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
-    secp_rxmesh(rx, Arg.target);
+    uint32_t final_num_vertices = Arg.target * rx.get_num_vertices();
+
+    secp_rxmesh(rx, final_num_vertices);
 }
 
 

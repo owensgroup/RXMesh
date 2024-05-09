@@ -79,18 +79,23 @@ enum : EdgeStatus
 
 
 inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
-                       const uint32_t         final_num_faces)
+                       const uint32_t         final_num_vertices)
 {
     EXPECT_TRUE(rx.validate());
 
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
     auto coords = rx.get_input_vertex_coordinates();
+    auto edge_status = rx.add_edge_attribute<EdgeStatus>("EdgeStatus", 1);
     LaunchBox<blockThreads> launch_box;
 
-    PriorityQueue_t pq(rx.get_num_edges());
+    float total_time   = 0;
+    float app_time     = 0;
+    float slice_time   = 0;
+    float cleanup_time = 0;
 
-    auto e_pop_attr = rx.add_edge_attribute<bool>("ePop", false);
+
+    auto e_pop_attr = rx.add_edge_attribute<bool>("ePop", 1);
 
 #if USE_POLYSCOPE
     rx.render_vertex_patch();
@@ -99,54 +104,189 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
     // polyscope::show();
 #endif
 
-    rx.prepare_launch_box({Op::EV},
-                          launch_box,
-                          (void*)compute_edge_priorities<float, blockThreads>,
-                          false,
-                          false,
-                          false,
-                          false,
-                          [&](uint32_t v, uint32_t e, uint32_t f){
-                            // Allocate enough additional memory
-                            // for the priority queue and the intermediate
-                            // array of PriorityPait_t.
-                            return pq.get_shmem_size(blockThreads) + (e*sizeof(PriorityPair_t));
-                          });
+    bool validate = false;
 
-    compute_edge_priorities<float, blockThreads>
-        <<<launch_box.blocks,
-           launch_box.num_threads,
-           launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords, pq.get_mutable_device_view(), pq.get_shmem_size(blockThreads));
+    CUDA_ERROR(cudaProfilerStart());
+    GPUTimer timer;
+    timer.start();
+    while(rx.get_num_vertices(true) > final_num_vertices)
+    {
+        // rebuild every round?
+        PriorityQueue_t pq(rx.get_num_edges());
+        e_pop_attr->reset(DEVICE, false);
 
-    cudaDeviceSynchronize();
-    RXMESH_TRACE("launch_box.smem_bytes_dyn = {}", launch_box.smem_bytes_dyn);
-    RXMESH_TRACE("pq.get_shmem_size = {}", pq.get_shmem_size(blockThreads));
+        //rx.prepare_launch_box(
+        rx.update_launch_box(
+            {Op::EV},
+            launch_box,
+            (void*)compute_edge_priorities<float, blockThreads>,
+            false, false, false, false,
+            [&](uint32_t v, uint32_t e, uint32_t f){
+              // Allocate enough additional memory
+              // for the priority queue and the intermediate
+              // array of PriorityPair_t.
+              return pq.get_shmem_size(blockThreads) + (e*sizeof(PriorityPair_t));
+            }
+        );
 
-    // next kernel needs to pop some percentage of the top
-    // elements in the priority queue and store popped elements
-    // to be used by the next kernel that actually does the collapses
+        compute_edge_priorities<float, blockThreads>
+            <<<launch_box.blocks,
+               launch_box.num_threads,
+               launch_box.smem_bytes_dyn>>>( rx.get_context(), *coords, pq.get_mutable_device_view(), pq.get_shmem_size(blockThreads));
+        cudaDeviceSynchronize();
+        //RXMESH_TRACE("launch_box.smem_bytes_dyn = {}", launch_box.smem_bytes_dyn);
+        //RXMESH_TRACE("pq.get_shmem_size = {}", pq.get_shmem_size(blockThreads));
 
-    float reduce_ratio = 0.1f;
+        // Next kernel needs to pop some percentage of the top
+        // elements in the priority queue and store popped elements
+        // to be used by the next kernel that actually does the collapses
 
-    // Mark the edge attributes to be collapsed
-    uint32_t pop_num_edges = reduce_ratio * rx.get_num_edges();
-    RXMESH_TRACE("pop_num_edges: {}", pop_num_edges);
+        float reduce_ratio = 0.1f;
+        const int num_edges_before = int(rx.get_num_edges());
+        const int reduce_threshold =
+            std::max(1, int(reduce_ratio * float(num_edges_before)));
+        // Mark the edge attributes to be collapsed
+        uint32_t pop_num_edges = reduce_threshold; //reduce_ratio * rx.get_num_edges();
+        //RXMESH_TRACE("pop_num_edges: {}", pop_num_edges);
 
-    constexpr uint32_t threads_per_block = 1024;
-    uint32_t number_of_blocks = (pop_num_edges + threads_per_block - 1) / threads_per_block;
-    int shared_mem_bytes = pq.get_shmem_size(threads_per_block) +
-                           (threads_per_block * sizeof(PriorityPair_t));
-    RXMESH_TRACE("threads_per_block: {}", threads_per_block);
-    RXMESH_TRACE("number_of_blocks: {}", number_of_blocks);
-    RXMESH_TRACE("shared_mem_bytes: {}", shared_mem_bytes);
+        constexpr uint32_t threads_per_block = 32;
+        uint32_t number_of_blocks = (pop_num_edges + threads_per_block - 1) / threads_per_block;
+        int shared_mem_bytes = pq.get_shmem_size(threads_per_block) +
+                               (threads_per_block * sizeof(PriorityPair_t));
+        //RXMESH_TRACE("threads_per_block: {}", threads_per_block);
+        //RXMESH_TRACE("number_of_blocks: {}", number_of_blocks);
+        //RXMESH_TRACE("shared_mem_bytes: {}", shared_mem_bytes);
 
-    pop_and_mark_edges_to_collapse<threads_per_block>
-        <<<number_of_blocks, threads_per_block, shared_mem_bytes>>>
-            (pq.get_mutable_device_view(),
-             *e_pop_attr,
-             pop_num_edges);
+        pop_and_mark_edges_to_collapse<threads_per_block>
+            <<<number_of_blocks, threads_per_block, shared_mem_bytes>>>
+                (pq.get_mutable_device_view(),
+                 *e_pop_attr,
+                 pop_num_edges);
 
-    cudaDeviceSynchronize();
-    RXMESH_TRACE("Made it past cudaDeviceSynchronize()");
-    
+        CUDA_ERROR(cudaDeviceSynchronize());
+        CUDA_ERROR(cudaGetLastError());
+        //RXMESH_TRACE("Made it past cudaDeviceSynchronize()");
+
+        // loop over the mesh, and try to collapse
+        // reset edge status
+        edge_status->reset(UNSEEN, DEVICE);
+
+        rx.reset_scheduler();
+        while(!rx.is_queue_empty() &&
+              rx.get_num_vertices(true) > final_num_vertices)
+        {
+
+            RXMESH_INFO(" Queue size = {}",
+                        rx.get_context().m_patch_scheduler.size());
+
+            //rx.prepare_launch_box(
+            rx.update_launch_box(
+                {Op::EV},
+                launch_box,
+                (void*)secp<float, blockThreads>,
+                true, false, false, false,
+                [&](uint32_t v, uint32_t e, uint32_t f) {
+                    return detail::mask_num_bytes(e) +
+                           2 * detail::mask_num_bytes(v) +
+                           3 * ShmemAllocator::default_alignment;
+                }
+            );
+
+            GPUTimer app_timer;
+            app_timer.start();
+            secp<float, blockThreads>
+                <<<launch_box.blocks,
+                   launch_box.num_threads,
+                   launch_box.smem_bytes_dyn>>>(rx.get_context(),
+                                                *coords,
+                                                reduce_threshold,
+                                                *edge_status,
+                                                *e_pop_attr);
+            // should we cudaDeviceSyn here? stopping timers too soon?
+            //CUDA_ERROR(cudaDeviceSynchronize());
+            //CUDA_ERROR(cudaGetLastError());
+            
+            app_timer.stop();
+
+            GPUTimer cleanup_timer;
+            cleanup_timer.start();
+            rx.cleanup();
+            cleanup_timer.stop();
+
+            GPUTimer slice_timer;
+            slice_timer.start();
+            rx.slice_patches(*coords, *edge_status);
+            slice_timer.stop();
+
+            GPUTimer cleanup_timer2;
+            cleanup_timer2.start();
+            rx.cleanup();
+            cleanup_timer2.stop();
+
+
+            CUDA_ERROR(cudaDeviceSynchronize());
+            CUDA_ERROR(cudaGetLastError());
+
+            app_time += app_timer.elapsed_millis();
+            slice_time += slice_timer.elapsed_millis();
+            cleanup_time += cleanup_timer.elapsed_millis();
+            cleanup_time += cleanup_timer2.elapsed_millis();
+
+            if (validate) {
+                rx.update_host();
+                EXPECT_TRUE(rx.validate());
+            }
+        }
+
+        if (false) {
+
+            RXMESH_INFO("#Vertices {}", rx.get_num_vertices(true));
+            RXMESH_INFO("#Edges {}", rx.get_num_edges(true));
+            RXMESH_INFO("#Faces {}", rx.get_num_faces(true));
+            RXMESH_INFO("#Patches {}", rx.get_num_patches(true));
+            RXMESH_INFO("request reduction = {}, achieved reduction= {}",
+                        reduce_threshold,
+                        num_edges_before - int(rx.get_num_edges(true)));
+
+            if (false) {
+                rx.update_host();
+                coords->move(DEVICE, HOST);                
+                rx.update_polyscope();
+                auto ps_mesh = rx.get_polyscope_mesh();
+                ps_mesh->updateVertexPositions(*coords);
+                ps_mesh->setEnabled(false);                
+                // rx.render_vertex_patch();
+                // rx.render_edge_patch();
+                // rx.render_face_patch();
+
+                polyscope::show();
+            }
+        }
+    }
+    timer.stop();
+    total_time += timer.elapsed_millis();
+    CUDA_ERROR(cudaProfilerStop());
+
+    RXMESH_INFO("secp_rxmesh() RXMesh simplification took {} (ms)", total_time);
+    RXMESH_INFO("secp_rxmesh() App time {} (ms)", app_time);
+    RXMESH_INFO("secp_rxmesh() Slice timer {} (ms)", slice_time);
+    RXMESH_INFO("secp_rxmesh() Cleanup timer {} (ms)", cleanup_time);
+
+    if (!validate) {
+        rx.update_host();
+    }
+    coords->move(DEVICE, HOST);
+
+#if USE_POLYSCOPE
+    rx.update_polyscope();
+
+    auto ps_mesh = rx.get_polyscope_mesh();
+    ps_mesh->updateVertexPositions(*coords);
+    ps_mesh->setEnabled(false);
+
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();
+    polyscope::show();
+#endif
 }
