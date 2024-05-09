@@ -61,8 +61,11 @@ class RXMeshStatic : public RXMesh
 
         m_attr_container = std::make_shared<AttributeContainer>();
 
-        add_vertex_coordinates(vertices,
-                               polyscope::guessNiceNameFromPath(file_path));
+        std::string name = extract_file_name(file_path);
+#if USE_POLYSCOPE
+        name = polyscope::guessNiceNameFromPath(file_path);
+#endif
+        add_vertex_coordinates(vertices, name);
     };
 
     /**

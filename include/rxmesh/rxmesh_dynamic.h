@@ -783,6 +783,13 @@ class RXMeshDynamic : public RXMeshStatic
                 this->m_max_vertices_per_patch * sizeof(uint8_t) +
                 ShmemAllocator::default_alignment;
         }
+
+        check_shared_memory(launch_box.smem_bytes_dyn,
+                            launch_box.smem_bytes_static,
+                            launch_box.num_registers_per_thread,
+                            blockThreads,
+                            kernel,
+                            false);
     }
 
     virtual ~RXMeshDynamic() = default;

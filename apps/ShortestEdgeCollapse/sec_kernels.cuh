@@ -4,11 +4,10 @@
 #include "link_condition.cuh"
 
 template <typename T, uint32_t blockThreads>
-__global__ static void sec(rxmesh::Context                   context,
-                           rxmesh::VertexAttribute<T>        coords,
-                           const CostHistogram<T>            histo,
-                           const int                         reduce_threshold,
-                           rxmesh::EdgeAttribute<EdgeStatus> edge_status)
+__global__ static void sec(rxmesh::Context            context,
+                           rxmesh::VertexAttribute<T> coords,
+                           const CostHistogram<T>     histo,
+                           const int                  reduce_threshold)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -43,9 +42,6 @@ __global__ static void sec(rxmesh::Context                   context,
     for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
         assert(eh.local_id() < cavity.patch_info().num_edges[0]);
 
-        if (edge_status(eh) != UNSEEN) {
-            return;
-        }
         const VertexIterator iter =
             ev_query.template get_iterator<VertexIterator>(eh.local_id());
 
@@ -57,7 +53,7 @@ __global__ static void sec(rxmesh::Context                   context,
 
         T len2 = logf(glm::distance2(p0, p1));
 
-        if (histo.get_bin(len2) <= reduce_threshold) {
+        if (histo.below_threshold(len2, reduce_threshold)) {
             edge_mask.set(eh.local_id(), true);
         }
     });
@@ -75,8 +71,6 @@ __global__ static void sec(rxmesh::Context                   context,
         assert(eh.local_id() < cavity.patch_info().num_edges[0]);
         if (edge_mask(eh.local_id())) {
             cavity.create(eh);
-        } else {
-            edge_status(eh) = OKAY;
         }
     });
     block.sync();
@@ -84,7 +78,7 @@ __global__ static void sec(rxmesh::Context                   context,
     ev_query.epilogue(block, shrd_alloc);
 
     // create the cavity
-    if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
+    if (cavity.prologue(block, shrd_alloc, coords)) {
 
         // if (threadIdx.x == 0) {
         //     uint16_t num_actual_cavities = 0;
@@ -161,14 +155,6 @@ __global__ static void sec(rxmesh::Context                   context,
 
     cavity.epilogue(block);
     block.sync();
-
-    if (cavity.is_successful()) {
-        for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
-            if (edge_mask(eh.local_id())) {
-                edge_status(eh) = ADDED;
-            }
-        });
-    }
 }
 
 

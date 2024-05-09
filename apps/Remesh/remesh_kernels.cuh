@@ -544,6 +544,10 @@ __global__ static void __launch_bounds__(blockThreads)
     auto block = cooperative_groups::this_thread_block();
 
     auto smooth = [&](VertexHandle v_id, VertexIterator& iter) {
+        if (iter.size() == 0) {
+            return;
+        }
+
         const Vec3<T> v(coords(v_id, 0), coords(v_id, 1), coords(v_id, 2));
 
         // compute both vertex normal and the new position
@@ -568,12 +572,16 @@ __global__ static void __launch_bounds__(blockThreads)
 
             const Vec3<T> r(coords(r_id, 0), coords(r_id, 1), coords(r_id, 2));
 
-            const Vec3<T> c = glm::cross(q - v, r - v);
+            Vec3<T> c = glm::cross(q - v, r - v);
 
             const T area = glm::length(c) / T(2.0);
             w += area;
 
-            const Vec3<T> n = glm::normalize(c) * area;
+            if (glm::length2(c) > 1e-6) {
+                c = glm::normalize(c);
+            }
+
+            const Vec3<T> n = c * area;
 
             v_normal += n;
 
@@ -584,6 +592,8 @@ __global__ static void __launch_bounds__(blockThreads)
         }
         new_v /= T(iter.size());
 
+        assert(w > 0);
+
         v_normal /= w;
 
         if (glm::length2(v_normal) < 1e-6) {
@@ -593,6 +603,10 @@ __global__ static void __launch_bounds__(blockThreads)
 
             new_v = new_v + (glm::dot(v_normal, (v - new_v)) * v_normal);
         }
+
+        assert(!isnan(new_v[0]));
+        assert(!isnan(new_v[1]));
+        assert(!isnan(new_v[2]));
 
         new_coords(v_id, 0) = new_v[0];
         new_coords(v_id, 1) = new_v[1];

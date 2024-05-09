@@ -9,6 +9,13 @@
 #include "rxmesh/util/timer.h"
 #include "rxmesh/util/vector.h"
 
+struct MCFData
+{
+    float total_time;
+    int   num_iter;
+    float matvec_time;
+};
+
 template <typename T>
 void axpy(rxmesh::RXMeshStatic&             rx,
           rxmesh::VertexAttribute<T>&       y,
@@ -47,7 +54,7 @@ void init_PR(rxmesh::RXMeshStatic&             rx,
 }
 
 template <typename T>
-void mcf_rxmesh_cg(rxmesh::RXMeshDynamic& rx, bool update_coordinates)
+MCFData mcf_rxmesh_cg(rxmesh::RXMeshDynamic& rx, bool update_coordinates)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -56,9 +63,6 @@ void mcf_rxmesh_cg(rxmesh::RXMeshDynamic& rx, bool update_coordinates)
     float    cg_tolerance        = 1e-6;
     uint32_t max_num_cg_iter     = 1000;
     bool     use_uniform_laplace = false;
-
-    ASSERT_TRUE(rx.is_closed())
-        << "mcf_rxmesh only takes watertight/closed mesh without boundaries";
 
     // Different attributes used throughout the application
     auto input_coord = rx.get_input_vertex_coordinates();
@@ -218,4 +222,10 @@ void mcf_rxmesh_cg(rxmesh::RXMeshDynamic& rx, bool update_coordinates)
     rx.remove_attribute("R");
     rx.remove_attribute("B");
     rx.remove_attribute("X");
+
+    MCFData mcf_data;
+    mcf_data.total_time  = timer.elapsed_millis();
+    mcf_data.num_iter    = num_cg_iter_taken;
+    mcf_data.matvec_time = matvec_time;
+    return mcf_data;
 }

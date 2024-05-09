@@ -32,6 +32,9 @@ TEST(Apps, DelaunayEdgeFlip)
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
+    ASSERT_TRUE(rx.is_closed())
+        << "mcf_rxmesh only takes watertight/closed mesh without boundaries";
+
     delaunay_rxmesh(rx, Arg.verify);
 }
 

@@ -14,6 +14,8 @@ inline float deg2rad(float deg)
 struct arg
 {
     std::string output_folder               = STRINGIFY(OUTPUT_DIR);
+    std::string plane_name                  = "";
+    int         n                           = 60;  // grid point along x and y
     uint32_t    device_id                   = 0;
     float       frame_dt                    = 0.05;
     float       sim_dt                      = 0.05;
@@ -22,10 +24,7 @@ struct arg
     float       min_edge_length             = 0.5;
     float       collapser_min_edge_length   = 0;
     float       max_edge_length             = 1.5;
-    float       splitter_max_edge_length  = 0.0;
-    float       min_curvature_multiplier    = 1.0;
-    float       max_curvature_multiplier    = 1.0;
-    float       friction_coefficient        = 0.0;
+    float       splitter_max_edge_length    = 0.0;
     float       edge_flip_min_length_change = 1e-8;
     float       min_triangle_area           = 1e-7;
     float       min_triangle_angle          = deg2rad(0.f);
@@ -49,13 +48,17 @@ TEST(Apps, SurfaceTracking)
 
     const Vector<3, float> lower_corner(-3.0, 0.0, -3.0);
 
-    create_plane(verts, fv, 60, 60, 0.1f, lower_corner);
+    Arg.plane_name =
+        "plane" + std::to_string(Arg.n) + "x" + std::to_string(Arg.n);
+
+    float spacing = 6.f / float(Arg.n);
+
+    create_plane(verts, fv, Arg.n, Arg.n, spacing, lower_corner);
 
     // RXMeshDynamic rx(fv);
     // rx.save(STRINGIFY(OUTPUT_DIR) + std::string("plane60x60_patches"));
 
-    RXMeshDynamic rx(fv,
-                     STRINGIFY(OUTPUT_DIR) + std::string("plane60x60_patches"));
+    RXMeshDynamic rx(fv, STRINGIFY(OUTPUT_DIR) + Arg.plane_name + "_patches");
 
     rx.add_vertex_coordinates(verts, "plane");
 
@@ -78,9 +81,10 @@ int main(int argc, char** argv)
             // clang-format off
             RXMESH_INFO("\nUsage: ShortestEdgeCollapse.exe < -option X>\n"
                         " -h:          Display this massage and exit\n"
+                        " -n:          Number of point along x(or y) direction. Default is {} \n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -device_id:  GPU device ID. Default is {}",
-            Arg.output_folder, Arg.device_id);
+            Arg.n, Arg.output_folder, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
@@ -93,10 +97,14 @@ int main(int argc, char** argv)
             Arg.device_id =
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
         }
+        if (cmd_option_exists(argv, argc + argv, "-n")) {
+            Arg.n = atoi(get_cmd_option(argv, argv + argc, "-n"));
+        }
     }
 
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
+    RXMESH_TRACE("n= {}", Arg.n);
 
     return RUN_ALL_TESTS();
 }

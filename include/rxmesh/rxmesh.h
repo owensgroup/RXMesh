@@ -356,6 +356,15 @@ class RXMesh
         return m_h_patches_info[p];
     }
 
+    /**
+     * @brief return the amount of allocated memory for topology information in
+     * megabytes
+     */
+    const double get_topology_memory_mg() const
+    {
+        return m_topo_memory_mega_bytes;
+    }
+
    protected:
     // Edge hash map that takes two vertices and return their edge id
     using EdgeMapT = std::unordered_map<std::pair<uint32_t, uint32_t>,
@@ -569,5 +578,7 @@ class RXMesh
     PatchInfo *m_d_patches_info, *m_h_patches_info;
 
     float m_capacity_factor, m_lp_hashtable_load_factor, m_patch_alloc_factor;
+
+    double m_topo_memory_mega_bytes;    
 };
 }  // namespace rxmesh

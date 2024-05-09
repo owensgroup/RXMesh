@@ -36,6 +36,8 @@ TEST(Apps, SEC)
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
+    ASSERT_TRUE(rx.is_closed());
+
     uint32_t final_num_vertices = Arg.target * rx.get_num_vertices();
 
     sec_rxmesh(rx, final_num_vertices);
