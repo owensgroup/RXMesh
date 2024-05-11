@@ -19,7 +19,7 @@ struct arg
     uint32_t    device_id                   = 0;
     float       frame_dt                    = 0.05;
     float       sim_dt                      = 0.05;
-    float       end_sim_t                   = 20.0;
+    float       end_sim_t                   = 5.0;
     float       max_volume_change           = 0.0005;
     float       min_edge_length             = 0.5;
     float       collapser_min_edge_length   = 0;
