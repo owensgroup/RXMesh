@@ -56,6 +56,13 @@ struct PatchStash
                                   INVALID32,
                                   stash_size * sizeof(uint32_t)));
 
+            CUDA_ERROR(cudaMalloc((void**)&m_v_ordering_bound,
+                                  2 * sizeof(uint32_t)));
+            CUDA_ERROR(cudaMemset(m_v_ordering_bound,
+                                    INVALID32,
+                                    2 * sizeof(uint32_t)));
+
+            m_node_num_separator_v = 0;
             m_is_active = true;
         } else {
             m_stash = (uint32_t*)malloc(stash_size * sizeof(uint32_t));
@@ -288,6 +295,9 @@ struct PatchStash
     uint32_t* m_coarse_level_pair_list;
     uint32_t* m_coarse_level_id_list;
     uint32_t* m_coarse_level_num_v;
+    uint32_t m_node_num_separator_v;
+    uint32_t* m_v_ordering_bound;
+    
     bool m_is_node;  // determine whether the patch is a node or not(remained or
                      // merged)
 

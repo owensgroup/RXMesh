@@ -64,8 +64,9 @@ __global__ static void match_patches_init_param(const rxmesh::Context context)
         // set level 0
         ps.m_coarse_level_id_list[0]   = i;
         ps.m_coarse_level_pair_list[0] = INVALID32;
-        ps.m_coarse_level_num_v[0] = context.m_patches_info[i].num_vertices[0];
-        ps.m_is_node               = true;
+        ps.m_coarse_level_num_v[0] =
+            context.m_patches_info[i].get_num_owned<VertexHandle>();
+        ps.m_is_node = true;
 
         ps.m_is_active        = true;
         ps.m_tmp_paired_patch = INVALID32;
@@ -120,8 +121,9 @@ __global__ static void match_patches_select(const rxmesh::Context context,
             }
 
             uint8_t  adj_patch_id = ps.m_tmp_level_stash[j];
-            uint32_t weight = ps.m_tmp_level_edge_weight[j] * 1000 + adj_patch_id;
-            bool     is_active_patch =
+            uint32_t weight =
+                ps.m_tmp_level_edge_weight[j] * 1000 + adj_patch_id;
+            bool is_active_patch =
                 context.m_patches_info[adj_patch_id].patch_stash.m_is_active;
             if (weight > max_weight && is_active_patch) {
                 max_weight = weight;
@@ -264,7 +266,7 @@ template <uint32_t blockThreads>
 __global__ static void match_patches_update_next_level(
     const rxmesh::Context context,
     const uint16_t        level,
-    uint16_t*                  num_node)
+    uint16_t*             num_node)
 {
     // update for non-node patches
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -400,20 +402,151 @@ __global__ static void check(const rxmesh::Context context,
     }
 }
 
-
 template <uint32_t blockThreads>
-__global__ static void match_patches_extract_vertices(
-    const rxmesh::Context context,
-    const uint16_t        level)
+__global__ static void ordering_init_top_layer(const rxmesh::Context context,
+                                               const uint16_t        level,
+                                               uint16_t* patch_list_size,
+                                               uint16_t* patch_list,
+                                               uint16_t* patch_prefix_sum,
+                                               uint32_t* patch_num_v_prefix_sum)
 {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx == 0) {
+        patch_list_size[0] = 1;
+
+        patch_list[0] = 0;
+
+        patch_prefix_sum[0] = 0;
+
+        patch_num_v_prefix_sum[0] = 0;
+        patch_num_v_prefix_sum[1] =
+            context.m_patches_info[0].patch_stash.m_coarse_level_num_v[level];
+    }
 }
 
 template <uint32_t blockThreads>
-__global__ static void generate_patches_ordering(
+__global__ static void ordering_extract_vertices(
     const rxmesh::Context             context,
     const uint16_t                    level,
+    uint16_t*                         patch_list_size,
+    uint16_t*                         patch_list,
+    uint16_t*                         patch_prefix_sum,
+    uint32_t*                         patch_num_v_prefix_sum,
     rxmesh::VertexAttribute<uint16_t> v_ordering)
 {
+
+    // EV qury to init the patch stash edge weight
+    auto ev_extract_vertices = [&](EdgeHandle e_id, VertexIterator& ev) {
+        VertexHandle v0          = ev[0];
+        uint32_t     v0_patch_id = v0.patch_id();
+        PatchStash&  v0_patch_stash =
+            context.m_patches_info[v0_patch_id].patch_stash;
+        uint32_t v0_level_patch_id =
+            v0_patch_stash.m_coarse_level_id_list[level - 1];
+
+        VertexHandle v1          = ev[1];
+        uint32_t     v1_patch_id = v1.patch_id();
+        PatchStash&  v1_patch_stash =
+            context.m_patches_info[v1_patch_id].patch_stash;
+        uint32_t v1_level_patch_id =
+            v1_patch_stash.m_coarse_level_id_list[level - 1];
+
+        // select edges crossing the patch boundary
+        if (v0_level_patch_id != v1_level_patch_id) {
+            uint32_t curr_v_order = INVALID32;
+            // go through the current level patches
+            for (uint16_t i = 0; i < patch_list_size[0]; ++i) {
+                uint32_t patch_id = patch_list[i];
+                if (patch_id == INVALID16) {
+                    // skip the separator vertex
+                    continue;
+                }
+
+                PatchStash& ps = context.m_patches_info[patch_id].patch_stash;
+                uint32_t i_pair_level_id = ps.m_coarse_level_pair_list[level];
+
+                uint32_t& ordering_max = patch_num_v_prefix_sum[i + 1];
+
+                // find the which level patch thst this edge is separating
+                if ((patch_id == v0_level_patch_id &&
+                     i_pair_level_id == v1_level_patch_id) ||
+                    (i == v1_level_patch_id &&
+                     i_pair_level_id == v0_level_patch_id)) {
+                    curr_v_order = ::atomicAdd(&ordering_max, -1);
+                    ::atomicAdd(&ps.m_node_num_separator_v, 1);
+                }
+            }
+
+            VertexHandle& sparator_vertex =
+                v0_level_patch_id < v1_level_patch_id ? v0 : v1;
+            v_ordering(sparator_vertex, 0) = curr_v_order;
+        }
+    };
+
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::EV>(block, shrd_alloc, ev_extract_vertices);
+
+    // update the prefix sum for next level
+    uint32_t idx        = blockIdx.x * blockDim.x + threadIdx.x;
+    for (uint16_t i = idx; i < patch_list_size[0]; ++i) {
+        uint16_t& patch_id = patch_list[i];
+
+        if (patch_id == INVALID16) {
+            patch_prefix_sum[i] = 1;  // spv
+        } else {
+            PatchStash& ps = context.m_patches_info[patch_id].patch_stash;
+            // check whether the vertex is node
+            if (ps.m_coarse_level_id_list[level] == patch_id) {
+                // check whether the patch would be expanded to 2 in the more
+                // fined level
+                if (ps.m_coarse_level_pair_list[level] != INVALID32) {
+                    patch_prefix_sum[i] = 3;  // p0 p1 spv
+                } else {
+                    patch_prefix_sum[i] = 1;  // p0
+                }
+            }
+        }
+    }
+}
+
+
+template <uint32_t blockThreads>
+__global__ static void ordering_generate_array(
+    const rxmesh::Context             context,
+    const uint16_t                    level,
+    uint16_t*                         patch_list_size,
+    uint16_t*                         patch_list,
+    uint16_t*                         patch_prefix_sum,
+    uint32_t*                         patch_num_v_prefix_sum,
+    rxmesh::VertexAttribute<uint16_t> v_ordering)
+{
+    patch_prefix_sum[0] = 0;
+    uint32_t idx        = blockIdx.x * blockDim.x + threadIdx.x;
+    for (uint16_t i = idx; i < patch_list_size[0]; ++i) {
+        uint16_t& patch_id = patch_list[i];
+        PatchStash& ps     = context.m_patches_info[patch_id].patch_stash;
+        if (patch_id == INVALID16) {
+            patch_prefix_sum[i] = 1;  // spv
+            // patch_num_v[i] = 
+        } else {
+            PatchStash& ps = context.m_patches_info[patch_id].patch_stash;
+            // check whether the vertex is node
+            if (ps.m_coarse_level_id_list[level] == patch_id) {
+                // check whether the patch would be expanded to 2 in the more
+                // fined level
+                if (ps.m_coarse_level_pair_list[level] != INVALID32) {
+                    patch_prefix_sum[i] = 3;  // p0 p1 spv
+                } else {
+                    patch_prefix_sum[i] = 1;  // p0
+                }
+            }
+        }
+
+        
+    }
 }
 
 
