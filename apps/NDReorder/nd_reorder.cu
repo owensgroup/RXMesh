@@ -26,6 +26,30 @@ struct arg
     uint32_t    device_id     = 0;
 } Arg;
 
+template <typename T>
+void cub_prefix_sum_wrap(T* in_arr, T* out_arr, uint16_t size)
+{
+    using namespace rxmesh;
+
+    void*  d_cub_temp_storage = nullptr;
+    size_t temp_storage_bytes = 0;
+    cub::DeviceScan::ExclusiveSum(
+        d_cub_temp_storage, temp_storage_bytes, in_arr, out_arr, size);
+    CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage, temp_storage_bytes));
+
+    cub::DeviceScan::ExclusiveSum(
+        d_cub_temp_storage, temp_storage_bytes, in_arr, out_arr, size);
+
+    CUDA_ERROR(cudaFree(d_cub_temp_storage));
+}
+
+template<typename T>
+void swapPointers(T*& ptr1, T*& ptr2) {
+    T* temp = ptr1;
+    ptr1 = ptr2;
+    ptr2 = temp;
+}
+
 template <uint32_t blockThreads>
 void cross_patch_ordering(rxmesh::RXMeshStatic&             rx,
                           rxmesh::VertexAttribute<uint16_t> v_ordering,
@@ -100,13 +124,6 @@ void cross_patch_ordering(rxmesh::RXMeshStatic&             rx,
     uint16_t* patch_list_size;
     CUDA_ERROR(cudaMallocManaged(&patch_list_size, sizeof(uint16_t) * 1));
 
-    // record how many pieces including the vertex separtors
-    uint16_t* patch_list;
-    CUDA_ERROR(cudaMallocManaged(&patch_list,
-                                 sizeof(uint16_t) * 2 * rx.get_num_patches()));
-    CUDA_ERROR(cudaMemset(
-        patch_list, INVALID16, sizeof(uint16_t) * 2 * rx.get_num_patches()));
-
     // patch_prefix_sum is just for preparing the next level of the patch list
     // marking the whether the patch would be expanded or not
     uint16_t* patch_prefix_sum;
@@ -116,13 +133,19 @@ void cross_patch_ordering(rxmesh::RXMeshStatic&             rx,
                           INVALID16,
                           sizeof(uint16_t) * 2 * (rx.get_num_patches() + 2)));
 
-    uint16_t* patch_num_v;
-    CUDA_ERROR(
-        cudaMallocManaged(&patch_num_v,
-                          sizeof(uint16_t) * 2 * (rx.get_num_patches() + 2)));
-    CUDA_ERROR(cudaMemset(patch_num_v,
-                          0,
-                          sizeof(uint16_t) * 2 * (rx.get_num_patches() + 2)));
+    // record how many pieces including the vertex separtors
+    uint16_t* patch_list;
+    CUDA_ERROR(cudaMallocManaged(&patch_list,
+                                 sizeof(uint16_t) * 2 * rx.get_num_patches()));
+    CUDA_ERROR(cudaMemset(
+        patch_list, INVALID16, sizeof(uint16_t) * 2 * rx.get_num_patches()));
+
+    uint16_t* next_patch_list;
+    CUDA_ERROR(cudaMallocManaged(&next_patch_list,
+                                 sizeof(uint16_t) * 2 * rx.get_num_patches()));
+    CUDA_ERROR(cudaMemset(next_patch_list,
+                          INVALID16,
+                          sizeof(uint16_t) * 2 * rx.get_num_patches()));
 
     // patch_num_v_prefix_sum record the start index and the end index for each
     // pieces in a prefix sum manner
@@ -134,76 +157,98 @@ void cross_patch_ordering(rxmesh::RXMeshStatic&             rx,
                           0,
                           sizeof(uint32_t) * 2 * (rx.get_num_patches() + 2)));
 
+    uint32_t* next_patch_num_v_prefix_sum;
+    CUDA_ERROR(
+        cudaMallocManaged(&next_patch_num_v_prefix_sum,
+                          sizeof(uint32_t) * 2 * (rx.get_num_patches() + 2)));
+    CUDA_ERROR(cudaMemset(next_patch_num_v_prefix_sum,
+                          0,
+                          sizeof(uint32_t) * 2 * (rx.get_num_patches() + 2)));
+
+    // init the parameters for the coarest level
     ordering_init_top_layer<blockThreads>
         <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(),
                                                  level,
                                                  patch_list_size,
-                                                 patch_list,
                                                  patch_prefix_sum,
+                                                 patch_list,
                                                  patch_num_v_prefix_sum);
     CUDA_ERROR(cudaDeviceSynchronize());
 
-    printf("--------------------\n");
-    printf("uncoarsen level: %d\n", level);
-    printf("patch_list: ");
-    for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
-        printf(" %d ", patch_list[i]);
-    }
-    printf("\n");
-
-    printf("patch_prefix_sum: ");
-    for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
-        printf(" %d ", patch_prefix_sum[i]);
-    }
-    printf("\n");
-
-    printf("patch_num_v_prefix_sum: ");
-    for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
-        printf(" %d ", patch_num_v_prefix_sum[i]);
-    }
-    printf("\n");
-    printf("--------------------\n");
-
+    uint16_t tmp_counter = 0;
     while (level > 0) {
+        ordering_generate_prefix_sum<blockThreads>
+            <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(),
+                                                     level,
+                                                     patch_list_size,
+                                                     patch_prefix_sum,
+                                                     patch_list,
+                                                     patch_num_v_prefix_sum);
+        CUDA_ERROR(cudaDeviceSynchronize());
+
+        cub_prefix_sum_wrap(
+            patch_prefix_sum, patch_prefix_sum, patch_list_size[0] + 1);
+
         ordering_extract_vertices<blockThreads>
             <<<rx.get_num_patches(), blockThreads, smem_bytes_dyn>>>(
                 rx.get_context(),
                 level,
                 patch_list_size,
-                patch_list,
                 patch_prefix_sum,
+                patch_list,
                 patch_num_v_prefix_sum,
+                next_patch_num_v_prefix_sum,
                 v_ordering);
         CUDA_ERROR(cudaDeviceSynchronize());
 
-        void*  d_cub_temp_storage = nullptr;
-        size_t temp_storage_bytes = 0;
-        cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
-                                      temp_storage_bytes,
-                                      patch_prefix_sum,
-                                      patch_prefix_sum,
-                                      patch_list_size[0] + 1);
-        CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage, temp_storage_bytes));
+        printf("next_patch_num_v_prefix_sum: ");
+        for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
+            printf(" %d ", next_patch_num_v_prefix_sum[i]);
+        }
+        printf("\n");
 
-        cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
-                                      temp_storage_bytes,
-                                      patch_prefix_sum,
-                                      patch_prefix_sum,
-                                      patch_list_size[0] + 1);
+        ordering_generate_finer_level<blockThreads>
+            <<<rx.get_num_patches(), blockThreads, smem_bytes_dyn>>>(
+                rx.get_context(),
+                level,
+                patch_list_size,
+                patch_prefix_sum,
+                patch_list,
+                next_patch_list,
+                patch_num_v_prefix_sum,
+                next_patch_num_v_prefix_sum,
+                v_ordering);
+        CUDA_ERROR(cudaDeviceSynchronize());
 
-        CUDA_ERROR(cudaFree(d_cub_temp_storage));
+        printf("next_patch_num_v_prefix_sum: ");
+        for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
+            printf(" %d ", next_patch_num_v_prefix_sum[i]);
+        }
+        printf("\n");
+
+        cub_prefix_sum_wrap(
+            next_patch_num_v_prefix_sum, next_patch_num_v_prefix_sum, patch_list_size[0] + 1);
 
         printf("--------------------\n");
         printf("uncoarsen level: %d\n", level);
+
+        printf("patch_list_size: %d\n", patch_list_size[0]);
+
+        printf("patch_prefix_sum: ");
+        for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
+            printf(" %d ", patch_prefix_sum[i]);
+        }
+        printf("\n");
+
         printf("patch_list: ");
         for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
             printf(" %d ", patch_list[i]);
         }
         printf("\n");
 
-        printf("patch_prefix_sum: ");
+        printf("next_patch_list: ");
         for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
-            printf(" %d ", patch_prefix_sum[i]);
+            printf(" %d ", next_patch_list[i]);
         }
         printf("\n");
 
@@ -212,14 +257,30 @@ void cross_patch_ordering(rxmesh::RXMeshStatic&             rx,
             printf(" %d ", patch_num_v_prefix_sum[i]);
         }
         printf("\n");
+
+        printf("next_patch_num_v_prefix_sum: ");
+        for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
+            printf(" %d ", next_patch_num_v_prefix_sum[i]);
+        }
+        printf("\n");
         printf("--------------------\n");
 
-        // generate_patches_ordering<blockThreads><<<rx.get_num_patches(),
-        // blockThreads>>>(
-        //         rx.get_context(), level);
-        //     CUDA_ERROR(cudaDeviceSynchronize());
+        swapPointers(patch_list, next_patch_list);
+        swapPointers(patch_num_v_prefix_sum, next_patch_num_v_prefix_sum);
+
+        // clear the next level
+        CUDA_ERROR(cudaMemset(next_patch_list,
+                              INVALID16,
+                              sizeof(uint16_t) * 2 * rx.get_num_patches()));
+        CUDA_ERROR(cudaMemset(next_patch_num_v_prefix_sum,
+                          0,
+                          sizeof(uint32_t) * 2 * (rx.get_num_patches() + 2)));
+            
         --level;
-        break;
+        ++tmp_counter;
+        if (tmp_counter == 2) {
+            break;
+        }
     }
 }
 
@@ -265,7 +326,8 @@ void nd_reorder()
 
     // vertex ordering attribute to store the result
     auto v_ordering = rx.add_vertex_attribute<uint16_t>(
-        "v_ordering", INVALID16, rxmesh::LOCATION_ALL);
+        "v_ordering", 1, rxmesh::LOCATION_ALL);
+    v_ordering->reset(INVALID16, rxmesh::DEVICE);
 
     // Phase: cross patch reordering
     cross_patch_ordering<blockThreads>(rx, *v_ordering, smem_bytes_dyn);
