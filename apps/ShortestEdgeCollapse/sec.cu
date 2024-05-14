@@ -10,6 +10,7 @@ struct arg
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     float       target        = 0.1;
+    float       reduce_ratio  = 0.1;
     uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
@@ -24,15 +25,15 @@ TEST(Apps, SEC)
     // Select device
     cuda_query(Arg.device_id);
 
-    // RXMeshDynamic rx(Arg.obj_file_name);
+    RXMeshDynamic rx(Arg.obj_file_name);
 
-    const std::string p_file = STRINGIFY(OUTPUT_DIR) +
-                               extract_file_name(Arg.obj_file_name) +
-                               "_patches";
-    RXMeshDynamic rx(Arg.obj_file_name, p_file);
-    if (!std::filesystem::exists(p_file)) {
-        rx.save(p_file);
-    }
+    // const std::string p_file = STRINGIFY(OUTPUT_DIR) +
+    //                            extract_file_name(Arg.obj_file_name) +
+    //                            "_patches";
+    // RXMeshDynamic rx(Arg.obj_file_name, p_file);
+    // if (!std::filesystem::exists(p_file)) {
+    //     rx.save(p_file);
+    // }
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
@@ -62,10 +63,11 @@ int main(int argc, char** argv)
                         " -input:      Input file. Input file should be under the input/ subdirectory\n"
                         "              Default is {} \n"
                         "              Hint: Only accept OBJ files\n"
-                        " -target:     The fraction of output #vertices from the input\n"
+                        " -target:     The fraction of output #vertices from the input. Default is {}\n"
+                        " -r:          Reduction ratio. Default is {}\n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -device_id:  GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.output_folder, Arg.device_id);
+            Arg.obj_file_name,Arg.target, Arg.reduce_ratio, Arg.output_folder, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
@@ -85,12 +87,16 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-target")) {
             Arg.target = atof(get_cmd_option(argv, argv + argc, "-target"));
         }
+        if (cmd_option_exists(argv, argc + argv, "-r")) {
+            Arg.reduce_ratio = atof(get_cmd_option(argv, argv + argc, "-r"));
+        }
     }
 
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
     RXMESH_TRACE("target= {}", Arg.target);
+    RXMESH_TRACE("reduce_ratio= {}", Arg.reduce_ratio);
 
     return RUN_ALL_TESTS();
 }

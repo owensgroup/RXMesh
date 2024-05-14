@@ -65,8 +65,6 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
     bool validate = false;
 
-    float reduce_ratio = 0.1;
-
     int num_passes = 0;
 
     CUDA_ERROR(cudaProfilerStart());
@@ -108,7 +106,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
         const int num_edges_before = int(rx.get_num_edges(true));
 
         const int reduce_threshold =
-            std::max(1, int(reduce_ratio * float(num_edges_before)));
+            std::max(1, int(Arg.reduce_ratio * float(num_edges_before)));
 
 
         histo_timer.stop();
@@ -118,8 +116,10 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
         rx.reset_scheduler();
         while (!rx.is_queue_empty() &&
                rx.get_num_vertices(true) > final_num_vertices) {
-            // RXMESH_INFO(" Queue size = {}",
-            //             rx.get_context().m_patch_scheduler.size());
+            RXMESH_INFO(" Queue size = {}, reduce_threshold = {}, #V= {}",
+                        rx.get_context().m_patch_scheduler.size(),
+                        reduce_threshold,
+                        rx.get_num_vertices(true));
 
             rx.update_launch_box(
                 {Op::EV},

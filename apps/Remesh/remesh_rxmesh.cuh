@@ -261,8 +261,11 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
         while (!rx.is_queue_empty()) {
             num_inner_iter++;
 
+            // RXMESH_INFO(" Queue size = {}",
+            //             rx.get_context().m_patch_scheduler.size());
+
             LaunchBox<blockThreads> launch_box;
-            rx.update_launch_box({Op::EV},
+            rx.update_launch_box({Op::EVDiamond},
                                  launch_box,
                                  (void*)edge_split<T, blockThreads>,
                                  true,
@@ -401,11 +404,13 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
         num_outer_iter++;
         rx.reset_scheduler();
         while (!rx.is_queue_empty()) {
+            // RXMESH_INFO(" Queue size = {}",
+            //             rx.get_context().m_patch_scheduler.size());
             num_inner_iter++;
 
             LaunchBox<blockThreads> launch_box;
             rx.update_launch_box(
-                {Op::EV},
+                {Op::EVDiamond},
                 launch_box,
                 (void*)edge_collapse<T, blockThreads>,
                 true,
@@ -540,6 +545,8 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
         num_outer_iter++;
         rx.reset_scheduler();
         while (!rx.is_queue_empty()) {
+            // RXMESH_INFO(" Queue size = {}",
+            //             rx.get_context().m_patch_scheduler.size());
             num_inner_iter++;
             LaunchBox<blockThreads> launch_box;
 

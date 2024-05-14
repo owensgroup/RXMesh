@@ -60,6 +60,11 @@ __global__ static void __launch_bounds__(blockThreads)
         // if not a boundary edge
         if (v2.is_valid() && v3.is_valid()) {
 
+            if (v0 == v1 || v0 == v2 || v0 == v3 ||v1 == v2 || v1 == v3 ||
+                v2 == v3) {
+                return;
+            }
+
             constexpr T PII = 3.14159265358979323f;
 
             const VecT V0(coords(v0, 0), coords(v0, 1), coords(v0, 2));

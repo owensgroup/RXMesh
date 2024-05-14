@@ -19,7 +19,7 @@ struct arg
     uint32_t    device_id                   = 0;
     float       frame_dt                    = 0.05;
     float       sim_dt                      = 0.05;
-    float       end_sim_t                   = 20.0;
+    float       end_sim_t                   = 5.0;
     float       max_volume_change           = 0.0005;
     float       min_edge_length             = 0.5;
     float       collapser_min_edge_length   = 0;
@@ -55,10 +55,11 @@ TEST(Apps, SurfaceTracking)
 
     create_plane(verts, fv, Arg.n, Arg.n, spacing, lower_corner);
 
-    // RXMeshDynamic rx(fv);
-    // rx.save(STRINGIFY(OUTPUT_DIR) + std::string("plane60x60_patches"));
+    RXMeshDynamic rx(fv);
 
-    RXMeshDynamic rx(fv, STRINGIFY(OUTPUT_DIR) + Arg.plane_name + "_patches");
+    // RXMeshDynamic rx(fv, STRINGIFY(OUTPUT_DIR) + Arg.plane_name +
+    // "_patches"); rx.save(STRINGIFY(OUTPUT_DIR) + Arg.plane_name +
+    // "_patches");
 
     rx.add_vertex_coordinates(verts, "plane");
 
