@@ -234,7 +234,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
 
             app_timer.start();
             secp<float, blockThreads>
-                <<<launch_box.blocks,
+                <<<DIVIDE_UP(launch_box.blocks, 8),
                    launch_box.num_threads,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(),
                                                 *coords,
