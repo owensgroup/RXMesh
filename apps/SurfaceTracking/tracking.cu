@@ -55,10 +55,11 @@ TEST(Apps, SurfaceTracking)
 
     create_plane(verts, fv, Arg.n, Arg.n, spacing, lower_corner);
 
-    // RXMeshDynamic rx(fv);
-    // rx.save(STRINGIFY(OUTPUT_DIR) + std::string("plane60x60_patches"));
+    RXMeshDynamic rx(fv);
 
-    RXMeshDynamic rx(fv, STRINGIFY(OUTPUT_DIR) + Arg.plane_name + "_patches");
+    // RXMeshDynamic rx(fv, STRINGIFY(OUTPUT_DIR) + Arg.plane_name +
+    // "_patches"); rx.save(STRINGIFY(OUTPUT_DIR) + Arg.plane_name +
+    // "_patches");
 
     rx.add_vertex_coordinates(verts, "plane");
 
