@@ -133,7 +133,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
 
         // rebuild every round? Not necessarily a great way to use a pq.
         PriorityQueue_t pq(rx.get_num_edges());
-        e_pop_attr->reset(DEVICE, false);
+        e_pop_attr->reset(false, DEVICE);
 
         //rx.prepare_launch_box(
         rx.update_launch_box(
