@@ -70,6 +70,34 @@ using Vec3 = glm::vec<3, T, glm::defaultp>;
 
 #include "rxmesh/util/report.h"
 
+template <typename T>
+void render_edge_attr(rxmesh::RXMeshDynamic& rx,
+    const std::shared_ptr<rxmesh::EdgeAttribute<T>>& edge_attr)
+{
+    using namespace rxmesh;
+    //make sure the attribute is on the HOST
+    edge_attr->move(DEVICE, HOST);
+
+    std::vector<float> edgeColors(rx.get_num_edges());
+    rx.for_each_edge(HOST,
+        [&](EdgeHandle eh) {
+            if(true == (*edge_attr)(eh))
+            {
+                //save a red color
+                edgeColors[rx.linear_id(eh)] = 1.0f;
+            }
+            else
+            {
+                //save a black color
+                edgeColors[rx.linear_id(eh)] = 0.0f;
+            }
+        });
+
+    auto ps_mesh = rx.get_polyscope_mesh();
+    auto edge_colors = ps_mesh->addEdgeScalarQuantity("Edges to Collapse", edgeColors);
+    edge_colors->setEnabled(true);
+}
+
 inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
                        const uint32_t         final_num_vertices)
 {
@@ -189,6 +217,10 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
                  *e_pop_attr,
                  pop_num_edges);
 
+       // if(num_passes == 1)
+       // {
+       //     render_edge_attr<bool>(rx, e_pop_attr);
+       // }
         CUDA_ERROR(cudaDeviceSynchronize());
         CUDA_ERROR(cudaGetLastError());
         pop_mark_timer.stop();
