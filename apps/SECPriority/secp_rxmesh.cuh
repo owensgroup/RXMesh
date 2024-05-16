@@ -83,13 +83,11 @@ void render_edge_attr(rxmesh::RXMeshDynamic& rx,
         [&](EdgeHandle eh) {
             if(true == (*edge_attr)(eh))
             {
-                //save a red color
-                edgeColors[rx.linear_id(eh)] = 1.0f;
+                edgeColors[rx.linear_id(eh)] = 200.0f;
             }
             else
             {
-                //save a black color
-                edgeColors[rx.linear_id(eh)] = 0.0f;
+                edgeColors[rx.linear_id(eh)] = eh.patch_id();
             }
         });
 
@@ -333,7 +331,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
     report.add_member("max_num_registers_per_thread",
                       max_num_registers_per_thread);
     report.add_member("max_num_blocks", max_num_blocks);
-    report.add_member("secs_remesh_time", total_time);
+    report.add_member("secp_remesh_time", total_time);
     report.add_member("priority_queue_time", pq_time);
     report.add_member("app_time", app_time);
     report.add_member("slice_time", slice_time);
