@@ -97,7 +97,8 @@ void render_edge_attr(rxmesh::RXMeshDynamic& rx,
 }
 
 inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
-                       const uint32_t         final_num_vertices)
+                       const uint32_t         final_num_vertices,
+                       const float edge_reduce_ratio)
 {
     EXPECT_TRUE(rx.validate());
 
@@ -191,7 +192,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
         // elements in the priority queue and store popped elements
         // to be used by the next kernel that actually does the collapses
 
-        float reduce_ratio = 0.1f;
+        float reduce_ratio = edge_reduce_ratio;
         const int num_edges_before = int(rx.get_num_edges());
         const int reduce_threshold =
             std::max(1, int(reduce_ratio * float(num_edges_before)));

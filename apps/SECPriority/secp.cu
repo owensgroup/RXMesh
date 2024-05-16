@@ -10,6 +10,7 @@ struct arg
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "dragon.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     float       target        = 0.1;
+    float       edgefrac = 0.1;
     uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
@@ -40,7 +41,7 @@ TEST(Apps, SECPriority)
 
     uint32_t final_num_vertices = Arg.target * rx.get_num_vertices();
 
-    secp_rxmesh(rx, final_num_vertices);
+    secp_rxmesh(rx, final_num_vertices, Arg.edgefrac);
 }
 
 
@@ -63,6 +64,7 @@ int main(int argc, char** argv)
                         "              Default is {} \n"
                         "              Hint: Only accept OBJ files\n"
                         " -target:     The fraction of output #vertices from the input\n"
+                        " -edgefrac:   The fraction of edges to collapse in a round\n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -device_id:  GPU device ID. Default is {}",
             Arg.obj_file_name, Arg.output_folder, Arg.device_id);
@@ -85,12 +87,16 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-target")) {
             Arg.target = atof(get_cmd_option(argv, argv + argc, "-target"));
         }
+        if (cmd_option_exists(argv, argc + argv, "-edgefrac")) {
+            Arg.edgefrac = atof(get_cmd_option(argv, argv + argc, "-edgefrac"));
+        }
     }
 
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
     RXMESH_TRACE("target= {}", Arg.target);
+    RXMESH_TRACE("edgefrac= {}", Arg.edgefrac);
 
     return RUN_ALL_TESTS();
 }
