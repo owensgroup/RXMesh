@@ -76,7 +76,8 @@ class Attribute : public AttributeBase
           m_h_ptr_on_device(nullptr),
           m_d_attr(nullptr),
           m_max_num_patches(0),
-          m_layout(AoS)
+          m_layout(AoS),
+          m_memory_mega_bytes(0)
     {
 
         this->m_name    = (char*)malloc(sizeof(char) * 1);
@@ -108,7 +109,8 @@ class Attribute : public AttributeBase
           m_h_ptr_on_device(nullptr),
           m_d_attr(nullptr),
           m_max_num_patches(rxmesh->get_max_num_patches()),
-          m_layout(layout)
+          m_layout(layout),
+          m_memory_mega_bytes(0)
     {
         if (name != nullptr) {
             this->m_name = (char*)malloc(sizeof(char) * (strlen(name) + 1));
@@ -235,6 +237,14 @@ class Attribute : public AttributeBase
     const char* get_name() const
     {
         return m_name;
+    }
+
+    /**
+     * @brief return the amount of allocated memory in megabytes 
+    */
+    const double get_memory_mg()const 
+    {
+        return m_memory_mega_bytes;
     }
 
     /**
@@ -539,7 +549,7 @@ class Attribute : public AttributeBase
         const HandleT  handle,
         const uint32_t attr = 0) const
     {
-        auto         pl = handle.unpack();
+        auto pl = handle.unpack();
         return this->operator()(pl.first, pl.second, attr);
     }
 
@@ -553,7 +563,7 @@ class Attribute : public AttributeBase
     __host__ __device__ __forceinline__ T& operator()(const HandleT  handle,
                                                       const uint32_t attr = 0)
     {
-        auto         pl = handle.unpack();
+        auto pl = handle.unpack();
         return this->operator()(pl.first, pl.second, attr);
     }
 
@@ -642,6 +652,9 @@ class Attribute : public AttributeBase
 
                 CUDA_ERROR(cudaMalloc((void**)&(m_d_attr),
                                       sizeof(T*) * m_max_num_patches));
+                m_memory_mega_bytes +=
+                    BYTES_TO_MEGABYTES(sizeof(T*) * m_max_num_patches);
+
                 m_h_ptr_on_device =
                     static_cast<T**>(malloc(sizeof(T*) * m_max_num_patches));
 
@@ -649,6 +662,9 @@ class Attribute : public AttributeBase
                     CUDA_ERROR(
                         cudaMalloc((void**)&(m_h_ptr_on_device[p]),
                                    sizeof(T) * capacity(p) * m_num_attributes));
+
+                    m_memory_mega_bytes += BYTES_TO_MEGABYTES(
+                        sizeof(T) * capacity(p) * m_num_attributes);
                 }
                 CUDA_ERROR(cudaMemcpy(m_d_attr,
                                       m_h_ptr_on_device,
@@ -670,6 +686,7 @@ class Attribute : public AttributeBase
     T**              m_d_attr;
     uint32_t         m_max_num_patches;
     layoutT          m_layout;
+    double           m_memory_mega_bytes;
 
     constexpr static uint32_t m_block_size = 256;
 };

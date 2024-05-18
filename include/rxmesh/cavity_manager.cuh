@@ -240,6 +240,27 @@ struct CavityManager
         return m_s_should_slice[0];
     }
 
+    /**
+     * @brief when the user call recover() function, that will recover the src
+     * handle and all verteices/edges/faces that were deleted due to this
+     * cavity. Here we could check if a vertex/edge/face is recovered
+     */
+    template <typename HandleT>
+    __device__ __inline__ bool is_recovered(const HandleT handle)
+    {
+        assert(handle.patch_id() == patch_id());
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return m_s_recover_v(handle.local_id());
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return m_s_recover_e(handle.local_id());
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return m_s_recover_f(handle.local_id());
+        }
+    }
+
    private:
     /**
      * @brief update all attributes such that it can be used after the topology
@@ -819,7 +840,7 @@ struct CavityManager
     // cavities if they are touching when they user does not want cavities to
     // shared edges
     //  This buffer overlap with m_s_q_correspondence_e
-    int16_t* m_s_boudary_edges_cavity_id;
+    uint16_t* m_s_boudary_edges_cavity_id;
 
     // if cavities that share an edge are allowed
     bool m_allow_touching_cavities;
@@ -830,7 +851,7 @@ struct CavityManager
     uint16_t *m_s_ev, *m_s_fe;
 
     // store the cavity ID each mesh element belong to. If the mesh element
-    // does not belong to any cavity, then it stores INVALID32
+    // does not belong to any cavity, then it stores INVALID16
     uint16_t *m_s_cavity_id_v, *m_s_cavity_id_e, *m_s_cavity_id_f;
 
     // the hashtable (this memory overlaps with m_s_cavity_id_v/e/f)

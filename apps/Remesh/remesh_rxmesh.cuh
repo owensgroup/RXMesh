@@ -4,7 +4,9 @@
 
 #include "rxmesh/util/util.h"
 
-int iddd = 0;
+#include "rxmesh/util/report.h"
+
+int ps_iddd = 0;
 
 using EdgeStatus = int8_t;
 enum : EdgeStatus
@@ -17,6 +19,8 @@ enum : EdgeStatus
 
 
 #include "remesh_kernels.cuh"
+
+float split_time_ms, collapse_time_ms, flip_time_ms, smoothing_time_ms;
 
 struct Stats
 {
@@ -214,8 +218,8 @@ void screen_shot(rxmesh::RXMeshDynamic&      rx,
     ps_mesh->setEnabled(true);
     rx.render_face_patch()->setEnabled(true);
 
-    polyscope::screenshot(app + "_" + std::to_string(iddd) + ".png");
-    iddd++;
+    polyscope::screenshot(app + "_" + std::to_string(ps_iddd) + ".png");
+    ps_iddd++;
 
     // polyscope::show();
 
@@ -246,6 +250,10 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
     // int   num_splits     = 0;
     int num_outer_iter = 0;
     int num_inner_iter = 0;
+
+    GPUTimer timer;
+    timer.start();
+
     while (true) {
         num_outer_iter++;
         rx.reset_scheduler();
@@ -253,8 +261,11 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
         while (!rx.is_queue_empty()) {
             num_inner_iter++;
 
+            // RXMESH_INFO(" Queue size = {}",
+            //             rx.get_context().m_patch_scheduler.size());
+
             LaunchBox<blockThreads> launch_box;
-            rx.update_launch_box({Op::EV},
+            rx.update_launch_box({Op::EVDiamond},
                                  launch_box,
                                  (void*)edge_split<T, blockThreads>,
                                  true,
@@ -351,13 +362,17 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
         //             num_splits,
         //             app_time + slice_time + cleanup_time);
     }
+    timer.stop();
 
     // RXMESH_INFO("total num_splits {}", num_splits);
     RXMESH_INFO("num_outer_iter {}", num_outer_iter);
     RXMESH_INFO("num_inner_iter {}", num_inner_iter);
+    RXMESH_INFO("Split total time {} (ms)", timer.elapsed_millis());
     RXMESH_INFO("Split time {} (ms)", app_time);
     RXMESH_INFO("Split slice timer {} (ms)", slice_time);
     RXMESH_INFO("Split cleanup timer {} (ms)", cleanup_time);
+
+    split_time_ms += timer.elapsed_millis();
 }
 
 template <typename T>
@@ -382,17 +397,23 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
     int   num_outer_iter = 0;
     int   num_inner_iter = 0;
     // int   num_collapses  = 0;
+
+    GPUTimer timer;
+    timer.start();
     while (true) {
         num_outer_iter++;
         rx.reset_scheduler();
         while (!rx.is_queue_empty()) {
+            // RXMESH_INFO(" Queue size = {}",
+            //             rx.get_context().m_patch_scheduler.size());
             num_inner_iter++;
 
             LaunchBox<blockThreads> launch_box;
             rx.update_launch_box(
+                //{Op::EVDiamond},
                 {Op::EV, Op::VV},
                 launch_box,
-                (void*)edge_collapse<T, blockThreads>,
+                (void*)edge_collapse_1<T, blockThreads>,
                 true,
                 false,
                 false,
@@ -401,13 +422,15 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
                     return detail::mask_num_bytes(e) +
                            2 * v * sizeof(uint16_t) +
                            2 * ShmemAllocator::default_alignment;
+                    // 2 * detail::mask_num_bytes(v) +
+                    // 3 * ShmemAllocator::default_alignment;
                 });
 
             // CUDA_ERROR(cudaMemset(d_buffer, 0, sizeof(int)));
 
             GPUTimer app_timer;
             app_timer.start();
-            edge_collapse<T, blockThreads>
+            edge_collapse_1<T, blockThreads>
                 <<<DIVIDE_UP(launch_box.blocks, 8),
                    launch_box.num_threads,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(),
@@ -484,12 +507,16 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
         //             num_collapses,
         //             app_time + slice_time + cleanup_time);
     }
+    timer.stop();
     // RXMESH_INFO("total num_collapses {}", num_collapses);
     RXMESH_INFO("num_outer_iter {}", num_outer_iter);
     RXMESH_INFO("num_inner_iter {}", num_inner_iter);
+    RXMESH_INFO("Collapse total time {} (ms)", timer.elapsed_millis());
     RXMESH_INFO("Collapse time {} (ms)", app_time);
     RXMESH_INFO("Collapse slice timer {} (ms)", slice_time);
     RXMESH_INFO("Collapse cleanup timer {} (ms)", cleanup_time);
+
+    collapse_time_ms += timer.elapsed_millis();
 }
 
 template <typename T>
@@ -510,13 +537,19 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
     float app_time     = 0;
     float slice_time   = 0;
     float cleanup_time = 0;
+
     // int   num_flips      = 0;
     int num_outer_iter = 0;
     int num_inner_iter = 0;
+
+    GPUTimer timer;
+    timer.start();
     while (true) {
         num_outer_iter++;
         rx.reset_scheduler();
         while (!rx.is_queue_empty()) {
+            // RXMESH_INFO(" Queue size = {}",
+            //             rx.get_context().m_patch_scheduler.size());
             num_inner_iter++;
             LaunchBox<blockThreads> launch_box;
 
@@ -534,9 +567,10 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(), *v_valence);
 
             rx.update_launch_box(
+                //{Op::EVDiamond},
                 {Op::EVDiamond, Op::VV},
                 launch_box,
-                (void*)edge_flip<T, blockThreads>,
+                (void*)edge_flip_1<T, blockThreads>,
                 true,
                 false,
                 false,
@@ -545,13 +579,15 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
                     return detail::mask_num_bytes(e) +
                            2 * v * sizeof(uint16_t) +
                            2 * ShmemAllocator::default_alignment;
+                    // 2 * detail::mask_num_bytes(v) +
+                    // 3 * ShmemAllocator::default_alignment;
                 });
 
             // CUDA_ERROR(cudaMemset(d_buffer, 0, sizeof(int)));
 
-            edge_flip<T, blockThreads><<<DIVIDE_UP(launch_box.blocks, 8),
-                                         launch_box.num_threads,
-                                         launch_box.smem_bytes_dyn>>>(
+            edge_flip_1<T, blockThreads><<<DIVIDE_UP(launch_box.blocks, 8),
+                                           launch_box.num_threads,
+                                           launch_box.smem_bytes_dyn>>>(
                 rx.get_context(), *coords, *v_valence, *edge_status, d_buffer);
             app_timer.stop();
 
@@ -620,12 +656,16 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
         //             num_flips,
         //             app_time + slice_time + cleanup_time);
     }
+    timer.stop();
     // RXMESH_INFO("total num_flips {}", num_flips);
     RXMESH_INFO("num_outer_iter {}", num_outer_iter);
     RXMESH_INFO("num_inner_iter {}", num_inner_iter);
+    RXMESH_INFO("Flip total time {} (ms)", timer.elapsed_millis());
     RXMESH_INFO("Flip time {} (ms)", app_time);
     RXMESH_INFO("Flip slice timer {} (ms)", slice_time);
     RXMESH_INFO("Flip cleanup timer {} (ms)", cleanup_time);
+
+    flip_time_ms += timer.elapsed_millis();
 }
 
 template <typename T>
@@ -651,6 +691,7 @@ inline void tangential_relaxation(rxmesh::RXMeshDynamic&      rx,
            launch_box.num_threads,
            launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords, *new_coords);
     app_timer.stop();
+    smoothing_time_ms += app_timer.elapsed_millis();
     RXMESH_INFO("Relax time {} (ms)", app_timer.elapsed_millis());
 }
 
@@ -658,6 +699,13 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
+
+    rxmesh::Report report("Remesh_RXMesh");
+    report.command_line(Arg.argc, Arg.argv);
+    report.device();
+    report.system();
+    report.model_data(Arg.obj_file_name + "_before", rx, "model_before");
+    report.add_member("method", std::string("RXMesh"));
 
 #if USE_POLYSCOPE
     rx.render_vertex_patch();
@@ -702,6 +750,9 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
         stats.max_vertex_valence,
         stats.min_vertex_valence);
 
+    RXMESH_INFO("Target edge length = {}",
+                Arg.relative_len * stats.avg_edge_len);
+
     // 4.0/5.0 * targe_edge_len
     const float low_edge_len =
         (4.f / 5.f) * Arg.relative_len * stats.avg_edge_len;
@@ -713,6 +764,11 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     const float high_edge_len_sq = high_edge_len * high_edge_len;
 
     // stats(rx);
+
+    split_time_ms     = 0;
+    collapse_time_ms  = 0;
+    flip_time_ms      = 0;
+    smoothing_time_ms = 0;
 
     GPUTimer timer;
     timer.start();
@@ -755,6 +811,9 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     RXMESH_INFO("Output mesh #Faces {}", rx.get_num_faces());
     RXMESH_INFO("Output mesh #Patches {}", rx.get_num_patches());
 
+    report.add_member("total_remesh_time", timer.elapsed_millis());
+    report.model_data(Arg.obj_file_name + "_after", rx, "model_after");
+
     compute_stats(
         rx, coords.get(), edge_len.get(), vertex_valence.get(), stats);
 
@@ -769,8 +828,26 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
         stats.max_vertex_valence,
         stats.min_vertex_valence);
 
+    report.add_member("avg_edge_len", stats.avg_edge_len);
+    report.add_member("max_edge_len", stats.max_edge_len);
+    report.add_member("min_edge_len", stats.min_edge_len);
+    report.add_member("avg_vertex_valence", stats.avg_vertex_valence);
+    report.add_member("max_vertex_valence", stats.max_vertex_valence);
+    report.add_member("min_vertex_valence", stats.min_vertex_valence);
+
+    report.add_member("attributes_memory_mg",
+                      coords->get_memory_mg() + new_coords->get_memory_mg() +
+                          edge_status->get_memory_mg() +
+                          vertex_valence->get_memory_mg());
+
+
+    report.add_member("split_time_ms", split_time_ms);
+    report.add_member("collapse_time_ms", collapse_time_ms);
+    report.add_member("flip_time_ms", flip_time_ms);
+    report.add_member("smoothing_time_ms", smoothing_time_ms);
+
     EXPECT_TRUE(rx.validate());
-    rx.export_obj("remesh.obj", *coords);
+    // rx.export_obj("remesh.obj", *coords);
 
 #if USE_POLYSCOPE
     rx.update_polyscope();
@@ -781,6 +858,9 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     rx.render_vertex_patch();
     rx.render_edge_patch();
     rx.render_face_patch();
-    // polyscope::show();
+    polyscope::show();
 #endif
+
+    report.write(Arg.output_folder + "/rxmesh_remesh",
+                 "Remesh_RXMesh_" + extract_file_name(Arg.obj_file_name));
 }

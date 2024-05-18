@@ -360,7 +360,7 @@ class RXMeshTest
 
         auto check_if_owned = [&](OutputHandleT xxh) -> bool {
             auto pl = xxh.unpack();
-            assert(pl.first < rxmrxesh.get_num_patches());
+            assert(pl.first < rx.get_num_patches());
             if constexpr (std::is_same_v<OutputHandleT, rxmesh::VertexHandle>) {
                 return rxmesh::detail::is_owned(
                     pl.second, rx.m_h_patches_info[pl.first].owned_mask_v);

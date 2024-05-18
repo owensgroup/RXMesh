@@ -32,6 +32,17 @@ class RXMesh
         return m_num_vertices;
     }
 
+    uint32_t get_num_vertices(bool from_device)
+    {
+        if (from_device) {
+            CUDA_ERROR(cudaMemcpy(&m_num_vertices,
+                                  m_rxmesh_context.m_num_vertices,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
+        }
+        return m_num_vertices;
+    }
+
     /**
      * @brief Total number of edges in the mesh
      */
@@ -40,11 +51,32 @@ class RXMesh
         return m_num_edges;
     }
 
+    uint32_t get_num_edges(bool from_device)
+    {
+        if (from_device) {
+            CUDA_ERROR(cudaMemcpy(&m_num_edges,
+                                  m_rxmesh_context.m_num_edges,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
+        }
+        return m_num_edges;
+    }
+
     /**
      * @brief Total number of faces in the mesh
      */
     uint32_t get_num_faces() const
     {
+        return m_num_faces;
+    }
+    uint32_t get_num_faces(bool from_device)
+    {
+        if (from_device) {
+            CUDA_ERROR(cudaMemcpy(&m_num_faces,
+                                  m_rxmesh_context.m_num_faces,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
+        }
         return m_num_faces;
     }
 
@@ -112,6 +144,16 @@ class RXMesh
     {
         return m_num_patches;
     }
+    uint32_t get_num_patches(bool from_device)
+    {
+        if (from_device) {
+            CUDA_ERROR(cudaMemcpy(&m_num_patches,
+                                  m_rxmesh_context.m_num_patches,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
+        }
+        return m_num_patches;
+    }
 
     /**
      * @brief the maximum number of patches
@@ -156,6 +198,17 @@ class RXMesh
         return m_max_vertices_per_patch;
     }
 
+    uint32_t get_per_patch_max_vertices(bool from_device)
+    {
+        if (from_device) {
+            CUDA_ERROR(cudaMemcpy(&m_max_vertices_per_patch,
+                                  m_rxmesh_context.m_max_num_vertices,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
+        }
+        return m_max_vertices_per_patch;
+    }
+
     /**
      * @brief Maximum number of edges in a patch
      */
@@ -164,11 +217,32 @@ class RXMesh
         return m_max_edges_per_patch;
     }
 
+    uint32_t get_per_patch_max_edges(bool from_device)
+    {
+        if (from_device) {
+            CUDA_ERROR(cudaMemcpy(&m_max_edges_per_patch,
+                                  m_rxmesh_context.m_max_num_edges,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
+        }
+        return m_max_edges_per_patch;
+    }
     /**
      * @brief Maximum number of faces in a patch
      */
     uint32_t get_per_patch_max_faces() const
     {
+        return m_max_faces_per_patch;
+    }
+
+    uint32_t get_per_patch_max_faces(bool from_device)
+    {
+        if (from_device) {
+            CUDA_ERROR(cudaMemcpy(&m_max_faces_per_patch,
+                                  m_rxmesh_context.m_max_num_faces,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
+        }
         return m_max_faces_per_patch;
     }
 
@@ -282,7 +356,6 @@ class RXMesh
         return m_h_patches_info[p];
     }
 
-    //TODO: tmp fix by eric, should move later
     template <typename LocalT>
     uint32_t max_bitmask_size() const
     {
@@ -297,6 +370,15 @@ class RXMesh
         if constexpr (std::is_same_v<LocalT, LocalFaceT>) {
             return detail::mask_num_bytes(this->m_max_faces_per_patch);
         }
+    }
+
+    /**
+     * @brief return the amount of allocated memory for topology information in
+     * megabytes
+     */
+    const double get_topology_memory_mg() const
+    {
+        return m_topo_memory_mega_bytes;
     }
 
    protected:
@@ -496,5 +578,7 @@ class RXMesh
     PatchInfo *m_d_patches_info, *m_h_patches_info;
 
     float m_capacity_factor, m_lp_hashtable_load_factor, m_patch_alloc_factor;
+
+    double m_topo_memory_mega_bytes;    
 };
 }  // namespace rxmesh

@@ -61,22 +61,11 @@ class RXMeshStatic : public RXMesh
 
         m_attr_container = std::make_shared<AttributeContainer>();
 
-        m_input_vertex_coordinates =
-            this->add_vertex_attribute<float>(vertices, "rx:vertices");
-
+        std::string name = extract_file_name(file_path);
 #if USE_POLYSCOPE
-        polyscope::options::autocenterStructures = true;
-        polyscope::options::autoscaleStructures  = true;
-        polyscope::options::automaticallyComputeSceneExtents = true;
-
-        polyscope::init();
-        m_polyscope_mesh_name = polyscope::guessNiceNameFromPath(file_path);
-        m_polyscope_mesh_name += std::to_string(rand());
-        this->register_polyscope();
-        render_vertex_patch();
-        render_edge_patch();
-        render_face_patch();
+        name = polyscope::guessNiceNameFromPath(file_path);
 #endif
+        add_vertex_coordinates(vertices, name);
     };
 
     /**
@@ -84,12 +73,50 @@ class RXMeshStatic : public RXMesh
      * @param fv Face incident vertices as read from an obj file
      */
     explicit RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
-                          const std::string                   patcher_file = "")
+                          const std::string                   patcher_file = "",
+                          const float capacity_factor          = 1.0,
+                          const float patch_alloc_factor       = 1.0,
+                          const float lp_hashtable_load_factor = 0.8)
         : RXMesh(), m_input_vertex_coordinates(nullptr)
     {
-        this->init(fv, patcher_file);
+        this->init(fv,
+                   patcher_file,
+                   capacity_factor,
+                   patch_alloc_factor,
+                   lp_hashtable_load_factor);
         m_attr_container = std::make_shared<AttributeContainer>();
     };
+
+    /**
+     * @brief Add vertex coordinates to the input mesh. When calling
+     * RXMeshStatic constructor that takes the face's vertices, this function
+     * can be called to then add vertex coordinates and also add the mesh to
+     * polyscope if it is active. You don't need to call this function if you
+     * are constructing RXMeshStatic with the constructor that takes the path to
+     * mesh file
+     */
+    void add_vertex_coordinates(std::vector<std::vector<float>>& vertices,
+                                std::string                      mesh_name = "")
+    {
+        if (m_input_vertex_coordinates == nullptr) {
+
+            m_input_vertex_coordinates =
+                this->add_vertex_attribute<float>(vertices, "rx:vertices");
+
+#if USE_POLYSCOPE
+            // polyscope::options::autocenterStructures = true;
+            // polyscope::options::autoscaleStructures  = true;
+            // polyscope::options::automaticallyComputeSceneExtents = true;
+            polyscope::init();
+            m_polyscope_mesh_name = mesh_name.empty() ? "RXMesh" : mesh_name;
+            m_polyscope_mesh_name += std::to_string(rand());
+            this->register_polyscope();
+            render_vertex_patch();
+            render_edge_patch();
+            render_face_patch();
+#endif
+        }
+    }
 
     virtual ~RXMeshStatic()
     {

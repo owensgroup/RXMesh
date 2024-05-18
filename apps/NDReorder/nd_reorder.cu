@@ -1,6 +1,4 @@
 #include "gtest/gtest.h"
-#include "rxmesh/attribute.h"
-#include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
 
 #include "nd_cross_patch_ordering.cuh"
@@ -8,7 +6,6 @@
 
 #include <vector>
 #include "cusparse.h"
-#include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/types.h"
 
