@@ -728,6 +728,10 @@ struct SparseMatrix
 
         CUSOLVER_ERROR(cusolverSpCreate(&m_cusolver_sphandle));
 
+        GPUTimer timer;
+    timer.start();
+
+
         if (reorder == Reorder::SYMRCM) {
             CUSOLVER_ERROR(cusolverSpXcsrsymrcmHost(m_cusolver_sphandle,
                                                     m_row_size,
@@ -759,6 +763,12 @@ struct SparseMatrix
                                    m_h_permute,
                                    m_row_size * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
+
+        
+        timer.stop();
+    float total_time = timer.elapsed_millis();
+
+        RXMESH_INFO("CPU Reordering time: {} ms", total_time);
 
         // working space for permutation: B = A*Q*A^T
         // the permutation for matrix A which works only for the col and row

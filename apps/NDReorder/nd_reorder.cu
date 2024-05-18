@@ -3,7 +3,7 @@
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
 
-#include "nd_cross_patch_oedering.cuh"
+#include "nd_cross_patch_ordering.cuh"
 #include "nd_reorder_kernel.cuh"
 
 #include <vector>
@@ -20,269 +20,15 @@
 #include "rxmesh/patch_info.h"
 #include "rxmesh/rxmesh_dynamic.h"
 
+#include "rxmesh/matrix/sparse_matrix.cuh"
+
+#include "thrust/sort.h"
+
 struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     uint32_t    device_id     = 0;
 } Arg;
-
-template <typename T>
-void cub_prefix_sum_wrap(T* in_arr, T* out_arr, uint16_t size)
-{
-    using namespace rxmesh;
-
-    void*  d_cub_temp_storage = nullptr;
-    size_t temp_storage_bytes = 0;
-    cub::DeviceScan::ExclusiveSum(
-        d_cub_temp_storage, temp_storage_bytes, in_arr, out_arr, size);
-    CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage, temp_storage_bytes));
-
-    cub::DeviceScan::ExclusiveSum(
-        d_cub_temp_storage, temp_storage_bytes, in_arr, out_arr, size);
-
-    CUDA_ERROR(cudaFree(d_cub_temp_storage));
-}
-
-template<typename T>
-void swapPointers(T*& ptr1, T*& ptr2) {
-    T* temp = ptr1;
-    ptr1 = ptr2;
-    ptr2 = temp;
-}
-
-template <uint32_t blockThreads>
-void cross_patch_ordering(rxmesh::RXMeshStatic&             rx,
-                          rxmesh::VertexAttribute<uint16_t> v_ordering,
-                          uint32_t                          smem_bytes_dyn)
-{
-    using namespace rxmesh;
-
-    uint16_t* num_node;
-    cudaMallocManaged(&num_node, sizeof(int));
-    *num_node = rx.get_num_patches();
-
-    uint16_t level = 0;
-
-    RXMESH_TRACE("Matching");
-    match_patches_init_edge_weight<blockThreads>
-        <<<rx.get_num_patches(), blockThreads, smem_bytes_dyn>>>(
-            rx.get_context());
-    CUDA_ERROR(cudaDeviceSynchronize());
-
-    match_patches_init_param<blockThreads>
-        <<<rx.get_num_patches(), blockThreads>>>(rx.get_context());
-    CUDA_ERROR(cudaDeviceSynchronize());
-
-    while (*num_node > 1) {
-        *num_node                    = 1;
-        uint16_t is_matching_counter = 0;
-        while (is_matching_counter < 10) {
-            match_patches_select<blockThreads>
-                <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(),
-                                                         level);
-            CUDA_ERROR(cudaDeviceSynchronize());
-
-            match_patches_confirm<blockThreads>
-                <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(),
-                                                         level);
-            CUDA_ERROR(cudaDeviceSynchronize());
-
-            // update the is_matching_flag here
-            ++is_matching_counter;
-        }
-
-        match_patches_update_node<blockThreads>
-            <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(), level);
-        CUDA_ERROR(cudaDeviceSynchronize());
-
-        match_patches_update_not_node<blockThreads>
-            <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(), level);
-        CUDA_ERROR(cudaDeviceSynchronize());
-
-        match_patches_update_next_level<blockThreads>
-            <<<rx.get_num_patches(), blockThreads>>>(
-                rx.get_context(), level, num_node);
-        CUDA_ERROR(cudaDeviceSynchronize());
-
-        check<blockThreads>
-            <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(), level);
-        CUDA_ERROR(cudaDeviceSynchronize());
-
-        // update level counter
-        ++level;
-
-        printf("level: %d, num_node: %d\n", level, *num_node);
-
-        // update the num_node here
-        if (level > 50) {
-            *num_node = 1;
-            RXMESH_ERROR("Too many levels");
-        }
-    }
-
-
-    uint16_t* patch_list_size;
-    CUDA_ERROR(cudaMallocManaged(&patch_list_size, sizeof(uint16_t) * 1));
-
-    // patch_prefix_sum is just for preparing the next level of the patch list
-    // marking the whether the patch would be expanded or not
-    uint16_t* patch_prefix_sum;
-    CUDA_ERROR(cudaMallocManaged(
-        &patch_prefix_sum, sizeof(uint16_t) * 2 * (rx.get_num_patches() + 2)));
-    CUDA_ERROR(cudaMemset(patch_prefix_sum,
-                          INVALID16,
-                          sizeof(uint16_t) * 2 * (rx.get_num_patches() + 2)));
-
-    // record how many pieces including the vertex separtors
-    uint16_t* patch_list;
-    CUDA_ERROR(cudaMallocManaged(&patch_list,
-                                 sizeof(uint16_t) * 2 * rx.get_num_patches()));
-    CUDA_ERROR(cudaMemset(
-        patch_list, INVALID16, sizeof(uint16_t) * 2 * rx.get_num_patches()));
-
-    uint16_t* next_patch_list;
-    CUDA_ERROR(cudaMallocManaged(&next_patch_list,
-                                 sizeof(uint16_t) * 2 * rx.get_num_patches()));
-    CUDA_ERROR(cudaMemset(next_patch_list,
-                          INVALID16,
-                          sizeof(uint16_t) * 2 * rx.get_num_patches()));
-
-    // patch_num_v_prefix_sum record the start index and the end index for each
-    // pieces in a prefix sum manner
-    uint32_t* patch_num_v_prefix_sum;
-    CUDA_ERROR(
-        cudaMallocManaged(&patch_num_v_prefix_sum,
-                          sizeof(uint32_t) * 2 * (rx.get_num_patches() + 2)));
-    CUDA_ERROR(cudaMemset(patch_num_v_prefix_sum,
-                          0,
-                          sizeof(uint32_t) * 2 * (rx.get_num_patches() + 2)));
-
-    uint32_t* next_patch_num_v_prefix_sum;
-    CUDA_ERROR(
-        cudaMallocManaged(&next_patch_num_v_prefix_sum,
-                          sizeof(uint32_t) * 2 * (rx.get_num_patches() + 2)));
-    CUDA_ERROR(cudaMemset(next_patch_num_v_prefix_sum,
-                          0,
-                          sizeof(uint32_t) * 2 * (rx.get_num_patches() + 2)));
-
-    // init the parameters for the coarest level
-    ordering_init_top_layer<blockThreads>
-        <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(),
-                                                 level,
-                                                 patch_list_size,
-                                                 patch_prefix_sum,
-                                                 patch_list,
-                                                 patch_num_v_prefix_sum);
-    CUDA_ERROR(cudaDeviceSynchronize());
-
-    uint16_t tmp_counter = 0;
-    while (level > 0) {
-        ordering_generate_prefix_sum<blockThreads>
-            <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(),
-                                                     level,
-                                                     patch_list_size,
-                                                     patch_prefix_sum,
-                                                     patch_list,
-                                                     patch_num_v_prefix_sum);
-        CUDA_ERROR(cudaDeviceSynchronize());
-
-        cub_prefix_sum_wrap(
-            patch_prefix_sum, patch_prefix_sum, patch_list_size[0] + 1);
-
-        ordering_extract_vertices<blockThreads>
-            <<<rx.get_num_patches(), blockThreads, smem_bytes_dyn>>>(
-                rx.get_context(),
-                level,
-                patch_list_size,
-                patch_prefix_sum,
-                patch_list,
-                patch_num_v_prefix_sum,
-                next_patch_num_v_prefix_sum,
-                v_ordering);
-        CUDA_ERROR(cudaDeviceSynchronize());
-
-        printf("next_patch_num_v_prefix_sum: ");
-        for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
-            printf(" %d ", next_patch_num_v_prefix_sum[i]);
-        }
-        printf("\n");
-
-        ordering_generate_finer_level<blockThreads>
-            <<<rx.get_num_patches(), blockThreads, smem_bytes_dyn>>>(
-                rx.get_context(),
-                level,
-                patch_list_size,
-                patch_prefix_sum,
-                patch_list,
-                next_patch_list,
-                patch_num_v_prefix_sum,
-                next_patch_num_v_prefix_sum,
-                v_ordering);
-        CUDA_ERROR(cudaDeviceSynchronize());
-
-        printf("next_patch_num_v_prefix_sum: ");
-        for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
-            printf(" %d ", next_patch_num_v_prefix_sum[i]);
-        }
-        printf("\n");
-
-        cub_prefix_sum_wrap(
-            next_patch_num_v_prefix_sum, next_patch_num_v_prefix_sum, patch_list_size[0] + 1);
-
-        printf("--------------------\n");
-        printf("uncoarsen level: %d\n", level);
-
-        printf("patch_list_size: %d\n", patch_list_size[0]);
-
-        printf("patch_prefix_sum: ");
-        for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
-            printf(" %d ", patch_prefix_sum[i]);
-        }
-        printf("\n");
-
-        printf("patch_list: ");
-        for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
-            printf(" %d ", patch_list[i]);
-        }
-        printf("\n");
-
-        printf("next_patch_list: ");
-        for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
-            printf(" %d ", next_patch_list[i]);
-        }
-        printf("\n");
-
-        printf("patch_num_v_prefix_sum: ");
-        for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
-            printf(" %d ", patch_num_v_prefix_sum[i]);
-        }
-        printf("\n");
-
-        printf("next_patch_num_v_prefix_sum: ");
-        for (uint16_t i = 0; i < patch_list_size[0] + 1; ++i) {
-            printf(" %d ", next_patch_num_v_prefix_sum[i]);
-        }
-        printf("\n");
-        printf("--------------------\n");
-
-        swapPointers(patch_list, next_patch_list);
-        swapPointers(patch_num_v_prefix_sum, next_patch_num_v_prefix_sum);
-
-        // clear the next level
-        CUDA_ERROR(cudaMemset(next_patch_list,
-                              INVALID16,
-                              sizeof(uint16_t) * 2 * rx.get_num_patches()));
-        CUDA_ERROR(cudaMemset(next_patch_num_v_prefix_sum,
-                          0,
-                          sizeof(uint32_t) * 2 * (rx.get_num_patches() + 2)));
-            
-        --level;
-        ++tmp_counter;
-        if (tmp_counter == 2) {
-            break;
-        }
-    }
-}
 
 void nd_reorder()
 {
@@ -329,13 +75,41 @@ void nd_reorder()
         "v_ordering", 1, rxmesh::LOCATION_ALL);
     v_ordering->reset(INVALID16, rxmesh::DEVICE);
 
+    uint32_t* reorder_array;
+    CUDA_ERROR(cudaMallocManaged(&reorder_array,
+                                 sizeof(uint32_t) * rx.get_num_vertices()));
+
+
     // Phase: cross patch reordering
-    cross_patch_ordering<blockThreads>(rx, *v_ordering, smem_bytes_dyn);
+    GPUTimer timer;
+    timer.start();
+
+    cross_patch_ordering<blockThreads>(
+        rx, *v_ordering, reorder_array, smem_bytes_dyn);
+
+        timer.stop();
+    float total_time = timer.elapsed_millis();
+
+    RXMESH_INFO("Cross patch ordering time: {} ms", total_time);
+
+    // correctness check
+    // thrust::sort(reorder_array, reorder_array + rx.get_num_vertices());
+    // for (int i = 0; i < rx.get_num_vertices(); i++) {
+    //     if (reorder_array[i] != i + 1) {
+    //         RXMESH_ERROR("reorder_array[{}] = {}", i, reorder_array[i]);
+    //         break;
+    //     }
+    // }
+
+    SparseMatrix<float> A_mat(rx);
+    A_mat.spmat_chol_reorder(Reorder::NSTDIS);
 
     // Phase: single patch reordering
     // nd_single_patch_main<blockThreads><<<blocks, threads, smem_bytes_dyn>>>(
     //     rx.get_context(), *v_reorder, *attr_matched_v, *attr_active_e,
     //     req_levels);
+
+    // RXMESH_TRACE("single patch ordering done");
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
