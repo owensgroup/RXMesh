@@ -410,24 +410,27 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
 
             LaunchBox<blockThreads> launch_box;
             rx.update_launch_box(
-                {Op::EVDiamond},
+                //{Op::EVDiamond},
+                {Op::EV, Op::VV},
                 launch_box,
-                (void*)edge_collapse<T, blockThreads>,
+                (void*)edge_collapse_1<T, blockThreads>,
                 true,
                 false,
                 false,
                 false,
                 [&](uint32_t v, uint32_t e, uint32_t f) {
                     return detail::mask_num_bytes(e) +
-                           2 * detail::mask_num_bytes(v) +
-                           3 * ShmemAllocator::default_alignment;
+                           2 * v * sizeof(uint16_t) +
+                           2 * ShmemAllocator::default_alignment;
+                    // 2 * detail::mask_num_bytes(v) +
+                    // 3 * ShmemAllocator::default_alignment;
                 });
 
             // CUDA_ERROR(cudaMemset(d_buffer, 0, sizeof(int)));
 
             GPUTimer app_timer;
             app_timer.start();
-            edge_collapse<T, blockThreads>
+            edge_collapse_1<T, blockThreads>
                 <<<DIVIDE_UP(launch_box.blocks, 8),
                    launch_box.num_threads,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(),
@@ -564,24 +567,27 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
                    launch_box.smem_bytes_dyn>>>(rx.get_context(), *v_valence);
 
             rx.update_launch_box(
-                {Op::EVDiamond},
+                //{Op::EVDiamond},
+                {Op::EVDiamond, Op::VV},
                 launch_box,
-                (void*)edge_flip<T, blockThreads>,
+                (void*)edge_flip_1<T, blockThreads>,
                 true,
                 false,
                 false,
                 false,
                 [&](uint32_t v, uint32_t e, uint32_t f) {
                     return detail::mask_num_bytes(e) +
-                           2 * detail::mask_num_bytes(v) +
-                           3 * ShmemAllocator::default_alignment;
+                           2 * v * sizeof(uint16_t) +
+                           2 * ShmemAllocator::default_alignment;
+                    // 2 * detail::mask_num_bytes(v) +
+                    // 3 * ShmemAllocator::default_alignment;
                 });
 
             // CUDA_ERROR(cudaMemset(d_buffer, 0, sizeof(int)));
 
-            edge_flip<T, blockThreads><<<DIVIDE_UP(launch_box.blocks, 8),
-                                         launch_box.num_threads,
-                                         launch_box.smem_bytes_dyn>>>(
+            edge_flip_1<T, blockThreads><<<DIVIDE_UP(launch_box.blocks, 8),
+                                           launch_box.num_threads,
+                                           launch_box.smem_bytes_dyn>>>(
                 rx.get_context(), *coords, *v_valence, *edge_status, d_buffer);
             app_timer.stop();
 

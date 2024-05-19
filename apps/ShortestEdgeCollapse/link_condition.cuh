@@ -44,7 +44,8 @@ __inline__ __device__ void link_condition(
             for_each_edge(
                 patch_info,
                 [&](EdgeHandle eh) {
-                    if (eh.local_id() == e) {
+                    if (eh.local_id() == e &&
+                        eh.patch_id() == patch_info.patch_id) {
                         return;
                     }
                     const VertexIterator v_iter =

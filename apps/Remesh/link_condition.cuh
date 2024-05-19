@@ -17,8 +17,8 @@ __inline__ __device__ void link_condition(
     rxmesh::Bitmask&                  edge_mask,
     rxmesh::Bitmask&                  v0_mask,
     rxmesh::Bitmask&                  v1_mask,
-    const int                         v0_index_in_iter = 0,
-    const int                         v1_index_in_iter = 1)
+    const int                         v0_index_in_iter,
+    const int                         v1_index_in_iter)
 {
     using namespace rxmesh;
 
@@ -30,8 +30,8 @@ __inline__ __device__ void link_condition(
             const VertexIterator iter =
                 ev_query.template get_iterator<VertexIterator>(e);
 
-            const uint16_t v0 = iter.local(0);
-            const uint16_t v1 = iter.local(1);
+            const uint16_t v0 = iter.local(v0_index_in_iter);
+            const uint16_t v1 = iter.local(v1_index_in_iter);
 
             if (threadIdx.x == 0) {
                 s_num_shared_one_ring = 0;
@@ -46,7 +46,8 @@ __inline__ __device__ void link_condition(
             for_each_edge(
                 patch_info,
                 [&](EdgeHandle eh) {
-                    if (eh.local_id() == e) {
+                    if (eh.local_id() == e &&
+                        eh.patch_id() == patch_info.patch_id) {
                         return;
                     }
                     const VertexIterator v_iter =
