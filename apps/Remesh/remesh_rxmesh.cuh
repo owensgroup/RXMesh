@@ -168,7 +168,9 @@ inline void compute_stats(rxmesh::RXMeshDynamic&                rx,
             float len = (*edge_len)(eh);
             stats.avg_edge_len += len;
             stats.max_edge_len = std::max(stats.max_edge_len, len);
-            stats.min_edge_len = std::min(stats.min_edge_len, len);
+            if (len > std::numeric_limits<float>::epsilon()) {
+                stats.min_edge_len = std::min(stats.min_edge_len, len);
+            }
         },
         NULL,
         false);
@@ -228,6 +230,7 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
                              rxmesh::VertexAttribute<T>*        coords,
                              rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
                              const T high_edge_len_sq,
+                             const T low_edge_len_sq,
                              int*    d_buffer)
 {
     using namespace rxmesh;
@@ -252,6 +255,9 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
 
         while (!rx.is_queue_empty()) {
             num_inner_iter++;
+
+            //RXMESH_INFO(" Queue size = {}",
+            //            rx.get_context().m_patch_scheduler.size());
 
             LaunchBox<blockThreads> launch_box;
             rx.update_launch_box({Op::EV},
@@ -278,6 +284,7 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
                                                 *coords,
                                                 *edge_status,
                                                 high_edge_len_sq,
+                                                low_edge_len_sq,
                                                 d_buffer);
             app_timer.stop();
 
@@ -300,12 +307,12 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
             slice_time += slice_timer.elapsed_millis();
             cleanup_time += cleanup_timer.elapsed_millis();
             cleanup_time += cleanup_timer2.elapsed_millis();
-            CUDA_ERROR(cudaDeviceSynchronize());
-            // int dd;
-            // CUDA_ERROR(
-            //     cudaMemcpy(&dd, d_buffer, sizeof(int),
-            //     cudaMemcpyDeviceToHost));
-            // num_splits += dd;
+            // CUDA_ERROR(cudaDeviceSynchronize());
+            //  int dd;
+            //  CUDA_ERROR(
+            //      cudaMemcpy(&dd, d_buffer, sizeof(int),
+            //      cudaMemcpyDeviceToHost));
+            //  num_splits += dd;
 
             // rx.update_host();
             // EXPECT_TRUE(rx.validate());
@@ -387,6 +394,9 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
         rx.reset_scheduler();
         while (!rx.is_queue_empty()) {
             num_inner_iter++;
+
+            //RXMESH_INFO(" Queue size = {}",
+            //            rx.get_context().m_patch_scheduler.size());
 
             LaunchBox<blockThreads> launch_box;
             rx.update_launch_box(
@@ -519,6 +529,9 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
         while (!rx.is_queue_empty()) {
             num_inner_iter++;
             LaunchBox<blockThreads> launch_box;
+
+            //RXMESH_INFO(" Queue size = {}",
+            //            rx.get_context().m_patch_scheduler.size());
 
             rx.update_launch_box({},
                                  launch_box,
@@ -719,8 +732,12 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     for (uint32_t iter = 0; iter < Arg.num_iter; ++iter) {
         RXMESH_INFO(" Edge Split -- iter {}", iter);
-        split_long_edges(
-            rx, coords.get(), edge_status.get(), high_edge_len_sq, d_buffer);
+        split_long_edges(rx,
+                         coords.get(),
+                         edge_status.get(),
+                         high_edge_len_sq,
+                         low_edge_len_sq,
+                         d_buffer);
 
         RXMESH_INFO(" Edge Collapse -- iter {}", iter);
         collapse_short_edges(rx,
@@ -781,6 +798,6 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     rx.render_vertex_patch();
     rx.render_edge_patch();
     rx.render_face_patch();
-    // polyscope::show();
+    polyscope::show();
 #endif
 }

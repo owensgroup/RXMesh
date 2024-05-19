@@ -47,6 +47,7 @@ __global__ static void __launch_bounds__(blockThreads)
                const rxmesh::VertexAttribute<T>  coords,
                rxmesh::EdgeAttribute<EdgeStatus> edge_status,
                const T                           high_edge_len_sq,
+               const T                           low_edge_len_sq,
                int*                              d_buffer)
 {
     // EV for calc edge len
@@ -111,41 +112,72 @@ __global__ static void __launch_bounds__(blockThreads)
 
             const VertexHandle new_v = cavity.add_vertex();
 
-            if (new_v.is_valid()) {
+            Vec3<T> new_p;
+            new_p[0] = (coords(v0, 0) + coords(v1, 0)) * T(0.5);
+            new_p[1] = (coords(v0, 1) + coords(v1, 1)) * T(0.5);
+            new_p[2] = (coords(v0, 2) + coords(v1, 2)) * T(0.5);
 
-                coords(new_v, 0) = (coords(v0, 0) + coords(v1, 0)) / 2.0f;
-                coords(new_v, 1) = (coords(v0, 1) + coords(v1, 1)) / 2.0f;
-                coords(new_v, 2) = (coords(v0, 2) + coords(v1, 2)) / 2.0f;
+            bool short_edge = false;
 
-                DEdgeHandle e0 =
-                    cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
-                const DEdgeHandle e_init = e0;
+            for (uint16_t i = 0; i < size; ++i) {
+                const VertexHandle v1 = cavity.get_cavity_vertex(c, i);
+                const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+                const T       edge_len_sq = glm::distance2(new_p, p1);
+                if (edge_len_sq < low_edge_len_sq) {
+                    short_edge = true;
+                    break;
+                }
+            }
 
-                if (e0.is_valid()) {
-                    is_updated.set(e0.local_id(), true);
-                    //::atomicAdd(&s_num_splits, 1);
-                    for (uint16_t i = 0; i < size; ++i) {
-                        const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+            if (short_edge) {
+                const EdgeHandle src =
+                    cavity.template get_creator<EdgeHandle>(c);
+                edge_status(src) = OKAY;
+                cavity.recover(src);                
+            } else {
 
-                        // is_updated.set(e.local_id(), true);
+                if (new_v.is_valid()) {
 
-                        const DEdgeHandle e1 =
-                            (i == size - 1) ?
-                                e_init.get_flip_dedge() :
-                                cavity.add_edge(
-                                    cavity.get_cavity_vertex(c, i + 1), new_v);
-                        if (!e1.is_valid()) {
-                            break;
-                        }
-                        if (i != size - 1) {
+                    //coords(new_v, 0) = (coords(v0, 0) + coords(v1, 0)) * T(0.5);
+                    //coords(new_v, 1) = (coords(v0, 1) + coords(v1, 1)) * T(0.5);
+                    //coords(new_v, 2) = (coords(v0, 2) + coords(v1, 2)) * T(0.5);
+
+                    coords(new_v, 0) = new_p[0];
+                    coords(new_v, 1) = new_p[1];
+                    coords(new_v, 2) = new_p[2];
+
+                    DEdgeHandle e0 =
+                        cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
+                    const DEdgeHandle e_init = e0;
+
+                    if (e0.is_valid()) {
+                        is_updated.set(e0.local_id(), true);
+                        //::atomicAdd(&s_num_splits, 1);
+                        for (uint16_t i = 0; i < size; ++i) {
+                            const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+
+                            // is_updated.set(e.local_id(), true);
+
+                            const DEdgeHandle e1 =
+                                (i == size - 1) ?
+                                    e_init.get_flip_dedge() :
+                                    cavity.add_edge(
+                                        cavity.get_cavity_vertex(c, i + 1),
+                                        new_v);
+                            if (!e1.is_valid()) {
+                                break;
+                            }
+                            
+                            is_updated.set(e.local_id(), true);
                             is_updated.set(e1.local_id(), true);
-                        }
+                            is_updated.set(e0.local_id(), true);
 
-                        const FaceHandle f = cavity.add_face(e0, e, e1);
-                        if (!f.is_valid()) {
-                            break;
+                            const FaceHandle f = cavity.add_face(e0, e, e1);
+                            if (!f.is_valid()) {
+                                break;
+                            }
+                            e0 = e1.get_flip_dedge();
                         }
-                        e0 = e1.get_flip_dedge();
                     }
                 }
             }
@@ -335,71 +367,73 @@ __global__ static void __launch_bounds__(blockThreads)
 
 
             // check if we will create a long edge
-            // bool long_edge = false;
-            //
-            // for (uint16_t i = 0; i < size; ++i) {
-            //    const VertexHandle v1 = cavity.get_cavity_vertex(c, i);
-            //    const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-            //    const T       edge_len_sq = glm::distance2(p0, p1);
-            //    if (edge_len_sq > high_edge_len_sq) {
-            //        long_edge = true;
-            //        break;
-            //    }
-            //}
-            //
-            // if (long_edge) {
-            //    // roll back
-            //    cavity.recover(src);
-            //} else {
+            bool long_edge = false;
 
-            const VertexHandle new_v = cavity.add_vertex();
+            for (uint16_t i = 0; i < size; ++i) {
+                const VertexHandle v1 = cavity.get_cavity_vertex(c, i);
+                const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+                const T       edge_len_sq = glm::distance2(p0, p1);
+                if (edge_len_sq > high_edge_len_sq) {
+                    long_edge = true;
+                    break;
+                }
+            }
 
-            if (new_v.is_valid()) {
+            if (long_edge) {
+                // roll back
+                edge_status(src) = OKAY;
+                cavity.recover(src);
+            } else {
 
-                coords(new_v, 0) = (p0[0] + p1[0]) * T(0.5);
-                coords(new_v, 1) = (p0[1] + p1[1]) * T(0.5);
-                coords(new_v, 2) = (p0[2] + p1[2]) * T(0.5);
+                const VertexHandle new_v = cavity.add_vertex();
 
-                DEdgeHandle e0 =
-                    cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
+                if (new_v.is_valid()) {
 
-                if (e0.is_valid()) {
-                    is_updated.set(e0.local_id(), true);
+                    coords(new_v, 0) = (p0[0] + p1[0]) * T(0.5);
+                    coords(new_v, 1) = (p0[1] + p1[1]) * T(0.5);
+                    coords(new_v, 2) = (p0[2] + p1[2]) * T(0.5);
 
-                    const DEdgeHandle e_init = e0;
+                    DEdgeHandle e0 =
+                        cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
 
-                    for (uint16_t i = 0; i < size; ++i) {
-                        const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+                    if (e0.is_valid()) {
+                        is_updated.set(e0.local_id(), true);
 
-                        // is_updated.set(e.local_id(), true);
+                        const DEdgeHandle e_init = e0;
 
-                        const VertexHandle v_end =
-                            cavity.get_cavity_vertex(c, (i + 1) % size);
+                        for (uint16_t i = 0; i < size; ++i) {
+                            const DEdgeHandle e = cavity.get_cavity_edge(c, i);
 
-                        const DEdgeHandle e1 =
-                            (i == size - 1) ?
-                                e_init.get_flip_dedge() :
-                                cavity.add_edge(
-                                    cavity.get_cavity_vertex(c, i + 1), new_v);
+                            // is_updated.set(e.local_id(), true);
 
-                        if (!e1.is_valid()) {
-                            break;
+                            const VertexHandle v_end =
+                                cavity.get_cavity_vertex(c, (i + 1) % size);
+
+                            const DEdgeHandle e1 =
+                                (i == size - 1) ?
+                                    e_init.get_flip_dedge() :
+                                    cavity.add_edge(
+                                        cavity.get_cavity_vertex(c, i + 1),
+                                        new_v);
+
+                            if (!e1.is_valid()) {
+                                break;
+                            }
+
+                            if (i != size - 1) {
+                                is_updated.set(e1.local_id(), true);
+                            }
+
+                            const FaceHandle new_f = cavity.add_face(e0, e, e1);
+
+                            if (!new_f.is_valid()) {
+                                break;
+                            }
+                            e0 = e1.get_flip_dedge();
                         }
-
-                        if (i != size - 1) {
-                            is_updated.set(e1.local_id(), true);
-                        }
-
-                        const FaceHandle new_f = cavity.add_face(e0, e, e1);
-
-                        if (!new_f.is_valid()) {
-                            break;
-                        }
-                        e0 = e1.get_flip_dedge();
                     }
                 }
             }
-            //}
         });
     }
     block.sync();
