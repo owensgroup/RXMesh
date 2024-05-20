@@ -251,16 +251,18 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
     int num_inner_iter = 0;
     while (true) {
         num_outer_iter++;
+        //if(num_outer_iter > 20){break;}
         rx.reset_scheduler();
 
         while (!rx.is_queue_empty()) {
             num_inner_iter++;
+            //if(num_inner_iter > 100){break;}
 
-            //RXMESH_INFO(" Queue size = {}",
-            //            rx.get_context().m_patch_scheduler.size());
+            RXMESH_INFO(" Queue size = {}",
+                        rx.get_context().m_patch_scheduler.size());
 
             LaunchBox<blockThreads> launch_box;
-            rx.update_launch_box({Op::EV},
+            rx.update_launch_box({Op::EVDiamond},
                                  launch_box,
                                  (void*)edge_split<T, blockThreads>,
                                  true,
@@ -291,22 +293,12 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
             GPUTimer cleanup_timer;
             cleanup_timer.start();
             rx.cleanup();
-            cleanup_timer.stop();
+            cleanup_timer.stop();           
+            
 
-            GPUTimer slice_timer;
-            slice_timer.start();
-            rx.slice_patches(*coords, *edge_status);
-            slice_timer.stop();
-
-            GPUTimer cleanup_timer2;
-            cleanup_timer2.start();
-            rx.cleanup();
-            cleanup_timer2.stop();
-
-            app_time += app_timer.elapsed_millis();
-            slice_time += slice_timer.elapsed_millis();
+            app_time += app_timer.elapsed_millis();            
             cleanup_time += cleanup_timer.elapsed_millis();
-            cleanup_time += cleanup_timer2.elapsed_millis();
+            
             // CUDA_ERROR(cudaDeviceSynchronize());
             //  int dd;
             //  CUDA_ERROR(
@@ -347,8 +339,23 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
             //    polyscope::show();
             //}
         }
+        RXMESH_INFO("Slicing");
+        GPUTimer slice_timer;
+        slice_timer.start();
+        rx.slice_patches(*coords, *edge_status);
+        slice_timer.stop();
+        slice_time += slice_timer.elapsed_millis();
+
+        GPUTimer cleanup_timer2;
+        cleanup_timer2.start();
+        rx.cleanup();
+        cleanup_timer2.stop();
+        cleanup_time += cleanup_timer2.elapsed_millis();
+
 
         int remaining_work = is_done(rx, edge_status, d_buffer);
+
+        RXMESH_INFO("remaining_work {}", remaining_work);
 
         if (remaining_work == 0 || prv_remaining_work == remaining_work) {
             break;
@@ -391,16 +398,18 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
     // int   num_collapses  = 0;
     while (true) {
         num_outer_iter++;
+        //if(num_outer_iter > 20){break;}
         rx.reset_scheduler();
         while (!rx.is_queue_empty()) {
             num_inner_iter++;
+            //if(num_inner_iter > 100){break;}
 
-            //RXMESH_INFO(" Queue size = {}",
-            //            rx.get_context().m_patch_scheduler.size());
+            RXMESH_INFO(" Queue size = {}",
+                        rx.get_context().m_patch_scheduler.size());
 
             LaunchBox<blockThreads> launch_box;
             rx.update_launch_box(
-                {Op::EV, Op::VV},
+                {Op::EVDiamond, Op::VV},
                 launch_box,
                 (void*)edge_collapse<T, blockThreads>,
                 true,
@@ -433,21 +442,9 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
             rx.cleanup();
             cleanup_timer.stop();
 
-            GPUTimer slice_timer;
-            slice_timer.start();
-            rx.slice_patches(*coords, *edge_status);
-            slice_timer.stop();
-
-            GPUTimer cleanup_timer2;
-            cleanup_timer2.start();
-            rx.cleanup();
-            cleanup_timer2.stop();
-
-
-            app_time += app_timer.elapsed_millis();
-            slice_time += slice_timer.elapsed_millis();
+            app_time += app_timer.elapsed_millis();            
             cleanup_time += cleanup_timer.elapsed_millis();
-            cleanup_time += cleanup_timer2.elapsed_millis();
+            
 
             // int dd;
             // CUDA_ERROR(
@@ -483,8 +480,22 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
             //    polyscope::show();
             //}
         }
+        GPUTimer slice_timer;
+        slice_timer.start();
+        rx.slice_patches(*coords, *edge_status);
+        slice_timer.stop();
+        slice_time += slice_timer.elapsed_millis();
+
+        GPUTimer cleanup_timer2;
+        cleanup_timer2.start();
+        rx.cleanup();
+        cleanup_timer2.stop();
+        cleanup_time += cleanup_timer2.elapsed_millis();
+
 
         int remaining_work = is_done(rx, edge_status, d_buffer);
+
+        RXMESH_INFO("remaining_work {}", remaining_work);
 
         if (remaining_work == 0 || prv_remaining_work == remaining_work) {
             break;
@@ -525,13 +536,16 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
     int num_inner_iter = 0;
     while (true) {
         num_outer_iter++;
+        //if(num_outer_iter > 20){break;}
         rx.reset_scheduler();
         while (!rx.is_queue_empty()) {
             num_inner_iter++;
+            //if(num_inner_iter > 100){break;}
+
             LaunchBox<blockThreads> launch_box;
 
-            //RXMESH_INFO(" Queue size = {}",
-            //            rx.get_context().m_patch_scheduler.size());
+            RXMESH_INFO(" Queue size = {}",
+                        rx.get_context().m_patch_scheduler.size());
 
             rx.update_launch_box({},
                                  launch_box,
@@ -571,22 +585,11 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
             GPUTimer cleanup_timer;
             cleanup_timer.start();
             rx.cleanup();
-            cleanup_timer.stop();
+            cleanup_timer.stop();                      
 
-            GPUTimer slice_timer;
-            slice_timer.start();
-            rx.slice_patches(*coords, *edge_status);
-            slice_timer.stop();
-
-            GPUTimer cleanup_timer2;
-            cleanup_timer2.start();
-            rx.cleanup();
-            cleanup_timer2.stop();
-
-            app_time += app_timer.elapsed_millis();
-            slice_time += slice_timer.elapsed_millis();
+            app_time += app_timer.elapsed_millis();            
             cleanup_time += cleanup_timer.elapsed_millis();
-            cleanup_time += cleanup_timer2.elapsed_millis();
+            
 
             // int dd;
             // CUDA_ERROR(
@@ -622,9 +625,23 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
             //    polyscope::show();
             //}
         }
+        GPUTimer slice_timer;
+        slice_timer.start();
+        rx.slice_patches(*coords, *edge_status);
+        slice_timer.stop();
+        slice_time += slice_timer.elapsed_millis();
+
+        GPUTimer cleanup_timer2;
+        cleanup_timer2.start();
+        rx.cleanup();
+        cleanup_timer2.stop();
+        cleanup_time += cleanup_timer2.elapsed_millis();
+
 
         int remaining_work = is_done(rx, edge_status, d_buffer);
 
+        RXMESH_INFO("remaining_work {}", remaining_work);
+        
         if (remaining_work == 0 || prv_remaining_work == remaining_work) {
             break;
         }

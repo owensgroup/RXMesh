@@ -335,18 +335,14 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
                                                 d_num_sliced);
             app_timer.stop();
 
-            GPUTimer slice_timer;
-            slice_timer.start();
-            rx.slice_patches(*coords);
-            slice_timer.stop();
+            
 
             GPUTimer cleanup_timer;
             cleanup_timer.start();
             rx.cleanup();
             cleanup_timer.stop();
 
-            app_time += app_timer.elapsed_millis();
-            slice_time += slice_timer.elapsed_millis();
+            app_time += app_timer.elapsed_millis();            
             cleanup_time += cleanup_timer.elapsed_millis();
 
             if (validate) {
@@ -376,6 +372,12 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
             //             h_num_sliced);
             //  break;
         }
+        GPUTimer slice_timer;
+        slice_timer.start();
+        rx.slice_patches(*coords);
+        slice_timer.stop();
+        slice_time += slice_timer.elapsed_millis();
+
         CUDA_ERROR(cudaMemcpy(
             &h_flipped, d_flipped, sizeof(int), cudaMemcpyDeviceToHost));
         // break;
@@ -409,6 +411,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     RXMESH_INFO("Output mesh #Patches {}", rx.get_num_patches());
 
     if (with_verify) {
+        RXMESH_INFO("*********verify*******");
         rx.export_obj(STRINGIFY(OUTPUT_DIR) "temp.obj", *coords);
         TriMesh tri_mesh;
         ASSERT_TRUE(OpenMesh::IO::read_mesh(tri_mesh,

@@ -74,7 +74,47 @@ __global__ static void __launch_bounds__(blockThreads)
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
     auto should_split = [&](const EdgeHandle& eh, const VertexIterator& iter) {
-        if (edge_status(eh) == UPDATE) {
+
+
+        // iter[0] and iter[2] are the edge two vertices
+        // iter[1] and iter[3] are the two opposite vertices
+        //    0
+        //  / | \
+        // 3  |  1
+        // \  |  /
+        //    2
+        assert(iter.size() == 4);
+
+        if (edge_status(eh) == UNSEEN) {
+            const VertexHandle va = iter[0];
+            const VertexHandle vb = iter[2];
+
+            const VertexHandle vc = iter[1];
+            const VertexHandle vd = iter[3];
+
+            // don't split boundary edges
+            if (vc.is_valid() && vd.is_valid()) {
+                // degenerate cases
+                if (va == vb || vb == vc || vc == va || va == vd || vb == vd ||
+                    vc == vd) {
+                    edge_status(eh) = OKAY;
+                    return;
+                }
+                const Vec3<T> pa(coords(va, 0), coords(va, 1), coords(va, 2));
+                const Vec3<T> pb(coords(vb, 0), coords(vb, 1), coords(vb, 2));
+
+                const T edge_len = glm::distance2(pa, pb);
+
+                if (edge_len > high_edge_len_sq) {
+                    cavity.create(eh);
+                } else {
+                    edge_status(eh) = OKAY;
+                }
+            }
+        }
+
+
+        /*if (edge_status(eh) == UPDATE) {
             cavity.create(eh);
         } else if (edge_status(eh) == UNSEEN) {
             const Vec3<T> v0(
@@ -90,11 +130,11 @@ __global__ static void __launch_bounds__(blockThreads)
             } else {
                 edge_status(eh) = OKAY;
             }
-        }
+        }*/
     };
 
     Query<blockThreads> query(context, cavity.patch_id());
-    query.dispatch<Op::EV>(block, shrd_alloc, should_split);
+    query.dispatch<Op::EVDiamond>(block, shrd_alloc, should_split);
     block.sync();
 
     shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
@@ -103,6 +143,7 @@ __global__ static void __launch_bounds__(blockThreads)
     if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
 
         is_updated.reset(block);
+        block.sync();
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
@@ -168,9 +209,9 @@ __global__ static void __launch_bounds__(blockThreads)
                                 break;
                             }
                             
-                            is_updated.set(e.local_id(), true);
+                            //is_updated.set(e.local_id(), true);
                             is_updated.set(e1.local_id(), true);
-                            is_updated.set(e0.local_id(), true);
+                            //is_updated.set(e0.local_id(), true);
 
                             const FaceHandle f = cavity.add_face(e0, e, e1);
                             if (!f.is_valid()) {
@@ -269,6 +310,44 @@ __global__ static void __launch_bounds__(blockThreads)
     auto should_collapse = [&](const EdgeHandle&     eh,
                                const VertexIterator& iter) {
         if (edge_status(eh) == UNSEEN) {
+            
+            const VertexHandle v0 = iter[0];
+            const VertexHandle v1 = iter[2];
+        
+            const VertexHandle v2 = iter[1];
+            const VertexHandle v3 = iter[3];
+        
+            // don't collapse boundary edges
+            if (v0.is_valid() && v1.is_valid() && v2.is_valid() && v3.is_valid()) {
+            
+                // degenerate cases
+                if (v0 == v1 || v0 == v2 || v0 == v3 || v1 == v2 || v1 == v3 ||
+                    v2 == v3) {
+                    return;
+                }
+                const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+                const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+                const T       edge_len_sq = glm::distance2(p0, p1);
+            
+                if (edge_len_sq < low_edge_len_sq) {
+
+                    const uint16_t c0(iter.local(0)), c1(iter.local(2));
+    
+                    uint16_t ret = ::atomicCAS(v_info + 2 * c0, INVALID16, c1);
+                    if (ret == INVALID16) {
+                        v_info[2 * c0 + 1] = eh.local_id();
+                        e_collapse.set(eh.local_id(), true);
+                    } else {
+                        ret = ::atomicCAS(v_info + 2 * c1, INVALID16, c0);
+                        if (ret == INVALID16) {
+                            v_info[2 * c1 + 1] = eh.local_id();
+                            e_collapse.set(eh.local_id(), true);
+                        }
+                    }
+                }
+            }
+        }
+        /*if (edge_status(eh) == UNSEEN) {
 
             const VertexHandle v0(iter[0]), v1(iter[1]);
 
@@ -292,12 +371,12 @@ __global__ static void __launch_bounds__(blockThreads)
                     }
                 }
             }
-        }
+        }*/
     };
 
     // 1. mark edge that we want to collapse based on the edge lenght
     Query<blockThreads> query(context, cavity.patch_id());
-    query.dispatch<Op::EV>(block, shrd_alloc, should_collapse);
+    query.dispatch<Op::EVDiamond>(block, shrd_alloc, should_collapse);
     block.sync();
 
 
@@ -504,6 +583,12 @@ __global__ static void __launch_bounds__(blockThreads)
         // valence which computed on the local index space
         if (edge_status(eh) == UNSEEN) {
             if (iter[1].is_valid() && iter[3].is_valid()) {
+                            
+            if (iter[0] == iter[1] || iter[0] == iter[2] ||
+                iter[0] == iter[3] || iter[1] == iter[2] ||
+                iter[1] == iter[3] || iter[2] == iter[3]) {
+                return;
+            }
 
                 // since we only deal with closed meshes without boundaries
                 constexpr int target_valence = 6;
