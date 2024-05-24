@@ -405,6 +405,7 @@ __global__ static void ordering_init_top_layer(const rxmesh::Context context,
                                                uint32_t* patch_num_v_prefix_sum)
 {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    // TODO: make this parallel
     if (idx == 0) {
         patch_list_size[0] = 1;
 
@@ -415,6 +416,19 @@ __global__ static void ordering_init_top_layer(const rxmesh::Context context,
         patch_num_v_prefix_sum[0] = 0;
         patch_num_v_prefix_sum[1] =
             context.m_patches_info[0].patch_stash.m_coarse_level_num_v[level];
+
+
+        // for (uint16_t i = 1; i < context.m_num_patches[0]; ++i) {
+        //     PatchStash& ps = context.m_patches_info[i].patch_stash;
+        //     if (ps.m_coarse_level_id_list[level] == i) {
+        //         patch_list[patch_list_size[0]] = i;
+        //         ++patch_list_size[0];
+
+        //         patch_num_v_prefix_sum[patch_list_size[0]] =
+        //             patch_num_v_prefix_sum[patch_list_size[0] - 1] +
+        //             ps.m_coarse_level_num_v[level];
+        //     }
+        // }
     }
 }
 
@@ -676,7 +690,7 @@ __global__ static void ordering_generate_reorder_array(
 
         assert(v0_order != INVALID16);
 
-        reorder_array[v0_unique_id] = v0_order;
+        reorder_array[v0_unique_id] = v0_order - 1;
     };
 
     auto block = cooperative_groups::this_thread_block();

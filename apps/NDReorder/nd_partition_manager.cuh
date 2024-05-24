@@ -1206,6 +1206,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::local_partition(
     }
 
     // choose the separator vertices from p0 coundary vertices
+    // TODO: move the separator to the last step and find out how metis do the limit constrain
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
         uint16_t v0_local_id = s_ev[2 * e];
         uint16_t v1_local_id = s_ev[2 * e + 1];

@@ -2,8 +2,10 @@ add_executable(NDReorder)
 
 set(SOURCE_LIST
     nd_reorder.cu 
-    nd_reorder_kernel.cuh
+    nd_single_patch_ordering.cuh
     nd_partition_manager.cuh
+    nd_cross_patch_ordering.cuh
+    check_nnz.h
 )
 
 target_sources(NDReorder 
@@ -11,6 +13,7 @@ target_sources(NDReorder
     ${SOURCE_LIST} ${COMMON_LIST}
 )
 
+include("metis.cmake")
 include("eigen.cmake")
 
 set_target_properties(NDReorder PROPERTIES FOLDER "apps")
@@ -22,9 +25,10 @@ source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "NDReorder" FILES ${SOURCE_LI
 target_link_libraries( NDReorder 
     PRIVATE RXMesh
     PRIVATE gtest_main
+    PRIVATE metis
     PRIVATE Eigen3::Eigen
 )
 
 # https://eigen.tuxfamily.org/dox/TopicCUDA.html
-target_compile_definitions(SurfaceTracking PUBLIC "EIGEN_DEFAULT_DENSE_INDEX_TYPE=int")
+# target_compile_definitions(SurfaceTracking PUBLIC "EIGEN_DEFAULT_DENSE_INDEX_TYPE=int")
 

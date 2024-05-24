@@ -2,7 +2,7 @@
 #include "rxmesh/util/import_obj.h"
 
 #include "nd_cross_patch_ordering.cuh"
-#include "nd_reorder_kernel.cuh"
+#include "nd_single_patch_ordering.cuh"
 
 #include <vector>
 #include "cusparse.h"
@@ -20,6 +20,8 @@
 #include "rxmesh/matrix/sparse_matrix.cuh"
 
 #include "thrust/sort.h"
+
+#include "check_nnz.h"
 
 struct arg
 {
@@ -78,37 +80,40 @@ void nd_reorder()
 
 
     // Phase: cross patch reordering
-    GPUTimer timer;
-    timer.start();
+    // GPUTimer timer;
+    // timer.start();
 
-    cross_patch_ordering<blockThreads>(
-        rx, *v_ordering, reorder_array, smem_bytes_dyn);
+    // cross_patch_ordering<blockThreads>(
+    //     rx, *v_ordering, reorder_array, smem_bytes_dyn);
 
-        timer.stop();
-    float total_time = timer.elapsed_millis();
+    // timer.stop();
+    // float total_time = timer.elapsed_millis();
 
-    RXMESH_INFO("Cross patch ordering time: {} ms", total_time);
+    // RXMESH_INFO("Cross patch ordering time: {} ms", total_time);
 
     // correctness check
     // thrust::sort(reorder_array, reorder_array + rx.get_num_vertices());
     // for (int i = 0; i < rx.get_num_vertices(); i++) {
-    //     if (reorder_array[i] != i + 1) {
+    //     printf("reorder_array[%d] = %d\n", i, reorder_array[i]);
+    //     if (reorder_array[i] != i) {
     //         RXMESH_ERROR("reorder_array[{}] = {}", i, reorder_array[i]);
     //         break;
     //     }
     // }
 
-    SparseMatrix<float> A_mat(rx);
-    A_mat.spmat_chol_reorder(Reorder::NSTDIS);
 
     // Phase: single patch reordering
-    // nd_single_patch_main<blockThreads><<<blocks, threads, smem_bytes_dyn>>>(
-    //     rx.get_context(), *v_reorder, *attr_matched_v, *attr_active_e,
-    //     req_levels);
+    nd_single_patch_main<blockThreads><<<blocks, threads, smem_bytes_dyn>>>(
+        rx.get_context(), *v_ordering, *attr_matched_v, *attr_active_e,
+        req_levels);
 
-    // RXMESH_TRACE("single patch ordering done");
+    RXMESH_TRACE("single patch ordering done");
 
     CUDA_ERROR(cudaDeviceSynchronize());
+
+    // for timing purposes: measure the time for cuda metis
+    // rxmesh::SparseMatrix<float> A_mat(rx);
+    // A_mat.spmat_chol_reorder(Reorder::NSTDIS);
 
 #if USE_POLYSCOPE
     // Tests using coloring
@@ -128,6 +133,15 @@ void nd_reorder()
 #endif
 
     RXMESH_TRACE("DONE!!!!!!!!!!!!!!");
+    
+    // for get the nnz data
+    // std::vector<uint32_t> reorder_vector(reorder_array, reorder_array + rx.get_num_vertices()); 
+
+    // processmesh_ordering(Arg.obj_file_name, reorder_vector);
+
+    // processmesh_original(Arg.obj_file_name);
+
+    // processmesh_metis(Arg.obj_file_name);
 }
 
 TEST(Apps, NDReorder)
