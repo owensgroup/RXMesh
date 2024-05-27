@@ -106,10 +106,24 @@ void nd_reorder()
     nd_single_patch_main<blockThreads><<<blocks, threads, smem_bytes_dyn>>>(
         rx.get_context(), *v_ordering, *attr_matched_v, *attr_active_e,
         req_levels);
-
+    CUDA_ERROR(cudaDeviceSynchronize());
     RXMESH_TRACE("single patch ordering done");
 
+
+    // correctness check
+    uint16_t* v_count;
+    CUDA_ERROR(cudaMallocManaged(&v_count, sizeof(uint16_t) * 5));
+    cudaMemset(v_count, 0, sizeof(uint16_t) * 5);
+    v_count[0] = rx.get_num_vertices();
+    nd_single_patch_test_v_count<blockThreads><<<blocks, threads>>>(
+        rx.get_context(), v_count);
+
     CUDA_ERROR(cudaDeviceSynchronize());
+
+    RXMESH_INFO("v_count[0] = {}, v_count[1] = {}, v_count[2] = {}",
+                v_count[0],
+                v_count[1],
+                v_count[2]);
 
     // for timing purposes: measure the time for cuda metis
     // rxmesh::SparseMatrix<float> A_mat(rx);
