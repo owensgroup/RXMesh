@@ -20,7 +20,7 @@ __global__ static void __launch_bounds__(blockThreads)
                        uint32_t*                  num_sliced)
 {
     using namespace rxmesh;
-    using VecT           = glm::vec<3, T, glm::defaultp>;
+    using vec3           = glm::vec<3, T, glm::defaultp>;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
     CavityManager<blockThreads, CavityOp::E> cavity(
@@ -67,17 +67,17 @@ __global__ static void __launch_bounds__(blockThreads)
 
             constexpr T PII = 3.14159265358979323f;
 
-            const VecT V0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-            const VecT V1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-            const VecT V2(coords(v2, 0), coords(v2, 1), coords(v2, 2));
-            const VecT V3(coords(v3, 0), coords(v3, 1), coords(v3, 2));
+            const vec3 V0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+            const vec3 V1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+            const vec3 V2(coords(v2, 0), coords(v2, 1), coords(v2, 2));
+            const vec3 V3(coords(v3, 0), coords(v3, 1), coords(v3, 2));
 
             // find the angle between S, M, Q vertices (i.e., angle at M)
-            auto angle_between_three_vertices = [](const VecT& S,
-                                                   const VecT& M,
-                                                   const VecT& Q) {
-                VecT p1      = S - M;
-                VecT p2      = Q - M;
+            auto angle_between_three_vertices = [](const vec3& S,
+                                                   const vec3& M,
+                                                   const vec3& Q) {
+                vec3 p1      = S - M;
+                vec3 p2      = Q - M;
                 T    dot_pro = glm::dot(p1, p2);
                 if constexpr (std::is_same_v<T, float>) {
                     return acosf(dot_pro / (glm::length(p1) * glm::length(p2)));

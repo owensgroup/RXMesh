@@ -3,7 +3,34 @@
 #include <string>
 #include "rxmesh/util/macros.h"
 
+#include <glm/fwd.hpp>
+
 namespace rxmesh {
+
+template <typename T>
+using vec1 = glm::vec<1, T, glm::defaultp>;
+
+template <typename T>
+using vec2 = glm::vec<2, T, glm::defaultp>;
+
+template <typename T>
+using vec3 = glm::vec<3, T, glm::defaultp>;
+
+template <typename T>
+using mat2x2 = glm::mat<2, 2, T, glm::defaultp>;
+
+template <typename T>
+using mat3x2 = glm::mat<3, 2, T, glm::defaultp>;
+
+template <typename T>
+using mat2x3 = glm::mat<2, 3, T, glm::defaultp>;
+
+template <typename T>
+using mat3x3 = glm::mat<3, 3, T, glm::defaultp>;
+
+template <typename T>
+using mat4x4 = glm::mat<4, 4, T, glm::defaultp>;
+
 
 /**
  * @brief Flags for where data resides. Used with Attributes

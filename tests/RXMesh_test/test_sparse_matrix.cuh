@@ -6,9 +6,6 @@
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
 
-template <typename T>
-using vec3 = glm::vec<3, T, glm::defaultp>;
-
 template <uint32_t blockThreads, typename IndexT = int>
 __global__ static void sparse_mat_test(const rxmesh::Context context,
                                        IndexT*               vet_degree)

@@ -6,8 +6,6 @@
 
 #include "rxmesh/rxmesh_static.h"
 
-template <typename T>
-using Vec3 = glm::vec<3, T, glm::defaultp>;
 
 template <uint32_t blockThreads, typename T>
 __global__ static void sum_edges_ev(const rxmesh::Context            context,
@@ -19,9 +17,9 @@ __global__ static void sum_edges_ev(const rxmesh::Context            context,
 
 
     auto sum_edges = [&](const EdgeHandle& id, const VertexIterator& iter) {
-        const Vec3<T> p0(
+        const vec3<T> p0(
             coords(iter[0], 0), coords(iter[0], 1), coords(iter[0], 2));
-        const Vec3<T> p1(
+        const vec3<T> p1(
             coords(iter[1], 0), coords(iter[1], 1), coords(iter[1], 2));
 
         const T edge_len = glm::distance2(p0, p1);
@@ -57,7 +55,7 @@ __global__ static void sum_edges_multi_queries(
 
     auto sum_edges = [&](const VertexHandle& vertex,
                          const EdgeIterator& eiter) {
-        const Vec3<T> p0(
+        const vec3<T> p0(
             coords(vertex, 0), coords(vertex, 1), coords(vertex, 2));
 
         // for each incident to the vertex
@@ -76,11 +74,11 @@ __global__ static void sum_edges_multi_queries(
             assert(vh0 == vertex || vh1 == vertex);
 
             // get the other end vertex coordinates
-            Vec3<T> p1;
+            vec3<T> p1;
             if (vertex != vh0) {
-                p1 = Vec3<T>(coords(vh0, 0), coords(vh0, 1), coords(vh0, 2));
+                p1 = vec3<T>(coords(vh0, 0), coords(vh0, 1), coords(vh0, 2));
             } else {
-                p1 = Vec3<T>(coords(vh1, 0), coords(vh1, 1), coords(vh1, 2));
+                p1 = vec3<T>(coords(vh1, 0), coords(vh1, 1), coords(vh1, 2));
             }
             const T edge_len = glm::distance2(p0, p1);
 

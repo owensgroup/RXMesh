@@ -1,11 +1,9 @@
 #pragma once
-
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 
-template <typename T>
-using vec3 = glm::vec<3, T, glm::defaultp>;
+#include "rxmesh/types.h"
 
 namespace rxmesh {
 
@@ -102,4 +100,108 @@ __inline__ __device__ __host__ void triangle_min_max_angle(const vec3<T>& a,
     max_angle = std::max(angle_a, angle_b);
     max_angle = std::max(max_angle, angle_c);
 };
+
+/**
+ * clamp_cot()
+ */
+template <typename T>
+__host__ __device__ __forceinline__ void clamp_cot(T& v)
+{
+    // clamp cotangent values as if angles are in[1, 179]
+
+    const T bound = 19.1;  // 3 degrees
+    v             = (v < -bound) ? -bound : ((v > bound) ? bound : v);
+}
+
+/**
+ * compute partial Voronoi area of the center vertex that is associated with the
+ * triangle p->q->r (oriented ccw)
+ */
+template <typename T>
+__host__ __device__ __forceinline__ T
+partial_voronoi_area(const vec3<T>& p,  // center
+                     const vec3<T>& q,  // before center
+                     const vec3<T>& r)  // after center
+
+{
+    // Edge vector p->q
+    const vec3<T> pq = q - p;
+
+    // Edge vector q->r
+    const vec3<T> qr = r - q;
+
+    // Edge vector p->r
+    const vec3<T> pr = r - p;
+
+    // compute and check triangle area
+    T triangle_area = tri_area(p, q, r);
+
+    if (triangle_area <= std::numeric_limits<T>::min()) {
+        return -1;
+    }
+
+
+    // dot products for each corner (of its two emanating edge vectors)
+    T dotp = glm::dot(pq, pr);
+    T dotq = -glm::dot(qr, pq);
+    T dotr = glm::dot(qr, pr);
+    if (dotp < 0.0) {
+        return 0.25 * triangle_area;
+    }
+
+    // angle at q or r obtuse
+    else if (dotq < 0.0 || dotr < 0.0) {
+        return 0.125 * triangle_area;
+    }
+
+    // no obtuse angles
+    else {
+        // cot(angle) = cos(angle)/sin(angle) = dot(A,B)/norm(cross(A,B))
+        T cotq = dotq / triangle_area;
+        T cotr = dotr / triangle_area;
+
+        // clamp cot(angle) by clamping angle to [1,179]
+        clamp_cot(cotq);
+        clamp_cot(cotr);
+
+
+        return 0.125 * (glm::length2(pr) * cotq + glm::length2(pq) * cotr);
+    }
+
+    return -1;
+}
+
+/**
+ * Get the edge weight between the two vertices p-r where q and s composes the
+ * diamond around p-r
+ */
+template <typename T>
+__host__ __device__ __forceinline__ T edge_cotan_weight(const vec3<T>& p,
+                                                        const vec3<T>& r,
+                                                        const vec3<T>& q,
+                                                        const vec3<T>& s)
+{
+    auto partial_weight = [&](const vec3<T>& v) -> T {
+        const vec3<T> d0 = p - v;
+        const vec3<T> d1 = r - v;
+
+        T triangle_area = tri_area(p, r, v);
+
+        if (triangle_area > std::numeric_limits<T>::min()) {
+            T cot = glm::dot(d0, d1) / triangle_area;
+            clamp_cot(cot);
+            return cot;
+        }
+        return T(0.0);
+    };
+
+    T eweight = 0.0;
+    eweight += partial_weight(q);
+    eweight += partial_weight(s);
+
+    assert(!isnan(eweight));
+    assert(!isinf(eweight));
+
+    return eweight;
+}
 }  // namespace rxmesh

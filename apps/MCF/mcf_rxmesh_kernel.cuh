@@ -1,10 +1,8 @@
 #pragma once
 
-#include "mcf_util.h"
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/query.cuh"
-#include "rxmesh/util/vector.h"
 
 /**
  * edge_cotan_weight()
@@ -21,10 +19,10 @@ edge_cotan_weight(const rxmesh::VertexHandle&       p_id,
     // q and s composes the diamond around p-r
     using namespace rxmesh;
 
-    const Vector<3, T> p(X(p_id, 0), X(p_id, 1), X(p_id, 2));
-    const Vector<3, T> r(X(r_id, 0), X(r_id, 1), X(r_id, 2));
-    const Vector<3, T> q(X(q_id, 0), X(q_id, 1), X(q_id, 2));
-    const Vector<3, T> s(X(s_id, 0), X(s_id, 1), X(s_id, 2));
+    const vec3<T> p(X(p_id, 0), X(p_id, 1), X(p_id, 2));
+    const vec3<T> r(X(r_id, 0), X(r_id, 1), X(r_id, 2));
+    const vec3<T> q(X(q_id, 0), X(q_id, 1), X(q_id, 2));
+    const vec3<T> s(X(s_id, 0), X(s_id, 1), X(s_id, 2));
 
     return edge_cotan_weight(p, r, q, s);
 }
@@ -43,9 +41,9 @@ partial_voronoi_area(const rxmesh::VertexHandle&       p_id,  // center
     // the triangle p->q->r (oriented ccw)
     using namespace rxmesh;
 
-    const Vector<3, T> p(X(p_id, 0), X(p_id, 1), X(p_id, 2));
-    const Vector<3, T> q(X(q_id, 0), X(q_id, 1), X(q_id, 2));
-    const Vector<3, T> r(X(r_id, 0), X(r_id, 1), X(r_id, 2));
+    const vec3<T> p(X(p_id, 0), X(p_id, 1), X(p_id, 2));
+    const vec3<T> q(X(q_id, 0), X(q_id, 1), X(q_id, 2));
+    const vec3<T> r(X(r_id, 0), X(r_id, 1), X(r_id, 2));
 
     return partial_voronoi_area(p, q, r);
 }
@@ -136,7 +134,7 @@ __global__ static void rxmesh_matvec(const rxmesh::Context            context,
     auto matvec_lambda = [&](VertexHandle& p_id, const VertexIterator& iter) {
         T sum_e_weight(0);
 
-        Vector<3, T> x(T(0));
+        vec3<T> x(T(0));
 
         // vertex weight
         T v_weight(0);
