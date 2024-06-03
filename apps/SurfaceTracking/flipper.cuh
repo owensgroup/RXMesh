@@ -13,7 +13,7 @@ using Vec3 = glm::vec<3, T, glm::defaultp>;
 #include "rxmesh/query.cuh"
 
 #include "link_condition.cuh"
-#include "primitives.cuh"
+#include "rxmesh/geometry_util.cuh"
 
 template <typename T, uint32_t blockThreads>
 __global__ static void __launch_bounds__(blockThreads)

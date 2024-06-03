@@ -5,17 +5,18 @@
 #include <glm/gtx/norm.hpp>
 
 template <typename T>
-using Vec3 = glm::vec<3, T, glm::defaultp>;
+using vec3 = glm::vec<3, T, glm::defaultp>;
 
+namespace rxmesh {
 
 /**
  * @brief Compute the signed volume of a tetrahedron.
  */
 template <typename T>
-__inline__ __device__ T signed_volume(const Vec3<T>& x0,
-                                      const Vec3<T>& x1,
-                                      const Vec3<T>& x2,
-                                      const Vec3<T>& x3)
+__inline__ __device__ __host__ T signed_volume(const vec3<T>& x0,
+                                               const vec3<T>& x1,
+                                               const vec3<T>& x2,
+                                               const vec3<T>& x3)
 {
     // Equivalent to triple(x1-x0, x2-x0, x3-x0), six times the signed volume of
     // the tetrahedron. But, for robustness, we want the result (up to sign) to
@@ -38,45 +39,47 @@ __inline__ __device__ T signed_volume(const Vec3<T>& x0,
 }
 
 template <typename T>
-__device__ __inline__ Vec3<T> tri_normal(const Vec3<T>& p0,
-                                         const Vec3<T>& p1,
-                                         const Vec3<T>& p2)
+__inline__ __device__ __host__ vec3<T> tri_normal(const vec3<T>& p0,
+                                                  const vec3<T>& p1,
+                                                  const vec3<T>& p2)
 {
-    const Vec3<T> u = p1 - p0;
-    const Vec3<T> v = p2 - p0;
+    const vec3<T> u = p1 - p0;
+    const vec3<T> v = p2 - p0;
     return glm::normalize(glm::cross(u, v));
 };
 
 
 template <typename T>
-__device__ __inline__ T tri_area(const Vec3<T>& p0,
-                                 const Vec3<T>& p1,
-                                 const Vec3<T>& p2)
+__inline__ __device__ __host__ T tri_area(const vec3<T>& p0,
+                                          const vec3<T>& p1,
+                                          const vec3<T>& p2)
 {
-    const Vec3<T> u = p1 - p0;
-    const Vec3<T> v = p2 - p0;
+    const vec3<T> u = p1 - p0;
+    const vec3<T> v = p2 - p0;
     return T(0.5) * glm::length(glm::cross(u, v));
 };
 
-
+/**
+ * @brief return the angle at c
+ */
 template <typename T>
-__device__ __inline__ T tri_angle(const Vec3<T>& l,
-                                  const Vec3<T>& c,
-                                  const Vec3<T>& r)
+__inline__ __device__ __host__ T tri_angle(const vec3<T>& l,
+                                           const vec3<T>& c,
+                                           const vec3<T>& r)
 {
-    glm::vec3 ll = glm::normalize(l - c);
-    glm::vec3 rr = glm::normalize(r - c);
+    vec3<T> ll = glm::normalize(l - c);
+    vec3<T> rr = glm::normalize(r - c);
     return glm::acos(glm::dot(rr, ll));
 };
 
 
 template <typename T>
-__device__ __inline__ void triangle_angles(const Vec3<T>& a,
-                                           const Vec3<T>& b,
-                                           const Vec3<T>& c,
-                                           T&             angle_a,
-                                           T&             angle_b,
-                                           T&             angle_c)
+__inline__ __device__ __host__ void triangle_angles(const vec3<T>& a,
+                                                    const vec3<T>& b,
+                                                    const vec3<T>& c,
+                                                    T&             angle_a,
+                                                    T&             angle_b,
+                                                    T&             angle_c)
 {
     angle_a = tri_angle(b, a, c);
     angle_b = tri_angle(c, b, a);
@@ -85,11 +88,11 @@ __device__ __inline__ void triangle_angles(const Vec3<T>& a,
 
 
 template <typename T>
-__device__ __inline__ void triangle_min_max_angle(const Vec3<T>& a,
-                                                  const Vec3<T>& b,
-                                                  const Vec3<T>& c,
-                                                  T&             min_angle,
-                                                  T&             max_angle)
+__inline__ __device__ __host__ void triangle_min_max_angle(const vec3<T>& a,
+                                                           const vec3<T>& b,
+                                                           const vec3<T>& c,
+                                                           T& min_angle,
+                                                           T& max_angle)
 {
     T angle_a, angle_b, angle_c;
     triangle_angles(a, b, c, angle_a, angle_b, angle_c);
@@ -99,3 +102,4 @@ __device__ __inline__ void triangle_min_max_angle(const Vec3<T>& a,
     max_angle = std::max(angle_a, angle_b);
     max_angle = std::max(max_angle, angle_c);
 };
+}  // namespace rxmesh

@@ -12,7 +12,7 @@ using Vec3 = glm::vec<3, T, glm::defaultp>;
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/query.cuh"
 
-#include "primitives.cuh"
+#include "rxmesh/geometry_util.cuh"
 
 #include "link_condition.cuh"
 

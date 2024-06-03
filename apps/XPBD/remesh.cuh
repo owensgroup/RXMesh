@@ -1,20 +1,8 @@
 #pragma once
 
 #include "rxmesh/query.cuh"
-
+#include "rxmesh/util/vector.h"
 #include "svd.cuh"
-
-template <typename T = float>
-using vec2 = glm::vec<2, T, glm::defaultp>;
-
-template <typename T = float>
-using mat2x2 = glm::mat<2, 2, T, glm::defaultp>;
-
-template <typename T = float>
-using mat3x2 = glm::mat<3, 2, T, glm::defaultp>;
-
-template <typename T = float>
-using mat2x3 = glm::mat<2, 3, T, glm::defaultp>;
 
 
 template <typename T>
@@ -127,9 +115,9 @@ __inline__ __device__ mat2x2<T> compression_metric(const vec3<T>&   w0,
     mat2x2<T> Sw2 = glm::transpose(UV) * S2 * UV;
     mat2x2<T> D   = e2 - 4.0 * c * c * perp(Sw2);
 
-    //TODO
-    //https://github.com/taichi-dev/taichi/blob/master/python/taichi/_funcs.py
-    //return get_positive(-e + sqrt(D)) / (2.0 * sq(c));
+    // TODO
+    // https://github.com/taichi-dev/taichi/blob/master/python/taichi/_funcs.py
+    // return get_positive(-e + sqrt(D)) / (2.0 * sq(c));
     return mat2x2<T>(0);
 }
 

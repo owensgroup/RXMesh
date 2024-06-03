@@ -17,15 +17,17 @@ __global__ static void compute_vertex_normal(const rxmesh::Context      context,
 
     auto vn_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
         // get the face's three vertices coordinates
-        Vector<3, T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
-        Vector<3, T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
-        Vector<3, T> c2(coords(fv[2], 0), coords(fv[2], 1), coords(fv[2], 2));
+        glm::fvec3 c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
+        glm::fvec3 c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
+        glm::fvec3 c2(coords(fv[2], 0), coords(fv[2], 1), coords(fv[2], 2));
 
         // compute the face normal
-        Vector<3, T> n = cross(c1 - c0, c2 - c0);
+        glm::fvec3 n = cross(c1 - c0, c2 - c0);
 
         // the three edges length
-        Vector<3, T> l(dist2(c0, c1), dist2(c1, c2), dist2(c2, c0));
+        glm::fvec3 l(glm::distance2(c0, c1),
+                     glm::distance2(c1, c2),
+                     glm::distance2(c2, c0));
 
         // add the face's normal to its vertices
         for (uint32_t v = 0; v < 3; ++v) {      // for every vertex in this face
@@ -93,7 +95,7 @@ int main(int argc, char** argv)
 
     polyscope_mesh->addVertexVectorQuantity("vNormal", *vertex_normals);
 
-    //polyscope::show();
+    polyscope::show();
 
     return 0;
 }

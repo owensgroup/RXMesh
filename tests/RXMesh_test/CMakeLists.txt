@@ -3,8 +3,7 @@ add_executable( RXMesh_test )
 set( SOURCE_LIST
     rxmesh_test_main.cu
 	rxmesh_test.h
-    test_attribute.cuh
-	test_vector.cu
+    test_attribute.cuh	
     test_util.cu
 	test_iterator.cu
     test_queries.h
