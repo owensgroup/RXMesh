@@ -113,12 +113,11 @@ void filtering_rxmesh(const std::string                  file_path,
     // Verify
     const T tol = 0.01;
     rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
-        uint32_t           v_id = rx.map_to_global(vh);
-        const Vector<3, T> gt(ground_truth[v_id][0],
-                              ground_truth[v_id][1],
-                              ground_truth[v_id][2]);
-        const Vector<3, T> co(
-            (*coords)(vh, 0), (*coords)(vh, 1), (*coords)(vh, 2));
+        uint32_t      v_id = rx.map_to_global(vh);
+        const vec3<T> gt(ground_truth[v_id][0],
+                         ground_truth[v_id][1],
+                         ground_truth[v_id][2]);
+        const vec3<T> co((*coords)(vh, 0), (*coords)(vh, 1), (*coords)(vh, 2));
 
         EXPECT_LT(std::fabs((*coords)(vh, 0) - ground_truth[v_id][0]), tol);
         EXPECT_LT(std::fabs((*coords)(vh, 1) - ground_truth[v_id][1]), tol);
