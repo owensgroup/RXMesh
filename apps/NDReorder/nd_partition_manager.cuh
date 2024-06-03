@@ -1375,6 +1375,9 @@ PartitionManager<blockThreads>::local_multi_level_partition(
     }
 
     // reuse the VV result
+    m_s_tmp_assigned_v.reset(block);
+    m_s_tmp_current_frontier_v.reset(block);
+    m_s_tmp_next_frontier_v.reset(block);
     coarse_p0_vertices.reset(block);
     coarse_p1_vertices.reset(block);
     block.sync();
@@ -1396,12 +1399,12 @@ PartitionManager<blockThreads>::local_multi_level_partition(
 
     for (uint16_t v = threadIdx.x; v < m_num_vertices_limit; v += blockThreads) {
         assert(coarse_p0_vertices(v) != coarse_p1_vertices(v));
-        if (coarse_p0_vertices(v) && active_vertices(v)) {
+        if (coarse_p0_vertices(v)) {
             m_s_v_partition_id[v] = 2;
             // printf("--- check coarse_p0_vertices: %u \n", v);
         }
 
-        if (coarse_p1_vertices(v) && active_vertices(v)) {
+        if (coarse_p1_vertices(v)) {
             m_s_v_partition_id[v] = 3;
             // printf("--- check coarse_p1_vertices: %u \n", v);
         }

@@ -23,6 +23,8 @@
 
 #include "check_nnz.h"
 
+#include "nd_mgnd_implementation.cuh"
+
 struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
@@ -91,16 +93,6 @@ void nd_reorder()
 
     // RXMESH_INFO("Cross patch ordering time: {} ms", total_time);
 
-    // correctness check
-    // thrust::sort(reorder_array, reorder_array + rx.get_num_vertices());
-    // for (int i = 0; i < rx.get_num_vertices(); i++) {
-    //     printf("reorder_array[%d] = %d\n", i, reorder_array[i]);
-    //     if (reorder_array[i] != i) {
-    //         RXMESH_ERROR("reorder_array[{}] = {}", i, reorder_array[i]);
-    //         break;
-    //     }
-    // }
-
 
     // Phase: single patch reordering
     nd_single_patch_main<blockThreads><<<blocks, threads, smem_bytes_dyn>>>(
@@ -161,12 +153,32 @@ void nd_reorder()
 TEST(Apps, NDReorder)
 {
     using namespace rxmesh;
+    constexpr uint32_t blockThreads = 256;
+
+    RXMeshStatic rx(Arg.obj_file_name);
 
     // Select device
     cuda_query(Arg.device_id);
 
+    // allocate result array
+    uint32_t* reorder_array;
+    CUDA_ERROR(cudaMallocManaged(&reorder_array,
+                                 sizeof(uint32_t) * rx.get_num_vertices()));
+    CUDA_ERROR(cudaMemset(reorder_array, 0, sizeof(uint32_t) * rx.get_num_vertices()));
+
     // nd reorder implementation
-    nd_reorder();
+    // nd_reorder();
+
+    // mgnd reorder implementation
+    mgnd_reorder(rx, reorder_array);
+
+    reorder_array_correctness_check(reorder_array, rx.get_num_vertices());
+
+     // for get the nnz data
+    std::vector<uint32_t> reorder_vector(reorder_array, reorder_array + rx.get_num_vertices()); 
+    processmesh_ordering(Arg.obj_file_name, (reorder_vector));
+    processmesh_original(Arg.obj_file_name);
+    processmesh_metis(Arg.obj_file_name);   
 }
 
 int main(int argc, char** argv)

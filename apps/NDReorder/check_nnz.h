@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <vector>
+#include "matplotlibcpp.h"
 
 using namespace Eigen;
 
@@ -124,12 +125,40 @@ void printNonZerosRatio(const SparseMatrix<float>& original_matrix,
 {
     int nnz_original   = original_matrix.nonZeros();
     int nnz_factorized = factorized_matrix.nonZeros();
-    printf(
-        "NNZ ratio for %s: %f\n", name.c_str(), float(nnz_factorized) / float(nnz_original));
+    printf("NNZ ratio for %s: %f\n",
+           name.c_str(),
+           float(nnz_factorized) / float(nnz_original));
+}
+
+void plotSparseMatrix(Eigen::SparseMatrix<float> spMat, std::string title, std::string filename)
+{
+    namespace plt = matplotlibcpp;
+
+    // Extract row and column indices of non-zero elements
+    std::vector<int> rows;
+    std::vector<int> cols;
+
+    for (int k = 0; k < spMat.outerSize(); ++k) {
+        for (Eigen::SparseMatrix<float>::InnerIterator it(spMat, k); it;
+             ++it) {
+            rows.push_back(it.row());
+            cols.push_back(it.col());
+        }
+    }
+
+    // Plot non-zero elements
+    plt::scatter(cols, rows);
+    plt::title(title);
+    plt::xlabel("Column Index");
+    plt::ylabel("Row Index");
+
+    // Save plot as an image file
+    plt::save(filename);
+    plt::clf();
 }
 
 
-void processmesh_original(const std::string&      inputfile)
+void processmesh_original(const std::string& inputfile)
 {
 
     Eigen::SparseMatrix<float> adjMatrix = loadOBJToSparseMatrix(inputfile);
@@ -141,16 +170,20 @@ void processmesh_original(const std::string&      inputfile)
                          Eigen::Lower,
                          Eigen::NaturalOrdering<int>>
         cholesky(adjMatrix);
+
     if (cholesky.info() != Eigen::Success) {
         printf("Cholesky decomposition failed with code %d\n", cholesky.info());
         return;
     }
+
     SparseMatrix<float> L = cholesky.matrixL();
-    printNonZerosRatio(adjMatrix, L, "the factorized matrix L (without reordering)");
+    printNonZerosRatio(
+        adjMatrix, L, "the factorized matrix L (without reordering)");
 }
 
 
-void processmesh_metis(const std::string& inputfile) {
+void processmesh_metis(const std::string& inputfile)
+{
 
     // Load OBJ file and convert to sparse adjacency matrix
     Eigen::SparseMatrix<float> adjMatrix = loadOBJToSparseMatrix(inputfile);
@@ -158,17 +191,22 @@ void processmesh_metis(const std::string& inputfile) {
     int num_vertices = adjMatrix.rows();
 
     // Convert Eigen sparse matrix to METIS format
-    idx_t n = num_vertices;
-    std::vector<idx_t> xadj(n + 1);
-    std::vector<idx_t> adjncy;
+    idx_t               n = num_vertices;
+    std::vector<idx_t>  xadj(n + 1);
+    std::vector<idx_t>  adjncy;
     std::vector<real_t> adjwgt;
 
     xadj[0] = 0;
     for (int k = 0; k < adjMatrix.outerSize(); ++k) {
-        for (Eigen::SparseMatrix<float>::InnerIterator it(adjMatrix, k); it; ++it) {
-            if (it.row() != it.col()) { // Exclude diagonal elements
+        std::unordered_set<int> seen;
+        for (Eigen::SparseMatrix<float>::InnerIterator it(adjMatrix, k); it;
+             ++it) {
+            if (it.row() != it.col() && seen.find(it.col()) == seen.end() &&
+                it.col() !=
+                    k) {  // Exclude diagonal elements and repeated edges
                 adjncy.push_back(it.col());
                 adjwgt.push_back(it.value());
+                seen.insert(it.col());
             }
         }
         xadj[k + 1] = adjncy.size();
@@ -176,19 +214,21 @@ void processmesh_metis(const std::string& inputfile) {
 
     std::vector<idx_t> perm(n);
     std::vector<idx_t> iperm(n);
-    idx_t options[METIS_NOPTIONS];
+    idx_t              options[METIS_NOPTIONS];
     METIS_SetDefaultOptions(options);
-    options[METIS_OPTION_NUMBERING] = 0; // 0-based indexing
+    options[METIS_OPTION_NUMBERING] = 0;  // 0-based indexing
 
-    idx_t nvtxs = n;
-    idx_t ncon = 1; // Number of balancing constraints
-    METIS_NodeND(&nvtxs, &xadj[0], &adjncy[0], NULL, options, &perm[0], &iperm[0]);
+    idx_t ncon = 1;  // Number of balancing constraints
+    METIS_NodeND(&n, &xadj[0], &adjncy[0], NULL, options, &perm[0], &iperm[0]);
 
     // Apply permutation to the sparse matrix (P * A * P^T)
-    Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic, idx_t> permMatrix(perm.size());
-    permMatrix.indices() = Eigen::Map<Eigen::Matrix<idx_t, Eigen::Dynamic, 1>>(perm.data(), perm.size());
+    Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic, idx_t> permMatrix(
+        perm.size());
+    permMatrix.indices() = Eigen::Map<Eigen::Matrix<idx_t, Eigen::Dynamic, 1>>(
+        perm.data(), perm.size());
 
-    Eigen::SparseMatrix<float> permutedMatrix = permMatrix.transpose() * adjMatrix * permMatrix;
+    Eigen::SparseMatrix<float> permutedMatrix =
+        permMatrix * adjMatrix * permMatrix.transpose();
 
     // Perform Cholesky factorization with reordering
     Eigen::SimplicialLLT<Eigen::SparseMatrix<float>> cholesky(permutedMatrix);
@@ -200,48 +240,75 @@ void processmesh_metis(const std::string& inputfile) {
 
     Eigen::SparseMatrix<float> L = cholesky.matrixL();
     printNonZerosRatio(adjMatrix, L, "the factorized matrix L with metis");
+    plotSparseMatrix(L, "Cholesky factorization with METIS", "metis.png");
 }
 
 
-void processmesh_ordering(const std::string&      inputfile,
-                 const std::vector<uint32_t>& reordering)
+void processmesh_ordering(const std::string&           inputfile,
+                          const std::vector<uint32_t>& reordering)
 {
 
     Eigen::SparseMatrix<float> adjMatrix = loadOBJToSparseMatrix(inputfile);
 
-    // Reorder the adjacency matrix using the pr                                                                                           ovided reordering array
-    int num_vertices = adjMatrix.rows();
-    SparseMatrix<float>         reorderedAdjMatrix(num_vertices, num_vertices);
-    std::vector<Triplet<float>> reorderedTripletList; 
-
-    for (int k = 0; k < adjMatrix.outerSize(); ++k) {
-        for (SparseMatrix<float>::InnerIterator it(adjMatrix, k); it; ++it) {
-            int i = reordering[it.row()];
-            int j = reordering[it.col()];
-            reorderedTripletList.push_back(Triplet<float>(i, j, it.value()));
-        }
+    // Reorder the adjacency matrix using the pr ovided reordering array
+    Eigen::VectorXi p(reordering.size());
+    for (size_t i = 0; i < reordering.size(); ++i) {
+        p[i] = static_cast<int>(reordering[i]);
     }
 
-    reorderedAdjMatrix.setFromTriplets(reorderedTripletList.begin(),
-                                       reorderedTripletList.end());
+    Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic> P(p);
+
+    // Perform the matrix reordering
+    Eigen::SparseMatrix<float> reorderedMatrix = P.transpose() * adjMatrix * P;
 
     // Perform Cholesky factorization on the reordered matrix
     SimplicialLLT<SparseMatrix<float>,
                   Eigen::Lower,
                   Eigen::NaturalOrdering<int>>
-        lltOfReorderedAdj(reorderedAdjMatrix);
+        lltOfReorderedAdj(reorderedMatrix);
     if (lltOfReorderedAdj.info() != Eigen::Success) {
         printf("Cholesky decomposition with reorder failed with code %d\n",
                lltOfReorderedAdj.info());
         return;
     }
     SparseMatrix<float> L_reordered = lltOfReorderedAdj.matrixL();
-    printNonZerosRatio(adjMatrix, L_reordered, "the factorized matrix L (with reordering)");
+    printNonZerosRatio(
+        adjMatrix, L_reordered, "the factorized matrix L (with reordering)");
+    plotSparseMatrix(L_reordered, "Cholesky factorization with reordering", "reordered.png");
 }
+
+std::vector<uint32_t> generateInversePermutation(const std::vector<uint32_t>& p)
+{
+    std::vector<uint32_t> inverse(p.size());
+    for (uint32_t i = 0; i < p.size(); ++i) {
+        inverse[p[i]] = i;
+    }
+    return inverse;
+}
+
+
+void reorder_array_correctness_check(uint32_t*      reorder_array,
+                                     const uint32_t num_vertices)
+{
+    std::vector<uint32_t> reorder_array_copy(reorder_array,
+                                             reorder_array + num_vertices);
+    sort(reorder_array_copy.begin(), reorder_array_copy.end());
+
+    for (int i = 0; i < num_vertices; i++) {
+        // printf("reorder_array[%d] = %d\n", i, reorder_array[i]);
+        if (reorder_array_copy[i] != i) {
+            RXMESH_ERROR("reorder_array[{}] = {}", i, reorder_array_copy[i]);
+            assert(false && "reorder_array is not correct");
+            return;
+        }
+    }
+    RXMESH_INFO("reorder_array is correct");
+}
+
 
 void test_loader()
 {
-    std::string                filename = "path/to/your.obj";
+    std::string                filename = "dragon.obj";
     Eigen::SparseMatrix<float> adjacencyMatrix =
         loadOBJToSparseMatrix(filename);
 }

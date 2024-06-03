@@ -18,41 +18,6 @@
 
 namespace rxmesh {
 
-
-template <uint32_t blockThreads>
-__global__ static void construct_coarse_graph(
-    const rxmesh::Context context)
-{
-    // VV qury to extract the vertex separators
-    auto vv_extract_separartors = [&](VertexHandle v_id, VertexIterator& vv) {
-        VertexHandle v0          = ev[0];
-        uint32_t     v0_patch_id = v0.patch_id();
-
-        VertexHandle v1          = ev[1];
-        uint32_t     v1_patch_id = v1.patch_id();
-
-        PatchInfo* pi_arr = context.m_patches_info;
-
-        // find the boundary edges
-        if (v0_patch_id != v1_patch_id) {
-            PatchStash& v0_patch_stash = pi_arr[v0_patch_id].patch_stash;
-            PatchStash& v1_patch_stash = pi_arr[v1_patch_id].patch_stash;
-
-            // update edge weight for both patches
-            uint8_t v0_stash_idx = v0_patch_stash.find_patch_index(v1_patch_id);
-            ::atomicAdd(&(v0_patch_stash.get_edge_weight(v0_stash_idx)), 1);
-            uint8_t v1_stash_idx = v1_patch_stash.find_patch_index(v0_patch_id);
-            ::atomicAdd(&(v1_patch_stash.get_edge_weight(v1_stash_idx)), 1);
-        }
-    };
-
-    auto block = cooperative_groups::this_thread_block();
-
-    Query<blockThreads> query(context);
-    ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, vv_extract_separartors);
-}
-
 template <uint32_t blockThreads>
 __global__ static void match_patches_init_edge_weight(
     const rxmesh::Context context)
