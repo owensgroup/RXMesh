@@ -3,7 +3,7 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/query.cuh"
-#include "rxmesh/util/vector.h"
+
 
 /**
  * update_step()
@@ -18,11 +18,11 @@ __device__ __inline__ T update_step(
     const T                           infinity_val)
 {
     using namespace rxmesh;
-    const Vector<3, T> v0(coords(v0_id, 0), coords(v0_id, 1), coords(v0_id, 2));
-    const Vector<3, T> v1(coords(v1_id, 0), coords(v1_id, 1), coords(v1_id, 2));
-    const Vector<3, T> v2(coords(v2_id, 0), coords(v2_id, 1), coords(v2_id, 2));
-    const Vector<3, T> x0 = v1 - v0;
-    const Vector<3, T> x1 = v2 - v0;
+    const vec3<T> v0(coords(v0_id, 0), coords(v0_id, 1), coords(v0_id, 2));
+    const vec3<T> v1(coords(v1_id, 0), coords(v1_id, 1), coords(v1_id, 2));
+    const vec3<T> v2(coords(v2_id, 0), coords(v2_id, 1), coords(v2_id, 2));
+    const vec3<T> x0 = v1 - v0;
+    const vec3<T> x1 = v2 - v0;
 
     T t[2];
     t[0] = geo_distance(v1_id);
@@ -30,10 +30,10 @@ __device__ __inline__ T update_step(
 
     T q[2][2];
 
-    q[0][0] = dot(x0, x0);
-    q[0][1] = dot(x0, x1);
-    q[1][0] = dot(x1, x0);
-    q[1][1] = dot(x1, x1);
+    q[0][0] = glm::dot(x0, x0);
+    q[0][1] = glm::dot(x0, x1);
+    q[1][0] = glm::dot(x1, x0);
+    q[1][1] = glm::dot(x1, x1);
 
 
     T det = q[0][0] * q[1][1] - q[0][1] * q[1][0];
@@ -50,13 +50,13 @@ __device__ __inline__ T update_step(
                  t[1] * t[1] * Q[1][1] - 1);
     T p = (delta + std::sqrt(dis)) / (Q[0][0] + Q[0][1] + Q[1][0] + Q[1][1]);
     T tp[2];
-    tp[0]                = t[0] - p;
-    tp[1]                = t[1] - p;
-    const Vector<3, T> n = (x0 * Q[0][0] + x1 * Q[1][0]) * tp[0] +
-                           (x0 * Q[0][1] + x1 * Q[1][1]) * tp[1];
+    tp[0]           = t[0] - p;
+    tp[1]           = t[1] - p;
+    const vec3<T> n = (x0 * Q[0][0] + x1 * Q[1][0]) * tp[0] +
+                      (x0 * Q[0][1] + x1 * Q[1][1]) * tp[1];
     T cond[2];
-    cond[0] = dot(x0, n);
-    cond[1] = dot(x1, n);
+    cond[0] = glm::dot(x0, n);
+    cond[1] = glm::dot(x1, n);
 
     T c[2];
     c[0] = cond[0] * Q[0][0] + cond[1] * Q[0][1];
@@ -65,8 +65,8 @@ __device__ __inline__ T update_step(
     if (t[0] == infinity_val || t[1] == infinity_val || dis < 0 || c[0] >= 0 ||
         c[1] >= 0) {
         T dp[2];
-        dp[0] = geo_distance(v1_id) + x0.norm();
-        dp[1] = geo_distance(v2_id) + x1.norm();
+        dp[0] = geo_distance(v1_id) + glm::length(x0);
+        dp[1] = geo_distance(v2_id) + glm::length(x1);
         p     = dp[dp[1] < dp[0]];
     }
     return p;
