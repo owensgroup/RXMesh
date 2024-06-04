@@ -1,19 +1,11 @@
 #pragma once
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtx/norm.hpp>
-
-template <typename T = float>
-using vec3 = glm::vec<3, T, glm::defaultp>;
-
-template <typename T = float>
-using mat3x3 = glm::mat<3, 3, T, glm::defaultp>;
+#include "rxmesh/types.h"
 
 template <typename T>
 struct SVD
 {
-    mat3x3<T> U, S, V;
+    rxmesh::mat3x3<T> U, S, V;
 };
 
 
@@ -663,7 +655,7 @@ __host__ __device__ __forceinline__ void svd(  // input A
 
 template <typename T>
 __host__ __device__ __forceinline__ SVD<T> singular_value_decomposition(
-    const mat3x3<T>& mat)
+    const rxmesh::mat3x3<T>& mat)
 {
 
     SVD<T> ret;

@@ -53,9 +53,6 @@ void update_polyscope(rxmesh::RXMeshDynamic&      rx,
     ps_mesh->setEdgeWidth(1.0);
     ps_mesh->setEnabled(true);
 
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
     polyscope::show();
     ps_mesh->setEnabled(false);
 #endif

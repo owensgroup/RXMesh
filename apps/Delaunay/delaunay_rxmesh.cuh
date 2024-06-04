@@ -269,12 +269,6 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     const uint32_t num_edges    = rx.get_num_edges();
     const uint32_t num_faces    = rx.get_num_faces();
 
-#if USE_POLYSCOPE
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
-    // polyscope::show();
-#endif
 
     MCFData mcf_data_before = mcf_rxmesh_cg<float>(rx, false);
     report.add_member("mcf_before_time", mcf_data_before.total_time);

@@ -1,22 +1,21 @@
 #pragma once
 
 #include "rxmesh/query.cuh"
-#include "rxmesh/util/vector.h"
 #include "svd.cuh"
 
 
 template <typename T>
-__inline__ __device__ vec3<T> normal(const vec3<T>& x0,
-                                     const vec3<T>& x1,
-                                     const vec3<T>& x2)
+__inline__ __device__ rxmesh::vec3<T> normal(const vec3<T>& x0,
+                                             const vec3<T>& x1,
+                                             const vec3<T>& x2)
 {
     return glm::normalize(glm::cross(x1 - x0, x2 - x0));
 }
 
 template <typename T>
-__inline__ __device__ mat3x3<T> local_base(const vec3<T>& n)
+__inline__ __device__ rxmesh::mat3x3<T> local_base(const vec3<T>& n)
 {
-    vec3<T> u =
+    rxmesh::vec3<T> u =
         (glm::dot(n, vec3<T>(1, 0, 0)) > glm::dot(n, vec3<T>(0, 0, 1))) ?
             vec3<T>(0, 0, 1) :
             vec3<T>(1, 0, 0);
@@ -30,25 +29,27 @@ __inline__ __device__ mat3x3<T> local_base(const vec3<T>& n)
 
 
 template <typename T>
-__inline__ __device__ vec2<T> perp(const vec2<T>& u)
+__inline__ __device__ rxmesh::vec2<T> perp(const vec2<T>& u)
 {
     return vec2<T>(-u[1], u[0]);
 }
 
 template <typename T>
-__inline__ __device__ mat2x2<T> perp(const mat2x2<T>& A)
+__inline__ __device__ rxmesh::mat2x2<T> perp(const mat2x2<T>& A)
 {
-    return mat2x2<T>(vec2<T>(A(1, 1), -A(1, 0)), vec2<T>(-A(0, 1), A(0, 0)));
+    return rxmesh::mat2x2<T>(vec2<T>(A(1, 1), -A(1, 0)),
+                             vec2<T>(-A(0, 1), A(0, 0)));
 }
 
 template <typename T>
-__inline__ __device__ mat2x2<T> projected_curvature(const vec3<T>&   m0,
-                                                    const vec3<T>&   m1,
-                                                    const vec3<T>&   m2,
-                                                    const mat2x3<T>& base,
-                                                    const T&         area)
+__inline__ __device__ rxmesh::mat2x2<T> projected_curvature(
+    const rxmesh::vec3<T>&   m0,
+    const rxmesh::vec3<T>&   m1,
+    const rxmesh::vec3<T>&   m2,
+    const rxmesh::mat2x3<T>& base,
+    const T&                 area)
 {
-    mat2x2<T> S;
+    rxmesh::mat2x2<T> S;
 
     for (int e = 0; e < 3; e++) {
         vec2<T> e_mat;
@@ -82,43 +83,45 @@ __inline__ __device__ mat3x3<T> derivative(const vec3<T>&   w0,
                                            const vec3<T>&   dz,
                                            const mat3x3<T>& invDm)
 {
-    return mat3x3<T>(w1 - w0, w2 - w0, dz) * invDm;
+    return rxmesh::mat3x3<T>(w1 - w0, w2 - w0, dz) * invDm;
 }
 
 
 template <typename T>
-__inline__ __device__ mat3x3<T> deformation_gradient(const vec3<T>&   v0,
-                                                     const vec3<T>&   v1,
-                                                     const vec3<T>&   v2,
-                                                     const vec3<T>&   n,
-                                                     const mat3x3<T>& invDm,
-                                                     const mat3x3<T>& Sp_str)
+__inline__ __device__ rxmesh::mat3x3<T> deformation_gradient(
+    const rxmesh::vec3<T>&   v0,
+    const rxmesh::vec3<T>&   v1,
+    const rxmesh::vec3<T>&   v2,
+    const rxmesh::vec3<T>&   n,
+    const rxmesh::mat3x3<T>& invDm,
+    const rxmesh::mat3x3<T>& Sp_str)
 {
     return derivative(v0, v1, v2, n, invDm) * Sp_str;
 }
 
 template <typename T>
-__inline__ __device__ mat2x2<T> compression_metric(const vec3<T>&   w0,
-                                                   const vec3<T>&   w1,
-                                                   const vec3<T>&   w2,
-                                                   const vec3<T>&   n,
-                                                   const mat3x3<T>& invDm,
-                                                   const mat3x3<T>& Sp_str,
-                                                   const mat3x3<T>& S2,
-                                                   const mat3x2<T>& UV,
-                                                   const T          c)
+__inline__ __device__ rxmesh::mat2x2<T> compression_metric(
+    const rxmesh::vec3<T>&   w0,
+    const rxmesh::vec3<T>&   w1,
+    const rxmesh::vec3<T>&   w2,
+    const rxmesh::vec3<T>&   n,
+    const rxmesh::mat3x3<T>& invDm,
+    const rxmesh::mat3x3<T>& Sp_str,
+    const rxmesh::mat3x3<T>& S2,
+    const rxmesh::mat3x2<T>& UV,
+    const T                  c)
 {
-    mat3x3<T> F   = deformation_gradient(w0, w1, w2, n, invDm, Sp_str);
-    mat3x3<T> G   = glm::transpose(F) * F - mat3x3<T>(1);
-    mat2x2<T> e   = glm::transpose(UV) * G * UV;
-    mat2x2<T> e2  = glm::transpose(UV) * glm::transpose(G) * G * UV;
-    mat2x2<T> Sw2 = glm::transpose(UV) * S2 * UV;
-    mat2x2<T> D   = e2 - 4.0 * c * c * perp(Sw2);
+    rxmesh::mat3x3<T> F   = deformation_gradient(w0, w1, w2, n, invDm, Sp_str);
+    rxmesh::mat3x3<T> G   = glm::transpose(F) * F - mat3x3<T>(1);
+    rxmesh::mat2x2<T> e   = glm::transpose(UV) * G * UV;
+    rxmesh::mat2x2<T> e2  = glm::transpose(UV) * glm::transpose(G) * G * UV;
+    rxmesh::mat2x2<T> Sw2 = glm::transpose(UV) * S2 * UV;
+    rxmesh::mat2x2<T> D   = e2 - 4.0 * c * c * perp(Sw2);
 
     // TODO
     // https://github.com/taichi-dev/taichi/blob/master/python/taichi/_funcs.py
     // return get_positive(-e + sqrt(D)) / (2.0 * sq(c));
-    return mat2x2<T>(0);
+    return rxmesh::mat2x2<T>(0);
 }
 
 template <uint32_t blockThreads, typename T>
@@ -134,6 +137,7 @@ void __global__ compute_face_sizing(
     const T                  refine_velocity,
     const T                  refine_compression)
 {
+    using namespace rxmesh;
 
     auto calc_sizing = [&](const FaceHandle& fh, const VertexIterator& iter) {
         const VertexHandle v0 = iter[0];
@@ -247,6 +251,8 @@ void __global__ compute_vertex_normal(const Context      context,
                                       VertexAttribute<T> w_coord,
                                       VertexAttribute<T> v_normal)
 {
+    using namespace rxmesh;
+
     // TODO make sure to init v_normal with zero
 
     auto calc_vn = [&](const FaceHandle& f, const VertexIterator& v) {

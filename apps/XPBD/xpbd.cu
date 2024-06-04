@@ -15,10 +15,10 @@ void __global__ init_edges(const Context                context,
         auto v0 = iter[0];
         auto v1 = iter[1];
 
-        const Vector3f x0(x(v0, 0), x(v0, 1), x(v0, 2));
-        const Vector3f x1(x(v1, 0), x(v1, 1), x(v1, 2));
+        const glm::fvec3 x0(x(v0, 0), x(v0, 1), x(v0, 2));
+        const glm::fvec3 x1(x(v1, 0), x(v1, 1), x(v1, 2));
 
-        rest_len(eh, 0) = (x0 - x1).norm();
+        rest_len(eh, 0) = glm::length(x0 - x1);
     };
 
     auto block = cooperative_groups::this_thread_block();
@@ -45,18 +45,18 @@ void __global__ solve_stretch(const Context                context,
         auto v0 = iter[0];
         auto v1 = iter[1];
 
-        const Vector3f x0(new_x(v0, 0), new_x(v0, 1), new_x(v0, 2));
-        const Vector3f x1(new_x(v1, 0), new_x(v1, 1), new_x(v1, 2));
+        const glm::fvec3 x0(new_x(v0, 0), new_x(v0, 1), new_x(v0, 2));
+        const glm::fvec3 x1(new_x(v1, 0), new_x(v1, 1), new_x(v1, 2));
 
         const float w1(invM(v0, 0)), w2(invM(v1, 0));
 
         if (w1 + w2 > 0.f) {
-            Vector3f    n = x0 - x1;
-            const float d = n.norm();
-            Vector3f    dpp(0.f, 0.f, 0.f);
+            glm::fvec3  n = x0 - x1;
+            const float d = glm::length(n);
+            glm::fvec3  dpp(0.f, 0.f, 0.f);
             const float constraint = (d - rest_len(eh, 0));
 
-            n.normalize();
+            n = glm::normalize(n);
             if (XPBD) {
                 const float compliance = stretch_compliance / dt2;
 
@@ -118,40 +118,40 @@ void __global__ solve_bending(const Context                context,
             const float w1(invM(v1, 0)), w2(invM(v2, 0)), w3(invM(v3, 0)),
                 w4(invM(v4, 0));
             if (w1 + w2 + w3 + w4 > 0.f) {
-                Vector3f p2(new_x(v2, 0) - new_x(v1, 0),
-                            new_x(v2, 1) - new_x(v1, 1),
-                            new_x(v2, 2) - new_x(v1, 2));
-                Vector3f p3(new_x(v3, 0) - new_x(v1, 0),
-                            new_x(v3, 1) - new_x(v1, 1),
-                            new_x(v3, 2) - new_x(v1, 2));
-                Vector3f p4(new_x(v4, 0) - new_x(v1, 0),
-                            new_x(v4, 1) - new_x(v1, 1),
-                            new_x(v4, 2) - new_x(v1, 2));
+                glm::fvec3 p2(new_x(v2, 0) - new_x(v1, 0),
+                              new_x(v2, 1) - new_x(v1, 1),
+                              new_x(v2, 2) - new_x(v1, 2));
+                glm::fvec3 p3(new_x(v3, 0) - new_x(v1, 0),
+                              new_x(v3, 1) - new_x(v1, 1),
+                              new_x(v3, 2) - new_x(v1, 2));
+                glm::fvec3 p4(new_x(v4, 0) - new_x(v1, 0),
+                              new_x(v4, 1) - new_x(v1, 1),
+                              new_x(v4, 2) - new_x(v1, 2));
 
-                float l23 = cross(p2, p3).norm();
-                float l24 = cross(p2, p4).norm();
+                float l23 = glm::length(glm::cross(p2, p3));
+                float l24 = glm::length(glm::cross(p2, p4));
                 if (l23 < 1e-8) {
                     l23 = 1.f;
                 }
                 if (l24 < 1e-8) {
                     l24 = 1.f;
                 }
-                Vector3f n1 = cross(p2, p3);
+                glm::fvec3 n1 = glm::cross(p2, p3);
                 n1 /= l23;
-                Vector3f n2 = cross(p2, p4);
+                glm::fvec3 n2 = glm::cross(p2, p4);
                 n2 /= l24;
 
                 // clamp(dot(n1, n2), -1., 1.)
                 float d = std::max(1.f, std::min(dot(n1, n2), -1.f));
 
-                Vector3f q3 = (cross(p2, n2) + cross(n1, p2) * d) / l23;
-                Vector3f q4 = (cross(p2, n1) + cross(n2, p2) * d) / l24;
-                Vector3f q2 = -(cross(p3, n2) + cross(n1, p3) * d) / l23 -
-                              (cross(p4, n1) + cross(n2, p4) * d) / l24;
-                Vector3f q1 = -q2 - q3 - q4;
+                glm::fvec3 q3 = (cross(p2, n2) + cross(n1, p2) * d) / l23;
+                glm::fvec3 q4 = (cross(p2, n1) + cross(n2, p2) * d) / l24;
+                glm::fvec3 q2 = -(cross(p3, n2) + cross(n1, p3) * d) / l23 -
+                                (cross(p4, n1) + cross(n2, p4) * d) / l24;
+                glm::fvec3 q1 = -q2 - q3 - q4;
 
-                float sum_wq = w1 * q1.norm2() + w2 * q2.norm2() +
-                               w3 * q3.norm2() + w4 * q4.norm2();
+                float sum_wq = w1 * glm::length2(q1) + w2 * glm::length2(q2) +
+                               w3 * glm::length2(q3) + w4 * glm::length2(q4);
                 float constraint = acos(d) - acos(-1.);
 
                 if (XPBD) {
@@ -203,22 +203,22 @@ int main(int argc, char** argv)
     constexpr uint32_t blockThreads = 256;
 
     // XPBD paramters
-    const float    frame_dt = 1e-2;
-    const float    dt       = 5e-4;
-    const Vector3f gravity(0.f, 0.f, -15.0f);
-    const uint32_t rest_iter          = 5;
-    const float    stretch_relaxation = 0.3;
-    const float    bending_relaxation = 0.2;
-    const float    stretch_compliance = 1e-7;
-    const float    bending_compliance = 1e-6;
-    const float    mass               = 1.0;
-    const bool     XPBD               = false;
+    const float      frame_dt = 1e-2;
+    const float      dt       = 5e-4;
+    const glm::fvec3 gravity(0.f, 0.f, -15.0f);
+    const uint32_t   rest_iter          = 5;
+    const float      stretch_relaxation = 0.3;
+    const float      bending_relaxation = 0.2;
+    const float      stretch_compliance = 1e-7;
+    const float      bending_compliance = 1e-6;
+    const float      mass               = 1.0;
+    const bool       XPBD               = false;
 
     // fixtures paramters
-    const Vector4f fixure_spheres[4] = {{0.f, 1.f, 0.f, 0.004},
-                                        {1.f, 1.f, 0.f, 0.004},
-                                        {0.f, 0.f, 0.f, 0.004},
-                                        {1.f, 0.f, 0.f, 0.004}};
+    const glm::fvec4 fixure_spheres[4] = {{0.f, 1.f, 0.f, 0.004},
+                                          {1.f, 1.f, 0.f, 0.004},
+                                          {0.f, 0.f, 0.f, 0.004},
+                                          {1.f, 0.f, 0.f, 0.004}};
 
     // mesh data
     auto x     = rx.get_input_vertex_coordinates();
@@ -238,12 +238,16 @@ int main(int argc, char** argv)
         [mass, fixure_spheres, invM = *invM, x = *x] __device__(
             VertexHandle vh) {
             invM(vh, 0) = mass;
-            Vector4f v(x(vh, 0), x(vh, 1), x(vh, 2), 0.f);
-            float    eps = std::numeric_limits<float>::epsilon();
-            if ((v - fixure_spheres[0]).norm2() - fixure_spheres[0][3] < eps ||
-                (v - fixure_spheres[1]).norm2() - fixure_spheres[1][3] < eps ||
-                (v - fixure_spheres[2]).norm2() - fixure_spheres[2][3] < eps ||
-                (v - fixure_spheres[3]).norm2() - fixure_spheres[3][3] < eps) {
+            glm::fvec4 v(x(vh, 0), x(vh, 1), x(vh, 2), 0.f);
+            float      eps = std::numeric_limits<float>::epsilon();
+            if (glm::length2(v - fixure_spheres[0]) - fixure_spheres[0][3] <
+                    eps ||
+                glm::length2(v - fixure_spheres[1]) - fixure_spheres[1][3] <
+                    eps ||
+                glm::length2(v - fixure_spheres[2]) - fixure_spheres[2][3] <
+                    eps ||
+                glm::length2(v - fixure_spheres[3]) - fixure_spheres[3][3] <
+                    eps) {
                 invM(vh, 0) = 0;
             }
         });
@@ -397,5 +401,4 @@ int main(int argc, char** argv)
     if (test) {
         RXMESH_INFO("mean= {}, mean2= {}", mean, mean2);
     }
-    
 }

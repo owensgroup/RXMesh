@@ -47,13 +47,6 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     uint32_t max_num_registers_per_thread = 0;
     uint32_t max_num_blocks               = 0;
 
-#if USE_POLYSCOPE
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
-    // polyscope::show();
-#endif
-
     bool validate = false;
 
     int num_passes = 0;

@@ -1029,7 +1029,7 @@ class RXMeshStatic : public RXMesh
      * @param lower bounding box lower corner
      * @param upper bounding box upper corner
      */
-    void scale(glm::vec3 lower, glm::vec3 upper)
+    void scale(glm::fvec3 lower, glm::fvec3 upper)
     {
         if (lower[0] > upper[0] || lower[1] > upper[1] || lower[2] > upper[2]) {
             RXMESH_ERROR(
@@ -1044,7 +1044,7 @@ class RXMeshStatic : public RXMesh
             return;
         }
 
-        glm::vec3 bb_lower, bb_upper;
+        glm::vec3 bb_lower(0), bb_upper(0);
 
         bounding_box(bb_lower, bb_upper);
 
@@ -1075,7 +1075,7 @@ class RXMeshStatic : public RXMesh
      * @param lower
      * @param upper
      */
-    void bounding_box(glm::vec3 lower, glm::vec3 upper)
+    void bounding_box(glm::vec3& lower, glm::vec3& upper)
     {
         lower[0] = std::numeric_limits<float>::max();
         lower[1] = std::numeric_limits<float>::max();
