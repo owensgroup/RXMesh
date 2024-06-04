@@ -1,10 +1,8 @@
 #include <cuda_profiler_api.h>
 
 #include "rxmesh/rxmesh_dynamic.h"
-
-#include "rxmesh/util/util.h"
-
 #include "rxmesh/util/report.h"
+#include "rxmesh/util/util.h"
 
 int ps_iddd = 0;
 

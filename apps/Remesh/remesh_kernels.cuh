@@ -6,7 +6,6 @@
 #include "rxmesh/kernels/debug.cuh"
 
 
-
 template <typename T, uint32_t blockThreads>
 __global__ static void stats_kernel(const rxmesh::Context            context,
                                     const rxmesh::VertexAttribute<T> coords,
@@ -20,8 +19,8 @@ __global__ static void stats_kernel(const rxmesh::Context            context,
     ShmemAllocator shrd_alloc;
 
     auto compute_edge_len = [&](const EdgeHandle eh, const VertexIterator& ev) {
-        const Vec3<T> v0(coords(ev[0], 0), coords(ev[0], 1), coords(ev[0], 2));
-        const Vec3<T> v1(coords(ev[1], 0), coords(ev[1], 1), coords(ev[1], 2));
+        const vec3<T> v0(coords(ev[0], 0), coords(ev[0], 1), coords(ev[0], 2));
+        const vec3<T> v1(coords(ev[1], 0), coords(ev[1], 1), coords(ev[1], 2));
 
         T len = glm::distance(v0, v1);
 
@@ -94,8 +93,8 @@ __global__ static void __launch_bounds__(blockThreads)
                     edge_status(eh) = OKAY;
                     return;
                 }
-                const Vec3<T> pa(coords(va, 0), coords(va, 1), coords(va, 2));
-                const Vec3<T> pb(coords(vb, 0), coords(vb, 1), coords(vb, 2));
+                const vec3<T> pa(coords(va, 0), coords(va, 1), coords(va, 2));
+                const vec3<T> pb(coords(vb, 0), coords(vb, 1), coords(vb, 2));
 
                 const T edge_len = glm::distance2(pa, pb);
 
@@ -278,8 +277,8 @@ __global__ static void __launch_bounds__(blockThreads)
                     v2 == v3) {
                     return;
                 }
-                const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-                const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+                const vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+                const vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
                 const T       edge_len_sq = glm::distance2(p0, p1);
 
                 if (edge_len_sq < low_edge_len_sq) {
@@ -323,10 +322,10 @@ __global__ static void __launch_bounds__(blockThreads)
 
             cavity.get_vertices(src, v0, v1);
 
-            const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-            const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+            const vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+            const vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
 
-            const Vec3<T> new_p((p0[0] + p1[0]) * T(0.5),
+            const vec3<T> new_p((p0[0] + p1[0]) * T(0.5),
                                 (p0[1] + p1[1]) * T(0.5),
                                 (p0[2] + p1[2]) * T(0.5));
 
@@ -338,7 +337,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
                 const VertexHandle vvv = cavity.get_cavity_vertex(c, i);
 
-                const Vec3<T> vp(
+                const vec3<T> vp(
                     coords(vvv, 0), coords(vvv, 1), coords(vvv, 2));
 
                 const T edge_len_sq = glm::distance2(vp, new_p);
@@ -482,8 +481,8 @@ __global__ static void __launch_bounds__(blockThreads)
 
             const VertexHandle v0(iter[0]), v1(iter[1]);
 
-            const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-            const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+            const vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+            const vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
             const T       edge_len_sq = glm::distance2(p0, p1);
 
             if (edge_len_sq < low_edge_len_sq) {
@@ -572,10 +571,10 @@ __global__ static void __launch_bounds__(blockThreads)
 
             cavity.get_vertices(src, v0, v1);
 
-            const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-            const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+            const vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+            const vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
 
-            const Vec3<T> new_p((p0[0] + p1[0]) * T(0.5),
+            const vec3<T> new_p((p0[0] + p1[0]) * T(0.5),
                                 (p0[1] + p1[1]) * T(0.5),
                                 (p0[2] + p1[2]) * T(0.5));
 
@@ -585,7 +584,7 @@ __global__ static void __launch_bounds__(blockThreads)
             for (uint16_t i = 0; i < size; ++i) {
                 const VertexHandle vvv = cavity.get_cavity_vertex(c, i);
 
-                const Vec3<T> vp(
+                const vec3<T> vp(
                     coords(vvv, 0), coords(vvv, 1), coords(vvv, 2));
 
                 const T edge_len_sq = glm::distance2(vp, new_p);
@@ -1029,7 +1028,7 @@ __global__ static void __launch_bounds__(blockThreads)
             return;
         }
 
-        const Vec3<T> v(coords(v_id, 0), coords(v_id, 1), coords(v_id, 2));
+        const vec3<T> v(coords(v_id, 0), coords(v_id, 1), coords(v_id, 2));
 
         // compute both vertex normal and the new position
         // the new position is the average of the one-ring
@@ -1040,10 +1039,10 @@ __global__ static void __launch_bounds__(blockThreads)
 
         // this is the last vertex in the one-ring (before r_id)
         VertexHandle q_id = iter.back();
-        Vec3<T>      q(coords(q_id, 0), coords(q_id, 1), coords(q_id, 2));
+        vec3<T>      q(coords(q_id, 0), coords(q_id, 1), coords(q_id, 2));
 
-        Vec3<T> new_v(0.0, 0.0, 0.0);
-        Vec3<T> v_normal(0.0, 0.0, 0.0);
+        vec3<T> new_v(0.0, 0.0, 0.0);
+        vec3<T> v_normal(0.0, 0.0, 0.0);
 
         T w = 0.0;
 
@@ -1051,9 +1050,9 @@ __global__ static void __launch_bounds__(blockThreads)
             // the current one ring vertex
             const VertexHandle r_id = iter[i];
 
-            const Vec3<T> r(coords(r_id, 0), coords(r_id, 1), coords(r_id, 2));
+            const vec3<T> r(coords(r_id, 0), coords(r_id, 1), coords(r_id, 2));
 
-            Vec3<T> c = glm::cross(q - v, r - v);
+            vec3<T> c = glm::cross(q - v, r - v);
 
             const T area = glm::length(c) / T(2.0);
             w += area;
@@ -1062,7 +1061,7 @@ __global__ static void __launch_bounds__(blockThreads)
                 c = glm::normalize(c);
             }
 
-            const Vec3<T> n = c * area;
+            const vec3<T> n = c * area;
 
             v_normal += n;
 
