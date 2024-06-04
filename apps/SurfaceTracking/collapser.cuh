@@ -1,12 +1,5 @@
 #pragma once
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtx/norm.hpp>
-
-template <typename T>
-using Vec3 = glm::vec<3, T, glm::defaultp>;
-
 #include <Eigen/Dense>
 
 #include "rxmesh/cavity_manager.cuh"
@@ -45,13 +38,13 @@ __global__ static void __launch_bounds__(blockThreads)
 
     auto new_vertex_position = [&](VertexHandle& v_to_keep,
                                    VertexHandle& v_to_delete) {
-        Vec3<T> new_p;
+        vec3<T> new_p;
 
-        const Vec3<T> p_keep(position(v_to_keep, 0),
+        const vec3<T> p_keep(position(v_to_keep, 0),
                              position(v_to_keep, 1),
                              position(v_to_keep, 2));
 
-        const Vec3<T> p_delete(position(v_to_delete, 0),
+        const vec3<T> p_delete(position(v_to_delete, 0),
                                position(v_to_delete, 1),
                                position(v_to_delete, 2));
 
@@ -114,10 +107,10 @@ __global__ static void __launch_bounds__(blockThreads)
             is_vertex_bd(ah) == 0 && is_vertex_bd(bh) == 0) {
 
             // vertices position
-            const Vec3<T> va(position(ah, 0), position(ah, 1), position(ah, 2));
-            const Vec3<T> vb(position(bh, 0), position(bh, 1), position(bh, 2));
-            const Vec3<T> vc(position(ch, 0), position(ch, 1), position(ch, 2));
-            const Vec3<T> vd(position(dh, 0), position(dh, 1), position(dh, 2));
+            const vec3<T> va(position(ah, 0), position(ah, 1), position(ah, 2));
+            const vec3<T> vb(position(bh, 0), position(bh, 1), position(bh, 2));
+            const vec3<T> vc(position(ch, 0), position(ch, 1), position(ch, 2));
+            const vec3<T> vd(position(dh, 0), position(dh, 1), position(dh, 2));
 
             bool should_it = true;
 
@@ -195,10 +188,10 @@ __global__ static void __launch_bounds__(blockThreads)
             cavity.get_vertices(src, v0, v1);
 
             // decide on new vertex position
-            Vec3<T> new_p = new_vertex_position(v0, v1);
+            vec3<T> new_p = new_vertex_position(v0, v1);
 
-            const Vec3<T> p0(position(v0, 0), position(v0, 1), position(v0, 2));
-            const Vec3<T> p1(position(v1, 0), position(v1, 1), position(v1, 2));
+            const vec3<T> p0(position(v0, 0), position(v0, 1), position(v0, 2));
+            const vec3<T> p1(position(v1, 0), position(v1, 1), position(v1, 2));
 
             // check if the new triangles will be bad i.e., will have normal
             // inversion, will have tiny area, will have bad angles
@@ -214,16 +207,16 @@ __global__ static void __launch_bounds__(blockThreads)
                     const VertexHandle vi = cavity.get_cavity_vertex(c, i);
                     const VertexHandle vj = cavity.get_cavity_vertex(c, j);
 
-                    const Vec3<T> pi(
+                    const vec3<T> pi(
                         position(vi, 0), position(vi, 1), position(vi, 2));
-                    const Vec3<T> pj(
+                    const vec3<T> pj(
                         position(vj, 0), position(vj, 1), position(vj, 2));
 
                     // the new triangle will be pi-pj-new_p
 
-                    const Vec3<T> n_new = tri_normal(pi, pj, new_p);
-                    const Vec3<T> n_0   = tri_normal(pi, pj, p0);
-                    const Vec3<T> n_1   = tri_normal(pi, pj, p1);
+                    const vec3<T> n_new = tri_normal(pi, pj, new_p);
+                    const vec3<T> n_0   = tri_normal(pi, pj, p0);
+                    const vec3<T> n_1   = tri_normal(pi, pj, p1);
 
                     const T area_new = tri_area(pi, pj, new_p);
 

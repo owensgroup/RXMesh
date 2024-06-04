@@ -1,12 +1,5 @@
 #pragma once
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtx/norm.hpp>
-
-template <typename T>
-using Vec3 = glm::vec<3, T, glm::defaultp>;
-
 #include <Eigen/Dense>
 
 #include "rxmesh/cavity_manager.cuh"
@@ -39,11 +32,11 @@ __global__ static void __launch_bounds__(blockThreads)
         }
 
 
-        const Vec3<T> v(position(vh, 0), position(vh, 1), position(vh, 2));
+        const vec3<T> v(position(vh, 0), position(vh, 1), position(vh, 2));
 
         VertexHandle qh = iter.back();
 
-        Vec3<T> q(position(qh, 0), position(qh, 1), position(qh, 2));
+        vec3<T> q(position(qh, 0), position(qh, 1), position(qh, 2));
 
         Eigen::Matrix<T, 3, 3> A;
         A << 0, 0, 0, 0, 0, 0, 0, 0, 0;
@@ -54,14 +47,14 @@ __global__ static void __launch_bounds__(blockThreads)
 
             const VertexHandle rh = iter[i];
 
-            const Vec3<T> r(position(rh, 0), position(rh, 1), position(rh, 2));
+            const vec3<T> r(position(rh, 0), position(rh, 1), position(rh, 2));
 
             // triangle normal
-            const Vec3<T> c = glm::cross(q - v, r - v);
+            const vec3<T> c = glm::cross(q - v, r - v);
 
             assert(glm::length(c) > std::numeric_limits<T>::min());
 
-            const Vec3<T> n = glm::normalize(c);
+            const vec3<T> n = glm::normalize(c);
 
             // triangle area
             const T area = T(0.5) * glm::length(c);
@@ -185,16 +178,16 @@ __global__ static void __launch_bounds__(blockThreads)
                 }
 
                 // vertices position
-                const Vec3<T> va(
+                const vec3<T> va(
                     position(ah, 0), position(ah, 1), position(ah, 2));
 
-                const Vec3<T> vb(
+                const vec3<T> vb(
                     position(bh, 0), position(bh, 1), position(bh, 2));
 
-                const Vec3<T> vc(
+                const vec3<T> vc(
                     position(ch, 0), position(ch, 1), position(ch, 2));
 
-                const Vec3<T> vd(
+                const vec3<T> vd(
                     position(dh, 0), position(dh, 1), position(dh, 2));
 
                 // change in length i.e., delaunay check
@@ -222,12 +215,12 @@ __global__ static void __launch_bounds__(blockThreads)
                 // they agree after flipping
                 if (flip_it) {
                     // old triangles normals
-                    const Vec3<T> n0 = tri_normal(va, vb, vc);
-                    const Vec3<T> n1 = tri_normal(va, vd, vb);
+                    const vec3<T> n0 = tri_normal(va, vb, vc);
+                    const vec3<T> n1 = tri_normal(va, vd, vb);
 
                     // new triangles normals
-                    const Vec3<T> n2 = tri_normal(vc, vd, vb);
-                    const Vec3<T> n3 = tri_normal(vc, va, vd);
+                    const vec3<T> n2 = tri_normal(vc, vd, vb);
+                    const vec3<T> n3 = tri_normal(vc, va, vd);
 
                     if (glm::dot(n0, n1) > T(0)) {
                         if (glm::dot(n2, n3) < T(0)) {

@@ -1,12 +1,5 @@
 #pragma once
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtx/norm.hpp>
-
-template <typename T>
-using Vec3 = glm::vec<3, T, glm::defaultp>;
-
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/query.cuh"
 
@@ -87,16 +80,16 @@ __global__ static void __launch_bounds__(blockThreads)
                 }
 
                 // vertices position
-                const Vec3<T> va(
+                const vec3<T> va(
                     position(ah, 0), position(ah, 1), position(ah, 2));
 
-                const Vec3<T> vb(
+                const vec3<T> vb(
                     position(bh, 0), position(bh, 1), position(bh, 2));
 
-                const Vec3<T> vc(
+                const vec3<T> vc(
                     position(ch, 0), position(ch, 1), position(ch, 2));
 
-                const Vec3<T> vd(
+                const vec3<T> vd(
                     position(dh, 0), position(dh, 1), position(dh, 2));
 
 
@@ -131,7 +124,7 @@ __global__ static void __launch_bounds__(blockThreads)
                 // Check angles of new triangles
                 if (split_it) {
                     // mid point (new) vertex
-                    const Vec3<T> ve = T(0.5) * (va + vb);
+                    const vec3<T> ve = T(0.5) * (va + vb);
 
                     // current min and max angles
                     T cur_min1, cur_min2, cur_max1, cur_max2;

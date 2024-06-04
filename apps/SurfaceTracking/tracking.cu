@@ -46,7 +46,7 @@ TEST(Apps, SurfaceTracking)
 
     std::vector<std::vector<uint32_t>> fv;
 
-    const Vector<3, float> lower_corner(-3.0, 0.0, -3.0);
+    const vec3<float> lower_corner(-3.0, 0.0, -3.0);
 
     Arg.plane_name =
         "plane" + std::to_string(Arg.n) + "x" + std::to_string(Arg.n);

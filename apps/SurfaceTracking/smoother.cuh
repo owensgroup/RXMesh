@@ -1,11 +1,5 @@
 #pragma once
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtx/norm.hpp>
-
-template <typename T>
-using Vec3 = glm::vec<3, T, glm::defaultp>;
 
 #include <Eigen/Dense>
 
@@ -25,7 +19,7 @@ __global__ static void __launch_bounds__(blockThreads)
     auto block = cooperative_groups::this_thread_block();
 
     auto smooth = [&](VertexHandle vh, VertexIterator& iter) {
-        const Vec3<T> v(current_position(vh, 0),
+        const vec3<T> v(current_position(vh, 0),
                         current_position(vh, 1),
                         current_position(vh, 2));
 
@@ -38,7 +32,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
         VertexHandle qh = iter.back();
 
-        Vec3<T> q(current_position(qh, 0),
+        vec3<T> q(current_position(qh, 0),
                   current_position(qh, 1),
                   current_position(qh, 2));
 
@@ -52,16 +46,16 @@ __global__ static void __launch_bounds__(blockThreads)
 
             const VertexHandle rh = iter[i];
 
-            const Vec3<T> r(current_position(rh, 0),
+            const vec3<T> r(current_position(rh, 0),
                             current_position(rh, 1),
                             current_position(rh, 2));
 
             // triangle normal
-            const Vec3<T> c = glm::cross(q - v, r - v);
+            const vec3<T> c = glm::cross(q - v, r - v);
 
             assert(glm::length(c) >= std::numeric_limits<T>::min());
 
-            const Vec3<T> n = glm::normalize(c);
+            const vec3<T> n = glm::normalize(c);
 
             // triangle area
             const T area = T(0.5) * glm::length(c);
@@ -115,7 +109,7 @@ __global__ static void __launch_bounds__(blockThreads)
         // displacement
         VertexHandle ph = iter.back();
 
-        Vec3<T> p(current_position(ph, 0),
+        vec3<T> p(current_position(ph, 0),
                   current_position(ph, 1),
                   current_position(ph, 2));
 
@@ -123,12 +117,12 @@ __global__ static void __launch_bounds__(blockThreads)
 
             const VertexHandle rh = iter[i];
 
-            const Vec3<T> r(current_position(rh, 0),
+            const vec3<T> r(current_position(rh, 0),
                             current_position(rh, 1),
                             current_position(rh, 2));
 
             // triangle normal
-            const Vec3<T> c = glm::cross(p - v, r - v);
+            const vec3<T> c = glm::cross(p - v, r - v);
 
             assert(glm::length(c) >= std::numeric_limits<T>::min());
 
@@ -138,7 +132,7 @@ __global__ static void __launch_bounds__(blockThreads)
             // centriod
             constexpr T third = T(1) / T(3);
 
-            Vec3<T> center = (third * (v + p + r)) - v;
+            vec3<T> center = (third * (v + p + r)) - v;
 
             sum_areas += area;
 
