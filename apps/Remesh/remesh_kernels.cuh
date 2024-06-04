@@ -3,14 +3,9 @@
 
 #include "link_condition.cuh"
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtx/norm.hpp>
-
 #include "rxmesh/kernels/debug.cuh"
 
-template <typename T>
-using Vec3 = glm::vec<3, T, glm::defaultp>;
+
 
 template <typename T, uint32_t blockThreads>
 __global__ static void stats_kernel(const rxmesh::Context            context,
@@ -261,11 +256,13 @@ __global__ static void __launch_bounds__(blockThreads)
         // 3  |  1
         // \  |  /
         //    2
-        assert(iter.size() == 4);
+
 
         if (edge_status(eh) == UNSEEN) {
             const VertexIterator iter =
                 query.template get_iterator<VertexIterator>(eh.local_id());
+
+            assert(iter.size() == 4);
 
             const VertexHandle v0 = iter[0];
             const VertexHandle v1 = iter[2];

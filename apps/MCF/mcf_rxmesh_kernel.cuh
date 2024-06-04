@@ -2,6 +2,7 @@
 
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
+#include "rxmesh/geometry_util.cuh"
 #include "rxmesh/query.cuh"
 
 /**
