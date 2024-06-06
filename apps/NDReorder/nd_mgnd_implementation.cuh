@@ -171,7 +171,7 @@ void mgnd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr)
         uint32_t v_linea_id  = rx.linear_id(vh);
         uint32_t v_order_idx = (*v_ordering)(vh, 0);
         
-        ordering_arr[v_global_id] = v_order_idx;
+        ordering_arr[v_order_idx] = v_global_id;
     });
 
     RXMESH_INFO("mgnd end");

@@ -65,6 +65,12 @@ struct PatchStash
             m_tmp_ordering_tail = INVALID32;
             m_num_separator_v = 0;
             m_is_active = true;
+
+            // for nd_corss_patch
+            m_is_seed = false;
+            m_is_frontier = false;
+            m_is_conflict = false;
+            m_settle_id = INVALID16;
         } else {
             m_stash = (uint32_t*)malloc(stash_size * sizeof(uint32_t));
             for (uint8_t i = 0; i < stash_size; ++i) {
@@ -308,6 +314,12 @@ struct PatchStash
     uint32_t  m_tmp_paired_patch;
     uint32_t* m_tmp_level_stash;
     uint32_t* m_tmp_level_edge_weight;
+
+
+    // for nd cross patch implementation
+    bool m_is_frontier;
+    bool m_is_conflict;
+    uint16 m_settle_id; 
 
     bool m_is_on_device;
 };

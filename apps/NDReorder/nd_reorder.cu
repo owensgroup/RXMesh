@@ -24,6 +24,7 @@
 #include "check_nnz.h"
 
 #include "nd_mgnd_implementation.cuh"
+#include "nd_cross_patch_nd_implementation.cuh"
 
 struct arg
 {
@@ -174,11 +175,13 @@ TEST(Apps, NDReorder)
 
     reorder_array_correctness_check(reorder_array, rx.get_num_vertices());
 
+    nd_reorder_test(rx);
+
      // for get the nnz data
-    std::vector<uint32_t> reorder_vector(reorder_array, reorder_array + rx.get_num_vertices()); 
-    processmesh_ordering(Arg.obj_file_name, (reorder_vector));
-    processmesh_original(Arg.obj_file_name);
-    processmesh_metis(Arg.obj_file_name);   
+    // std::vector<uint32_t> reorder_vector(reorder_array, reorder_array + rx.get_num_vertices()); 
+    // processmesh_ordering(Arg.obj_file_name, (reorder_vector));
+    // processmesh_original(Arg.obj_file_name);
+    // processmesh_metis(Arg.obj_file_name);   
 }
 
 int main(int argc, char** argv)
