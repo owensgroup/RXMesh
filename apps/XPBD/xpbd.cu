@@ -100,10 +100,7 @@ void __global__ solve_bending(const Context                context,
                               const float                  bending_compliance,
                               const float                  bending_relaxation,
                               const float                  dt2)
-{
-    /*
-     *
-     */
+{    
     auto solve = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         // iter[0] and iter[2] are the edge two vertices
         // iter[1] and iter[3] are the two opposite vertices
@@ -230,7 +227,6 @@ int main(int argc, char** argv)
     auto rest_len = rx.add_edge_attribute<float>("rest_len", 1);
     auto la_s     = rx.add_edge_attribute<float>("la_s", 1);
     auto la_b     = rx.add_edge_attribute<float>("la_b", 1);
-
 
     // initialize
     rx.for_each_vertex(
