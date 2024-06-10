@@ -20,30 +20,29 @@ namespace rxmesh {
 
 // write to patch stash
 template <uint32_t blockThreads>
-__global__ static void nd_init_edge_weight(
-    const rxmesh::Context context)
+__global__ static void nd_init_edge_weight(const rxmesh::Context& context)
 {
     // EV qury to init the patch stash edge weight
     auto ev_update_stash_weight = [&](EdgeHandle e_id, VertexIterator& ev) {
-        VertexHandle v0          = ev[0];
-        uint32_t     v0_patch_id = v0.patch_id();
+        // VertexHandle v0          = ev[0];
+        // uint32_t     v0_patch_id = v0.patch_id();
 
-        VertexHandle v1          = ev[1];
-        uint32_t     v1_patch_id = v1.patch_id();
+        // VertexHandle v1          = ev[1];
+        // uint32_t     v1_patch_id = v1.patch_id();
 
-        PatchInfo* pi_arr = context.m_patches_info;
+        // PatchInfo* pi_arr = context.m_patches_info;
 
-        // find the boundary edges
-        if (v0_patch_id != v1_patch_id) {
-            PatchStash& v0_patch_stash = pi_arr[v0_patch_id].patch_stash;
-            PatchStash& v1_patch_stash = pi_arr[v1_patch_id].patch_stash;
+        // // find the boundary edges
+        // if (v0_patch_id != v1_patch_id) {
+        //     PatchStash& v0_patch_stash = pi_arr[v0_patch_id].patch_stash;
+        //     PatchStash& v1_patch_stash = pi_arr[v1_patch_id].patch_stash;
 
-            // update edge weight for both patches
-            uint8_t v0_stash_idx = v0_patch_stash.find_patch_index(v1_patch_id);
-            ::atomicAdd(&(v0_patch_stash.get_edge_weight(v0_stash_idx)), 1);
-            uint8_t v1_stash_idx = v1_patch_stash.find_patch_index(v0_patch_id);
-            ::atomicAdd(&(v1_patch_stash.get_edge_weight(v1_stash_idx)), 1);
-        }
+        //     // update edge weight for both patches
+        //     uint8_t v0_stash_idx = v0_patch_stash.find_patch_index(v1_patch_id);
+        //     ::atomicAdd(&(v0_patch_stash.get_edge_weight(v0_stash_idx)), 1);
+        //     uint8_t v1_stash_idx = v1_patch_stash.find_patch_index(v0_patch_id);
+        //     ::atomicAdd(&(v1_patch_stash.get_edge_weight(v1_stash_idx)), 1);
+        // }
     };
 
     auto block = cooperative_groups::this_thread_block();
@@ -54,15 +53,16 @@ __global__ static void nd_init_edge_weight(
 }
 
 template <uint32_t blockThreads>
-__global__ static void bipartition_init_seed(const rxmesh::Context     context,
-                                        uint32_t* frontiers,
-                                        uint32_t* frontier_head,
-                                        uint32_t* frontier_size,
-                                                uint16_t partition_label,
-                                               uint32_t* d_patch_label)
+__global__ static void bipartition_init_seed(const rxmesh::Context& context,
+                                             uint32_t*              frontiers,
+                                             uint32_t* frontier_head,
+                                             uint32_t* frontier_size,
+                                             uint16_t  partition_label,
+                                             uint32_t* d_patch_label)
 {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    for (uint32_t i = idx; i < context.m_num_patches[0]; i += blockDim.x * gridDim.x) {
+    for (uint32_t i = idx; i < context.m_num_patches[0];
+         i += blockDim.x * gridDim.x) {
         if (d_patch_label[i] != partition_label) {
             // filter out not active patches for this bipartition
             continue;
@@ -70,12 +70,14 @@ __global__ static void bipartition_init_seed(const rxmesh::Context     context,
 
         PatchStash& ps = context.m_patches_info[i].patch_stash;
 
-        // set the initial status of seed 
-        for (uint32_t j = frontiers_head[0]; j < frontiers_head[0] + frontiers_size[0]; j++) {
+        // set the initial status of seed
+        for (uint32_t j = frontier_head[0];
+             j < frontier_head[0] + frontier_size[0];
+             j++) {
             if (i == frontiers[j]) {
-                ps.m_is_seed = true;
+                ps.m_is_seed     = true;
                 ps.m_is_frontier = true;
-                ps.m_settled_id = j;
+                ps.m_settle_id   = j;
                 break;
             }
         }
@@ -83,17 +85,18 @@ __global__ static void bipartition_init_seed(const rxmesh::Context     context,
 }
 
 template <uint32_t blockThreads>
-__global__ static void bipartition_propogation(const rxmesh::Context     context,
-                                        uint32_t* frontiers,
-                                        uint32_t* frontier_head,
-                                        uint32_t* frontier_size,
-                                        uint32_t* new_frontiers_head,
-                                        uint32_t* new_frontiers_size,
-                                                uint16_t partition_label,
+__global__ static void bipartition_propogation(const rxmesh::Context& context,
+                                               uint32_t*              frontiers,
+                                               uint32_t* frontier_head,
+                                               uint32_t* frontier_size,
+                                               uint32_t* new_frontier_head,
+                                               uint32_t* new_frontier_size,
+                                               uint16_t  partition_label,
                                                uint32_t* d_patch_label)
 {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    for (uint32_t i = idx; i < context.m_num_patches[0]; i += blockDim.x * gridDim.x) {
+    for (uint32_t i = idx; i < context.m_num_patches[0];
+         i += blockDim.x * gridDim.x) {
         if (d_patch_label[i] != partition_label) {
             // filter out not active patches for this bipartition
             continue;
@@ -102,9 +105,11 @@ __global__ static void bipartition_propogation(const rxmesh::Context     context
         PatchStash& ps = context.m_patches_info[i].patch_stash;
 
         bool is_frontier = false;
-        for (uint32_t j = frontiers_head[0]; j < frontiers_head[0] + frontiers_size[0]; j++) {
+        for (uint32_t j = frontier_head[0];
+             j < frontier_head[0] + frontier_size[0];
+             j++) {
             if (i == frontiers[j]) {
-                is_frontier = true;
+                is_frontier      = true;
                 ps.m_is_frontier = true;
                 break;
             }
@@ -117,8 +122,9 @@ __global__ static void bipartition_propogation(const rxmesh::Context     context
                     break;
                 }
 
-                uint32_t adj_patch_id = ps.m_stash[j];
-                PatchStash& adj_ps = context.m_patches_info[adj_patch_id].patch_stash;
+                uint32_t    adj_patch_id = ps.m_stash[j];
+                PatchStash& adj_ps =
+                    context.m_patches_info[adj_patch_id].patch_stash;
 
                 // skip if not in the same partition
                 if (d_patch_label[adj_patch_id] != partition_label) {
@@ -126,30 +132,26 @@ __global__ static void bipartition_propogation(const rxmesh::Context     context
                 }
 
                 // skip if already settled or seed
-                if (adj_ps.m_is_seed || adj_ps.m_settled_id != INVALID32) {
+                if (adj_ps.m_is_seed || adj_ps.m_settle_id != INVALID32) {
                     continue;
                 }
 
                 // update frontier
-                uint32_t frontier_idx = ::atomicAdd(new_frontiers_size, 1);
+                uint32_t frontier_idx   = ::atomicAdd(new_frontier_size, 1);
                 frontiers[frontier_idx] = adj_patch_id;
-                adj_ps.m_is_frontier = true;
-                adj_ps.m_settled_id = ps.m_settled_id;
+                adj_ps.m_is_frontier    = true;
+                adj_ps.m_settle_id      = ps.m_settle_id;
             }
 
             ps.m_is_frontier = false;
         }
-
-        
     }
-    
 }
 
 template <uint32_t blockThreads>
-__global__ static void bipartition_recenter(const rxmesh::Context     context, 
-                                            uint32_t* d_patch_label)
+__global__ static void bipartition_recenter(const rxmesh::Context context,
+                                            uint32_t*             d_patch_label)
 {
-    
 }
 
 __global__ static void check_patch_stash(const rxmesh::Context context)
@@ -165,25 +167,36 @@ __global__ static void check_patch_stash(const rxmesh::Context context)
                 if (ps.m_stash[j] == INVALID32) {
                     break;
                 }
-                printf(" stash: %d, weight: %d\n", ps.m_stash[j], ps.get_edge_weight(j));
+                printf(" stash: %d, weight: %d\n",
+                       ps.m_stash[j],
+                       ps.get_edge_weight(j));
             }
         }
     }
 }
 
 template <uint32_t blockThreads>
-void run_bipartition_lloyd(RXMeshStatic& rx, uint16_t partition_label, uint32_t* d_patch_label)
+void run_bipartition_lloyd(RXMeshStatic& rx,
+                           uint16_t      partition_label,
+                           uint32_t*     d_patch_label)
 {
-    //get random seed for 2
-    uint16_t num_seeds = 2;
+    const uint32_t threads_p = blockThreads;
+    const uint32_t blocks_p  = DIVIDE_UP(rx.get_num_patches(), threads_p);
+
+    // get random seed for 2
+    uint16_t              num_seeds = 2;
     std::vector<uint32_t> components;
-    uint32_t* frontiers;
-    CUDA_ERROR(cudaMallocManaged(&frontiers, rx.get_num_patches() * sizeof(uint32_t));
+    uint32_t*             frontiers;
+    CUDA_ERROR(
+        cudaMallocManaged(&frontiers, rx.get_num_patches() * sizeof(uint32_t)));
     uint32_t* frontier_head;
-    CUDA_ERROR(cudaMallocManaged(&frontier_head, sizeof(uint32_t));
+    CUDA_ERROR(cudaMallocManaged(&frontier_head, sizeof(uint32_t)));
     uint32_t* frontier_size;
     CUDA_ERROR(cudaMallocManaged(&frontier_size, sizeof(uint32_t)));
-    
+    uint32_t* new_frontier_head;
+    CUDA_ERROR(cudaMallocManaged(&new_frontier_head, sizeof(uint32_t)));
+    uint32_t* new_frontier_size;
+    CUDA_ERROR(cudaMallocManaged(&new_frontier_size, sizeof(uint32_t)));
 
     for (uint32_t i = 0; i < rx.get_num_patches(); i++) {
         if (d_patch_label[i] == partition_label) {
@@ -192,31 +205,48 @@ void run_bipartition_lloyd(RXMeshStatic& rx, uint16_t partition_label, uint32_t*
     }
 
     // set the first frontier to be two seeds
-    random_shuffle(component.data(), component.size());
+    random_shuffle(components.data(), components.size());
     frontiers[0] = components[0];
     frontiers[1] = components[1];
 
-    //propogation until all the patches are assigned to a partition
-    while(true) {
-        bipartition_propogation(rx, frontiers, d_patch_label);
+    bipartition_init_seed<blockThreads>
+        <<<blocks_p, threads_p>>>(rx.get_context(),
+                                  frontiers,
+                                  frontier_head,
+                                  frontier_size,
+                                  partition_label,
+                                  d_patch_label);
+
+    // propogation until all the patches are assigned to a partition
+    while (true) {
+        new_frontier_head[0] = frontier_head[0] + frontier_size[0];
+        new_frontier_size[0] = 0;
+        // bipartition_propogation<blockThreads><<<blocks_p,
+        // threads_p>>>(rx.get_context(),
+        //                                                  frontiers,
+        //                                                  frontier_head,
+        //                                                  frontier_size,
+        //                                                  new_frontier_head,
+        //                                                  new_frontier_size,
+        //                                                  partition_label,
+        //                                                  d_patch_label);
         break;
     }
 
-    //propogation to get centroids
-    bipartition_recenter(rx, frontiers, d_patch_label);
+    // propogation to get centroids
+    //  bipartition_recenter(rx, frontiers, d_patch_label);
 
-    //repeat the process until convergence
+    // repeat the process until convergence
 
     // refinement on the boundary
-
 }
 
 
 template <uint32_t blockThreads>
 __global__ static void nd_extract_vertices(const rxmesh::Context     context,
-                                        VertexAttribute<uint16_t> v_ordering,
-                                        uint32_t* v_ordering_prefix_sum,
-                                        uint32_t* v_ordering_spv_idx)
+                                           VertexAttribute<uint16_t> v_ordering,
+                                           uint32_t* d_v_ordering_prefix_sum,
+                                           uint32_t* d_v_ordering_spv_idx)
 {
     // VV qury to extract the vertex separators
     auto vv_extract_separartors = [&](VertexHandle v_id, VertexIterator& vv) {
@@ -234,12 +264,12 @@ __global__ static void nd_extract_vertices(const rxmesh::Context     context,
 
         uint32_t v_order = INVALID32;
         if (is_separator) {
-            v_order = ::atomicAdd(
-                (unsigned int*)&v_ordering_prefix_sum[v_ordering_spv_idx[0]],
-                (unsigned int)1);
+            v_order = ::atomicAdd((unsigned int*)&d_v_ordering_prefix_sum
+                                      [d_v_ordering_spv_idx[0]],
+                                  (unsigned int)1);
         } else {
             v_order =
-                ::atomicAdd((unsigned int*)&v_ordering_prefix_sum[v_patch_id],
+                ::atomicAdd((unsigned int*)&d_v_ordering_prefix_sum[v_patch_id],
                             (unsigned int)1);
         }
         assert(v_order != INVALID32);
@@ -256,10 +286,10 @@ __global__ static void nd_extract_vertices(const rxmesh::Context     context,
 
 template <uint32_t blockThreads>
 __global__ static void nd_assign_numbering(const RXMeshStatic&       rx,
-                                        const rxmesh::Context     context,
-                                        VertexAttribute<uint16_t> v_ordering,
-                                        uint32_t* v_ordering_prefix_sum,
-                                        uint32_t* v_ordering_spv_idx)
+                                           const rxmesh::Context     context,
+                                           VertexAttribute<uint16_t> v_ordering,
+                                           uint32_t* d_v_ordering_prefix_sum,
+                                           uint32_t* d_v_ordering_spv_idx)
 {
     // VV qury to asssign the numbering to the vertices
     auto vv_assign_numbering = [&](VertexHandle v_id, VertexIterator& vv) {
@@ -276,9 +306,10 @@ __global__ static void nd_assign_numbering(const RXMeshStatic&       rx,
         }
 
         if (is_separator) {
-            v_ordering(v_id, 0) += v_ordering_prefix_sum[v_ordering_spv_idx[0]];
+            v_ordering(v_id, 0) +=
+                d_v_ordering_prefix_sum[d_v_ordering_spv_idx[0]];
         } else {
-            v_ordering(v_id, 0) += v_ordering_prefix_sum[v_patch_id];
+            v_ordering(v_id, 0) += d_v_ordering_prefix_sum[v_patch_id];
         }
     };
 
@@ -289,7 +320,8 @@ __global__ static void nd_assign_numbering(const RXMeshStatic&       rx,
     query.dispatch<Op::VV>(block, shrd_alloc, vv_assign_numbering);
 }
 
-void nd_reorder_test(RXMeshStatic& rx) {
+void nd_reorder_test(RXMeshStatic& rx)
+{
     constexpr uint32_t blockThreads = 256;
 
     LaunchBox<blockThreads> launch_box_nd_init_edge_weight;
@@ -305,23 +337,31 @@ void nd_reorder_test(RXMeshStatic& rx) {
     check_patch_stash<<<1, 1>>>(rx.get_context());
 }
 
-void nd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr)
+void nd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr, uint16_t nd_level)
 {
     constexpr uint32_t blockThreads = 256;
 
     // vertex color attribute
-    auto      v_ordering = rx.add_vertex_attribute<uint16_t>("v_ordering", 1);
-    uint32_t  v_ordering_prefix_sum_size = rx.get_num_patches() + 2;
-    uint32_t* v_ordering_prefix_sum;
-    cudaMallocManaged(&v_ordering_prefix_sum,
+    auto v_ordering = rx.add_vertex_attribute<uint16_t>("v_ordering", 1);
+
+    uint32_t num_v_separator = (1 << nd_level) - 1;
+    uint32_t v_ordering_prefix_sum_size =
+        rx.get_num_patches() + 1 + num_v_separator;
+    uint32_t* d_v_ordering_prefix_sum;
+    cudaMallocManaged(&d_v_ordering_prefix_sum,
                       v_ordering_prefix_sum_size * sizeof(uint32_t));
-    cudaMemset(v_ordering_prefix_sum,
+    cudaMemset(d_v_ordering_prefix_sum,
                0,
                v_ordering_prefix_sum_size * sizeof(uint32_t));
 
-    uint32_t* v_ordering_spv_idx;
-    cudaMallocManaged(&v_ordering_spv_idx, 1 * sizeof(uint32_t));
-    v_ordering_spv_idx[0] = rx.get_num_patches();
+    uint32_t* d_v_ordering_spv_idx;
+    cudaMallocManaged(&d_v_ordering_spv_idx,
+                      v_ordering_prefix_sum_size * sizeof(uint32_t));
+    d_v_ordering_spv_idx[0] = rx.get_num_patches();
+
+    uint32_t* d_patch_label;
+    cudaMallocManaged(&d_patch_label, rx.get_num_patches() * sizeof(uint32_t));
+    cudaMemset(d_patch_label, 0, rx.get_num_patches() * sizeof(uint32_t));
 
     uint32_t blocks  = rx.get_num_patches();
     uint32_t threads = blockThreads;
@@ -335,54 +375,37 @@ void nd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr)
                           launch_box_assign_numbering,
                           (void*)nd_assign_numbering<blockThreads>);
 
-    RXMESH_INFO("mgnd start");
+    // main body here
 
-    nd_extract_vertices<blockThreads>
-        <<<launch_box_extract_vertices.blocks,
-           launch_box_extract_vertices.num_threads,
-           launch_box_extract_vertices.smem_bytes_dyn>>>(rx.get_context(),
-                                                         *v_ordering,
-                                                         v_ordering_prefix_sum,
-                                                         v_ordering_spv_idx);
-    cudaDeviceSynchronize();
+    for (uint32_t i = 0; i < nd_level; i++) {
+        //partition for each label
+        uint32_t num_label = 1 << i;
+        uint32_t next_num_label = 1 << (i + 1);
+        
+        // update the prefix_sum location
+        // += num_label
 
-    printf("v_ordering_prefix_sum: ");
-    for (int i = 0; i < v_ordering_prefix_sum_size; i++) {
-        printf("%d ", v_ordering_prefix_sum[i]);
+        for (uint32_t j = 0; j < num_label; j++) {
+            run_bipartition_lloyd<blockThreads>(rx, j, d_patch_label);
+
+            // extract vertices
+        }
+
+        // calculate prefix sum
+
+        // assign numbering
     }
-    printf("\n");
 
-    thrust::exclusive_scan(v_ordering_prefix_sum,
-                           v_ordering_prefix_sum + v_ordering_prefix_sum_size,
-                           v_ordering_prefix_sum);
 
-    printf("v_ordering_prefix_sum: ");
-    for (int i = 0; i < v_ordering_prefix_sum_size; i++) {
-        printf("%d ", v_ordering_prefix_sum[i]);
-    }
-    printf("\n");
+    // verify the result
+    // v_ordering->move(rxmesh::DEVICE, rxmesh::HOST);
+    // rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
+    //     uint32_t v_global_id = rx.map_to_global(vh);
+    //     uint32_t v_linea_id  = rx.linear_id(vh);
+    //     uint32_t v_order_idx = (*v_ordering)(vh, 0);
 
-    nd_assign_numbering<blockThreads>
-        <<<launch_box_assign_numbering.blocks,
-           launch_box_assign_numbering.num_threads,
-           launch_box_assign_numbering.smem_bytes_dyn>>>(rx,
-                                                         rx.get_context(),
-                                                         *v_ordering,
-                                                         v_ordering_prefix_sum,
-                                                         v_ordering_spv_idx);
-    cudaDeviceSynchronize();
-
-    v_ordering->move(rxmesh::DEVICE, rxmesh::HOST);
-
-    rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
-        uint32_t v_global_id = rx.map_to_global(vh);
-        uint32_t v_linea_id  = rx.linear_id(vh);
-        uint32_t v_order_idx = (*v_ordering)(vh, 0);
-
-        ordering_arr[v_order_idx] = v_global_id;
-    });
-
-    RXMESH_INFO("mgnd end");
+    //     ordering_arr[v_order_idx] = v_global_id;
+    // });
 }
 
 }  // namespace rxmesh

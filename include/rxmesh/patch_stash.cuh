@@ -317,9 +317,10 @@ struct PatchStash
 
 
     // for nd cross patch implementation
+    bool m_is_seed;
     bool m_is_frontier;
     bool m_is_conflict;
-    uint16 m_settle_id; 
+    uint16_t m_settle_id; 
 
     bool m_is_on_device;
 };

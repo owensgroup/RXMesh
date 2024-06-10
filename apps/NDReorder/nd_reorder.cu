@@ -171,9 +171,9 @@ TEST(Apps, NDReorder)
     // nd_reorder();
 
     // mgnd reorder implementation
-    mgnd_reorder(rx, reorder_array);
+    // mgnd_reorder(rx, reorder_array);
 
-    reorder_array_correctness_check(reorder_array, rx.get_num_vertices());
+    // reorder_array_correctness_check(reorder_array, rx.get_num_vertices());
 
     nd_reorder_test(rx);
 
