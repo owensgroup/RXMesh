@@ -21,6 +21,8 @@
 #include "polyscope/surface_mesh.h"
 #endif
 
+#include <glm/fwd.hpp>
+
 namespace rxmesh {
 
 /**
@@ -1027,7 +1029,7 @@ class RXMeshStatic : public RXMesh
      * @param lower bounding box lower corner
      * @param upper bounding box upper corner
      */
-    void scale(Vector3f lower, Vector3f upper)
+    void scale(glm::fvec3 lower, glm::fvec3 upper)
     {
         if (lower[0] > upper[0] || lower[1] > upper[1] || lower[2] > upper[2]) {
             RXMESH_ERROR(
@@ -1042,11 +1044,11 @@ class RXMeshStatic : public RXMesh
             return;
         }
 
-        Vector3f bb_lower, bb_upper;
+        glm::vec3 bb_lower(0), bb_upper(0);
 
         bounding_box(bb_lower, bb_upper);
 
-        Vector3f factor;
+        glm::vec3 factor;
         for (int i = 0; i < 3; ++i) {
             factor[i] =
                 (upper[i] - lower[i]) / ((bb_upper[i] - bb_lower[i]) +
@@ -1073,7 +1075,7 @@ class RXMeshStatic : public RXMesh
      * @param lower
      * @param upper
      */
-    void bounding_box(Vector3f& lower, Vector3f& upper)
+    void bounding_box(glm::vec3& lower, glm::vec3& upper)
     {
         lower[0] = std::numeric_limits<float>::max();
         lower[1] = std::numeric_limits<float>::max();
@@ -1088,7 +1090,7 @@ class RXMeshStatic : public RXMesh
         for_each_vertex(
             HOST,
             [&](const VertexHandle vh) {
-                Vector3f v(coord(vh, 0), coord(vh, 1), coord(vh, 2));
+                glm::vec3 v(coord(vh, 0), coord(vh, 1), coord(vh, 2));
                 for (int i = 0; i < 3; ++i) {
                     lower[i] = std::min(lower[i], v[i]);
                     upper[i] = std::max(upper[i], v[i]);
@@ -1201,7 +1203,7 @@ class RXMeshStatic : public RXMesh
         file.precision(30);
 
 
-        std::vector<Vector3d> obj_coords(get_num_vertices());
+        std::vector<glm::dvec3> obj_coords(get_num_vertices());
         for_each_vertex(
             HOST,
             [&](const VertexHandle vh) {

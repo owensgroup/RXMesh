@@ -1,5 +1,4 @@
 #pragma once
-#include "mcf_util.h"
 #include "rxmesh/attribute.h"
 #include "rxmesh/matrix/dense_matrix.cuh"
 #include "rxmesh/matrix/sparse_matrix.cuh"

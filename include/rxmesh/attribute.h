@@ -13,7 +13,12 @@
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/util.h"
-#include "rxmesh/util/vector.h"
+
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/fwd.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtx/norm.hpp>
 
 class RXMeshTest;
 
@@ -240,9 +245,9 @@ class Attribute : public AttributeBase
     }
 
     /**
-     * @brief return the amount of allocated memory in megabytes 
-    */
-    const double get_memory_mg()const 
+     * @brief return the amount of allocated memory in megabytes
+     */
+    const double get_memory_mg() const
     {
         return m_memory_mega_bytes;
     }

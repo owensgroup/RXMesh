@@ -1,11 +1,6 @@
 #pragma once
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtx/norm.hpp>
-
-template <typename T>
-using Vec3 = glm::vec<3, T, glm::defaultp>;
+#include "rxmesh/types.h"
 
 template <class S, class T>
 constexpr __host__ __device__ inline S lerp(const S& value0,
@@ -73,9 +68,9 @@ constexpr inline T randhash(unsigned int seed, T a, T b)
 
 
 template <typename T>
-Vec3<T> sample_sphere(unsigned int& seed)
+rxmesh::vec3<T> sample_sphere(unsigned int& seed)
 {
-    Vec3<T> v;
+    rxmesh::vec3<T> v;
 
     T m2;
 
@@ -109,10 +104,10 @@ struct FlowNoise3
         }
         using namespace rxmesh;
 
-        CUDA_ERROR(cudaMalloc((void**)&d_basis, n * sizeof(Vec3<T>)));
+        CUDA_ERROR(cudaMalloc((void**)&d_basis, n * sizeof(vec3<T>)));
         CUDA_ERROR(cudaMalloc((void**)&d_perm, n * sizeof(int)));
         CUDA_ERROR(cudaMemcpy(
-            d_basis, h_basis, n * sizeof(Vec3<T>), cudaMemcpyHostToDevice));
+            d_basis, h_basis, n * sizeof(vec3<T>), cudaMemcpyHostToDevice));
         CUDA_ERROR(cudaMemcpy(
             d_perm, h_perm, n * sizeof(int), cudaMemcpyHostToDevice));
     }
@@ -135,14 +130,14 @@ struct FlowNoise3
         int j = (int)floory;
         int k = (int)floorz;
 
-        const Vec3<T>& n000 = basis(hash_index(i, j, k));
-        const Vec3<T>& n100 = basis(hash_index(i + 1, j, k));
-        const Vec3<T>& n010 = basis(hash_index(i, j + 1, k));
-        const Vec3<T>& n110 = basis(hash_index(i + 1, j + 1, k));
-        const Vec3<T>& n001 = basis(hash_index(i, j, k + 1));
-        const Vec3<T>& n101 = basis(hash_index(i + 1, j, k + 1));
-        const Vec3<T>& n011 = basis(hash_index(i, j + 1, k + 1));
-        const Vec3<T>& n111 = basis(hash_index(i + 1, j + 1, k + 1));
+        const rxmesh::vec3<T>& n000 = basis(hash_index(i, j, k));
+        const rxmesh::vec3<T>& n100 = basis(hash_index(i + 1, j, k));
+        const rxmesh::vec3<T>& n010 = basis(hash_index(i, j + 1, k));
+        const rxmesh::vec3<T>& n110 = basis(hash_index(i + 1, j + 1, k));
+        const rxmesh::vec3<T>& n001 = basis(hash_index(i, j, k + 1));
+        const rxmesh::vec3<T>& n101 = basis(hash_index(i + 1, j, k + 1));
+        const rxmesh::vec3<T>& n011 = basis(hash_index(i, j + 1, k + 1));
+        const rxmesh::vec3<T>& n111 = basis(hash_index(i + 1, j + 1, k + 1));
 
         T fx = x - floorx, fy = y - floory, fz = z - floorz;
         T sx = fx * fx * fx * (10 - fx * (15 - fx * 6)),
@@ -175,7 +170,8 @@ struct FlowNoise3
         return perm((perm((perm(i % n) + j) % n) + k) % n);
     }
 
-    constexpr __device__ __host__ const Vec3<T>& basis(unsigned int h) const
+    constexpr __device__ __host__ const rxmesh::vec3<T>& basis(
+        unsigned int h) const
     {
         assert(h < n);
 #ifdef __CUDA_ARCH__
@@ -195,8 +191,8 @@ struct FlowNoise3
 #endif
     }
 
-    Vec3<T>  h_basis[n];
-    Vec3<T>* d_basis;
-    int      h_perm[n];
-    int*     d_perm;
+    rxmesh::vec3<T>  h_basis[n];
+    rxmesh::vec3<T>* d_basis;
+    int              h_perm[n];
+    int*             d_perm;
 };

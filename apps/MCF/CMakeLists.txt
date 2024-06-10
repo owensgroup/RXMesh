@@ -5,7 +5,6 @@ set(SOURCE_LIST
 	mcf_rxmesh_kernel.cuh
 	mcf_openmesh.h
 	mcf_rxmesh.h	
-	mcf_util.h
 	mcf_sparse_matrix.cuh
 )
 

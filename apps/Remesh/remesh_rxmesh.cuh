@@ -1,10 +1,8 @@
 #include <cuda_profiler_api.h>
 
 #include "rxmesh/rxmesh_dynamic.h"
-
-#include "rxmesh/util/util.h"
-
 #include "rxmesh/util/report.h"
+#include "rxmesh/util/util.h"
 
 int ps_iddd = 0;
 
@@ -707,13 +705,6 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     report.model_data(Arg.obj_file_name + "_before", rx, "model_before");
     report.add_member("method", std::string("RXMesh"));
 
-#if USE_POLYSCOPE
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
-    rx.get_polyscope_mesh();
-    // polyscope::show();
-#endif
 
     auto coords     = rx.get_input_vertex_coordinates();
     auto new_coords = rx.add_vertex_attribute<float>("newCoords", 3);

@@ -2,7 +2,6 @@
 #include "gtest/gtest.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/report.h"
-#include "rxmesh/util/vector.h"
 
 using dataT = float;
 

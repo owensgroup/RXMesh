@@ -9,8 +9,7 @@ set(SOURCE_LIST
 	smoother.cuh
 	frame_stepper.h
 	simulation.h
-	noise.h
-	primitives.cuh
+	noise.h	
 	collapser.cuh
 	link_condition.cuh
 )
