@@ -700,7 +700,7 @@ struct CavityManager
 
     /**
      * @brief give a patch q, we store the corresponding element in p in
-     * s_correspondence. Thus, s_correspondence is indexing via q's index space
+     * s_correspondence. Thus, s_correspondence is indexed via q's index space
      */
     template <typename HandleT>
     __device__ __inline__ void populate_correspondence(

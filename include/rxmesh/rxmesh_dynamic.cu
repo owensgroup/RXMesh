@@ -70,6 +70,13 @@ __device__ __inline__ void hashtable_calibration(const Context context,
 
                 LPPair lp = pi.get_lp<HandleT>().find(lid, nullptr, nullptr);
 
+                // if (lp.is_sentinel()) {
+                //     printf("\n ## B=%u, T= %u, patch_id = %u, i= %u",
+                //            blockIdx.x,
+                //            threadIdx.x,
+                //            pi.patch_id,
+                //            i);
+                // }
                 assert(!lp.is_sentinel());
 
                 owner = pi.patch_stash.get_patch(lp);
@@ -2046,7 +2053,7 @@ __global__ static void check_ribbon_faces(const Context               context,
                                 //     vh.local_id(),
                                 //     s_vf_offset[v_id],
                                 //     s_vf_offset[v_id + 1]);
-                                ::atomicAdd(d_check, 1);                                
+                                ::atomicAdd(d_check, 1);
                                 break;
                             }
                         }
@@ -2527,7 +2534,7 @@ bool RXMeshDynamic::validate()
 
     CUDA_ERROR(cudaFree(d_check));
 
-    RXMESH_TRACE("RXMeshDynamic validatation finished");
+    RXMESH_TRACE("RXMeshDynamic validation finished");
     return success;
 }
 
@@ -2857,7 +2864,7 @@ void RXMeshDynamic::update_host()
     RXMESH_TRACE("RXMeshDynamic updating host finished");
 }
 
-void RXMeshDynamic::update_polyscope()
+void RXMeshDynamic::update_polyscope(std::string new_name)
 {
 #if USE_POLYSCOPE
     // for polyscope, we just remove the mesh and re-add it since polyscope does
@@ -2865,7 +2872,11 @@ void RXMeshDynamic::update_polyscope()
     // if (this->m_polyscope_mesh_name.find("updated") != std::string::npos) {
     // polyscope::removeSurfaceMesh(this->m_polyscope_mesh_name, true);
     //}
-    this->m_polyscope_mesh_name = this->m_polyscope_mesh_name + "updated";
+    if (new_name.empty()) {
+        this->m_polyscope_mesh_name = this->m_polyscope_mesh_name + "updated";
+    } else {
+        this->m_polyscope_mesh_name = new_name;
+    }
     this->register_polyscope();
 #endif
 }

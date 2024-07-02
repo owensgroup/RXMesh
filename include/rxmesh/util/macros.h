@@ -42,6 +42,32 @@ constexpr int MAX_OVERLAP_CAVITIES = 4;
 #define STRINGIFY(x) TOSTRING(x)
 #define TOSTRING(x) #x
 
+
+#ifndef myAssert
+#ifdef __CUDA_ARCH__
+#define myAssert(condition)                                                   \
+    if (!(condition)) {                                                       \
+        printf(                                                               \
+            "**********Assertion failed: %s, file %s, line %d, blockId= %d, " \
+            "thread= %d\n",                                                   \
+            #condition,                                                       \
+            __FILE__,                                                         \
+            __LINE__,                                                         \
+            blockIdx.x,                                                       \
+            threadIdx.x); /*asm("trap;");*/                                   \
+    }
+#else
+#define myAssert(condition)                                        \
+    if (!(condition)) {                                            \
+        printf("**********Assertion failed: %s, file %s, line %d", \
+               #condition,                                         \
+               __FILE__,                                           \
+               __LINE__);                                          \
+    }
+#endif
+#endif
+
+
 // CUDA_ERROR
 inline void HandleError(cudaError_t err, const char* file, int line)
 {
