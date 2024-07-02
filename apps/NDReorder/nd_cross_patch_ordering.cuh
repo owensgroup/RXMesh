@@ -14,7 +14,6 @@
 #include "rxmesh/attribute.h"
 
 #include "rxmesh/query.cuh"
-#include "rxmesh/util/vector.h"
 
 namespace rxmesh {
 

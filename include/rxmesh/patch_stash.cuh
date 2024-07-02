@@ -69,8 +69,8 @@ struct PatchStash
             // for nd_corss_patch
             m_is_seed = false;
             m_is_frontier = false;
-            m_is_conflict = false;
-            m_settle_id = INVALID16;
+            m_is_boundary = false;
+            m_local_label = INVALID16;
         } else {
             m_stash = (uint32_t*)malloc(stash_size * sizeof(uint32_t));
             for (uint8_t i = 0; i < stash_size; ++i) {
@@ -319,8 +319,8 @@ struct PatchStash
     // for nd cross patch implementation
     bool m_is_seed;
     bool m_is_frontier;
-    bool m_is_conflict;
-    uint16_t m_settle_id; 
+    bool m_is_boundary;
+    uint16_t m_local_label; 
 
     bool m_is_on_device;
 };
