@@ -177,4 +177,8 @@ void mgnd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr)
     RXMESH_INFO("mgnd end");
 }
 
+//TODO: refinement kernel for balancing the partition
+//TODO: cuda device synchronize vs cuda stream synchronize, efficiency test
+//TODO: outline for the thesis
+
 }  // namespace rxmesh
