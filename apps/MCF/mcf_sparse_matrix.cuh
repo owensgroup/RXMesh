@@ -63,11 +63,10 @@ __global__ static void mcf_B_setup(const rxmesh::Context            context,
 }
 
 template <typename T, uint32_t blockThreads>
-__global__ static void mcf_A_X_setup(
+__global__ static void mcf_A_setup(
     const rxmesh::Context            context,
     const rxmesh::VertexAttribute<T> coords,
     rxmesh::SparseMatrix<T>          A_mat,
-    rxmesh::DenseMatrix<T>           X_mat,
     const bool                       use_uniform_laplace,  // for non-uniform
     const T                          time_step)
 {
@@ -84,11 +83,6 @@ __global__ static void mcf_A_X_setup(
         uint16_t r_local_id = r_ids.second;
 
         uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
-
-        // set up initial X matrix
-        X_mat(row_index, 0) = coords(p_id, 0);
-        X_mat(row_index, 1) = coords(p_id, 1);
-        X_mat(row_index, 2) = coords(p_id, 2);
 
         // set up matrix A
         for (uint32_t v = 0; v < iter.size(); ++v) {
@@ -155,8 +149,9 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
     auto     coords       = rx.get_input_vertex_coordinates();
 
     SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>  X_mat(num_vertices, 3);
     DenseMatrix<float>  B_mat(num_vertices, 3);
+
+    std::shared_ptr<DenseMatrix<float>> X_mat = coords->to_matrix();
 
     RXMESH_INFO("use_uniform_laplace: {}, time_step: {}",
                 Arg.use_uniform_laplace,
@@ -180,23 +175,22 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
     LaunchBox<blockThreads> launch_box_A_X;
     rx.prepare_launch_box({Op::VV},
                           launch_box_A_X,
-                          (void*)mcf_A_X_setup<float, blockThreads>,
+                          (void*)mcf_A_setup<float, blockThreads>,
                           !Arg.use_uniform_laplace);
 
-    mcf_A_X_setup<float, blockThreads>
+    mcf_A_setup<float, blockThreads>
         <<<launch_box_A_X.blocks,
            launch_box_A_X.num_threads,
            launch_box_A_X.smem_bytes_dyn>>>(rx.get_context(),
                                             *coords,
                                             A_mat,
-                                            X_mat,
                                             Arg.use_uniform_laplace,
                                             Arg.time_step);
 
     // Solving the linear system using chol factorization and no reordering
-    A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NONE);
+    A_mat.spmat_linear_solve(B_mat, *X_mat, Solver::CHOL, Reorder::NONE);
 
-    X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
+    X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
 
     const T tol     = 0.001;
     T       tmp_tol = tol;
@@ -205,15 +199,15 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
         uint32_t v_id        = rx.map_to_global(vh);
         uint32_t v_linear_id = rx.linear_id(vh);
 
-        T a = X_mat(v_linear_id, 0);
 
         for (uint32_t i = 0; i < 3; ++i) {
-            tmp_tol = std::abs((X_mat(v_linear_id, i) - ground_truth[v_id][i]) /
-                               ground_truth[v_id][i]);
+            tmp_tol =
+                std::abs(((*X_mat)(v_linear_id, i) - ground_truth[v_id][i]) /
+                         ground_truth[v_id][i]);
 
             if (tmp_tol > tol) {
                 RXMESH_WARN("val: {}, truth: {}, tol: {}\n",
-                            X_mat(v_linear_id, i),
+                            (*X_mat)(v_linear_id, i),
                             ground_truth[v_id][i],
                             tmp_tol);
                 passed = false;
@@ -221,6 +215,19 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
             }
         }
     });
+
+
+    rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
+        uint32_t v_linear_id = rx.linear_id(vh);
+
+        for (uint32_t i = 0; i < 3; ++i) {
+            (*coords)(vh, i) = (*X_mat)(v_linear_id, i);
+        }
+    });
+
+    // rx.export_obj("mcf_rxmesh_chol.obj", *coords);
+    // rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    // polyscope::show();
 
     EXPECT_TRUE(passed);
 }

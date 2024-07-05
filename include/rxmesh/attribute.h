@@ -7,13 +7,13 @@
 #include "rxmesh/kernels/attribute.cuh"
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/util.cuh"
+#include "rxmesh/matrix/dense_matrix.cuh"
 #include "rxmesh/patch_info.h"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/types.h"
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/util.h"
-
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/fwd.hpp>
@@ -25,6 +25,7 @@ class RXMeshTest;
 
 namespace rxmesh {
 
+class RXMeshStatic;
 
 /**
  * @brief Base untyped attributes used as an interface for attribute container
@@ -98,11 +99,11 @@ class Attribute : public AttributeBase
      * @param location where the attribute to be allocated
      * @param layout memory layout in case of num_attributes>1
      */
-    explicit Attribute(const char*    name,
-                       const uint32_t num_attributes,
-                       locationT      location,
-                       const layoutT  layout,
-                       const RXMesh*  rxmesh)
+    explicit Attribute(const char*         name,
+                       const uint32_t      num_attributes,
+                       locationT           location,
+                       const layoutT       layout,
+                       const RXMeshStatic* rxmesh)
         : AttributeBase(),
           m_rxmesh(rxmesh),
           m_h_patches_info(rxmesh->m_h_patches_info),
@@ -155,10 +156,12 @@ class Attribute : public AttributeBase
             return this->operator()(m_rxmesh->map_to_local_face(i), j);
         }
     }
+
     size_t rows() const
     {
         return size();
     }
+
     size_t cols() const
     {
         return this->get_num_attributes();
@@ -179,6 +182,50 @@ class Attribute : public AttributeBase
         }
     }
 
+    /**
+     * @brief convert the attributes stored into a dense matrix where number of
+     * rows represent the number of mesh elements of this attribute and number
+     * of columns is the number of attributes
+     */
+    std::shared_ptr<DenseMatrix<T>> to_matrix()
+    {
+        std::shared_ptr<DenseMatrix<T>> mat =
+            std::make_shared<DenseMatrix<T>>(rows(), cols());
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            m_rxmesh->for_each_vertex(HOST, [&](const VertexHandle vh) {
+                uint32_t i = m_rxmesh->linear_id(vh);
+
+                for (uint32_t j = 0; j < cols(); ++j) {
+                    (*mat)(i, j) = this->operator()(vh, j);
+                }
+            });
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            m_rxmesh->for_each_edge(HOST, [&](const EdgeHandle eh) {
+                uint32_t i = m_rxmesh->linear_id(eh);
+
+                for (uint32_t j = 0; j < cols(); ++j) {
+                    (*mat)(i, j) = this->operator()(eh, j);
+                }
+            });
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            m_rxmesh->for_each_face(HOST, [&](const FaceHandle fh) {
+                uint32_t i = m_rxmesh->linear_id(fh);
+
+                for (uint32_t j = 0; j < cols(); ++j) {
+                    (*mat)(i, j) = this->operator()(fh, j);
+                }
+            });
+        }
+
+        mat->move(HOST, DEVICE);
+
+        return mat;
+    }
 
     /**
      * @brief get the number of elements in a patch. The element type
@@ -680,18 +727,18 @@ class Attribute : public AttributeBase
         }
     }
 
-    const RXMesh*    m_rxmesh;
-    const PatchInfo* m_h_patches_info;
-    const PatchInfo* m_d_patches_info;
-    char*            m_name;
-    uint32_t         m_num_attributes;
-    locationT        m_allocated;
-    T**              m_h_attr;
-    T**              m_h_ptr_on_device;
-    T**              m_d_attr;
-    uint32_t         m_max_num_patches;
-    layoutT          m_layout;
-    double           m_memory_mega_bytes;
+    const RXMeshStatic* m_rxmesh;
+    const PatchInfo*    m_h_patches_info;
+    const PatchInfo*    m_d_patches_info;
+    char*               m_name;
+    uint32_t            m_num_attributes;
+    locationT           m_allocated;
+    T**                 m_h_attr;
+    T**                 m_h_ptr_on_device;
+    T**                 m_d_attr;
+    uint32_t            m_max_num_patches;
+    layoutT             m_layout;
+    double              m_memory_mega_bytes;
 
     constexpr static uint32_t m_block_size = 256;
 };
@@ -760,11 +807,11 @@ class AttributeContainer
      * @return a shared pointer to the attribute
      */
     template <typename AttrT>
-    std::shared_ptr<AttrT> add(const char*   name,
-                               uint32_t      num_attributes,
-                               locationT     location,
-                               layoutT       layout,
-                               const RXMesh* rxmesh)
+    std::shared_ptr<AttrT> add(const char*         name,
+                               uint32_t            num_attributes,
+                               locationT           location,
+                               layoutT             layout,
+                               const RXMeshStatic* rxmesh)
     {
         if (does_exist(name)) {
             RXMESH_WARN(

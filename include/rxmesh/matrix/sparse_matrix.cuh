@@ -556,7 +556,7 @@ struct SparseMatrix
                             rxmesh::Solver         solver,
                             rxmesh::Reorder        reorder)
     {
-        for (int i = 0; i < B_mat.m_col_size; ++i) {
+        for (int i = 0; i < B_mat.cols(); ++i) {
             cusparse_linear_solver_wrapper(solver,
                                            reorder,
                                            m_cusolver_sphandle,
