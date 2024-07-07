@@ -177,11 +177,13 @@ TEST(Apps, NDReorder)
 
     nd_reorder(rx, reorder_array, 1);
 
+    reorder_array_correctness_check(reorder_array, rx.get_num_vertices());
+
      // for get the nnz data
-    // std::vector<uint32_t> reorder_vector(reorder_array, reorder_array + rx.get_num_vertices()); 
-    // processmesh_ordering(Arg.obj_file_name, (reorder_vector));
-    // processmesh_original(Arg.obj_file_name);
-    // processmesh_metis(Arg.obj_file_name);   
+    std::vector<uint32_t> reorder_vector(reorder_array, reorder_array + rx.get_num_vertices()); 
+    processmesh_ordering(Arg.obj_file_name, (reorder_vector));
+    processmesh_original(Arg.obj_file_name);
+    processmesh_metis(Arg.obj_file_name);   
 }
 
 int main(int argc, char** argv)
