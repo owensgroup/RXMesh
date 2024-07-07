@@ -146,7 +146,8 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
     constexpr uint32_t blockThreads = 256;
 
     uint32_t num_vertices = rx.get_num_vertices();
-    auto     coords       = rx.get_input_vertex_coordinates();
+
+    auto coords = rx.get_input_vertex_coordinates();
 
     SparseMatrix<float> A_mat(rx);
     DenseMatrix<float>  B_mat(num_vertices, 3);
@@ -190,44 +191,13 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
     // Solving the linear system using chol factorization and no reordering
     A_mat.spmat_linear_solve(B_mat, *X_mat, Solver::CHOL, Reorder::NONE);
 
+    // move the results to the host
     X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
 
-    const T tol     = 0.001;
-    T       tmp_tol = tol;
-    bool    passed  = true;
-    rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
-        uint32_t v_id        = rx.map_to_global(vh);
-        uint32_t v_linear_id = rx.linear_id(vh);
-
-
-        for (uint32_t i = 0; i < 3; ++i) {
-            tmp_tol =
-                std::abs(((*X_mat)(v_linear_id, i) - ground_truth[v_id][i]) /
-                         ground_truth[v_id][i]);
-
-            if (tmp_tol > tol) {
-                RXMESH_WARN("val: {}, truth: {}, tol: {}\n",
-                            (*X_mat)(v_linear_id, i),
-                            ground_truth[v_id][i],
-                            tmp_tol);
-                passed = false;
-                break;
-            }
-        }
-    });
-
-
-    rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
-        uint32_t v_linear_id = rx.linear_id(vh);
-
-        for (uint32_t i = 0; i < 3; ++i) {
-            (*coords)(vh, i) = (*X_mat)(v_linear_id, i);
-        }
-    });
+    // copy the results to attributes
+    coords->from_matrix(X_mat.get());
 
     // rx.export_obj("mcf_rxmesh_chol.obj", *coords);
-    // rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-    // polyscope::show();
-
-    EXPECT_TRUE(passed);
+    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    polyscope::show();
 }

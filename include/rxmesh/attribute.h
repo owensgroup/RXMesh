@@ -187,7 +187,7 @@ class Attribute : public AttributeBase
      * rows represent the number of mesh elements of this attribute and number
      * of columns is the number of attributes
      */
-    std::shared_ptr<DenseMatrix<T>> to_matrix()
+    std::shared_ptr<DenseMatrix<T>> to_matrix() const
     {
         std::shared_ptr<DenseMatrix<T>> mat =
             std::make_shared<DenseMatrix<T>>(rows(), cols());
@@ -226,6 +226,50 @@ class Attribute : public AttributeBase
 
         return mat;
     }
+
+    /**
+     * @brief copy a dense matrix to this attribute. The copying happens on the
+     * host side, i.e., we copy the content of mat which is on the host to this
+     * attribute on the host side
+     * @param mat
+     */
+    void from_matrix(DenseMatrix<T>* mat)
+    {
+        assert(mat->rows() == rows());
+        assert(mat->cols() == cols());
+
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            m_rxmesh->for_each_vertex(HOST, [&](const VertexHandle vh) {
+                uint32_t i = m_rxmesh->linear_id(vh);
+
+                for (uint32_t j = 0; j < cols(); ++j) {
+                    this->operator()(vh, j) = (*mat)(i, j);
+                }
+            });
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            m_rxmesh->for_each_edge(HOST, [&](const EdgeHandle eh) {
+                uint32_t i = m_rxmesh->linear_id(eh);
+
+                for (uint32_t j = 0; j < cols(); ++j) {
+                    this->operator()(eh, j) = (*mat)(i, j);
+                }
+            });
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            m_rxmesh->for_each_face(HOST, [&](const FaceHandle fh) {
+                uint32_t i = m_rxmesh->linear_id(fh);
+
+                for (uint32_t j = 0; j < cols(); ++j) {
+                    this->operator()(fh, j) = (*mat)(i, j);
+                }
+            });
+        }
+    }
+
 
     /**
      * @brief get the number of elements in a patch. The element type
