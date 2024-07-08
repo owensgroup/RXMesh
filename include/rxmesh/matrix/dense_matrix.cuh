@@ -3,6 +3,7 @@
 #include "cusparse.h"
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
+#include "rxmesh/rxmesh.h"
 #include "rxmesh/types.h"
 
 namespace rxmesh {
@@ -16,10 +17,27 @@ namespace rxmesh {
 template <typename T, typename IndexT = int, unsigned int MemAlignSize = 0>
 struct DenseMatrix
 {
-    DenseMatrix(IndexT    num_rows,
-                IndexT    num_cols,
-                locationT location = LOCATION_ALL)
-        : m_num_rows(num_rows),
+    template <typename U, typename IndexU>
+    friend class SparseMatrix;
+
+    DenseMatrix()
+        : m_allocated(LOCATION_NONE),
+          m_num_rows(0),
+          m_num_cols(0),
+          m_d_val(nullptr),
+          m_h_val(nullptr),
+          m_col_pad_bytes(0),
+          m_col_pad_idx(0)
+    {
+    }
+
+
+    DenseMatrix(const RXMesh& rx,
+                IndexT        num_rows,
+                IndexT        num_cols,
+                locationT     location = LOCATION_ALL)
+        : m_context(rx.get_context()),
+          m_num_rows(num_rows),
           m_num_cols(num_cols),
           m_dendescr(NULL),
           m_h_val(nullptr),
@@ -100,6 +118,53 @@ struct DenseMatrix
 #else
         return m_h_val[col * (m_num_rows + m_col_pad_idx) + row];
 #endif
+    }
+
+
+    /**
+     * @brief access the matrix using vertex/edge/face handle as a row index.
+     */
+    template <typename HandleT>
+    __host__ __device__ T& operator()(const HandleT handle, const uint32_t col)
+    {
+        return this->operator()(get_row_id_from_handle(handle), col);
+    }
+
+    /**
+     * @brief access the matrix using vertex/edge/face handle as a row index.
+     */
+    template <typename HandleT>
+    __host__ __device__ const T& operator()(const HandleT  handle,
+                                            const uint32_t col) const
+    {
+        return this->operator()(get_row_id_from_handle(handle), col);
+    }
+
+    /**
+     * @brief return the row index corresponding to specific vertex/edge/face
+     * handle
+     */
+    template <typename HandleT>
+    __host__ __device__ const uint32_t
+    get_row_id_from_handle(const HandleT handle) const
+    {
+        auto id = handle.unpack();
+
+        uint32_t row;
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            row = m_context.vertex_prefix()[id.first] + id.second;
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            row = m_context.edge_prefix()[id.first] + id.second;
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            row = m_context.face_prefix()[id.first] + id.second;
+        }
+
+        return row;
     }
 
     /**
@@ -231,6 +296,7 @@ struct DenseMatrix
     }
 
 
+    const Context        m_context;
     cusparseDnMatDescr_t m_dendescr;
     locationT            m_allocated;
     IndexT               m_num_rows;

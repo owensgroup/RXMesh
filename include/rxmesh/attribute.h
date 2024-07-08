@@ -190,7 +190,7 @@ class Attribute : public AttributeBase
     std::shared_ptr<DenseMatrix<T>> to_matrix() const
     {
         std::shared_ptr<DenseMatrix<T>> mat =
-            std::make_shared<DenseMatrix<T>>(rows(), cols());
+            std::make_shared<DenseMatrix<T>>(*m_rxmesh, rows(), cols());
 
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             m_rxmesh->for_each_vertex(HOST, [&](const VertexHandle vh) {

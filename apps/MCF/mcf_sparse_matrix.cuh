@@ -13,17 +13,11 @@ __global__ static void mcf_B_setup(const rxmesh::Context            context,
     using namespace rxmesh;
 
     auto init_lambda = [&](VertexHandle& p_id, const VertexIterator& iter) {
-        auto     r_ids      = p_id.unpack();
-        uint32_t r_patch_id = r_ids.first;
-        uint16_t r_local_id = r_ids.second;
-
-        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
-
         if (use_uniform_laplace) {
-            const T valence     = static_cast<T>(iter.size());
-            B_mat(row_index, 0) = coords(p_id, 0) * valence;
-            B_mat(row_index, 1) = coords(p_id, 1) * valence;
-            B_mat(row_index, 2) = coords(p_id, 2) * valence;
+            const T valence = static_cast<T>(iter.size());
+            B_mat(p_id, 0)  = coords(p_id, 0) * valence;
+            B_mat(p_id, 1)  = coords(p_id, 1) * valence;
+            B_mat(p_id, 2)  = coords(p_id, 2) * valence;
         } else {
             T v_weight = 0;
 
@@ -42,9 +36,9 @@ __global__ static void mcf_B_setup(const rxmesh::Context            context,
             }
             v_weight = 0.5 / v_weight;
 
-            B_mat(row_index, 0) = coords(p_id, 0) / v_weight;
-            B_mat(row_index, 1) = coords(p_id, 1) / v_weight;
-            B_mat(row_index, 2) = coords(p_id, 2) / v_weight;
+            B_mat(p_id, 0) = coords(p_id, 0) / v_weight;
+            B_mat(p_id, 1) = coords(p_id, 1) / v_weight;
+            B_mat(p_id, 2) = coords(p_id, 2) / v_weight;
         }
     };
 
@@ -81,8 +75,6 @@ __global__ static void mcf_A_setup(
         auto     r_ids      = p_id.unpack();
         uint32_t r_patch_id = r_ids.first;
         uint16_t r_local_id = r_ids.second;
-
-        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
 
         // set up matrix A
         for (uint32_t v = 0; v < iter.size(); ++v) {
@@ -150,7 +142,7 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
     auto coords = rx.get_input_vertex_coordinates();
 
     SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>  B_mat(num_vertices, 3);
+    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
 
     std::shared_ptr<DenseMatrix<float>> X_mat = coords->to_matrix();
 
@@ -196,7 +188,7 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
 
     // copy the results to attributes
     coords->from_matrix(X_mat.get());
-        
+
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
     polyscope::show();
 

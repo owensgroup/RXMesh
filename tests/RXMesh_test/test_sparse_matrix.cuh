@@ -15,7 +15,7 @@ __global__ static void sparse_mat_test(const rxmesh::Context context,
         auto     ids      = v_id.unpack();
         uint32_t patch_id = ids.first;
         uint16_t local_id = ids.second;
-        vet_degree[context.m_vertex_prefix[patch_id] + local_id] =
+        vet_degree[context.vertex_prefix()[patch_id] + local_id] =
             iter.size() + 1;
     };
 
@@ -40,7 +40,7 @@ __global__ static void sparse_mat_edge_len_test(
         uint32_t r_patch_id = r_ids.first;
         uint16_t r_local_id = r_ids.second;
 
-        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
+        uint32_t row_index = context.vertex_prefix()[r_patch_id] + r_local_id;
 
         arr_ref[row_index]     = 0;
         sparse_mat(v_id, v_id) = 0;
@@ -71,10 +71,10 @@ __global__ void spmat_multi_hardwired_kernel(T*                      vec,
     int   tid = threadIdx.x + blockIdx.x * blockDim.x;
     float sum = 0;
     if (tid < N) {
-        uint32_t start = sparse_mat.get_row_ptr_at(tid);
-        uint32_t end   = sparse_mat.get_row_ptr_at(tid + 1);
+        uint32_t start = sparse_mat.row_ptr()[tid];
+        uint32_t end   = sparse_mat.row_ptr()[tid + 1];
         for (int i = 0; i < end - start; i++) {
-            sum += vec[sparse_mat.get_col_idx_at(start + i)] *
+            sum += vec[sparse_mat.col_idx()[start + i]] *
                    sparse_mat.get_val_at(start + i);
         }
         out[tid] = sum;
@@ -96,19 +96,14 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
         T v_weight = iter.size();
 
         // reference value calculation
-        auto     r_ids      = v_id.unpack();
-        uint32_t r_patch_id = r_ids.first;
-        uint16_t r_local_id = r_ids.second;
 
-        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
+        B_mat(v_id, 0) = iter.size() * 7.4f;
+        B_mat(v_id, 1) = iter.size() * 2.6f;
+        B_mat(v_id, 2) = iter.size() * 10.3f;
 
-        B_mat(row_index, 0) = iter.size() * 7.4f;
-        B_mat(row_index, 1) = iter.size() * 2.6f;
-        B_mat(row_index, 2) = iter.size() * 10.3f;
-
-        X_mat(row_index, 0) = coords(v_id, 0) * v_weight;
-        X_mat(row_index, 1) = coords(v_id, 1) * v_weight;
-        X_mat(row_index, 2) = coords(v_id, 2) * v_weight;
+        X_mat(v_id, 0) = coords(v_id, 0) * v_weight;
+        X_mat(v_id, 1) = coords(v_id, 1) * v_weight;
+        X_mat(v_id, 2) = coords(v_id, 2) * v_weight;
 
         vec3<T> vi_coord(coords(v_id, 0), coords(v_id, 1), coords(v_id, 2));
         for (uint32_t v = 0; v < iter.size(); ++v) {
@@ -158,7 +153,7 @@ TEST(RXMeshStatic, SparseMatrix)
     CUDA_ERROR(cudaMalloc((void**)&d_result, (num_vertices) * sizeof(int)));
 
     SparseMatrix<int> spmat(rx);
-    spmat.set_identity();
+    spmat.set_ones();
 
     spmat_multi_hardwired_kernel<<<blocks, threads>>>(
         d_arr_ones, spmat, d_result, num_vertices);
@@ -289,9 +284,9 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 
     auto                coords = rx.get_input_vertex_coordinates();
     SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>  X_mat(num_vertices, 3);
-    DenseMatrix<float>  B_mat(num_vertices, 3);
-    DenseMatrix<float>  ret_mat(num_vertices, 3);
+    DenseMatrix<float>  X_mat(rx, num_vertices, 3);
+    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
+    DenseMatrix<float>  ret_mat(rx, num_vertices, 3);
 
     float time_step = 1.f;
 
@@ -352,9 +347,9 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 
     auto                coords = rx.get_input_vertex_coordinates();
     SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>  X_mat(num_vertices, 3);
-    DenseMatrix<float>  B_mat(num_vertices, 3);
-    DenseMatrix<float>  ret_mat(num_vertices, 3);
+    DenseMatrix<float>  X_mat(rx, num_vertices, 3);
+    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
+    DenseMatrix<float>  ret_mat(rx, num_vertices, 3);
 
     float time_step = 1.f;
 
@@ -374,7 +369,7 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
     A_mat.spmat_chol_buffer_alloc();
     A_mat.spmat_chol_factor();
 
-    for (int i = 0; i < B_mat.m_col_size; ++i) {
+    for (int i = 0; i < B_mat.cols(); ++i) {
         A_mat.spmat_chol_solve(B_mat.col_data(i), X_mat.col_data(i));
     }
 

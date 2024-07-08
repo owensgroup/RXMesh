@@ -70,7 +70,7 @@ __global__ static void sparse_mat_prescan(const rxmesh::Context context,
         auto     ids                                          = v_id.unpack();
         uint32_t patch_id                                     = ids.first;
         uint16_t local_id                                     = ids.second;
-        row_ptr[context.m_vertex_prefix[patch_id] + local_id] = iter.size() + 1;
+        row_ptr[context.vertex_prefix()[patch_id] + local_id] = iter.size() + 1;
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -90,14 +90,14 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
         auto     ids      = v_id.unpack();
         uint32_t patch_id = ids.first;
         uint16_t local_id = ids.second;
-        col_idx[row_ptr[context.m_vertex_prefix[patch_id] + local_id]] =
-            context.m_vertex_prefix[patch_id] + local_id;
+        col_idx[row_ptr[context.vertex_prefix()[patch_id] + local_id]] =
+            context.vertex_prefix()[patch_id] + local_id;
         for (uint32_t v = 0; v < iter.size(); ++v) {
             auto     s_ids      = iter[v].unpack();
             uint32_t s_patch_id = s_ids.first;
             uint16_t s_local_id = s_ids.second;
-            col_idx[row_ptr[context.m_vertex_prefix[patch_id] + local_id] + v +
-                    1] = context.m_vertex_prefix[s_patch_id] + s_local_id;
+            col_idx[row_ptr[context.vertex_prefix()[patch_id] + local_id] + v +
+                    1] = context.vertex_prefix()[s_patch_id] + s_local_id;
         }
     };
 
@@ -133,17 +133,17 @@ void permute_gather(IndexT* d_p, T* d_in, T* d_out, IndexT size)
 
 
 /**
- * @brief Sparse matrix that represent the VV connectivity, i.e., it is a square
- * matrix with number of rows/cols is equal to number of vertices and there is
- * non-zero values at entry (i,j) only if the vertex i is connected to vertex j.
- * The sparse matrix is stored as a CSR matrix and it is allocated on both host
- * and device. The class also provides implementation for matrix-vector
- * multiplication and linear solver—(using cuSolver and cuSparse as a back-end.
+ * @brief Device-only sparse matrix that represent the VV connectivity, i.e., it
+ * is a square matrix with number of rows/cols is equal to number of vertices
+ * and there is non-zero values at entry (i,j) only if the vertex i is connected
+ * to vertex j. The sparse matrix is stored as a CSR matrix. The class also
+ * provides implementation for matrix-vector multiplication and linear
+ * solver—(using cuSolver and cuSparse as a back-end.
  */
 template <typename T, typename IndexT = int>
 struct SparseMatrix
 {
-    SparseMatrix(RXMeshStatic& rx)
+    SparseMatrix(const RXMeshStatic& rx)
         : m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
           m_d_val(nullptr),
@@ -166,6 +166,7 @@ struct SparseMatrix
           m_d_solver_val(nullptr),
           m_use_reorder(false),
           m_reorder_allocated(false),
+          m_d_cusparse_spmm_buffer(false),
           m_allocated(LOCATION_NONE)
     {
         using namespace rxmesh;
@@ -373,21 +374,45 @@ struct SparseMatrix
         assert(1 != 1);
     }
 
-
-    __device__ IndexT& get_row_ptr_at(IndexT idx) const
+    /**
+     * @brief return the row pointer of the CSR matrix
+     * @return
+     */
+    __device__ __host__ const IndexT* row_ptr() const
     {
-        return m_d_row_ptr[idx];
+#ifdef __CUDA_ARCH__
+        return m_d_row_ptr;
+#else
+        return m_h_row_ptr;
+#endif
     }
 
-    __device__ IndexT& get_col_idx_at(IndexT idx) const
+    /**
+     * @brief return the column index pointer of the CSR matrix
+     * @return
+     */
+    __device__ __host__ const IndexT* col_idx() const
     {
-        return m_d_col_idx[idx];
+#ifdef __CUDA_ARCH__
+        return m_d_col_idx;
+#else
+        return m_h_col_idx;
+#endif
     }
 
-    __device__ T& get_val_at(IndexT idx) const
+    /**
+     * @brief access the value of (1D array) array that holds the nnz in the CSR
+     * matrix
+     */
+    __device__ __host__ T& get_val_at(IndexT idx) const
     {
+#ifdef __CUDA_ARCH__
         return m_d_val[idx];
+#else
+        return m_h_val[idx];
+#endif
     }
+
 
     /**
      * @brief release all allocated memory
@@ -406,6 +431,7 @@ struct SparseMatrix
             GPU_FREE(m_d_permute);
             free(m_h_permute);
         }
+        GPU_FREE(m_d_cusparse_spmm_buffer);
     }
 
     /**
@@ -460,30 +486,27 @@ struct SparseMatrix
      * where A is the sparse matrix, B is a dense matrix, and the result is a
      * dense matrix C
      */
-    __host__ void multiply_by_dense_matrix(rxmesh::DenseMatrix<T> B_mat,
-                                           rxmesh::DenseMatrix<T> C_mat,
-                                           cudaStream_t           stream = 0)
+    __host__ void multiply_by_dense_matrix(rxmesh::DenseMatrix<T>& B_mat,
+                                           rxmesh::DenseMatrix<T>& C_mat,
+                                           cudaStream_t            stream = 0)
     {
         float alpha = 1.0f;
         float beta  = 0.0f;
 
         // A_mat.create_cusparse_handle();
-        cusparseSpMatDescr_t matA    = m_spdescr;
-        cusparseDnMatDescr_t matB    = B_mat.m_dendescr;
-        cusparseDnMatDescr_t matC    = C_mat.m_dendescr;
-        void*                dBuffer = NULL;
+        cusparseSpMatDescr_t matA = m_spdescr;
+        cusparseDnMatDescr_t matB = B_mat.m_dendescr;
+        cusparseDnMatDescr_t matC = C_mat.m_dendescr;
 
         CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
 
         // allocate an external buffer if needed
         if (m_spmm_buffer_size == 0) {
-            RXMESH_WARN(
-                "Sparse matrix - Dense matrix multiplication buffer size not "
-                "initialized.",
-                "Calculate it now.");
             denmat_mul_buffer_size(B_mat, C_mat, stream);
+            CUDA_ERROR(
+                cudaMalloc(&m_d_cusparse_spmm_buffer, m_spmm_buffer_size));
         }
-        CUDA_ERROR(cudaMalloc(&dBuffer, m_spmm_buffer_size));
+
 
         // execute SpMM
         CUSPARSE_ERROR(cusparseSpMM(m_cusparse_handle,
@@ -496,9 +519,7 @@ struct SparseMatrix
                                     matC,
                                     CUDA_R_32F,
                                     CUSPARSE_SPMM_ALG_DEFAULT,
-                                    dBuffer));
-
-        CUDA_ERROR(cudaFree(dBuffer));
+                                    m_d_cusparse_spmm_buffer));
     }
 
     /**
@@ -1061,8 +1082,8 @@ struct SparseMatrix
         uint32_t c_patch_id = c_ids.first;
         uint16_t c_local_id = c_ids.second;
 
-        uint32_t col_index = m_context.m_vertex_prefix[c_patch_id] + c_local_id;
-        uint32_t row_index = m_context.m_vertex_prefix[r_patch_id] + r_local_id;
+        uint32_t col_index = m_context.vertex_prefix()[c_patch_id] + c_local_id;
+        uint32_t row_index = m_context.vertex_prefix()[r_patch_id] + r_local_id;
 
         const IndexT start = m_d_row_ptr[row_index];
         const IndexT end   = m_d_row_ptr[row_index + 1];
@@ -1072,7 +1093,7 @@ struct SparseMatrix
                 return i;
             }
         }
-        assert(1 != 1);
+        return 0;
     }
 
 
@@ -1219,6 +1240,8 @@ struct SparseMatrix
     IndexT* m_d_solver_row_ptr;
     IndexT* m_d_solver_col_idx;
     T*      m_d_solver_val;
+
+    void* m_d_cusparse_spmm_buffer;
 
     // flags
     bool      m_use_reorder;
