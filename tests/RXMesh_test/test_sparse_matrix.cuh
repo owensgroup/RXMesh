@@ -158,7 +158,7 @@ TEST(RXMeshStatic, SparseMatrix)
     CUDA_ERROR(cudaMalloc((void**)&d_result, (num_vertices) * sizeof(int)));
 
     SparseMatrix<int> spmat(rx);
-    spmat.set_ones();
+    spmat.set_identity();
 
     spmat_multi_hardwired_kernel<<<blocks, threads>>>(
         d_arr_ones, spmat, d_result, num_vertices);
@@ -193,7 +193,7 @@ TEST(RXMeshStatic, SparseMatrix)
     CUDA_ERROR(cudaFree(d_arr_ones));
     CUDA_ERROR(cudaFree(d_result));
     CUDA_ERROR(cudaFree(vet_degree));
-    spmat.free_mat();
+    spmat.release();
 }
 
 /* First replace the sparse matrix entry with the edge length and then do spmv
@@ -264,7 +264,7 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
     CUDA_ERROR(cudaFree(d_arr_ref));
     CUDA_ERROR(cudaFree(d_arr_ones));
     CUDA_ERROR(cudaFree(d_result));
-    spmat.free_mat();
+    spmat.release();
 }
 
 /* set up a simple AX=B system where A is a sparse matrix, B and C are dense
@@ -310,7 +310,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
     GPUTimer timer;
     timer.start();
 
-    A_mat.denmat_mul(X_mat, ret_mat);
+    A_mat.multiply_by_dense_matrix(X_mat, ret_mat);
 
     timer.stop();
     RXMESH_TRACE("SPMM_rxmesh() took {} (ms) ", timer.elapsed_millis());
@@ -331,7 +331,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
             EXPECT_NEAR(h_ret_mat[i][j], h_B_mat[i][j], 1e-3);
         }
     }
-    A_mat.free_mat();
+    A_mat.release();
 }
 
 TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
@@ -380,7 +380,7 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 
     A_mat.spmat_chol_buffer_free();
 
-    A_mat.denmat_mul(X_mat, ret_mat);
+    A_mat.multiply_by_dense_matrix(X_mat, ret_mat);
 
     std::vector<vec3<float>> h_ret_mat(num_vertices);
     CUDA_ERROR(cudaMemcpy(h_ret_mat.data(),
@@ -398,5 +398,5 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
             EXPECT_NEAR(h_ret_mat[i][j], h_B_mat[i][j], 1e-3);
         }
     }
-    A_mat.free_mat();
+    A_mat.release();
 }

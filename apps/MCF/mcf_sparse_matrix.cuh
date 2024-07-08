@@ -196,8 +196,11 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
 
     // copy the results to attributes
     coords->from_matrix(X_mat.get());
-
-    // rx.export_obj("mcf_rxmesh_chol.obj", *coords);
+        
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
     polyscope::show();
+
+    B_mat.release();
+    X_mat->release();
+    A_mat.release();
 }
