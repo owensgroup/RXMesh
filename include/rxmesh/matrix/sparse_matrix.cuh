@@ -133,12 +133,13 @@ void permute_gather(IndexT* d_p, T* d_in, T* d_out, IndexT size)
 
 
 /**
- * @brief Device-only sparse matrix that represent the VV connectivity, i.e., it
+ * @brief Sparse matrix that represent the VV connectivity, i.e., it
  * is a square matrix with number of rows/cols is equal to number of vertices
  * and there is non-zero values at entry (i,j) only if the vertex i is connected
- * to vertex j. The sparse matrix is stored as a CSR matrix. The class also
- * provides implementation for matrix-vector multiplication and linear
- * solver—(using cuSolver and cuSparse as a back-end.
+ * to vertex j. The sparse matrix is stored as a CSR matrix. The matrix is
+ * accessible on both host and device. The class also provides implementation
+ * for matrix-vector multiplication and linear solver—(using cuSolver and
+ * cuSparse as a back-end.
  */
 template <typename T, typename IndexT = int>
 struct SparseMatrix
@@ -324,51 +325,55 @@ struct SparseMatrix
         return m_nnz;
     }
 
+
     /**
      * @brief access the matrix using VertexHandle
      */
-    __device__ T& operator()(const VertexHandle& row_v,
-                             const VertexHandle& col_v)
+    __device__ __host__ const T& operator()(const VertexHandle& row_v,
+                                            const VertexHandle& col_v) const
     {
-        return m_d_val[get_val_idx(row_v, col_v)];
+        return this->operator()(get_row_id_from_handle(row_v),
+                                get_row_id_from_handle(col_v));
     }
 
     /**
      * @brief access the matrix using VertexHandle
      */
-    __device__ T& operator()(const VertexHandle& row_v,
-                             const VertexHandle& col_v) const
+    __device__ __host__ T& operator()(const VertexHandle& row_v,
+                                      const VertexHandle& col_v)
     {
-        return m_d_val[get_val_idx(row_v, col_v)];
+        return this->operator()(get_row_id_from_handle(row_v),
+                                get_row_id_from_handle(col_v));
     }
 
     /**
      * @brief access the matrix using row and col index
      */
-    __device__ T& operator()(const IndexT x, const IndexT y)
+    __device__ __host__ T& operator()(const IndexT x, const IndexT y)
     {
-        const IndexT start = m_d_row_ptr[x];
-        const IndexT end   = m_d_row_ptr[x + 1];
+        const IndexT start = row_ptr()[x];
+        const IndexT end   = row_ptr()[x + 1];
 
         for (IndexT i = start; i < end; ++i) {
-            if (m_d_col_idx[i] == y) {
-                return m_d_val[i];
+            if (col_idx()[i] == y) {
+                return get_val_at(i);
             }
-        }
+        }        
         assert(1 != 1);
     }
 
     /**
      * @brief access the matrix using row and col index
      */
-    __device__ T& operator()(const IndexT x, const IndexT y) const
+    __device__ __host__ const T& operator()(const IndexT x,
+                                            const IndexT y) const
     {
-        const IndexT start = m_d_row_ptr[x];
-        const IndexT end   = m_d_row_ptr[x + 1];
+        const IndexT start = row_ptr()[x];
+        const IndexT end   = row_ptr()[x + 1];
 
         for (IndexT i = start; i < end; ++i) {
-            if (m_d_col_idx[i] == y) {
-                return m_d_val[i];
+            if (col_idx()[i] == y) {
+                return get_val_at(i);
             }
         }
         assert(1 != 1);
@@ -1069,34 +1074,17 @@ struct SparseMatrix
         }
     }
 
-
-   private:
-    __device__ const IndexT get_val_idx(const VertexHandle& row_v,
-                                        const VertexHandle& col_v) const
+    /**
+     * @brief return the row index corresponding to specific vertex handle
+     */
+    __device__ __host__ const uint32_t
+    get_row_id_from_handle(const VertexHandle& handle) const
     {
-        auto     r_ids      = row_v.unpack();
-        uint32_t r_patch_id = r_ids.first;
-        uint16_t r_local_id = r_ids.second;
-
-        auto     c_ids      = col_v.unpack();
-        uint32_t c_patch_id = c_ids.first;
-        uint16_t c_local_id = c_ids.second;
-
-        uint32_t col_index = m_context.vertex_prefix()[c_patch_id] + c_local_id;
-        uint32_t row_index = m_context.vertex_prefix()[r_patch_id] + r_local_id;
-
-        const IndexT start = m_d_row_ptr[row_index];
-        const IndexT end   = m_d_row_ptr[row_index + 1];
-
-        for (IndexT i = start; i < end; ++i) {
-            if (m_d_col_idx[i] == col_index) {
-                return i;
-            }
-        }
-        return 0;
+        auto id = handle.unpack();
+        return m_context.vertex_prefix()[id.first] + id.second;
     }
 
-
+   private:
     void denmat_mul_buffer_size(rxmesh::DenseMatrix<T> B_mat,
                                 rxmesh::DenseMatrix<T> C_mat,
                                 cudaStream_t           stream = 0)
