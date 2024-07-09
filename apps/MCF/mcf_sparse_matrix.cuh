@@ -181,7 +181,7 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
                                             Arg.time_step);
 
     // Solving the linear system using chol factorization and no reordering
-    A_mat.spmat_linear_solve(B_mat, *X_mat, Solver::CHOL, Reorder::NONE);
+    A_mat.solve(B_mat, *X_mat, Solver::CHOL, Reorder::NONE);
 
     // move the results to the host
     X_mat->move(rxmesh::DEVICE, rxmesh::HOST);

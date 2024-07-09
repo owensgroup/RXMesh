@@ -17,6 +17,9 @@ namespace rxmesh {
 template <typename T, typename IndexT = int, unsigned int MemAlignSize = 0>
 struct DenseMatrix
 {
+    static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>,
+                  "RXMesh::DenseMatrix supports only float or double");
+
     template <typename U, typename IndexU>
     friend class SparseMatrix;
 

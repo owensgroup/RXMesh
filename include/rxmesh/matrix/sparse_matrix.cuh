@@ -40,6 +40,7 @@ enum class Reorder
     NSTDIS = 3
 };
 
+namespace detail {
 static int reorder_to_int(const Reorder& reorder)
 {
     switch (reorder) {
@@ -58,7 +59,6 @@ static int reorder_to_int(const Reorder& reorder)
     }
 }
 
-namespace detail {
 // this is the function for the CSR calculation
 template <uint32_t blockThreads, typename IndexT = int>
 __global__ static void sparse_mat_prescan(const rxmesh::Context context,
@@ -167,9 +167,13 @@ struct SparseMatrix
           m_d_solver_val(nullptr),
           m_use_reorder(false),
           m_reorder_allocated(false),
-          m_d_cusparse_spmm_buffer(false),
+          m_d_cusparse_spmm_buffer(nullptr),
+          m_d_cusparse_spmv_buffer(nullptr),
           m_allocated(LOCATION_NONE)
     {
+        static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>,
+                      "RXMesh::SparseMatrix supports only float or double");
+
         using namespace rxmesh;
         constexpr uint32_t blockThreads = 256;
 
@@ -358,7 +362,7 @@ struct SparseMatrix
             if (col_idx()[i] == y) {
                 return get_val_at(i);
             }
-        }        
+        }
         assert(1 != 1);
     }
 
@@ -422,7 +426,7 @@ struct SparseMatrix
     /**
      * @brief release all allocated memory
      */
-    void release()
+    __host__ void release()
     {
         release(LOCATION_ALL);
         CUSPARSE_ERROR(cusparseDestroy(m_cusparse_handle));
@@ -437,12 +441,15 @@ struct SparseMatrix
             free(m_h_permute);
         }
         GPU_FREE(m_d_cusparse_spmm_buffer);
+        GPU_FREE(m_d_cusparse_spmv_buffer);
     }
 
     /**
      * @brief move the data between host an device
      */
-    void move(locationT source, locationT target, cudaStream_t stream = NULL)
+    __host__ void move(locationT    source,
+                       locationT    target,
+                       cudaStream_t stream = NULL)
     {
         if (source == target) {
             RXMESH_WARN(
@@ -485,16 +492,58 @@ struct SparseMatrix
     }
 
     /**
+     * @brief allocate the temp buffer needed for sparse matrix multiplication
+     * by a dense matrix
+     */
+    __host__ void alloc_multiply_buffer(rxmesh::DenseMatrix<T> B_mat,
+                                        rxmesh::DenseMatrix<T> C_mat,
+                                        cudaStream_t           stream = 0)
+    {
+        T alpha = 1.0;
+        T beta  = 0.0;
+
+        cusparseSpMatDescr_t matA    = m_spdescr;
+        cusparseDnMatDescr_t matB    = B_mat.m_dendescr;
+        cusparseDnMatDescr_t matC    = C_mat.m_dendescr;
+        void*                dBuffer = NULL;
+
+        CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
+
+        CUSPARSE_ERROR(cusparseSpMM_bufferSize(m_cusparse_handle,
+                                               CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                               CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                               &alpha,
+                                               matA,
+                                               matB,
+                                               &beta,
+                                               matC,
+                                               CUDA_R_32F,
+                                               CUSPARSE_SPMM_ALG_DEFAULT,
+                                               &m_spmm_buffer_size));
+        CUDA_ERROR(cudaMalloc(&m_d_cusparse_spmm_buffer, m_spmm_buffer_size));
+    }
+
+    /**
      * @brief multiply the sparse matrix by a dense matrix. The function
      * performs the multiplication as
      * C = A*B
      * where A is the sparse matrix, B is a dense matrix, and the result is a
-     * dense matrix C
+     * dense matrix C.
+     * This method requires extra buffer allocation for cusparse. User may want
+     * to call first alloce_multiply_buffer() (with the same parameters) first
+     * to do the allocation and so timing this method will reflect the timing
+     * for the multiplication operation only. Otherwise, this method calls
+     * alloce_multiply_buffer() if it is not called before. Note that this
+     * allocation happens only once and we then reuse it
      */
-    __host__ void multiply_by_dense_matrix(rxmesh::DenseMatrix<T>& B_mat,
-                                           rxmesh::DenseMatrix<T>& C_mat,
-                                           cudaStream_t            stream = 0)
+    __host__ void multiply(rxmesh::DenseMatrix<T>& B_mat,
+                           rxmesh::DenseMatrix<T>& C_mat,
+                           cudaStream_t            stream = 0)
     {
+        assert(cols() == B_mat.cols());
+        assert(rows() == C_mat.rows());
+        assert(B_mat.cols() == C_mat.cols());
+
         float alpha = 1.0f;
         float beta  = 0.0f;
 
@@ -506,10 +555,8 @@ struct SparseMatrix
         CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
 
         // allocate an external buffer if needed
-        if (m_spmm_buffer_size == 0) {
-            denmat_mul_buffer_size(B_mat, C_mat, stream);
-            CUDA_ERROR(
-                cudaMalloc(&m_d_cusparse_spmm_buffer, m_spmm_buffer_size));
+        if (m_d_cusparse_spmm_buffer == nullptr) {
+            alloc_multiply_buffer(B_mat, C_mat, stream);
         }
 
 
@@ -528,17 +575,63 @@ struct SparseMatrix
     }
 
     /**
-     * @brief wrap up the cusparse api for sparse matrix array
-     * multiplication.
+     * @brief allocate the temp buffer needed for sparse matrix multiplication
+     * by a dense vector
      */
-    void arr_mul(T* in_arr, T* rt_arr, cudaStream_t stream = 0)
+    __host__ void alloc_multiply_buffer(T*           in_arr,
+                                        T*           rt_arr,
+                                        cudaStream_t stream = 0)
     {
-        const float alpha = 1.0f;
-        const float beta  = 0.0f;
+        const T alpha = 1.0;
+        const T beta  = 0.0;
 
-        void*                buffer = NULL;
-        cusparseDnVecDescr_t vecx   = NULL;
-        cusparseDnVecDescr_t vecy   = NULL;
+        cusparseDnVecDescr_t vecx = NULL;
+        cusparseDnVecDescr_t vecy = NULL;
+
+        CUSPARSE_ERROR(
+            cusparseCreateDnVec(&vecx, m_num_cols, in_arr, CUDA_R_32F));
+        CUSPARSE_ERROR(
+            cusparseCreateDnVec(&vecy, m_num_rows, rt_arr, CUDA_R_32F));
+
+        CUSPARSE_ERROR(cusparseSpMV_bufferSize(m_cusparse_handle,
+                                               CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                               &alpha,
+                                               m_spdescr,
+                                               vecx,
+                                               &beta,
+                                               vecy,
+                                               CUDA_R_32F,
+                                               CUSPARSE_SPMV_ALG_DEFAULT,
+                                               &m_spmv_buffer_size));
+        CUSPARSE_ERROR(cusparseDestroyDnVec(vecx));
+        CUSPARSE_ERROR(cusparseDestroyDnVec(vecy));
+
+        CUDA_ERROR(cudaMalloc(&m_d_cusparse_spmv_buffer, m_spmv_buffer_size));
+    }
+
+
+    /**
+     * @brief multiply the sparse matrix by a dense vector. The function
+     * performs the multiplication as
+     * Y = A*X
+     * where A is the sparse matrix, X is a dense vector, and the result is a
+     * dense vector Y.
+     * This method requires extra buffer allocation for cusparse. User may want
+     * to call first alloce_multiply_buffer() (with the same parameters) first
+     * to do the allocation and so timing this method will reflect the timing
+     * for the multiplication operation only. Otherwise, this method calls
+     * alloce_multiply_buffer() if it is not called before. Note that this
+     * allocation happens only once and we then reuse it
+     * TODO allow this function to take a DenseMatrix instead that represent a
+     * dense vector, i.e., one column with multiple rows
+     */
+    __host__ void multiply(T* in_arr, T* rt_arr, cudaStream_t stream = 0)
+    {
+        const T alpha = 1.0;
+        const T beta  = 0.0;
+
+        cusparseDnVecDescr_t vecx = NULL;
+        cusparseDnVecDescr_t vecy = NULL;
 
         CUSPARSE_ERROR(
             cusparseCreateDnVec(&vecx, m_num_cols, in_arr, CUDA_R_32F));
@@ -547,15 +640,10 @@ struct SparseMatrix
 
         CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
 
-        if (m_spmv_buffer_size == 0) {
-            RXMESH_WARN(
-                "Sparse matrix - Array multiplication buffer size not "
-                "initialized."
-                "Calculate it now.");
-            arr_mul_buffer_size(in_arr, rt_arr, stream);
+        if (m_d_cusparse_spmv_buffer == nullptr) {
+            alloc_multiply_buffer(in_arr, rt_arr, stream);
         }
 
-        CUDA_ERROR(cudaMalloc(&buffer, m_spmv_buffer_size));
 
         CUSPARSE_ERROR(cusparseSpMV(m_cusparse_handle,
                                     CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -566,36 +654,43 @@ struct SparseMatrix
                                     vecy,
                                     CUDA_R_32F,
                                     CUSPARSE_SPMV_ALG_DEFAULT,
-                                    buffer));
+                                    m_d_cusparse_spmv_buffer));
 
         CUSPARSE_ERROR(cusparseDestroyDnVec(vecx));
         CUSPARSE_ERROR(cusparseDestroyDnVec(vecy));
-        CUDA_ERROR(cudaFree(buffer));
     }
 
     /**
-     * @brief do the sparse matrix dense matrix multiplication using sparse
-     * matrix array multiplication in a column wise way
+     * @brief multiply the sparse matrix by a dense matrix. The function
+     * performs the multiplication as
+     * C = A*B
+     * where A is the sparse matrix, B is a dense matrix, and the result is a
+     * dense matrix C.
+     * This is similar to the multiply() function above but instead of extract
+     * the columns for B and multiply them separately as sparse matrix dense
+     * vector multiplication
      */
-    void spmat_denmat_mul_cw(rxmesh::DenseMatrix<T> B_mat,
-                             rxmesh::DenseMatrix<T> C_mat)
+    void multiply_cw(rxmesh::DenseMatrix<T> B_mat,
+                     rxmesh::DenseMatrix<T> C_mat,
+                     cudaStream_t           stream = 0)
     {
+        assert(cols() == B_mat.cols());
+        assert(rows() == C_mat.rows());
+        assert(B_mat.cols() == C_mat.cols());
+
         for (int i = 0; i < B_mat.m_num_cols; ++i) {
-            arr_mul(B_mat.col_data(i), C_mat.col_data(i));
+            multiply(B_mat.col_data(i), C_mat.col_data(i), stream);
         }
     }
-
-    /*  ----- SOLVER -----  */
-
-    /* --- HIGH LEVEL API --- */
+        
 
     /**
      * @brief solve the Ax=b for x where x and b are all array
      */
-    void spmat_linear_solve(T*              B_arr,
-                            T*              X_arr,
-                            rxmesh::Solver  solver,
-                            rxmesh::Reorder reorder)
+    void solve(T*              B_arr,
+               T*              X_arr,
+               rxmesh::Solver  solver,
+               rxmesh::Reorder reorder)
     {
         cusparse_linear_solver_wrapper(solver,
                                        reorder,
@@ -615,10 +710,10 @@ struct SparseMatrix
      * @brief solve the AX=B for X where X and B are all dense matrix and we
      * would solve it in a column wise manner
      */
-    void spmat_linear_solve(rxmesh::DenseMatrix<T> B_mat,
-                            rxmesh::DenseMatrix<T> X_mat,
-                            rxmesh::Solver         solver,
-                            rxmesh::Reorder        reorder)
+    void solve(rxmesh::DenseMatrix<T> B_mat,
+               rxmesh::DenseMatrix<T> X_mat,
+               rxmesh::Solver         solver,
+               rxmesh::Reorder        reorder)
     {
         for (int i = 0; i < B_mat.cols(); ++i) {
             cusparse_linear_solver_wrapper(solver,
@@ -636,111 +731,6 @@ struct SparseMatrix
         }
     }
 
-    /**
-     * @brief wrap up the cusolver api for solving linear systems. This is a
-     * lower level api
-     */
-    void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
-                                        const rxmesh::Reorder reorder,
-                                        cusolverSpHandle_t    handle,
-                                        cusparseMatDescr_t    descrA,
-                                        int                   rowsA,
-                                        int                   colsA,
-                                        int                   nnzA,
-                                        int*                  d_csrRowPtrA,
-                                        int*                  d_csrColIndA,
-                                        T*                    d_csrValA,
-                                        T*                    d_b,
-                                        T*                    d_x)
-    {
-        if constexpr ((!std::is_same_v<T, float>)&&(
-                          !std::is_same_v<T, double>)) {
-            RXMESH_ERROR(
-                "Unsupported type for cusparse: {}"
-                "Only float and double are supported",
-                typeid(T).name());
-        }
-
-        double tol         = 1.e-12;
-        int    singularity = 0; /* -1 if A is invertible under tol. */
-
-        /* solve B*z = Q*b */
-        if (solver == Solver::CHOL) {
-            if constexpr (std::is_same_v<T, float>) {
-                CUSOLVER_ERROR(cusolverSpScsrlsvchol(handle,
-                                                     rowsA,
-                                                     nnzA,
-                                                     descrA,
-                                                     d_csrValA,
-                                                     d_csrRowPtrA,
-                                                     d_csrColIndA,
-                                                     d_b,
-                                                     tol,
-                                                     reorder_to_int(reorder),
-                                                     d_x,
-                                                     &singularity));
-            }
-
-            if constexpr (std::is_same_v<T, double>) {
-                CUSOLVER_ERROR(cusolverSpDcsrlsvchol(handle,
-                                                     rowsA,
-                                                     nnzA,
-                                                     descrA,
-                                                     d_csrValA,
-                                                     d_csrRowPtrA,
-                                                     d_csrColIndA,
-                                                     d_b,
-                                                     tol,
-                                                     reorder_to_int(reorder),
-                                                     d_x,
-                                                     &singularity));
-            }
-
-        } else if (solver == Solver::QR) {
-            if constexpr (std::is_same_v<T, float>) {
-                CUSOLVER_ERROR(cusolverSpScsrlsvqr(handle,
-                                                   rowsA,
-                                                   nnzA,
-                                                   descrA,
-                                                   d_csrValA,
-                                                   d_csrRowPtrA,
-                                                   d_csrColIndA,
-                                                   d_b,
-                                                   tol,
-                                                   reorder_to_int(reorder),
-                                                   d_x,
-                                                   &singularity));
-            }
-
-            if constexpr (std::is_same_v<T, double>) {
-                CUSOLVER_ERROR(cusolverSpDcsrlsvqr(handle,
-                                                   rowsA,
-                                                   nnzA,
-                                                   descrA,
-                                                   d_csrValA,
-                                                   d_csrRowPtrA,
-                                                   d_csrColIndA,
-                                                   d_b,
-                                                   tol,
-                                                   reorder_to_int(reorder),
-                                                   d_x,
-                                                   &singularity));
-            }
-        } else {
-            RXMESH_ERROR(
-                "Only Solver::CHOL and Solver::QR is supported, use CUDA 12.x "
-                "for "
-                "Solver::LU");
-        }
-        CUDA_ERROR(cudaDeviceSynchronize());
-
-        if (0 <= singularity) {
-            RXMESH_WARN(
-                "WARNING: the matrix is singular at row {} under tol ({})",
-                singularity,
-                tol);
-        }
-    }
 
     /* --- LOW LEVEL API --- */
 
@@ -1085,61 +1075,6 @@ struct SparseMatrix
     }
 
    private:
-    void denmat_mul_buffer_size(rxmesh::DenseMatrix<T> B_mat,
-                                rxmesh::DenseMatrix<T> C_mat,
-                                cudaStream_t           stream = 0)
-    {
-        float alpha = 1.0f;
-        float beta  = 0.0f;
-
-        cusparseSpMatDescr_t matA    = m_spdescr;
-        cusparseDnMatDescr_t matB    = B_mat.m_dendescr;
-        cusparseDnMatDescr_t matC    = C_mat.m_dendescr;
-        void*                dBuffer = NULL;
-
-        CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
-
-        // allocate an external buffer if needed
-        CUSPARSE_ERROR(cusparseSpMM_bufferSize(m_cusparse_handle,
-                                               CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                               CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                               &alpha,
-                                               matA,
-                                               matB,
-                                               &beta,
-                                               matC,
-                                               CUDA_R_32F,
-                                               CUSPARSE_SPMM_ALG_DEFAULT,
-                                               &m_spmm_buffer_size));
-    }
-
-
-    void arr_mul_buffer_size(T* in_arr, T* rt_arr, cudaStream_t stream = 0)
-    {
-        const float alpha = 1.0f;
-        const float beta  = 0.0f;
-
-        cusparseDnVecDescr_t vecx = NULL;
-        cusparseDnVecDescr_t vecy = NULL;
-
-        CUSPARSE_ERROR(
-            cusparseCreateDnVec(&vecx, m_num_cols, in_arr, CUDA_R_32F));
-        CUSPARSE_ERROR(
-            cusparseCreateDnVec(&vecy, m_num_rows, rt_arr, CUDA_R_32F));
-
-        CUSPARSE_ERROR(cusparseSpMV_bufferSize(m_cusparse_handle,
-                                               CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                               &alpha,
-                                               m_spdescr,
-                                               vecx,
-                                               &beta,
-                                               vecy,
-                                               CUDA_R_32F,
-                                               CUSPARSE_SPMV_ALG_DEFAULT,
-                                               &m_spmv_buffer_size));
-    }
-
-
     void release(locationT location)
     {
         if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
@@ -1187,6 +1122,108 @@ struct SparseMatrix
         }
     }
 
+    /**
+     * @brief wrapper for cuSolver API for solving linear systems using cuSolver
+     * High-level API
+     */
+    void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
+                                        const rxmesh::Reorder reorder,
+                                        cusolverSpHandle_t    handle,
+                                        cusparseMatDescr_t    descrA,
+                                        int                   rowsA,
+                                        int                   colsA,
+                                        int                   nnzA,
+                                        int*                  d_csrRowPtrA,
+                                        int*                  d_csrColIndA,
+                                        T*                    d_csrValA,
+                                        T*                    d_b,
+                                        T*                    d_x)
+    {
+        double tol = 1.e-12;
+
+        int singularity = 0; /* -1 if A is invertible under tol. */
+
+        /* solve B*z = Q*b */
+        if (solver == Solver::CHOL) {
+            if constexpr (std::is_same_v<T, float>) {
+                CUSOLVER_ERROR(
+                    cusolverSpScsrlsvchol(handle,
+                                          rowsA,
+                                          nnzA,
+                                          descrA,
+                                          d_csrValA,
+                                          d_csrRowPtrA,
+                                          d_csrColIndA,
+                                          d_b,
+                                          tol,
+                                          detail::reorder_to_int(reorder),
+                                          d_x,
+                                          &singularity));
+            }
+
+            if constexpr (std::is_same_v<T, double>) {
+                CUSOLVER_ERROR(
+                    cusolverSpDcsrlsvchol(handle,
+                                          rowsA,
+                                          nnzA,
+                                          descrA,
+                                          d_csrValA,
+                                          d_csrRowPtrA,
+                                          d_csrColIndA,
+                                          d_b,
+                                          tol,
+                                          detail::reorder_to_int(reorder),
+                                          d_x,
+                                          &singularity));
+            }
+
+        } else if (solver == Solver::QR) {
+            if constexpr (std::is_same_v<T, float>) {
+                CUSOLVER_ERROR(
+                    cusolverSpScsrlsvqr(handle,
+                                        rowsA,
+                                        nnzA,
+                                        descrA,
+                                        d_csrValA,
+                                        d_csrRowPtrA,
+                                        d_csrColIndA,
+                                        d_b,
+                                        tol,
+                                        detail::reorder_to_int(reorder),
+                                        d_x,
+                                        &singularity));
+            }
+
+            if constexpr (std::is_same_v<T, double>) {
+                CUSOLVER_ERROR(
+                    cusolverSpDcsrlsvqr(handle,
+                                        rowsA,
+                                        nnzA,
+                                        descrA,
+                                        d_csrValA,
+                                        d_csrRowPtrA,
+                                        d_csrColIndA,
+                                        d_b,
+                                        tol,
+                                        detail::reorder_to_int(reorder),
+                                        d_x,
+                                        &singularity));
+            }
+        } else {
+            RXMESH_ERROR(
+                "Only Solver::CHOL and Solver::QR is supported, use CUDA 12.x "
+                "for Solver::LU");
+        }
+
+
+        if (0 <= singularity) {
+            RXMESH_WARN(
+                "WARNING: the matrix is singular at row {} under tol ({})",
+                singularity,
+                tol);
+        }
+    }
+
     const Context        m_context;
     cusparseHandle_t     m_cusparse_handle;
     cusolverSpHandle_t   m_cusolver_sphandle;
@@ -1230,6 +1267,7 @@ struct SparseMatrix
     T*      m_d_solver_val;
 
     void* m_d_cusparse_spmm_buffer;
+    void* m_d_cusparse_spmv_buffer;
 
     // flags
     bool      m_use_reorder;

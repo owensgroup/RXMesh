@@ -237,7 +237,7 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
                                                launch_box.smem_bytes_dyn>>>(
         rx.get_context(), *coords, spmat, d_arr_ref);
 
-    spmat.arr_mul(d_arr_ones, d_result);
+    spmat.multiply(d_arr_ones, d_result);
 
     // copy the value back to host
     std::vector<float> h_arr_ref(num_vertices);
@@ -299,13 +299,13 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
                                          launch_box.smem_bytes_dyn>>>(
         rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
-    A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
+    A_mat.solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
 
     // timing begins for spmm
     GPUTimer timer;
     timer.start();
 
-    A_mat.multiply_by_dense_matrix(X_mat, ret_mat);
+    A_mat.multiply(X_mat, ret_mat);
 
     timer.stop();
     RXMESH_TRACE("SPMM_rxmesh() took {} (ms) ", timer.elapsed_millis());
@@ -362,7 +362,7 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
                                          launch_box.smem_bytes_dyn>>>(
         rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
-    // A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
+    // A_mat.solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
 
     A_mat.spmat_chol_reorder(Reorder::NSTDIS);
     A_mat.spmat_chol_analysis();
@@ -375,7 +375,7 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 
     A_mat.spmat_chol_buffer_free();
 
-    A_mat.multiply_by_dense_matrix(X_mat, ret_mat);
+    A_mat.multiply(X_mat, ret_mat);
 
     std::vector<vec3<float>> h_ret_mat(num_vertices);
     CUDA_ERROR(cudaMemcpy(h_ret_mat.data(),
