@@ -4,6 +4,8 @@
 #include "rxmesh/matrix/sparse_matrix.cuh"
 #include "rxmesh/rxmesh_static.h"
 
+#include "mcf_kernels.cuh"
+
 template <typename T, uint32_t blockThreads>
 __global__ static void mcf_B_setup(const rxmesh::Context            context,
                                    const rxmesh::VertexAttribute<T> coords,
@@ -131,8 +133,7 @@ __global__ static void mcf_A_setup(
 }
 
 template <typename T>
-void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
-                              const std::vector<std::vector<T>>& ground_truth)
+void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
