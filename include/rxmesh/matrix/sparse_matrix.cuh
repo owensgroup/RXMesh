@@ -170,10 +170,7 @@ struct SparseMatrix
           m_d_cusparse_spmm_buffer(nullptr),
           m_d_cusparse_spmv_buffer(nullptr),
           m_allocated(LOCATION_NONE)
-    {
-        static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>,
-                      "RXMesh::SparseMatrix supports only float or double");
-
+    {        
         using namespace rxmesh;
         constexpr uint32_t blockThreads = 256;
 

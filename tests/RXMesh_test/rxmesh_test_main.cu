@@ -31,6 +31,7 @@ struct RXMeshTestArg
 #include "test_patch_slicing.cuh"
 #include "test_multi_queries.cuh"
 #include "test_wasted_work.cuh"
+#include "test_eigen.cuh"
 // clang-format on
 
 int main(int argc, char** argv)

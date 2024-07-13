@@ -22,6 +22,7 @@ set( SOURCE_LIST
 	test_patch_slicing.cuh
 	test_multi_queries.cuh
 	test_wasted_work.cuh
+	test_eigen.cuh
 )
 
 target_sources( RXMesh_test 

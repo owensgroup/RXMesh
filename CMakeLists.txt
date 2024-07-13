@@ -171,6 +171,12 @@ find_package(CUDAToolkit REQUIRED)
 target_link_libraries(RXMesh INTERFACE CUDA::cusparse)
 target_link_libraries(RXMesh INTERFACE CUDA::cusolver)
 
+#Eigen
+include("cmake/eigen.cmake")
+target_link_libraries(RXMesh INTERFACE Eigen3::Eigen)
+# https://eigen.tuxfamily.org/dox/TopicCUDA.html
+target_compile_definitions(RXMesh INTERFACE "EIGEN_DEFAULT_DENSE_INDEX_TYPE=int")
+
 include(GoogleTest)
 add_subdirectory(apps)
 add_subdirectory(tests)
