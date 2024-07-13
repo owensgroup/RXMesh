@@ -130,10 +130,14 @@ TEST(Attribute, Reduce)
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
     uint32_t result = 0;
-    rx.for_each_edge(rxmesh::HOST, [&](const rxmesh::EdgeHandle eh) {
-        auto pl = eh.unpack();
-        result  = std::max(result, pl.first * pl.second);
-    });
+    rx.for_each_edge(
+        rxmesh::HOST,
+        [&](const rxmesh::EdgeHandle eh) {
+            auto pl = eh.unpack();
+            result  = std::max(result, pl.first * pl.second);
+        },
+        NULL,
+        false);
 
     EXPECT_EQ(output, result);
 }

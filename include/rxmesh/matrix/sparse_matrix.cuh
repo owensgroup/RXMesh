@@ -537,7 +537,7 @@ struct SparseMatrix
                            rxmesh::DenseMatrix<T>& C_mat,
                            cudaStream_t            stream = 0)
     {
-        assert(cols() == B_mat.cols());
+        assert(cols() == B_mat.rows());
         assert(rows() == C_mat.rows());
         assert(B_mat.cols() == C_mat.cols());
 
