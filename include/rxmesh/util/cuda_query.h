@@ -104,6 +104,14 @@ inline cudaDeviceProp cuda_query(const int dev)
     RXMESH_TRACE("Peak Memory Bandwidth: {0:f}(GB/s)", maxBW);
     RXMESH_TRACE("Kernels compiled for compute capability: {}", cuda_arch());
 
+    int cusolver_major = -1, cusolver_minor = -1, cusolver_patch = -1;
+    CUSOLVER_ERROR(cusolverGetProperty(MAJOR_VERSION, &cusolver_major));
+    CUSOLVER_ERROR(cusolverGetProperty(MINOR_VERSION, &cusolver_minor));
+    CUSOLVER_ERROR(cusolverGetProperty(PATCH_LEVEL, &cusolver_patch));
+    RXMESH_TRACE("Using cuSolver Version {}.{}.{}",
+                 cusolver_major,
+                 cusolver_minor,
+                 cusolver_patch);
 
     if (!dev_prop.managedMemory) {
         RXMESH_ERROR(

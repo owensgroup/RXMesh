@@ -69,7 +69,7 @@ struct DenseMatrix
     /**
      * @brief return the leading dimension (row by default)
      */
-    IndexT lead_dim() const
+    __host__ __device__ IndexT lead_dim() const
     {
         return m_num_rows;
     }
@@ -77,7 +77,7 @@ struct DenseMatrix
     /**
      * @brief return number of rows
      */
-    IndexT rows() const
+    __host__ __device__ IndexT rows() const
     {
         return m_num_rows;
     }
@@ -85,7 +85,7 @@ struct DenseMatrix
     /**
      * @brief return number of columns
      */
-    IndexT cols() const
+    __host__ __device__ IndexT cols() const
     {
         return m_num_cols;
     }
@@ -174,7 +174,7 @@ struct DenseMatrix
      * @brief return the raw pointer based on the specified location (host vs.
      * device)
      */
-    T* data(locationT location = DEVICE) const
+    __host__ __device__ T* data(locationT location = DEVICE) const
     {
         if ((location & HOST) == HOST) {
             return m_h_val;
@@ -191,7 +191,8 @@ struct DenseMatrix
     /**
      * @brief return the raw pointer pf a column.
      */
-    T* col_data(const uint32_t ld_idx, locationT location = DEVICE) const
+    __host__ const T* col_data(const uint32_t ld_idx,
+                               locationT      location = DEVICE) const
     {
         if ((location & HOST) == HOST) {
             return m_h_val + ld_idx * (m_num_rows + m_col_pad_idx);
@@ -201,19 +202,41 @@ struct DenseMatrix
             return m_d_val + ld_idx * (m_num_rows + m_col_pad_idx);
         }
 
-        if ((location & m_allocated) == location) {
-            RXMESH_ERROR("Requested data not allocated on {}",
-                         location_to_string(location));
+        if ((location & m_allocated) != location) {
+            RXMESH_ERROR(
+                "DenseMatrix::col_data() Requested data not allocated on {}",
+                location_to_string(location));
         }
 
-        assert(1 != 1);
-        return 0;
+        return nullptr;
+    }
+
+    /**
+     * @brief return the raw pointer pf a column.
+     */
+    __host__ T* col_data(const uint32_t ld_idx, locationT location = DEVICE)
+    {
+        if ((location & HOST) == HOST) {
+            return m_h_val + ld_idx * (m_num_rows + m_col_pad_idx);
+        }
+
+        if ((location & DEVICE) == DEVICE) {
+            return m_d_val + ld_idx * (m_num_rows + m_col_pad_idx);
+        }
+
+        if ((location & m_allocated) != location) {
+            RXMESH_ERROR(
+                "DenseMatrix::col_data() Requested data not allocated on {}",
+                location_to_string(location));
+        }
+
+        return nullptr;
     }
 
     /**
      * @brief return the total number bytes used to allocate the matrix
      */
-    IndexT bytes() const
+    __host__ __device__ IndexT bytes() const
     {
         return (m_num_rows + m_col_pad_idx) * m_num_cols * sizeof(T);
     }
@@ -221,7 +244,9 @@ struct DenseMatrix
     /**
      * @brief move the data between host and device
      */
-    void move(locationT source, locationT target, cudaStream_t stream = NULL)
+    __host__ void move(locationT    source,
+                       locationT    target,
+                       cudaStream_t stream = NULL)
     {
         if (source == target) {
             RXMESH_WARN(
@@ -260,7 +285,7 @@ struct DenseMatrix
     /**
      * @brief release the data on host or device
      */
-    void release(locationT location = LOCATION_ALL)
+    __host__ void release(locationT location = LOCATION_ALL)
     {
         if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
             free(m_h_val);
