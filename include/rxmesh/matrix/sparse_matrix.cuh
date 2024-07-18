@@ -1345,6 +1345,22 @@ struct SparseMatrix
             return CUDA_C_32F;
         } else if (std::is_same_v<T, cuDoubleComplex>) {
             return CUDA_C_64F;
+        } else if (std::is_same_v<T, int8_t>) {
+            return CUDA_R_8I;
+        } else if (std::is_same_v<T, uint8_t>) {
+            return CUDA_R_8U;
+        } else if (std::is_same_v<T, int16_t>) {
+            return CUDA_R_16I;
+        } else if (std::is_same_v<T, uint16_t>) {
+            return CUDA_R_16U;
+        } else if (std::is_same_v<T, int32_t> || std::is_same_v<T, int>) {
+            return CUDA_R_32I;
+        } else if (std::is_same_v<T, uint32_t>) {
+            return CUDA_R_32U;
+        } else if (std::is_same_v<T, int64_t>) {
+            return CUDA_R_64I;
+        } else if (std::is_same_v<T, uint64_t>) {
+            return CUDA_R_64U;
         } else {
             RXMESH_ERROR(
                 "SparseMatrix unsupported type. SparseMatrix can support "
