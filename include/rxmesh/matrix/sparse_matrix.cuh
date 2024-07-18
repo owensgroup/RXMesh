@@ -625,19 +625,13 @@ struct SparseMatrix
                cudaStream_t          stream = 0)
     {
         for (int i = 0; i < B_mat.cols(); ++i) {
-            cusparse_linear_solver_wrapper(solver,
-                                           reorder,
-                                           m_cusolver_sphandle,
-                                           m_descr,
-                                           m_num_rows,
-                                           m_num_cols,
-                                           m_nnz,
-                                           m_d_row_ptr,
-                                           m_d_col_idx,
-                                           m_d_val,
-                                           B_mat.col_data(i),
-                                           X_mat.col_data(i),
-                                           stream);
+            cusparse_linear_solver_wrapper(
+                solver,
+                reorder,
+                m_cusolver_sphandle,
+                B_mat.col_data(i, solver == Solver::LU ? HOST : DEVICE),
+                X_mat.col_data(i, solver == Solver::LU ? HOST : DEVICE),
+                stream);
         }
     }
 
@@ -650,19 +644,8 @@ struct SparseMatrix
                PermuteMethod reorder,
                cudaStream_t  stream = 0)
     {
-        cusparse_linear_solver_wrapper(solver,
-                                       reorder,
-                                       m_cusolver_sphandle,
-                                       m_descr,
-                                       m_num_rows,
-                                       m_num_cols,
-                                       m_nnz,
-                                       m_d_row_ptr,
-                                       m_d_col_idx,
-                                       m_d_val,
-                                       B_arr,
-                                       X_arr,
-                                       stream);
+        cusparse_linear_solver_wrapper(
+            solver, reorder, m_cusolver_sphandle, B_arr, X_arr, stream);
     }
 
 
@@ -671,7 +654,7 @@ struct SparseMatrix
     /**
      * @brief allocate all temp buffers needed for the solver low-level API
      */
-    void solver_permute_alloc(PermuteMethod reorder)
+    void permute_alloc(PermuteMethod reorder)
     {
         if (reorder == PermuteMethod::NONE) {
             return;
@@ -717,7 +700,7 @@ struct SparseMatrix
      */
     void permute(PermuteMethod reorder = PermuteMethod::NSTDIS)
     {
-        solver_permute_alloc(reorder);
+        permute_alloc(reorder);
 
         if (reorder == PermuteMethod::NONE) {
             RXMESH_WARN(
@@ -768,7 +751,7 @@ struct SparseMatrix
         // indices, the val will be done on device with the m_d_permute_map
         // only on the device since we don't need to access the permuted val on
         // the host at all
-
+#pragma omp parallel for
         for (int j = 0; j < m_nnz; j++) {
             m_h_permute_map[j] = j;
         }
@@ -866,8 +849,34 @@ struct SparseMatrix
                                                         &m_workspaceInBytes));
         }
 
+        if constexpr (std::is_same_v<T, cuComplex>) {
+            CUSOLVER_ERROR(cusolverSpCcsrcholBufferInfo(m_cusolver_sphandle,
+                                                        m_num_rows,
+                                                        m_nnz,
+                                                        m_descr,
+                                                        m_d_solver_val,
+                                                        m_d_solver_row_ptr,
+                                                        m_d_solver_col_idx,
+                                                        m_chol_info,
+                                                        &m_internalDataInBytes,
+                                                        &m_workspaceInBytes));
+        }
+
         if constexpr (std::is_same_v<T, double>) {
             CUSOLVER_ERROR(cusolverSpDcsrcholBufferInfo(m_cusolver_sphandle,
+                                                        m_num_rows,
+                                                        m_nnz,
+                                                        m_descr,
+                                                        m_d_solver_val,
+                                                        m_d_solver_row_ptr,
+                                                        m_d_solver_col_idx,
+                                                        m_chol_info,
+                                                        &m_internalDataInBytes,
+                                                        &m_workspaceInBytes));
+        }
+
+        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+            CUSOLVER_ERROR(cusolverSpZcsrcholBufferInfo(m_cusolver_sphandle,
                                                         m_num_rows,
                                                         m_nnz,
                                                         m_descr,
@@ -900,8 +909,31 @@ struct SparseMatrix
                                                     m_chol_info,
                                                     m_chol_buffer));
         }
+
+        if constexpr (std::is_same_v<T, cuComplex>) {
+            CUSOLVER_ERROR(cusolverSpCcsrcholFactor(m_cusolver_sphandle,
+                                                    m_num_rows,
+                                                    m_nnz,
+                                                    m_descr,
+                                                    m_d_solver_val,
+                                                    m_d_solver_row_ptr,
+                                                    m_d_solver_col_idx,
+                                                    m_chol_info,
+                                                    m_chol_buffer));
+        }
         if constexpr (std::is_same_v<T, double>) {
             CUSOLVER_ERROR(cusolverSpDcsrcholFactor(m_cusolver_sphandle,
+                                                    m_num_rows,
+                                                    m_nnz,
+                                                    m_descr,
+                                                    m_d_solver_val,
+                                                    m_d_solver_row_ptr,
+                                                    m_d_solver_col_idx,
+                                                    m_chol_info,
+                                                    m_chol_buffer));
+        }
+        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+            CUSOLVER_ERROR(cusolverSpZcsrcholFactor(m_cusolver_sphandle,
                                                     m_num_rows,
                                                     m_nnz,
                                                     m_descr,
@@ -919,8 +951,16 @@ struct SparseMatrix
             CUSOLVER_ERROR(cusolverSpScsrcholZeroPivot(
                 m_cusolver_sphandle, m_chol_info, tol, &singularity));
         }
+        if constexpr (std::is_same_v<T, cuComplex>) {
+            CUSOLVER_ERROR(cusolverSpCcsrcholZeroPivot(
+                m_cusolver_sphandle, m_chol_info, tol, &singularity));
+        }
         if constexpr (std::is_same_v<T, double>) {
             CUSOLVER_ERROR(cusolverSpDcsrcholZeroPivot(
+                m_cusolver_sphandle, m_chol_info, tol, &singularity));
+        }
+        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+            CUSOLVER_ERROR(cusolverSpZcsrcholZeroPivot(
                 m_cusolver_sphandle, m_chol_info, tol, &singularity));
         }
         if (0 <= singularity) {
@@ -939,7 +979,7 @@ struct SparseMatrix
      */
     void pre_solve(PermuteMethod reorder = PermuteMethod::NSTDIS)
     {
-        solver_permute_alloc(PermuteMethod::NSTDIS);
+        permute_alloc(PermuteMethod::NSTDIS);
         permute(PermuteMethod::NSTDIS);
         analyze_pattern();
         post_analyze_alloc();
@@ -997,8 +1037,25 @@ struct SparseMatrix
                                                    m_chol_buffer));
         }
 
+        if constexpr (std::is_same_v<T, cuComplex>) {
+            CUSOLVER_ERROR(cusolverSpCcsrcholSolve(m_cusolver_sphandle,
+                                                   m_num_rows,
+                                                   d_solver_b,
+                                                   d_solver_x,
+                                                   m_chol_info,
+                                                   m_chol_buffer));
+        }
+
         if constexpr (std::is_same_v<T, double>) {
             CUSOLVER_ERROR(cusolverSpDcsrcholSolve(m_cusolver_sphandle,
+                                                   m_num_rows,
+                                                   d_solver_b,
+                                                   d_solver_x,
+                                                   m_chol_info,
+                                                   m_chol_buffer));
+        }
+        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+            CUSOLVER_ERROR(cusolverSpZcsrcholSolve(m_cusolver_sphandle,
                                                    m_num_rows,
                                                    d_solver_b,
                                                    d_solver_x,
@@ -1067,13 +1124,6 @@ struct SparseMatrix
     void cusparse_linear_solver_wrapper(const Solver        solver,
                                         const PermuteMethod reorder,
                                         cusolverSpHandle_t  handle,
-                                        cusparseMatDescr_t  descrA,
-                                        int                 rowsA,
-                                        int                 colsA,
-                                        int                 nnzA,
-                                        const int*          d_csrRowPtrA,
-                                        const int*          d_csrColIndA,
-                                        const T*            d_csrValA,
                                         const T*            d_b,
                                         T*                  d_x,
                                         cudaStream_t        stream)
@@ -1088,12 +1138,12 @@ struct SparseMatrix
         if (solver == Solver::CHOL) {
             if constexpr (std::is_same_v<T, float>) {
                 CUSOLVER_ERROR(cusolverSpScsrlsvchol(handle,
-                                                     rowsA,
-                                                     nnzA,
-                                                     descrA,
-                                                     d_csrValA,
-                                                     d_csrRowPtrA,
-                                                     d_csrColIndA,
+                                                     rows(),
+                                                     non_zeros(),
+                                                     m_descr,
+                                                     m_d_val,
+                                                     m_d_row_ptr,
+                                                     m_d_col_idx,
                                                      d_b,
                                                      tol,
                                                      reorder_to_int(reorder),
@@ -1103,12 +1153,12 @@ struct SparseMatrix
 
             if constexpr (std::is_same_v<T, cuComplex>) {
                 CUSOLVER_ERROR(cusolverSpCcsrlsvchol(handle,
-                                                     rowsA,
-                                                     nnzA,
-                                                     descrA,
-                                                     d_csrValA,
-                                                     d_csrRowPtrA,
-                                                     d_csrColIndA,
+                                                     rows(),
+                                                     non_zeros(),
+                                                     m_descr,
+                                                     m_d_val,
+                                                     m_d_row_ptr,
+                                                     m_d_col_idx,
                                                      d_b,
                                                      tol,
                                                      reorder_to_int(reorder),
@@ -1118,12 +1168,12 @@ struct SparseMatrix
 
             if constexpr (std::is_same_v<T, double>) {
                 CUSOLVER_ERROR(cusolverSpDcsrlsvchol(handle,
-                                                     rowsA,
-                                                     nnzA,
-                                                     descrA,
-                                                     d_csrValA,
-                                                     d_csrRowPtrA,
-                                                     d_csrColIndA,
+                                                     rows(),
+                                                     non_zeros(),
+                                                     m_descr,
+                                                     m_d_val,
+                                                     m_d_row_ptr,
+                                                     m_d_col_idx,
                                                      d_b,
                                                      tol,
                                                      reorder_to_int(reorder),
@@ -1132,12 +1182,13 @@ struct SparseMatrix
             }
             if constexpr (std::is_same_v<T, cuDoubleComplex>) {
                 CUSOLVER_ERROR(cusolverSpZcsrlsvchol(handle,
-                                                     rowsA,
-                                                     nnzA,
-                                                     descrA,
-                                                     d_csrValA,
-                                                     d_csrRowPtrA,
-                                                     d_csrColIndA,
+                                                     rows(),
+                                                     non_zeros(),
+                                                     m_d_val,
+                                                     m_descr,
+                                                     m_d_val,
+                                                     m_d_row_ptr,
+                                                     m_d_col_idx,
                                                      d_b,
                                                      tol,
                                                      reorder_to_int(reorder),
@@ -1148,12 +1199,12 @@ struct SparseMatrix
         } else if (solver == Solver::QR) {
             if constexpr (std::is_same_v<T, float>) {
                 CUSOLVER_ERROR(cusolverSpScsrlsvqr(handle,
-                                                   rowsA,
-                                                   nnzA,
-                                                   descrA,
-                                                   d_csrValA,
-                                                   d_csrRowPtrA,
-                                                   d_csrColIndA,
+                                                   rows(),
+                                                   non_zeros(),
+                                                   m_descr,
+                                                   m_d_val,
+                                                   m_d_row_ptr,
+                                                   m_d_col_idx,
                                                    d_b,
                                                    tol,
                                                    reorder_to_int(reorder),
@@ -1163,12 +1214,12 @@ struct SparseMatrix
 
             if constexpr (std::is_same_v<T, cuComplex>) {
                 CUSOLVER_ERROR(cusolverSpCcsrlsvqr(handle,
-                                                   rowsA,
-                                                   nnzA,
-                                                   descrA,
-                                                   d_csrValA,
-                                                   d_csrRowPtrA,
-                                                   d_csrColIndA,
+                                                   rows(),
+                                                   non_zeros(),
+                                                   m_descr,
+                                                   m_d_val,
+                                                   m_d_row_ptr,
+                                                   m_d_col_idx,
                                                    d_b,
                                                    tol,
                                                    reorder_to_int(reorder),
@@ -1178,12 +1229,13 @@ struct SparseMatrix
 
             if constexpr (std::is_same_v<T, double>) {
                 CUSOLVER_ERROR(cusolverSpDcsrlsvqr(handle,
-                                                   rowsA,
-                                                   nnzA,
-                                                   descrA,
-                                                   d_csrValA,
-                                                   d_csrRowPtrA,
-                                                   d_csrColIndA,
+                                                   rows(),
+                                                   non_zeros(),
+                                                   m_d_val,
+                                                   m_descr,
+                                                   m_d_val,
+                                                   m_d_row_ptr,
+                                                   m_d_col_idx,
                                                    d_b,
                                                    tol,
                                                    reorder_to_int(reorder),
@@ -1192,12 +1244,12 @@ struct SparseMatrix
             }
             if constexpr (std::is_same_v<T, cuDoubleComplex>) {
                 CUSOLVER_ERROR(cusolverSpZcsrlsvqr(handle,
-                                                   rowsA,
-                                                   nnzA,
-                                                   descrA,
-                                                   d_csrValA,
-                                                   d_csrRowPtrA,
-                                                   d_csrColIndA,
+                                                   rows(),
+                                                   non_zeros(),
+                                                   m_descr,
+                                                   m_d_val,
+                                                   m_d_row_ptr,
+                                                   m_d_col_idx,
                                                    d_b,
                                                    tol,
                                                    reorder_to_int(reorder),
@@ -1211,12 +1263,12 @@ struct SparseMatrix
 
             if constexpr (std::is_same_v<T, float>) {
                 CUSOLVER_ERROR(cusolverSpScsrlsvluHost(handle,
-                                                       rowsA,
-                                                       nnzA,
-                                                       descrA,
-                                                       d_csrValA,
-                                                       d_csrRowPtrA,
-                                                       d_csrColIndA,
+                                                       rows(),
+                                                       non_zeros(),
+                                                       m_descr,
+                                                       m_h_val,
+                                                       m_h_row_ptr,
+                                                       m_h_col_idx,
                                                        d_b,
                                                        tol,
                                                        reorder_to_int(reorder),
@@ -1226,12 +1278,12 @@ struct SparseMatrix
 
             if constexpr (std::is_same_v<T, cuComplex>) {
                 CUSOLVER_ERROR(cusolverSpCcsrlsvluHost(handle,
-                                                       rowsA,
-                                                       nnzA,
-                                                       descrA,
-                                                       d_csrValA,
-                                                       d_csrRowPtrA,
-                                                       d_csrColIndA,
+                                                       rows(),
+                                                       non_zeros(),
+                                                       m_descr,
+                                                       m_h_val,
+                                                       m_h_row_ptr,
+                                                       m_h_col_idx,
                                                        d_b,
                                                        tol,
                                                        reorder_to_int(reorder),
@@ -1241,12 +1293,12 @@ struct SparseMatrix
 
             if constexpr (std::is_same_v<T, double>) {
                 CUSOLVER_ERROR(cusolverSpDcsrlsvluHost(handle,
-                                                       rowsA,
-                                                       nnzA,
-                                                       descrA,
-                                                       d_csrValA,
-                                                       d_csrRowPtrA,
-                                                       d_csrColIndA,
+                                                       rows(),
+                                                       non_zeros(),
+                                                       m_descr,
+                                                       m_h_val,
+                                                       m_h_row_ptr,
+                                                       m_h_col_idx,
                                                        d_b,
                                                        tol,
                                                        reorder_to_int(reorder),
@@ -1255,12 +1307,12 @@ struct SparseMatrix
             }
             if constexpr (std::is_same_v<T, cuDoubleComplex>) {
                 CUSOLVER_ERROR(cusolverSpZcsrlsvluHost(handle,
-                                                       rowsA,
-                                                       nnzA,
-                                                       descrA,
-                                                       d_csrValA,
-                                                       d_csrRowPtrA,
-                                                       d_csrColIndA,
+                                                       rows(),
+                                                       non_zeros(),
+                                                       m_descr,
+                                                       m_h_val,
+                                                       m_h_row_ptr,
+                                                       m_h_col_idx,
                                                        d_b,
                                                        tol,
                                                        reorder_to_int(reorder),

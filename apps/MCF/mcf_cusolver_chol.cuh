@@ -181,14 +181,25 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx)
                                             Arg.use_uniform_laplace,
                                             Arg.time_step);
 
-    // Solving the linear system using chol factorization and no reordering
-    // A_mat.solve(B_mat, *X_mat, Solver::CHOL, Reorder::NONE);
 
+    // To Use LU, we have to move the data to the host
+    // A_mat.move(DEVICE, HOST);
+    // B_mat.move(DEVICE, HOST);
+    // X_mat->move(DEVICE, HOST);
+    // A_mat.solve(B_mat, *X_mat, Solver::LU, PermuteMethod::NSTDIS);
+
+    // Solving using QR or CHOL
+    // A_mat.solve(B_mat, *X_mat, Solver::QR, PermuteMethod::NSTDIS);
+    // A_mat.solve(B_mat, *X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
+
+    // Solving using CHOL
     A_mat.pre_solve(PermuteMethod::NSTDIS);
     A_mat.solve(B_mat, *X_mat);
 
 
     // move the results to the host
+    // if we use LU, the data will be on the host and we should not move the
+    // device to the host
     X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // copy the results to attributes

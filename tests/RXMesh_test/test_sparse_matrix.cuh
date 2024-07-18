@@ -362,15 +362,15 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
                                          launch_box.smem_bytes_dyn>>>(
         rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
-    // A_mat.solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
+    // A_mat.solve(B_mat, X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
 
-    A_mat.solver_permute_alloc(PermuteMethod::NSTDIS);
+    A_mat.permute_alloc(PermuteMethod::NSTDIS);
     A_mat.permute(PermuteMethod::NSTDIS);
     A_mat.analyze_pattern();
     A_mat.post_analyze_alloc();
     A_mat.factorize();
     A_mat.solve(B_mat, X_mat);
-        
+
     A_mat.multiply(X_mat, ret_mat);
 
     std::vector<vec3<float>> h_ret_mat(num_vertices);
