@@ -933,6 +933,20 @@ struct SparseMatrix
     }
 
     /**
+     * @brief Call all the necessary functions to permute and factorize the
+     * sparse matrix before calling the solve() method below. After calling this
+     * pre_solve(), solver() can be called with multiple right hand sides
+     */
+    void pre_solve(PermuteMethod reorder = PermuteMethod::NSTDIS)
+    {
+        solver_permute_alloc(PermuteMethod::NSTDIS);
+        permute(PermuteMethod::NSTDIS);
+        analyze_pattern();
+        post_analyze_alloc();
+        factorize();
+    }
+
+    /**
      * @brief The lower level api of solving the linear system after using
      * factorization. The format follows Ax=b to solve x, where A is this sparse
      * matrix, x and b are device array. As long as A doesn't change. This

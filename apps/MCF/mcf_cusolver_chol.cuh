@@ -184,11 +184,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx)
     // Solving the linear system using chol factorization and no reordering
     // A_mat.solve(B_mat, *X_mat, Solver::CHOL, Reorder::NONE);
 
-    A_mat.solver_permute_alloc(PermuteMethod::NSTDIS);
-    A_mat.permute(PermuteMethod::NSTDIS);
-    A_mat.analyze_pattern();
-    A_mat.post_analyze_alloc();
-    A_mat.factorize();
+    A_mat.pre_solve(PermuteMethod::NSTDIS);
     A_mat.solve(B_mat, *X_mat);
 
 
