@@ -373,8 +373,6 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
         A_mat.spmat_chol_solve(B_mat.col_data(i), X_mat.col_data(i));
     }
 
-    A_mat.spmat_chol_buffer_free();
-
     A_mat.multiply(X_mat, ret_mat);
 
     std::vector<vec3<float>> h_ret_mat(num_vertices);
