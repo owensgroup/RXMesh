@@ -130,7 +130,7 @@ struct DenseMatrix
     template <typename HandleT>
     __host__ __device__ T& operator()(const HandleT handle, const uint32_t col)
     {
-        return this->operator()(get_row_id_from_handle(handle), col);
+        return this->operator()(get_row_id(handle), col);
     }
 
     /**
@@ -140,7 +140,7 @@ struct DenseMatrix
     __host__ __device__ const T& operator()(const HandleT  handle,
                                             const uint32_t col) const
     {
-        return this->operator()(get_row_id_from_handle(handle), col);
+        return this->operator()(get_row_id(handle), col);
     }
 
     /**
@@ -148,8 +148,7 @@ struct DenseMatrix
      * handle
      */
     template <typename HandleT>
-    __host__ __device__ const uint32_t
-    get_row_id_from_handle(const HandleT handle) const
+    __host__ __device__ const uint32_t get_row_id(const HandleT handle) const
     {
         auto id = handle.unpack();
 

@@ -32,7 +32,7 @@ enum class Solver
  * permutation, SYMAMD for Symmetric Approximate Minimum Degree Algorithm based
  * on Quotient Graph, NSTDIS for Nested Dissection
  */
-enum class Reorder
+enum class PermuteMethod
 {
     NONE   = 0,
     SYMRCM = 1,
@@ -75,13 +75,15 @@ struct SparseMatrix
           m_d_solver_val(nullptr),
           m_h_solver_row_ptr(nullptr),
           m_h_solver_col_idx(nullptr),
-          m_h_solver_val(nullptr),
           m_h_permute_map(nullptr),
           m_d_permute_map(nullptr),
           m_use_reorder(false),
           m_reorder_allocated(false),
           m_d_cusparse_spmm_buffer(nullptr),
           m_d_cusparse_spmv_buffer(nullptr),
+          m_chol_buffer(nullptr),
+          m_d_solver_b(nullptr),
+          m_d_solver_x(nullptr),
           m_allocated(LOCATION_NONE)
     {
         using namespace rxmesh;
@@ -249,8 +251,7 @@ struct SparseMatrix
     __device__ __host__ const T& operator()(const VertexHandle& row_v,
                                             const VertexHandle& col_v) const
     {
-        return this->operator()(get_row_id_from_handle(row_v),
-                                get_row_id_from_handle(col_v));
+        return this->operator()(get_row_id(row_v), get_row_id(col_v));
     }
 
     /**
@@ -259,8 +260,7 @@ struct SparseMatrix
     __device__ __host__ T& operator()(const VertexHandle& row_v,
                                       const VertexHandle& col_v)
     {
-        return this->operator()(get_row_id_from_handle(row_v),
-                                get_row_id_from_handle(col_v));
+        return this->operator()(get_row_id(row_v), get_row_id(col_v));
     }
 
     /**
@@ -335,6 +335,15 @@ struct SparseMatrix
 #endif
     }
 
+    /**
+     * @brief return the row index corresponding to specific vertex handle
+     */
+    __device__ __host__ const uint32_t
+    get_row_id(const VertexHandle& handle) const
+    {
+        auto id = handle.unpack();
+        return m_context.vertex_prefix()[id.first] + id.second;
+    }
 
     /**
      * @brief release all allocated memory
@@ -352,8 +361,11 @@ struct SparseMatrix
             GPU_FREE(m_d_solver_row_ptr);
             GPU_FREE(m_d_solver_col_idx);
             GPU_FREE(m_d_permute);
-            free(m_h_permute);
+            GPU_FREE(m_d_solver_x);
+            GPU_FREE(m_d_solver_b);
             GPU_FREE(m_d_permute_map);
+
+            free(m_h_permute);
             free(m_h_permute_map);
         }
         GPU_FREE(m_chol_buffer);
@@ -413,9 +425,9 @@ struct SparseMatrix
      * @brief allocate the temp buffer needed for sparse matrix multiplication
      * by a dense matrix
      */
-    __host__ void alloc_multiply_buffer(const rxmesh::DenseMatrix<T>& B_mat,
-                                        rxmesh::DenseMatrix<T>&       C_mat,
-                                        cudaStream_t stream = 0)
+    __host__ void alloc_multiply_buffer(const DenseMatrix<T>& B_mat,
+                                        DenseMatrix<T>&       C_mat,
+                                        cudaStream_t          stream = 0)
     {
         T alpha = 1.0;
         T beta  = 0.0;
@@ -454,9 +466,9 @@ struct SparseMatrix
      * alloce_multiply_buffer() if it is not called before. Note that this
      * allocation happens only once and we then reuse it
      */
-    __host__ void multiply(rxmesh::DenseMatrix<T>& B_mat,
-                           rxmesh::DenseMatrix<T>& C_mat,
-                           cudaStream_t            stream = 0)
+    __host__ void multiply(DenseMatrix<T>& B_mat,
+                           DenseMatrix<T>& C_mat,
+                           cudaStream_t    stream = 0)
     {
         assert(cols() == B_mat.rows());
         assert(rows() == C_mat.rows());
@@ -588,9 +600,9 @@ struct SparseMatrix
      * the columns for B and multiply them separately as sparse matrix dense
      * vector multiplication
      */
-    void multiply_cw(const rxmesh::DenseMatrix<T>& B_mat,
-                     rxmesh::DenseMatrix<T>&       C_mat,
-                     cudaStream_t                  stream = 0)
+    void multiply_cw(const DenseMatrix<T>& B_mat,
+                     DenseMatrix<T>&       C_mat,
+                     cudaStream_t          stream = 0)
     {
         assert(cols() == B_mat.cols());
         assert(rows() == C_mat.rows());
@@ -603,38 +615,14 @@ struct SparseMatrix
 
 
     /**
-     * @brief solve the Ax=b for x
-     */
-    void solve(const T*        B_arr,
-               T*              X_arr,
-               rxmesh::Solver  solver,
-               rxmesh::Reorder reorder,
-               cudaStream_t    stream = 0)
-    {
-        cusparse_linear_solver_wrapper(solver,
-                                       reorder,
-                                       m_cusolver_sphandle,
-                                       m_descr,
-                                       m_num_rows,
-                                       m_num_cols,
-                                       m_nnz,
-                                       m_d_row_ptr,
-                                       m_d_col_idx,
-                                       m_d_val,
-                                       B_arr,
-                                       X_arr,
-                                       stream);
-    }
-
-    /**
      * @brief solve the AX=B for X where X and B are all dense matrix and we
      * would solve it in a column wise manner
      */
-    void solve(const rxmesh::DenseMatrix<T>& B_mat,
-               rxmesh::DenseMatrix<T>&       X_mat,
-               rxmesh::Solver                solver,
-               rxmesh::Reorder               reorder,
-               cudaStream_t                  stream = 0)
+    void solve(const DenseMatrix<T>& B_mat,
+               DenseMatrix<T>&       X_mat,
+               Solver                solver,
+               PermuteMethod         reorder,
+               cudaStream_t          stream = 0)
     {
         for (int i = 0; i < B_mat.cols(); ++i) {
             cusparse_linear_solver_wrapper(solver,
@@ -653,38 +641,72 @@ struct SparseMatrix
         }
     }
 
+    /**
+     * @brief solve the Ax=b for x
+     */
+    void solve(const T*      B_arr,
+               T*            X_arr,
+               Solver        solver,
+               PermuteMethod reorder,
+               cudaStream_t  stream = 0)
+    {
+        cusparse_linear_solver_wrapper(solver,
+                                       reorder,
+                                       m_cusolver_sphandle,
+                                       m_descr,
+                                       m_num_rows,
+                                       m_num_cols,
+                                       m_nnz,
+                                       m_d_row_ptr,
+                                       m_d_col_idx,
+                                       m_d_val,
+                                       B_arr,
+                                       X_arr,
+                                       stream);
+    }
+
 
     /* --- LOW LEVEL API --- */
 
     /**
      * @brief allocate all temp buffers needed for the solver low-level API
      */
-    void solver_alloc(rxmesh::Reorder reorder)
+    void solver_permute_alloc(PermuteMethod reorder)
     {
-        if (reorder == Reorder::NONE) {
+        if (reorder == PermuteMethod::NONE) {
             return;
         }
 
-        m_reorder_allocated = true;
-        CUDA_ERROR(cudaMalloc((void**)&m_d_solver_val, m_nnz * sizeof(T)));
-        CUDA_ERROR(cudaMalloc((void**)&m_d_solver_row_ptr,
-                              (m_num_rows + 1) * sizeof(IndexT)));
-        CUDA_ERROR(
-            cudaMalloc((void**)&m_d_solver_col_idx, m_nnz * sizeof(IndexT)));
+        if (!m_reorder_allocated) {
+            m_reorder_allocated = true;
+            CUDA_ERROR(cudaMalloc((void**)&m_d_solver_val, m_nnz * sizeof(T)));
+            CUDA_ERROR(cudaMalloc((void**)&m_d_solver_row_ptr,
+                                  (m_num_rows + 1) * sizeof(IndexT)));
+            CUDA_ERROR(cudaMalloc((void**)&m_d_solver_col_idx,
+                                  m_nnz * sizeof(IndexT)));
 
+            m_h_solver_row_ptr =
+                (IndexT*)malloc((m_num_rows + 1) * sizeof(IndexT));
+            m_h_solver_col_idx = (IndexT*)malloc(m_nnz * sizeof(IndexT));
 
-        m_h_solver_val     = (T*)malloc(m_nnz * sizeof(T));
-        m_h_solver_row_ptr = (IndexT*)malloc((m_num_rows + 1) * sizeof(IndexT));
-        m_h_solver_col_idx = (IndexT*)malloc(m_nnz * sizeof(IndexT));
+            m_h_permute = (IndexT*)malloc(m_num_rows * sizeof(IndexT));
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_d_permute, m_num_rows * sizeof(IndexT)));
 
-        m_h_permute = (IndexT*)malloc(m_num_rows * sizeof(IndexT));
-        CUDA_ERROR(
-            cudaMalloc((void**)&m_d_permute, m_num_rows * sizeof(IndexT)));
+            m_h_permute_map =
+                static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
 
-        m_h_permute_map = static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_d_permute_map, m_nnz * sizeof(IndexT)));
 
-        CUDA_ERROR(
-            cudaMalloc((void**)&m_d_permute_map, m_nnz * sizeof(IndexT)));
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_d_solver_x, m_num_cols * sizeof(T)));
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_d_solver_b, m_num_rows * sizeof(T)));
+        }
+        std::memcpy(
+            m_h_solver_row_ptr, m_h_row_ptr, (m_num_rows + 1) * sizeof(IndexT));
+        std::memcpy(m_h_solver_col_idx, m_h_col_idx, m_nnz * sizeof(IndexT));
     }
 
     /**
@@ -693,55 +715,49 @@ struct SparseMatrix
      * the solving process. Any other function call order would be undefined.
      * @param reorder: the reorder method applied.
      */
-    void spmat_chol_reorder(rxmesh::Reorder reorder)
+    void permute(PermuteMethod reorder = PermuteMethod::NSTDIS)
     {
-        solver_alloc(reorder);
+        solver_permute_alloc(reorder);
 
-        if (reorder == Reorder::NONE) {
+        if (reorder == PermuteMethod::NONE) {
             RXMESH_WARN(
-                "SparseMatrix::spmat_chol_reorder() No reordering is "
-                "specified. Continue without reordering!");
+                "SparseMatrix::permute() No reordering is specified. Continue "
+                "without reordering!");
             m_use_reorder = false;
             return;
-        }
-
-        /*check on host*/
-        bool on_host = true;
-        if ((HOST & m_allocated) != HOST) {
-            move(DEVICE, HOST);
-            on_host = false;
         }
 
         m_use_reorder = true;
 
 
-        if (reorder == Reorder::SYMRCM) {
+        if (reorder == PermuteMethod::SYMRCM) {
             CUSOLVER_ERROR(cusolverSpXcsrsymrcmHost(m_cusolver_sphandle,
                                                     m_num_rows,
                                                     m_nnz,
                                                     m_descr,
-                                                    m_h_row_ptr,
-                                                    m_h_col_idx,
+                                                    m_h_solver_row_ptr,
+                                                    m_h_solver_col_idx,
                                                     m_h_permute));
-        } else if (reorder == Reorder::SYMAMD) {
+        } else if (reorder == PermuteMethod::SYMAMD) {
             CUSOLVER_ERROR(cusolverSpXcsrsymamdHost(m_cusolver_sphandle,
                                                     m_num_rows,
                                                     m_nnz,
                                                     m_descr,
-                                                    m_h_row_ptr,
-                                                    m_h_col_idx,
+                                                    m_h_solver_row_ptr,
+                                                    m_h_solver_col_idx,
                                                     m_h_permute));
-        } else if (reorder == Reorder::NSTDIS) {
+        } else if (reorder == PermuteMethod::NSTDIS) {
             CUSOLVER_ERROR(cusolverSpXcsrmetisndHost(m_cusolver_sphandle,
                                                      m_num_rows,
                                                      m_nnz,
                                                      m_descr,
-                                                     m_h_row_ptr,
-                                                     m_h_col_idx,
+                                                     m_h_solver_row_ptr,
+                                                     m_h_solver_col_idx,
                                                      NULL,
                                                      m_h_permute));
         }
 
+        // copy permutation to the device
         CUDA_ERROR(cudaMemcpyAsync(m_d_permute,
                                    m_h_permute,
                                    m_num_rows * sizeof(IndexT),
@@ -749,8 +765,13 @@ struct SparseMatrix
 
         // working space for permutation: B = A*Q*A^T
         // the permutation for matrix A which works only for the col and row
-        // indices, the val will be done on device with the d/h_val_permute
+        // indices, the val will be done on device with the m_d_permute_map
+        // only on the device since we don't need to access the permuted val on
+        // the host at all
 
+        for (int j = 0; j < m_nnz; j++) {
+            m_h_permute_map[j] = j;
+        }
 
         size_t size_perm       = 0;
         void*  perm_buffer_cpu = NULL;
@@ -760,66 +781,44 @@ struct SparseMatrix
                                                          m_num_cols,
                                                          m_nnz,
                                                          m_descr,
-                                                         m_h_row_ptr,
-                                                         m_h_col_idx,
+                                                         m_h_solver_row_ptr,
+                                                         m_h_solver_col_idx,
                                                          m_h_permute,
                                                          m_h_permute,
                                                          &size_perm));
 
         perm_buffer_cpu = (void*)malloc(sizeof(char) * size_perm);
 
-        for (int j = 0; j < m_nnz; j++) {
-            m_h_permute_map[j] = j;
-        }
-
+        // permute the matrix
         CUSOLVER_ERROR(cusolverSpXcsrpermHost(m_cusolver_sphandle,
                                               m_num_rows,
                                               m_num_cols,
                                               m_nnz,
                                               m_descr,
-                                              m_h_row_ptr,
-                                              m_h_col_idx,
+                                              m_h_solver_row_ptr,
+                                              m_h_solver_col_idx,
                                               m_h_permute,
                                               m_h_permute,
                                               m_h_permute_map,
                                               perm_buffer_cpu));
 
-
-        // do the permutation for val indices on host
-        // T* tmp_h_val = static_cast<T*>(malloc(m_nnz * sizeof(T)));
-
-        // for (int j = 0; j < m_nnz; j++) {
-        //     tmp_h_val[j] = m_h_val[j];
-        // }
-        // for (int j = 0; j < m_nnz; j++) {
-        //     m_h_val[j] = tmp_h_val[m_h_permute_map[j]];
-        // }
-
-        // copy the purmutated csr from the host
+        // copy the permute csr from the device
         CUDA_ERROR(cudaMemcpyAsync(m_d_solver_row_ptr,
-                                   m_h_row_ptr,
+                                   m_h_solver_row_ptr,
                                    (m_num_rows + 1) * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
         CUDA_ERROR(cudaMemcpyAsync(m_d_solver_col_idx,
-                                   m_h_col_idx,
+                                   m_h_solver_col_idx,
                                    m_nnz * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
 
-        // do the permutation for val indices on device
+        // do the permutation for val on device
         CUDA_ERROR(cudaMemcpyAsync(m_d_permute_map,
                                    m_h_permute_map,
                                    m_nnz * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
-
         permute_gather(m_d_permute_map, m_d_val, m_d_solver_val, m_nnz);
 
-
-        // restore the host data back to the original
-        if (on_host) {
-            move(DEVICE, HOST);
-        } else {
-            release(HOST);
-        }
 
         free(perm_buffer_cpu);
     }
@@ -828,7 +827,7 @@ struct SparseMatrix
      * @brief The lower level api of matrix analysis. Generating a member value
      * of type csrcholInfo_t for cucolver.
      */
-    void spmat_chol_analysis()
+    void analyze_pattern()
     {
         if (!m_use_reorder) {
             m_d_solver_row_ptr = m_d_row_ptr;
@@ -836,8 +835,6 @@ struct SparseMatrix
             m_d_solver_val     = m_d_val;
         }
 
-        m_internalDataInBytes = 0;
-        m_workspaceInBytes    = 0;
         CUSOLVER_ERROR(cusolverSpXcsrcholAnalysis(m_cusolver_sphandle,
                                                   m_num_rows,
                                                   m_nnz,
@@ -851,8 +848,11 @@ struct SparseMatrix
      * @brief The lower level api of matrix factorization buffer calculation and
      * allocation. The buffer is a member variable.
      */
-    void spmat_chol_buffer_alloc()
+    void post_analyze_alloc()
     {
+        m_internalDataInBytes = 0;
+        m_workspaceInBytes    = 0;
+
         if constexpr (std::is_same_v<T, float>) {
             CUSOLVER_ERROR(cusolverSpScsrcholBufferInfo(m_cusolver_sphandle,
                                                         m_num_rows,
@@ -887,7 +887,7 @@ struct SparseMatrix
      * @brief The lower level api of matrix factorization and save the
      * factorization result in to the buffer.
      */
-    void spmat_chol_factor()
+    void factorize()
     {
         if constexpr (std::is_same_v<T, float>) {
             CUSOLVER_ERROR(cusolverSpScsrcholFactor(m_cusolver_sphandle,
@@ -925,8 +925,8 @@ struct SparseMatrix
         }
         if (0 <= singularity) {
             RXMESH_WARN(
-                "SparseMatrix::spmat_chol_factor() The matrix is singular at "
-                "row {} under tol ({})",
+                "SparseMatrix::factorize() The matrix is singular at row {} "
+                "under tol ({})",
                 singularity,
                 tol);
         }
@@ -934,24 +934,40 @@ struct SparseMatrix
 
     /**
      * @brief The lower level api of solving the linear system after using
-     * cholesky factorization. The format follows Ax=b to solve x, where A is
-     * the sparse matrix, x and b are device array. As long as A doesn't change.
-     * This function could be called for many different b and x.
-     * @param d_b: device array of b
-     * @param d_x: device array of x
+     * factorization. The format follows Ax=b to solve x, where A is this sparse
+     * matrix, x and b are device array. As long as A doesn't change. This
+     * function could be called for many different b and x.
+     * @param B_mat: right hand side
+     * @param X_mat: output solution
      */
-    void spmat_chol_solve(T* d_b, T* d_x)
+    void solve(DenseMatrix<T>& B_mat,
+               DenseMatrix<T>& X_mat,
+               cudaStream_t    stream = NULL)
     {
+        CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
+        for (int i = 0; i < B_mat.cols(); ++i) {
+            solve(B_mat.col_data(i), X_mat.col_data(i));
+        }
+    }
 
+    /**
+     * @brief The lower level api of solving the linear system after using
+     * factorization. The format follows Ax=b to solve x, where A is the sparse
+     * matrix, x and b are device array. As long as A doesn't change. This
+     * function could be called for many different b and x.
+     * @param d_b: right hand side
+     * @param d_x: output solution
+     */
+    void solve(T* d_b, T* d_x)
+    {
         T* d_solver_b;
         T* d_solver_x;
 
         if (m_use_reorder) {
             // purmute b and x
-            CUDA_ERROR(cudaMalloc((void**)&d_solver_b, m_num_rows * sizeof(T)));
+            d_solver_b = m_d_solver_b;
+            d_solver_x = m_d_solver_x;
             permute_gather(m_d_permute, d_b, d_solver_b, m_num_rows);
-
-            CUDA_ERROR(cudaMalloc((void**)&d_solver_x, m_num_cols * sizeof(T)));
             permute_gather(m_d_permute, d_x, d_solver_x, m_num_rows);
         } else {
             d_solver_b = d_b;
@@ -978,20 +994,9 @@ struct SparseMatrix
 
         if (m_use_reorder) {
             permute_scatter(m_d_permute, d_solver_x, d_x, m_num_rows);
-            GPU_FREE(d_solver_b);
-            GPU_FREE(d_solver_x);
         }
     }
 
-    /**
-     * @brief return the row index corresponding to specific vertex handle
-     */
-    __device__ __host__ const uint32_t
-    get_row_id_from_handle(const VertexHandle& handle) const
-    {
-        auto id = handle.unpack();
-        return m_context.vertex_prefix()[id.first] + id.second;
-    }
 
    private:
     void release(locationT location)
@@ -1045,19 +1050,19 @@ struct SparseMatrix
      * @brief wrapper for cuSolver API for solving linear systems using cuSolver
      * High-level API
      */
-    void cusparse_linear_solver_wrapper(const rxmesh::Solver  solver,
-                                        const rxmesh::Reorder reorder,
-                                        cusolverSpHandle_t    handle,
-                                        cusparseMatDescr_t    descrA,
-                                        int                   rowsA,
-                                        int                   colsA,
-                                        int                   nnzA,
-                                        const int*            d_csrRowPtrA,
-                                        const int*            d_csrColIndA,
-                                        const T*              d_csrValA,
-                                        const T*              d_b,
-                                        T*                    d_x,
-                                        cudaStream_t          stream)
+    void cusparse_linear_solver_wrapper(const Solver        solver,
+                                        const PermuteMethod reorder,
+                                        cusolverSpHandle_t  handle,
+                                        cusparseMatDescr_t  descrA,
+                                        int                 rowsA,
+                                        int                 colsA,
+                                        int                 nnzA,
+                                        const int*          d_csrRowPtrA,
+                                        const int*          d_csrColIndA,
+                                        const T*            d_csrValA,
+                                        const T*            d_b,
+                                        T*                  d_x,
+                                        cudaStream_t        stream)
     {
         CUSOLVER_ERROR(cusolverSpSetStream(handle, stream));
 
@@ -1282,24 +1287,23 @@ struct SparseMatrix
         }
     }
 
-    int reorder_to_int(const Reorder& reorder) const
+    int reorder_to_int(const PermuteMethod& reorder) const
     {
         switch (reorder) {
-            case Reorder::NONE:
+            case PermuteMethod::NONE:
                 return 0;
-            case Reorder::SYMRCM:
+            case PermuteMethod::SYMRCM:
                 return 1;
-            case Reorder::SYMAMD:
+            case PermuteMethod::SYMAMD:
                 return 2;
-            case Reorder::NSTDIS:
+            case PermuteMethod::NSTDIS:
                 return 3;
             default: {
-                RXMESH_ERROR("reorder_to_int() unknown input reorder");
+                RXMESH_ERROR("reorder_to_int() unknown input");
                 return 0;
             }
         }
     }
-
 
     void permute_scatter(IndexT* d_p, T* d_in, T* d_out, IndexT size)
     {
@@ -1366,10 +1370,12 @@ struct SparseMatrix
 
     IndexT* m_h_solver_row_ptr;
     IndexT* m_h_solver_col_idx;
-    T*      m_h_solver_val;
 
     IndexT* m_h_permute_map;
     IndexT* m_d_permute_map;
+
+    T* m_d_solver_b;
+    T* m_d_solver_x;
 
     void* m_d_cusparse_spmm_buffer;
     void* m_d_cusparse_spmv_buffer;

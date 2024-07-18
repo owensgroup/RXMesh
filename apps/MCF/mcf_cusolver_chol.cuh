@@ -182,16 +182,15 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx)
                                             Arg.time_step);
 
     // Solving the linear system using chol factorization and no reordering
-    //A_mat.solve(B_mat, *X_mat, Solver::CHOL, Reorder::NONE);
+    // A_mat.solve(B_mat, *X_mat, Solver::CHOL, Reorder::NONE);
 
-    A_mat.spmat_chol_reorder(Reorder::NSTDIS);
-    A_mat.spmat_chol_analysis();
-    A_mat.spmat_chol_buffer_alloc();
-    A_mat.spmat_chol_factor();
+    A_mat.solver_permute_alloc(PermuteMethod::NSTDIS);
+    A_mat.permute(PermuteMethod::NSTDIS);
+    A_mat.analyze_pattern();
+    A_mat.post_analyze_alloc();
+    A_mat.factorize();
+    A_mat.solve(B_mat, *X_mat);
 
-    for (int i = 0; i < B_mat.cols(); ++i) {
-        A_mat.spmat_chol_solve(B_mat.col_data(i), X_mat->col_data(i));
-    }
 
     // move the results to the host
     X_mat->move(rxmesh::DEVICE, rxmesh::HOST);

@@ -299,7 +299,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
                                          launch_box.smem_bytes_dyn>>>(
         rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
-    A_mat.solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
+    A_mat.solve(B_mat, X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
 
     // timing begins for spmm
     GPUTimer timer;
@@ -364,15 +364,13 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 
     // A_mat.solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
 
-    A_mat.spmat_chol_reorder(Reorder::NSTDIS);
-    A_mat.spmat_chol_analysis();
-    A_mat.spmat_chol_buffer_alloc();
-    A_mat.spmat_chol_factor();
-
-    for (int i = 0; i < B_mat.cols(); ++i) {
-        A_mat.spmat_chol_solve(B_mat.col_data(i), X_mat.col_data(i));
-    }
-
+    A_mat.solver_permute_alloc(PermuteMethod::NSTDIS);
+    A_mat.permute(PermuteMethod::NSTDIS);
+    A_mat.analyze_pattern();
+    A_mat.post_analyze_alloc();
+    A_mat.factorize();
+    A_mat.solve(B_mat, X_mat);
+        
     A_mat.multiply(X_mat, ret_mat);
 
     std::vector<vec3<float>> h_ret_mat(num_vertices);
