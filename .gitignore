@@ -10,6 +10,7 @@ input/*
 !input/cloth.obj
 !input/plane_5.obj
 !input/sphere1.obj
+!input/bunnyhead.obj
 build/
 include/rxmesh/util/git_sha1.cpp
 .vscode/
