@@ -17,6 +17,9 @@
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/timer.h"
+
+#include "rxmesh/kernels/boundary.cuh"
+
 #if USE_POLYSCOPE
 #include "polyscope/surface_mesh.h"
 #endif
@@ -1006,6 +1009,54 @@ class RXMeshStatic : public RXMesh
         m_attr_container->remove(name.c_str());
     }
 
+    /**
+     * @brief populate boundary_v with 1 if the vertex is a boundary vertex and
+     * 0 otherwise. Only the first attribute (i.e., boundary_v(vh, 0)) will be
+     * populated. Possible types of T is bool or int (and maybe float). The
+     * results will be first calculated on device and then move to the host is
+     * boundary_v is allocated on the host.
+     */
+    template <typename T>
+    void get_boundary_vertices(VertexAttribute<T>& boundary_v,
+                               bool                move_to_host = true,
+                               cudaStream_t        stream       = NULL) const
+    {
+        if (!boundary_v.is_device_allocated()) {
+            RXMESH_ERROR(
+                "RXMeshStatic::get_boundary_vertices the input/output "
+                "VertexAttribute (i.e., boundary_v) should be allocated on "
+                "device since the boundary vertices are identified first on "
+                "the device (before optionally moving them to the host). "
+                "Returning without calculating the boundary vertices!");
+            return;
+        }
+
+        boundary_v.reset(0, LOCATION_ALL);
+
+        constexpr uint32_t      blockThreads = 256;
+
+        LaunchBox<blockThreads> lb;        
+
+        prepare_launch_box(
+            {Op::EF, Op::EV},
+            lb,
+            (void*)detail::identify_boundary_vertices<blockThreads, T>,
+            false,
+            false,
+            false,
+            [&](uint32_t v, uint32_t e, uint32_t f) {
+                return detail::mask_num_bytes(e) +
+                       ShmemAllocator::default_alignment;
+            });
+
+        detail::identify_boundary_vertices<blockThreads>
+            <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
+                get_context(), boundary_v);
+
+        if (move_to_host && boundary_v.is_host_allocated()) {
+            boundary_v.move(DEVICE, HOST, stream);
+        }
+    }
 
     /**
      * @brief return a shared pointer the input vertex position

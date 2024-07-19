@@ -91,6 +91,16 @@ struct DenseMatrix
     }
 
     /**
+     * @brief set all entries in the matrix to zeros on both host and device
+     */
+    __host__ void set_zeros()
+    {
+        std::memset(m_h_val, 0, bytes());
+
+        CUDA_ERROR(cudaMemset(m_d_val, 0, bytes()));
+    }
+
+    /**
      * @brief accessing a specific value in the matrix using the row and col
      * index. Can be used on both host and device
      */

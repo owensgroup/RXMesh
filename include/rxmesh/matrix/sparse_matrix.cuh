@@ -4,6 +4,8 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 
+#include "rxmesh/launch_box.h"
+
 #include "thrust/device_ptr.h"
 #include "thrust/execution_policy.h"
 #include "thrust/gather.h"
@@ -13,6 +15,8 @@
 #include "rxmesh/matrix/dense_matrix.cuh"
 
 #include "rxmesh/matrix/sparse_matrix_kernels.cuh"
+
+#include "rxmesh/launch_box.h"
 
 namespace rxmesh {
 

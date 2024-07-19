@@ -7,13 +7,14 @@
 #include "rxmesh/kernels/attribute.cuh"
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/util.cuh"
-#include "rxmesh/matrix/dense_matrix.cuh"
 #include "rxmesh/patch_info.h"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/types.h"
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/util.h"
+
+#include "rxmesh/matrix/dense_matrix.cuh"
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/fwd.hpp>
@@ -385,9 +386,7 @@ class Attribute : public AttributeBase
      */
     void reset(const T value, locationT location, cudaStream_t stream = NULL)
     {
-        if ((location & DEVICE) == DEVICE) {
-
-            assert((m_allocated & DEVICE) == DEVICE);
+        if (((location & DEVICE) == DEVICE) && is_host_allocated()) {
 
             const int threads = 256;
             detail::template memset_attribute<T>
@@ -399,8 +398,8 @@ class Attribute : public AttributeBase
         }
 
 
-        if ((location & HOST) == HOST) {
-            assert((m_allocated & HOST) == HOST);
+        if (((location & HOST) == HOST) && is_host_allocated()) {
+
 #pragma omp parallel for
             for (int p = 0; p < static_cast<int>(m_rxmesh->get_num_patches());
                  ++p) {
@@ -480,7 +479,7 @@ class Attribute : public AttributeBase
      */
     void release(locationT location = LOCATION_ALL)
     {
-        if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
+        if (((location & HOST) == HOST) && is_host_allocated()) {
             for (uint32_t p = 0; p < m_rxmesh->get_max_num_patches(); ++p) {
                 free(m_h_attr[p]);
             }
@@ -489,8 +488,7 @@ class Attribute : public AttributeBase
             m_allocated = m_allocated & (~HOST);
         }
 
-        if (((location & DEVICE) == DEVICE) &&
-            ((m_allocated & DEVICE) == DEVICE)) {
+        if (((location & DEVICE) == DEVICE) && is_device_allocated()) {
             for (uint32_t p = 0; p < m_rxmesh->get_max_num_patches(); ++p) {
                 GPU_FREE(m_h_ptr_on_device[p]);
             }
