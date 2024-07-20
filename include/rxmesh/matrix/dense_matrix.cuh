@@ -106,12 +106,75 @@ struct DenseMatrix
         std::random_device rd;
         std::mt19937       gen(rd());
 
-        std::uniform_int_distribution<> dis(min, max);
+        if constexpr (std::is_same_v<T, cuComplex> ||
+                      std::is_same_v<T, float>) {
+            std::uniform_real_distribution<float> dis(static_cast<float>(minn),
+                                                      static_cast<float>(maxx));
 
-
-        for (int i = 0; i < rows() * cols(); ++i) {
-            m_h_val[i] = dis(gen);
+            for (int i = 0; i < rows() * cols(); ++i) {
+                if constexpr (std::is_same_v<T, cuComplex>) {
+                    m_h_val[i].x = dis(gen);
+                    m_h_val[i].y = dis(gen);
+                }
+                if constexpr (std::is_same_v<T, float>) {
+                    m_h_val[i] = dis(gen);
+                }
+            }
         }
+
+        if constexpr (std::is_same_v<T, cuDoubleComplex> ||
+                      std::is_same_v<T, double>) {
+            std::uniform_real_distribution<double> dis(
+                static_cast<double>(minn), static_cast<double>(maxx));
+
+            for (int i = 0; i < rows() * cols(); ++i) {
+                if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+                    m_h_val[i].x = dis(gen);
+                    m_h_val[i].y = dis(gen);
+                }
+                if constexpr (std::is_same_v<T, double>) {
+                    m_h_val[i] = dis(gen);
+                }
+            }
+        }
+
+        if constexpr (std::is_same_v<T, int> || std::is_same_v<T, int32_t>) {
+            std::uniform_int_distribution<int> dis(static_cast<int>(minn),
+                                                   static_cast<int>(maxx));
+
+            for (int i = 0; i < rows() * cols(); ++i) {
+                m_h_val[i] = dis(gen);
+            }
+        }
+
+        if constexpr (std::is_same_v<T, uint32_t>) {
+            std::uniform_int_distribution<uint32_t> dis(
+                static_cast<uint32_t>(minn), static_cast<uint32_t>(maxx));
+
+            for (int i = 0; i < rows() * cols(); ++i) {
+                m_h_val[i] = dis(gen);
+            }
+        }
+
+
+        if constexpr (std::is_same_v<T, int64_t>) {
+            std::uniform_int_distribution<int64_t> dis(
+                static_cast<int64_t>(minn), static_cast<int64_t>(maxx));
+
+            for (int i = 0; i < rows() * cols(); ++i) {
+                m_h_val[i] = dis(gen);
+            }
+        }
+
+        if constexpr (std::is_same_v<T, uint64_t>) {
+            std::uniform_int_distribution<uint64_t> dis(
+                static_cast<uint64_t>(minn), static_cast<uint64_t>(maxx));
+
+            for (int i = 0; i < rows() * cols(); ++i) {
+                m_h_val[i] = dis(gen);
+            }
+        }
+
 
         CUDA_ERROR(
             cudaMemcpy(m_d_val, m_h_val, bytes(), cudaMemcpyHostToDevice));
