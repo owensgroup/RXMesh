@@ -101,7 +101,7 @@ struct DenseMatrix
      * @brief fill in the matrix with random numbers on both host and device
      * @return
      */
-    __host__ void fill_random(T min = T(-1), T max = T(1))
+    __host__ void fill_random(double minn = -1.0, double maxx = 1.0)
     {
         std::random_device rd;
         std::mt19937       gen(rd());
