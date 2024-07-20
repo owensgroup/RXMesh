@@ -17,9 +17,6 @@ namespace rxmesh {
 template <typename T, typename IndexT = int, unsigned int MemAlignSize = 0>
 struct DenseMatrix
 {
-    static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>,
-                  "RXMesh::DenseMatrix supports only float or double");
-
     template <typename U, typename IndexU>
     friend class SparseMatrix;
 
@@ -98,6 +95,26 @@ struct DenseMatrix
         std::memset(m_h_val, 0, bytes());
 
         CUDA_ERROR(cudaMemset(m_d_val, 0, bytes()));
+    }
+
+    /**
+     * @brief fill in the matrix with random numbers on both host and device
+     * @return
+     */
+    __host__ void fill_random(T min = T(-1), T max = T(1))
+    {
+        std::random_device rd;
+        std::mt19937       gen(rd());
+
+        std::uniform_int_distribution<> dis(min, max);
+
+
+        for (int i = 0; i < rows() * cols(); ++i) {
+            m_h_val[i] = dis(gen);
+        }
+
+        CUDA_ERROR(
+            cudaMemcpy(m_d_val, m_h_val, bytes(), cudaMemcpyHostToDevice));
     }
 
     /**
