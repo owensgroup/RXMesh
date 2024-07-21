@@ -526,12 +526,14 @@ class Attribute : public AttributeBase
         if ((source_flag & LOCATION_ALL) == LOCATION_ALL &&
             (dst_flag & LOCATION_ALL) != LOCATION_ALL) {
             RXMESH_ERROR("Attribute::copy_from() Invalid configuration!");
+            return;
         }
 
         if (m_num_attributes != source.get_num_attributes()) {
             RXMESH_ERROR(
                 "Attribute::copy_from() number of attributes is "
                 "different!");
+            return;
         }
 
         if (this->is_empty() || m_rxmesh->get_num_patches() == 0) {
@@ -542,13 +544,15 @@ class Attribute : public AttributeBase
         if ((source_flag & HOST) == HOST && (dst_flag & HOST) == HOST) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because it was not allocated on host");
+                return;
             }
             if ((dst_flag & m_allocated) != dst_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because location (this) was not allocated on host");
+                return;
             }
 
             for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
@@ -563,13 +567,15 @@ class Attribute : public AttributeBase
         if ((source_flag & DEVICE) == DEVICE && (dst_flag & DEVICE) == DEVICE) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because it was not allocated on device");
+                return;
             }
             if ((dst_flag & m_allocated) != dst_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because location (this) was not allocated on device");
+                return;
             }
 
             for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
@@ -587,13 +593,15 @@ class Attribute : public AttributeBase
         if ((source_flag & DEVICE) == DEVICE && (dst_flag & HOST) == HOST) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because it was not allocated on host");
+                return;
             }
             if ((dst_flag & m_allocated) != dst_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because location (this) was not allocated on device");
+                return;
             }
 
 
@@ -612,13 +620,15 @@ class Attribute : public AttributeBase
         if ((source_flag & HOST) == HOST && (dst_flag & DEVICE) == DEVICE) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because it was not allocated on device");
+                return;
             }
             if ((dst_flag & m_allocated) != dst_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because location (this) was not allocated on host");
+                return;
             }
 
 

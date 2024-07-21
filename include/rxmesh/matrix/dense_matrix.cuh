@@ -8,7 +8,7 @@
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/types.h"
 
-#include"rxmesh/util/meta.h"
+#include "rxmesh/util/meta.h"
 
 namespace rxmesh {
 
@@ -289,6 +289,68 @@ struct DenseMatrix
         return result;
     }
 
+    /**
+     * @brief compute the following
+     * Y = alpha * X + Y
+     * where Y is this dense matrix, X is another dense matrix that has the same
+     * dimensions as Y and alpha is a scalar. The results are computed for the
+     * data on the device. Only float, double, cuComplex, and cuDoubleComplex
+     * are supported
+     * @param stream
+     * @return
+     */
+    __host__ void axpy(DenseMatrix<T>& X, T alpha, cudaStream_t stream = NULL)
+    {
+        CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
+        if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double> &&
+                      !std::is_same_v<T, cuComplex> &&
+                      !std::is_same_v<T, cuDoubleComplex>) {
+            RXMESH_ERROR(
+                "DenseMatrix::axpy() only float, double, cuComplex, and "
+                "cuDoubleComplex are supported for this function!");
+            return;
+        }
+
+        if constexpr (std::is_same_v<T, float>) {
+            CUBLAS_ERROR(cublasSaxpy(m_cublas_handle,
+                                     rows() * cols(),
+                                     &alpha,
+                                     X.m_d_val,
+                                     1,
+                                     m_d_val,
+                                     1));
+        }
+
+        if constexpr (std::is_same_v<T, double>) {
+            CUBLAS_ERROR(cublasDaxpy(m_cublas_handle,
+                                     rows() * cols(),
+                                     &alpha,
+                                     X.m_d_val,
+                                     1,
+                                     m_d_val,
+                                     1));
+        }
+
+        if constexpr (std::is_same_v<T, cuComplex>) {
+            CUBLAS_ERROR(cublasCaxpy(m_cublas_handle,
+                                     rows() * cols(),
+                                     &alpha,
+                                     X.m_d_val,
+                                     1,
+                                     m_d_val,
+                                     1));
+        }
+
+        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+            CUBLAS_ERROR(cublasZaxpy(m_cublas_handle,
+                                     rows() * cols(),
+                                     &alpha,
+                                     X.m_d_val,
+                                     1,
+                                     m_d_val,
+                                     1));
+        }
+    }
 
     /**
      * @brief return the row index corresponding to specific vertex/edge/face
@@ -425,6 +487,88 @@ struct DenseMatrix
         } else if (source == DEVICE && target == HOST) {
             CUDA_ERROR(cudaMemcpyAsync(
                 m_h_val, m_d_val, bytes(), cudaMemcpyDeviceToHost, stream));
+        }
+    }
+
+
+    /**
+     * @brief Deep copy from a source matrix. If source_flag and target_flag are
+     * both set to LOCATION_ALL, then we copy what is on host to host, and what
+     * on device to device. If sourc_flag is set to HOST (or DEVICE) and
+     * target_flag is set to LOCATION_ALL, then we copy source's HOST (or
+     * DEVICE) to both HOST and DEVICE. Setting source_flag to
+     * LOCATION_ALL while target_flag is NOT set to LOCATION_ALL is invalid
+     * because we don't know which source to copy from
+     * @param source matrix to copy from
+     * @param source_flag defines where we will copy from
+     * @param target_flag defines where we will copy to
+     * @param stream used to launch kernel/memcpy
+     */
+    __host__ void copy_from(DenseMatrix<T>& source,
+                            locationT       source_flag = LOCATION_ALL,
+                            locationT       target_flag = LOCATION_ALL,
+                            cudaStream_t    stream      = NULL)
+    {
+        if (rows() != source.rows() || cols() != source.cols()) {
+            RXMESH_ERROR(
+                "DenseMatrix::copy_from() the number of rows/cols is "
+                "different!");
+            return;
+        }
+
+        if ((source_flag & LOCATION_ALL) == LOCATION_ALL &&
+            (target_flag & LOCATION_ALL) != LOCATION_ALL) {
+            RXMESH_ERROR("DenseMatrix::copy_from() Invalid configuration!");
+            return;
+        }
+
+        if ((source_flag & m_allocated) != source_flag) {
+            RXMESH_ERROR(
+                "DenseMatrix::copy_from() copying source is not valid"
+                " because it was not allocated on source i.e., {}",
+                location_to_string(source_flag));
+            return;
+        }
+
+        if ((target_flag & m_allocated) != target_flag) {
+            RXMESH_WARN(
+                "DenseMatrix::copy_from() allocating target before moving to "
+                "{}",
+                location_to_string(target_flag));
+            allocate(target_flag);
+        }
+        // 1) copy from HOST to HOST
+        if ((source_flag & HOST) == HOST && (target_flag & HOST) == HOST) {
+            std::memcpy(m_h_val, source.m_h_val, bytes());
+        }
+
+        // 2) copy from DEVICE to DEVICE
+        if ((source_flag & DEVICE) == DEVICE &&
+            (target_flag & DEVICE) == DEVICE) {
+            CUDA_ERROR(cudaMemcpyAsync(m_d_val,
+                                       source.m_d_val,
+                                       bytes(),
+                                       cudaMemcpyDeviceToDevice,
+                                       stream));
+        }
+
+        // 3) copy from DEVICE to HOST
+        if ((source_flag & DEVICE) == DEVICE && (target_flag & HOST) == HOST) {
+            CUDA_ERROR(cudaMemcpyAsync(m_h_val,
+                                       source.m_d_val,
+                                       bytes(),
+                                       cudaMemcpyDeviceToHost,
+                                       stream));
+        }
+
+
+        // 4) copy from HOST to DEVICE
+        if ((source_flag & HOST) == HOST && (target_flag & DEVICE) == DEVICE) {
+            CUDA_ERROR(cudaMemcpyAsync(m_d_val,
+                                       source.m_h_val,
+                                       bytes(),
+                                       cudaMemcpyHostToDevice,
+                                       stream));
         }
     }
 
