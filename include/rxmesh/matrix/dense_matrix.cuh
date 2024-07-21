@@ -1,10 +1,14 @@
 #pragma once
 #include <vector>
+#include "cublas_v2.h"
 #include "cusparse.h"
+
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/types.h"
+
+#include"rxmesh/util/meta.h"
 
 namespace rxmesh {
 
@@ -14,10 +18,12 @@ namespace rxmesh {
  * We would only support col major dense matrix for now since that's what
  * cusparse and cusolver wants.
  */
-template <typename T, typename IndexT = int, unsigned int MemAlignSize = 0>
+template <typename T, unsigned int MemAlignSize = 0>
 struct DenseMatrix
 {
-    template <typename U, typename IndexU>
+    using IndexT = int;
+
+    template <typename U>
     friend class SparseMatrix;
 
     DenseMatrix()
@@ -42,6 +48,7 @@ struct DenseMatrix
           m_dendescr(NULL),
           m_h_val(nullptr),
           m_d_val(nullptr),
+          m_cublas_handle(nullptr),
           m_col_pad_bytes(0),
           m_col_pad_idx(0)
     {
@@ -59,8 +66,12 @@ struct DenseMatrix
                                            m_num_cols,
                                            m_num_rows,  // leading dim
                                            m_d_val,
-                                           CUDA_R_32F,
+                                           cuda_type<T>(),
                                            CUSPARSE_ORDER_COL));
+
+        CUBLAS_ERROR(cublasCreate(&m_cublas_handle));
+        CUBLAS_ERROR(
+            cublasSetPointerMode(m_cublas_handle, CUBLAS_POINTER_MODE_HOST));
     }
 
     /**
@@ -234,6 +245,52 @@ struct DenseMatrix
     }
 
     /**
+     * @brief compute the sum of the absolute value of all elements in the
+     * matrix. For complex types (cuComples and cuDoubleComplex), we sum the
+     * absolute value of the real and absolute value of the imaginary part. The
+     * results are computed for the data on the device. Only float, double,
+     * cuComplex, and cuDoubleComplex are supported
+     * @param stream
+     * @return
+     */
+    __host__ BaseTypeT<T> abs_sum(cudaStream_t stream = NULL)
+    {
+        CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
+        if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double> &&
+                      !std::is_same_v<T, cuComplex> &&
+                      !std::is_same_v<T, cuDoubleComplex>) {
+            RXMESH_ERROR(
+                "DenseMatrix::abs_sum() only float, double, cuComplex, and "
+                "cuDoubleComplex are supported for this function!");
+            return BaseTypeT<T>(0);
+        }
+
+        BaseTypeT<T> result;
+        if constexpr (std::is_same_v<T, float>) {
+            CUBLAS_ERROR(cublasSasum(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &result));
+        }
+
+        if constexpr (std::is_same_v<T, double>) {
+            CUBLAS_ERROR(cublasDasum(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &result));
+        }
+
+        if constexpr (std::is_same_v<T, cuComplex>) {
+            CUBLAS_ERROR(cublasScasum(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &result));
+        }
+
+        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+            CUBLAS_ERROR(cublasDzasum(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &result));
+        }
+
+        return result;
+    }
+
+
+    /**
      * @brief return the row index corresponding to specific vertex/edge/face
      * handle
      */
@@ -387,6 +444,9 @@ struct DenseMatrix
             GPU_FREE(m_d_val);
             m_allocated = m_allocated & (~DEVICE);
         }
+        if ((location & LOCATION_ALL) == LOCATION_ALL) {
+            CUSPARSE_ERROR(cusparseDestroyDnMat(m_dendescr));
+        }
     }
 
    private:
@@ -415,6 +475,7 @@ struct DenseMatrix
 
     const Context        m_context;
     cusparseDnMatDescr_t m_dendescr;
+    cublasHandle_t       m_cublas_handle;
     locationT            m_allocated;
     IndexT               m_num_rows;
     IndexT               m_num_cols;

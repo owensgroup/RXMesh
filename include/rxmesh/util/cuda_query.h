@@ -113,6 +113,26 @@ inline cudaDeviceProp cuda_query(const int dev)
                  cusolver_minor,
                  cusolver_patch);
 
+
+    int cusparse_major = -1, cusparse_minor = -1, cusparse_patch = -1;
+    CUSPARSE_ERROR(cusparseGetProperty(MAJOR_VERSION, &cusparse_major));
+    CUSPARSE_ERROR(cusparseGetProperty(MINOR_VERSION, &cusparse_minor));
+    CUSPARSE_ERROR(cusparseGetProperty(PATCH_LEVEL, &cusparse_patch));
+    RXMESH_TRACE("Using cuSparse Version {}.{}.{}",
+                 cusparse_major,
+                 cusparse_minor,
+                 cusparse_patch);
+
+    int cublas_major = -1, cublas_minor = -1, cublas_patch = -1;
+    CUBLAS_ERROR(cublasGetProperty(MAJOR_VERSION, &cublas_major));
+    CUBLAS_ERROR(cublasGetProperty(MINOR_VERSION, &cublas_minor));
+    CUBLAS_ERROR(cublasGetProperty(PATCH_LEVEL, &cublas_patch));
+    RXMESH_TRACE("Using cuBlas Version {}.{}.{}",
+                 cublas_major,
+                 cublas_minor,
+                 cublas_patch);
+
+
     if (!dev_prop.managedMemory) {
         RXMESH_ERROR(
             "The selected device does not support CUDA unified memory");

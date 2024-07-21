@@ -416,4 +416,42 @@ __device__ __host__ __inline__ void align(const std::size_t byte_alignment,
     const uint64_t aligned = intptr + byte_alignment - remainder;
     ptr                    = reinterpret_cast<T*>(aligned);
 }
+
+/**
+ * @brief get cuSparse/cuSolver data type for T
+ */
+template <typename T>
+__host__ __inline__ cudaDataType_t cuda_type()
+{
+    if (std::is_same_v<T, float>) {
+        return CUDA_R_32F;
+    } else if (std::is_same_v<T, double>) {
+        return CUDA_R_64F;
+    } else if (std::is_same_v<T, cuComplex>) {
+        return CUDA_C_32F;
+    } else if (std::is_same_v<T, cuDoubleComplex>) {
+        return CUDA_C_64F;
+    } else if (std::is_same_v<T, int8_t>) {
+        return CUDA_R_8I;
+    } else if (std::is_same_v<T, uint8_t>) {
+        return CUDA_R_8U;
+    } else if (std::is_same_v<T, int16_t>) {
+        return CUDA_R_16I;
+    } else if (std::is_same_v<T, uint16_t>) {
+        return CUDA_R_16U;
+    } else if (std::is_same_v<T, int32_t> || std::is_same_v<T, int>) {
+        return CUDA_R_32I;
+    } else if (std::is_same_v<T, uint32_t>) {
+        return CUDA_R_32U;
+    } else if (std::is_same_v<T, int64_t>) {
+        return CUDA_R_64I;
+    } else if (std::is_same_v<T, uint64_t>) {
+        return CUDA_R_64U;
+    } else {
+        RXMESH_ERROR(
+            "Unsupported type. Sparse/Dense Matrix in RXMesh can support "
+            "different data type but for the solver, only float, double, "
+            "cuComplex, and cuDoubleComplex are supported");
+    }
+}
 }  // namespace rxmesh

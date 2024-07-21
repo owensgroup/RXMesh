@@ -24,6 +24,7 @@ set( SOURCE_LIST
 	test_wasted_work.cuh
 	test_eigen.cuh
 	test_boundary.cuh
+	test_dense_matrix.cuh
 )
 
 target_sources( RXMesh_test 

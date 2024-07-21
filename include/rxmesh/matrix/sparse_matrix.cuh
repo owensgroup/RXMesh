@@ -53,9 +53,11 @@ enum class PermuteMethod
  * for matrix-vector multiplication and linear solver—(using cuSolver and
  * cuSparse as a back-end.
  */
-template <typename T, typename IndexT = int>
+template <typename T>
 struct SparseMatrix
 {
+    using IndexT = int;
+
     SparseMatrix(const RXMeshStatic& rx)
         : m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
@@ -177,7 +179,7 @@ struct SparseMatrix
                                          CUSPARSE_INDEX_32I,
                                          CUSPARSE_INDEX_32I,
                                          CUSPARSE_INDEX_BASE_ZERO,
-                                         cuda_type()));
+                                         cuda_type<T>()));
 
         CUSPARSE_ERROR(cusparseCreate(&m_cusparse_handle));
         CUSOLVER_ERROR(cusolverSpCreate(&m_cusolver_sphandle));
@@ -202,6 +204,9 @@ struct SparseMatrix
                               cudaMemcpyDeviceToHost));
 
         m_allocated = m_allocated | HOST;
+
+        CUSPARSE_ERROR(cusparseSetPointerMode(m_cusparse_handle,
+                                              CUSPARSE_POINTER_MODE_HOST));
     }
 
     /**
@@ -451,7 +456,7 @@ struct SparseMatrix
                                                matB,
                                                &beta,
                                                matC,
-                                               cuda_type(),
+                                               cuda_type<T>(),
                                                CUSPARSE_SPMM_ALG_DEFAULT,
                                                &m_spmm_buffer_size));
         CUDA_ERROR(cudaMalloc(&m_d_cusparse_spmm_buffer, m_spmm_buffer_size));
@@ -478,8 +483,24 @@ struct SparseMatrix
         assert(rows() == C_mat.rows());
         assert(B_mat.cols() == C_mat.cols());
 
-        float alpha = 1.0f;
-        float beta  = 0.0f;
+        BaseTypeT<T> alpha;
+        BaseTypeT<T> beta;
+
+        if constexpr (std::is_same_v<T, cuComplex>) {
+            alpha = make_cuComplex(1.f, 1.f);
+            beta  = make_cuComplex(0.f, 0.f);
+        }
+
+        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+            alpha = make_cuDoubleComplex(1.0, 1.0);
+            beta  = make_cuDoubleComplex(0.0, 0.0);
+        }
+
+        if constexpr (!std::is_same_v<T, cuComplex> &&
+                      !std::is_same_v<T, cuDoubleComplex>) {
+            alpha = T(1);
+            beta  = T(0);
+        }
 
         // A_mat.create_cusparse_handle();
         cusparseSpMatDescr_t matA = m_spdescr;
@@ -503,7 +524,7 @@ struct SparseMatrix
                                     matB,
                                     &beta,
                                     matC,
-                                    cuda_type(),
+                                    cuda_type<T>(),
                                     CUSPARSE_SPMM_ALG_DEFAULT,
                                     m_d_cusparse_spmm_buffer));
     }
@@ -523,9 +544,9 @@ struct SparseMatrix
         cusparseDnVecDescr_t vecy = NULL;
 
         CUSPARSE_ERROR(
-            cusparseCreateDnVec(&vecx, m_num_cols, in_arr, cuda_type()));
+            cusparseCreateDnVec(&vecx, m_num_cols, in_arr, cuda_type<T>()));
         CUSPARSE_ERROR(
-            cusparseCreateDnVec(&vecy, m_num_rows, rt_arr, cuda_type()));
+            cusparseCreateDnVec(&vecy, m_num_rows, rt_arr, cuda_type<T>()));
 
         CUSPARSE_ERROR(cusparseSpMV_bufferSize(m_cusparse_handle,
                                                CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -534,7 +555,7 @@ struct SparseMatrix
                                                vecx,
                                                &beta,
                                                vecy,
-                                               cuda_type(),
+                                               cuda_type<T>(),
                                                CUSPARSE_SPMV_ALG_DEFAULT,
                                                &m_spmv_buffer_size));
         CUSPARSE_ERROR(cusparseDestroyDnVec(vecx));
@@ -568,9 +589,9 @@ struct SparseMatrix
         cusparseDnVecDescr_t vecy = NULL;
 
         CUSPARSE_ERROR(
-            cusparseCreateDnVec(&vecx, m_num_cols, in_arr, cuda_type()));
+            cusparseCreateDnVec(&vecx, m_num_cols, in_arr, cuda_type<T>()));
         CUSPARSE_ERROR(
-            cusparseCreateDnVec(&vecy, m_num_rows, rt_arr, cuda_type()));
+            cusparseCreateDnVec(&vecy, m_num_rows, rt_arr, cuda_type<T>()));
 
         CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
 
@@ -586,7 +607,7 @@ struct SparseMatrix
                                     vecx,
                                     &beta,
                                     vecy,
-                                    cuda_type(),
+                                    cuda_type<T>(),
                                     CUSPARSE_SPMV_ALG_DEFAULT,
                                     m_d_cusparse_spmv_buffer));
 
@@ -1336,40 +1357,6 @@ struct SparseMatrix
                 "singular at row {} under tol ({})",
                 singularity,
                 tol);
-        }
-    }
-
-    cudaDataType_t cuda_type() const
-    {
-        if (std::is_same_v<T, float>) {
-            return CUDA_R_32F;
-        } else if (std::is_same_v<T, double>) {
-            return CUDA_R_64F;
-        } else if (std::is_same_v<T, cuComplex>) {
-            return CUDA_C_32F;
-        } else if (std::is_same_v<T, cuDoubleComplex>) {
-            return CUDA_C_64F;
-        } else if (std::is_same_v<T, int8_t>) {
-            return CUDA_R_8I;
-        } else if (std::is_same_v<T, uint8_t>) {
-            return CUDA_R_8U;
-        } else if (std::is_same_v<T, int16_t>) {
-            return CUDA_R_16I;
-        } else if (std::is_same_v<T, uint16_t>) {
-            return CUDA_R_16U;
-        } else if (std::is_same_v<T, int32_t> || std::is_same_v<T, int>) {
-            return CUDA_R_32I;
-        } else if (std::is_same_v<T, uint32_t>) {
-            return CUDA_R_32U;
-        } else if (std::is_same_v<T, int64_t>) {
-            return CUDA_R_64I;
-        } else if (std::is_same_v<T, uint64_t>) {
-            return CUDA_R_64U;
-        } else {
-            RXMESH_ERROR(
-                "SparseMatrix unsupported type. SparseMatrix can support "
-                "different data type but for the solver, only float, double, "
-                "cuComplex, and cuDoubleComplex are supported");
         }
     }
 

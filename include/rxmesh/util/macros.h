@@ -68,18 +68,24 @@ constexpr int MAX_OVERLAP_CAVITIES = 4;
 #endif
 
 
-// CUDA_ERROR
+#ifndef CUDA_ERROR
 inline void HandleError(cudaError_t err, const char* file, int line)
 {
     // Error handling micro, wrap it around function whenever possible
     if (err != cudaSuccess) {
         Log::get_logger()->error("Line {} File {}", line, file);
         Log::get_logger()->error("CUDA ERROR: {}", cudaGetErrorString(err));
+#ifdef _WIN32
+        system("pause");
+#else
         exit(EXIT_FAILURE);
+#endif
     }
 }
 #define CUDA_ERROR(err) (HandleError(err, __FILE__, __LINE__))
+#endif
 
+#ifndef CUSPARSE_ERROR
 inline void cusparseHandleError(cusparseStatus_t status,
                                 const char*      file,
                                 const int        line)
@@ -97,8 +103,9 @@ inline void cusparseHandleError(cusparseStatus_t status,
     return;
 }
 #define CUSPARSE_ERROR(err) (cusparseHandleError(err, __FILE__, __LINE__))
+#endif
 
-
+#ifndef CUSOLVER_ERROR
 static inline void cusolverHandleError(cusolverStatus_t status,
                                        const char*      file,
                                        const int        line)
@@ -139,6 +146,28 @@ static inline void cusolverHandleError(cusolverStatus_t status,
     return;
 }
 #define CUSOLVER_ERROR(err) (cusolverHandleError(err, __FILE__, __LINE__))
+#endif
+
+
+#ifndef CUBLAS_ERROR
+inline void cublasHandleError(cublasStatus_t status,
+                              const char*    file,
+                              const int      line)
+{
+    if (status != CUBLAS_STATUS_SUCCESS) {
+        Log::get_logger()->error("Line {} File {}", line, file);
+        Log::get_logger()->error("CUBLAS ERROR: {}",
+                                 cublasGetStatusString(status));
+#ifdef _WIN32
+        system("pause");
+#else
+        exit(EXIT_FAILURE);
+#endif
+    }
+    return;
+}
+#define CUBLAS_ERROR(err) (cublasHandleError(err, __FILE__, __LINE__))
+#endif
 
 
 // GPU_FREE

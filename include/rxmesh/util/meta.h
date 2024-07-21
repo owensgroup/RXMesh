@@ -1,5 +1,8 @@
 #pragma once
 #include <tuple>
+
+#include <cuComplex.h>
+
 namespace rxmesh {
 namespace detail {
 
@@ -48,4 +51,32 @@ struct FunctionTraits<ReturnType (ClassType::*)(Args...) const>
 };
 
 }  // namespace detail
+
+
+/**
+ * @brief Extracting base type from a type. Used primarily to extract the float
+ * and double base type of cuComplex and cuDoubleComplex types
+ */
+template <typename T>
+struct BaseType
+{
+    using type = T;
+};
+
+template <>
+struct BaseType<cuComplex>
+{
+    using type = float;
+};
+
+template <>
+struct BaseType<cuDoubleComplex>
+{
+    using type = double;
+};
+
+
+template <typename T>
+using BaseTypeT = typename BaseType<T>::type;
+
 }  // namespace rxmesh
