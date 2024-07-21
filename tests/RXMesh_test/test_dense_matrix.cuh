@@ -72,3 +72,46 @@ TEST(RXMeshStatic, DenseMatrixAXPY)
 
     EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 }
+
+TEST(RXMeshStatic, DenseMatrixDot)
+{
+    using namespace rxmesh;
+
+    cuda_query(rxmesh_args.device_id);
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    DenseMatrix<cuComplex> y(rx, 10, 10);
+    y.fill_random();    
+
+    DenseMatrix<cuComplex> x(rx, 10, 10);
+    x.fill_random();    
+
+    cuComplex dot_res = y.dot(x);
+
+    cuComplex res = make_cuComplex(0.f, 0.f);
+
+
+    
+
+    for (uint32_t i = 0; i < y.rows(); ++i) {
+        for (uint32_t j = 0; j < y.cols(); ++j) {
+            // for complex number (rx, ix) and (ry+iy), the result of the
+            // multiplication is (rx.ry-ix.iy) + i(rx.iy + ix.ry)
+
+            cuComplex x_val = x(i, j);
+            cuComplex y_val = y(i, j);
+
+            res.x += x_val.x * y_val.x - x_val.y * y_val.y;
+            res.y += x_val.x * y_val.y + x_val.y * y_val.x;
+        }
+    }
+
+    EXPECT_NEAR(res.x, dot_res.x, 0.001);
+    EXPECT_NEAR(res.y, dot_res.y, 0.001);
+
+    y.release();
+    x.release();
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+}

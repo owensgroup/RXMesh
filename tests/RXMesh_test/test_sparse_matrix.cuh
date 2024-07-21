@@ -153,7 +153,7 @@ TEST(RXMeshStatic, SparseMatrix)
     CUDA_ERROR(cudaMalloc((void**)&d_result, (num_vertices) * sizeof(int)));
 
     SparseMatrix<int> spmat(rx);
-    spmat.set_ones();
+    spmat.set_value(1);
 
     spmat_multi_hardwired_kernel<<<blocks, threads>>>(
         d_arr_ones, spmat, d_result, num_vertices);

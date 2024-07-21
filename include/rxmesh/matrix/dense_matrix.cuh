@@ -99,13 +99,16 @@ struct DenseMatrix
     }
 
     /**
-     * @brief set all entries in the matrix to zeros on both host and device
+     * @brief set all entries in the matrix to certain value on both host and
+     * device
      */
-    __host__ void set_zeros()
+    __host__ void set_value(T val)
     {
-        std::memset(m_h_val, 0, bytes());
-
-        CUDA_ERROR(cudaMemset(m_d_val, 0, bytes()));
+        std::fill_n(m_h_val, rows() * cols(), val);
+        CUDA_ERROR(cudaMemcpy(m_d_val,
+                              m_h_val,
+                              rows() * cols() * sizeof(T),
+                              cudaMemcpyHostToDevice));
     }
 
     /**
@@ -296,8 +299,6 @@ struct DenseMatrix
      * dimensions as Y and alpha is a scalar. The results are computed for the
      * data on the device. Only float, double, cuComplex, and cuDoubleComplex
      * are supported
-     * @param stream
-     * @return
      */
     __host__ void axpy(DenseMatrix<T>& X, T alpha, cudaStream_t stream = NULL)
     {
@@ -350,6 +351,93 @@ struct DenseMatrix
                                      m_d_val,
                                      1));
         }
+    }
+
+    /**
+     * @brief compute the dot produce with another dense matrix. If the matrix
+     * is a 1D vector, it is the inner product. If the matrix represents a 2D
+     * matrix, then it is the sum of the element-wise multiplication. The
+     * results are computed for the data on the device. Only float, double,
+     * cuComplex, and cuDoubleComplex are supported. For complex matrices
+     * (cuComplex and cuDoubleComplex), it is optional to use the conjugate of
+     * x.
+     */
+    __host__ T dot(DenseMatrix<T>& x,
+                   bool            use_conjugate = false,
+                   cudaStream_t    stream        = NULL)
+    {
+        CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
+        if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double> &&
+                      !std::is_same_v<T, cuComplex> &&
+                      !std::is_same_v<T, cuDoubleComplex>) {
+            RXMESH_ERROR(
+                "DenseMatrix::dot() only float, double, cuComplex, and "
+                "cuDoubleComplex are supported for this function!");
+            return T(0);
+        }
+
+        T result;
+        if constexpr (std::is_same_v<T, float>) {
+            CUBLAS_ERROR(cublasSdot(m_cublas_handle,
+                                    rows() * cols(),
+                                    x.m_d_val,
+                                    1,
+                                    m_d_val,
+                                    1,
+                                    &result));
+        }
+
+        if constexpr (std::is_same_v<T, double>) {
+            CUBLAS_ERROR(cublasDdot(m_cublas_handle,
+                                    rows() * cols(),
+                                    x.m_d_val,
+                                    1,
+                                    m_d_val,
+                                    1,
+                                    &result));
+        }
+
+        if constexpr (std::is_same_v<T, cuComplex>) {
+            if (use_conjugate) {
+                CUBLAS_ERROR(cublasCdotc(m_cublas_handle,
+                                         rows() * cols(),
+                                         x.m_d_val,
+                                         1,
+                                         m_d_val,
+                                         1,
+                                         &result));
+            } else {
+                CUBLAS_ERROR(cublasCdotu(m_cublas_handle,
+                                         rows() * cols(),
+                                         x.m_d_val,
+                                         1,
+                                         m_d_val,
+                                         1,
+                                         &result));
+            }
+        }
+
+        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+            if (use_conjugate) {
+                CUBLAS_ERROR(cublasZdotc(m_cublas_handle,
+                                         rows() * cols(),
+                                         x.m_d_val,
+                                         1,
+                                         m_d_val,
+                                         1,
+                                         &result));
+            } else {
+                CUBLAS_ERROR(cublasZdotu(m_cublas_handle,
+                                         rows() * cols(),
+                                         x.m_d_val,
+                                         1,
+                                         m_d_val,
+                                         1,
+                                         &result));
+            }
+        }
+
+        return result;
     }
 
     /**

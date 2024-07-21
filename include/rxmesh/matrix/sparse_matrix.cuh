@@ -210,24 +210,16 @@ struct SparseMatrix
     }
 
     /**
-     * @brief set all entries in the matrix to ones on both host and device
+     * @brief set all entries in the matrix to certain value on both host and
+     * device
      */
-    __host__ void set_ones()
+    __host__ void set_value(T val)
     {
-        std::fill_n(m_h_val, m_nnz, 1);
+        std::fill_n(m_h_val, m_nnz, val);
         CUDA_ERROR(cudaMemcpy(
             m_d_val, m_h_val, m_nnz * sizeof(T), cudaMemcpyHostToDevice));
     }
-
-    /**
-     * @brief set all entries in the matrix to zeros on both host and device
-     */
-    __host__ void set_zeros()
-    {
-        std::memset(m_h_val, 0, m_nnz * sizeof(T));
-
-        CUDA_ERROR(cudaMemset(m_d_val, 0, m_nnz * sizeof(T)));
-    }
+        
 
     /**
      * @brief return number of rows
