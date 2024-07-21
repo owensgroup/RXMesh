@@ -312,6 +312,18 @@ struct DenseMatrix
             return;
         }
 
+
+        if (rows() != X.rows() || cols() != X.cols()) {
+            RXMESH_ERROR(
+                "DenseMatrix::axpy() The input matrices size does not match. "
+                "This matrix size is {},{} while X size is {},{}",
+                rows(),
+                cols(),
+                X.rows(),
+                X.cols());
+            return;
+        }
+
         if constexpr (std::is_same_v<T, float>) {
             CUBLAS_ERROR(cublasSaxpy(m_cublas_handle,
                                      rows() * cols(),
@@ -533,6 +545,56 @@ struct DenseMatrix
                 CUBLAS_ERROR(cublasZdscal(
                     m_cublas_handle, rows() * cols(), &scalar, m_d_val, 1));
             }
+        }
+    }
+
+    /**
+     * @brief Swap the content of this dense matrix with another dense matrix.
+     * The results are computed for the data on the device. Only float, double,
+     * cuComplex, and cuDoubleComplex are supported.
+     */
+    __host__ void swap(DenseMatrix<T>& X, cudaStream_t stream = NULL)
+    {
+        CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
+        if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double> &&
+                      !std::is_same_v<T, cuComplex> &&
+                      !std::is_same_v<T, cuDoubleComplex>) {
+            RXMESH_ERROR(
+                "DenseMatrix::swap() only float, double, cuComplex, and "
+                "cuDoubleComplex are supported for this function!");
+            return;
+        }
+
+        if (rows() != X.rows() || cols() != X.cols()) {
+            RXMESH_ERROR(
+                "DenseMatrix::swap() The input matrices size does not match. "
+                "This matrix size is {},{} while X size is {},{}",
+                rows(),
+                cols(),
+                X.rows(),
+                X.cols());
+            return;
+        }
+
+
+        if constexpr (std::is_same_v<T, float>) {
+            CUBLAS_ERROR(cublasSswap(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, X.m_d_val, 1));
+        }
+
+        if constexpr (std::is_same_v<T, double>) {
+            CUBLAS_ERROR(cublasDswap(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, X.m_d_val, 1));
+        }
+
+        if constexpr (std::is_same_v<T, cuComplex>) {
+            CUBLAS_ERROR(cublasCswap(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, X.m_d_val, 1));
+        }
+
+        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+            CUBLAS_ERROR(cublasZswap(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, X.m_d_val, 1));
         }
     }
 
