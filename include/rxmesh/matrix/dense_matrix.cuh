@@ -457,7 +457,7 @@ struct DenseMatrix
             RXMESH_ERROR(
                 "DenseMatrix::norm2() only float, double, cuComplex, and "
                 "cuDoubleComplex are supported for this function!");
-            return T(0);
+            return BaseTypeT<T>(0);
         }
 
         BaseTypeT<T> result;
@@ -484,6 +484,57 @@ struct DenseMatrix
         return result;
     }
 
+
+    /**
+     * @brief multiply all entries in the dense matrix by a scalar (i.e.,
+     * scaling). For complex number, the scalar could be either a complex or
+     * real number. The results are computed for the data on the device. Only
+     * float, double, cuComplex, and cuDoubleComplex are supported.
+     */
+    template <typename U>
+    __host__ void multiply(U scalar, cudaStream_t stream = NULL)
+    {
+        CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
+        if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double> &&
+                      !std::is_same_v<T, cuComplex> &&
+                      !std::is_same_v<T, cuDoubleComplex>) {
+            RXMESH_ERROR(
+                "DenseMatrix::multiply() only float, double, cuComplex, and "
+                "cuDoubleComplex are supported for this function!");
+            return T(0);
+        }
+
+
+        if constexpr (std::is_same_v<T, float>) {
+            CUBLAS_ERROR(cublasSscal(
+                m_cublas_handle, rows() * cols(), &scalar, m_d_val, 1));
+        }
+
+        if constexpr (std::is_same_v<T, double>) {
+            CUBLAS_ERROR(cublasDscal(
+                m_cublas_handle, rows() * cols(), &scalar, m_d_val, 1));
+        }
+
+        if constexpr (std::is_same_v<T, cuComplex>) {
+            if constexpr (std::is_same_v<U, cuComplex>) {
+                CUBLAS_ERROR(cublasCscal(
+                    m_cublas_handle, rows() * cols(), &scalar, m_d_val, 1));
+            } else {
+                CUBLAS_ERROR(cublasCsscal(
+                    m_cublas_handle, rows() * cols(), &scalar, m_d_val, 1));
+            }
+        }
+
+        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+            if constexpr (std::is_same_v<U, cuDoubleComplex>) {
+                CUBLAS_ERROR(cublasZscal(
+                    m_cublas_handle, rows() * cols(), &scalar, m_d_val, 1));
+            } else {
+                CUBLAS_ERROR(cublasZdscal(
+                    m_cublas_handle, rows() * cols(), &scalar, m_d_val, 1));
+            }
+        }
+    }
 
     /**
      * @brief return the row index corresponding to specific vertex/edge/face

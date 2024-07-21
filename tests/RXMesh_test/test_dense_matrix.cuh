@@ -145,3 +145,46 @@ TEST(RXMeshStatic, DenseMatrixNorm2)
 
     EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 }
+
+
+TEST(RXMeshStatic, DenseMatrixMulitply)
+{
+    using namespace rxmesh;
+
+    cuda_query(rxmesh_args.device_id);
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    DenseMatrix<cuComplex> x(rx, 10, 10);
+    DenseMatrix<cuComplex> copy(rx, 10, 10);
+
+    x.fill_random();
+
+    copy.copy_from(x, HOST, HOST);
+
+    float scalar = 5.0f;
+
+    x.multiply(scalar);
+
+    x.move(DEVICE, HOST);
+
+    for (uint32_t i = 0; i < x.rows(); ++i) {
+        for (uint32_t j = 0; j < x.cols(); ++j) {
+
+            cuComplex x_val = x(i, j);
+
+            cuComplex res = copy(i, j);
+            res.x *= scalar;
+            res.y *= scalar;
+
+            EXPECT_NEAR(res.x, x_val.x, 0.001);
+            EXPECT_NEAR(res.y, x_val.y, 0.001);
+        }
+    }
+
+
+    x.release();
+    copy.release();
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+}
