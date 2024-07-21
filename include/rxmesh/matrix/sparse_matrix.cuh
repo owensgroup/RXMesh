@@ -219,7 +219,7 @@ struct SparseMatrix
         CUDA_ERROR(cudaMemcpy(
             m_d_val, m_h_val, m_nnz * sizeof(T), cudaMemcpyHostToDevice));
     }
-        
+
 
     /**
      * @brief return number of rows
@@ -430,8 +430,8 @@ struct SparseMatrix
                                         DenseMatrix<T>&       C_mat,
                                         cudaStream_t          stream = 0)
     {
-        T alpha = 1.0;
-        T beta  = 0.0;
+        T alpha;
+        T beta;
 
         cusparseSpMatDescr_t matA    = m_spdescr;
         cusparseDnMatDescr_t matB    = B_mat.m_dendescr;
@@ -475,8 +475,8 @@ struct SparseMatrix
         assert(rows() == C_mat.rows());
         assert(B_mat.cols() == C_mat.cols());
 
-        BaseTypeT<T> alpha;
-        BaseTypeT<T> beta;
+        T alpha;
+        T beta;
 
         if constexpr (std::is_same_v<T, cuComplex>) {
             alpha = make_cuComplex(1.f, 1.f);
