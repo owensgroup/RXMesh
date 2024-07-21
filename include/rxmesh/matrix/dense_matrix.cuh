@@ -440,6 +440,51 @@ struct DenseMatrix
         return result;
     }
 
+
+    /**
+     * @brief compute the norm of a dense matrix which is computed as
+     * sqrt(\sum (x[i]*x[i]**H) for i = 0,...,n*m where n is number of rows and
+     * m is number of columns, and **H denotes the conjugate if x is complex
+     * number. The results are computed for the data on the device. Only float,
+     * double, cuComplex, and cuDoubleComplex are supported.
+     */
+    __host__ BaseTypeT<T> norm2(cudaStream_t stream = NULL)
+    {
+        CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
+        if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double> &&
+                      !std::is_same_v<T, cuComplex> &&
+                      !std::is_same_v<T, cuDoubleComplex>) {
+            RXMESH_ERROR(
+                "DenseMatrix::norm2() only float, double, cuComplex, and "
+                "cuDoubleComplex are supported for this function!");
+            return T(0);
+        }
+
+        BaseTypeT<T> result;
+        if constexpr (std::is_same_v<T, float>) {
+            CUBLAS_ERROR(cublasSnrm2(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &result));
+        }
+
+        if constexpr (std::is_same_v<T, double>) {
+            CUBLAS_ERROR(cublasDnrm2(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &result));
+        }
+
+        if constexpr (std::is_same_v<T, cuComplex>) {
+            CUBLAS_ERROR(cublasScnrm2(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &result));
+        }
+
+        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+            CUBLAS_ERROR(cublasDznrm2(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &result));
+        }
+
+        return result;
+    }
+
+
     /**
      * @brief return the row index corresponding to specific vertex/edge/face
      * handle

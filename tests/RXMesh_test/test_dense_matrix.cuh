@@ -82,17 +82,15 @@ TEST(RXMeshStatic, DenseMatrixDot)
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     DenseMatrix<cuComplex> y(rx, 10, 10);
-    y.fill_random();    
+    y.fill_random();
 
     DenseMatrix<cuComplex> x(rx, 10, 10);
-    x.fill_random();    
+    x.fill_random();
 
     cuComplex dot_res = y.dot(x);
 
     cuComplex res = make_cuComplex(0.f, 0.f);
 
-
-    
 
     for (uint32_t i = 0; i < y.rows(); ++i) {
         for (uint32_t j = 0; j < y.cols(); ++j) {
@@ -111,6 +109,38 @@ TEST(RXMeshStatic, DenseMatrixDot)
     EXPECT_NEAR(res.y, dot_res.y, 0.001);
 
     y.release();
+    x.release();
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+}
+
+
+TEST(RXMeshStatic, DenseMatrixNorm2)
+{
+    using namespace rxmesh;
+
+    cuda_query(rxmesh_args.device_id);
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    DenseMatrix<cuComplex> x(rx, 10, 10);
+    x.fill_random();
+
+    float norm2_res = x.norm2();
+
+    float res = 0.f;
+
+    for (uint32_t i = 0; i < x.rows(); ++i) {
+        for (uint32_t j = 0; j < x.cols(); ++j) {
+
+            cuComplex x_val = x(i, j);
+
+            res += x_val.x * x_val.x + x_val.y * x_val.y;
+        }
+    }
+
+    EXPECT_NEAR(norm2_res, std::sqrt(res), 0.001);
+
     x.release();
 
     EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
