@@ -1033,9 +1033,9 @@ class RXMeshStatic : public RXMesh
 
         boundary_v.reset(0, LOCATION_ALL);
 
-        constexpr uint32_t      blockThreads = 256;
+        constexpr uint32_t blockThreads = 256;
 
-        LaunchBox<blockThreads> lb;        
+        LaunchBox<blockThreads> lb;
 
         prepare_launch_box(
             {Op::EF, Op::EV},
@@ -1253,23 +1253,115 @@ class RXMeshStatic : public RXMesh
         std::fstream file(fn, std::ios::out);
         file.precision(30);
 
+        std::vector<glm::vec3> v_list;
+        create_vertex_list(v_list, coords);
 
-        std::vector<glm::dvec3> obj_coords(get_num_vertices());
+        assert(get_num_vertices() == v_list.size());
+
+        for (uint32_t v = 0; v < v_list.size(); ++v) {
+            file << "v " << v_list[v][0] << " " << v_list[v][1] << " "
+                 << v_list[v][2] << " \n";
+        }
+
+        std::vector<glm::uvec3> f_list;
+        create_face_list(f_list);
+
+        assert(f_list.size() == get_num_faces());
+
+        for (uint32_t f = 0; f < f_list.size(); ++f) {
+            file << "f ";
+            for (uint32_t i = 0; i < 3; ++i) {
+                file << f_list[f][i] + 1 << " ";
+            }
+            file << "\n";
+        }
+
+        file.close();
+    }
+
+    /**
+     * @brief export the mesh to a VTK file which can be visualized using
+     * Paraview. The VTK supports visualizing attributes on vertices and faces.
+     * Edge attributes are NOT supported. This function uses parameter pack such
+     * that the user can call it with zero, one or move attributes (again should
+     * be either VertexAttribute or FaceAttribute). 
+     */
+    template <typename T, typename... AttributesT>
+    void export_vtk(const std::string&        filename,
+                    const VertexAttribute<T>& coords,
+                    AttributesT... attributes) const
+    {
+        std::string  fn = filename;
+        std::fstream file(fn, std::ios::out);
+        file.precision(30);
+
+        file << "# vtk DataFile Version 3.0\n";
+        file << extract_file_name(filename) << "\n";
+        file << "ASCII\n";
+        file << "DATASET POLYDATA\n";
+        file << "POINTS " << get_num_vertices() << " float\n ";
+
+        std::vector<glm::vec3> v_list;
+        create_vertex_list(v_list, coords);
+
+        assert(get_num_vertices() == v_list.size());
+
+        for (uint32_t v = 0; v < v_list.size(); ++v) {
+            file << v_list[v][0] << " " << v_list[v][1] << " " << v_list[v][2]
+                 << " \n";
+        }
+
+        std::vector<glm::uvec3> f_list;
+        create_face_list(f_list);
+
+        assert(f_list.size() == get_num_faces());
+
+        file << "POLYGONS 3 " << 4 * f_list.size() << "\n";
+
+        for (uint32_t f = 0; f < f_list.size(); ++f) {
+            file << "3 ";
+            for (uint32_t i = 0; i < 3; ++i) {
+                file << f_list[f][i] << " ";
+            }
+            file << "\n";
+        }
+        bool first_v_attr = true;
+        bool first_f_attr = true;
+
+
+        ([&] { export_vtk(file, first_v_attr, first_f_attr, attributes); }(),
+         ...);
+
+        file.close();
+    }
+
+    /**
+     * @brief convert given vertex attributes representing the coordinates into
+     * std vector
+     */
+    template <typename T>
+    void create_vertex_list(std::vector<glm::vec3>&   v_list,
+                            const VertexAttribute<T>& coords) const
+    {
+        v_list.resize(get_num_vertices());
         for_each_vertex(
             HOST,
             [&](const VertexHandle vh) {
-                uint32_t vid       = linear_id(vh);
-                obj_coords[vid][0] = coords(vh, 0);
-                obj_coords[vid][1] = coords(vh, 1);
-                obj_coords[vid][2] = coords(vh, 2);
+                uint32_t vid   = linear_id(vh);
+                v_list[vid][0] = coords(vh, 0);
+                v_list[vid][1] = coords(vh, 1);
+                v_list[vid][2] = coords(vh, 2);
             },
             NULL,
             false);
+    }
 
-        for (uint32_t v = 0; v < obj_coords.size(); ++v) {
-            file << "v " << obj_coords[v][0] << " " << obj_coords[v][1] << " "
-                 << obj_coords[v][2] << " \n";
-        }
+    /**
+     * @brief convert the mesh connectivity to face list
+     */
+    void create_face_list(std::vector<glm::uvec3>& f_list) const
+    {
+        f_list.reserve(get_num_faces());
 
         for (uint32_t p = 0; p < this->m_num_patches; ++p) {
             const uint32_t p_num_faces = this->m_h_patches_info[p].num_faces[0];
@@ -1278,7 +1370,9 @@ class RXMeshStatic : public RXMesh
                         f, this->m_h_patches_info[p].active_mask_f) &&
                     detail::is_owned(f,
                                      this->m_h_patches_info[p].owned_mask_f)) {
-                    file << "f ";
+
+                    glm::uvec3 face;
+
                     for (uint32_t e = 0; e < 3; ++e) {
                         uint16_t edge =
                             this->m_h_patches_info[p].fe[3 * f + e].id;
@@ -1288,16 +1382,91 @@ class RXMeshStatic : public RXMesh
                         uint16_t     v = this->m_h_patches_info[p].ev[e_id].id;
                         VertexHandle vh(p, v);
                         uint32_t     vid = linear_id(vh);
-                        file << vid + 1 << " ";
+                        face[e]          = vid;
                     }
-                    file << std::endl;
+                    f_list.push_back(face);
                 }
             }
         }
     }
 
-
    protected:
+    template <typename AttributeT>
+    void export_vtk(std::fstream&     file,
+                    bool&             first_v_attr,
+                    bool&             first_f_attr,
+                    const AttributeT& attribute) const
+    {
+        using HandleT = typename AttributeT::HandleType;
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            if (first_f_attr) {
+                file << "CELL_DATA " << get_num_faces() << "\n";
+                first_f_attr = false;
+            }
+            uint32_t num_attr = attribute.get_num_attributes();
+            if (num_attr == 1) {
+                file << "SCALARS " << attribute.get_name() << " float 1\n";
+                file << "LOOKUP_TABLE default\n";
+            } else if (num_attr == 2) {
+                file << "COLOR_SCALARS " << attribute.get_name() << " 2\n";
+            } else if (num_attr == 3) {
+                file << "VECTORS " << attribute.get_name() << " float \n";
+            } else {
+                RXMESH_ERROR(
+                    "RXMeshStatic::export_vtk() The number of attributes ({}) "
+                    "is not support. Only 1, 2, or 3 attributes are supported",
+                    num_attr);
+                return;
+            }
+
+            for_each_face(
+                HOST,
+                [&](const FaceHandle& fh) {
+                    for (int i = 0; i < attribute.get_num_attributes(); ++i) {
+                        file << attribute(fh, i) << " ";
+                    }
+                    file << "\n";
+                },
+                NULL,
+                false);
+        }
+
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            if (first_v_attr) {
+                file << "POINT_DATA " << get_num_vertices() << "\n";
+                first_v_attr = false;
+            }
+            uint32_t num_attr = attribute.get_num_attributes();
+            if (num_attr == 1) {
+                file << "SCALARS " << attribute.get_name() << " float 1\n";
+                file << "LOOKUP_TABLE default\n";
+            } else if (num_attr == 2) {
+                file << "COLOR_SCALARS " << attribute.get_name() << " 2\n";
+            } else if (num_attr == 3) {
+                file << "VECTORS " << attribute.get_name() << " float \n";
+            } else {
+                RXMESH_ERROR(
+                    "RXMeshStatic::export_vtk() The number of attributes ({}) "
+                    "is not support. Only 1, 2, or 3 attributes are supported",
+                    num_attr);
+                return;
+            }
+
+            for_each_vertex(
+                HOST,
+                [&](const VertexHandle& vh) {
+                    for (int i = 0; i < attribute.get_num_attributes(); ++i) {
+                        file << attribute(vh, i) << " ";
+                    }
+                    file << "\n";
+                },
+                NULL,
+                false);
+        }
+    }
+
     template <uint32_t blockThreads>
     size_t calc_shared_memory(const Op op, const bool oriented) const
     {

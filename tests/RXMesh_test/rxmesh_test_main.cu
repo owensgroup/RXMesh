@@ -34,6 +34,7 @@ struct RXMeshTestArg
 #include "test_eigen.cuh"
 #include "test_boundary.cuh"
 #include "test_dense_matrix.cuh"
+#include "test_export.cuh"
 // clang-format on
 
 int main(int argc, char** argv)
