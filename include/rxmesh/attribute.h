@@ -386,8 +386,7 @@ class Attribute : public AttributeBase
      */
     void reset(const T value, locationT location, cudaStream_t stream = NULL)
     {
-        if (((location & DEVICE) == DEVICE) && is_host_allocated()) {
-
+        if (((location & DEVICE) == DEVICE) && is_device_allocated()) {
             const int threads = 256;
             detail::template memset_attribute<T>
                 <<<m_rxmesh->get_num_patches(), threads, 0, stream>>>(

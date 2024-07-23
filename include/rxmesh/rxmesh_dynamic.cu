@@ -2036,9 +2036,8 @@ __global__ static void check_ribbon_faces(const Context               context,
                                 // printf(
                                 //     "\n T=%u, p = %u, #F=%u, #F_owned= %u, "
                                 //     "#E=%u, #E_owned= %u, #V=%u, #V_owned=
-                                //     %u, " "fvh_global=%u, %u, vh=%u, %u, s_vf
-                                //     =%u, "
-                                //     "%u",
+                                //     %u, " "f= %u, fvh_global=%u, %u, v_id=
+                                //     %u, " "vh=%u,%u, s_vf =%u, %u",
                                 //     threadIdx.x,
                                 //     patch_id,
                                 //     patch_info.num_faces[0],
@@ -2047,8 +2046,10 @@ __global__ static void check_ribbon_faces(const Context               context,
                                 //     patch_info.get_num_owned<EdgeHandle>(),
                                 //     patch_info.num_vertices[0],
                                 //     patch_info.get_num_owned<VertexHandle>(),
+                                //     f,
                                 //     fvh_global.patch_id(),
                                 //     fvh_global.local_id(),
+                                //     v_id,
                                 //     vh.patch_id(),
                                 //     vh.local_id(),
                                 //     s_vf_offset[v_id],
