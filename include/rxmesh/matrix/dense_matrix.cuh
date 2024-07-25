@@ -10,6 +10,8 @@
 
 #include "rxmesh/util/meta.h"
 
+#include <Eigen/Dense>
+
 namespace rxmesh {
 
 /**
@@ -25,6 +27,9 @@ struct DenseMatrix
 
     template <typename U>
     friend class SparseMatrix;
+
+    using EigenDenseMatrix = Eigen::Map<
+        Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>>;
 
     DenseMatrix()
         : m_allocated(LOCATION_NONE),
@@ -816,6 +821,16 @@ struct DenseMatrix
                                        cudaMemcpyHostToDevice,
                                        stream));
         }
+    }
+
+    /**
+     * @brief Convert/map the dense matrix to Eigen dense matrix. This is a
+     * zero-copy conversion so Eigen dense matrix will point to the same memory
+     * as the host-side of this DenseMatrix
+     */
+    __host__ EigenDenseMatrix to_eigen()
+    {
+        return EigenDenseMatrix(m_h_val, rows(), cols());
     }
 
     /**

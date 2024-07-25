@@ -4,6 +4,42 @@
 
 #include "rxmesh/matrix/dense_matrix.cuh"
 
+TEST(RXMeshStatic, DenseMatrixToEigen)
+{
+    using namespace rxmesh;
+
+    cuda_query(rxmesh_args.device_id);
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    DenseMatrix<float> rx_mat(rx, 10, 10);
+    DenseMatrix<float> rx_mat_copy(rx, 10, 10);
+
+    rx_mat.fill_random();
+    rx_mat_copy.copy_from(rx_mat, HOST, HOST);
+
+    auto eigen_mat = rx_mat.to_eigen();
+
+    // ensure that the content of Eigen matrix is the same as the RXMesh
+    // DenseMatrix
+    for (uint32_t i = 0; i < rx_mat.rows(); ++i) {
+        for (uint32_t j = 0; j < rx_mat.cols(); ++j) {
+            EXPECT_NEAR(rx_mat(i, j), eigen_mat(i, j), 0.0000001);
+        }
+    }
+
+    // ensure operations done on the Eigen matrix is reflected on RXMesh
+    // DenseMatrix
+    const float scalar = 5.f;
+    eigen_mat *= scalar;
+
+    for (uint32_t i = 0; i < rx_mat.rows(); ++i) {
+        for (uint32_t j = 0; j < rx_mat.cols(); ++j) {
+            EXPECT_NEAR(rx_mat_copy(i, j), rx_mat(i, j) / scalar, 0.0000001);
+        }
+    }
+}
+
 TEST(RXMeshStatic, DenseMatrixASum)
 {
     using namespace rxmesh;

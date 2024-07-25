@@ -18,6 +18,8 @@
 
 #include "rxmesh/launch_box.h"
 
+#include <Eigen/Sparse>
+
 namespace rxmesh {
 
 /**
@@ -57,6 +59,9 @@ template <typename T>
 struct SparseMatrix
 {
     using IndexT = int;
+
+    using EigenSparseMatrix =
+        Eigen::Map<const Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT>>;
 
     SparseMatrix(const RXMeshStatic& rx)
         : m_d_row_ptr(nullptr),
@@ -630,6 +635,17 @@ struct SparseMatrix
         }
     }
 
+
+    /**
+     * @brief Convert/map this sparse matrix to Eigen sparse matrix. This is a
+     * zero-copy conversion so Eigen sparse matrix will point to the same memory
+     * as the host-side of this SparseMatrix
+     */
+    __host__ EigenSparseMatrix to_eigen()
+    {
+        return EigenSparseMatrix(
+            rows(), cols(), non_zeros(), m_h_row_ptr, m_h_col_idx, m_h_val);        
+    }
 
     /**
      * @brief solve the AX=B for X where X and B are all dense matrix and we
