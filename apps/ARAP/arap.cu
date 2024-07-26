@@ -3,6 +3,8 @@
 
 #include "rxmesh/matrix/sparse_matrix.cuh"
 
+#include "eigen/Dense"
+
 using namespace rxmesh;
 
 template <typename T>
@@ -87,8 +89,8 @@ __global__ static void edge_weight_values(
     rxmesh::SparseMatrix<T>    A_mat)
 {
 
-    auto vn_lambda = [&](EdgeHandle edge_id, VertexIterator& vv) {
-        edge_weights(edge_id, 0) = A_mat(vv[0], vv[1]);
+    auto vn_lambda = [&](EdgeHandle edge_id, VertexIterator& ev) {
+        edge_weights(edge_id, 0) = A_mat(ev[0], ev[1]);
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -96,6 +98,73 @@ __global__ static void edge_weight_values(
     ShmemAllocator      shrd_alloc;
     query.dispatch<Op::EV>(block, shrd_alloc, vn_lambda);
 }
+
+template <typename T, uint32_t blockThreads>
+__global__ static void calculate_rotation_matrix(const rxmesh::Context    context,
+                                          rxmesh::VertexAttribute<T> ref_coords,
+                                          rxmesh::VertexAttribute<T> current_coords,
+                                          rxmesh::VertexAttribute<T>  rotationVector,
+                                          rxmesh::SparseMatrix<T> weight_mat)
+{
+
+    auto vn_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
+
+
+        // pi
+        
+        Eigen::MatrixXf pi = Eigen::MatrixXf::Identity(3, vv.size());
+        for (int j = 0; j < vv.size(); j++) 
+        {
+            pi(0, j) = ref_coords(v_id, 0) - ref_coords(vv[j], 0);
+            pi(1, j) = ref_coords(v_id, 1) - ref_coords(vv[j], 1);
+            pi(2, j) = ref_coords(v_id, 2) - ref_coords(vv[j], 2);
+        }
+        
+        // Di
+        //Eigen::Sparse eigen_weight_mat = weight_mat;
+        Eigen::VectorXf weight_vector;
+        weight_vector.resize(vv.size());
+
+        for (int v = 0; v < vv.size();v++) 
+        {
+            weight_vector(v) = weight_mat(v_id, vv[v]);
+        }
+        Eigen::MatrixXf diagonal_mat = weight_vector.asDiagonal();
+        
+        // pi'T
+        Eigen::MatrixXf pi_dash = Eigen::MatrixXf::Identity(3, vv.size());
+        for (int j = 0; j < vv.size(); j++) {
+            pi_dash(0, j) = current_coords(v_id, 0) - current_coords(vv[j], 0);
+            pi_dash(1, j) = current_coords(v_id, 1) - current_coords(vv[j], 1);
+            pi_dash(2, j) = current_coords(v_id, 2) - current_coords(vv[j], 2);
+        }
+
+        // calculate covariance matrix S = piDiPiTdash
+        
+        Eigen::MatrixXf S = pi * diagonal_mat * pi_dash.transpose();
+
+        // perform svd on S (eigen)
+        
+        
+        // R =VU
+        Eigen::MatrixXf R = S.jacobiSvd().matrixU() * S.jacobiSvd().matrixV();
+
+        // Matrix R to vector attribute R
+        for (int i=0;i<3;i++) {
+            for (int j = 0; j < 3; j++)
+                rotationVector(v_id, i * 3 + j) = R(i, j);
+        }
+        
+
+    };
+
+    auto                block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, vn_lambda);
+}
+
+
 
 
 
@@ -113,7 +182,11 @@ int main(int argc, char** argv)
 
     //compute wij
     auto weights = rx.add_edge_attribute<float>("edgeWeights", 1);
-    auto vertex_pos = *rx.get_input_vertex_coordinates();
+
+
+    auto ref_vertex_pos = *rx.get_input_vertex_coordinates();  // stays same across computation
+    auto changed_vertex_pos = rx.add_vertex_attribute<float>("P", 3);  // changes per iteration
+
     SparseMatrix<float> weight_matrix(rx);
 
     //obtain cotangent weight matrix
@@ -127,7 +200,7 @@ int main(int argc, char** argv)
         <<<launch_box.blocks,
                                                   launch_box.num_threads,
                                                   launch_box.smem_bytes_dyn>>>(
-                                                  rx.get_context(), vertex_pos, weight_matrix);
+                                                  rx.get_context(), ref_vertex_pos, weight_matrix);
 
     //visualise edge weights
      rxmesh::LaunchBox<CUDABlockSize> launch_box2;
@@ -142,8 +215,17 @@ int main(int argc, char** argv)
             launch_box2.smem_bytes_dyn>>>(rx.get_context(), *weights, weight_matrix );
 
      weights->move(DEVICE, HOST);
-     rx.get_polyscope_mesh()->addEdgeScalarQuantity("edgeWeights", *weights);
+
+
+     //pi and p'i
+
+     //rx.get_polyscope_mesh()->addEdgeScalarQuantity("edgeWeights", *weights);
      //
+
+     //calculate rotation matrix
+     auto rot_mat = rx.add_vertex_attribute<float>("RotationMatrix", 9);
+
+    
 
 
 
