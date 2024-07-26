@@ -108,8 +108,6 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
 {
 
     auto vn_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
-
-
         // pi
         
         Eigen::MatrixXf pi = Eigen::MatrixXf::Identity(3, vv.size());
@@ -121,7 +119,6 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
         }
         
         // Di
-        //Eigen::Sparse eigen_weight_mat = weight_mat;
         Eigen::VectorXf weight_vector;
         weight_vector.resize(vv.size());
 
@@ -147,15 +144,20 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
         
         
         // R =VU
-        Eigen::MatrixXf R = S.jacobiSvd().matrixU() * S.jacobiSvd().matrixV();
+        Eigen::MatrixXf V = S.jacobiSvd().matrixV();
+        Eigen::MatrixXf U = S.jacobiSvd().matrixU().eval();
 
+        float smallest_singular_value =
+            S.jacobiSvd().singularValues().minCoeff();
+
+       U.col(smallest_singular_value)= U.col(smallest_singular_value) * -1;
+
+        Eigen::MatrixXf R = V * U;
         // Matrix R to vector attribute R
         for (int i=0;i<3;i++) {
             for (int j = 0; j < 3; j++)
                 rotationVector(v_id, i * 3 + j) = R(i, j);
         }
-        
-
     };
 
     auto                block = cooperative_groups::this_thread_block();
