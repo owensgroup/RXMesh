@@ -3,7 +3,8 @@
 
 #include "rxmesh/matrix/sparse_matrix.cuh"
 
-#include "eigen/Dense"
+#include "Eigen/Dense"
+
 
 using namespace rxmesh;
 
@@ -99,6 +100,27 @@ __global__ static void edge_weight_values(
     query.dispatch<Op::EV>(block, shrd_alloc, vn_lambda);
 }
 
+
+
+////////
+
+__host__ __device__ Eigen::Matrix3f calculateSVD(Eigen::Matrix3f S)
+{
+    Eigen::JacobiSVD<Eigen::Matrix3f, Eigen::ComputeFullU | Eigen::ComputeFullV> svd(S);
+
+
+    Eigen::MatrixXf V = svd.matrixV();
+    Eigen::MatrixXf U = svd.matrixU().eval();
+
+    float smallest_singular_value = svd.singularValues().minCoeff();
+
+    U.col(smallest_singular_value) = U.col(smallest_singular_value) * -1;
+
+    Eigen::MatrixXf R = V * U;
+
+    return R;
+}
+
 template <typename T, uint32_t blockThreads>
 __global__ static void calculate_rotation_matrix(const rxmesh::Context    context,
                                           rxmesh::VertexAttribute<T> ref_coords,
@@ -138,12 +160,18 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
 
         // calculate covariance matrix S = piDiPiTdash
         
-        Eigen::MatrixXf S = pi * diagonal_mat * pi_dash.transpose();
+        Eigen::Matrix3f S = pi * diagonal_mat * pi_dash.transpose();
 
         // perform svd on S (eigen)
         
         
         // R =VU
+
+
+        Eigen::JacobiSVD<Eigen::Matrix3f, Eigen::ComputeFullU | Eigen::ComputeFullV> svd(S);
+
+
+        /*
         Eigen::MatrixXf V = S.jacobiSvd().matrixV();
         Eigen::MatrixXf U = S.jacobiSvd().matrixU().eval();
 
@@ -158,6 +186,7 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
             for (int j = 0; j < 3; j++)
                 rotationVector(v_id, i * 3 + j) = R(i, j);
         }
+        */
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -203,7 +232,7 @@ int main(int argc, char** argv)
                                                   launch_box.num_threads,
                                                   launch_box.smem_bytes_dyn>>>(
                                                   rx.get_context(), ref_vertex_pos, weight_matrix);
-
+    
     //visualise edge weights
      rxmesh::LaunchBox<CUDABlockSize> launch_box2;
      rx.prepare_launch_box(
@@ -225,7 +254,25 @@ int main(int argc, char** argv)
      //
 
      //calculate rotation matrix
-     auto rot_mat = rx.add_vertex_attribute<float>("RotationMatrix", 9);
+     auto rot_mat = *rx.add_vertex_attribute<float>("RotationMatrix", 9);
+
+    rxmesh::LaunchBox<CUDABlockSize> rotation_launch_box;
+
+    
+    rx.prepare_launch_box({rxmesh::Op::VV},
+                           rotation_launch_box,
+                           (void*)calculate_rotation_matrix<float, CUDABlockSize>);
+    /*
+    calculate_rotation_matrix<float, CUDABlockSize>
+        <<<rotation_launch_box.blocks,
+           rotation_launch_box.num_threads,
+           rotation_launch_box.smem_bytes_dyn>>>(rx.get_context(),
+                                                 ref_vertex_pos,
+                                                 *changed_vertex_pos,
+                                                 rot_mat,
+                                                 weight_matrix);
+                                                 */
+                                                 
 
     
 
