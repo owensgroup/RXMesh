@@ -23,7 +23,7 @@ edge_cotan_weight(const rxmesh::VertexHandle&       p_id,
 
     //cotans[(v1, v2)] =np.dot(e1, e2) / np.linalg.norm(np.cross(e1, e2))
 
-    T weight = 0;
+    float weight = 0;
     if (q_id.is_valid())
         weight   += dot((p - q), (r - q)) / length(cross(p - q, r - q));
     if (s_id.is_valid())
@@ -108,13 +108,15 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
     //compute wij
-    //auto weights = rx.add_edge_attribute<float>("edgeWeights", 1);
+    auto weights = rx.add_edge_attribute<float>("edgeWeights", 1);
     auto vertex_pos = *rx.get_input_vertex_coordinates();
-    SparseMatrix<float> weights(rx);
-    
+    SparseMatrix<float> weight_matrix(rx);
+
+    //obtain cotangent weight matrix
     constexpr uint32_t               CUDABlockSize = 256;
     rxmesh::LaunchBox<CUDABlockSize> launch_box;
     rx.prepare_launch_box({rxmesh::Op::EVDiamond},
@@ -125,8 +127,23 @@ int main(int argc, char** argv)
         <<<launch_box.blocks,
                                                   launch_box.num_threads,
                                                   launch_box.smem_bytes_dyn>>>(
-                                                  rx.get_context(), vertex_pos, weights);
-                                                  
+                                                  rx.get_context(), vertex_pos, weight_matrix);
+
+    //visualise edge weights
+     rxmesh::LaunchBox<CUDABlockSize> launch_box2;
+     rx.prepare_launch_box(
+         {rxmesh::Op::EV},
+         launch_box2,
+         (void*)edge_weight_values<float, CUDABlockSize>);
+
+     edge_weight_values<float, CUDABlockSize>
+         <<<launch_box2.blocks,
+            launch_box2.num_threads,
+            launch_box2.smem_bytes_dyn>>>(rx.get_context(), *weights, weight_matrix );
+
+     weights->move(DEVICE, HOST);
+     rx.get_polyscope_mesh()->addEdgeScalarQuantity("edgeWeights", *weights);
+     //
 
 
 
