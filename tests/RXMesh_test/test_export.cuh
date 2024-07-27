@@ -9,8 +9,6 @@ TEST(RXMeshStatic, Export)
 
     CUDA_ERROR(cudaDeviceReset());
 
-    cuda_query(rxmesh_args.device_id);
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto v_attr_scalar = *rx.add_vertex_attribute<float>("vScalar", 1);

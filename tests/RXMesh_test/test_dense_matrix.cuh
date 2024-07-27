@@ -8,8 +8,6 @@ TEST(RXMeshStatic, DenseMatrixToEigen)
 {
     using namespace rxmesh;
 
-    cuda_query(rxmesh_args.device_id);
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     DenseMatrix<float> rx_mat(rx, 10, 10);
@@ -44,8 +42,6 @@ TEST(RXMeshStatic, DenseMatrixASum)
 {
     using namespace rxmesh;
 
-    cuda_query(rxmesh_args.device_id);
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     DenseMatrix<float> mat(rx, 10, 10);
@@ -73,8 +69,6 @@ TEST(RXMeshStatic, DenseMatrixASum)
 TEST(RXMeshStatic, DenseMatrixAXPY)
 {
     using namespace rxmesh;
-
-    cuda_query(rxmesh_args.device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
@@ -112,8 +106,6 @@ TEST(RXMeshStatic, DenseMatrixAXPY)
 TEST(RXMeshStatic, DenseMatrixDot)
 {
     using namespace rxmesh;
-
-    cuda_query(rxmesh_args.device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
@@ -155,8 +147,6 @@ TEST(RXMeshStatic, DenseMatrixNorm2)
 {
     using namespace rxmesh;
 
-    cuda_query(rxmesh_args.device_id);
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     DenseMatrix<cuComplex> x(rx, 10, 10);
@@ -186,8 +176,6 @@ TEST(RXMeshStatic, DenseMatrixNorm2)
 TEST(RXMeshStatic, DenseMatrixMulitply)
 {
     using namespace rxmesh;
-
-    cuda_query(rxmesh_args.device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
@@ -228,8 +216,6 @@ TEST(RXMeshStatic, DenseMatrixMulitply)
 TEST(RXMeshStatic, DenseMatrixSwap)
 {
     using namespace rxmesh;
-
-    cuda_query(rxmesh_args.device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 

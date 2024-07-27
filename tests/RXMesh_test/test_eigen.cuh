@@ -30,8 +30,6 @@ TEST(Attribute, Eigen)
 {
     using namespace rxmesh;
 
-    cuda_query(0);
-
     std::string obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
 
     RXMeshStatic rx(obj_path);
@@ -59,7 +57,7 @@ TEST(Attribute, Eigen)
            launch_box.num_threads,
            launch_box.smem_bytes_dyn>>>(rx.get_context(), in_attr, out_attr);
 
-    cudaDeviceSynchronize();
+    CUDA_ERROR(cudaDeviceSynchronize());
 
     out_attr.move(DEVICE, HOST);
 
