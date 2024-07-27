@@ -217,71 +217,68 @@ __global__ static void bipartition_seed_propogation(
 }
 
 template <uint32_t blockThreads>
-__global__ static void bipartition_seed_recenter(
+__global__ static void bipartition_seed_propogation_refined(
     const rxmesh::Context context,
     uint32_t*             d_patch_partition_label,
-    uint16_t*             d_patch_local_seed_label_count,
     uint16_t*             d_patch_local_partition_role,
     uint16_t*             d_patch_local_partition_label,
-    uint32_t*             seeds,
-    uint32_t*             num_seeds)
+    uint16_t*             d_patch_local_seed_label_count,
+    uint32_t*             d_patch_local_frontiers,
+    uint32_t*             d_frontier_head,
+    uint32_t*             d_frontier_size,
+    uint32_t*             d_new_frontier_head,
+    uint32_t*             d_new_frontier_size)
 {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    // for debug only
+    // for (uint32_t i = 0; i < context.m_num_patches[0]; i++) {
     for (uint32_t i = idx; i < context.m_num_patches[0];
          i += blockDim.x * gridDim.x) {
 
         PatchStash& ps = context.m_patches_info[i].patch_stash;
 
-        // skip the unlabled patch
-        if (d_patch_local_partition_role[i] == INVALID16) {
+        if (d_patch_local_partition_label[i] != INVALID16) {
+            ::atomicAdd(&d_new_frontier_size[0], 1);
+            // printf("check: patch %d is already labeled\n", i);
             continue;
         }
 
-        // selecct the vertices that is adjacent to other vertices
-        bool is_boundary = false;
+        uint32_t seed_label0_count = 0;
+        uint32_t seed_label1_count = 0;
+
         for (uint32_t j = 0; j < ps.stash_size; j++) {
             if (ps.m_stash[j] == INVALID32) {
                 break;
             }
 
-            uint32_t    adj_patch_id = ps.m_stash[j];
-            PatchStash& adj_ps =
-                context.m_patches_info[adj_patch_id].patch_stash;
+            uint32_t adj_patch_id = ps.m_stash[j];
 
+            // skip if not in the same partition
             if (d_patch_partition_label[adj_patch_id] !=
                 d_patch_partition_label[i]) {
                 // printf(" adj patch %d is not in the same partition\n",
-                //        adj_patch_id);
+                //          adj_patch_id);
                 continue;
             }
 
-            if (d_patch_local_partition_label[adj_patch_id] !=
-                d_patch_local_partition_label[i]) {
-                is_boundary = true;
+            if (d_patch_local_partition_label[adj_patch_id] == 0) {
+                seed_label0_count++;
+            } else if (d_patch_local_partition_label[adj_patch_id] == 1) {
+                seed_label1_count++;
             }
         }
 
-        uint32_t patch_seed_label = (d_patch_partition_label[i] << 1) +
-                                    d_patch_local_partition_label[i];
+        if (seed_label0_count == 0 && seed_label1_count == 0) {
+            // printf("Check: patch %d is isolated for now\n", i);
+            continue;
+        }
 
-        if (is_boundary &&
-            d_patch_local_seed_label_count[patch_seed_label] > 0) {
-            assert(d_patch_local_seed_label_count[patch_seed_label] > 0);
-            uint16_t remaining_count = atomicAdd(
-                &d_patch_local_seed_label_count[patch_seed_label], -1);
-
-            if (remaining_count == 1) {
-                // the new seed is selected!
-                d_patch_local_partition_role[i]                  = 2;
-                d_patch_local_seed_label_count[patch_seed_label] = 1;
-                seeds[patch_seed_label]                          = i;
-
-                ::atomicAdd(&num_seeds[0], 1);
-            } else {
-                // proceed until the seed is found
-                d_patch_local_partition_role[i]  = 0;
-                d_patch_local_partition_label[i] = INVALID16;
-            }
+        if (seed_label0_count > seed_label1_count) {
+            d_patch_local_partition_label[i] = 0;
+            atomicAdd(&d_patch_local_seed_label_count[(d_patch_partition_label[i] << 1) + 0], 1);
+        } else {
+            d_patch_local_partition_label[i] = 1;
+            atomicAdd(&d_patch_local_seed_label_count[(d_patch_partition_label[i] << 1) + 1], 1);
         }
     }
 }
@@ -289,7 +286,6 @@ __global__ static void bipartition_seed_recenter(
 template <uint32_t blockThreads>
 __global__ static void bipartition_mark_boundary(
     const rxmesh::Context context,
-    uint32_t*             d_tmp_local_seed_label_count_difference,
     uint32_t*             d_patch_partition_label,
     uint16_t*             d_patch_local_seed_label_count,
     uint16_t*             d_patch_local_partition_role,
@@ -329,6 +325,51 @@ __global__ static void bipartition_mark_boundary(
 
         if (is_boundary) {
             d_patch_local_partition_role[i] = 1;
+        }
+    }
+}
+
+template <uint32_t blockThreads>
+__global__ static void bipartition_seed_recenter(
+    const rxmesh::Context context,
+    uint32_t*             d_patch_partition_label,
+    uint16_t*             d_patch_local_seed_label_count,
+    uint16_t*             d_patch_local_partition_role,
+    uint16_t*             d_patch_local_partition_label,
+    uint32_t*             seeds,
+    uint32_t*             num_seeds)
+{
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    for (uint32_t i = idx; i < context.m_num_patches[0];
+         i += blockDim.x * gridDim.x) {
+
+        PatchStash& ps = context.m_patches_info[i].patch_stash;
+
+        // skip the unlabled patch
+        if (d_patch_local_partition_role[i] == INVALID16) {
+            continue;
+        }
+
+        uint32_t patch_seed_label = (d_patch_partition_label[i] << 1) +
+                                    d_patch_local_partition_label[i];
+
+        if (d_patch_local_partition_role[i] = 1 &&
+            d_patch_local_seed_label_count[patch_seed_label] > 0) {
+            uint16_t remaining_count = atomicAdd(
+                &d_patch_local_seed_label_count[patch_seed_label], -1);
+
+            if (remaining_count == 1) {
+                // the new seed is selected!
+                d_patch_local_partition_role[i]                  = 2;
+                d_patch_local_seed_label_count[patch_seed_label] = 1;
+                seeds[patch_seed_label]                          = i;
+
+                ::atomicAdd(&num_seeds[0], 1);
+            } else {
+                // proceed until the seed is found
+                d_patch_local_partition_role[i]  = 0;
+                d_patch_local_partition_label[i] = INVALID16;
+            }
         }
     }
 }
@@ -400,8 +441,6 @@ __global__ static void bipartition_check_isolation(
             }
 
             uint32_t    adj_patch_id = ps.m_stash[j];
-            PatchStash& adj_ps =
-                context.m_patches_info[adj_patch_id].patch_stash;
 
             if (d_patch_partition_label[adj_patch_id] !=
                 d_patch_partition_label[i]) {
@@ -462,8 +501,6 @@ __global__ static void bipartition_check_propogation(
                     }
 
                     uint32_t    adj_patch_id = ps.m_stash[j];
-                    PatchStash& adj_ps =
-                        context.m_patches_info[adj_patch_id].patch_stash;
 
                     if (d_patch_partition_label[adj_patch_id] !=
                         d_patch_partition_label[i]) {
@@ -488,8 +525,6 @@ __global__ static void bipartition_check_propogation(
                     }
 
                     uint32_t    adj_patch_id = ps.m_stash[j];
-                    PatchStash& adj_ps =
-                        context.m_patches_info[adj_patch_id].patch_stash;
 
                     if (d_patch_partition_label[adj_patch_id] !=
                         d_patch_partition_label[i]) {
@@ -513,8 +548,6 @@ __global__ static void bipartition_check_propogation(
                     }
 
                     uint32_t    adj_patch_id = ps.m_stash[j];
-                    PatchStash& adj_ps =
-                        context.m_patches_info[adj_patch_id].patch_stash;
 
                     if (d_patch_partition_label[adj_patch_id] !=
                         d_patch_partition_label[i]) {
@@ -541,7 +574,7 @@ __global__ static void check_d_arr(T* d_arr, uint32_t size)
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx == 0) {
         for (uint32_t i = 0; i < size; i++) {
-            printf(" %u", d_arr[i]);
+            printf(" %u,", d_arr[i]);
         }
         printf("\n");
     }
@@ -609,6 +642,8 @@ void run_partition_lloyd(RXMeshStatic& rx,
     d_new_frontier_head[0] = d_frontier_head[0] + d_frontier_size[0];
     d_new_frontier_size[0] = 0;
 
+    CUDA_ERROR(cudaDeviceSynchronize());
+
     // printf("d_patch_partition_label: ");
     // check_d_arr<<<1, 1>>>(d_patch_partition_label, rx.get_num_patches());
     // CUDA_ERROR(cudaDeviceSynchronize());
@@ -647,6 +682,14 @@ void run_partition_lloyd(RXMeshStatic& rx,
             // reset the seeds, essentially the same as the initialization
             while (true) {
                 d_frontier_size[0] = 0;
+                bipartition_mark_boundary<blockThreads>
+                    <<<blocks_p, threads_p>>>(rx.get_context(),
+                                              d_patch_partition_label,
+                                              d_patch_local_seed_label_count,
+                                              d_patch_local_partition_role,
+                                              d_patch_local_partition_label);
+                CUDA_ERROR(cudaDeviceSynchronize());
+
                 bipartition_seed_recenter<blockThreads>
                     <<<blocks_p, threads_p>>>(rx.get_context(),
                                               d_patch_partition_label,
@@ -705,6 +748,7 @@ void run_partition_lloyd(RXMeshStatic& rx,
 
         // tmp check
         if (d_patch_local_frontiers[curr_num_seeds - 1] == INVALID32) {
+            printf("last frontier: %u, seeds: %u \n", d_patch_local_frontiers[curr_num_seeds - 1], curr_num_seeds);
             printf("d_patch_local_frontiers: ");
             check_d_arr<<<1, 1>>>(d_patch_local_frontiers,
                                   rx.get_num_patches());
@@ -716,7 +760,19 @@ void run_partition_lloyd(RXMeshStatic& rx,
         tmp_break_counter = 0;
         // propogation until all the patches are assigned to a partition
         while (true) {
-            bipartition_seed_propogation<blockThreads>
+            // bipartition_seed_propogation<blockThreads>
+            //     <<<blocks_p, threads_p>>>(rx.get_context(),
+            //                               d_patch_partition_label,
+            //                               d_patch_local_partition_role,
+            //                               d_patch_local_partition_label,
+            //                               d_patch_local_seed_label_count,
+            //                               d_patch_local_frontiers,
+            //                               d_frontier_head,
+            //                               d_frontier_size,
+            //                               d_new_frontier_head,
+            //                               d_new_frontier_size);
+
+            bipartition_seed_propogation_refined<blockThreads>
                 <<<blocks_p, threads_p>>>(rx.get_context(),
                                           d_patch_partition_label,
                                           d_patch_local_partition_role,
@@ -727,6 +783,7 @@ void run_partition_lloyd(RXMeshStatic& rx,
                                           d_frontier_size,
                                           d_new_frontier_head,
                                           d_new_frontier_size);
+
             CUDA_ERROR(cudaDeviceSynchronize());
 
             // update the frontiers
@@ -734,6 +791,8 @@ void run_partition_lloyd(RXMeshStatic& rx,
             d_frontier_size[0]     = d_new_frontier_size[0];
             d_new_frontier_head[0] = d_frontier_head[0] + d_frontier_size[0];
             d_new_frontier_size[0] = 0;
+
+            CUDA_ERROR(cudaDeviceSynchronize());
 
             // prints
             // printf("--- propogate iter ---\n");
@@ -757,12 +816,12 @@ void run_partition_lloyd(RXMeshStatic& rx,
             //                                 rx.get_num_patches());
             // CUDA_ERROR(cudaDeviceSynchronize());
 
-            if (d_new_frontier_head[0] == rx.get_num_patches()) {
+            if (d_frontier_size[0] == rx.get_num_patches()) {
                 break;
             }
 
             tmp_break_counter++;
-            if (tmp_break_counter > 20) {
+            if (tmp_break_counter > 50) {
                 printf("Error: propogation failed\n");
 
                 bipartition_check_propogation<blockThreads>
@@ -782,7 +841,7 @@ void run_partition_lloyd(RXMeshStatic& rx,
                                               d_patch_local_partition_role,
                                               d_patch_local_partition_label);
 
-                // exit(0);
+                exit(0);
                 break;
             }
         }
@@ -829,7 +888,6 @@ void run_partition_lloyd(RXMeshStatic& rx,
     // refinement
     // bipartition_mark_boundary<blockThreads>
     //     <<<blocks_p, threads_p>>>(rx.get_context(),
-    //                               d_tmp_local_seed_label_count_difference,
     //                               d_patch_partition_label,
     //                               d_patch_local_seed_label_count,
     //                               d_patch_local_partition_role,
@@ -851,6 +909,8 @@ void run_partition_lloyd(RXMeshStatic& rx,
     //                               d_patch_local_seed_label_count,
     //                               d_patch_local_partition_role,
     //                               d_patch_local_partition_label);
+
+    
 
     printf("d_tmp_local_seed_label_count_difference: ");
     check_d_arr<uint32_t>
@@ -1212,7 +1272,7 @@ void nd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr, uint16_t nd_level)
 
     // variables for prefixsum & ordering calculation
     // TODO tmp variable for testing
-    nd_level                     = 4;
+    nd_level                     = 6;
     uint32_t num_patch_separator = (1 << nd_level) - 1;
     uint32_t total_prefix_sum_size =
         rx.get_num_patches() + 1 + num_patch_separator;

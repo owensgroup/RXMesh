@@ -22,7 +22,7 @@ RXMesh::RXMesh()
       m_input_max_edge_incident_faces(0),
       m_input_max_face_adjacent_faces(0),
       m_num_patches(0),
-      m_patch_size(256),
+      m_patch_size(32),
       m_is_input_edge_manifold(true),
       m_is_input_closed(true),
       m_h_vertex_prefix(nullptr),
