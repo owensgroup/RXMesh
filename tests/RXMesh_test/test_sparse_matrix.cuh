@@ -132,9 +132,6 @@ TEST(RXMeshStatic, SparseMatrix)
 
     using namespace rxmesh;
 
-    // Select device
-    cuda_query(rxmesh_args.device_id);
-
     // generate rxmesh obj
     std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
     RXMeshStatic rx(obj_path);
@@ -202,8 +199,6 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
     //
     using namespace rxmesh;
 
-    // Select device
-    cuda_query(rxmesh_args.device_id);
 
     // generate rxmesh obj
     RXMeshStatic rx(rxmesh_args.obj_file_name);
@@ -272,10 +267,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
     // matrix.
 
     using namespace rxmesh;
-
-    // Select device
-    cuda_query(rxmesh_args.device_id);
-
+        
     // generate rxmesh obj
     std::string  obj_path = rxmesh_args.obj_file_name;
     RXMeshStatic rx(obj_path);
@@ -335,9 +327,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 {
     using namespace rxmesh;
-
-    // Select device
-    cuda_query(rxmesh_args.device_id);
+        
 
     // generate rxmesh obj
     std::string  obj_path = rxmesh_args.obj_file_name;
@@ -402,9 +392,6 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 TEST(RXMeshStatic, SparseMatrixToEigen)
 {
     using namespace rxmesh;
-
-    // Select device
-    cuda_query(rxmesh_args.device_id);
 
     // generate rxmesh obj
     std::string  obj_path = rxmesh_args.obj_file_name;
