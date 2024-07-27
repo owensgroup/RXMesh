@@ -5,6 +5,7 @@
 
 #include "Eigen/Dense"
 
+#include "rxmesh/util/svd3_cuda.h"
 
 using namespace rxmesh;
 
@@ -167,8 +168,13 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
         
         // R =VU
 
+        Eigen::Matrix3f U;         // left singular vectors
+        Eigen::Matrix3f V;         // right singular vectors
+        Eigen::Vector3f sing_val;  // singular values
 
-        Eigen::JacobiSVD<Eigen::Matrix3f, Eigen::ComputeFullU | Eigen::ComputeFullV> svd(S);
+        svd(S, U, sing_val, V);
+        
+        //Eigen::JacobiSVD<Eigen::Matrix3f, Eigen::ComputeFullU | Eigen::ComputeFullV> svd(S);
 
 
         /*
