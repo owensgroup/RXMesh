@@ -149,8 +149,6 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
                 current_coords(v_id, 2) - current_coords(vv[j], 2)};
 
             S = S + w * pi_vector * pi_dash_vector.transpose();
-
-
         }
 
         // perform svd on S (eigen)
@@ -166,10 +164,14 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
 
         const float smallest_singular_value = sing_val.minCoeff();
 
-        U.col(smallest_singular_value) = U.col(smallest_singular_value) * -1;
 
         Eigen::Matrix3f R = V * U.transpose();
-        
+
+        if (R.determinant() < 0) {
+            U.col(smallest_singular_value) =
+                U.col(smallest_singular_value) * -1;
+            R = V * U.transpose();
+        }
 
         // Matrix R to vector attribute R
         
@@ -184,13 +186,8 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
         /*
         Eigen::MatrixXf V = S.jacobiSvd().matrixV();
         Eigen::MatrixXf U = S.jacobiSvd().matrixU().eval();
-
-        
-
-       
-        
         */
-        /*
+
         Eigen::Vector3<float> new_coords = {current_coords(v_id, 0),
                                             current_coords(v_id, 1),
                                             current_coords(v_id, 2)};
@@ -199,7 +196,7 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
         current_coords(v_id, 0) = new_coords[0];
         current_coords(v_id, 1) = new_coords[1];
         current_coords(v_id, 2) = new_coords[2];
-        */
+        
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -347,7 +344,7 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cube.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
     
@@ -358,7 +355,7 @@ int main(int argc, char** argv)
 
 
     //input
-    auto constraints = *rx.add_vertex_attribute<float>("FixedVertices", 1);
+    auto constraints = rx.add_vertex_attribute<float>("FixedVertices", 1);
 
 
     constexpr uint32_t CUDABlockSize = 256;
@@ -371,9 +368,10 @@ int main(int argc, char** argv)
     test_input<float, CUDABlockSize><<<input_launch_box.blocks,
                                        input_launch_box.num_threads,
                                        input_launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), ref_vertex_pos, *changed_vertex_pos, constraints);
+        rx.get_context(), ref_vertex_pos, *changed_vertex_pos, *constraints);
 
     changed_vertex_pos->move(DEVICE, HOST);
+    constraints->move(DEVICE, HOST);
     rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
     //process
 
@@ -436,10 +434,10 @@ int main(int argc, char** argv)
                                                  weight_matrix);
 
     changed_vertex_pos->move(DEVICE, HOST);
-
+    /*
     ///position calculation
     
-    /**  Calculate bMatrix */
+    /**  Calculate bMatrix 
     uint32_t num_vertices = rx.get_num_vertices();
 
 
@@ -477,7 +475,7 @@ int main(int argc, char** argv)
         <<<launch_box_L.blocks,
            launch_box_L.num_threads,
            launch_box_L.smem_bytes_dyn>>>(
-            rx.get_context(), weight_matrix, systemMatrix, constraints);
+            rx.get_context(), weight_matrix, systemMatrix, *constraints);
     
     // incorporating constraints. Keep the static and user modified vertices the
     // same
@@ -497,8 +495,8 @@ int main(int argc, char** argv)
     std::shared_ptr<DenseMatrix<float>> X_mat = coords->to_matrix();
     
     // Solving using CHOL
-    systemMatrix.pre_solve(PermuteMethod::NSTDIS);
-    systemMatrix.solve(bMatrix, *X_mat);
+    //systemMatrix.pre_solve(PermuteMethod::NSTDIS);
+    //systemMatrix.solve(bMatrix, *X_mat);
 
     
     // move the results to the host
@@ -509,11 +507,12 @@ int main(int argc, char** argv)
 
 
     // visualize new position
-    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    //rx.get_polyscope_mesh()->updateVertexPositions(*coords);
 
-    //rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
+    rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
 
-
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("fixedVertices", *constraints);
+    
 #if USE_POLYSCOPE
     polyscope::show();
 #endif
