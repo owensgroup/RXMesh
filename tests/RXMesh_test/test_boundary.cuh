@@ -6,8 +6,6 @@ TEST(RXMeshStatic, BoundaryVertex)
 {
     using namespace rxmesh;
 
-    cuda_query(rxmesh_args.device_id);
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
 
     auto v_bd = *rx.add_vertex_attribute<bool>("vBoundary", 1);

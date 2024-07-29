@@ -58,8 +58,6 @@ TEST(Attribute, Norm2)
 
     CUDA_ERROR(cudaDeviceReset());
 
-    cuda_query(rxmesh_args.device_id);
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto attr = rx.add_vertex_attribute<float>("v", 3, rxmesh::DEVICE);
@@ -83,8 +81,6 @@ TEST(Attribute, Norm2)
 TEST(Attribute, Dot)
 {
     using namespace rxmesh;
-
-    cuda_query(rxmesh_args.device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
@@ -110,8 +106,6 @@ TEST(Attribute, Reduce)
     using namespace rxmesh;
 
     CUDA_ERROR(cudaDeviceReset());
-
-    cuda_query(rxmesh_args.device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
@@ -147,8 +141,6 @@ TEST(Attribute, CopyFrom)
 {
     using namespace rxmesh;
 
-    cuda_query(rxmesh_args.device_id);
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto f_device = rx.add_face_attribute<uint32_t>("d", 3, DEVICE);
@@ -168,8 +160,6 @@ TEST(Attribute, CopyFrom)
 TEST(Attribute, AddingAndRemoving)
 {
     using namespace rxmesh;
-
-    cuda_query(rxmesh_args.device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 

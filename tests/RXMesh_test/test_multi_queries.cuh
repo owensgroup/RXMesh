@@ -108,9 +108,6 @@ TEST(RXMeshStatic, MultiQueries)
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 320;
 
-    // Select device
-    cuda_query(rxmesh_args.device_id);
-
     RXMeshStatic rx(rxmesh_args.obj_file_name);
 
     const auto coords = rx.get_input_vertex_coordinates();

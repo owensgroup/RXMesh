@@ -2,6 +2,7 @@
 #include "gtest/gtest.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/report.h"
+#include "rxmesh/util/cuda_query.h"
 
 using dataT = float;
 
@@ -35,6 +36,7 @@ struct RXMeshTestArg
 #include "test_boundary.cuh"
 #include "test_dense_matrix.cuh"
 #include "test_export.cuh"
+#include "test_svd.cuh"
 // clang-format on
 
 int main(int argc, char** argv)
@@ -86,6 +88,8 @@ int main(int argc, char** argv)
     RXMESH_TRACE("output_folder= {}", rxmesh_args.output_folder);
     RXMESH_TRACE("num_run= {}", rxmesh_args.num_run);
     RXMESH_TRACE("device_id= {}", rxmesh_args.device_id);
+
+    cuda_query(rxmesh_args.device_id);
 
     return RUN_ALL_TESTS();
 }
