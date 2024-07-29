@@ -130,6 +130,8 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
                                           rxmesh::SparseMatrix<T> weight_mat)
 {
 
+
+
     auto vn_lambda = [&](VertexHandle v_id, VertexIterator& vv)
     {
         // pi
@@ -161,7 +163,9 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
         }
         */
         // calculate covariance matrix S = piDiPiTdash
+
         
+
         Eigen::Matrix3f S;  //= pi * diagonal_mat * pi_dash.transpose();
 
         for (int j=0;j<vv.size();j++) {
@@ -221,6 +225,15 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
        
         
         */
+
+        for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 3; j++) 
+            {
+                float r = R(i, j);
+                float cord = current_coords(v_id, i);
+                current_coords(v_id, i) =cord*r;
+            }
+
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -229,8 +242,34 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
     query.dispatch<Op::VV>(block, shrd_alloc, vn_lambda);
 }
 
+template <typename T, uint32_t blockThreads>
+__global__ static void test_input(
+    const rxmesh::Context      context,
+    rxmesh::VertexAttribute<T> ref_coords,
+    rxmesh::VertexAttribute<T> current_coords
+    )
+{
+
+    //above a specific z up value, shift x by 1
+    auto vn_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
+
+        current_coords(v_id, 0) = ref_coords(v_id, 0);
+        current_coords(v_id, 1) = ref_coords(v_id, 1);
+        current_coords(v_id, 2) = ref_coords(v_id, 2);
+
+        if (current_coords(v_id,1)>0.1) {
+            current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
+        }
+        
+    };
 
 
+    auto block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, vn_lambda);
+
+}
 
 
 
@@ -245,17 +284,41 @@ int main(int argc, char** argv)
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
+    
+    auto ref_vertex_pos =
+        *rx.get_input_vertex_coordinates();  // stays same across computation
+    auto changed_vertex_pos =
+        rx.add_vertex_attribute<float>("P", 3);  // changes per iteration
+
+
+    //input
+    constexpr uint32_t CUDABlockSize = 256;
+    rxmesh::LaunchBox<CUDABlockSize> input_launch_box;
+    rx.prepare_launch_box(
+        {rxmesh::Op::VV},
+        input_launch_box,
+        (void*)test_input<float, CUDABlockSize>);
+
+    test_input<float, CUDABlockSize><<<input_launch_box.blocks,
+                                       input_launch_box.num_threads,
+                                       input_launch_box.smem_bytes_dyn>>>(
+        rx.get_context(), ref_vertex_pos, *changed_vertex_pos);
+
+    changed_vertex_pos->move(DEVICE, HOST);
+
+    //process
+
+
+    /*
     //compute wij
     auto weights = rx.add_edge_attribute<float>("edgeWeights", 1);
 
 
-    auto ref_vertex_pos = *rx.get_input_vertex_coordinates();  // stays same across computation
-    auto changed_vertex_pos = rx.add_vertex_attribute<float>("P", 3);  // changes per iteration
+
 
     SparseMatrix<float> weight_matrix(rx);
 
     //obtain cotangent weight matrix
-    constexpr uint32_t               CUDABlockSize = 256;
     rxmesh::LaunchBox<CUDABlockSize> launch_box;
     rx.prepare_launch_box({rxmesh::Op::EVDiamond},
                           launch_box,
@@ -296,7 +359,7 @@ int main(int argc, char** argv)
     rx.prepare_launch_box({rxmesh::Op::VV},
                            rotation_launch_box,
                            (void*)calculate_rotation_matrix<float, CUDABlockSize>);
-    /*
+    
     calculate_rotation_matrix<float, CUDABlockSize>
         <<<rotation_launch_box.blocks,
            rotation_launch_box.num_threads,
@@ -305,11 +368,13 @@ int main(int argc, char** argv)
                                                  *changed_vertex_pos,
                                                  rot_mat,
                                                  weight_matrix);
-                                                 */
-                                                 
+
+    changed_vertex_pos->move(DEVICE, HOST);
 
     
+    */
 
+    rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
 
 
 #if USE_POLYSCOPE
