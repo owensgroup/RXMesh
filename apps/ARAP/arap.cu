@@ -55,6 +55,7 @@ __global__ static void compute_edge_weights(const rxmesh::Context      context,
             VertexHandle s_id = (v == vv.size() - 1) ? vv[0] : vv[v + 1];
             e_weight = edge_cotan_weight(vertex_id, r_id, q_id, s_id, coords);
             A_mat(vertex_id, vv[v]) = e_weight;
+            A_mat(vertex_id, vv[v]) = 1;
         }
 
     };
@@ -74,7 +75,8 @@ __global__ static void compute_edge_weights_evd(const rxmesh::Context      conte
     auto vn_lambda = [&](EdgeHandle edge_id, VertexIterator& vv) {
             T e_weight = 0;
             e_weight = edge_cotan_weight(vv[0], vv[2], vv[1], vv[3], coords);
-            A_mat(vv[0], vv[2]) = e_weight;
+        A_mat(vv[0], vv[2]) = e_weight;
+        //A_mat(vv[0], vv[2]) = 1;
         
     };
 
@@ -131,7 +133,7 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
 {
     auto vn_lambda = [&](VertexHandle v_id, VertexIterator& vv)
     {
-        Eigen::Matrix3f S;  
+        Eigen::Matrix3f S=Eigen::Matrix3f::Zero();  
 
         for (int j=0;j<vv.size();j++) {
 
@@ -191,7 +193,7 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
         Eigen::Vector3<float> new_coords = {current_coords(v_id, 0),
                                             current_coords(v_id, 1),
                                             current_coords(v_id, 2)};
-        new_coords = new_coords.transpose() * R;
+        new_coords = R*new_coords;
 
         current_coords(v_id, 0) = new_coords[0];
         current_coords(v_id, 1) = new_coords[1];
@@ -221,12 +223,12 @@ __global__ static void test_input(
         current_coords(v_id, 1) = ref_coords(v_id, 1);
         current_coords(v_id, 2) = ref_coords(v_id, 2);
 
-        if (current_coords(v_id,1)>0.1) {
+        if (current_coords(v_id,1)>0.25) {
             current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
             constrained(v_id, 0) = 1;
         }
         else {
-            if (current_coords(v_id, 1) < 0.025)
+            if (current_coords(v_id, 0) < 0.025)
                 constrained(v_id, 0) = 1;
             else
                 constrained(v_id, 0) = 0;
@@ -371,7 +373,7 @@ int main(int argc, char** argv)
         rx.get_context(), ref_vertex_pos, *changed_vertex_pos, *constraints);
 
     changed_vertex_pos->move(DEVICE, HOST);
-    constraints->move(DEVICE, HOST);
+    constraints->move(DEVICE,  HOST);
     rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
     //process
 
@@ -437,7 +439,7 @@ int main(int argc, char** argv)
     /*
     ///position calculation
     
-    /**  Calculate bMatrix 
+    //  Calculate bMatrix 
     uint32_t num_vertices = rx.get_num_vertices();
 
 
@@ -515,5 +517,6 @@ int main(int argc, char** argv)
     
 #if USE_POLYSCOPE
     polyscope::show();
+    polyscope::shutdown();
 #endif
 }
