@@ -226,13 +226,13 @@ __global__ static void test_input(
         current_coords(v_id, 2) = ref_coords(v_id, 2);
 
         if (current_coords(v_id,1)>0.25) {
-            //current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
-            constrained(v_id, 0) = 0;
+            current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
+            constrained(v_id, 0) = 1;
         }
         else {
             if (current_coords(v_id, 0) < 0.025) {
                 constrained(v_id, 0) = 1;
-                current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
+                //current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
 
             }
             else
@@ -256,7 +256,8 @@ __global__ static void calculate_b(
     rxmesh::VertexAttribute<T> original_coords,  // [num_coord, 3]
     rxmesh::VertexAttribute<T> rot_mat,          // [num_coord, 9]
     rxmesh::SparseMatrix<T>    weight_mat,       // [num_coord, num_coord]
-    rxmesh::DenseMatrix<T>        bMatrix)                 // [num_coord, 3]
+    rxmesh::DenseMatrix<T>        bMatrix,                 // [num_coord, 3]
+    rxmesh::VertexAttribute<T> constrained)
 {
     auto init_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
         
@@ -271,8 +272,9 @@ __global__ static void calculate_b(
             for (int j = 0; j < 3; j++)
                 Ri(i, j) = rot_mat(v_id, i * 3 + j);
         }
-        Eigen::VectorXf w;
-        w.resize(vv.size());
+        Eigen::VectorXf w = Eigen::VectorXf::Zero(vv.size());
+        //w.resize(vv.size());
+        
 
         for (int v = 0; v < vv.size(); v++) {
             w(v) = weight_mat(v_id, vv[v]);
@@ -298,10 +300,20 @@ __global__ static void calculate_b(
             // update bi
             bi = bi + 0.5 * w[nei_index] * rot_add * vert_diff;
         }
-
-        bMatrix(v_id, 0) = bi[0];
+        
+        
+        if (constrained(v_id, 0) == 0) {
+           bMatrix(v_id, 0) = bi[0];
         bMatrix(v_id, 1) = bi[1];
         bMatrix(v_id, 2) = bi[2];
+        }
+        else 
+        {
+            bMatrix(v_id, 0) = original_coords(v_id,0);
+            bMatrix(v_id, 1) = original_coords(v_id, 1);
+            bMatrix(v_id, 2) = original_coords(v_id, 2);
+        }
+        
     };
 
     auto block = cooperative_groups::this_thread_block();
@@ -351,7 +363,7 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cube.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
     
@@ -463,7 +475,7 @@ int main(int argc, char** argv)
     calculate_b<float, CUDABlockSize><<<launch_box_bMatrix.blocks,
                                         launch_box_bMatrix.num_threads,
                                         launch_box_bMatrix.smem_bytes_dyn>>>(
-        rx.get_context(), *changed_vertex_pos, rot_mat, weight_matrix, bMatrix);
+        rx.get_context(), *changed_vertex_pos, rot_mat, weight_matrix, bMatrix, *constraints);
 
     // Calculate System Matrix L 
     //Eigen::MatrixXf systemMatrix = Eigen::MatrixXf::Zero(num_vertices, num_vertices);
@@ -499,7 +511,7 @@ int main(int argc, char** argv)
     
     // solve eq9 by Cholesky factorization
     auto coords = rx.get_input_vertex_coordinates();
-    std::shared_ptr<DenseMatrix<float>> X_mat = coords->to_matrix();
+    std::shared_ptr<DenseMatrix<float>> X_mat = changed_vertex_pos->to_matrix();
     
     // Solving using CHOL
     //systemMatrix.pre_solve(PermuteMethod::NSTDIS);
