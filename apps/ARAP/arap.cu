@@ -229,7 +229,10 @@ __global__ static void test_input(
             constrained(v_id, 0) = 1;
         }
         else {
-            constrained(v_id, 0) = 0;
+            if (current_coords(v_id, 1) < 0.025)
+                constrained(v_id, 0) = 1;
+            else
+                constrained(v_id, 0) = 0;
         }
         
     };
@@ -344,8 +347,8 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
     
     auto ref_vertex_pos =
