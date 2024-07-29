@@ -225,13 +225,13 @@ __global__ static void test_input(
         current_coords(v_id, 1) = ref_coords(v_id, 1);
         current_coords(v_id, 2) = ref_coords(v_id, 2);
 
-        if (current_coords(v_id,1)>0.25) {
+        if (current_coords(v_id,1)>0.75) {
             current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
             constrained(v_id, 0) = 1;
         }
         else {
-            if (current_coords(v_id, 0) < 0.025) {
-                constrained(v_id, 0) = 1;
+            if (current_coords(v_id, 1) < 0.025) {
+                constrained(v_id, 0) = 2;
                 //current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
 
             }
@@ -272,15 +272,9 @@ __global__ static void calculate_b(
             for (int j = 0; j < 3; j++)
                 Ri(i, j) = rot_mat(v_id, i * 3 + j);
         }
-        Eigen::VectorXf w = Eigen::VectorXf::Zero(vv.size());
-        //w.resize(vv.size());
-        
 
-        for (int v = 0; v < vv.size(); v++) {
-            w(v) = weight_mat(v_id, vv[v]);
-        }
-
-        for (int nei_index = 0; nei_index < vv.size(); nei_index++) {
+        for (int nei_index = 0; nei_index < vv.size(); nei_index++) 
+        {
             // get rotation matrix for neightbor j
             Eigen::Matrix3f Rj = Eigen::Matrix3f::Zero(3, 3);
             for (int i = 0; i < 3; i++) 
@@ -298,14 +292,13 @@ __global__ static void calculate_b(
             };
 
             // update bi
-            bi = bi + 0.5 * w[nei_index] * rot_add * vert_diff;
+            bi = bi + 0.5 * weight_mat(v_id, vv[nei_index]) * rot_add * vert_diff;
         }
-        
-        
+
         if (constrained(v_id, 0) == 0) {
-           bMatrix(v_id, 0) = bi[0];
-        bMatrix(v_id, 1) = bi[1];
-        bMatrix(v_id, 2) = bi[2];
+            bMatrix(v_id, 0) = bi[0];
+            bMatrix(v_id, 1) = bi[1];
+            bMatrix(v_id, 2) = bi[2];
         }
         else 
         {
@@ -313,7 +306,6 @@ __global__ static void calculate_b(
             bMatrix(v_id, 1) = original_coords(v_id, 1);
             bMatrix(v_id, 2) = original_coords(v_id, 2);
         }
-        
     };
 
     auto block = cooperative_groups::this_thread_block();
@@ -332,6 +324,10 @@ __global__ static void calculate_system_matrix(
 
 {
     auto init_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
+
+        L(v_id, v_id) = 0;
+        for (int nei_index = 0; nei_index < vv.size(); nei_index++)
+            L(v_id, vv[nei_index]) = 0;
 
         if (constrained(v_id, 0)==0) {
             for (int nei_index = 0; nei_index < vv.size(); nei_index++) 
@@ -373,10 +369,9 @@ int main(int argc, char** argv)
         rx.add_vertex_attribute<float>("P", 3);  // changes per iteration
 
 
+
     //input
     auto constraints = rx.add_vertex_attribute<float>("FixedVertices", 1);
-
-
     constexpr uint32_t CUDABlockSize = 256;
     rxmesh::LaunchBox<CUDABlockSize> input_launch_box;
     rx.prepare_launch_box(
@@ -396,7 +391,7 @@ int main(int argc, char** argv)
 
 
     
-    //compute wij
+    //compute weights
     auto weights = rx.add_edge_attribute<float>("edgeWeights", 1);
     SparseMatrix<float> weight_matrix(rx);
 
@@ -411,60 +406,33 @@ int main(int argc, char** argv)
                                                   launch_box.num_threads,
                                                   launch_box.smem_bytes_dyn>>>(
                                                   rx.get_context(), ref_vertex_pos, weight_matrix);
-    /*
-    //visualise edge weights
-     rxmesh::LaunchBox<CUDABlockSize> launch_box2;
+
+     // Calculate System 
+     SparseMatrix<float> systemMatrix(rx);
+     // call function to calculate L Matrix entries parallely
+     rxmesh::LaunchBox<CUDABlockSize> launch_box_L;
      rx.prepare_launch_box(
-         {rxmesh::Op::EV},
-         launch_box2,
-         (void*)edge_weight_values<float, CUDABlockSize>);
+         {rxmesh::Op::VV},
+         launch_box_L,
+         (void*)calculate_system_matrix<float, CUDABlockSize>);
 
-     edge_weight_values<float, CUDABlockSize>
-         <<<launch_box2.blocks,
-            launch_box2.num_threads,
-            launch_box2.smem_bytes_dyn>>>(rx.get_context(), *weights, weight_matrix );
+     calculate_system_matrix<float, CUDABlockSize>
+         <<<launch_box_L.blocks,
+            launch_box_L.num_threads,
+            launch_box_L.smem_bytes_dyn>>>(
+             rx.get_context(), weight_matrix, systemMatrix, *constraints);
 
-     weights->move(DEVICE, HOST);
+     systemMatrix.move(DEVICE, HOST);
 
 
-     //pi and p'i
-     //rx.get_polyscope_mesh()->addEdgeScalarQuantity("edgeWeights", *weights);
-     */
-
-    //
-
-     //calculate rotation matrix
-     auto rot_mat = *rx.add_vertex_attribute<float>("RotationMatrix", 9);
-
+    auto rot_mat = *rx.add_vertex_attribute<float>("RotationMatrix", 9);
     rxmesh::LaunchBox<CUDABlockSize> rotation_launch_box;
+    rx.prepare_launch_box(
+         {rxmesh::Op::VV},
+         rotation_launch_box,
+         (void*)calculate_rotation_matrix<float, CUDABlockSize>);
 
-    
-    rx.prepare_launch_box({rxmesh::Op::VV},
-                           rotation_launch_box,
-                           (void*)calculate_rotation_matrix<float, CUDABlockSize>);
-    
-    calculate_rotation_matrix<float, CUDABlockSize>
-        <<<rotation_launch_box.blocks,
-           rotation_launch_box.num_threads,
-           rotation_launch_box.smem_bytes_dyn>>>(rx.get_context(),
-                                                 ref_vertex_pos,
-                                                 *changed_vertex_pos,
-                                                 rot_mat,
-                                                 weight_matrix);
-
-    //changed_vertex_pos->move(DEVICE, HOST);
-    
-    ///position calculation
-    
-    //  Calculate bMatrix 
-    uint32_t num_vertices = rx.get_num_vertices();
-
-
-    //Eigen::MatrixXf bMatrix = Eigen::MatrixXf::Zero(num_vertices, 3);
-
-    DenseMatrix<float> bMatrix(rx, num_vertices, 3);
-
-    //DenseMatrix<float> B_mat(rx, num_vertices, 3);
+    DenseMatrix<float> bMatrix(rx, rx.get_num_vertices(), 3);
 
     // call function to calculate bMatrix entries parallely
     rxmesh::LaunchBox<CUDABlockSize> launch_box_bMatrix;
@@ -472,69 +440,67 @@ int main(int argc, char** argv)
                           launch_box_bMatrix,
                           (void*)calculate_b<float, CUDABlockSize>);
 
-    calculate_b<float, CUDABlockSize><<<launch_box_bMatrix.blocks,
-                                        launch_box_bMatrix.num_threads,
-                                        launch_box_bMatrix.smem_bytes_dyn>>>(
-        rx.get_context(), *changed_vertex_pos, rot_mat, weight_matrix, bMatrix, *constraints);
 
-    // Calculate System Matrix L 
-    //Eigen::MatrixXf systemMatrix = Eigen::MatrixXf::Zero(num_vertices, num_vertices);
-    SparseMatrix<float> systemMatrix(rx);
-    
 
-    // VertexAttribute that will store
-
-    // call function to calculate L Matrix entries parallely
-    rxmesh::LaunchBox<CUDABlockSize> launch_box_L;
-    rx.prepare_launch_box({rxmesh::Op::VV},
-                          launch_box_L,
-                          (void*)calculate_system_matrix<float, CUDABlockSize>);
-
-    calculate_system_matrix<float, CUDABlockSize>
-        <<<launch_box_L.blocks,
-           launch_box_L.num_threads,
-           launch_box_L.smem_bytes_dyn>>>(
-            rx.get_context(), weight_matrix, systemMatrix, *constraints);
-    
-    // incorporating constraints. Keep the static and user modified vertices the
-    // same
-    // TODO: check with Ahmed if the following code is correct
-    // (do I need to move matrices from GPU to CPU to run following code?)
-    /*
-    for (int ids : constraints) {
-        systemMatrix.row(ids).setZero();
-        systemMatrix(ids, ids) = 1;
-    }
-    */
-
+    DenseMatrix<float> X_mat(rx, rx.get_num_vertices(), 3);
 
     
-    // solve eq9 by Cholesky factorization
-    auto coords = rx.get_input_vertex_coordinates();
-    std::shared_ptr<DenseMatrix<float>> X_mat = changed_vertex_pos->to_matrix();
-    
-    // Solving using CHOL
-    //systemMatrix.pre_solve(PermuteMethod::NSTDIS);
-    //systemMatrix.solve(bMatrix, *X_mat);
+     //how many times will arap algorithm run?
+     int iterations = 1;
+     for (int i=0;i<iterations;i++) {
+         //rotation part
+         // calculate rotation matrix
+         calculate_rotation_matrix<float, CUDABlockSize>
+             <<<rotation_launch_box.blocks,
+                rotation_launch_box.num_threads,
+                rotation_launch_box.smem_bytes_dyn>>>(rx.get_context(),
+                                                      ref_vertex_pos,
+                                                      *changed_vertex_pos,
+                                                      rot_mat,
+                                                      weight_matrix);
 
-    systemMatrix.solve(bMatrix, *X_mat, Solver::QR, PermuteMethod::NSTDIS);
-    
-    // move the results to the host
-    X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
-    
-    // copy the results to attributes
-    coords->from_matrix(X_mat.get());
+         //changed_vertex_pos->move(DEVICE, HOST);
+          calculate_b<float, CUDABlockSize>
+             <<<launch_box_bMatrix.blocks,
+                launch_box_bMatrix.num_threads,
+                launch_box_bMatrix.smem_bytes_dyn>>>(rx.get_context(),
+                                                     ref_vertex_pos,
+                                                     rot_mat,
+                                                     weight_matrix,
+                                                     bMatrix,
+                                                     *constraints);
+
+         bMatrix.move(DEVICE, HOST);
+         systemMatrix.solve(bMatrix, X_mat, Solver::LU, PermuteMethod::NSTDIS);
+         
+         changed_vertex_pos->from_matrix(&X_mat);
 
 
-    // visualize new position
-    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-
-    //rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
-
-    rx.get_polyscope_mesh()->addVertexScalarQuantity("fixedVertices", *constraints);
+         rx.get_polyscope_mesh()->updateVertexPositions(changed_vertex_pos);
+     }
+     // visualize new position
+     
+     rx.get_polyscope_mesh()->addVertexScalarQuantity("fixedVertices",
+                                                      *constraints);
     
 #if USE_POLYSCOPE
     polyscope::show();
     polyscope::shutdown();
 #endif
 }
+
+
+//just in case
+
+// Solving using CHOL
+// systemMatrix.pre_solve(PermuteMethod::NSTDIS);
+// systemMatrix.solve(bMatrix, *X_mat);
+
+// systemMatrix.solve(bMatrix, *X_mat, Solver::QR, PermuteMethod::NSTDIS);
+
+
+// move the results to the host
+// X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
+
+// copy the results to attributes
+// changed_vertex_pos->from_matrix(X_mat.get());
