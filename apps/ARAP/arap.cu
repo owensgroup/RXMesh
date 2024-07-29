@@ -129,44 +129,9 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
                                           rxmesh::VertexAttribute<T>  rotationVector,
                                           rxmesh::SparseMatrix<T> weight_mat)
 {
-
-
-
     auto vn_lambda = [&](VertexHandle v_id, VertexIterator& vv)
     {
-        // pi
-        /*        
-        Eigen::MatrixXf pi = Eigen::MatrixXf::Identity(3, vv.size());
-        for (int j = 0; j < vv.size(); j++) 
-        {
-            pi(0, j) = ref_coords(v_id, 0) - ref_coords(vv[j], 0);
-            pi(1, j) = ref_coords(v_id, 1) - ref_coords(vv[j], 1);
-            pi(2, j) = ref_coords(v_id, 2) - ref_coords(vv[j], 2);
-        }
-        
-        // Di
-        Eigen::VectorXf weight_vector;
-        weight_vector.resize(vv.size());
-
-        for (int v = 0; v < vv.size();v++) 
-        {
-            weight_vector(v) = weight_mat(v_id, vv[v]);
-        }
-        Eigen::MatrixXf diagonal_mat = weight_vector.asDiagonal();
-        
-        // pi'T
-        Eigen::MatrixXf pi_dash = Eigen::MatrixXf::Identity(3, vv.size());
-        for (int j = 0; j < vv.size(); j++) {
-            pi_dash(0, j) = current_coords(v_id, 0) - current_coords(vv[j], 0);
-            pi_dash(1, j) = current_coords(v_id, 1) - current_coords(vv[j], 1);
-            pi_dash(2, j) = current_coords(v_id, 2) - current_coords(vv[j], 2);
-        }
-        */
-        // calculate covariance matrix S = piDiPiTdash
-
-        
-
-        Eigen::Matrix3f S;  //= pi * diagonal_mat * pi_dash.transpose();
+        Eigen::Matrix3f S;  
 
         for (int j=0;j<vv.size();j++) {
 
@@ -203,7 +168,7 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
 
         U.col(smallest_singular_value) = U.col(smallest_singular_value) * -1;
 
-        Eigen::MatrixXf R = V * U.transpose();
+        Eigen::Matrix3f R = V * U.transpose();
         
 
         // Matrix R to vector attribute R
@@ -225,15 +190,16 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
        
         
         */
+        /*
+        Eigen::Vector3<float> new_coords = {current_coords(v_id, 0),
+                                            current_coords(v_id, 1),
+                                            current_coords(v_id, 2)};
+        new_coords = new_coords.transpose() * R;
 
-        for (int i = 0; i < 3; i++)
-            for (int j = 0; j < 3; j++) 
-            {
-                float r = R(i, j);
-                float cord = current_coords(v_id, i);
-                current_coords(v_id, i) =cord*r;
-            }
-
+        current_coords(v_id, 0) = new_coords[0];
+        current_coords(v_id, 1) = new_coords[1];
+        current_coords(v_id, 2) = new_coords[2];
+        */
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -246,7 +212,8 @@ template <typename T, uint32_t blockThreads>
 __global__ static void test_input(
     const rxmesh::Context      context,
     rxmesh::VertexAttribute<T> ref_coords,
-    rxmesh::VertexAttribute<T> current_coords
+    rxmesh::VertexAttribute<T> current_coords,
+    rxmesh::VertexAttribute<T> constrained
     )
 {
 
@@ -259,6 +226,10 @@ __global__ static void test_input(
 
         if (current_coords(v_id,1)>0.1) {
             current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
+            constrained(v_id, 0) = 1;
+        }
+        else {
+            constrained(v_id, 0) = 0;
         }
         
     };
@@ -271,6 +242,98 @@ __global__ static void test_input(
 
 }
 
+/* compute all entries of bMatrix parallely */
+template <typename T, uint32_t blockThreads>
+__global__ static void calculate_b(
+    const rxmesh::Context      context,
+    rxmesh::VertexAttribute<T> original_coords,  // [num_coord, 3]
+    rxmesh::VertexAttribute<T> rot_mat,          // [num_coord, 9]
+    rxmesh::SparseMatrix<T>    weight_mat,       // [num_coord, num_coord]
+    rxmesh::DenseMatrix<T>        bMatrix)                 // [num_coord, 3]
+{
+    auto init_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
+        
+        // variable to store ith entry of bMatrix
+        Eigen::Vector3f bi(0.0f, 0.0f, 0.0f);
+
+        // get rotation matrix for ith vertex
+        Eigen::Matrix3f Ri = Eigen::Matrix3f::Zero(3, 3);
+
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+                Ri(i, j) = rot_mat(v_id, i * 3 + j);
+        }
+        Eigen::VectorXf w;
+        w.resize(vv.size());
+
+        for (int v = 0; v < vv.size(); v++) {
+            w(v) = weight_mat(v_id, vv[v]);
+        }
+
+        for (int nei_index = 0; nei_index < vv.size(); nei_index++) {
+            // get rotation matrix for neightbor j
+            Eigen::Matrix3f Rj = Eigen::Matrix3f::Zero(3, 3);
+            for (int i = 0; i < 3; i++) 
+                for (int j = 0; j < 3; j++)
+                    Rj(i, j) = rot_mat(vv[nei_index], i * 3 + j);
+            
+            // find rotation addition
+            Eigen::Matrix3f rot_add = Ri + Rj;
+            // find coord difference
+            Eigen::Vector3f vert_diff = 
+            {
+                original_coords(v_id, 0) - original_coords(vv[nei_index], 0),
+                original_coords(v_id, 1) - original_coords(vv[nei_index], 1),
+                original_coords(v_id, 2) - original_coords(vv[nei_index], 2)
+            };
+
+            // update bi
+            bi = bi + 0.5 * w[nei_index] * rot_add * vert_diff;
+        }
+
+        bMatrix(v_id, 0) = bi[0];
+        bMatrix(v_id, 1) = bi[1];
+        bMatrix(v_id, 2) = bi[2];
+    };
+
+    auto block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
+}
+
+/* compute system matrix rows parallely (L from eq9) */
+template <typename T, uint32_t blockThreads>
+__global__ static void calculate_system_matrix(
+    const rxmesh::Context   context,
+    rxmesh::SparseMatrix<T> weight_mat,  // [num_coord, num_coord]
+    rxmesh::SparseMatrix<T> L, // [num_coord, num_coord]
+    rxmesh::VertexAttribute<T> constrained)
+
+{
+    auto init_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
+
+        if (constrained(v_id, 0)==0) {
+            for (int nei_index = 0; nei_index < vv.size(); nei_index++) 
+            {
+                L(v_id, v_id) += weight_mat(v_id, vv[nei_index]);
+                L(v_id, vv[nei_index]) -= weight_mat(v_id, vv[nei_index]);
+            }
+        }
+        else {
+            for (int nei_index = 0; nei_index < vv.size(); nei_index++) {
+                L(v_id, vv[nei_index]) = 0;
+            }
+            L(v_id, v_id) = 1;
+        }
+    };
+
+    auto                block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
+}
 
 
 
@@ -292,6 +355,9 @@ int main(int argc, char** argv)
 
 
     //input
+    auto constraints = *rx.add_vertex_attribute<float>("FixedVertices", 1);
+
+
     constexpr uint32_t CUDABlockSize = 256;
     rxmesh::LaunchBox<CUDABlockSize> input_launch_box;
     rx.prepare_launch_box(
@@ -302,20 +368,16 @@ int main(int argc, char** argv)
     test_input<float, CUDABlockSize><<<input_launch_box.blocks,
                                        input_launch_box.num_threads,
                                        input_launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), ref_vertex_pos, *changed_vertex_pos);
+        rx.get_context(), ref_vertex_pos, *changed_vertex_pos, constraints);
 
     changed_vertex_pos->move(DEVICE, HOST);
-
+    rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
     //process
 
 
-    /*
+    
     //compute wij
     auto weights = rx.add_edge_attribute<float>("edgeWeights", 1);
-
-
-
-
     SparseMatrix<float> weight_matrix(rx);
 
     //obtain cotangent weight matrix
@@ -329,7 +391,7 @@ int main(int argc, char** argv)
                                                   launch_box.num_threads,
                                                   launch_box.smem_bytes_dyn>>>(
                                                   rx.get_context(), ref_vertex_pos, weight_matrix);
-    
+    /*
     //visualise edge weights
      rxmesh::LaunchBox<CUDABlockSize> launch_box2;
      rx.prepare_launch_box(
@@ -346,9 +408,10 @@ int main(int argc, char** argv)
 
 
      //pi and p'i
-
      //rx.get_polyscope_mesh()->addEdgeScalarQuantity("edgeWeights", *weights);
-     //
+     */
+
+    //
 
      //calculate rotation matrix
      auto rot_mat = *rx.add_vertex_attribute<float>("RotationMatrix", 9);
@@ -371,10 +434,81 @@ int main(int argc, char** argv)
 
     changed_vertex_pos->move(DEVICE, HOST);
 
+    ///position calculation
     
+    /**  Calculate bMatrix */
+    uint32_t num_vertices = rx.get_num_vertices();
+
+
+    //Eigen::MatrixXf bMatrix = Eigen::MatrixXf::Zero(num_vertices, 3);
+
+    DenseMatrix<float> bMatrix(rx, num_vertices, 3);
+
+    //DenseMatrix<float> B_mat(rx, num_vertices, 3);
+
+    // call function to calculate bMatrix entries parallely
+    rxmesh::LaunchBox<CUDABlockSize> launch_box_bMatrix;
+    rx.prepare_launch_box({rxmesh::Op::VV},
+                          launch_box_bMatrix,
+                          (void*)calculate_b<float, CUDABlockSize>);
+
+    calculate_b<float, CUDABlockSize><<<launch_box_bMatrix.blocks,
+                                        launch_box_bMatrix.num_threads,
+                                        launch_box_bMatrix.smem_bytes_dyn>>>(
+        rx.get_context(), *changed_vertex_pos, rot_mat, weight_matrix, bMatrix);
+
+    // Calculate System Matrix L 
+    //Eigen::MatrixXf systemMatrix = Eigen::MatrixXf::Zero(num_vertices, num_vertices);
+    SparseMatrix<float> systemMatrix(rx);
+    
+
+    // VertexAttribute that will store
+
+    // call function to calculate L Matrix entries parallely
+    rxmesh::LaunchBox<CUDABlockSize> launch_box_L;
+    rx.prepare_launch_box({rxmesh::Op::VV},
+                          launch_box_L,
+                          (void*)calculate_system_matrix<float, CUDABlockSize>);
+
+    calculate_system_matrix<float, CUDABlockSize>
+        <<<launch_box_L.blocks,
+           launch_box_L.num_threads,
+           launch_box_L.smem_bytes_dyn>>>(
+            rx.get_context(), weight_matrix, systemMatrix, constraints);
+    
+    // incorporating constraints. Keep the static and user modified vertices the
+    // same
+    // TODO: check with Ahmed if the following code is correct
+    // (do I need to move matrices from GPU to CPU to run following code?)
+    /*
+    for (int ids : constraints) {
+        systemMatrix.row(ids).setZero();
+        systemMatrix(ids, ids) = 1;
+    }
     */
 
-    rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
+
+    
+    // solve eq9 by Cholesky factorization
+    auto coords = rx.get_input_vertex_coordinates();
+    std::shared_ptr<DenseMatrix<float>> X_mat = coords->to_matrix();
+    
+    // Solving using CHOL
+    systemMatrix.pre_solve(PermuteMethod::NSTDIS);
+    systemMatrix.solve(bMatrix, *X_mat);
+
+    
+    // move the results to the host
+    X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
+    
+    // copy the results to attributes
+    coords->from_matrix(X_mat.get());
+
+
+    // visualize new position
+    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+
+    //rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
 
 
 #if USE_POLYSCOPE
