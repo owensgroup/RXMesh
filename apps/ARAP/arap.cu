@@ -130,9 +130,10 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
                                           rxmesh::SparseMatrix<T> weight_mat)
 {
 
-    auto vn_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
+    auto vn_lambda = [&](VertexHandle v_id, VertexIterator& vv)
+    {
         // pi
-        
+        /*        
         Eigen::MatrixXf pi = Eigen::MatrixXf::Identity(3, vv.size());
         for (int j = 0; j < vv.size(); j++) 
         {
@@ -158,10 +159,30 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
             pi_dash(1, j) = current_coords(v_id, 1) - current_coords(vv[j], 1);
             pi_dash(2, j) = current_coords(v_id, 2) - current_coords(vv[j], 2);
         }
-
+        */
         // calculate covariance matrix S = piDiPiTdash
         
-        Eigen::Matrix3f S = pi * diagonal_mat * pi_dash.transpose();
+        Eigen::Matrix3f S;  //= pi * diagonal_mat * pi_dash.transpose();
+
+        for (int j=0;j<vv.size();j++) {
+
+            float w = weight_mat(v_id, vv[j]);
+
+            Eigen::Vector<float,3> pi_vector = {
+                ref_coords(v_id, 0) - ref_coords(vv[j], 0),
+                ref_coords(v_id, 1) - ref_coords(vv[j], 1),
+                ref_coords(v_id, 2) - ref_coords(vv[j], 2)};
+
+
+            Eigen::Vector<float, 3> pi_dash_vector = {
+                current_coords(v_id, 0) - current_coords(vv[j], 0),
+                current_coords(v_id, 1) - current_coords(vv[j], 1),
+                current_coords(v_id, 2) - current_coords(vv[j], 2)};
+
+            S = S + w * pi_vector * pi_dash_vector.transpose();
+
+
+        }
 
         // perform svd on S (eigen)
         
@@ -173,7 +194,21 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
         Eigen::Vector3f sing_val;  // singular values
 
         svd(S, U, sing_val, V);
+
+        const float smallest_singular_value = sing_val.minCoeff();
+
+        U.col(smallest_singular_value) = U.col(smallest_singular_value) * -1;
+
+        Eigen::MatrixXf R = V * U.transpose();
         
+
+        // Matrix R to vector attribute R
+        
+        for (int i = 0; i < 3; i++) 
+            for (int j = 0; j < 3; j++)
+                rotationVector(v_id, i * 3 + j) = R(i, j);
+        
+
         //Eigen::JacobiSVD<Eigen::Matrix3f, Eigen::ComputeFullU | Eigen::ComputeFullV> svd(S);
 
 
@@ -181,17 +216,10 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
         Eigen::MatrixXf V = S.jacobiSvd().matrixV();
         Eigen::MatrixXf U = S.jacobiSvd().matrixU().eval();
 
-        float smallest_singular_value =
-            S.jacobiSvd().singularValues().minCoeff();
+        
 
-       U.col(smallest_singular_value)= U.col(smallest_singular_value) * -1;
-
-        Eigen::MatrixXf R = V * U;
-        // Matrix R to vector attribute R
-        for (int i=0;i<3;i++) {
-            for (int j = 0; j < 3; j++)
-                rotationVector(v_id, i * 3 + j) = R(i, j);
-        }
+       
+        
         */
     };
 
