@@ -190,6 +190,8 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
         Eigen::MatrixXf U = S.jacobiSvd().matrixU().eval();
         */
 
+        //Apply rotation
+        /*
         Eigen::Vector3<float> new_coords = {current_coords(v_id, 0),
                                             current_coords(v_id, 1),
                                             current_coords(v_id, 2)};
@@ -198,7 +200,7 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
         current_coords(v_id, 0) = new_coords[0];
         current_coords(v_id, 1) = new_coords[1];
         current_coords(v_id, 2) = new_coords[2];
-        
+        */
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -224,12 +226,15 @@ __global__ static void test_input(
         current_coords(v_id, 2) = ref_coords(v_id, 2);
 
         if (current_coords(v_id,1)>0.25) {
-            current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
-            constrained(v_id, 0) = 1;
+            //current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
+            constrained(v_id, 0) = 0;
         }
         else {
-            if (current_coords(v_id, 0) < 0.025)
+            if (current_coords(v_id, 0) < 0.025) {
                 constrained(v_id, 0) = 1;
+                current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
+
+            }
             else
                 constrained(v_id, 0) = 0;
         }
@@ -435,8 +440,8 @@ int main(int argc, char** argv)
                                                  rot_mat,
                                                  weight_matrix);
 
-    changed_vertex_pos->move(DEVICE, HOST);
-    /*
+    //changed_vertex_pos->move(DEVICE, HOST);
+    
     ///position calculation
     
     //  Calculate bMatrix 
@@ -500,6 +505,7 @@ int main(int argc, char** argv)
     //systemMatrix.pre_solve(PermuteMethod::NSTDIS);
     //systemMatrix.solve(bMatrix, *X_mat);
 
+    systemMatrix.solve(bMatrix, *X_mat, Solver::QR, PermuteMethod::NSTDIS);
     
     // move the results to the host
     X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
@@ -509,9 +515,9 @@ int main(int argc, char** argv)
 
 
     // visualize new position
-    //rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
 
-    rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
+    //rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
 
     rx.get_polyscope_mesh()->addVertexScalarQuantity("fixedVertices", *constraints);
     
