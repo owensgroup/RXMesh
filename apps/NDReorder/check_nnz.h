@@ -5,6 +5,7 @@
 #include <iostream>
 #include <vector>
 #include "matplotlibcpp.h"
+#include "rxmesh/util/timer.h"
 
 using namespace Eigen;
 
@@ -219,7 +220,16 @@ void processmesh_metis(const std::string& inputfile)
     options[METIS_OPTION_NUMBERING] = 0;  // 0-based indexing
 
     idx_t ncon = 1;  // Number of balancing constraints
+
+    rxmesh::GPUTimer timer;
+    timer.start();
+
     METIS_NodeND(&n, &xadj[0], &adjncy[0], NULL, options, &perm[0], &iperm[0]);
+
+    timer.stop();
+    float total_time = timer.elapsed_millis();
+
+    printf("METIS reordering time: %f ms\n", total_time);
 
     // Apply permutation to the sparse matrix (P * A * P^T)
     Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic, idx_t> permMatrix(

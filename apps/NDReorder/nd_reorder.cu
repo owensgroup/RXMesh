@@ -29,6 +29,7 @@
 struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    uint16_t nd_level        = 4;
     uint32_t    device_id     = 0;
 } Arg;
 
@@ -174,8 +175,16 @@ TEST(Apps, NDReorder)
     mgnd_reorder(rx, reorder_array);
 
     reorder_array_correctness_check(reorder_array, rx.get_num_vertices());
+    
+    GPUTimer timer;
+    timer.start();
 
-    nd_reorder(rx, reorder_array, 1);
+    nd_reorder(rx, reorder_array, Arg.nd_level);
+
+    timer.stop();
+    float total_time = timer.elapsed_millis();
+
+    RXMESH_INFO("ND overall Reordering time: {} ms", total_time);
 
     reorder_array_correctness_check(reorder_array, rx.get_num_vertices());
 
@@ -215,6 +224,11 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-device_id")) {
             Arg.device_id =
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-nd_level")) {
+            Arg.nd_level =
+                atoi(get_cmd_option(argv, argv + argc, "-nd_level"));
         }
     }
 
