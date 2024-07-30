@@ -220,9 +220,9 @@ __global__ static void test_input(
         current_coords(v_id, 2) = ref_coords(v_id, 2);
 
         if (current_coords(v_id,1)>1.35) {
-            current_coords(v_id, 1) = current_coords(v_id, 1) + 0.55;
-            current_coords(v_id, 0) = current_coords(v_id, 0) + 0.75;
-            current_coords(v_id, 2) = current_coords(v_id, 2) + 0.35;
+            current_coords(v_id, 1) = current_coords(v_id, 1) + 1.55;
+            current_coords(v_id, 0) = current_coords(v_id, 0) + 1.75;
+            current_coords(v_id, 2) = current_coords(v_id, 2) + 2.35;
             constrained(v_id, 0) = 1;
         }
         else {
@@ -299,9 +299,9 @@ __global__ static void calculate_b(
         }
         else 
         {
-            bMatrix(v_id, 0) = original_coords(v_id,0);
-            bMatrix(v_id, 1) = original_coords(v_id, 1);
-            bMatrix(v_id, 2) = original_coords(v_id, 2);
+            bMatrix(v_id, 0) = changed_coords(v_id,0);
+            bMatrix(v_id, 1) = changed_coords(v_id, 1);
+            bMatrix(v_id, 2) = changed_coords(v_id, 2);
         }
     };
 
