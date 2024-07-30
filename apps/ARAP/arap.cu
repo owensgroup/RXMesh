@@ -76,7 +76,10 @@ __global__ static void compute_edge_weights_evd(const rxmesh::Context      conte
             T e_weight = 0;
             e_weight = edge_cotan_weight(vv[0], vv[2], vv[1], vv[3], coords);
         A_mat(vv[0], vv[2]) = e_weight;
-        A_mat(vv[0], vv[2]) = 1;
+        A_mat(vv[2], vv[0]) = e_weight;
+
+        //A_mat(vv[0], vv[2]) = 1;
+        //A_mat(vv[2], vv[0]) = 1;
         
     };
 
@@ -180,23 +183,14 @@ __global__ static void calculate_rotation_matrix(const rxmesh::Context    contex
         for (int i = 0; i < 3; i++) 
             for (int j = 0; j < 3; j++)
                 rotationVector(v_id, i * 3 + j) = R(i, j);
-        
-
-        //Eigen::JacobiSVD<Eigen::Matrix3f, Eigen::ComputeFullU | Eigen::ComputeFullV> svd(S);
-
-
-        /*
-        Eigen::MatrixXf V = S.jacobiSvd().matrixV();
-        Eigen::MatrixXf U = S.jacobiSvd().matrixU().eval();
-        */
 
         //Apply rotation
-        /*
+        
         Eigen::Vector3<float> new_coords = {current_coords(v_id, 0),
                                             current_coords(v_id, 1),
                                             current_coords(v_id, 2)};
-        new_coords = R*new_coords;
-
+        /* new_coords                    = R * new_coords;
+        
         current_coords(v_id, 0) = new_coords[0];
         current_coords(v_id, 1) = new_coords[1];
         current_coords(v_id, 2) = new_coords[2];
@@ -226,7 +220,7 @@ __global__ static void test_input(
         current_coords(v_id, 2) = ref_coords(v_id, 2);
 
         if (current_coords(v_id,1)>1.25) {
-            current_coords(v_id, 1) = current_coords(v_id, 1) + 0.25;
+            current_coords(v_id, 1) = current_coords(v_id, 1) + 0.65;
             constrained(v_id, 0) = 1;
         }
         else {
@@ -254,6 +248,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void calculate_b(
     const rxmesh::Context      context,
     rxmesh::VertexAttribute<T> original_coords,  // [num_coord, 3]
+    rxmesh::VertexAttribute<T> changed_coords,  // [num_coord, 3]
     rxmesh::VertexAttribute<T> rot_mat,          // [num_coord, 9]
     rxmesh::SparseMatrix<T>    weight_mat,       // [num_coord, num_coord]
     rxmesh::DenseMatrix<T>        bMatrix,                 // [num_coord, 3]
@@ -302,9 +297,9 @@ __global__ static void calculate_b(
         }
         else 
         {
-            bMatrix(v_id, 0) = original_coords(v_id,0);
-            bMatrix(v_id, 1) = original_coords(v_id, 1);
-            bMatrix(v_id, 2) = original_coords(v_id, 2);
+            bMatrix(v_id, 0) = changed_coords(v_id,0);
+            bMatrix(v_id, 1) = changed_coords(v_id, 1);
+            bMatrix(v_id, 2) = changed_coords(v_id, 2);
         }
     };
 
@@ -329,15 +324,18 @@ __global__ static void calculate_system_matrix(
         for (int nei_index = 0; nei_index < vv.size(); nei_index++)
             L(v_id, vv[nei_index]) = 0;
 
-        if (constrained(v_id, 0)==0) {
+        if (constrained(v_id, 0)==0) 
+        {
             for (int nei_index = 0; nei_index < vv.size(); nei_index++) 
             {
                 L(v_id, v_id) += weight_mat(v_id, vv[nei_index]);
                 L(v_id, vv[nei_index]) -= weight_mat(v_id, vv[nei_index]);
             }
         }
-        else {
-            for (int nei_index = 0; nei_index < vv.size(); nei_index++) {
+        else 
+        {
+            for (int nei_index = 0; nei_index < vv.size(); nei_index++) 
+            {
                 L(v_id, vv[nei_index]) = 0;
             }
             L(v_id, v_id) = 1;
@@ -359,7 +357,7 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere1.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
     
@@ -447,7 +445,7 @@ int main(int argc, char** argv)
 
     
      //how many times will arap algorithm run?
-     int iterations = 1;
+     int iterations = 0;
      for (int i=0;i<iterations;i++) {
          //rotation part
          // calculate rotation matrix
@@ -460,26 +458,31 @@ int main(int argc, char** argv)
                                                       rot_mat,
                                                       weight_matrix);
 
-         //changed_vertex_pos->move(DEVICE, HOST);
+          changed_vertex_pos->move(DEVICE, HOST);
           calculate_b<float, CUDABlockSize>
              <<<launch_box_bMatrix.blocks,
                 launch_box_bMatrix.num_threads,
                 launch_box_bMatrix.smem_bytes_dyn>>>(rx.get_context(),
                                                      ref_vertex_pos,
+                                                    *changed_vertex_pos,
                                                      rot_mat,
                                                      weight_matrix,
                                                      bMatrix,
                                                      *constraints);
 
+
          bMatrix.move(DEVICE, HOST);
+
+         X_mat = changed_vertex_pos->to_matrix();
          systemMatrix.solve(bMatrix, *X_mat, Solver::LU, PermuteMethod::NSTDIS);
-         
+         //systemMatrix.solve(bMatrix, *X_mat, Solver::QR, PermuteMethod::NSTDIS);
+         X_mat->move(DEVICE, HOST);
          changed_vertex_pos->from_matrix(X_mat.get());
 
 
      }
      // visualize new position
-     //rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
+     rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
 
      rx.get_polyscope_mesh()->addVertexScalarQuantity("fixedVertices",
                                                       *constraints);
