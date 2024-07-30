@@ -33,7 +33,7 @@ edge_cotan_weight(const rxmesh::VertexHandle&       p_id,
     if (s_id.is_valid())
         weight   += dot((p - s), (r - s)) / length(cross(p - s, r - s));
     weight /= 2;
-    return weight;
+    return std::max(0.f, weight);
 }
 
 
@@ -219,8 +219,10 @@ __global__ static void test_input(
         current_coords(v_id, 1) = ref_coords(v_id, 1);
         current_coords(v_id, 2) = ref_coords(v_id, 2);
 
-        if (current_coords(v_id,1)>1.25) {
-            current_coords(v_id, 1) = current_coords(v_id, 1) + 0.65;
+        if (current_coords(v_id,1)>1.35) {
+            current_coords(v_id, 1) = current_coords(v_id, 1) + 0.55;
+            current_coords(v_id, 0) = current_coords(v_id, 0) + 0.75;
+            current_coords(v_id, 2) = current_coords(v_id, 2) + 0.35;
             constrained(v_id, 0) = 1;
         }
         else {
@@ -297,9 +299,9 @@ __global__ static void calculate_b(
         }
         else 
         {
-            bMatrix(v_id, 0) = changed_coords(v_id,0);
-            bMatrix(v_id, 1) = changed_coords(v_id, 1);
-            bMatrix(v_id, 2) = changed_coords(v_id, 2);
+            bMatrix(v_id, 0) = original_coords(v_id,0);
+            bMatrix(v_id, 1) = original_coords(v_id, 1);
+            bMatrix(v_id, 2) = original_coords(v_id, 2);
         }
     };
 
@@ -357,7 +359,7 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere1.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
     
@@ -445,7 +447,7 @@ int main(int argc, char** argv)
 
     
      //how many times will arap algorithm run?
-     int iterations = 0;
+     int iterations = 10;
      for (int i=0;i<iterations;i++) {
          //rotation part
          // calculate rotation matrix
@@ -458,7 +460,7 @@ int main(int argc, char** argv)
                                                       rot_mat,
                                                       weight_matrix);
 
-          changed_vertex_pos->move(DEVICE, HOST);
+          //changed_vertex_pos->move(DEVICE, HOST);
           calculate_b<float, CUDABlockSize>
              <<<launch_box_bMatrix.blocks,
                 launch_box_bMatrix.num_threads,
@@ -470,16 +472,13 @@ int main(int argc, char** argv)
                                                      bMatrix,
                                                      *constraints);
 
-
          bMatrix.move(DEVICE, HOST);
 
          X_mat = changed_vertex_pos->to_matrix();
-         systemMatrix.solve(bMatrix, *X_mat, Solver::LU, PermuteMethod::NSTDIS);
-         //systemMatrix.solve(bMatrix, *X_mat, Solver::QR, PermuteMethod::NSTDIS);
+         //systemMatrix.solve(bMatrix, *X_mat, Solver::LU, PermuteMethod::NSTDIS);
+         systemMatrix.solve(bMatrix, *X_mat, Solver::QR, PermuteMethod::NSTDIS);
          X_mat->move(DEVICE, HOST);
          changed_vertex_pos->from_matrix(X_mat.get());
-
-
      }
      // visualize new position
      rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
