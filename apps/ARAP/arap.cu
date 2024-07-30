@@ -76,7 +76,7 @@ __global__ static void compute_edge_weights_evd(const rxmesh::Context      conte
             T e_weight = 0;
             e_weight = edge_cotan_weight(vv[0], vv[2], vv[1], vv[3], coords);
         A_mat(vv[0], vv[2]) = e_weight;
-        //A_mat(vv[0], vv[2]) = 1;
+        A_mat(vv[0], vv[2]) = 1;
         
     };
 
@@ -225,12 +225,12 @@ __global__ static void test_input(
         current_coords(v_id, 1) = ref_coords(v_id, 1);
         current_coords(v_id, 2) = ref_coords(v_id, 2);
 
-        if (current_coords(v_id,1)>0.75) {
-            current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
+        if (current_coords(v_id,1)>1.25) {
+            current_coords(v_id, 1) = current_coords(v_id, 1) + 0.25;
             constrained(v_id, 0) = 1;
         }
         else {
-            if (current_coords(v_id, 1) < 0.025) {
+            if (current_coords(v_id, 1) < -0.34) {
                 constrained(v_id, 0) = 2;
                 //current_coords(v_id, 0) = current_coords(v_id, 0) + 0.25;
 
@@ -442,7 +442,8 @@ int main(int argc, char** argv)
 
 
 
-    DenseMatrix<float> X_mat(rx, rx.get_num_vertices(), 3);
+    //DenseMatrix<float> X_mat(rx, rx.get_num_vertices(), 3);
+    std::shared_ptr<DenseMatrix<float>> X_mat = changed_vertex_pos->to_matrix();
 
     
      //how many times will arap algorithm run?
@@ -471,15 +472,15 @@ int main(int argc, char** argv)
                                                      *constraints);
 
          bMatrix.move(DEVICE, HOST);
-         systemMatrix.solve(bMatrix, X_mat, Solver::LU, PermuteMethod::NSTDIS);
+         systemMatrix.solve(bMatrix, *X_mat, Solver::LU, PermuteMethod::NSTDIS);
          
-         changed_vertex_pos->from_matrix(&X_mat);
+         changed_vertex_pos->from_matrix(X_mat.get());
 
 
-         rx.get_polyscope_mesh()->updateVertexPositions(changed_vertex_pos);
      }
      // visualize new position
-     
+     //rx.get_polyscope_mesh()->updateVertexPositions(*changed_vertex_pos);
+
      rx.get_polyscope_mesh()->addVertexScalarQuantity("fixedVertices",
                                                       *constraints);
     
