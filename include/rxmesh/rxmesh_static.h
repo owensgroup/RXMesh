@@ -21,6 +21,8 @@
 #include "polyscope/surface_mesh.h"
 #endif
 
+#include <glm/fwd.hpp>
+
 namespace rxmesh {
 
 /**
@@ -61,22 +63,11 @@ class RXMeshStatic : public RXMesh
 
         m_attr_container = std::make_shared<AttributeContainer>();
 
-        m_input_vertex_coordinates =
-            this->add_vertex_attribute<float>(vertices, "rx:vertices");
-
+        std::string name = extract_file_name(file_path);
 #if USE_POLYSCOPE
-        polyscope::options::autocenterStructures = true;
-        polyscope::options::autoscaleStructures  = true;
-        polyscope::options::automaticallyComputeSceneExtents = true;
-
-        polyscope::init();
-        m_polyscope_mesh_name = polyscope::guessNiceNameFromPath(file_path);
-        m_polyscope_mesh_name += std::to_string(rand());
-        this->register_polyscope();
-        render_vertex_patch();
-        render_edge_patch();
-        render_face_patch();
+        name = polyscope::guessNiceNameFromPath(file_path);
 #endif
+        add_vertex_coordinates(vertices, name);
     };
 
     /**
@@ -84,12 +75,50 @@ class RXMeshStatic : public RXMesh
      * @param fv Face incident vertices as read from an obj file
      */
     explicit RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
-                          const std::string                   patcher_file = "")
+                          const std::string                   patcher_file = "",
+                          const float capacity_factor          = 1.0,
+                          const float patch_alloc_factor       = 1.0,
+                          const float lp_hashtable_load_factor = 0.8)
         : RXMesh(), m_input_vertex_coordinates(nullptr)
     {
-        this->init(fv, patcher_file);
+        this->init(fv,
+                   patcher_file,
+                   capacity_factor,
+                   patch_alloc_factor,
+                   lp_hashtable_load_factor);
         m_attr_container = std::make_shared<AttributeContainer>();
     };
+
+    /**
+     * @brief Add vertex coordinates to the input mesh. When calling
+     * RXMeshStatic constructor that takes the face's vertices, this function
+     * can be called to then add vertex coordinates and also add the mesh to
+     * polyscope if it is active. You don't need to call this function if you
+     * are constructing RXMeshStatic with the constructor that takes the path to
+     * mesh file
+     */
+    void add_vertex_coordinates(std::vector<std::vector<float>>& vertices,
+                                std::string                      mesh_name = "")
+    {
+        if (m_input_vertex_coordinates == nullptr) {
+
+            m_input_vertex_coordinates =
+                this->add_vertex_attribute<float>(vertices, "rx:vertices");
+
+#if USE_POLYSCOPE
+            // polyscope::options::autocenterStructures = true;
+            // polyscope::options::autoscaleStructures  = true;
+            // polyscope::options::automaticallyComputeSceneExtents = true;
+            polyscope::init();
+            m_polyscope_mesh_name = mesh_name.empty() ? "RXMesh" : mesh_name;
+            m_polyscope_mesh_name += std::to_string(rand());
+            this->register_polyscope();
+            render_vertex_patch();
+            render_edge_patch();
+            render_face_patch();
+#endif
+        }
+    }
 
     virtual ~RXMeshStatic()
     {
@@ -1000,7 +1029,7 @@ class RXMeshStatic : public RXMesh
      * @param lower bounding box lower corner
      * @param upper bounding box upper corner
      */
-    void scale(Vector3f lower, Vector3f upper)
+    void scale(glm::fvec3 lower, glm::fvec3 upper)
     {
         if (lower[0] > upper[0] || lower[1] > upper[1] || lower[2] > upper[2]) {
             RXMESH_ERROR(
@@ -1015,11 +1044,11 @@ class RXMeshStatic : public RXMesh
             return;
         }
 
-        Vector3f bb_lower, bb_upper;
+        glm::vec3 bb_lower(0), bb_upper(0);
 
         bounding_box(bb_lower, bb_upper);
 
-        Vector3f factor;
+        glm::vec3 factor;
         for (int i = 0; i < 3; ++i) {
             factor[i] =
                 (upper[i] - lower[i]) / ((bb_upper[i] - bb_lower[i]) +
@@ -1046,7 +1075,7 @@ class RXMeshStatic : public RXMesh
      * @param lower
      * @param upper
      */
-    void bounding_box(Vector3f& lower, Vector3f& upper)
+    void bounding_box(glm::vec3& lower, glm::vec3& upper)
     {
         lower[0] = std::numeric_limits<float>::max();
         lower[1] = std::numeric_limits<float>::max();
@@ -1061,7 +1090,7 @@ class RXMeshStatic : public RXMesh
         for_each_vertex(
             HOST,
             [&](const VertexHandle vh) {
-                Vector3f v(coord(vh, 0), coord(vh, 1), coord(vh, 2));
+                glm::vec3 v(coord(vh, 0), coord(vh, 1), coord(vh, 2));
                 for (int i = 0; i < 3; ++i) {
                     lower[i] = std::min(lower[i], v[i]);
                     upper[i] = std::max(upper[i], v[i]);
@@ -1174,7 +1203,7 @@ class RXMeshStatic : public RXMesh
         file.precision(30);
 
 
-        std::vector<Vector3d> obj_coords(get_num_vertices());
+        std::vector<glm::dvec3> obj_coords(get_num_vertices());
         for_each_vertex(
             HOST,
             [&](const VertexHandle vh) {

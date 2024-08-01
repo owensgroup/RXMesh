@@ -2,7 +2,7 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/query.cuh"
-#include "rxmesh/util/vector.h"
+
 /**
  * gaussian_curvature()
  */
@@ -17,17 +17,22 @@ __global__ static void compute_gaussian_curvature(
 
     auto gc_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
         // get the face's three vertices coordinates
-        Vector<3, T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
-        Vector<3, T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
-        Vector<3, T> c2(coords(fv[2], 0), coords(fv[2], 1), coords(fv[2], 2));
+        vec3<T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
+        vec3<T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
+        vec3<T> c2(coords(fv[2], 0), coords(fv[2], 1), coords(fv[2], 2));
 
         // the three edges length
-        Vector<3, T> l(dist2(c0, c1), dist2(c1, c2), dist2(c2, c0));
-        T            s = cross(c1 - c0, c2 - c0).norm();
-        Vector<3, T> c(dot(c1 - c0, c2 - c0),
-                       dot(c2 - c1, c0 - c1),
-                       dot(c0 - c2, c1 - c2));
-        Vector<3, T> rads(atan2(s, c[0]), atan2(s, c[1]), atan2(s, c[2]));
+        vec3<T> l(glm::distance2(c0, c1),
+                  glm::distance2(c1, c2),
+                  glm::distance2(c2, c0));
+
+        T s = glm::length(glm::cross(c1 - c0, c2 - c0));
+
+        vec3<T> c(glm::dot(c1 - c0, c2 - c0),
+                  glm::dot(c2 - c1, c0 - c1),
+                  glm::dot(c0 - c2, c1 - c2));
+
+        vec3<T> rads(atan2(s, c[0]), atan2(s, c[1]), atan2(s, c[2]));
 
         bool is_ob = false;
         for (int i = 0; i < 3; ++i) {

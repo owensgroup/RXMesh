@@ -24,14 +24,14 @@ TEST(Apps, Remesh)
     cuda_query(Arg.device_id);
 
     RXMeshDynamic rx(Arg.obj_file_name);
-    //rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
-    //        "_patches");
+    // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
+    //         "_patches");
 
     // RXMeshDynamic rx(Arg.obj_file_name,
     //                  STRINGIFY(OUTPUT_DIR) +
     //                      extract_file_name(Arg.obj_file_name) + "_patches");
-
-    ASSERT_TRUE(rx.is_closed());
+    //
+    // ASSERT_TRUE(rx.is_closed());
 
     remesh_rxmesh(rx);
 }

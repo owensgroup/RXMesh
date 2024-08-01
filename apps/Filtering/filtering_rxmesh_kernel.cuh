@@ -8,10 +8,6 @@
 #include "rxmesh/context.h"
 #include "rxmesh/kernels/query_dispatcher.cuh"
 #include "rxmesh/query.cuh"
-#include "rxmesh/util/vector.h"
-
-constexpr float EPS = 10e-6;
-
 
 /**
  * compute_vertex_normal()
@@ -27,13 +23,12 @@ __global__ static void compute_vertex_normal(const rxmesh::Context      context,
         VertexHandle v0(fv[0]), v1(fv[1]), v2(fv[2]);
 
         // get the face's three vertices coordinates
-        Vector<3, T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
-        Vector<3, T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
-        Vector<3, T> c2(coords(fv[2], 0), coords(fv[2], 1), coords(fv[2], 2));
+        vec3<T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
+        vec3<T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
+        vec3<T> c2(coords(fv[2], 0), coords(fv[2], 1), coords(fv[2], 2));
 
         // compute the face normal
-        Vector<3, T> n = cross(c1 - c0, c2 - c0);
-        n.normalize();
+        vec3<T> n = glm::normalize(glm::cross(c1 - c0, c2 - c0));
 
         // add the face's normal to its vertices
         for (uint32_t v = 0; v < 3; ++v) {      // for every vertex in this face
@@ -59,8 +54,8 @@ __device__ __inline__ void compute_new_coordinates(
     const rxmesh::VertexHandle&       v_id,
     const rxmesh::VertexHandle        vv[],
     const uint8_t                     num_vv,
-    rxmesh::Vector<3, T>&             v,
-    const rxmesh::Vector<3, T>&       n,
+    rxmesh::vec3<T>&                  v,
+    const rxmesh::vec3<T>&            n,
     const T                           sigma_c_sq,
     const rxmesh::VertexAttribute<T>& input_coords,
     rxmesh::VertexAttribute<T>&       filtered_coords)
@@ -70,11 +65,11 @@ __device__ __inline__ void compute_new_coordinates(
     T sum        = 0;
     T normalizer = 0;
     for (uint8_t i = 0; i < num_vv; ++i) {
-        rxmesh::Vector<3, T> q(input_coords(vv[i], 0),
-                               input_coords(vv[i], 1),
-                               input_coords(vv[i], 2));
+        rxmesh::vec3<T> q(input_coords(vv[i], 0),
+                          input_coords(vv[i], 1),
+                          input_coords(vv[i], 2));
         q -= v;
-        T t  = q.norm();
+        T t  = glm::length(q);
         T h  = dot(q, n);
         T wc = exp(-0.5 * t * t / sigma_c_sq);
         T ws = exp(-0.5 * h * h / sigma_s_sq);
@@ -108,11 +103,11 @@ __launch_bounds__(blockThreads) __global__
     uint32_t vv_patch[maxVVSize];
     uint16_t vv_local[maxVVSize];
 
-    uint8_t      num_vv     = 0;
-    T            sigma_c_sq = 0;
-    T            radius     = 0;
-    Vector<3, T> vertex, normal;
-    uint32_t     v_id = INVALID32;
+    uint8_t  num_vv     = 0;
+    T        sigma_c_sq = 0;
+    T        radius     = 0;
+    vec3<T>  vertex, normal;
+    uint32_t v_id = INVALID32;
 
     __shared__ uint32_t s_num_patches;
     __shared__ uint32_t s_block_patches[blockThreads];
@@ -149,10 +144,10 @@ __launch_bounds__(blockThreads) __global__
         sigma_c_sq = 1e10;
 
         for (uint32_t v = 0; v < iter.size(); ++v) {
-            const uint32_t     vv_id = iter[v];
-            const Vector<3, T> q(input_coords(vv_id, 0),
-                                 input_coords(vv_id, 1),
-                                 input_coords(vv_id, 2));
+            const uint32_t vv_id = iter[v];
+            const vec3<T>  q(input_coords(vv_id, 0),
+                            input_coords(vv_id, 1),
+                            input_coords(vv_id, 2));
 
             T len = dist2(vertex, q);
             if (len < sigma_c_sq) {
@@ -167,9 +162,9 @@ __launch_bounds__(blockThreads) __global__
         for (uint32_t v = 0; v < iter.size(); ++v) {
             uint32_t vv_id = iter[v];
 
-            const Vector<3, T> vvc(input_coords(vv_id, 0),
-                                   input_coords(vv_id, 1),
-                                   input_coords(vv_id, 2));
+            const vec3<T> vvc(input_coords(vv_id, 0),
+                              input_coords(vv_id, 1),
+                              input_coords(vv_id, 2));
 
             T dist = dist2(vertex, vvc);
 
@@ -212,9 +207,9 @@ __launch_bounds__(blockThreads) __global__
 
                         // make sure that it is not a duplicate
                         if (!linear_search(vv, vvv_id, num_vv)) {
-                            const Vector<3, T> vvv(input_coords(vvv_id, 0),
-                                                   input_coords(vvv_id, 1),
-                                                   input_coords(vvv_id, 2));
+                            const vec3<T> vvv(input_coords(vvv_id, 0),
+                                              input_coords(vvv_id, 1),
+                                              input_coords(vvv_id, 2));
 
 
                             T dist = dist2(vvv, vertex);
@@ -361,9 +356,9 @@ __launch_bounds__(blockThreads) __global__
                             // make sure that it is not a duplicate
                             if (!linear_search(vv, vvv_id, num_vv)) {
 
-                                const Vector<3, T> vvv(input_coords(vvv_id, 0),
-                                                       input_coords(vvv_id, 1),
-                                                       input_coords(vvv_id, 2));
+                                const vec3<T> vvv(input_coords(vvv_id, 0),
+                                                  input_coords(vvv_id, 1),
+                                                  input_coords(vvv_id, 2));
 
                                 T dist = dist2(vvv, vertex);
 
@@ -441,7 +436,7 @@ __global__ static void bilateral_filtering(
     uint32_t     num_vv     = 0;
     T            sigma_c_sq = 0;
     T            radius     = 0;
-    Vector<3, T> vertex, normal;
+    vec3<T>      vertex, normal;
     VertexHandle v_id;
 
     auto first_ring = [&](VertexHandle& p_id, VertexIterator& iter) {
@@ -454,7 +449,7 @@ __global__ static void bilateral_filtering(
         normal[1] = vertex_normals(v_id, 1);
         normal[2] = vertex_normals(v_id, 2);
 
-        normal.normalize();
+        normal = glm::normalize(normal);
 
         vv[0] = v_id;
         ++num_vv;
@@ -463,11 +458,11 @@ __global__ static void bilateral_filtering(
 
         for (uint32_t v = 0; v < iter.size(); ++v) {
             const VertexHandle vv_id = iter[v];
-            const Vector<3, T> q(input_coords(vv_id, 0),
-                                 input_coords(vv_id, 1),
-                                 input_coords(vv_id, 2));
+            const vec3<T>      q(input_coords(vv_id, 0),
+                            input_coords(vv_id, 1),
+                            input_coords(vv_id, 2));
 
-            T len = dist2(vertex, q);
+            T len = glm::distance2(vertex, q);
             if (len < sigma_c_sq) {
                 sigma_c_sq = len;
             }
@@ -479,11 +474,11 @@ __global__ static void bilateral_filtering(
         for (uint32_t v = 0; v < iter.size(); ++v) {
             const VertexHandle vv_id = iter[v];
 
-            const Vector<3, T> vvc(input_coords(vv_id, 0),
-                                   input_coords(vv_id, 1),
-                                   input_coords(vv_id, 2));
+            const vec3<T> vvc(input_coords(vv_id, 0),
+                              input_coords(vv_id, 1),
+                              input_coords(vv_id, 2));
 
-            T dist = dist2(vertex, vvc);
+            T dist = glm::distance2(vertex, vvc);
 
             if (dist <= radius) {
                 uint8_t id = num_vv++;
@@ -513,12 +508,12 @@ __global__ static void bilateral_filtering(
                 if (vvv_id != v_id) {
                     // make sure that we don't store duplicate outputs
                     if (!linear_search(vv, vvv_id, num_vv)) {
-                        const Vector<3, T> vvv(input_coords(vvv_id, 0),
-                                               input_coords(vvv_id, 1),
-                                               input_coords(vvv_id, 2));
+                        const vec3<T> vvv(input_coords(vvv_id, 0),
+                                          input_coords(vvv_id, 1),
+                                          input_coords(vvv_id, 2));
 
 
-                        T dist = dist2(vvv, vertex);
+                        T dist = glm::distance2(vvv, vertex);
                         if (dist <= radius) {
                             uint32_t id = num_vv++;
                             assert(id < maxVVSize);

@@ -30,9 +30,8 @@ set_property(TARGET Geodesic PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "Geodesic" FILES ${SOURCE_LIST})
 
-target_link_libraries( Geodesic
-    PRIVATE RXMesh_header_lib 
-    PRIVATE RXMesh_lib    
+target_link_libraries( Geodesic    
+    PRIVATE RXMesh
 	PRIVATE gtest_main
 	PRIVATE OpenMeshCore
     PRIVATE OpenMeshTools

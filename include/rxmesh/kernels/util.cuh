@@ -29,6 +29,32 @@ __global__ void memset(attrT* d_dest, const attrT val, const uint32_t length)
     }
 }
 
+__device__ __forceinline__ float atomicMin(float* address, float val)
+{
+    // from
+    // https://github.com/treecode/Bonsai/blob/master/runtime/profiling/derived_atomic_functions.h
+    int ret = __float_as_int(*address);
+    while (val < __int_as_float(ret)) {
+        int old = ret;
+        if ((ret = ::atomicCAS((int*)address, old, __float_as_int(val))) == old)
+            break;
+    }
+    return __int_as_float(ret);
+}
+
+__device__ __forceinline__ float atomicMax(float* address, float val)
+{
+    // from
+    // https://github.com/treecode/Bonsai/blob/master/runtime/profiling/derived_atomic_functions.h
+    int ret = __float_as_int(*address);
+    while (val > __int_as_float(ret)) {
+        int old = ret;
+        if ((ret = ::atomicCAS((int*)address, old, __float_as_int(val))) == old)
+            break;
+    }
+    return __int_as_float(ret);
+}
+
 __device__ __forceinline__ uint16_t atomicAdd(uint16_t* address, uint16_t val)
 {
     // Taken from

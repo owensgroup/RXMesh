@@ -5,7 +5,6 @@ set(SOURCE_LIST
 	mcf_rxmesh_kernel.cuh
 	mcf_openmesh.h
 	mcf_rxmesh.h	
-	mcf_util.h
 	mcf_sparse_matrix.cuh
 )
 
@@ -33,9 +32,8 @@ set_property(TARGET MCF PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "MCF" FILES ${SOURCE_LIST})
 
 
-target_link_libraries( MCF 
-    PRIVATE RXMesh_header_lib 
-    PRIVATE RXMesh_lib
+target_link_libraries( MCF     
+    PRIVATE RXMesh
     PRIVATE gtest_main
 	PRIVATE OpenMeshCore
     PRIVATE OpenMeshTools

@@ -1,9 +1,9 @@
 #pragma once
 #include "../common/openmesh_report.h"
 #include "../common/openmesh_trimesh.h"
-#include "mcf_util.h"
 #include "rxmesh/util/timer.h"
-#include "rxmesh/util/vector.h"
+
+#include "rxmesh/geometry_util.cuh"
 
 /**
  * axpy3()
@@ -41,7 +41,8 @@ T dot3(const std::vector<std::vector<T>>& A,
 
     T   ret  = 0;
     int size = static_cast<int>(A.size());
-#pragma omp parallel for schedule(static) num_threads(num_omp_threads) reduction(+ : ret)
+#pragma omp parallel for schedule(static) num_threads(num_omp_threads) \
+    reduction(+ : ret)
     for (int i = 0; i < size; ++i) {
         T partial = 0;
         for (size_t j = 0; j < A[i].size(); ++j) {
@@ -73,14 +74,14 @@ T partial_voronoi_area(const int      p_id,  // center
     assert((*q_it).idx() == q_id);
     assert((*r_it).idx() == r_id);
 
-    const rxmesh::Vector<3, T> p(
+    const rxmesh::vec3<T> p(
         mesh.point(*p_it)[0], mesh.point(*p_it)[1], mesh.point(*p_it)[2]);
-    const rxmesh::Vector<3, T> q(
+    const rxmesh::vec3<T> q(
         mesh.point(*q_it)[0], mesh.point(*q_it)[1], mesh.point(*q_it)[2]);
-    const rxmesh::Vector<3, T> r(
+    const rxmesh::vec3<T> r(
         mesh.point(*r_it)[0], mesh.point(*r_it)[1], mesh.point(*r_it)[2]);
 
-    return partial_voronoi_area(p, q, r);
+    return rxmesh::partial_voronoi_area(p, q, r);
 }
 
 /**
@@ -102,16 +103,16 @@ T edge_cotan_weight(const int      p_id,
     TriMesh::VertexIter q_it = mesh.vertices_begin() + q_id;
     TriMesh::VertexIter s_it = mesh.vertices_begin() + s_id;
 
-    const rxmesh::Vector<3, T> p(
+    const rxmesh::vec3<T> p(
         mesh.point(*p_it)[0], mesh.point(*p_it)[1], mesh.point(*p_it)[2]);
-    const rxmesh::Vector<3, T> r(
+    const rxmesh::vec3<T> r(
         mesh.point(*r_it)[0], mesh.point(*r_it)[1], mesh.point(*r_it)[2]);
-    const rxmesh::Vector<3, T> q(
+    const rxmesh::vec3<T> q(
         mesh.point(*q_it)[0], mesh.point(*q_it)[1], mesh.point(*q_it)[2]);
-    const rxmesh::Vector<3, T> s(
+    const rxmesh::vec3<T> s(
         mesh.point(*s_it)[0], mesh.point(*s_it)[1], mesh.point(*s_it)[2]);
 
-    return edge_cotan_weight(p, r, q, s);
+    return rxmesh::edge_cotan_weight(p, r, q, s);
 }
 
 
@@ -149,8 +150,8 @@ void mcf_matvec(TriMesh&                           mesh,
         TriMesh::VertexIter p_iter = mesh.vertices_begin() + p_id;
 
         // Off-diagonal entries
-        rxmesh::Vector<3, T> x(T(0));
-        T                    sum_e_weight(0);
+        rxmesh::vec3<T> x(T(0));
+        T               sum_e_weight(0);
 
         // vertex weight
         T v_weight(0);
@@ -440,7 +441,7 @@ void mcf_openmesh(const int                    num_omp_threads,
 
 
     // write output
-    //#pragma omp parallel for
+    // #pragma omp parallel for
     //    for (int v_id = 0; v_id < int(input_mesh.n_vertices()); ++v_id) {
     //        TriMesh::VertexIter v_iter = input_mesh.vertices_begin() + v_id;
     //        input_mesh.point(*v_iter)[0] = smoothed_coord[v_id][0];

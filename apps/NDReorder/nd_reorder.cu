@@ -1,92 +1,79 @@
 #include "gtest/gtest.h"
-#include "rxmesh/attribute.h"
-#include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
 
-#include "nd_reorder_kernel.cuh"
+#include "nd_cross_patch_ordering.cuh"
+#include "nd_single_patch_ordering.cuh"
+
+#include <vector>
+#include "cusparse.h"
+#include "rxmesh/context.h"
+#include "rxmesh/types.h"
+
+#include "rxmesh/bitmask.cuh"
+#include "rxmesh/context.h"
+#include "rxmesh/handle.h"
+#include "rxmesh/kernels/loader.cuh"
+#include "rxmesh/kernels/util.cuh"
+#include "rxmesh/patch_info.h"
+#include "rxmesh/rxmesh_dynamic.h"
+
+#include "rxmesh/matrix/sparse_matrix.cuh"
+
+#include "thrust/sort.h"
+
+#include "check_nnz.h"
+
+#include "nd_mgnd_implementation.cuh"
+#include "nd_cross_patch_nd_implementation.cuh"
 
 struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    uint16_t nd_level        = 4;
     uint32_t    device_id     = 0;
 } Arg;
 
-
-/*
-
- */
-void nd_reorder()
+TEST(Apps, NDReorder)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
     RXMeshStatic rx(Arg.obj_file_name);
 
-    //rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
-    //        "_nd_patches");
+    // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
+    //         "_nd_patches");
 
     // RXMeshDynamic rx(Arg.obj_file_name,
     //                  STRINGIFY(OUTPUT_DIR) +
-    //                      extract_file_name(Arg.obj_file_name) + "_nd_patches");
-
-
-    // Tests using coloring
-    //vertex color attribute 
-    auto attr_matched_v = rx.add_vertex_attribute<uint16_t>("attr_matched_v", 1);
-    auto attr_active_e = rx.add_edge_attribute<uint16_t>("attr_active_e", 1);
-    
-    auto v_reorder =
-        rx.add_vertex_attribute<uint16_t>("v_reorder", 1, rxmesh::LOCATION_ALL);
-
-    uint16_t req_levels = 5;
-
-    // TODO: prepare kernel required variable
-    uint32_t blocks         = rx.get_num_patches();
-    uint32_t threads        = blockThreads;
-    size_t   smem_bytes_dyn = 0;
-
-    smem_bytes_dyn += (1 + 1 * req_levels) * rx.max_bitmask_size<LocalEdgeT>();
-    smem_bytes_dyn += (6 + 4 * req_levels) * rx.max_bitmask_size<LocalVertexT>();
-    smem_bytes_dyn += (4 + 5 * req_levels) * rx.get_per_patch_max_edges() * sizeof(uint16_t);
-    smem_bytes_dyn += (1 + 4 * req_levels) * rx.get_per_patch_max_vertices() * sizeof(uint16_t);
-    smem_bytes_dyn += (11 + 11 * req_levels) * ShmemAllocator::default_alignment;
-
-    RXMESH_TRACE("blocks: {}, threads: {}, smem_bytes: {}", blocks, threads, smem_bytes_dyn);
-
-    nd_main<blockThreads><<<blocks, threads, smem_bytes_dyn>>>(
-        rx.get_context(), *v_reorder, *attr_matched_v, *attr_active_e, req_levels);
-
-    CUDA_ERROR(cudaDeviceSynchronize());
-
-#if USE_POLYSCOPE
-    // Tests using coloring
-    //Move vertex color to the host 
-    attr_matched_v->move(rxmesh::DEVICE, rxmesh::HOST);
-    attr_active_e->move(rxmesh::DEVICE, rxmesh::HOST);
-
-    //polyscope instance associated with rx 
-    auto polyscope_mesh = rx.get_polyscope_mesh();
-
-    //pass vertex color to polyscope 
-    polyscope_mesh->addVertexScalarQuantity("attr_matched_v", *attr_matched_v);
-    polyscope_mesh->addEdgeScalarQuantity("attr_active_e", *attr_active_e);
-
-    //render 
-    polyscope::show();
-#endif
-
-    RXMESH_TRACE("DONE!!!!!!!!!!!!!!");
-}
-
-TEST(Apps, NDReorder)
-{
-    using namespace rxmesh;
+    //                      extract_file_name(Arg.obj_file_name) +
+    //                      "_nd_patches");
 
     // Select device
     cuda_query(Arg.device_id);
 
-    // nd reorder implementation
-    nd_reorder();
+    // allocate result array
+    uint32_t* reorder_array;
+    CUDA_ERROR(cudaMallocManaged(&reorder_array,
+                                 sizeof(uint32_t) * rx.get_num_vertices()));
+    CUDA_ERROR(cudaMemset(reorder_array, 0, sizeof(uint32_t) * rx.get_num_vertices()));
+
+    GPUTimer timer;
+    timer.start();
+
+    nd_reorder(rx, reorder_array, Arg.nd_level);
+
+    timer.stop();
+    float total_time = timer.elapsed_millis();
+
+    RXMESH_INFO("ND overall Reordering time: {} ms", total_time);
+
+    reorder_array_correctness_check(reorder_array, rx.get_num_vertices());
+
+    //  // for get the nnz data
+    std::vector<uint32_t> reorder_vector(reorder_array, reorder_array + rx.get_num_vertices()); 
+    processmesh_ordering(Arg.obj_file_name, (reorder_vector));
+    processmesh_metis(Arg.obj_file_name);   
+    processmesh_original(Arg.obj_file_name);
 }
 
 int main(int argc, char** argv)
@@ -119,6 +106,11 @@ int main(int argc, char** argv)
             Arg.device_id =
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
         }
+
+        if (cmd_option_exists(argv, argc + argv, "-nd_level")) {
+            Arg.nd_level =
+                atoi(get_cmd_option(argv, argv + argc, "-nd_level"));
+        }
     }
 
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
@@ -126,6 +118,3 @@ int main(int argc, char** argv)
 
     return RUN_ALL_TESTS();
 }
-
-
-// batch info file

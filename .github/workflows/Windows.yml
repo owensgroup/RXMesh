@@ -4,10 +4,10 @@ jobs:
   WindowsRun:
     runs-on: windows-2019
     steps:
-      - uses: Jimver/cuda-toolkit@v0.2.8
+      - uses: Jimver/cuda-toolkit@v0.2.14
         id: cuda-toolkit
         with:
-          cuda: '11.2.2'
+          cuda: '12.3.2'
           linux-local-args: '["--toolkit"]'      
       - run: nvcc -V      
       - name: Checkout

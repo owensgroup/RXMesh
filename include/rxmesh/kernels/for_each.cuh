@@ -9,13 +9,17 @@ namespace rxmesh {
 
 template <typename LambdaT>
 __device__ __inline__ void for_each_vertex(const PatchInfo patch_info,
-                                           LambdaT         apply)
+                                           LambdaT         apply,
+                                           bool allow_not_owned = false)
 {
 
     const uint16_t num_v = patch_info.num_vertices[0];
     for (uint16_t v = threadIdx.x; v < num_v; v += blockDim.x) {
-        if (detail::is_owned(v, patch_info.owned_mask_v) &&
-            !detail::is_deleted(v, patch_info.active_mask_v)) {
+        if (!detail::is_deleted(v, patch_info.active_mask_v)) {
+            if (!allow_not_owned &&
+                !detail::is_owned(v, patch_info.owned_mask_v)) {
+                continue;
+            }
             VertexHandle v_handle(patch_info.patch_id, v);
             apply(v_handle);
         }
@@ -37,13 +41,17 @@ __global__ void for_each_vertex(const uint32_t   num_patches,
 
 template <typename LambdaT>
 __device__ __inline__ void for_each_edge(const PatchInfo patch_info,
-                                         LambdaT         apply)
+                                         LambdaT         apply,
+                                         bool allow_not_owned = false)
 {
 
     const uint16_t num_e = patch_info.num_edges[0];
     for (uint16_t e = threadIdx.x; e < num_e; e += blockDim.x) {
-        if (detail::is_owned(e, patch_info.owned_mask_e) &&
-            !detail::is_deleted(e, patch_info.active_mask_e)) {
+        if (!detail::is_deleted(e, patch_info.active_mask_e)) {
+            if (!allow_not_owned &&
+                !detail::is_owned(e, patch_info.owned_mask_e)) {
+                continue;
+            }
             EdgeHandle e_handle(patch_info.patch_id, e);
             apply(e_handle);
         }
@@ -65,12 +73,16 @@ __global__ void for_each_edge(const uint32_t   num_patches,
 
 template <typename LambdaT>
 __device__ __inline__ void for_each_face(const PatchInfo patch_info,
-                                         LambdaT         apply)
+                                         LambdaT         apply,
+                                         bool allow_not_owned = false)
 {
     const uint16_t num_f = patch_info.num_faces[0];
     for (uint16_t f = threadIdx.x; f < num_f; f += blockDim.x) {
-        if (detail::is_owned(f, patch_info.owned_mask_f) &&
-            !detail::is_deleted(f, patch_info.active_mask_f)) {
+        if (!detail::is_deleted(f, patch_info.active_mask_f)) {
+            if (!allow_not_owned &&
+                !detail::is_owned(f, patch_info.owned_mask_f)) {
+                continue;
+            }
             FaceHandle f_handle(patch_info.patch_id, f);
             apply(f_handle);
         }

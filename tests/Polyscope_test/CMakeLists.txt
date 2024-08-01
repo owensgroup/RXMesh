@@ -17,9 +17,8 @@ if (USE_POLYSCOPE)
 	source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "Polyscope_test" FILES ${SOURCE_LIST})
 
 	target_link_libraries( Polyscope_test
-		PRIVATE polyscope
-	    PRIVATE RXMesh_header_lib 
-	    PRIVATE RXMesh_lib
+		PRIVATE polyscope	    
+	    PRIVATE RXMesh
 		PRIVATE gtest_main
 	)
 

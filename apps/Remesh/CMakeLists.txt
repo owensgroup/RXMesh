@@ -3,7 +3,8 @@ add_executable(Remesh)
 set(SOURCE_LIST
     remesh.cu  
 	remesh_rxmesh.cuh	
-	remesh_kernels.cuh
+	remesh_kernels.cuh	
+	link_condition.cuh
 )
 
 set(COMMON_LIST    
@@ -29,9 +30,8 @@ set_property(TARGET Remesh PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "Remesh" FILES ${SOURCE_LIST})
 
-target_link_libraries(Remesh 
-    PRIVATE RXMesh_header_lib 
-    PRIVATE RXMesh_lib
+target_link_libraries(Remesh     
+    PRIVATE RXMesh
     PRIVATE gtest_main
 	PRIVATE OpenMeshCore
     PRIVATE OpenMeshTools

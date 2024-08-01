@@ -1,6 +1,7 @@
-#include "gtest/gtest.h"
 #include <cmath>
+#include "gtest/gtest.h"
 
+#include "rxmesh/geometry_util.cuh"
 #include "rxmesh/rxmesh_static.h"
 
 #include "query_kernel.cuh"
@@ -46,12 +47,6 @@ TEST(RXMeshStatic, EVDiamond)
 
     auto coords = *rx.get_input_vertex_coordinates();
 
-    auto tri_area = [&](Vector3f& x0, Vector3f& x1, Vector3f& x2) {
-        float a((x0 - x1).norm()), b((x1 - x2).norm()), c((x2 - x0).norm());
-        float s = (a + b + c) / 2;
-        return std::sqrt(s * (s - a) * (s - b) * (s - c));
-    };
-
     rx.for_each_edge(HOST, [&](const EdgeHandle& eh) {
         //      v3
         //    /   \
@@ -70,10 +65,10 @@ TEST(RXMeshStatic, EVDiamond)
 
         if (v0.is_valid() && v1.is_valid() && v2.is_valid() && v3.is_valid()) {
 
-            Vector3f x0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-            Vector3f x1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-            Vector3f x2(coords(v2, 0), coords(v2, 1), coords(v2, 2));
-            Vector3f x3(coords(v3, 0), coords(v3, 1), coords(v3, 2));
+            glm::vec3 x0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+            glm::vec3 x1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+            glm::vec3 x2(coords(v2, 0), coords(v2, 1), coords(v2, 2));
+            glm::vec3 x3(coords(v3, 0), coords(v3, 1), coords(v3, 2));
 
             float t0 = tri_area(x0, x1, x2);
             float t1 = tri_area(x0, x2, x3);
