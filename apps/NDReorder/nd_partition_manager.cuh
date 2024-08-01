@@ -534,8 +534,9 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
     }
     block.sync();
 
-    uint16_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     assert(m_s_num_vertices[0] == m_patch_info.get_num_owned<VertexHandle>());
+
+    uint16_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx == 0) {
         printf(
             "num_v: %u, num_e: %u, num_v_limit: %u, num_e_limit: %u, "
@@ -1252,7 +1253,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::local_partition(
     }
 }
 
-
+//TODO: doesn't work for multi-level
 template <uint32_t blockThreads>
 __device__ __inline__ void
 PartitionManager<blockThreads>::local_multi_level_partition(

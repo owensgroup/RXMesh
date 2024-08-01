@@ -6,6 +6,7 @@
 #include <vector>
 #include "matplotlibcpp.h"
 #include "rxmesh/util/timer.h"
+#include "rxmesh/util/log.h"
 
 using namespace Eigen;
 
@@ -126,8 +127,10 @@ void printNonZerosRatio(const SparseMatrix<float>& original_matrix,
 {
     int nnz_original   = original_matrix.nonZeros();
     int nnz_factorized = factorized_matrix.nonZeros();
-    printf("NNZ ratio for %s: %f\n",
-           name.c_str(),
+    // printf("NNZ ratio for %s: %f\n",
+    //        name.c_str(),
+    //        float(nnz_factorized) / float(nnz_original));
+    RXMESH_INFO("NNZ ratio for {}: {}", name.c_str(),
            float(nnz_factorized) / float(nnz_original));
 }
 
@@ -221,7 +224,7 @@ void processmesh_metis(const std::string& inputfile)
 
     idx_t ncon = 1;  // Number of balancing constraints
 
-    rxmesh::GPUTimer timer;
+    rxmesh::CPUTimer timer;
     timer.start();
 
     METIS_NodeND(&n, &xadj[0], &adjncy[0], NULL, options, &perm[0], &iperm[0]);
@@ -229,7 +232,8 @@ void processmesh_metis(const std::string& inputfile)
     timer.stop();
     float total_time = timer.elapsed_millis();
 
-    printf("METIS reordering time: %f ms\n", total_time);
+    // printf("METIS reordering time: %f ms\n", total_time);
+    RXMESH_INFO("METIS reordering time: {} ms", total_time);
 
     // Apply permutation to the sparse matrix (P * A * P^T)
     Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic, idx_t> permMatrix(

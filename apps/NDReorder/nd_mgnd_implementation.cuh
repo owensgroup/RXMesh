@@ -138,21 +138,21 @@ void mgnd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr)
                                                          v_ordering_spv_idx);
     cudaDeviceSynchronize();
 
-    printf("v_ordering_prefix_sum: ");
-    for (int i = 0; i < v_ordering_prefix_sum_size; i++) {
-        printf("%d ", v_ordering_prefix_sum[i]);
-    }
-    printf("\n");
+    // printf("v_ordering_prefix_sum: ");
+    // for (int i = 0; i < v_ordering_prefix_sum_size; i++) {
+    //     printf("%d ", v_ordering_prefix_sum[i]);
+    // }
+    // printf("\n");
 
     thrust::exclusive_scan(v_ordering_prefix_sum,
                            v_ordering_prefix_sum + v_ordering_prefix_sum_size,
                            v_ordering_prefix_sum);
 
-    printf("v_ordering_prefix_sum: ");
-    for (int i = 0; i < v_ordering_prefix_sum_size; i++) {
-        printf("%d ", v_ordering_prefix_sum[i]);
-    }
-    printf("\n");
+    // printf("v_ordering_prefix_sum: ");
+    // for (int i = 0; i < v_ordering_prefix_sum_size; i++) {
+    //     printf("%d ", v_ordering_prefix_sum[i]);
+    // }
+    // printf("\n");
 
     assign_numbering<blockThreads>
         <<<launch_box_assign_numbering.blocks,
@@ -176,9 +176,5 @@ void mgnd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr)
 
     RXMESH_INFO("mgnd end");
 }
-
-//TODO: refinement kernel for balancing the partition
-//TODO: cuda device synchronize vs cuda stream synchronize, efficiency test
-//TODO: outline for the thesis
 
 }  // namespace rxmesh
