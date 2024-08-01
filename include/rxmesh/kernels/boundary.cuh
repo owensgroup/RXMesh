@@ -19,6 +19,8 @@ __global__ void identify_boundary_vertices(const Context      context,
     ShmemAllocator shrd_alloc;
 
     Bitmask bd_e(query.get_patch_info().num_edges[0], shrd_alloc);
+    bd_e.reset(block);
+    block.sync();
 
     auto boundary_edges = [&](EdgeHandle& e_id, const FaceIterator& iter) {
         if (iter.size() < 2) {
