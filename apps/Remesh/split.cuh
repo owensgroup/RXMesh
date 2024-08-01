@@ -213,7 +213,6 @@ __global__ static void edge_split(rxmesh::Context                   context,
     //    }
     //    block.sync();
     //}
-
 }
 
 
@@ -251,17 +250,17 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
             //             rx.get_context().m_patch_scheduler.size());
 
             LaunchBox<blockThreads> launch_box;
-            rx.prepare_launch_box({Op::EVDiamond},
-                                  launch_box,
-                                  (void*)edge_split<T, blockThreads>,
-                                  true,
-                                  false,
-                                  false,
-                                  false,
-                                  [&](uint32_t v, uint32_t e, uint32_t f) {
-                                      return detail::mask_num_bytes(e) +
-                                             ShmemAllocator::default_alignment;
-                                  });
+            rx.update_launch_box({Op::EVDiamond},
+                                 launch_box,
+                                 (void*)edge_split<T, blockThreads>,
+                                 true,
+                                 false,
+                                 false,
+                                 false,
+                                 [&](uint32_t v, uint32_t e, uint32_t f) {
+                                     return detail::mask_num_bytes(e) +
+                                            ShmemAllocator::default_alignment;
+                                 });
 
             timers.start("Split");
             edge_split<T, blockThreads>
@@ -291,7 +290,7 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
             CUDA_ERROR(cudaDeviceSynchronize());
             timers.stop("SplitCleanup");
 
-            bool show = true;
+            bool show = false;
             if (show) {
 
                 rx.update_host();
