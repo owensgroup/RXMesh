@@ -15,7 +15,7 @@ __global__ static void compute_area_matrix(
 
     auto vn_lambda = [&](EdgeHandle edge_id, VertexIterator& vv) {
         if (boundaryVertices(vv[0], 0) == 1 && boundaryVertices(vv[1], 0) == 1) {
-            AreaMatrix(vv[0], vv[1]) = make_cuComplex(0, -0.25);  // modify later
+            AreaMatrix(vv[0], vv[1]) = make_cuComplex(0, -0.25);  
             AreaMatrix(vv[1], vv[0]) = make_cuComplex(0, 0.25);
         }
     };
@@ -97,8 +97,8 @@ __global__ static void calculate_Ld_matrix(
         for (int nei_index = 0; nei_index < vv.size(); nei_index++) {
             Ld(v_id, v_id) =
                 cuCaddf(Ld(v_id, v_id),
-                        make_cuComplex(weight_mat(v_id, vv[nei_index]),
-                                       weight_mat(v_id, vv[nei_index])));
+                        make_cuComplex(weight_mat(v_id, vv[nei_index]),0));
+//                                       weight_mat(v_id, vv[nei_index])));
 
             Ld(v_id, vv[nei_index]) =
                 cuCsubf(Ld(v_id, vv[nei_index]),make_cuComplex(weight_mat(v_id, vv[nei_index]), 0));
@@ -208,13 +208,13 @@ int main(int argc, char** argv)
      SparseMatrix<cuComplex> Lc(rx);
     rxmesh::LaunchBox<CUDABlockSize> launch_box_lc;
     rx.prepare_launch_box({rxmesh::Op::VV},
-                          launch_box_ld,
+                          launch_box_lc,
                           (void*)subtract_matrix<cuComplex, CUDABlockSize>);
 
     subtract_matrix<cuComplex, CUDABlockSize>
-        <<<launch_box_ld.blocks,
-           launch_box_ld.num_threads,
-           launch_box_ld.smem_bytes_dyn>>>
+        <<<launch_box_lc.blocks,
+           launch_box_lc.num_threads,
+           launch_box_lc.smem_bytes_dyn>>>
     (rx.get_context(), Lc, Ld, A);
 
     int number_of_vertices = rx.get_num_vertices();
@@ -258,31 +258,32 @@ int main(int argc, char** argv)
     //
     // S = [B- (1/Vb) * ebebT];
     u.fill_random();
+    Lc.pre_solve(PermuteMethod::NSTDIS);  // can be outside the loop
 
-    int iterations=1;
+    int iterations=32;
 
     for (int i = 0; i < iterations; i++) {
         cuComplex T2 = eb.dot(u);
 
         B.multiply(u, T1);
 
-        eb.multiply(T2);
+        //eb.multiply(T2);
 
         rx.for_each_vertex(
             rxmesh::DEVICE,
             [eb, B, T2, T1] __device__(const rxmesh::VertexHandle vh) mutable {
-                T1(vh, 0) = cuCsubf(T1(vh, 0), eb(vh, 0));
+                T1(vh, 0) = cuCsubf(T1(vh, 0), cuCmulf(eb(vh, 0),T2));
             });
 
-        // Lc.pre_solve(PermuteMethod::NSTDIS);  // can be outside the loop
-        // Lc.solve(T1, y);                      // Ly=T1
+        // 
+         Lc.solve(T1, y);                      // Ly=T1
 
 
-        Lc.solve(T1, y, Solver::QR, PermuteMethod::NSTDIS);
+        //Lc.solve(T1, y, Solver::QR, PermuteMethod::NSTDIS);
 
         y.multiply(1 / y.norm2());
-        u.copy_from(y);
     }
+    u.copy_from(y);
     // conversion step
 
 
@@ -291,9 +292,18 @@ int main(int argc, char** argv)
     rx.for_each_vertex(rxmesh::DEVICE,
                       [u,parametric_coordinates] __device__(
                           const rxmesh::VertexHandle vh) mutable {
-                            parametric_coordinates(vh, 0) = u(vh, 1).x;
-                            parametric_coordinates(vh, 1) = u(vh, 1).y;
+                            parametric_coordinates(vh, 0) = u(vh, 0).x;
+                            parametric_coordinates(vh, 1) = u(vh, 0).y;
                       });
+
+    parametric_coordinates.move(DEVICE, HOST);
+
+    //calculate cntre, shift mesh by centre (translate back)
+    //divide maximum value irrespective of axis (abs max value verte)- divide by all coordinates
+    //u,v is always [(0,0),(1,1)]
+
+
+
 
 
     rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
