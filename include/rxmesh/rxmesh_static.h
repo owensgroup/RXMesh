@@ -612,6 +612,30 @@ class RXMeshStatic : public RXMesh
         }
     }
 
+
+    /**
+     * @brief same as for_each_vertex/edge/face where the type is defined via
+     * template parameter
+     */
+    template <typename HandleT, typename LambdaT>
+    void for_each(locationT    location,
+                  LambdaT      apply,
+                  cudaStream_t stream   = NULL,
+                  bool         with_omp = true)
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            for_each_vertex(location, apply, stream, with_omp);
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            for_each_edge(location, apply, stream, with_omp);
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            for_each_face(location, apply, stream, with_omp);
+        }
+    }
+
     /**
      * @brief populate the launch_box with grid size and dynamic shared memory
      * needed for kernel launch
@@ -983,6 +1007,34 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
+     * @brief similar to add_vertex/edge/face_attribute where the mesh element
+     * type is defined via template parameter
+     * @return
+     */
+    template <class T, class HandleT>
+    std::shared_ptr<Attribute<T, HandleT>> add_attribute(
+        const std::string& name,
+        uint32_t           num_attributes,
+        locationT          location = LOCATION_ALL,
+        layoutT            layout   = SoA)
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return add_vertex_attribute<T>(
+                name, num_attributes, location, layout);
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return add_edge_attribute<T>(
+                name, num_attributes, location, layout);
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return add_face_attribute<T>(
+                name, num_attributes, location, layout);
+        }
+    }
+
+    /**
      * @brief Checks if an attribute exists given its name
      * @param name the attribute name
      * @return True if the attribute exists. False otherwise.
@@ -1284,7 +1336,7 @@ class RXMeshStatic : public RXMesh
      * Paraview. The VTK supports visualizing attributes on vertices and faces.
      * Edge attributes are NOT supported. This function uses parameter pack such
      * that the user can call it with zero, one or move attributes (again should
-     * be either VertexAttribute or FaceAttribute). 
+     * be either VertexAttribute or FaceAttribute).
      */
     template <typename T, typename... AttributesT>
     void export_vtk(const std::string&        filename,
