@@ -141,25 +141,26 @@ int main(int argc, char** argv)
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
 
-    SparseMatrix<cuComplex> Ld(rx);  // complex V x V
-
-    SparseMatrix<cuComplex> A(rx);  // 2V x 2V
-
+    
     auto boundaryVertices =
         *rx.add_vertex_attribute<int>("boundaryVertices", 1);
 
-    auto coords = *rx.get_input_vertex_coordinates();
 
     rx.get_boundary_vertices(
-        boundaryVertices);  // 0 or 1 value for boundary vertex
-
-    // identify boundary edge (vv query)
-    // v1 is central; v2 is on boundary
+        boundaryVertices); 
 
 
 
     //for matrix calls
     constexpr uint32_t CUDABlockSize = 256;
+
+
+    SparseMatrix<cuComplex> Ld(rx);  // complex V x V
+
+    SparseMatrix<cuComplex> A(rx);  // 2V x 2V
+
+    auto coords = *rx.get_input_vertex_coordinates();
+
 
     rxmesh::LaunchBox<CUDABlockSize> launch_box_area;
     rx.prepare_launch_box({rxmesh::Op:: EV},
