@@ -231,8 +231,6 @@ int main(int argc, char** argv)
 
     uint32_t num_bd_vertices = 0;
 
-    u.fill_random();
-
 
     rx.for_each_vertex(
         HOST,
@@ -259,26 +257,47 @@ int main(int argc, char** argv)
 
     //
     // S = [B- (1/Vb) * ebebT];
+    u.fill_random();
 
-    cuComplex T2 = eb.dot(u);
+    int iterations=1;
 
-    B.multiply(u, T1);
+    for (int i = 0; i < iterations; i++) {
+        cuComplex T2 = eb.dot(u);
 
-    eb.multiply(T2);
+        B.multiply(u, T1);
 
-    rx.for_each_vertex(
-        rxmesh::DEVICE,
-        [eb, B, T2, T1] __device__(const rxmesh::VertexHandle vh) mutable {
-            T1(vh, 0) = cuCsubf(T1(vh, 0), eb(vh, 0));
-        });
+        eb.multiply(T2);
 
-    Lc.pre_solve(PermuteMethod::NSTDIS);  // can be outside the loop
-    Lc.solve(T1, y);                      // Ly=T1
+        rx.for_each_vertex(
+            rxmesh::DEVICE,
+            [eb, B, T2, T1] __device__(const rxmesh::VertexHandle vh) mutable {
+                T1(vh, 0) = cuCsubf(T1(vh, 0), eb(vh, 0));
+            });
 
-    y.multiply(1 / y.norm2());
-    u.copy_from(y);
+        // Lc.pre_solve(PermuteMethod::NSTDIS);  // can be outside the loop
+        // Lc.solve(T1, y);                      // Ly=T1
 
+
+        Lc.solve(T1, y, Solver::QR, PermuteMethod::NSTDIS);
+
+        y.multiply(1 / y.norm2());
+        u.copy_from(y);
+    }
     // conversion step
+
+
+    auto parametric_coordinates = *rx.add_vertex_attribute<float>("pCoords", 2);
+
+    rx.for_each_vertex(rxmesh::DEVICE,
+                      [u,parametric_coordinates] __device__(
+                          const rxmesh::VertexHandle vh) mutable {
+                            parametric_coordinates(vh, 0) = u(vh, 1).x;
+                            parametric_coordinates(vh, 1) = u(vh, 1).y;
+                      });
+
+
+    rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
+        "pCoords", parametric_coordinates);
 
     rx.get_polyscope_mesh()->addVertexScalarQuantity("vBoundary",
                                                      boundaryVertices);
