@@ -60,7 +60,7 @@ __global__ static void edge_split(rxmesh::Context                   context,
                 // degenerate cases
                 if (va == vb || vb == vc || vc == va || va == vd || vb == vd ||
                     vc == vd) {
-                    edge_status(eh) = OKAY;
+                    edge_status(eh) = SKIP;
                     return;
                 }
                 const vec3<T> pa(coords(va, 0), coords(va, 1), coords(va, 2));
@@ -92,10 +92,10 @@ __global__ static void edge_split(rxmesh::Context                   context,
                         //        eh.local_id());
                         cavity.create(eh);
                     } else {
-                        edge_status(eh) = OKAY;
+                        edge_status(eh) = SKIP;
                     }
                 } else {
-                    edge_status(eh) = OKAY;
+                    edge_status(eh) = SKIP;
                 }
             }
         }

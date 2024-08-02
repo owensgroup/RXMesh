@@ -133,7 +133,7 @@ __global__ static void __launch_bounds__(blockThreads)
         if (edge_mask(eh.local_id())) {
             cavity.create(eh);
         } else {
-            edge_status(eh) = OKAY;
+            edge_status(eh) = SKIP;
         }
     });
     block.sync();
@@ -235,7 +235,7 @@ __global__ static void __launch_bounds__(blockThreads)
                 if (iter[0] == iter[1] || iter[0] == iter[2] ||
                     iter[0] == iter[3] || iter[1] == iter[2] ||
                     iter[1] == iter[3] || iter[2] == iter[3]) {
-                    edge_status(eh) = OKAY;
+                    edge_status(eh) = SKIP;
                     return;
                 }
 
@@ -289,7 +289,7 @@ __global__ static void __launch_bounds__(blockThreads)
                     }
                 }
             } else {
-                edge_status(eh) = OKAY;
+                edge_status(eh) = SKIP;
             }
         }
     };
@@ -325,7 +325,7 @@ __global__ static void __launch_bounds__(blockThreads)
         if (e_flip(eh.local_id())) {
             cavity.create(eh);
         } else {
-            edge_status(eh) = OKAY;
+            edge_status(eh) = SKIP;
         }
     });
     block.sync();

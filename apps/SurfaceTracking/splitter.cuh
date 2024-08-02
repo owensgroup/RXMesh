@@ -165,7 +165,7 @@ __global__ static void __launch_bounds__(blockThreads)
                     cavity.create(eh);
                 }
             } else {
-                edge_status(eh) = OKAY;
+                edge_status(eh) = SKIP;
             }
         }
     };
