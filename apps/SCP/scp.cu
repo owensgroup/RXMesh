@@ -91,7 +91,6 @@ __global__ static void calculate_Ld_matrix(
 {
     auto init_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
         Ld(v_id, v_id) = make_cuComplex(0, 0);
-
         for (int nei_index = 0; nei_index < vv.size(); nei_index++)
             Ld(v_id, vv[nei_index]) = make_cuComplex(0, 0);
 
@@ -231,6 +230,9 @@ int main(int argc, char** argv)
     SparseMatrix<cuComplex> B(rx);
 
     uint32_t num_bd_vertices = 0;
+
+    u.fill_random();
+
 
     rx.for_each_vertex(
         HOST,
