@@ -251,7 +251,7 @@ int main(int argc, char** argv)
                        [B, eb, boundaryVertices, num_bd_vertices] __device__(
                            const rxmesh::VertexHandle vh) mutable {
                            eb(vh, 0) = make_cuComplex(
-                               boundaryVertices(vh, 0) / num_bd_vertices, 0.0f);
+                               (float)boundaryVertices(vh, 0) / num_bd_vertices, 0.0f);
                            B(vh, vh) =
                                make_cuComplex(boundaryVertices(vh, 0), 0.0f);
                        });
@@ -270,13 +270,14 @@ int main(int argc, char** argv)
     //std::cout << std::endl << u(0, 0).y;
     //std::cout << eb(0, 0).x;
 
-    cuComplex T2 = eb.dot(u);
-    std::cout << std::endl<< T2.x;
-    std::cout << std::endl<< T2.y;
+    
 
-    /*
+    
     for (int i = 0; i < iterations; i++) {
-        
+
+        cuComplex T2 = eb.dot(u);
+        std::cout << std::endl << T2.x;
+        std::cout << std::endl << T2.y;
 
         B.multiply(u, T1);
 
@@ -321,7 +322,7 @@ int main(int argc, char** argv)
 
     rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
         "pCoords", parametric_coordinates);
-*/
+
     rx.get_polyscope_mesh()->addVertexScalarQuantity("vBoundary",
                                                      boundaryVertices);
 
