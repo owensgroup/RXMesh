@@ -180,7 +180,7 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "plane.obj");
 
     auto boundaryVertices =
         *rx.add_vertex_attribute<int>("boundaryVertices", 1);
@@ -293,7 +293,7 @@ int main(int argc, char** argv)
     u.fill_random();
     Lc.pre_solve(PermuteMethod::NSTDIS);  // can be outside the loop
 
-    int iterations=32;
+    int iterations=8;
 
     //std::cout << std::endl << u(0, 0).x;
     //std::cout << std::endl << u(0, 0).y;
@@ -305,8 +305,8 @@ int main(int argc, char** argv)
     for (int i = 0; i < iterations; i++) {
 
         cuComplex T2 = eb.dot(u);
-        std::cout << std::endl << T2.x;
-        std::cout << std::endl << T2.y;
+        //std::cout << std::endl << T2.x;
+        //std::cout << std::endl << T2.y;
 
         B.multiply(u, T1);
 
@@ -316,7 +316,7 @@ int main(int argc, char** argv)
 
         rx.for_each_vertex(
             rxmesh::DEVICE,
-            [eb, B, T2, T1] __device__(const rxmesh::VertexHandle vh) mutable {
+            [eb, T2, T1] __device__(const rxmesh::VertexHandle vh) mutable {
 
             
             T1(vh, 0) = cuCsubf(
@@ -330,13 +330,25 @@ int main(int argc, char** argv)
 
             });
 
-         Lc.solve(T1, y);                      // Ly=T1
+        Lc.solve(T1, y);                      // Ly=T1
 
         y.move(DEVICE, HOST);
 
         //Lc.solve(T1, y, Solver::QR, PermuteMethod::NSTDIS);
 
-        y.multiply(1 / y.norm2());
+        float norm = y.norm2();
+        rx.for_each_vertex(
+            rxmesh::DEVICE,
+            [y] __device__(const rxmesh::VertexHandle vh) mutable {
+                printf("\nx:%f", y(vh, 0).x);
+                printf("\ny:%f", y(vh, 0).y);
+            });
+
+        y.multiply(1.0f / norm);
+        
+
+
+
         u.copy_from(y);
     }
     // conversion step
