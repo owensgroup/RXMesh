@@ -18,18 +18,23 @@ __global__ static void compute_area_matrix(
         {
             AreaMatrix(vv[0], vv[1]) = make_cuComplex(0, -0.25);  
             AreaMatrix(vv[1], vv[0]) = make_cuComplex(0, 0.25);
+            //printf("\nfirst edge: %f", AreaMatrix(vv[0], vv[1]).y);
+
         }
         else if (boundaryVertices(vv[1], 0) == 1 &&
             boundaryVertices(vv[2], 0) == 1) {
             AreaMatrix(vv[1], vv[2]) = make_cuComplex(0, -0.25);
             AreaMatrix(vv[2], vv[1]) = make_cuComplex(0, 0.25);
-        }
+            //printf("\nsecond edge: %f", AreaMatrix(vv[1], vv[2]).y);
+
+            }
         else if (boundaryVertices(vv[2], 0) == 1 &&
             boundaryVertices(vv[0], 0) == 1) {
             AreaMatrix(vv[2], vv[0]) = make_cuComplex(0, -0.25);
             AreaMatrix(vv[0], vv[2]) = make_cuComplex(0, 0.25);
-        }
+            //printf("\nthird edge: %f", AreaMatrix(vv[2], vv[0]).y);
 
+        }
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -108,16 +113,26 @@ __global__ static void calculate_Ld_matrix(
 
         for (int nei_index = 0; nei_index < vv.size(); nei_index++) {
 
-            Ld(v_id, v_id) =
+            Ld(v_id, v_id) = //make_cuComplex(5, 0);
                 cuCaddf(Ld(v_id, v_id),
-                        make_cuComplex(weight_mat(v_id, vv[nei_index]),0));
-//                                       weight_mat(v_id, vv[nei_index])));
+                        make_cuComplex(1,0));//weight_mat(v_id, vv[nei_index]),0));
+            //                                       weight_mat(v_id, vv[nei_index])));
 
-            if (v_id != vv[nei_index])
             Ld(v_id, vv[nei_index]) =
                 cuCsubf(Ld(v_id, vv[nei_index]),
                     make_cuComplex(weight_mat(v_id, vv[nei_index]), 0));
+
+
+
         }
+        //printf("\nOwner vertex: %f", Ld(v_id, v_id).x);
+
+        for (int nei_index = 0; nei_index < vv.size(); nei_index++) {
+            //printf("\n%d: %f", nei_index, Ld(v_id, vv[nei_index]).x);
+
+        }
+
+
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -136,10 +151,20 @@ __global__ static void subtract_matrix(const rxmesh::Context   context,
     auto subtract = [&](VertexHandle v_id, VertexIterator& vv) {
         for (int i = 0; i < vv.size(); ++i) {
 
+            //printf("\nBr:%f", B_mat(v_id, vv[i]).x);
+            //printf("\nBc:%f", B_mat(v_id, vv[i]).y);
+
 
             A_mat(v_id, vv[i]) = //B_mat(v_id, vv[i]);
                 cuCsubf(B_mat(v_id, vv[i]), C_mat(v_id, vv[i]));
+            
+            //printf("\nAr:%f", A_mat(v_id, vv[i]).x);
+            //printf("\nAc:%f", A_mat(v_id, vv[i]).y);
+
         }
+        A_mat(v_id, v_id) = cuCsubf(B_mat(v_id, v_id), C_mat(v_id, v_id));
+        //printf("\nAdiagr:%f", A_mat(v_id, v_id).x);
+        //printf("\nAdiagc:%f", A_mat(v_id, v_id).y);
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -256,6 +281,8 @@ int main(int argc, char** argv)
                                (float)boundaryVertices(vh, 0) / num_bd_vertices, 0.0f);
                            B(vh, vh) =
                                make_cuComplex((float)boundaryVertices(vh, 0), 0.0f);
+
+                            
                        });
 
     //B.move(rxmesh::DEVICE, rxmesh::HOST);
@@ -290,10 +317,16 @@ int main(int argc, char** argv)
         rx.for_each_vertex(
             rxmesh::DEVICE,
             [eb, B, T2, T1] __device__(const rxmesh::VertexHandle vh) mutable {
-                T1(vh, 0) = cuCsubf(
+
+            
+            T1(vh, 0) = cuCsubf(
                     T1(vh, 0), 
                     cuCmulf(eb(vh, 0),T2)
+
                 );
+                
+                
+
 
             });
 
@@ -303,7 +336,7 @@ int main(int argc, char** argv)
 
         //Lc.solve(T1, y, Solver::QR, PermuteMethod::NSTDIS);
 
-        //y.multiply(1 / y.norm2());
+        y.multiply(1 / y.norm2());
         u.copy_from(y);
     }
     // conversion step
