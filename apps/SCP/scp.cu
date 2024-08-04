@@ -13,17 +13,29 @@ __global__ static void compute_area_matrix(
     rxmesh::SparseMatrix<cuComplex>    AreaMatrix)
 {
 
-    auto vn_lambda = [&](EdgeHandle edge_id, VertexIterator& vv) {
-        if (boundaryVertices(vv[0], 0) == 1 && boundaryVertices(vv[1], 0) == 1) {
+    auto vn_lambda = [&](FaceHandle face_id, VertexIterator& vv) {
+        if (boundaryVertices(vv[0], 0) == 1 && boundaryVertices(vv[1], 0) == 1) 
+        {
             AreaMatrix(vv[0], vv[1]) = make_cuComplex(0, -0.25);  
             AreaMatrix(vv[1], vv[0]) = make_cuComplex(0, 0.25);
         }
+        if (boundaryVertices(vv[1], 0) == 1 &&
+            boundaryVertices(vv[2], 0) == 1) {
+            AreaMatrix(vv[1], vv[2]) = make_cuComplex(0, -0.25);
+            AreaMatrix(vv[2], vv[1]) = make_cuComplex(0, 0.25);
+        }
+        if (boundaryVertices(vv[2], 0) == 1 &&
+            boundaryVertices(vv[0], 0) == 1) {
+            AreaMatrix(vv[2], vv[0]) = make_cuComplex(0, -0.25);
+            AreaMatrix(vv[0], vv[2]) = make_cuComplex(0, 0.25);
+        }
+
     };
 
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::EV>(block, shrd_alloc, vn_lambda);
+    query.dispatch<Op::FV>(block, shrd_alloc, vn_lambda);
 }
 
 template <typename T>
@@ -71,8 +83,8 @@ __global__ static void compute_edge_weights_evd(
             e_weight += edge_cotan_weight(vv[0], vv[2], vv[3], coords);
         //if (vv[1].is_valid() && vv[3].is_valid())
         e_weight /= 4;
-        A_mat(vv[0], vv[2]) = e_weight;
-        A_mat(vv[2], vv[0]) = e_weight;
+        A_mat(vv[0], vv[2]) = 1;
+        A_mat(vv[2], vv[0]) = 1;
 
     };
 
@@ -95,15 +107,16 @@ __global__ static void calculate_Ld_matrix(
             Ld(v_id, vv[nei_index]) = make_cuComplex(0, 0);
 
         for (int nei_index = 0; nei_index < vv.size(); nei_index++) {
+
             Ld(v_id, v_id) =
                 cuCaddf(Ld(v_id, v_id),
                         make_cuComplex(weight_mat(v_id, vv[nei_index]),0));
 //                                       weight_mat(v_id, vv[nei_index])));
 
+            if (v_id != vv[nei_index])
             Ld(v_id, vv[nei_index]) =
-                cuCsubf(Ld(v_id, vv[nei_index]),make_cuComplex(weight_mat(v_id, vv[nei_index]), 0));
-
-
+                cuCsubf(Ld(v_id, vv[nei_index]),
+                    make_cuComplex(weight_mat(v_id, vv[nei_index]), 0));
         }
     };
 
@@ -142,19 +155,14 @@ int main(int argc, char** argv)
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
 
-    
     auto boundaryVertices =
         *rx.add_vertex_attribute<int>("boundaryVertices", 1);
-
 
     rx.get_boundary_vertices(
         boundaryVertices); 
 
-
-
     //for matrix calls
     constexpr uint32_t CUDABlockSize = 256;
-
 
     SparseMatrix<cuComplex> Ld(rx);  // complex V x V
 
@@ -162,9 +170,8 @@ int main(int argc, char** argv)
 
     auto coords = *rx.get_input_vertex_coordinates();
 
-
     rxmesh::LaunchBox<CUDABlockSize> launch_box_area;
-    rx.prepare_launch_box({rxmesh::Op:: EV},
+    rx.prepare_launch_box({rxmesh::Op:: FV},
                           launch_box_area,
                           (void*)compute_area_matrix<float, CUDABlockSize>);
 
@@ -174,8 +181,6 @@ int main(int argc, char** argv)
            launch_box_area.smem_bytes_dyn>>>(
         rx.get_context(), boundaryVertices, A);
 
-
-    
  SparseMatrix<float> weight_matrix(rx);
 
     // obtain cotangent weight matrix
@@ -190,8 +195,7 @@ int main(int argc, char** argv)
            launch_box.num_threads,
            launch_box.smem_bytes_dyn>>>(
             rx.get_context(), coords, weight_matrix);
-            
-    
+
     rxmesh::LaunchBox<CUDABlockSize> launch_box_ld;
     rx.prepare_launch_box(
         {rxmesh::Op::VV},
@@ -205,7 +209,7 @@ int main(int argc, char** argv)
             rx.get_context(), weight_matrix, Ld);
 
 
-     SparseMatrix<cuComplex> Lc(rx);
+    SparseMatrix<cuComplex> Lc(rx);
     rxmesh::LaunchBox<CUDABlockSize> launch_box_lc;
     rx.prepare_launch_box({rxmesh::Op::VV},
                           launch_box_lc,
@@ -262,8 +266,17 @@ int main(int argc, char** argv)
 
     int iterations=32;
 
+    //std::cout << std::endl << u(0, 0).x;
+    //std::cout << std::endl << u(0, 0).y;
+    //std::cout << eb(0, 0).x;
+
+    cuComplex T2 = eb.dot(u);
+    std::cout << std::endl<< T2.x;
+    std::cout << std::endl<< T2.y;
+
+    /*
     for (int i = 0; i < iterations; i++) {
-        cuComplex T2 = eb.dot(u);
+        
 
         B.multiply(u, T1);
 
@@ -297,7 +310,7 @@ int main(int argc, char** argv)
                       });
 
     parametric_coordinates.move(DEVICE, HOST);
-
+    
     //calculate cntre, shift mesh by centre (translate back)
     //divide maximum value irrespective of axis (abs max value verte)- divide by all coordinates
     //u,v is always [(0,0),(1,1)]
@@ -308,7 +321,7 @@ int main(int argc, char** argv)
 
     rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
         "pCoords", parametric_coordinates);
-
+*/
     rx.get_polyscope_mesh()->addVertexScalarQuantity("vBoundary",
                                                      boundaryVertices);
 
