@@ -19,12 +19,12 @@ __global__ static void compute_area_matrix(
             AreaMatrix(vv[0], vv[1]) = make_cuComplex(0, -0.25);  
             AreaMatrix(vv[1], vv[0]) = make_cuComplex(0, 0.25);
         }
-        if (boundaryVertices(vv[1], 0) == 1 &&
+        else if (boundaryVertices(vv[1], 0) == 1 &&
             boundaryVertices(vv[2], 0) == 1) {
             AreaMatrix(vv[1], vv[2]) = make_cuComplex(0, -0.25);
             AreaMatrix(vv[2], vv[1]) = make_cuComplex(0, 0.25);
         }
-        if (boundaryVertices(vv[2], 0) == 1 &&
+        else if (boundaryVertices(vv[2], 0) == 1 &&
             boundaryVertices(vv[0], 0) == 1) {
             AreaMatrix(vv[2], vv[0]) = make_cuComplex(0, -0.25);
             AreaMatrix(vv[0], vv[2]) = make_cuComplex(0, 0.25);
@@ -135,7 +135,9 @@ __global__ static void subtract_matrix(const rxmesh::Context   context,
 
     auto subtract = [&](VertexHandle v_id, VertexIterator& vv) {
         for (int i = 0; i < vv.size(); ++i) {
-            A_mat(v_id, vv[i]) = 
+
+
+            A_mat(v_id, vv[i]) = //B_mat(v_id, vv[i]);
                 cuCsubf(B_mat(v_id, vv[i]), C_mat(v_id, vv[i]));
         }
     };
@@ -253,10 +255,10 @@ int main(int argc, char** argv)
                            eb(vh, 0) = make_cuComplex(
                                (float)boundaryVertices(vh, 0) / num_bd_vertices, 0.0f);
                            B(vh, vh) =
-                               make_cuComplex(boundaryVertices(vh, 0), 0.0f);
+                               make_cuComplex((float)boundaryVertices(vh, 0), 0.0f);
                        });
 
-    B.move(rxmesh::DEVICE, rxmesh::HOST);
+    //B.move(rxmesh::DEVICE, rxmesh::HOST);
     eb.move(rxmesh::DEVICE, rxmesh::HOST);
 
     //
@@ -281,23 +283,29 @@ int main(int argc, char** argv)
 
         B.multiply(u, T1);
 
+
+
         //eb.multiply(T2);
 
         rx.for_each_vertex(
             rxmesh::DEVICE,
             [eb, B, T2, T1] __device__(const rxmesh::VertexHandle vh) mutable {
-                T1(vh, 0) = cuCsubf(T1(vh, 0), cuCmulf(eb(vh, 0),T2));
+                T1(vh, 0) = cuCsubf(
+                    T1(vh, 0), 
+                    cuCmulf(eb(vh, 0),T2)
+                );
+
             });
 
-        // 
          Lc.solve(T1, y);                      // Ly=T1
 
+        y.move(DEVICE, HOST);
 
         //Lc.solve(T1, y, Solver::QR, PermuteMethod::NSTDIS);
 
-        y.multiply(1 / y.norm2());
+        //y.multiply(1 / y.norm2());
+        u.copy_from(y);
     }
-    u.copy_from(y);
     // conversion step
 
 
@@ -322,6 +330,9 @@ int main(int argc, char** argv)
 
     rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
         "pCoords", parametric_coordinates);
+
+    rx.get_polyscope_mesh()->addVertexVectorQuantity2D("vq",
+                                                       parametric_coordinates);
 
     rx.get_polyscope_mesh()->addVertexScalarQuantity("vBoundary",
                                                      boundaryVertices);
