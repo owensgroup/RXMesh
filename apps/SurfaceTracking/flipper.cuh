@@ -162,7 +162,7 @@ __global__ static void __launch_bounds__(blockThreads)
                 // check if ah or bh is boundary
 
                 if (is_vertex_bd(ah) == 1 || is_vertex_bd(bh) == 1) {
-                    edge_status(eh) = OKAY;
+                    edge_status(eh) = SKIP;
                     return;
                 }
 
@@ -318,7 +318,7 @@ __global__ static void __launch_bounds__(blockThreads)
         if (edge_mask(eh.local_id())) {
             cavity.create(eh);
         } else {
-            edge_status(eh) = OKAY;
+            edge_status(eh) = SKIP;
         }
     });
     block.sync();

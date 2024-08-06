@@ -10,7 +10,7 @@ using EdgeStatus = int8_t;
 enum : EdgeStatus
 {
     UNSEEN = 0,  // means we have not tested it before for e.g., split/flip/col
-    OKAY   = 1,  // means we have tested it and it is okay to skip
+    SKIP   = 1,  // means we have tested it and it is okay to skip
     UPDATE = 2,  // means we should update it i.e., we have tested it before
     ADDED  = 3,  // means it has been added to during the split/flip/collapse
 };

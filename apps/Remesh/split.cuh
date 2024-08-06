@@ -26,10 +26,6 @@ __global__ static void edge_split(rxmesh::Context                   context,
         block, context, shrd_alloc, true);
 
 
-    //__shared__ int s_num_splits;
-    // if (threadIdx.x == 0) {
-    //    s_num_splits = 0;
-    //}
     if (cavity.patch_id() == INVALID32) {
         return;
     }
@@ -60,7 +56,7 @@ __global__ static void edge_split(rxmesh::Context                   context,
                 // degenerate cases
                 if (va == vb || vb == vc || vc == va || va == vd || vb == vd ||
                     vc == vd) {
-                    edge_status(eh) = OKAY;
+                    edge_status(eh) = SKIP;
                     return;
                 }
                 const vec3<T> pa(coords(va, 0), coords(va, 1), coords(va, 2));
@@ -78,24 +74,21 @@ __global__ static void edge_split(rxmesh::Context                   context,
                     T min_new_edge_len = std::numeric_limits<T>::max();
 
                     min_new_edge_len =
-                        std::max(min_new_edge_len, glm::distance2(p_new, pa));
+                        std::min(min_new_edge_len, glm::distance2(p_new, pa));
                     min_new_edge_len =
-                        std::max(min_new_edge_len, glm::distance2(p_new, pb));
+                        std::min(min_new_edge_len, glm::distance2(p_new, pb));
                     min_new_edge_len =
-                        std::max(min_new_edge_len, glm::distance2(p_new, pc));
+                        std::min(min_new_edge_len, glm::distance2(p_new, pc));
                     min_new_edge_len =
-                        std::max(min_new_edge_len, glm::distance2(p_new, pd));
+                        std::min(min_new_edge_len, glm::distance2(p_new, pd));
 
                     if (min_new_edge_len >= low_edge_len_sq) {
-                        // printf("\n to_split = %u, %u",
-                        //        eh.patch_id(),
-                        //        eh.local_id());
                         cavity.create(eh);
                     } else {
-                        edge_status(eh) = OKAY;
+                        edge_status(eh) = SKIP;
                     }
                 } else {
-                    edge_status(eh) = OKAY;
+                    edge_status(eh) = SKIP;
                 }
             }
         }
@@ -108,10 +101,6 @@ __global__ static void edge_split(rxmesh::Context                   context,
     shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
 
     if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
-
-        if (threadIdx.x == 0) {
-            printf("\n Patch %u cavity.prologue", cavity.patch_id());
-        }
 
         is_updated.reset(block);
         block.sync();
@@ -132,6 +121,21 @@ __global__ static void edge_split(rxmesh::Context                   context,
                 coords(new_v, 0) = (coords(v0, 0) + coords(v1, 0)) * T(0.5);
                 coords(new_v, 1) = (coords(v0, 1) + coords(v1, 1)) * T(0.5);
                 coords(new_v, 2) = (coords(v0, 2) + coords(v1, 2)) * T(0.5);
+
+#ifndef NDEBUG
+                // sanity check: we don't introduce small edges
+                const vec3<T> p_new(
+                    coords(new_v, 0), coords(new_v, 1), coords(new_v, 2));
+
+                for (int i = 0; i < 4; ++i) {
+
+                    const VertexHandle v = cavity.get_cavity_vertex(c, i);
+
+                    const vec3<T> p(coords(v, 0), coords(v, 1), coords(v, 2));
+
+                    assert(glm::distance2(p_new, p) >= low_edge_len_sq);
+                }
+#endif
 
                 DEdgeHandle e0 =
                     cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
@@ -171,48 +175,13 @@ __global__ static void edge_split(rxmesh::Context                   context,
     cavity.epilogue(block);
     block.sync();
 
-
     if (cavity.is_successful()) {
-        if (threadIdx.x == 0) {
-            printf("\n ** Patch %u passed", cavity.patch_id());
-        }
-        // if (threadIdx.x == 0) {
-        //    ::atomicAdd(d_buffer, s_num_splits);
-        //}
         for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (is_updated(eh.local_id())) {
                 edge_status(eh) = ADDED;
             }
         });
     }
-
-
-    //{
-    //    block.sync();
-    //    if (threadIdx.x == 0) {
-    //        printf("\n done patch =%u, successful= %d",
-    //               cavity.patch_id(),
-    //               int(cavity.is_successful()));
-    //
-    //        const PatchInfo& pi = cavity.patch_info();
-    //        for (uint16_t e = 0; e < pi.num_edges[0]; e++) {
-    //            LocalEdgeT le(e);
-    //            if (!pi.is_owned(le) && !pi.is_deleted(le)) {
-    //                EdgeHandle eh = pi.template find<EdgeHandle>(e);
-    //                if (!eh.is_valid()) {
-    //                    printf(
-    //                        "\n $$$ B=%u, T= %u, found an edge - patch= %u, "
-    //                        "edge = %u",
-    //                        blockIdx.x,
-    //                        threadIdx.x,
-    //                        pi.patch_id,
-    //                        e);
-    //                }
-    //            }
-    //        }
-    //    }
-    //    block.sync();
-    //}
 }
 
 
@@ -272,22 +241,19 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
                                                 high_edge_len_sq,
                                                 low_edge_len_sq,
                                                 d_buffer);
-            CUDA_ERROR(cudaDeviceSynchronize());
+            
             timers.stop("Split");
 
             timers.start("SplitCleanup");
-            rx.cleanup();
-            CUDA_ERROR(cudaDeviceSynchronize());
+            rx.cleanup();            
             timers.stop("SplitCleanup");
 
             timers.start("SplitSlice");
-            rx.slice_patches(*coords, *edge_status);
-            CUDA_ERROR(cudaDeviceSynchronize());
+            rx.slice_patches(*coords, *edge_status);            
             timers.stop("SplitSlice");
 
             timers.start("SplitCleanup");
-            rx.cleanup();
-            CUDA_ERROR(cudaDeviceSynchronize());
+            rx.cleanup();            
             timers.stop("SplitCleanup");
 
             bool show = false;
