@@ -345,12 +345,6 @@ int main(int argc, char** argv)
 
         // apply user deformation
         rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
-            if (vh.local_id() == 0 && vh.patch_id() == 0) {
-                printf("\n Disp = %f, %f, %f",
-                       displacement[0],
-                       displacement[1],
-                       displacement[2]);
-            }
             if (constraints(vh) == 1) {
                 deformed_vertex_pos(vh, 0) += displacement[0];
                 deformed_vertex_pos(vh, 1) += displacement[1];
