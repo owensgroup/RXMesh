@@ -61,28 +61,28 @@ __global__ static void calc_edge_weights_mat(
 template <typename T, uint32_t blockThreads>
 __global__ static void calculate_rotation_matrix(
     const rxmesh::Context      context,
-    rxmesh::VertexAttribute<T> ref_coords,
-    rxmesh::VertexAttribute<T> current_coords,
-    rxmesh::VertexAttribute<T> rotationVector,
-    rxmesh::SparseMatrix<T>    weight_mat)
+    rxmesh::VertexAttribute<T> ref_vertex_pos,
+    rxmesh::VertexAttribute<T> deformed_vertex_pos,
+    rxmesh::VertexAttribute<T> rot_mat,
+    rxmesh::SparseMatrix<T>    weight_matrix)
 {
     auto vn_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
         Eigen::Matrix3f S = Eigen::Matrix3f::Zero();
 
         for (int j = 0; j < vv.size(); j++) {
 
-            float w = weight_mat(v_id, vv[j]);
+            float w = weight_matrix(v_id, vv[j]);
 
             Eigen::Vector<float, 3> pi_vector = {
-                ref_coords(v_id, 0) - ref_coords(vv[j], 0),
-                ref_coords(v_id, 1) - ref_coords(vv[j], 1),
-                ref_coords(v_id, 2) - ref_coords(vv[j], 2)};
+                ref_vertex_pos(v_id, 0) - ref_vertex_pos(vv[j], 0),
+                ref_vertex_pos(v_id, 1) - ref_vertex_pos(vv[j], 1),
+                ref_vertex_pos(v_id, 2) - ref_vertex_pos(vv[j], 2)};
 
 
             Eigen::Vector<float, 3> pi_dash_vector = {
-                current_coords(v_id, 0) - current_coords(vv[j], 0),
-                current_coords(v_id, 1) - current_coords(vv[j], 1),
-                current_coords(v_id, 2) - current_coords(vv[j], 2)};
+                deformed_vertex_pos(v_id, 0) - deformed_vertex_pos(vv[j], 0),
+                deformed_vertex_pos(v_id, 1) - deformed_vertex_pos(vv[j], 1),
+                deformed_vertex_pos(v_id, 2) - deformed_vertex_pos(vv[j], 2)};
 
             S = S + w * pi_vector * pi_dash_vector.transpose();
         }
@@ -108,13 +108,7 @@ __global__ static void calculate_rotation_matrix(
 
         for (int i = 0; i < 3; i++)
             for (int j = 0; j < 3; j++)
-                rotationVector(v_id, i * 3 + j) = R(i, j);
-
-        // Apply rotation
-
-        Eigen::Vector3<float> new_coords = {current_coords(v_id, 0),
-                                            current_coords(v_id, 1),
-                                            current_coords(v_id, 2)};
+                rot_mat(v_id, i * 3 + j) = R(i, j);        
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -127,15 +121,15 @@ __global__ static void calculate_rotation_matrix(
 template <typename T, uint32_t blockThreads>
 __global__ static void calculate_b(
     const rxmesh::Context      context,
-    rxmesh::VertexAttribute<T> original_coords,  // [num_coord, 3]
-    rxmesh::VertexAttribute<T> changed_coords,   // [num_coord, 3]
-    rxmesh::VertexAttribute<T> rot_mat,          // [num_coord, 9]
-    rxmesh::SparseMatrix<T>    weight_mat,       // [num_coord, num_coord]
-    rxmesh::DenseMatrix<T>     bMatrix,          // [num_coord, 3]
+    rxmesh::VertexAttribute<T> ref_vertex_pos,
+    rxmesh::VertexAttribute<T> deformed_vertex_pos,
+    rxmesh::VertexAttribute<T> rot_mat,
+    rxmesh::SparseMatrix<T>    weight_mat,
+    rxmesh::DenseMatrix<T>     b_mat,
     rxmesh::VertexAttribute<T> constraints)
 {
     auto init_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
-        // variable to store ith entry of bMatrix
+        // variable to store ith entry of b_mat
         Eigen::Vector3f bi(0.0f, 0.0f, 0.0f);
 
         // get rotation matrix for ith vertex
@@ -157,9 +151,9 @@ __global__ static void calculate_b(
             Eigen::Matrix3f rot_add = Ri + Rj;
             // find coord difference
             Eigen::Vector3f vert_diff = {
-                original_coords(v_id, 0) - original_coords(vv[nei_index], 0),
-                original_coords(v_id, 1) - original_coords(vv[nei_index], 1),
-                original_coords(v_id, 2) - original_coords(vv[nei_index], 2)};
+                ref_vertex_pos(v_id, 0) - ref_vertex_pos(vv[nei_index], 0),
+                ref_vertex_pos(v_id, 1) - ref_vertex_pos(vv[nei_index], 1),
+                ref_vertex_pos(v_id, 2) - ref_vertex_pos(vv[nei_index], 2)};
 
             // update bi
             bi = bi +
@@ -167,13 +161,13 @@ __global__ static void calculate_b(
         }
 
         if (constraints(v_id, 0) == 0) {
-            bMatrix(v_id, 0) = bi[0];
-            bMatrix(v_id, 1) = bi[1];
-            bMatrix(v_id, 2) = bi[2];
+            b_mat(v_id, 0) = bi[0];
+            b_mat(v_id, 1) = bi[1];
+            b_mat(v_id, 2) = bi[2];
         } else {
-            bMatrix(v_id, 0) = changed_coords(v_id, 0);
-            bMatrix(v_id, 1) = changed_coords(v_id, 1);
-            bMatrix(v_id, 2) = changed_coords(v_id, 2);
+            b_mat(v_id, 0) = deformed_vertex_pos(v_id, 0);
+            b_mat(v_id, 1) = deformed_vertex_pos(v_id, 1);
+            b_mat(v_id, 2) = deformed_vertex_pos(v_id, 2);
         }
     };
 
@@ -187,7 +181,7 @@ __global__ static void calculate_b(
 template <typename T, uint32_t blockThreads>
 __global__ static void calculate_system_matrix(
     const rxmesh::Context      context,
-    rxmesh::SparseMatrix<T>    weight_mat,
+    rxmesh::SparseMatrix<T>    weight_matrix,
     rxmesh::SparseMatrix<T>    sys_mat,
     rxmesh::VertexAttribute<T> constraints)
 
@@ -195,8 +189,8 @@ __global__ static void calculate_system_matrix(
     auto calc_mat = [&](VertexHandle v_id, VertexIterator& vv) {
         if (constraints(v_id, 0) == 0) {
             for (int i = 0; i < vv.size(); i++) {
-                sys_mat(v_id, v_id) += weight_mat(v_id, vv[i]);
-                sys_mat(v_id, vv[i]) -= weight_mat(v_id, vv[i]);
+                sys_mat(v_id, v_id) += weight_matrix(v_id, vv[i]);
+                sys_mat(v_id, vv[i]) -= weight_matrix(v_id, vv[i]);
             }
         } else {
             for (int i = 0; i < vv.size(); i++) {
