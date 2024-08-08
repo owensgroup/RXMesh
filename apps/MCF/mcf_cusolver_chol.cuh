@@ -193,7 +193,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx)
     // A_mat.solve(B_mat, *X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
 
     // Solving using CHOL
-    A_mat.pre_solve(PermuteMethod::NSTDIS);
+    A_mat.pre_solve(Solver::CHOL, PermuteMethod::NSTDIS);
     A_mat.solve(B_mat, *X_mat);
 
 
@@ -206,7 +206,10 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx)
     coords->from_matrix(X_mat.get());
 
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+
+#if USE_POLYSCOPE
     polyscope::show();
+#endif
 
     B_mat.release();
     X_mat->release();

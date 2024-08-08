@@ -291,7 +291,7 @@ int main(int argc, char** argv)
     //
     // S = [B- (1/Vb) * ebebT];
     u.fill_random();
-    Lc.pre_solve(PermuteMethod::NSTDIS);  // can be outside the loop
+    Lc.pre_solve(Solver::CHOL, PermuteMethod::NSTDIS);  // can be outside the loop
 
     int iterations=8;
 

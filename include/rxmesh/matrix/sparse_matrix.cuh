@@ -24,12 +24,15 @@ namespace rxmesh {
 
 /**
  * @brief The enum class for choosing different solver types
+ * Documentation of cuSolver low-level preview API
+ * https://docs.nvidia.com/cuda/archive/8.0/cusolver/index.html#cusolver-preview-reference
  */
 enum class Solver
 {
-    CHOL = 0,
-    LU   = 1,
-    QR   = 2
+    NONE = 0,
+    CHOL = 1,
+    LU   = 2,
+    QR   = 3
 };
 
 /**
@@ -92,10 +95,11 @@ struct SparseMatrix
           m_reorder_allocated(false),
           m_d_cusparse_spmm_buffer(nullptr),
           m_d_cusparse_spmv_buffer(nullptr),
-          m_chol_buffer(nullptr),
+          m_solver_buffer(nullptr),
           m_d_solver_b(nullptr),
           m_d_solver_x(nullptr),
-          m_allocated(LOCATION_NONE)
+          m_allocated(LOCATION_NONE),
+          m_current_solver(Solver::NONE)
     {
         using namespace rxmesh;
         constexpr uint32_t blockThreads = 256;
@@ -190,6 +194,8 @@ struct SparseMatrix
         CUSOLVER_ERROR(cusolverSpCreate(&m_cusolver_sphandle));
 
         CUSOLVER_ERROR(cusolverSpCreateCsrcholInfo(&m_chol_info));
+
+        CUSOLVER_ERROR(cusolverSpCreateCsrqrInfo(&m_qr_info));
 
         // allocate the host
         m_h_val = static_cast<T*>(malloc(m_nnz * sizeof(T)));
@@ -361,6 +367,8 @@ struct SparseMatrix
         CUSPARSE_ERROR(cusparseDestroyMatDescr(m_descr));
         CUSOLVER_ERROR(cusolverSpDestroy(m_cusolver_sphandle));
         CUSOLVER_ERROR(cusolverSpDestroyCsrcholInfo(m_chol_info));
+        CUSOLVER_ERROR(cusolverSpDestroyCsrqrInfo(m_qr_info));
+
 
         if (m_reorder_allocated) {
             GPU_FREE(m_d_solver_val);
@@ -374,7 +382,7 @@ struct SparseMatrix
             free(m_h_permute);
             free(m_h_permute_map);
         }
-        GPU_FREE(m_chol_buffer);
+        GPU_FREE(m_solver_buffer);
         GPU_FREE(m_d_cusparse_spmm_buffer);
         GPU_FREE(m_d_cusparse_spmv_buffer);
     }
@@ -622,9 +630,9 @@ struct SparseMatrix
      * the columns for B and multiply them separately as sparse matrix dense
      * vector multiplication
      */
-    void multiply_cw(const DenseMatrix<T>& B_mat,
-                     DenseMatrix<T>&       C_mat,
-                     cudaStream_t          stream = 0)
+    __host__ void multiply_cw(const DenseMatrix<T>& B_mat,
+                              DenseMatrix<T>&       C_mat,
+                              cudaStream_t          stream = 0)
     {
         assert(cols() == B_mat.cols());
         assert(rows() == C_mat.rows());
@@ -644,18 +652,18 @@ struct SparseMatrix
     __host__ EigenSparseMatrix to_eigen()
     {
         return EigenSparseMatrix(
-            rows(), cols(), non_zeros(), m_h_row_ptr, m_h_col_idx, m_h_val);        
+            rows(), cols(), non_zeros(), m_h_row_ptr, m_h_col_idx, m_h_val);
     }
 
     /**
      * @brief solve the AX=B for X where X and B are all dense matrix and we
      * would solve it in a column wise manner
      */
-    void solve(const DenseMatrix<T>& B_mat,
-               DenseMatrix<T>&       X_mat,
-               Solver                solver,
-               PermuteMethod         reorder,
-               cudaStream_t          stream = 0)
+    __host__ void solve(const DenseMatrix<T>& B_mat,
+                        DenseMatrix<T>&       X_mat,
+                        Solver                solver,
+                        PermuteMethod         reorder,
+                        cudaStream_t          stream = 0)
     {
         for (int i = 0; i < B_mat.cols(); ++i) {
             cusparse_linear_solver_wrapper(
@@ -671,11 +679,11 @@ struct SparseMatrix
     /**
      * @brief solve the Ax=b for x
      */
-    void solve(const T*      B_arr,
-               T*            X_arr,
-               Solver        solver,
-               PermuteMethod reorder,
-               cudaStream_t  stream = 0)
+    __host__ void solve(const T*      B_arr,
+                        T*            X_arr,
+                        Solver        solver,
+                        PermuteMethod reorder,
+                        cudaStream_t  stream = 0)
     {
         cusparse_linear_solver_wrapper(
             solver, reorder, m_cusolver_sphandle, B_arr, X_arr, stream);
@@ -687,7 +695,7 @@ struct SparseMatrix
     /**
      * @brief allocate all temp buffers needed for the solver low-level API
      */
-    void permute_alloc(PermuteMethod reorder)
+    __host__ void permute_alloc(PermuteMethod reorder)
     {
         if (reorder == PermuteMethod::NONE) {
             return;
@@ -731,7 +739,7 @@ struct SparseMatrix
      * the solving process. Any other function call order would be undefined.
      * @param reorder: the reorder method applied.
      */
-    void permute(PermuteMethod reorder = PermuteMethod::NSTDIS)
+    __host__ void permute(PermuteMethod reorder)
     {
         permute_alloc(reorder);
 
@@ -843,7 +851,7 @@ struct SparseMatrix
      * @brief The lower level api of matrix analysis. Generating a member value
      * of type csrcholInfo_t for cucolver.
      */
-    void analyze_pattern()
+    __host__ void analyze_pattern(Solver solver)
     {
         if (!m_use_reorder) {
             m_d_solver_row_ptr = m_d_row_ptr;
@@ -851,77 +859,213 @@ struct SparseMatrix
             m_d_solver_val     = m_d_val;
         }
 
-        CUSOLVER_ERROR(cusolverSpXcsrcholAnalysis(m_cusolver_sphandle,
-                                                  m_num_rows,
-                                                  m_nnz,
-                                                  m_descr,
-                                                  m_d_solver_row_ptr,
-                                                  m_d_solver_col_idx,
-                                                  m_chol_info));
+        if (solver == Solver::CHOL) {
+            CUSOLVER_ERROR(cusolverSpXcsrcholAnalysis(m_cusolver_sphandle,
+                                                      m_num_rows,
+                                                      m_nnz,
+                                                      m_descr,
+                                                      m_d_solver_row_ptr,
+                                                      m_d_solver_col_idx,
+                                                      m_chol_info));
+        } else if (solver == Solver::QR) {
+            CUSOLVER_ERROR(cusolverSpXcsrqrAnalysis(m_cusolver_sphandle,
+                                                    m_num_rows,
+                                                    m_num_cols,
+                                                    m_nnz,
+                                                    m_descr,
+                                                    m_d_solver_row_ptr,
+                                                    m_d_solver_col_idx,
+                                                    m_qr_info));
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix::analyze_pattern() incompatible solver with "
+                "analyze_pattern method");
+        }
     }
 
     /**
      * @brief The lower level api of matrix factorization buffer calculation and
      * allocation. The buffer is a member variable.
      */
-    void post_analyze_alloc()
+    __host__ void post_analyze_alloc(Solver solver)
     {
         m_internalDataInBytes = 0;
         m_workspaceInBytes    = 0;
 
-        if constexpr (std::is_same_v<T, float>) {
-            CUSOLVER_ERROR(cusolverSpScsrcholBufferInfo(m_cusolver_sphandle,
-                                                        m_num_rows,
-                                                        m_nnz,
-                                                        m_descr,
-                                                        m_d_solver_val,
-                                                        m_d_solver_row_ptr,
-                                                        m_d_solver_col_idx,
-                                                        m_chol_info,
-                                                        &m_internalDataInBytes,
-                                                        &m_workspaceInBytes));
-        }
+        GPU_FREE(m_solver_buffer);
 
-        if constexpr (std::is_same_v<T, cuComplex>) {
-            CUSOLVER_ERROR(cusolverSpCcsrcholBufferInfo(m_cusolver_sphandle,
-                                                        m_num_rows,
-                                                        m_nnz,
-                                                        m_descr,
-                                                        m_d_solver_val,
-                                                        m_d_solver_row_ptr,
-                                                        m_d_solver_col_idx,
-                                                        m_chol_info,
-                                                        &m_internalDataInBytes,
-                                                        &m_workspaceInBytes));
-        }
+        if (solver == Solver::CHOL) {
 
-        if constexpr (std::is_same_v<T, double>) {
-            CUSOLVER_ERROR(cusolverSpDcsrcholBufferInfo(m_cusolver_sphandle,
-                                                        m_num_rows,
-                                                        m_nnz,
-                                                        m_descr,
-                                                        m_d_solver_val,
-                                                        m_d_solver_row_ptr,
-                                                        m_d_solver_col_idx,
-                                                        m_chol_info,
-                                                        &m_internalDataInBytes,
-                                                        &m_workspaceInBytes));
-        }
+            if constexpr (std::is_same_v<T, float>) {
+                CUSOLVER_ERROR(
+                    cusolverSpScsrcholBufferInfo(m_cusolver_sphandle,
+                                                 m_num_rows,
+                                                 m_nnz,
+                                                 m_descr,
+                                                 m_d_solver_val,
+                                                 m_d_solver_row_ptr,
+                                                 m_d_solver_col_idx,
+                                                 m_chol_info,
+                                                 &m_internalDataInBytes,
+                                                 &m_workspaceInBytes));
+            }
 
-        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
-            CUSOLVER_ERROR(cusolverSpZcsrcholBufferInfo(m_cusolver_sphandle,
-                                                        m_num_rows,
-                                                        m_nnz,
-                                                        m_descr,
-                                                        m_d_solver_val,
-                                                        m_d_solver_row_ptr,
-                                                        m_d_solver_col_idx,
-                                                        m_chol_info,
-                                                        &m_internalDataInBytes,
-                                                        &m_workspaceInBytes));
-        }
+            if constexpr (std::is_same_v<T, cuComplex>) {
+                CUSOLVER_ERROR(
+                    cusolverSpCcsrcholBufferInfo(m_cusolver_sphandle,
+                                                 m_num_rows,
+                                                 m_nnz,
+                                                 m_descr,
+                                                 m_d_solver_val,
+                                                 m_d_solver_row_ptr,
+                                                 m_d_solver_col_idx,
+                                                 m_chol_info,
+                                                 &m_internalDataInBytes,
+                                                 &m_workspaceInBytes));
+            }
 
-        CUDA_ERROR(cudaMalloc((void**)&m_chol_buffer, m_workspaceInBytes));
+            if constexpr (std::is_same_v<T, double>) {
+                CUSOLVER_ERROR(
+                    cusolverSpDcsrcholBufferInfo(m_cusolver_sphandle,
+                                                 m_num_rows,
+                                                 m_nnz,
+                                                 m_descr,
+                                                 m_d_solver_val,
+                                                 m_d_solver_row_ptr,
+                                                 m_d_solver_col_idx,
+                                                 m_chol_info,
+                                                 &m_internalDataInBytes,
+                                                 &m_workspaceInBytes));
+            }
+
+            if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+                CUSOLVER_ERROR(
+                    cusolverSpZcsrcholBufferInfo(m_cusolver_sphandle,
+                                                 m_num_rows,
+                                                 m_nnz,
+                                                 m_descr,
+                                                 m_d_solver_val,
+                                                 m_d_solver_row_ptr,
+                                                 m_d_solver_col_idx,
+                                                 m_chol_info,
+                                                 &m_internalDataInBytes,
+                                                 &m_workspaceInBytes));
+            }
+        } else if (solver == Solver::QR) {
+            if constexpr (std::is_same_v<T, float>) {
+                float mu = 0.f;
+                CUSOLVER_ERROR(
+                    cusolverSpScsrqrBufferInfo(m_cusolver_sphandle,
+                                               m_num_rows,
+                                               m_num_cols,
+                                               m_nnz,
+                                               m_descr,
+                                               m_d_solver_val,
+                                               m_d_solver_row_ptr,
+                                               m_d_solver_col_idx,
+                                               m_qr_info,
+                                               &m_internalDataInBytes,
+                                               &m_workspaceInBytes));
+
+                CUSOLVER_ERROR(cusolverSpScsrqrSetup(m_cusolver_sphandle,
+                                                     m_num_rows,
+                                                     m_num_cols,
+                                                     m_nnz,
+                                                     m_descr,
+                                                     m_d_solver_val,
+                                                     m_d_solver_row_ptr,
+                                                     m_d_solver_col_idx,
+                                                     mu,
+                                                     m_qr_info));
+            }
+
+            if constexpr (std::is_same_v<T, cuComplex>) {
+                cuComplex mu = make_cuComplex(0.f, 0.f);
+                CUSOLVER_ERROR(
+                    cusolverSpCcsrqrBufferInfo(m_cusolver_sphandle,
+                                               m_num_rows,
+                                               m_num_cols,
+                                               m_nnz,
+                                               m_descr,
+                                               m_d_solver_val,
+                                               m_d_solver_row_ptr,
+                                               m_d_solver_col_idx,
+                                               m_qr_info,
+                                               &m_internalDataInBytes,
+                                               &m_workspaceInBytes));
+
+                CUSOLVER_ERROR(cusolverSpCcsrqrSetup(m_cusolver_sphandle,
+                                                     m_num_rows,
+                                                     m_num_cols,
+                                                     m_nnz,
+                                                     m_descr,
+                                                     m_d_solver_val,
+                                                     m_d_solver_row_ptr,
+                                                     m_d_solver_col_idx,
+                                                     mu,
+                                                     m_qr_info));
+            }
+
+            if constexpr (std::is_same_v<T, double>) {
+                double mu = 0.f;
+                CUSOLVER_ERROR(
+                    cusolverSpDcsrqrBufferInfo(m_cusolver_sphandle,
+                                               m_num_rows,
+                                               m_num_cols,
+                                               m_nnz,
+                                               m_descr,
+                                               m_d_solver_val,
+                                               m_d_solver_row_ptr,
+                                               m_d_solver_col_idx,
+                                               m_qr_info,
+                                               &m_internalDataInBytes,
+                                               &m_workspaceInBytes));
+
+                CUSOLVER_ERROR(cusolverSpDcsrqrSetup(m_cusolver_sphandle,
+                                                     m_num_rows,
+                                                     m_num_cols,
+                                                     m_nnz,
+                                                     m_descr,
+                                                     m_d_solver_val,
+                                                     m_d_solver_row_ptr,
+                                                     m_d_solver_col_idx,
+                                                     mu,
+                                                     m_qr_info));
+            }
+
+            if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+                cuDoubleComplex mu = make_cuDoubleComplex(0.0, 0.0);
+                CUSOLVER_ERROR(
+                    cusolverSpZcsrqrBufferInfo(m_cusolver_sphandle,
+                                               m_num_rows,
+                                               m_num_cols,
+                                               m_nnz,
+                                               m_descr,
+                                               m_d_solver_val,
+                                               m_d_solver_row_ptr,
+                                               m_d_solver_col_idx,
+                                               m_qr_info,
+                                               &m_internalDataInBytes,
+                                               &m_workspaceInBytes));
+
+                CUSOLVER_ERROR(cusolverSpZcsrqrSetup(m_cusolver_sphandle,
+                                                     m_num_rows,
+                                                     m_num_cols,
+                                                     m_nnz,
+                                                     m_descr,
+                                                     m_d_solver_val,
+                                                     m_d_solver_row_ptr,
+                                                     m_d_solver_col_idx,
+                                                     mu,
+                                                     m_qr_info));
+            }
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix::post_analyze_alloc() incompatible solver with "
+                "post_analyze_alloc method");
+            return;
+        }
+        CUDA_ERROR(cudaMalloc((void**)&m_solver_buffer, m_workspaceInBytes));
     }
 
 
@@ -929,73 +1073,151 @@ struct SparseMatrix
      * @brief The lower level api of matrix factorization and save the
      * factorization result in to the buffer.
      */
-    void factorize()
+    __host__ void factorize(Solver solver)
     {
-        if constexpr (std::is_same_v<T, float>) {
-            CUSOLVER_ERROR(cusolverSpScsrcholFactor(m_cusolver_sphandle,
-                                                    m_num_rows,
-                                                    m_nnz,
-                                                    m_descr,
-                                                    m_d_solver_val,
-                                                    m_d_solver_row_ptr,
-                                                    m_d_solver_col_idx,
-                                                    m_chol_info,
-                                                    m_chol_buffer));
-        }
+        if (solver == Solver::CHOL) {
+            if constexpr (std::is_same_v<T, float>) {
+                CUSOLVER_ERROR(cusolverSpScsrcholFactor(m_cusolver_sphandle,
+                                                        m_num_rows,
+                                                        m_nnz,
+                                                        m_descr,
+                                                        m_d_solver_val,
+                                                        m_d_solver_row_ptr,
+                                                        m_d_solver_col_idx,
+                                                        m_chol_info,
+                                                        m_solver_buffer));
+            }
 
-        if constexpr (std::is_same_v<T, cuComplex>) {
-            CUSOLVER_ERROR(cusolverSpCcsrcholFactor(m_cusolver_sphandle,
-                                                    m_num_rows,
-                                                    m_nnz,
-                                                    m_descr,
-                                                    m_d_solver_val,
-                                                    m_d_solver_row_ptr,
-                                                    m_d_solver_col_idx,
-                                                    m_chol_info,
-                                                    m_chol_buffer));
-        }
-        if constexpr (std::is_same_v<T, double>) {
-            CUSOLVER_ERROR(cusolverSpDcsrcholFactor(m_cusolver_sphandle,
-                                                    m_num_rows,
-                                                    m_nnz,
-                                                    m_descr,
-                                                    m_d_solver_val,
-                                                    m_d_solver_row_ptr,
-                                                    m_d_solver_col_idx,
-                                                    m_chol_info,
-                                                    m_chol_buffer));
-        }
-        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
-            CUSOLVER_ERROR(cusolverSpZcsrcholFactor(m_cusolver_sphandle,
-                                                    m_num_rows,
-                                                    m_nnz,
-                                                    m_descr,
-                                                    m_d_solver_val,
-                                                    m_d_solver_row_ptr,
-                                                    m_d_solver_col_idx,
-                                                    m_chol_info,
-                                                    m_chol_buffer));
+            if constexpr (std::is_same_v<T, cuComplex>) {
+                CUSOLVER_ERROR(cusolverSpCcsrcholFactor(m_cusolver_sphandle,
+                                                        m_num_rows,
+                                                        m_nnz,
+                                                        m_descr,
+                                                        m_d_solver_val,
+                                                        m_d_solver_row_ptr,
+                                                        m_d_solver_col_idx,
+                                                        m_chol_info,
+                                                        m_solver_buffer));
+            }
+            if constexpr (std::is_same_v<T, double>) {
+                CUSOLVER_ERROR(cusolverSpDcsrcholFactor(m_cusolver_sphandle,
+                                                        m_num_rows,
+                                                        m_nnz,
+                                                        m_descr,
+                                                        m_d_solver_val,
+                                                        m_d_solver_row_ptr,
+                                                        m_d_solver_col_idx,
+                                                        m_chol_info,
+                                                        m_solver_buffer));
+            }
+            if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+                CUSOLVER_ERROR(cusolverSpZcsrcholFactor(m_cusolver_sphandle,
+                                                        m_num_rows,
+                                                        m_nnz,
+                                                        m_descr,
+                                                        m_d_solver_val,
+                                                        m_d_solver_row_ptr,
+                                                        m_d_solver_col_idx,
+                                                        m_chol_info,
+                                                        m_solver_buffer));
+            }
+        } else if (solver == Solver::QR) {
+            if constexpr (std::is_same_v<T, float>) {
+                CUSOLVER_ERROR(cusolverSpScsrqrFactor(m_cusolver_sphandle,
+                                                      m_num_rows,
+                                                      m_num_cols,
+                                                      m_nnz,
+                                                      nullptr,
+                                                      nullptr,
+                                                      m_qr_info,
+                                                      m_solver_buffer));
+            }
+
+            if constexpr (std::is_same_v<T, cuComplex>) {
+                CUSOLVER_ERROR(cusolverSpCcsrqrFactor(m_cusolver_sphandle,
+                                                      m_num_rows,
+                                                      m_num_cols,
+                                                      m_nnz,
+                                                      nullptr,
+                                                      nullptr,
+                                                      m_qr_info,
+                                                      m_solver_buffer));
+            }
+            if constexpr (std::is_same_v<T, double>) {
+                CUSOLVER_ERROR(cusolverSpDcsrqrFactor(m_cusolver_sphandle,
+                                                      m_num_rows,
+                                                      m_num_cols,
+                                                      m_nnz,
+                                                      nullptr,
+                                                      nullptr,
+                                                      m_qr_info,
+                                                      m_solver_buffer));
+            }
+            if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+                CUSOLVER_ERROR(cusolverSpZcsrqrFactor(m_cusolver_sphandle,
+                                                      m_num_rows,
+                                                      m_num_cols,
+                                                      m_nnz,
+                                                      nullptr,
+                                                      nullptr,
+                                                      m_qr_info,
+                                                      m_solver_buffer));
+            }
+
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix::factorize() incompatible solver with factorize "
+                "method");
+            return;
         }
 
         double tol = 1.0e-8;
         int    singularity;
 
-        if constexpr (std::is_same_v<T, float>) {
-            CUSOLVER_ERROR(cusolverSpScsrcholZeroPivot(
-                m_cusolver_sphandle, m_chol_info, tol, &singularity));
+        if (solver == Solver::CHOL) {
+            if constexpr (std::is_same_v<T, float>) {
+                CUSOLVER_ERROR(cusolverSpScsrcholZeroPivot(
+                    m_cusolver_sphandle, m_chol_info, tol, &singularity));
+            }
+            if constexpr (std::is_same_v<T, cuComplex>) {
+                CUSOLVER_ERROR(cusolverSpCcsrcholZeroPivot(
+                    m_cusolver_sphandle, m_chol_info, tol, &singularity));
+            }
+            if constexpr (std::is_same_v<T, double>) {
+                CUSOLVER_ERROR(cusolverSpDcsrcholZeroPivot(
+                    m_cusolver_sphandle, m_chol_info, tol, &singularity));
+            }
+            if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+                CUSOLVER_ERROR(cusolverSpZcsrcholZeroPivot(
+                    m_cusolver_sphandle, m_chol_info, tol, &singularity));
+            }
+        } else if (solver == Solver::QR) {
+
+            if constexpr (std::is_same_v<T, float>) {
+                CUSOLVER_ERROR(cusolverSpScsrqrZeroPivot(
+                    m_cusolver_sphandle, m_qr_info, tol, &singularity));
+            }
+            if constexpr (std::is_same_v<T, cuComplex>) {
+                CUSOLVER_ERROR(cusolverSpCcsrqrZeroPivot(
+                    m_cusolver_sphandle, m_qr_info, tol, &singularity));
+            }
+            if constexpr (std::is_same_v<T, double>) {
+                CUSOLVER_ERROR(cusolverSpDcsrqrZeroPivot(
+                    m_cusolver_sphandle, m_qr_info, tol, &singularity));
+            }
+            if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+                CUSOLVER_ERROR(cusolverSpZcsrqrZeroPivot(
+                    m_cusolver_sphandle, m_qr_info, tol, &singularity));
+            }
+
+
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix::factorize() incompatible solver with factorize "
+                "method");
+            return;
         }
-        if constexpr (std::is_same_v<T, cuComplex>) {
-            CUSOLVER_ERROR(cusolverSpCcsrcholZeroPivot(
-                m_cusolver_sphandle, m_chol_info, tol, &singularity));
-        }
-        if constexpr (std::is_same_v<T, double>) {
-            CUSOLVER_ERROR(cusolverSpDcsrcholZeroPivot(
-                m_cusolver_sphandle, m_chol_info, tol, &singularity));
-        }
-        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
-            CUSOLVER_ERROR(cusolverSpZcsrcholZeroPivot(
-                m_cusolver_sphandle, m_chol_info, tol, &singularity));
-        }
+
         if (0 <= singularity) {
             RXMESH_WARN(
                 "SparseMatrix::factorize() The matrix is singular at row {} "
@@ -1010,13 +1232,22 @@ struct SparseMatrix
      * sparse matrix before calling the solve() method below. After calling this
      * pre_solve(), solver() can be called with multiple right hand sides
      */
-    void pre_solve(PermuteMethod reorder = PermuteMethod::NSTDIS)
+    __host__ void pre_solve(Solver        solver,
+                            PermuteMethod reorder = PermuteMethod::NSTDIS)
     {
-        permute_alloc(PermuteMethod::NSTDIS);
-        permute(PermuteMethod::NSTDIS);
-        analyze_pattern();
-        post_analyze_alloc();
-        factorize();
+        if (solver != Solver::CHOL && solver != Solver::QR) {
+            RXMESH_WARN(
+                "SparseMatrix::pre_solve() the low-level API only works for "
+                "Cholesky and QR solvers");
+            return;
+        }
+        m_current_solver = solver;
+
+        permute_alloc(reorder);
+        permute(reorder);
+        analyze_pattern(solver);
+        post_analyze_alloc(solver);
+        factorize(solver);
     }
 
     /**
@@ -1027,9 +1258,9 @@ struct SparseMatrix
      * @param B_mat: right hand side
      * @param X_mat: output solution
      */
-    void solve(DenseMatrix<T>& B_mat,
-               DenseMatrix<T>& X_mat,
-               cudaStream_t    stream = NULL)
+    __host__ void solve(DenseMatrix<T>& B_mat,
+                        DenseMatrix<T>& X_mat,
+                        cudaStream_t    stream = NULL)
     {
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
         for (int i = 0; i < B_mat.cols(); ++i) {
@@ -1045,7 +1276,7 @@ struct SparseMatrix
      * @param d_b: right hand side
      * @param d_x: output solution
      */
-    void solve(T* d_b, T* d_x)
+    __host__ void solve(T* d_b, T* d_x)
     {
         T* d_solver_b;
         T* d_solver_x;
@@ -1061,39 +1292,89 @@ struct SparseMatrix
             d_solver_x = d_x;
         }
 
-        if constexpr (std::is_same_v<T, float>) {
-            CUSOLVER_ERROR(cusolverSpScsrcholSolve(m_cusolver_sphandle,
-                                                   m_num_rows,
-                                                   d_solver_b,
-                                                   d_solver_x,
-                                                   m_chol_info,
-                                                   m_chol_buffer));
-        }
+        if (m_current_solver == Solver::CHOL) {
 
-        if constexpr (std::is_same_v<T, cuComplex>) {
-            CUSOLVER_ERROR(cusolverSpCcsrcholSolve(m_cusolver_sphandle,
-                                                   m_num_rows,
-                                                   d_solver_b,
-                                                   d_solver_x,
-                                                   m_chol_info,
-                                                   m_chol_buffer));
-        }
+            if constexpr (std::is_same_v<T, float>) {
+                CUSOLVER_ERROR(cusolverSpScsrcholSolve(m_cusolver_sphandle,
+                                                       m_num_rows,
+                                                       d_solver_b,
+                                                       d_solver_x,
+                                                       m_chol_info,
+                                                       m_solver_buffer));
+            }
 
-        if constexpr (std::is_same_v<T, double>) {
-            CUSOLVER_ERROR(cusolverSpDcsrcholSolve(m_cusolver_sphandle,
-                                                   m_num_rows,
-                                                   d_solver_b,
-                                                   d_solver_x,
-                                                   m_chol_info,
-                                                   m_chol_buffer));
-        }
-        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
-            CUSOLVER_ERROR(cusolverSpZcsrcholSolve(m_cusolver_sphandle,
-                                                   m_num_rows,
-                                                   d_solver_b,
-                                                   d_solver_x,
-                                                   m_chol_info,
-                                                   m_chol_buffer));
+            if constexpr (std::is_same_v<T, cuComplex>) {
+                CUSOLVER_ERROR(cusolverSpCcsrcholSolve(m_cusolver_sphandle,
+                                                       m_num_rows,
+                                                       d_solver_b,
+                                                       d_solver_x,
+                                                       m_chol_info,
+                                                       m_solver_buffer));
+            }
+
+            if constexpr (std::is_same_v<T, double>) {
+                CUSOLVER_ERROR(cusolverSpDcsrcholSolve(m_cusolver_sphandle,
+                                                       m_num_rows,
+                                                       d_solver_b,
+                                                       d_solver_x,
+                                                       m_chol_info,
+                                                       m_solver_buffer));
+            }
+            if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+                CUSOLVER_ERROR(cusolverSpZcsrcholSolve(m_cusolver_sphandle,
+                                                       m_num_rows,
+                                                       d_solver_b,
+                                                       d_solver_x,
+                                                       m_chol_info,
+                                                       m_solver_buffer));
+            }
+        } else if (m_current_solver == Solver::QR) {
+
+            if constexpr (std::is_same_v<T, float>) {
+                CUSOLVER_ERROR(cusolverSpScsrqrSolve(m_cusolver_sphandle,
+                                                     m_num_rows,
+                                                     m_num_cols,
+                                                     d_solver_b,
+                                                     d_solver_x,
+                                                     m_qr_info,
+                                                     m_solver_buffer));
+            }
+
+            if constexpr (std::is_same_v<T, cuComplex>) {
+                CUSOLVER_ERROR(cusolverSpCcsrqrSolve(m_cusolver_sphandle,
+                                                     m_num_rows,
+                                                     m_num_cols,
+                                                     d_solver_b,
+                                                     d_solver_x,
+                                                     m_qr_info,
+                                                     m_solver_buffer));
+            }
+
+            if constexpr (std::is_same_v<T, double>) {
+                CUSOLVER_ERROR(cusolverSpDcsrqrSolve(m_cusolver_sphandle,
+                                                     m_num_rows,
+                                                     m_num_cols,
+                                                     d_solver_b,
+                                                     d_solver_x,
+                                                     m_qr_info,
+                                                     m_solver_buffer));
+            }
+            if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+                CUSOLVER_ERROR(cusolverSpZcsrqrSolve(m_cusolver_sphandle,
+                                                     m_num_rows,
+                                                     m_num_cols,
+                                                     d_solver_b,
+                                                     d_solver_x,
+                                                     m_qr_info,
+                                                     m_solver_buffer));
+            }
+
+
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix::solve() the low-level API only works for "
+                "Cholesky and QR solvers");
+            return;
         }
 
         if (m_use_reorder) {
@@ -1103,7 +1384,7 @@ struct SparseMatrix
 
 
    private:
-    void release(locationT location)
+    __host__ void release(locationT location)
     {
         if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
             free(m_h_val);
@@ -1124,7 +1405,7 @@ struct SparseMatrix
         }
     }
 
-    void allocate(locationT location)
+    __host__ void allocate(locationT location)
     {
         if ((location & HOST) == HOST) {
             release(HOST);
@@ -1154,12 +1435,12 @@ struct SparseMatrix
      * @brief wrapper for cuSolver API for solving linear systems using cuSolver
      * High-level API
      */
-    void cusparse_linear_solver_wrapper(const Solver        solver,
-                                        const PermuteMethod reorder,
-                                        cusolverSpHandle_t  handle,
-                                        const T*            d_b,
-                                        T*                  d_x,
-                                        cudaStream_t        stream)
+    __host__ void cusparse_linear_solver_wrapper(const Solver        solver,
+                                                 const PermuteMethod reorder,
+                                                 cusolverSpHandle_t  handle,
+                                                 const T*            d_b,
+                                                 T*                  d_x,
+                                                 cudaStream_t        stream)
     {
         CUSOLVER_ERROR(cusolverSpSetStream(handle, stream));
 
@@ -1290,9 +1571,10 @@ struct SparseMatrix
                                                    &singularity));
             }
         } else if (solver == Solver::LU) {
-            RXMESH_ERROR(
-                "SparseMatrix: LU Solver is run on the host. Make sure your "
-                "data resides on the host before calling the solver");
+            RXMESH_WARN(
+                "SparseMatrix::cusparse_linear_solver_wrapper() LU Solver is "
+                "run on the host. Make sure your data resides on the host "
+                "before calling the solver");
 
             if constexpr (std::is_same_v<T, float>) {
                 CUSOLVER_ERROR(cusolverSpScsrlsvluHost(handle,
@@ -1386,7 +1668,7 @@ struct SparseMatrix
         }
     }
 
-    void permute_scatter(IndexT* d_p, T* d_in, T* d_out, IndexT size)
+    __host__ void permute_scatter(IndexT* d_p, T* d_in, T* d_out, IndexT size)
     {
         // d_out[d_p[i]] = d_in[i]
         thrust::device_ptr<IndexT> t_p(d_p);
@@ -1396,7 +1678,7 @@ struct SparseMatrix
         thrust::scatter(thrust::device, t_i, t_i + size, t_p, t_o);
     }
 
-    void permute_gather(IndexT* d_p, T* d_in, T* d_out, IndexT size)
+    __host__ void permute_gather(IndexT* d_p, T* d_in, T* d_out, IndexT size)
     {
         // d_out[i] = d_in[d_p[i]]
         thrust::device_ptr<IndexT> t_p(d_p);
@@ -1434,19 +1716,23 @@ struct SparseMatrix
     csrcholInfo_t m_chol_info;
     size_t        m_internalDataInBytes;
     size_t        m_workspaceInBytes;
-    void*         m_chol_buffer;
+    void*         m_solver_buffer;
+    csrqrInfo_t   m_qr_info;
 
     // purmutation array
     IndexT* m_h_permute;
     IndexT* m_d_permute;
 
     // CSR matrix for solving only
-    // equal to the original matrix if not permutated
-    // only allocated as a new CSR matrix if permutated
+    // equal to the original matrix if not permuted
+    // only allocated as a new CSR matrix if permuted
     bool    m_reorder_allocated;
     IndexT* m_d_solver_row_ptr;
     IndexT* m_d_solver_col_idx;
     T*      m_d_solver_val;
+
+    // caching user's solver that is used in pre_solve
+    Solver m_current_solver;
 
 
     IndexT* m_h_solver_row_ptr;

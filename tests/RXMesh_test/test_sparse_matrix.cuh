@@ -356,12 +356,7 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
         rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
     // A_mat.solve(B_mat, X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
-
-    A_mat.permute_alloc(PermuteMethod::NSTDIS);
-    A_mat.permute(PermuteMethod::NSTDIS);
-    A_mat.analyze_pattern();
-    A_mat.post_analyze_alloc();
-    A_mat.factorize();
+    A_mat.pre_solve(Solver::CHOL, PermuteMethod::NSTDIS);
     A_mat.solve(B_mat, X_mat);
 
     A_mat.multiply(X_mat, ret_mat);
