@@ -63,7 +63,7 @@ __global__ static void calculate_rotation_matrix(
     const rxmesh::Context      context,
     rxmesh::VertexAttribute<T> ref_vertex_pos,
     rxmesh::VertexAttribute<T> deformed_vertex_pos,
-    rxmesh::VertexAttribute<T> rot_mat,
+    rxmesh::VertexAttribute<T> rotations,
     rxmesh::SparseMatrix<T>    weight_matrix)
 {
     auto vn_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
@@ -108,7 +108,7 @@ __global__ static void calculate_rotation_matrix(
 
         for (int i = 0; i < 3; i++)
             for (int j = 0; j < 3; j++)
-                rot_mat(v_id, i * 3 + j) = R(i, j);        
+                rotations(v_id, i * 3 + j) = R(i, j);
     };
 
     auto                block = cooperative_groups::this_thread_block();
@@ -123,7 +123,7 @@ __global__ static void calculate_b(
     const rxmesh::Context      context,
     rxmesh::VertexAttribute<T> ref_vertex_pos,
     rxmesh::VertexAttribute<T> deformed_vertex_pos,
-    rxmesh::VertexAttribute<T> rot_mat,
+    rxmesh::VertexAttribute<T> rotations,
     rxmesh::SparseMatrix<T>    weight_mat,
     rxmesh::DenseMatrix<T>     b_mat,
     rxmesh::VertexAttribute<T> constraints)
@@ -137,7 +137,7 @@ __global__ static void calculate_b(
 
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++)
-                Ri(i, j) = rot_mat(v_id, i * 3 + j);
+                Ri(i, j) = rotations(v_id, i * 3 + j);
         }
 
         for (int nei_index = 0; nei_index < vv.size(); nei_index++) {
@@ -145,7 +145,7 @@ __global__ static void calculate_b(
             Eigen::Matrix3f Rj = Eigen::Matrix3f::Zero(3, 3);
             for (int i = 0; i < 3; i++)
                 for (int j = 0; j < 3; j++)
-                    Rj(i, j) = rot_mat(vv[nei_index], i * 3 + j);
+                    Rj(i, j) = rotations(vv[nei_index], i * 3 + j);
 
             // find rotation addition
             Eigen::Matrix3f rot_add = Ri + Rj;
@@ -182,21 +182,21 @@ template <typename T, uint32_t blockThreads>
 __global__ static void calculate_system_matrix(
     const rxmesh::Context      context,
     rxmesh::SparseMatrix<T>    weight_matrix,
-    rxmesh::SparseMatrix<T>    sys_mat,
+    rxmesh::SparseMatrix<T>    laplace_mat,
     rxmesh::VertexAttribute<T> constraints)
 
 {
     auto calc_mat = [&](VertexHandle v_id, VertexIterator& vv) {
         if (constraints(v_id, 0) == 0) {
             for (int i = 0; i < vv.size(); i++) {
-                sys_mat(v_id, v_id) += weight_matrix(v_id, vv[i]);
-                sys_mat(v_id, vv[i]) -= weight_matrix(v_id, vv[i]);
+                laplace_mat(v_id, v_id) += weight_matrix(v_id, vv[i]);
+                laplace_mat(v_id, vv[i]) -= weight_matrix(v_id, vv[i]);
             }
         } else {
             for (int i = 0; i < vv.size(); i++) {
-                sys_mat(v_id, vv[i]) = 0;
+                laplace_mat(v_id, vv[i]) = 0;
             }
-            sys_mat(v_id, v_id) = 1;
+            laplace_mat(v_id, v_id) = 1;
         }
     };
 
@@ -249,11 +249,11 @@ int main(int argc, char** argv)
     weight_matrix.set_value(0.f);
 
     // system matrix
-    SparseMatrix<float> sys_mat(rx);
-    sys_mat.set_value(0.f);
+    SparseMatrix<float> laplace_mat(rx);
+    laplace_mat.set_value(0.f);
 
     // rotation matrix as a very attribute where every vertex has 3x3 matrix
-    auto rot_mat = *rx.add_vertex_attribute<float>("RotationMatrix", 9);
+    auto rotations = *rx.add_vertex_attribute<float>("RotationMatrix", 9);
 
     // b-matrix
     DenseMatrix<float> b_mat(rx, rx.get_num_vertices(), 3);
@@ -302,10 +302,10 @@ int main(int argc, char** argv)
 
     calculate_system_matrix<float, CUDABlockSize>
         <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
-            rx.get_context(), weight_matrix, sys_mat, constraints);
+            rx.get_context(), weight_matrix, laplace_mat, constraints);
 
-    // pre_solve sys_mat
-    sys_mat.pre_solve(Solver::QR, PermuteMethod::NSTDIS);
+    // pre_solve laplace_mat
+    laplace_mat.pre_solve(Solver::QR, PermuteMethod::NSTDIS);
 
     // launch box for rotation matrix calculation
     rxmesh::LaunchBox<CUDABlockSize> lb_rot;
@@ -355,7 +355,7 @@ int main(int argc, char** argv)
                     rx.get_context(),
                     ref_vertex_pos,
                     deformed_vertex_pos,
-                    rot_mat,
+                    rotations,
                     weight_matrix);
 
             // solve for position
@@ -365,12 +365,12 @@ int main(int argc, char** argv)
                    lb_b_mat.smem_bytes_dyn>>>(rx.get_context(),
                                               ref_vertex_pos,
                                               deformed_vertex_pos,
-                                              rot_mat,
+                                              rotations,
                                               weight_matrix,
                                               b_mat,
                                               constraints);
 
-            sys_mat.solve(b_mat, *deformed_vertex_pos_mat);
+            laplace_mat.solve(b_mat, *deformed_vertex_pos_mat);
         }
 
         // move mat to the host
