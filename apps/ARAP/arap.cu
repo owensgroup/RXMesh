@@ -388,4 +388,12 @@ int main(int argc, char** argv)
     polyscope::state::userCallback = polyscope_callback;
     polyscope::show();
 #endif
+
+    deformed_vertex_pos_mat->release();
+    weight_matrix.release();
+    laplace_mat.release();
+    b_mat.release();
+
+
+    return 0;
 }
