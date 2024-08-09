@@ -1,8 +1,8 @@
 #pragma once
 #include <stdint.h>
 #include <string>
+#include "rxmesh/types.h"
 #include "rxmesh/util/macros.h"
-#include "rxmesh/util/vector.h"
 
 namespace rxmesh {
 
@@ -15,7 +15,7 @@ void create_plane(std::vector<std::vector<T>>&        verts,
                   uint32_t                            nx,
                   uint32_t                            ny,
                   T                                   dx         = 1.0,
-                  const Vector<3, T>                  low_corner = {0, 0, 0})
+                  const vec3<T>                       low_corner = {0, 0, 0})
 {
     verts.clear();
     tris.clear();

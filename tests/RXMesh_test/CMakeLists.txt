@@ -3,8 +3,7 @@ add_executable( RXMesh_test )
 set( SOURCE_LIST
     rxmesh_test_main.cu
 	rxmesh_test.h
-    test_attribute.cuh
-	test_vector.cu
+    test_attribute.cuh	
     test_util.cu
 	test_iterator.cu
     test_queries.h
@@ -23,6 +22,11 @@ set( SOURCE_LIST
 	test_patch_slicing.cuh
 	test_multi_queries.cuh
 	test_wasted_work.cuh
+	test_eigen.cuh
+	test_boundary.cuh
+	test_dense_matrix.cuh
+	test_export.cuh
+	test_svd.cuh
 )
 
 target_sources( RXMesh_test 

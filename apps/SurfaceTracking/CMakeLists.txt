@@ -9,8 +9,7 @@ set(SOURCE_LIST
 	smoother.cuh
 	frame_stepper.h
 	simulation.h
-	noise.h
-	primitives.cuh
+	noise.h	
 	collapser.cuh
 	link_condition.cuh
 )
@@ -28,8 +27,6 @@ if (WIN32)
       PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
-include("eigen.cmake")
-
 set_target_properties(SurfaceTracking PROPERTIES FOLDER "apps")
 
 set_property(TARGET SurfaceTracking PROPERTY CUDA_SEPARABLE_COMPILATION ON)
@@ -38,11 +35,7 @@ source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "SurfaceTracking" FILES ${SOU
 
 target_link_libraries(SurfaceTracking     
     PRIVATE RXMesh
-    PRIVATE gtest_main	
-	PRIVATE Eigen3::Eigen
+    PRIVATE gtest_main
 )
-
-# https://eigen.tuxfamily.org/dox/TopicCUDA.html
-target_compile_definitions(SurfaceTracking PUBLIC "EIGEN_DEFAULT_DENSE_INDEX_TYPE=int")
 
 #gtest_discover_tests( SurfaceTracking )

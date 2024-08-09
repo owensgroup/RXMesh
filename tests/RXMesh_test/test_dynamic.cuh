@@ -265,8 +265,7 @@ inline void set_edge_tag(rxmesh::RXMeshDynamic&      rx,
 TEST(RXMeshDynamic, RandomFlips)
 {
     using namespace rxmesh;
-    cuda_query(rxmesh_args.device_id);
-
+    
     RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
                      STRINGIFY(INPUT_DIR) "sphere3_patches");
 
@@ -384,8 +383,7 @@ TEST(RXMeshDynamic, RandomFlips)
 TEST(RXMeshDynamic, RandomCollapse)
 {
     using namespace rxmesh;
-    cuda_query(rxmesh_args.device_id);
-
+    
     RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
                      STRINGIFY(INPUT_DIR) "sphere3_patches");
 

@@ -2,24 +2,18 @@
 
 #define G_EIGENVALUE_RANK_RATIO 0.03
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtx/norm.hpp>
-
 #include "frame_stepper.h"
 #include "rxmesh/rxmesh_dynamic.h"
 #include "simulation.h"
 
 #include "rxmesh/util/report.h"
 
-template <typename T>
-using Vec3 = glm::vec<3, T, glm::defaultp>;
 
 using EdgeStatus = int8_t;
 enum : EdgeStatus
 {
     UNSEEN = 0,  // means we have not tested it before for e.g., split/flip/col
-    OKAY   = 1,  // means we have tested it and it is okay to skip
+    SKIP   = 1,  // means we have tested it and it is okay to skip
     UPDATE = 2,  // means we should update it i.e., we have tested it before
     ADDED  = 3,  // means it has been added to during the split/flip/collapse
 };
@@ -59,9 +53,6 @@ void update_polyscope(rxmesh::RXMeshDynamic&      rx,
     ps_mesh->setEdgeWidth(1.0);
     ps_mesh->setEnabled(true);
 
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
     polyscope::show();
     ps_mesh->setEnabled(false);
 #endif

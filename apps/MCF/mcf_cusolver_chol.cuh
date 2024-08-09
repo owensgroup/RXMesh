@@ -1,9 +1,10 @@
 #pragma once
-#include "mcf_util.h"
 #include "rxmesh/attribute.h"
 #include "rxmesh/matrix/dense_matrix.cuh"
 #include "rxmesh/matrix/sparse_matrix.cuh"
 #include "rxmesh/rxmesh_static.h"
+
+#include "mcf_kernels.cuh"
 
 template <typename T, uint32_t blockThreads>
 __global__ static void mcf_B_setup(const rxmesh::Context            context,
@@ -14,17 +15,11 @@ __global__ static void mcf_B_setup(const rxmesh::Context            context,
     using namespace rxmesh;
 
     auto init_lambda = [&](VertexHandle& p_id, const VertexIterator& iter) {
-        auto     r_ids      = p_id.unpack();
-        uint32_t r_patch_id = r_ids.first;
-        uint16_t r_local_id = r_ids.second;
-
-        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
-
         if (use_uniform_laplace) {
-            const T valence     = static_cast<T>(iter.size());
-            B_mat(row_index, 0) = coords(p_id, 0) * valence;
-            B_mat(row_index, 1) = coords(p_id, 1) * valence;
-            B_mat(row_index, 2) = coords(p_id, 2) * valence;
+            const T valence = static_cast<T>(iter.size());
+            B_mat(p_id, 0)  = coords(p_id, 0) * valence;
+            B_mat(p_id, 1)  = coords(p_id, 1) * valence;
+            B_mat(p_id, 2)  = coords(p_id, 2) * valence;
         } else {
             T v_weight = 0;
 
@@ -43,9 +38,9 @@ __global__ static void mcf_B_setup(const rxmesh::Context            context,
             }
             v_weight = 0.5 / v_weight;
 
-            B_mat(row_index, 0) = coords(p_id, 0) / v_weight;
-            B_mat(row_index, 1) = coords(p_id, 1) / v_weight;
-            B_mat(row_index, 2) = coords(p_id, 2) / v_weight;
+            B_mat(p_id, 0) = coords(p_id, 0) / v_weight;
+            B_mat(p_id, 1) = coords(p_id, 1) / v_weight;
+            B_mat(p_id, 2) = coords(p_id, 2) / v_weight;
         }
     };
 
@@ -64,11 +59,10 @@ __global__ static void mcf_B_setup(const rxmesh::Context            context,
 }
 
 template <typename T, uint32_t blockThreads>
-__global__ static void mcf_A_X_setup(
+__global__ static void mcf_A_setup(
     const rxmesh::Context            context,
     const rxmesh::VertexAttribute<T> coords,
     rxmesh::SparseMatrix<T>          A_mat,
-    rxmesh::DenseMatrix<T>           X_mat,
     const bool                       use_uniform_laplace,  // for non-uniform
     const T                          time_step)
 {
@@ -83,13 +77,6 @@ __global__ static void mcf_A_X_setup(
         auto     r_ids      = p_id.unpack();
         uint32_t r_patch_id = r_ids.first;
         uint16_t r_local_id = r_ids.second;
-
-        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
-
-        // set up initial X matrix
-        X_mat(row_index, 0) = coords(p_id, 0);
-        X_mat(row_index, 1) = coords(p_id, 1);
-        X_mat(row_index, 2) = coords(p_id, 2);
 
         // set up matrix A
         for (uint32_t v = 0; v < iter.size(); ++v) {
@@ -146,18 +133,19 @@ __global__ static void mcf_A_X_setup(
 }
 
 template <typename T>
-void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
-                              const std::vector<std::vector<T>>& ground_truth)
+void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
 
     uint32_t num_vertices = rx.get_num_vertices();
-    auto     coords       = rx.get_input_vertex_coordinates();
+
+    auto coords = rx.get_input_vertex_coordinates();
 
     SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>  X_mat(num_vertices, 3);
-    DenseMatrix<float>  B_mat(num_vertices, 3);
+    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
+
+    std::shared_ptr<DenseMatrix<float>> X_mat = coords->to_matrix();
 
     RXMESH_INFO("use_uniform_laplace: {}, time_step: {}",
                 Arg.use_uniform_laplace,
@@ -181,47 +169,49 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
     LaunchBox<blockThreads> launch_box_A_X;
     rx.prepare_launch_box({Op::VV},
                           launch_box_A_X,
-                          (void*)mcf_A_X_setup<float, blockThreads>,
+                          (void*)mcf_A_setup<float, blockThreads>,
                           !Arg.use_uniform_laplace);
 
-    mcf_A_X_setup<float, blockThreads>
+    mcf_A_setup<float, blockThreads>
         <<<launch_box_A_X.blocks,
            launch_box_A_X.num_threads,
            launch_box_A_X.smem_bytes_dyn>>>(rx.get_context(),
                                             *coords,
                                             A_mat,
-                                            X_mat,
                                             Arg.use_uniform_laplace,
                                             Arg.time_step);
 
-    // Solving the linear system using chol factorization and no reordering
-    A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NONE);
 
-    X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
+    // To Use LU, we have to move the data to the host
+    // A_mat.move(DEVICE, HOST);
+    // B_mat.move(DEVICE, HOST);
+    // X_mat->move(DEVICE, HOST);
+    // A_mat.solve(B_mat, *X_mat, Solver::LU, PermuteMethod::NSTDIS);
 
-    const T tol     = 0.001;
-    T       tmp_tol = tol;
-    bool    passed  = true;
-    rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
-        uint32_t v_id        = rx.map_to_global(vh);
-        uint32_t v_linear_id = rx.linear_id(vh);
+    // Solving using QR or CHOL
+    // A_mat.solve(B_mat, *X_mat, Solver::QR, PermuteMethod::NSTDIS);
+    // A_mat.solve(B_mat, *X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
 
-        T a = X_mat(v_linear_id, 0);
+    // Solving using CHOL
+    A_mat.pre_solve(Solver::CHOL, PermuteMethod::NSTDIS);
+    A_mat.solve(B_mat, *X_mat);
 
-        for (uint32_t i = 0; i < 3; ++i) {
-            tmp_tol = std::abs((X_mat(v_linear_id, i) - ground_truth[v_id][i]) /
-                               ground_truth[v_id][i]);
 
-            if (tmp_tol > tol) {
-                RXMESH_WARN("val: {}, truth: {}, tol: {}\n",
-                            X_mat(v_linear_id, i),
-                            ground_truth[v_id][i],
-                            tmp_tol);
-                passed = false;
-                break;
-            }
-        }
-    });
+    // move the results to the host
+    // if we use LU, the data will be on the host and we should not move the
+    // device to the host
+    X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
 
-    EXPECT_TRUE(passed);
+    // copy the results to attributes
+    coords->from_matrix(X_mat.get());
+
+    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+
+#if USE_POLYSCOPE
+    polyscope::show();
+#endif
+
+    B_mat.release();
+    X_mat->release();
+    A_mat.release();
 }

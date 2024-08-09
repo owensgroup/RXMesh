@@ -13,13 +13,20 @@
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/util.h"
-#include "rxmesh/util/vector.h"
+
+#include "rxmesh/matrix/dense_matrix.cuh"
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/fwd.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtx/norm.hpp>
 
 class RXMeshTest;
 
 
 namespace rxmesh {
 
+class RXMeshStatic;
 
 /**
  * @brief Base untyped attributes used as an interface for attribute container
@@ -93,11 +100,11 @@ class Attribute : public AttributeBase
      * @param location where the attribute to be allocated
      * @param layout memory layout in case of num_attributes>1
      */
-    explicit Attribute(const char*    name,
-                       const uint32_t num_attributes,
-                       locationT      location,
-                       const layoutT  layout,
-                       const RXMesh*  rxmesh)
+    explicit Attribute(const char*         name,
+                       const uint32_t      num_attributes,
+                       locationT           location,
+                       const layoutT       layout,
+                       const RXMeshStatic* rxmesh)
         : AttributeBase(),
           m_rxmesh(rxmesh),
           m_h_patches_info(rxmesh->m_h_patches_info),
@@ -150,10 +157,12 @@ class Attribute : public AttributeBase
             return this->operator()(m_rxmesh->map_to_local_face(i), j);
         }
     }
+
     size_t rows() const
     {
         return size();
     }
+
     size_t cols() const
     {
         return this->get_num_attributes();
@@ -171,6 +180,94 @@ class Attribute : public AttributeBase
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return m_rxmesh->get_num_faces();
+        }
+    }
+
+    /**
+     * @brief convert the attributes stored into a dense matrix where number of
+     * rows represent the number of mesh elements of this attribute and number
+     * of columns is the number of attributes
+     */
+    std::shared_ptr<DenseMatrix<T>> to_matrix() const
+    {
+        std::shared_ptr<DenseMatrix<T>> mat =
+            std::make_shared<DenseMatrix<T>>(*m_rxmesh, rows(), cols());
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            m_rxmesh->for_each_vertex(HOST, [&](const VertexHandle vh) {
+                uint32_t i = m_rxmesh->linear_id(vh);
+
+                for (uint32_t j = 0; j < cols(); ++j) {
+                    (*mat)(i, j) = this->operator()(vh, j);
+                }
+            });
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            m_rxmesh->for_each_edge(HOST, [&](const EdgeHandle eh) {
+                uint32_t i = m_rxmesh->linear_id(eh);
+
+                for (uint32_t j = 0; j < cols(); ++j) {
+                    (*mat)(i, j) = this->operator()(eh, j);
+                }
+            });
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            m_rxmesh->for_each_face(HOST, [&](const FaceHandle fh) {
+                uint32_t i = m_rxmesh->linear_id(fh);
+
+                for (uint32_t j = 0; j < cols(); ++j) {
+                    (*mat)(i, j) = this->operator()(fh, j);
+                }
+            });
+        }
+
+        mat->move(HOST, DEVICE);
+
+        return mat;
+    }
+
+    /**
+     * @brief copy a dense matrix to this attribute. The copying happens on the
+     * host side, i.e., we copy the content of mat which is on the host to this
+     * attribute on the host side
+     * @param mat
+     */
+    void from_matrix(DenseMatrix<T>* mat)
+    {
+        assert(mat->rows() == rows());
+        assert(mat->cols() == cols());
+
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            m_rxmesh->for_each_vertex(HOST, [&](const VertexHandle vh) {
+                uint32_t i = m_rxmesh->linear_id(vh);
+
+                for (uint32_t j = 0; j < cols(); ++j) {
+                    this->operator()(vh, j) = (*mat)(i, j);
+                }
+            });
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            m_rxmesh->for_each_edge(HOST, [&](const EdgeHandle eh) {
+                uint32_t i = m_rxmesh->linear_id(eh);
+
+                for (uint32_t j = 0; j < cols(); ++j) {
+                    this->operator()(eh, j) = (*mat)(i, j);
+                }
+            });
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            m_rxmesh->for_each_face(HOST, [&](const FaceHandle fh) {
+                uint32_t i = m_rxmesh->linear_id(fh);
+
+                for (uint32_t j = 0; j < cols(); ++j) {
+                    this->operator()(fh, j) = (*mat)(i, j);
+                }
+            });
         }
     }
 
@@ -240,9 +337,9 @@ class Attribute : public AttributeBase
     }
 
     /**
-     * @brief return the amount of allocated memory in megabytes 
-    */
-    const double get_memory_mg()const 
+     * @brief return the amount of allocated memory in megabytes
+     */
+    const double get_memory_mg() const
     {
         return m_memory_mega_bytes;
     }
@@ -289,10 +386,7 @@ class Attribute : public AttributeBase
      */
     void reset(const T value, locationT location, cudaStream_t stream = NULL)
     {
-        if ((location & DEVICE) == DEVICE) {
-
-            assert((m_allocated & DEVICE) == DEVICE);
-
+        if (((location & DEVICE) == DEVICE) && is_device_allocated()) {
             const int threads = 256;
             detail::template memset_attribute<T>
                 <<<m_rxmesh->get_num_patches(), threads, 0, stream>>>(
@@ -303,8 +397,8 @@ class Attribute : public AttributeBase
         }
 
 
-        if ((location & HOST) == HOST) {
-            assert((m_allocated & HOST) == HOST);
+        if (((location & HOST) == HOST) && is_host_allocated()) {
+
 #pragma omp parallel for
             for (int p = 0; p < static_cast<int>(m_rxmesh->get_num_patches());
                  ++p) {
@@ -384,7 +478,7 @@ class Attribute : public AttributeBase
      */
     void release(locationT location = LOCATION_ALL)
     {
-        if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
+        if (((location & HOST) == HOST) && is_host_allocated()) {
             for (uint32_t p = 0; p < m_rxmesh->get_max_num_patches(); ++p) {
                 free(m_h_attr[p]);
             }
@@ -393,8 +487,7 @@ class Attribute : public AttributeBase
             m_allocated = m_allocated & (~HOST);
         }
 
-        if (((location & DEVICE) == DEVICE) &&
-            ((m_allocated & DEVICE) == DEVICE)) {
+        if (((location & DEVICE) == DEVICE) && is_device_allocated()) {
             for (uint32_t p = 0; p < m_rxmesh->get_max_num_patches(); ++p) {
                 GPU_FREE(m_h_ptr_on_device[p]);
             }
@@ -432,12 +525,14 @@ class Attribute : public AttributeBase
         if ((source_flag & LOCATION_ALL) == LOCATION_ALL &&
             (dst_flag & LOCATION_ALL) != LOCATION_ALL) {
             RXMESH_ERROR("Attribute::copy_from() Invalid configuration!");
+            return;
         }
 
         if (m_num_attributes != source.get_num_attributes()) {
             RXMESH_ERROR(
                 "Attribute::copy_from() number of attributes is "
                 "different!");
+            return;
         }
 
         if (this->is_empty() || m_rxmesh->get_num_patches() == 0) {
@@ -448,13 +543,15 @@ class Attribute : public AttributeBase
         if ((source_flag & HOST) == HOST && (dst_flag & HOST) == HOST) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because it was not allocated on host");
+                return;
             }
             if ((dst_flag & m_allocated) != dst_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because location (this) was not allocated on host");
+                return;
             }
 
             for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
@@ -469,13 +566,15 @@ class Attribute : public AttributeBase
         if ((source_flag & DEVICE) == DEVICE && (dst_flag & DEVICE) == DEVICE) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because it was not allocated on device");
+                return;
             }
             if ((dst_flag & m_allocated) != dst_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because location (this) was not allocated on device");
+                return;
             }
 
             for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
@@ -493,13 +592,15 @@ class Attribute : public AttributeBase
         if ((source_flag & DEVICE) == DEVICE && (dst_flag & HOST) == HOST) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because it was not allocated on host");
+                return;
             }
             if ((dst_flag & m_allocated) != dst_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because location (this) was not allocated on device");
+                return;
             }
 
 
@@ -518,13 +619,15 @@ class Attribute : public AttributeBase
         if ((source_flag & HOST) == HOST && (dst_flag & DEVICE) == DEVICE) {
             if ((source_flag & source.m_allocated) != source_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because it was not allocated on device");
+                return;
             }
             if ((dst_flag & m_allocated) != dst_flag) {
                 RXMESH_ERROR(
-                    "Attribute::copy() copying source is not valid"
+                    "Attribute::copy_from() copying source is not valid"
                     " because location (this) was not allocated on host");
+                return;
             }
 
 
@@ -675,18 +778,18 @@ class Attribute : public AttributeBase
         }
     }
 
-    const RXMesh*    m_rxmesh;
-    const PatchInfo* m_h_patches_info;
-    const PatchInfo* m_d_patches_info;
-    char*            m_name;
-    uint32_t         m_num_attributes;
-    locationT        m_allocated;
-    T**              m_h_attr;
-    T**              m_h_ptr_on_device;
-    T**              m_d_attr;
-    uint32_t         m_max_num_patches;
-    layoutT          m_layout;
-    double           m_memory_mega_bytes;
+    const RXMeshStatic* m_rxmesh;
+    const PatchInfo*    m_h_patches_info;
+    const PatchInfo*    m_d_patches_info;
+    char*               m_name;
+    uint32_t            m_num_attributes;
+    locationT           m_allocated;
+    T**                 m_h_attr;
+    T**                 m_h_ptr_on_device;
+    T**                 m_d_attr;
+    uint32_t            m_max_num_patches;
+    layoutT             m_layout;
+    double              m_memory_mega_bytes;
 
     constexpr static uint32_t m_block_size = 256;
 };
@@ -755,11 +858,11 @@ class AttributeContainer
      * @return a shared pointer to the attribute
      */
     template <typename AttrT>
-    std::shared_ptr<AttrT> add(const char*   name,
-                               uint32_t      num_attributes,
-                               locationT     location,
-                               layoutT       layout,
-                               const RXMesh* rxmesh)
+    std::shared_ptr<AttrT> add(const char*         name,
+                               uint32_t            num_attributes,
+                               locationT           location,
+                               layoutT             layout,
+                               const RXMeshStatic* rxmesh)
     {
         if (does_exist(name)) {
             RXMESH_WARN(

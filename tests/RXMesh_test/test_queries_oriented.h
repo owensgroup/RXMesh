@@ -15,9 +15,6 @@ TEST(RXMeshStatic, Oriented_VV_Open)
 {
     using namespace rxmesh;
 
-    // Select device
-    cuda_query(rxmesh_args.device_id);
-
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
@@ -134,9 +131,6 @@ TEST(RXMeshStatic, Oriented_VV_Open)
 TEST(RXMeshStatic, Oriented_VV_Closed)
 {
     using namespace rxmesh;
-
-    // Select device
-    cuda_query(rxmesh_args.device_id);
 
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;

@@ -1,19 +1,10 @@
 #pragma once
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtx/norm.hpp>
-
-
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
-template <typename T>
-using Vec3 = glm::vec<3, T, glm::defaultp>;
-
 #include "histogram.cuh"
 #include "sec_kernels.cuh"
-
 #include "rxmesh/util/report.h"
 
 inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
@@ -55,13 +46,6 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     size_t   max_smem_bytes_static        = 0;
     uint32_t max_num_registers_per_thread = 0;
     uint32_t max_num_blocks               = 0;
-
-#if USE_POLYSCOPE
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
-    // polyscope::show();
-#endif
 
     bool validate = false;
 

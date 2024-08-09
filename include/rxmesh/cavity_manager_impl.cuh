@@ -2949,6 +2949,62 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 bool b2 = m_s_src_mask_e(e2);
 
                 if (b0 || b1 || b2) {
+
+
+                    // uint16_t v0q = q_patch_info.ev[2 * e0 + 0].id;
+                    // uint16_t v1q = q_patch_info.ev[2 * e0 + 1].id;
+                    //
+                    // uint16_t v2q = (q_patch_info.ev[2 * e1 + 1].id == v0q ||
+                    //                 q_patch_info.ev[2 * e1 + 1].id == v1q) ?
+                    //                    q_patch_info.ev[2 * e1 + 0].id :
+                    //                    q_patch_info.ev[2 * e1 + 1].id;
+                    //
+                    // if (!(v0q != v1q && v0q != v2q && v1q != v2q)) {
+                    //     printf(
+                    //         "\n ## e0v=%u, %u, e1v=%u, %u, e2v=%u, %u, dirty
+                    //         = "
+                    //         "%d, is_locked = %d",
+                    //         q_patch_info.ev[2 * e0 + 0].id,
+                    //         q_patch_info.ev[2 * e0 + 1].id,
+                    //         q_patch_info.ev[2 * e1 + 0].id,
+                    //         q_patch_info.ev[2 * e1 + 1].id,
+                    //         q_patch_info.ev[2 * e2 + 0].id,
+                    //         q_patch_info.ev[2 * e2 + 1].id,
+                    //         m_context.m_patches_info[q].is_dirty(),
+                    //         m_context.m_patches_info[q].lock.is_locked());
+                    // }
+                    //
+                    // if ((!m_s_src_connect_mask_v(v0q) &&
+                    //      !m_s_src_mask_v(v0q)) ||
+                    //     (!m_s_src_connect_mask_v(v1q) &&
+                    //      !m_s_src_mask_v(v1q)) &&
+                    //         (!m_s_src_connect_mask_v(v2q) &&
+                    //          !m_s_src_mask_v(v2q))) {
+                    //
+                    //     printf("\n **v0q= %u, v1q= %u, v2q= %u", v0q, v1q,
+                    //     v2q);
+                    //
+                    //     /*if (q_patch_info.is_owned(LocalVertexT(v0q))) {
+                    //         printf("\n **v0q = %f, %f, %f",
+                    //                coords(VertexHandle(q, v0q), 0),
+                    //                coords(VertexHandle(q, v0q), 1),
+                    //                coords(VertexHandle(q, v0q), 2));
+                    //     }
+                    //     if (q_patch_info.is_owned(LocalVertexT(v1q))) {
+                    //         printf("\n **v1q = %f, %f, %f",
+                    //                coords(VertexHandle(q, v1q), 0),
+                    //                coords(VertexHandle(q, v1q), 1),
+                    //                coords(VertexHandle(q, v1q), 2));
+                    //     }
+                    //     if (q_patch_info.is_owned(LocalVertexT(v2q))) {
+                    //         printf("\n **v2q = %f, %f, %f",
+                    //                coords(VertexHandle(q, v2q), 0),
+                    //                coords(VertexHandle(q, v2q), 1),
+                    //                coords(VertexHandle(q, v2q), 2));
+                    //     }*/
+                    // }
+
+
                     if (!b0) {
                         assert(e0 < m_s_src_connect_mask_e.size());
                         m_s_src_connect_mask_e.set(e0, true);
@@ -3231,6 +3287,48 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
 
                 m_s_ev[2 * ep + 0] = v0p;
                 m_s_ev[2 * ep + 1] = v1p;
+
+                // if (v0p == INVALID16 || v1p == INVALID16) {
+                //     printf(
+                //         "\n patch_id = %u, q= %u, v0q=%u, v1q= "
+                //         "%u,v0p=%u, v1p= %u, q_edge= %u, o= %u, "
+                //         "m_s_src_connect_mask_v(v0q)= "
+                //         "%d,m_s_src_connect_mask_v(v1q)= %d, "
+                //         "m_s_src_mask_v(v0q)= %u, m_s_src_mask_v(v1q)= %u, "
+                //         "m_s_src_connect_mask_e=%d, "
+                //         "m_s_src_mask_e=%d, "
+                //         "q_patch_info.is_owned(v0q)= "
+                //         "%d,q_patch_info.is_owned(v1q)= %d,",
+                //         patch_id(),
+                //         q,
+                //         v0q,
+                //         v1q,
+                //         v0p,
+                //         v1p,
+                //         q_edge,
+                //         o,
+                //         m_s_src_connect_mask_v(v0q),
+                //         m_s_src_connect_mask_v(v1q),
+                //         m_s_src_mask_v(v0q),
+                //         m_s_src_mask_v(v1q),
+                //         m_s_src_connect_mask_e(q_edge),
+                //         m_s_src_mask_e(q_edge),
+                //         q_patch_info.is_owned(LocalVertexT(v0q)),
+                //         q_patch_info.is_owned(LocalVertexT(v1q)));
+                //
+                //     /*if (q_patch_info.is_owned(LocalVertexT(v0q))) {
+                //         printf("\n v0q = %f, %f, %f",
+                //                coords(VertexHandle(q, v0q), 0),
+                //                coords(VertexHandle(q, v0q), 1),
+                //                coords(VertexHandle(q, v0q), 2));
+                //     }
+                //     if (q_patch_info.is_owned(LocalVertexT(v1q))) {
+                //         printf("\n v1q = %f, %f, %f",
+                //                coords(VertexHandle(q, v1q), 0),
+                //                coords(VertexHandle(q, v1q), 1),
+                //                coords(VertexHandle(q, v1q), 2));
+                //     }*/
+                // }
 
                 // active bitmask is set in add_element
 

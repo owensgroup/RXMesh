@@ -7,7 +7,6 @@
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh/util/timer.h"
-#include "rxmesh/util/vector.h"
 
 struct MCFData
 {

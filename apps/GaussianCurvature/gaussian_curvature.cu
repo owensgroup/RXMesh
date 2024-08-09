@@ -62,11 +62,11 @@ void gaussian_curvature_rxmesh(const std::vector<T>& gaussian_curvature_gold)
     // Verify
     v_gc.move(rxmesh::DEVICE, rxmesh::HOST);
 
+    // convert gold to attribute to compare against
+    auto gold = *rx.add_vertex_attribute(gaussian_curvature_gold, "gold");
+
     rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
-        uint32_t v_id = rx.map_to_global(vh);
-        EXPECT_NEAR(std::abs(gaussian_curvature_gold[v_id]),
-                    std::abs(v_gc(vh, 0)),
-                    0.001);
+        EXPECT_NEAR(std::abs(gold(vh)), std::abs(v_gc(vh)), 0.001);
     });
 
 #if USE_POLYSCOPE

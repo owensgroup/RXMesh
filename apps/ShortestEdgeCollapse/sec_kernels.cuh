@@ -48,8 +48,8 @@ __global__ static void sec(rxmesh::Context            context,
         const VertexHandle v0 = iter[0];
         const VertexHandle v1 = iter[1];
 
-        const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-        const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+        const vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+        const vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
 
         T len2 = logf(glm::distance2(p0, p1));
 
@@ -170,8 +170,8 @@ __global__ static void compute_min_max_cost(
         const VertexHandle v0 = iter[0];
         const VertexHandle v1 = iter[1];
 
-        const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-        const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+        const vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+        const vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
 
         T len2 = logf(glm::distance2(p0, p1));
 
@@ -198,8 +198,8 @@ __global__ static void populate_histogram(
         const VertexHandle v0 = iter[0];
         const VertexHandle v1 = iter[1];
 
-        const Vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-        const Vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+        const vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
+        const vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
 
         T len2 = logf(glm::distance2(p0, p1));
 
