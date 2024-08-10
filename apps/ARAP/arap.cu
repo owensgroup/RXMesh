@@ -66,7 +66,7 @@ __global__ static void calculate_rotation_matrix(
     rxmesh::VertexAttribute<T> rotations,
     rxmesh::SparseMatrix<T>    weight_matrix)
 {
-    auto vn_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
+    auto cal_rot = [&](VertexHandle v_id, VertexIterator& vv) {
         Eigen::Matrix3f S = Eigen::Matrix3f::Zero();
 
         for (int j = 0; j < vv.size(); j++) {
@@ -114,7 +114,7 @@ __global__ static void calculate_rotation_matrix(
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, vn_lambda);
+    query.dispatch<Op::VV>(block, shrd_alloc, cal_rot);
 }
 
 
