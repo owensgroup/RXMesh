@@ -22,6 +22,7 @@ struct arg
     float       cg_tolerance        = 1e-6;
     uint32_t    max_num_cg_iter     = 1000;
     bool        use_uniform_laplace = false;
+    uint32_t    nd_level            = 4;
     char**      argv;
     int         argc;
 } Arg;
@@ -57,6 +58,7 @@ TEST(App, MCF)
 
     // RXMesh cusolver Impl
     mcf_rxmesh_cusolver_chol(rx, ground_truth);
+    mcf_rxmesh_cusolver_chol_reordering(rx, ground_truth);
 }
 
 int main(int argc, char** argv)
@@ -113,6 +115,10 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-device_id")) {
             Arg.device_id =
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-nd_level")) {
+            Arg.nd_level =
+                atoi(get_cmd_option(argv, argv + argc, "-nd_level"));
         }
     }
 
