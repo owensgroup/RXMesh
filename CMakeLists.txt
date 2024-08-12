@@ -147,7 +147,6 @@ set(cuda_flags
     -Xptxas -warn-spills -res-usage   
 	#-Xptxas -dlcm=cg -dscm=cg
 	--ptxas-options=-v	
-    -G # cumemcheck debug    
 )
 
 

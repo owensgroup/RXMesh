@@ -14,7 +14,17 @@
 #include "cusolverSp_LOWLEVEL_PREVIEW.h"
 #include "rxmesh/matrix/dense_matrix.cuh"
 
+#include "rxmesh/matrix/tmp_reordering.cuh"
+
 namespace rxmesh {
+
+int safeUint32ToInt(uint32_t value) {
+    if (value <= static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+        return static_cast<int>(value);
+    } else {
+        throw std::overflow_error("uint32_t value too large to fit in int");
+    }
+}
 
 /**
  * @brief The enum class for choosing different solver types
@@ -37,7 +47,8 @@ enum class Reorder
     NONE   = 0,
     SYMRCM = 1,
     SYMAMD = 2,
-    NSTDIS = 3
+    NSTDIS = 3, 
+    GPUND  = 4
 };
 
 static int reorder_to_int(const Reorder& reorder)
@@ -686,7 +697,7 @@ struct SparseMatrix
      * the solving process. Any other function call order would be undefined.
      * @param reorder: the reorder method applied.
      */
-    void spmat_chol_reorder(rxmesh::Reorder reorder)
+    void spmat_chol_reorder(rxmesh::Reorder reorder, uint32_t* ext_reorder_arr = nullptr)
     {
         if (reorder == Reorder::NONE) {
             RXMESH_INFO("None reordering is specified",
@@ -757,6 +768,16 @@ struct SparseMatrix
                                                      m_h_col_idx,
                                                      NULL,
                                                      m_h_permute));
+        } else if (reorder == Reorder::GPUND) {
+            if (ext_reorder_arr == nullptr) {
+                RXMESH_ERROR("GPUND reorder need external reorder array");
+            }
+            cudaMemcpy(m_h_permute,
+                       ext_reorder_arr,
+                       m_row_size * sizeof(IndexT),
+                       cudaMemcpyHostToHost);
+        } else {  // default is NONE
+            RXMESH_ERROR("Unknown reorder type");
         }
 
         CUDA_ERROR(cudaMemcpyAsync(m_d_permute,
@@ -909,6 +930,9 @@ struct SparseMatrix
                                                         &m_internalDataInBytes,
                                                         &m_workspaceInBytes));
         }
+
+        RXMESH_INFO("Internal data size: {} bytes", m_internalDataInBytes);
+        RXMESH_INFO("Workspace size: {} bytes", m_workspaceInBytes);
 
         CUDA_ERROR(cudaMalloc((void**)&m_chol_buffer, m_workspaceInBytes));
     }
