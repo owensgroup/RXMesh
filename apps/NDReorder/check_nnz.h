@@ -227,6 +227,7 @@ void processmesh_metis(const std::string& inputfile)
     rxmesh::CPUTimer timer;
     timer.start();
 
+    //TODO adjncy is empty
     METIS_NodeND(&n, &xadj[0], &adjncy[0], NULL, options, &perm[0], &iperm[0]);
 
     timer.stop();
@@ -245,7 +246,9 @@ void processmesh_metis(const std::string& inputfile)
         permMatrix * adjMatrix * permMatrix.transpose();
 
     // Perform Cholesky factorization with reordering
-    Eigen::SimplicialLLT<Eigen::SparseMatrix<float>> cholesky(permutedMatrix);
+    SimplicialLLT<SparseMatrix<float>,
+                  Eigen::Lower,
+                  Eigen::NaturalOrdering<int>> cholesky(permutedMatrix);
 
     if (cholesky.info() != Eigen::Success) {
         printf("Cholesky decomposition failed with code %d\n", cholesky.info());
@@ -316,7 +319,9 @@ void processmesh_parmetis(const std::string& inputfile)
         permMatrix * adjMatrix * permMatrix.transpose();
 
     // Perform Cholesky factorization with reordering
-    Eigen::SimplicialLLT<Eigen::SparseMatrix<float>> cholesky(permutedMatrix);
+    Eigen::SimplicialLLT<SparseMatrix<float>,
+                  Eigen::Lower,
+                  Eigen::NaturalOrdering<int>> cholesky(permutedMatrix);
 
     if (cholesky.info() != Eigen::Success) {
         printf("Cholesky decomposition failed with code %d\n", cholesky.info());

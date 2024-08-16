@@ -1266,9 +1266,9 @@ void generate_total_num_v_prefix_sum(uint32_t* d_patch_partition_label,
                         thrust::make_zip_iterator(thrust::make_tuple(
                             d_tmp_indices, d_total_num_v_prefix_sum)));
 
-    printf("d_tmp_indices: ");
-    check_d_arr<<<1, 1>>>(d_tmp_indices,
-    total_prefix_sum_size); CUDA_ERROR(cudaDeviceSynchronize());
+    // printf("d_tmp_indices: ");
+    // check_d_arr<<<1, 1>>>(d_tmp_indices,
+    // total_prefix_sum_size); CUDA_ERROR(cudaDeviceSynchronize());
 
     // get the mapping array
     thrust::sequence(
@@ -1293,9 +1293,9 @@ void generate_total_num_v_prefix_sum(uint32_t* d_patch_partition_label,
         thrust::make_zip_iterator(d_patch_prefix_sum_mapping_arr));
     CUDA_ERROR(cudaDeviceSynchronize());
 
-    printf("d_patch_prefix_sum_mapping_arr: ");
-    check_d_arr<<<1, 1>>>(d_patch_prefix_sum_mapping_arr,
-    total_prefix_sum_size); CUDA_ERROR(cudaDeviceSynchronize());
+    // printf("d_patch_prefix_sum_mapping_arr: ");
+    // check_d_arr<<<1, 1>>>(d_patch_prefix_sum_mapping_arr,
+    // total_prefix_sum_size); CUDA_ERROR(cudaDeviceSynchronize());
 
     // generate the prefix sum
     thrust::exclusive_scan(thrust::device,

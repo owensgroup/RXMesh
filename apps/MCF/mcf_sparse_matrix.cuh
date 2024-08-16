@@ -195,23 +195,30 @@ void mcf_rxmesh_cusolver_chol(rxmesh::RXMeshStatic&              rx,
 
     // Solving the linear system using chol factorization and no reordering
     // A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NONE);
-    GPUTimer timer;
+    CPUTimer ctimer;
 
-    timer.start();
+    ctimer.start();
     A_mat.spmat_chol_reorder(Reorder::NSTDIS);
-    timer.stop();
+    ctimer.stop();
 
-    float reorder_total_time = timer.elapsed_millis();
+    float reorder_total_time = ctimer.elapsed_millis();
     RXMESH_INFO("Reordering time Low: {}", reorder_total_time);
 
-    timer.start();
+    GPUTimer gtimer;
+    gtimer.start();
     A_mat.spmat_chol_analysis();
     A_mat.spmat_chol_buffer_alloc();
     A_mat.spmat_chol_factor();
-    timer.stop();
+    gtimer.stop();
 
-    float total_time = timer.elapsed_millis();
-    RXMESH_INFO("Linear solver time cuSolver Low: {}", total_time); 
+    float fact_time = gtimer.elapsed_millis();
+    RXMESH_INFO("Factorization time Low w/ our Reorder: {}", fact_time); 
+
+    gtimer.start();
+    A_mat.spmat_chol_solve(B_mat.m_d_val, X_mat.m_d_val);
+    gtimer.stop();
+    float solve_time = gtimer.elapsed_millis();
+    RXMESH_INFO("Solve time Low w/ our Reorder: {}", solve_time);
 
     X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
 
@@ -300,24 +307,30 @@ void mcf_rxmesh_cusolver_chol_reordering(rxmesh::RXMeshStatic&              rx,
     CUDA_ERROR(cudaMallocHost(&reorder_array,
                                  sizeof(uint32_t) * rx.get_num_vertices()));
 
-    CPUTimer ctimer;
-    ctimer.start();
+    GPUTimer gtimer;
+    gtimer.start();
     nd_reorder(rx, reorder_array, Arg.nd_level);
     A_mat.spmat_chol_reorder(Reorder::GPUND, reorder_array);
-    ctimer.stop();
+    gtimer.stop();
 
-    float reorder_total_time = ctimer.elapsed_millis();
+    float reorder_total_time = gtimer.elapsed_millis();
     RXMESH_INFO("Reordering time Low: {}", reorder_total_time);
 
-    GPUTimer gtimer;
     gtimer.start();
     A_mat.spmat_chol_analysis();
     A_mat.spmat_chol_buffer_alloc();
     A_mat.spmat_chol_factor();
     gtimer.stop();
 
-    float total_time = gtimer.elapsed_millis();
-    RXMESH_INFO("Linear solver time Low Reorder: {}", total_time); 
+    float fact_time = gtimer.elapsed_millis();
+    RXMESH_INFO("Factorization time Low w/ our Reorder: {}", fact_time); 
+
+    gtimer.start();
+    A_mat.spmat_chol_solve(B_mat.m_d_val, X_mat.m_d_val);
+    gtimer.stop();
+    float solve_time = gtimer.elapsed_millis();
+    RXMESH_INFO("Solve time Low w/ our Reorder: {}", solve_time);
+
 
     X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
 

@@ -739,7 +739,7 @@ struct SparseMatrix
 
         CUSOLVER_ERROR(cusolverSpCreate(&m_cusolver_sphandle));
 
-        GPUTimer timer;
+        CPUTimer timer;
     timer.start();
 
 
@@ -780,16 +780,17 @@ struct SparseMatrix
             RXMESH_ERROR("Unknown reorder type");
         }
 
+        timer.stop();
+        float total_time = timer.elapsed_millis();
+        RXMESH_INFO("CPU CUDA_METIS Reordering time: {} ms", total_time);
+
         CUDA_ERROR(cudaMemcpyAsync(m_d_permute,
                                    m_h_permute,
                                    m_row_size * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
 
-        
-        timer.stop();
-    float total_time = timer.elapsed_millis();
 
-        RXMESH_INFO("CPU Reordering time: {} ms", total_time);
+        
 
         // working space for permutation: B = A*Q*A^T
         // the permutation for matrix A which works only for the col and row
