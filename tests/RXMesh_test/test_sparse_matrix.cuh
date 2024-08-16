@@ -6,6 +6,8 @@
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
 
+#include <Eigen/SparseCholesky>
+
 template <uint32_t blockThreads, typename IndexT = int>
 __global__ static void sparse_mat_test(const rxmesh::Context context,
                                        IndexT*               vet_degree)
@@ -15,7 +17,7 @@ __global__ static void sparse_mat_test(const rxmesh::Context context,
         auto     ids      = v_id.unpack();
         uint32_t patch_id = ids.first;
         uint16_t local_id = ids.second;
-        vet_degree[context.m_vertex_prefix[patch_id] + local_id] =
+        vet_degree[context.vertex_prefix()[patch_id] + local_id] =
             iter.size() + 1;
     };
 
@@ -40,7 +42,7 @@ __global__ static void sparse_mat_edge_len_test(
         uint32_t r_patch_id = r_ids.first;
         uint16_t r_local_id = r_ids.second;
 
-        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
+        uint32_t row_index = context.vertex_prefix()[r_patch_id] + r_local_id;
 
         arr_ref[row_index]     = 0;
         sparse_mat(v_id, v_id) = 0;
@@ -71,10 +73,10 @@ __global__ void spmat_multi_hardwired_kernel(T*                      vec,
     int   tid = threadIdx.x + blockIdx.x * blockDim.x;
     float sum = 0;
     if (tid < N) {
-        uint32_t start = sparse_mat.get_row_ptr_at(tid);
-        uint32_t end   = sparse_mat.get_row_ptr_at(tid + 1);
+        uint32_t start = sparse_mat.row_ptr()[tid];
+        uint32_t end   = sparse_mat.row_ptr()[tid + 1];
         for (int i = 0; i < end - start; i++) {
-            sum += vec[sparse_mat.get_col_idx_at(start + i)] *
+            sum += vec[sparse_mat.col_idx()[start + i]] *
                    sparse_mat.get_val_at(start + i);
         }
         out[tid] = sum;
@@ -96,19 +98,14 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
         T v_weight = iter.size();
 
         // reference value calculation
-        auto     r_ids      = v_id.unpack();
-        uint32_t r_patch_id = r_ids.first;
-        uint16_t r_local_id = r_ids.second;
 
-        uint32_t row_index = context.m_vertex_prefix[r_patch_id] + r_local_id;
+        B_mat(v_id, 0) = iter.size() * 7.4f;
+        B_mat(v_id, 1) = iter.size() * 2.6f;
+        B_mat(v_id, 2) = iter.size() * 10.3f;
 
-        B_mat(row_index, 0) = iter.size() * 7.4f;
-        B_mat(row_index, 1) = iter.size() * 2.6f;
-        B_mat(row_index, 2) = iter.size() * 10.3f;
-
-        X_mat(row_index, 0) = coords(v_id, 0) * v_weight;
-        X_mat(row_index, 1) = coords(v_id, 1) * v_weight;
-        X_mat(row_index, 2) = coords(v_id, 2) * v_weight;
+        X_mat(v_id, 0) = coords(v_id, 0) * v_weight;
+        X_mat(v_id, 1) = coords(v_id, 1) * v_weight;
+        X_mat(v_id, 2) = coords(v_id, 2) * v_weight;
 
         vec3<T> vi_coord(coords(v_id, 0), coords(v_id, 1), coords(v_id, 2));
         for (uint32_t v = 0; v < iter.size(); ++v) {
@@ -128,13 +125,12 @@ __global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
     query.dispatch<Op::VV>(block, shrd_alloc, mat_setup);
 }
 
-/* Check the access of the sparse matrix in CSR format in device */
+
 TEST(RXMeshStatic, SparseMatrix)
 {
-    using namespace rxmesh;
+    // Test accessing of the sparse matrix in CSR format in device
 
-    // Select device
-    cuda_query(0);
+    using namespace rxmesh;
 
     // generate rxmesh obj
     std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
@@ -158,7 +154,7 @@ TEST(RXMeshStatic, SparseMatrix)
     CUDA_ERROR(cudaMalloc((void**)&d_result, (num_vertices) * sizeof(int)));
 
     SparseMatrix<int> spmat(rx);
-    spmat.set_ones();
+    spmat.set_value(1);
 
     spmat_multi_hardwired_kernel<<<blocks, threads>>>(
         d_arr_ones, spmat, d_result, num_vertices);
@@ -193,18 +189,16 @@ TEST(RXMeshStatic, SparseMatrix)
     CUDA_ERROR(cudaFree(d_arr_ones));
     CUDA_ERROR(cudaFree(d_result));
     CUDA_ERROR(cudaFree(vet_degree));
-    spmat.free_mat();
+    spmat.release();
 }
 
-/* First replace the sparse matrix entry with the edge length and then do spmv
- * with an all one array and check the result
- */
 TEST(RXMeshStatic, SparseMatrixEdgeLen)
 {
+    // First replace the sparse matrix entry with the edge length and then do
+    // spmv with an all one array and check the result
+    //
     using namespace rxmesh;
 
-    // Select device
-    cuda_query(0);
 
     // generate rxmesh obj
     RXMeshStatic rx(rxmesh_args.obj_file_name);
@@ -242,7 +236,7 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
                                                launch_box.smem_bytes_dyn>>>(
         rx.get_context(), *coords, spmat, d_arr_ref);
 
-    spmat.arr_mul(d_arr_ones, d_result);
+    spmat.multiply(d_arr_ones, d_result);
 
     // copy the value back to host
     std::vector<float> h_arr_ref(num_vertices);
@@ -264,20 +258,16 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
     CUDA_ERROR(cudaFree(d_arr_ref));
     CUDA_ERROR(cudaFree(d_arr_ones));
     CUDA_ERROR(cudaFree(d_result));
-    spmat.free_mat();
+    spmat.release();
 }
 
-/* set up a simple AX=B system where A is a sparse matrix, B and C are dense
- * matrix. Solve it using the warpped up cusolver API and check the final AX
- * with B using warpped up cusparse API.
- */
 TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 {
+    // set up a simple AX=B system where A is a sparse matrix, B and C are dense
+    // matrix.
+
     using namespace rxmesh;
-
-    // Select device
-    cuda_query(0);
-
+        
     // generate rxmesh obj
     std::string  obj_path = rxmesh_args.obj_file_name;
     RXMeshStatic rx(obj_path);
@@ -289,9 +279,9 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 
     auto                coords = rx.get_input_vertex_coordinates();
     SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>  X_mat(num_vertices, 3);
-    DenseMatrix<float>  B_mat(num_vertices, 3);
-    DenseMatrix<float>  ret_mat(num_vertices, 3);
+    DenseMatrix<float>  X_mat(rx, num_vertices, 3);
+    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
+    DenseMatrix<float>  ret_mat(rx, num_vertices, 3);
 
     float time_step = 1.f;
 
@@ -304,16 +294,11 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
                                          launch_box.smem_bytes_dyn>>>(
         rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
-    A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
+    A_mat.solve(B_mat, X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
 
-    // timing begins for spmm
-    GPUTimer timer;
-    timer.start();
 
-    A_mat.denmat_mul(X_mat, ret_mat);
+    A_mat.multiply(X_mat, ret_mat);
 
-    timer.stop();
-    RXMESH_TRACE("SPMM_rxmesh() took {} (ms) ", timer.elapsed_millis());
 
     std::vector<vec3<float>> h_ret_mat(num_vertices);
     CUDA_ERROR(cudaMemcpy(h_ret_mat.data(),
@@ -331,15 +316,18 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
             EXPECT_NEAR(h_ret_mat[i][j], h_B_mat[i][j], 1e-3);
         }
     }
-    A_mat.free_mat();
+
+
+    A_mat.release();
+    X_mat.release();
+    B_mat.release();
+    ret_mat.release();
 }
 
 TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 {
     using namespace rxmesh;
-
-    // Select device
-    cuda_query(0);
+        
 
     // generate rxmesh obj
     std::string  obj_path = rxmesh_args.obj_file_name;
@@ -352,9 +340,9 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 
     auto                coords = rx.get_input_vertex_coordinates();
     SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>  X_mat(num_vertices, 3);
-    DenseMatrix<float>  B_mat(num_vertices, 3);
-    DenseMatrix<float>  ret_mat(num_vertices, 3);
+    DenseMatrix<float>  X_mat(rx, num_vertices, 3);
+    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
+    DenseMatrix<float>  ret_mat(rx, num_vertices, 3);
 
     float time_step = 1.f;
 
@@ -367,20 +355,11 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
                                          launch_box.smem_bytes_dyn>>>(
         rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
-    // A_mat.spmat_linear_solve(B_mat, X_mat, Solver::CHOL, Reorder::NSTDIS);
+    // A_mat.solve(B_mat, X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
+    A_mat.pre_solve(Solver::CHOL, PermuteMethod::NSTDIS);
+    A_mat.solve(B_mat, X_mat);
 
-    A_mat.spmat_chol_reorder(Reorder::NSTDIS);
-    A_mat.spmat_chol_analysis();
-    A_mat.spmat_chol_buffer_alloc();
-    A_mat.spmat_chol_factor();
-
-    for (int i = 0; i < B_mat.m_col_size; ++i) {
-        A_mat.spmat_chol_solve(B_mat.col_data(i), X_mat.col_data(i));
-    }
-
-    A_mat.spmat_chol_buffer_free();
-
-    A_mat.denmat_mul(X_mat, ret_mat);
+    A_mat.multiply(X_mat, ret_mat);
 
     std::vector<vec3<float>> h_ret_mat(num_vertices);
     CUDA_ERROR(cudaMemcpy(h_ret_mat.data(),
@@ -398,5 +377,75 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
             EXPECT_NEAR(h_ret_mat[i][j], h_B_mat[i][j], 1e-3);
         }
     }
-    A_mat.free_mat();
+
+    A_mat.release();
+    X_mat.release();
+    B_mat.release();
+    ret_mat.release();
+}
+
+TEST(RXMeshStatic, SparseMatrixToEigen)
+{
+    using namespace rxmesh;
+
+    // generate rxmesh obj
+    std::string  obj_path = rxmesh_args.obj_file_name;
+    RXMeshStatic rx(obj_path);
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    const uint32_t threads = 256;
+    const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
+
+    auto                coords = rx.get_input_vertex_coordinates();
+    SparseMatrix<float> A_mat(rx);
+    DenseMatrix<float>  X_mat(rx, num_vertices, 3);
+    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
+
+
+    float time_step = 1.f;
+
+    LaunchBox<threads> launch_box;
+    rx.prepare_launch_box(
+        {Op::VV}, launch_box, (void*)simple_A_X_B_setup<float, threads>);
+
+    simple_A_X_B_setup<float, threads><<<launch_box.blocks,
+                                         launch_box.num_threads,
+                                         launch_box.smem_bytes_dyn>>>(
+        rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
+
+    A_mat.solve(B_mat, X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
+
+
+    DenseMatrix<float> X_copy(rx, num_vertices, 3);
+    X_copy.copy_from(X_mat, DEVICE, HOST);
+
+    A_mat.move(DEVICE, HOST);
+    B_mat.move(DEVICE, HOST);
+
+    auto A_eigen = A_mat.to_eigen();
+    auto X_eigen = X_mat.to_eigen();
+    auto B_eigen = B_mat.to_eigen();
+
+    // Note: there is a bug with Eigen if we use the default reordering
+    // which is Eigen::AMDOrdering<int>
+    // (https://gitlab.com/libeigen/eigen/-/issues/2839)
+    Eigen::SimplicialLDLT<Eigen::SparseMatrix<float>,
+                          Eigen::UpLoType::Lower,
+                          Eigen::COLAMDOrdering<int>>
+        eigen_solver;
+
+    eigen_solver.compute(A_eigen);
+    X_eigen = eigen_solver.solve(B_eigen);
+
+    for (uint32_t i = 0; i < X_copy.rows(); ++i) {
+        for (uint32_t j = 0; j < X_copy.cols(); ++j) {
+            EXPECT_NEAR(X_eigen(i, j), X_copy(i, j), 0.0000001);
+        }
+    }
+
+    A_mat.release();
+    X_mat.release();
+    B_mat.release();
+    X_copy.release();
 }

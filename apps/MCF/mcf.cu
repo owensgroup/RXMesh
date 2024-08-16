@@ -4,7 +4,6 @@
 
 #include <omp.h>
 
-#include "../common/openmesh_trimesh.h"
 #include "gtest/gtest.h"
 #include "rxmesh/attribute.h"
 #include "rxmesh/rxmesh_static.h"
@@ -27,9 +26,8 @@ struct arg
     int         argc;
 } Arg;
 
-#include "mcf_openmesh.h"
-#include "mcf_rxmesh.h"
-#include "mcf_sparse_matrix.cuh"
+#include "mcf_cg.h"
+#include "mcf_cusolver_chol.cuh"
 
 
 TEST(App, MCF)
@@ -42,23 +40,11 @@ TEST(App, MCF)
 
     RXMeshStatic rx(Arg.obj_file_name);
 
-    TriMesh input_mesh;
-    ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
-
-
-    // OpenMesh Impl
-    std::vector<std::vector<dataT>> ground_truth(rx.get_num_vertices());
-    for (auto& g : ground_truth) {
-        g.resize(3);
-    }
-    mcf_openmesh(omp_get_max_threads(), input_mesh, ground_truth);
-
     // RXMesh Impl
-    mcf_rxmesh_cg(rx, ground_truth);  
+    mcf_cg<dataT>(rx);
 
     // RXMesh cusolver Impl
-    mcf_rxmesh_cusolver_chol(rx, ground_truth);
-    mcf_rxmesh_cusolver_chol_reordering(rx, ground_truth);
+    mcf_cusolver_chol<dataT>(rx);
 }
 
 int main(int argc, char** argv)

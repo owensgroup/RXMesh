@@ -79,6 +79,10 @@ FetchContent_Declare(cereal
 )
 FetchContent_Populate(cereal)
 
+# Package Management
+# TODO: Consider using CPM for the various libraries above 
+include(cmake/CPM.cmake) 
+
 # Auto-detect GPU architecture
 include("cmake/AutoDetectCudaArch.cmake")
 
@@ -133,7 +137,7 @@ set(cxx_flags
 
 set(MSVC_XCOMPILER_FLAGS "/openmp:experimental /MP /std:c++17 /Zi")
 set(cuda_flags
-    -Xcompiler=$<$<CXX_COMPILER_ID:GNU>:-Wall -fopenmp -O3 -Wno-unused-function>
+    -Xcompiler=$<$<CXX_COMPILER_ID:GNU>:-rdynamic -Wall -fopenmp -O3 -Wno-unused-function>
 	-Xcompiler=$<$<CXX_COMPILER_ID:MSVC>:${MSVC_XCOMPILER_FLAGS}>
     #Disables warning
     #177-D "function XXX was declared but never referenced"
@@ -169,6 +173,12 @@ endif()
 find_package(CUDAToolkit REQUIRED)
 target_link_libraries(RXMesh INTERFACE CUDA::cusparse)
 target_link_libraries(RXMesh INTERFACE CUDA::cusolver)
+
+#Eigen
+include("cmake/eigen.cmake")
+target_link_libraries(RXMesh INTERFACE Eigen3::Eigen)
+# https://eigen.tuxfamily.org/dox/TopicCUDA.html
+target_compile_definitions(RXMesh INTERFACE "EIGEN_DEFAULT_DENSE_INDEX_TYPE=int")
 
 include(GoogleTest)
 add_subdirectory(apps)

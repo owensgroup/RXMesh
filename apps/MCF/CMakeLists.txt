@@ -2,15 +2,9 @@ add_executable(MCF)
 
 set(SOURCE_LIST    
     mcf.cu
-	mcf_rxmesh_kernel.cuh
-	mcf_openmesh.h
-	mcf_rxmesh.h	
-	mcf_sparse_matrix.cuh
-)
-
-set(COMMON_LIST    
-    ../common/openmesh_trimesh.h
-	 ../common/openmesh_report.h
+	mcf_kernels.cuh
+	mcf_cg.h	
+	mcf_cusolver_chol.cuh
 )
 
 target_sources(MCF 
@@ -35,8 +29,6 @@ source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "MCF" FILES ${SOURCE_LIST})
 target_link_libraries( MCF     
     PRIVATE RXMesh
     PRIVATE gtest_main
-	PRIVATE OpenMeshCore
-    PRIVATE OpenMeshTools
 )
 
 #gtest_discover_tests( MCF )
