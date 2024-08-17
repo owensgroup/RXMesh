@@ -24,6 +24,22 @@
 namespace rxmesh {
 
 /**
+ * @brief Cast a uint32_t to an int, throwing an exception if the value is too
+ * large to fit in an int.
+*/
+bool arr_check_uint32_to_int_cast(const uint32_t* arr, size_t size) {
+    static_assert(sizeof(int) >= sizeof(uint32_t), "int must be at least 32 bits wide");
+    static_assert(std::is_same<int, std::int32_t>::value, "int must be exactly 32 bits");
+
+    for (size_t i = 0; i < size; ++i) {
+        if (arr[i] > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+            return false;  // Unsafe to cast
+        }
+    }
+    return true;  // Safe to cast
+}
+
+/**
  * @brief Initializes the edge weights of patches in a mesh.
  *
  * Device function that updates the edge weights of patches in a mesh. The
@@ -223,10 +239,11 @@ __global__ static void bipartition_seed_propogation_refined(
             assert(seed_label0_count != seed_label1_count);
 
             d_patch_local_partition_label[i] = final_label;
-            uint32_t old_count =
-                ::atomicAdd(&d_patch_local_seed_label_count
-                              [(d_patch_partition_label[i] << 1) + final_label],
-                          1);
+            uint32_t old_count               = ::atomicAdd(
+                &d_patch_local_seed_label_count[(d_patch_partition_label[i]
+                                                 << 1) +
+                                                final_label],
+                1);
 
             // if (seed_unlabeled_count > 0 &&
             // d_patch_seed_label_balanced_count[(d_patch_partition_label[i] <<
@@ -245,26 +262,31 @@ __global__ static void bipartition_seed_propogation_refined(
             }
 
             d_patch_local_partition_label[i] = final_label;
-            uint32_t old_count =
-                ::atomicAdd(&d_patch_local_seed_label_count
-                              [(d_patch_partition_label[i] << 1) + final_label],
-                          1);
+            uint32_t old_count               = ::atomicAdd(
+                &d_patch_local_seed_label_count[(d_patch_partition_label[i]
+                                                 << 1) +
+                                                final_label],
+                1);
 
             if (d_patch_seed_label_balanced_count[(d_patch_partition_label[i]
                                                    << 1) +
                                                   final_label] < old_count) {
                 // reset the label count
-                ::atomicAdd(&d_patch_local_seed_label_count
-                              [(d_patch_partition_label[i] << 1) + final_label],
-                          -1);
+                ::atomicAdd(
+                    &d_patch_local_seed_label_count[(d_patch_partition_label[i]
+                                                     << 1) +
+                                                    final_label],
+                    -1);
 
                 final_label = final_label ^ 1;
 
                 // set the label to the opposite
                 d_patch_local_partition_label[i] = final_label;
-                ::atomicAdd(&d_patch_local_seed_label_count
-                              [(d_patch_partition_label[i] << 1) + final_label],
-                          1);
+                ::atomicAdd(
+                    &d_patch_local_seed_label_count[(d_patch_partition_label[i]
+                                                     << 1) +
+                                                    final_label],
+                    1);
             }
         }
     }
@@ -370,7 +392,7 @@ __global__ static void bipartition_seed_propogation_write_label(
     uint32_t*             d_patch_local_partition_label,
     uint32_t*             d_tmp_patch_local_partition_label,
     uint32_t*             d_patch_seed_label_balanced_count,
-    uint32_t*             d_patch_local_seed_label_count, 
+    uint32_t*             d_patch_local_seed_label_count,
     bool                  is_balancing)
 {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -391,15 +413,16 @@ __global__ static void bipartition_seed_propogation_write_label(
             1);
         d_patch_local_partition_label[i] = final_label;
 
-        if (is_balancing && d_patch_seed_label_balanced_count[(d_patch_partition_label[i]
+        if (is_balancing &&
+            d_patch_seed_label_balanced_count[(d_patch_partition_label[i]
                                                << 1) +
                                               final_label] < old_count) {
             // reset the label count
             ::atomicAdd(&d_patch_local_seed_label_count
-                          [(d_patch_partition_label[i] << 1) + final_label],
-                      -1);
+                            [(d_patch_partition_label[i] << 1) + final_label],
+                        -1);
             d_patch_local_partition_label[i] = INVALID32;
-            d_patch_seed_hop_dist[i] = INVALID32;
+            d_patch_seed_hop_dist[i]         = INVALID32;
         }
 
         d_tmp_patch_local_partition_label[i] = INVALID32;
@@ -533,8 +556,8 @@ __global__ static void bipartition_refine_partition(
         if (d_patch_local_partition_role[i] == 1 && count_difference < 0) {
             d_patch_local_partition_label[i] ^= 1;
             ::atomicAdd(&d_patch_local_seed_label_count[patch_seed_index], -1);
-            ::atomicAdd(&d_patch_local_seed_label_count[patch_another_seed_label],
-                      1);
+            ::atomicAdd(
+                &d_patch_local_seed_label_count[patch_another_seed_label], 1);
         }
     }
 }
@@ -590,8 +613,8 @@ __global__ static void bipartition_check_isolation(
             printf("Check: patch %d is isolated\n", i);
             d_patch_local_partition_label[i] ^= 1;
             ::atomicAdd(&d_patch_local_seed_label_count[patch_seed_index], -1);
-            ::atomicAdd(&d_patch_local_seed_label_count[patch_another_seed_label],
-                      1);
+            ::atomicAdd(
+                &d_patch_local_seed_label_count[patch_another_seed_label], 1);
         }
     }
 }
@@ -738,7 +761,8 @@ void run_partition_lloyd(RXMeshStatic& rx,
     //     assert(d_patch_partition_label[i] < curr_num_partitions);
     // }
 
-    // printf("---------- lloys start with %d seed ----------\n", curr_num_seeds);
+    // printf("---------- lloys start with %d seed ----------\n",
+    // curr_num_seeds);
 
     // initialize the tmp parameters, set by bytes
     cudaMemset(d_patch_local_partition_role,
@@ -754,8 +778,8 @@ void run_partition_lloyd(RXMeshStatic& rx,
                INVALID32,
                rx.get_num_patches() * sizeof(uint32_t));
     cudaMemset(d_patch_seed_hop_dist,
-                INVALID32,
-                rx.get_num_patches() * sizeof(uint32_t));
+               INVALID32,
+               rx.get_num_patches() * sizeof(uint32_t));
 
     bipartition_init_random_seeds<blockThreads>
         <<<rx.get_num_patches() + 1, threads_p>>>(
@@ -886,7 +910,7 @@ void run_partition_lloyd(RXMeshStatic& rx,
         //     exit(1);
         // }
 
-        tmp_break_counter = 0;
+        tmp_break_counter                    = 0;
         uint32_t tmp_prev_labeled_patch_size = INVALID32;
         // propogation until all the patches are assigned to a partition
         while (true) {
@@ -919,10 +943,11 @@ void run_partition_lloyd(RXMeshStatic& rx,
                                           d_patch_local_partition_label,
                                           d_tmp_patch_local_partition_label,
                                           d_patch_seed_label_balanced_count,
-                                          d_patch_local_seed_label_count, 
+                                          d_patch_local_seed_label_count,
                                           false);
 
-            // printf("is_balancing: %d\n", tmp_prev_labeled_patch_size != h_labeled_patch_size);
+            // printf("is_balancing: %d\n", tmp_prev_labeled_patch_size !=
+            // h_labeled_patch_size);
 
             // printf("d_patch_seed_hop_dist: ");
             // check_d_arr<uint32_t>
@@ -1266,9 +1291,9 @@ void generate_total_num_v_prefix_sum(uint32_t* d_patch_partition_label,
                         thrust::make_zip_iterator(thrust::make_tuple(
                             d_tmp_indices, d_total_num_v_prefix_sum)));
 
-    printf("d_tmp_indices: ");
-    check_d_arr<<<1, 1>>>(d_tmp_indices,
-    total_prefix_sum_size); CUDA_ERROR(cudaDeviceSynchronize());
+    // printf("d_tmp_indices: ");
+    // check_d_arr<<<1, 1>>>(d_tmp_indices,
+    // total_prefix_sum_size); CUDA_ERROR(cudaDeviceSynchronize());
 
     // get the mapping array
     thrust::sequence(
@@ -1293,9 +1318,9 @@ void generate_total_num_v_prefix_sum(uint32_t* d_patch_partition_label,
         thrust::make_zip_iterator(d_patch_prefix_sum_mapping_arr));
     CUDA_ERROR(cudaDeviceSynchronize());
 
-    printf("d_patch_prefix_sum_mapping_arr: ");
-    check_d_arr<<<1, 1>>>(d_patch_prefix_sum_mapping_arr,
-    total_prefix_sum_size); CUDA_ERROR(cudaDeviceSynchronize());
+    // printf("d_patch_prefix_sum_mapping_arr: ");
+    // check_d_arr<<<1, 1>>>(d_patch_prefix_sum_mapping_arr,
+    // total_prefix_sum_size); CUDA_ERROR(cudaDeviceSynchronize());
 
     // generate the prefix sum
     thrust::exclusive_scan(thrust::device,
@@ -1352,7 +1377,7 @@ __global__ void nd_init_seed_label_balanced_count(
     }
 }
 
-void nd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr, uint32_t nd_level)
+void cuda_nd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr, uint32_t nd_level, bool is_global_id = false)
 {
     constexpr uint32_t blockThreads = 256;
 
@@ -1500,7 +1525,8 @@ void nd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr, uint32_t nd_level)
     //        launch_box_nd_init_edge_weight.smem_bytes_dyn>>>(rx.get_context());
     // CUDA_ERROR(cudaDeviceSynchronize());
 
-    printf("--------- starting partitioning with level: %u ---------\n", nd_level);
+    printf("--------- starting partitioning with level: %u ---------\n",
+           nd_level);
     GPUTimer timer;
     timer.start();
 
@@ -1590,10 +1616,11 @@ void nd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr, uint32_t nd_level)
     // generate the result for testing
     v_attr_ordering->move(rxmesh::DEVICE, rxmesh::HOST);
     rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
-        uint32_t v_linear_id  = rx.linear_id(vh);
+        uint32_t v_global_id = rx.map_to_global(vh);
+        uint32_t v_linear_id = rx.linear_id(vh);
         uint32_t v_order_idx = (*v_attr_ordering)(vh, 0);
 
-        ordering_arr[v_order_idx] = v_linear_id;
+        ordering_arr[v_order_idx] = is_global_id ? v_global_id : v_linear_id;
     });
 }
 

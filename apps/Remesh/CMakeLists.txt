@@ -3,7 +3,11 @@ add_executable(Remesh)
 set(SOURCE_LIST
     remesh.cu  
 	remesh_rxmesh.cuh	
-	remesh_kernels.cuh	
+	util.cuh	
+	split.cuh	
+	collapse.cuh	
+	flip.cuh	
+	smoothing.cuh	
 	link_condition.cuh
 )
 

@@ -10,8 +10,6 @@ TEST(RXMeshStatic, ForEach)
 {
     using namespace rxmesh;
 
-    cuda_query(rxmesh_args.device_id);
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cube.obj");
 
     std::atomic_uint32_t num_v = 0;
@@ -47,8 +45,6 @@ __global__ static void for_each_kernel(const rxmesh::Context context)
 TEST(RXMeshStatic, ForEachOnDevice)
 {
     using namespace rxmesh;
-
-    cuda_query(rxmesh_args.device_id);
 
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> launch_box;

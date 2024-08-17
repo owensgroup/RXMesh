@@ -26,9 +26,12 @@ class Context
           m_num_faces(nullptr),
           m_num_vertices(nullptr),
           m_num_patches(nullptr),
-          m_vertex_prefix(nullptr),
-          m_edge_prefix(nullptr),
-          m_face_prefix(nullptr),
+          m_d_vertex_prefix(nullptr),
+          m_d_edge_prefix(nullptr),
+          m_d_face_prefix(nullptr),
+          m_h_vertex_prefix(nullptr),
+          m_h_edge_prefix(nullptr),
+          m_h_face_prefix(nullptr),
           m_capacity_factor(0.0f),
           m_patches_info(nullptr),
           m_max_lp_capacity_v(0),
@@ -37,10 +40,10 @@ class Context
     {
     }
 
-    __device__ Context(const Context&) = default;
-    __device__ Context(Context&&)      = default;
+    __device__          Context(const Context&)   = default;
+    __device__          Context(Context&&)        = default;
     __device__ Context& operator=(const Context&) = default;
-    __device__ Context& operator=(Context&&) = default;
+    __device__ Context& operator=(Context&&)      = default;
 
     /**
      * @brief Total number of edges in mesh
@@ -78,6 +81,33 @@ class Context
     {
         dir  = (edge_dir & 1) != 0;
         edge = edge_dir >> 1;
+    }
+
+    __device__ __host__ __inline__ const uint32_t* vertex_prefix() const
+    {
+#ifdef __CUDA_ARCH__
+        return m_d_vertex_prefix;
+#else
+        return m_h_vertex_prefix;
+#endif
+    }
+
+    __device__ __host__ __inline__ const uint32_t* edge_prefix() const
+    {
+#ifdef __CUDA_ARCH__
+        return m_d_edge_prefix;
+#else
+        return m_h_edge_prefix;
+#endif
+    }
+
+    __device__ __host__ __inline__ const uint32_t* face_prefix() const
+    {
+#ifdef __CUDA_ARCH__
+        return m_d_face_prefix;
+#else
+        return m_h_face_prefix;
+#endif
     }
 
     /**
@@ -139,10 +169,11 @@ class Context
         }
     }
 
-       /**
+    /** 
      * @brief compute a linear compact index for a give vertex/edge/face handle
      * @tparam HandleT the type of the input handle
      * @param input handle
+     * @note this function is copied from RXMeshDynamic::linear_id()
      */
     template <typename HandleT>
     __device__ __host__ __inline__ uint32_t linear_id(HandleT input) const
@@ -171,13 +202,13 @@ class Context
             ret);
 
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            return ret + m_vertex_prefix[p_id];
+            return ret + m_d_vertex_prefix[p_id];
         }
         if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            return ret + m_edge_prefix[p_id];
+            return ret + m_d_edge_prefix[p_id];
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            return ret + m_face_prefix[p_id];
+            return ret + m_d_face_prefix[p_id];
         }
     }
 
@@ -203,9 +234,12 @@ class Context
               const uint32_t num_patches,
               const uint32_t max_num_patches,
               const float    capacity_factor,
-              uint32_t*      vertex_prefix,
-              uint32_t*      edge_prefix,
-              uint32_t*      face_prefix,
+              uint32_t*      d_vertex_prefix,
+              uint32_t*      d_edge_prefix,
+              uint32_t*      d_face_prefix,
+              uint32_t*      h_vertex_prefix,
+              uint32_t*      h_edge_prefix,
+              uint32_t*      h_face_prefix,
               uint16_t       max_lp_capacity_v,
               uint16_t       max_lp_capacity_e,
               uint16_t       max_lp_capacity_f,
@@ -250,9 +284,13 @@ class Context
                               sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
 
-        m_vertex_prefix = vertex_prefix;
-        m_edge_prefix   = edge_prefix;
-        m_face_prefix   = face_prefix;
+        m_h_vertex_prefix = h_vertex_prefix;
+        m_h_edge_prefix   = h_edge_prefix;
+        m_h_face_prefix   = h_face_prefix;
+
+        m_d_vertex_prefix = d_vertex_prefix;
+        m_d_edge_prefix   = d_edge_prefix;
+        m_d_face_prefix   = d_face_prefix;
 
         m_max_lp_capacity_v = max_lp_capacity_v;
         m_max_lp_capacity_e = max_lp_capacity_e;
@@ -271,8 +309,9 @@ class Context
 
     uint32_t *m_num_edges, *m_num_faces, *m_num_vertices, *m_num_patches;
     // per-patch max v/e/f
-    uint32_t * m_max_num_vertices, *m_max_num_edges, *m_max_num_faces;
-    uint32_t * m_vertex_prefix, *m_edge_prefix, *m_face_prefix;
+    uint32_t *m_max_num_vertices, *m_max_num_edges, *m_max_num_faces;
+    uint32_t *m_d_vertex_prefix, *m_d_edge_prefix, *m_d_face_prefix,
+        *m_h_vertex_prefix, *m_h_edge_prefix, *m_h_face_prefix;
     uint16_t   m_max_lp_capacity_v, m_max_lp_capacity_e, m_max_lp_capacity_f;
     PatchInfo* m_patches_info;
     float      m_capacity_factor;

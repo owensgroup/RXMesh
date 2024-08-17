@@ -22,6 +22,11 @@ set( SOURCE_LIST
 	test_patch_slicing.cuh
 	test_multi_queries.cuh
 	test_wasted_work.cuh
+	test_eigen.cuh
+	test_boundary.cuh
+	test_dense_matrix.cuh
+	test_export.cuh
+	test_svd.cuh
 )
 
 target_sources( RXMesh_test 

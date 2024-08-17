@@ -9,11 +9,7 @@
 TEST(RXMeshStatic, EVDiamond)
 {
     using namespace rxmesh;
-
-    // Select device
-    cuda_query(rxmesh_args.device_id);
-
-    // RXMesh
+        
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "plane_5.obj");
 
     // input/output container

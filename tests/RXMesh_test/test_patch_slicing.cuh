@@ -16,8 +16,7 @@ __global__ static void set_patch_should_slice(rxmesh::Context context, int p)
 TEST(RXMeshDynamic, PatchSlicing)
 {
     using namespace rxmesh;
-    cuda_query(rxmesh_args.device_id);
-
+ 
     RXMeshDynamic rx(rxmesh_args.obj_file_name,
                      STRINGIFY(OUTPUT_DIR) +
                          extract_file_name(rxmesh_args.obj_file_name) +

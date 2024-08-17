@@ -162,7 +162,7 @@ __global__ static void __launch_bounds__(blockThreads)
         if (edge_mask(eh.local_id())) {
             cavity.create(eh);
         } else {
-            edge_status(eh) = OKAY;
+            edge_status(eh) = SKIP;
         }
     });
     block.sync();
@@ -238,13 +238,13 @@ __global__ static void __launch_bounds__(blockThreads)
             if (is_bad) {
                 // roll back
                 cavity.recover(src);
-                // mark this edge as OKAY because 1) if all cavities in this
+                // mark this edge as SKIP because 1) if all cavities in this
                 // patch are successful, then we want to indicate that this
                 // edge is okay and should not be attempted again
                 // 2) if we have to rollback all changes in this patch, we still
                 // don't want to attempt this edge since we know that it creates
                 // short edges
-                edge_status(src) = OKAY;
+                edge_status(src) = SKIP;
             } else {
 
                 const VertexHandle new_v = cavity.add_vertex();

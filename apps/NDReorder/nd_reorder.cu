@@ -18,6 +18,7 @@
 #include "rxmesh/rxmesh_dynamic.h"
 
 #include "rxmesh/matrix/sparse_matrix.cuh"
+#include "rxmesh/matrix/test_spmat_reordering.cuh"
 
 #include "thrust/sort.h"
 
@@ -60,7 +61,7 @@ TEST(Apps, NDReorder)
     GPUTimer timer;
     timer.start();
 
-    nd_reorder(rx, reorder_array, Arg.nd_level);
+    cuda_nd_reorder(rx, reorder_array, Arg.nd_level, true);
 
     timer.stop();
     float total_time = timer.elapsed_millis();

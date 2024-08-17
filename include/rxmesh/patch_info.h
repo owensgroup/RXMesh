@@ -12,7 +12,6 @@
 #include "rxmesh/lp_hashtable.cuh"
 
 
-
 #ifdef __CUDA_ARCH__
 #include "rxmesh/kernels/util.cuh"
 #endif
@@ -145,8 +144,11 @@ struct ALIGN(16) PatchInfo
         const LPPair*      table = nullptr,
         const LPPair*      stash = nullptr) const
     {
-        if (table == nullptr && stash == nullptr) {
-            assert(!is_owned(typename HandleT::LocalT(key)));
+        // if (table == nullptr && stash == nullptr) {
+        //     assert(!is_owned(typename HandleT::LocalT(key)));
+        // }
+        if (is_owned(typename HandleT::LocalT(key))) {
+            return HandleT(patch_id, key);
         }
         LPPair lp = get_lp<HandleT>().find(key, table, stash);
 

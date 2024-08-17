@@ -58,8 +58,6 @@ TEST(Attribute, Norm2)
 
     CUDA_ERROR(cudaDeviceReset());
 
-    cuda_query(rxmesh_args.device_id);
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto attr = rx.add_vertex_attribute<float>("v", 3, rxmesh::DEVICE);
@@ -83,8 +81,6 @@ TEST(Attribute, Norm2)
 TEST(Attribute, Dot)
 {
     using namespace rxmesh;
-
-    cuda_query(rxmesh_args.device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
@@ -111,8 +107,6 @@ TEST(Attribute, Reduce)
 
     CUDA_ERROR(cudaDeviceReset());
 
-    cuda_query(rxmesh_args.device_id);
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto attr = rx.add_edge_attribute<uint32_t>("e", 3, rxmesh::DEVICE);
@@ -130,10 +124,14 @@ TEST(Attribute, Reduce)
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
     uint32_t result = 0;
-    rx.for_each_edge(rxmesh::HOST, [&](const rxmesh::EdgeHandle eh) {
-        auto pl = eh.unpack();
-        result  = std::max(result, pl.first * pl.second);
-    });
+    rx.for_each_edge(
+        rxmesh::HOST,
+        [&](const rxmesh::EdgeHandle eh) {
+            auto pl = eh.unpack();
+            result  = std::max(result, pl.first * pl.second);
+        },
+        NULL,
+        false);
 
     EXPECT_EQ(output, result);
 }
@@ -142,8 +140,6 @@ TEST(Attribute, Reduce)
 TEST(Attribute, CopyFrom)
 {
     using namespace rxmesh;
-
-    cuda_query(rxmesh_args.device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
@@ -164,8 +160,6 @@ TEST(Attribute, CopyFrom)
 TEST(Attribute, AddingAndRemoving)
 {
     using namespace rxmesh;
-
-    cuda_query(rxmesh_args.device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 

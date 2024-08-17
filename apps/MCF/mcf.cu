@@ -4,7 +4,6 @@
 
 #include <omp.h>
 
-#include "../common/openmesh_trimesh.h"
 #include "gtest/gtest.h"
 #include "rxmesh/attribute.h"
 #include "rxmesh/rxmesh_static.h"
@@ -22,14 +21,13 @@ struct arg
     float       cg_tolerance        = 1e-6;
     uint32_t    max_num_cg_iter     = 1000;
     bool        use_uniform_laplace = false;
-    uint32_t    nd_level            = 4;
+    uint32_t    nd_level            = 1;
     char**      argv;
     int         argc;
 } Arg;
 
-#include "mcf_openmesh.h"
-#include "mcf_rxmesh.h"
-#include "mcf_sparse_matrix.cuh"
+#include "mcf_cg.h"
+#include "mcf_cusolver_chol.cuh"
 
 
 TEST(App, MCF)
@@ -42,23 +40,14 @@ TEST(App, MCF)
 
     RXMeshStatic rx(Arg.obj_file_name);
 
-    TriMesh input_mesh;
-    ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
-
-
-    // OpenMesh Impl
-    std::vector<std::vector<dataT>> ground_truth(rx.get_num_vertices());
-    for (auto& g : ground_truth) {
-        g.resize(3);
-    }
-    mcf_openmesh(omp_get_max_threads(), input_mesh, ground_truth);
-
     // RXMesh Impl
-    mcf_rxmesh_cg(rx, ground_truth);  
+    mcf_cg<dataT>(rx);
 
     // RXMesh cusolver Impl
-    mcf_rxmesh_cusolver_chol(rx, ground_truth);
-    mcf_rxmesh_cusolver_chol_reordering(rx, ground_truth);
+    mcf_cusolver_chol<dataT>(rx);
+
+    // RXMesh cusolver Impl with our CUDA_ND reorder
+    mcf_cusolver_chol_cudaND<dataT>(rx);
 }
 
 int main(int argc, char** argv)
@@ -82,7 +71,8 @@ int main(int argc, char** argv)
                         " -dt:                Time step (delta t). Default is {} \n"
                         "                     Hint: should be between (0.001, 1) for cotan Laplace or between (1, 100) for uniform Laplace\n"
                         " -eps:               Conjugate gradient tolerance. Default is {}\n"
-                        " -max_cg_iter:       Conjugate gradient maximum number of iterations. Default is {}\n"                        
+                        " -max_cg_iter:       Conjugate gradient maximum number of iterations. Default is {}\n"
+                        " -nd_level:          ND level. Default is {}\n"                        
                         " -device_id:         GPU device ID. Default is {}",
             Arg.obj_file_name, Arg.output_folder,  (Arg.use_uniform_laplace? "true" : "false"), Arg.time_step, Arg.cg_tolerance, Arg.max_num_cg_iter, Arg.device_id);
             // clang-format on

@@ -104,6 +104,34 @@ inline cudaDeviceProp cuda_query(const int dev)
     RXMESH_TRACE("Peak Memory Bandwidth: {0:f}(GB/s)", maxBW);
     RXMESH_TRACE("Kernels compiled for compute capability: {}", cuda_arch());
 
+    int cusolver_major = -1, cusolver_minor = -1, cusolver_patch = -1;
+    CUSOLVER_ERROR(cusolverGetProperty(MAJOR_VERSION, &cusolver_major));
+    CUSOLVER_ERROR(cusolverGetProperty(MINOR_VERSION, &cusolver_minor));
+    CUSOLVER_ERROR(cusolverGetProperty(PATCH_LEVEL, &cusolver_patch));
+    RXMESH_TRACE("Using cuSolver Version {}.{}.{}",
+                 cusolver_major,
+                 cusolver_minor,
+                 cusolver_patch);
+
+
+    int cusparse_major = -1, cusparse_minor = -1, cusparse_patch = -1;
+    CUSPARSE_ERROR(cusparseGetProperty(MAJOR_VERSION, &cusparse_major));
+    CUSPARSE_ERROR(cusparseGetProperty(MINOR_VERSION, &cusparse_minor));
+    CUSPARSE_ERROR(cusparseGetProperty(PATCH_LEVEL, &cusparse_patch));
+    RXMESH_TRACE("Using cuSparse Version {}.{}.{}",
+                 cusparse_major,
+                 cusparse_minor,
+                 cusparse_patch);
+
+    int cublas_major = -1, cublas_minor = -1, cublas_patch = -1;
+    CUBLAS_ERROR(cublasGetProperty(MAJOR_VERSION, &cublas_major));
+    CUBLAS_ERROR(cublasGetProperty(MINOR_VERSION, &cublas_minor));
+    CUBLAS_ERROR(cublasGetProperty(PATCH_LEVEL, &cublas_patch));
+    RXMESH_TRACE("Using cuBlas Version {}.{}.{}",
+                 cublas_major,
+                 cublas_minor,
+                 cublas_patch);
+
 
     if (!dev_prop.managedMemory) {
         RXMESH_ERROR(
