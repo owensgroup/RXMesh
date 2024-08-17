@@ -169,10 +169,11 @@ class Context
         }
     }
 
-       /**
+    /** 
      * @brief compute a linear compact index for a give vertex/edge/face handle
      * @tparam HandleT the type of the input handle
      * @param input handle
+     * @note this function is copied from RXMeshDynamic::linear_id()
      */
     template <typename HandleT>
     __device__ __host__ __inline__ uint32_t linear_id(HandleT input) const
@@ -201,13 +202,13 @@ class Context
             ret);
 
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            return ret + m_vertex_prefix[p_id];
+            return ret + m_d_vertex_prefix[p_id];
         }
         if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            return ret + m_edge_prefix[p_id];
+            return ret + m_d_edge_prefix[p_id];
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            return ret + m_face_prefix[p_id];
+            return ret + m_d_face_prefix[p_id];
         }
     }
 

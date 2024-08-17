@@ -4,7 +4,6 @@
 #include <fstream>
 #include <iostream>
 #include <vector>
-#include "matplotlibcpp.h"
 #include "rxmesh/util/timer.h"
 #include "rxmesh/util/log.h"
 
@@ -134,33 +133,6 @@ void printNonZerosRatio(const SparseMatrix<float>& original_matrix,
            float(nnz_factorized) / float(nnz_original));
 }
 
-void plotSparseMatrix(Eigen::SparseMatrix<float> spMat, std::string title, std::string filename)
-{
-    namespace plt = matplotlibcpp;
-
-    // Extract row and column indices of non-zero elements
-    std::vector<int> rows;
-    std::vector<int> cols;
-
-    for (int k = 0; k < spMat.outerSize(); ++k) {
-        for (Eigen::SparseMatrix<float>::InnerIterator it(spMat, k); it;
-             ++it) {
-            rows.push_back(it.row());
-            cols.push_back(it.col());
-        }
-    }
-
-    // Plot non-zero elements
-    plt::scatter(cols, rows);
-    plt::title(title);
-    plt::xlabel("Column Index");
-    plt::ylabel("Row Index");
-
-    // Save plot as an image file
-    plt::save(filename);
-    plt::clf();
-}
-
 
 void processmesh_original(const std::string& inputfile)
 {
@@ -257,7 +229,6 @@ void processmesh_metis(const std::string& inputfile)
 
     Eigen::SparseMatrix<float> L = cholesky.matrixL();
     printNonZerosRatio(adjMatrix, L, "the factorized matrix L with metis");
-    plotSparseMatrix(L, "Cholesky factorization with METIS", "metis.png");
 }
 
 void processmesh_parmetis(const std::string& inputfile)
@@ -330,7 +301,6 @@ void processmesh_parmetis(const std::string& inputfile)
 
     Eigen::SparseMatrix<float> L = cholesky.matrixL();
     printNonZerosRatio(adjMatrix, L, "the factorized matrix L with parmetis");
-    plotSparseMatrix(L, "Cholesky factorization with parMETIS", "parmetis.png");
 }
 
 
@@ -364,7 +334,6 @@ void processmesh_ordering(const std::string&           inputfile,
     SparseMatrix<float> L_reordered = lltOfReorderedAdj.matrixL();
     printNonZerosRatio(
         adjMatrix, L_reordered, "the factorized matrix L (with reordering)");
-    plotSparseMatrix(L_reordered, "Cholesky factorization with reordering", "reordered.png");
 }
 
 std::vector<uint32_t> generateInversePermutation(const std::vector<uint32_t>& p)

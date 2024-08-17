@@ -55,7 +55,7 @@ enum class PermuteMethod
     SYMRCM = 1,
     SYMAMD = 2,
     NSTDIS = 3, 
-    GPUND  = 4
+    CUSTOM  = 4
 };
 
 /**
@@ -64,7 +64,7 @@ enum class PermuteMethod
  * and there is non-zero values at entry (i,j) only if the vertex i is connected
  * to vertex j. The sparse matrix is stored as a CSR matrix. The matrix is
  * accessible on both host and device. The class also provides implementation
- * for matrix-vector multiplication and linear solver—(using cuSolver and
+ * for matrix-vector multiplication and linear solverï¿½(using cuSolver and
  * cuSparse as a back-end.
  */
 template <typename T>
@@ -748,7 +748,7 @@ struct SparseMatrix
      * the solving process. Any other function call order would be undefined.
      * @param reorder: the reorder method applied.
      */
-    __host__ void permute(PermuteMethod reorder)
+    __host__ void permute(PermuteMethod reorder, IndexT* h_costom_reordering = nullptr)
     {
         permute_alloc(reorder);
 
@@ -788,7 +788,20 @@ struct SparseMatrix
                                                      m_h_solver_col_idx,
                                                      NULL,
                                                      m_h_permute));
+        } else if (reorder == PermuteMethod::CUSTOM) {
+            if (h_costom_reordering == nullptr) {
+                RXMESH_ERROR(
+                    "SparseMatrix::permute() CUSTOM reordering is specified "
+                    "but no reordering array is provided!");
+                m_use_reorder = false;
+                return;
+            }
+            cudaMemcpy(m_h_permute, h_costom_reordering, m_num_rows * sizeof(IndexT), cudaMemcpyHostToHost);
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix::permute() incompatible reorder method");
         }
+            
 
         // copy permutation to the device
         CUDA_ERROR(cudaMemcpyAsync(m_d_permute,
@@ -1242,7 +1255,8 @@ struct SparseMatrix
      * pre_solve(), solver() can be called with multiple right hand sides
      */
     __host__ void pre_solve(Solver        solver,
-                            PermuteMethod reorder = PermuteMethod::NSTDIS)
+                            PermuteMethod reorder = PermuteMethod::NSTDIS, 
+                            IndexT* h_costom_reordering = nullptr)
     {
         if (solver != Solver::CHOL && solver != Solver::QR) {
             RXMESH_WARN(
@@ -1253,7 +1267,7 @@ struct SparseMatrix
         m_current_solver = solver;
 
         permute_alloc(reorder);
-        permute(reorder);
+        permute(reorder, h_costom_reordering);
         analyze_pattern(solver);
         post_analyze_alloc(solver);
         factorize(solver);
