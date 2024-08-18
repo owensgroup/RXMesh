@@ -853,6 +853,8 @@ struct SparseMatrix
      */
     __host__ void analyze_pattern(Solver solver)
     {
+        m_current_solver = solver;
+
         if (!m_use_reorder) {
             m_d_solver_row_ptr = m_d_row_ptr;
             m_d_solver_col_idx = m_d_col_idx;
@@ -889,6 +891,13 @@ struct SparseMatrix
      */
     __host__ void post_analyze_alloc(Solver solver)
     {
+        if (solver != m_current_solver) {
+            RXMESH_ERROR(
+                "SparseMatrix::post_analyze_alloc() input solver is different "
+                "than current solver used in analyze_pattern()");
+            return;
+        }
+
         m_internalDataInBytes = 0;
         m_workspaceInBytes    = 0;
 
@@ -1075,6 +1084,13 @@ struct SparseMatrix
      */
     __host__ void factorize(Solver solver)
     {
+        if (solver != m_current_solver) {
+            RXMESH_ERROR(
+                "SparseMatrix::post_analyze_alloc() input solver is different "
+                "than current solver used in analyze_pattern()");
+            return;
+        }
+
         if (solver == Solver::CHOL) {
             if constexpr (std::is_same_v<T, float>) {
                 CUSOLVER_ERROR(cusolverSpScsrcholFactor(m_cusolver_sphandle,

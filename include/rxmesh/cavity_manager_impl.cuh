@@ -1382,7 +1382,8 @@ CavityManager<blockThreads, cop>::deactivate_boundary_cavities(
 
                 assert(e < m_s_owned_mask_e.size());
                 assert(f < m_s_owned_mask_f.size());
-                if (!m_s_owned_mask_f(f) || !m_s_owned_mask_e(e)) {
+                if (!m_s_owned_mask_f(f) || !m_s_owned_mask_e(e) ||
+                    !m_s_owned_mask_v(v0) || !m_s_owned_mask_v(v1)) {
                     assert(v0 < m_s_owned_cavity_bdry_v.size());
                     assert(v1 < m_s_owned_cavity_bdry_v.size());
                     m_s_owned_cavity_bdry_v.set(v0, true);

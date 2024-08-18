@@ -263,9 +263,9 @@ __device__ __forceinline__ void e_f_manifold(const uint16_t  num_edges,
             auto ret = atomicCAS(s_ef + 2 * edge, INVALID16, face_id);
             if (ret != INVALID16) {
                 ret = atomicCAS(s_ef + 2 * edge + 1, INVALID16, face_id);
-                if (ret != INVALID16) {
-                    printf("\n B= %u", blockIdx.x);
-                }
+                //if (ret != INVALID16) {
+                //    printf("\n B= %u", blockIdx.x);
+                //}
                 assert(ret == INVALID16);
             }
         }
