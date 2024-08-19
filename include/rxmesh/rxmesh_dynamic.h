@@ -639,11 +639,13 @@ class RXMeshDynamic : public RXMeshStatic
      */
     explicit RXMeshDynamic(const std::string file_path,
                            const std::string patcher_file             = "",
+                           const uint32_t    patch_size               = 256,
                            const float       capacity_factor          = 1.8,
                            const float       patch_alloc_factor       = 5.0,
                            const float       lp_hashtable_load_factor = 0.5)
         : RXMeshStatic(file_path,
                        patcher_file,
+                       patch_size,
                        capacity_factor,
                        patch_alloc_factor,
                        lp_hashtable_load_factor)
@@ -656,11 +658,13 @@ class RXMeshDynamic : public RXMeshStatic
      */
     explicit RXMeshDynamic(std::vector<std::vector<uint32_t>>& fv,
                            const std::string patcher_file             = "",
+                           const uint32_t    patch_size               = 256,
                            const float       capacity_factor          = 1.8,
                            const float       patch_alloc_factor       = 5.0,
                            const float       lp_hashtable_load_factor = 0.5)
         : RXMeshStatic(fv,
                        patcher_file,
+                       patch_size,
                        capacity_factor,
                        patch_alloc_factor,
                        lp_hashtable_load_factor)

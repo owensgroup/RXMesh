@@ -391,7 +391,7 @@ class RXMesh
 
     RXMesh(const RXMesh&) = delete;
 
-    RXMesh();
+    RXMesh(uint32_t patch_size);
 
     /**
      * @brief init all the data structures
