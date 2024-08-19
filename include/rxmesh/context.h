@@ -169,27 +169,21 @@ class Context
         }
     }
 
-    /** 
-     * @brief compute a linear compact index for a give vertex/edge/face handle
+    /**
+     * @brief compute a linear compact index for a give vertex/edge/face handle.
+     * This is only valid for static mesh processing i.e., RXMeshStatic.
      * @tparam HandleT the type of the input handle
      * @param input handle
-     * @note this function is copied from RXMeshDynamic::linear_id()
      */
     template <typename HandleT>
     __device__ __host__ __inline__ uint32_t linear_id(HandleT input) const
     {
         using LocalT = typename HandleT::LocalT;
 
-        if (!input.is_valid()) {
-            RXMESH_ERROR("RXMeshStatic::linear_id() input handle is not valid");
-        }
+        assert(input.is_valid());
 
+        assert(input.patch_id() >= m_num_patches[0]);
 
-        if (input.patch_id() >= m_num_patches[0]) {
-            RXMESH_ERROR(
-                "RXMeshStatic::linear_id() patch index ({}) is out-of-bound",
-                input.patch_id());
-        }
 
         const HandleT owner_handle = get_owner_handle(input);
 
