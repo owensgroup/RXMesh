@@ -65,29 +65,27 @@ __device__ __forceinline__ void block_mat_transpose(
     }*/
     __syncthreads();
 
-// #if __CUDA_ARCH__ >= 700
+#if __CUDA_ARCH__ >= 700
     // 2) compute the number of items in each bucket/col
-    // __half* mat_half = (__half*)(mat);
-    // for (uint32_t i = 0; i < itemPerThread; ++i) {
-    //     if (thread_data[i] != INVALID16) {
-    //         local_offset[i] = ::atomicAdd(&mat_half[thread_data[i]], 1);
-    //     }
-    // }
-    // __syncthreads();
-    // for (uint32_t i = threadIdx.x; i < num_cols; i += blockThreads) {
-    //     uint16_t val = uint16_t(mat_half[i]);
-    //     mat[i]       = val;
-
-    //     printf("\n i= %u, mat[i]= %u", i, mat[i]);
-    // }
-// #else
+    __half* mat_half = (__half*)(mat);
+    for (uint32_t i = 0; i < itemPerThread; ++i) {
+        if (thread_data[i] != INVALID16) {
+            local_offset[i] = ::atomicAdd(&mat_half[thread_data[i]], 1);
+        }
+    }
+    __syncthreads();
+    for (uint32_t i = threadIdx.x; i < num_cols; i += blockThreads) {
+        uint16_t val = uint16_t(mat_half[i]);
+        mat[i]       = val;
+    }
+#else
     for (uint32_t i = 0; i < itemPerThread; ++i) {
         if (thread_data[i] != INVALID16) {
             local_offset[i] = atomicAdd(&mat[thread_data[i]], 1u);
         }
     }
     __syncthreads();
-// #endif
+#endif
 
     // 3) exclusive scan on mat to compute the offset
     cub_block_exclusive_sum<uint16_t, blockThreads>(mat, num_cols);
@@ -264,9 +262,9 @@ __device__ __forceinline__ void e_f_manifold(const uint16_t  num_edges,
             auto ret = atomicCAS(s_ef + 2 * edge, INVALID16, face_id);
             if (ret != INVALID16) {
                 ret = atomicCAS(s_ef + 2 * edge + 1, INVALID16, face_id);
-                //if (ret != INVALID16) {
-                //    printf("\n B= %u", blockIdx.x);
-                //}
+                // if (ret != INVALID16) {
+                //     printf("\n B= %u", blockIdx.x);
+                // }
                 assert(ret == INVALID16);
             }
         }
@@ -287,7 +285,7 @@ __device__ __forceinline__ void orient_edges_around_vertices(
     // start by loading the faces while also doing transposing EV
     uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
     uint16_t* s_ef = shrd_alloc.alloc<uint16_t>(2 * num_edges);
-    
+
     for (uint32_t i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
         s_ef[i] = INVALID16;
     }
@@ -295,7 +293,7 @@ __device__ __forceinline__ void orient_edges_around_vertices(
     load_async(reinterpret_cast<const uint16_t*>(patch_info.fe),
                3 * num_faces,
                reinterpret_cast<uint16_t*>(s_fe),
-               true);    
+               true);
 
     // We could have used block_mat_transpose to transpose FE so we can look
     // up the "two" faces sharing an edge. But we can do better because we know

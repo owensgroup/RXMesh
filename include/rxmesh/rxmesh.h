@@ -579,6 +579,6 @@ class RXMesh
 
     float m_capacity_factor, m_lp_hashtable_load_factor, m_patch_alloc_factor;
 
-    double m_topo_memory_mega_bytes;    
+    double m_topo_memory_mega_bytes;
 };
 }  // namespace rxmesh
