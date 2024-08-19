@@ -363,36 +363,3 @@ void reorder_array_correctness_check(uint32_t*      reorder_array,
     }
     RXMESH_INFO("reorder_array is correct");
 }
-
-
-void test_loader()
-{
-    std::string                filename = "dragon.obj";
-    Eigen::SparseMatrix<float> adjacencyMatrix =
-        loadOBJToSparseMatrix(filename);
-}
-
-int test_solver()
-{
-
-    // create sparse Matrix
-    int                                 n = 5;
-    std::vector<Eigen::Triplet<double>> ijv;
-    for (int i = 0; i < n; i++) {
-        ijv.push_back(Eigen::Triplet<double>(i, i, 1));
-        if (i < n - 1) {
-            ijv.push_back(Eigen::Triplet<double>(i + 1, i, -0.9));
-        }
-    }
-    Eigen::SparseMatrix<double> X(n, n);
-    X.setFromTriplets(ijv.begin(), ijv.end());
-    Eigen::SparseMatrix<double> XX = X * X.transpose();
-
-    // Cholesky decomposition
-    Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> cholesky;
-    cholesky.analyzePattern(XX);
-    cholesky.factorize(XX);
-
-    std::cout << Eigen::MatrixXd(XX) << std::endl;
-    std::cout << Eigen::MatrixXd(cholesky.matrixL()) << std::endl;
-}

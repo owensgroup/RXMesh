@@ -76,15 +76,6 @@ struct ALIGN(16) PartitionManager
         cooperative_groups::thread_block& block,
         rxmesh::VertexAttribute<uint16_t> v_ordering);
 
-    __device__ __inline__ uint16_t* num_vertices_at(uint16_t curr_level)
-    {
-        return m_s_num_vertices[curr_level];
-    }
-
-    __device__ __inline__ uint16_t* num_edges_at(uint16_t curr_level)
-    {
-        return m_s_num_edges[curr_level];
-    }
 
     __device__ __inline__ uint16_t* get_ev(uint16_t curr_level)
     {
@@ -1253,7 +1244,7 @@ __device__ __inline__ void PartitionManager<blockThreads>::local_partition(
     }
 }
 
-//TODO: doesn't work for multi-level
+// TODO: doesn't work for multi-level
 template <uint32_t blockThreads>
 __device__ __inline__ void
 PartitionManager<blockThreads>::local_multi_level_partition(
@@ -1270,9 +1261,9 @@ PartitionManager<blockThreads>::local_multi_level_partition(
     Bitmask&       coarse_p1_vertices = get_p1_vertices_bitmask(curr_level);
     Bitmask&       separator_v = get_separator_vertices_bitmask(curr_level);
     Bitmask&       current_vertices = get_current_vertices_bitmask(curr_level);
-    Bitmask&       active_vertices = get_new_tmp_bitmask_active_v(block);
+    Bitmask&       active_vertices  = get_new_tmp_bitmask_active_v(block);
     active_vertices.reset(block);
-    int            num_iter         = 10;
+    int num_iter = 10;
 
 
     // EV operation setting active vertices
@@ -1311,7 +1302,8 @@ PartitionManager<blockThreads>::local_multi_level_partition(
         /* int                              */ num_iter);
     block.sync();
 
-    for (uint16_t v = threadIdx.x; v < m_num_vertices_limit; v += blockThreads) {
+    for (uint16_t v = threadIdx.x; v < m_num_vertices_limit;
+         v += blockThreads) {
         assert(coarse_p0_vertices(v) != coarse_p1_vertices(v));
         if (coarse_p0_vertices(v) && current_vertices(v)) {
             m_s_v_partition_id[v] = 0;
@@ -1360,7 +1352,7 @@ PartitionManager<blockThreads>::local_multi_level_partition(
         if (m_s_v_partition_id[v0_local_id] == 1) {
             active_vertices.set(v0_local_id, true);
         }
-        
+
         if (m_s_v_partition_id[v1_local_id] == 1) {
             active_vertices.set(v1_local_id, true);
         }
@@ -1398,7 +1390,8 @@ PartitionManager<blockThreads>::local_multi_level_partition(
 
     block.sync();
 
-    for (uint16_t v = threadIdx.x; v < m_num_vertices_limit; v += blockThreads) {
+    for (uint16_t v = threadIdx.x; v < m_num_vertices_limit;
+         v += blockThreads) {
         assert(coarse_p0_vertices(v) != coarse_p1_vertices(v));
         if (coarse_p0_vertices(v)) {
             m_s_v_partition_id[v] = 2;
