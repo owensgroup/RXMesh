@@ -1267,8 +1267,9 @@ void generate_total_num_v_prefix_sum(uint32_t* d_patch_partition_label,
     uint32_t* d_tmp_total_label;
     CUDA_ERROR(cudaMalloc(&d_tmp_total_label,
                           total_prefix_sum_size * sizeof(uint32_t)));
-    cudaMemset(
-        d_tmp_total_label, INVALID32, total_prefix_sum_size * sizeof(uint32_t));
+    CUDA_ERROR(cudaMemset(d_tmp_total_label,
+                          INVALID32,
+                          total_prefix_sum_size * sizeof(uint32_t)));
 
     // load patch labels
     copy_scaled_patch_label<blockThreads><<<blocks_p, threads_p>>>(
@@ -1284,7 +1285,7 @@ void generate_total_num_v_prefix_sum(uint32_t* d_patch_partition_label,
         cudaMalloc(&d_tmp_indices, total_prefix_sum_size * sizeof(uint32_t)));
     thrust::sequence(thrust::device,
                      d_tmp_indices,
-                     d_tmp_indices + total_prefix_sum_size - 1);
+                     d_tmp_indices + (total_prefix_sum_size - 1));
 
     // the last index is reserved for exclusive sum which means nothing for the
     // sorting
@@ -1470,38 +1471,44 @@ void cuda_nd_reorder(RXMeshStatic& rx,
 
     uint32_t* d_patch_partition_label;  // label of v_ordering_prefix_sum for
                                         // each patch
-    cudaMalloc(&d_patch_partition_label,
-               rx.get_num_patches() * sizeof(uint32_t));
-    cudaMemset(
-        d_patch_partition_label, 0, rx.get_num_patches() * sizeof(uint32_t));
+    CUDA_ERROR(cudaMalloc(&d_patch_partition_label,
+                          rx.get_num_patches() * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(
+        d_patch_partition_label, 0, rx.get_num_patches() * sizeof(uint32_t)));
 
     uint32_t* d_patch_num_v;
-    cudaMalloc(&d_patch_num_v, rx.get_num_patches() * sizeof(uint32_t));
-    cudaMemset(d_patch_num_v, 0, rx.get_num_patches() * sizeof(uint32_t));
+    CUDA_ERROR(
+        cudaMalloc(&d_patch_num_v, rx.get_num_patches() * sizeof(uint32_t)));
+    CUDA_ERROR(
+        cudaMemset(d_patch_num_v, 0, rx.get_num_patches() * sizeof(uint32_t)));
 
     uint32_t* d_spv_num_v_heap;  // manage the separators in a heap manner
-    cudaMalloc(&d_spv_num_v_heap, num_patch_separator * sizeof(uint32_t));
-    cudaMemset(d_spv_num_v_heap, 0, num_patch_separator * sizeof(uint32_t));
+    CUDA_ERROR(
+        cudaMalloc(&d_spv_num_v_heap, num_patch_separator * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(
+        d_spv_num_v_heap, 0, num_patch_separator * sizeof(uint32_t)));
 
     uint32_t* d_total_num_v_prefix_sum;
-    cudaMalloc(&d_total_num_v_prefix_sum,
-               total_prefix_sum_size * sizeof(uint32_t));
-    cudaMemset(
-        d_total_num_v_prefix_sum, 0, total_prefix_sum_size * sizeof(uint32_t));
+    CUDA_ERROR(cudaMalloc(&d_total_num_v_prefix_sum,
+                          total_prefix_sum_size * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(
+        d_total_num_v_prefix_sum, 0, total_prefix_sum_size * sizeof(uint32_t)));
 
     uint32_t* d_patch_prefix_sum_mapping_arr;
-    cudaMalloc(&d_patch_prefix_sum_mapping_arr,
-               rx.get_num_patches() * sizeof(uint32_t));
-    cudaMemset(d_patch_prefix_sum_mapping_arr,
-               INVALID32,
-               total_prefix_sum_size * sizeof(uint32_t));
+    CUDA_ERROR(cudaMalloc(&d_patch_prefix_sum_mapping_arr,
+                          total_prefix_sum_size * sizeof(uint32_t)));
+
+    CUDA_ERROR(cudaMemset(d_patch_prefix_sum_mapping_arr,
+                          INVALID32,
+                          total_prefix_sum_size * sizeof(uint32_t)));
 
     uint32_t* d_spv_prefix_sum_mapping_arr;
-    cudaMalloc(&d_spv_prefix_sum_mapping_arr,
-               num_patch_separator * sizeof(uint32_t));
-    cudaMemset(d_spv_prefix_sum_mapping_arr,
-               INVALID32,
-               num_patch_separator * sizeof(uint32_t));
+    CUDA_ERROR(cudaMalloc(&d_spv_prefix_sum_mapping_arr,
+                          num_patch_separator * sizeof(uint32_t)));
+
+    CUDA_ERROR(cudaMemset(d_spv_prefix_sum_mapping_arr,
+                          INVALID32,
+                          num_patch_separator * sizeof(uint32_t)));
 
     printf("--------- finish variable allocation ---------\n");
 
