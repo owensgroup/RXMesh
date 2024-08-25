@@ -87,7 +87,6 @@ __device__ __forceinline__ void block_mat_transpose(
     __syncthreads();
 #endif
 
-
     // 3) exclusive scan on mat to compute the offset
     cub_block_exclusive_sum<uint16_t, blockThreads>(mat, num_cols);
 
@@ -263,9 +262,9 @@ __device__ __forceinline__ void e_f_manifold(const uint16_t  num_edges,
             auto ret = atomicCAS(s_ef + 2 * edge, INVALID16, face_id);
             if (ret != INVALID16) {
                 ret = atomicCAS(s_ef + 2 * edge + 1, INVALID16, face_id);
-                //if (ret != INVALID16) {
-                //    printf("\n B= %u", blockIdx.x);
-                //}
+                // if (ret != INVALID16) {
+                //     printf("\n B= %u", blockIdx.x);
+                // }
                 assert(ret == INVALID16);
             }
         }
@@ -286,7 +285,7 @@ __device__ __forceinline__ void orient_edges_around_vertices(
     // start by loading the faces while also doing transposing EV
     uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
     uint16_t* s_ef = shrd_alloc.alloc<uint16_t>(2 * num_edges);
-    
+
     for (uint32_t i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
         s_ef[i] = INVALID16;
     }
@@ -294,7 +293,7 @@ __device__ __forceinline__ void orient_edges_around_vertices(
     load_async(reinterpret_cast<const uint16_t*>(patch_info.fe),
                3 * num_faces,
                reinterpret_cast<uint16_t*>(s_fe),
-               true);    
+               true);
 
     // We could have used block_mat_transpose to transpose FE so we can look
     // up the "two" faces sharing an edge. But we can do better because we know

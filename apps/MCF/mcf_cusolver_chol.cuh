@@ -1,6 +1,7 @@
 #pragma once
 #include "rxmesh/attribute.h"
 #include "rxmesh/matrix/dense_matrix.cuh"
+#include "rxmesh/matrix/nd_reorder.cuh"
 #include "rxmesh/matrix/sparse_matrix.cuh"
 #include "rxmesh/rxmesh_static.h"
 
@@ -205,9 +206,109 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx)
     // copy the results to attributes
     coords->from_matrix(X_mat.get());
 
+#if USE_POLYSCOPE
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    polyscope::show();
+#endif
+
+    B_mat.release();
+    X_mat->release();
+    A_mat.release();
+}
+
+template <typename T>
+void mcf_cusolver_chol_cudaND(rxmesh::RXMeshStatic& rx)
+{
+    using namespace rxmesh;
+    constexpr uint32_t blockThreads = 256;
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    auto coords = rx.get_input_vertex_coordinates();
+
+    SparseMatrix<float> A_mat(rx);
+    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
+
+    std::shared_ptr<DenseMatrix<float>> X_mat = coords->to_matrix();
+
+    RXMESH_INFO("use_uniform_laplace: {}, time_step: {}",
+                Arg.use_uniform_laplace,
+                Arg.time_step);
+
+    // B set up
+    LaunchBox<blockThreads> launch_box_B;
+    rx.prepare_launch_box({Op::VV},
+                          launch_box_B,
+                          (void*)mcf_B_setup<float, blockThreads>,
+                          !Arg.use_uniform_laplace);
+
+    mcf_B_setup<float, blockThreads><<<launch_box_B.blocks,
+                                       launch_box_B.num_threads,
+                                       launch_box_B.smem_bytes_dyn>>>(
+        rx.get_context(), *coords, B_mat, Arg.use_uniform_laplace);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+    // A and X set up
+    LaunchBox<blockThreads> launch_box_A_X;
+    rx.prepare_launch_box({Op::VV},
+                          launch_box_A_X,
+                          (void*)mcf_A_setup<float, blockThreads>,
+                          !Arg.use_uniform_laplace);
+
+    mcf_A_setup<float, blockThreads>
+        <<<launch_box_A_X.blocks,
+           launch_box_A_X.num_threads,
+           launch_box_A_X.smem_bytes_dyn>>>(rx.get_context(),
+                                            *coords,
+                                            A_mat,
+                                            Arg.use_uniform_laplace,
+                                            Arg.time_step);
+
+
+    // To Use LU, we have to move the data to the host
+    // A_mat.move(DEVICE, HOST);
+    // B_mat.move(DEVICE, HOST);
+    // X_mat->move(DEVICE, HOST);
+    // A_mat.solve(B_mat, *X_mat, Solver::LU, PermuteMethod::NSTDIS);
+
+    // Solving using QR or CHOL
+    // A_mat.solve(B_mat, *X_mat, Solver::QR, PermuteMethod::NSTDIS);
+    // A_mat.solve(B_mat, *X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
+
+    // Compute CUDA_ND reorder
+    uint32_t* h_reorder_array;
+    int*      h_reorder_array_int_cpy;
+    CUDA_ERROR(cudaMallocManaged(&h_reorder_array,
+                                 sizeof(uint32_t) * rx.get_num_vertices()));
+    CUDA_ERROR(cudaMemset(
+        h_reorder_array, 0, sizeof(uint32_t) * rx.get_num_vertices()));
+
+    cuda_nd_reorder(rx, h_reorder_array, Arg.nd_level);
+    if (arr_check_uint32_to_int_cast(h_reorder_array, rx.get_num_vertices())) {
+        h_reorder_array_int_cpy = reinterpret_cast<int*>(h_reorder_array);
+    } else {
+        RXMESH_ERROR(
+            "Error: Overflow in casting reorder array uint32_t to int");
+    }
+
+
+    // Solving using CHOL
+    A_mat.pre_solve(
+        Solver::CHOL, PermuteMethod::CUSTOM, h_reorder_array_int_cpy);
+    A_mat.solve(B_mat, *X_mat);
+
+
+    // move the results to the host
+    // if we use LU, the data will be on the host and we should not move the
+    // device to the host
+    X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
+
+    // copy the results to attributes
+    coords->from_matrix(X_mat.get());
 
 #if USE_POLYSCOPE
+    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
     polyscope::show();
 #endif
 

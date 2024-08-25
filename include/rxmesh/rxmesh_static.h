@@ -44,10 +44,11 @@ class RXMeshStatic : public RXMesh
      */
     explicit RXMeshStatic(const std::string file_path,
                           const std::string patcher_file             = "",
+                          const uint32_t    patch_size               = 512,
                           const float       capacity_factor          = 1.0,
                           const float       patch_alloc_factor       = 1.0,
                           const float       lp_hashtable_load_factor = 0.8)
-        : RXMesh()
+        : RXMesh(patch_size)
     {
         std::vector<std::vector<uint32_t>> fv;
         std::vector<std::vector<float>>    vertices;
@@ -79,10 +80,11 @@ class RXMeshStatic : public RXMesh
      */
     explicit RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
                           const std::string                   patcher_file = "",
-                          const float capacity_factor          = 1.0,
-                          const float patch_alloc_factor       = 1.0,
-                          const float lp_hashtable_load_factor = 0.8)
-        : RXMesh(), m_input_vertex_coordinates(nullptr)
+                          const uint32_t                      patch_size = 512,
+                          const float capacity_factor                    = 1.0,
+                          const float patch_alloc_factor                 = 1.0,
+                          const float lp_hashtable_load_factor           = 0.8)
+        : RXMesh(patch_size), m_input_vertex_coordinates(nullptr)
     {
         this->init(fv,
                    patcher_file,

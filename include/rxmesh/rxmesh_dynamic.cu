@@ -1057,6 +1057,7 @@ __inline__ __device__ void bi_assignment_ggp(
     cooperative_groups::thread_block& block,
     const uint16_t                    num_vertices,
     const Bitmask&                    s_owned_v,
+    const bool                        ignore_owned_v,
     const Bitmask&                    s_active_v,
     const uint16_t*                   s_vv_offset,
     const uint16_t*                   s_vv,
@@ -1067,13 +1068,10 @@ __inline__ __device__ void bi_assignment_ggp(
     Bitmask&                          s_partition_b_v,
     int                               num_iter)
 {
-
-
     __shared__ int      s_num_assigned_vertices;
     __shared__ int      s_num_active_vertices;
     __shared__ int      s_num_A_vertices, s_num_B_vertices;
     __shared__ uint16_t s_seed_a, s_seed_b;
-
 
     // compute the total number of active vertices (including not-owned)
     auto compute_num_active_vertices = [&]() {
@@ -1099,7 +1097,10 @@ __inline__ __device__ void bi_assignment_ggp(
 
         bool found_a(false), found_b(false);
         for (uint16_t v = 0; v < num_vertices; ++v) {
-            if (s_active_v(v) && !s_owned_v(v)) {
+            if (s_active_v(v) /* && !s_owned_v(v)*/) {
+                if (!ignore_owned_v && s_owned_v(v)) {
+                    continue;
+                }
                 s_seed_a = v;
                 found_a  = true;
                 break;
@@ -1117,7 +1118,10 @@ __inline__ __device__ void bi_assignment_ggp(
         assert(found_a);
 
         for (uint16_t v = num_vertices - 1; v > 1; --v) {
-            if (s_active_v(v) && !s_owned_v(v) && v != s_seed_a) {
+            if (s_active_v(v) /*&& !s_owned_v(v)*/ && v != s_seed_a) {
+                if (!ignore_owned_v && s_owned_v(v)) {
+                    continue;
+                }
                 s_seed_b = v;
                 found_b  = true;
                 break;
@@ -1288,7 +1292,8 @@ __inline__ __device__ void bi_assignment_ggp(
         for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
             if (s_active_v(v)) {
                 bool is_a(s_partition_a_v(v));
-                bool on_frontier = !s_owned_v(v);
+                // TODO: line frontier of separators, double check the logic
+                bool on_frontier = (ignore_owned_v) ? false : !s_owned_v(v);
 
                 if (!on_frontier) {
                     const uint16_t start = s_vv_offset[v];
@@ -1385,13 +1390,11 @@ __inline__ __device__ void bi_assignment_ggp(
         }
     };
 
-
     if (threadIdx.x == 0) {
         bootstrap();
     }
     compute_num_active_vertices();
     block.sync();
-
 
     for (int it = 0; it < num_iter; ++it) {
 
@@ -2929,6 +2932,7 @@ template __inline__ __device__ void detail::bi_assignment_ggp<256>(
     cooperative_groups::thread_block&,
     const uint16_t,
     const Bitmask&,
+    const bool,
     const Bitmask&,
     const uint16_t*,
     const uint16_t*,

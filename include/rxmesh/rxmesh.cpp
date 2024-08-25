@@ -14,7 +14,7 @@
 #include "rxmesh/util/util.h"
 
 namespace rxmesh {
-RXMesh::RXMesh()
+RXMesh::RXMesh(uint32_t patch_size)
     : m_num_edges(0),
       m_num_faces(0),
       m_num_vertices(0),
@@ -22,7 +22,7 @@ RXMesh::RXMesh()
       m_input_max_edge_incident_faces(0),
       m_input_max_face_adjacent_faces(0),
       m_num_patches(0),
-      m_patch_size(256),
+      m_patch_size(patch_size),
       m_is_input_edge_manifold(true),
       m_is_input_closed(true),
       m_h_vertex_prefix(nullptr),

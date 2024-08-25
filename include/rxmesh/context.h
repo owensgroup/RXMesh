@@ -169,6 +169,43 @@ class Context
         }
     }
 
+    /**
+     * @brief compute a linear compact index for a give vertex/edge/face handle.
+     * This is only valid for static mesh processing i.e., RXMeshStatic.
+     * @tparam HandleT the type of the input handle
+     * @param input handle
+     */
+    template <typename HandleT>
+    __device__ __host__ __inline__ uint32_t linear_id(HandleT input) const
+    {
+        using LocalT = typename HandleT::LocalT;
+
+        assert(input.is_valid());
+
+        assert(input.patch_id() >= m_num_patches[0]);
+
+
+        const HandleT owner_handle = get_owner_handle(input);
+
+        uint32_t p_id = owner_handle.patch_id();
+        uint16_t ret  = owner_handle.local_id();
+
+        ret = this->m_patches_info[p_id].count_num_owned(
+            m_patches_info[p_id].get_owned_mask<HandleT>(),
+            m_patches_info[p_id].get_active_mask<HandleT>(),
+            ret);
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return ret + m_d_vertex_prefix[p_id];
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return ret + m_d_edge_prefix[p_id];
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return ret + m_d_face_prefix[p_id];
+        }
+    }
+
 
     /**
      * @brief initialize various members

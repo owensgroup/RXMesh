@@ -21,6 +21,7 @@ struct arg
     float       cg_tolerance        = 1e-6;
     uint32_t    max_num_cg_iter     = 1000;
     bool        use_uniform_laplace = false;
+    uint32_t    nd_level            = 1;
     char**      argv;
     int         argc;
 } Arg;
@@ -44,6 +45,9 @@ TEST(App, MCF)
 
     // RXMesh cusolver Impl
     mcf_cusolver_chol<dataT>(rx);
+
+    // RXMesh cusolver Impl with our CUDA_ND reorder
+    mcf_cusolver_chol_cudaND<dataT>(rx);
 }
 
 int main(int argc, char** argv)
@@ -67,7 +71,8 @@ int main(int argc, char** argv)
                         " -dt:                Time step (delta t). Default is {} \n"
                         "                     Hint: should be between (0.001, 1) for cotan Laplace or between (1, 100) for uniform Laplace\n"
                         " -eps:               Conjugate gradient tolerance. Default is {}\n"
-                        " -max_cg_iter:       Conjugate gradient maximum number of iterations. Default is {}\n"                        
+                        " -max_cg_iter:       Conjugate gradient maximum number of iterations. Default is {}\n"
+                        " -nd_level:          ND level. Default is {}\n"                        
                         " -device_id:         GPU device ID. Default is {}",
             Arg.obj_file_name, Arg.output_folder,  (Arg.use_uniform_laplace? "true" : "false"), Arg.time_step, Arg.cg_tolerance, Arg.max_num_cg_iter, Arg.device_id);
             // clang-format on
@@ -100,6 +105,10 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-device_id")) {
             Arg.device_id =
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-nd_level")) {
+            Arg.nd_level =
+                atoi(get_cmd_option(argv, argv + argc, "-nd_level"));
         }
     }
 
