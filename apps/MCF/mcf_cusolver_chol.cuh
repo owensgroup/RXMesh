@@ -194,10 +194,10 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     // A_mat.solve(B_mat, *X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
 
     // Pre-Solves
-    uint32_t* h_reorder_array;
+    uint32_t* h_reorder_array = nullptr;
 
     if (permute_method != PermuteMethod::CUSTOM) {
-        A_mat.pre_solve(Solver::CHOL, PermuteMethod::NSTDIS);
+        A_mat.pre_solve(Solver::CHOL, permute_method);
     } else {
         // Compute CUDA_ND reorder
 
