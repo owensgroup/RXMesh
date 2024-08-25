@@ -194,7 +194,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     // A_mat.solve(B_mat, *X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
 
     // Pre-Solves
-    uint32_t* h_reorder_array = nullptr;
+    int* h_reorder_array = nullptr;
 
     if (permute_method != PermuteMethod::CUSTOM) {
         A_mat.pre_solve(Solver::CHOL, permute_method);
@@ -202,23 +202,14 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
         // Compute CUDA_ND reorder
 
         CUDA_ERROR(cudaMallocManaged(&h_reorder_array,
-                                     sizeof(uint32_t) * rx.get_num_vertices()));
+                                     sizeof(int) * rx.get_num_vertices()));
         CUDA_ERROR(cudaMemset(
-            h_reorder_array, 0, sizeof(uint32_t) * rx.get_num_vertices()));
+            h_reorder_array, 0, sizeof(int) * rx.get_num_vertices()));
 
         cuda_nd_reorder(rx, h_reorder_array, Arg.nd_level);
 
-        int* h_reorder_array_int_cpy;
-        if (arr_check_uint32_to_int_cast(h_reorder_array,
-                                         rx.get_num_vertices())) {
-            h_reorder_array_int_cpy = reinterpret_cast<int*>(h_reorder_array);
-        } else {
-            RXMESH_ERROR(
-                "Error: Overflow in casting reorder array uint32_t to int");
-        }
         // Solving using CHOL
-        A_mat.pre_solve(
-            Solver::CHOL, PermuteMethod::CUSTOM, h_reorder_array_int_cpy);
+        A_mat.pre_solve(Solver::CHOL, PermuteMethod::CUSTOM, h_reorder_array);
     }
 
     // Solve

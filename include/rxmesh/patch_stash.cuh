@@ -46,9 +46,8 @@ struct PatchStash
 
             CUDA_ERROR(cudaMalloc((void**)&m_tmp_level_stash,
                                   stash_size * sizeof(uint32_t)));
-            CUDA_ERROR(cudaMemset(m_tmp_level_stash, 
-                                  INVALID32, 
-                                  stash_size * sizeof(uint32_t)));
+            CUDA_ERROR(cudaMemset(
+                m_tmp_level_stash, INVALID32, stash_size * sizeof(uint32_t)));
 
             CUDA_ERROR(cudaMalloc((void**)&m_tmp_level_edge_weight,
                                   stash_size * sizeof(uint32_t)));
@@ -56,18 +55,17 @@ struct PatchStash
                                   INVALID32,
                                   stash_size * sizeof(uint32_t)));
 
-            CUDA_ERROR(cudaMalloc((void**)&m_v_ordering_bound,
-                                  2 * sizeof(uint32_t)));
-            CUDA_ERROR(cudaMemset(m_v_ordering_bound,
-                                    INVALID32,
-                                    2 * sizeof(uint32_t)));
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_v_ordering_bound, 2 * sizeof(uint32_t)));
+            CUDA_ERROR(cudaMemset(
+                m_v_ordering_bound, INVALID32, 2 * sizeof(uint32_t)));
 
             m_tmp_ordering_tail = INVALID32;
-            m_num_separator_v = 0;
-            m_is_active = true;
+            m_num_separator_v   = 0;
+            m_is_active         = true;
 
             // for nd_corss_patch
-            m_is_seed = false;
+            m_is_seed     = false;
             m_is_frontier = false;
             m_is_boundary = false;
             m_local_label = INVALID16;
@@ -302,9 +300,9 @@ struct PatchStash
     uint32_t* m_coarse_level_pair_list;
     uint32_t* m_coarse_level_id_list;
     uint32_t* m_coarse_level_num_v;
-    uint32_t m_num_separator_v;
+    uint32_t  m_num_separator_v;
     uint32_t* m_v_ordering_bound;
-    
+
     bool m_is_node;  // determine whether the patch is a node or not(remained or
                      // merged)
 
@@ -317,10 +315,10 @@ struct PatchStash
 
 
     // for nd cross patch implementation
-    bool m_is_seed;
-    bool m_is_frontier;
-    bool m_is_boundary;
-    uint16_t m_local_label; 
+    bool     m_is_seed;
+    bool     m_is_frontier;
+    bool     m_is_boundary;
+    uint16_t m_local_label;
 
     bool m_is_on_device;
 };

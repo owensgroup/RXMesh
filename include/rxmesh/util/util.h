@@ -366,6 +366,26 @@ __device__ __host__ __inline__ uint16_t round_to_next_multiple_32(uint16_t num)
     }
 }
 
+/**
+ * @brief Cast a uint32_t to an int, throwing an exception if the value is too
+ * large to fit in an int.
+ */
+__host__ __inline__ bool arr_check_uint32_to_int_cast(const uint32_t* arr,
+                                                      size_t          size)
+{
+    static_assert(sizeof(int) >= sizeof(uint32_t),
+                  "int must be at least 32 bits wide");
+    static_assert(std::is_same<int, std::int32_t>::value,
+                  "int must be exactly 32 bits");
+
+    for (size_t i = 0; i < size; ++i) {
+        if (arr[i] > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+            return false;  // Unsafe to cast
+        }
+    }
+    return true;  // Safe to cast
+}
+
 namespace detail {
 
 /**

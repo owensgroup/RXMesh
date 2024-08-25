@@ -24,25 +24,6 @@
 namespace rxmesh {
 
 /**
- * @brief Cast a uint32_t to an int, throwing an exception if the value is too
- * large to fit in an int.
- */
-bool arr_check_uint32_to_int_cast(const uint32_t* arr, size_t size)
-{
-    static_assert(sizeof(int) >= sizeof(uint32_t),
-                  "int must be at least 32 bits wide");
-    static_assert(std::is_same<int, std::int32_t>::value,
-                  "int must be exactly 32 bits");
-
-    for (size_t i = 0; i < size; ++i) {
-        if (arr[i] > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
-            return false;  // Unsafe to cast
-        }
-    }
-    return true;  // Safe to cast
-}
-
-/**
  * @brief Initializes the edge weights of patches in a mesh.
  *
  * Device function that updates the edge weights of patches in a mesh. The
@@ -541,7 +522,7 @@ __global__ static void bipartition_refine_partition(
 
         // skip the unlabled patch
         if (d_patch_local_partition_role[i] == INVALID32) {
-            printf("Error: patch %d is not labeled\n", i);
+            //printf("Error: patch %d is not labeled\n", i);
             assert(false && "Error: patch is not labeled when refining\n");
         }
 
@@ -613,7 +594,7 @@ __global__ static void bipartition_check_isolation(
                 (d_patch_partition_label[i] << 1) +
                 (d_patch_local_partition_label[i] ^ 1);
 
-            printf("Check: patch %d is isolated\n", i);
+            //printf("Check: patch %d is isolated\n", i);
             d_patch_local_partition_label[i] ^= 1;
             ::atomicAdd(&d_patch_local_seed_label_count[patch_seed_index], -1);
             ::atomicAdd(
@@ -717,19 +698,8 @@ __global__ static void bipartition_check_propogation(
     }
 }
 
-template <typename T>
-__global__ static void check_d_arr(T* d_arr, uint32_t size)
-{
-    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx == 0) {
-        for (uint32_t i = 0; i < size; i++) {
-            printf(" %u,", d_arr[i]);
-        }
-        printf("\n");
-    }
-}
 
-// Bisecting k-means instead os normal k-means for initialization?
+// Bisecting k-means instead of normal k-means for initialization?
 // now just normal k-means
 // 1. how good is bi-secting k-means
 // 2. how slow is bi-secting k-means
@@ -768,21 +738,21 @@ void run_partition_lloyd(RXMeshStatic& rx,
     // curr_num_seeds);
 
     // initialize the tmp parameters, set by bytes
-    cudaMemset(d_patch_local_partition_role,
-               0,
-               rx.get_num_patches() * sizeof(uint32_t));
-    cudaMemset(d_patch_local_partition_label,
-               INVALID32,
-               rx.get_num_patches() * sizeof(uint32_t));
-    cudaMemset(d_patch_local_seeds,
-               INVALID32,
-               rx.get_num_patches() * sizeof(uint32_t));
-    cudaMemset(d_patch_local_seed_label_count,
-               INVALID32,
-               rx.get_num_patches() * sizeof(uint32_t));
-    cudaMemset(d_patch_seed_hop_dist,
-               INVALID32,
-               rx.get_num_patches() * sizeof(uint32_t));
+    CUDA_ERROR(cudaMemset(d_patch_local_partition_role,
+                          0,
+                          rx.get_num_patches() * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(d_patch_local_partition_label,
+                          INVALID32,
+                          rx.get_num_patches() * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(d_patch_local_seeds,
+                          INVALID32,
+                          rx.get_num_patches() * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(d_patch_local_seed_label_count,
+                          INVALID32,
+                          rx.get_num_patches() * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMemset(d_patch_seed_hop_dist,
+                          INVALID32,
+                          rx.get_num_patches() * sizeof(uint32_t)));
 
     bipartition_init_random_seeds<blockThreads>
         <<<rx.get_num_patches() + 1, threads_p>>>(
@@ -797,31 +767,6 @@ void run_partition_lloyd(RXMeshStatic& rx,
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
-    // printf("d_patch_seed_hop_dist: ");
-    // check_d_arr<uint32_t>
-    //     <<<1, 1>>>(d_patch_seed_hop_dist, rx.get_num_patches());
-    // CUDA_ERROR(cudaDeviceSynchronize());
-
-    // printf("d_patch_partition_label: ");
-    // check_d_arr<<<1, 1>>>(d_patch_partition_label, rx.get_num_patches());
-    // CUDA_ERROR(cudaDeviceSynchronize());
-
-    // printf("d_patch_local_seeds: ");
-    // check_d_arr<<<1, 1>>>(d_patch_local_seeds, rx.get_num_patches());
-    // CUDA_ERROR(cudaDeviceSynchronize());
-
-    // printf("d_patch_local_partition_role: ");
-    // check_d_arr<<<1, 1>>>(d_patch_local_partition_role,
-    // rx.get_num_patches()); CUDA_ERROR(cudaDeviceSynchronize());
-
-    // printf("d_patch_local_partition_label: ");
-    // check_d_arr<<<1, 1>>>(d_patch_local_partition_label,
-    // rx.get_num_patches()); CUDA_ERROR(cudaDeviceSynchronize());
-
-    // printf("d_patch_local_seed_label_count: ");
-    // check_d_arr<<<1, 1>>>(d_patch_local_seed_label_count,
-    // rx.get_num_patches()); CUDA_ERROR(cudaDeviceSynchronize());
-
     uint32_t lloyd_iter = 0;
     while (lloyd_iter < lloyd_iter_limit) {
 
@@ -832,13 +777,13 @@ void run_partition_lloyd(RXMeshStatic& rx,
             // printf("---------- recenter ----------\n");
 
             // reset seed
-            cudaMemset(d_patch_local_seeds,
-                       INVALID32,
-                       rx.get_num_patches() * sizeof(uint32_t));
+            CUDA_ERROR(cudaMemset(d_patch_local_seeds,
+                                  INVALID32,
+                                  rx.get_num_patches() * sizeof(uint32_t)));
 
-            cudaMemset(d_patch_seed_hop_dist,
-                       INVALID32,
-                       rx.get_num_patches() * sizeof(uint32_t));
+            CUDA_ERROR(cudaMemset(d_patch_seed_hop_dist,
+                                  INVALID32,
+                                  rx.get_num_patches() * sizeof(uint32_t)));
 
             // reset the seeds, essentially the same as the initialization
             while (true) {
@@ -859,34 +804,11 @@ void run_partition_lloyd(RXMeshStatic& rx,
                                               d_patch_local_seeds,
                                               d_num_seeds);
 
-                // prints
-                // printf("--- recenter iter ---\n");
-                // printf("d_patch_local_partition_role: ");
-                // check_d_arr<<<1, 1>>>(d_patch_local_partition_role,
-                //                       rx.get_num_patches());
-                // CUDA_ERROR(cudaDeviceSynchronize());
-
-                // printf("d_patch_local_partition_label: ");
-                // check_d_arr<<<1, 1>>>(d_patch_local_partition_label,
-                //                       rx.get_num_patches());
-                // CUDA_ERROR(cudaDeviceSynchronize());
-
-                // printf("d_patch_local_seed_label_count: ");
-                // check_d_arr<uint32_t><<<1,
-                // 1>>>(d_patch_local_seed_label_count,
-                //                                 rx.get_num_patches());
-                // CUDA_ERROR(cudaDeviceSynchronize());
-
-                // printf("d_patch_local_seeds: ");
-                // check_d_arr<<<1, 1>>>(d_patch_local_seeds,
-                //                       rx.get_num_patches());
-                // CUDA_ERROR(cudaDeviceSynchronize());
-
-                cudaMemcpy(&h_num_seeds,
-                           d_num_seeds,
-                           sizeof(uint32_t),
-                           cudaMemcpyDeviceToHost);
-                cudaMemset(d_num_seeds, 0, sizeof(uint32_t));
+                CUDA_ERROR(cudaMemcpy(&h_num_seeds,
+                                      d_num_seeds,
+                                      sizeof(uint32_t),
+                                      cudaMemcpyDeviceToHost));
+                CUDA_ERROR(cudaMemset(d_num_seeds, 0, sizeof(uint32_t)));
                 if (h_num_seeds == curr_num_seeds) {
                     break;
                 }
@@ -949,43 +871,12 @@ void run_partition_lloyd(RXMeshStatic& rx,
                                           d_patch_local_seed_label_count,
                                           false);
 
-            // printf("is_balancing: %d\n", tmp_prev_labeled_patch_size !=
-            // h_labeled_patch_size);
-
-            // printf("d_patch_seed_hop_dist: ");
-            // check_d_arr<uint32_t>
-            //     <<<1, 1>>>(d_patch_seed_hop_dist, rx.get_num_patches());
-            // CUDA_ERROR(cudaDeviceSynchronize());
-
-            // prints
-            // printf("--- propogate iter ---\n");
-            // printf("d_patch_local_seeds: ");
-            // check_d_arr<<<1, 1>>>(d_patch_local_seeds,
-            //                       rx.get_num_patches());
-            // CUDA_ERROR(cudaDeviceSynchronize());
-
-            // printf("d_patch_local_partition_role: ");
-            // check_d_arr<<<1, 1>>>(d_patch_local_partition_role,
-            //                       rx.get_num_patches());
-            // CUDA_ERROR(cudaDeviceSynchronize());
-
-            // printf("d_patch_local_partition_label: ");
-            // check_d_arr<<<1, 1>>>(d_patch_local_partition_label,
-            //                       rx.get_num_patches());
-            // CUDA_ERROR(cudaDeviceSynchronize());
-
-            // printf("d_patch_local_seed_label_count: ");
-            // check_d_arr<uint32_t><<<1,
-            // 1>>>(d_patch_local_seed_label_count,
-            //                                 rx.get_num_patches());
-            // CUDA_ERROR(cudaDeviceSynchronize());
-
             tmp_prev_labeled_patch_size = h_labeled_patch_size;
-            cudaMemcpy(&h_labeled_patch_size,
-                       d_labeled_patch_size,
-                       sizeof(uint32_t),
-                       cudaMemcpyDeviceToHost);
-            cudaMemset(d_labeled_patch_size, 0, sizeof(uint32_t));
+            CUDA_ERROR(cudaMemcpy(&h_labeled_patch_size,
+                                  d_labeled_patch_size,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
+            CUDA_ERROR(cudaMemset(d_labeled_patch_size, 0, sizeof(uint32_t)));
             if (h_labeled_patch_size == rx.get_num_patches()) {
                 break;
             }
@@ -1052,30 +943,6 @@ void run_partition_lloyd(RXMeshStatic& rx,
     //                               d_patch_local_seed_label_count,
     //                               d_patch_local_partition_role,
     //                               d_patch_local_partition_label);
-
-
-    // printf("---------- check label ----------\n");
-
-    // printf("d_patch_partition_label: ");
-    // check_d_arr<<<1, 1>>>(d_patch_partition_label, rx.get_num_patches());
-    // CUDA_ERROR(cudaDeviceSynchronize());
-
-    // printf("d_patch_local_partition_label: ");
-    // check_d_arr<<<1, 1>>>(d_patch_local_partition_label,
-    // rx.get_num_patches()); CUDA_ERROR(cudaDeviceSynchronize());
-
-    // printf("d_patch_local_seed_label_count: ");
-    // check_d_arr<uint32_t>
-    //     <<<1, 1>>>(d_patch_local_seed_label_count, curr_num_seeds + 1);
-    // CUDA_ERROR(cudaDeviceSynchronize());
-
-    // printf("d_patch_seed_label_balanced_count: ");
-    // check_d_arr<uint32_t>
-    //     <<<1, 1>>>(d_patch_seed_label_balanced_count, curr_num_seeds + 1);
-    // CUDA_ERROR(cudaDeviceSynchronize());
-
-
-    // printf("---------- lloyd finish ----------\n");
 }
 
 template <uint32_t blockThreads>
@@ -1382,7 +1249,7 @@ __global__ void nd_init_seed_label_balanced_count(
 }
 
 void cuda_nd_reorder(RXMeshStatic& rx,
-                     uint32_t*     ordering_arr,
+                     int*          ordering_arr,
                      uint32_t      nd_level,
                      bool          is_global_id = false)
 {
@@ -1400,7 +1267,6 @@ void cuda_nd_reorder(RXMeshStatic& rx,
         rx.add_vertex_attribute<uint32_t>("v_attr_spv_label", 1);
     v_attr_spv_label->reset(INVALID32, rxmesh::DEVICE);
 
-    printf("starts reorder\n");
 
     // variables for lloyd calculation
     uint32_t* d_patch_local_seeds;
@@ -1462,7 +1328,6 @@ void cuda_nd_reorder(RXMeshStatic& rx,
                           INVALID32,
                           rx.get_num_patches() * sizeof(uint32_t)));
 
-    printf("--------- start lloyd variable allocation ---------\n");
 
     // variables for prefixsum & ordering calculation
     uint32_t num_patch_separator = (1 << nd_level) - 1;
@@ -1510,8 +1375,7 @@ void cuda_nd_reorder(RXMeshStatic& rx,
                           INVALID32,
                           num_patch_separator * sizeof(uint32_t)));
 
-    printf("--------- finish variable allocation ---------\n");
-
+    
     // prepare launch box for GPU kernels
     LaunchBox<blockThreads> launch_box_nd_init_edge_weight;
     rx.prepare_launch_box({rxmesh::Op::EV},
@@ -1538,8 +1402,7 @@ void cuda_nd_reorder(RXMeshStatic& rx,
     //        launch_box_nd_init_edge_weight.smem_bytes_dyn>>>(rx.get_context());
     // CUDA_ERROR(cudaDeviceSynchronize());
 
-    printf("--------- starting partitioning with level: %u ---------\n",
-           nd_level);
+    
     GPUTimer timer;
     timer.start();
 
@@ -1581,8 +1444,7 @@ void cuda_nd_reorder(RXMeshStatic& rx,
             1 << (i + 1));
     }
 
-    printf("--------- starting ordering generation ---------\n");
-
+    
     // count the number of vertices in each patch and vertex separator
     nd_count_vertex_num<blockThreads>
         <<<launch_box_count_vertex_num.blocks,
@@ -1619,8 +1481,6 @@ void cuda_nd_reorder(RXMeshStatic& rx,
             d_spv_prefix_sum_mapping_arr,
             rx.get_num_patches());
 
-    printf("---------- Finish ----------\n");
-
     timer.stop();
     float total_time = timer.elapsed_millis();
 
@@ -1636,7 +1496,5 @@ void cuda_nd_reorder(RXMeshStatic& rx,
         ordering_arr[v_order_idx] = is_global_id ? v_global_id : v_linear_id;
     });
 }
-
-// automatically num levels - no need to specify hyper parameters
 
 }  // namespace rxmesh
