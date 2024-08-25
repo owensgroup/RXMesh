@@ -44,10 +44,7 @@ TEST(App, MCF)
     mcf_cg<dataT>(rx);
 
     // RXMesh cusolver Impl
-    mcf_cusolver_chol<dataT>(rx);
-
-    // RXMesh cusolver Impl with our CUDA_ND reorder
-    mcf_cusolver_chol_cudaND<dataT>(rx);
+    mcf_cusolver_chol<dataT>(rx, PermuteMethod::CUSTOM);
 }
 
 int main(int argc, char** argv)
@@ -107,8 +104,7 @@ int main(int argc, char** argv)
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
         }
         if (cmd_option_exists(argv, argc + argv, "-nd_level")) {
-            Arg.nd_level =
-                atoi(get_cmd_option(argv, argv + argc, "-nd_level"));
+            Arg.nd_level = atoi(get_cmd_option(argv, argv + argc, "-nd_level"));
         }
     }
 
