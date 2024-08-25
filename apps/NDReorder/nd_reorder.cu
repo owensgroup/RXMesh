@@ -18,7 +18,7 @@
 #include "rxmesh/rxmesh_dynamic.h"
 
 #include "rxmesh/matrix/sparse_matrix.cuh"
-#include "rxmesh/matrix/test_spmat_reordering.cuh"
+#include "rxmesh/matrix/nd_reorder.cuh"
 
 #include "thrust/sort.h"
 

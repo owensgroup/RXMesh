@@ -26,10 +26,13 @@ namespace rxmesh {
 /**
  * @brief Cast a uint32_t to an int, throwing an exception if the value is too
  * large to fit in an int.
-*/
-bool arr_check_uint32_to_int_cast(const uint32_t* arr, size_t size) {
-    static_assert(sizeof(int) >= sizeof(uint32_t), "int must be at least 32 bits wide");
-    static_assert(std::is_same<int, std::int32_t>::value, "int must be exactly 32 bits");
+ */
+bool arr_check_uint32_to_int_cast(const uint32_t* arr, size_t size)
+{
+    static_assert(sizeof(int) >= sizeof(uint32_t),
+                  "int must be at least 32 bits wide");
+    static_assert(std::is_same<int, std::int32_t>::value,
+                  "int must be exactly 32 bits");
 
     for (size_t i = 0; i < size; ++i) {
         if (arr[i] > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
@@ -1377,7 +1380,10 @@ __global__ void nd_init_seed_label_balanced_count(
     }
 }
 
-void cuda_nd_reorder(RXMeshStatic& rx, uint32_t* ordering_arr, uint32_t nd_level, bool is_global_id = false)
+void cuda_nd_reorder(RXMeshStatic& rx,
+                     uint32_t*     ordering_arr,
+                     uint32_t      nd_level,
+                     bool          is_global_id = false)
 {
     constexpr uint32_t blockThreads = 256;
 

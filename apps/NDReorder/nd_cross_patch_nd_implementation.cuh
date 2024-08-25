@@ -1,6 +1,6 @@
 
 
-/********* Check #include "rxmesh/matrix/test_spmat_reordering.cuh" for latest implementation **********/
+/********* Check #include "rxmesh/matrix/nd_reorder.cuh" for latest implementation **********/
 
 
 // #pragma once
