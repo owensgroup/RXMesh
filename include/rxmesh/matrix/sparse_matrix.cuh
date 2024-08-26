@@ -13,7 +13,7 @@
 
 #include "cusolverSp_LOWLEVEL_PREVIEW.h"
 #include "rxmesh/matrix/dense_matrix.cuh"
-
+#include "rxmesh/matrix/permute_util.h"
 #include "rxmesh/matrix/sparse_matrix_kernels.cuh"
 
 #include "rxmesh/launch_box.h"
@@ -796,6 +796,8 @@ struct SparseMatrix
             RXMESH_ERROR("SparseMatrix::permute() incompatible reorder method");
         }
 
+
+        assert(is_unique_permutation(m_num_rows, m_h_permute));
 
         // copy permutation to the device
         CUDA_ERROR(cudaMemcpyAsync(m_d_permute,
