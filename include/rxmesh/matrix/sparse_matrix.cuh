@@ -790,10 +790,8 @@ struct SparseMatrix
                 m_use_reorder = false;
                 return;
             }
-            cudaMemcpy(m_h_permute,
-                       h_custom_reordering,
-                       m_num_rows * sizeof(IndexT),
-                       cudaMemcpyHostToHost);
+            std::memcpy(
+                m_h_permute, h_custom_reordering, m_num_rows * sizeof(IndexT));
         } else {
             RXMESH_ERROR("SparseMatrix::permute() incompatible reorder method");
         }

@@ -70,6 +70,14 @@ class Context
     }
 
     /**
+     * @brief Total number of patches in mesh
+     */
+    __device__ __forceinline__ uint32_t get_num_patches() const
+    {
+        return m_num_patches[0];
+    }
+
+    /**
      * @brief Unpack an edge to its edge ID and direction
      * @param edge_dir The input packed edge as stored in PatchInfo and
      * internally in RXMesh
@@ -190,6 +198,12 @@ class Context
         uint32_t p_id = owner_handle.patch_id();
         uint16_t ret  = owner_handle.local_id();
 
+        assert(m_patches_info[p_id].is_owned(HandleT::LocalT(ret)));
+
+        // TODO we don't need to do count the number of owned elements if the
+        // mesh is static, i.e., we have not modified the topology of the mesh
+        // yet since we number the owned elements first and there is no deleted
+        // elements yet
         ret = this->m_patches_info[p_id].count_num_owned(
             m_patches_info[p_id].get_owned_mask<HandleT>(),
             m_patches_info[p_id].get_active_mask<HandleT>(),
