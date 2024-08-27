@@ -190,7 +190,7 @@ class Context
 
         assert(input.is_valid());
 
-        assert(input.patch_id() >= m_num_patches[0]);
+        assert(input.patch_id() < m_num_patches[0]);
 
 
         const HandleT owner_handle = get_owner_handle(input);

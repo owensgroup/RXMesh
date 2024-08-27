@@ -39,16 +39,17 @@ enum class Solver
  * @brief The enum class for choosing different reorder types
  * NONE for No Reordering Applied, SYMRCM for Symmetric Reverse Cuthill-McKee
  * permutation, SYMAMD for Symmetric Approximate Minimum Degree Algorithm based
- * on Quotient Graph, NSTDIS for Nested Dissection, CUSTOM is a user-defined
- * permutation
+ * on Quotient Graph, NSTDIS for Nested Dissection, GPUMGND is a GPU modified
+ * generalized nested dissection permutation, and GPUND is GPU nested dissection
  */
 enum class PermuteMethod
 {
-    NONE   = 0,
-    SYMRCM = 1,
-    SYMAMD = 2,
-    NSTDIS = 3,
-    CUSTOM = 4
+    NONE    = 0,
+    SYMRCM  = 1,
+    SYMAMD  = 2,
+    NSTDIS  = 3,
+    GPUMGND = 4,
+    GPUND   = 5
 };
 
 /**
@@ -782,7 +783,8 @@ struct SparseMatrix
                                                      m_h_solver_col_idx,
                                                      NULL,
                                                      m_h_permute));
-        } else if (reorder == PermuteMethod::CUSTOM) {
+        } else if (reorder == PermuteMethod::GPUMGND ||
+                   reorder == PermuteMethod::GPUND) {
             if (h_custom_reordering == nullptr) {
                 RXMESH_ERROR(
                     "SparseMatrix::permute() CUSTOM reordering is specified "

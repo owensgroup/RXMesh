@@ -4,6 +4,7 @@
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
 
+#include <thrust/execution_policy.h>
 #include <thrust/scan.h>
 
 namespace rxmesh {
@@ -80,7 +81,8 @@ __global__ static void assign_permutation(const Context context,
 
 /**
  * @brief Modified Generalized Nested Dissection permutation where the separator
- * is order last.
+ * is order last. h_permute should be allocated with size equal to num of
+ * vertices of the mesh.
  */
 inline void mgnd_permute(RXMeshStatic& rx, int* h_permute)
 {
@@ -120,9 +122,11 @@ inline void mgnd_permute(RXMeshStatic& rx, int* h_permute)
             rx.get_context(), d_permute, d_v_ordering_prefix_sum);
 
 
-    thrust::exclusive_scan(d_v_ordering_prefix_sum,
-                           d_v_ordering_prefix_sum + v_ordering_prefix_sum_size,
-                           d_v_ordering_prefix_sum);
+    thrust::exclusive_scan(
+        thrust::device,
+        d_v_ordering_prefix_sum,
+        d_v_ordering_prefix_sum + (v_ordering_prefix_sum_size - 1),
+        d_v_ordering_prefix_sum);
 
     rx.prepare_launch_box(
         {Op::VV}, lb, (void*)detail::assign_permutation<blockThreads>);

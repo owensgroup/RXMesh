@@ -1,9 +1,11 @@
 #pragma once
 #include "rxmesh/attribute.h"
 #include "rxmesh/matrix/dense_matrix.cuh"
-#include "rxmesh/matrix/nd_reorder.cuh"
 #include "rxmesh/matrix/sparse_matrix.cuh"
 #include "rxmesh/rxmesh_static.h"
+
+#include "rxmesh/matrix/mgnd_permute.cuh"
+#include "rxmesh/matrix/nd_reorder.cuh"
 
 #include "mcf_kernels.cuh"
 
@@ -196,20 +198,19 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     // Pre-Solves
     int* h_reorder_array = nullptr;
 
-    if (permute_method != PermuteMethod::CUSTOM) {
-        A_mat.pre_solve(Solver::CHOL, permute_method);
-    } else {
+    if (permute_method == PermuteMethod::GPUMGND ||
+        permute_method == PermuteMethod::GPUND) {
         // Compute CUDA_ND reorder
+        h_reorder_array = (int*)malloc(sizeof(int) * rx.get_num_vertices());
 
-        CUDA_ERROR(cudaMallocManaged(&h_reorder_array,
-                                     sizeof(int) * rx.get_num_vertices()));
-        CUDA_ERROR(cudaMemset(
-            h_reorder_array, 0, sizeof(int) * rx.get_num_vertices()));
+        // cuda_nd_reorder(rx, h_reorder_array, Arg.nd_level);
 
-        cuda_nd_reorder(rx, h_reorder_array, Arg.nd_level);
+        mgnd_permute(rx, h_reorder_array);
 
         // Solving using CHOL
-        A_mat.pre_solve(Solver::CHOL, PermuteMethod::CUSTOM, h_reorder_array);
+        A_mat.pre_solve(Solver::CHOL, permute_method, h_reorder_array);
+    } else {
+        A_mat.pre_solve(Solver::CHOL, permute_method);
     }
 
     // Solve
@@ -231,5 +232,5 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     B_mat.release();
     X_mat->release();
     A_mat.release();
-    GPU_FREE(h_reorder_array);
+    free(h_reorder_array);
 }
