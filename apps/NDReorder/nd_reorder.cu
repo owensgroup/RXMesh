@@ -9,15 +9,12 @@
 #include "rxmesh/matrix/permute_util.h"
 #include "rxmesh/matrix/sparse_matrix.cuh"
 
-#include "check_nnz.h"
-#include "compute_chol_nnz.h"
-
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "cube.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere1.obj";
     uint16_t    nd_level      = 4;
     uint32_t    device_id     = 0;
 } Arg;
@@ -33,9 +30,7 @@ int post_chol_factorization_nnz(rxmesh::RXMeshStatic& rx,
     assert(h_reorder_array.size() == rx.get_num_vertices());
 
     // VV matrix
-    rxmesh::SparseMatrix<float> mat(rx);
-
-    // return compute_chol_nnz(mat);
+    rxmesh::SparseMatrix<float> mat(rx);   
 
     // populate an SPD matrix
     mat.for_each([](int r, int c, float& val) {
@@ -49,7 +44,7 @@ int post_chol_factorization_nnz(rxmesh::RXMeshStatic& rx,
     // convert matrix to Eigen
     auto eigen_mat = mat.to_eigen_copy();
 
-    // std::cout << "eigen_mat\n" << eigen_mat << "\n";
+    //std::cout << "eigen_mat\n" << eigen_mat << "\n";
 
     // permutation array in Eigen format
     Eigen::Map<Eigen::VectorXi> p(h_reorder_array.data(),
@@ -84,7 +79,14 @@ int post_chol_factorization_nnz(rxmesh::RXMeshStatic& rx,
     // extract nnz from lower matrix
     Eigen::SparseMatrix<float> ff = solver.matrixL();
 
-    return ff.nonZeros();
+    //std::cout << "ff\n" << ff << "\n";
+
+    //these are the nnz on (strictly) the lower part 
+    int lower_nnz = ff.nonZeros() - ff.rows();
+
+    //multiply by two to account for lower and upper parts of the matirx
+    //add rows() to account for entries along the diagonal  
+    return 2*lower_nnz + ff.rows();
 }
 
 TEST(Apps, NDReorder)

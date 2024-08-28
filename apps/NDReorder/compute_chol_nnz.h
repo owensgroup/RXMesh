@@ -43,5 +43,7 @@ int compute_chol_nnz(const rxmesh::SparseMatrix<T>& mat)
         }
     }
 
-    return nnz;
+    //multiply by two to account for lower and upper parts of the matirx
+    //add rows() to account for entries along the diagonal  
+    return 2*nnz + mat.rows();
 }
