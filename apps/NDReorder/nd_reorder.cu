@@ -1,80 +1,120 @@
 #include "gtest/gtest.h"
-#include "rxmesh/util/import_obj.h"
 
-#include "nd_cross_patch_ordering.cuh"
-#include "nd_single_patch_ordering.cuh"
+#include <filesystem>
 
-#include <vector>
-#include "cusparse.h"
-#include "rxmesh/context.h"
-#include "rxmesh/types.h"
+#include "rxmesh/rxmesh_static.h"
 
-#include "rxmesh/bitmask.cuh"
-#include "rxmesh/context.h"
-#include "rxmesh/handle.h"
-#include "rxmesh/kernels/loader.cuh"
-#include "rxmesh/kernels/util.cuh"
-#include "rxmesh/patch_info.h"
-#include "rxmesh/rxmesh_dynamic.h"
-
-#include "rxmesh/matrix/sparse_matrix.cuh"
+#include "rxmesh/matrix/mgnd_permute.cuh"
 #include "rxmesh/matrix/nd_reorder.cuh"
-
-#include "thrust/sort.h"
+#include "rxmesh/matrix/permute_util.h"
+#include "rxmesh/matrix/sparse_matrix.cuh"
 
 #include "check_nnz.h"
+#include "compute_chol_nnz.h"
 
-#include "nd_mgnd_implementation.cuh"
-#include "nd_cross_patch_nd_implementation.cuh"
+#include <Eigen/Dense>
+#include <Eigen/Sparse>
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
-    uint16_t nd_level        = 4;
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "cube.obj";
+    uint16_t    nd_level      = 4;
     uint32_t    device_id     = 0;
 } Arg;
+
+/**
+ * @brief calculate the number of nnz after Cholesky factorization
+ */
+int post_chol_factorization_nnz(rxmesh::RXMeshStatic& rx,
+                                std::vector<int>&     h_reorder_array)
+{
+    using namespace rxmesh;
+
+    assert(h_reorder_array.size() == rx.get_num_vertices());
+
+    // VV matrix
+    rxmesh::SparseMatrix<float> mat(rx);
+
+    // return compute_chol_nnz(mat);
+
+    // populate an SPD matrix
+    mat.for_each([](int r, int c, float& val) {
+        if (r == c) {
+            val = 10.0f;
+        } else {
+            val = -1.0f;
+        }
+    });
+
+    // convert matrix to Eigen
+    auto eigen_mat = mat.to_eigen_copy();
+
+    // std::cout << "eigen_mat\n" << eigen_mat << "\n";
+
+    // permutation array in Eigen format
+    Eigen::Map<Eigen::VectorXi> p(h_reorder_array.data(),
+                                  rx.get_num_vertices());
+
+    // permutation matrix
+    Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic> perm(
+        rx.get_num_vertices());
+    for (int i = 0; i < rx.get_num_vertices(); ++i) {
+        perm.indices()[i] = h_reorder_array[i];
+    }
+
+    Eigen::SparseMatrix<float> permuted_mat =
+        perm.transpose() * eigen_mat * perm;
+
+    // compute Cholesky factorization on the permuted matirx
+
+    Eigen::SimplicialLLT<Eigen::SparseMatrix<float>,
+                         Eigen::Lower,
+                         Eigen::NaturalOrdering<int>>
+        solver;
+    solver.compute(permuted_mat);
+
+    if (solver.info() != Eigen::Success) {
+        RXMESH_ERROR(
+            "post_chol_factorization_nnz(): Cholesky decomposition with "
+            "reorder failed with code {}",
+            solver.info());
+        return -1;
+    }
+
+    // extract nnz from lower matrix
+    Eigen::SparseMatrix<float> ff = solver.matrixL();
+
+    return ff.nonZeros();
+}
 
 TEST(Apps, NDReorder)
 {
     using namespace rxmesh;
-    constexpr uint32_t blockThreads = 256;
 
-    RXMeshStatic rx(Arg.obj_file_name);
-
-    // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
-    //         "_nd_patches");
-
-    // RXMeshDynamic rx(Arg.obj_file_name,
-    //                  STRINGIFY(OUTPUT_DIR) +
-    //                      extract_file_name(Arg.obj_file_name) +
-    //                      "_nd_patches");
-
-    // Select device
     cuda_query(Arg.device_id);
 
+    const std::string p_file = STRINGIFY(OUTPUT_DIR) +
+                               extract_file_name(Arg.obj_file_name) +
+                               "_patches";
+    RXMeshStatic rx(Arg.obj_file_name, p_file);
+    if (!std::filesystem::exists(p_file)) {
+        rx.save(p_file);
+    }
+
     // allocate result array
-    uint32_t* reorder_array;
-    CUDA_ERROR(cudaMallocManaged(&reorder_array,
-                                 sizeof(uint32_t) * rx.get_num_vertices()));
-    CUDA_ERROR(cudaMemset(reorder_array, 0, sizeof(uint32_t) * rx.get_num_vertices()));
+    std::vector<int> h_permute(rx.get_num_vertices());
+    fill_with_sequential_numbers(h_permute.data(), h_permute.size());
 
-    GPUTimer timer;
-    timer.start();
+    // cuda_nd_reorder(rx, h_reorder_array, Arg.nd_level);
 
-    cuda_nd_reorder(rx, reorder_array, Arg.nd_level, true);
+    EXPECT_TRUE(is_unique_permutation(rx.get_num_vertices(), h_permute.data()));
 
-    timer.stop();
-    float total_time = timer.elapsed_millis();
+    RXMESH_INFO(" Post reorder NNZ = {}",
+                post_chol_factorization_nnz(rx, h_permute));
 
-    RXMESH_INFO("ND overall Reordering time: {} ms", total_time);
-
-    reorder_array_correctness_check(reorder_array, rx.get_num_vertices());
-
-    //  // for get the nnz data
-    std::vector<uint32_t> reorder_vector(reorder_array, reorder_array + rx.get_num_vertices()); 
-    processmesh_ordering(Arg.obj_file_name, (reorder_vector));
-    processmesh_metis(Arg.obj_file_name);   
-    processmesh_original(Arg.obj_file_name);
+    // processmesh_ordering(Arg.obj_file_name, h_permute);
+    //  processmesh_metis(Arg.obj_file_name);
+    //  processmesh_original(Arg.obj_file_name);
 }
 
 int main(int argc, char** argv)
@@ -109,8 +149,7 @@ int main(int argc, char** argv)
         }
 
         if (cmd_option_exists(argv, argc + argv, "-nd_level")) {
-            Arg.nd_level =
-                atoi(get_cmd_option(argv, argv + argc, "-nd_level"));
+            Arg.nd_level = atoi(get_cmd_option(argv, argv + argc, "-nd_level"));
         }
     }
 

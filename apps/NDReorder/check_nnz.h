@@ -4,8 +4,8 @@
 #include <fstream>
 #include <iostream>
 #include <vector>
-#include "rxmesh/util/timer.h"
 #include "rxmesh/util/log.h"
+#include "rxmesh/util/timer.h"
 
 using namespace Eigen;
 
@@ -129,8 +129,9 @@ void printNonZerosRatio(const SparseMatrix<float>& original_matrix,
     // printf("NNZ ratio for %s: %f\n",
     //        name.c_str(),
     //        float(nnz_factorized) / float(nnz_original));
-    RXMESH_INFO("NNZ ratio for {}: {}", name.c_str(),
-           float(nnz_factorized) / float(nnz_original));
+    RXMESH_INFO("NNZ ratio for {}: {}",
+                name.c_str(),
+                float(nnz_factorized) / float(nnz_original));
 }
 
 
@@ -199,7 +200,7 @@ void processmesh_metis(const std::string& inputfile)
     rxmesh::CPUTimer timer;
     timer.start();
 
-    //TODO adjncy is empty
+    // TODO adjncy is empty
     METIS_NodeND(&n, &xadj[0], &adjncy[0], NULL, options, &perm[0], &iperm[0]);
 
     timer.stop();
@@ -220,7 +221,8 @@ void processmesh_metis(const std::string& inputfile)
     // Perform Cholesky factorization with reordering
     SimplicialLLT<SparseMatrix<float>,
                   Eigen::Lower,
-                  Eigen::NaturalOrdering<int>> cholesky(permutedMatrix);
+                  Eigen::NaturalOrdering<int>>
+        cholesky(permutedMatrix);
 
     if (cholesky.info() != Eigen::Success) {
         printf("Cholesky decomposition failed with code %d\n", cholesky.info());
@@ -291,8 +293,9 @@ void processmesh_parmetis(const std::string& inputfile)
 
     // Perform Cholesky factorization with reordering
     Eigen::SimplicialLLT<SparseMatrix<float>,
-                  Eigen::Lower,
-                  Eigen::NaturalOrdering<int>> cholesky(permutedMatrix);
+                         Eigen::Lower,
+                         Eigen::NaturalOrdering<int>>
+        cholesky(permutedMatrix);
 
     if (cholesky.info() != Eigen::Success) {
         printf("Cholesky decomposition failed with code %d\n", cholesky.info());
@@ -304,8 +307,8 @@ void processmesh_parmetis(const std::string& inputfile)
 }
 
 
-void processmesh_ordering(const std::string&           inputfile,
-                          const std::vector<uint32_t>& reordering)
+void processmesh_ordering(const std::string&      inputfile,
+                          const std::vector<int>& reordering)
 {
 
     Eigen::SparseMatrix<float> adjMatrix = loadOBJToSparseMatrix(inputfile);
@@ -334,32 +337,4 @@ void processmesh_ordering(const std::string&           inputfile,
     SparseMatrix<float> L_reordered = lltOfReorderedAdj.matrixL();
     printNonZerosRatio(
         adjMatrix, L_reordered, "the factorized matrix L (with reordering)");
-}
-
-std::vector<uint32_t> generateInversePermutation(const std::vector<uint32_t>& p)
-{
-    std::vector<uint32_t> inverse(p.size());
-    for (uint32_t i = 0; i < p.size(); ++i) {
-        inverse[p[i]] = i;
-    }
-    return inverse;
-}
-
-
-void reorder_array_correctness_check(uint32_t*      reorder_array,
-                                     const uint32_t num_vertices)
-{
-    std::vector<uint32_t> reorder_array_copy(reorder_array,
-                                             reorder_array + num_vertices);
-    sort(reorder_array_copy.begin(), reorder_array_copy.end());
-
-    for (int i = 0; i < num_vertices; i++) {
-        // printf("reorder_array[%d] = %d\n", i, reorder_array[i]);
-        if (reorder_array_copy[i] != i) {
-            RXMESH_ERROR("reorder_array[{}] = {}", i, reorder_array_copy[i]);
-            assert(false && "reorder_array is not correct");
-            return;
-        }
-    }
-    RXMESH_INFO("reorder_array is correct");
 }

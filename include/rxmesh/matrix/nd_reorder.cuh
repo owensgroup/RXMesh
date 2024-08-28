@@ -522,7 +522,7 @@ __global__ static void bipartition_refine_partition(
 
         // skip the unlabled patch
         if (d_patch_local_partition_role[i] == INVALID32) {
-            //printf("Error: patch %d is not labeled\n", i);
+            // printf("Error: patch %d is not labeled\n", i);
             assert(false && "Error: patch is not labeled when refining\n");
         }
 
@@ -594,7 +594,7 @@ __global__ static void bipartition_check_isolation(
                 (d_patch_partition_label[i] << 1) +
                 (d_patch_local_partition_label[i] ^ 1);
 
-            //printf("Check: patch %d is isolated\n", i);
+            // printf("Check: patch %d is isolated\n", i);
             d_patch_local_partition_label[i] ^= 1;
             ::atomicAdd(&d_patch_local_seed_label_count[patch_seed_index], -1);
             ::atomicAdd(
@@ -1248,15 +1248,18 @@ __global__ void nd_init_seed_label_balanced_count(
     }
 }
 
-void cuda_nd_reorder(RXMeshStatic& rx,
-                     int*          ordering_arr,
-                     uint32_t      nd_level,
-                     bool          is_global_id = false)
+void cuda_nd_reorder(RXMeshStatic&     rx,
+                     std::vector<int>& ordering_arr,
+                     uint32_t          nd_level,
+                     bool              is_global_id = false)
 {
+
     constexpr uint32_t blockThreads = 256;
 
     uint32_t blocks  = rx.get_num_patches();
     uint32_t threads = blockThreads;
+
+    ordering_arr.resize(rx.get_num_vertices());
 
     // store the final ordering result in the vertex color attribute
     auto v_attr_ordering =
@@ -1375,7 +1378,7 @@ void cuda_nd_reorder(RXMeshStatic& rx,
                           INVALID32,
                           num_patch_separator * sizeof(uint32_t)));
 
-    
+
     // prepare launch box for GPU kernels
     LaunchBox<blockThreads> launch_box_nd_init_edge_weight;
     rx.prepare_launch_box({rxmesh::Op::EV},
@@ -1402,7 +1405,7 @@ void cuda_nd_reorder(RXMeshStatic& rx,
     //        launch_box_nd_init_edge_weight.smem_bytes_dyn>>>(rx.get_context());
     // CUDA_ERROR(cudaDeviceSynchronize());
 
-    
+
     GPUTimer timer;
     timer.start();
 
@@ -1444,7 +1447,7 @@ void cuda_nd_reorder(RXMeshStatic& rx,
             1 << (i + 1));
     }
 
-    
+
     // count the number of vertices in each patch and vertex separator
     nd_count_vertex_num<blockThreads>
         <<<launch_box_count_vertex_num.blocks,

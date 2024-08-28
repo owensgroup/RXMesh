@@ -196,19 +196,20 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     // A_mat.solve(B_mat, *X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
 
     // Pre-Solves
-    int* h_reorder_array = nullptr;
+    std::vector<int> h_reorder_array;
 
     if (permute_method == PermuteMethod::GPUMGND ||
         permute_method == PermuteMethod::GPUND) {
-        // Compute CUDA_ND reorder
-        h_reorder_array = (int*)malloc(sizeof(int) * rx.get_num_vertices());
+
+        // compute permutation
+        h_reorder_array.resize(rx.get_num_vertices());
 
         // cuda_nd_reorder(rx, h_reorder_array, Arg.nd_level);
 
         mgnd_permute(rx, h_reorder_array);
 
         // Solving using CHOL
-        A_mat.pre_solve(Solver::CHOL, permute_method, h_reorder_array);
+        A_mat.pre_solve(Solver::CHOL, permute_method, h_reorder_array.data());
     } else {
         A_mat.pre_solve(Solver::CHOL, permute_method);
     }
@@ -232,5 +233,4 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     B_mat.release();
     X_mat->release();
     A_mat.release();
-    free(h_reorder_array);
 }

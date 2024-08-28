@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include "cusolverSp.h"
 #include "cusparse.h"
 #include "rxmesh/attribute.h"
@@ -259,6 +260,39 @@ struct SparseMatrix
         return m_nnz;
     }
 
+    /**
+     * @brief return the number of non-zero values on and below the diagonal
+     */
+    __host__ IndexT lower_non_zeros() const
+    {
+        int l_nnz = 0;
+
+        for_each([&](IndexT r, IndexT c, T&) {
+            if (c <= r) {
+                l_nnz++;
+            }
+        });
+
+
+        return l_nnz;
+    }
+
+    /**
+     * @brief apply a lambda function for each entry in the sparse matrix
+     * @return
+     */
+    template <typename FuncT>
+    __host__ void for_each(FuncT fun)
+    {
+        for (IndexT r = 0; r < rows(); ++r) {
+            IndexT start = m_h_row_ptr[r];
+            IndexT stop  = m_h_row_ptr[r + 1];
+            for (IndexT i = start; i < stop; ++i) {
+                IndexT c = m_h_col_idx[i];
+                fun(r, c, get_val_at(i));
+            }
+        }
+    }
 
     /**
      * @brief access the matrix using VertexHandle
@@ -656,6 +690,32 @@ struct SparseMatrix
     {
         return EigenSparseMatrix(
             rows(), cols(), non_zeros(), m_h_row_ptr, m_h_col_idx, m_h_val);
+    }
+
+    /**
+     * @brief copy the matrix to Eigen SparseMatirx
+     */
+    __host__ Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT> to_eigen_copy()
+    {
+        using TripletT = Eigen::Triplet<T>;
+
+        std::vector<TripletT> triplets;
+        triplets.reserve(non_zeros());
+        for_each([&](int r, int c, T& val) {
+            triplets.push_back({r, c, val});
+        });
+
+        Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT> ret(rows(), cols());
+
+        // std::sort(
+        //     triplets.begin(), triplets.end(), [](TripletT& a, TripletT& b) {
+        //         return (a.row() < b.row()) ||
+        //                (a.row() == b.row() && a.col() < b.col());
+        //     });
+
+        ret.setFromTriplets(triplets.begin(), triplets.end());
+
+        return ret;
     }
 
     /**

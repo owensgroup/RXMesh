@@ -44,7 +44,7 @@ TEST(App, MCF)
     mcf_cg<dataT>(rx);
 
     // RXMesh cusolver Impl
-    mcf_cusolver_chol<dataT>(rx, PermuteMethod::GPUND);
+    mcf_cusolver_chol<dataT>(rx, PermuteMethod::NSTDIS);
 }
 
 int main(int argc, char** argv)

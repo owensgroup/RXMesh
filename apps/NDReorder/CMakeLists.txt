@@ -6,6 +6,7 @@ set(SOURCE_LIST
     nd_partition_manager.cuh
     nd_cross_patch_ordering.cuh	
     check_nnz.h
+	compute_chol_nnz.h
 )
 
 target_sources(NDReorder 

@@ -86,7 +86,8 @@ __global__ static void nd_single_patch_test_v_count(rxmesh::Context context,
     if (idx == 0) {
         for (int i = 0; i < context.m_num_patches[0]; i++) {
             v_count[1] += context.m_patches_info[i].num_vertices[0];
-            v_count[2] += context.m_patches_info[i].get_num_owned<VertexHandle>();
+            v_count[2] +=
+                context.m_patches_info[i].get_num_owned<VertexHandle>();
         }
     }
 }
@@ -132,9 +133,12 @@ void nd_reorder_single_patch(rxmesh::RXMeshDynamic& rx)
 
 
     // Phase: single patch reordering
-    nd_single_patch_main<blockThreads><<<blocks, threads, smem_bytes_dyn>>>(
-        rx.get_context(), *v_ordering, *attr_matched_v, *attr_active_e,
-        req_levels);
+    nd_single_patch_main<blockThreads>
+        <<<blocks, threads, smem_bytes_dyn>>>(rx.get_context(),
+                                              *v_ordering,
+                                              *attr_matched_v,
+                                              *attr_active_e,
+                                              req_levels);
     CUDA_ERROR(cudaDeviceSynchronize());
     RXMESH_TRACE("single patch ordering done");
 
@@ -144,8 +148,8 @@ void nd_reorder_single_patch(rxmesh::RXMeshDynamic& rx)
     CUDA_ERROR(cudaMallocManaged(&v_count, sizeof(uint16_t) * 5));
     cudaMemset(v_count, 0, sizeof(uint16_t) * 5);
     v_count[0] = rx.get_num_vertices();
-    nd_single_patch_test_v_count<blockThreads><<<blocks, threads>>>(
-        rx.get_context(), v_count);
+    nd_single_patch_test_v_count<blockThreads>
+        <<<blocks, threads>>>(rx.get_context(), v_count);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
