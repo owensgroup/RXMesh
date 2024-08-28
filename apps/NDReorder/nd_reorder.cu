@@ -9,8 +9,7 @@
 #include "rxmesh/matrix/permute_util.h"
 #include "rxmesh/matrix/sparse_matrix.cuh"
 
-#include <Eigen/Dense>
-#include <Eigen/Sparse>
+#include "count_nnz_fillin.h"
 
 struct arg
 {
@@ -19,75 +18,6 @@ struct arg
     uint32_t    device_id     = 0;
 } Arg;
 
-/**
- * @brief calculate the number of nnz after Cholesky factorization
- */
-int post_chol_factorization_nnz(rxmesh::RXMeshStatic& rx,
-                                std::vector<int>&     h_reorder_array)
-{
-    using namespace rxmesh;
-
-    assert(h_reorder_array.size() == rx.get_num_vertices());
-
-    // VV matrix
-    rxmesh::SparseMatrix<float> mat(rx);   
-
-    // populate an SPD matrix
-    mat.for_each([](int r, int c, float& val) {
-        if (r == c) {
-            val = 10.0f;
-        } else {
-            val = -1.0f;
-        }
-    });
-
-    // convert matrix to Eigen
-    auto eigen_mat = mat.to_eigen_copy();
-
-    //std::cout << "eigen_mat\n" << eigen_mat << "\n";
-
-    // permutation array in Eigen format
-    Eigen::Map<Eigen::VectorXi> p(h_reorder_array.data(),
-                                  rx.get_num_vertices());
-
-    // permutation matrix
-    Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic> perm(
-        rx.get_num_vertices());
-    for (int i = 0; i < rx.get_num_vertices(); ++i) {
-        perm.indices()[i] = h_reorder_array[i];
-    }
-
-    Eigen::SparseMatrix<float> permuted_mat =
-        perm.transpose() * eigen_mat * perm;
-
-    // compute Cholesky factorization on the permuted matirx
-
-    Eigen::SimplicialLLT<Eigen::SparseMatrix<float>,
-                         Eigen::Lower,
-                         Eigen::NaturalOrdering<int>>
-        solver;
-    solver.compute(permuted_mat);
-
-    if (solver.info() != Eigen::Success) {
-        RXMESH_ERROR(
-            "post_chol_factorization_nnz(): Cholesky decomposition with "
-            "reorder failed with code {}",
-            solver.info());
-        return -1;
-    }
-
-    // extract nnz from lower matrix
-    Eigen::SparseMatrix<float> ff = solver.matrixL();
-
-    //std::cout << "ff\n" << ff << "\n";
-
-    //these are the nnz on (strictly) the lower part 
-    int lower_nnz = ff.nonZeros() - ff.rows();
-
-    //multiply by two to account for lower and upper parts of the matirx
-    //add rows() to account for entries along the diagonal  
-    return 2*lower_nnz + ff.rows();
-}
 
 TEST(Apps, NDReorder)
 {
@@ -111,8 +41,7 @@ TEST(Apps, NDReorder)
 
     EXPECT_TRUE(is_unique_permutation(rx.get_num_vertices(), h_permute.data()));
 
-    RXMESH_INFO(" Post reorder NNZ = {}",
-                post_chol_factorization_nnz(rx, h_permute));
+    RXMESH_INFO(" Post reorder NNZ = {}", count_nnz_fillin(rx, h_permute));
 
     // processmesh_ordering(Arg.obj_file_name, h_permute);
     //  processmesh_metis(Arg.obj_file_name);
