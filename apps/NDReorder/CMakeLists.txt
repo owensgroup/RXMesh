@@ -1,11 +1,10 @@
 add_executable(NDReorder)
 
 set(SOURCE_LIST
-    nd_reorder.cu 
+    test_all_permutations.cu 
     nd_single_patch_ordering.cuh
     nd_partition_manager.cuh
-    nd_cross_patch_ordering.cuh	
-    check_nnz.h
+    nd_cross_patch_ordering.cuh   
 	count_nnz_fillin.h
 )
 
