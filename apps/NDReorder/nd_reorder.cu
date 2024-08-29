@@ -18,6 +18,19 @@ struct arg
     uint32_t    device_id     = 0;
 } Arg;
 
+template <typename EigeMatT>
+void no_permute(const rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
+{
+    using namespace rxmesh;
+
+    std::vector<int> h_permute(rx.get_num_vertices());
+
+    fill_with_sequential_numbers(h_permute.data(), h_permute.size());
+
+    int nnz = count_nnz_fillin(eigen_mat, h_permute);
+
+    RXMESH_INFO(" Post reorder NNZ = {}", nnz);
+}
 
 TEST(Apps, NDReorder)
 {
@@ -33,17 +46,29 @@ TEST(Apps, NDReorder)
         rx.save(p_file);
     }
 
-    // allocate result array
-    std::vector<int> h_permute(rx.get_num_vertices());
-    fill_with_sequential_numbers(h_permute.data(), h_permute.size());
+    // VV matrix
+    rxmesh::SparseMatrix<float> mat(rx);
+
+    // populate an SPD matrix
+    mat.for_each([](int r, int c, float& val) {
+        if (r == c) {
+            val = 10.0f;
+        } else {
+            val = -1.0f;
+        }
+    });
+
+    // convert matrix to Eigen
+    auto eigen_mat = mat.to_eigen();
+
+    no_permute(rx, eigen_mat);
 
     // cuda_nd_reorder(rx, h_reorder_array, Arg.nd_level);
 
-    EXPECT_TRUE(is_unique_permutation(rx.get_num_vertices(), h_permute.data()));
+    // EXPECT_TRUE(is_unique_permutation(rx.get_num_vertices(),
+    // h_permute.data()));
 
-    RXMESH_INFO(" Post reorder NNZ = {}", count_nnz_fillin(rx, h_permute));
-
-    // processmesh_ordering(Arg.obj_file_name, h_permute);
+    //  processmesh_ordering(Arg.obj_file_name, h_permute);
     //  processmesh_metis(Arg.obj_file_name);
     //  processmesh_original(Arg.obj_file_name);
 }

@@ -8,43 +8,44 @@
  * @brief calculate the total number of nnz after Cholesky factorization given a
  * permutation array that will be applied before the factorization
  */
-int count_nnz_fillin(rxmesh::RXMeshStatic& rx, std::vector<int>& h_permute)
+template <typename EigeMatT>
+int count_nnz_fillin(const EigeMatT& eigen_mat, std::vector<int>& h_permute)
 {
     using namespace rxmesh;
 
-    assert(h_permute.size() == rx.get_num_vertices());
+    assert(h_permute.size() == eigen_mat.rows());
 
-    // VV matrix
-    rxmesh::SparseMatrix<float> mat(rx);
-
-    // populate an SPD matrix
-    mat.for_each([](int r, int c, float& val) {
-        if (r == c) {
-            val = 10.0f;
-        } else {
-            val = -1.0f;
-        }
-    });
-
-    // convert matrix to Eigen
-    auto eigen_mat = mat.to_eigen_copy();
+    //// VV matrix
+    // rxmesh::SparseMatrix<float> mat(rx);
+    //
+    //// populate an SPD matrix
+    // mat.for_each([](int r, int c, float& val) {
+    //     if (r == c) {
+    //         val = 10.0f;
+    //     } else {
+    //         val = -1.0f;
+    //     }
+    // });
+    //
+    //// convert matrix to Eigen
+    // auto eigen_mat = mat.to_eigen();
 
     // std::cout << "eigen_mat\n" << eigen_mat << "\n";
 
     // permutation array in Eigen format
-    Eigen::Map<Eigen::VectorXi> p(h_permute.data(), rx.get_num_vertices());
+    Eigen::Map<Eigen::VectorXi> p(h_permute.data(), eigen_mat.rows());
 
     // permutation matrix
     Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic> perm(
-        rx.get_num_vertices());
-    for (int i = 0; i < rx.get_num_vertices(); ++i) {
+        eigen_mat.rows());
+    for (int i = 0; i < eigen_mat.rows(); ++i) {
         perm.indices()[i] = h_permute[i];
     }
 
     Eigen::SparseMatrix<float> permuted_mat =
         perm.transpose() * eigen_mat * perm;
 
-    // compute Cholesky factorization on the permuted matirx
+    // compute Cholesky factorization on the permuted matrix
 
     Eigen::SimplicialLLT<Eigen::SparseMatrix<float>,
                          Eigen::Lower,
