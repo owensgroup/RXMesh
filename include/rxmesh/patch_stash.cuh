@@ -55,20 +55,10 @@ struct PatchStash
                                   INVALID32,
                                   stash_size * sizeof(uint32_t)));
 
-            CUDA_ERROR(
-                cudaMalloc((void**)&m_v_ordering_bound, 2 * sizeof(uint32_t)));
-            CUDA_ERROR(cudaMemset(
-                m_v_ordering_bound, INVALID32, 2 * sizeof(uint32_t)));
-
             m_tmp_ordering_tail = INVALID32;
             m_num_separator_v   = 0;
             m_is_active         = true;
 
-            // for nd_corss_patch
-            m_is_seed     = false;
-            m_is_frontier = false;
-            m_is_boundary = false;
-            m_local_label = INVALID16;
         } else {
             m_stash = (uint32_t*)malloc(stash_size * sizeof(uint32_t));
             for (uint8_t i = 0; i < stash_size; ++i) {
@@ -133,19 +123,6 @@ struct PatchStash
         return m_edge_weight[id];
     }
 
-    __host__ __device__ __inline__ uint32_t get_coarse_level_id(
-        uint16_t level) const
-    {
-        assert(m_coarse_level_id_list[level] != INVALID32);
-        return m_coarse_level_id_list[level];
-    }
-
-    __host__ __device__ __inline__ uint32_t& get_level_patch_id(uint16_t level)
-    {
-        assert(m_coarse_level_id_list[level] != INVALID32);
-        return m_coarse_level_id_list[level];
-    }
-
     __host__ __device__ __inline__ uint32_t get_tmp_level_patch(
         uint8_t id) const
     {
@@ -157,33 +134,7 @@ struct PatchStash
     {
         assert(id >= 0 && id < stash_size);
         return m_tmp_level_stash[id];
-    }
-
-    __host__ __device__ __inline__ uint32_t get_tmp_level_edge_weight(
-        uint8_t id) const
-    {
-        assert(id >= 0 && id < stash_size);
-        assert(m_tmp_level_stash[id] != INVALID32);
-
-        if (m_tmp_level_edge_weight[id] == INVALID32) {
-            m_tmp_level_edge_weight[id] = 0;
-        }
-
-        return m_tmp_level_edge_weight[id];
-    }
-
-    __host__ __device__ __inline__ uint32_t& get_tmp_level_edge_weight(
-        uint8_t id)
-    {
-        assert(id >= 0 && id < stash_size);
-        assert(m_tmp_level_stash[id] != INVALID32);
-
-        if (m_tmp_level_edge_weight[id] == INVALID32) {
-            m_tmp_level_edge_weight[id] = 0;
-        }
-
-        return m_tmp_level_edge_weight[id];
-    }
+    }  
 
     /*__host__ __device__ __inline__ uint8_t insert_patch(uint32_t patch)
     {
@@ -268,24 +219,17 @@ struct PatchStash
         return INVALID8;
     }
 
-    __host__ __device__ __inline__ uint8_t find_tmp_level_patch_index(
-        uint32_t patch) const
-    {
-        assert(patch != INVALID32);
-        for (uint8_t i = 0; i < stash_size; ++i) {
-            if (m_tmp_level_stash[i] == patch) {
-                return i;
-            }
-        }
-        return INVALID8;
-    }
-
-
+   
     __host__ void free()
     {
         if (m_is_on_device) {
             GPU_FREE(m_stash);
             GPU_FREE(m_edge_weight);
+            GPU_FREE(m_coarse_level_id_list);
+            GPU_FREE(m_coarse_level_pair_list);
+            GPU_FREE(m_coarse_level_num_v);
+            GPU_FREE(m_tmp_level_stash);
+            GPU_FREE(m_tmp_level_edge_weight);
         } else {
             ::free(m_stash);
             ::free(m_edge_weight);
@@ -301,7 +245,6 @@ struct PatchStash
     uint32_t* m_coarse_level_id_list;
     uint32_t* m_coarse_level_num_v;
     uint32_t  m_num_separator_v;
-    uint32_t* m_v_ordering_bound;
 
     bool m_is_node;  // determine whether the patch is a node or not(remained or
                      // merged)
@@ -312,13 +255,6 @@ struct PatchStash
     uint32_t  m_tmp_paired_patch;
     uint32_t* m_tmp_level_stash;
     uint32_t* m_tmp_level_edge_weight;
-
-
-    // for nd cross patch implementation
-    bool     m_is_seed;
-    bool     m_is_frontier;
-    bool     m_is_boundary;
-    uint16_t m_local_label;
 
     bool m_is_on_device;
 };
