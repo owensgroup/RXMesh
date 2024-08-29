@@ -704,18 +704,18 @@ __global__ static void bipartition_check_propogation(
 // 1. how good is bi-secting k-means
 // 2. how slow is bi-secting k-means
 template <uint32_t blockThreads>
-void run_partition_lloyd(RXMeshStatic& rx,
-                         uint32_t      nd_level,
-                         uint32_t*     d_patch_partition_label,
-                         uint32_t*     d_patch_seed_label_balanced_count,
-                         uint32_t*     d_patch_seed_hop_dist,
-                         uint32_t*     d_patch_local_seed_label_count,
-                         uint32_t*     d_patch_local_partition_role,
-                         uint32_t*     d_patch_local_partition_label,
-                         uint32_t*     d_tmp_patch_local_partition_label,
-                         uint32_t*     d_patch_local_seeds,
-                         uint32_t*     d_num_seeds,
-                         uint32_t*     d_labeled_patch_size)
+void run_partition_lloyd(const RXMeshStatic& rx,
+                         uint32_t            nd_level,
+                         uint32_t*           d_patch_partition_label,
+                         uint32_t*           d_patch_seed_label_balanced_count,
+                         uint32_t*           d_patch_seed_hop_dist,
+                         uint32_t*           d_patch_local_seed_label_count,
+                         uint32_t*           d_patch_local_partition_role,
+                         uint32_t*           d_patch_local_partition_label,
+                         uint32_t*           d_tmp_patch_local_partition_label,
+                         uint32_t*           d_patch_local_seeds,
+                         uint32_t*           d_num_seeds,
+                         uint32_t*           d_labeled_patch_size)
 {
     // sanity check that the label the num matches
 

@@ -138,6 +138,21 @@ void with_mgnd(const rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
     RXMESH_INFO(" With MGND NNZ = {}", nnz);
 }
 
+template <typename EigeMatT>
+void with_cuda_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
+{
+    std::vector<int> h_permute(eigen_mat.rows());
+
+    rxmesh::cuda_nd_reorder(rx, h_permute, Arg.nd_level);
+
+    EXPECT_TRUE(
+        rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
+
+    int nnz = count_nnz_fillin(eigen_mat, h_permute);
+
+    RXMESH_INFO(" With CUDA ND NNZ = {}", nnz);
+}
+
 TEST(Apps, NDReorder)
 {
     using namespace rxmesh;
@@ -175,7 +190,7 @@ TEST(Apps, NDReorder)
 
     with_mgnd(rx, eigen_mat);
 
-    // cuda_nd_reorder(rx, h_reorder_array, Arg.nd_level);
+    with_cuda_nd(rx, eigen_mat);
 }
 
 int main(int argc, char** argv)
