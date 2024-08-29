@@ -39,10 +39,12 @@ int count_nnz_fillin(const EigeMatT& eigen_mat, std::vector<I>& h_permute)
         perm.indices()[i] = h_permute[i];
     }
 
-    Eigen::SparseMatrix<float> permuted_mat =
-        perm.transpose() * eigen_mat * perm;
+    Eigen::SparseMatrix<float> permuted_mat(eigen_mat.rows(), eigen_mat.rows()); 
 
-    // compute Cholesky factorization on the permuted matrix
+    Eigen::internal::permute_symm_to_fullsymm<Eigen::Lower, false>(
+        eigen_mat, permuted_mat, perm.indices().data());
+
+    // compute Cholesky factorization on the permuted matrix    
 
     Eigen::SimplicialLLT<Eigen::SparseMatrix<float>,
                          Eigen::Lower,

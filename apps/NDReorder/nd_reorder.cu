@@ -80,31 +80,31 @@ void with_metis(const rxmesh::SparseMatrix<T>& rx_mat,
     METIS_SetDefaultOptions(options);
 
 
-    // Specifies the partitioning method
-    options[METIS_OPTION_PTYPE] = METIS_PTYPE_KWAY;
+    /*// Specifies the partitioning method
+    options[METIS_OPTION_PTYPE] = METIS_PTYPE_RB;
 
     // Specifies the type of objective
-    options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
+    options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_NODE;
 
     // Specifies the matching scheme to be used during coarsening
-    options[METIS_OPTION_CTYPE] = METIS_CTYPE_SHEM;
+    options[METIS_OPTION_CTYPE] = METIS_CTYPE_RM;
 
     // Determines the algorithm used during initial partitioning.
-    options[METIS_OPTION_IPTYPE] = METIS_IPTYPE_GROW;
+    options[METIS_OPTION_IPTYPE] = METIS_IPTYPE_EDGE;
 
     // Determines the algorithm used for refinement
-    options[METIS_OPTION_RTYPE] = METIS_RTYPE_FM;
+    options[METIS_OPTION_RTYPE] = METIS_RTYPE_SEP1SIDED;*/
 
     // Used to indicate which numbering scheme is used for the adjacency
     // structure of a graph or the elementnode structure of a mesh.
     options[METIS_OPTION_NUMBERING] = 0;  // 0-based indexing
 
-    // Specifies that the graph should be compressed by combining together
+    /*// Specifies that the graph should be compressed by combining together
     // vertices that have identical adjacency lists.
     options[METIS_OPTION_COMPRESS] = 0;  // Does not try to compress the graph.
 
     // Specifies the amount of progress/debugging information will be printed
-    options[METIS_OPTION_DBGLVL] = 0;
+    options[METIS_OPTION_DBGLVL] = 0;*/
 
 
     METIS_NodeND(&n,
@@ -115,7 +115,9 @@ void with_metis(const rxmesh::SparseMatrix<T>& rx_mat,
                  h_permute.data(),
                  h_iperm.data());
 
-    int nnz = count_nnz_fillin(eigen_mat, h_permute);
+    EXPECT_TRUE(is_unique_permutation(h_permute.size(), h_permute.data()));
+
+    int nnz = count_nnz_fillin(eigen_mat, h_iperm);
 
     RXMESH_INFO(" With METIS Nested Dissection NNZ = {}", nnz);
 }
@@ -157,8 +159,6 @@ TEST(Apps, NDReorder)
 
     // cuda_nd_reorder(rx, h_reorder_array, Arg.nd_level);
 
-    // EXPECT_TRUE(is_unique_permutation(rx.get_num_vertices(),
-    // h_permute.data()));
 
     //  processmesh_ordering(Arg.obj_file_name, h_permute);
     //  processmesh_metis(Arg.obj_file_name);
