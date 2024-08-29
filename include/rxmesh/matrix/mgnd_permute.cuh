@@ -84,7 +84,7 @@ __global__ static void assign_permutation(const Context context,
  * is order last. h_permute should be allocated with size equal to num of
  * vertices of the mesh.
  */
-inline void mgnd_permute(RXMeshStatic& rx, std::vector<int>& h_permute)
+inline void mgnd_permute(const RXMeshStatic& rx, std::vector<int>& h_permute)
 {
     constexpr uint32_t blockThreads = 256;
 

@@ -21,11 +21,11 @@ struct arg
 } Arg;
 
 template <typename EigeMatT>
-void no_permute(const rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
+void no_permute(const EigeMatT& eigen_mat)
 {
     using namespace rxmesh;
 
-    std::vector<int> h_permute(rx.get_num_vertices());
+    std::vector<int> h_permute(eigen_mat.rows());
 
     fill_with_sequential_numbers(h_permute.data(), h_permute.size());
 
@@ -115,11 +115,27 @@ void with_metis(const rxmesh::SparseMatrix<T>& rx_mat,
                  h_permute.data(),
                  h_iperm.data());
 
-    EXPECT_TRUE(is_unique_permutation(h_permute.size(), h_permute.data()));
+    EXPECT_TRUE(
+        rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
     int nnz = count_nnz_fillin(eigen_mat, h_iperm);
 
     RXMESH_INFO(" With METIS Nested Dissection NNZ = {}", nnz);
+}
+
+template <typename EigeMatT>
+void with_mgnd(const rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
+{
+    std::vector<int> h_permute(eigen_mat.rows());
+
+    rxmesh::mgnd_permute(rx, h_permute);
+
+    EXPECT_TRUE(
+        rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
+
+    int nnz = count_nnz_fillin(eigen_mat, h_permute);
+
+    RXMESH_INFO(" With MGND NNZ = {}", nnz);
 }
 
 TEST(Apps, NDReorder)
@@ -153,16 +169,13 @@ TEST(Apps, NDReorder)
     // convert matrix to Eigen
     auto eigen_mat = rx_mat.to_eigen();
 
-    no_permute(rx, eigen_mat);
+    no_permute(eigen_mat);
 
     with_metis(rx_mat, eigen_mat);
 
+    with_mgnd(rx, eigen_mat);
+
     // cuda_nd_reorder(rx, h_reorder_array, Arg.nd_level);
-
-
-    //  processmesh_ordering(Arg.obj_file_name, h_permute);
-    //  processmesh_metis(Arg.obj_file_name);
-    //  processmesh_original(Arg.obj_file_name);
 }
 
 int main(int argc, char** argv)
