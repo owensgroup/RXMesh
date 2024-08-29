@@ -8,8 +8,8 @@
  * @brief calculate the total number of nnz after Cholesky factorization given a
  * permutation array that will be applied before the factorization
  */
-template <typename EigeMatT>
-int count_nnz_fillin(const EigeMatT& eigen_mat, std::vector<int>& h_permute)
+template <typename EigeMatT, typename I>
+int count_nnz_fillin(const EigeMatT& eigen_mat, std::vector<I>& h_permute)
 {
     using namespace rxmesh;
 
@@ -31,9 +31,6 @@ int count_nnz_fillin(const EigeMatT& eigen_mat, std::vector<int>& h_permute)
     // auto eigen_mat = mat.to_eigen();
 
     // std::cout << "eigen_mat\n" << eigen_mat << "\n";
-
-    // permutation array in Eigen format
-    Eigen::Map<Eigen::VectorXi> p(h_permute.data(), eigen_mat.rows());
 
     // permutation matrix
     Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic> perm(

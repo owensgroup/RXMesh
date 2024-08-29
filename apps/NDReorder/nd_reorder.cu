@@ -11,9 +11,11 @@
 
 #include "count_nnz_fillin.h"
 
+#include "metis.h"
+
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere1.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "cube.obj";
     uint16_t    nd_level      = 4;
     uint32_t    device_id     = 0;
 } Arg;
@@ -29,7 +31,93 @@ void no_permute(const rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute);
 
-    RXMESH_INFO(" Post reorder NNZ = {}", nnz);
+    RXMESH_INFO(" No-permutation NNZ = {}", nnz);
+}
+
+template <typename T, typename EigeMatT>
+void with_metis(const rxmesh::SparseMatrix<T>& rx_mat,
+                const EigeMatT&                eigen_mat)
+{
+    EXPECT_TRUE(rx_mat.rows() == eigen_mat.rows());
+    EXPECT_TRUE(rx_mat.cols() == eigen_mat.cols());
+    EXPECT_TRUE(rx_mat.non_zeros() == eigen_mat.nonZeros());
+
+    idx_t n = eigen_mat.rows();
+
+    // xadj is of length n+1 marking the start of the adjancy list of each
+    // vertex in adjncy.
+    std::vector<idx_t> xadj(n + 1);
+
+    // adjncy stores the adjacency lists of the vertices. The adjnacy list of a
+    // vertex should not contain the vertex itself.
+    std::vector<idx_t> adjncy;
+    adjncy.reserve(eigen_mat.nonZeros());
+
+    // populate xadj and adjncy
+    xadj[0] = 0;
+    for (int r = 0; r < rx_mat.rows(); ++r) {
+        int start = rx_mat.row_ptr()[r];
+        int stop  = rx_mat.row_ptr()[r + 1];
+        for (int i = start; i < stop; ++i) {
+            int c = rx_mat.col_idx()[i];
+            if (r != c) {
+                adjncy.push_back(c);
+            }
+        }
+        xadj[r + 1] = adjncy.size();
+    }
+
+    // is an array of size n such that if A and A' are the original and
+    // permuted matrices, then A'[i] = A[perm[i]].
+    std::vector<idx_t> h_permute(n);
+
+    // iperm is an array of size n such that if A and A' are the original
+    // and permuted matrices, then A[i] = A'[iperm[i]].
+    std::vector<idx_t> h_iperm(n);
+
+    // Metis options
+    idx_t options[METIS_NOPTIONS];
+    METIS_SetDefaultOptions(options);
+
+
+    // Specifies the partitioning method
+    options[METIS_OPTION_PTYPE] = METIS_PTYPE_KWAY;
+
+    // Specifies the type of objective
+    options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_CUT;
+
+    // Specifies the matching scheme to be used during coarsening
+    options[METIS_OPTION_CTYPE] = METIS_CTYPE_SHEM;
+
+    // Determines the algorithm used during initial partitioning.
+    options[METIS_OPTION_IPTYPE] = METIS_IPTYPE_GROW;
+
+    // Determines the algorithm used for refinement
+    options[METIS_OPTION_RTYPE] = METIS_RTYPE_FM;
+
+    // Used to indicate which numbering scheme is used for the adjacency
+    // structure of a graph or the elementnode structure of a mesh.
+    options[METIS_OPTION_NUMBERING] = 0;  // 0-based indexing
+
+    // Specifies that the graph should be compressed by combining together
+    // vertices that have identical adjacency lists.
+    options[METIS_OPTION_COMPRESS] = 0;  // Does not try to compress the graph.
+
+    // Specifies the amount of progress/debugging information will be printed
+    options[METIS_OPTION_DBGLVL] = 0;
+
+
+    METIS_NodeND(&n,
+                 xadj.data(),
+                 adjncy.data(),
+                 NULL,
+                 options,
+                 h_permute.data(),
+                 h_iperm.data());
+
+    int nnz = count_nnz_fillin(eigen_mat, h_permute);
+
+    RXMESH_INFO(" With METIS Nested Dissection NNZ = {}", nnz);
 }
 
 TEST(Apps, NDReorder)
@@ -47,10 +135,10 @@ TEST(Apps, NDReorder)
     }
 
     // VV matrix
-    rxmesh::SparseMatrix<float> mat(rx);
+    rxmesh::SparseMatrix<float> rx_mat(rx);
 
     // populate an SPD matrix
-    mat.for_each([](int r, int c, float& val) {
+    rx_mat.for_each([](int r, int c, float& val) {
         if (r == c) {
             val = 10.0f;
         } else {
@@ -58,10 +146,14 @@ TEST(Apps, NDReorder)
         }
     });
 
+    RXMESH_INFO(" Input Matrix NNZ = {}", rx_mat.non_zeros());
+
     // convert matrix to Eigen
-    auto eigen_mat = mat.to_eigen();
+    auto eigen_mat = rx_mat.to_eigen();
 
     no_permute(rx, eigen_mat);
+
+    with_metis(rx_mat, eigen_mat);
 
     // cuda_nd_reorder(rx, h_reorder_array, Arg.nd_level);
 

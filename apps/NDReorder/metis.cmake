@@ -16,8 +16,8 @@ if(NOT metis_POPULATED)
 endif()
 
 # Optionally set IDXTYPEWIDTH and REALTYPEWIDTH
-set(IDXTYPEWIDTH 64 CACHE STRING "Width of integer type for METIS")
-set(REALTYPEWIDTH 64 CACHE STRING "Width of real type for METIS")
+set(IDXTYPEWIDTH 32 CACHE STRING "Width of integer type for METIS")
+set(REALTYPEWIDTH 32 CACHE STRING "Width of real type for METIS")
 
 # Add the METIS library
 add_subdirectory(${metis_SOURCE_DIR} ${metis_BINARY_DIR})
