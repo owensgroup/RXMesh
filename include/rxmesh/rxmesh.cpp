@@ -830,7 +830,7 @@ void RXMesh::build_device()
 
     // make sure that if a patch stash of patch p has patch q, then q's patch
     // stash should have p in it
-    /* for (uint32_t p = 0; p < get_num_patches(); ++p) {
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
         for (uint8_t p_sh = 0; p_sh < PatchStash::stash_size; ++p_sh) {
             uint32_t q = m_h_patches_info[p].patch_stash.get_patch(p_sh);
             if (q != INVALID32) {
@@ -846,7 +846,7 @@ void RXMesh::build_device()
                 }
             }
         }
-    }*/
+    }
 }
 
 void RXMesh::build_device_single_patch(const uint32_t patch_id,

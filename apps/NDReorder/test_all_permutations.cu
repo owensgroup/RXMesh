@@ -5,6 +5,7 @@
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/matrix/mgnd_permute.cuh"
+#include "rxmesh/matrix/nd_permute.cuh"
 #include "rxmesh/matrix/nd_reorder.cuh"
 #include "rxmesh/matrix/permute_util.h"
 #include "rxmesh/matrix/sparse_matrix.cuh"
@@ -15,7 +16,7 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "cube.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
     uint16_t    nd_level      = 4;
     uint32_t    device_id     = 0;
 } Arg;
@@ -107,13 +108,14 @@ void with_metis(const rxmesh::SparseMatrix<T>& rx_mat,
     options[METIS_OPTION_DBGLVL] = 0;*/
 
 
-    METIS_NodeND(&n,
-                 xadj.data(),
-                 adjncy.data(),
-                 NULL,
-                 options,
-                 h_permute.data(),
-                 h_iperm.data());
+    int metis_ret = METIS_NodeND(&n,
+                                 xadj.data(),
+                                 adjncy.data(),
+                                 NULL,
+                                 options,
+                                 h_permute.data(),
+                                 h_iperm.data());
+    EXPECT_TRUE(metis_ret == 1);
 
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
@@ -143,7 +145,9 @@ void with_cuda_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
-    rxmesh::cuda_nd_reorder(rx, h_permute, Arg.nd_level);
+    // rxmesh::cuda_nd_reorder(rx, h_permute, Arg.nd_level);
+
+    rxmesh::nd_permute(rx, h_permute);
 
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
@@ -184,13 +188,13 @@ TEST(Apps, NDReorder)
     // convert matrix to Eigen
     auto eigen_mat = rx_mat.to_eigen();
 
+    with_cuda_nd(rx, eigen_mat);
+
     no_permute(eigen_mat);
 
     with_metis(rx_mat, eigen_mat);
 
     with_mgnd(rx, eigen_mat);
-
-    with_cuda_nd(rx, eigen_mat);
 }
 
 int main(int argc, char** argv)
