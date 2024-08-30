@@ -283,7 +283,7 @@ void random_max_matching(const Graph<integer_t>&  graph,
     }
     std::vector<bool> matched(graph.n, false);
 
-    Level l;
+    Level<integer_t> l;
     l.nodes.reserve(DIVIDE_UP(graph.n, 2));
 
     // we store the parent of each node which we use to create the coarse graph
