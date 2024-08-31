@@ -26,7 +26,7 @@ struct Graph
     // vertex should not contain the vertex itself.
     std::vector<T> adjncy;
 
-    void print()
+    void print() const
     {
         std::cout << "\n*** graph ***\n";
         for (int i = 0; i < n; ++i) {
@@ -117,8 +117,8 @@ void construct_a_simple_chordal_graph(Graph<T>& graph)
  * @brief construct patch neighbor graph which is the same as what we store in
  * PatchStash but in format acceptable by metis
  */
-void construct_patches_neighbor_graph(RXMeshStatic& rx,
-                                      Graph<idx_t>& patches_graph)
+template <typename T>
+void construct_patches_neighbor_graph(RXMeshStatic& rx, Graph<T>& patches_graph)
 {
     uint32_t num_patches = rx.get_num_patches();
 
@@ -281,6 +281,9 @@ void random_max_matching(const Graph<integer_t>&  graph,
     if (graph.n <= 1) {
         return;
     }
+
+    // graph.print();
+
     std::vector<bool> matched(graph.n, false);
 
     Level<integer_t> l;
@@ -293,24 +296,27 @@ void random_max_matching(const Graph<integer_t>&  graph,
 
     // TODO traverse the graph in a random order
     for (int v = 0; v < graph.n; ++v) {
-        // the neighbor with which we will match v
-        integer_t matched_neighbour = integer_t(-1);
+        if (!matched[v]) {
 
-        for (int i = graph.xadj[v]; i < graph.xadj[v + 1]; ++i) {
-            integer_t n = graph.adjncy[i];
-            if (!matched[n]) {
-                matched_neighbour = n;
-                break;
+            // the neighbor with which we will match v
+            integer_t matched_neighbour = integer_t(-1);
+
+            for (int i = graph.xadj[v]; i < graph.xadj[v + 1]; ++i) {
+                integer_t n = graph.adjncy[i];
+                if (!matched[n]) {
+                    matched_neighbour = n;
+                    break;
+                }
             }
-        }
-        if (matched_neighbour != integer_t(-1)) {
-            int pa = l.nodes.size();
+            if (matched_neighbour != integer_t(-1)) {
+                int pa = l.nodes.size();
 
-            l.nodes.push_back(Node(pa, v, matched_neighbour));
-            matched[v]                 = true;
-            matched[matched_neighbour] = true;
-            parents[v]                 = pa;
-            parents[matched_neighbour] = pa;
+                l.nodes.push_back(Node(pa, v, matched_neighbour));
+                matched[v]                 = true;
+                matched[matched_neighbour] = true;
+                parents[v]                 = pa;
+                parents[matched_neighbour] = pa;
+            }
         }
     }
 
@@ -337,13 +343,15 @@ void random_max_matching(const Graph<integer_t>&  graph,
     for (int i = 0; i < l.nodes.size(); ++i) {
         const auto& node = l.nodes[i];
         // the neighbors to this node is the union of neighbors of node.lch and
-        // node.rch
+        // node.rch. We don't store node.lcu/node.rch, but instead we store
+        // their parent (because this is the coarse graph)
         std::unordered_set<integer_t> u_neighbour;
 
         auto get_neighbour = [&](integer_t x, integer_t y) {
             for (integer_t n = graph.xadj[x]; n < graph.xadj[x + 1]; ++n) {
                 if (graph.adjncy[n] != y) {
-                    u_neighbour.insert(graph.adjncy[n]);
+                    assert(parents[graph.adjncy[n]] != integer_t(-1));
+                    u_neighbour.insert(parents[graph.adjncy[n]]);
                 }
             }
         };
@@ -351,10 +359,11 @@ void random_max_matching(const Graph<integer_t>&  graph,
         get_neighbour(node.lch, node.rch);
         get_neighbour(node.rch, node.lch);
 
+        c_graph.xadj[i + 1] = c_graph.xadj[i];
         for (const auto& u : u_neighbour) {
             // actually what we insert in the coarse graph is the parents
-            c_graph.adjncy.push_back(parents[u]);
-            c_graph.xadj[i + 1] = c_graph.xadj[i] + 1;
+            c_graph.adjncy.push_back(u);
+            c_graph.xadj[i + 1]++;
         }
     }
 
@@ -372,8 +381,14 @@ void nd_permute(RXMeshStatic& rx, std::vector<int>& h_permute)
     // a graph representing the patch connectivity
     Graph<int> p_graph;
 
-    // construct_patches_neighbor_graph(rx, p_graph);
-    construct_a_simple_chordal_graph(p_graph);
+    construct_patches_neighbor_graph(rx, p_graph);
+    // construct_a_simple_chordal_graph(p_graph);
+
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();
+
+    polyscope::show();
 
     // create max match tree
     random_max_matching(p_graph, max_match_tree);
