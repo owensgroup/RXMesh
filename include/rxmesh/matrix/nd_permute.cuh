@@ -10,6 +10,8 @@
 
 #include "metis.h"
 
+#include "rxmesh/matrix/mgnd_permute.cuh"
+
 namespace rxmesh {
 
 template <typename T>
@@ -251,6 +253,10 @@ template <typename integer_t>
 class Node
 {
    public:
+    Node(integer_t left_child, integer_t right_child)
+        : lch(left_child), rch(right_child), pa(integer_t(-1))
+    {
+    }
     Node(integer_t parent, integer_t left_child, integer_t right_child)
         : pa(parent), lch(left_child), rch(right_child)
     {
@@ -272,12 +278,38 @@ struct MaxMatchTree
     // this level have children corresponds to the vertices in the graph.
     // The root of this tree is the last level at levels.size() -1
     std::vector<Level<integer_t>> levels;
+
+    void print() const
+    {
+        for (int l = levels.size() - 1; l >= 0; --l) {
+            const auto& level = levels[l];
+            for (int n = 0; n < level.nodes.size(); ++n) {
+                const auto& node = level.nodes[n];
+                if (l == 0) {
+                    std::cout << "L" << l << "_" << n << " -> " << node.lch
+                              << ";\n";
+
+                    std::cout << "L" << l << "_" << n << " -> " << node.rch
+                              << ";\n";
+                } else {
+                    std::cout << "L" << l << "_" << n << " -> "
+                              << "L" << l - 1 << "_" << node.lch << ";\n";
+
+                    std::cout << "L" << l << "_" << n << " -> "
+                              << "L" << l - 1 << "_" << node.rch << ";\n";
+                }
+            }
+        }
+    }
 };
 
 template <typename integer_t>
 void random_max_matching(const Graph<integer_t>&  graph,
-                         MaxMatchTree<integer_t>& max_match_tree)
+                         MaxMatchTree<integer_t>& max_match_tree,
+                         std::vector<int>&        h_grand_parent)
 {
+    // TODO add edge weight and pick the edge with highest weight during
+    // matching
     if (graph.n <= 1) {
         return;
     }
@@ -309,13 +341,27 @@ void random_max_matching(const Graph<integer_t>&  graph,
                 }
             }
             if (matched_neighbour != integer_t(-1)) {
-                int pa = l.nodes.size();
+                int node_id = l.nodes.size();
 
-                l.nodes.push_back(Node(pa, v, matched_neighbour));
+                l.nodes.push_back(Node(v, matched_neighbour));
                 matched[v]                 = true;
                 matched[matched_neighbour] = true;
-                parents[v]                 = pa;
-                parents[matched_neighbour] = pa;
+
+                parents[v]                 = node_id;
+                parents[matched_neighbour] = node_id;
+
+                // update the parent of the previous level
+                if (!max_match_tree.levels.empty()) {
+                    max_match_tree.levels.back().nodes[v].pa = node_id;
+                    max_match_tree.levels.back().nodes[matched_neighbour].pa =
+                        node_id;
+                }
+
+                // store the parent of level -1
+                if (max_match_tree.levels.empty()) {
+                    h_grand_parent[v]                 = node_id;
+                    h_grand_parent[matched_neighbour] = node_id;
+                }
             }
         }
     }
@@ -323,11 +369,30 @@ void random_max_matching(const Graph<integer_t>&  graph,
     // create a node for unmatched vertices
     for (int v = 0; v < graph.n; ++v) {
         if (!matched[v]) {
-            int pa = l.nodes.size();
-            l.nodes.push_back(Node(pa, v, v));
-            parents[v] = pa;
+            int node_id = l.nodes.size();
+            l.nodes.push_back(Node(v, v));
+            parents[v] = node_id;
+
+            // update the parent of the previous level
+            if (!max_match_tree.levels.empty()) {
+                max_match_tree.levels.back().nodes[v].pa = node_id;
+            }
+
+            // store the parent of level -1
+            if (max_match_tree.levels.empty()) {
+                h_grand_parent[v] = node_id;
+            }
         }
     }
+
+    // update the grand parents if we are not on level 0
+    // if (!max_match_tree.levels.empty() && l.nodes.size() > 1) {
+    //    for (uint32_t p = 0; p < h_grand_parent.size(); ++p) {
+    //        // int parent        = h_grand_parent[p];
+    //        // int grand         = max_match_tree.levels.back().nodes[parent];
+    //        h_grand_parent[p] = parents[h_grand_parent[p]];
+    //    }
+    //}
 
 
     // create a coarse graph and update the nodes parent
@@ -371,26 +436,220 @@ void random_max_matching(const Graph<integer_t>&  graph,
     max_match_tree.levels.push_back(l);
 
     // recurse to the next level
-    random_max_matching(c_graph, max_match_tree);
+    random_max_matching(c_graph, max_match_tree, h_grand_parent);
+}
+
+namespace detail {
+
+__inline__ __device__ bool is_v_on_grand_separator(const VertexHandle v_id,
+                                                   uint32_t           v_gp,
+                                                   int* d_grand_parent,
+                                                   const VertexIterator& iter)
+{
+    for (uint16_t i = 0; i < iter.size(); ++i) {
+        uint32_t n_pid = iter[i].patch_id();
+
+        int n_gp = d_grand_parent[n_pid];
+
+        if (v_gp != n_gp) {
+            return true;
+        }
+    }
+    return false;
+}
+template <uint32_t blockThreads>
+__global__ static void extract_separators(const Context        context,
+                                          int*                 d_grand_parent,
+                                          int*                 d_permute,
+                                          int*                 d_accumulate,
+                                          VertexAttribute<int> assigned)
+{
+
+    auto extract = [&](VertexHandle v_id, VertexIterator& iter) {
+        // this is important to check if v is on the separator before going in
+        // and check if it is on the current/grant separator because we have
+        // consistent criterion for if a vertex is on a separator (using less
+        // than for the vertex patch id)
+
+        if (is_v_on_separator(v_id, iter)) {
+            uint32_t v_gp = d_grand_parent[v_id.patch_id()];
+
+            if (is_v_on_grand_separator(v_id, v_gp, d_grand_parent, iter)) {
+                assigned(v_id) = 1;
+
+                int v_new_local = ::atomicAdd(&d_accumulate[v_gp], int(1));
+                d_permute[context.linear_id(v_id)] = v_new_local;
+            }
+        }
+    };
+
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, extract);
+}
+
+template <uint32_t blockThreads>
+__global__ static void separators_permutation(const Context context,
+                                              int*          d_grand_parent,
+                                              int*          d_permute,
+                                              int*          d_accumulate,
+                                              int           num_vertices,
+                                              VertexAttribute<int> assigned)
+{
+    auto extract = [&](VertexHandle v_id, VertexIterator& iter) {
+        if (is_v_on_separator(v_id, iter)) {
+            uint32_t v_gp = d_grand_parent[v_id.patch_id()];
+
+            if (is_v_on_grand_separator(v_id, v_gp, d_grand_parent, iter)) {
+
+                int v_new_local = d_permute[context.linear_id(v_id)];
+
+                int v_new_id = v_new_local + d_accumulate[v_gp];
+
+                v_new_id = num_vertices - v_new_id;
+
+                d_permute[context.linear_id(v_id)] = v_new_id;
+            }
+        }
+    };
+
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, extract);
+}
+}  // namespace detail
+
+void permute_separators(RXMeshStatic&      rx,
+                        MaxMatchTree<int>& max_match_tree,
+                        std::vector<int>   h_grand_parent,
+                        int*               d_permute,
+                        int*               d_grand_parent,
+                        int*               d_accumulate)
+{
+
+
+    auto assigned = *rx.add_vertex_attribute<int>("sep", 1);
+
+    constexpr uint32_t blockThreads = 256;
+
+    LaunchBox<blockThreads> lbe;
+    rx.prepare_launch_box(
+        {Op::VV}, lbe, (void*)detail::extract_separators<blockThreads>);
+
+    LaunchBox<blockThreads> lba;
+    rx.prepare_launch_box(
+        {Op::VV}, lba, (void*)detail::separators_permutation<blockThreads>);
+
+    rx.render_face_patch();
+    rx.render_vertex_patch();
+
+    for (int l = 0; l < max_match_tree.levels.size() - 1; ++l) {
+        assigned.reset(0, DEVICE);
+
+        CUDA_ERROR(cudaMemset(
+            d_accumulate, 0, sizeof(int) * (rx.get_num_patches() + 1)));
+
+        // move grand parents to the device
+        CUDA_ERROR(cudaMemcpy(d_grand_parent,
+                              h_grand_parent.data(),
+                              sizeof(int) * h_grand_parent.size(),
+                              cudaMemcpyHostToDevice));
+
+        detail::extract_separators<blockThreads>
+            <<<lbe.blocks, lbe.num_threads, lbe.smem_bytes_dyn>>>(
+                rx.get_context(),
+                d_grand_parent,
+                d_permute,
+                d_accumulate,
+                assigned);
+
+
+        assigned.move(DEVICE, HOST);
+        rx.get_polyscope_mesh()->addVertexScalarQuantity(
+            "Sep_" + std::to_string(l), assigned);
+        assigned.reset(0, DEVICE);
+
+        thrust::exclusive_scan(thrust::device,
+                               d_accumulate,
+                               d_accumulate + rx.get_num_patches(),
+                               d_accumulate);
+
+        detail::separators_permutation<blockThreads>
+            <<<lba.blocks, lba.num_threads, lba.smem_bytes_dyn>>>(
+                rx.get_context(),
+                d_grand_parent,
+                d_permute,
+                d_accumulate,
+                rx.get_num_vertices(),
+                assigned);
+
+
+        for (uint32_t p = 0; p < h_grand_parent.size(); ++p) {
+            h_grand_parent[p] =
+                max_match_tree.levels[l].nodes[h_grand_parent[p]].pa;
+        }
+
+        assigned.move(DEVICE, HOST);
+        rx.get_polyscope_mesh()->addVertexScalarQuantity(
+            "ID_" + std::to_string(l), assigned);
+
+        polyscope::show();
+    }
 }
 
 void nd_permute(RXMeshStatic& rx, std::vector<int>& h_permute)
 {
+    h_permute.resize(rx.get_num_vertices());
+
+    // for a level L in the max_match_tree, d_grand_parent stores the node at
+    // level L that branch off to a given patch
+    int* d_grand_parent = nullptr;
+    CUDA_ERROR(cudaMalloc((void**)&d_grand_parent,
+                          sizeof(int) * rx.get_num_patches()));
+
+    // the new index
+    int* d_permute = nullptr;
+    CUDA_ERROR(
+        cudaMalloc((void**)&d_permute, rx.get_num_vertices() * sizeof(int)));
+
+    int* d_accumulate = nullptr;
+    CUDA_ERROR(cudaMalloc((void**)&d_accumulate,
+                          sizeof(int) * (rx.get_num_patches() + 1)));
+
+    // the grand parent on the host used during identifying separators
+    // initialize during the max_matching with node in the tree after the root
+    // the branches off to a given patch
+    std::vector<int> h_grand_parent(rx.get_num_patches());
+    fill_with_sequential_numbers(h_grand_parent.data(), h_grand_parent.size());
+
     MaxMatchTree<int> max_match_tree;
 
     // a graph representing the patch connectivity
     Graph<int> p_graph;
+    p_graph.print();
 
     construct_patches_neighbor_graph(rx, p_graph);
     // construct_a_simple_chordal_graph(p_graph);
 
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
-
-    polyscope::show();
 
     // create max match tree
-    random_max_matching(p_graph, max_match_tree);
+    random_max_matching(p_graph, max_match_tree, h_grand_parent);
+    max_match_tree.print();
+
+
+    permute_separators(rx,
+                       max_match_tree,
+                       h_grand_parent,
+                       d_permute,
+                       d_grand_parent,
+                       d_accumulate);
+
+    GPU_FREE(d_permute);
+    GPU_FREE(d_grand_parent);
+    GPU_FREE(d_accumulate);
 }
 }  // namespace rxmesh
