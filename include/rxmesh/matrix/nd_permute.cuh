@@ -37,14 +37,14 @@ struct Graph
      * @brief return the weight between x and y. If there is no edge between
      * them return the default weight
      */
-    T get_weight(T x, T y, T default = -1) const
+    T get_weight(T x, T y, T default_val = -1) const
     {
         for (T i = xadj[x]; i < xadj[x + 1]; ++i) {
             if (adjncy[i] == y) {
                 return weights[i];
             }
         }
-        return default;
+        return default_val;
     }
 
     void print() const
@@ -960,7 +960,7 @@ void permute_separators(RXMeshStatic&      rx,
 
     auto context = rx.get_context();
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
-        d_permute[context.linear_id(vh)] += d_count[v_index(vh)];       
+        d_permute[context.linear_id(vh)] += d_count[v_index(vh)];
     });
 
 
