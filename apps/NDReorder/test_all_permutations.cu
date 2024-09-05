@@ -12,6 +12,8 @@
 
 #include "count_nnz_fillin.h"
 
+#include "render_permutation.h"
+
 #include "metis.h"
 
 struct arg
@@ -22,7 +24,7 @@ struct arg
 } Arg;
 
 template <typename EigeMatT>
-void no_permute(const EigeMatT& eigen_mat)
+void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 {
     using namespace rxmesh;
 
@@ -30,13 +32,16 @@ void no_permute(const EigeMatT& eigen_mat)
 
     fill_with_sequential_numbers(h_permute.data(), h_permute.size());
 
+    render_permutation(rx, h_permute, "No_PERM");
+
     int nnz = count_nnz_fillin(eigen_mat, h_permute);
 
     RXMESH_INFO(" No-permutation NNZ = {}", nnz);
 }
 
 template <typename T, typename EigeMatT>
-void with_metis(const rxmesh::SparseMatrix<T>& rx_mat,
+void with_metis(rxmesh::RXMeshStatic&          rx,
+                const rxmesh::SparseMatrix<T>& rx_mat,
                 const EigeMatT&                eigen_mat)
 {
     EXPECT_TRUE(rx_mat.rows() == eigen_mat.rows());
@@ -120,13 +125,15 @@ void with_metis(const rxmesh::SparseMatrix<T>& rx_mat,
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
+    render_permutation(rx, h_permute, "METIS");
+
     int nnz = count_nnz_fillin(eigen_mat, h_iperm);
 
     RXMESH_INFO(" With METIS Nested Dissection NNZ = {}", nnz);
 }
 
 template <typename EigeMatT>
-void with_mgnd(const rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
+void with_mgnd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
@@ -134,6 +141,8 @@ void with_mgnd(const rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
+
+    render_permutation(rx, h_permute, "MGND");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute);
 
@@ -151,6 +160,8 @@ void with_cuda_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
+
+    render_permutation(rx, h_permute, "CUDA_ND");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute);
 
@@ -185,16 +196,19 @@ TEST(Apps, NDReorder)
 
     RXMESH_INFO(" Input Matrix NNZ = {}", rx_mat.non_zeros());
 
+    rx.render_face_patch();
+    rx.render_vertex_patch();
+
     // convert matrix to Eigen
     auto eigen_mat = rx_mat.to_eigen();
 
-    with_cuda_nd(rx, eigen_mat);
+    no_permute(rx, eigen_mat);
 
-    no_permute(eigen_mat);
-
-    with_metis(rx_mat, eigen_mat);
+    with_metis(rx, rx_mat, eigen_mat);
 
     with_mgnd(rx, eigen_mat);
+
+    with_cuda_nd(rx, eigen_mat);
 }
 
 int main(int argc, char** argv)

@@ -5,12 +5,8 @@
 
 #include "rxmesh/rxmesh_static.h"
 
-#include "rxmesh/matrix/permute_util.h"
-#include "rxmesh/matrix/separator_tree.h"
-
-#include "metis.h"
-
 #include "rxmesh/matrix/mgnd_permute.cuh"
+#include "rxmesh/matrix/permute_util.h"
 
 namespace rxmesh {
 
@@ -164,112 +160,6 @@ void construct_patches_neighbor_graph(
         }
         patches_graph.xadj[p + 1] = patches_graph.adjncy.size();
     }
-}
-
-/**
- * @brief run metis on the patch neighbor graph
- */
-void run_metis(Graph<idx_t>&       patches_graph,
-               std::vector<idx_t>& h_permute,
-               std::vector<idx_t>& h_iperm)
-{
-    // Metis options
-    idx_t options[METIS_NOPTIONS];
-    METIS_SetDefaultOptions(options);
-    options[METIS_OPTION_NUMBERING] = 0;
-    // options[METIS_OPTION_DBGLVL]    = 1;
-
-    int ret = METIS_NodeND(&patches_graph.n,
-                           patches_graph.xadj.data(),
-                           patches_graph.adjncy.data(),
-                           NULL,
-                           options,
-                           h_permute.data(),
-                           h_iperm.data());
-    if (ret != 1) {
-        RXMESH_ERROR("run_metis() METIS failed.");
-    }
-}
-
-template <typename integer_t>
-void print_graph_vertices_at_each_level(
-    const SeparatorTree<integer_t>& tree,
-    const std::vector<integer_t>&   inv_permute,
-    integer_t                       node,
-    integer_t                       level)
-{
-    if (node == -1)
-        return;
-
-    // Extract the range of vertices in the permuted graph
-    integer_t start = tree.sizes[node];
-    integer_t end   = tree.sizes[node + 1];
-
-    std::cout << "Level " << level << ": Separator node " << node
-              << " separates original vertices: ";
-
-    // Map the permuted indices back to the original graph vertices
-    for (integer_t i = start; i < end; i++) {
-        std::cout << inv_permute[i] << " ";
-    }
-    std::cout << std::endl;
-
-    // Recursively traverse the left and right children
-    if (tree.lch[node] != -1) {
-        print_graph_vertices_at_each_level(
-            tree, inv_permute, tree.lch[node], level + 1);
-    }
-    if (tree.rch[node] != -1) {
-        print_graph_vertices_at_each_level(
-            tree, inv_permute, tree.rch[node], level + 1);
-    }
-}
-
-void nd_permute_metis_sep_tree(RXMeshStatic& rx, std::vector<int>& h_permute)
-{
-    // a graph representing the patch connectivity
-    Graph<idx_t> p_graph;
-
-    // construct_patches_neighbor_graph(rx, p_graph);
-    construct_a_simple_chordal_graph(p_graph);
-
-
-    p_graph.print();
-
-    std::vector<idx_t> p_graph_permute(p_graph.n);
-    std::vector<idx_t> p_graph_inv_permute(p_graph.n);
-
-    // fill_with_sequential_numbers(p_graph_permute.data(),
-    //                              p_graph_permute.size());
-    //
-    // fill_with_sequential_numbers(p_graph_inv_permute.data(),
-    //                              p_graph_inv_permute.size());
-    run_metis(p_graph, p_graph_permute, p_graph_inv_permute);
-
-    if (!is_unique_permutation(p_graph_permute.size(),
-                               p_graph_permute.data())) {
-        RXMESH_ERROR("nd_permute() METIS failed to give unique permutation");
-    }
-
-    SeparatorTree<idx_t> sep_tree =
-        build_sep_tree_from_perm(p_graph.xadj.data(),
-                                 p_graph.adjncy.data(),
-                                 p_graph_permute,
-                                 p_graph_inv_permute);
-
-    sep_tree.print();
-    sep_tree.printm("sep_tree");
-    sep_tree.check();
-
-    print_graph_vertices_at_each_level(
-        sep_tree, p_graph_inv_permute, sep_tree.root(), idx_t(0));
-
-
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
-
-    polyscope::show();
 }
 
 
@@ -672,7 +562,6 @@ template <uint32_t blockThreads>
 __global__ static void extract_separators(const Context        context,
                                           const int*           d_patch_proj_l,
                                           const int*           d_patch_proj_l1,
-                                          VertexAttribute<int> v_sep,
                                           VertexAttribute<int> v_index,
                                           int*                 d_permute,
                                           int                  current_level,
@@ -705,14 +594,12 @@ __global__ static void extract_separators(const Context        context,
 
         // make sure that the vertex is not counted towards a separator from
         //  previous levels in the tree
-        if (v_sep(v_id) < 0) {
+        if (v_index(v_id) < 0) {
 
             // if the vertex is on the separator of the current level
             if (is_v_on_separator(v_id, iter) &&
                 is_v_on_grand_separator(
                     v_id, v_proj_1, d_patch_proj_l1, iter)) {
-
-                v_sep(v_id) = current_level;
 
                 d_permute[context.linear_id(v_id)] =
                     ::atomicAdd(&d_count[d_dfs_index[index]], int(1));
@@ -795,19 +682,13 @@ void create_dfs_indexing(const int                level,
     }
 }
 
-void permute_separators(RXMeshStatic&      rx,
-                        MaxMatchTree<int>& max_match_tree,
-                        int*               d_permute,
-                        int*               d_patch_proj_l,
-                        int*               d_patch_proj_l1,
-                        int*               d_mmt_sibling)
+void permute_separators(RXMeshStatic&         rx,
+                        VertexAttribute<int>& v_index,
+                        MaxMatchTree<int>&    max_match_tree,
+                        int*                  d_permute,
+                        int*                  d_patch_proj_l,
+                        int*                  d_patch_proj_l1)
 {
-
-    // store wither the vertex is on a separator
-    auto v_sep = *rx.add_vertex_attribute<int>("sep", 1);
-    v_sep.reset(-1, DEVICE);
-
-    auto v_index = *rx.add_vertex_attribute<int>("level", 1);
     v_index.reset(-1, DEVICE);
 
     constexpr uint32_t blockThreads = 256;
@@ -816,8 +697,6 @@ void permute_separators(RXMeshStatic&      rx,
     rx.prepare_launch_box(
         {Op::VV}, lbe, (void*)detail::extract_separators<blockThreads>);
 
-    rx.render_face_patch();
-    rx.render_vertex_patch();
 
     // the total number of nodes in the tree is upper-bounded by 2^d where d
     // is the depth of the tree.
@@ -835,11 +714,7 @@ void permute_separators(RXMeshStatic&      rx,
     // or right
     // We identify the left and right nodes of a (parent) node using less (<)
     // between the left and right node ID.
-    // int *d_node_sep(nullptr), *d_node_left(nullptr), *d_node_right(nullptr);
-    //
-    // CUDA_ERROR(cudaMalloc((void**)&d_node_sep, sizeof(int) * num_nodes));
-    // CUDA_ERROR(cudaMalloc((void**)&d_node_left, sizeof(int) * num_nodes));
-    // CUDA_ERROR(cudaMalloc((void**)&d_node_right, sizeof(int) * num_nodes));
+
 
     // count the number of mesh vertices at different parts in the max match
     // tree some vertices are on the different separators along the tree. The
@@ -868,15 +743,6 @@ void permute_separators(RXMeshStatic&      rx,
 
 
     for (int l = depth - 1; l >= 0; --l) {
-        // std::fill(h_sibling.begin(), h_sibling.end(), int(-1));
-        //
-        // for (int n = 0; n < max_match_tree.levels[l].nodes.size(); ++n) {
-        //     int nl = max_match_tree.levels[l].nodes[n].lch;
-        //     int nr = max_match_tree.levels[l].nodes[n].rch;
-        //
-        //     h_sibling[nl] = nr;
-        //     h_sibling[nr] = nl;
-        // }
 
         // TODO use swap at the end of the loop rather copying twice with every
         // iteration
@@ -894,97 +760,64 @@ void permute_separators(RXMeshStatic&      rx,
         }
 
 
-        // move the siblings
-        // CUDA_ERROR(cudaMemcpy(d_mmt_sibling,
-        //                      h_sibling.data(),
-        //                      sizeof(int) * h_sibling.size(),
-        //                      cudaMemcpyHostToDevice));
-
-
         detail::extract_separators<blockThreads>
             <<<lbe.blocks, lbe.num_threads, lbe.smem_bytes_dyn>>>(
                 rx.get_context(),
                 d_patch_proj_l,
                 (l == 0) ? nullptr : d_patch_proj_l1,
-                v_sep,
                 v_index,
                 d_permute,
                 l,
                 depth,
                 d_dfs_index,
                 d_count);
-
-        v_sep.move(DEVICE, HOST);
-        rx.get_polyscope_mesh()->addVertexScalarQuantity(
-            "Sep_" + std::to_string(l), v_sep);
     }
 
-    v_index.move(DEVICE, HOST);
-    rx.get_polyscope_mesh()->addVertexScalarQuantity("Index", v_index);
-
-    // std::vector<int> h_node_sep(num_nodes);
-    // std::vector<int> h_node_left(num_nodes);
-    // std::vector<int> h_node_right(num_nodes);
-    // CUDA_ERROR(cudaMemcpy(h_node_sep.data(),
-    //                       d_node_sep,
-    //                       sizeof(int) * num_nodes,
-    //                       cudaMemcpyDeviceToHost));
-    // CUDA_ERROR(cudaMemcpy(h_node_left.data(),
-    //                       d_node_left,
-    //                       sizeof(int) * num_nodes,
-    //                       cudaMemcpyDeviceToHost));
-    // CUDA_ERROR(cudaMemcpy(h_node_right.data(),
-    //                       d_node_right,
-    //                       sizeof(int) * num_nodes,
-    //                       cudaMemcpyDeviceToHost));
 
     thrust::exclusive_scan(
         thrust::device, d_count, d_count + count_size, d_count);
 
-    std::vector<int> h_count(count_size);
-    CUDA_ERROR(cudaMemcpy(h_count.data(),
-                          d_count,
-                          sizeof(int) * count_size,
-                          cudaMemcpyDeviceToHost));
-
-    max_match_tree.print([&](int l, int n) {
-        const int S = depth - l - 1;
-
-        const int shift = (1 << S) - 1;
-
-        int index = shift + n;
-
-        return std::to_string(dfs_index[index]) + "_" +
-               std::to_string(h_count[dfs_index[index]]);
-    });
+    // std::vector<int> h_count(count_size);
+    // CUDA_ERROR(cudaMemcpy(h_count.data(),
+    //                       d_count,
+    //                       sizeof(int) * count_size,
+    //                       cudaMemcpyDeviceToHost));
+    //
+    // max_match_tree.print([&](int l, int n) {
+    //     const int S = depth - l - 1;
+    //
+    //     const int shift = (1 << S) - 1;
+    //
+    //     int index = shift + n;
+    //
+    //     return std::to_string(dfs_index[index]) + "_" +
+    //            std::to_string(h_count[dfs_index[index]]);
+    // });
 
     auto context = rx.get_context();
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
         d_permute[context.linear_id(vh)] += d_count[v_index(vh)];
     });
 
-
-    v_index.move(DEVICE, HOST);
-    rx.get_polyscope_mesh()->addVertexScalarQuantity("Perm", v_index);
-
-    polyscope::show();
+    GPU_FREE(d_dfs_index);
+    GPU_FREE(d_count);
 }
 
 void nd_permute(RXMeshStatic& rx, std::vector<int>& h_permute)
 {
     h_permute.resize(rx.get_num_vertices());
 
+    auto v_index = *rx.add_vertex_attribute<int>("index", 1);
+
     // for a level L in the max_match_tree, d_patch_proj stores the node at
     // level L that branch off to a given patch, i.e., the projection of the
     // the patch on to level L in the tree
-    int *d_patch_proj_l(nullptr), *d_patch_proj_l1(nullptr),
-        *d_mmt_sibling(nullptr);
+    int *d_patch_proj_l(nullptr), *d_patch_proj_l1(nullptr);
     CUDA_ERROR(cudaMalloc((void**)&d_patch_proj_l,
                           sizeof(int) * rx.get_num_patches()));
     CUDA_ERROR(cudaMalloc((void**)&d_patch_proj_l1,
                           sizeof(int) * rx.get_num_patches()));
-    CUDA_ERROR(
-        cudaMalloc((void**)&d_mmt_sibling, sizeof(int) * rx.get_num_patches()));
+
 
     // stores the edge weight of the patch graph
     int*     d_patch_graph_edge_weight = nullptr;
@@ -1027,22 +860,19 @@ void nd_permute(RXMeshStatic& rx, std::vector<int>& h_permute)
     // a graph representing the patch connectivity
     Graph<int> p_graph;
     construct_patches_neighbor_graph(rx, p_graph, h_patch_graph_edge_weight);
-    // construct_a_simple_chordal_graph(p_graph);
-    // p_graph.print();
 
 
     // create max match tree
     MaxMatchTree<int> max_match_tree;
     heavy_max_matching(rx, p_graph, max_match_tree);
-    max_match_tree.print();
 
 
     permute_separators(rx,
+                       v_index,
                        max_match_tree,
                        d_permute,
                        d_patch_proj_l,
-                       d_patch_proj_l1,
-                       d_mmt_sibling);
+                       d_patch_proj_l1);
 
     timer.stop();
     gtimer.stop();
@@ -1059,7 +889,6 @@ void nd_permute(RXMeshStatic& rx, std::vector<int>& h_permute)
     GPU_FREE(d_permute);
     GPU_FREE(d_patch_proj_l);
     GPU_FREE(d_patch_proj_l1);
-    GPU_FREE(d_mmt_sibling);
     GPU_FREE(d_patch_graph_edge_weight);
 }
 }  // namespace rxmesh

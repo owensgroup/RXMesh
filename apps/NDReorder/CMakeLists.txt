@@ -6,6 +6,7 @@ set(SOURCE_LIST
     nd_partition_manager.cuh
     nd_cross_patch_ordering.cuh   
 	count_nnz_fillin.h
+	render_permutation.h
 )
 
 target_sources(NDReorder 
