@@ -295,7 +295,8 @@ struct Level
     std::vector<Node<integer_t>> nodes;
 
     // we cache the node in this level that branches off to certain patch
-    std::vector<int> patch_grand_parent;
+    // i.e., the node in this level where a patch is projected
+    std::vector<int> patch_proj;
 };
 
 template <typename integer_t>
@@ -328,12 +329,36 @@ struct MaxMatchTree
             }
         }
     }
+
+    template <typename FuncT>
+    void print(FuncT label) const
+    {
+        for (int l = levels.size() - 1; l >= 0; --l) {
+            const auto& level = levels[l];
+            for (int n = 0; n < level.nodes.size(); ++n) {
+                const auto& node = level.nodes[n];
+                if (l == 0) {
+                    std::cout << "L" << label(l, n) << " -> "
+                              << "N" << label(l - 1, node.lch) << ";\n";
+
+                    std::cout << "L" << label(l, n) << " -> "
+                              << "N" << label(l - 1, node.rch) << ";\n";
+                } else {
+                    std::cout << "L" << label(l, n) << " -> "
+                              << "L" << label(l - 1, node.lch) << ";\n";
+
+                    std::cout << "L" << label(l, n) << " -> "
+                              << "L" << label(l - 1, node.rch) << ";\n";
+                }
+            }
+        }
+    }
 };
 
 template <typename integer_t>
-void random_max_matching(const RXMeshStatic&      rx,
-                         const Graph<integer_t>&  graph,
-                         MaxMatchTree<integer_t>& max_match_tree)
+void heavy_max_matching(const RXMeshStatic&      rx,
+                        const Graph<integer_t>&  graph,
+                        MaxMatchTree<integer_t>& max_match_tree)
 {
     // TODO workaround isolated island (comes from disconnected component input
     // mesh)
@@ -347,7 +372,7 @@ void random_max_matching(const RXMeshStatic&      rx,
 
     Level<integer_t> l;
     l.nodes.reserve(DIVIDE_UP(graph.n, 2));
-    l.patch_grand_parent.resize(rx.get_num_patches());
+    l.patch_proj.resize(rx.get_num_patches());
 
     // we store the parent of each node which we use to create the coarse graph
     // i.e., next level graph
@@ -355,7 +380,8 @@ void random_max_matching(const RXMeshStatic&      rx,
     parents.resize(graph.n, integer_t(-1));
 
     std::vector<integer_t> rands(graph.n);
-    fill_with_random_numbers(rands.data(), rands.size());
+    // fill_with_random_numbers(rands.data(), rands.size());
+    fill_with_sequential_numbers(rands.data(), rands.size());
 
 
     for (int k = 0; k < graph.n; ++k) {
@@ -396,8 +422,8 @@ void random_max_matching(const RXMeshStatic&      rx,
 
                 // store the grant parent of level -1
                 if (max_match_tree.levels.empty()) {
-                    l.patch_grand_parent[v]                 = node_id;
-                    l.patch_grand_parent[matched_neighbour] = node_id;
+                    l.patch_proj[v]                 = node_id;
+                    l.patch_proj[matched_neighbour] = node_id;
                 }
             }
         }
@@ -417,16 +443,16 @@ void random_max_matching(const RXMeshStatic&      rx,
 
             // store the parent of level -1
             if (max_match_tree.levels.empty()) {
-                l.patch_grand_parent[v] = node_id;
+                l.patch_proj[v] = node_id;
             }
         }
     }
 
-    // update the grand parents if we are not on level 0
+    // update the projection if we are not on level 0
     if (!max_match_tree.levels.empty() && l.nodes.size() > 1) {
-        for (uint32_t p = 0; p < l.patch_grand_parent.size(); ++p) {
-            l.patch_grand_parent[p] =
-                parents[max_match_tree.levels.back().patch_grand_parent[p]];
+        for (uint32_t p = 0; p < l.patch_proj.size(); ++p) {
+            l.patch_proj[p] =
+                parents[max_match_tree.levels.back().patch_proj[p]];
         }
     }
 
@@ -505,7 +531,7 @@ void random_max_matching(const RXMeshStatic&      rx,
     max_match_tree.levels.push_back(l);
 
     // recurse to the next level
-    random_max_matching(rx, c_graph, max_match_tree);
+    heavy_max_matching(rx, c_graph, max_match_tree);
 }
 
 namespace detail {
@@ -553,13 +579,17 @@ __global__ static void compute_patch_graph_edge_weight(
 
 __inline__ __device__ bool is_v_on_grand_separator(const VertexHandle v_id,
                                                    uint32_t           v_gp,
-                                                   int* d_grand_parent,
+                                                   const int* d_patch_proj,
                                                    const VertexIterator& iter)
 {
+    // on a certain level of the max match, return the sibling to a certain
+    // mesh vertex on the tree (only if this sibling is different than the
+    // vertx's patch grand parent)
+
     for (uint16_t i = 0; i < iter.size(); ++i) {
         uint32_t n_pid = iter[i].patch_id();
 
-        int n_gp = d_grand_parent[n_pid];
+        int n_gp = (d_patch_proj == nullptr) ? n_pid : d_patch_proj[n_pid];
 
         if (v_gp != n_gp) {
             return true;
@@ -567,13 +597,26 @@ __inline__ __device__ bool is_v_on_grand_separator(const VertexHandle v_id,
     }
     return false;
 }
+
 template <uint32_t blockThreads>
-__global__ static void extract_separators(const Context        context,
-                                          int*                 d_grand_parent,
-                                          int*                 d_permute,
-                                          int*                 d_accumulate,
-                                          VertexAttribute<int> assigned)
+__global__ static void extract_separators0(const Context        context,
+                                           const int*           d_patch_proj_l,
+                                           const int*           d_patch_proj_l1,
+                                           VertexAttribute<int> v_sep,
+                                           int                  current_level,
+                                           int                  depth,
+                                           const int*           d_mmt_sibling,
+                                           int*                 d_node_sep,
+                                           int*                 d_node_left,
+                                           int*                 d_node_right)
 {
+    // d_patch_proj_l is the patch projection on this level
+    // d_patch_proj_l1 is the patch projection on the next level (i.e.,
+    // current_level -1)
+
+    const int S = depth - current_level - 1;
+
+    const int shift = (1 << S) - 1;
 
     auto extract = [&](VertexHandle v_id, VertexIterator& iter) {
         // this is important to check if v is on the separator before going in
@@ -581,14 +624,38 @@ __global__ static void extract_separators(const Context        context,
         // consistent criterion for if a vertex is on a separator (using less
         // than for the vertex patch id)
 
-        if (is_v_on_separator(v_id, iter)) {
-            uint32_t v_gp = d_grand_parent[v_id.patch_id()];
+        int v_proj = d_patch_proj_l[v_id.patch_id()];
 
-            if (is_v_on_grand_separator(v_id, v_gp, d_grand_parent, iter)) {
-                assigned(v_id) = 1;
+        int v_proj_1 = (d_patch_proj_l1 == nullptr) ?
+                           v_id.patch_id() :
+                           d_patch_proj_l1[v_id.patch_id()];
 
-                int v_new_local = ::atomicAdd(&d_accumulate[v_gp], int(1));
-                d_permute[context.linear_id(v_id)] = v_new_local;
+        int index = shift + v_proj;
+
+
+        // make sure that the vertex is not counted towards a separator from
+        //  previous levels in the tree
+        if (v_sep(v_id) < 0) {
+
+            // if the vertex is on the separator of the current level
+            if (is_v_on_separator(v_id, iter) &&
+                is_v_on_grand_separator(
+                    v_id, v_proj_1, d_patch_proj_l1, iter)) {
+
+                v_sep(v_id) = current_level;
+
+                ::atomicAdd(&d_node_sep[index], int(1));
+            } else {
+                // if not on the current separator, then we get the sibling on
+                // the max match tree, and compare the index to know if we
+                // should put the vertex on the left or the right
+                int mmt_sibling = d_mmt_sibling[v_proj_1];
+
+                if (v_proj_1 < mmt_sibling) {
+                    ::atomicAdd(&d_node_left[index], int(1));
+                } else {
+                    ::atomicAdd(&d_node_right[index], int(1));
+                }
             }
         }
     };
@@ -599,28 +666,74 @@ __global__ static void extract_separators(const Context        context,
     ShmemAllocator      shrd_alloc;
     query.dispatch<Op::VV>(block, shrd_alloc, extract);
 }
+
 
 template <uint32_t blockThreads>
-__global__ static void separators_permutation(const Context context,
-                                              int*          d_grand_parent,
-                                              int*          d_permute,
-                                              int*          d_accumulate,
-                                              int           num_vertices,
-                                              VertexAttribute<int> assigned)
+__global__ static void extract_separators(const Context        context,
+                                          const int*           d_patch_proj_l,
+                                          const int*           d_patch_proj_l1,
+                                          VertexAttribute<int> v_sep,
+                                          VertexAttribute<int> v_index,
+                                          int*                 d_permute,
+                                          int                  current_level,
+                                          int                  depth,
+                                          const int*           d_dfs_index,
+                                          int*                 d_count)
 {
+    // d_patch_proj_l is the patch projection on this level
+    // d_patch_proj_l1 is the patch projection on the next level (i.e.,
+    // current_level -1)
+
+    const int S = depth - current_level - 1;
+
+    const int shift = (1 << S) - 1;
+
     auto extract = [&](VertexHandle v_id, VertexIterator& iter) {
-        if (is_v_on_separator(v_id, iter)) {
-            uint32_t v_gp = d_grand_parent[v_id.patch_id()];
+        // this is important to check if v is on the separator before going in
+        // and check if it is on the current/grant separator because we have
+        // consistent criterion for if a vertex is on a separator (using less
+        // than for the vertex patch id)
 
-            if (is_v_on_grand_separator(v_id, v_gp, d_grand_parent, iter)) {
+        int v_proj = d_patch_proj_l[v_id.patch_id()];
 
-                int v_new_local = d_permute[context.linear_id(v_id)];
+        int v_proj_1 = (d_patch_proj_l1 == nullptr) ?
+                           v_id.patch_id() :
+                           d_patch_proj_l1[v_id.patch_id()];
 
-                int v_new_id = v_new_local + d_accumulate[v_gp];
+        int index = shift + v_proj;
 
-                v_new_id = num_vertices - v_new_id;
 
-                d_permute[context.linear_id(v_id)] = v_new_id;
+        // make sure that the vertex is not counted towards a separator from
+        //  previous levels in the tree
+        if (v_sep(v_id) < 0) {
+
+            // if the vertex is on the separator of the current level
+            if (is_v_on_separator(v_id, iter) &&
+                is_v_on_grand_separator(
+                    v_id, v_proj_1, d_patch_proj_l1, iter)) {
+
+                v_sep(v_id) = current_level;
+
+                d_permute[context.linear_id(v_id)] =
+                    ::atomicAdd(&d_count[d_dfs_index[index]], int(1));
+
+                assert(v_index(v_id) < 0);
+                v_index(v_id) = d_dfs_index[index];
+
+            } else if (current_level == 0) {
+                // get the patch index within the max match tree
+
+                const int SS = depth - (current_level - 1) - 1;
+
+                const int sh = (1 << SS) - 1;
+
+                int index = sh + v_id.patch_id();
+
+                d_permute[context.linear_id(v_id)] =
+                    ::atomicAdd(&d_count[d_dfs_index[index]], int(1));
+
+                assert(v_index(v_id) < 0);
+                v_index(v_id) = d_dfs_index[index];
             }
         }
     };
@@ -631,17 +744,71 @@ __global__ static void separators_permutation(const Context context,
     ShmemAllocator      shrd_alloc;
     query.dispatch<Op::VV>(block, shrd_alloc, extract);
 }
+
+
 }  // namespace detail
+
+void create_dfs_indexing(const int                level,
+                         const int                node,
+                         int&                     current_id,
+                         const MaxMatchTree<int>& max_match_tree,
+                         std::vector<bool>&       visited,
+                         std::vector<int>&        dfs_index)
+{
+    const int S     = max_match_tree.levels.size() - level - 1;
+    const int shift = (1 << S) - 1;
+    const int id    = shift + node;
+
+    visited[id]   = true;
+    dfs_index[id] = current_id++;
+
+    if (level >= 0) {
+
+        int lch = max_match_tree.levels[level].nodes[node].lch;
+        int rch = max_match_tree.levels[level].nodes[node].rch;
+
+        int next_level = level - 1;
+
+        int ss = max_match_tree.levels.size() - next_level - 1;
+        int sh = (1 << ss) - 1;
+
+        int lch_id = sh + lch;
+        int rch_id = sh + rch;
+
+        if (!visited[lch_id]) {
+            create_dfs_indexing(next_level,
+                                lch,
+                                current_id,
+                                max_match_tree,
+                                visited,
+                                dfs_index);
+        }
+
+        if (!visited[rch_id]) {
+            create_dfs_indexing(next_level,
+                                rch,
+                                current_id,
+                                max_match_tree,
+                                visited,
+                                dfs_index);
+        }
+    }
+}
 
 void permute_separators(RXMeshStatic&      rx,
                         MaxMatchTree<int>& max_match_tree,
                         int*               d_permute,
-                        int*               d_grand_parent,
-                        int*               d_accumulate)
+                        int*               d_patch_proj_l,
+                        int*               d_patch_proj_l1,
+                        int*               d_mmt_sibling)
 {
 
+    // store wither the vertex is on a separator
+    auto v_sep = *rx.add_vertex_attribute<int>("sep", 1);
+    v_sep.reset(-1, DEVICE);
 
-    auto assigned = *rx.add_vertex_attribute<int>("sep", 1);
+    auto v_index = *rx.add_vertex_attribute<int>("level", 1);
+    v_index.reset(-1, DEVICE);
 
     constexpr uint32_t blockThreads = 256;
 
@@ -649,71 +816,175 @@ void permute_separators(RXMeshStatic&      rx,
     rx.prepare_launch_box(
         {Op::VV}, lbe, (void*)detail::extract_separators<blockThreads>);
 
-    LaunchBox<blockThreads> lba;
-    rx.prepare_launch_box(
-        {Op::VV}, lba, (void*)detail::separators_permutation<blockThreads>);
-
     rx.render_face_patch();
     rx.render_vertex_patch();
 
-    for (int l = max_match_tree.levels.size() - 2; l >= 0; --l) {
-        assigned.reset(0, DEVICE);
+    // the total number of nodes in the tree is upper-bounded by 2^d where d
+    // is the depth of the tree.
+    const int      depth     = max_match_tree.levels.size();
+    const uint32_t num_nodes = 1 << depth;
 
-        CUDA_ERROR(cudaMemset(
-            d_accumulate, 0, sizeof(int) * (rx.get_num_patches() + 1)));
+    // std::vector<int> h_sibling(rx.get_num_patches());
 
-        // move grand parents to the device
-        CUDA_ERROR(
-            cudaMemcpy(d_grand_parent,
-                       max_match_tree.levels[l].patch_grand_parent.data(),
-                       sizeof(int) * rx.get_num_patches(),
-                       cudaMemcpyHostToDevice));
+    //@brief every node in the max match tree will contains three pieces of
+    // information:
+    // 1) the size of its separator
+    // 2) the number of nodes on the right
+    // 3) the number of nodes on the left
+    // the count here refers to the number of mesh vertices on separator, left,
+    // or right
+    // We identify the left and right nodes of a (parent) node using less (<)
+    // between the left and right node ID.
+    // int *d_node_sep(nullptr), *d_node_left(nullptr), *d_node_right(nullptr);
+    //
+    // CUDA_ERROR(cudaMalloc((void**)&d_node_sep, sizeof(int) * num_nodes));
+    // CUDA_ERROR(cudaMalloc((void**)&d_node_left, sizeof(int) * num_nodes));
+    // CUDA_ERROR(cudaMalloc((void**)&d_node_right, sizeof(int) * num_nodes));
+
+    // count the number of mesh vertices at different parts in the max match
+    // tree some vertices are on the different separators along the tree. The
+    // remaining vertices are the one inside the interior of the patch that
+    // are number randomly.
+    int count_size = 1 << (depth + 1);
+
+    int *d_dfs_index(nullptr), *d_count(nullptr);
+    CUDA_ERROR(cudaMalloc((void**)&d_dfs_index, sizeof(int) * count_size));
+
+
+    CUDA_ERROR(cudaMalloc((void**)&d_count, sizeof(int) * (count_size + 1)));
+    CUDA_ERROR(cudaMemset(d_count, 0, sizeof(int) * count_size));
+
+
+    int               current_id = 0;
+    std::vector<bool> visited(count_size, false);
+    std::vector<int>  dfs_index(count_size, -1);
+    create_dfs_indexing(
+        depth - 1, 0, current_id, max_match_tree, visited, dfs_index);
+
+    CUDA_ERROR(cudaMemcpy(d_dfs_index,
+                          dfs_index.data(),
+                          count_size * sizeof(int),
+                          cudaMemcpyHostToDevice));
+
+
+    for (int l = depth - 1; l >= 0; --l) {
+        // std::fill(h_sibling.begin(), h_sibling.end(), int(-1));
+        //
+        // for (int n = 0; n < max_match_tree.levels[l].nodes.size(); ++n) {
+        //     int nl = max_match_tree.levels[l].nodes[n].lch;
+        //     int nr = max_match_tree.levels[l].nodes[n].rch;
+        //
+        //     h_sibling[nl] = nr;
+        //     h_sibling[nr] = nl;
+        // }
+
+        // TODO use swap at the end of the loop rather copying twice with every
+        // iteration
+        CUDA_ERROR(cudaMemcpy(d_patch_proj_l,
+                              max_match_tree.levels[l].patch_proj.data(),
+                              sizeof(int) * rx.get_num_patches(),
+                              cudaMemcpyHostToDevice));
+
+        if (l != 0) {
+            CUDA_ERROR(
+                cudaMemcpy(d_patch_proj_l1,
+                           max_match_tree.levels[l - 1].patch_proj.data(),
+                           sizeof(int) * rx.get_num_patches(),
+                           cudaMemcpyHostToDevice));
+        }
+
+
+        // move the siblings
+        // CUDA_ERROR(cudaMemcpy(d_mmt_sibling,
+        //                      h_sibling.data(),
+        //                      sizeof(int) * h_sibling.size(),
+        //                      cudaMemcpyHostToDevice));
+
 
         detail::extract_separators<blockThreads>
             <<<lbe.blocks, lbe.num_threads, lbe.smem_bytes_dyn>>>(
                 rx.get_context(),
-                d_grand_parent,
+                d_patch_proj_l,
+                (l == 0) ? nullptr : d_patch_proj_l1,
+                v_sep,
+                v_index,
                 d_permute,
-                d_accumulate,
-                assigned);
+                l,
+                depth,
+                d_dfs_index,
+                d_count);
 
-
-        assigned.move(DEVICE, HOST);
+        v_sep.move(DEVICE, HOST);
         rx.get_polyscope_mesh()->addVertexScalarQuantity(
-            "Sep_" + std::to_string(l), assigned);
-
-        // assigned.reset(0, DEVICE);
-        // thrust::exclusive_scan(thrust::device,
-        //                        d_accumulate,
-        //                        d_accumulate + rx.get_num_patches(),
-        //                        d_accumulate);
-        //
-        // detail::separators_permutation<blockThreads>
-        //     <<<lba.blocks, lba.num_threads, lba.smem_bytes_dyn>>>(
-        //         rx.get_context(),
-        //         d_grand_parent,
-        //         d_permute,
-        //         d_accumulate,
-        //         rx.get_num_vertices(),
-        //         assigned);
-        //
-        // assigned.move(DEVICE, HOST);
-        // rx.get_polyscope_mesh()->addVertexScalarQuantity(
-        //     "ID_" + std::to_string(l), assigned);
-        //
-        polyscope::show();
+            "Sep_" + std::to_string(l), v_sep);
     }
+
+    v_index.move(DEVICE, HOST);
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("Index", v_index);
+
+    // std::vector<int> h_node_sep(num_nodes);
+    // std::vector<int> h_node_left(num_nodes);
+    // std::vector<int> h_node_right(num_nodes);
+    // CUDA_ERROR(cudaMemcpy(h_node_sep.data(),
+    //                       d_node_sep,
+    //                       sizeof(int) * num_nodes,
+    //                       cudaMemcpyDeviceToHost));
+    // CUDA_ERROR(cudaMemcpy(h_node_left.data(),
+    //                       d_node_left,
+    //                       sizeof(int) * num_nodes,
+    //                       cudaMemcpyDeviceToHost));
+    // CUDA_ERROR(cudaMemcpy(h_node_right.data(),
+    //                       d_node_right,
+    //                       sizeof(int) * num_nodes,
+    //                       cudaMemcpyDeviceToHost));
+
+    thrust::exclusive_scan(
+        thrust::device, d_count, d_count + count_size, d_count);
+
+    std::vector<int> h_count(count_size);
+    CUDA_ERROR(cudaMemcpy(h_count.data(),
+                          d_count,
+                          sizeof(int) * count_size,
+                          cudaMemcpyDeviceToHost));
+
+    max_match_tree.print([&](int l, int n) {
+        const int S = depth - l - 1;
+
+        const int shift = (1 << S) - 1;
+
+        int index = shift + n;
+
+        return std::to_string(dfs_index[index]) + "_" +
+               std::to_string(h_count[dfs_index[index]]);
+    });
+
+    auto context = rx.get_context();
+    rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
+        d_permute[context.linear_id(vh)] += d_count[v_index(vh)];       
+    });
+
+
+    v_index.move(DEVICE, HOST);
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("Perm", v_index);
+
+    polyscope::show();
 }
 
 void nd_permute(RXMeshStatic& rx, std::vector<int>& h_permute)
 {
     h_permute.resize(rx.get_num_vertices());
 
-    // for a level L in the max_match_tree, d_grand_parent stores the node at
-    // level L that branch off to a given patch
-    int* d_grand_parent = nullptr;
-    CUDA_ERROR(cudaMalloc((void**)&d_grand_parent,
+    // for a level L in the max_match_tree, d_patch_proj stores the node at
+    // level L that branch off to a given patch, i.e., the projection of the
+    // the patch on to level L in the tree
+    int *d_patch_proj_l(nullptr), *d_patch_proj_l1(nullptr),
+        *d_mmt_sibling(nullptr);
+    CUDA_ERROR(cudaMalloc((void**)&d_patch_proj_l,
                           sizeof(int) * rx.get_num_patches()));
+    CUDA_ERROR(cudaMalloc((void**)&d_patch_proj_l1,
+                          sizeof(int) * rx.get_num_patches()));
+    CUDA_ERROR(
+        cudaMalloc((void**)&d_mmt_sibling, sizeof(int) * rx.get_num_patches()));
 
     // stores the edge weight of the patch graph
     int*     d_patch_graph_edge_weight = nullptr;
@@ -730,10 +1001,11 @@ void nd_permute(RXMeshStatic& rx, std::vector<int>& h_permute)
     CUDA_ERROR(
         cudaMalloc((void**)&d_permute, rx.get_num_vertices() * sizeof(int)));
 
-    int* d_accumulate = nullptr;
-    CUDA_ERROR(cudaMalloc((void**)&d_accumulate,
-                          sizeof(int) * (rx.get_num_patches() + 1)));
+    CPUTimer timer;
+    GPUTimer gtimer;
 
+    timer.start();
+    gtimer.start();
 
     // compute edge weight
     constexpr uint32_t      blockThreads = 512;
@@ -757,20 +1029,37 @@ void nd_permute(RXMeshStatic& rx, std::vector<int>& h_permute)
     construct_patches_neighbor_graph(rx, p_graph, h_patch_graph_edge_weight);
     // construct_a_simple_chordal_graph(p_graph);
     // p_graph.print();
-    CUDA_ERROR(cudaDeviceSynchronize());
+
 
     // create max match tree
     MaxMatchTree<int> max_match_tree;
-    random_max_matching(rx, p_graph, max_match_tree);
-    // max_match_tree.print();
+    heavy_max_matching(rx, p_graph, max_match_tree);
+    max_match_tree.print();
 
 
-    permute_separators(
-        rx, max_match_tree, d_permute, d_grand_parent, d_accumulate);
+    permute_separators(rx,
+                       max_match_tree,
+                       d_permute,
+                       d_patch_proj_l,
+                       d_patch_proj_l1,
+                       d_mmt_sibling);
+
+    timer.stop();
+    gtimer.stop();
+
+    RXMESH_INFO("nd_permute took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+
+    CUDA_ERROR(cudaMemcpy(h_permute.data(),
+                          d_permute,
+                          h_permute.size() * sizeof(int),
+                          cudaMemcpyDeviceToHost));
 
     GPU_FREE(d_permute);
-    GPU_FREE(d_grand_parent);
-    GPU_FREE(d_accumulate);
+    GPU_FREE(d_patch_proj_l);
+    GPU_FREE(d_patch_proj_l1);
+    GPU_FREE(d_mmt_sibling);
     GPU_FREE(d_patch_graph_edge_weight);
 }
 }  // namespace rxmesh
