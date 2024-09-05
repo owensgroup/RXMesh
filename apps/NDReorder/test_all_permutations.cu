@@ -112,6 +112,8 @@ void with_metis(rxmesh::RXMeshStatic&          rx,
     // Specifies the amount of progress/debugging information will be printed
     options[METIS_OPTION_DBGLVL] = 0;*/
 
+    rxmesh::CPUTimer timer;
+    timer.start();
 
     int metis_ret = METIS_NodeND(&n,
                                  xadj.data(),
@@ -120,6 +122,10 @@ void with_metis(rxmesh::RXMeshStatic&          rx,
                                  options,
                                  h_permute.data(),
                                  h_iperm.data());
+    timer.stop();
+
+    RXMESH_INFO("metis took {} (ms)", timer.elapsed_millis());
+
     EXPECT_TRUE(metis_ret == 1);
 
     EXPECT_TRUE(
@@ -209,6 +215,8 @@ TEST(Apps, NDReorder)
     with_mgnd(rx, eigen_mat);
 
     with_cuda_nd(rx, eigen_mat);
+
+    polyscope::show();
 }
 
 int main(int argc, char** argv)

@@ -270,8 +270,8 @@ void heavy_max_matching(const RXMeshStatic&      rx,
     parents.resize(graph.n, integer_t(-1));
 
     std::vector<integer_t> rands(graph.n);
-    // fill_with_random_numbers(rands.data(), rands.size());
-    fill_with_sequential_numbers(rands.data(), rands.size());
+    fill_with_random_numbers(rands.data(), rands.size());
+    //fill_with_sequential_numbers(rands.data(), rands.size());
 
 
     for (int k = 0; k < graph.n; ++k) {
@@ -487,76 +487,6 @@ __inline__ __device__ bool is_v_on_grand_separator(const VertexHandle v_id,
     }
     return false;
 }
-
-template <uint32_t blockThreads>
-__global__ static void extract_separators0(const Context        context,
-                                           const int*           d_patch_proj_l,
-                                           const int*           d_patch_proj_l1,
-                                           VertexAttribute<int> v_sep,
-                                           int                  current_level,
-                                           int                  depth,
-                                           const int*           d_mmt_sibling,
-                                           int*                 d_node_sep,
-                                           int*                 d_node_left,
-                                           int*                 d_node_right)
-{
-    // d_patch_proj_l is the patch projection on this level
-    // d_patch_proj_l1 is the patch projection on the next level (i.e.,
-    // current_level -1)
-
-    const int S = depth - current_level - 1;
-
-    const int shift = (1 << S) - 1;
-
-    auto extract = [&](VertexHandle v_id, VertexIterator& iter) {
-        // this is important to check if v is on the separator before going in
-        // and check if it is on the current/grant separator because we have
-        // consistent criterion for if a vertex is on a separator (using less
-        // than for the vertex patch id)
-
-        int v_proj = d_patch_proj_l[v_id.patch_id()];
-
-        int v_proj_1 = (d_patch_proj_l1 == nullptr) ?
-                           v_id.patch_id() :
-                           d_patch_proj_l1[v_id.patch_id()];
-
-        int index = shift + v_proj;
-
-
-        // make sure that the vertex is not counted towards a separator from
-        //  previous levels in the tree
-        if (v_sep(v_id) < 0) {
-
-            // if the vertex is on the separator of the current level
-            if (is_v_on_separator(v_id, iter) &&
-                is_v_on_grand_separator(
-                    v_id, v_proj_1, d_patch_proj_l1, iter)) {
-
-                v_sep(v_id) = current_level;
-
-                ::atomicAdd(&d_node_sep[index], int(1));
-            } else {
-                // if not on the current separator, then we get the sibling on
-                // the max match tree, and compare the index to know if we
-                // should put the vertex on the left or the right
-                int mmt_sibling = d_mmt_sibling[v_proj_1];
-
-                if (v_proj_1 < mmt_sibling) {
-                    ::atomicAdd(&d_node_left[index], int(1));
-                } else {
-                    ::atomicAdd(&d_node_right[index], int(1));
-                }
-            }
-        }
-    };
-
-    auto block = cooperative_groups::this_thread_block();
-
-    Query<blockThreads> query(context);
-    ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, extract);
-}
-
 
 template <uint32_t blockThreads>
 __global__ static void extract_separators(const Context        context,
