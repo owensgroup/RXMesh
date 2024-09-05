@@ -4,6 +4,25 @@
 
 #include <Eigen/Sparse>
 
+template <typename SparseMatrixType>
+void exportToPlainText(const SparseMatrixType& mat, const std::string& filename)
+{
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error opening file: " << filename << std::endl;
+        return;
+    }
+
+    for (int k = 0; k < mat.outerSize(); ++k) {
+        for (typename SparseMatrixType::InnerIterator it(mat, k); it; ++it) {
+            file << (it.row() + 1) << " " << (it.col() + 1) << " " << it.value()
+                 << std::endl;  // 1-based indexing for MATLAB
+        }
+    }
+
+    file.close();
+}
+
 /**
  * @brief calculate the total number of nnz after Cholesky factorization given a
  * permutation array that will be applied before the factorization
@@ -39,12 +58,14 @@ int count_nnz_fillin(const EigeMatT& eigen_mat, std::vector<I>& h_permute)
         perm.indices()[i] = h_permute[i];
     }
 
-    Eigen::SparseMatrix<float> permuted_mat(eigen_mat.rows(), eigen_mat.rows()); 
+    Eigen::SparseMatrix<float> permuted_mat(eigen_mat.rows(), eigen_mat.rows());
 
     Eigen::internal::permute_symm_to_fullsymm<Eigen::Lower, false>(
         eigen_mat, permuted_mat, perm.indices().data());
 
-    // compute Cholesky factorization on the permuted matrix    
+    // exportToPlainText(permuted_mat, "mat.txt");
+
+    // compute Cholesky factorization on the permuted matrix
 
     Eigen::SimplicialLLT<Eigen::SparseMatrix<float>,
                          Eigen::Lower,

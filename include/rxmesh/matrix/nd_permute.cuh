@@ -795,8 +795,11 @@ void permute_separators(RXMeshStatic&         rx,
     // });
 
     auto context = rx.get_context();
+    int  num_v   = rx.get_num_vertices();
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
-        d_permute[context.linear_id(vh)] += d_count[v_index(vh)];
+        int l = d_permute[context.linear_id(vh)];
+        l += d_count[v_index(vh)];
+        d_permute[context.linear_id(vh)] = num_v - l - 1;
     });
 
     GPU_FREE(d_dfs_index);
