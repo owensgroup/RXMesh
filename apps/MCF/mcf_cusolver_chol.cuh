@@ -194,9 +194,9 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
 
 
     // pre-solve
-    //A_mat.pre_solve(rx, Solver::CHOL, permute_method);
+    // A_mat.pre_solve(rx, Solver::CHOL, permute_method);
     // Solve
-    //A_mat.solve(B_mat, *X_mat);
+    // A_mat.solve(B_mat, *X_mat);
 
     Report report("MCF_Chol");
     report.command_line(Arg.argc, Arg.argv);
@@ -205,6 +205,8 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     report.model_data(Arg.obj_file_name, rx);
     report.add_member("method", std::string("RXMesh"));
     report.add_member("blockThreads", blockThreads);
+    report.add_member("PermuteMethod",
+                      permute_method_to_string(permute_method));
 
     CPUTimer timer;
     GPUTimer gtimer;
@@ -272,7 +274,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
     report.add_member("solve", timer.elapsed_millis());
-    
+
 
     // move the results to the host
     // if we use LU, the data will be on the host and we should not move the

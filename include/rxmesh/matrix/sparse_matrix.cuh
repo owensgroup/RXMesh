@@ -56,6 +56,45 @@ enum class PermuteMethod
     GPUND   = 5
 };
 
+inline PermuteMethod string_to_permute_method(std::string prem)
+{
+    std::transform(prem.begin(), prem.end(), prem.begin(), [](unsigned char c) {
+        return std::tolower(c);
+    });
+
+    if (prem == "symrcm") {
+        return PermuteMethod::SYMRCM;
+    } else if (prem == "symamd") {
+        return PermuteMethod::SYMAMD;
+    } else if (prem == "nstdis") {
+        return PermuteMethod::NSTDIS;
+    } else if (prem == "gpumgnd") {
+        return PermuteMethod::GPUMGND;
+    } else if (prem == "gpund") {
+        return PermuteMethod::GPUND;
+    } else {
+        return PermuteMethod::NONE;
+    }
+}
+
+
+inline std::string permute_method_to_string(PermuteMethod prem)
+{
+    if (prem == PermuteMethod::SYMRCM) {
+        return "symrcm";
+    } else if (prem == PermuteMethod::SYMAMD) {
+        return "symamd";
+    } else if (prem == PermuteMethod::NSTDIS) {
+        return "nstdis";
+    } else if (prem == PermuteMethod::GPUMGND) {
+        return "gpumgnd";
+    } else if (prem == PermuteMethod::GPUND) {
+        return "gpund";
+    } else {
+        return "none";
+    }
+}
+
 /**
  * @brief Sparse matrix that represent the VV connectivity, i.e., it
  * is a square matrix with number of rows/cols is equal to number of vertices

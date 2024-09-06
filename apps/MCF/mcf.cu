@@ -16,6 +16,7 @@ struct arg
 {
     std::string obj_file_name       = STRINGIFY(INPUT_DIR) "dragon.obj";
     std::string output_folder       = STRINGIFY(OUTPUT_DIR);
+    std::string perm_method         = "gpund";
     uint32_t    device_id           = 0;
     float       time_step           = 0.001;
     float       cg_tolerance        = 1e-6;
@@ -43,10 +44,10 @@ TEST(App, MCF)
     ASSERT_TRUE(rx.is_edge_manifold());
 
     // RXMesh Impl
-    //mcf_cg<dataT>(rx);
+    // mcf_cg<dataT>(rx);
 
     // RXMesh cusolver Impl
-    mcf_cusolver_chol<dataT>(rx, PermuteMethod::GPUND);
+    mcf_cusolver_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
 }
 
 int main(int argc, char** argv)
