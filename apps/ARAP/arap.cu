@@ -305,7 +305,7 @@ int main(int argc, char** argv)
             rx.get_context(), weight_matrix, laplace_mat, constraints);
 
     // pre_solve laplace_mat
-    laplace_mat.pre_solve(Solver::QR, PermuteMethod::NSTDIS);
+    laplace_mat.pre_solve(rx, Solver::QR, PermuteMethod::NSTDIS);
 
     // launch box for rotation matrix calculation
     rxmesh::LaunchBox<CUDABlockSize> lb_rot;

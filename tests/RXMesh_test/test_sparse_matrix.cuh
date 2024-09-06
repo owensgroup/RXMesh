@@ -267,7 +267,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
     // matrix.
 
     using namespace rxmesh;
-        
+
     // generate rxmesh obj
     std::string  obj_path = rxmesh_args.obj_file_name;
     RXMeshStatic rx(obj_path);
@@ -327,7 +327,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 {
     using namespace rxmesh;
-        
+
 
     // generate rxmesh obj
     std::string  obj_path = rxmesh_args.obj_file_name;
@@ -356,7 +356,7 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
         rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
     // A_mat.solve(B_mat, X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
-    A_mat.pre_solve(Solver::CHOL, PermuteMethod::NSTDIS);
+    A_mat.pre_solve(rx, Solver::CHOL, PermuteMethod::NSTDIS);
     A_mat.solve(B_mat, X_mat);
 
     A_mat.multiply(X_mat, ret_mat);

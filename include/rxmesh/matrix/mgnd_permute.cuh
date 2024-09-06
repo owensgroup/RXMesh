@@ -84,11 +84,9 @@ __global__ static void assign_permutation(const Context context,
  * is order last. h_permute should be allocated with size equal to num of
  * vertices of the mesh.
  */
-inline void mgnd_permute(const RXMeshStatic& rx, std::vector<int>& h_permute)
+inline void mgnd_permute(const RXMeshStatic& rx, int* h_permute)
 {
     constexpr uint32_t blockThreads = 256;
-
-    h_permute.resize(rx.get_num_vertices());
 
     // auto v_ordering = *rx.add_vertex_attribute<uint32_t>("v_ordering", 1);
 
@@ -147,7 +145,7 @@ inline void mgnd_permute(const RXMeshStatic& rx, std::vector<int>& h_permute)
     //     h_permute[v_order_idx] = v_linea_id;
     // });
 
-    CUDA_ERROR(cudaMemcpy(h_permute.data(),
+    CUDA_ERROR(cudaMemcpy(h_permute,
                           d_permute,
                           rx.get_num_vertices() * sizeof(int),
                           cudaMemcpyDeviceToHost));

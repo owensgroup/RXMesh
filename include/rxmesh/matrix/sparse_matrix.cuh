@@ -17,6 +17,9 @@
 #include "rxmesh/matrix/permute_util.h"
 #include "rxmesh/matrix/sparse_matrix_kernels.cuh"
 
+#include "rxmesh/matrix/mgnd_permute.cuh"
+#include "rxmesh/matrix/nd_permute.cuh"
+
 #include "rxmesh/launch_box.h"
 
 #include <Eigen/Sparse>
@@ -802,8 +805,7 @@ struct SparseMatrix
      * the solving process. Any other function call order would be undefined.
      * @param reorder: the reorder method applied.
      */
-    __host__ void permute(PermuteMethod reorder,
-                          IndexT*       h_custom_reordering = nullptr)
+    __host__ void permute(RXMeshStatic& rx, PermuteMethod reorder)
     {
         permute_alloc(reorder);
 
@@ -843,17 +845,11 @@ struct SparseMatrix
                                                      m_h_solver_col_idx,
                                                      NULL,
                                                      m_h_permute));
-        } else if (reorder == PermuteMethod::GPUMGND ||
-                   reorder == PermuteMethod::GPUND) {
-            if (h_custom_reordering == nullptr) {
-                RXMESH_ERROR(
-                    "SparseMatrix::permute() CUSTOM reordering is specified "
-                    "but no reordering array is provided!");
-                m_use_reorder = false;
-                return;
-            }
-            std::memcpy(
-                m_h_permute, h_custom_reordering, m_num_rows * sizeof(IndexT));
+        } else if (reorder == PermuteMethod::GPUMGND) {
+            mgnd_permute(rx, m_h_permute);
+
+        } else if (reorder == PermuteMethod::GPUND) {
+            nd_permute(rx, m_h_permute);
         } else {
             RXMESH_ERROR("SparseMatrix::permute() incompatible reorder method");
         }
@@ -1328,9 +1324,9 @@ struct SparseMatrix
      * sparse matrix before calling the solve() method below. After calling this
      * pre_solve(), solver() can be called with multiple right hand sides
      */
-    __host__ void pre_solve(Solver        solver,
-                            PermuteMethod reorder = PermuteMethod::NSTDIS,
-                            IndexT*       h_custom_reordering = nullptr)
+    __host__ void pre_solve(RXMeshStatic& rx,
+                            Solver        solver,
+                            PermuteMethod reorder = PermuteMethod::NSTDIS)
     {
         if (solver != Solver::CHOL && solver != Solver::QR) {
             RXMESH_WARN(
@@ -1341,7 +1337,7 @@ struct SparseMatrix
         m_current_solver = solver;
 
         permute_alloc(reorder);
-        permute(reorder, h_custom_reordering);
+        permute(rx, reorder);
         analyze_pattern(solver);
         post_analyze_alloc(solver);
         factorize(solver);

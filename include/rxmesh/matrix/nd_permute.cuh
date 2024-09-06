@@ -136,7 +136,7 @@ void construct_a_simple_chordal_graph(Graph<T>& graph)
  */
 template <typename T>
 void construct_patches_neighbor_graph(
-    RXMeshStatic&           rx,
+    const RXMeshStatic&     rx,
     Graph<T>&               patches_graph,
     const std::vector<int>& h_patch_graph_edge_weight)
 {
@@ -271,7 +271,7 @@ void heavy_max_matching(const RXMeshStatic&      rx,
 
     std::vector<integer_t> rands(graph.n);
     fill_with_random_numbers(rands.data(), rands.size());
-    //fill_with_sequential_numbers(rands.data(), rands.size());
+    // fill_with_sequential_numbers(rands.data(), rands.size());
 
 
     for (int k = 0; k < graph.n; ++k) {
@@ -612,7 +612,7 @@ void create_dfs_indexing(const int                level,
     }
 }
 
-void permute_separators(RXMeshStatic&         rx,
+void permute_separators(const RXMeshStatic&   rx,
                         VertexAttribute<int>& v_index,
                         MaxMatchTree<int>&    max_match_tree,
                         int*                  d_permute,
@@ -736,9 +736,8 @@ void permute_separators(RXMeshStatic&         rx,
     GPU_FREE(d_count);
 }
 
-void nd_permute(RXMeshStatic& rx, std::vector<int>& h_permute)
+void nd_permute(RXMeshStatic& rx, int* h_permute)
 {
-    h_permute.resize(rx.get_num_vertices());
 
     auto v_index = *rx.add_vertex_attribute<int>("index", 1);
 
@@ -814,9 +813,9 @@ void nd_permute(RXMeshStatic& rx, std::vector<int>& h_permute)
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
 
-    CUDA_ERROR(cudaMemcpy(h_permute.data(),
+    CUDA_ERROR(cudaMemcpy(h_permute,
                           d_permute,
-                          h_permute.size() * sizeof(int),
+                          rx.get_num_patches() * sizeof(int),
                           cudaMemcpyDeviceToHost));
 
     GPU_FREE(d_permute);

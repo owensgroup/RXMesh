@@ -143,7 +143,7 @@ void with_mgnd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
-    rxmesh::mgnd_permute(rx, h_permute);
+    rxmesh::mgnd_permute(rx, h_permute.data());
 
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
@@ -162,7 +162,7 @@ void with_cuda_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     // rxmesh::cuda_nd_reorder(rx, h_permute, Arg.nd_level);
 
-    rxmesh::nd_permute(rx, h_permute);
+    rxmesh::nd_permute(rx, h_permute.data());
 
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));

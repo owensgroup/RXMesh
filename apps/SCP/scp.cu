@@ -161,7 +161,7 @@ int main(int argc, char** argv)
     uv_mat.fill_random();
 
     // factorize the matrix
-    Lc.pre_solve(Solver::CHOL, PermuteMethod::NSTDIS);
+    Lc.pre_solve(rx, Solver::CHOL, PermuteMethod::NSTDIS);
 
     // the power method
     int iterations = 32;

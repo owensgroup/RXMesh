@@ -4,9 +4,6 @@
 #include "rxmesh/matrix/sparse_matrix.cuh"
 #include "rxmesh/rxmesh_static.h"
 
-#include "rxmesh/matrix/mgnd_permute.cuh"
-#include "rxmesh/matrix/nd_reorder.cuh"
-
 #include "mcf_kernels.cuh"
 
 template <typename T, uint32_t blockThreads>
@@ -195,24 +192,9 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     // A_mat.solve(B_mat, *X_mat, Solver::QR, PermuteMethod::NSTDIS);
     // A_mat.solve(B_mat, *X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
 
-    // Pre-Solves
-    std::vector<int> h_reorder_array;
+    // pre-solve
+    A_mat.pre_solve(rx, Solver::CHOL, permute_method);
 
-    if (permute_method == PermuteMethod::GPUMGND ||
-        permute_method == PermuteMethod::GPUND) {
-
-        // compute permutation
-        h_reorder_array.resize(rx.get_num_vertices());
-
-        // cuda_nd_reorder(rx, h_reorder_array, Arg.nd_level);
-
-        mgnd_permute(rx, h_reorder_array);
-
-        // Solving using CHOL
-        A_mat.pre_solve(Solver::CHOL, permute_method, h_reorder_array.data());
-    } else {
-        A_mat.pre_solve(Solver::CHOL, permute_method);
-    }
 
     // Solve
     A_mat.solve(B_mat, *X_mat);
