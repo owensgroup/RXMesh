@@ -815,7 +815,7 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
 
     CUDA_ERROR(cudaMemcpy(h_permute,
                           d_permute,
-                          rx.get_num_patches() * sizeof(int),
+                          rx.get_num_vertices() * sizeof(int),
                           cudaMemcpyDeviceToHost));
 
     GPU_FREE(d_permute);
