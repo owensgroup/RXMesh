@@ -186,18 +186,93 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     // A_mat.move(DEVICE, HOST);
     // B_mat.move(DEVICE, HOST);
     // X_mat->move(DEVICE, HOST);
-    // A_mat.solve(B_mat, *X_mat, Solver::LU, PermuteMethod::NSTDIS);
+    // A_mat.solve(B_mat, *X_mat, Solver::LU, permute_method);
 
     // Solving using QR or CHOL
-    // A_mat.solve(B_mat, *X_mat, Solver::QR, PermuteMethod::NSTDIS);
-    // A_mat.solve(B_mat, *X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
+    // A_mat.solve(B_mat, *X_mat, Solver::QR, permute_method);
+    // A_mat.solve(B_mat, *X_mat, Solver::CHOL, permute_method);
+
 
     // pre-solve
-    A_mat.pre_solve(rx, Solver::CHOL, permute_method);
-
-
+    //A_mat.pre_solve(rx, Solver::CHOL, permute_method);
     // Solve
+    //A_mat.solve(B_mat, *X_mat);
+
+    Report report("MCF_Chol");
+    report.command_line(Arg.argc, Arg.argv);
+    report.device();
+    report.system();
+    report.model_data(Arg.obj_file_name, rx);
+    report.add_member("method", std::string("RXMesh"));
+    report.add_member("blockThreads", blockThreads);
+
+    CPUTimer timer;
+    GPUTimer gtimer;
+
+    timer.start();
+    gtimer.start();
+    A_mat.permute_alloc(permute_method);
+    timer.stop();
+    gtimer.stop();
+    RXMESH_INFO("permute_alloc took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+    report.add_member("permute_alloc", timer.elapsed_millis());
+
+    timer.start();
+    gtimer.start();
+    A_mat.permute(rx, permute_method);
+    timer.stop();
+    gtimer.stop();
+    RXMESH_INFO("permute took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+    report.add_member("permute", timer.elapsed_millis());
+
+
+    timer.start();
+    gtimer.start();
+    A_mat.analyze_pattern(Solver::CHOL);
+    timer.stop();
+    gtimer.stop();
+    RXMESH_INFO("analyze_pattern took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+    report.add_member("analyze_pattern", timer.elapsed_millis());
+
+
+    timer.start();
+    gtimer.start();
+    A_mat.post_analyze_alloc(Solver::CHOL);
+    timer.stop();
+    gtimer.stop();
+    RXMESH_INFO("post_analyze_alloc took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+    report.add_member("post_analyze_alloc", timer.elapsed_millis());
+
+
+    timer.start();
+    gtimer.start();
+    A_mat.factorize(Solver::CHOL);
+    timer.stop();
+    gtimer.stop();
+    RXMESH_INFO("factorize took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+    report.add_member("factorize", timer.elapsed_millis());
+
+
+    timer.start();
+    gtimer.start();
     A_mat.solve(B_mat, *X_mat);
+    timer.stop();
+    gtimer.stop();
+    RXMESH_INFO("solve took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+    report.add_member("solve", timer.elapsed_millis());
+    
 
     // move the results to the host
     // if we use LU, the data will be on the host and we should not move the
@@ -215,4 +290,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     B_mat.release();
     X_mat->release();
     A_mat.release();
+
+    report.write(Arg.output_folder + "/rxmesh",
+                 "MCF_SpMat_" + extract_file_name(Arg.obj_file_name));
 }

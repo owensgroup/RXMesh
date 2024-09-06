@@ -40,11 +40,13 @@ TEST(App, MCF)
 
     RXMeshStatic rx(Arg.obj_file_name);
 
+    ASSERT_TRUE(rx.is_edge_manifold());
+
     // RXMesh Impl
-    mcf_cg<dataT>(rx);
+    //mcf_cg<dataT>(rx);
 
     // RXMesh cusolver Impl
-    mcf_cusolver_chol<dataT>(rx, PermuteMethod::NSTDIS);
+    mcf_cusolver_chol<dataT>(rx, PermuteMethod::GPUND);
 }
 
 int main(int argc, char** argv)
