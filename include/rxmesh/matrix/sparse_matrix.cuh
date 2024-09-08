@@ -1189,6 +1189,12 @@ struct SparseMatrix
                 "post_analyze_alloc method");
             return;
         }
+
+        RXMESH_INFO(
+            "post_analyze_alloc() internalDataInBytes= {}, workspaceInBytes= "
+            "{}",
+            m_internalDataInBytes,
+            m_workspaceInBytes);
         CUDA_ERROR(cudaMalloc((void**)&m_solver_buffer, m_workspaceInBytes));
     }
 

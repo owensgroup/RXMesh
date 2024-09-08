@@ -419,14 +419,22 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
                                     ShmemAllocator&  shrd_alloc,
                                     uint16_t*        s_output_offset,
                                     uint16_t*        s_output_value,
-                                    bool             oriented)
+                                    bool             oriented,
+                                    bool             smem_dup)
 {
-    // M_vv = M_EV^{T} \dot M_EV
-    // This requires computing M_EV^{T} which we compute in shared memory
-    // similar to v_e. Doing that, we have store in s_output_value the edges
-    // incident to each vertex. After that we need to replace each edge with
-    // the other end vertex which is duplicated by writing it to
-    // s_edges_duplicate
+    // smem_dup indicate if we should store the duplicated EV in shared memory
+    // if oriented is false, we have the option to either store the duplicated
+    // EV in shared memory (which is allocated/de-allocated inside this
+    // function), or just read it from global memory. If oriented is true, then
+    // we don't have an option since oriented requires a lot of shared memory
+    // that is okay to reuse to store the duplicates
+    //
+    //  M_vv = M_EV^{T} \dot M_EV
+    //  This requires computing M_EV^{T} which we compute in shared memory
+    //  similar to v_e. Doing that, we have store in s_output_value the edges
+    //  incident to each vertex. After that we need to replace each edge with
+    //  the other end vertex which is duplicated by writing it to
+    //  s_edges_duplicate
     const uint16_t  num_vertices   = patch_info.num_vertices[0];
     const uint16_t  num_edges      = patch_info.num_edges[0];
     const uint32_t* active_mask_e  = patch_info.active_mask_e;
@@ -435,7 +443,7 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
 
     // assert(2 * 2 * num_edges >= num_vertices + 1 + 2 * num_edges);
 
-    if (!oriented) {
+    if (!oriented && smem_dup) {
         s_ev_duplicate =
             shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
         for (uint16_t i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
@@ -443,6 +451,8 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
         }
         // we should sync here to avoid writing to s_ev before reading it into
         // s_ev_duplicate but we rely on the sync in block_mat_transpose
+    } else if (!smem_dup) {
+        s_ev_duplicate = reinterpret_cast<uint16_t*>(patch_info.ev);
     }
 
     v_e<blockThreads>(num_vertices,
@@ -488,7 +498,9 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
         }
     }
 
-    shrd_alloc.dealloc<uint16_t>(2 * patch_info.num_edges[0]);
+    if ((!oriented && smem_dup) || oriented) {
+        shrd_alloc.dealloc<uint16_t>(2 * patch_info.num_edges[0]);
+    }
 }
 
 template <uint32_t blockThreads>
@@ -671,7 +683,8 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
                           shrd_alloc,
                           s_output_offset,
                           s_output_value,
-                          oriented);
+                          oriented,
+                          true);
     }
 
     if constexpr (op == Op::VE) {

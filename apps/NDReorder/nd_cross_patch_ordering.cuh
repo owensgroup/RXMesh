@@ -758,7 +758,7 @@ void cross_patch_ordering(rxmesh::RXMeshStatic&             rx,
 
     uint16_t* num_node;
     cudaMallocManaged(&num_node, sizeof(int));
-    *num_node = rx.get_num_patches();
+    *num_node              = rx.get_num_patches();
     uint16_t prev_num_node = 0;
 
     uint16_t level = 0;
@@ -811,11 +811,12 @@ void cross_patch_ordering(rxmesh::RXMeshStatic&             rx,
 
         if (num_node[0] == prev_num_node) {
             // check<blockThreads>
-            //     <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(), level);
+            //     <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(),
+            //     level);
             // CUDA_ERROR(cudaDeviceSynchronize());
             return;
         }
-        
+
 
         printf("level: %d, num_node: %d\n", level, *num_node);
 
@@ -911,7 +912,8 @@ void cross_patch_ordering(rxmesh::RXMeshStatic&             rx,
         CUDA_ERROR(cudaDeviceSynchronize());
 
         // check_ordering<blockThreads>
-        //     <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(), level);
+        //     <<<rx.get_num_patches(), blockThreads>>>(rx.get_context(),
+        //     level);
         // CUDA_ERROR(cudaDeviceSynchronize());
 
         ordering_generate_finer_level<blockThreads>

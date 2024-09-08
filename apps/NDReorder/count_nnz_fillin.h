@@ -34,20 +34,6 @@ int count_nnz_fillin(const EigeMatT& eigen_mat, std::vector<I>& h_permute)
 
     assert(h_permute.size() == eigen_mat.rows());
 
-    //// VV matrix
-    // rxmesh::SparseMatrix<float> mat(rx);
-    //
-    //// populate an SPD matrix
-    // mat.for_each([](int r, int c, float& val) {
-    //     if (r == c) {
-    //         val = 10.0f;
-    //     } else {
-    //         val = -1.0f;
-    //     }
-    // });
-    //
-    //// convert matrix to Eigen
-    // auto eigen_mat = mat.to_eigen();
 
     // std::cout << "eigen_mat\n" << eigen_mat << "\n";
 

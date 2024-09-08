@@ -8,6 +8,8 @@
 #include "rxmesh/matrix/mgnd_permute.cuh"
 #include "rxmesh/matrix/permute_util.h"
 
+#include "rxmesh/matrix/nd_single_patch_ordering.cuh"
+
 namespace rxmesh {
 
 template <typename T>
@@ -823,4 +825,67 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
     GPU_FREE(d_patch_proj_l1);
     GPU_FREE(d_patch_graph_edge_weight);
 }
+
+
+void single_patch_nd_permute(RXMeshStatic& rx, int* h_permute)
+{
+
+    constexpr uint32_t blockThreads = 256;
+
+    // helper vertex and edge attr
+    // TODO delete them
+    auto attr_v = rx.add_vertex_attribute<uint16_t>("attr_v", 1);
+    auto attr_e = rx.add_edge_attribute<uint16_t>("attr_e", 1);
+
+    // vertex ordering attribute to store the result
+    auto v_ordering = rx.add_vertex_attribute<int>("v_ordering", 1);
+    v_ordering->reset(-1, DEVICE);
+
+
+    LaunchBox<blockThreads> lb;
+    rx.prepare_launch_box({Op::V},
+                          lb,
+                          (void*)nd_single_patch<blockThreads>,
+                          false,
+                          false,
+                          false,
+                          [](uint32_t v, uint32_t e, uint32_t f) {
+                              return
+                                  // active_v_mis, v_mis, candidate_v_mis
+                                  3 * detail::mask_num_bytes(v) +
+
+                                  // 4*EV for vv_cur and vv_nxt
+                                  (3 * 2 * e + std::max(v + 1, 2 * e)) *
+                                      sizeof(uint16_t) +
+
+                                  // padding
+                                  6 * ShmemAllocator::default_alignment;
+                          });
+
+    RXMESH_TRACE("single_patch_nd_permute shared memory= {} (bytes)",
+                 lb.smem_bytes_dyn);
+
+
+    nd_single_patch<blockThreads>
+        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
+            rx.get_context(), *v_ordering, *attr_v, *attr_e);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+#if USE_POLYSCOPE
+    attr_v->move(DEVICE, HOST);
+    attr_e->move(DEVICE, HOST);
+
+
+    auto ps_mesh = rx.get_polyscope_mesh();
+
+    ps_mesh->addVertexScalarQuantity("attr_v", *attr_v);
+    ps_mesh->addEdgeScalarQuantity("attr_e", *attr_e);
+    ps_mesh->addVertexScalarQuantity("in_patch_prem", *v_ordering);
+
+    // render
+    polyscope::show();
+#endif
+}
+
 }  // namespace rxmesh

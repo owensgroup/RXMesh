@@ -22,7 +22,7 @@ struct arg
     float       time_step           = 0.001;
     float       cg_tolerance        = 1e-6;
     uint32_t    max_num_cg_iter     = 1000;
-    bool        use_uniform_laplace = false;    
+    bool        use_uniform_laplace = false;
     char**      argv;
     int         argc;
 } Arg;
@@ -43,9 +43,9 @@ TEST(App, MCF)
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
-    if (Arg.solver == "ch"){
+    if (Arg.solver == "ch") {
         mcf_cg<dataT>(rx);
-    } else{
+    } else {
         mcf_cusolver_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
     }
 }
@@ -108,10 +108,12 @@ int main(int argc, char** argv)
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
         }
         if (cmd_option_exists(argv, argc + argv, "-perm_method")) {
-            Arg.perm_method = std::string(get_cmd_option(argv, argv + argc, "-perm_method"));
+            Arg.perm_method =
+                std::string(get_cmd_option(argv, argv + argc, "-perm_method"));
         }
         if (cmd_option_exists(argv, argc + argv, "-solver")) {
-            Arg.solver = std::string(get_cmd_option(argv, argv + argc, "-solver"));
+            Arg.solver =
+                std::string(get_cmd_option(argv, argv + argc, "-solver"));
         }
     }
 

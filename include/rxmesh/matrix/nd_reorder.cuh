@@ -1,4 +1,5 @@
 #pragma once
+#if 0
 #include <stdint.h>
 
 #include <cooperative_groups.h>
@@ -1501,3 +1502,4 @@ void cuda_nd_reorder(RXMeshStatic&     rx,
 }
 
 }  // namespace rxmesh
+#endif

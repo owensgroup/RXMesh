@@ -207,8 +207,9 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     report.add_member("blockThreads", blockThreads);
     report.add_member("PermuteMethod",
                       permute_method_to_string(permute_method));
-    
-    RXMESH_INFO("permute_method took {}", permute_method_to_string(permute_method));
+
+    RXMESH_INFO("permute_method took {}",
+                permute_method_to_string(permute_method));
 
     float total_time = 0;
 
@@ -224,7 +225,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
     report.add_member("permute_alloc", timer.elapsed_millis());
-    total_time+=timer.elapsed_millis();
+    total_time += timer.elapsed_millis();
 
     timer.start();
     gtimer.start();
@@ -235,7 +236,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
     report.add_member("permute", timer.elapsed_millis());
-    total_time+=timer.elapsed_millis();
+    total_time += timer.elapsed_millis();
 
 
     timer.start();
@@ -247,7 +248,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
     report.add_member("analyze_pattern", timer.elapsed_millis());
-    total_time+=timer.elapsed_millis();
+    total_time += timer.elapsed_millis();
 
 
     timer.start();
@@ -259,7 +260,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
     report.add_member("post_analyze_alloc", timer.elapsed_millis());
-    total_time+=timer.elapsed_millis();
+    total_time += timer.elapsed_millis();
 
 
     timer.start();
@@ -271,7 +272,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
     report.add_member("factorize", timer.elapsed_millis());
-    total_time+=timer.elapsed_millis();
+    total_time += timer.elapsed_millis();
 
 
     timer.start();
@@ -283,7 +284,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
     report.add_member("solve", timer.elapsed_millis());
-    total_time+=timer.elapsed_millis();
+    total_time += timer.elapsed_millis();
 
     report.add_member("total_time", total_time);
 
@@ -298,8 +299,8 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     coords->from_matrix(X_mat.get());
 
 #if USE_POLYSCOPE
-    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-    polyscope::show();
+    // rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    // polyscope::show();
 #endif
 
     B_mat.release();

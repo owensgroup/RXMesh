@@ -24,7 +24,7 @@ namespace rxmesh {
 // TODO: change the uniform shared memory allocation to per level allocation for
 // less shared memory use
 template <uint32_t blockThreads>
-struct ALIGN(16) PartitionManager
+struct PartitionManager
 {
     /**
      * @brief Default constructor for PartitionManager.
@@ -51,8 +51,8 @@ struct ALIGN(16) PartitionManager
 
     __device__ __inline__ void local_matching(
         cooperative_groups::thread_block& block,
-        rxmesh::VertexAttribute<uint16_t> attr_matched_v,
-        rxmesh::EdgeAttribute<uint16_t>   attr_active_e,
+        VertexAttribute<uint16_t>         attr_matched_v,
+        EdgeAttribute<uint16_t>           attr_active_e,
         uint16_t                          curr_level);
 
     __device__ __inline__ void local_coarsening(
@@ -69,12 +69,11 @@ struct ALIGN(16) PartitionManager
 
     __device__ __inline__ void local_multi_level_partition(
         cooperative_groups::thread_block& block,
-        uint16_t                          curr_level,
-        uint16_t                          partition_level);
+        uint16_t                          curr_level);
 
     __device__ __inline__ void local_genrate_reordering(
         cooperative_groups::thread_block& block,
-        rxmesh::VertexAttribute<uint16_t> v_ordering);
+        VertexAttribute<int>              v_ordering);
 
 
     __device__ __inline__ uint16_t* get_ev(uint16_t curr_level)
@@ -129,8 +128,8 @@ struct ALIGN(16) PartitionManager
         return m_s_separator_vertices[curr_level];
     }
 
-    __device__ __inline__ bool coarsen_owned(rxmesh::LocalEdgeT e_handle,
-                                             uint16_t           level)
+    __device__ __inline__ bool coarsen_owned(LocalEdgeT e_handle,
+                                             uint16_t   level)
     {
         if (level == 0) {
             return m_patch_info.is_owned(e_handle);
@@ -139,8 +138,8 @@ struct ALIGN(16) PartitionManager
         return true;
     }
 
-    __device__ __inline__ bool coarsen_owned(rxmesh::LocalVertexT v_handle,
-                                             uint16_t             level)
+    __device__ __inline__ bool coarsen_owned(LocalVertexT v_handle,
+                                             uint16_t     level)
     {
         if (level == 0) {
             return m_patch_info.is_owned(v_handle);
@@ -562,8 +561,8 @@ __device__ __inline__ PartitionManager<blockThreads>::PartitionManager(
 template <uint32_t blockThreads>
 __device__ __inline__ void PartitionManager<blockThreads>::local_matching(
     cooperative_groups::thread_block& block,
-    rxmesh::VertexAttribute<uint16_t> attr_matched_v,
-    rxmesh::EdgeAttribute<uint16_t>   attr_active_e,
+    VertexAttribute<uint16_t>         attr_matched_v,
+    EdgeAttribute<uint16_t>           attr_active_e,
     uint16_t                          curr_level)
 {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1250,8 +1249,7 @@ template <uint32_t blockThreads>
 __device__ __inline__ void
 PartitionManager<blockThreads>::local_multi_level_partition(
     cooperative_groups::thread_block& block,
-    uint16_t                          curr_level,
-    uint16_t                          partition_level)
+    uint16_t                          curr_level)
 {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -1509,7 +1507,7 @@ template <uint32_t blockThreads>
 __device__ __inline__ void
 PartitionManager<blockThreads>::local_genrate_reordering(
     cooperative_groups::thread_block& block,
-    VertexAttribute<uint16_t>         v_ordering)
+    VertexAttribute<int>              v_ordering)
 {
     // Get level 0 param
     uint16_t  num_vertices = m_num_vertices_limit;
