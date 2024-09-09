@@ -834,52 +834,65 @@ void single_patch_nd_permute(RXMeshStatic& rx, int* h_permute)
 
     // helper vertex and edge attr
     // TODO delete them
-    auto attr_v = rx.add_vertex_attribute<uint16_t>("attr_v", 1);
-    auto attr_e = rx.add_edge_attribute<uint16_t>("attr_e", 1);
+    auto attr_v  = rx.add_vertex_attribute<int>("attr_v", 1);
+    auto attr_v1 = rx.add_vertex_attribute<int>("attr_v1", 1);
+    auto attr_e  = rx.add_edge_attribute<int>("attr_e", 1);
+
+    attr_v->reset(DEVICE, -1);
+    attr_v1->reset(DEVICE, -1);
+    attr_e->reset(DEVICE, -1);
 
     // vertex ordering attribute to store the result
     auto v_ordering = rx.add_vertex_attribute<int>("v_ordering", 1);
     v_ordering->reset(-1, DEVICE);
 
+    const int maxCoarsenLevels = 3;
 
     LaunchBox<blockThreads> lb;
-    rx.prepare_launch_box({Op::V},
-                          lb,
-                          (void*)nd_single_patch<blockThreads>,
-                          false,
-                          false,
-                          false,
-                          [](uint32_t v, uint32_t e, uint32_t f) {
-                              return
-                                  // active_v_mis, v_mis, candidate_v_mis
-                                  3 * detail::mask_num_bytes(v) +
+    rx.prepare_launch_box(
+        {Op::V},
+        lb,
+        (void*)nd_single_patch<blockThreads, maxCoarsenLevels>,
+        false,
+        false,
+        false,
+        [&](uint32_t v, uint32_t e, uint32_t f) {
+            return
+                // active_v_mis, v_mis, candidate_v_mis
+                5 * detail::mask_num_bytes(v) +
 
-                                  // 4*EV for vv_cur and vv_nxt
-                                  (3 * 2 * e + std::max(v + 1, 2 * e)) *
-                                      sizeof(uint16_t) +
+                // 4*EV for vv_cur and vv_nxt
+                (3 * 2 * e + std::max(v + 1, 2 * e)) * sizeof(uint16_t) +
+                // matching array
+                v * maxCoarsenLevels * sizeof(uint16_t) +
 
-                                  // padding
-                                  6 * ShmemAllocator::default_alignment;
-                          });
+                // padding
+                7 * ShmemAllocator::default_alignment;
+        });
 
     RXMESH_TRACE("single_patch_nd_permute shared memory= {} (bytes)",
                  lb.smem_bytes_dyn);
 
 
-    nd_single_patch<blockThreads>
+    nd_single_patch<blockThreads, maxCoarsenLevels>
         <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
-            rx.get_context(), *v_ordering, *attr_v, *attr_e);
+            rx.get_context(), *v_ordering, *attr_v, *attr_e, *attr_v1);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
 #if USE_POLYSCOPE
     attr_v->move(DEVICE, HOST);
+    attr_v1->move(DEVICE, HOST);
     attr_e->move(DEVICE, HOST);
 
+    for (int p = 0; p < rx.get_num_patches(); ++p) {
+        rx.render_patch(p)->setEnabled(false);
+    }
 
     auto ps_mesh = rx.get_polyscope_mesh();
 
     ps_mesh->addVertexScalarQuantity("attr_v", *attr_v);
+    ps_mesh->addVertexScalarQuantity("attr_v1", *attr_v1);
     ps_mesh->addEdgeScalarQuantity("attr_e", *attr_e);
     ps_mesh->addVertexScalarQuantity("in_patch_prem", *v_ordering);
 

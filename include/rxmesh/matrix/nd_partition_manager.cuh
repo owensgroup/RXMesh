@@ -23,7 +23,7 @@ namespace rxmesh {
 
 // TODO: change the uniform shared memory allocation to per level allocation for
 // less shared memory use
-template <uint32_t blockThreads>
+template <uint32_t blockThreads, int maxCoarsenLevels>
 struct PartitionManager
 {
     /**

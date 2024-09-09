@@ -5,29 +5,37 @@
 
 #include "rxmesh/matrix/nd_patch.cuh"
 
+
 namespace rxmesh {
 
-template <uint32_t blockThreads>
-__global__ static void nd_single_patch(Context                   context,
-                                       VertexAttribute<int>      v_ordering,
-                                       VertexAttribute<uint16_t> attr_matched_v,
-                                       EdgeAttribute<uint16_t>   attr_active_e)
+template <uint32_t blockThreads, int maxCoarsenLevels>
+__global__ static void nd_single_patch(Context              context,
+                                       VertexAttribute<int> v_ordering,
+                                       VertexAttribute<int> attr_v,
+                                       EdgeAttribute<int>   attr_e,
+                                       VertexAttribute<int> attr_v1)
 {
 
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
 
-    PatchND<blockThreads> pnd(block, context, shrd_alloc);
+
+    PatchND<blockThreads, maxCoarsenLevels> pnd(block, context, shrd_alloc);
 
 
     // matching and coarsening
-    // int i = 0;
-    // while (i < req_levels) {
-    //    pm.local_matching(block, attr_matched_v, attr_active_e, i);
-    //    pm.local_coarsening(block, i);
-    //    ++i;
-    //}
-    //
+    int l = 0;
+    while (l < maxCoarsenLevels) {
+        pnd.edge_matching(block, l, attr_v, attr_e);
+        pnd.coarsen(block, l);
+
+        // TODO earlier exit based on the current coarsen graph size
+
+        ++l;
+        break;
+    }
+
+
     //// multi-level bipartition
     // pm.local_multi_level_partition(block, req_levels);
     //

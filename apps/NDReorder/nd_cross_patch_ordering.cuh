@@ -1,4 +1,5 @@
 #pragma once
+#if 0
 #include <stdint.h>
 
 #include <cooperative_groups.h>
@@ -1005,3 +1006,4 @@ void cross_patch_ordering(rxmesh::RXMeshStatic&             rx,
 }
 
 }  // namespace rxmesh
+#endif
