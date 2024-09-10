@@ -16,7 +16,8 @@ __global__ static void nd_single_patch(Context              context,
                                        VertexAttribute<int> attr_v1)
 {
 
-    auto           block = cooperative_groups::this_thread_block();
+    auto block = cooperative_groups::this_thread_block();
+
     ShmemAllocator shrd_alloc;
 
 
@@ -25,16 +26,23 @@ __global__ static void nd_single_patch(Context              context,
 
     // matching and coarsening
     int l = 0;
+
+
     while (l < maxCoarsenLevels) {
+
         pnd.edge_matching(block, l, attr_v, attr_e);
         pnd.coarsen(block, l);
 
-        // TODO earlier exit based on the current coarsen graph size
+        int num_active_vertices = pnd.num_active_vertices(block);
 
+        if (num_active_vertices <= 32) {
+            break;
+        }
         ++l;
-        
     }
 
+    block.sync();
+    pnd.bipartition_coarse_graph(block);
 
     //// multi-level bipartition
     // pm.local_multi_level_partition(block, req_levels);

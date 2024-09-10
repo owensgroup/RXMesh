@@ -846,7 +846,7 @@ void single_patch_nd_permute(RXMeshStatic& rx, int* h_permute)
     auto v_ordering = rx.add_vertex_attribute<int>("v_ordering", 1);
     v_ordering->reset(-1, DEVICE);
 
-    const int maxCoarsenLevels = 3;
+    const int maxCoarsenLevels = 5;
 
     LaunchBox<blockThreads> lb;
     rx.prepare_launch_box(

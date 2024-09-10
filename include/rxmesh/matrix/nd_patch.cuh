@@ -167,26 +167,26 @@ struct PatchND
         block.sync();
 
 
-        {
-            for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
-                attr_v(VertexHandle(m_patch_info.patch_id, v)) =
-                    (get_matching_arr(level)[v] == INVALID16) ?
-                        -1 :
-                        get_matching_arr(level)[v];
-            }
-
-            for (uint16_t e = threadIdx.x; e < m_num_e; e += blockThreads) {
-                uint16_t v0 = m_patch_info.ev[2 * e + 0].id;
-                uint16_t v1 = m_patch_info.ev[2 * e + 1].id;
-                if (get_matching_arr(level)[v0] ==
-                        get_matching_arr(level)[v1] &&
-                    get_matching_arr(level)[v0] != INVALID16) {
-                    attr_e(EdgeHandle(m_patch_info.patch_id, e)) = 1;
-                } else {
-                    attr_e(EdgeHandle(m_patch_info.patch_id, e)) = -1;
-                }
-            }
-        }
+        //{
+        //    for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
+        //        attr_v(VertexHandle(m_patch_info.patch_id, v)) =
+        //            (get_matching_arr(level)[v] == INVALID16) ?
+        //                -1 :
+        //                get_matching_arr(level)[v];
+        //    }
+        //
+        //    for (uint16_t e = threadIdx.x; e < m_num_e; e += blockThreads) {
+        //        uint16_t v0 = m_patch_info.ev[2 * e + 0].id;
+        //        uint16_t v1 = m_patch_info.ev[2 * e + 1].id;
+        //        if (get_matching_arr(level)[v0] ==
+        //                get_matching_arr(level)[v1] &&
+        //            get_matching_arr(level)[v0] != INVALID16) {
+        //            attr_e(EdgeHandle(m_patch_info.patch_id, e)) = 1;
+        //        } else {
+        //            attr_e(EdgeHandle(m_patch_info.patch_id, e)) = -1;
+        //        }
+        //    }
+        //}
     }
 
     /**
@@ -212,15 +212,17 @@ struct PatchND
 
                     // TODO apply the vertex weight
                     uint16_t matched_neighbour = INVALID16;
+                    uint16_t w                 = INVALID16;
 
                     uint16_t start = vv.offset[v];
                     uint16_t stop  = vv.offset[v + 1];
 
                     for (uint16_t i = start; i < stop; ++i) {
                         uint16_t n = vv.value[i];
-                        if (!matched_v(n)) {
+                        if (!matched_v(n) && active_v(n) && n < w) {
                             matched_neighbour = n;
-                            break;
+                            w                 = n;
+                            // break;
                         }
                     }
 
@@ -229,13 +231,29 @@ struct PatchND
                         matched_v.set(v, true);
                         matched_v.set(matched_neighbour, true);
 
-                        v_matching[v] = std::min(matched_neighbour, v);
-                        v_matching[matched_neighbour] =
-                            std::min(matched_neighbour, v);
+                        v_matching[v] = matched_neighbour;
+
+                        v_matching[matched_neighbour] = v;
                     }
                 }
             }
         }
+    }
+
+
+    /**
+     * @brief partition the coarse graph into two partitions
+     */
+    __device__ __inline__ void bipartition_coarse_graph(
+        cooperative_groups::thread_block& block)
+    {
+        // compacting active vertices ID by recycling the memory that is
+        //  used to store the next graph
+        uint16_t* s_active_v_id = m_s_vv_nxt.offset;
+
+        uint16_t* s_partition;
+
+        int num_active_v = compact_active_vertices(block, s_active_v_id);
     }
 
     /**
@@ -415,11 +433,12 @@ struct PatchND
                 uint16_t stop  = vv.offset[v + 1];
                 for (uint16_t i = start; i < stop; ++i) {
                     uint16_t n = vv.value[i];
-
-                    if (helper_v.try_set(n)) {
-                        v_matching[v] = std::min(v, n);
-                        v_matching[n] = std::min(v, n);
-                        break;
+                    if (active_v(n)) {
+                        if (helper_v.try_set(n)) {
+                            v_matching[v] = n;
+                            v_matching[n] = v;
+                            break;
+                        }
                     }
                 }
             }
@@ -441,91 +460,133 @@ struct PatchND
         fill_n<blockThreads>(vv_next.offset, m_num_v + 1, uint16_t(0));
         block.sync();
 
-        auto should_add = [&](const uint16_t n,
-                              const uint16_t v_start,
-                              const uint16_t v_stop) {
-            for (uint16_t j = v_start; j < v_stop; ++j) {
-                uint16_t s       = vv_cur.value[j];
-                uint16_t s_match = v_matching[s];
-
-                if (s_match != INVALID16 && s > s_match) {
-                    // s will become s_match in the new graph
-                    s = s_match;
-                }
-
-                if (s == n) {
-                    return false;
+        auto is_connected = [&](const uint16_t v,
+                                const uint16_t n,
+                                const uint16_t v_start,
+                                const uint16_t v_stop) {
+            // check if v is connected to n
+            for (uint16_t i = v_start; i < v_stop; ++i) {
+                uint16_t s = vv_cur.value[i];
+                if (active_v(s)) {
+                    if (s == n) {
+                        return true;
+                    }
                 }
             }
 
-            return true;
+            return false;
+        };
+
+
+        auto for_each_future_neighbour = [&](uint16_t v, auto do_something) {
+            // we only consider the vertex if 1) it is not matched, i.e., it
+            // will appear as itself in the coarse graph, 2) if it is matched
+            // but it is matched vertex has a higher id since we only keep the
+            // vertex with lesser ID
+
+
+            uint16_t match = v_matching[v];
+
+            if (v < match || match == INVALID16) {
+                // if v is the smallest, it will be the one that creates the
+                // new vertex
+                // count how many vertices v will be connected to (be
+                // careful about the duplicates)
+
+                const uint16_t v_start = vv_cur.offset[v];
+                const uint16_t v_stop  = vv_cur.offset[v + 1];
+
+                for (uint16_t i = v_start; i < v_stop; ++i) {
+                    uint16_t n = vv_cur.value[i];
+
+                    assert(n < m_num_v);
+
+                    // if n is active (because initial VV could be connected to
+                    // not-owned vertices or vertices on the separator) and if
+                    // n is not the matched vertex with v
+
+                    if (active_v(n) && n != match) {
+                        uint16_t n_match = v_matching[n];
+                        if (n_match == v) {
+                            continue;
+                        }
+
+
+                        if (n < n_match || n_match == INVALID16) {
+
+                            do_something(n);
+                        } else if (n_match != INVALID16 && n_match < n) {
+                            bool is_n_match_connected =
+                                is_connected(v, n_match, v_start, v_stop);
+
+
+                            if (!is_n_match_connected) {
+
+                                do_something(n_match);
+                            }
+                        }
+                    }
+                }
+
+
+                if (match != INVALID16) {
+
+                    // do the same with the match
+                    const uint16_t m_start = vv_cur.offset[match];
+                    const uint16_t m_stop  = vv_cur.offset[match + 1];
+
+                    for (uint16_t i = m_start; i < m_stop; ++i) {
+                        uint16_t n = vv_cur.value[i];
+
+                        assert(n < m_num_v);
+
+
+                        if (active_v(n) && n != v) {
+                            uint16_t n_match = v_matching[n];
+
+
+                            // if the match is v itself, then we don't wanna
+                            // consider it
+                            if (n_match == v) {
+                                continue;
+                            }
+
+
+                            if (is_connected(v, n, v_start, v_stop) ||
+                                is_connected(v, n_match, v_start, v_stop)) {
+                                // if n (or its match) is connected to v, then
+                                // we considered it already
+
+                                continue;
+                            }
+
+                            if (n < n_match || n_match == INVALID16) {
+
+                                do_something(n);
+
+                            } else if (n_match != INVALID16 && n_match < n) {
+                                bool is_n_match_connected = is_connected(
+                                    match, n_match, m_start, m_stop);
+
+                                if (!is_n_match_connected) {
+
+                                    do_something(n_match);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         };
 
         // 1) Count
         for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
             if (active_v(v)) {
+                uint16_t num_vv = 0;
 
-                // check if the vertex is matched
-                uint16_t match = v_matching[v];
-                if (match < v && match != INVALID16) {
-                    // if the matched vertex (match) is the one that will create
-                    // the new vertex, then deactivate v
-                    active_v.reset(v, true);
-                } else if ((v < match && match != INVALID16) ||
-                           (match == INVALID16)) {
-                    // if v is the smallest, it will be the one that creates the
-                    // new vertex
-                    // count how many vertices v will be connected to (be
-                    // careful about the duplicates)
+                for_each_future_neighbour(v, [&](uint16_t n) { num_vv++; });
 
-                    uint16_t num_vv = 0;
-
-                    const uint16_t v_start = vv_cur.offset[v];
-                    const uint16_t v_stop  = vv_cur.offset[v + 1];
-
-
-                    for (uint16_t i = v_start; i < v_stop; ++i) {
-                        uint16_t n = vv_cur.value[i];
-
-                        uint16_t n_match = v_matching[n];
-                        if (n_match == INVALID16) {
-                            // n is not matched, i.e., it will show up in as
-                            // itself in the new graph
-                            num_vv++;
-                        }
-                        if (n_match != INVALID16 && n < n_match) {
-                            // n is matched with something else and n is the
-                            // lesser ID between itself and its match
-                            num_vv++;
-                        }
-                    }
-
-                    if (match != INVALID16) {
-
-                        // do the same with the match
-                        const uint16_t m_start = vv_cur.offset[match];
-                        const uint16_t m_stop  = vv_cur.offset[match + 1];
-
-                        for (uint16_t i = m_start; i < m_stop; ++i) {
-                            uint16_t n = vv_cur.value[i];
-
-                            uint16_t n_match = v_matching[n];
-                            if ((n_match != INVALID16 && n < n_match) ||
-                                n_match == INVALID16) {
-
-                                // but we have to check that we did not count n
-                                // before during the loop over v's neighbors
-
-                                if (should_add(n, v_start, v_stop)) {
-                                    num_vv++;
-                                }
-                            }
-                        }
-                    }
-
-
-                    vv_next.offset[v] = num_vv;
-                }
+                vv_next.offset[v] = num_vv;
             }
         }
         block.sync();
@@ -543,53 +604,30 @@ struct PatchND
         for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
             if (active_v(v)) {
 
-                // check if the vertex is matched
+                uint16_t id     = 0;
+                uint16_t offset = vv_next.offset[v];
+                uint16_t num_v  = 0;
+
+                for_each_future_neighbour(v, [&](uint16_t n) {
+                    assert(n < m_num_v);
+                    vv_next.value[offset + id] = n;
+                    id++;
+                    num_v++;
+                });
+
+                assert(num_v == vv_next.offset[v + 1] - vv_next.offset[v]);
+            }
+        }
+        block.sync();
+
+        // 4) Deactivate matched vertices with higher ID than its match
+        for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
+            if (active_v(v)) {
                 uint16_t match = v_matching[v];
-                if ((v < match && match != INVALID16) || (match == INVALID16)) {
-                    uint16_t id     = 0;
-                    uint16_t offset = vv_next.offset[v];
-                    uint16_t num_v  = 0;
-
-                    const uint16_t v_start = vv_cur.offset[v];
-                    const uint16_t v_stop  = vv_cur.offset[v + 1];
-
-
-                    for (uint16_t i = v_start; i < v_stop; ++i) {
-                        uint16_t n = vv_cur.value[i];
-
-                        uint16_t n_match = v_matching[n];
-
-                        if ((n_match != INVALID16 && n < n_match) ||
-                            n_match == INVALID16) {
-                            vv_next.value[offset + id] = n;
-                            id++;
-                            num_v++;
-                        }
-                    }
-
-                    if (match != INVALID16) {
-
-                        // do the same with the match
-                        const uint16_t m_start = vv_cur.offset[match];
-                        const uint16_t m_stop  = vv_cur.offset[match + 1];
-                        for (uint16_t i = m_start; i < m_stop; ++i) {
-                            uint16_t n = vv_cur.value[i];
-
-                            uint16_t n_match = v_matching[n];
-                            if ((n_match != INVALID16 && n < n_match) ||
-                                n_match == INVALID16) {
-
-                                if (should_add(n, v_start, v_stop)) {
-                                    vv_next.value[offset + id] = n;
-                                    id++;
-                                    num_v++;
-                                }
-                            }
-                        }
-                    }
-
-
-                    assert(num_v == vv_next.offset[v + 1] - vv_next.offset[v]);
+                if (v > match && match != INVALID16) {
+                    // if the matched vertex (match) is the one that will create
+                    // the new vertex, then deactivate v
+                    active_v.reset(v, true);
                 }
             }
         }
@@ -604,7 +642,77 @@ struct PatchND
         return &m_v_matching[m_num_v * level];
     }
 
-   private:
+    /**
+     * @brief count the number of current active vertices
+     */
+    __device__ __inline__ int num_active_vertices(
+        cooperative_groups::thread_block& block)
+    {
+        __shared__ int s_count[1];
+        if (threadIdx.x == 0) {
+            s_count[0] = 0;
+        }
+        block.sync();
+
+        const uint16_t mask_num_elements =
+            DIVIDE_UP(m_s_cur_active_v.size(), 32);
+        for (uint16_t i = threadIdx.x; i < mask_num_elements;
+             i += blockThreads) {
+            int num_set_bits = __popc(m_s_cur_active_v.m_bitmask[i]);
+
+            ::atomicAdd(s_count, num_set_bits);
+        }
+        block.sync();
+        return s_count[0];
+    }
+
+    /**
+     * @brief compact the active vertices ID
+     * @return
+     */
+    __device__ __inline__ int compact_active_vertices(
+        cooperative_groups::thread_block& block,
+        uint16_t*                         s_active_v_id)
+    {
+        __shared__ int s_count[1];
+        if (threadIdx.x == 0) {
+            s_count[0] = 0;
+        }
+        block.sync();
+
+        for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
+            if (m_s_cur_active_v(v)) {
+                s_active_v_id[::atomicAdd(s_count, 1)] = v;
+            }
+        }
+        block.sync();
+        return s_count[0];
+    }
+
+    __device__ __inline__ void print_graph(const VV&      vv,
+                                           const Bitmask& active_v)
+    {
+        if (threadIdx.x == 0) {
+            printf("\n ************ \n");
+            for (uint16_t v = 0; v < m_num_v; ++v) {
+                if (active_v(v)) {
+                    uint16_t start = vv.offset[v];
+                    uint16_t stop  = vv.offset[v + 1];
+                    for (uint16_t i = start; i < stop; ++i) {
+                        uint16_t n = vv.value[i];
+                        assert(n < m_num_v);
+                        assert(n != v);
+                        if (v < n && active_v(n)) {
+                            printf("\n %u -> %u", v, n);
+                        }
+                    }
+                }
+            }
+            printf("\n ************ \n");
+        }
+    }
+
+    // private:
     PatchInfo m_patch_info;
     VV        m_s_vv_cur, m_s_vv_nxt;
     Bitmask   m_s_active_v_mis;     // the active vertices for MIS
