@@ -32,7 +32,7 @@ __global__ static void nd_single_patch(Context              context,
         // TODO earlier exit based on the current coarsen graph size
 
         ++l;
-        break;
+        
     }
 
 
