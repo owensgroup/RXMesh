@@ -32,6 +32,9 @@ struct PatchND
         m_s_active_v        = Bitmask(m_num_v, shrd_alloc);
         m_s_cur_active_v    = Bitmask(m_num_v, shrd_alloc);
 
+        // recycle this memory
+        m_s_bipart    = Bitmask(m_num_v, m_s_v_mis.m_bitmask);
+        m_s_swapped_v = Bitmask(m_num_v, m_s_candidate_v_mis.m_bitmask);
 
         m_s_active_v_mis.reset(block);
         m_s_v_mis.reset(block);
@@ -245,15 +248,254 @@ struct PatchND
      * @brief partition the coarse graph into two partitions
      */
     __device__ __inline__ void bipartition_coarse_graph(
-        cooperative_groups::thread_block& block)
+        cooperative_groups::thread_block& block,
+        int                               max_iter = 20)
     {
+
+
         // compacting active vertices ID by recycling the memory that is
         //  used to store the next graph
         uint16_t* s_active_v_id = m_s_vv_nxt.offset;
 
-        uint16_t* s_partition;
 
         int num_active_v = compact_active_vertices(block, s_active_v_id);
+
+        // KL algorithm
+
+        assert(num_active_v > 1);
+
+        // Recycling the memory against.
+        assert(2 * num_active_v < 2 * m_num_e);
+
+        // the vertex with which we will switch assignment
+        uint16_t* s_switch = m_s_vv_nxt.value;
+
+        // store the gain of switching the assignment
+        int16_t* s_gain =
+            reinterpret_cast<int16_t*>(m_s_vv_nxt.value + num_active_v);
+
+
+        // Step 1: Initial partition of the vertices into two sets
+
+        // Random assignment
+        for (uint16_t v = threadIdx.x; v < num_active_v; v += blockThreads) {
+            // assign partition randomly
+            if (v % 2 == 0) {
+                m_s_bipart.reset(s_active_v_id[v], true);
+            } else {
+                m_s_bipart.set(s_active_v_id[v], true);
+            }
+        }
+
+        // BFS from the first vertex (to make sure that each partition is a
+        // connected component)
+        // m_s_bipart.reset(block);
+        // block.sync();
+        //__shared__ int s_num_added;
+        // if (threadIdx.x == 0) {
+        //    m_s_bipart.set(s_active_v_id[0], true);
+        //    s_num_added = 1;
+        //}
+        // block.sync();
+        //
+        // for (int iter = 0; iter < max_iter; ++iter) {
+        //    for (uint16_t v = threadIdx.x; v < num_active_v;
+        //         v += blockThreads) {
+        //        uint16_t vertex = s_active_v_id[v];
+        //        if (!m_s_bipart(vertex)) {
+        //
+        //            uint16_t v_start = m_s_vv_cur.offset[vertex];
+        //            uint16_t v_stop  = m_s_vv_cur.offset[vertex + 1];
+        //            for (uint16_t i = v_start; i < v_stop; ++i) {
+        //                uint16_t n = m_s_vv_cur.value[i];
+        //
+        //                if (m_s_bipart(n)) {
+        //                    m_s_bipart.set(vertex, true);
+        //                    int ret = ::atomicAdd(&s_num_added, 1);
+        //
+        //
+        //                    if (ret >= DIVIDE_UP(num_active_v, 2)) {
+        //                        ::atomicAdd(&s_num_added, -1);
+        //                        m_s_bipart.reset(vertex, true);
+        //                    }
+        //                    break;
+        //                }
+        //            }
+        //        }
+        //    }
+        //    block.sync();
+        //    if (s_num_added >= DIVIDE_UP(num_active_v, 2)) {
+        //        break;
+        //    }
+        //}
+
+        //  Make vertices that has been swapped and so we don't swap them
+        // anymore
+        // exit if all gains are -ve
+
+        auto calc_gain = [&](uint16_t a, uint16_t b) {
+            // compute the gain of switch the assignment between u and v
+
+            uint16_t int_a(0), ext_a(0), int_b(0), ext_b(0);
+            bool     is_edge = false;
+            bool     a_par   = m_s_bipart(a);
+            bool     b_par   = m_s_bipart(b);
+
+            if (a_par == b_par) {
+                return std::numeric_limits<int16_t>::min();
+            }
+
+            // Calculate D(a) and D(b), where D is the difference between
+            // external and internal edges
+
+            uint16_t a_start = m_s_vv_cur.offset[a];
+            uint16_t a_stop  = m_s_vv_cur.offset[a + 1];
+            for (uint16_t i = a_start; i < a_stop; ++i) {
+                uint16_t s = m_s_vv_cur.value[i];
+                if (!m_s_cur_active_v(s)) {
+                    continue;
+                }
+                if (s == b) {
+                    is_edge = true;
+                }
+
+                if (m_s_bipart(s) == a_par) {
+                    int_a++;
+                } else {
+                    ext_a++;
+                }
+            }
+
+
+            uint16_t b_start = m_s_vv_cur.offset[b];
+            uint16_t b_stop  = m_s_vv_cur.offset[b + 1];
+            for (uint16_t i = b_start; i < b_stop; ++i) {
+                uint16_t s = m_s_vv_cur.value[i];
+                if (!m_s_cur_active_v(s)) {
+                    continue;
+                }
+                if (m_s_bipart(s) == b_par) {
+                    int_b++;
+                } else {
+                    ext_b++;
+                }
+            }
+
+
+            int16_t D_a = ext_a - int_a;
+            int16_t D_b = ext_b - int_a;
+
+            int16_t g = D_a + D_b - 2 * int(is_edge);
+
+            return g;
+        };
+
+        __shared__ bool s_exit;
+        m_s_swapped_v.reset(block);
+
+        int cur_edge_cut = std::numeric_limits<int>::max();
+        for (int iter = 0; iter < max_iter; ++iter) {
+
+            // if (threadIdx.x == 0) {
+            //     printf("\n iter =%u, edge_cut= %d",
+            //            iter,
+            //            calc_edge_cut(m_s_vv_cur, m_s_cur_active_v,
+            //            m_s_bipart));
+            //     print_graph(m_s_vv_cur, m_s_cur_active_v);
+            // }
+
+            // Step 2: calc the gain of changing the assignment with all active
+            // vertices, i.e., every thread will compute the gain of switching
+            // one vertex with all other vertices and calc the max gain out of
+            // all these vertices
+            block.sync();
+
+
+            for (uint16_t i = threadIdx.x; i < num_active_v;
+                 i += blockThreads) {
+                uint16_t v = s_active_v_id[i];
+
+                // for all other vertices
+                int16_t  max_g = std::numeric_limits<int16_t>::min();
+                uint16_t max_u = INVALID16;
+                if (!m_s_swapped_v(v)) {
+                    for (uint16_t j = 0; j < num_active_v; ++j) {
+                        uint16_t u = s_active_v_id[j];
+
+                        if (v < u && !m_s_swapped_v(u)) {
+                            int16_t g = calc_gain(v, u);
+                            if (g > max_g) {
+                                max_g = g;
+                                max_u = u;
+                            }
+                        }
+                    }
+                }
+                s_gain[i]   = max_g;
+                s_switch[i] = max_u;
+            }
+            block.sync();
+
+            // let one thread decide which two vertices to switch
+            if (threadIdx.x == 0) {
+
+                uint16_t max_g_id = INVALID16;
+                int16_t  max_g    = std::numeric_limits<int16_t>::min();
+
+                int all_swapped = true;
+
+                for (uint16_t i = 0; i < num_active_v; ++i) {
+                    if (!m_s_swapped_v(i)) {
+                        all_swapped = false;
+                    }
+                    int16_t g = s_gain[i];
+                    if (g > max_g) {
+                        max_g    = g;
+                        max_g_id = i;
+                    }
+                }
+
+                if (max_g_id == INVALID16 || all_swapped) {
+                    s_exit = true;
+                } else {
+                    s_exit = false;
+
+                    uint16_t a = s_active_v_id[max_g_id];
+                    uint16_t b = s_switch[max_g_id];
+
+                    assert(m_s_bipart(a) != m_s_bipart(b));
+                    assert(!m_s_swapped_v(a));
+                    assert(!m_s_swapped_v(b));
+
+                    m_s_swapped_v.set(a, true);
+                    m_s_swapped_v.set(b, true);
+
+                    if (m_s_bipart(a)) {
+                        m_s_bipart.reset(a, true);
+                    } else {
+                        m_s_bipart.set(a, true);
+                    }
+
+
+                    if (m_s_bipart(b)) {
+                        m_s_bipart.reset(b, true);
+                    } else {
+                        m_s_bipart.set(b, true);
+                    }
+                }
+            }
+
+            block.sync();
+            if (s_exit) {
+                break;
+            }
+        }
+
+
+        //{
+        //    block.sync();
+        //    print_graph(m_s_vv_cur, m_s_cur_active_v);
+        //}
     }
 
     /**
@@ -274,12 +516,12 @@ struct PatchND
         Bitmask&                          active_e,
         int                               max_iter = 100)
     {
-        __shared__ int s_added[1];
+        __shared__ int s_added;
 
         fill_n<blockThreads>(v_matching, m_num_v, uint16_t(INVALID16));
         for (int iter = 0; iter < max_iter; ++iter) {
             if (threadIdx.x == 0) {
-                s_added[0] = 0;
+                s_added = 0;
             }
             candidate_v.reset(block);
             block.sync();
@@ -302,13 +544,13 @@ struct PatchND
 
                         active_v.reset(v0, true);
                         active_v.reset(v1, true);
-                        s_added[0] = 1;
+                        s_added = 1;
                     }
                 }
             }
             block.sync();
 
-            if (s_added[0] == 0) {
+            if (s_added == 0) {
                 break;
             }
 
@@ -334,9 +576,9 @@ struct PatchND
         int                               max_iter = 100)
     {
         // the active vertices for MIS considerations
-        __shared__ int s_num_active_v_mis[1];
+        __shared__ int s_num_active_v_mis;
         if (threadIdx.x == 0) {
-            s_num_active_v_mis[0] = 0;
+            s_num_active_v_mis = 0;
         }
 
         m_s_active_v_mis.copy(block, active_v);
@@ -351,14 +593,14 @@ struct PatchND
             // calc the number of active vertices for MIS consideration
             for (int c = threadIdx.x; c < m_num_v; c += blockThreads) {
                 if (m_s_active_v_mis(c)) {
-                    ::atomicAdd(s_num_active_v_mis, 1);
+                    ::atomicAdd(&s_num_active_v_mis, 1);
                 }
             }
             // reset the candidate
             m_s_candidate_v_mis.reset(block);
             block.sync();
 
-            if (s_num_active_v_mis[0] == 0) {
+            if (s_num_active_v_mis == 0) {
                 break;
             }
 
@@ -404,7 +646,7 @@ struct PatchND
             }
 
             if (threadIdx.x == 0) {
-                s_num_active_v_mis[0] = 0;
+                s_num_active_v_mis = 0;
             }
             block.sync();
         }
@@ -648,9 +890,9 @@ struct PatchND
     __device__ __inline__ int num_active_vertices(
         cooperative_groups::thread_block& block)
     {
-        __shared__ int s_count[1];
+        __shared__ int s_count;
         if (threadIdx.x == 0) {
-            s_count[0] = 0;
+            s_count = 0;
         }
         block.sync();
 
@@ -660,10 +902,10 @@ struct PatchND
              i += blockThreads) {
             int num_set_bits = __popc(m_s_cur_active_v.m_bitmask[i]);
 
-            ::atomicAdd(s_count, num_set_bits);
+            ::atomicAdd(&s_count, num_set_bits);
         }
         block.sync();
-        return s_count[0];
+        return s_count;
     }
 
     /**
@@ -694,10 +936,16 @@ struct PatchND
     {
         if (threadIdx.x == 0) {
             printf("\n ************ \n");
+            printf("\n digraph G {");
             for (uint16_t v = 0; v < m_num_v; ++v) {
                 if (active_v(v)) {
                     uint16_t start = vv.offset[v];
                     uint16_t stop  = vv.offset[v + 1];
+
+                    if (m_s_bipart(v)) {
+                        printf("\n %u [style=filled, fillcolor=lightblue]", v);
+                    }
+
                     for (uint16_t i = start; i < stop; ++i) {
                         uint16_t n = vv.value[i];
                         assert(n < m_num_v);
@@ -708,8 +956,37 @@ struct PatchND
                     }
                 }
             }
+            printf("\n }");
             printf("\n ************ \n");
         }
+    }
+
+    __device__ __inline__ uint16_t calc_edge_cut(const VV&      vv,
+                                                 const Bitmask& active_v,
+                                                 const Bitmask& bipart_v)
+    {
+        int ret = 0;
+        if (threadIdx.x == 0) {
+
+            for (uint16_t v = 0; v < m_num_v; ++v) {
+                if (active_v(v)) {
+                    uint16_t start = vv.offset[v];
+                    uint16_t stop  = vv.offset[v + 1];
+
+
+                    for (uint16_t i = start; i < stop; ++i) {
+                        uint16_t n = vv.value[i];
+
+                        if (v < n && active_v(n) &&
+                            bipart_v(v) != bipart_v(n)) {
+                            ret++;
+                        }
+                    }
+                }
+            }
+        }
+
+        return ret;
     }
 
     // private:
@@ -720,6 +997,8 @@ struct PatchND
     Bitmask   m_s_v_mis;            // the vertices in the MIS
     Bitmask   m_s_active_v;  // active vertices in the patch (minus not-owned)
     Bitmask   m_s_cur_active_v;  // current active vertices during coarsening
+    Bitmask   m_s_bipart;        // the bipartition assignment
+    Bitmask   m_s_swapped_v;
     uint32_t  m_num_v, m_num_e;
     uint16_t* m_v_matching;  // store the vertex a given vertex is matched with
 };

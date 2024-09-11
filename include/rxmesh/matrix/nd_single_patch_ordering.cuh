@@ -44,9 +44,6 @@ __global__ static void nd_single_patch(Context              context,
     block.sync();
     pnd.bipartition_coarse_graph(block);
 
-    //// multi-level bipartition
-    // pm.local_multi_level_partition(block, req_levels);
-    //
     // i -= 1;
     // while (i > 0) {
     //     pm.local_uncoarsening(block, i);
