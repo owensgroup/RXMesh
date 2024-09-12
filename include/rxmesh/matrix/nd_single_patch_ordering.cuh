@@ -3,8 +3,10 @@
 #include "rxmesh/context.h"
 #include "rxmesh/query.cuh"
 
+
 #include "rxmesh/matrix/nd_patch.cuh"
 
+#include "rxmesh/matrix/kmeans_patch.cuh"
 
 namespace rxmesh {
 
@@ -53,5 +55,21 @@ __global__ static void nd_single_patch(Context              context,
     // }
     //
     // pm.local_genrate_reordering(block, v_ordering);
+}
+
+
+template <uint32_t blockThreads>
+__global__ static void nd_single_patch_kmeans(Context              context,
+                                              VertexAttribute<int> v_ordering,
+                                              VertexAttribute<int> attr_v,
+                                              EdgeAttribute<int>   attr_e,
+                                              VertexAttribute<int> attr_v1)
+{
+    auto block = cooperative_groups::this_thread_block();
+
+    ShmemAllocator shrd_alloc;
+
+
+    PatchKMeans<blockThreads> pnd(block, context, shrd_alloc);
 }
 }  // namespace rxmesh

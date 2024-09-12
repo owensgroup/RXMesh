@@ -849,6 +849,7 @@ void single_patch_nd_permute(RXMeshStatic& rx, int* h_permute)
     const int maxCoarsenLevels = 5;
 
     LaunchBox<blockThreads> lb;
+#if 0
     rx.prepare_launch_box(
         {Op::V},
         lb,
@@ -869,15 +870,40 @@ void single_patch_nd_permute(RXMeshStatic& rx, int* h_permute)
                 // padding
                 7 * ShmemAllocator::default_alignment;
         });
+#else
+    rx.prepare_launch_box({Op::V},
+                          lb,
+                          (void*)nd_single_patch_kmeans<blockThreads>,
+                          false,
+                          false,
+                          false,
+                          [&](uint32_t v, uint32_t e, uint32_t f) {
+                              return
+                                  // active_v_mis, v_mis, candidate_v_mis
+                                  3 * detail::mask_num_bytes(v) +
+
+                                  // EV for vv_cur
+                                  (2 * e + std::max(v + 1, 2 * e)) *
+                                      sizeof(uint16_t) +
+
+
+                                  // padding
+                                  4 * ShmemAllocator::default_alignment;
+                          });
+#endif
 
     RXMESH_TRACE("single_patch_nd_permute shared memory= {} (bytes)",
                  lb.smem_bytes_dyn);
 
-
+#if 0
     nd_single_patch<blockThreads, maxCoarsenLevels>
         <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
             rx.get_context(), *v_ordering, *attr_v, *attr_e, *attr_v1);
-
+#else
+    nd_single_patch_kmeans<blockThreads>
+        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
+            rx.get_context(), *v_ordering, *attr_v, *attr_e, *attr_v1);
+#endif
     CUDA_ERROR(cudaDeviceSynchronize());
 
 #if USE_POLYSCOPE
