@@ -1214,6 +1214,38 @@ __inline__ __device__ void bi_assignment_ggp(
                             }
                         }
                     }
+                } else if (s_active_v(v) && !s_assigned_v(v)) {
+                    // for active vertices that are not connected to anything
+                    // other vertices, we will add then to one of the partitions
+                    // at random (kinda) and put the vertex on the frontier so
+                    // we don't encounter this if condition again
+                    const uint16_t start = s_vv_offset[v];
+                    const uint16_t end   = s_vv_offset[v + 1];
+
+                    // and we have to calculate the neighbors since we might be
+                    // connected to in-active vertices
+                    int num_neighbours = 0;
+
+                    for (uint16_t vv = start; vv < end; ++vv) {
+
+                        const uint16_t nv = s_vv[vv];
+
+                        if (!s_active_v(nv)) {
+                            continue;
+                        }
+                        num_neighbours++;
+                    }
+                    if (num_neighbours == 0) {
+                        if (v % 2 == 0) {
+                            s_partition_a_v.set(v, true);
+                            ::atomicAdd(&s_num_A_vertices, 1);
+                        } else {
+                            s_partition_b_v.set(v, true);
+                            ::atomicAdd(&s_num_B_vertices, 1);
+                        }
+                        s_next_frontier_v.set(v, true);
+                        printf("\n reg growing %u", v);
+                    }
                 }
             }
 
@@ -1301,17 +1333,24 @@ __inline__ __device__ void bi_assignment_ggp(
                     const uint16_t start = s_vv_offset[v];
                     const uint16_t end   = s_vv_offset[v + 1];
 
+
+                    // put isolated vertices on the frontier right away so we
+                    // don't have to deal with them again
+                    // int num_neighbours = 0;
+
                     for (uint16_t vv = start; vv < end; ++vv) {
                         const uint16_t nv = s_vv[vv];
-                        if (is_a) {
-                            if (s_partition_b_v(nv)) {
-                                on_frontier = true;
-                                break;
-                            }
-                        } else {
-                            if (s_partition_a_v(nv)) {
-                                on_frontier = true;
-                                break;
+                        if (s_active_v(nv)) {
+                            if (is_a) {
+                                if (s_partition_b_v(nv)) {
+                                    on_frontier = true;
+                                    break;
+                                }
+                            } else {
+                                if (s_partition_a_v(nv)) {
+                                    on_frontier = true;
+                                    break;
+                                }
                             }
                         }
                     }
@@ -1422,6 +1461,11 @@ __inline__ __device__ void bi_assignment_ggp(
         init_interior();
         block.sync();
 
+        if (s_num_assigned_vertices == 0) {
+            // i.e., there is no frontier means we probably have a disconnected
+            // input
+            break;
+        }
         compute_interior();
         block.sync();
     }
