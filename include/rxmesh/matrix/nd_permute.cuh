@@ -134,7 +134,7 @@ void construct_a_simple_chordal_graph(Graph<T>& graph)
 
 /**
  * @brief construct patch neighbor graph which is the same as what we store in
- * PatchStash but in format acceptable by metis
+ * PatchStash but in a different format 
  */
 template <typename T>
 void construct_patches_neighbor_graph(

@@ -12,8 +12,6 @@ target_sources(NDReorder
     ${SOURCE_LIST} ${COMMON_LIST}
 )
 
-include("metis.cmake")
-
 set_target_properties(NDReorder PROPERTIES FOLDER "apps")
 
 set_property(TARGET NDReorder PROPERTY CUDA_SEPARABLE_COMPILATION ON)

@@ -159,6 +159,11 @@ target_compile_options(RXMesh INTERFACE
     $<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>
 )
 
+
+#METIS
+include("cmake/metis.cmake")
+target_link_libraries(RXMesh INTERFACE metis)	
+
 target_link_libraries(RXMesh INTERFACE glm::glm)
 if (USE_POLYSCOPE)
 	target_link_libraries(RXMesh INTERFACE polyscope)	

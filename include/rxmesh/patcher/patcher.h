@@ -40,7 +40,8 @@ class Patcher
                                      uint32_t,
                                      ::rxmesh::detail::edge_key_hash> edges_map,
             const uint32_t num_vertices,
-            const uint32_t num_edges);
+            const uint32_t num_edges,
+            bool           use_metis);
 
     Patcher(std::string filename);
 
@@ -265,6 +266,8 @@ class Patcher
     void bfs(const std::vector<uint32_t>& ff_offset,
              const std::vector<uint32_t>& ff_values);
 
+    void metis_kway(const std::vector<uint32_t>& ff_offset,
+                    const std::vector<uint32_t>& ff_values);
 
     uint32_t m_patch_size, m_num_patches, m_num_vertices, m_num_edges,
         m_num_faces, m_num_seeds, m_max_num_patches, m_num_components,

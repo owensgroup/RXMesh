@@ -15,6 +15,7 @@
 #include "rxmesh/util/timer.h"
 #include "rxmesh/util/util.h"
 
+#include "metis.h"
 
 namespace rxmesh {
 
@@ -38,7 +39,8 @@ Patcher::Patcher(uint32_t                                        patch_size,
                                           uint32_t,
                                           detail::edge_key_hash> edges_map,
                  const uint32_t                                  num_vertices,
-                 const uint32_t                                  num_edges)
+                 const uint32_t                                  num_edges,
+                 bool                                            use_metis)
     : m_patch_size(patch_size),
       m_num_patches(0),
       m_num_vertices(num_vertices),
@@ -109,41 +111,44 @@ Patcher::Patcher(uint32_t                                        patch_size,
         assign_patch(fv, edges_map);
     } else {
 
-        initialize_random_seeds(seeds, ff_offset, ff_values);
-        allocate_device_memory(seeds,
-                               ff_offset,
-                               ff_values,
-                               d_face_patch,
-                               d_queue,
-                               d_queue_ptr,
-                               d_ff_values,
-                               d_ff_offset,
-                               d_cub_temp_storage_scan,
-                               d_cub_temp_storage_max,
-                               cub_scan_bytes,
-                               cub_max_bytes,
-                               d_seeds,
-                               d_new_num_patches,
-                               d_max_patch_size,
-                               d_patches_offset,
-                               d_patches_size,
-                               d_patches_val);
-        run_lloyd(d_face_patch,
-                  d_queue,
-                  d_queue_ptr,
-                  d_ff_values,
-                  d_ff_offset,
-                  d_cub_temp_storage_scan,
-                  d_cub_temp_storage_max,
-                  cub_scan_bytes,
-                  cub_max_bytes,
-                  d_seeds,
-                  d_new_num_patches,
-                  d_max_patch_size,
-                  d_patches_offset,
-                  d_patches_size,
-                  d_patches_val);
-
+        if (use_metis) {
+            metis_kway(ff_offset, ff_values);
+        } else {
+            initialize_random_seeds(seeds, ff_offset, ff_values);
+            allocate_device_memory(seeds,
+                                   ff_offset,
+                                   ff_values,
+                                   d_face_patch,
+                                   d_queue,
+                                   d_queue_ptr,
+                                   d_ff_values,
+                                   d_ff_offset,
+                                   d_cub_temp_storage_scan,
+                                   d_cub_temp_storage_max,
+                                   cub_scan_bytes,
+                                   cub_max_bytes,
+                                   d_seeds,
+                                   d_new_num_patches,
+                                   d_max_patch_size,
+                                   d_patches_offset,
+                                   d_patches_size,
+                                   d_patches_val);
+            run_lloyd(d_face_patch,
+                      d_queue,
+                      d_queue_ptr,
+                      d_ff_values,
+                      d_ff_offset,
+                      d_cub_temp_storage_scan,
+                      d_cub_temp_storage_max,
+                      cub_scan_bytes,
+                      cub_max_bytes,
+                      d_seeds,
+                      d_new_num_patches,
+                      d_max_patch_size,
+                      d_patches_offset,
+                      d_patches_size,
+                      d_patches_val);
+        }
         postprocess(fv, ff_offset, ff_values);
         // bfs(ff_offset, ff_values);
         assign_patch(fv, edges_map);
@@ -913,5 +918,101 @@ uint32_t Patcher::construct_patches_compressed_format(
     return max_patch_size;
 }
 
+
+void Patcher::metis_kway(const std::vector<uint32_t>& ff_offset,
+                         const std::vector<uint32_t>& ff_values)
+{
+
+    std::vector<idx_t> xadj(ff_offset.size());
+    std::vector<idx_t> adjncy(ff_values.size());
+
+    for (uint32_t i = 0; i < ff_offset.size(); ++i) {
+        xadj[i] = ff_offset[i];
+    }
+
+    for (uint32_t i = 0; i < ff_values.size(); ++i) {
+        adjncy[i] = ff_values[i];
+    }
+
+    idx_t options[METIS_NOPTIONS];
+    METIS_SetDefaultOptions(options);
+    options[METIS_OPTION_PTYPE] = METIS_PTYPE_KWAY;
+    options[METIS_OPTION_OBJTYPE] =
+        METIS_OBJTYPE_VOL;  // Total communication volume minimization.
+    options[METIS_OPTION_NUMBERING] = 0;
+    options[METIS_OPTION_CONTIG]    = 0;
+    options[METIS_OPTION_COMPRESS]  = 0;
+    options[METIS_OPTION_DBGLVL]    = METIS_DBG_TIME;
+
+    // number of vertices in the graph
+    idx_t              nvtxs  = m_num_faces;
+    idx_t              ncon   = 1;
+    idx_t*             vwgt   = NULL;
+    idx_t*             vsize  = NULL;
+    idx_t*             adjwgt = NULL;
+    idx_t              nparts = DIVIDE_UP(m_num_faces, m_patch_size);
+    real_t*            tpwgts = NULL;
+    real_t*            ubvec  = NULL;
+    idx_t              objval = 0;
+    std::vector<idx_t> part(nvtxs, 0);
+
+    CPUTimer timer;
+    timer.start();
+
+    int metis_status = METIS_PartGraphKway(&nvtxs,
+                                           &ncon,
+                                           xadj.data(),
+                                           adjncy.data(),
+                                           vwgt,
+                                           vsize,
+                                           adjwgt,
+                                           &nparts,
+                                           tpwgts,
+                                           ubvec,
+                                           options,
+                                           &objval,
+                                           part.data());
+    timer.stop();
+    m_patching_time_ms = timer.elapsed_millis();
+
+    if (metis_status == METIS_ERROR_INPUT) {
+        RXMESH_ERROR("METIS ERROR INPUT");
+        exit(EXIT_FAILURE);
+    } else if (metis_status == METIS_ERROR_MEMORY) {
+        RXMESH_ERROR("\n METIS ERROR MEMORY \n");
+        exit(EXIT_FAILURE);
+    } else if (metis_status == METIS_ERROR) {
+        RXMESH_ERROR("\n METIS ERROR\n");
+        exit(EXIT_FAILURE);
+    }
+
+    m_num_patches = nparts;
+    m_patches_offset.resize(m_num_patches, 0);
+    std::vector<uint32_t> patches_size(m_num_patches, 0);
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        m_face_patch[f] = part[f];
+        patches_size[part[f]]++;
+    }
+
+    std::inclusive_scan(
+        patches_size.begin(), patches_size.end(), m_patches_offset.begin());
+
+    if (m_patches_offset.back() != m_num_faces) {
+        RXMESH_ERROR("Patcher::metis_kway()  Error with creating patch graph");
+        exit(EXIT_FAILURE);
+    }
+
+    std::fill(patches_size.begin(), patches_size.end(), 0);
+
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        int p = m_face_patch[f];
+
+        uint32_t id = (p == 0) ? 0 : m_patches_offset[p - 1];
+
+        id += patches_size[p]++;
+
+        m_patches_val[id] = f;
+    }
+}
 }  // namespace patcher
 }  // namespace rxmesh
