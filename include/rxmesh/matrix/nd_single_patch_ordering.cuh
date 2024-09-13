@@ -59,17 +59,21 @@ __global__ static void nd_single_patch(Context              context,
 
 
 template <uint32_t blockThreads>
-__global__ static void nd_single_patch_kmeans(Context              context,
-                                              VertexAttribute<int> v_ordering,
-                                              VertexAttribute<int> attr_v,
-                                              EdgeAttribute<int>   attr_e,
-                                              VertexAttribute<int> attr_v1)
+__global__ static void nd_single_patch_kmeans(
+    Context                   context,
+    VertexAttribute<uint16_t> v_permute)
 {
     auto block = cooperative_groups::this_thread_block();
 
     ShmemAllocator shrd_alloc;
 
 
-    PatchKMeans<blockThreads> pnd(block, context, shrd_alloc);
+    PatchKMeans<blockThreads> pkm(block, context, shrd_alloc);
+
+    pkm.partition(block);
+
+    pkm.extract_separator(block);
+
+    pkm.assign_permutation(block, v_permute);
 }
 }  // namespace rxmesh

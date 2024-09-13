@@ -614,13 +614,118 @@ void create_dfs_indexing(const int                level,
     }
 }
 
-void permute_separators(const RXMeshStatic&   rx,
-                        VertexAttribute<int>& v_index,
-                        MaxMatchTree<int>&    max_match_tree,
-                        int*                  d_permute,
-                        int*                  d_patch_proj_l,
-                        int*                  d_patch_proj_l1)
+void single_patch_nd_permute(RXMeshStatic&              rx,
+                             VertexAttribute<uint16_t>& v_local_permute)
 {
+
+    constexpr uint32_t blockThreads = 256;
+
+    // auto attr_v  = rx.add_vertex_attribute<int>("attr_v", 1);
+    // auto attr_v1 = rx.add_vertex_attribute<int>("attr_v1", 1);
+    // auto attr_e  = rx.add_edge_attribute<int>("attr_e", 1);
+    //
+    // attr_v->reset(-1, DEVICE);
+    // attr_v1->reset(-1, DEVICE);
+    // attr_e->reset(-1, DEVICE);
+
+
+    v_local_permute.reset(INVALID16, DEVICE);
+
+    LaunchBox<blockThreads> lb;
+
+#if 0
+    const int maxCoarsenLevels = 5;
+    rx.prepare_launch_box(
+        {Op::V},
+        lb,
+        (void*)nd_single_patch<blockThreads, maxCoarsenLevels>,
+        false,
+        false,
+        false,
+        [&](uint32_t v, uint32_t e, uint32_t f) {
+            return
+                // active_v_mis, v_mis, candidate_v_mis
+                5 * detail::mask_num_bytes(v) +
+
+                // 4*EV for vv_cur and vv_nxt
+                (3 * 2 * e + std::max(v + 1, 2 * e)) * sizeof(uint16_t) +
+                // matching array
+                v * maxCoarsenLevels * sizeof(uint16_t) +
+
+                // padding
+                7 * ShmemAllocator::default_alignment;
+        });
+#else
+    rx.prepare_launch_box({Op::V},
+                          lb,
+                          (void*)nd_single_patch_kmeans<blockThreads>,
+                          false,
+                          false,
+                          false,
+                          [&](uint32_t v, uint32_t e, uint32_t f) {
+                              return
+                                  // active_v_mis, v_mis, candidate_v_mis
+                                  7 * detail::mask_num_bytes(v) +
+
+                                  // EV for vv_cur
+                                  (2 * e + std::max(v + 1, 2 * e)) *
+                                      sizeof(uint16_t) +
+
+                                  // index
+                                  v * sizeof(uint16_t) +
+
+                                  // padding
+                                  8 * ShmemAllocator::default_alignment;
+                          });
+#endif
+
+    RXMESH_TRACE("single_patch_nd_permute shared memory= {} (bytes)",
+                 lb.smem_bytes_dyn);
+
+#if 0
+    nd_single_patch<blockThreads, maxCoarsenLevels>
+        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
+            rx.get_context(), v_local_permute, *attr_v, *attr_e, *attr_v1);
+#else
+    nd_single_patch_kmeans<blockThreads>
+        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(rx.get_context(),
+                                                           v_local_permute);
+#endif
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+#if USE_POLYSCOPE
+    // attr_v->move(DEVICE, HOST);
+    // attr_v1->move(DEVICE, HOST);
+    // attr_e->move(DEVICE, HOST);
+
+    // v_local_permute.move(DEVICE, HOST);
+    //  for (int p = 0; p < rx.get_num_patches(); ++p) {
+    //      rx.render_patch(p)->setEnabled(false);
+    //  }
+
+    // auto ps_mesh = rx.get_polyscope_mesh();
+
+    // ps_mesh->addVertexScalarQuantity("attr_v", *attr_v);
+    // ps_mesh->addVertexScalarQuantity("attr_v1", *attr_v1);
+    // ps_mesh->addEdgeScalarQuantity("attr_e", *attr_e);
+    // ps_mesh->addVertexScalarQuantity("in_patch_prem", v_local_permute);
+
+    // render
+    // polyscope::show();
+#endif
+}
+
+void permute_separators(RXMeshStatic&              rx,
+                        VertexAttribute<int>&      v_index,
+                        VertexAttribute<uint16_t>& v_local_permute,
+                        MaxMatchTree<int>&         max_match_tree,
+                        int*                       d_permute,
+                        int*                       d_patch_proj_l,
+                        int*                       d_patch_proj_l1)
+{
+    single_patch_nd_permute(rx, v_local_permute);
+
     v_index.reset(-1, DEVICE);
 
     constexpr uint32_t blockThreads = 256;
@@ -729,8 +834,20 @@ void permute_separators(const RXMeshStatic&   rx,
     auto context = rx.get_context();
     int  num_v   = rx.get_num_vertices();
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
-        int l = d_permute[context.linear_id(vh)];
-        l += d_count[v_index(vh)];
+        int l = d_count[v_index(vh)];
+
+
+        if (v_local_permute(vh) != INVALID16) {
+            // if it is interior and not on any separator
+
+            // l += v_local_permute(vh);
+            l += d_permute[context.linear_id(vh)];
+
+        } else {
+            // if it is a separator
+            l += d_permute[context.linear_id(vh)];
+        }
+
         d_permute[context.linear_id(vh)] = num_v - l - 1;
     });
 
@@ -742,6 +859,8 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
 {
 
     auto v_index = *rx.add_vertex_attribute<int>("index", 1);
+
+    auto v_local_permute = *rx.add_vertex_attribute<uint16_t>("index", 1);
 
     // for a level L in the max_match_tree, d_patch_proj stores the node at
     // level L that branch off to a given patch, i.e., the projection of the
@@ -803,6 +922,7 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
 
     permute_separators(rx,
                        v_index,
+                       v_local_permute,
                        max_match_tree,
                        d_permute,
                        d_patch_proj_l,
@@ -826,105 +946,5 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
     GPU_FREE(d_patch_graph_edge_weight);
 }
 
-
-void single_patch_nd_permute(RXMeshStatic& rx, int* h_permute)
-{
-
-    constexpr uint32_t blockThreads = 256;
-
-    // helper vertex and edge attr
-    // TODO delete them
-    auto attr_v  = rx.add_vertex_attribute<int>("attr_v", 1);
-    auto attr_v1 = rx.add_vertex_attribute<int>("attr_v1", 1);
-    auto attr_e  = rx.add_edge_attribute<int>("attr_e", 1);
-
-    attr_v->reset(DEVICE, -1);
-    attr_v1->reset(DEVICE, -1);
-    attr_e->reset(DEVICE, -1);
-
-    // vertex ordering attribute to store the result
-    auto v_ordering = rx.add_vertex_attribute<int>("v_ordering", 1);
-    v_ordering->reset(-1, DEVICE);
-
-    const int maxCoarsenLevels = 5;
-
-    LaunchBox<blockThreads> lb;
-#if 0
-    rx.prepare_launch_box(
-        {Op::V},
-        lb,
-        (void*)nd_single_patch<blockThreads, maxCoarsenLevels>,
-        false,
-        false,
-        false,
-        [&](uint32_t v, uint32_t e, uint32_t f) {
-            return
-                // active_v_mis, v_mis, candidate_v_mis
-                5 * detail::mask_num_bytes(v) +
-
-                // 4*EV for vv_cur and vv_nxt
-                (3 * 2 * e + std::max(v + 1, 2 * e)) * sizeof(uint16_t) +
-                // matching array
-                v * maxCoarsenLevels * sizeof(uint16_t) +
-
-                // padding
-                7 * ShmemAllocator::default_alignment;
-        });
-#else
-    rx.prepare_launch_box({Op::V},
-                          lb,
-                          (void*)nd_single_patch_kmeans<blockThreads>,
-                          false,
-                          false,
-                          false,
-                          [&](uint32_t v, uint32_t e, uint32_t f) {
-                              return
-                                  // active_v_mis, v_mis, candidate_v_mis
-                                  3 * detail::mask_num_bytes(v) +
-
-                                  // EV for vv_cur
-                                  (2 * e + std::max(v + 1, 2 * e)) *
-                                      sizeof(uint16_t) +
-
-
-                                  // padding
-                                  4 * ShmemAllocator::default_alignment;
-                          });
-#endif
-
-    RXMESH_TRACE("single_patch_nd_permute shared memory= {} (bytes)",
-                 lb.smem_bytes_dyn);
-
-#if 0
-    nd_single_patch<blockThreads, maxCoarsenLevels>
-        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
-            rx.get_context(), *v_ordering, *attr_v, *attr_e, *attr_v1);
-#else
-    nd_single_patch_kmeans<blockThreads>
-        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
-            rx.get_context(), *v_ordering, *attr_v, *attr_e, *attr_v1);
-#endif
-    CUDA_ERROR(cudaDeviceSynchronize());
-
-#if USE_POLYSCOPE
-    attr_v->move(DEVICE, HOST);
-    attr_v1->move(DEVICE, HOST);
-    attr_e->move(DEVICE, HOST);
-
-    for (int p = 0; p < rx.get_num_patches(); ++p) {
-        rx.render_patch(p)->setEnabled(false);
-    }
-
-    auto ps_mesh = rx.get_polyscope_mesh();
-
-    ps_mesh->addVertexScalarQuantity("attr_v", *attr_v);
-    ps_mesh->addVertexScalarQuantity("attr_v1", *attr_v1);
-    ps_mesh->addEdgeScalarQuantity("attr_e", *attr_e);
-    ps_mesh->addVertexScalarQuantity("in_patch_prem", *v_ordering);
-
-    // render
-    polyscope::show();
-#endif
-}
 
 }  // namespace rxmesh

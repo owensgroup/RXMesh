@@ -6,7 +6,6 @@
 
 #include "rxmesh/matrix/mgnd_permute.cuh"
 #include "rxmesh/matrix/nd_permute.cuh"
-#include "rxmesh/matrix/nd_reorder.cuh"
 #include "rxmesh/matrix/permute_util.h"
 #include "rxmesh/matrix/sparse_matrix.cuh"
 
@@ -18,7 +17,7 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "cloth_uni_loop.obj";
     uint16_t    nd_level      = 4;
     uint32_t    device_id     = 0;
 } Arg;
@@ -34,7 +33,7 @@ void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     render_permutation(rx, h_permute, "No_PERM");
 
-    int nnz = count_nnz_fillin(eigen_mat, h_permute);
+    int nnz = count_nnz_fillin(eigen_mat, h_permute, "natural");
 
     RXMESH_INFO(" No-permutation NNZ = {}", nnz);
 }
@@ -133,7 +132,7 @@ void with_metis(rxmesh::RXMeshStatic&          rx,
 
     render_permutation(rx, h_permute, "METIS");
 
-    int nnz = count_nnz_fillin(eigen_mat, h_iperm);
+    int nnz = count_nnz_fillin(eigen_mat, h_iperm, "metis");
 
     RXMESH_INFO(" With METIS Nested Dissection NNZ = {}", nnz);
 }
@@ -150,7 +149,7 @@ void with_mgnd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     render_permutation(rx, h_permute, "MGND");
 
-    int nnz = count_nnz_fillin(eigen_mat, h_permute);
+    int nnz = count_nnz_fillin(eigen_mat, h_permute, "mgnd");
 
     RXMESH_INFO(" With MGND NNZ = {}", nnz);
 }
@@ -160,8 +159,6 @@ void with_cuda_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
-    // rxmesh::cuda_nd_reorder(rx, h_permute, Arg.nd_level);
-
     rxmesh::nd_permute(rx, h_permute.data());
 
     EXPECT_TRUE(
@@ -169,7 +166,7 @@ void with_cuda_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     render_permutation(rx, h_permute, "CUDA_ND");
 
-    int nnz = count_nnz_fillin(eigen_mat, h_permute);
+    int nnz = count_nnz_fillin(eigen_mat, h_permute, "cuda_nd");
 
     RXMESH_INFO(" With CUDA ND NNZ = {}", nnz);
 }
@@ -216,7 +213,7 @@ TEST(Apps, NDReorder)
 
     with_cuda_nd(rx, eigen_mat);
 
-    polyscope::show();
+    // polyscope::show();
 }
 
 int main(int argc, char** argv)

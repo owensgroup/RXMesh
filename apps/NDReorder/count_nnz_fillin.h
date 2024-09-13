@@ -28,7 +28,9 @@ void exportToPlainText(const SparseMatrixType& mat, const std::string& filename)
  * permutation array that will be applied before the factorization
  */
 template <typename EigeMatT, typename I>
-int count_nnz_fillin(const EigeMatT& eigen_mat, std::vector<I>& h_permute)
+int count_nnz_fillin(const EigeMatT& eigen_mat,
+                     std::vector<I>& h_permute,
+                     std::string     st = "")
 {
     using namespace rxmesh;
 
@@ -49,7 +51,8 @@ int count_nnz_fillin(const EigeMatT& eigen_mat, std::vector<I>& h_permute)
     Eigen::internal::permute_symm_to_fullsymm<Eigen::Lower, false>(
         eigen_mat, permuted_mat, perm.indices().data());
 
-    // exportToPlainText(permuted_mat, "mat.txt");
+
+    exportToPlainText(permuted_mat, st + std::string(".txt"));
 
     // compute Cholesky factorization on the permuted matrix
 

@@ -10,6 +10,26 @@
 
 namespace rxmesh {
 
+namespace detail {
+
+template <uint32_t blockThreads>
+__inline__ __device__ void bi_assignment_ggp(
+    cooperative_groups::thread_block& block,
+    const uint16_t                    num_vertices,
+    const Bitmask&                    s_owned_v,
+    const bool                        ignore_owned_v,
+    const Bitmask&                    s_active_v,
+    const uint16_t*                   m_s_vv_offset,
+    const uint16_t*                   m_s_vv,
+    Bitmask&                          s_assigned_v,
+    Bitmask&                          s_current_frontier_v,
+    Bitmask&                          s_next_frontier_v,
+    Bitmask&                          s_partition_a_v,
+    Bitmask&                          s_partition_b_v,
+    int                               num_iter);
+}
+
+
 template <uint32_t blockThreads>
 struct PatchKMeans
 {
@@ -23,13 +43,25 @@ struct PatchKMeans
 
         m_s_active_v     = Bitmask(m_num_v, shrd_alloc);
         m_s_cur_active_v = Bitmask(m_num_v, shrd_alloc);
-        m_s_bipart       = Bitmask(m_num_v, shrd_alloc);
 
+        m_s_assigned_v      = Bitmask(m_num_v, shrd_alloc);
+        m_s_cur_frontier_v  = Bitmask(m_num_v, shrd_alloc);
+        m_s_next_frontier_v = Bitmask(m_num_v, shrd_alloc);
+        m_s_partition_a_v   = Bitmask(m_num_v, shrd_alloc);
+        m_s_partition_b_v   = Bitmask(m_num_v, shrd_alloc);
+
+        m_s_separator = Bitmask(m_num_v, m_s_cur_frontier_v.m_bitmask);
 
         m_s_active_v.reset(block);
         m_s_cur_active_v.reset(block);
-        m_s_bipart.reset(block);
 
+        m_s_assigned_v.reset(block);
+        m_s_cur_frontier_v.reset(block);
+        m_s_next_frontier_v.reset(block);
+        m_s_partition_a_v.reset(block);
+        m_s_partition_b_v.reset(block);
+
+        m_s_index = shrd_alloc.alloc<uint16_t>(m_num_v);
 
         detail::load_async(
             block,
@@ -57,13 +89,13 @@ struct PatchKMeans
         }
 
         // create vv
-        m_s_vv_cur.offset = &s_ev[0];
-        m_s_vv_cur.value  = &s_ev[m_num_v + 1];
+        m_s_vv.offset = &s_ev[0];
+        m_s_vv.value  = &s_ev[m_num_v + 1];
         detail::v_v<blockThreads>(block,
                                   m_patch_info,
                                   shrd_alloc,
-                                  m_s_vv_cur.offset,
-                                  m_s_vv_cur.value,
+                                  m_s_vv.offset,
+                                  m_s_vv.value,
                                   false,
                                   false);
         block.sync();
@@ -73,10 +105,10 @@ struct PatchKMeans
         for (int v = threadIdx.x; v < m_num_v; v += blockThreads) {
             bool on_sep = false;
             if (m_s_active_v(v)) {
-                uint16_t start = m_s_vv_cur.offset[v];
-                uint16_t stop  = m_s_vv_cur.offset[v + 1];
+                uint16_t start = m_s_vv.offset[v];
+                uint16_t stop  = m_s_vv.offset[v + 1];
                 for (uint16_t i = start; i < stop; ++i) {
-                    uint16_t n = m_s_vv_cur.value[i];
+                    uint16_t n = m_s_vv.value[i];
 
                     VertexHandle nh = m_patch_info.find<VertexHandle>(n);
 
@@ -98,6 +130,150 @@ struct PatchKMeans
         block.sync();
     }
 
+    /**
+     * @brief partition the mesh into two parts of nearly equal size and with
+     */
+    __device__ __inline__ void partition(
+        cooperative_groups::thread_block& block)
+    {
+
+
+        detail::bi_assignment_ggp<blockThreads>(block,
+                                                m_num_v,
+                                                m_s_cur_active_v,
+                                                true,
+                                                m_s_cur_active_v,
+                                                m_s_vv.offset,
+                                                m_s_vv.value,
+                                                m_s_assigned_v,
+                                                m_s_cur_frontier_v,
+                                                m_s_next_frontier_v,
+                                                m_s_partition_a_v,
+                                                m_s_partition_b_v,
+                                                10);
+
+#ifndef NDEBUG
+        for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
+            if (m_s_cur_active_v(v)) {
+                assert(m_s_partition_a_v(v) != m_s_partition_b_v(v));
+                assert(m_s_partition_a_v(v) || m_s_partition_b_v(v));
+            }
+        }
+
+#endif
+
+        //{
+        //    block.sync();
+        //    for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
+        //        if (m_s_partition_a_v(v)) {
+        //            attr_v(VertexHandle(m_patch_info.patch_id, v)) = 1;
+        //        } else if (m_s_partition_b_v(v)) {
+        //            attr_v(VertexHandle(m_patch_info.patch_id, v)) = 2;
+        //        } else {
+        //            attr_v(VertexHandle(m_patch_info.patch_id, v)) = -1;
+        //        }
+        //    }
+        //}
+    }
+
+    /**
+     * @brief extract the separator between the two partitions
+     */
+    __device__ __inline__ void extract_separator(
+        cooperative_groups::thread_block& block)
+    {
+        m_s_separator.reset(block);
+        block.sync();
+        for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
+            if (m_s_cur_active_v(v)) {
+                assert(m_s_partition_a_v(v) != m_s_partition_b_v(v));
+                assert(m_s_partition_a_v(v) || m_s_partition_b_v(v));
+                uint16_t start = m_s_vv.offset[v];
+                uint16_t stop  = m_s_vv.offset[v + 1];
+
+                if (m_s_partition_a_v(v)) {
+
+
+                    for (uint16_t i = start; i < stop; ++i) {
+                        uint16_t n = m_s_vv.value[i];
+                        if (m_s_cur_active_v(n)) {
+                            assert(m_s_partition_a_v(n) !=
+                                   m_s_partition_b_v(n));
+                            assert(m_s_partition_a_v(n) ||
+                                   m_s_partition_b_v(n));
+
+                            if (m_s_partition_b_v(n)) {
+                                m_s_separator.set(v, true);
+                                // attr_v(VertexHandle(m_patch_info.patch_id,
+                                // v)) = 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @brief given the partitions and their extracted separators, compute the
+     * new permutation by putting the separator at the end, then reorder
+     * everything in partition a then everything in partition b
+     */
+    __device__ __inline__ void assign_permutation(
+        cooperative_groups::thread_block& block,
+        VertexAttribute<uint16_t>&        v_permute)
+    {
+        __shared__ int s_num_a;
+        __shared__ int s_num_b;
+        __shared__ int s_num_sep;
+        if (threadIdx.x == 0) {
+            s_num_a   = 0;
+            s_num_b   = 0;
+            s_num_sep = 0;
+        }
+        block.sync();
+
+
+        for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
+            if (m_s_cur_active_v(v)) {
+
+                if (m_s_separator(v)) {
+                    m_s_index[v] = ::atomicAdd(&s_num_sep, 1);
+                } else if (m_s_partition_b_v(v)) {
+                    m_s_index[v] = ::atomicAdd(&s_num_b, 1);
+                } else if (m_s_partition_a_v(v)) {
+                    m_s_index[v] = ::atomicAdd(&s_num_a, 1);
+                } else {
+                    assert(1 != 1);
+                }
+            }
+        }
+
+        block.sync();
+
+        int sum = s_num_a + s_num_b + s_num_sep;
+
+        // assert(sum == num_active_vertices(block));
+
+
+        for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
+            if (m_s_cur_active_v(v)) {
+                VertexHandle vh(m_patch_info.patch_id, v);
+
+                assert(v_permute(vh) == INVALID16);
+
+                if (m_s_separator(v)) {
+                    v_permute(vh) = sum - m_s_index[v] - 1;
+                } else if (m_s_partition_b_v(v)) {
+                    v_permute(vh) = sum - s_num_sep - m_s_index[v] - 1;
+                } else if (m_s_partition_a_v(v)) {
+                    v_permute(vh) =
+                        sum - (s_num_sep + s_num_b) - m_s_index[v] - 1;
+                }
+            }
+        }
+    }
 
     /**
      * @brief count the number of current active vertices
@@ -206,10 +382,15 @@ struct PatchKMeans
 
     // private:
     PatchInfo m_patch_info;
-    VV        m_s_vv_cur;
+    VV        m_s_vv;
     Bitmask   m_s_active_v;  // active vertices in the patch (minus not-owned)
     Bitmask   m_s_cur_active_v;
-    Bitmask   m_s_bipart;  // the bipartition assignment
-    uint32_t  m_num_v, m_num_e;
+    Bitmask   m_s_separator;
+    uint16_t* m_s_index;
+
+    Bitmask m_s_assigned_v, m_s_cur_frontier_v, m_s_next_frontier_v,
+        m_s_partition_a_v, m_s_partition_b_v;
+
+    uint32_t m_num_v, m_num_e;
 };
 }  // namespace rxmesh

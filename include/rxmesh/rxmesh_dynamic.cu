@@ -1193,7 +1193,9 @@ __inline__ __device__ void bi_assignment_ggp(
 
                         const uint16_t nv = s_vv[vv];
 
-                        assert(s_active_v(nv));
+                        if (!s_active_v(nv)) {
+                            continue;
+                        }
 
                         if (!s_assigned_v(nv)) {
                             if (s_partition_a_v(v)) {
