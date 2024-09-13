@@ -61,7 +61,8 @@ __global__ static void nd_single_patch(Context              context,
 template <uint32_t blockThreads>
 __global__ static void nd_single_patch_kmeans(
     Context                   context,
-    VertexAttribute<uint16_t> v_permute)
+    VertexAttribute<uint16_t> v_permute,
+    int                       threshold = 100)
 {
     auto block = cooperative_groups::this_thread_block();
 
@@ -69,6 +70,12 @@ __global__ static void nd_single_patch_kmeans(
 
 
     PatchKMeans<blockThreads> pkm(block, context, shrd_alloc);
+
+    int num_v = pkm.num_active_vertices(block);
+
+    if (num_v < threshold) {
+        return;
+    }
 
     pkm.partition(block);
 
