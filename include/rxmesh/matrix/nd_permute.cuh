@@ -860,7 +860,7 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
 
     auto v_index = *rx.add_vertex_attribute<int>("index", 1);
 
-    auto v_local_permute = *rx.add_vertex_attribute<uint16_t>("index", 1);
+    auto v_local_permute = *rx.add_vertex_attribute<uint16_t>("local_index", 1);
 
     // for a level L in the max_match_tree, d_patch_proj stores the node at
     // level L that branch off to a given patch, i.e., the projection of the
