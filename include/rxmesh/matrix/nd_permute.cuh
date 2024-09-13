@@ -840,8 +840,8 @@ void permute_separators(RXMeshStatic&              rx,
         if (v_local_permute(vh) != INVALID16) {
             // if it is interior and not on any separator
 
-            // l += v_local_permute(vh);
-            l += d_permute[context.linear_id(vh)];
+            l += v_local_permute(vh);
+            // l += d_permute[context.linear_id(vh)];
 
         } else {
             // if it is a separator
