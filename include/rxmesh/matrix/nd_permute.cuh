@@ -692,7 +692,7 @@ void single_patch_nd_permute(RXMeshStatic&              rx,
                                                            v_local_permute);
 #endif
 
-    CUDA_ERROR(cudaDeviceSynchronize());
+    // CUDA_ERROR(cudaDeviceSynchronize());
 
 #if USE_POLYSCOPE
     // attr_v->move(DEVICE, HOST);
