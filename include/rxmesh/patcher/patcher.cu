@@ -145,13 +145,13 @@ Patcher::Patcher(uint32_t                                        patch_size,
                   d_patches_val);
 
         postprocess(fv, ff_offset, ff_values);
-        //bfs(ff_offset, ff_values);
+        // bfs(ff_offset, ff_values);
         assign_patch(fv, edges_map);
     }
 
-    
+
     print_statistics();
-    
+
     GPU_FREE(d_face_patch);
     GPU_FREE(d_queue);
     GPU_FREE(d_queue_ptr);
@@ -455,8 +455,8 @@ void Patcher::get_multi_components(
             while (!face_queue.empty()) {
                 uint32_t face = face_queue.front();
                 face_queue.pop();
-                uint32_t start = (face == 0) ? 0 : ff_offset[face - 1];
-                uint32_t end   = ff_offset[face];
+                uint32_t start = ff_offset[face];
+                uint32_t end   = ff_offset[face + 1];
                 for (uint32_t f = start; f < end; ++f) {
                     uint32_t n_face = ff_values[f];
                     if (!visited[n_face]) {
@@ -485,9 +485,7 @@ void Patcher::bfs(const std::vector<uint32_t>& ff_offset,
              f < m_patches_offset[p];
              ++f) {
             uint32_t face = m_patches_val[f];
-            for (uint32_t n = (face == 0) ? 0 : ff_offset[face - 1];
-                 n < ff_offset[face];
-                 ++n) {
+            for (uint32_t n = ff_offset[face]; n < ff_offset[face + 1]; ++n) {
                 uint32_t n_face  = ff_values[n];
                 uint32_t n_patch = m_face_patch[n_face];
                 if (n_patch != p) {
@@ -577,8 +575,8 @@ void Patcher::postprocess(const std::vector<std::vector<uint32_t>>& fv,
             uint32_t face = m_patches_val[fb];
 
             bool     added = false;
-            uint32_t start = (face == 0) ? 0 : ff_offset[face - 1];
-            uint32_t end   = ff_offset[face];
+            uint32_t start = ff_offset[face];
+            uint32_t end   = ff_offset[face + 1];
 
             for (uint32_t g = start; g < end; ++g) {
                 uint32_t n       = ff_values[g];

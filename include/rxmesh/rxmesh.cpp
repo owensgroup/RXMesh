@@ -385,8 +385,10 @@ void RXMesh::build_supporting_structures(
         exit(EXIT_FAILURE);
     }
 
-    ff_offset.resize(m_num_faces);
-    std::inclusive_scan(ff_size.begin(), ff_size.end(), ff_offset.begin());
+    ff_offset.resize(m_num_faces + 1);
+    std::exclusive_scan(ff_size.begin(), ff_size.end(), ff_offset.begin(), 0);
+    ff_offset[m_num_faces] =
+        ff_offset[m_num_faces - 1] + ff_size[m_num_faces - 1];
     ff_values.clear();
     ff_values.resize(ff_offset.back());
     std::fill(ff_size.begin(), ff_size.end(), 0);
@@ -399,8 +401,8 @@ void RXMesh::build_supporting_structures(
 
                 uint32_t f0_offset = ff_size[f0]++;
                 uint32_t f1_offset = ff_size[f1]++;
-                f0_offset += (f0 == 0) ? 0 : ff_offset[f0 - 1];
-                f1_offset += (f1 == 0) ? 0 : ff_offset[f1 - 1];
+                f0_offset += ff_offset[f0];
+                f1_offset += ff_offset[f1];
 
                 ff_values[f0_offset] = f1;
                 ff_values[f1_offset] = f0;
