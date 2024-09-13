@@ -942,7 +942,7 @@ struct PatchND
                     uint16_t start = vv.offset[v];
                     uint16_t stop  = vv.offset[v + 1];
 
-                    if (m_s_partition_a_v(v)) {
+                    if (m_s_bipart(v)) {
                         printf("\n %u [style=filled, fillcolor=lightblue]", v);
                     }
 

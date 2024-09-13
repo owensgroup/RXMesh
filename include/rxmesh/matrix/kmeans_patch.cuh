@@ -333,7 +333,7 @@ struct PatchKMeans
                     uint16_t start = vv.offset[v];
                     uint16_t stop  = vv.offset[v + 1];
 
-                    if (m_s_bipart(v)) {
+                    if (m_s_partition_a_v(v)) {
                         printf("\n %u [style=filled, fillcolor=lightblue]", v);
                     }
 
