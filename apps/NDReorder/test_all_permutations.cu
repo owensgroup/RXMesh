@@ -31,7 +31,7 @@ void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     fill_with_sequential_numbers(h_permute.data(), h_permute.size());
 
-    render_permutation(rx, h_permute, "No_PERM");
+    //render_permutation(rx, h_permute, "No_PERM");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "natural");
 
@@ -130,7 +130,7 @@ void with_metis(rxmesh::RXMeshStatic&          rx,
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
-    render_permutation(rx, h_permute, "METIS");
+    //render_permutation(rx, h_permute, "METIS");
 
     int nnz = count_nnz_fillin(eigen_mat, h_iperm, "metis");
 
@@ -147,7 +147,7 @@ void with_mgnd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
-    render_permutation(rx, h_permute, "MGND");
+    //render_permutation(rx, h_permute, "MGND");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "mgnd");
 
@@ -164,7 +164,7 @@ void with_cuda_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
-    render_permutation(rx, h_permute, "CUDA_ND");
+    //render_permutation(rx, h_permute, "CUDA_ND");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "cuda_nd");
 

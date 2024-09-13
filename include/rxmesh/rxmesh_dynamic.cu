@@ -1244,7 +1244,7 @@ __inline__ __device__ void bi_assignment_ggp(
                             ::atomicAdd(&s_num_B_vertices, 1);
                         }
                         s_next_frontier_v.set(v, true);
-                        printf("\n reg growing %u", v);
+                        //printf("\n reg growing %u", v);
                     }
                 }
             }
