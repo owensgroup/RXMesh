@@ -7,6 +7,8 @@
 #include <thrust/execution_policy.h>
 #include <thrust/scan.h>
 
+#include "rxmesh/matrix/permute_util.h"
+
 namespace rxmesh {
 
 namespace detail {
@@ -149,6 +151,9 @@ inline void mgnd_permute(const RXMeshStatic& rx, int* h_permute)
                           d_permute,
                           rx.get_num_vertices() * sizeof(int),
                           cudaMemcpyDeviceToHost));
+
+    std::vector<int> helper(rx.get_num_vertices());
+    inverse_permutation(rx.get_num_vertices(), h_permute, helper.data());
 
     GPU_FREE(d_v_ordering_prefix_sum);
     GPU_FREE(d_permute);

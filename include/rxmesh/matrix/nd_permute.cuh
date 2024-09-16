@@ -940,6 +940,10 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
                           rx.get_num_vertices() * sizeof(int),
                           cudaMemcpyDeviceToHost));
 
+
+    std::vector<int> helper(rx.get_num_vertices());
+    inverse_permutation(rx.get_num_vertices(), h_permute, helper.data());
+
     GPU_FREE(d_permute);
     GPU_FREE(d_patch_proj_l);
     GPU_FREE(d_patch_proj_l1);

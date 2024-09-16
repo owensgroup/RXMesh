@@ -38,18 +38,6 @@ void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
     RXMESH_INFO(" No-permutation NNZ = {}", nnz);
 }
 
-template <typename T>
-std::vector<T> inverse_permutation(const std::vector<T>& perm)
-{
-    std::vector<int> perm_inv(perm.size());
-
-    for (int i = 0; i < perm_inv.size(); ++i) {
-        perm_inv[perm[i]] = i;
-    }
-
-    return perm_inv;
-}
-
 
 template <typename T, typename EigeMatT>
 void with_metis(rxmesh::RXMeshStatic&          rx,
@@ -160,6 +148,10 @@ void with_gpumgnd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
+    std::vector<int> helper(rx.get_num_vertices());
+    rxmesh::inverse_permutation(
+        rx.get_num_vertices(), h_permute.data(), helper.data());
+
     // render_permutation(rx, h_permute, "GPUMGND");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "gpumgnd");
@@ -176,6 +168,10 @@ void with_gpu_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
+
+    std::vector<int> helper(rx.get_num_vertices());
+    rxmesh::inverse_permutation(
+        rx.get_num_vertices(), h_permute.data(), helper.data());
 
     // render_permutation(rx, h_permute, "GPUND");
 
@@ -201,15 +197,17 @@ void with_amd(rxmesh::RXMeshStatic&    rx,
                 h_permute.size() * sizeof(int));
 
 
-    std::vector<int> h_permute_inv = inverse_permutation(h_permute);
+    std::vector<int> helper(rx.get_num_vertices());
+    rxmesh::inverse_permutation(
+        rx.get_num_vertices(), h_permute.data(), helper.data());
 
 
-    EXPECT_TRUE(rxmesh::is_unique_permutation(h_permute_inv.size(),
-                                              h_permute_inv.data()));
+    EXPECT_TRUE(
+        rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
-    // render_permutation(rx, h_permute_inv, "AMD");
+    // render_permutation(rx, h_permute, "AMD");
 
-    int nnz = count_nnz_fillin(eigen_mat, h_permute_inv, "amd");
+    int nnz = count_nnz_fillin(eigen_mat, h_permute, "amd");
 
     RXMESH_INFO(" With AMD NNZ = {}", nnz);
 }
@@ -233,11 +231,13 @@ void with_symrcm(rxmesh::RXMeshStatic&    rx,
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
-    std::vector<int> h_permute_inv = inverse_permutation(h_permute);
+    std::vector<int> helper(rx.get_num_vertices());
+    rxmesh::inverse_permutation(
+        rx.get_num_vertices(), h_permute.data(), helper.data());
 
-    // render_permutation(rx, h_permute_inv, "symrcm");
+    // render_permutation(rx, h_permute, "symrcm");
 
-    int nnz = count_nnz_fillin(eigen_mat, h_permute_inv, "symrcm");
+    int nnz = count_nnz_fillin(eigen_mat, h_permute, "symrcm");
 
     RXMESH_INFO(" With SYMRCM NNZ = {}", nnz);
 }
