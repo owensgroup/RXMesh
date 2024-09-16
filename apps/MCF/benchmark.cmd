@@ -18,20 +18,20 @@ set input_dir4=C:\Github\RXMesh\input\SI
 
 
 rem Flag to indicate whether to start processing files
-set start_processing=1
+set start_processing=0
 
 rem Define the file name to start processing from
-rem set start_file=C:\Github\RXMesh\input\SI\usnm_1149322-20m.obj
+set start_file=C:\Github\RXMesh\input\SI\bell_x1-complete_with_vane-smooth.obj
 
 rem Loop over each directory
-for %%d in (%input_dir4%) do (
+for %%d in (%input_dir4% %input_dir1% %input_dir2% %input_dir3%) do (
     for %%f in (%%d\*.obj) do (
 		echo %%f
         if not "!start_processing!"=="1" (
-            rem if "%%f"=="%start_file%" (
-            rem     set start_processing=1
-			rem 	echo !start_processing!
-            rem )
+            if "%%f"=="%start_file%" (
+                set start_processing=1
+				echo !start_processing!
+            )
         ) else (
             if exist "%%f" (
                 echo %exe% -input "%%f" -device_id %device_id% -perm_method symamd

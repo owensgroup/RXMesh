@@ -798,6 +798,14 @@ struct SparseMatrix
     /* --- LOW LEVEL API --- */
 
     /**
+     * @brief return a pointer to the host memory that holds the permutation
+     */
+    __host__ IndexT* get_h_permute()
+    {
+        return m_h_permute;
+    }
+
+    /**
      * @brief allocate all temp buffers needed for the solver low-level API
      */
     __host__ void permute_alloc(PermuteMethod reorder)

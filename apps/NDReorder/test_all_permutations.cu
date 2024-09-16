@@ -31,7 +31,7 @@ void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     fill_with_sequential_numbers(h_permute.data(), h_permute.size());
 
-    //render_permutation(rx, h_permute, "No_PERM");
+    // render_permutation(rx, h_permute, "No_PERM");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "natural");
 
@@ -130,7 +130,7 @@ void with_metis(rxmesh::RXMeshStatic&          rx,
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
-    //render_permutation(rx, h_permute, "METIS");
+    // render_permutation(rx, h_permute, "METIS");
 
     int nnz = count_nnz_fillin(eigen_mat, h_iperm, "metis");
 
@@ -138,7 +138,7 @@ void with_metis(rxmesh::RXMeshStatic&          rx,
 }
 
 template <typename EigeMatT>
-void with_mgnd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
+void with_gpumgnd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
@@ -147,15 +147,15 @@ void with_mgnd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
-    //render_permutation(rx, h_permute, "MGND");
+    // render_permutation(rx, h_permute, "GPUMGND");
 
-    int nnz = count_nnz_fillin(eigen_mat, h_permute, "mgnd");
+    int nnz = count_nnz_fillin(eigen_mat, h_permute, "gpumgnd");
 
-    RXMESH_INFO(" With MGND NNZ = {}", nnz);
+    RXMESH_INFO(" With GPUMGND NNZ = {}", nnz);
 }
 
 template <typename EigeMatT>
-void with_cuda_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
+void with_gpu_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
@@ -164,11 +164,57 @@ void with_cuda_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
-    //render_permutation(rx, h_permute, "CUDA_ND");
+    // render_permutation(rx, h_permute, "GPUND");
 
-    int nnz = count_nnz_fillin(eigen_mat, h_permute, "cuda_nd");
+    int nnz = count_nnz_fillin(eigen_mat, h_permute, "gpund");
 
-    RXMESH_INFO(" With CUDA ND NNZ = {}", nnz);
+    RXMESH_INFO(" With GPUND NNZ = {}", nnz);
+}
+
+template <typename T, typename EigeMatT>
+void with_amd(rxmesh::RXMeshStatic&    rx,
+              rxmesh::SparseMatrix<T>& rx_mat,
+              const EigeMatT&          eigen_mat)
+{
+    std::vector<int> h_permute(eigen_mat.rows());
+
+    rx_mat.permute_alloc(rxmesh::PermuteMethod::SYMAMD);
+    rx_mat.permute(rx, rxmesh::PermuteMethod::SYMAMD);
+
+    const int* h_perm = rx_mat.get_h_permute();
+
+    std::memcpy(h_permute.data(),
+                rx_mat.get_h_permute(),
+                h_permute.size() * sizeof(int));
+
+    // render_permutation(rx, h_permute, "AMD");
+
+    int nnz = count_nnz_fillin(eigen_mat, h_permute, "amd");
+
+    RXMESH_INFO(" With AMD NNZ = {}", nnz);
+}
+
+template <typename T, typename EigeMatT>
+void with_symrcm(rxmesh::RXMeshStatic&    rx,
+                 rxmesh::SparseMatrix<T>& rx_mat,
+                 const EigeMatT&          eigen_mat)
+{
+    std::vector<int> h_permute(eigen_mat.rows());
+
+    rx_mat.permute_alloc(rxmesh::PermuteMethod::SYMRCM);
+    rx_mat.permute(rx, rxmesh::PermuteMethod::SYMRCM);
+
+    const int* h_perm = rx_mat.get_h_permute();
+
+    std::memcpy(h_permute.data(),
+                rx_mat.get_h_permute(),
+                h_permute.size() * sizeof(int));
+
+    // render_permutation(rx, h_permute, "symrcm");
+
+    int nnz = count_nnz_fillin(eigen_mat, h_permute, "symrcm");
+
+    RXMESH_INFO(" With SYMRCM NNZ = {}", nnz);
 }
 
 TEST(Apps, NDReorder)
@@ -207,11 +253,15 @@ TEST(Apps, NDReorder)
 
     no_permute(rx, eigen_mat);
 
+    with_amd(rx, rx_mat, eigen_mat);
+
+    with_symrcm(rx, rx_mat, eigen_mat);
+
     with_metis(rx, rx_mat, eigen_mat);
 
-    with_mgnd(rx, eigen_mat);
+    with_gpumgnd(rx, eigen_mat);
 
-    with_cuda_nd(rx, eigen_mat);
+    with_gpu_nd(rx, eigen_mat);
 
     // polyscope::show();
 }
