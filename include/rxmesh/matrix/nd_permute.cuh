@@ -724,7 +724,20 @@ void permute_separators(RXMeshStatic&              rx,
                         int*                       d_patch_proj_l,
                         int*                       d_patch_proj_l1)
 {
+
+
+    CPUTimer timer;
+    GPUTimer gtimer;
+
     single_patch_nd_permute(rx, v_local_permute);
+
+
+    timer.stop();
+    gtimer.stop();
+
+    RXMESH_INFO("single_patch_nd_permute took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
 
     v_index.reset(-1, DEVICE);
 
