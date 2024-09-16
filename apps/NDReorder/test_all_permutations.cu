@@ -38,6 +38,19 @@ void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
     RXMESH_INFO(" No-permutation NNZ = {}", nnz);
 }
 
+template <typename T>
+std::vector<T> inverse_permutation(const std::vector<T>& perm)
+{
+    std::vector<int> perm_inv(perm.size());
+
+    for (int i = 0; i < perm_inv.size(); ++i) {
+        perm_inv[perm[i]] = i;
+    }
+
+    return perm_inv;
+}
+
+
 template <typename T, typename EigeMatT>
 void with_metis(rxmesh::RXMeshStatic&          rx,
                 const rxmesh::SparseMatrix<T>& rx_mat,
@@ -187,9 +200,16 @@ void with_amd(rxmesh::RXMeshStatic&    rx,
                 rx_mat.get_h_permute(),
                 h_permute.size() * sizeof(int));
 
-    // render_permutation(rx, h_permute, "AMD");
 
-    int nnz = count_nnz_fillin(eigen_mat, h_permute, "amd");
+    std::vector<int> h_permute_inv = inverse_permutation(h_permute);
+
+
+    EXPECT_TRUE(rxmesh::is_unique_permutation(h_permute_inv.size(),
+                                              h_permute_inv.data()));
+
+    // render_permutation(rx, h_permute_inv, "AMD");
+
+    int nnz = count_nnz_fillin(eigen_mat, h_permute_inv, "amd");
 
     RXMESH_INFO(" With AMD NNZ = {}", nnz);
 }
@@ -210,9 +230,14 @@ void with_symrcm(rxmesh::RXMeshStatic&    rx,
                 rx_mat.get_h_permute(),
                 h_permute.size() * sizeof(int));
 
-    // render_permutation(rx, h_permute, "symrcm");
+    EXPECT_TRUE(
+        rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
-    int nnz = count_nnz_fillin(eigen_mat, h_permute, "symrcm");
+    std::vector<int> h_permute_inv = inverse_permutation(h_permute);
+
+    // render_permutation(rx, h_permute_inv, "symrcm");
+
+    int nnz = count_nnz_fillin(eigen_mat, h_permute_inv, "symrcm");
 
     RXMESH_INFO(" With SYMRCM NNZ = {}", nnz);
 }
