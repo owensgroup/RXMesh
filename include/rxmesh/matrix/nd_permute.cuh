@@ -729,6 +729,9 @@ void permute_separators(RXMeshStatic&              rx,
     CPUTimer timer;
     GPUTimer gtimer;
 
+    timer.start();
+    gtimer.start();
+
     single_patch_nd_permute(rx, v_local_permute);
 
 
