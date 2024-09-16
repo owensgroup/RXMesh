@@ -43,7 +43,7 @@ TEST(App, MCF)
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
-    if (Arg.solver == "ch") {
+    if (Arg.solver == "cg") {
         mcf_cg<dataT>(rx);
     } else {
         mcf_cusolver_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
