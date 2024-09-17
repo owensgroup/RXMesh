@@ -107,9 +107,9 @@ int main(int argc, char** argv)
             Arg.device_id =
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
         }
-        if (cmd_option_exists(argv, argc + argv, "-perm_method")) {
+        if (cmd_option_exists(argv, argc + argv, "-perm")) {
             Arg.perm_method =
-                std::string(get_cmd_option(argv, argv + argc, "-perm_method"));
+                std::string(get_cmd_option(argv, argv + argc, "-perm"));
         }
         if (cmd_option_exists(argv, argc + argv, "-solver")) {
             Arg.solver =
@@ -120,7 +120,7 @@ int main(int argc, char** argv)
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
     RXMESH_TRACE("solver= {}", Arg.solver);
-    RXMESH_TRACE("perm_method= {}", Arg.perm_method);
+    RXMESH_TRACE("perm= {}", Arg.perm_method);
     RXMESH_TRACE("max_num_cg_iter= {}", Arg.max_num_cg_iter);
     RXMESH_TRACE("cg_tolerance= {0:f}", Arg.cg_tolerance);
     RXMESH_TRACE("use_uniform_laplace= {}", Arg.use_uniform_laplace);
