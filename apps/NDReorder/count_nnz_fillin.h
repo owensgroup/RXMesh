@@ -51,6 +51,9 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
     Eigen::internal::permute_symm_to_fullsymm<Eigen::Lower, false>(
         eigen_mat, permuted_mat, perm.indices().data());
 
+    // exportToPlainText(permuted_mat,
+    //                   std::string("C:\\Github\\Matlab_Reordering_Trial\\") +
+    //                       st + std::string(".txt"));
 
     exportToPlainText(permuted_mat, st + std::string(".txt"));
 
