@@ -20,54 +20,10 @@ struct PatchStash
                 cudaMalloc((void**)&m_stash, stash_size * sizeof(uint32_t)));
             CUDA_ERROR(
                 cudaMemset(m_stash, INVALID8, stash_size * sizeof(uint32_t)));
-
-            CUDA_ERROR(cudaMalloc((void**)&m_edge_weight,
-                                  stash_size * sizeof(uint32_t)));
-            CUDA_ERROR(cudaMemset(
-                m_edge_weight, INVALID32, stash_size * sizeof(uint32_t)));
-
-            CUDA_ERROR(cudaMalloc((void**)&m_coarse_level_id_list,
-                                  stash_size * sizeof(uint32_t)));
-            CUDA_ERROR(cudaMemset(m_coarse_level_id_list,
-                                  INVALID32,
-                                  stash_size * sizeof(uint32_t)));
-
-            CUDA_ERROR(cudaMalloc((void**)&m_coarse_level_pair_list,
-                                  stash_size * sizeof(uint32_t)));
-            CUDA_ERROR(cudaMemset(m_coarse_level_pair_list,
-                                  INVALID32,
-                                  stash_size * sizeof(uint32_t)));
-
-            CUDA_ERROR(cudaMalloc((void**)&m_coarse_level_num_v,
-                                  stash_size * sizeof(uint32_t)));
-            CUDA_ERROR(cudaMemset(m_coarse_level_num_v,
-                                  INVALID32,
-                                  stash_size * sizeof(uint32_t)));
-
-            CUDA_ERROR(cudaMalloc((void**)&m_tmp_level_stash,
-                                  stash_size * sizeof(uint32_t)));
-            CUDA_ERROR(cudaMemset(
-                m_tmp_level_stash, INVALID32, stash_size * sizeof(uint32_t)));
-
-            CUDA_ERROR(cudaMalloc((void**)&m_tmp_level_edge_weight,
-                                  stash_size * sizeof(uint32_t)));
-            CUDA_ERROR(cudaMemset(m_tmp_level_edge_weight,
-                                  INVALID32,
-                                  stash_size * sizeof(uint32_t)));
-
-            m_tmp_ordering_tail = INVALID32;
-            m_num_separator_v   = 0;
-            m_is_active         = true;
-
         } else {
             m_stash = (uint32_t*)malloc(stash_size * sizeof(uint32_t));
             for (uint8_t i = 0; i < stash_size; ++i) {
                 m_stash[i] = INVALID32;
-            }
-
-            m_edge_weight = (uint32_t*)malloc(stash_size * sizeof(uint32_t));
-            for (uint8_t i = 0; i < stash_size; ++i) {
-                m_edge_weight[i] = INVALID32;
             }
         }
     }
@@ -101,40 +57,6 @@ struct PatchStash
         return get_patch(p.patch_stash_id());
     }
 
-    __host__ __device__ __inline__ uint32_t get_edge_weight(uint8_t id) const
-    {
-        assert(id >= 0 && id < stash_size);
-
-        if (m_edge_weight[id] == INVALID32) {
-            m_edge_weight[id] = 0;
-        }
-
-        return m_edge_weight[id];
-    }
-
-    __host__ __device__ __inline__ uint32_t& get_edge_weight(uint8_t id)
-    {
-        assert(id >= 0 && id < stash_size);
-
-        if (m_edge_weight[id] == INVALID32) {
-            m_edge_weight[id] = 0;
-        }
-
-        return m_edge_weight[id];
-    }
-
-    __host__ __device__ __inline__ uint32_t get_tmp_level_patch(
-        uint8_t id) const
-    {
-        assert(id >= 0 && id < stash_size);
-        return m_tmp_level_stash[id];
-    }
-
-    __host__ __device__ __inline__ uint32_t& get_tmp_level_patch(uint8_t id)
-    {
-        assert(id >= 0 && id < stash_size);
-        return m_tmp_level_stash[id];
-    }  
 
     /*__host__ __device__ __inline__ uint8_t insert_patch(uint32_t patch)
     {
@@ -219,42 +141,19 @@ struct PatchStash
         return INVALID8;
     }
 
-   
+
     __host__ void free()
     {
         if (m_is_on_device) {
             GPU_FREE(m_stash);
-            GPU_FREE(m_edge_weight);
-            GPU_FREE(m_coarse_level_id_list);
-            GPU_FREE(m_coarse_level_pair_list);
-            GPU_FREE(m_coarse_level_num_v);
-            GPU_FREE(m_tmp_level_stash);
-            GPU_FREE(m_tmp_level_edge_weight);
+
         } else {
             ::free(m_stash);
-            ::free(m_edge_weight);
         }
     }
 
     // store the stash level of the initial level of coarsening
     uint32_t* m_stash;
-    uint32_t* m_edge_weight;
-
-    // store the patch id of each level of coarsening
-    uint32_t* m_coarse_level_pair_list;
-    uint32_t* m_coarse_level_id_list;
-    uint32_t* m_coarse_level_num_v;
-    uint32_t  m_num_separator_v;
-
-    bool m_is_node;  // determine whether the patch is a node or not(remained or
-                     // merged)
-
-    // store the stash info of the current level during coarsening
-    bool      m_is_active;
-    uint32_t  m_tmp_ordering_tail;
-    uint32_t  m_tmp_paired_patch;
-    uint32_t* m_tmp_level_stash;
-    uint32_t* m_tmp_level_edge_weight;
 
     bool m_is_on_device;
 };
