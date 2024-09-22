@@ -145,7 +145,7 @@ set(cuda_flags
     -rdc=true
 	-lineinfo	
 	--expt-extended-lambda	
-	-use_fast_math	
+	#-use_fast_math	
     $<$<CXX_COMPILER_ID:GNU>:-O3>
 	--expt-relaxed-constexpr	
     -Xptxas -warn-spills -res-usage   
