@@ -11,11 +11,11 @@
 namespace rxmesh {
 
 template <uint32_t blockThreads, int maxCoarsenLevels>
-__global__ static void nd_single_patch(Context              context,
-                                       VertexAttribute<int> v_ordering,
-                                       VertexAttribute<int> attr_v,
-                                       EdgeAttribute<int>   attr_e,
-                                       VertexAttribute<int> attr_v1)
+__global__ static void patch_permute_nd(Context              context,
+                                        VertexAttribute<int> v_ordering,
+                                        VertexAttribute<int> attr_v,
+                                        EdgeAttribute<int>   attr_e,
+                                        VertexAttribute<int> attr_v1)
 {
 
     auto block = cooperative_groups::this_thread_block();
@@ -59,10 +59,9 @@ __global__ static void nd_single_patch(Context              context,
 
 
 template <uint32_t blockThreads>
-__global__ static void nd_single_patch_kmeans(
-    Context                   context,
-    VertexAttribute<uint16_t> v_permute,
-    int                       threshold = 100)
+__global__ static void patch_permute_kmeans(Context                   context,
+                                            VertexAttribute<uint16_t> v_permute,
+                                            int threshold = 100)
 {
     auto block = cooperative_groups::this_thread_block();
 

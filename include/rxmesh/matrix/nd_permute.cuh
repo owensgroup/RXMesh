@@ -6,9 +6,8 @@
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/matrix/mgnd_permute.cuh"
+#include "rxmesh/matrix/patch_permute.cuh"
 #include "rxmesh/matrix/permute_util.h"
-
-#include "rxmesh/matrix/nd_single_patch_ordering.cuh"
 
 namespace rxmesh {
 
@@ -638,7 +637,7 @@ void single_patch_nd_permute(RXMeshStatic&              rx,
     rx.prepare_launch_box(
         {Op::V},
         lb,
-        (void*)nd_single_patch<blockThreads, maxCoarsenLevels>,
+        (void*)patch_permute_nd<blockThreads, maxCoarsenLevels>,
         false,
         false,
         false,
@@ -658,7 +657,7 @@ void single_patch_nd_permute(RXMeshStatic&              rx,
 #else
     rx.prepare_launch_box({Op::V},
                           lb,
-                          (void*)nd_single_patch_kmeans<blockThreads>,
+                          (void*)patch_permute_kmeans<blockThreads>,
                           false,
                           false,
                           false,
@@ -683,11 +682,11 @@ void single_patch_nd_permute(RXMeshStatic&              rx,
                  lb.smem_bytes_dyn);
 
 #if 0
-    nd_single_patch<blockThreads, maxCoarsenLevels>
+    patch_permute_nd<blockThreads, maxCoarsenLevels>
         <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
             rx.get_context(), v_local_permute, *attr_v, *attr_e, *attr_v1);
 #else
-    nd_single_patch_kmeans<blockThreads>
+    patch_permute_kmeans<blockThreads>
         <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(rx.get_context(),
                                                            v_local_permute);
 #endif

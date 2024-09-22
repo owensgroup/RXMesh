@@ -1,8 +1,7 @@
 add_executable(NDReorder)
 
 set(SOURCE_LIST
-    test_all_permutations.cu 
-    nd_cross_patch_ordering.cuh   
+    test_all_permutations.cu     
 	count_nnz_fillin.h
 	render_permutation.h
 )
