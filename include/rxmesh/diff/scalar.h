@@ -12,11 +12,13 @@
 #include <Eigen/Dense>
 #include <cmath>
 
-
-#include "rxmesh/diff/to_passive.h"
 #include "rxmesh/diff/util.h"
 
 namespace rxmesh {
+
+#define TINYAD_CHECK_FINITE_IF_ENABLED_AD(exp) \
+    {                                          \
+    }
 
 /**
  * Forward-differentiable scalar type with constructors for passive and active
@@ -157,13 +159,13 @@ struct Scalar
         if constexpr (WithHessian)
             res.Hess = Hess * a.grad * a.grad.transpose() + grad * a.Hess;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ friend Scalar operator-(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         Scalar res;
         res.val  = -a.val;
@@ -177,14 +179,14 @@ struct Scalar
 
     __host__ __device__ friend Scalar sqrt(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
         const PassiveT f = std::sqrt(a.val);
         return chain(f, (PassiveT)0.5 / f, (PassiveT)-0.25 / (f * a.val), a);
     }
 
     __host__ __device__ friend Scalar sqr(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         Scalar res;
         res.val  = a.val * a.val;
@@ -193,13 +195,13 @@ struct Scalar
         if constexpr (WithHessian)
             res.Hess = 2.0 * (a.val * a.Hess + a.grad * a.grad.transpose());
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ friend Scalar pow(const Scalar& a, const int& e)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT f2 = (PassiveT)std::pow(a.val, e - 2);
         const PassiveT f1 = f2 * a.val;
@@ -210,7 +212,7 @@ struct Scalar
 
     __host__ __device__ Scalar pow(const Scalar& a, const PassiveT& e)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT f2 = std::pow(a.val, e - (PassiveT)2.0);
         const PassiveT f1 = f2 * a.val;
@@ -221,7 +223,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar fabs(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
         if (a.val >= 0.0)
             return chain(a.val, 1.0, 0.0, a);
         else
@@ -235,7 +237,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar exp(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT exp_a = std::exp(a.val);
         return chain(exp_a, exp_a, exp_a, a);
@@ -243,7 +245,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar log(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT a_inv = (PassiveT)1.0 / a.val;
         return chain(std::log(a.val), a_inv, -a_inv / a.val, a);
@@ -251,7 +253,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar log2(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT a_inv = (PassiveT)1.0 / a.val / (PassiveT)std::log(2.0);
         return chain(std::log2(a.val), a_inv, -a_inv / a.val, a);
@@ -259,7 +261,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar log10(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT a_inv = (PassiveT)1.0 / a.val / (PassiveT)std::log(10.0);
         return chain(std::log10(a.val), a_inv, -a_inv / a.val, a);
@@ -267,7 +269,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar sin(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT sin_a = std::sin(a.val);
         return chain(sin_a, std::cos(a.val), -sin_a, a);
@@ -275,7 +277,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar cos(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT cos_a = std::cos(a.val);
         return chain(cos_a, -std::sin(a.val), -cos_a, a);
@@ -283,7 +285,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar tan(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT cos   = std::cos(a.val);
         const PassiveT cos_2 = cos * cos;
@@ -296,7 +298,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar asin(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT s      = (PassiveT)1.0 - a.val * a.val;
         const PassiveT s_sqrt = std::sqrt(s);
@@ -306,14 +308,14 @@ struct Scalar
 
     __host__ __device__ friend Scalar acos(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
         assert(a.val > -1.0);
         assert(a.val < 1.0);
 
         const PassiveT s      = (PassiveT)1.0 - a.val * a.val;
         const PassiveT s_sqrt = std::sqrt(s);
-        TINYAD_CHECK_FINITE_IF_ENABLED_d(s);
-        TINYAD_CHECK_FINITE_IF_ENABLED_d(s_sqrt);
+        assert(is_finite(s));
+        assert(is_finite(s_sqrt));
         assert(s > 0.0);
 
         return chain(
@@ -322,7 +324,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar atan(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT s = a.val * a.val + (PassiveT)1.0;
         return chain(std::atan(a.val),
@@ -333,7 +335,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar sinh(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT sinh_a = std::sinh(a.val);
         return chain(sinh_a, std::cosh(a.val), sinh_a, a);
@@ -341,7 +343,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar cosh(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT cosh_a = std::cosh(a.val);
         return chain(cosh_a, std::sinh(a.val), cosh_a, a);
@@ -349,7 +351,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar tanh(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT cosh   = std::cosh(a.val);
         const PassiveT cosh_2 = cosh * cosh;
@@ -362,12 +364,12 @@ struct Scalar
 
     __host__ __device__ friend Scalar asinh(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT s      = a.val * a.val + (PassiveT)1.0;
         const PassiveT s_sqrt = std::sqrt(s);
-        TINYAD_CHECK_FINITE_IF_ENABLED_d(s);
-        TINYAD_CHECK_FINITE_IF_ENABLED_d(s_sqrt);
+        assert(is_finite(s));
+        assert(is_finite(s_sqrt));
 
         return chain(
             std::asinh(a.val), (PassiveT)1.0 / s_sqrt, -a.val / s_sqrt / s, a);
@@ -375,15 +377,15 @@ struct Scalar
 
     __host__ __device__ friend Scalar acosh(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT sm      = a.val - (PassiveT)1.0;
         const PassiveT sp      = a.val + (PassiveT)1.0;
         const PassiveT sm_sqrt = std::sqrt(sm);
         const PassiveT sp_sqrt = std::sqrt(sp);
         const PassiveT prod    = sm_sqrt * sp_sqrt;
-        TINYAD_CHECK_FINITE_IF_ENABLED_d(sm_sqrt);
-        TINYAD_CHECK_FINITE_IF_ENABLED_d(sp_sqrt);
+        assert(is_finite(sm_sqrt));
+        assert(is_finite(sp_sqrt));
 
         return chain(std::acosh(a.val),
                      (PassiveT)1.0 / prod,
@@ -393,7 +395,7 @@ struct Scalar
 
     __host__ __device__ friend Scalar atanh(const Scalar& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         const PassiveT s = (PassiveT)1.0 - a.val * a.val;
         return chain(std::atanh(a.val),
@@ -417,7 +419,7 @@ struct Scalar
     __host__ __device__ friend bool isfinite(const Scalar& a)
     {
 
-        return std::isfinite(a.val);
+        return isfinite(a.val);
     }
 
     // ///////////////////////////////////////////////////////////////////////////
@@ -427,8 +429,8 @@ struct Scalar
     __host__ __device__ friend Scalar operator+(const Scalar& a,
                                                 const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         Scalar res;
         res.val  = a.val + b.val;
@@ -437,38 +439,38 @@ struct Scalar
         if constexpr (WithHessian)
             res.Hess = a.Hess + b.Hess;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ friend Scalar operator+(const Scalar&   a,
                                                 const PassiveT& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         Scalar res = a;
         res.val += b;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ friend Scalar operator+(const PassiveT& a,
                                                 const Scalar&   b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(b));
 
         Scalar res = b;
         res.val += a;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ Scalar& operator+=(const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(*this);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(*this));
+        assert(is_finite_scalar(b));
 
         assert(this->grad.size() == b.grad.size());
 
@@ -477,25 +479,25 @@ struct Scalar
         if constexpr (WithHessian)
             this->Hess += b.Hess;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(*this);
+        assert(is_finite_scalar(*this));
         return *this;
     }
 
     __host__ __device__ Scalar& operator+=(const PassiveT& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(*this);
+        assert(is_finite_scalar(*this));
 
         this->val += b;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(*this);
+        assert(is_finite_scalar(*this));
         return *this;
     }
 
     __host__ __device__ friend Scalar operator-(const Scalar& a,
                                                 const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         assert(a.grad.size() == b.grad.size());
 
@@ -507,26 +509,26 @@ struct Scalar
         if constexpr (WithHessian)
             res.Hess = a.Hess - b.Hess;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ friend Scalar operator-(const Scalar&   a,
                                                 const PassiveT& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         Scalar res = a;
         res.val -= b;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ friend Scalar operator-(const PassiveT& a,
                                                 const Scalar&   b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(b));
 
         Scalar res;
         res.val  = a - b.val;
@@ -535,14 +537,14 @@ struct Scalar
         if constexpr (WithHessian)
             res.Hess = -b.Hess;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ Scalar& operator-=(const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(*this);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(*this));
+        assert(is_finite_scalar(b));
 
 
         assert(this->grad.size() == b.grad.size());
@@ -553,25 +555,25 @@ struct Scalar
         if constexpr (WithHessian)
             this->Hess -= b.Hess;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(*this);
+        assert(is_finite_scalar(*this));
         return *this;
     }
 
     __host__ __device__ Scalar& operator-=(const PassiveT& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(*this);
+        assert(is_finite_scalar(*this));
 
         this->val -= b;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(*this);
+        assert(is_finite_scalar(*this));
         return *this;
     }
 
     __host__ __device__ friend Scalar operator*(const Scalar& a,
                                                 const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         assert(a.grad.size() == b.grad.size());
 
@@ -599,15 +601,15 @@ struct Scalar
             res.Hess = b.val * a.Hess + a.grad * b.grad.transpose() +
                        b.grad * a.grad.transpose() + a.val * b.Hess;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ friend Scalar operator*(const Scalar&   a,
                                                 const PassiveT& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_d(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         Scalar res = a;
         res.val *= b;
@@ -616,15 +618,15 @@ struct Scalar
         if constexpr (WithHessian)
             res.Hess *= b;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ friend Scalar operator*(const PassiveT& a,
                                                 const Scalar&   b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_d(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite(a));
+        assert(is_finite_scalar(b));
 
         Scalar res = b;
         res.val *= a;
@@ -633,7 +635,7 @@ struct Scalar
         if constexpr (WithHessian)
             res.Hess *= a;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
@@ -652,8 +654,8 @@ struct Scalar
     __host__ __device__ friend Scalar operator/(const Scalar& a,
                                                 const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
 
         assert(a.grad.size() == b.grad.size());
@@ -667,14 +669,14 @@ struct Scalar
                         b.grad * res.grad.transpose() - res.val * b.Hess) /
                        b.val;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ friend Scalar operator/(const Scalar&   a,
                                                 const PassiveT& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         Scalar res = a;
         res.val /= b;
@@ -683,14 +685,14 @@ struct Scalar
         if constexpr (WithHessian)
             res.Hess /= b;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ friend Scalar operator/(const PassiveT& a,
                                                 const Scalar&   b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(b));
 
         Scalar res;
         res.val  = a / b.val;
@@ -701,7 +703,7 @@ struct Scalar
                         b.grad * res.grad.transpose() - res.val * b.Hess) /
                        b.val;
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
@@ -719,8 +721,8 @@ struct Scalar
 
     __host__ __device__ friend Scalar atan2(const Scalar& y, const Scalar& x)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(y);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(x);
+        assert(is_finite_scalar(y));
+        assert(is_finite_scalar(x));
 
         assert(y.grad.size() == x.grad.size());
 
@@ -740,14 +742,14 @@ struct Scalar
             res.Hess = (du - res.grad * dv.transpose()) / v;
         }
 
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(res);
+        assert(is_finite_scalar(res));
         return res;
     }
 
     __host__ __device__ friend Scalar hypot(const Scalar& a, const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         assert(a.grad.size(), b.grad.size());
 
@@ -756,8 +758,8 @@ struct Scalar
 
     __host__ __device__ friend bool operator==(const Scalar& a, const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         return a.val == b.val;
     }
@@ -765,7 +767,7 @@ struct Scalar
     __host__ __device__ friend bool operator==(const Scalar&   a,
                                                const PassiveT& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         return a.val == b;
     }
@@ -773,7 +775,7 @@ struct Scalar
     __host__ __device__ friend bool operator==(const PassiveT& a,
                                                const Scalar&   b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(b));
 
         return a == b.val;
     }
@@ -800,8 +802,8 @@ struct Scalar
 
     __host__ __device__ friend bool operator<(const Scalar& a, const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         return a.val < b.val;
     }
@@ -809,7 +811,7 @@ struct Scalar
     __host__ __device__ friend bool operator<(const Scalar&   a,
                                               const PassiveT& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         return a.val < b;
     }
@@ -817,15 +819,15 @@ struct Scalar
     __host__ __device__ friend bool operator<(const PassiveT& a,
                                               const Scalar&   b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(b));
 
         return a < b.val;
     }
 
     __host__ __device__ friend bool operator<=(const Scalar& a, const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         return a.val <= b.val;
     }
@@ -833,7 +835,7 @@ struct Scalar
     __host__ __device__ friend bool operator<=(const Scalar&   a,
                                                const PassiveT& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         return a.val <= b;
     }
@@ -841,22 +843,22 @@ struct Scalar
     __host__ __device__ friend bool operator<=(const PassiveT& a,
                                                const Scalar&   b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(b));
 
         return a <= b.val;
     }
 
     __host__ __device__ friend bool operator>(const Scalar& a, const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
         return a.val > b.val;
     }
 
     __host__ __device__ friend bool operator>(const Scalar&   a,
                                               const PassiveT& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         return a.val > b;
     }
@@ -864,15 +866,15 @@ struct Scalar
     __host__ __device__ friend bool operator>(const PassiveT& a,
                                               const Scalar&   b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(b));
 
         return a > b.val;
     }
 
     __host__ __device__ friend bool operator>=(const Scalar& a, const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         return a.val >= b.val;
     }
@@ -880,7 +882,7 @@ struct Scalar
     __host__ __device__ friend bool operator>=(const Scalar&   a,
                                                const PassiveT& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
+        assert(is_finite_scalar(a));
 
         return a.val >= b;
     }
@@ -888,15 +890,15 @@ struct Scalar
     __host__ __device__ friend bool operator>=(const PassiveT& a,
                                                const Scalar&   b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(b));
 
         return a >= b.val;
     }
 
     __host__ __device__ friend Scalar min(const Scalar& a, const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         return (b < a) ? b : a;
     }
@@ -908,8 +910,8 @@ struct Scalar
 
     __host__ __device__ friend Scalar max(const Scalar& a, const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         return (a < b) ? b : a;
     }
@@ -923,7 +925,7 @@ struct Scalar
                                             const Scalar& a,
                                             const Scalar& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(x);
+        assert(is_finite_scalar(x));
         if (x < a)
             return a;
         else if (x > b)
@@ -940,8 +942,8 @@ struct Scalar
         const std::complex<Scalar>& a,
         const std::complex<Scalar>& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         return std::complex<Scalar>(a.real() + b.real(), a.imag() + b.imag());
     }
@@ -950,8 +952,8 @@ struct Scalar
         const std::complex<PassiveT>& a,
         const std::complex<Scalar>&   b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
 
         return std::complex<Scalar>(a.real() + b.real(), a.imag() + b.imag());
@@ -961,8 +963,8 @@ struct Scalar
         const std::complex<Scalar>&   a,
         const std::complex<PassiveT>& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
 
         return std::complex<Scalar>(a.real() + b.real(), a.imag() + b.imag());
@@ -972,8 +974,8 @@ struct Scalar
         const std::complex<Scalar>& a,
         const std::complex<Scalar>& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
 
         return std::complex<Scalar>(a.real() - b.real(), a.imag() - b.imag());
@@ -983,8 +985,8 @@ struct Scalar
         const std::complex<PassiveT>& a,
         const std::complex<Scalar>&   b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         return std::complex<Scalar>(a.real() - b.real(), a.imag() - b.imag());
     }
@@ -993,8 +995,8 @@ struct Scalar
         const std::complex<Scalar>&   a,
         const std::complex<PassiveT>& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         return std::complex<Scalar>(a.real() - b.real(), a.imag() - b.imag());
     }
@@ -1003,8 +1005,8 @@ struct Scalar
         const std::complex<Scalar>& a,
         const std::complex<Scalar>& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
 
         return std::complex<Scalar>(a.real() * b.real() - a.imag() * b.imag(),
@@ -1015,8 +1017,8 @@ struct Scalar
         const std::complex<PassiveT>& a,
         const std::complex<Scalar>&   b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         return std::complex<Scalar>(a.real() * b.real() - a.imag() * b.imag(),
                                     a.real() * b.imag() + a.imag() * b.real());
@@ -1026,8 +1028,8 @@ struct Scalar
         const std::complex<Scalar>&   a,
         const std::complex<PassiveT>& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
 
         return std::complex<Scalar>(a.real() * b.real() - a.imag() * b.imag(),
@@ -1037,8 +1039,7 @@ struct Scalar
     __host__ __device__ friend std::complex<Scalar> sqr(
         const std::complex<Scalar>& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-
+        assert(is_finite_scalar(a));
 
         return std::complex<Scalar>(sqr(a.real()) - sqr(a.imag()),
                                     2.0 * a.real() * a.imag());
@@ -1048,8 +1049,8 @@ struct Scalar
         const std::complex<Scalar>& a,
         const std::complex<Scalar>& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
 
         const Scalar denom = b.real() * b.real() + b.imag() * b.imag();
@@ -1062,9 +1063,8 @@ struct Scalar
         const std::complex<Scalar>&   a,
         const std::complex<PassiveT>& b)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(b);
-
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
 
         const PassiveT denom = b.real() * b.real() + b.imag() * b.imag();
         return std::complex<Scalar>(
@@ -1075,24 +1075,21 @@ struct Scalar
     __host__ __device__ friend std::complex<Scalar> conj(
         const std::complex<Scalar>& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-
+        assert(is_finite_scalar(a));
 
         return std::complex<Scalar>(a.real(), -a.imag());
     }
 
     __host__ __device__ friend Scalar abs(const std::complex<Scalar>& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-
+        assert(is_finite_scalar(a));
 
         return hypot(a.real(), a.imag());
     }
 
     __host__ __device__ friend Scalar arg(const std::complex<Scalar>& a)
     {
-        TINYAD_CHECK_FINITE_IF_ENABLED_AD(a);
-
+        assert(is_finite_scalar(a));
 
         return atan2(a.imag(), a.real());
     }
