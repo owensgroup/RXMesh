@@ -27,6 +27,7 @@ set( SOURCE_LIST
 	test_dense_matrix.cuh
 	test_export.cuh
 	test_svd.cuh
+	test_scalar.cu
 )
 
 target_sources( RXMesh_test 

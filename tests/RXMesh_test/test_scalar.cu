@@ -4,10 +4,14 @@
 
 #include "rxmesh/rxmesh_static.h"
 
-#define RX_ASSERT_NEAR(val1, val2, eps, d_err)                     \
-    if (abs(val1 - val2) > eps) {                                  \
-        printf("\n val1= %f, val2= %f, eps= %f", val1, val2, eps); \
-        d_err[0]++;                                                \
+#define RX_ASSERT_NEAR(val1, val2, eps, d_err)                           \
+    if (abs(val1 - val2) > eps) {                                        \
+        printf("\n val1= %.17g, val2= %.17g, eps= %.17g, diff= %.17g\n", \
+               double(val1),                                             \
+               double(val2),                                             \
+               double(eps),                                              \
+               abs(val1 - val2));                                        \
+        d_err[0]++;                                                      \
     }
 
 #define RX_ASSERT_TRUE(exp, d_err) \
@@ -153,13 +157,14 @@ __inline__ __device__ void test_exp(int* d_err, T eps)
     using Real1 = Scalar<1, T, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
-
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
     const Real1 f = exp(a);
     RX_ASSERT_NEAR(f.val, std::exp(T(4.0)), eps, d_err);
-    RX_ASSERT_NEAR(f.grad(0), T(3.0) * exp(T(4.0)), eps, d_err);
+    const T g = T(3.0) * exp(T(4.0));
+    RX_ASSERT_NEAR(f.grad(0), g, eps, d_err);
     if constexpr (WithHessian) {
-        RX_ASSERT_NEAR(f.Hess(0, 0), T(11.0) * std::exp(T(4.0)), eps, d_err);
+        const T h = T(11.0) * std::exp(T(4.0));
+        RX_ASSERT_NEAR(f.Hess(0, 0), h, eps, d_err);
     }
 }
 
@@ -173,9 +178,11 @@ __inline__ __device__ void test_log(int* d_err, T eps)
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
     const Real1 f = log(a);
     RX_ASSERT_NEAR(f.val, T(2.0) * std::log(T(2.0)), eps, d_err);
-    RX_ASSERT_NEAR(f.grad(0), T(3.0) / T(4.0), eps, d_err);
+    const T g = T(3.0) / T(4.0);
+    RX_ASSERT_NEAR(f.grad(0), g, eps, d_err);
     if constexpr (WithHessian) {
-        RX_ASSERT_NEAR(f.Hess(0, 0), T(-1.0) / T(16.0), eps, d_err);
+        const T h = T(-1.0) / T(16.0);
+        RX_ASSERT_NEAR(f.Hess(0, 0), h, eps, d_err);
     }
 }
 
@@ -185,17 +192,137 @@ __inline__ __device__ void test_log2(int* d_err, T eps)
     using namespace rxmesh;
     using Real1 = Scalar<1, T, WithHessian>;
 
+    // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
     const Real1 f = log2(a);
     RX_ASSERT_NEAR(f.val, 2.0, eps, d_err);
-    RX_ASSERT_NEAR(f.grad(0), 3.0 / 4.0 / std::log(2.0), eps, d_err);
+    const T g = 3.0 / 4.0 / std::log(2.0);
+    RX_ASSERT_NEAR(f.grad(0), g, eps, d_err);
     if constexpr (WithHessian) {
-        RX_ASSERT_NEAR(f.Hess(0, 0), -1.0 / 16.0 / std::log(2.0), eps, d_err);
+        const T h = -1.0 / 16.0 / std::log(2.0);
+        RX_ASSERT_NEAR(f.Hess(0, 0), h, eps, d_err);
     }
 }
 
 template <typename T, bool WithHessian>
-__global__ static void test_scalar(int* d_err, T eps = 1e-6)
+__inline__ __device__ void test_log10(int* d_err, T eps)
+{
+    using namespace rxmesh;
+    using Real1 = Scalar<1, T, WithHessian>;
+
+    // a(x) = x^2 + x + 2 at x=1
+    const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
+    const Real1 f = log10(a);
+    RX_ASSERT_NEAR(f.val, std::log10(T(4.0)), eps, d_err);
+    const T g = 3.0 / 4.0 / std::log(10.0);
+    RX_ASSERT_NEAR(f.grad(0), g, eps, d_err);
+    if constexpr (WithHessian) {
+        const T h = -1.0 / 16.0 / std::log(10.0);
+        RX_ASSERT_NEAR(f.Hess(0, 0), h, eps, d_err);
+    }
+}
+
+template <typename T, bool WithHessian>
+__inline__ __device__ void test_sin(int* d_err, T eps)
+{
+    using namespace rxmesh;
+    using Real1 = Scalar<1, T, WithHessian>;
+
+    // a(x) = x^2 + x + 2 at x=1
+    const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
+    const Real1 f = sin(a);
+    RX_ASSERT_NEAR(f.val, std::sin(T(4.0)), eps, d_err);
+
+    const T g = T(3.0) * std::cos(T(4.0));
+    RX_ASSERT_NEAR(f.grad(0), g, eps, d_err);
+    if constexpr (WithHessian) {
+        const T h = T(2.0) * std::cos(T(4.0)) - T(9.0) * std::sin(T(4.0));
+        RX_ASSERT_NEAR(f.Hess(0, 0), h, eps, d_err);
+    }
+}
+
+template <typename T, bool WithHessian>
+__inline__ __device__ void test_cos(int* d_err, T eps)
+{
+    using namespace rxmesh;
+    using Real1 = Scalar<1, T, WithHessian>;
+
+    // a(x) = x^2 + x + 2 at x=1
+    const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
+    const Real1 f = cos(a);
+    RX_ASSERT_NEAR(f.val, std::cos(T(4.0)), eps, d_err);
+
+    const T g = T(-3.0) * std::sin(T(4.0));
+    RX_ASSERT_NEAR(f.grad(0), g, eps, d_err);
+    if constexpr (WithHessian) {
+        const T h = T(-2.0) * std::sin(T(4.0)) - T(9.0) * std::cos(T(4.0));
+        RX_ASSERT_NEAR(f.Hess(0, 0), h, eps, d_err);
+    }
+}
+
+template <typename T, bool WithHessian>
+__inline__ __device__ void test_tan(int* d_err, T eps)
+{
+    using namespace rxmesh;
+    using Real1 = Scalar<1, T, WithHessian>;
+
+    // a(x) = x^2 + x + 2 at x=1
+    const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
+    const Real1 f = tan(a);
+    RX_ASSERT_NEAR(f.val, std::tan(T(4.0)), eps, d_err);
+
+    const T g = T(3.0) / sqr(std::cos(T(4.0)));
+    RX_ASSERT_NEAR(f.grad(0), g, eps, d_err);
+    if constexpr (WithHessian) {
+        const T h = T(4.0) * (T(1.0) + T(9.0) * std::tan(T(4.0))) /
+                    (T(1.0) + std::cos(T(8.0)));
+        RX_ASSERT_NEAR(f.Hess(0, 0), h, eps, d_err);
+    }
+}
+
+
+template <typename T, bool WithHessian>
+__inline__ __device__ void test_asin(int* d_err, T eps)
+{
+    using namespace rxmesh;
+    using Real1 = Scalar<1, T, WithHessian>;
+
+    // a(x) = x^2 + x - 1.5 at x=1
+    const Real1 a = Real1::known_derivatives(0.5, 3.0, 2.0);
+    const Real1 f = asin(a);
+    RX_ASSERT_NEAR(f.val, std::asin(T(0.5)), eps, d_err);
+
+    const T g = 3.4641;
+    RX_ASSERT_NEAR(f.grad(0), g, 1e-4, d_err);
+    if constexpr (WithHessian) {
+        const T h = 9.2376;
+        RX_ASSERT_NEAR(f.Hess(0, 0), h, 1e-4, d_err);
+    }
+}
+
+
+template <typename T, bool WithHessian>
+__inline__ __device__ void test_acos(int* d_err, T eps)
+{
+    using namespace rxmesh;
+    using Real1 = Scalar<1, T, WithHessian>;
+
+    // a(x) = x^2 + x - 1.5 at x=1
+    const Real1 a = Real1::known_derivatives(0.5, 3.0, 2.0);
+    const Real1 f = acos(a);
+    RX_ASSERT_NEAR(f.val, std::acos(T(0.5)), eps, d_err);
+
+    const T g = -3.4641;
+    RX_ASSERT_NEAR(f.grad(0), g, 1e-4, d_err);
+    if constexpr (WithHessian) {
+        const T h = -9.2376;
+        RX_ASSERT_NEAR(f.Hess(0, 0), h, 1e-4, d_err);
+    }
+}
+
+
+template <typename T, bool WithHessian>
+__global__ static void test_scalar(int* d_err, T eps = 1e-4)
 {
 
 
@@ -222,6 +349,24 @@ __global__ static void test_scalar(int* d_err, T eps = 1e-6)
 
     // test log2
     test_log2<T, WithHessian>(d_err, eps);
+
+    // test log10
+    test_log10<T, WithHessian>(d_err, eps);
+
+    // test sin
+    test_sin<T, WithHessian>(d_err, eps);
+
+    // test cos
+    test_cos<T, WithHessian>(d_err, eps);
+
+    // test tan
+    test_tan<T, WithHessian>(d_err, eps);
+
+    // test asin
+    test_asin<T, WithHessian>(d_err, eps);
+
+    // test acos
+    test_acos<T, WithHessian>(d_err, eps);
 }
 
 
