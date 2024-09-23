@@ -15,7 +15,7 @@ TEST(RXMeshStatic, Oriented_VV_Open)
 {
     using namespace rxmesh;
 
-    std::vector<std::vector<dataT>>    Verts;
+    std::vector<std::vector<float>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
     // This is how the plane.obj looks like
@@ -39,7 +39,7 @@ TEST(RXMeshStatic, Oriented_VV_Open)
     EXPECT_FALSE(rx.is_closed())
         << " Expected input to be open with boundaries";
 
-    auto coordinates = rx.add_vertex_attribute<dataT>(Verts, "coordinates");
+    auto coordinates = rx.add_vertex_attribute<float>(Verts, "coordinates");
 
     // input/output container
     auto input  = rx.add_vertex_attribute<VertexHandle>("input", 1);
@@ -76,11 +76,11 @@ TEST(RXMeshStatic, Oriented_VV_Open)
     RXMeshTest tester(rx, Faces);
     EXPECT_TRUE(tester.run_test(rx, Faces, *input, *output));
 
-    auto vector_length = [](const dataT x, const dataT y, const dataT z) {
+    auto vector_length = [](const float x, const float y, const float z) {
         return std::sqrt(x * x + y * y + z * z);
     };
 
-    auto dot = [](const std::vector<dataT>& u, const std::vector<dataT>& v) {
+    auto dot = [](const std::vector<float>& u, const std::vector<float>& v) {
         return std::inner_product(
             std::begin(u), std::end(u), std::begin(v), 0.0);
     };
@@ -90,7 +90,7 @@ TEST(RXMeshStatic, Oriented_VV_Open)
         // and the sum angle around it is 360
         if (rx.map_to_global(vertex) != 4) {
 
-            dataT sum_angles = 0;
+            float sum_angles = 0;
 
             // 2 since every vertex is connected to three vertices (except
             // vertex 4 which is connected to 8 other vertices but we don't
@@ -104,18 +104,18 @@ TEST(RXMeshStatic, Oriented_VV_Open)
 
                 if (v_1.is_valid() && v_0.is_valid()) {
 
-                    std::vector<dataT> p1{
+                    std::vector<float> p1{
                         (*coordinates)(vertex, 0) - (*coordinates)(v_0, 0),
                         (*coordinates)(vertex, 1) - (*coordinates)(v_0, 1),
                         (*coordinates)(vertex, 2) - (*coordinates)(v_0, 2)};
 
-                    std::vector<dataT> p2{
+                    std::vector<float> p2{
                         (*coordinates)(vertex, 0) - (*coordinates)(v_1, 0),
                         (*coordinates)(vertex, 1) - (*coordinates)(v_1, 1),
                         (*coordinates)(vertex, 2) - (*coordinates)(v_1, 2)};
 
-                    dataT dot_pro = dot(p1, p2);
-                    dataT angle   = std::acos(
+                    float dot_pro = dot(p1, p2);
+                    float angle   = std::acos(
                         dot_pro / (vector_length(p1[0], p1[1], p1[2]) *
                                    vector_length(p2[0], p2[1], p2[2])));
                     sum_angles += (angle * 180) / 3.14159265;
@@ -132,7 +132,7 @@ TEST(RXMeshStatic, Oriented_VV_Closed)
 {
     using namespace rxmesh;
 
-    std::vector<std::vector<dataT>>    Verts;
+    std::vector<std::vector<float>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
     ASSERT_TRUE(import_obj(STRINGIFY(INPUT_DIR) "cube.obj", Verts, Faces));
@@ -143,7 +143,7 @@ TEST(RXMeshStatic, Oriented_VV_Closed)
     EXPECT_TRUE(rx.is_closed())
         << " Expecting input to be closed without boundaries";
 
-    auto coordinates = rx.add_vertex_attribute<dataT>(Verts, "coordinates");
+    auto coordinates = rx.add_vertex_attribute<float>(Verts, "coordinates");
 
     // input/output container
     auto input  = rx.add_vertex_attribute<VertexHandle>("input", 1);
@@ -184,11 +184,11 @@ TEST(RXMeshStatic, Oriented_VV_Closed)
     // Make sure orientation is accurate
     // for the cube, all angle are either 45 or 90
 
-    auto vector_length = [](const dataT x, const dataT y, const dataT z) {
+    auto vector_length = [](const float x, const float y, const float z) {
         return std::sqrt(x * x + y * y + z * z);
     };
 
-    auto dot = [](const std::vector<dataT>& u, const std::vector<dataT>& v) {
+    auto dot = [](const std::vector<float>& u, const std::vector<float>& v) {
         return std::inner_product(
             std::begin(u), std::end(u), std::begin(v), 0.0);
     };
@@ -203,18 +203,18 @@ TEST(RXMeshStatic, Oriented_VV_Closed)
 
             if (v_1.is_valid() && v_0.is_valid()) {
 
-                std::vector<dataT> p1{
+                std::vector<float> p1{
                     (*coordinates)(vertex, 0) - (*coordinates)(v_0, 0),
                     (*coordinates)(vertex, 1) - (*coordinates)(v_0, 1),
                     (*coordinates)(vertex, 2) - (*coordinates)(v_0, 2)};
 
-                std::vector<dataT> p2{
+                std::vector<float> p2{
                     (*coordinates)(vertex, 0) - (*coordinates)(v_1, 0),
                     (*coordinates)(vertex, 1) - (*coordinates)(v_1, 1),
                     (*coordinates)(vertex, 2) - (*coordinates)(v_1, 2)};
 
-                dataT dot_pro = dot(p1, p2);
-                dataT theta =
+                float dot_pro = dot(p1, p2);
+                float theta =
                     std::acos(dot_pro / (vector_length(p1[0], p1[1], p1[2]) *
                                          vector_length(p2[0], p2[1], p2[2])));
                 theta = (theta * 180) / 3.14159265;

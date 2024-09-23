@@ -1,6 +1,8 @@
 #include "gtest/gtest.h"
 
+#include "rxmesh/lp_hashtable.cuh"
 #include "rxmesh/lp_pair.cuh"
+#include "rxmesh/util/util.h"
 
 TEST(RXMesh, LPPair)
 {
@@ -76,7 +78,7 @@ TEST(RXMesh, LPHashTable)
 TEST(RXMesh, DISABLED_BenchmarkLPHashTable)
 {
     using namespace rxmesh;
-        
+
     const float    load_factor = 0.9;
     const uint32_t low_size    = 128;
     const uint32_t high_size   = 2048;

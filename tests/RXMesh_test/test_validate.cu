@@ -1,4 +1,5 @@
-#pragma once
+#include "gtest/gtest.h"
+
 #include "rxmesh/rxmesh_dynamic.h"
 
 TEST(RXMeshDynamic, Validate)

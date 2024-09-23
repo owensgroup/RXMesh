@@ -2,6 +2,7 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/reduce_handle.h"
 #include "rxmesh/util/macros.h"
+#include "rxmesh/rxmesh_static.h"
 
 template <typename T>
 void populate(rxmesh::RXMeshStatic& rx, rxmesh::VertexAttribute<T>& v, T val)

@@ -132,9 +132,7 @@ TEST(RXMeshStatic, SparseMatrix)
 
     using namespace rxmesh;
 
-    // generate rxmesh obj
-    std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
-    RXMeshStatic rx(obj_path);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
 
@@ -201,7 +199,7 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
 
 
     // generate rxmesh obj
-    RXMeshStatic rx(rxmesh_args.obj_file_name);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
 
@@ -268,9 +266,7 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 
     using namespace rxmesh;
 
-    // generate rxmesh obj
-    std::string  obj_path = rxmesh_args.obj_file_name;
-    RXMeshStatic rx(obj_path);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
 
@@ -328,10 +324,7 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 {
     using namespace rxmesh;
 
-
-    // generate rxmesh obj
-    std::string  obj_path = rxmesh_args.obj_file_name;
-    RXMeshStatic rx(obj_path);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
 
@@ -388,9 +381,7 @@ TEST(RXMeshStatic, SparseMatrixToEigen)
 {
     using namespace rxmesh;
 
-    // generate rxmesh obj
-    std::string  obj_path = rxmesh_args.obj_file_name;
-    RXMeshStatic rx(obj_path);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
 

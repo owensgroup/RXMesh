@@ -16,11 +16,8 @@ __global__ static void set_patch_should_slice(rxmesh::Context context, int p)
 TEST(RXMeshDynamic, PatchSlicing)
 {
     using namespace rxmesh;
- 
-    RXMeshDynamic rx(rxmesh_args.obj_file_name,
-                     STRINGIFY(OUTPUT_DIR) +
-                         extract_file_name(rxmesh_args.obj_file_name) +
-                         "_patches");
+
+    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto coords = rx.get_input_vertex_coordinates();
 
