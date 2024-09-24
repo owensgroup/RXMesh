@@ -18,7 +18,7 @@ void populate(rxmesh::RXMeshStatic&                              rx,
 }
 
 
-TEST(DiffAttribute, Simple)
+TEST(DiffAttribute, CopyFromDevice)
 {
     // write diff vertex attribute on the device and verify it on the host
     using namespace rxmesh;
@@ -52,8 +52,9 @@ TEST(DiffAttribute, Simple)
 
     EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
-    // #if USE_POLYSCOPE
-    //  rx.get_polyscope_mesh()->addVertexScalarQuantity("vAttr", v_attr);
-    //  polyscope::show();
-    // #endif
+#if USE_POLYSCOPE
+    auto viz_attr = v_attr.to_passive();
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("vAttr", *viz_attr);
+    // polyscope::show();
+#endif
 }

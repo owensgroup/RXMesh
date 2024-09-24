@@ -15,7 +15,7 @@
     }
 
 #define RX_ASSERT_TRUE(exp, d_err) \
-    if (!exp) {                    \
+    if (!(exp)) {                  \
         d_err[0]++;                \
     }
 
@@ -458,7 +458,7 @@ __inline__ __device__ void test_atanh(int* d_err, T eps)
 }
 
 template <typename T, bool WithHessian>
-__global__ static void test_scalar(int* d_err, T eps = 1e-4)
+__global__ static void test_scalar_unary(int* d_err, T eps = 1e-4)
 {
 
 
@@ -526,8 +526,114 @@ __global__ static void test_scalar(int* d_err, T eps = 1e-4)
     test_atanh<T, WithHessian>(d_err, eps);
 }
 
+template <typename T, bool WithHessian>
+__global__ static void test_scalar_constructors(int* d_err, T eps = 1e-9)
+{
+    using namespace rxmesh;
+    using Real2 = Scalar<T, 2, WithHessian>;
+    using Real4 = Scalar<T, 4, WithHessian>;
 
-TEST(Diff, Scalar)
+    {
+        // make_active()
+        const auto v = Real2::make_active({2.0, 4.0});
+        RX_ASSERT_NEAR(v[0].val, 2.0, eps, d_err);
+        RX_ASSERT_NEAR(v[1].val, 4.0, eps, d_err);
+
+        RX_ASSERT_NEAR(v[0].grad[0], 1.0, eps, d_err);
+        RX_ASSERT_NEAR(v[0].grad[1], 0.0, eps, d_err);
+
+        RX_ASSERT_NEAR(v[1].grad[0], 0.0, eps, d_err);
+        RX_ASSERT_NEAR(v[1].grad[1], 1.0, eps, d_err);
+
+        RX_ASSERT_TRUE(v[0].Hess.isZero(), d_err);
+        RX_ASSERT_TRUE(v[1].Hess.isZero(), d_err);
+
+        // to_passive() vector
+        const Eigen::Matrix<T, 2, 1> v_passive  = to_passive(v);
+        const Eigen::Matrix<T, 2, 1> v_passive2 = to_passive(v_passive);
+        RX_ASSERT_NEAR(v_passive[0], 2.0, eps, d_err);
+        RX_ASSERT_NEAR(v_passive[1], 4.0, eps, d_err);
+        RX_ASSERT_NEAR(v_passive2[0], 2.0, eps, d_err);
+        RX_ASSERT_NEAR(v_passive2[1], 4.0, eps, d_err);
+    }
+
+    {
+
+        // to_passive() matrix
+        const Eigen::Vector<Real4, 4> v =
+            Real4::make_active({1.0, 2.0, 3.0, 4.0});
+
+        Eigen::Matrix<Real4, 2, 2> M;
+        M << v[0], v[1], v[2], v[3];
+        const Eigen::Matrix2<T> M_passive  = to_passive(M);
+        const Eigen::Matrix2<T> M_passive2 = to_passive(M_passive);
+        RX_ASSERT_NEAR(M(0, 0).val, M_passive(0, 0), eps, d_err);
+        RX_ASSERT_NEAR(M(0, 1).val, M_passive(0, 1), eps, d_err);
+        RX_ASSERT_NEAR(M(1, 0).val, M_passive(1, 0), eps, d_err);
+        RX_ASSERT_NEAR(M(1, 1).val, M_passive(1, 1), eps, d_err);
+
+        RX_ASSERT_NEAR(M_passive2(0, 0), M_passive(0, 0), eps, d_err);
+        RX_ASSERT_NEAR(M_passive2(0, 1), M_passive(0, 1), eps, d_err);
+        RX_ASSERT_NEAR(M_passive2(1, 0), M_passive(1, 0), eps, d_err);
+        RX_ASSERT_NEAR(M_passive2(1, 1), M_passive(1, 1), eps, d_err);
+    }
+
+
+    {
+        // Active variable
+        Real2 a(4.0, 0);
+        RX_ASSERT_TRUE(a.val == 4.0, d_err);
+        RX_ASSERT_TRUE(a.grad[0] == 1.0, d_err);
+        RX_ASSERT_TRUE(a.grad[1] == 0.0, d_err);
+        RX_ASSERT_TRUE(a.Hess.isZero(), d_err);
+
+        // Passive variable
+        Real2 b(5.0);
+        RX_ASSERT_TRUE(b.val == 5.0, d_err);
+        RX_ASSERT_TRUE(b.grad.isZero(), d_err);
+        RX_ASSERT_TRUE(b.Hess.isZero(), d_err);
+
+        // Copy constructor
+        const auto a2(a);
+        RX_ASSERT_TRUE(a.val == a2.val, d_err);
+        RX_ASSERT_TRUE(a.grad == a2.grad, d_err);
+        RX_ASSERT_TRUE(a.Hess == a2.Hess, d_err);
+
+        // Assignment operator
+        const auto b2 = b;
+        RX_ASSERT_TRUE(b.val == b2.val, d_err);
+        RX_ASSERT_TRUE(b.grad == b2.grad, d_err);
+        RX_ASSERT_TRUE(b.Hess == b2.Hess, d_err);
+    }
+}
+
+template <typename T, bool WithHessian>
+__global__ static void test_is_nan_is_inf(int* d_err, T eps = 1e-9)
+{
+    using namespace rxmesh;
+    using Real1 = Scalar<T, 1, WithHessian>;
+    const Real1 a(0.0);
+    const Real1 b(INFINITY);
+    const Real1 c(-INFINITY);
+    const Real1 d(NAN);
+
+    RX_ASSERT_TRUE(!isnan(a), d_err);
+    RX_ASSERT_TRUE(!isnan(b), d_err);
+    RX_ASSERT_TRUE(!isnan(c), d_err);
+    RX_ASSERT_TRUE(isnan(d), d_err);
+
+    RX_ASSERT_TRUE(!isinf(a), d_err);
+    RX_ASSERT_TRUE(isinf(b), d_err);
+    RX_ASSERT_TRUE(isinf(c), d_err);
+    RX_ASSERT_TRUE(!isinf(d), d_err);
+
+    RX_ASSERT_TRUE(isfinite(a), d_err);
+    RX_ASSERT_TRUE(!isfinite(b), d_err);
+    RX_ASSERT_TRUE(!isfinite(c), d_err);
+    RX_ASSERT_TRUE(isfinite(d), d_err);
+}
+
+TEST(Diff, ScalarUnaryOps)
 {
     using namespace rxmesh;
 
@@ -535,10 +641,10 @@ TEST(Diff, Scalar)
     CUDA_ERROR(cudaMalloc((void**)&d_err, sizeof(int)));
     CUDA_ERROR(cudaMemset(d_err, 0, sizeof(int)));
 
-    test_scalar<float, false><<<1, 1>>>(d_err);
-    test_scalar<double, false><<<1, 1>>>(d_err);
-    test_scalar<float, true><<<1, 1>>>(d_err);
-    test_scalar<double, true><<<1, 1>>>(d_err);
+    test_scalar_unary<float, false><<<1, 1>>>(d_err);
+    test_scalar_unary<double, false><<<1, 1>>>(d_err);
+    test_scalar_unary<float, true><<<1, 1>>>(d_err);
+    test_scalar_unary<double, true><<<1, 1>>>(d_err);
 
     EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
@@ -550,11 +656,48 @@ TEST(Diff, Scalar)
     GPU_FREE(d_err);
 }
 
-TEST(Diff, ScalarAttr)
+TEST(Diff, ScalarConstructors)
 {
     using namespace rxmesh;
 
-    std::string obj_path = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    int* d_err;
+    CUDA_ERROR(cudaMalloc((void**)&d_err, sizeof(int)));
+    CUDA_ERROR(cudaMemset(d_err, 0, sizeof(int)));
 
-    RXMeshStatic rx(obj_path);
+    test_scalar_constructors<float, false><<<1, 1>>>(d_err);
+    test_scalar_constructors<double, false><<<1, 1>>>(d_err);
+    test_scalar_constructors<float, true><<<1, 1>>>(d_err);
+    test_scalar_constructors<double, true><<<1, 1>>>(d_err);
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    int h_err;
+    CUDA_ERROR(cudaMemcpy(&h_err, d_err, sizeof(int), cudaMemcpyDeviceToHost));
+
+    ASSERT_EQ(h_err, 0);
+
+    GPU_FREE(d_err);
+}
+
+TEST(Diff, ScalarIsNANIsInf)
+{
+    using namespace rxmesh;
+
+    int* d_err;
+    CUDA_ERROR(cudaMalloc((void**)&d_err, sizeof(int)));
+    CUDA_ERROR(cudaMemset(d_err, 0, sizeof(int)));
+
+    test_is_nan_is_inf<float, false><<<1, 1>>>(d_err);
+    test_is_nan_is_inf<double, false><<<1, 1>>>(d_err);
+    test_is_nan_is_inf<float, true><<<1, 1>>>(d_err);
+    test_is_nan_is_inf<double, true><<<1, 1>>>(d_err);
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    int h_err;
+    CUDA_ERROR(cudaMemcpy(&h_err, d_err, sizeof(int), cudaMemcpyDeviceToHost));
+
+    ASSERT_EQ(h_err, 0);
+
+    GPU_FREE(d_err);
 }

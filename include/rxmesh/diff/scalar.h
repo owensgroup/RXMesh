@@ -416,7 +416,7 @@ struct Scalar
     __host__ __device__ friend bool isfinite(const Scalar& a)
     {
 
-        return isfinite(a.val);
+        return is_finite(a.val);
     }
 
     // ///////////////////////////////////////////////////////////////////////////
