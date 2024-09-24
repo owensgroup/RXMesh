@@ -41,9 +41,9 @@ class DiffAttribute : public Attribute<Scalar<T, Size, WithHessian>, HandleT>
      */
     std::shared_ptr<BaseAttributeType> to_passive()
     {
-        auto ret = m_rxmesh->template add_vertex_attribute<T>(
-            std::string("rx:") + std::string(m_name), 1, HOST);
-        m_rxmesh->for_each_vertex(HOST, [&](VertexHandle vh) {
+        auto ret = this->m_rxmesh->template add_vertex_attribute<T>(
+            std::string("rx:") + std::string(this->m_name), 1, HOST);
+        this->m_rxmesh->for_each_vertex(HOST, [&](VertexHandle vh) {
             (*ret)(vh) = this->operator()(vh).val;
         });
 

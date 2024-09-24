@@ -748,7 +748,7 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite_scalar(b));
 
-        assert(a.grad.size(), b.grad.size());
+        assert(a.grad.size() == b.grad.size());
 
         return sqrt(a * a + b * b);
     }

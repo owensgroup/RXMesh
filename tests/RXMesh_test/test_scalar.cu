@@ -67,8 +67,8 @@ __inline__ __device__ void test_sqr(int* d_err, T eps)
     using namespace rxmesh;
     using Real2 = Scalar<T, 2, WithHessian>;
 
-    Real2 x = Real2::Scalar(4.0, 0);
-    Real2 y = Real2::Scalar(6.0, 1);
+    Real2 x(4.0, 0);
+    Real2 y(6.0, 1);
     Real2 a = x * x + 7.0 * y * y - 8.0 * x + 2 * y;
 
     Real2 a_sqr = sqr(a);
