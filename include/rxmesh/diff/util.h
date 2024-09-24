@@ -11,7 +11,7 @@
 
 namespace rxmesh {
 
-template <int k, typename PassiveT, bool WithHessian>
+template <typename PassiveT, int k, bool WithHessian>
 struct Scalar;
 
 
@@ -97,7 +97,7 @@ __host__ __device__ __inline__ bool is_sym(const T& A, S eps = double(1e-6))
  */
 template <int k, typename PassiveT, bool WithHessian>
 __device__ __host__ __inline__ bool is_finite_scalar(
-    const Scalar<k, PassiveT, WithHessian>& s)
+    const Scalar<PassiveT, k, WithHessian>& s)
 {
     if (!is_finite(s.val) || !is_finite_mat(s.grad) || !is_finite_mat(s.Hess)) {
         return false;

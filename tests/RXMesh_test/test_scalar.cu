@@ -24,7 +24,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_unary_minus(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x = 1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -42,7 +42,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_sqrt(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -60,7 +60,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_sqr(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real2 = Scalar<2, T, WithHessian>;
+    using Real2 = Scalar<T, 2, WithHessian>;
 
     Real2 x = Real2::Scalar(4.0, 0);
     Real2 y = Real2::Scalar(6.0, 1);
@@ -96,7 +96,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_fabs(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     {  // a(x) = x^3 at x = 1
         const Real1 a = Real1::known_derivatives(1.0, 3.0, 6.0);
@@ -125,7 +125,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_abs(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     {  // a(x) = x^3 at x = 1
         const Real1 a = Real1::known_derivatives(1.0, 3.0, 6.0);
@@ -154,7 +154,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_exp(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -172,7 +172,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_log(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -190,7 +190,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_log2(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -208,7 +208,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_log10(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -226,7 +226,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_sin(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -245,7 +245,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_cos(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -264,7 +264,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_tan(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -285,7 +285,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_asin(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x - 1.5 at x=1
     const Real1 a = Real1::known_derivatives(0.5, 3.0, 2.0);
@@ -305,7 +305,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_acos(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x - 1.5 at x=1
     const Real1 a = Real1::known_derivatives(0.5, 3.0, 2.0);
@@ -325,7 +325,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_atan(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x - 1.5 at x=1
     const Real1 a = Real1::known_derivatives(0.5, 3.0, 2.0);
@@ -344,7 +344,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_sinh(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -363,7 +363,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_cosh(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -383,7 +383,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_tanh(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -403,7 +403,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_asinh(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x - 1.5  at x=1
     const Real1 a = Real1::known_derivatives(0.5, 3.0, 2.0);
@@ -423,7 +423,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_acosh(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x + 2 at x=1
     const Real1 a = Real1::known_derivatives(4.0, 3.0, 2.0);
@@ -442,7 +442,7 @@ template <typename T, bool WithHessian>
 __inline__ __device__ void test_atanh(int* d_err, T eps)
 {
     using namespace rxmesh;
-    using Real1 = Scalar<1, T, WithHessian>;
+    using Real1 = Scalar<T, 1, WithHessian>;
 
     // a(x) = x^2 + x - 1.5 at x=1
     const Real1 a = Real1::known_derivatives(0.5, 3.0, 2.0);

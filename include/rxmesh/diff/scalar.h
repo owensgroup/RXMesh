@@ -16,10 +16,6 @@
 
 namespace rxmesh {
 
-#define TINYAD_CHECK_FINITE_IF_ENABLED_AD(exp) \
-    {                                          \
-    }
-
 /**
  * Forward-differentiable scalar type with constructors for passive and active
  * variables. Each scalar carries its gradient and Hessian w.r.t. a variable
@@ -27,7 +23,7 @@ namespace rxmesh {
  * floating point type, e.g. double. WithHessian: Set to false for
  * gradient-only mode.
  */
-template <int k, typename PassiveT, bool WithHessian = true>
+template <typename PassiveT, int k, bool WithHessian = true>
 struct Scalar
 {
     // Make template arguments available as members
@@ -38,8 +34,9 @@ struct Scalar
 
     // Determine derivative data types at compile time. Use 0-by-0 if no Hessian
     // required.
-    using GradType = Eigen::Matrix<PassiveT, k, 1>;
-    using HessType = typename std::conditional_t<WithHessian,
+    using PassiveType = PassiveT;
+    using GradType    = Eigen::Matrix<PassiveT, k, 1>;
+    using HessType    = typename std::conditional_t<WithHessian,
                                                  Eigen::Matrix<PassiveT, k, k>,
                                                  Eigen::Matrix<PassiveT, 0, 0>>;
 
@@ -1142,16 +1139,16 @@ __host__ __device__ PassiveT atan2(const PassiveT& _y, const PassiveT& _x)
 
 template <int k, typename PassiveT, bool WithHessian>
 __host__ __device__ PassiveT
-to_passive(const Scalar<k, PassiveT, WithHessian>& a)
+to_passive(const Scalar<PassiveT, k, WithHessian>& a)
 {
     return a.val;
 }
 
-template <int k, int rows, int cols, typename ScalarT, bool WithHessian>
-__host__ __device__ Eigen::Matrix<ScalarT, rows, cols> to_passive(
-    const Eigen::Matrix<Scalar<k, ScalarT, WithHessian>, rows, cols>& A)
+template <int k, int rows, int cols, typename PassiveT, bool WithHessian>
+__host__ __device__ Eigen::Matrix<PassiveT, rows, cols> to_passive(
+    const Eigen::Matrix<Scalar<PassiveT, k, WithHessian>, rows, cols>& A)
 {
-    Eigen::Matrix<ScalarT, rows, cols> A_passive(A.rows(), A.cols());
+    Eigen::Matrix<PassiveT, rows, cols> A_passive(A.rows(), A.cols());
     for (Eigen::Index i = 0; i < A.rows(); ++i) {
         for (Eigen::Index j = 0; j < A.cols(); ++j)
             A_passive(i, j) = A(i, j).val;
@@ -1161,15 +1158,15 @@ __host__ __device__ Eigen::Matrix<ScalarT, rows, cols> to_passive(
 }
 
 // ///////////////////////////////////////////////////////////////////////////
-// TinyAD::Scalar typedefs
+// Scalar typedefs
 // ///////////////////////////////////////////////////////////////////////////
 
 template <int k, bool WithHessian = true>
-using Float = Scalar<k, float, WithHessian>;
+using Float = Scalar<float, k, WithHessian>;
 template <int k, bool WithHessian = true>
-using Double = Scalar<k, double, WithHessian>;
+using Double = Scalar<double, k, WithHessian>;
 template <int k, bool WithHessian = true>
-using LongDouble = Scalar<k, long double, WithHessian>;
+using LongDouble = Scalar<long double, k, WithHessian>;
 
 }  // namespace rxmesh
 
@@ -1183,11 +1180,11 @@ namespace Eigen {
  * and https://eigen.tuxfamily.org/dox/structEigen_1_1NumTraits.html
  */
 template <int k, typename PassiveT, bool WithHessian>
-struct NumTraits<rxmesh::Scalar<k, PassiveT, WithHessian>> : NumTraits<PassiveT>
+struct NumTraits<rxmesh::Scalar<PassiveT, k, WithHessian>> : NumTraits<PassiveT>
 {
-    typedef rxmesh::Scalar<k, PassiveT, WithHessian> Real;
-    typedef rxmesh::Scalar<k, PassiveT, WithHessian> NonInteger;
-    typedef rxmesh::Scalar<k, PassiveT, WithHessian> Nested;
+    typedef rxmesh::Scalar<PassiveT, k, WithHessian> Real;
+    typedef rxmesh::Scalar<PassiveT, k, WithHessian> NonInteger;
+    typedef rxmesh::Scalar<PassiveT, k, WithHessian> Nested;
 
     enum
     {
@@ -1206,19 +1203,19 @@ struct NumTraits<rxmesh::Scalar<k, PassiveT, WithHessian>> : NumTraits<PassiveT>
  * allowed, and that the return type is rxmesh::Scalar.
  */
 template <typename BinaryOp, int k, typename PassiveT, bool WithHessian>
-struct ScalarBinaryOpTraits<rxmesh::Scalar<k, PassiveT, WithHessian>,
+struct ScalarBinaryOpTraits<rxmesh::Scalar<PassiveT, k, WithHessian>,
                             PassiveT,
                             BinaryOp>
 {
-    typedef rxmesh::Scalar<k, PassiveT, WithHessian> ReturnType;
+    typedef rxmesh::Scalar<PassiveT, k, WithHessian> ReturnType;
 };
 
 template <typename BinaryOp, int k, typename PassiveT, bool WithHessian>
 struct ScalarBinaryOpTraits<PassiveT,
-                            rxmesh::Scalar<k, PassiveT, WithHessian>,
+                            rxmesh::Scalar<PassiveT, k, WithHessian>,
                             BinaryOp>
 {
-    typedef rxmesh::Scalar<k, PassiveT, WithHessian> ReturnType;
+    typedef rxmesh::Scalar<PassiveT, k, WithHessian> ReturnType;
 };
 
 }  // namespace Eigen
