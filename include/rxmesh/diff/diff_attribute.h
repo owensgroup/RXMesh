@@ -11,25 +11,43 @@ template <typename T, int Size, bool WithHessian, typename HandleT>
 class DiffAttribute : public Attribute<Scalar<T, Size, WithHessian>, HandleT>
 {
    public:
-    using PassiveType = T;
-    using ScalarType  = Scalar<T, Size, WithHessian>;
+    using PassiveType       = T;
+    using ScalarType        = Scalar<T, Size, WithHessian>;
+    using BaseAttributeType = Attribute<T, VertexHandle>;
 
 
     DiffAttribute() : Attribute<ScalarType, HandleT>()
     {
     }
 
-    explicit DiffAttribute(const char*         name,
-                           uint32_t            num_attributes,  // not used
-                           locationT           location,
-                           layoutT             layout,  // not used
-                           const RXMeshStatic* rxmesh)
+    explicit DiffAttribute(const char*   name,
+                           uint32_t      num_attributes,  // not used
+                           locationT     location,
+                           layoutT       layout,  // not used
+                           RXMeshStatic* rxmesh)
         : Attribute<ScalarType, HandleT>(name,
                                          num_attributes,
                                          location,
                                          layout,
                                          rxmesh)
     {
+    }
+
+
+    /**
+     * @brief return the value of the Scalar type as an attribute. The only
+     * reason we do this is for visualization. Thus, the return attributes is
+     * defined only on the host
+     */
+    std::shared_ptr<BaseAttributeType> to_passive()
+    {
+        auto ret = m_rxmesh->template add_vertex_attribute<T>(
+            std::string("rx:") + std::string(m_name), 1, HOST);
+        m_rxmesh->for_each_vertex(HOST, [&](VertexHandle vh) {
+            (*ret)(vh) = this->operator()(vh).val;
+        });
+
+        return ret;
     }
 
    private:
