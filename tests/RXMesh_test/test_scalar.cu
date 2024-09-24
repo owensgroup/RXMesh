@@ -3,6 +3,8 @@
 #include "rxmesh/diff/scalar.h"
 
 #include "rxmesh/rxmesh_static.h"
+#include "rxmesh/util/inverse.h"
+
 
 #define RX_ASSERT_NEAR(val1, val2, eps, d_err)                           \
     if (abs(val1 - val2) > eps) {                                        \
@@ -749,7 +751,9 @@ __global__ static void test_min_quadratic(int* d_err, T eps = 1e-9)
                     2.0 * x[1] + 6.0 * x[2] + 10;
 
     // Solve for minimum
-    const Eigen::Vector<T, 3> x_min = -f.Hess.inverse() * f.grad;
+    typename Real3::HessType f_hess_inv = inverse(f.Hess);
+
+    const Eigen::Vector<T, 3> x_min = -f_hess_inv * f.grad;
 
     RX_ASSERT_NEAR(x_min.x(), -0.5, eps, d_err);
     RX_ASSERT_NEAR(x_min.y(), 0.5, eps, d_err);
