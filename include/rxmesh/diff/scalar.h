@@ -916,20 +916,7 @@ struct Scalar
     __host__ __device__ friend Scalar fmax(const Scalar& a, const Scalar& b)
     {
         return max(a, b);
-    }
-
-    __host__ __device__ friend Scalar clamp(const Scalar& x,
-                                            const Scalar& a,
-                                            const Scalar& b)
-    {
-        assert(is_finite_scalar(x));
-        if (x < a)
-            return a;
-        else if (x > b)
-            return b;
-        else
-            return x;
-    }
+    }  
 
     // ///////////////////////////////////////////////////////////////////////////
     // std::complex operators (just spell out and differentiate the real case)

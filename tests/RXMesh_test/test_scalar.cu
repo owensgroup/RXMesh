@@ -19,6 +19,11 @@
         d_err[0]++;                \
     }
 
+#define RX_ASSERT_FALSE(exp, d_err) \
+    if ((exp)) {                    \
+        d_err[0]++;                 \
+    }
+
 
 template <typename T, bool WithHessian>
 __inline__ __device__ void test_unary_minus(int* d_err, T eps)
@@ -280,7 +285,6 @@ __inline__ __device__ void test_tan(int* d_err, T eps)
     }
 }
 
-
 template <typename T, bool WithHessian>
 __inline__ __device__ void test_asin(int* d_err, T eps)
 {
@@ -300,7 +304,6 @@ __inline__ __device__ void test_asin(int* d_err, T eps)
     }
 }
 
-
 template <typename T, bool WithHessian>
 __inline__ __device__ void test_acos(int* d_err, T eps)
 {
@@ -319,7 +322,6 @@ __inline__ __device__ void test_acos(int* d_err, T eps)
         RX_ASSERT_NEAR(f.Hess(0, 0), h, 1e-4, d_err);
     }
 }
-
 
 template <typename T, bool WithHessian>
 __inline__ __device__ void test_atan(int* d_err, T eps)
@@ -377,7 +379,6 @@ __inline__ __device__ void test_cosh(int* d_err, T eps)
         RX_ASSERT_NEAR(f.Hess(0, 0), h, eps, d_err);
     }
 }
-
 
 template <typename T, bool WithHessian>
 __inline__ __device__ void test_tanh(int* d_err, T eps)
@@ -633,6 +634,128 @@ __global__ static void test_is_nan_is_inf(int* d_err, T eps = 1e-9)
     RX_ASSERT_TRUE(isfinite(d), d_err);
 }
 
+template <typename T, bool WithHessian>
+__global__ static void test_comparsion(int* d_err, T eps = 1e-9)
+{
+    using namespace rxmesh;
+    using Real1   = Scalar<T, 1, WithHessian>;
+    const Real1 a = Real1::known_derivatives(1.0, 1.0, 4.0);
+    const Real1 b = Real1::known_derivatives(1.0, 2.0, 8.0);
+    const Real1 c = Real1::known_derivatives(2.0, 2.0, 8.0);
+
+    RX_ASSERT_TRUE(a == b, d_err);
+    RX_ASSERT_TRUE(b == a, d_err);
+    RX_ASSERT_TRUE(a != c, d_err);
+    RX_ASSERT_TRUE(c != a, d_err);
+    RX_ASSERT_TRUE(b != c, d_err);
+    RX_ASSERT_TRUE(c != b, d_err);
+
+    RX_ASSERT_FALSE(a < b, d_err);
+    RX_ASSERT_FALSE(b < a, d_err);
+    RX_ASSERT_TRUE(a < c, d_err);
+    RX_ASSERT_FALSE(c < a, d_err);
+    RX_ASSERT_TRUE(b < c, d_err);
+    RX_ASSERT_FALSE(c < b, d_err);
+
+    RX_ASSERT_TRUE(a <= b, d_err);
+    RX_ASSERT_TRUE(b <= a, d_err);
+    RX_ASSERT_TRUE(a <= c, d_err);
+    RX_ASSERT_FALSE(c <= a, d_err);
+    RX_ASSERT_TRUE(b <= c, d_err);
+    RX_ASSERT_FALSE(c <= b, d_err);
+
+    RX_ASSERT_FALSE(a > b, d_err);
+    RX_ASSERT_FALSE(b > a, d_err);
+    RX_ASSERT_FALSE(a > c, d_err);
+    RX_ASSERT_TRUE(c > a, d_err);
+    RX_ASSERT_FALSE(b > c, d_err);
+    RX_ASSERT_TRUE(c > b, d_err);
+
+    RX_ASSERT_TRUE(a >= b, d_err);
+    RX_ASSERT_TRUE(b >= a, d_err);
+    RX_ASSERT_FALSE(a >= c, d_err);
+    RX_ASSERT_TRUE(c >= a, d_err);
+    RX_ASSERT_FALSE(b >= c, d_err);
+    RX_ASSERT_TRUE(c >= b, d_err);
+
+    // Test double overloads
+    RX_ASSERT_TRUE(a == 1.0, d_err);
+    RX_ASSERT_FALSE(a == 2.0, d_err);
+    RX_ASSERT_FALSE(a != 1.0, d_err);
+    RX_ASSERT_TRUE(a != 2.0, d_err);
+    RX_ASSERT_FALSE(a < 1.0, d_err);
+    RX_ASSERT_TRUE(a < 2.0, d_err);
+    RX_ASSERT_TRUE(a <= 1.0, d_err);
+    RX_ASSERT_TRUE(a <= 2.0, d_err);
+    RX_ASSERT_FALSE(a > 1.0, d_err);
+    RX_ASSERT_FALSE(a > 2.0, d_err);
+    RX_ASSERT_TRUE(a >= 1.0, d_err);
+    RX_ASSERT_FALSE(a >= 2.0, d_err);
+}
+
+template <typename T, bool WithHessian>
+__global__ static void test_min_max(int* d_err, T eps = 1e-9)
+{
+    using namespace rxmesh;
+    using Real1   = Scalar<T, 1, WithHessian>;
+    const Real1 a = Real1::known_derivatives(1.0, 2.0, 3.0);
+    const Real1 b = Real1::known_derivatives(2.0, 3.0, 4.0);
+
+    RX_ASSERT_TRUE(min(a, b) == a, d_err);
+    RX_ASSERT_TRUE(min(a, b).grad == a.grad, d_err);
+    RX_ASSERT_TRUE(min(a, b).Hess == a.Hess, d_err);
+
+    RX_ASSERT_TRUE(fmin(a, b) == a, d_err);
+    RX_ASSERT_TRUE(fmin(a, b).grad == a.grad, d_err);
+    RX_ASSERT_TRUE(fmin(a, b).Hess == a.Hess, d_err);
+
+    RX_ASSERT_TRUE(max(a, b) == b, d_err);
+    RX_ASSERT_TRUE(max(a, b).grad == b.grad, d_err);
+    RX_ASSERT_TRUE(max(a, b).Hess == b.Hess, d_err);
+
+    RX_ASSERT_TRUE(fmax(a, b) == b, d_err);
+    RX_ASSERT_TRUE(fmax(a, b).grad == b.grad, d_err);
+    RX_ASSERT_TRUE(fmax(a, b).Hess == b.Hess, d_err);
+}
+
+template <typename T, bool WithHessian>
+__global__ static void test_quadratic(int* d_err, T eps = 1e-9)
+{
+    using namespace rxmesh;
+    using Real1 = Scalar<T, 1, WithHessian>;
+
+    // f(a) = a^2 + a + 2 at a = 1
+    const Real1 a = Real1::make_active(1.0, 0);
+    const Real1 f = sqr(a) + a + 2.0;
+
+    RX_ASSERT_NEAR(f.val, 4.0, eps, d_err);
+    RX_ASSERT_NEAR(f.grad(0), 3.0, eps, d_err);
+    if constexpr (WithHessian) {
+        RX_ASSERT_NEAR(f.Hess(0, 0), 2.0, eps, d_err);
+    }
+}
+
+template <typename T, bool WithHessian>
+__global__ static void test_min_quadratic(int* d_err, T eps = 1e-9)
+{
+    using namespace rxmesh;
+    using Real3 = Scalar<T, 3, WithHessian>;
+
+    // Variable vector in R^3
+    const Eigen::Vector<Real3, 3> x = Real3::make_active({0.0, 0.0, 0.0});
+
+    // Quadratic function
+    const Real3 f = sqr(x[0]) + 2.0 * sqr(x[1]) + 6.0 * sqr(x[2]) + x[0] -
+                    2.0 * x[1] + 6.0 * x[2] + 10;
+
+    // Solve for minimum
+    const Eigen::Vector<T, 3> x_min = -f.Hess.inverse() * f.grad;
+
+    RX_ASSERT_NEAR(x_min.x(), -0.5, eps, d_err);
+    RX_ASSERT_NEAR(x_min.y(), 0.5, eps, d_err);
+    RX_ASSERT_NEAR(x_min.z(), -0.5, eps, d_err);
+}
+
 TEST(Diff, ScalarUnaryOps)
 {
     using namespace rxmesh;
@@ -691,6 +814,98 @@ TEST(Diff, ScalarIsNANIsInf)
     test_is_nan_is_inf<double, false><<<1, 1>>>(d_err);
     test_is_nan_is_inf<float, true><<<1, 1>>>(d_err);
     test_is_nan_is_inf<double, true><<<1, 1>>>(d_err);
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    int h_err;
+    CUDA_ERROR(cudaMemcpy(&h_err, d_err, sizeof(int), cudaMemcpyDeviceToHost));
+
+    ASSERT_EQ(h_err, 0);
+
+    GPU_FREE(d_err);
+}
+
+TEST(Diff, ScalarComparison)
+{
+    using namespace rxmesh;
+
+    int* d_err;
+    CUDA_ERROR(cudaMalloc((void**)&d_err, sizeof(int)));
+    CUDA_ERROR(cudaMemset(d_err, 0, sizeof(int)));
+
+    test_comparsion<float, false><<<1, 1>>>(d_err);
+    test_comparsion<double, false><<<1, 1>>>(d_err);
+    test_comparsion<float, true><<<1, 1>>>(d_err);
+    test_comparsion<double, true><<<1, 1>>>(d_err);
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    int h_err;
+    CUDA_ERROR(cudaMemcpy(&h_err, d_err, sizeof(int), cudaMemcpyDeviceToHost));
+
+    ASSERT_EQ(h_err, 0);
+
+    GPU_FREE(d_err);
+}
+
+TEST(Diff, ScalarMinMax)
+{
+    using namespace rxmesh;
+
+    int* d_err;
+    CUDA_ERROR(cudaMalloc((void**)&d_err, sizeof(int)));
+    CUDA_ERROR(cudaMemset(d_err, 0, sizeof(int)));
+
+    test_min_max<float, false><<<1, 1>>>(d_err);
+    test_min_max<double, false><<<1, 1>>>(d_err);
+    test_min_max<float, true><<<1, 1>>>(d_err);
+    test_min_max<double, true><<<1, 1>>>(d_err);
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    int h_err;
+    CUDA_ERROR(cudaMemcpy(&h_err, d_err, sizeof(int), cudaMemcpyDeviceToHost));
+
+    ASSERT_EQ(h_err, 0);
+
+    GPU_FREE(d_err);
+}
+
+TEST(Diff, ScalarQuadratic)
+{
+    using namespace rxmesh;
+
+    int* d_err;
+    CUDA_ERROR(cudaMalloc((void**)&d_err, sizeof(int)));
+    CUDA_ERROR(cudaMemset(d_err, 0, sizeof(int)));
+
+    test_quadratic<float, false><<<1, 1>>>(d_err);
+    test_quadratic<double, false><<<1, 1>>>(d_err);
+    test_quadratic<float, true><<<1, 1>>>(d_err);
+    test_quadratic<double, true><<<1, 1>>>(d_err);
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    int h_err;
+    CUDA_ERROR(cudaMemcpy(&h_err, d_err, sizeof(int), cudaMemcpyDeviceToHost));
+
+    ASSERT_EQ(h_err, 0);
+
+    GPU_FREE(d_err);
+}
+
+TEST(Diff, ScalarMinQuadratic)
+{
+    using namespace rxmesh;
+
+    int* d_err;
+    CUDA_ERROR(cudaMalloc((void**)&d_err, sizeof(int)));
+    CUDA_ERROR(cudaMemset(d_err, 0, sizeof(int)));
+
+    test_min_quadratic<float, true><<<1, 1>>>(d_err);
+    test_min_quadratic<double, true><<<1, 1>>>(d_err);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
 
     EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
