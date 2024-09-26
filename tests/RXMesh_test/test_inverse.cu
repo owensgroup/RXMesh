@@ -51,11 +51,6 @@ TEST(Diff, Inverse4x4)
 
     Eigen::Matrix4f m4x4_inv = inverse(m4x4);
 
-    std::cout << "\n My Inverse= \n" << m4x4_inv;
-    std::cout << "\n Eigen Inverse= \n" << m4x4.inverse();
-
-    std::cout << "\n diff = \n " << m4x4_inv - m4x4.inverse();
-
     Eigen::Matrix4f m4x4_eigen_inv = m4x4.inverse();
 
     for (int i = 0; i < 4; ++i) {

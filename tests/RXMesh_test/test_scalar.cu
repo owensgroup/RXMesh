@@ -7,7 +7,7 @@
 
 
 #define RX_ASSERT_NEAR(val1, val2, eps, d_err)                           \
-    if (abs(val1 - val2) > eps) {                                        \
+    if (abs((val1 - val2)) > eps) {                                      \
         printf("\n val1= %.17g, val2= %.17g, eps= %.17g, diff= %.17g\n", \
                double(val1),                                             \
                double(val2),                                             \
@@ -774,15 +774,6 @@ __global__ static void test_triangle_distortion(int* d_err, T eps = 1e-9)
 
     auto Mr_inv = inverse(Mr);
 
-    // printf("\n **** Mr_inv= ");
-    // for (int i = 0; i < 2; ++i) {
-    //     printf("\n ");
-    //     for (int j = 0; j < 2; ++j) {
-    //         printf(" %.9g", Mr_inv(i, j));
-    //     }
-    // }
-
-
     // active variables vector for vertex positions a, b, c
 
     // clang-format off
@@ -798,42 +789,99 @@ __global__ static void test_triangle_distortion(int* d_err, T eps = 1e-9)
     const Eigen::Matrix<Real6, 2, 1> c(x[4], x[5]);
     const Eigen::Matrix<Real6, 2, 2> M = col_mat(b - a, c - a);
 
-    // printf("\n **** M= ");
-    // for (int i = 0; i < 2; ++i) {
-    //     for (int j = 0; j < 2; ++j) {
-    //         printf("\n i= %d, j= %d\n", i, j);
-    //         M(i, j).print();
-    //     }
-    // }
-
     const Eigen::Matrix<Real6, 2, 2> J = M * Mr_inv;
-
-    // printf("\n **** J= ");
-    // for (int i = 0; i < 2; ++i) {
-    //     for (int j = 0; j < 2; ++j) {
-    //         printf("\n i= %d, j= %d\n", i, j);
-    //         J(i, j).print();
-    //     }
-    // }
 
     auto J_inv = inverse(J);
     // auto J_inv = J.inverse();
 
-    // printf("\n **** J_inv= ");
-    // for (int i = 0; i < 2; ++i) {
-    //     for (int j = 0; j < 2; ++j) {
-    //         printf("\n i= %d, j= %d\n", i, j);
-    //         J_inv(i, j).print();
-    //     }
-    // }
-
-
     const Real6 E = J.squaredNorm() + J_inv.squaredNorm();
-    
-    //E.print();
+
+    // E.print();
 
     RX_ASSERT_TRUE(is_finite_scalar(E), d_err);
 }
+
+
+template <typename T, bool WithHessian>
+__global__ static void test_sphere(int* d_err, T eps = 1e-7)
+{
+    using namespace rxmesh;
+    using Real2 = Scalar<T, 2, WithHessian>;
+
+    // f: R^2 -> R^3
+    // f(phi, psi) = (sin(phi) * cos(psi), sin(phi) * sin(psi), cos(phi))
+
+    Real2 alpha = Real2::make_active((T)glm::pi<T>() / 8.0, 0);
+
+    Real2 beta = Real2::make_active((T)glm::pi<T>() / 8.0, 1);
+
+    const auto f = Eigen::Matrix<Real2, 3, 1>(
+        sin(alpha) * cos(beta), sin(alpha) * sin(beta), cos(alpha));
+
+    // Test function value
+    RX_ASSERT_NEAR(
+        f[0].val, std::sin(alpha.val) * std::cos(alpha.val), eps, d_err);
+    RX_ASSERT_NEAR(
+        f[1].val, std::sin(alpha.val) * std::sin(alpha.val), eps, d_err);
+    RX_ASSERT_NEAR(f[2].val, std::cos(alpha.val), eps, d_err);
+
+    // Test gradient (Jacobian)
+    RX_ASSERT_NEAR(
+        f[0].grad(0), std::cos(alpha.val) * std::cos(beta.val), eps, d_err);
+    RX_ASSERT_NEAR(
+        f[0].grad(1), -std::sin(alpha.val) * std::sin(beta.val), eps, d_err);
+    RX_ASSERT_NEAR(
+        f[1].grad(0), std::cos(alpha.val) * std::sin(beta.val), eps, d_err);
+    RX_ASSERT_NEAR(
+        f[1].grad(1), std::cos(beta.val) * std::sin(alpha.val), eps, d_err);
+    RX_ASSERT_NEAR(f[2].grad(0), -std::sin(alpha.val), eps, d_err);
+    RX_ASSERT_NEAR(f[2].grad(1), 0.0, eps, d_err);
+
+
+    if constexpr (WithHessian) {
+        // Test Hessian
+        RX_ASSERT_NEAR(f[0].Hess(0, 0),
+                       -std::sin(alpha.val) * std::cos(beta.val),
+                       eps,
+                       d_err);
+        RX_ASSERT_NEAR(f[0].Hess(0, 1),
+                       -std::cos(alpha.val) * std::sin(beta.val),
+                       eps,
+                       d_err);
+        RX_ASSERT_NEAR(f[0].Hess(1, 0),
+                       -std::cos(alpha.val) * std::sin(beta.val),
+                       eps,
+                       d_err);
+        RX_ASSERT_NEAR(f[0].Hess(1, 1),
+                       -std::sin(alpha.val) * std::cos(beta.val),
+                       eps,
+                       d_err);
+        RX_ASSERT_NEAR(f[1].Hess(0, 0),
+                       -std::sin(alpha.val) * std::sin(beta.val),
+                       eps,
+                       d_err);
+        RX_ASSERT_NEAR(f[1].Hess(0, 1),
+                       std::cos(alpha.val) * std::cos(beta.val),
+                       eps,
+                       d_err);
+        RX_ASSERT_NEAR(f[1].Hess(1, 0),
+                       std::cos(alpha.val) * std::cos(beta.val),
+                       eps,
+                       d_err);
+        RX_ASSERT_NEAR(f[1].Hess(1, 1),
+                       -std::sin(alpha.val) * std::sin(beta.val),
+                       eps,
+                       d_err);
+        RX_ASSERT_NEAR(f[2].Hess(0, 0), -std::cos(alpha.val), eps, d_err);
+        RX_ASSERT_NEAR(f[2].Hess(0, 1), 0.0, eps, d_err);
+        RX_ASSERT_NEAR(f[2].Hess(1, 0), 0.0, eps, d_err);
+        RX_ASSERT_NEAR(f[2].Hess(1, 1), 0.0, eps, d_err);
+        RX_ASSERT_TRUE(is_sym(f[0].Hess, eps), d_err);
+        RX_ASSERT_TRUE(is_sym(f[1].Hess, eps), d_err);
+        RX_ASSERT_TRUE(is_sym(f[2].Hess, eps), d_err);
+    }
+}
+
 
 TEST(Diff, ScalarUnaryOps)
 {
@@ -1006,7 +1054,33 @@ TEST(Diff, ScalarTriangleDistortion)
     CUDA_ERROR(cudaMemset(d_err, 0, sizeof(int)));
 
     test_triangle_distortion<float, true><<<1, 1>>>(d_err);
-    // test_triangle_distortion<double, true><<<1, 1>>>(d_err);
+    test_triangle_distortion<double, true><<<1, 1>>>(d_err);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    int h_err;
+    CUDA_ERROR(cudaMemcpy(&h_err, d_err, sizeof(int), cudaMemcpyDeviceToHost));
+
+    ASSERT_EQ(h_err, 0);
+
+    GPU_FREE(d_err);
+}
+
+TEST(Diff, ScalarSphere)
+{
+    using namespace rxmesh;
+
+    int* d_err;
+    CUDA_ERROR(cudaMalloc((void**)&d_err, sizeof(int)));
+    CUDA_ERROR(cudaMemset(d_err, 0, sizeof(int)));
+
+
+    test_sphere<float, false><<<1, 1>>>(d_err);
+    test_sphere<double, false><<<1, 1>>>(d_err);
+    test_sphere<float, true><<<1, 1>>>(d_err);
+    test_sphere<double, true><<<1, 1>>>(d_err);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
