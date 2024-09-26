@@ -14,6 +14,40 @@ namespace rxmesh {
 template <typename PassiveT, int k, bool WithHessian>
 struct Scalar;
 
+/**
+ * @brief Assemble matrix from column vectors.
+ */
+template <typename Derived>
+__device__ __host__ __inline__ auto col_mat(
+    const Eigen::MatrixBase<Derived>& _v0,
+    const Eigen::MatrixBase<Derived>& _v1)
+{
+    using T = typename Derived::Scalar;
+    Eigen::Matrix<T, Derived::RowsAtCompileTime, 2 * Derived::ColsAtCompileTime>
+        M;
+
+    M << _v0, _v1;
+
+    return M;
+}
+
+/**
+ * @brief Assemble matrix from column vectors.
+ */
+template <typename Derived>
+__device__ __host__ __inline__ auto col_mat(
+    const Eigen::MatrixBase<Derived>& _v0,
+    const Eigen::MatrixBase<Derived>& _v1,
+    const Eigen::MatrixBase<Derived>& _v2)
+{
+    using T = typename Derived::Scalar;
+    Eigen::Matrix<T, Derived::RowsAtCompileTime, 3 * Derived::ColsAtCompileTime>
+        M;
+
+    M << _v0, _v1, _v2;
+
+    return M;
+}
 
 /**
  * @brief return true if the element wise difference between A and B is less
