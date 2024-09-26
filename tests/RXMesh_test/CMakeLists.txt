@@ -29,6 +29,7 @@ set( SOURCE_LIST
 	test_svd.cu
 	test_scalar.cu
 	test_diff_attribute.cu
+	test_inverse.cu
 )
 
 target_sources( RXMesh_test 
