@@ -760,6 +760,81 @@ __global__ static void test_min_quadratic(int* d_err, T eps = 1e-9)
     RX_ASSERT_NEAR(x_min.z(), -0.5, eps, d_err);
 }
 
+template <typename T, bool WithHessian>
+__global__ static void test_triangle_distortion(int* d_err, T eps = 1e-9)
+{
+    using namespace rxmesh;
+    using Real6 = Scalar<T, 6, WithHessian>;
+
+    // passive rest-state triangle ar, br, cr
+    const Eigen::Matrix<T, 2, 1> ar(1.0, 1.0);
+    const Eigen::Matrix<T, 2, 1> br(2.0, 1.0);
+    const Eigen::Matrix<T, 2, 1> cr(1.0, 2.0);
+    const Eigen::Matrix<T, 2, 2> Mr = col_mat(br - ar, cr - ar);
+
+    auto Mr_inv = inverse(Mr);
+
+    // printf("\n **** Mr_inv= ");
+    // for (int i = 0; i < 2; ++i) {
+    //     printf("\n ");
+    //     for (int j = 0; j < 2; ++j) {
+    //         printf(" %.9g", Mr_inv(i, j));
+    //     }
+    // }
+
+
+    // active variables vector for vertex positions a, b, c
+
+    // clang-format off
+    const Eigen::Vector<Real6, 6> x = Real6::make_active({
+        10.0, 1.0,
+        15.0, 3.0,
+        2.0, 2.0,
+    });
+    // clang-format on
+
+    const Eigen::Matrix<Real6, 2, 1> a(x[0], x[1]);
+    const Eigen::Matrix<Real6, 2, 1> b(x[2], x[3]);
+    const Eigen::Matrix<Real6, 2, 1> c(x[4], x[5]);
+    const Eigen::Matrix<Real6, 2, 2> M = col_mat(b - a, c - a);
+
+    // printf("\n **** M= ");
+    // for (int i = 0; i < 2; ++i) {
+    //     for (int j = 0; j < 2; ++j) {
+    //         printf("\n i= %d, j= %d\n", i, j);
+    //         M(i, j).print();
+    //     }
+    // }
+
+    const Eigen::Matrix<Real6, 2, 2> J = M * Mr_inv;
+
+    // printf("\n **** J= ");
+    // for (int i = 0; i < 2; ++i) {
+    //     for (int j = 0; j < 2; ++j) {
+    //         printf("\n i= %d, j= %d\n", i, j);
+    //         J(i, j).print();
+    //     }
+    // }
+
+    auto J_inv = inverse(J);
+    // auto J_inv = J.inverse();
+
+    // printf("\n **** J_inv= ");
+    // for (int i = 0; i < 2; ++i) {
+    //     for (int j = 0; j < 2; ++j) {
+    //         printf("\n i= %d, j= %d\n", i, j);
+    //         J_inv(i, j).print();
+    //     }
+    // }
+
+
+    const Real6 E = J.squaredNorm() + J_inv.squaredNorm();
+    
+    //E.print();
+
+    RX_ASSERT_TRUE(is_finite_scalar(E), d_err);
+}
+
 TEST(Diff, ScalarUnaryOps)
 {
     using namespace rxmesh;
@@ -908,6 +983,30 @@ TEST(Diff, ScalarMinQuadratic)
 
     test_min_quadratic<float, true><<<1, 1>>>(d_err);
     test_min_quadratic<double, true><<<1, 1>>>(d_err);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    int h_err;
+    CUDA_ERROR(cudaMemcpy(&h_err, d_err, sizeof(int), cudaMemcpyDeviceToHost));
+
+    ASSERT_EQ(h_err, 0);
+
+    GPU_FREE(d_err);
+}
+
+
+TEST(Diff, ScalarTriangleDistortion)
+{
+    using namespace rxmesh;
+
+    int* d_err;
+    CUDA_ERROR(cudaMalloc((void**)&d_err, sizeof(int)));
+    CUDA_ERROR(cudaMemset(d_err, 0, sizeof(int)));
+
+    test_triangle_distortion<float, true><<<1, 1>>>(d_err);
+    // test_triangle_distortion<double, true><<<1, 1>>>(d_err);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
