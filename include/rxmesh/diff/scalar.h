@@ -444,6 +444,7 @@ struct Scalar
                                                 const PassiveT& b)
     {
         assert(is_finite_scalar(a));
+        assert(is_finite(b));
 
         Scalar res = a;
         res.val += b;
@@ -455,6 +456,7 @@ struct Scalar
     __host__ __device__ friend Scalar operator+(const PassiveT& a,
                                                 const Scalar&   b)
     {
+        assert(is_finite(a));
         assert(is_finite_scalar(b));
 
         Scalar res = b;
@@ -482,6 +484,7 @@ struct Scalar
 
     __host__ __device__ Scalar& operator+=(const PassiveT& b)
     {
+        assert(is_finite(b));
         assert(is_finite_scalar(*this));
 
         this->val += b;
@@ -514,6 +517,7 @@ struct Scalar
                                                 const PassiveT& b)
     {
         assert(is_finite_scalar(a));
+        assert(is_finite(b));
 
         Scalar res = a;
         res.val -= b;
@@ -525,6 +529,7 @@ struct Scalar
     __host__ __device__ friend Scalar operator-(const PassiveT& a,
                                                 const Scalar&   b)
     {
+        assert(is_finite(a));
         assert(is_finite_scalar(b));
 
         Scalar res;
@@ -558,6 +563,7 @@ struct Scalar
 
     __host__ __device__ Scalar& operator-=(const PassiveT& b)
     {
+        assert(is_finite(b));
         assert(is_finite_scalar(*this));
 
         this->val -= b;
@@ -606,7 +612,7 @@ struct Scalar
                                                 const PassiveT& b)
     {
         assert(is_finite_scalar(a));
-        assert(is_finite_scalar(b));
+        assert(is_finite(b));
 
         Scalar res = a;
         res.val *= b;
@@ -674,6 +680,7 @@ struct Scalar
                                                 const PassiveT& b)
     {
         assert(is_finite_scalar(a));
+        assert(is_finite(b));
 
         Scalar res = a;
         res.val /= b;
@@ -689,6 +696,7 @@ struct Scalar
     __host__ __device__ friend Scalar operator/(const PassiveT& a,
                                                 const Scalar&   b)
     {
+        assert(is_finite(a));
         assert(is_finite_scalar(b));
 
         Scalar res;
@@ -765,6 +773,7 @@ struct Scalar
                                                const PassiveT& b)
     {
         assert(is_finite_scalar(a));
+        assert(is_finite(b));
 
         return a.val == b;
     }
@@ -772,6 +781,7 @@ struct Scalar
     __host__ __device__ friend bool operator==(const PassiveT& a,
                                                const Scalar&   b)
     {
+        assert(is_finite(a));
         assert(is_finite_scalar(b));
 
         return a == b.val;
@@ -809,6 +819,7 @@ struct Scalar
                                               const PassiveT& b)
     {
         assert(is_finite_scalar(a));
+        assert(is_finite(b));
 
         return a.val < b;
     }
@@ -816,6 +827,7 @@ struct Scalar
     __host__ __device__ friend bool operator<(const PassiveT& a,
                                               const Scalar&   b)
     {
+        assert(is_finite(a));
         assert(is_finite_scalar(b));
 
         return a < b.val;
@@ -833,6 +845,7 @@ struct Scalar
                                                const PassiveT& b)
     {
         assert(is_finite_scalar(a));
+        assert(is_finite(b));
 
         return a.val <= b;
     }
@@ -840,6 +853,7 @@ struct Scalar
     __host__ __device__ friend bool operator<=(const PassiveT& a,
                                                const Scalar&   b)
     {
+        assert(is_finite(a));
         assert(is_finite_scalar(b));
 
         return a <= b.val;
@@ -856,6 +870,7 @@ struct Scalar
                                               const PassiveT& b)
     {
         assert(is_finite_scalar(a));
+        assert(is_finite(b));
 
         return a.val > b;
     }
@@ -863,6 +878,7 @@ struct Scalar
     __host__ __device__ friend bool operator>(const PassiveT& a,
                                               const Scalar&   b)
     {
+        assert(is_finite(a));
         assert(is_finite_scalar(b));
 
         return a > b.val;
@@ -880,6 +896,7 @@ struct Scalar
                                                const PassiveT& b)
     {
         assert(is_finite_scalar(a));
+        assert(is_finite(b));
 
         return a.val >= b;
     }
@@ -887,6 +904,7 @@ struct Scalar
     __host__ __device__ friend bool operator>=(const PassiveT& a,
                                                const Scalar&   b)
     {
+        assert(is_finite(a));
         assert(is_finite_scalar(b));
 
         return a >= b.val;
@@ -902,6 +920,9 @@ struct Scalar
 
     __host__ __device__ friend Scalar fmin(const Scalar& a, const Scalar& b)
     {
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
+
         return min(a, b);
     }
 
@@ -915,14 +936,17 @@ struct Scalar
 
     __host__ __device__ friend Scalar fmax(const Scalar& a, const Scalar& b)
     {
+        assert(is_finite_scalar(a));
+        assert(is_finite_scalar(b));
+
         return max(a, b);
-    }  
+    }
 
     // ///////////////////////////////////////////////////////////////////////////
     // std::complex operators (just spell out and differentiate the real case)
     // ///////////////////////////////////////////////////////////////////////////
 
-    __host__ __device__ friend std::complex<Scalar> operator+(
+    /*__host__ __device__ friend std::complex<Scalar> operator+(
         const std::complex<Scalar>& a,
         const std::complex<Scalar>& b)
     {
@@ -1076,7 +1100,7 @@ struct Scalar
         assert(is_finite_scalar(a));
 
         return atan2(a.imag(), a.real());
-    }
+    }*/
 
     // ///////////////////////////////////////////////////////////////////////////
     // Stream Operators
@@ -1085,10 +1109,28 @@ struct Scalar
     __host__ friend std::ostream& operator<<(std::ostream& s, const Scalar& a)
     {
         s << a.val << std::endl;
-        s << "grad: " << a.grad << std::endl;
+        s << "grad: \n" << a.grad << std::endl;
         if constexpr (WithHessian)
-            s << "Hess: " << a.Hess;
+            s << "Hess: \n" << a.Hess;
         return s;
+    }
+
+    __host__ __device__ void print() const
+    {
+        printf("\n val: %.9g", val);
+        printf("\n grad: ");
+        for (int i = 0; i < k; ++i) {
+            printf("\n %.9g", grad(i));
+        }
+        if constexpr (WithHessian) {
+            printf("\n Hess: ");
+            for (int i = 0; i < k; ++i) {
+                printf("\n");
+                for (int j = 0; j < k; ++j) {
+                    printf("%.9g ", Hess(i, j));
+                }
+            }
+        }
     }
 
     // ///////////////////////////////////////////////////////////////////////////
