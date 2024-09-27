@@ -79,6 +79,35 @@ __device__ __host__ __inline__ bool is_same_matrix(
 }
 
 /**
+ * @brief check if a variable is +/- infinity. Works both on host and device
+ */
+template <typename T>
+__device__ __host__ __inline__ bool is_inf(const T& A)
+{
+
+#ifdef __CUDA_ARCH__
+    return ::isinf(A);
+#else
+    return std::isinf(A);
+#endif
+}
+
+/**
+ * @brief check if a variable is nan. Works both on host and device
+ */
+template <typename T>
+__device__ __host__ __inline__ bool is_nan(const T& A)
+{
+
+#ifdef __CUDA_ARCH__
+    return ::isnan(A);
+#else
+    return std::isnan(A);
+#endif
+}
+
+
+/**
  * @brief check if a variable is finite. Works both on host and device
  */
 template <typename T>

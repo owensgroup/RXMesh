@@ -633,7 +633,7 @@ __global__ static void test_is_nan_is_inf(int* d_err, T eps = 1e-9)
     RX_ASSERT_TRUE(isfinite(a), d_err);
     RX_ASSERT_TRUE(!isfinite(b), d_err);
     RX_ASSERT_TRUE(!isfinite(c), d_err);
-    RX_ASSERT_TRUE(isfinite(d), d_err);
+    RX_ASSERT_TRUE(!isfinite(d), d_err);
 }
 
 template <typename T, bool WithHessian>

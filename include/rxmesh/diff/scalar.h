@@ -403,14 +403,12 @@ struct Scalar
 
     __host__ __device__ friend bool isnan(const Scalar& a)
     {
-
-        return std::isnan(a.val);
+        return is_nan(a.val);
     }
 
     __host__ __device__ friend bool isinf(const Scalar& a)
     {
-
-        return std::isinf(a.val);
+        return is_inf(a.val);
     }
 
     __host__ __device__ friend bool isfinite(const Scalar& a)
