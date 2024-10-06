@@ -33,6 +33,14 @@ struct Query
     }
 
     /**
+     * @brief return the patch id associated with this instance
+     */
+    __device__ __inline__ int get_patch_id() const
+    {
+        return m_patch_info.patch_id;
+    }
+
+    /**
      * @brief return the patch info associated with this instance
      */
     __device__ __inline__ const PatchInfo& get_patch_info() const

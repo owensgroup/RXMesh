@@ -708,6 +708,74 @@ void Patcher::assign_patch(
             }
         }
     }
+
+
+    /* for (uint32_t f = 0; f < m_num_faces; ++f) {
+        uint32_t p0 = m_vertex_patch[fv[f][0]];
+        uint32_t p1 = m_vertex_patch[fv[f][1]];
+        uint32_t p2 = m_vertex_patch[fv[f][2]];
+
+        if (p0 == p1 && p1 == p2 && p0 == p2) {
+            // ideal case
+            continue;
+        }
+        if (p0 != p1 && p0 != p2 && p1 != p2) {
+            // hopeless case
+            continue;
+        }
+
+        // find the index in fv[f] of the odd vertex i.e., the vertex with
+        // different patch id
+        uint32_t odd = (p0 == p1) ? 2 : ((p1 == p2) ? 0 : 1);
+
+        // find the index in fv[f] of the common vertex i.e., any vertex other
+        // than odd
+        uint32_t common = (odd + 1) % 3;
+
+        // the common patch
+        uint32_t common_patch = m_vertex_patch[fv[f][common]];
+
+        // re-assign the odd one to agree with the other two
+        // only if this face is also assigned to the common patch
+        uint32_t f_p = m_face_patch[f];
+        if (f_p == common_patch) {
+            m_vertex_patch[fv[f][odd]] = common_patch;
+        }
+    }*/
+
+    // Refinement: every vertex get re-assigned to the patch where the most of
+    // the vertex neighbors are assigned to
+    /* std::vector<std::vector<uint32_t>> vv(m_num_vertices);
+
+    for (auto& it : edges_map) {
+        uint32_t v0 = it.first.first;
+        uint32_t v1 = it.first.second;
+
+        vv[v0].push_back(v1);
+        vv[v1].push_back(v0);
+    }
+
+    for (uint32_t v = 0; v < m_num_vertices; ++v) {
+        std::unordered_map<uint32_t, uint32_t> neighbour_patch;
+        for (uint32_t i = 0; i < vv[v].size(); ++i) {
+            uint32_t n       = vv[v][i];
+            uint32_t n_patch = m_vertex_patch[n];
+            neighbour_patch[n_patch] += 1;
+        }
+
+        uint32_t pop_patch       = INVALID32;
+        uint32_t pop_patch_count = 0;
+        for (auto& it : neighbour_patch) {
+            uint32_t p       = it.first;
+            uint32_t p_count = it.second;
+            if (p_count > pop_patch_count) {
+                pop_patch       = p;
+                pop_patch_count = p_count;
+            }
+        }
+
+        m_vertex_patch[v] = pop_patch;
+    }*/
 }
 
 void Patcher::run_lloyd(uint32_t* d_face_patch,

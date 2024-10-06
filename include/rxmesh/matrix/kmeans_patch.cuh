@@ -264,15 +264,15 @@ struct PatchKMeans
                 assert(v_permute(vh) == INVALID16);
 
                 if (m_s_separator(v)) {
-                    v_permute(vh) = sum - m_s_index[v] - 1;
-                    // v_permute(vh) = m_s_index[v];
+                    //v_permute(vh) = sum - m_s_index[v] - 1;
+                     v_permute(vh) = m_s_index[v];
                 } else if (m_s_partition_b_v(v)) {
-                    v_permute(vh) = sum - s_num_sep - m_s_index[v] - 1;
-                    // v_permute(vh) = s_num_sep + m_s_index[v];
+                    //v_permute(vh) = sum - s_num_sep - m_s_index[v] - 1;
+                     v_permute(vh) = s_num_sep + m_s_index[v];
                 } else if (m_s_partition_a_v(v)) {
-                    v_permute(vh) =
-                        sum - (s_num_sep + s_num_b) - m_s_index[v] - 1;
-                    // v_permute(vh) = s_num_sep + s_num_b + m_s_index[v];
+                    //v_permute(vh) =
+                    //    sum - (s_num_sep + s_num_b) - m_s_index[v] - 1;
+                     v_permute(vh) = s_num_sep + s_num_b + m_s_index[v];
                 }
             }
         }

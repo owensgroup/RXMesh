@@ -9,6 +9,9 @@
 #include "rxmesh/matrix/patch_permute.cuh"
 #include "rxmesh/matrix/permute_util.h"
 
+// if we should calc and use vertex weight in max match
+//#define USE_V_WEIGHTS
+
 namespace rxmesh {
 
 template <typename T>
@@ -27,7 +30,12 @@ struct Graph
 
     // stores the weights for each edge. this vector is indexed the same way
     // adjncy is indexed
-    std::vector<T> weights;
+    std::vector<T> e_weights;
+
+#ifdef USE_V_WEIGHTS
+    // store the vertex weights
+    std::vector<T> v_weights;
+#endif
 
 
     /**
@@ -38,7 +46,7 @@ struct Graph
     {
         for (T i = xadj[x]; i < xadj[x + 1]; ++i) {
             if (adjncy[i] == y) {
-                return weights[i];
+                return e_weights[i];
             }
         }
         return default_val;
@@ -70,67 +78,6 @@ struct Graph
     }
 };
 
-template <typename T>
-void construct_a_simple_chordal_graph(Graph<T>& graph)
-{
-    graph.n                            = 20;
-    std::vector<std::pair<T, T>> edges = {
-        {0, 1},   {1, 2},   {2, 3},   {3, 4},   {4, 5},   {5, 6},
-        {6, 7},   {7, 8},   {8, 9},   {0, 2},   {1, 3},   {3, 5},
-        {4, 6},   {5, 7},   {6, 8},   {7, 9},   {9, 10},  {10, 11},
-        {11, 12}, {12, 13}, {13, 14}, {14, 15}, {15, 16}, {16, 17},
-        {17, 18}, {18, 19}, {8, 10},  {9, 11},  {10, 12}, {11, 13},
-        {12, 14}, {13, 15}, {14, 16}, {15, 17}, {16, 18}, {17, 19}};
-
-    // graph.n = 40;
-    // std::vector<std::pair<int, int>> edges = {
-    //     {0, 1},   {1, 2},   {2, 3},   {3, 4},   {4, 5},   {5, 6},   {6, 7},
-    //     {7, 8},   {8, 9},   {9, 10},  {10, 11}, {11, 12}, {12, 13}, {13, 14},
-    //     {14, 15}, {15, 16}, {16, 17}, {17, 18}, {18, 19}, {19, 20}, {20, 21},
-    //     {21, 22}, {22, 23}, {23, 24}, {24, 25}, {25, 26}, {26, 27}, {27, 28},
-    //     {28, 29}, {29, 30}, {30, 31}, {31, 32}, {32, 33}, {33, 34}, {34, 35},
-    //     {35, 36}, {36, 37}, {37, 38}, {38, 39}, {0, 2},   {1, 3},   {3, 5},
-    //     {4, 6},   {5, 7},   {6, 8},   {7, 9},   {8, 10},  {9, 11},  {10, 12},
-    //     {11, 13}, {12, 14}, {13, 15}, {14, 16}, {15, 17}, {16, 18}, {17, 19},
-    //     {18, 20}, {19, 21}, {20, 22}, {21, 23}, {23, 25}, {24, 26}, {25, 27},
-    //     {26, 28}, {27, 29}, {28, 30}, {29, 31}, {30, 32}, {31, 33}, {32, 34},
-    //     {33, 35}, {34, 36}, {35, 37}, {36, 38}, {37, 39}};
-
-
-    graph.xadj.resize(graph.n + 1, 0);
-
-
-    for (const auto& edge : edges) {
-        graph.xadj[edge.first]++;
-        graph.xadj[edge.second]++;
-    }
-
-    int before = 0;
-    for (int i = 0; i <= graph.n; ++i) {
-        int c         = graph.xadj[i];
-        graph.xadj[i] = before;
-        before += c;
-    }
-
-    graph.adjncy.resize(graph.xadj.back());
-
-
-    std::vector<T> current_pos(graph.xadj.size(), 0);
-    for (auto& edge : edges) {
-        int row = edge.first;
-        int idx = current_pos[row] + graph.xadj[row];
-        current_pos[row]++;
-        graph.adjncy[idx] = edge.second;
-
-        std::swap(edge.first, edge.second);
-
-        row = edge.first;
-        idx = current_pos[row] + graph.xadj[row];
-        current_pos[row]++;
-        graph.adjncy[idx] = edge.second;
-    }
-}
-
 /**
  * @brief construct patch neighbor graph which is the same as what we store in
  * PatchStash but in a different format
@@ -139,13 +86,23 @@ template <typename T>
 void construct_patches_neighbor_graph(
     const RXMeshStatic&     rx,
     Graph<T>&               patches_graph,
-    const std::vector<int>& h_patch_graph_edge_weight)
+    const std::vector<int>& h_patch_graph_edge_weight,
+    const int*              d_patch_graph_vertex_weight)
 {
     uint32_t num_patches = rx.get_num_patches();
 
     patches_graph.n = num_patches;
     patches_graph.xadj.resize(num_patches + 1);
     patches_graph.adjncy.reserve(8 * num_patches);
+
+#ifdef USE_V_WEIGHTS
+    patches_graph.v_weights.resize(num_patches);
+    CUDA_ERROR(cudaMemcpy(patches_graph.v_weights.data(),
+                          d_patch_graph_vertex_weight,
+                          sizeof(int) * num_patches,
+                          cudaMemcpyDeviceToHost));
+#endif
+
 
     patches_graph.xadj[0] = 0;
     for (uint32_t p = 0; p < num_patches; ++p) {
@@ -155,7 +112,7 @@ void construct_patches_neighbor_graph(
             uint32_t n = pi.patch_stash.get_patch(i);
             if (n != INVALID32 && n != p) {
                 patches_graph.adjncy.push_back(n);
-                patches_graph.weights.push_back(
+                patches_graph.e_weights.push_back(
                     h_patch_graph_edge_weight[PatchStash::stash_size * p + i]);
             }
         }
@@ -251,6 +208,25 @@ void heavy_max_matching(const RXMeshStatic&      rx,
                         const Graph<integer_t>&  graph,
                         MaxMatchTree<integer_t>& max_match_tree)
 {
+
+#ifdef USE_V_WEIGHTS
+#ifndef NDEBUG
+    int v_weight_sum = 0;
+    for (size_t i = 0; i < graph.n; ++i) {
+        v_weight_sum += graph.v_weights[i];
+    }
+    if (v_weight_sum != rx.get_num_vertices()) {
+        RXMESH_ERROR(
+            "Unexpected behavior in heavy_max_matching as the sum of the
+            " " patch graph's vertex weight ({}) does not match the number of
+            " " vertices in the mesh({})
+                .", v_weight_sum,
+            rx.get_num_vertices());
+    }
+
+#endif
+#endif
+
     // TODO workaround isolated island (comes from disconnected component input
     // mesh)
     if (graph.n <= 1) {
@@ -285,7 +261,7 @@ void heavy_max_matching(const RXMeshStatic&      rx,
 
             for (int i = graph.xadj[v]; i < graph.xadj[v + 1]; ++i) {
                 integer_t n = graph.adjncy[i];
-                integer_t w = graph.weights[i];
+                integer_t w = graph.e_weights[i];
 
                 if (!matched[n]) {
                     if (w > max_w) {
@@ -311,7 +287,7 @@ void heavy_max_matching(const RXMeshStatic&      rx,
                         node_id;
                 }
 
-                // store the grant parent of level -1
+                // store the grand parent of level -1
                 if (max_match_tree.levels.empty()) {
                     l.patch_proj[v]                 = node_id;
                     l.patch_proj[matched_neighbour] = node_id;
@@ -356,7 +332,10 @@ void heavy_max_matching(const RXMeshStatic&      rx,
     c_graph.n = l.nodes.size();
     c_graph.xadj.resize(c_graph.n + 1, 0);
     c_graph.adjncy.reserve(c_graph.n * 3);  // just a guess
-    c_graph.weights.reserve(c_graph.n * 3);
+    c_graph.e_weights.reserve(c_graph.n * 3);
+#ifdef USE_V_WEIGHTS
+    c_graph.v_weights.resize(c_graph.n);
+#endif
 
 
     for (int i = 0; i < l.nodes.size(); ++i) {
@@ -388,7 +367,7 @@ void heavy_max_matching(const RXMeshStatic&      rx,
                     // 1) the weight of the edge between n and x
                     // 2) plus the weight of the edge between n and y (only if n
                     // is connect to y)
-                    integer_t new_weight = graph.weights[i];
+                    integer_t new_weight = graph.e_weights[i];
 
                     // check if the n is connect to y as well
                     // if so, the weight
@@ -409,11 +388,19 @@ void heavy_max_matching(const RXMeshStatic&      rx,
         get_neighbour(node.lch, node.rch);
         get_neighbour(node.rch, node.lch);
 
+#ifdef USE_V_WEIGHTS
+        c_graph.v_weights[i] = graph.v_weights[node.lch];
+        if (node.lch != node.rch) {
+            c_graph.v_weights[i] += graph.v_weights[node.rch];
+        }
+#endif
+
+
         c_graph.xadj[i + 1] = c_graph.xadj[i];
         for (const auto& u : u_neighbour) {
             // actually what we insert in the coarse graph is the parents
             c_graph.adjncy.push_back(u.first);
-            c_graph.weights.push_back(u.second);
+            c_graph.e_weights.push_back(u.second);
             c_graph.xadj[i + 1]++;
         }
     }
@@ -430,8 +417,14 @@ namespace detail {
 template <uint32_t blockThreads>
 __global__ static void compute_patch_graph_edge_weight(
     const rxmesh::Context context,
-    int*                  d_edge_weight)
+    int*                  d_edge_weight,
+    int*                  d_vertex_weight)
 {
+    __shared__ int s_owned_vertex_sum;
+    if (threadIdx.x == 0) {
+        s_owned_vertex_sum = 0;
+    }
+
     auto weights = [&](EdgeHandle e_id, VertexIterator& ev) {
         VertexHandle v0          = ev[0];
         uint32_t     v0_patch_id = v0.patch_id();
@@ -466,6 +459,19 @@ __global__ static void compute_patch_graph_edge_weight(
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
     query.dispatch<Op::EV>(block, shrd_alloc, weights);
+
+#ifdef USE_V_WEIGHTS
+    // sum the owned vertices in the patch in shared memory and then write it to
+    // global memory
+    for_each_vertex(query.get_patch_info(), [&](const VertexHandle& vh) {
+        ::atomicAdd(&s_owned_vertex_sum, int(1));
+    });
+
+    block.sync();
+    if (threadIdx.x == 0) {
+        d_vertex_weight[query.get_patch_id()] = s_owned_vertex_sum;
+    }
+#endif
 }
 
 __inline__ __device__ bool is_v_on_grand_separator(const VertexHandle v_id,
@@ -475,7 +481,7 @@ __inline__ __device__ bool is_v_on_grand_separator(const VertexHandle v_id,
 {
     // on a certain level of the max match, return the sibling to a certain
     // mesh vertex on the tree (only if this sibling is different than the
-    // vertx's patch grand parent)
+    // vertex's patch grand parent)
 
     for (uint16_t i = 0; i < iter.size(); ++i) {
         uint32_t n_pid = iter[i].patch_id();
@@ -494,11 +500,13 @@ __global__ static void extract_separators(const Context        context,
                                           const int*           d_patch_proj_l,
                                           const int*           d_patch_proj_l1,
                                           VertexAttribute<int> v_index,
-                                          int*                 d_permute,
-                                          int                  current_level,
-                                          int                  depth,
-                                          const int*           d_dfs_index,
-                                          int*                 d_count)
+                                          // VertexAttribute<int> v_render,
+                                          int*       d_permute,
+                                          int        current_level,
+                                          int        depth,
+                                          const int* d_dfs_index,
+                                          int*       d_count,
+                                          int*       d_cut_size)
 {
     // d_patch_proj_l is the patch projection on this level
     // d_patch_proj_l1 is the patch projection on the next level (i.e.,
@@ -507,6 +515,24 @@ __global__ static void extract_separators(const Context        context,
     const int S = depth - current_level - 1;
 
     const int shift = (1 << S) - 1;
+
+    auto block = cooperative_groups::this_thread_block();
+
+    ShmemAllocator shrd_alloc;
+
+    Query<blockThreads> query(context);
+
+    const uint16_t num_v = query.get_patch_info().num_vertices[0];
+
+    int* s_v_local_id = shrd_alloc.alloc<int>(num_v);
+
+    fill_n<blockThreads>(s_v_local_id, num_v, int(-1));
+
+    __shared__ int s_patch_total;
+    if (threadIdx.x == 0) {
+        s_patch_total = 0;
+    }
+
 
     auto extract = [&](VertexHandle v_id, VertexIterator& iter) {
         // this is important to check if v is on the separator before going in
@@ -532,11 +558,18 @@ __global__ static void extract_separators(const Context        context,
                 is_v_on_grand_separator(
                     v_id, v_proj_1, d_patch_proj_l1, iter)) {
 
-                d_permute[context.linear_id(v_id)] =
-                    ::atomicAdd(&d_count[d_dfs_index[index]], int(1));
+                s_v_local_id[v_id.local_id()] =
+                    ::atomicAdd(&s_patch_total, int(1));
+
+                //::atomicAdd(d_cut_size, int(1));
+
+                // d_permute[context.linear_id(v_id)] =
+                //     ::atomicAdd(&d_count[d_dfs_index[index]], int(1));
 
                 assert(v_index(v_id) < 0);
                 v_index(v_id) = d_dfs_index[index];
+
+                // v_render(v_id) = current_level;
 
             } else if (current_level == 0) {
                 // get the patch index within the max match tree
@@ -552,15 +585,37 @@ __global__ static void extract_separators(const Context        context,
 
                 assert(v_index(v_id) < 0);
                 v_index(v_id) = d_dfs_index[index];
+
+                // v_render(v_id) = 10;
             }
         }
     };
 
-    auto block = cooperative_groups::this_thread_block();
 
-    Query<blockThreads> query(context);
-    ShmemAllocator      shrd_alloc;
     query.dispatch<Op::VV>(block, shrd_alloc, extract);
+    block.sync();
+
+    if (s_patch_total > 0) {
+
+        if (threadIdx.x == 0) {
+
+            int p_proj = d_patch_proj_l[query.get_patch_id()];
+
+            int index = shift + p_proj;
+
+            int sum = ::atomicAdd(&d_count[d_dfs_index[index]], s_patch_total);
+
+            s_patch_total = sum;
+        }
+        block.sync();
+
+        for_each_vertex(query.get_patch_info(), [&](const VertexHandle v_id) {
+            int local_id = s_v_local_id[v_id.local_id()];
+            if (local_id != -1) {
+                d_permute[context.linear_id(v_id)] = s_patch_total + local_id;
+            }
+        });
+    }
 }
 
 
@@ -747,7 +802,13 @@ void permute_separators(RXMeshStatic&              rx,
 
     LaunchBox<blockThreads> lbe;
     rx.prepare_launch_box(
-        {Op::VV}, lbe, (void*)detail::extract_separators<blockThreads>);
+        {Op::VV},
+        lbe,
+        (void*)detail::extract_separators<blockThreads>,
+        false,
+        false,
+        false,
+        [&](uint32_t v, uint32_t e, uint32_t f) { return v * sizeof(int); });
 
 
     // the total number of nodes in the tree is upper-bounded by 2^d where d
@@ -777,6 +838,10 @@ void permute_separators(RXMeshStatic&              rx,
     int *d_dfs_index(nullptr), *d_count(nullptr);
     CUDA_ERROR(cudaMalloc((void**)&d_dfs_index, sizeof(int) * count_size));
 
+    int* d_cut_size(nullptr);
+    //CUDA_ERROR(cudaMalloc((void**)&d_cut_size, sizeof(int)));
+    //CUDA_ERROR(cudaMemset(d_cut_size, 0, sizeof(int)));
+
 
     CUDA_ERROR(cudaMalloc((void**)&d_count, sizeof(int) * (count_size + 1)));
     CUDA_ERROR(cudaMemset(d_count, 0, sizeof(int) * count_size));
@@ -793,6 +858,21 @@ void permute_separators(RXMeshStatic&              rx,
                           count_size * sizeof(int),
                           cudaMemcpyHostToDevice));
 
+    // auto v_render = *rx.add_vertex_attribute<int>("Render", 1);
+    // v_render.reset(-1, LOCATION_ALL);
+
+
+    // for (int l = depth - 1; l >= 0; --l) {
+    //     rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
+    //         int proj     =
+    //         max_match_tree.levels[l].patch_proj[vh.patch_id()]; v_render(vh)
+    //         = proj;
+    //     });
+    //     rx.get_polyscope_mesh()->addVertexScalarQuantity(
+    //         "Match " + std::to_string(l), v_render);
+    // }
+
+    int sum_edge_cut = 0;
 
     for (int l = depth - 1; l >= 0; --l) {
 
@@ -818,13 +898,31 @@ void permute_separators(RXMeshStatic&              rx,
                 d_patch_proj_l,
                 (l == 0) ? nullptr : d_patch_proj_l1,
                 v_index,
+                // v_render,
                 d_permute,
                 l,
                 depth,
                 d_dfs_index,
-                d_count);
+                d_count,
+                d_cut_size);
+        // int h_cut_size = 0;
+        // CUDA_ERROR(cudaMemcpy(
+        //     &h_cut_size, d_cut_size, sizeof(int), cudaMemcpyDeviceToHost));
+        // CUDA_ERROR(cudaMemset(d_cut_size, 0, sizeof(int)));
+        // sum_edge_cut += h_cut_size;
+        // RXMESH_INFO("Level = {},Cut Size = {}", l, h_cut_size);
+        //  if (l >= depth - 3) {
+        //      v_render.move(DEVICE, HOST);
+        //      rx.get_polyscope_mesh()->addVertexScalarQuantity(
+        //          "Render " + std::to_string(l), v_render);
+        //
+        //      // v_index.move(DEVICE, HOST);
+        //      // rx.get_polyscope_mesh()->addVertexScalarQuantity(
+        //      //     "Index " + std::to_string(l), v_index);
+        //  }
     }
 
+    //RXMESH_INFO("Sum Edge Cut Size = {}", sum_edge_cut);
 
     thrust::exclusive_scan(
         thrust::device, d_count, d_count + count_size, d_count);
@@ -895,6 +993,17 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
         cudaMalloc((void**)&d_patch_graph_edge_weight, edge_weight_bytes));
     CUDA_ERROR(cudaMemset(d_patch_graph_edge_weight, 0, edge_weight_bytes));
 
+    // stores the vertex weight of the patch graph
+    int* d_patch_graph_vertex_weight = nullptr;
+#ifdef USE_V_WEIGHTS
+    uint32_t vertex_weight_size  = rx.get_num_patches();
+    uint32_t vertex_weight_bytes = sizeof(int) * vertex_weight_size;
+    CUDA_ERROR(
+        cudaMalloc((void**)&d_patch_graph_vertex_weight, vertex_weight_bytes));
+    CUDA_ERROR(cudaMemset(d_patch_graph_vertex_weight, 0, vertex_weight_bytes));
+#endif
+
+
     std::vector<int> h_patch_graph_edge_weight(edge_weight_size, 0);
 
     // the new index
@@ -912,13 +1021,15 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
     constexpr uint32_t      blockThreads = 512;
     LaunchBox<blockThreads> lb;
     rx.prepare_launch_box(
-        {rxmesh::Op::EV},
+        {Op::EV},
         lb,
         (void*)detail::compute_patch_graph_edge_weight<blockThreads>);
 
     detail::compute_patch_graph_edge_weight<blockThreads>
         <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
-            rx.get_context(), d_patch_graph_edge_weight);
+            rx.get_context(),
+            d_patch_graph_edge_weight,
+            d_patch_graph_vertex_weight);
 
     CUDA_ERROR(cudaMemcpy(h_patch_graph_edge_weight.data(),
                           d_patch_graph_edge_weight,
@@ -927,7 +1038,8 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
 
     // a graph representing the patch connectivity
     Graph<int> p_graph;
-    construct_patches_neighbor_graph(rx, p_graph, h_patch_graph_edge_weight);
+    construct_patches_neighbor_graph(
+        rx, p_graph, h_patch_graph_edge_weight, d_patch_graph_vertex_weight);
 
 
     // create max match tree
@@ -963,6 +1075,7 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
     GPU_FREE(d_patch_proj_l);
     GPU_FREE(d_patch_proj_l1);
     GPU_FREE(d_patch_graph_edge_weight);
+    GPU_FREE(d_patch_graph_vertex_weight);
 }
 
 

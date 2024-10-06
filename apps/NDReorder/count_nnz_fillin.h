@@ -5,7 +5,8 @@
 #include <Eigen/Sparse>
 
 template <typename SparseMatrixType>
-void exportToPlainText(const SparseMatrixType& mat, const std::string& filename)
+void export_to_plain_text(const SparseMatrixType& mat,
+                          const std::string&      filename)
 {
     std::ofstream file(filename);
     if (!file.is_open()) {
@@ -51,11 +52,12 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
     Eigen::internal::permute_symm_to_fullsymm<Eigen::Lower, false>(
         eigen_mat, permuted_mat, perm.indices().data());
 
-    // exportToPlainText(permuted_mat,
-    //                   std::string("C:\\Github\\Matlab_Reordering_Trial\\") +
-    //                       st + std::string(".txt"));
-
-    exportToPlainText(permuted_mat, st + std::string(".txt"));
+    // export_to_plain_text(permuted_mat,
+    //                      std::string("C:\\Github\\Matlab_Reordering_Trial\\")
+    //                      +
+    //                          st + std::string(".txt"));
+    //
+    // return 0;
 
     // compute Cholesky factorization on the permuted matrix
 
@@ -81,7 +83,7 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
     // these are the nnz on (strictly) the lower part
     int lower_nnz = lower_mat.nonZeros() - lower_mat.rows();
 
-    // multiply by two to account for lower and upper parts of the matirx
+    // multiply by two to account for lower and upper parts of the matrix
     // add rows() to account for entries along the diagonal
     return 2 * lower_nnz + lower_mat.rows();
 }

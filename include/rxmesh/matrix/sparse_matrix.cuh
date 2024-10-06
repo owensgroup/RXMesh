@@ -112,6 +112,44 @@ struct SparseMatrix
     using EigenSparseMatrix =
         Eigen::Map<const Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT>>;
 
+    SparseMatrix()
+        : m_d_row_ptr(nullptr),
+          m_d_col_idx(nullptr),
+          m_d_val(nullptr),
+          m_h_row_ptr(nullptr),
+          m_h_col_idx(nullptr),
+          m_h_val(nullptr),
+          m_num_rows(0),
+          m_num_cols(0),
+          m_nnz(0),
+          m_context(Context()),
+          m_cusparse_handle(NULL),
+          m_descr(NULL),
+          m_spdescr(NULL),
+          m_spmm_buffer_size(0),
+          m_spmv_buffer_size(0),
+          m_h_permute(nullptr),
+          m_d_permute(nullptr),
+          m_d_solver_row_ptr(nullptr),
+          m_d_solver_col_idx(nullptr),
+          m_d_solver_val(nullptr),
+          m_h_solver_row_ptr(nullptr),
+          m_h_solver_col_idx(nullptr),
+          m_h_permute_map(nullptr),
+          m_d_permute_map(nullptr),
+          m_use_reorder(false),
+          m_reorder_allocated(false),
+          m_d_cusparse_spmm_buffer(nullptr),
+          m_d_cusparse_spmv_buffer(nullptr),
+          m_solver_buffer(nullptr),
+          m_d_solver_b(nullptr),
+          m_d_solver_x(nullptr),
+          m_allocated(LOCATION_NONE),
+          m_current_solver(Solver::NONE)
+    {
+    }
+
+
     SparseMatrix(const RXMeshStatic& rx)
         : m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
