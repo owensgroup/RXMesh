@@ -196,12 +196,13 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     std::vector<uint32_t>              ff_values;
     std::vector<uint32_t>              ff_offset;
     std::vector<std::vector<uint32_t>> ef;
+    std::vector<std::vector<uint32_t>> ev;
 
     m_max_capacity_lp_v = 0;
     m_max_capacity_lp_e = 0;
     m_max_capacity_lp_f = 0;
 
-    build_supporting_structures(fv, ef, ff_offset, ff_values);
+    build_supporting_structures(fv, ef, ev, ff_offset, ff_values);
 
     if (!patcher_file.empty()) {
         if (!std::filesystem::exists(patcher_file)) {
@@ -247,7 +248,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
 
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
-        build_single_patch_ltog(fv, p);
+        build_single_patch_ltog(fv, ev, p);
     }
 
     // calc max elements for use in build_device (which populates
@@ -323,6 +324,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
 
 void RXMesh::build_supporting_structures(
     const std::vector<std::vector<uint32_t>>& fv,
+    std::vector<std::vector<uint32_t>>&       ev,
     std::vector<std::vector<uint32_t>>&       ef,
     std::vector<uint32_t>&                    ff_offset,
     std::vector<uint32_t>&                    ff_values)
@@ -338,6 +340,7 @@ void RXMesh::build_supporting_structures(
         static_cast<size_t>(1.5f * static_cast<float>(m_num_faces));
     ef.reserve(reserve_size);
     m_edges_map.reserve(reserve_size);
+    ev.reserve(2 * reserve_size);
 
     std::vector<uint32_t> ff_size(m_num_faces, 0);
 
@@ -361,6 +364,10 @@ void RXMesh::build_supporting_structures(
             if (e_iter == m_edges_map.end()) {
                 uint32_t edge_id = m_num_edges++;
                 m_edges_map.insert(std::make_pair(edge, edge_id));
+
+                std::vector<uint32_t> evv = {v0, v1};
+                ev.push_back(evv);
+
                 std::vector<uint32_t> tmp(1, f);
                 ef.push_back(tmp);
             } else {
@@ -486,6 +493,7 @@ void RXMesh::calc_max_elements()
 
 void RXMesh::build_single_patch_ltog(
     const std::vector<std::vector<uint32_t>>& fv,
+    const std::vector<std::vector<uint32_t>>& ev,
     const uint32_t                            patch_id)
 {
     // patch start and end
@@ -503,9 +511,13 @@ void RXMesh::build_single_patch_ltog(
     const uint32_t total_patch_num_faces =
         (p_end - p_start) + (r_end - r_start);
     m_h_patches_ltog_f[patch_id].resize(total_patch_num_faces);
-    m_h_patches_ltog_v[patch_id].resize(3 * total_patch_num_faces);
-    m_h_patches_ltog_e[patch_id].resize(3 * total_patch_num_faces);
+    m_h_patches_ltog_v[patch_id].reserve(3 * total_patch_num_faces);
+    m_h_patches_ltog_e[patch_id].reserve(3 * total_patch_num_faces);
 
+    std::vector<bool> is_vertex_added(m_num_vertices, false);
+    std::vector<bool> is_edge_added(m_num_edges, false);
+
+    // add faces owned by this patch
     auto add_new_face = [&](uint32_t global_face_id, uint16_t local_face_id) {
         m_h_patches_ltog_f[patch_id][local_face_id] = global_face_id;
 
@@ -515,9 +527,17 @@ void RXMesh::build_single_patch_ltog(
 
             uint32_t edge_id = get_edge_id(v0, v1);
 
-            m_h_patches_ltog_v[patch_id][local_face_id * 3 + v] = v0;
+            if (!is_vertex_added[v0]) {
+                is_vertex_added[v0] = true;
 
-            m_h_patches_ltog_e[patch_id][local_face_id * 3 + v] = edge_id;
+                m_h_patches_ltog_v[patch_id].push_back(v0);
+            }
+
+            if (!is_edge_added[edge_id]) {
+                is_edge_added[edge_id] = true;
+
+                m_h_patches_ltog_e[patch_id].push_back(edge_id);
+            }
         }
     };
 
@@ -533,11 +553,36 @@ void RXMesh::build_single_patch_ltog(
     }
 
 
+    // add edges owned by this patch
+    for (uint32_t e = 0; e < m_num_edges; ++e) {
+        // if the edge is owned by this patch but it was not added yet
+        if (m_patcher->get_edge_patch_id(e) == patch_id && !is_edge_added[e]) {
+            m_h_patches_ltog_e[patch_id].push_back(e);
+            for (uint32_t i = 0; i < 2; ++i) {
+                uint32_t v = ev[e][i];
+                if (!is_vertex_added[v]) {
+                    m_h_patches_ltog_v[patch_id].push_back(v);
+                }
+            }
+        }
+    }
+
+    // add vertices owned by this patch
+    for (uint32_t v = 0; v < m_num_vertices; ++v) {
+        // if the edge is owned by this patch but it was not added yet
+        if (m_patcher->get_vertex_patch_id(v) == patch_id &&
+            !is_vertex_added[v]) {
+            m_h_patches_ltog_v[patch_id].push_back(v);
+        }
+    }
+
     auto create_unique_mapping = [&](std::vector<uint32_t>&       ltog_map,
                                      const std::vector<uint32_t>& patch) {
         std::sort(ltog_map.begin(), ltog_map.end());
+#ifndef NDEBUG
         auto unique_end = std::unique(ltog_map.begin(), ltog_map.end());
-        ltog_map.resize(unique_end - ltog_map.begin());
+        assert(unique_end == ltog_map.end());
+#endif
 
         // we use stable partition since we want ltog to be sorted so we can
         // use binary search on it when we populate the topology
