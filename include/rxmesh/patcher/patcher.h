@@ -233,9 +233,9 @@ class Patcher
                                              std::vector<uint32_t>& component,
                                              uint32_t               num_seeds);
 
-    void postprocess(const std::vector<std::vector<uint32_t>>& fv,
-                     const std::vector<uint32_t>&              ff_offset,
-                     const std::vector<uint32_t>&              ff_values);
+    void extract_ribbons(const std::vector<std::vector<uint32_t>>& fv,
+                         const std::vector<uint32_t>&              ff_offset,
+                         const std::vector<uint32_t>&              ff_values);
 
     uint32_t construct_patches_compressed_format(uint32_t* d_face_patch,
                                                  void*  d_cub_temp_storage_scan,
@@ -268,6 +268,10 @@ class Patcher
 
     void metis_kway(const std::vector<uint32_t>& ff_offset,
                     const std::vector<uint32_t>& ff_values);
+
+    void calc_edge_cut(const std::vector<std::vector<uint32_t>>& fv,
+                       const std::vector<uint32_t>&              ff_offset,
+                       const std::vector<uint32_t>&              ff_values);
 
     uint32_t m_patch_size, m_num_patches, m_num_vertices, m_num_edges,
         m_num_faces, m_num_seeds, m_max_num_patches, m_num_components,

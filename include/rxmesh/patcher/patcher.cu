@@ -149,11 +149,13 @@ Patcher::Patcher(uint32_t                                        patch_size,
                       d_patches_size,
                       d_patches_val);
         }
-        postprocess(fv, ff_offset, ff_values);
+        extract_ribbons(fv, ff_offset, ff_values);
         // bfs(ff_offset, ff_values);
         assign_patch(fv, edges_map);
     }
 
+
+    calc_edge_cut(fv, ff_offset, ff_values);
 
     print_statistics();
 
@@ -297,6 +299,57 @@ void Patcher::allocate_device_memory(const std::vector<uint32_t>& seeds,
     CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage_max, cub_max_bytes));
 }
 
+void Patcher::calc_edge_cut(const std::vector<std::vector<uint32_t>>& fv,
+                            const std::vector<uint32_t>&              ff_offset,
+                            const std::vector<uint32_t>&              ff_values)
+{
+    // given a graph where nodes represents faces in the mesh and two nodes
+    // are connected in this graph if two faces share an edge, we calculate
+    // the edge cut fo such a graph
+    uint32_t face_edge_cut = 0;
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        for (uint32_t i = ff_offset[f]; i < ff_offset[f + 1]; ++i) {
+            uint32_t n = ff_values[i];
+            if (f < n && m_face_patch[f] != m_face_patch[n]) {
+                face_edge_cut++;
+            }
+        }
+    }
+
+    uint32_t vertex_edge_cut = 0;
+
+    using EdgeMapT = std::unordered_map<std::pair<uint32_t, uint32_t>,
+                                        uint32_t,
+                                        detail::edge_key_hash>;
+
+    EdgeMapT edges_map;
+    uint32_t num_edges = 0;
+
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        for (uint32_t i = 0; i < fv[f].size(); ++i) {
+
+            uint32_t v0 = fv[f][i];
+            uint32_t v1 = fv[f][(i + 1) % fv[f].size()];
+
+            std::pair<uint32_t, uint32_t> edge = detail::edge_key(v0, v1);
+
+            auto e_iter = edges_map.find(edge);
+
+            if (e_iter == edges_map.end()) {
+                uint32_t edge_id = num_edges++;
+                edges_map.insert(std::make_pair(edge, edge_id));
+
+                if (m_vertex_patch[v0] != m_vertex_patch[v1]) {
+                    vertex_edge_cut++;
+                }
+            }
+        }
+    }
+
+    RXMESH_INFO("Patcher: (Face) Edge Cut = {}, (Vertex) Edge Cut = {} ",
+                face_edge_cut,
+                vertex_edge_cut);
+}
 void Patcher::print_statistics()
 {
     RXMESH_TRACE("Patcher: num_patches = {}", m_num_patches);
@@ -534,9 +587,9 @@ void Patcher::bfs(const std::vector<uint32_t>& ff_offset,
     }
 }
 
-void Patcher::postprocess(const std::vector<std::vector<uint32_t>>& fv,
-                          const std::vector<uint32_t>&              ff_offset,
-                          const std::vector<uint32_t>&              ff_values)
+void Patcher::extract_ribbons(const std::vector<std::vector<uint32_t>>& fv,
+                              const std::vector<uint32_t>& ff_offset,
+                              const std::vector<uint32_t>& ff_values)
 {
     // Post process the patches by extracting the ribbons
     // For patch P, we start first by identifying boundary faces; faces that has
