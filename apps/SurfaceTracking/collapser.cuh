@@ -11,18 +11,18 @@
 
 
 template <typename T, uint32_t blockThreads>
-__global__ static void __launch_bounds__(blockThreads)
-    edge_collapse(rxmesh::Context                   context,
-                  rxmesh::VertexAttribute<T>        position,
-                  rxmesh::VertexAttribute<int8_t>   vertex_rank,
-                  rxmesh::EdgeAttribute<EdgeStatus> edge_status,
-                  rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
-                  rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
-                  const T                           collapser_min_edge_length,
-                  const T                           max_volume_change,
-                  const T                           min_triangle_area,
-                  const T                           min_triangle_angle,
-                  const T                           max_triangle_angle)
+__global__ static void  //__launch_bounds__(blockThreads)
+edge_collapse(rxmesh::Context                   context,
+              rxmesh::VertexAttribute<T>        position,
+              rxmesh::VertexAttribute<int8_t>   vertex_rank,
+              rxmesh::EdgeAttribute<EdgeStatus> edge_status,
+              rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
+              rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
+              const T                           collapser_min_edge_length,
+              const T                           max_volume_change,
+              const T                           min_triangle_area,
+              const T                           min_triangle_angle,
+              const T                           max_triangle_angle)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();

@@ -12,17 +12,17 @@ enum class EdgeSplitPredicate
 
 
 template <typename T, uint32_t blockThreads>
-__global__ static void __launch_bounds__(blockThreads)
-    split_edges(rxmesh::Context                   context,
-                const rxmesh::VertexAttribute<T>  position,
-                rxmesh::EdgeAttribute<EdgeStatus> edge_status,
-                rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
-                rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
-                const T                           splitter_max_edge_length,
-                const T                           min_triangle_area,
-                const T                           min_triangle_angle,
-                const T                           max_triangle_angle,
-                const EdgeSplitPredicate          predicate)
+__global__ static void  //__launch_bounds__(blockThreads)
+split_edges(rxmesh::Context                   context,
+            const rxmesh::VertexAttribute<T>  position,
+            rxmesh::EdgeAttribute<EdgeStatus> edge_status,
+            rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
+            rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
+            const T                           splitter_max_edge_length,
+            const T                           min_triangle_area,
+            const T                           min_triangle_angle,
+            const T                           max_triangle_angle,
+            const EdgeSplitPredicate          predicate)
 {
     using namespace rxmesh;
 
