@@ -1,6 +1,6 @@
 #pragma once
 #include "rxmesh/cavity_manager.cuh"
-#include "../ShortestEdgeCollapse/link_condition.cuh"
+#include "../Remesh/link_condition.cuh"
 
 #include <cooperative_groups.h>
 #include <cuda_runtime.h>
@@ -55,7 +55,7 @@ __global__ static void secp(rxmesh::Context                   context,
 
     // 2a) check edge link condition.
     link_condition(block, cavity.patch_info(), ev_query, 
-                   edge_mask, v0_mask, v1_mask);
+                   edge_mask, v0_mask, v1_mask, 0, 1);
     block.sync();
 
     for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
