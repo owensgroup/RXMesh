@@ -10,7 +10,7 @@
 #include "rxmesh/matrix/permute_util.h"
 
 // if we should calc and use vertex weight in max match
-//#define USE_V_WEIGHTS
+// #define USE_V_WEIGHTS
 
 namespace rxmesh {
 
@@ -839,8 +839,8 @@ void permute_separators(RXMeshStatic&              rx,
     CUDA_ERROR(cudaMalloc((void**)&d_dfs_index, sizeof(int) * count_size));
 
     int* d_cut_size(nullptr);
-    //CUDA_ERROR(cudaMalloc((void**)&d_cut_size, sizeof(int)));
-    //CUDA_ERROR(cudaMemset(d_cut_size, 0, sizeof(int)));
+    // CUDA_ERROR(cudaMalloc((void**)&d_cut_size, sizeof(int)));
+    // CUDA_ERROR(cudaMemset(d_cut_size, 0, sizeof(int)));
 
 
     CUDA_ERROR(cudaMalloc((void**)&d_count, sizeof(int) * (count_size + 1)));
@@ -922,7 +922,7 @@ void permute_separators(RXMeshStatic&              rx,
         //  }
     }
 
-    //RXMESH_INFO("Sum Edge Cut Size = {}", sum_edge_cut);
+    // RXMESH_INFO("Sum Edge Cut Size = {}", sum_edge_cut);
 
     thrust::exclusive_scan(
         thrust::device, d_count, d_count + count_size, d_count);

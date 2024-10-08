@@ -1244,7 +1244,7 @@ __inline__ __device__ void bi_assignment_ggp(
                             ::atomicAdd(&s_num_B_vertices, 1);
                         }
                         s_next_frontier_v.set(v, true);
-                        //printf("\n reg growing %u", v);
+                        // printf("\n reg growing %u", v);
                     }
                 }
             }
@@ -1334,13 +1334,13 @@ __inline__ __device__ void bi_assignment_ggp(
                     const uint16_t end   = s_vv_offset[v + 1];
 
 
-                    // put isolated vertices on the frontier right away so we
-                    // don't have to deal with them again
-                    // int num_neighbours = 0;
+                    // check if the vertex is isolated
+                    int num_neighbours = 0;
 
                     for (uint16_t vv = start; vv < end; ++vv) {
                         const uint16_t nv = s_vv[vv];
                         if (s_active_v(nv)) {
+                            num_neighbours++;
                             if (is_a) {
                                 if (s_partition_b_v(nv)) {
                                     on_frontier = true;
@@ -1353,6 +1353,14 @@ __inline__ __device__ void bi_assignment_ggp(
                                 }
                             }
                         }
+                    }
+
+                    if (num_neighbours == 0) {
+                        // if the vertex is isolated, then we mark it
+                        // as assigned but we don't put it on the frontier
+                        assert(!on_frontier);
+                        s_assigned_v.set(v, true);
+                        ::atomicAdd(&s_num_assigned_vertices, 1);
                     }
                 }
                 if (on_frontier) {
@@ -1375,6 +1383,8 @@ __inline__ __device__ void bi_assignment_ggp(
     // s_seed_a and s_seed_b. In the last iteration in this while loop, (one of)
     // the most interior seed will be finally written
     auto compute_interior = [&]() {
+        int num_assigned_prv_iter = 0;
+
         while (s_num_assigned_vertices < s_num_active_vertices) {
             block.sync();
             for (uint16_t v = threadIdx.x; v < num_vertices;
@@ -1428,6 +1438,13 @@ __inline__ __device__ void bi_assignment_ggp(
             s_current_frontier_v.copy(block, s_next_frontier_v);
             block.sync();
             s_next_frontier_v.reset(block);
+
+            if (s_num_assigned_vertices == num_assigned_prv_iter) {
+                // means that we have not no made any progress in this iteration
+                // probably because we have a disconnected patch
+                break;
+            }
+            num_assigned_prv_iter = s_num_assigned_vertices;
         }
     };
 
