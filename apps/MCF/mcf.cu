@@ -75,7 +75,7 @@ int main(int argc, char** argv)
                         " -perm:              Permutation method for Cholesky factorization. Default is {}\n"
                         " -max_cg_iter:       Conjugate gradient maximum number of iterations. Default is {}\n"                                            
                         " -device_id:         GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.output_folder,  (Arg.use_uniform_laplace? "true" : "false"), Arg.solver, Arg.time_step, Arg.cg_tolerance, Arg.perm_method, Arg.max_num_cg_iter, Arg.device_id);
+            Arg.obj_file_name, Arg.output_folder,  (Arg.use_uniform_laplace? "true" : "false"), Arg.time_step, Arg.solver, Arg.cg_tolerance, Arg.perm_method, Arg.max_num_cg_iter, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
