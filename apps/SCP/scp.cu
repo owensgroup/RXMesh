@@ -61,17 +61,17 @@ __global__ static void conformal_energy(const Context                context,
         assert(p.is_valid() && q.is_valid());
         assert(o0.is_valid() || o1.is_valid());
 
-        const vec3<float> P(coord(p, 0), coord(p, 1), coord(p, 2));
-        const vec3<float> Q(coord(q, 0), coord(q, 1), coord(q, 2));
+        const vec3<float> P = coord.to_glm<3>(p);
+        const vec3<float> Q = coord.to_glm<3>(q);
 
         float coef = 0;
 
         if (o0.is_valid()) {
-            const vec3<float> O0(coord(o0, 0), coord(o0, 1), coord(o0, 2));
+            const vec3<float> O0 = coord.to_glm<3>(o0);
             coef += weight(P, Q, O0);
         }
         if (o1.is_valid()) {
-            const vec3<float> O1(coord(o1, 0), coord(o1, 1), coord(o1, 2));
+            const vec3<float> O1 = coord.to_glm<3>(o1);
             coef += weight(P, Q, O1);
         }
 

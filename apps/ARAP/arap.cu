@@ -30,10 +30,10 @@ __global__ static void calc_edge_weights_mat(
             return;
         }
 
-        const vec3<T> p(coords(p_id, 0), coords(p_id, 1), coords(p_id, 2));
-        const vec3<T> r(coords(r_id, 0), coords(r_id, 1), coords(r_id, 2));
-        const vec3<T> q(coords(q_id, 0), coords(q_id, 1), coords(q_id, 2));
-        const vec3<T> s(coords(s_id, 0), coords(s_id, 1), coords(s_id, 2));
+        const vec3<T> p = coords.to_glm<3>(p_id);
+        const vec3<T> r = coords.to_glm<3>(r_id);
+        const vec3<T> q = coords.to_glm<3>(q_id);
+        const vec3<T> s = coords.to_glm<3>(s_id);
 
         // cotans[(v1, v2)] =np.dot(e1, e2) / np.linalg.norm(np.cross(e1, e2))
 

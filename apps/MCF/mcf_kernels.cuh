@@ -20,10 +20,10 @@ edge_cotan_weight(const rxmesh::VertexHandle&       p_id,
     // q and s composes the diamond around p-r
     using namespace rxmesh;
 
-    const vec3<T> p(X(p_id, 0), X(p_id, 1), X(p_id, 2));
-    const vec3<T> r(X(r_id, 0), X(r_id, 1), X(r_id, 2));
-    const vec3<T> q(X(q_id, 0), X(q_id, 1), X(q_id, 2));
-    const vec3<T> s(X(s_id, 0), X(s_id, 1), X(s_id, 2));
+    const vec3<T> p = X.to_glm<3>(p_id);
+    const vec3<T> r = X.to_glm<3>(r_id);
+    const vec3<T> q = X.to_glm<3>(q_id);
+    const vec3<T> s = X.to_glm<3>(s_id);
 
     return edge_cotan_weight(p, r, q, s);
 }
@@ -42,9 +42,9 @@ partial_voronoi_area(const rxmesh::VertexHandle&       p_id,  // center
     // the triangle p->q->r (oriented ccw)
     using namespace rxmesh;
 
-    const vec3<T> p(X(p_id, 0), X(p_id, 1), X(p_id, 2));
-    const vec3<T> q(X(q_id, 0), X(q_id, 1), X(q_id, 2));
-    const vec3<T> r(X(r_id, 0), X(r_id, 1), X(r_id, 2));
+    const vec3<T> p = X.to_glm<3>(p_id);
+    const vec3<T> q = X.to_glm<3>(q_id);
+    const vec3<T> r = X.to_glm<3>(r_id);
 
     return partial_voronoi_area(p, q, r);
 }

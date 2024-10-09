@@ -88,7 +88,7 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rx,
     // Verify
     v_normals->move(rxmesh::DEVICE, rxmesh::HOST);
 
-    rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
+     rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
         uint32_t v_id = rx.map_to_global(vh);
 
         for (uint32_t i = 0; i < 3; ++i) {

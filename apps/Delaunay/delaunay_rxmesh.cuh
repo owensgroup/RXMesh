@@ -67,10 +67,10 @@ __global__ static void __launch_bounds__(blockThreads)
 
             constexpr T PII = 3.14159265358979323f;
 
-            const vec3 V0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-            const vec3 V1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-            const vec3 V2(coords(v2, 0), coords(v2, 1), coords(v2, 2));
-            const vec3 V3(coords(v3, 0), coords(v3, 1), coords(v3, 2));
+            const vec3 V0 = coords.to_glm<3>(v0);
+            const vec3 V1 = coords.to_glm<3>(v1);
+            const vec3 V2 = coords.to_glm<3>(v2);
+            const vec3 V3 = coords.to_glm<3>(v3);            
 
             // find the angle between S, M, Q vertices (i.e., angle at M)
             auto angle_between_three_vertices = [](const vec3& S,

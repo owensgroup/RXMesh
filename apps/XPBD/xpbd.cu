@@ -19,8 +19,8 @@ void __global__ init_edges(const Context                context,
         auto v0 = iter[0];
         auto v1 = iter[1];
 
-        const glm::fvec3 x0(x(v0, 0), x(v0, 1), x(v0, 2));
-        const glm::fvec3 x1(x(v1, 0), x(v1, 1), x(v1, 2));
+        const glm::fvec3 x0 = x.to_glm<3>(v0);
+        const glm::fvec3 x1 = x.to_glm<3>(v1);
 
         rest_len(eh, 0) = glm::length(x0 - x1);
     };
@@ -49,8 +49,8 @@ void __global__ solve_stretch(const Context                context,
         auto v0 = iter[0];
         auto v1 = iter[1];
 
-        const glm::fvec3 x0(new_x(v0, 0), new_x(v0, 1), new_x(v0, 2));
-        const glm::fvec3 x1(new_x(v1, 0), new_x(v1, 1), new_x(v1, 2));
+        const glm::fvec3 x0 = new_x.to_glm<3>(v0);
+        const glm::fvec3 x1 = new_x.to_glm<3>(v1);
 
         const float w1(invM(v0, 0)), w2(invM(v1, 0));
 

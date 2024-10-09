@@ -658,6 +658,23 @@ class Attribute : public AttributeBase
 
 
     /**
+     * @brief Accessing the attribute a glm vector. This is used for read only
+     * since the return result is a copy
+     */
+    template <int N>
+    __host__ __device__ __inline__ vec<T, N> to_glm(const HandleT& handle) const
+    {
+        assert(N == get_num_attributes());
+
+        vec<T, N> ret;
+
+        for (int i = 0; i < N; ++i) {
+            ret[i] = this->operator()(handle, i);
+        }
+        return ret;
+    }
+
+    /**
      * @brief Accessing an attribute using a handle to the mesh element
      * @param handle input handle
      * @param attr the attribute id

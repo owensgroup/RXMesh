@@ -29,8 +29,8 @@ __global__ static void stats_kernel(const rxmesh::Context            context,
     ShmemAllocator shrd_alloc;
 
     auto compute_edge_len = [&](const EdgeHandle eh, const VertexIterator& ev) {
-        const vec3<T> v0(coords(ev[0], 0), coords(ev[0], 1), coords(ev[0], 2));
-        const vec3<T> v1(coords(ev[1], 0), coords(ev[1], 1), coords(ev[1], 2));
+        const vec3<T> v0 = coords.to_glm<3>(ev[0]);
+        const vec3<T> v1 = coords.to_glm<3>(ev[1]);
 
         T len = glm::distance(v0, v1);
 

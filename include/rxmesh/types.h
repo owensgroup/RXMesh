@@ -7,30 +7,35 @@
 
 namespace rxmesh {
 
-template <typename T>
-using vec1 = glm::vec<1, T, glm::defaultp>;
+template <typename T, int N>
+using vec = glm::vec<N, T, glm::defaultp>;
 
 template <typename T>
-using vec2 = glm::vec<2, T, glm::defaultp>;
+using vec1 = vec<T, 1>;
 
 template <typename T>
-using vec3 = glm::vec<3, T, glm::defaultp>;
+using vec2 = vec<T, 2>;
 
 template <typename T>
-using mat2x2 = glm::mat<2, 2, T, glm::defaultp>;
+using vec3 = vec<T, 3>;
+
+template <typename T, int N, int M>
+using mat = glm::mat<N, M, T, glm::defaultp>;
 
 template <typename T>
-using mat3x2 = glm::mat<3, 2, T, glm::defaultp>;
+using mat2x2 = mat<T, 2, 2>;
 
 template <typename T>
-using mat2x3 = glm::mat<2, 3, T, glm::defaultp>;
+using mat3x2 = mat<T, 3, 2>;
 
 template <typename T>
-using mat3x3 = glm::mat<3, 3, T, glm::defaultp>;
+using mat2x3 = mat<T, 2, 3>;
 
 template <typename T>
-using mat4x4 = glm::mat<4, 4, T, glm::defaultp>;
+using mat3x3 = mat<T, 3, 3>;
 
+template <typename T>
+using mat4x4 = mat<T, 4, 4>;
 
 /**
  * @brief Flags for where data resides. Used with Attributes
