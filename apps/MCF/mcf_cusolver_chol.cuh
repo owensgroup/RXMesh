@@ -224,8 +224,10 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     RXMESH_INFO("permute_alloc took {} (ms), {} (ms)",
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
-    report.add_member("permute_alloc", timer.elapsed_millis());
-    total_time += timer.elapsed_millis();
+    report.add_member(
+        "permute_alloc",
+        std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
     timer.start();
     gtimer.start();
@@ -235,8 +237,9 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     RXMESH_INFO("permute took {} (ms), {} (ms)",
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
-    report.add_member("permute", timer.elapsed_millis());
-    total_time += timer.elapsed_millis();
+    report.add_member(
+        "permute", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
 
     timer.start();
@@ -247,8 +250,10 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     RXMESH_INFO("analyze_pattern took {} (ms), {} (ms)",
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
-    report.add_member("analyze_pattern", timer.elapsed_millis());
-    total_time += timer.elapsed_millis();
+    report.add_member(
+        "analyze_pattern",
+        std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
 
     timer.start();
@@ -259,9 +264,10 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     RXMESH_INFO("post_analyze_alloc took {} (ms), {} (ms)",
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
-    report.add_member("post_analyze_alloc", timer.elapsed_millis());
-    total_time += timer.elapsed_millis();
-
+    report.add_member(
+        "post_analyze_alloc",
+        std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
     timer.start();
     gtimer.start();
@@ -271,8 +277,9 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     RXMESH_INFO("factorize took {} (ms), {} (ms)",
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
-    report.add_member("factorize", timer.elapsed_millis());
-    total_time += timer.elapsed_millis();
+    report.add_member(
+        "factorize", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
 
     timer.start();
@@ -283,8 +290,9 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     RXMESH_INFO("solve took {} (ms), {} (ms)",
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
-    report.add_member("solve", timer.elapsed_millis());
-    total_time += timer.elapsed_millis();
+    report.add_member(
+        "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
     report.add_member("total_time", total_time);
 
@@ -293,10 +301,10 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     // move the results to the host
     // if we use LU, the data will be on the host and we should not move the
     // device to the host
-    //X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
+    // X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // copy the results to attributes
-    //coords->from_matrix(X_mat.get());
+    // coords->from_matrix(X_mat.get());
 
 #if USE_POLYSCOPE
     // rx.get_polyscope_mesh()->updateVertexPositions(*coords);

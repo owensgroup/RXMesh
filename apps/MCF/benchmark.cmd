@@ -21,10 +21,10 @@ rem Flag to indicate whether to start processing files
 set start_processing=0
 
 rem Define the file name to start processing from
-set start_file=C:\Github\RXMesh\input\SI\bell_x1-complete_with_vane-smooth.obj
+set start_file=C:\Github\RXMesh\input\SI\greek-slave-plaster-cast-master-geometry.obj
 
 rem Loop over each directory
-for %%d in (%input_dir4% %input_dir1% %input_dir2% %input_dir3%) do (
+for %%d in (%input_dir1% %input_dir2% %input_dir3% %input_dir4%) do (
     for %%f in (%%d\*.obj) do (
 		echo %%f
         if not "!start_processing!"=="1" (
@@ -34,8 +34,8 @@ for %%d in (%input_dir4% %input_dir1% %input_dir2% %input_dir3%) do (
             )
         ) else (
             if exist "%%f" (
-                echo %exe% -input "%%f" -device_id %device_id% -perm_method symamd
-                %exe% -input "%%f" -device_id %device_id% -perm_method symamd
+                echo %exe% -input "%%f" -device_id %device_id% -perm nstdis
+                %exe% -input "%%f" -device_id %device_id% -perm nstdis
             )
         )
     )
