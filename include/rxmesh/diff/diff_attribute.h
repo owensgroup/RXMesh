@@ -1,5 +1,7 @@
 #pragma once
 
+
+
 #include "rxmesh/attribute.h"
 #include "rxmesh/diff/scalar.h"
 
@@ -21,9 +23,9 @@ class DiffAttribute : public Attribute<Scalar<T, Size, WithHessian>, HandleT>
     }
 
     explicit DiffAttribute(const char*   name,
-                           uint32_t      num_attributes,  // not used
+                           uint32_t      num_attributes,
                            locationT     location,
-                           layoutT       layout,  // not used
+                           layoutT       layout,
                            RXMeshStatic* rxmesh)
         : Attribute<ScalarType, HandleT>(name,
                                          num_attributes,
@@ -32,7 +34,6 @@ class DiffAttribute : public Attribute<Scalar<T, Size, WithHessian>, HandleT>
                                          rxmesh)
     {
     }
-
 
     /**
      * @brief return the value of the Scalar type as an attribute. The only
