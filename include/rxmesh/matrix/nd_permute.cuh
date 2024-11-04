@@ -1300,6 +1300,10 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
     // MaxMatchTree<int> ggp_max_match_tree;
     GGGP(rx, p_graph, max_match_tree);
 
+    // ERIC TODO 
+    // TODO1: do the FM refinement
+    // TODO2: First do th GGGP on the higher level and then do the max matching for the lower level
+
     RXMESH_INFO("Max Match Tree");
     max_match_tree.print();
 
