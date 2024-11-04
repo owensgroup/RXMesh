@@ -29,9 +29,13 @@ void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     std::vector<int> h_permute(eigen_mat.rows());
 
+    RXMESH_INFO(" No-permutation before fill.");
+
     fill_with_sequential_numbers(h_permute.data(), h_permute.size());
 
     // render_permutation(rx, h_permute, "No_PERM");
+
+    RXMESH_INFO(" Before count_nnz_fillin");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "natural");
 
@@ -248,13 +252,13 @@ TEST(Apps, NDReorder)
 
     cuda_query(Arg.device_id);
 
-    const std::string p_file = STRINGIFY(OUTPUT_DIR) +
-                               extract_file_name(Arg.obj_file_name) +
-                               "_patches";
-    RXMeshStatic rx(Arg.obj_file_name, p_file);
-    if (!std::filesystem::exists(p_file)) {
-        rx.save(p_file);
-    }
+    // const std::string p_file = STRINGIFY(OUTPUT_DIR) +
+    //                            extract_file_name(Arg.obj_file_name) +
+    //                            "_patches";
+    RXMeshStatic rx(Arg.obj_file_name);
+    // if (!std::filesystem::exists(p_file)) {
+    //     rx.save(p_file);
+    // }
 
     // VV matrix
     rxmesh::SparseMatrix<float> rx_mat(rx);
@@ -276,6 +280,8 @@ TEST(Apps, NDReorder)
     // convert matrix to Eigen
     auto eigen_mat = rx_mat.to_eigen();
 
+    RXMESH_INFO(" Eigen Matrix NNZ = {}", eigen_mat.nonZeros());
+
     no_permute(rx, eigen_mat);
 
     with_amd(rx, rx_mat, eigen_mat);
@@ -288,7 +294,7 @@ TEST(Apps, NDReorder)
 
     with_gpu_nd(rx, eigen_mat);
 
-    // polyscope::show();
+    polyscope::show();
 }
 
 int main(int argc, char** argv)

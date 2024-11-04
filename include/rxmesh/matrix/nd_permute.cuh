@@ -412,6 +412,256 @@ void heavy_max_matching(const RXMeshStatic&      rx,
     heavy_max_matching(rx, c_graph, max_match_tree);
 }
 
+template <typename integer_t>
+void GGGP(const RXMeshStatic&      rx,
+          const Graph<integer_t>&  graph,
+          MaxMatchTree<integer_t>& max_match_tree)
+{
+    std::vector<integer_t> node_partition_mapping(graph.n, 0);
+    std::vector<integer_t> local_node_partition_mapping(graph.n, 0);
+
+    // the partitioning process lambda function
+    auto process_partition = [&](integer_t current_partition) {
+        integer_t local_n = std::count(node_partition_mapping.begin(),
+                                       node_partition_mapping.end(),
+                                       current_partition);
+
+        if (local_n <= 1) {
+            // if there is only one node in the partition, then we are done
+            return;
+        }
+
+        // select the node with the min edge weight sum as the starting node
+        integer_t min_edge_sum = std::numeric_limits<integer_t>::max();
+        integer_t start_node   = integer_t(-1);
+        integer_t new_partition_node_count = 0;
+        integer_t edge_cut_weight          = 0;
+        for (integer_t i = 0; i < graph.n; ++i) {
+
+            if (node_partition_mapping[i] != current_partition) {
+                // skip the node if it is not in the partition
+                continue;
+            }
+
+            integer_t edge_sum = 0;
+            for (integer_t j = graph.xadj[i]; j < graph.xadj[i + 1]; ++j) {
+
+                if (node_partition_mapping[graph.adjncy[j]] !=
+                    current_partition) {
+                    // skip the node if it is not in the partition
+                    continue;
+                }
+
+                edge_sum += graph.e_weights[j];
+            }
+            if (edge_sum < min_edge_sum) {
+                min_edge_sum = edge_sum;
+                start_node   = i;
+            }
+        }
+
+        assert(start_node != integer_t(-1));
+
+        // set the initial seed start node for the new partition
+        // old local partition is 0,
+        // new local partition is 1
+        local_node_partition_mapping[start_node] = 1;
+        new_partition_node_count                 = 1;
+        edge_cut_weight                          = min_edge_sum;
+
+        while (new_partition_node_count < (local_n / 2)) {
+            // add the node what would introduce the lowest edge cut weight
+            // increase
+            integer_t min_edge_cut = std::numeric_limits<integer_t>::max();
+            integer_t next_node    = integer_t(-1);
+            for (integer_t i = 0; i < graph.n; ++i) {
+                if (node_partition_mapping[i] != current_partition) {
+                    // skip the node if it is not in the partition
+                    continue;
+                }
+
+                if (local_node_partition_mapping[i] == 1) {
+                    // skip the node if it is already in the new partition
+                    continue;
+                }
+
+                integer_t tmp_edge_cut            = edge_cut_weight;
+                bool      is_adj_to_new_partition = false;
+                for (integer_t j = graph.xadj[i]; j < graph.xadj[i + 1]; ++j) {
+                    if (node_partition_mapping[graph.adjncy[j]] !=
+                        current_partition) {
+                        // skip the node if it is not in the partition
+                        continue;
+                    }
+
+                    if (local_node_partition_mapping[graph.adjncy[j]] == 1) {
+                        // the node is adjacent to the new partition, the edge
+                        // cut weight will decrease
+                        is_adj_to_new_partition = true;
+                        tmp_edge_cut -= graph.e_weights[j];
+                    } else {
+                        // the node is adjacent to the old partition, the edge
+                        // cut weight will increase
+                        tmp_edge_cut += graph.e_weights[j];
+                    }
+                }
+
+                if (is_adj_to_new_partition && tmp_edge_cut < min_edge_cut) {
+                    min_edge_cut = tmp_edge_cut;
+                    next_node    = i;
+                }
+            }
+
+            assert(next_node != integer_t(-1));
+
+            new_partition_node_count++;
+            edge_cut_weight                         = min_edge_cut;
+            local_node_partition_mapping[next_node] = 1;
+        }
+
+        // RXMESH_INFO("Partition {} has {} nodes", current_partition, local_n);
+        // RXMESH_INFO("Partition {} has {} nodes in the new partition",
+        //             current_partition,
+        //             new_partition_node_count);
+        // // print node_partition_mapping and local_node_partition_mapping
+        // RXMESH_INFO("node_partition_mapping:");
+        // for (int i = 0; i < graph.n; ++i) {
+        //     std::cout << node_partition_mapping[i] << " ";
+        // }
+        // std::cout << std::endl;
+
+        // RXMESH_INFO("local_node_partition_mapping:");
+        // for (int i = 0; i < graph.n; ++i) {
+        //     std::cout << local_node_partition_mapping[i] << " ";
+        // }
+        // std::cout << std::endl;
+    };
+
+    // start the partitioning process loop
+    integer_t current_partition_process_level = 0;
+    bool      is_done                         = false;
+    while (!is_done) {
+        // process the partition
+        for (integer_t i = 0; i < (1 << current_partition_process_level); ++i) {
+            process_partition(i);
+        }
+
+        // check the mapping before we move to the next level
+        RXMESH_INFO("MAIN - node_partition_mapping:");
+        for (int i = 0; i < graph.n; ++i) {
+            std::cout << node_partition_mapping[i] << " ";
+        }
+        std::cout << std::endl;
+
+
+        for (integer_t i = 0; i < graph.n; ++i) {
+            node_partition_mapping[i] = (node_partition_mapping[i] << 1) +
+                                        local_node_partition_mapping[i];
+        }
+
+        std::fill(local_node_partition_mapping.begin(),
+                  local_node_partition_mapping.end(),
+                  0);
+
+        RXMESH_INFO(" ---------- MAIN ---------- ");
+
+        RXMESH_INFO("MAIN - node_partition_mapping after shift:");
+        for (int i = 0; i < graph.n; ++i) {
+            std::cout << node_partition_mapping[i] << " ";
+        }
+        std::cout << std::endl;
+
+        std::vector<integer_t> sorted_mapping;
+        sorted_mapping = node_partition_mapping;
+        std::sort(sorted_mapping.begin(), sorted_mapping.end());
+
+        RXMESH_INFO("MAIN - sorted_mapping:");
+        for (int i = 0; i < graph.n; ++i) {
+            std::cout << sorted_mapping[i] << " ";
+        }
+        std::cout << std::endl;
+
+        // fill the max match tree for current level
+        max_match_tree.levels.insert(max_match_tree.levels.begin(),
+                                     Level<integer_t>());
+        auto& level      = max_match_tree.levels.front();
+        level.patch_proj = node_partition_mapping;
+
+        // fill current level nodes
+        for (int i = 0; i < (1 << (current_partition_process_level)); ++i) {
+            level.nodes.push_back(
+                Node<integer_t>(integer_t(-1), integer_t(-1)));
+
+            Node<integer_t>& node = level.nodes.back();
+
+            assert(std::find(node_partition_mapping.begin(),
+                             node_partition_mapping.end(),
+                             i) !=
+                   node_partition_mapping.end());  // must be found
+
+            node.lch = (i << 1);
+
+            assert (std::find(node_partition_mapping.begin(),
+                          node_partition_mapping.end(),
+                          i + 1) != node_partition_mapping.end());
+                // partition found
+            node.rch = (i << 1) + 1;
+
+            node.pa = i;
+        }
+
+        RXMESH_INFO(" ---------- LEVEL DONE ---------- ");
+
+        // check if we are done
+        // if every node is in a unique partition, then we are done
+        is_done = true;
+
+        // is_done = *std::max_element(node_partition_mapping.begin(),
+        //                            node_partition_mapping.end()) >
+        //                            node_partition_mapping.size();
+
+        std::unordered_set<int> elementSet;
+        for (const auto& element : node_partition_mapping) {
+            elementSet.insert(element);
+        }
+
+        is_done = elementSet.size() == node_partition_mapping.size();
+
+        if (is_done) {
+            break;
+        }
+
+        current_partition_process_level++;
+    }
+
+    // fill the last level of the max match tree
+    Level<integer_t>& level = max_match_tree.levels.front();
+    for (int i = 0; i < (1 << (current_partition_process_level)); ++i) {
+         Node<integer_t>& node = level.nodes[i];
+        
+        // processing lch
+        auto find_iter = std::find(node_partition_mapping.begin(),
+                         node_partition_mapping.end(),
+                         i << 1);
+        assert(find_iter != node_partition_mapping.end());  // must be found
+        integer_t index = std::distance(node_partition_mapping.begin(), find_iter);
+        node.lch = index;
+
+        // processing rch
+        find_iter = std::find(node_partition_mapping.begin(),
+                         node_partition_mapping.end(),
+                         (i << 1) + 1);
+        if (find_iter != node_partition_mapping.end()) {
+            // partition found
+            index = std::distance(node_partition_mapping.begin(), find_iter);
+            node.rch = index;
+        } else {
+            // partition not found
+            node.rch = node.lch;
+        }
+    }
+}
+
 namespace detail {
 
 template <uint32_t blockThreads>
@@ -561,7 +811,7 @@ __global__ static void extract_separators(const Context        context,
                 s_v_local_id[v_id.local_id()] =
                     ::atomicAdd(&s_patch_total, int(1));
 
-                //::atomicAdd(d_cut_size, int(1));
+                // ::atomicAdd(d_cut_size, int(1));
 
                 // d_permute[context.linear_id(v_id)] =
                 //     ::atomicAdd(&d_count[d_dfs_index[index]], int(1));
@@ -858,19 +1108,19 @@ void permute_separators(RXMeshStatic&              rx,
                           count_size * sizeof(int),
                           cudaMemcpyHostToDevice));
 
-    // auto v_render = *rx.add_vertex_attribute<int>("Render", 1);
-    // v_render.reset(-1, LOCATION_ALL);
+    auto v_render = *rx.add_vertex_attribute<int>("Render", 1);
+    v_render.reset(-1, LOCATION_ALL);
 
 
-    // for (int l = depth - 1; l >= 0; --l) {
-    //     rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
-    //         int proj     =
-    //         max_match_tree.levels[l].patch_proj[vh.patch_id()]; v_render(vh)
-    //         = proj;
-    //     });
-    //     rx.get_polyscope_mesh()->addVertexScalarQuantity(
-    //         "Match " + std::to_string(l), v_render);
-    // }
+    for (int l = depth - 1; l >= 0; --l) {
+        rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
+            int proj     =
+            max_match_tree.levels[l].patch_proj[vh.patch_id()]; v_render(vh)
+            = proj;
+        });
+        rx.get_polyscope_mesh()->addVertexScalarQuantity(
+            "Match " + std::to_string(l), v_render);
+    }
 
     int sum_edge_cut = 0;
 
@@ -1044,8 +1294,17 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
 
     // create max match tree
     MaxMatchTree<int> max_match_tree;
-    heavy_max_matching(rx, p_graph, max_match_tree);
+    // heavy_max_matching(rx, p_graph, max_match_tree);
 
+    // test the GGGP function
+    // MaxMatchTree<int> ggp_max_match_tree;
+    GGGP(rx, p_graph, max_match_tree);
+
+    RXMESH_INFO("Max Match Tree");
+    max_match_tree.print();
+
+    // RXMESH_INFO("GGGP Max Match Tree");
+    // ggp_max_match_tree.print();
 
     permute_separators(rx,
                        v_index,
