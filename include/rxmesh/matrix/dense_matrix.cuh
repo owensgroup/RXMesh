@@ -38,10 +38,16 @@ struct DenseMatrix
           m_d_val(nullptr),
           m_h_val(nullptr),
           m_col_pad_bytes(0),
-          m_col_pad_idx(0)
+          m_col_pad_idx(0),
+          index_style(true)
     {
     }
 
+    bool  index_style;
+    void change_index()
+    {
+        index_style != index_style;        
+    }
 
     DenseMatrix(const RXMesh& rx,
                 IndexT        num_rows,
@@ -55,7 +61,8 @@ struct DenseMatrix
           m_d_val(nullptr),
           m_cublas_handle(nullptr),
           m_col_pad_bytes(0),
-          m_col_pad_idx(0)
+          m_col_pad_idx(0),
+          index_style(true)
     {
 
         IndexT col_data_bytes = m_num_rows * sizeof(T);
@@ -107,13 +114,27 @@ struct DenseMatrix
      * @brief set all entries in the matrix to certain value on both host and
      * device
      */
-    __host__ void set_value(T val)
+    __host__ void reset(T val, locationT location, cudaStream_t stream = NULL)
     {
-        std::fill_n(m_h_val, rows() * cols(), val);
-        CUDA_ERROR(cudaMemcpy(m_d_val,
-                              m_h_val,
-                              rows() * cols() * sizeof(T),
-                              cudaMemcpyHostToDevice));
+
+        bool do_device = (location & DEVICE) == DEVICE;
+        bool do_host   = (location & DEVICE) == DEVICE;
+
+        if (do_device && do_host) {
+            std::fill_n(m_h_val, rows() * cols(), val);
+            CUDA_ERROR(cudaMemcpyAsync(m_d_val,
+                                       m_h_val,
+                                       rows() * cols() * sizeof(T),
+                                       cudaMemcpyHostToDevice,
+                                       stream));
+        } else if (do_device) {
+            const int    threads = 512;
+            const IndexT nnz     = rows() * cols();
+            memset<<<DIVIDE_UP(nnz, threads), threads, 0, stream>>>(
+                m_d_val, val, nnz);
+        } else if (do_host) {
+            std::fill_n(m_h_val, rows() * cols(), val);
+        }
     }
 
     /**
@@ -209,9 +230,9 @@ struct DenseMatrix
         assert(col < m_num_cols);
 
 #ifdef __CUDA_ARCH__
-        return m_d_val[col * (m_num_rows + m_col_pad_idx) + row];
+        return m_d_val[get_index(row, col)];
 #else
-        return m_h_val[col * (m_num_rows + m_col_pad_idx) + row];
+        return m_h_val[get_index(row, col)];
 #endif
     }
 
@@ -226,9 +247,9 @@ struct DenseMatrix
         assert(col < m_num_cols);
 
 #ifdef __CUDA_ARCH__
-        return m_d_val[col * (m_num_rows + m_col_pad_idx) + row];
+        return m_d_val[get_index(row, col)];
 #else
-        return m_h_val[col * (m_num_rows + m_col_pad_idx) + row];
+        return m_h_val[get_index(row, col)];
 #endif
     }
 
@@ -379,9 +400,9 @@ struct DenseMatrix
      * (cuComplex and cuDoubleComplex), it is optional to use the conjugate of
      * x.
      */
-    __host__ T dot(DenseMatrix<T>& x,
-                   bool            use_conjugate = false,
-                   cudaStream_t    stream        = NULL)
+    __host__ T dot(const DenseMatrix<T>& x,
+                   bool                  use_conjugate = false,
+                   cudaStream_t          stream        = NULL) const
     {
         CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
         if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double> &&
@@ -874,6 +895,20 @@ struct DenseMatrix
             CUDA_ERROR(cudaMalloc((void**)&m_d_val, bytes()));
 
             m_allocated = m_allocated | DEVICE;
+        }
+    }
+
+
+    /**
+     * @brief return the 1d indext given the row and column id
+     */
+    __host__ __device__ __inline__ int get_index(uint32_t row,
+                                                 uint32_t col) const
+    {
+        if (index_style) {
+            return col * (m_num_rows + m_col_pad_idx) + row;
+        } else {
+            return col + row * m_num_cols;
         }
     }
 
