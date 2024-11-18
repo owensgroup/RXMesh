@@ -111,43 +111,47 @@ Patcher::Patcher(uint32_t                                        patch_size,
         assign_patch(fv, edges_map);
     } else {
 
-        if (use_metis) {
-            metis_kway(ff_offset, ff_values);
+        if (false) {
+            grid();
         } else {
-            initialize_random_seeds(seeds, ff_offset, ff_values);
-            allocate_device_memory(seeds,
-                                   ff_offset,
-                                   ff_values,
-                                   d_face_patch,
-                                   d_queue,
-                                   d_queue_ptr,
-                                   d_ff_values,
-                                   d_ff_offset,
-                                   d_cub_temp_storage_scan,
-                                   d_cub_temp_storage_max,
-                                   cub_scan_bytes,
-                                   cub_max_bytes,
-                                   d_seeds,
-                                   d_new_num_patches,
-                                   d_max_patch_size,
-                                   d_patches_offset,
-                                   d_patches_size,
-                                   d_patches_val);
-            run_lloyd(d_face_patch,
-                      d_queue,
-                      d_queue_ptr,
-                      d_ff_values,
-                      d_ff_offset,
-                      d_cub_temp_storage_scan,
-                      d_cub_temp_storage_max,
-                      cub_scan_bytes,
-                      cub_max_bytes,
-                      d_seeds,
-                      d_new_num_patches,
-                      d_max_patch_size,
-                      d_patches_offset,
-                      d_patches_size,
-                      d_patches_val);
+            if (use_metis) {
+                metis_kway(ff_offset, ff_values);
+            } else {
+                initialize_random_seeds(seeds, ff_offset, ff_values);
+                allocate_device_memory(seeds,
+                                       ff_offset,
+                                       ff_values,
+                                       d_face_patch,
+                                       d_queue,
+                                       d_queue_ptr,
+                                       d_ff_values,
+                                       d_ff_offset,
+                                       d_cub_temp_storage_scan,
+                                       d_cub_temp_storage_max,
+                                       cub_scan_bytes,
+                                       cub_max_bytes,
+                                       d_seeds,
+                                       d_new_num_patches,
+                                       d_max_patch_size,
+                                       d_patches_offset,
+                                       d_patches_size,
+                                       d_patches_val);
+                run_lloyd(d_face_patch,
+                          d_queue,
+                          d_queue_ptr,
+                          d_ff_values,
+                          d_ff_offset,
+                          d_cub_temp_storage_scan,
+                          d_cub_temp_storage_max,
+                          cub_scan_bytes,
+                          cub_max_bytes,
+                          d_seeds,
+                          d_new_num_patches,
+                          d_max_patch_size,
+                          d_patches_offset,
+                          d_patches_size,
+                          d_patches_val);
+            }
         }
         extract_ribbons(fv, ff_offset, ff_values);
         // bfs(ff_offset, ff_values);
@@ -172,6 +176,21 @@ Patcher::Patcher(uint32_t                                        patch_size,
     GPU_FREE(d_patches_offset);
     GPU_FREE(d_patches_size);
     GPU_FREE(d_patches_val);
+}
+
+void Patcher::grid()
+{
+    // this only work if the input is a mesh coming from create_plane()
+    // where are laid out sequenetially and so we can just group them using
+    // their id
+
+    m_num_patches = DIVIDE_UP(m_num_faces, m_patch_size);
+
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        m_face_patch[f] = f / m_patch_size;
+    }
+
+    compute_inital_compressed_patches();
 }
 
 Patcher::~Patcher()
@@ -1108,18 +1127,30 @@ void Patcher::metis_kway(const std::vector<uint32_t>& ff_offset,
     }
 
     m_num_patches = nparts;
-    m_patches_offset.resize(m_num_patches, 0);
-    std::vector<uint32_t> patches_size(m_num_patches, 0);
+
     for (uint32_t f = 0; f < m_num_faces; ++f) {
         m_face_patch[f] = part[f];
-        patches_size[part[f]]++;
+    }
+
+    compute_inital_compressed_patches();
+}
+
+void Patcher::compute_inital_compressed_patches()
+{
+    m_patches_offset.resize(m_num_patches, 0);
+
+    std::vector<uint32_t> patches_size(m_num_patches, 0);
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        patches_size[m_face_patch[f]]++;
     }
 
     std::inclusive_scan(
         patches_size.begin(), patches_size.end(), m_patches_offset.begin());
 
     if (m_patches_offset.back() != m_num_faces) {
-        RXMESH_ERROR("Patcher::metis_kway()  Error with creating patch graph");
+        RXMESH_ERROR(
+            "Patcher::compute_inital_compressed_patches()  Error with creating "
+            "patch graph");
         exit(EXIT_FAILURE);
     }
 

@@ -214,6 +214,15 @@ class Patcher
                                 uint32_t*& d_patches_size,
                                 uint32_t*& d_patches_val);
 
+    void grid();
+
+
+    /**
+     * @brief form initial face assigement, compute the compressed storage of 
+     * the patches (i.e., populate m_patches_val and m_patches_offset)
+     */
+    void compute_inital_compressed_patches();
+
     void assign_patch(
         const std::vector<std::vector<uint32_t>>&                 fv,
         const std::unordered_map<std::pair<uint32_t, uint32_t>,
