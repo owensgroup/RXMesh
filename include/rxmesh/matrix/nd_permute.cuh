@@ -500,13 +500,13 @@ __global__ static void extract_separators(const Context        context,
                                           const int*           d_patch_proj_l,
                                           const int*           d_patch_proj_l1,
                                           VertexAttribute<int> v_index,
-                                          // VertexAttribute<int> v_render,
-                                          int*       d_permute,
-                                          int        current_level,
-                                          int        depth,
-                                          const int* d_dfs_index,
-                                          int*       d_count,
-                                          int*       d_cut_size)
+                                          //VertexAttribute<int> v_render,
+                                          int*                 d_permute,
+                                          int                  current_level,
+                                          int                  depth,
+                                          const int*           d_dfs_index,
+                                          int*                 d_count,
+                                          int*                 d_cut_size)
 {
     // d_patch_proj_l is the patch projection on this level
     // d_patch_proj_l1 is the patch projection on the next level (i.e.,
@@ -621,12 +621,12 @@ __global__ static void extract_separators(const Context        context,
 
 }  // namespace detail
 
-void create_dfs_indexing(const int                level,
-                         const int                node,
-                         int&                     current_id,
-                         const MaxMatchTree<int>& max_match_tree,
-                         std::vector<bool>&       visited,
-                         std::vector<int>&        dfs_index)
+inline void create_dfs_indexing(const int                level,
+                                const int                node,
+                                int&                     current_id,
+                                const MaxMatchTree<int>& max_match_tree,
+                                std::vector<bool>&       visited,
+                                std::vector<int>&        dfs_index)
 {
     const int S     = max_match_tree.levels.size() - level - 1;
     const int shift = (1 << S) - 1;
@@ -668,8 +668,8 @@ void create_dfs_indexing(const int                level,
     }
 }
 
-void single_patch_nd_permute(RXMeshStatic&              rx,
-                             VertexAttribute<uint16_t>& v_local_permute)
+inline void single_patch_nd_permute(RXMeshStatic&              rx,
+                                    VertexAttribute<uint16_t>& v_local_permute)
 {
 
     constexpr uint32_t blockThreads = 256;
@@ -770,13 +770,13 @@ void single_patch_nd_permute(RXMeshStatic&              rx,
 #endif
 }
 
-void permute_separators(RXMeshStatic&              rx,
-                        VertexAttribute<int>&      v_index,
-                        VertexAttribute<uint16_t>& v_local_permute,
-                        MaxMatchTree<int>&         max_match_tree,
-                        int*                       d_permute,
-                        int*                       d_patch_proj_l,
-                        int*                       d_patch_proj_l1)
+inline void permute_separators(RXMeshStatic&              rx,
+                               VertexAttribute<int>&      v_index,
+                               VertexAttribute<uint16_t>& v_local_permute,
+                               MaxMatchTree<int>&         max_match_tree,
+                               int*                       d_permute,
+                               int*                       d_patch_proj_l,
+                               int*                       d_patch_proj_l1)
 {
 
 
@@ -968,7 +968,7 @@ void permute_separators(RXMeshStatic&              rx,
     GPU_FREE(d_count);
 }
 
-void nd_permute(RXMeshStatic& rx, int* h_permute)
+inline void nd_permute(RXMeshStatic& rx, int* h_permute)
 {
 
     auto v_index = *rx.add_vertex_attribute<int>("index", 1);
