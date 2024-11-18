@@ -125,6 +125,7 @@ struct SparseMatrix
           m_context(Context()),
           m_cusparse_handle(NULL),
           m_descr(NULL),
+          m_replicate(0),
           m_spdescr(NULL),
           m_spmm_buffer_size(0),
           m_spmv_buffer_size(0),
@@ -149,8 +150,10 @@ struct SparseMatrix
     {
     }
 
+    SparseMatrix(const RXMeshStatic& rx) : SparseMatrix(rx, 1){};
 
-    SparseMatrix(const RXMeshStatic& rx)
+   protected:
+    SparseMatrix(const RXMeshStatic& rx, IndexT replicate)
         : m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
           m_d_val(nullptr),
@@ -163,6 +166,7 @@ struct SparseMatrix
           m_context(rx.get_context()),
           m_cusparse_handle(NULL),
           m_descr(NULL),
+          m_replicate(replicate),
           m_spdescr(NULL),
           m_spmm_buffer_size(0),
           m_spmv_buffer_size(0),
@@ -192,25 +196,25 @@ struct SparseMatrix
         IndexT num_vertices = rx.get_num_vertices();
         IndexT num_edges    = rx.get_num_edges();
 
-        m_num_rows = num_vertices;
-        m_num_cols = num_vertices;
+        m_num_rows = num_vertices * m_replicate;
+        m_num_cols = num_vertices * m_replicate;
 
         // row pointer allocation and init with prefix sum for CSR
         CUDA_ERROR(cudaMalloc((void**)&m_d_row_ptr,
-                              (num_vertices + 1) * sizeof(IndexT)));
+                              (m_num_rows + 1) * sizeof(IndexT)));
 
         CUDA_ERROR(
-            cudaMemset(m_d_row_ptr, 0, (num_vertices + 1) * sizeof(IndexT)));
+            cudaMemset(m_d_row_ptr, 0, (m_num_rows + 1) * sizeof(IndexT)));
 
         LaunchBox<blockThreads> launch_box;
         rx.prepare_launch_box({Op::VV},
                               launch_box,
                               (void*)detail::sparse_mat_prescan<blockThreads>);
 
-        detail::sparse_mat_prescan<blockThreads>
-            <<<launch_box.blocks,
-               launch_box.num_threads,
-               launch_box.smem_bytes_dyn>>>(m_context, m_d_row_ptr);
+        detail::sparse_mat_prescan<blockThreads><<<launch_box.blocks,
+                                                   launch_box.num_threads,
+                                                   launch_box.smem_bytes_dyn>>>(
+            m_context, m_d_row_ptr, m_replicate);
 
         // prefix sum using CUB.
         void*  d_cub_temp_storage = nullptr;
@@ -219,20 +223,20 @@ struct SparseMatrix
                                       temp_storage_bytes,
                                       m_d_row_ptr,
                                       m_d_row_ptr,
-                                      num_vertices + 1);
+                                      m_num_rows + 1);
         CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage, temp_storage_bytes));
 
         cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
                                       temp_storage_bytes,
                                       m_d_row_ptr,
                                       m_d_row_ptr,
-                                      num_vertices + 1);
+                                      m_num_rows + 1);
 
         CUDA_ERROR(cudaFree(d_cub_temp_storage));
 
         // get nnz
         CUDA_ERROR(cudaMemcpy(&m_nnz,
-                              (m_d_row_ptr + num_vertices),
+                              (m_d_row_ptr + m_num_rows),
                               sizeof(IndexT),
                               cudaMemcpyDeviceToHost));
 
@@ -246,7 +250,8 @@ struct SparseMatrix
             <<<launch_box.blocks,
                launch_box.num_threads,
                launch_box.smem_bytes_dyn>>>(
-                m_context, m_d_row_ptr, m_d_col_idx);
+                m_context, m_d_row_ptr, m_d_col_idx, m_replicate);
+
 
         // allocate value ptr
         CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_nnz * sizeof(T)));
@@ -302,17 +307,74 @@ struct SparseMatrix
 
         CUSPARSE_ERROR(cusparseSetPointerMode(m_cusparse_handle,
                                               CUSPARSE_POINTER_MODE_HOST));
+
+#ifndef NDEBUG
+        // sanity check: no repeated indices in the col_id for a specific row
+        for (IndexT r = 0; r < rows(); ++r) {
+            IndexT start = m_h_row_ptr[r];
+            IndexT stop  = m_h_row_ptr[r + 1];
+
+            std::set<IndexT> cols;
+            for (IndexT i = start; i < stop; ++i) {
+                IndexT c = m_h_col_idx[i];
+                if (cols.find(c) != cols.end()) {
+                    RXMESH_ERROR(
+                        "SparseMatrix::SparseMatrix() Error in constructing "
+                        "the sparse matrix. Row {} contains repeated column "
+                        "indices {}",
+                        r,
+                        c);
+                }
+                cols.insert(c);
+            }
+        }
+
+#endif
+    }
+
+   public:
+    /**
+     * @brief export the matrix to a file that can be opened by MATLAB (i.e.,
+     * 1-based indices)
+     */
+    __host__ void to_file(std::string file_name)
+    {
+        std::ofstream file(file_name);
+        if (!file.is_open()) {
+            RXMESH_ERROR("SparseMatrix::to_file() Can not open file {}",
+                         file_name);
+            return;
+        }
+
+        for_each([&](IndexT r, IndexT c, T val) {
+            file << r + 1 << " " << c + 1 << " " << val << std::endl;
+        });
+        file.close();
     }
 
     /**
      * @brief set all entries in the matrix to certain value on both host and
      * device
      */
-    __host__ void set_value(T val)
+    __host__ void reset(T val, locationT location, cudaStream_t stream = NULL)
     {
-        std::fill_n(m_h_val, m_nnz, val);
-        CUDA_ERROR(cudaMemcpy(
-            m_d_val, m_h_val, m_nnz * sizeof(T), cudaMemcpyHostToDevice));
+        bool do_device = (location & DEVICE) == DEVICE;
+        bool do_host   = (location & DEVICE) == DEVICE;
+
+        if (do_device && do_host) {
+            std::fill_n(m_h_val, m_nnz, val);
+            CUDA_ERROR(cudaMemcpyAsync(m_d_val,
+                                       m_h_val,
+                                       m_nnz * sizeof(T),
+                                       cudaMemcpyHostToDevice,
+                                       stream));
+        } else if (do_device) {
+            const int threads = 512;
+            memset<<<DIVIDE_UP(m_nnz, threads), threads, 0, stream>>>(
+                m_d_val, val, m_nnz);
+        } else if (do_host) {
+            std::fill_n(m_h_val, m_nnz, val);
+        }
     }
 
 
@@ -1567,7 +1629,7 @@ struct SparseMatrix
     }
 
 
-   private:
+   protected:
     __host__ void release(locationT location)
     {
         if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
@@ -1877,6 +1939,8 @@ struct SparseMatrix
     cusolverSpHandle_t   m_cusolver_sphandle;
     cusparseSpMatDescr_t m_spdescr;
     cusparseMatDescr_t   m_descr;
+
+    int m_replicate;
 
     IndexT m_num_rows;
     IndexT m_num_cols;
