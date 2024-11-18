@@ -57,6 +57,14 @@ struct VertexHandle
     }
 
     /**
+     * @brief Constructor with known (packed) handle
+     */
+    constexpr __device__ __host__ VertexHandle(uint64_t handle)
+        : m_handle(handle)
+    {
+    }
+
+    /**
      * @brief Constructor meant to be used internally by RXMesh and
      * query_dispatcher
      * @param patch_id the patch where the vertex belongs
@@ -146,6 +154,13 @@ struct EdgeHandle
      * @brief Default constructor
      */
     constexpr __device__ __host__ EdgeHandle() : m_handle(INVALID64)
+    {
+    }
+
+    /**
+     * @brief Constructor with known (packed) handle
+     */
+    constexpr __device__ __host__ EdgeHandle(uint64_t handle) : m_handle(handle)
     {
     }
 
@@ -386,6 +401,13 @@ struct FaceHandle
      * @brief Default constructor
      */
     constexpr __device__ __host__ FaceHandle() : m_handle(INVALID64)
+    {
+    }
+
+    /**
+     * @brief Constructor with known (packed) handle
+     */
+    constexpr __device__ __host__ FaceHandle(uint64_t handle) : m_handle(handle)
     {
     }
 
