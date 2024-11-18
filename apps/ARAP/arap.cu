@@ -246,18 +246,18 @@ int main(int argc, char** argv)
     // compute weights
     auto weights = rx.add_edge_attribute<float>("edgeWeights", 1);
     SparseMatrix<float> weight_matrix(rx);
-    weight_matrix.set_value(0.f);
+    weight_matrix.reset(0.f, LOCATION_ALL);
 
     // system matrix
     SparseMatrix<float> laplace_mat(rx);
-    laplace_mat.set_value(0.f);
+    laplace_mat.reset(0.f, LOCATION_ALL);
 
     // rotation matrix as a very attribute where every vertex has 3x3 matrix
     auto rotations = *rx.add_vertex_attribute<float>("RotationMatrix", 9);
 
     // b-matrix
     DenseMatrix<float> b_mat(rx, rx.get_num_vertices(), 3);
-    b_mat.set_value(0.f);
+    b_mat.reset(0.f, LOCATION_ALL);
 
     // obtain cotangent weight matrix
     rxmesh::LaunchBox<CUDABlockSize> lb;

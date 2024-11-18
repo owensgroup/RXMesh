@@ -251,7 +251,7 @@ TEST(Apps, NDReorder)
     const std::string p_file = STRINGIFY(OUTPUT_DIR) +
                                extract_file_name(Arg.obj_file_name) +
                                "_patches";
-    RXMeshStatic rx(Arg.obj_file_name, p_file);
+    RXMeshStatic rx(Arg.obj_file_name /*,p_file*/);
     if (!std::filesystem::exists(p_file)) {
         rx.save(p_file);
     }
