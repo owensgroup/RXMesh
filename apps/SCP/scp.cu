@@ -122,7 +122,7 @@ int main(int argc, char** argv)
 
     // compute conformal energy matrix Lc
     SparseMatrix<cuComplex> Lc(rx);
-    Lc.set_value(make_cuComplex(0.f, 0.f));
+    Lc.reset(make_cuComplex(0.f, 0.f), LOCATION_ALL);
     rxmesh::LaunchBox<CUDABlockSize> lb;
     rx.prepare_launch_box(
         {Op::EVDiamond}, lb, (void*)conformal_energy<CUDABlockSize>);
@@ -139,10 +139,10 @@ int main(int argc, char** argv)
 
     // Compute B and eb matrix
     DenseMatrix<cuComplex> eb(rx, rx.get_num_vertices(), 1);
-    eb.set_value(make_cuComplex(0.f, 0.f));
+    eb.reset(make_cuComplex(0.f, 0.f), LOCATION_ALL);
 
     SparseMatrix<cuComplex> B(rx);
-    B.set_value(make_cuComplex(0.f, 0.f));
+    B.reset(make_cuComplex(0.f, 0.f), LOCATION_ALL);
 
     float nb = 1.f / std::sqrt(float(num_bd_vertices));
     rx.for_each_vertex(
@@ -154,7 +154,7 @@ int main(int argc, char** argv)
 
     // temp mat needed for the power method
     DenseMatrix<cuComplex> T1(rx, rx.get_num_vertices(), 1);
-    T1.set_value(make_cuComplex(0.f, 0.f));
+    T1.reset(make_cuComplex(0.f, 0.f), LOCATION_ALL);
 
 
     // fill-in the init solution of the eigen vector with random values
