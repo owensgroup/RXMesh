@@ -15,7 +15,7 @@ namespace detail {
 
 template <uint32_t rowOffset,
           uint32_t blockThreads,
-          uint32_t itemPerThread = TRANSPOSE_ITEM_PER_THREAD>
+          int      itemPerThread = TRANSPOSE_ITEM_PER_THREAD>
 __device__ __forceinline__ void block_mat_transpose(
     const uint32_t  num_rows,
     const uint32_t  num_cols,
@@ -36,7 +36,7 @@ __device__ __forceinline__ void block_mat_transpose(
         return threadIdx.x + blockThreads * i;
     };
 
-    for (uint16_t i = 0; i < itemPerThread; ++i) {
+    for (int i = 0; i < itemPerThread; ++i) {
         uint16_t id = index(i);
         // avoid reading out-of-bound from mat
         if (id < nnz) {
@@ -115,7 +115,8 @@ __device__ __forceinline__ void e_v_diamond(
 
     uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
 
-    for (uint16_t e = threadIdx.x; e < 4 * num_edges; e += blockThreads) {
+    int c = 4 * int(num_edges);
+    for (int e = threadIdx.x; e < c; e += blockThreads) {
         s_output_value[e] = INVALID16;
     }
     block.sync();
@@ -126,42 +127,48 @@ __device__ __forceinline__ void e_v_diamond(
                s_fe,
                true);
 
-    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-        const uint16_t src = patch_info.ev[2 * e + 0].id;
-        const uint16_t dst = patch_info.ev[2 * e + 1].id;
+    c = 2 * int(num_edges);
+    for (int e = threadIdx.x; e < c; e += blockThreads) {
+        uint16_t edge    = e / 2;
+        uint16_t local_v = e % 2;
 
-        s_output_value[4 * e + 0] = src;
-        s_output_value[4 * e + 2] = dst;
+        const uint16_t vertex = patch_info.ev[2 * edge + local_v].id;
+
+        local_v *= 2;
+
+        s_output_value[4 * edge + local_v] = vertex;
     }
     block.sync();
 
-    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+    c = 3 * int(num_faces);
+    for (int f = threadIdx.x; f < c; f += blockThreads) {
+        uint16_t face = f / 3;
+        if (!is_deleted(face, patch_info.active_mask_f)) {
+            uint16_t local_e = f % 3;
+            uint16_t edge_i  = INVALID16;
+            flag_t   dir_i   = 0;
+            Context::unpack_edge_dir(s_fe[f], edge_i, dir_i);
 
-        if (!is_deleted(f, patch_info.active_mask_f)) {
-            uint16_t f_v[3];
-            uint16_t f_e[3];
-            flag_t   f_dir[3];
-            for (int i = 0; i < 3; ++i) {
-                f_e[i] = s_fe[3 * f + i];
-                Context::unpack_edge_dir(f_e[i], f_e[i], f_dir[i]);
-                assert(f_e[i] < num_edges);
-                uint16_t id = (4 * f_e[i]) + (2 * f_dir[i]);
-                assert(id < 4 * num_edges);
-                f_v[i] = s_output_value[id];
-                assert(f_v[i] < patch_info.num_vertices[0]);
-            }
+            // the vertex at the end of this edge
+            assert(edge_i < num_edges);
+            uint16_t id = (4 * edge_i) + (2 * dir_i);
+            assert(id < 4 * num_edges);
+            uint16_t vertex_i = s_output_value[id];
+            assert(vertex_i < patch_info.num_vertices[0]);
 
-            for (int i = 0; i < 3; ++i) {
-                uint16_t v = f_v[(i + 2) % 3];
-                // if f_dir[i]==0 --> 4 * f_e[i] + 1
-                // if f_dir[i]==1 --> 4 * f_e[i] + 3
-                uint32_t id = (4 * f_e[i] + 1) + (2 * f_dir[i]);
-                assert(id < 4 * num_edges);
-                s_output_value[id] = v;
-            }
+            // the edge where vertex_i is oppsoite to it
+            uint16_t local_e1 = (local_e + 1) % 3;
+            uint16_t edge_i1  = INVALID16;
+            flag_t   dir_i1   = 0;
+            Context::unpack_edge_dir(
+                s_fe[3 * face + local_e1], edge_i1, dir_i1);
+            // if dir_i1==0 --> 4 * edge_i1 + 1
+            // if dir_i1==1 --> 4 * edge_i1 + 3
+            id = (4 * edge_i1 + 1) + (2 * dir_i1);
+            assert(id < 4 * num_edges);
+            s_output_value[id] = vertex_i;
         }
     }
-
 
     shrd_alloc.dealloc<uint16_t>(3 * num_faces);
 }
@@ -180,14 +187,17 @@ __device__ __forceinline__ void e_e_manifold(
     const uint16_t num_edges(patch_info.num_edges[0]),
         num_faces(patch_info.num_faces[0]);
 
-    s_output_value = shrd_alloc.alloc<uint16_t>(4 * num_edges);
+    int c = 4 * int(num_edges);
 
-    for (uint16_t e = threadIdx.x; e < 4 * num_edges; e += blockThreads) {
+    s_output_value = shrd_alloc.alloc<uint16_t>(c);
+
+
+    for (int e = threadIdx.x; e < c; e += blockThreads) {
         s_output_value[e] = INVALID16;
     }
     block.sync();
 
-    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+    for (int f = threadIdx.x; f < int(num_faces); f += blockThreads) {
 
         if (!is_deleted(f, patch_info.active_mask_f)) {
 
@@ -249,7 +259,8 @@ __device__ __forceinline__ void e_f_manifold(const uint16_t  num_edges,
                                              const uint32_t* active_mask_f)
 {
     // s_ef should be filled with INVALID16 before calling this function
-    for (uint16_t e = threadIdx.x; e < 3 * num_faces; e += blockThreads) {
+    int c = 3 * int(num_faces);
+    for (int e = threadIdx.x; e < c; e += blockThreads) {
         uint16_t face_id = e / 3;
 
         assert(face_id < num_faces);
@@ -317,8 +328,8 @@ __device__ __forceinline__ void orient_edges_around_vertices(
         // reason to orient its edges because no serious computation is done on
         // it
 
-        uint16_t start = s_output_offset[v];
-        uint16_t end   = s_output_offset[v + 1];
+        int start = int(s_output_offset[v]);
+        int end   = int(s_output_offset[v + 1]);
 
 
         assert(end >= start);
@@ -326,7 +337,7 @@ __device__ __forceinline__ void orient_edges_around_vertices(
 
         // if the mesh is not closed, pick a boundary edge as starting point
         // TODO we may eliminate this in case of closed mesh
-        for (uint16_t e_id = start; e_id < end; ++e_id) {
+        for (int e_id = start; e_id < end; ++e_id) {
             uint16_t e_0 = s_output_value[e_id];
             uint16_t f0(s_ef[2 * e_0]), f1(s_ef[2 * e_0 + 1]);
             if (f0 == INVALID16 || f1 == INVALID16) {
@@ -370,7 +381,7 @@ __device__ __forceinline__ void orient_edges_around_vertices(
                 }
             }
 
-            for (uint16_t vn = e_id + 1; vn < end; ++vn) {
+            for (int vn = e_id + 1; vn < end; ++vn) {
                 uint16_t e_winning_candid = s_output_value[vn];
                 if (e_candid_0 == e_winning_candid ||
                     e_candid_1 == e_winning_candid) {
@@ -446,7 +457,7 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
     if (!oriented && smem_dup) {
         s_ev_duplicate =
             shrd_alloc.alloc<uint16_t>(2 * patch_info.num_edges[0]);
-        for (uint16_t i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
+        for (int i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
             s_ev_duplicate[i] = s_output_offset[i];
         }
         // we should sync here to avoid writing to s_ev before reading it into
@@ -604,7 +615,7 @@ __device__ __forceinline__ void f_f(const uint16_t  num_edges,
 
     // copy FE in to EF_offset so we can do the transpose in place without
     // losing FE
-    for (uint16_t i = threadIdx.x; i < num_faces * 3; i += blockThreads) {
+    for (int i = threadIdx.x; i < num_faces * 3; i += blockThreads) {
         flag_t   dir(0);
         uint16_t e     = s_FE[i] >> 1;
         s_EF_offset[i] = e;
@@ -623,9 +634,9 @@ __device__ __forceinline__ void f_f(const uint16_t  num_edges,
 
     // TODO we can store this sum of neighbor faces in registers and then do
     // the exclusive sum on it and finally store it in shared memory
-    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+    for (int f = threadIdx.x; f < int(num_faces); f += blockThreads) {
         uint16_t num_neighbour_faces = 0;
-        for (uint16_t e = 0; e < 3; ++e) {
+        for (int e = 0; e < 3; ++e) {
             uint16_t edge = s_FE[3 * f + e];
 
             assert(s_EF_offset[edge + 1] >= s_EF_offset[edge]);
@@ -639,11 +650,11 @@ __device__ __forceinline__ void f_f(const uint16_t  num_edges,
 
     cub_block_exclusive_sum<uint16_t, blockThreads>(s_FF_offset, num_faces);
 
-    for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+    for (int f = threadIdx.x; f < int(num_faces); f += blockThreads) {
         uint16_t offset = s_FF_offset[f];
-        for (uint16_t e = 0; e < 3; ++e) {
+        for (int e = 0; e < 3; ++e) {
             uint16_t edge = s_FE[3 * f + e];
-            for (uint16_t ef = s_EF_offset[edge]; ef < s_EF_offset[edge + 1];
+            for (int ef = s_EF_offset[edge]; ef < int(s_EF_offset[edge + 1]);
                  ++ef) {
                 uint16_t n_face = s_EF_output[ef];
                 if (n_face != f) {
