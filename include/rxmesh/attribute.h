@@ -21,6 +21,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 
+#include <Eigen/Dense>
+
 class RXMeshTest;
 
 
@@ -659,7 +661,7 @@ class Attribute : public AttributeBase
 
     /**
      * @brief Accessing the attribute a glm vector. This is used for read only
-     * since the return result is a copy
+     * since the return result is a copy.
      */
     template <int N>
     __host__ __device__ __inline__ vec<T, N> to_glm(const HandleT& handle) const
@@ -669,6 +671,25 @@ class Attribute : public AttributeBase
         vec<T, N> ret;
 
         for (int i = 0; i < N; ++i) {
+            ret[i] = this->operator()(handle, i);
+        }
+        return ret;
+    }
+
+
+    /**
+     * @brief Accessing the attribute a Eigen matrix. This is used for read only
+     * since the return result is a copy.
+     */
+    template <int N>
+    __host__ __device__ __inline__ Eigen::Matrix<T, N, 1> to_eigen(
+        const HandleT& handle) const
+    {
+        assert(N == get_num_attributes());
+
+        Eigen::Matrix<T, N, 1> ret;
+
+        for (Eigen::Index i = 0; i < N; ++i) {
             ret[i] = this->operator()(handle, i);
         }
         return ret;
