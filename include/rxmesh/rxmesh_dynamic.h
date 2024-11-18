@@ -726,6 +726,7 @@ class RXMeshDynamic : public RXMeshStatic
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,
                             launch_box.num_registers_per_thread,
+                            launch_box.local_mem_per_thread,
                             blockThreads,
                             kernel);
     }
@@ -883,6 +884,7 @@ class RXMeshDynamic : public RXMeshStatic
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,
                             launch_box.num_registers_per_thread,
+                            launch_box.local_mem_per_thread,
                             blockThreads,
                             kernel,
                             false);
@@ -1018,12 +1020,14 @@ class RXMeshDynamic : public RXMeshStatic
         auto check = [&](int add_item) {
             size_t   smem_bytes_static;
             uint32_t num_reg_per_thread;
+            size_t   local_mem_per_thread;
 
             if (add_item == 0) {
                 check_shared_memory(
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
+                    local_mem_per_thread,
                     block_size,
                     (void*)detail::slice_patches<block_size,
                                                  TRANSPOSE_ITEM_PER_THREAD + 0>,
@@ -1033,6 +1037,7 @@ class RXMeshDynamic : public RXMeshStatic
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
+                    local_mem_per_thread,
                     block_size,
                     (void*)detail::slice_patches<block_size,
                                                  TRANSPOSE_ITEM_PER_THREAD + 1>,
@@ -1042,6 +1047,7 @@ class RXMeshDynamic : public RXMeshStatic
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
+                    local_mem_per_thread,
                     block_size,
                     (void*)detail::slice_patches<block_size,
                                                  TRANSPOSE_ITEM_PER_THREAD + 2>,
@@ -1051,6 +1057,7 @@ class RXMeshDynamic : public RXMeshStatic
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
+                    local_mem_per_thread,
                     block_size,
                     (void*)detail::slice_patches<block_size,
                                                  TRANSPOSE_ITEM_PER_THREAD + 3>,
@@ -1060,6 +1067,7 @@ class RXMeshDynamic : public RXMeshStatic
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
+                    local_mem_per_thread,
                     block_size,
                     (void*)detail::slice_patches<block_size,
                                                  TRANSPOSE_ITEM_PER_THREAD + 4>,
@@ -1069,6 +1077,7 @@ class RXMeshDynamic : public RXMeshStatic
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
+                    local_mem_per_thread,
                     block_size,
                     (void*)detail::slice_patches<block_size,
                                                  TRANSPOSE_ITEM_PER_THREAD + 5>,

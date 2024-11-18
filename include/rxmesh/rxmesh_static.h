@@ -708,6 +708,7 @@ class RXMeshStatic : public RXMesh
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,
                             launch_box.num_registers_per_thread,
+                            launch_box.local_mem_per_thread,
                             blockThreads,
                             kernel);
     }
@@ -859,11 +860,13 @@ class RXMeshStatic : public RXMesh
     template <class T, int Size, bool WithHessian>
     std::shared_ptr<DiffFaceAttribute<T, Size, WithHessian>>
     add_diff_face_attribute(const std::string& name,
-                            locationT          location = LOCATION_ALL)
+                            uint32_t           num_attributes = 1,
+                            locationT          location       = LOCATION_ALL,
+                            layoutT            layout         = SoA)
     {
         return m_attr_container
             ->template add<DiffFaceAttribute<T, Size, WithHessian>>(
-                name.c_str(), 1, location, SoA, this);
+                name.c_str(), num_attributes, location, layout, this);
     }
 
     /**
@@ -900,11 +903,13 @@ class RXMeshStatic : public RXMesh
     template <class T, int Size, bool WithHessian>
     std::shared_ptr<DiffEdgeAttribute<T, Size, WithHessian>>
     add_diff_edge_attribute(const std::string& name,
-                            locationT          location = LOCATION_ALL)
+                            uint32_t           num_attributes = 1,
+                            locationT          location       = LOCATION_ALL,
+                            layoutT            layout         = SoA)
     {
         return m_attr_container
             ->template add<DiffEdgeAttribute<T, Size, WithHessian>>(
-                name.c_str(), 1, location, SoA, this);
+                name.c_str(), num_attributes, location, layout, this);
     }
 
     /**
@@ -943,11 +948,13 @@ class RXMeshStatic : public RXMesh
     template <class T, int Size, bool WithHessian>
     std::shared_ptr<DiffVertexAttribute<T, Size, WithHessian>>
     add_diff_vertex_attribute(const std::string& name,
-                              locationT          location = LOCATION_ALL)
+                              uint32_t           num_attributes = 1,
+                              locationT          location       = LOCATION_ALL,
+                              layoutT            layout         = SoA)
     {
         return m_attr_container
             ->template add<DiffVertexAttribute<T, Size, WithHessian>>(
-                name.c_str(), 1, location, SoA, this);
+                name.c_str(), num_attributes, location, layout, this);
     }
 
     /**
@@ -1924,6 +1931,7 @@ class RXMeshStatic : public RXMesh
     void check_shared_memory(const uint32_t smem_bytes_dyn,
                              size_t&        smem_bytes_static,
                              uint32_t&      num_reg_per_thread,
+                             size_t&        local_mem_per_thread,
                              const uint32_t num_threads_per_block,
                              const void*    kernel,
                              bool           print = true) const
@@ -1945,16 +1953,20 @@ class RXMeshStatic : public RXMesh
         CUDA_ERROR(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
             &num_blocks_per_sm, kernel, num_threads_per_block, smem_bytes_dyn));
 
+        local_mem_per_thread = func_attr.localSizeBytes;
+
         if (print) {
             RXMESH_TRACE(
                 "RXMeshStatic::check_shared_memory() user function requires "
                 "shared memory = {} (dynamic) + {} (static) = {} (bytes) and "
-                "{} registers per thread with occupancy of {} blocks/SM",
+                "{} registers/thread with occupancy of {} blocks/SM, {} local "
+                "mem/thread (bytes)",
                 smem_bytes_dyn,
                 smem_bytes_static,
                 smem_bytes_dyn + smem_bytes_static,
                 num_reg_per_thread,
-                num_blocks_per_sm);
+                num_blocks_per_sm,
+                local_mem_per_thread);
 
             RXMESH_TRACE(
                 "RXMeshStatic::check_shared_memory() available total shared "
