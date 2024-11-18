@@ -2,7 +2,7 @@
  * This file is part of TinyAD and released under the MIT license.
  * Author: Patrick Schmidt
  *
- * Adding support for the Scalar type to run on both host and device
+ * Update: adding support for the Scalar type to run on both host and device
  * Author: Ahmed Mahmoud
  */
 #pragma once

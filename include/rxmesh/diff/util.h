@@ -14,6 +14,26 @@ namespace rxmesh {
 template <typename PassiveT, int k, bool WithHessian>
 struct Scalar;
 
+
+/**
+ * @brief  Mapping local query index to global index in the gradient/hessian.
+ * The local query index (index_in_iter) is the index used for indexing the
+ * iterator returned from query operations (e.g., query.dispatch). The local_id
+ * is the index of the local variable (e.g., o for u and 1 for v in a
+ * parameterization problem where we optimize the UV coordinates). The returned
+ * index is an index that can be used to index the gradient/hessian, i.e., a 1D
+ * index for an array (e.g., gradient) or matrix (e.g., hessian) that holds all
+ * the optimization variables as 1D indexed variables.
+ */
+template <int VariableDim>
+__device__ __inline__ int index_mapping(uint16_t index_in_iter,
+                                        int      variable_local_id)
+{
+    assert(variable_local_id < VariableDim);
+    return index_in_iter * VariableDim + variable_local_id;
+}
+
+
 /**
  * @brief Assemble matrix from column vectors.
  */

@@ -52,14 +52,13 @@ __global__ static void smoothing(const rxmesh::Context      context,
         e_obj_func(eh) = dist_sq.val;
 
         // add the edge contribution to its two end vertices' grad
-
-        ::atomicAdd(&v_pos_grad(v0, 0), dist_sq.grad[0]);
-        ::atomicAdd(&v_pos_grad(v0, 1), dist_sq.grad[1]);
-        ::atomicAdd(&v_pos_grad(v0, 2), dist_sq.grad[2]);
-
-        ::atomicAdd(&v_pos_grad(v1, 0), dist_sq.grad[3]);
-        ::atomicAdd(&v_pos_grad(v1, 1), dist_sq.grad[4]);
-        ::atomicAdd(&v_pos_grad(v1, 2), dist_sq.grad[5]);
+        for (uint16_t vertex = 0; vertex < iter.size(); ++vertex) {
+            for (int local = 0; local < VariableDim; ++local) {
+                ::atomicAdd(
+                    &v_pos_grad(iter[vertex], local),
+                    dist_sq.grad[index_mapping<VariableDim>(vertex, local)]);
+            }
+        }
     };
 
     auto block = cooperative_groups::this_thread_block();
