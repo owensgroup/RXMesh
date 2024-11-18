@@ -26,11 +26,11 @@ struct GPUTimer
     void stop()
     {
         CUDA_ERROR(cudaEventRecord(m_stop, m_stream));
-        CUDA_ERROR(cudaEventSynchronize(m_stop));
     }
     float elapsed_millis()
     {
         float elapsed = 0;
+        CUDA_ERROR(cudaEventSynchronize(m_stop));
         CUDA_ERROR(cudaEventElapsedTime(&elapsed, m_start, m_stop));
         return elapsed;
     }
