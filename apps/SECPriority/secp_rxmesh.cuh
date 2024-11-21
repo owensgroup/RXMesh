@@ -10,7 +10,7 @@
 
 // Priority Queue related includes
 #include <cuco/priority_queue.cuh>
-#include <cuco/detail/pair.cuh>
+#include <cuco/pair.cuh>
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
