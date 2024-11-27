@@ -56,11 +56,10 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
 
     RXMESH_INFO(" After perm_mat\n");
 
-    // tmp fix from eigen
+    // tmp fix that EIGEN doesn't work
     export_to_plain_text(permuted_mat,
                          std::string("/home/ericyuan/Projects/RXMesh/build/output/")
-                         +
-                             st + std::string(".txt"));
+                         + st + std::string(".txt"));
     
     return 0;
 
@@ -87,20 +86,20 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
     RXMESH_INFO(" before lower_mat\n");
 
     // extract nnz from lower matrix
-    // Eigen::SparseMatrix<float> lower_mat = solver.matrixL();
+    Eigen::SparseMatrix<float> lower_mat = solver.matrixL();
 
-    // // std::cout << "ff\n" << ff << "\n";
+    // std::cout << "ff\n" << ff << "\n";
 
-    // RXMESH_INFO(" After lower_mat\n");
+    RXMESH_INFO(" After lower_mat\n");
 
-    // // these are the nnz on (strictly) the lower part
-    // int lower_nnz = lower_mat.nonZeros() - lower_mat.rows();
+    // these are the nnz on (strictly) the lower part
+    int lower_nnz = lower_mat.nonZeros() - lower_mat.rows();
 
-    // RXMESH_INFO(" After lower_nnz\n");
+    RXMESH_INFO(" After lower_nnz\n");
 
     // multiply by two to account for lower and upper parts of the matrix
     // add rows() to account for entries along the diagonal
-    return 1; // 2 * lower_nnz + lower_mat.rows();
+    return 2 * lower_nnz + lower_mat.rows();
 }
 
 /**
