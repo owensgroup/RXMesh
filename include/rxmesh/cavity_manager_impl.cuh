@@ -66,12 +66,34 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
                 m_context.m_patches_info[s_patch_id].lock.acquire_lock(
                     blockIdx.x);
 
+            // bool locked = true;
+            // if (s_patch_id % 3 != iteration % 3) {
+            //     // if (false) {
+            //     locked = false;
+            // } else {
+            //     locked = true;
+            //     // locked =
+            //     //
+            //     m_context.m_patches_info[s_patch_id].lock.acquire_lock(
+            //     //     blockIdx.x);
+            // }
+
             if (!locked) {
                 // if we can not, we add it again to the queue
                 push(s_patch_id);
 
                 // and signal other threads to also exit
                 s_patch_id = INVALID32;
+            }
+
+            if (locked) {
+                // if we lock the patch but it is dirty, we should unlock and
+                // not work on it
+                if (m_context.m_patches_info[s_patch_id].is_dirty()) {
+                    push(s_patch_id);
+                    m_context.m_patches_info[s_patch_id].lock.release_lock();
+                    s_patch_id = INVALID32;
+                }
             }
         }
 
@@ -154,13 +176,13 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                        reinterpret_cast<uint16_t*>(m_patch_info.ev),
                        2 * m_s_num_edges[0],
                        m_s_ev,
-                       false);
+                       true);
 
     detail::load_async(block,
                        reinterpret_cast<uint16_t*>(m_patch_info.fe),
                        3 * m_s_num_faces[0],
                        m_s_fe,
-                       false);
+                       true);
 
     auto alloc_masks = [&](uint16_t        num_elements,
                            Bitmask&        owned,
@@ -198,12 +220,12 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
                            reinterpret_cast<const char*>(g_owned),
                            owned.num_bytes(),
                            reinterpret_cast<char*>(owned.m_bitmask),
-                           false);
+                           true);
         detail::load_async(block,
                            reinterpret_cast<const char*>(g_active),
                            active.num_bytes(),
                            reinterpret_cast<char*>(active.m_bitmask),
-                           false);
+                           true);
     };
 
 
@@ -337,7 +359,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     // patch stash
     __shared__ uint32_t p_st[PatchStash::stash_size];
     m_s_patch_stash.m_stash = p_st;
-    for (uint32_t i = threadIdx.x; i < PatchStash::stash_size;
+    for (int i = threadIdx.x; i < int(PatchStash::stash_size);
          i += blockThreads) {
         m_s_patch_stash.m_stash[i] = m_patch_info.patch_stash.m_stash[i];
     }
@@ -756,10 +778,12 @@ CavityManager<blockThreads, cop>::construct_cavity_graph(
     };
 
     auto add_graph_edge_by_faces_through_edges = [&]() {
-        for (uint16_t f = threadIdx.x; f < m_s_num_faces[0];
+        for (int f = threadIdx.x; f < int(m_s_num_faces[0]);
              f += blockThreads) {
             assert(f < m_s_active_mask_f.size());
             if (m_s_active_mask_f(f)) {
+
+                assert(!m_patch_info.is_deleted(LocalFaceT(f)));
 
                 // edges tag
                 const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
@@ -775,10 +799,13 @@ CavityManager<blockThreads, cop>::construct_cavity_graph(
                 add_edge_gather(c2, c0);
 
                 if (is_active_cavity(c0)) {
+                    assert(m_s_active_mask_f(f));
                     m_s_cavity_id_f[f] = c0;
                 } else if (is_active_cavity(c1)) {
+                    assert(m_s_active_mask_f(f));
                     m_s_cavity_id_f[f] = c1;
                 } else if (is_active_cavity(c2)) {
+                    assert(m_s_active_mask_f(f));
                     m_s_cavity_id_f[f] = c2;
                 }
             }
@@ -787,7 +814,7 @@ CavityManager<blockThreads, cop>::construct_cavity_graph(
 
 
     auto add_graph_edge_by_edges_through_vertices = [&]() {
-        for (uint16_t e = threadIdx.x; e < m_s_num_edges[0];
+        for (int e = threadIdx.x; e < int(m_s_num_edges[0]);
              e += blockThreads) {
             assert(e < m_s_active_mask_e.size());
             if (m_s_active_mask_e(e)) {
@@ -802,8 +829,10 @@ CavityManager<blockThreads, cop>::construct_cavity_graph(
                 add_edge_gather(c0, c1);
 
                 if (is_active_cavity(c0)) {
+                    assert(m_s_active_mask_e(e));
                     m_s_cavity_id_e[e] = c0;
                 } else if (is_active_cavity(c1)) {
+                    assert(m_s_active_mask_e(e));
                     m_s_cavity_id_e[e] = c1;
                 }
             }
@@ -812,7 +841,7 @@ CavityManager<blockThreads, cop>::construct_cavity_graph(
 
 
     auto add_graph_edge_by_vertices_through_edges = [&]() {
-        for (uint16_t e = threadIdx.x; e < m_s_num_edges[0];
+        for (int e = threadIdx.x; e < int(m_s_num_edges[0]);
              e += blockThreads) {
             assert(e < m_s_active_mask_e.size());
             if (m_s_active_mask_e(e)) {
@@ -831,7 +860,7 @@ CavityManager<blockThreads, cop>::construct_cavity_graph(
 
 
     auto add_graph_edge_by_edges_through_faces = [&]() {
-        for (uint16_t f = threadIdx.x; f < m_s_num_faces[0];
+        for (int f = threadIdx.x; f < int(m_s_num_faces[0]);
              f += blockThreads) {
             assert(f < m_s_active_mask_f.size());
             if (m_s_active_mask_f(f)) {
@@ -975,11 +1004,11 @@ CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
     // because it overlaps with m_s_active_cavity_mis
     m_s_in_cavity_f.reset(block);
     m_s_active_cavity_mis.reset(block);
-            
+
     // because it overlaps with m_s_candidate_cavity_mis
     m_s_recover_f.reset(block);
     m_s_candidate_cavity_mis.reset(block);
-    
+
     // because it overlaps with m_s_cavity_mis
     m_s_ownership_change_mask_f.reset(block);
     m_s_cavity_mis.reset(block);
@@ -1002,18 +1031,21 @@ CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
                           cop == CavityOp::VE || cop == CavityOp::VF) {
                 assert(m_s_active_mask_v(creator));
                 m_s_cavity_id_v[creator] = c;
+                assert(m_s_active_mask_v(creator));
             }
 
             if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
                           cop == CavityOp::EE || cop == CavityOp::EF) {
                 assert(m_s_active_mask_e(creator));
                 m_s_cavity_id_e[creator] = c;
+                assert(m_s_active_mask_e(creator));
             }
 
             if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
                           cop == CavityOp::FE || cop == CavityOp::FF) {
                 assert(m_s_active_mask_f(creator));
                 m_s_cavity_id_f[creator] = c;
+                assert(m_s_active_mask_f(creator));
             }
         }
     }
@@ -1103,7 +1135,7 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void
 CavityManager<blockThreads, cop>::mark_vertices_through_edges()
 {
-    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         assert(e < m_s_active_mask_e.size());
         if (m_s_active_mask_e(e)) {
 
@@ -1112,6 +1144,9 @@ CavityManager<blockThreads, cop>::mark_vertices_through_edges()
 
             const uint16_t v0 = m_s_ev[2 * e + 0];
             const uint16_t v1 = m_s_ev[2 * e + 1];
+
+            assert(m_s_active_mask_v(v0));
+            assert(m_s_active_mask_v(v1));
 
             mark_element_scatter(m_s_cavity_id_v, v0, e_cavity);
             mark_element_scatter(m_s_cavity_id_v, v1, e_cavity);
@@ -1123,7 +1158,7 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void
 CavityManager<blockThreads, cop>::mark_edges_through_faces()
 {
-    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+    for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
         assert(f < m_s_active_mask_f.size());
         if (m_s_active_mask_f(f)) {
 
@@ -1132,6 +1167,10 @@ CavityManager<blockThreads, cop>::mark_edges_through_faces()
             const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
             const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
             const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
+
+            assert(m_s_active_mask_e(e0));
+            assert(m_s_active_mask_e(e0));
+            assert(m_s_active_mask_e(e0));
 
             mark_element_scatter(m_s_cavity_id_e, e0, f_cavity);
             mark_element_scatter(m_s_cavity_id_e, e1, f_cavity);
@@ -1145,7 +1184,7 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void
 CavityManager<blockThreads, cop>::mark_edges_through_vertices()
 {
-    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         assert(e < m_s_active_mask_e.size());
         if (m_s_active_mask_e(e)) {
 
@@ -1155,6 +1194,9 @@ CavityManager<blockThreads, cop>::mark_edges_through_vertices()
 
             const uint16_t c0 = m_s_cavity_id_v[v0];
             const uint16_t c1 = m_s_cavity_id_v[v1];
+
+            assert(m_s_active_mask_v(v0));
+            assert(m_s_active_mask_v(v1));
 
             mark_element_gather(m_s_cavity_id_e, e, c0);
             mark_element_gather(m_s_cavity_id_e, e, c1);
@@ -1167,7 +1209,7 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void
 CavityManager<blockThreads, cop>::mark_faces_through_edges()
 {
-    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+    for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
         assert(f < m_s_active_mask_f.size());
         if (m_s_active_mask_f(f)) {
 
@@ -1176,11 +1218,20 @@ CavityManager<blockThreads, cop>::mark_faces_through_edges()
             const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
             const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
 
+
+            assert(!m_patch_info.is_deleted(LocalFaceT(f)));
+
+            assert(!m_patch_info.is_deleted(LocalEdgeT(e0)));
+            assert(!m_patch_info.is_deleted(LocalEdgeT(e1)));
+            assert(!m_patch_info.is_deleted(LocalEdgeT(e2)));
+
+            assert(m_s_active_mask_e(e0));
+            assert(m_s_active_mask_e(e1));
+            assert(m_s_active_mask_e(e2));
+
             const uint16_t c0 = m_s_cavity_id_e[e0];
             const uint16_t c1 = m_s_cavity_id_e[e1];
             const uint16_t c2 = m_s_cavity_id_e[e2];
-
-            // printf("\n F= %u - cavities= %u, %u, %u", f, c0, c1, c2);
 
             mark_element_gather(m_s_cavity_id_f, f, c0);
             mark_element_gather(m_s_cavity_id_f, f, c1);
@@ -1296,7 +1347,7 @@ CavityManager<blockThreads, cop>::deactivate_conflicting_cavities(
     uint16_t*      element_cavity_id,
     const Bitmask& active_bitmask)
 {
-    for (uint16_t i = threadIdx.x; i < num_elements; i += blockThreads) {
+    for (int i = threadIdx.x; i < int(num_elements); i += blockThreads) {
         const uint32_t c = element_cavity_id[i];
         if (c != INVALID16) {
             assert(i < active_bitmask.size());
@@ -1332,7 +1383,7 @@ CavityManager<blockThreads, cop>::reactivate_elements(
     uint16_t*      element_cavity_id,
     const uint16_t num_elements)
 {
-    for (uint16_t b = threadIdx.x; b < num_elements; b += blockThreads) {
+    for (int b = threadIdx.x; b < int(num_elements); b += blockThreads) {
         const uint16_t c = element_cavity_id[b];
         if (c != INVALID16) {
             assert(c < m_s_active_cavity_bitmask.size());
@@ -1355,7 +1406,7 @@ CavityManager<blockThreads, cop>::deactivate_boundary_cavities(
     m_s_owned_cavity_bdry_v.reset(block);
     block.sync();
 
-    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+    for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
         assert(f < m_s_active_mask_f.size());
         assert(f < m_s_in_cavity_f.size());
         if (m_s_active_mask_f(f) || m_s_in_cavity_f(f)) {
@@ -1394,7 +1445,7 @@ CavityManager<blockThreads, cop>::deactivate_boundary_cavities(
     }
     block.sync();
 
-    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         assert(e < m_s_active_mask_e.size());
         assert(e < m_s_in_cavity_e.size());
         if (m_s_active_mask_e(e) || m_s_in_cavity_e(e)) {
@@ -1424,7 +1475,7 @@ CavityManager<blockThreads, cop>::deactivate_boundary_cavities(
     block.sync();
 
     for_each_cavity(block, [&](uint16_t c, uint16_t size) {
-        for (uint16_t i = 0; i < size; ++i) {
+        for (int i = 0; i < int(size); ++i) {
             uint16_t vertex = get_cavity_vertex(c, i).local_id();
             assert(vertex < m_s_owned_mask_v.size());
             assert(vertex < m_s_owned_cavity_bdry_v.size());
@@ -1464,7 +1515,7 @@ CavityManager<blockThreads, cop>::clear_bitmask_if_in_cavity(
     const uint16_t* element_cavity_id,
     const uint16_t  num_elements)
 {
-    for (uint16_t b = threadIdx.x; b < num_elements; b += blockThreads) {
+    for (int b = threadIdx.x; b < int(num_elements); b += blockThreads) {
         if (element_cavity_id[b] != INVALID16) {
             assert(b < active_bitmask.size());
             assert(b < in_cavity.size());
@@ -1478,7 +1529,7 @@ CavityManager<blockThreads, cop>::clear_bitmask_if_in_cavity(
 
 
 template <uint32_t blockThreads, CavityOp cop>
-template <uint32_t itemPerThread>
+template <int itemPerThread>
 __device__ __inline__ void
 CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
     cooperative_groups::thread_block& block)
@@ -1504,7 +1555,7 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
         return threadIdx.x + blockThreads * i;
     };
 
-    for (uint16_t i = 0; i < itemPerThread; ++i) {
+    for (int i = 0; i < itemPerThread; ++i) {
         uint16_t f = index(i);
 
         local_offset[i] = INVALID16;
@@ -1578,7 +1629,7 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
 
 
     if (!m_allow_touching_cavities) {
-        for (uint16_t f = threadIdx.x; f < m_s_num_faces[0];
+        for (int f = threadIdx.x; f < int(m_s_num_faces[0]);
              f += blockThreads) {
             uint16_t face_cavity = m_s_cavity_id_f[f];
             if (face_cavity != INVALID16) {
@@ -1607,7 +1658,7 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
     // m_s_cavity_boundary_edges
 
     // deactivate the cavities
-    for (uint16_t c = threadIdx.x; c < m_s_num_cavities[0]; c += blockThreads) {
+    for (int c = threadIdx.x; c < int(m_s_num_cavities[0]); c += blockThreads) {
         if (m_s_cavity_size_prefix[c + 1] >= m_s_num_edges[0]) {
             assert(c < m_s_active_cavity_bitmask.size());
             deactivate_cavity(c);
@@ -1619,7 +1670,7 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
     reactivate_elements();
     block.sync();
 
-    for (uint16_t i = 0; i < itemPerThread; ++i) {
+    for (int i = 0; i < itemPerThread; ++i) {
         if (local_offset[i] != INVALID16) {
 
             uint16_t f = index(i);
@@ -1665,14 +1716,14 @@ CavityManager<blockThreads, cop>::sort_cavities_edge_loop()
 
     // TODO need to increase the parallelism in this part. It should be at
     // least one warp processing one cavity
-    for (uint16_t c = threadIdx.x; c < m_s_num_cavities[0]; c += blockThreads) {
+    for (int c = threadIdx.x; c < int(m_s_num_cavities[0]); c += blockThreads) {
         assert(c < m_s_active_cavity_bitmask.size());
         if (m_s_active_cavity_bitmask(c)) {
             // Specify the starting edge of the cavity before sorting everything
             // TODO this may be tuned for different CavityOp's
 
-            const uint16_t start = m_s_cavity_size_prefix[c];
-            const uint16_t end   = m_s_cavity_size_prefix[c + 1];
+            const int start = int(m_s_cavity_size_prefix[c]);
+            const int end   = int(m_s_cavity_size_prefix[c + 1]);
 
             assert(end >= start);
 
@@ -1680,14 +1731,14 @@ CavityManager<blockThreads, cop>::sort_cavities_edge_loop()
                 // we pick one end vertex of the edge to be the starting point
                 // of the cavity boundary loop
                 uint16_t cavity_edge_src_vertex;
-                for (uint16_t e = 0; e < m_s_num_edges[0]; ++e) {
+                for (int e = 0; e < m_s_num_edges[0]; ++e) {
                     if (m_s_cavity_id_e[e] == c) {
                         cavity_edge_src_vertex = m_s_ev[2 * e];
                         break;
                     }
                 }
 
-                for (uint16_t e = start; e < end; ++e) {
+                for (int e = start; e < end; ++e) {
                     uint32_t edge = m_s_cavity_boundary_edges[e];
                     assert((edge >> 1) < m_s_active_mask_e.size());
                     assert(m_s_active_mask_e((edge >> 1)));
@@ -1702,7 +1753,7 @@ CavityManager<blockThreads, cop>::sort_cavities_edge_loop()
             }
 
 
-            for (uint16_t e = start; e < end; ++e) {
+            for (int e = start; e < end; ++e) {
                 uint16_t edge;
                 uint8_t  dir;
                 Context::unpack_edge_dir(
@@ -1712,7 +1763,7 @@ CavityManager<blockThreads, cop>::sort_cavities_edge_loop()
                     end_vertex = m_s_ev[2 * edge];
                 }
 
-                for (uint16_t i = e + 1; i < end; ++i) {
+                for (int i = e + 1; i < end; ++i) {
                     uint32_t ee = m_s_cavity_boundary_edges[i] >> 1;
                     uint32_t v0 = m_s_ev[2 * ee + 0];
                     uint32_t v1 = m_s_ev[2 * ee + 1];
@@ -1741,7 +1792,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::for_each_cavity(
 {
     // TODO need to increase the parallelism in this part. It should be at
     // least one warp processing one cavity
-    for (uint16_t c = threadIdx.x; c < m_s_num_cavities[0]; c += blockThreads) {
+    for (int c = threadIdx.x; c < int(m_s_num_cavities[0]); c += blockThreads) {
         assert(c < m_s_active_cavity_bitmask.size());
         if (m_s_active_cavity_bitmask(c)) {
             const uint16_t size = get_cavity_size(c);
@@ -1930,9 +1981,9 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::add_element(
     uint16_t found = INVALID16;
 
     // number of 32-bit unsigned int used in the bit mask
-    const uint32_t num32 = DIVIDE_UP(capacity, 32);
+    const int num32 = DIVIDE_UP(capacity, 32);
 
-    for (uint32_t i = 0; i < num32 && found == INVALID16; ++i) {
+    for (int i = 0; i < num32 && found == INVALID16; ++i) {
         // flip the bits so that we are not looking for an element whose bit is
         // set
         uint32_t mask = ~active_bitmask.m_bitmask[i];
@@ -2057,8 +2108,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::store_hashtable(
                                                            m_s_table_stash_f);
 
     // patch stash
-    for (uint32_t i = threadIdx.x; i < PatchStash::stash_size;
-         i += blockThreads) {
+    for (int i = threadIdx.x; i < PatchStash::stash_size; i += blockThreads) {
         m_patch_info.patch_stash.m_stash[i] = m_s_patch_stash.m_stash[i];
     }
 }
@@ -2121,7 +2171,7 @@ __device__ __inline__ void
 CavityManager<blockThreads, cop>::set_dirty_for_locked_patches()
 {
     if (threadIdx.x == 0) {
-        for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
+        for (int st = 0; st < PatchStash::stash_size; ++st) {
             assert(st < m_s_locked_patches_mask.size());
             if (m_s_locked_patches_mask(st)) {
                 uint32_t q = m_s_patch_stash.get_patch(st);
@@ -2137,7 +2187,7 @@ __device__ __inline__ void
 CavityManager<blockThreads, cop>::unlock_locked_patches()
 {
     if (threadIdx.x == 0) {
-        for (uint8_t st = 0; st < m_s_locked_patches_mask.size(); ++st) {
+        for (int st = 0; st < m_s_locked_patches_mask.size(); ++st) {
             if (m_s_locked_patches_mask(st)) {
                 uint32_t q = m_s_patch_stash.get_patch(st);
                 assert(q != INVALID32);
@@ -2189,7 +2239,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::pre_migrate(
     // on the boundary of the cavity has to be owned by the patch)
     // TODO this could be fused in construct_cavities_edge_loop()
     for_each_cavity(block, [&](uint16_t c, uint16_t size) {
-        for (uint16_t i = 0; i < size; ++i) {
+        for (int i = 0; i < int(size); ++i) {
             uint16_t vertex = get_cavity_vertex(c, i).local_id();
             assert(m_s_active_mask_v(vertex));
             assert(vertex < m_s_owned_mask_v.size());
@@ -2210,7 +2260,7 @@ template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::pre_ribbonize(
     cooperative_groups::thread_block& block)
 {
-    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         assert(e < m_s_active_mask_e.size());
         assert(e < m_s_in_cavity_e.size());
         if (m_s_active_mask_e(e) || m_s_in_cavity_e(e)) {
@@ -2269,13 +2319,13 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
     m_s_ownership_change_mask_f.reset(block);
     block.sync();
 
-    for (uint16_t v = threadIdx.x; v < m_s_num_vertices[0]; v += blockThreads) {
+    for (int v = threadIdx.x; v < int(m_s_num_vertices[0]); v += blockThreads) {
         if (!m_s_owned_mask_v(v) && m_s_in_cavity_v(v)) {
             m_s_ownership_change_mask_v.set(v, true);
         }
     }
 
-    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+    for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
         assert(f < m_s_owned_mask_f.size());
         assert(f < m_s_active_mask_f.size());
         assert(f < m_s_in_cavity_f.size());
@@ -2322,7 +2372,7 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
         }
 
         if (m_s_ownership_change_mask_f(f)) {
-            for (uint16_t e = 0; e < 3; ++e) {
+            for (int e = 0; e < 3; ++e) {
                 if (!m_s_owned_mask_e(edges[e]) &&
                     m_s_active_mask_e(edges[e])) {
                     m_s_ownership_change_mask_e.set(edges[e], true);
@@ -2332,7 +2382,7 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
     }
 
 
-    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         assert(e < m_s_owned_mask_e.size());
         assert(e < m_s_active_mask_e.size());
         assert(e < m_s_in_cavity_e.size());
@@ -2368,7 +2418,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     block.sync();
 
     // soft migrate
-    for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
+    for (int st = 0; st < PatchStash::stash_size; ++st) {
         const uint32_t q = m_s_patch_stash.get_patch(st);
         if (q != INVALID32) {
             if (!soft_migrate_from_patch(block, st, q)) {
@@ -2389,7 +2439,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     block.sync();
 
     // make sure non of the q patches are dirty
-    for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
+    for (int st = 0; st < PatchStash::stash_size; ++st) {
         assert(st < m_s_locked_patches_mask.size());
         if (m_s_locked_patches_mask(st)) {
             const uint32_t q = m_s_patch_stash.get_patch(st);
@@ -2401,7 +2451,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     block.sync();
 
     // full migrate
-    for (uint32_t st = 0; st < PatchStash::stash_size; ++st) {
+    for (int st = 0; st < PatchStash::stash_size; ++st) {
         const uint32_t q = m_s_patch_stash.get_patch(st);
         if (q != INVALID32) {
             if (!migrate_from_patch(block, st, q)) {
@@ -2412,9 +2462,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     block.sync();
 
 
-    // since we may have added new patches during dull migration, make sure non
+    // since we may have added new patches during full migration, make sure non
     // of the q patches are dirty
-    for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
+    for (int st = 0; st < PatchStash::stash_size; ++st) {
         assert(st < m_s_locked_patches_mask.size());
         if (m_s_locked_patches_mask(st)) {
             const uint32_t q = m_s_patch_stash.get_patch(st);
@@ -2457,7 +2507,7 @@ CavityManager<blockThreads, cop>::lock_patches_to_lock(
     cooperative_groups::thread_block& block)
 {
     block.sync();
-    for (uint8_t st = 0; st < PatchStash::stash_size; ++st) {
+    for (int st = 0; st < PatchStash::stash_size; ++st) {
         assert(st < m_s_patches_to_lock_mask.size());
         if (m_s_patches_to_lock_mask(st)) {
             const uint32_t patch = m_s_patch_stash.get_patch(st);
@@ -2518,7 +2568,7 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
     block.sync();
 
 
-    for (uint32_t v = threadIdx.x; v < m_s_num_vertices[0]; v += blockThreads) {
+    for (int v = threadIdx.x; v < int(m_s_num_vertices[0]); v += blockThreads) {
         assert(v < m_s_not_owned_cavity_bdry_v.size());
         if (m_s_not_owned_cavity_bdry_v(v)) {
             // get the owner patch of v
@@ -2562,7 +2612,7 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
 
         // in m_s_src_connect_mask_v, mark the vertices connected to
         // vertices in m_s_src_mask_v
-        for (uint16_t e = threadIdx.x; e < q_num_edges; e += blockThreads) {
+        for (int e = threadIdx.x; e < int(q_num_edges); e += blockThreads) {
             if (!q_patch_info.is_deleted(LocalEdgeT(e))) {
                 const uint16_t v0q = q_patch_info.ev[2 * e + 0].id;
                 const uint16_t v1q = q_patch_info.ev[2 * e + 1].id;
@@ -2611,7 +2661,7 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
         // So, we round up the end of the loop to be multiple of the
         // blockthreads and check inside the loop so we don't access
         // non-existing vertices
-        for (uint16_t v = threadIdx.x; v < q_num_vertices_up;
+        for (int v = threadIdx.x; v < int(q_num_vertices_up);
              v += blockThreads) {
             if (m_s_should_slice[0]) {
                 return false;
@@ -2687,10 +2737,10 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
     block.sync();
 
 
-    for (uint32_t v = threadIdx.x; v < m_s_num_vertices[0]; v += blockThreads) {
+    for (int v = threadIdx.x; v < int(m_s_num_vertices[0]); v += blockThreads) {
         // migrate a vertex if it is not owned and either 1) on the cavity
-        // boundary, 2) connected to a cavity boundary vertex, or 3) inside the
-        // cavity
+        // boundary, 2) connected to a cavity boundary vertex, or 3) inside
+        // the cavity
         assert(v < m_s_owned_mask_v.size());
         assert(v < m_s_not_owned_cavity_bdry_v.size());
         assert(v < m_s_connect_cavity_bdry_v.size());
@@ -2715,9 +2765,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             if (v_owner.patch_id() == q) {
 
                 // we no longer check if q is the actual owner
-                // if it turned up that q is no longer the owner (after locking
-                // q) we just quite. This check happens at the end of migrate
-                // assert(m_context.m_patches_info[q].is_owned(
+                // if it turned up that q is no longer the owner (after
+                // locking q) we just quite. This check happens at the end
+                // of migrate assert(m_context.m_patches_info[q].is_owned(
                 //    LocalVertexT(v_owner.local_id())));
 
                 ::atomicAdd(&s_ok_q, 1);
@@ -2749,7 +2799,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
 
         // in m_s_src_connect_mask_v, mark the vertices connected to
         // vertices in m_s_src_mask_v
-        for (uint16_t e = threadIdx.x; e < q_num_edges; e += blockThreads) {
+        for (int e = threadIdx.x; e < int(q_num_edges); e += blockThreads) {
             if (!q_patch_info.is_deleted(LocalEdgeT(e))) {
                 const uint16_t v0q = q_patch_info.ev[2 * e + 0].id;
                 const uint16_t v1q = q_patch_info.ev[2 * e + 1].id;
@@ -2797,7 +2847,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         // So, we round up the end of the loop to be multiple of the
         // blockthreads and check inside the loop so we don't access
         // non-existing vertices
-        for (uint16_t v = threadIdx.x; v < q_num_vertices_up;
+        for (int v = threadIdx.x; v < int(q_num_vertices_up);
              v += blockThreads) {
             if (m_s_should_slice[0]) {
                 return false;
@@ -2864,7 +2914,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             ROUND_UP_TO_NEXT_MULTIPLE(q_num_edges, blockThreads);
 
         // 4. move edges since we now have a copy of the vertices in p
-        for (uint16_t e = threadIdx.x; e < q_num_edges_up; e += blockThreads) {
+        for (int e = threadIdx.x; e < int(q_num_edges_up); e += blockThreads) {
             if (m_s_should_slice[0]) {
                 return false;
             }
@@ -2930,7 +2980,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         // we migrate all faces touches a vertex in m_s_src_mask_v,
         // we need first to represent the edges that touch these
         // faces in q before migrating the faces
-        for (uint16_t f = threadIdx.x; f < q_num_faces; f += blockThreads) {
+        for (int f = threadIdx.x; f < int(q_num_faces); f += blockThreads) {
             if (!q_patch_info.is_deleted(LocalFaceT(f))) {
 
                 const uint16_t e0 = q_patch_info.fe[3 * f + 0].id >> 1;
@@ -3025,7 +3075,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
 
         // make sure that there is a copy of edge in
         // m_s_src_connect_mask_e in q
-        for (uint16_t e = threadIdx.x; e < q_num_edges_up; e += blockThreads) {
+        for (int e = threadIdx.x; e < int(q_num_edges_up); e += blockThreads) {
             if (m_s_should_slice[0]) {
                 return false;
             }
@@ -3091,7 +3141,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             ROUND_UP_TO_NEXT_MULTIPLE(q_num_faces, blockThreads);
 
         // 6.  move face since we now have a copy of the edges in p
-        for (uint16_t f = threadIdx.x; f < q_num_faces_up; f += blockThreads) {
+        for (int f = threadIdx.x; f < int(q_num_faces_up); f += blockThreads) {
             if (m_s_should_slice[0]) {
                 return false;
             }
@@ -3142,6 +3192,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
             return false;
         }
     }
+
 
     return true;
 }
@@ -3199,6 +3250,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
                     m_s_patch_stash.insert_patch(o, m_s_patch_stash_mutex);
 
                 assert(owner_stash_id != INVALID8);
+                assert(owner_stash_id < PatchStash::stash_size);
                 ret = LPPair(vp, vq, owner_stash_id);
 
                 assert(q_vertex < m_correspondence_size_vf);
@@ -3339,6 +3391,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
                 const uint8_t owner_stash_id =
                     m_s_patch_stash.insert_patch(o, m_s_patch_stash_mutex);
 
+                assert(owner_stash_id < PatchStash::stash_size);
                 assert(q_edge < m_correspondence_size_e);
                 m_s_q_correspondence_e[q_edge]       = ep;
                 m_s_q_correspondence_stash_e[q_edge] = owner_stash_id;
@@ -3440,6 +3493,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
                 const uint8_t owner_stash_id =
                     m_s_patch_stash.insert_patch(o, m_s_patch_stash_mutex);
                 assert(owner_stash_id != INVALID8);
+                assert(owner_stash_id < PatchStash::stash_size);
 
                 assert(q_face < m_correspondence_size_vf);
                 m_s_q_correspondence_vf[q_face]       = fp;
@@ -3578,7 +3632,7 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
     // otherwise, we do a search over the not-owned elements in the dest
     // patch. For every not-owned element, we map it to its owner patch and
     // check against lid-src_patch pair
-    for (uint16_t i = 0; i < dest_patch_num_elements; ++i) {
+    for (int i = 0; i < int(dest_patch_num_elements); ++i) {
         assert(i < dest_patch_owned_mask.size());
         assert(i < dest_patch_active_mask.size());
         assert(i < dest_in_cavity.size());
@@ -3592,7 +3646,8 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
                 lp.local_id_in_owner_patch() == lid) {
                 q_correspondence[lid_in]       = i;
                 q_correspondence_stash[lid_in] = lp.patch_stash_id();
-                src_patch_stash_id             = lp.patch_stash_id();
+                assert(q_correspondence_stash[lid_in] < PatchStash::stash_size);
+                src_patch_stash_id = lp.patch_stash_id();
                 src_patch = m_s_patch_stash.get_patch(src_patch_stash_id);
                 return i;
             }
@@ -3622,25 +3677,28 @@ CavityManager<blockThreads, cop>::populate_correspondence(
 
     LPHashTable lp = m_patch_info.get_lp<HandleT>();
 
-    for (uint16_t b = threadIdx.x; b < lp.m_capacity; b += blockThreads) {
+    for (int b = threadIdx.x; b < int(lp.m_capacity); b += blockThreads) {
         const LPPair pair = s_table[b];
         if (!pair.is_sentinel() && pair.patch_stash_id() == q_stash) {
             assert(pair.local_id_in_owner_patch() < s_correspondence_size);
             s_correspondence[pair.local_id_in_owner_patch()] = pair.local_id();
             s_correspondence_stash[pair.local_id_in_owner_patch()] =
                 pair.patch_stash_id();
+            assert(s_correspondence_stash[pair.local_id_in_owner_patch()] <
+                   PatchStash::stash_size);
         }
     }
 
 
-    for (uint16_t b = threadIdx.x; b < LPHashTable::stash_size;
-         b += blockThreads) {
+    for (int b = threadIdx.x; b < LPHashTable::stash_size; b += blockThreads) {
         auto pair = s_stash[b];
         if (!pair.is_sentinel() && pair.patch_stash_id() == q_stash) {
             assert(pair.local_id_in_owner_patch() < s_correspondence_size);
             s_correspondence[pair.local_id_in_owner_patch()] = pair.local_id();
             s_correspondence_stash[pair.local_id_in_owner_patch()] =
                 pair.patch_stash_id();
+            assert(s_correspondence_stash[pair.local_id_in_owner_patch()] <
+                   PatchStash::stash_size);
         }
     }
 }
@@ -3661,7 +3719,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::ensure_ownership(
     }
     block.sync();
 
-    for (uint16_t vp = threadIdx.x; vp < num_elements; vp += blockThreads) {
+    for (int vp = threadIdx.x; vp < int(num_elements); vp += blockThreads) {
         assert(vp < s_ownership_change.size());
         if (s_ownership_change(vp)) {
             const HandleT h = m_patch_info.find<HandleT>(
@@ -3719,7 +3777,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
     const LPPair*                     s_stash,
     Bitmask&                          s_owned_bitmask)
 {
-    for (uint16_t vp = threadIdx.x; vp < num_elements; vp += blockThreads) {
+    for (int vp = threadIdx.x; vp < int(num_elements); vp += blockThreads) {
         assert(vp < s_ownership_change.size());
         if (s_ownership_change(vp)) {
             // m_s_readd_to_queue[0] = true;
@@ -3802,13 +3860,13 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::update_attribute(
             assert(h.local_id() != INVALID16);
             assert(h.patch_id() < m_context.m_max_num_patches);
 
-            for (uint32_t attr = 0; attr < num_attr; ++attr) {
+            for (int attr = 0; attr < int(num_attr); ++attr) {
                 attribute(p, vp, attr) = attribute(h, attr);
             }
         };
 
     if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-        for (uint16_t vp = threadIdx.x; vp < m_s_num_vertices[0];
+        for (int vp = threadIdx.x; vp < int(m_s_num_vertices[0]);
              vp += blockThreads) {
             assert(vp < m_s_ownership_change_mask_v.size());
             if (m_s_ownership_change_mask_v(vp)) {
@@ -3824,7 +3882,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::update_attribute(
     }
 
     if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-        for (uint16_t ep = threadIdx.x; ep < m_s_num_edges[0];
+        for (int ep = threadIdx.x; ep < int(m_s_num_edges[0]);
              ep += blockThreads) {
             assert(ep < m_s_ownership_change_mask_e.size());
             if (m_s_ownership_change_mask_e(ep)) {
@@ -3840,7 +3898,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::update_attribute(
     }
 
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-        for (uint16_t fp = threadIdx.x; fp < m_s_num_faces[0];
+        for (int fp = threadIdx.x; fp < int(m_s_num_faces[0]);
              fp += blockThreads) {
             assert(fp < m_s_ownership_change_mask_f.size());
             if (m_s_ownership_change_mask_f(fp)) {
@@ -3860,7 +3918,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::update_attribute(
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::recover_faces()
 {
-    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+    for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
         if (m_s_recover_f(f)) {
             if (!m_patch_info.is_deleted(LocalFaceT(f))) {
                 m_s_active_mask_f.set(f, true);
@@ -3878,7 +3936,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::recover_faces()
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::recover_edges()
 {
-    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         if (m_s_recover_e(e)) {
             if (!m_patch_info.is_deleted(LocalEdgeT(e))) {
                 m_s_active_mask_e.set(e, true);
@@ -3896,7 +3954,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::recover_edges()
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::recover_vertices()
 {
-    for (uint16_t v = threadIdx.x; v < m_s_num_vertices[0]; v += blockThreads) {
+    for (int v = threadIdx.x; v < int(m_s_num_vertices[0]); v += blockThreads) {
         if (m_s_recover_v(v)) {
             if (!m_patch_info.is_deleted(LocalVertexT(v))) {
                 m_s_active_mask_v.set(v, true);
@@ -3910,7 +3968,7 @@ __device__ __inline__ void
 CavityManager<blockThreads, cop>::recover_vertices_through_edges()
 {
     // scatter
-    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         if (m_s_recover_e(e)) {
             for (int i = 0; i < 2; ++i) {
                 const uint16_t v = m_s_ev[2 * e + i];
@@ -3928,7 +3986,7 @@ __device__ __inline__ void
 CavityManager<blockThreads, cop>::recover_edges_through_faces()
 {
     // scatter
-    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+    for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
         if (m_s_recover_f(f)) {
             for (int i = 0; i < 3; ++i) {
                 const uint16_t e = m_s_fe[3 * f + i] >> 1;
@@ -3947,7 +4005,7 @@ __device__ __inline__ void
 CavityManager<blockThreads, cop>::recover_edges_through_vertices()
 {
     // gather
-    for (uint16_t e = threadIdx.x; e < m_s_num_edges[0]; e += blockThreads) {
+    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         if (!m_s_active_mask_e(e) && !m_patch_info.is_deleted(LocalEdgeT(e))) {
             bool recover = false;
 
@@ -3974,7 +4032,7 @@ __device__ __inline__ void
 CavityManager<blockThreads, cop>::recover_faces_through_edges()
 {
     // gather
-    for (uint16_t f = threadIdx.x; f < m_s_num_faces[0]; f += blockThreads) {
+    for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
 
         if (!m_s_active_mask_f(f) && !m_patch_info.is_deleted(LocalFaceT(f))) {
 
@@ -4033,7 +4091,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
 
 #ifndef NDEBUG
         if (m_preserve_cavity) {
-            for (uint16_t v = threadIdx.x; v < m_s_active_mask_v.size();
+            for (int v = threadIdx.x; v < int(m_s_active_mask_v.size());
                  v += blockThreads) {
                 if (m_s_in_cavity_v(v)) {
                     assert(!m_s_active_mask_v(v));
@@ -4042,7 +4100,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
                     assert(m_s_active_mask_v(v));
                 }
             }
-            for (uint16_t e = threadIdx.x; e < m_s_active_mask_e.size();
+            for (int e = threadIdx.x; e < int(m_s_active_mask_e.size());
                  e += blockThreads) {
                 if (m_s_in_cavity_e(e)) {
                     assert(!m_s_active_mask_e(e));
@@ -4051,7 +4109,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
                     assert(m_s_active_mask_e(e));
                 }
             }
-            for (uint16_t f = threadIdx.x; f < m_s_active_mask_f.size();
+            for (int f = threadIdx.x; f < int(m_s_active_mask_f.size());
                  f += blockThreads) {
                 if (m_s_in_cavity_f(f)) {
                     assert(!m_s_active_mask_f(f));
@@ -4067,7 +4125,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
             // fill-in), that means we have lost its topology/geometry info.
             // A potential solution is to selectively update global memory such
             // that we don't update global memory with these elements
-            for (uint16_t v = threadIdx.x; v < m_s_active_mask_v.size();
+            for (int v = threadIdx.x; v < int(m_s_active_mask_v.size());
                  v += blockThreads) {
                 if (m_s_in_cavity_v(v)) {
                     assert(!m_s_fill_in_v(v));
@@ -4076,7 +4134,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
                     assert(!m_s_in_cavity_v(v));
                 }
             }
-            for (uint16_t e = threadIdx.x; e < m_s_active_mask_e.size();
+            for (int e = threadIdx.x; e < int(m_s_active_mask_e.size());
                  e += blockThreads) {
                 if (m_s_in_cavity_e(e)) {
                     assert(!m_s_fill_in_e(e));
@@ -4085,7 +4143,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
                     assert(!m_s_in_cavity_e(e));
                 }
             }
-            for (uint16_t f = threadIdx.x; f < m_s_active_mask_f.size();
+            for (int f = threadIdx.x; f < int(m_s_active_mask_f.size());
                  f += blockThreads) {
                 if (m_s_in_cavity_f(f)) {
                     assert(!m_s_fill_in_f(f));
@@ -4126,7 +4184,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
             //  removing fill-in elements since we were not successful in adding
             //  all of them. Thus, we need to preserve the original mesh by
             //  removing these elements and re-activating the in-cavity ones
-            for (uint16_t v = threadIdx.x; v < m_s_active_mask_v.size();
+            for (int v = threadIdx.x; v < int(m_s_active_mask_v.size());
                  v += blockThreads) {
                 if (m_s_in_cavity_v(v)) {
                     m_s_active_mask_v.set(v, true);
@@ -4136,7 +4194,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
                 }
             }
 
-            for (uint16_t e = threadIdx.x; e < m_s_active_mask_e.size();
+            for (int e = threadIdx.x; e < int(m_s_active_mask_e.size());
                  e += blockThreads) {
                 if (m_s_in_cavity_e(e)) {
                     m_s_active_mask_e.set(e, true);
@@ -4147,7 +4205,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
             }
 
 
-            for (uint16_t f = threadIdx.x; f < m_s_active_mask_f.size();
+            for (int f = threadIdx.x; f < int(m_s_active_mask_f.size());
                  f += blockThreads) {
                 if (m_s_in_cavity_f(f)) {
                     m_s_active_mask_f.set(f, true);
