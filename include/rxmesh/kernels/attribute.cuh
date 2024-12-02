@@ -94,6 +94,16 @@ __launch_bounds__(blockSize) __global__
     }
 }
 
+struct CustomMaxPair
+{
+    template <typename T>
+    __device__ __forceinline__ cub::KeyValuePair<int, T> operator()(
+        const cub::KeyValuePair<int, T>& a,
+        const cub::KeyValuePair<int, T>& b) const
+    {
+        return (b.value > a.value) ? b : a;
+    }
+};
 
 template <class T, uint32_t blockSize, typename ReductionOp, typename HandleT>
 __launch_bounds__(blockSize) __global__
