@@ -10,7 +10,7 @@ TEST(RXMeshStatic, DISABLED_HigherQueries)
     using namespace rxmesh;
 
 
-    std::vector<std::vector<dataT>>    Verts;
+    std::vector<std::vector<float>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
     ASSERT_TRUE(import_obj(STRINGIFY(INPUT_DIR) "sphere3.obj", Verts, Faces));
 

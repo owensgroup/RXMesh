@@ -40,7 +40,8 @@ class Patcher
                                      uint32_t,
                                      ::rxmesh::detail::edge_key_hash> edges_map,
             const uint32_t num_vertices,
-            const uint32_t num_edges);
+            const uint32_t num_edges,
+            bool           use_metis);
 
     Patcher(std::string filename);
 
@@ -213,6 +214,15 @@ class Patcher
                                 uint32_t*& d_patches_size,
                                 uint32_t*& d_patches_val);
 
+    void grid();
+
+
+    /**
+     * @brief form initial face assigement, compute the compressed storage of 
+     * the patches (i.e., populate m_patches_val and m_patches_offset)
+     */
+    void compute_inital_compressed_patches();
+
     void assign_patch(
         const std::vector<std::vector<uint32_t>>&                 fv,
         const std::unordered_map<std::pair<uint32_t, uint32_t>,
@@ -232,9 +242,9 @@ class Patcher
                                              std::vector<uint32_t>& component,
                                              uint32_t               num_seeds);
 
-    void postprocess(const std::vector<std::vector<uint32_t>>& fv,
-                     const std::vector<uint32_t>&              ff_offset,
-                     const std::vector<uint32_t>&              ff_values);
+    void extract_ribbons(const std::vector<std::vector<uint32_t>>& fv,
+                         const std::vector<uint32_t>&              ff_offset,
+                         const std::vector<uint32_t>&              ff_values);
 
     uint32_t construct_patches_compressed_format(uint32_t* d_face_patch,
                                                  void*  d_cub_temp_storage_scan,
@@ -265,6 +275,12 @@ class Patcher
     void bfs(const std::vector<uint32_t>& ff_offset,
              const std::vector<uint32_t>& ff_values);
 
+    void metis_kway(const std::vector<uint32_t>& ff_offset,
+                    const std::vector<uint32_t>& ff_values);
+
+    void calc_edge_cut(const std::vector<std::vector<uint32_t>>& fv,
+                       const std::vector<uint32_t>&              ff_offset,
+                       const std::vector<uint32_t>&              ff_values);
 
     uint32_t m_patch_size, m_num_patches, m_num_vertices, m_num_edges,
         m_num_faces, m_num_seeds, m_max_num_patches, m_num_components,

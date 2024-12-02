@@ -79,6 +79,10 @@ FetchContent_Declare(cereal
 )
 FetchContent_Populate(cereal)
 
+# Package Management
+# TODO: Consider using CPM for the various libraries above 
+include(cmake/CPM.cmake) 
+
 # Auto-detect GPU architecture
 include("cmake/AutoDetectCudaArch.cmake")
 
@@ -133,7 +137,7 @@ set(cxx_flags
 
 set(MSVC_XCOMPILER_FLAGS "/openmp:experimental /MP /std:c++17 /Zi")
 set(cuda_flags
-    -Xcompiler=$<$<CXX_COMPILER_ID:GNU>:-Wall -fopenmp -O3 -Wno-unused-function>
+    -Xcompiler=$<$<CXX_COMPILER_ID:GNU>:-rdynamic -Wall -fopenmp -O3 -Wno-unused-function>
 	-Xcompiler=$<$<CXX_COMPILER_ID:MSVC>:${MSVC_XCOMPILER_FLAGS}>
     #Disables warning
     #177-D "function XXX was declared but never referenced"
@@ -141,13 +145,12 @@ set(cuda_flags
     -rdc=true
 	-lineinfo	
 	--expt-extended-lambda	
-	-use_fast_math	
+	#-use_fast_math	
     $<$<CXX_COMPILER_ID:GNU>:-O3>
 	--expt-relaxed-constexpr	
     -Xptxas -warn-spills -res-usage   
 	#-Xptxas -dlcm=cg -dscm=cg
 	--ptxas-options=-v	
-    #-G    
 )
 
 
@@ -155,6 +158,11 @@ target_compile_options(RXMesh INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:${cxx_flags}>
     $<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>
 )
+
+
+#METIS
+include("cmake/metis.cmake")
+target_link_libraries(RXMesh INTERFACE metis)	
 
 target_link_libraries(RXMesh INTERFACE glm::glm)
 if (USE_POLYSCOPE)

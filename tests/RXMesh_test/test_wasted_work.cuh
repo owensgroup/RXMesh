@@ -3,7 +3,6 @@
 
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
-
 #include "rxmesh/util/report.h"
 
 template <uint32_t blockThreads>

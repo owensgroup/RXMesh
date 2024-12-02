@@ -213,4 +213,12 @@ __device__ __forceinline__ void fill_n(T* arr, const SizeT size, const T val)
         arr[i] = val;
     }
 }
+
+template <typename T>
+__device__ __forceinline__ void swap(T*& a, T*& b)
+{
+    T* temp = a;
+    a       = b;
+    b       = temp;
+}
 }  // namespace rxmesh

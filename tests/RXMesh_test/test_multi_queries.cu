@@ -108,7 +108,7 @@ TEST(RXMeshStatic, MultiQueries)
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 320;
 
-    RXMeshStatic rx(rxmesh_args.obj_file_name);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     const auto coords = rx.get_input_vertex_coordinates();
 

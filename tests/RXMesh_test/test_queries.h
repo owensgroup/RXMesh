@@ -96,13 +96,13 @@ TEST(RXMeshStatic, Queries)
     using namespace rxmesh;
 
     bool oriented = false;
-        
-    std::vector<std::vector<dataT>>    Verts;
+
+    std::vector<std::vector<float>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
     ASSERT_TRUE(import_obj(rxmesh_args.obj_file_name, Verts, Faces));
 
-    
+
     RXMeshStatic rx(Faces);
 
 

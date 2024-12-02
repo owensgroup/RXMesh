@@ -79,8 +79,8 @@ __global__ static void __launch_bounds__(blockThreads)
                     v2 == v3) {
                     return;
                 }
-                const vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-                const vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+                const vec3<T> p0          = coords.to_glm<3>(v0);
+                const vec3<T> p1          = coords.to_glm<3>(v1);
                 const T       edge_len_sq = glm::distance2(p0, p1);
 
                 if (edge_len_sq < low_edge_len_sq) {
@@ -124,8 +124,8 @@ __global__ static void __launch_bounds__(blockThreads)
 
             cavity.get_vertices(src, v0, v1);
 
-            const vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-            const vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+            const vec3<T> p0 = coords.to_glm<3>(v0);
+            const vec3<T> p1 = coords.to_glm<3>(v1);
 
             const vec3<T> new_p((p0[0] + p1[0]) * T(0.5),
                                 (p0[1] + p1[1]) * T(0.5),
@@ -139,8 +139,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
                 const VertexHandle vvv = cavity.get_cavity_vertex(c, i);
 
-                const vec3<T> vp(
-                    coords(vvv, 0), coords(vvv, 1), coords(vvv, 2));
+                const vec3<T> vp = coords.to_glm<3>(vvv);
 
                 const T edge_len_sq = glm::distance2(vp, new_p);
 
@@ -300,9 +299,10 @@ __global__ static void __launch_bounds__(blockThreads)
                     return;
                 }
 
-                const vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-                const vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
-                const T       edge_len_sq = glm::distance2(p0, p1);
+                const vec3<T> p0 = coords.to_glm<3>(v0);
+                const vec3<T> p1 = coords.to_glm<3>(v1);
+
+                const T edge_len_sq = glm::distance2(p0, p1);
 
                 if (edge_len_sq < low_edge_len_sq) {
 
@@ -391,8 +391,8 @@ __global__ static void __launch_bounds__(blockThreads)
 
             cavity.get_vertices(src, v0, v1);
 
-            const vec3<T> p0(coords(v0, 0), coords(v0, 1), coords(v0, 2));
-            const vec3<T> p1(coords(v1, 0), coords(v1, 1), coords(v1, 2));
+            const vec3<T> p0 = coords.to_glm<3>(v0);
+            const vec3<T> p1 = coords.to_glm<3>(v1);
 
             const vec3<T> new_p((p0[0] + p1[0]) * T(0.5),
                                 (p0[1] + p1[1]) * T(0.5),
@@ -404,8 +404,7 @@ __global__ static void __launch_bounds__(blockThreads)
             for (uint16_t i = 0; i < size; ++i) {
                 const VertexHandle vvv = cavity.get_cavity_vertex(c, i);
 
-                const vec3<T> vp(
-                    coords(vvv, 0), coords(vvv, 1), coords(vvv, 2));
+                const vec3<T> vp = coords.to_glm<3>(vvv);               
 
                 const T edge_len_sq = glm::distance2(vp, new_p);
                 if (edge_len_sq > high_edge_len_sq) {

@@ -15,6 +15,7 @@
 #include "rxmesh/util/timer.h"
 #include "rxmesh/util/util.h"
 
+#include "metis.h"
 
 namespace rxmesh {
 
@@ -38,7 +39,8 @@ Patcher::Patcher(uint32_t                                        patch_size,
                                           uint32_t,
                                           detail::edge_key_hash> edges_map,
                  const uint32_t                                  num_vertices,
-                 const uint32_t                                  num_edges)
+                 const uint32_t                                  num_edges,
+                 bool                                            use_metis)
     : m_patch_size(patch_size),
       m_num_patches(0),
       m_num_vertices(num_vertices),
@@ -109,49 +111,58 @@ Patcher::Patcher(uint32_t                                        patch_size,
         assign_patch(fv, edges_map);
     } else {
 
-        initialize_random_seeds(seeds, ff_offset, ff_values);
-        allocate_device_memory(seeds,
-                               ff_offset,
-                               ff_values,
-                               d_face_patch,
-                               d_queue,
-                               d_queue_ptr,
-                               d_ff_values,
-                               d_ff_offset,
-                               d_cub_temp_storage_scan,
-                               d_cub_temp_storage_max,
-                               cub_scan_bytes,
-                               cub_max_bytes,
-                               d_seeds,
-                               d_new_num_patches,
-                               d_max_patch_size,
-                               d_patches_offset,
-                               d_patches_size,
-                               d_patches_val);
-        run_lloyd(d_face_patch,
-                  d_queue,
-                  d_queue_ptr,
-                  d_ff_values,
-                  d_ff_offset,
-                  d_cub_temp_storage_scan,
-                  d_cub_temp_storage_max,
-                  cub_scan_bytes,
-                  cub_max_bytes,
-                  d_seeds,
-                  d_new_num_patches,
-                  d_max_patch_size,
-                  d_patches_offset,
-                  d_patches_size,
-                  d_patches_val);
-
-        postprocess(fv, ff_offset, ff_values);
-        //bfs(ff_offset, ff_values);
+        if (false) {
+            grid();
+        } else {
+            if (use_metis) {
+                metis_kway(ff_offset, ff_values);
+            } else {
+                initialize_random_seeds(seeds, ff_offset, ff_values);
+                allocate_device_memory(seeds,
+                                       ff_offset,
+                                       ff_values,
+                                       d_face_patch,
+                                       d_queue,
+                                       d_queue_ptr,
+                                       d_ff_values,
+                                       d_ff_offset,
+                                       d_cub_temp_storage_scan,
+                                       d_cub_temp_storage_max,
+                                       cub_scan_bytes,
+                                       cub_max_bytes,
+                                       d_seeds,
+                                       d_new_num_patches,
+                                       d_max_patch_size,
+                                       d_patches_offset,
+                                       d_patches_size,
+                                       d_patches_val);
+                run_lloyd(d_face_patch,
+                          d_queue,
+                          d_queue_ptr,
+                          d_ff_values,
+                          d_ff_offset,
+                          d_cub_temp_storage_scan,
+                          d_cub_temp_storage_max,
+                          cub_scan_bytes,
+                          cub_max_bytes,
+                          d_seeds,
+                          d_new_num_patches,
+                          d_max_patch_size,
+                          d_patches_offset,
+                          d_patches_size,
+                          d_patches_val);
+            }
+        }
+        extract_ribbons(fv, ff_offset, ff_values);
+        // bfs(ff_offset, ff_values);
         assign_patch(fv, edges_map);
     }
 
-    
+
+    calc_edge_cut(fv, ff_offset, ff_values);
+
     print_statistics();
-    
+
     GPU_FREE(d_face_patch);
     GPU_FREE(d_queue);
     GPU_FREE(d_queue_ptr);
@@ -165,6 +176,21 @@ Patcher::Patcher(uint32_t                                        patch_size,
     GPU_FREE(d_patches_offset);
     GPU_FREE(d_patches_size);
     GPU_FREE(d_patches_val);
+}
+
+void Patcher::grid()
+{
+    // this only work if the input is a mesh coming from create_plane()
+    // where are laid out sequenetially and so we can just group them using
+    // their id
+
+    m_num_patches = DIVIDE_UP(m_num_faces, m_patch_size);
+
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        m_face_patch[f] = f / m_patch_size;
+    }
+
+    compute_inital_compressed_patches();
 }
 
 Patcher::~Patcher()
@@ -292,6 +318,57 @@ void Patcher::allocate_device_memory(const std::vector<uint32_t>& seeds,
     CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage_max, cub_max_bytes));
 }
 
+void Patcher::calc_edge_cut(const std::vector<std::vector<uint32_t>>& fv,
+                            const std::vector<uint32_t>&              ff_offset,
+                            const std::vector<uint32_t>&              ff_values)
+{
+    // given a graph where nodes represents faces in the mesh and two nodes
+    // are connected in this graph if two faces share an edge, we calculate
+    // the edge cut fo such a graph
+    uint32_t face_edge_cut = 0;
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        for (uint32_t i = ff_offset[f]; i < ff_offset[f + 1]; ++i) {
+            uint32_t n = ff_values[i];
+            if (f < n && m_face_patch[f] != m_face_patch[n]) {
+                face_edge_cut++;
+            }
+        }
+    }
+
+    uint32_t vertex_edge_cut = 0;
+
+    using EdgeMapT = std::unordered_map<std::pair<uint32_t, uint32_t>,
+                                        uint32_t,
+                                        detail::edge_key_hash>;
+
+    EdgeMapT edges_map;
+    uint32_t num_edges = 0;
+
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        for (uint32_t i = 0; i < fv[f].size(); ++i) {
+
+            uint32_t v0 = fv[f][i];
+            uint32_t v1 = fv[f][(i + 1) % fv[f].size()];
+
+            std::pair<uint32_t, uint32_t> edge = detail::edge_key(v0, v1);
+
+            auto e_iter = edges_map.find(edge);
+
+            if (e_iter == edges_map.end()) {
+                uint32_t edge_id = num_edges++;
+                edges_map.insert(std::make_pair(edge, edge_id));
+
+                if (m_vertex_patch[v0] != m_vertex_patch[v1]) {
+                    vertex_edge_cut++;
+                }
+            }
+        }
+    }
+
+    RXMESH_INFO("Patcher: (Face) Edge Cut = {}, (Vertex) Edge Cut = {} ",
+                face_edge_cut,
+                vertex_edge_cut);
+}
 void Patcher::print_statistics()
 {
     RXMESH_TRACE("Patcher: num_patches = {}", m_num_patches);
@@ -455,8 +532,8 @@ void Patcher::get_multi_components(
             while (!face_queue.empty()) {
                 uint32_t face = face_queue.front();
                 face_queue.pop();
-                uint32_t start = (face == 0) ? 0 : ff_offset[face - 1];
-                uint32_t end   = ff_offset[face];
+                uint32_t start = ff_offset[face];
+                uint32_t end   = ff_offset[face + 1];
                 for (uint32_t f = start; f < end; ++f) {
                     uint32_t n_face = ff_values[f];
                     if (!visited[n_face]) {
@@ -485,9 +562,7 @@ void Patcher::bfs(const std::vector<uint32_t>& ff_offset,
              f < m_patches_offset[p];
              ++f) {
             uint32_t face = m_patches_val[f];
-            for (uint32_t n = (face == 0) ? 0 : ff_offset[face - 1];
-                 n < ff_offset[face];
-                 ++n) {
+            for (uint32_t n = ff_offset[face]; n < ff_offset[face + 1]; ++n) {
                 uint32_t n_face  = ff_values[n];
                 uint32_t n_patch = m_face_patch[n_face];
                 if (n_patch != p) {
@@ -531,9 +606,9 @@ void Patcher::bfs(const std::vector<uint32_t>& ff_offset,
     }
 }
 
-void Patcher::postprocess(const std::vector<std::vector<uint32_t>>& fv,
-                          const std::vector<uint32_t>&              ff_offset,
-                          const std::vector<uint32_t>&              ff_values)
+void Patcher::extract_ribbons(const std::vector<std::vector<uint32_t>>& fv,
+                              const std::vector<uint32_t>& ff_offset,
+                              const std::vector<uint32_t>& ff_values)
 {
     // Post process the patches by extracting the ribbons
     // For patch P, we start first by identifying boundary faces; faces that has
@@ -577,8 +652,8 @@ void Patcher::postprocess(const std::vector<std::vector<uint32_t>>& fv,
             uint32_t face = m_patches_val[fb];
 
             bool     added = false;
-            uint32_t start = (face == 0) ? 0 : ff_offset[face - 1];
-            uint32_t end   = ff_offset[face];
+            uint32_t start = ff_offset[face];
+            uint32_t end   = ff_offset[face + 1];
 
             for (uint32_t g = start; g < end; ++g) {
                 uint32_t n       = ff_values[g];
@@ -705,6 +780,74 @@ void Patcher::assign_patch(
             }
         }
     }
+
+
+    /* for (uint32_t f = 0; f < m_num_faces; ++f) {
+        uint32_t p0 = m_vertex_patch[fv[f][0]];
+        uint32_t p1 = m_vertex_patch[fv[f][1]];
+        uint32_t p2 = m_vertex_patch[fv[f][2]];
+
+        if (p0 == p1 && p1 == p2 && p0 == p2) {
+            // ideal case
+            continue;
+        }
+        if (p0 != p1 && p0 != p2 && p1 != p2) {
+            // hopeless case
+            continue;
+        }
+
+        // find the index in fv[f] of the odd vertex i.e., the vertex with
+        // different patch id
+        uint32_t odd = (p0 == p1) ? 2 : ((p1 == p2) ? 0 : 1);
+
+        // find the index in fv[f] of the common vertex i.e., any vertex other
+        // than odd
+        uint32_t common = (odd + 1) % 3;
+
+        // the common patch
+        uint32_t common_patch = m_vertex_patch[fv[f][common]];
+
+        // re-assign the odd one to agree with the other two
+        // only if this face is also assigned to the common patch
+        uint32_t f_p = m_face_patch[f];
+        if (f_p == common_patch) {
+            m_vertex_patch[fv[f][odd]] = common_patch;
+        }
+    }*/
+
+    // Refinement: every vertex get re-assigned to the patch where the most of
+    // the vertex neighbors are assigned to
+    /* std::vector<std::vector<uint32_t>> vv(m_num_vertices);
+
+    for (auto& it : edges_map) {
+        uint32_t v0 = it.first.first;
+        uint32_t v1 = it.first.second;
+
+        vv[v0].push_back(v1);
+        vv[v1].push_back(v0);
+    }
+
+    for (uint32_t v = 0; v < m_num_vertices; ++v) {
+        std::unordered_map<uint32_t, uint32_t> neighbour_patch;
+        for (uint32_t i = 0; i < vv[v].size(); ++i) {
+            uint32_t n       = vv[v][i];
+            uint32_t n_patch = m_vertex_patch[n];
+            neighbour_patch[n_patch] += 1;
+        }
+
+        uint32_t pop_patch       = INVALID32;
+        uint32_t pop_patch_count = 0;
+        for (auto& it : neighbour_patch) {
+            uint32_t p       = it.first;
+            uint32_t p_count = it.second;
+            if (p_count > pop_patch_count) {
+                pop_patch       = p;
+                pop_patch_count = p_count;
+            }
+        }
+
+        m_vertex_patch[v] = pop_patch;
+    }*/
 }
 
 void Patcher::run_lloyd(uint32_t* d_face_patch,
@@ -915,5 +1058,113 @@ uint32_t Patcher::construct_patches_compressed_format(
     return max_patch_size;
 }
 
+
+void Patcher::metis_kway(const std::vector<uint32_t>& ff_offset,
+                         const std::vector<uint32_t>& ff_values)
+{
+
+    std::vector<idx_t> xadj(ff_offset.size());
+    std::vector<idx_t> adjncy(ff_values.size());
+
+    for (uint32_t i = 0; i < ff_offset.size(); ++i) {
+        xadj[i] = ff_offset[i];
+    }
+
+    for (uint32_t i = 0; i < ff_values.size(); ++i) {
+        adjncy[i] = ff_values[i];
+    }
+
+    idx_t options[METIS_NOPTIONS];
+    METIS_SetDefaultOptions(options);
+    options[METIS_OPTION_PTYPE] = METIS_PTYPE_KWAY;
+    options[METIS_OPTION_OBJTYPE] =
+        METIS_OBJTYPE_VOL;  // Total communication volume minimization.
+    options[METIS_OPTION_NUMBERING] = 0;
+    options[METIS_OPTION_CONTIG]    = 0;
+    options[METIS_OPTION_COMPRESS]  = 0;
+    options[METIS_OPTION_DBGLVL]    = METIS_DBG_TIME;
+
+    // number of vertices in the graph
+    idx_t              nvtxs  = m_num_faces;
+    idx_t              ncon   = 1;
+    idx_t*             vwgt   = NULL;
+    idx_t*             vsize  = NULL;
+    idx_t*             adjwgt = NULL;
+    idx_t              nparts = DIVIDE_UP(m_num_faces, m_patch_size);
+    real_t*            tpwgts = NULL;
+    real_t*            ubvec  = NULL;
+    idx_t              objval = 0;
+    std::vector<idx_t> part(nvtxs, 0);
+
+    CPUTimer timer;
+    timer.start();
+
+    int metis_status = METIS_PartGraphKway(&nvtxs,
+                                           &ncon,
+                                           xadj.data(),
+                                           adjncy.data(),
+                                           vwgt,
+                                           vsize,
+                                           adjwgt,
+                                           &nparts,
+                                           tpwgts,
+                                           ubvec,
+                                           options,
+                                           &objval,
+                                           part.data());
+    timer.stop();
+    m_patching_time_ms = timer.elapsed_millis();
+
+    if (metis_status == METIS_ERROR_INPUT) {
+        RXMESH_ERROR("METIS ERROR INPUT");
+        exit(EXIT_FAILURE);
+    } else if (metis_status == METIS_ERROR_MEMORY) {
+        RXMESH_ERROR("\n METIS ERROR MEMORY \n");
+        exit(EXIT_FAILURE);
+    } else if (metis_status == METIS_ERROR) {
+        RXMESH_ERROR("\n METIS ERROR\n");
+        exit(EXIT_FAILURE);
+    }
+
+    m_num_patches = nparts;
+
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        m_face_patch[f] = part[f];
+    }
+
+    compute_inital_compressed_patches();
+}
+
+void Patcher::compute_inital_compressed_patches()
+{
+    m_patches_offset.resize(m_num_patches, 0);
+
+    std::vector<uint32_t> patches_size(m_num_patches, 0);
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        patches_size[m_face_patch[f]]++;
+    }
+
+    std::inclusive_scan(
+        patches_size.begin(), patches_size.end(), m_patches_offset.begin());
+
+    if (m_patches_offset.back() != m_num_faces) {
+        RXMESH_ERROR(
+            "Patcher::compute_inital_compressed_patches()  Error with creating "
+            "patch graph");
+        exit(EXIT_FAILURE);
+    }
+
+    std::fill(patches_size.begin(), patches_size.end(), 0);
+
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        int p = m_face_patch[f];
+
+        uint32_t id = (p == 0) ? 0 : m_patches_offset[p - 1];
+
+        id += patches_size[p]++;
+
+        m_patches_val[id] = f;
+    }
+}
 }  // namespace patcher
 }  // namespace rxmesh

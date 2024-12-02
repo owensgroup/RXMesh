@@ -79,4 +79,44 @@ struct BaseType<cuDoubleComplex>
 template <typename T>
 using BaseTypeT = typename BaseType<T>::type;
 
+
+namespace detail {
+
+/**
+ * @brief Extracting base type from a type. Used primarily to extract the
+ * PassiveType from a Scalar
+ * Primary template: Default case where T::Passive does not exist
+ */
+
+template <typename, typename = void>
+struct HasPassiveType : std::false_type
+{
+};
+
+/**
+ * @brief Specialization: When T::PassiveType exists
+ */
+template <typename T>
+struct HasPassiveType<T, std::void_t<typename T::PassiveType>> : std::true_type
+{
+};
+
+/**
+ * @brief Helper alias to simplify the check
+ */
+template <typename T>
+constexpr bool HasPassiveType_v = HasPassiveType<T>::value;
+}  // namespace detail
+
+
+/**
+ * @brief Extracting base type from a type. Used primarily to extract the
+ * PassiveType from a Scalar, i.e., if T is a Scalar type, then the returned
+ * type is Scalar::PassiveType. If T is a type that does not have PassiveType
+ * (e.g., float, double), then the returned type is T itself.
+ */
+template <typename T>
+using PassiveType = typename std::
+    conditional<detail::HasPassiveType_v<T>, typename T::PassiveType, T>::type;
+
 }  // namespace rxmesh

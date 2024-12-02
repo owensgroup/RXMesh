@@ -8,11 +8,11 @@
 
 
 template <typename T, uint32_t blockThreads>
-__global__ static void __launch_bounds__(blockThreads)
-    null_space_smooth_vertex(const rxmesh::Context                 context,
-                             const rxmesh::VertexAttribute<int8_t> is_vertex_bd,
-                             const rxmesh::VertexAttribute<T> current_position,
-                             rxmesh::VertexAttribute<T>       new_position)
+__global__ static void  //__launch_bounds__(blockThreads)
+null_space_smooth_vertex(const rxmesh::Context                 context,
+                         const rxmesh::VertexAttribute<int8_t> is_vertex_bd,
+                         const rxmesh::VertexAttribute<T>      current_position,
+                         rxmesh::VertexAttribute<T>            new_position)
 {
 
     using namespace rxmesh;

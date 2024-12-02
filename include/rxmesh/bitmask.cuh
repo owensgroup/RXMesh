@@ -180,6 +180,21 @@ struct Bitmask
         }
     }
 
+    /**
+     * @brief copy from another bitmask using a raw pointer to the bitmask
+     * the pointer should be appropriately allocated 
+     */
+    __device__ __inline__ void copy(cooperative_groups::thread_group& g,
+                                    uint32_t*                         other)
+    {
+        assert(m_bitmask != nullptr);
+        const uint16_t mask_num_elements = DIVIDE_UP(size(), 32);
+        for (uint16_t i = g.thread_rank(); i < mask_num_elements;
+             i += g.size()) {
+            m_bitmask[i] = m_bitmask[i];
+        }
+    }
+
 
     /**
      * @brief set a bit in the bitmask

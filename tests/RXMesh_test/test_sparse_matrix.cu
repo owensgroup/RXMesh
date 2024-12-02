@@ -132,9 +132,7 @@ TEST(RXMeshStatic, SparseMatrix)
 
     using namespace rxmesh;
 
-    // generate rxmesh obj
-    std::string  obj_path = STRINGIFY(INPUT_DIR) "dragon.obj";
-    RXMeshStatic rx(obj_path);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
 
@@ -154,7 +152,7 @@ TEST(RXMeshStatic, SparseMatrix)
     CUDA_ERROR(cudaMalloc((void**)&d_result, (num_vertices) * sizeof(int)));
 
     SparseMatrix<int> spmat(rx);
-    spmat.set_value(1);
+    spmat.reset(1, LOCATION_ALL);
 
     spmat_multi_hardwired_kernel<<<blocks, threads>>>(
         d_arr_ones, spmat, d_result, num_vertices);
@@ -201,7 +199,7 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
 
 
     // generate rxmesh obj
-    RXMeshStatic rx(rxmesh_args.obj_file_name);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
 
@@ -267,10 +265,8 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
     // matrix.
 
     using namespace rxmesh;
-        
-    // generate rxmesh obj
-    std::string  obj_path = rxmesh_args.obj_file_name;
-    RXMeshStatic rx(obj_path);
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
 
@@ -327,11 +323,8 @@ TEST(RXMeshStatic, SparseMatrixSimpleSolve)
 TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
 {
     using namespace rxmesh;
-        
 
-    // generate rxmesh obj
-    std::string  obj_path = rxmesh_args.obj_file_name;
-    RXMeshStatic rx(obj_path);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
 
@@ -356,12 +349,7 @@ TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
         rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
 
     // A_mat.solve(B_mat, X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
-
-    A_mat.permute_alloc(PermuteMethod::NSTDIS);
-    A_mat.permute(PermuteMethod::NSTDIS);
-    A_mat.analyze_pattern();
-    A_mat.post_analyze_alloc();
-    A_mat.factorize();
+    A_mat.pre_solve(rx, Solver::CHOL, PermuteMethod::NSTDIS);
     A_mat.solve(B_mat, X_mat);
 
     A_mat.multiply(X_mat, ret_mat);
@@ -393,9 +381,7 @@ TEST(RXMeshStatic, SparseMatrixToEigen)
 {
     using namespace rxmesh;
 
-    // generate rxmesh obj
-    std::string  obj_path = rxmesh_args.obj_file_name;
-    RXMeshStatic rx(obj_path);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
 

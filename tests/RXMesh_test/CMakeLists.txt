@@ -1,32 +1,37 @@
 add_executable( RXMesh_test )
 
 set( SOURCE_LIST
-    rxmesh_test_main.cu
+    rxmesh_test_main.cu	
 	rxmesh_test.h
-    test_attribute.cuh	
+    test_attribute.cu
     test_util.cu
 	test_iterator.cu
     test_queries.h
-	test_queries_oriented.h
-	test_higher_queries.h
+	test_queries_oriented.cu
+	test_higher_queries.cu
 	query_kernel.cuh
 	higher_query.cuh
-	test_for_each.cuh
-	test_validate.h
-	test_lp_pair.h
-	test_dynamic.cuh
-	test_ev_diamond.h
-	test_sparse_matrix.cuh
+	test_for_each.cu
+	test_validate.cu
+	test_lp_pair.cu
+	test_dynamic.cu
+	test_ev_diamond.cu
+	test_sparse_matrix.cu
 	test_patch_lock.cuh
 	test_patch_scheduler.cuh
-	test_patch_slicing.cuh
-	test_multi_queries.cuh
+	test_patch_slicing.cu
+	test_multi_queries.cu
 	test_wasted_work.cuh
-	test_eigen.cuh
-	test_boundary.cuh
-	test_dense_matrix.cuh
-	test_export.cuh
-	test_svd.cuh
+	test_eigen.cu
+	test_boundary.cu
+	test_dense_matrix.cu
+	test_export.cu
+	test_svd.cu
+	test_scalar.cu
+	test_diff_attribute.cu
+	test_inverse.cu
+	test_grad.h
+	test_hessian.cu
 )
 
 target_sources( RXMesh_test 

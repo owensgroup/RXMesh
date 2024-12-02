@@ -21,6 +21,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 
+#include <Eigen/Dense>
+
 class RXMeshTest;
 
 
@@ -100,11 +102,11 @@ class Attribute : public AttributeBase
      * @param location where the attribute to be allocated
      * @param layout memory layout in case of num_attributes>1
      */
-    explicit Attribute(const char*         name,
-                       const uint32_t      num_attributes,
-                       locationT           location,
-                       const layoutT       layout,
-                       const RXMeshStatic* rxmesh)
+    explicit Attribute(const char*    name,
+                       const uint32_t num_attributes,
+                       locationT      location,
+                       const layoutT  layout,
+                       RXMeshStatic*  rxmesh)
         : AttributeBase(),
           m_rxmesh(rxmesh),
           m_h_patches_info(rxmesh->m_h_patches_info),
@@ -658,6 +660,42 @@ class Attribute : public AttributeBase
 
 
     /**
+     * @brief Accessing the attribute a glm vector. This is used for read only
+     * since the return result is a copy.
+     */
+    template <int N>
+    __host__ __device__ __inline__ vec<T, N> to_glm(const HandleT& handle) const
+    {
+        assert(N == get_num_attributes());
+
+        vec<T, N> ret;
+
+        for (int i = 0; i < N; ++i) {
+            ret[i] = this->operator()(handle, i);
+        }
+        return ret;
+    }
+
+
+    /**
+     * @brief Accessing the attribute a Eigen matrix. This is used for read only
+     * since the return result is a copy.
+     */
+    template <int N>
+    __host__ __device__ __inline__ Eigen::Matrix<T, N, 1> to_eigen(
+        const HandleT& handle) const
+    {
+        assert(N == get_num_attributes());
+
+        Eigen::Matrix<T, N, 1> ret;
+
+        for (Eigen::Index i = 0; i < N; ++i) {
+            ret[i] = this->operator()(handle, i);
+        }
+        return ret;
+    }
+
+    /**
      * @brief Accessing an attribute using a handle to the mesh element
      * @param handle input handle
      * @param attr the attribute id
@@ -727,7 +765,7 @@ class Attribute : public AttributeBase
     }
 
 
-   private:
+   protected:
     /**
      * @brief allocate internal memory
      */
@@ -778,18 +816,18 @@ class Attribute : public AttributeBase
         }
     }
 
-    const RXMeshStatic* m_rxmesh;
-    const PatchInfo*    m_h_patches_info;
-    const PatchInfo*    m_d_patches_info;
-    char*               m_name;
-    uint32_t            m_num_attributes;
-    locationT           m_allocated;
-    T**                 m_h_attr;
-    T**                 m_h_ptr_on_device;
-    T**                 m_d_attr;
-    uint32_t            m_max_num_patches;
-    layoutT             m_layout;
-    double              m_memory_mega_bytes;
+    RXMeshStatic*    m_rxmesh;
+    const PatchInfo* m_h_patches_info;
+    const PatchInfo* m_d_patches_info;
+    char*            m_name;
+    uint32_t         m_num_attributes;
+    locationT        m_allocated;
+    T**              m_h_attr;
+    T**              m_h_ptr_on_device;
+    T**              m_d_attr;
+    uint32_t         m_max_num_patches;
+    layoutT          m_layout;
+    double           m_memory_mega_bytes;
 
     constexpr static uint32_t m_block_size = 256;
 };
@@ -858,11 +896,11 @@ class AttributeContainer
      * @return a shared pointer to the attribute
      */
     template <typename AttrT>
-    std::shared_ptr<AttrT> add(const char*         name,
-                               uint32_t            num_attributes,
-                               locationT           location,
-                               layoutT             layout,
-                               const RXMeshStatic* rxmesh)
+    std::shared_ptr<AttrT> add(const char*   name,
+                               uint32_t      num_attributes,
+                               locationT     location,
+                               layoutT       layout,
+                               RXMeshStatic* rxmesh)
     {
         if (does_exist(name)) {
             RXMESH_WARN(

@@ -133,7 +133,8 @@ __global__ static void mcf_A_setup(
 }
 
 template <typename T>
-void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx)
+void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
+                       rxmesh::PermuteMethod permute_method)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -163,7 +164,6 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx)
                                        launch_box_B.smem_bytes_dyn>>>(
         rx.get_context(), *coords, B_mat, Arg.use_uniform_laplace);
 
-    CUDA_ERROR(cudaDeviceSynchronize());
 
     // A and X set up
     LaunchBox<blockThreads> launch_box_A_X;
@@ -186,29 +186,135 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx)
     // A_mat.move(DEVICE, HOST);
     // B_mat.move(DEVICE, HOST);
     // X_mat->move(DEVICE, HOST);
-    // A_mat.solve(B_mat, *X_mat, Solver::LU, PermuteMethod::NSTDIS);
+    // A_mat.solve(B_mat, *X_mat, Solver::LU, permute_method);
 
     // Solving using QR or CHOL
-    // A_mat.solve(B_mat, *X_mat, Solver::QR, PermuteMethod::NSTDIS);
-    // A_mat.solve(B_mat, *X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
+    // A_mat.solve(B_mat, *X_mat, Solver::QR, permute_method);
+    // A_mat.solve(B_mat, *X_mat, Solver::CHOL, permute_method);
 
-    // Solving using CHOL
-    A_mat.pre_solve(PermuteMethod::NSTDIS);
+
+    // pre-solve
+    // A_mat.pre_solve(rx, Solver::CHOL, permute_method);
+    // Solve
+    // A_mat.solve(B_mat, *X_mat);
+
+    Report report("MCF_Chol");
+    report.command_line(Arg.argc, Arg.argv);
+    report.device();
+    report.system();
+    report.model_data(Arg.obj_file_name, rx);
+    report.add_member("method", std::string("RXMesh"));
+    report.add_member("blockThreads", blockThreads);
+    report.add_member("PermuteMethod",
+                      permute_method_to_string(permute_method));
+
+    RXMESH_INFO("permute_method took {}",
+                permute_method_to_string(permute_method));
+
+    float total_time = 0;
+
+    CPUTimer timer;
+    GPUTimer gtimer;
+
+    timer.start();
+    gtimer.start();
+    A_mat.permute_alloc(permute_method);
+    timer.stop();
+    gtimer.stop();
+    RXMESH_INFO("permute_alloc took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+    report.add_member(
+        "permute_alloc",
+        std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+
+    timer.start();
+    gtimer.start();
+    A_mat.permute(rx, permute_method);
+    timer.stop();
+    gtimer.stop();
+    RXMESH_INFO("permute took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+    report.add_member(
+        "permute", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+
+
+    timer.start();
+    gtimer.start();
+    A_mat.analyze_pattern(Solver::CHOL);
+    timer.stop();
+    gtimer.stop();
+    RXMESH_INFO("analyze_pattern took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+    report.add_member(
+        "analyze_pattern",
+        std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+
+
+    timer.start();
+    gtimer.start();
+    A_mat.post_analyze_alloc(Solver::CHOL);
+    timer.stop();
+    gtimer.stop();
+    RXMESH_INFO("post_analyze_alloc took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+    report.add_member(
+        "post_analyze_alloc",
+        std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+
+    timer.start();
+    gtimer.start();
+    A_mat.factorize(Solver::CHOL);
+    timer.stop();
+    gtimer.stop();
+    RXMESH_INFO("factorize took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+    report.add_member(
+        "factorize", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+
+
+    timer.start();
+    gtimer.start();
     A_mat.solve(B_mat, *X_mat);
+    timer.stop();
+    gtimer.stop();
+    RXMESH_INFO("solve took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+    report.add_member(
+        "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
+    report.add_member("total_time", total_time);
+
+    RXMESH_INFO("total_time {} (ms)", total_time);
 
     // move the results to the host
     // if we use LU, the data will be on the host and we should not move the
     // device to the host
-    X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
+    // X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // copy the results to attributes
-    coords->from_matrix(X_mat.get());
+    // coords->from_matrix(X_mat.get());
 
-    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-    polyscope::show();
+#if USE_POLYSCOPE
+    // rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    // polyscope::show();
+#endif
 
     B_mat.release();
     X_mat->release();
     A_mat.release();
+
+    report.write(Arg.output_folder + "/rxmesh",
+                 "MCF_SpMat_" + extract_file_name(Arg.obj_file_name));
 }

@@ -35,6 +35,7 @@ __inline__ __device__ void bi_assignment_ggp(
     cooperative_groups::thread_block& block,
     const uint16_t                    num_vertices,
     const Bitmask&                    s_owned_v,
+    const bool                        ignore_owned_v,
     const Bitmask&                    s_active_v,
     const uint16_t*                   m_s_vv_offset,
     const uint16_t*                   m_s_vv,
@@ -278,6 +279,7 @@ __global__ static void slice_patches(Context        context,
         bi_assignment_ggp<blockThreads>(block,
                                         num_vertices,
                                         s_owned_v,
+                                        false,
                                         s_active_v,
                                         s_vv_offset,
                                         s_vv,
@@ -639,11 +641,13 @@ class RXMeshDynamic : public RXMeshStatic
      */
     explicit RXMeshDynamic(const std::string file_path,
                            const std::string patcher_file             = "",
+                           const uint32_t    patch_size               = 256,
                            const float       capacity_factor          = 1.8,
                            const float       patch_alloc_factor       = 5.0,
                            const float       lp_hashtable_load_factor = 0.5)
         : RXMeshStatic(file_path,
                        patcher_file,
+                       patch_size,
                        capacity_factor,
                        patch_alloc_factor,
                        lp_hashtable_load_factor)
@@ -656,11 +660,13 @@ class RXMeshDynamic : public RXMeshStatic
      */
     explicit RXMeshDynamic(std::vector<std::vector<uint32_t>>& fv,
                            const std::string patcher_file             = "",
+                           const uint32_t    patch_size               = 256,
                            const float       capacity_factor          = 1.8,
                            const float       patch_alloc_factor       = 5.0,
                            const float       lp_hashtable_load_factor = 0.5)
         : RXMeshStatic(fv,
                        patcher_file,
+                       patch_size,
                        capacity_factor,
                        patch_alloc_factor,
                        lp_hashtable_load_factor)
@@ -720,6 +726,7 @@ class RXMeshDynamic : public RXMeshStatic
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,
                             launch_box.num_registers_per_thread,
+                            launch_box.local_mem_per_thread,
                             blockThreads,
                             kernel);
     }
@@ -877,6 +884,7 @@ class RXMeshDynamic : public RXMeshStatic
         check_shared_memory(launch_box.smem_bytes_dyn,
                             launch_box.smem_bytes_static,
                             launch_box.num_registers_per_thread,
+                            launch_box.local_mem_per_thread,
                             blockThreads,
                             kernel,
                             false);
@@ -1012,12 +1020,14 @@ class RXMeshDynamic : public RXMeshStatic
         auto check = [&](int add_item) {
             size_t   smem_bytes_static;
             uint32_t num_reg_per_thread;
+            size_t   local_mem_per_thread;
 
             if (add_item == 0) {
                 check_shared_memory(
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
+                    local_mem_per_thread,
                     block_size,
                     (void*)detail::slice_patches<block_size,
                                                  TRANSPOSE_ITEM_PER_THREAD + 0>,
@@ -1027,6 +1037,7 @@ class RXMeshDynamic : public RXMeshStatic
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
+                    local_mem_per_thread,
                     block_size,
                     (void*)detail::slice_patches<block_size,
                                                  TRANSPOSE_ITEM_PER_THREAD + 1>,
@@ -1036,6 +1047,7 @@ class RXMeshDynamic : public RXMeshStatic
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
+                    local_mem_per_thread,
                     block_size,
                     (void*)detail::slice_patches<block_size,
                                                  TRANSPOSE_ITEM_PER_THREAD + 2>,
@@ -1045,6 +1057,7 @@ class RXMeshDynamic : public RXMeshStatic
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
+                    local_mem_per_thread,
                     block_size,
                     (void*)detail::slice_patches<block_size,
                                                  TRANSPOSE_ITEM_PER_THREAD + 3>,
@@ -1054,6 +1067,7 @@ class RXMeshDynamic : public RXMeshStatic
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
+                    local_mem_per_thread,
                     block_size,
                     (void*)detail::slice_patches<block_size,
                                                  TRANSPOSE_ITEM_PER_THREAD + 4>,
@@ -1063,6 +1077,7 @@ class RXMeshDynamic : public RXMeshStatic
                     dyn_shmem,
                     smem_bytes_static,
                     num_reg_per_thread,
+                    local_mem_per_thread,
                     block_size,
                     (void*)detail::slice_patches<block_size,
                                                  TRANSPOSE_ITEM_PER_THREAD + 5>,

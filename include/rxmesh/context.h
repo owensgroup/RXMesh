@@ -70,6 +70,14 @@ class Context
     }
 
     /**
+     * @brief Total number of patches in mesh
+     */
+    __device__ __forceinline__ uint32_t get_num_patches() const
+    {
+        return m_num_patches[0];
+    }
+
+    /**
      * @brief Unpack an edge to its edge ID and direction
      * @param edge_dir The input packed edge as stored in PatchInfo and
      * internally in RXMesh
@@ -166,6 +174,49 @@ class Context
             }
 
             return HandleT(owner, lp.local_id_in_owner_patch());
+        }
+    }
+
+    /**
+     * @brief compute a linear compact index for a give vertex/edge/face handle.
+     * This is only valid for static mesh processing i.e., RXMeshStatic.
+     * @tparam HandleT the type of the input handle
+     * @param input handle
+     */
+    template <typename HandleT>
+    __device__ __host__ __inline__ uint32_t linear_id(HandleT input) const
+    {
+        using LocalT = typename HandleT::LocalT;
+
+        assert(input.is_valid());
+
+        assert(input.patch_id() < m_num_patches[0]);
+
+
+        const HandleT owner_handle = get_owner_handle(input);
+
+        uint32_t p_id = owner_handle.patch_id();
+        uint16_t ret  = owner_handle.local_id();
+
+        assert(m_patches_info[p_id].is_owned(HandleT::LocalT(ret)));
+
+        // TODO we don't need to do count the number of owned elements if the
+        // mesh is static, i.e., we have not modified the topology of the mesh
+        // yet since we number the owned elements first and there is no deleted
+        // elements yet
+        ret = this->m_patches_info[p_id].count_num_owned(
+            m_patches_info[p_id].get_owned_mask<HandleT>(),
+            m_patches_info[p_id].get_active_mask<HandleT>(),
+            ret);
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return ret + m_d_vertex_prefix[p_id];
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return ret + m_d_edge_prefix[p_id];
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return ret + m_d_face_prefix[p_id];
         }
     }
 

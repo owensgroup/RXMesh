@@ -59,8 +59,8 @@ __global__ static void edge_split(rxmesh::Context                   context,
                     edge_status(eh) = SKIP;
                     return;
                 }
-                const vec3<T> pa(coords(va, 0), coords(va, 1), coords(va, 2));
-                const vec3<T> pb(coords(vb, 0), coords(vb, 1), coords(vb, 2));
+                const vec3<T> pa = coords.to_glm<3>(va);
+                const vec3<T> pb = coords.to_glm<3>(vb);
 
                 const T edge_len = glm::distance2(pa, pb);
 
@@ -68,8 +68,8 @@ __global__ static void edge_split(rxmesh::Context                   context,
 
                     vec3<T> p_new = (pa + pb) * T(0.5);
 
-                    vec3<T> pc(coords(vc, 0), coords(vc, 1), coords(vc, 2));
-                    vec3<T> pd(coords(vd, 0), coords(vd, 1), coords(vd, 2));
+                    vec3<T> pc = coords.to_glm<3>(vc);
+                    vec3<T> pd = coords.to_glm<3>(vd);
 
                     T min_new_edge_len = std::numeric_limits<T>::max();
 
@@ -124,14 +124,13 @@ __global__ static void edge_split(rxmesh::Context                   context,
 
 #ifndef NDEBUG
                 // sanity check: we don't introduce small edges
-                const vec3<T> p_new(
-                    coords(new_v, 0), coords(new_v, 1), coords(new_v, 2));
+                const vec3<T> p_new = coords.to_glm<3>(new_v);
 
                 for (int i = 0; i < 4; ++i) {
 
                     const VertexHandle v = cavity.get_cavity_vertex(c, i);
 
-                    const vec3<T> p(coords(v, 0), coords(v, 1), coords(v, 2));
+                    const vec3<T> p = coords.to_glm<3>(v);                    
 
                     assert(glm::distance2(p_new, p) >= low_edge_len_sq);
                 }
@@ -241,19 +240,19 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
                                                 high_edge_len_sq,
                                                 low_edge_len_sq,
                                                 d_buffer);
-            
+
             timers.stop("Split");
 
             timers.start("SplitCleanup");
-            rx.cleanup();            
+            rx.cleanup();
             timers.stop("SplitCleanup");
 
             timers.start("SplitSlice");
-            rx.slice_patches(*coords, *edge_status);            
+            rx.slice_patches(*coords, *edge_status);
             timers.stop("SplitSlice");
 
             timers.start("SplitCleanup");
-            rx.cleanup();            
+            rx.cleanup();
             timers.stop("SplitCleanup");
 
             bool show = false;

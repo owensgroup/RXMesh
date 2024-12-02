@@ -1,10 +1,8 @@
 #include <vector>
 #include "gtest/gtest.h"
+#include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/report.h"
-#include "rxmesh/util/cuda_query.h"
-
-using dataT = float;
 
 struct RXMeshTestArg
 {
@@ -17,26 +15,11 @@ struct RXMeshTestArg
 } rxmesh_args;
 
 // clang-format off
-#include "test_higher_queries.h"
 #include "test_queries.h"
-#include "test_queries_oriented.h"
-#include "test_attribute.cuh"
-#include "test_for_each.cuh"
-#include "test_validate.h"
-#include "test_lp_pair.h"
-#include "test_dynamic.cuh"
-#include "test_ev_diamond.h"
-#include "test_sparse_matrix.cuh"
-#include "test_patch_lock.cuh"
 #include "test_patch_scheduler.cuh"
-#include "test_patch_slicing.cuh"
-#include "test_multi_queries.cuh"
+#include "test_patch_lock.cuh"
 #include "test_wasted_work.cuh"
-#include "test_eigen.cuh"
-#include "test_boundary.cuh"
-#include "test_dense_matrix.cuh"
-#include "test_export.cuh"
-#include "test_svd.cuh"
+#include "test_grad.h"
 // clang-format on
 
 int main(int argc, char** argv)

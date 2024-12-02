@@ -28,12 +28,12 @@ struct PatchStash
         }
     }
 
-    __device__ __host__ PatchStash()                        = default;
-    __device__ __host__ PatchStash(const PatchStash& other) = default;
-    __device__ __host__ PatchStash(PatchStash&&)            = default;
+    __device__ __host__ PatchStash()                             = default;
+    __device__ __host__ PatchStash(const PatchStash& other)      = default;
+    __device__ __host__ PatchStash(PatchStash&&)                 = default;
     __device__ __host__ PatchStash& operator=(const PatchStash&) = default;
-    __device__ __host__ PatchStash& operator=(PatchStash&&) = default;
-    __device__                      __host__ ~PatchStash()  = default;
+    __device__ __host__ PatchStash& operator=(PatchStash&&)      = default;
+    __device__                      __host__ ~PatchStash()       = default;
 
     __host__ __device__ __inline__ uint32_t get_patch(uint8_t id) const
     {
@@ -56,6 +56,7 @@ struct PatchStash
     {
         return get_patch(p.patch_stash_id());
     }
+
 
     /*__host__ __device__ __inline__ uint8_t insert_patch(uint32_t patch)
     {
@@ -145,12 +146,16 @@ struct PatchStash
     {
         if (m_is_on_device) {
             GPU_FREE(m_stash);
+
         } else {
             ::free(m_stash);
         }
     }
 
+    // store the stash level of the initial level of coarsening
     uint32_t* m_stash;
-    bool      m_is_on_device;
+
+    bool m_is_on_device;
 };
+
 }  // namespace rxmesh

@@ -10,11 +10,11 @@ struct ShmemMutex
 #endif
 #endif
 
-    __device__ ShmemMutex(const ShmemMutex& other) = default;
-    __device__ ShmemMutex(ShmemMutex&&)            = default;
-    __device__ ShmemMutex& operator=(const ShmemMutex&) = default;
-    __device__ ShmemMutex& operator=(ShmemMutex&&) = default;
-    __device__ ~ShmemMutex()                       = default;
+    __device__             ShmemMutex(const ShmemMutex& other) = default;
+    __device__             ShmemMutex(ShmemMutex&&)            = default;
+    __device__ ShmemMutex& operator=(const ShmemMutex&)        = default;
+    __device__ ShmemMutex& operator=(ShmemMutex&&)             = default;
+    __device__ ~ShmemMutex()                                   = default;
 
     __device__ ShmemMutex() : m_mutex(nullptr)
     {

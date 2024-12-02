@@ -22,7 +22,7 @@ __global__ static void __launch_bounds__(blockThreads)
             return;
         }
 
-        const vec3<T> v(coords(v_id, 0), coords(v_id, 1), coords(v_id, 2));
+        const vec3<T> v = coords.to_glm<3>(v_id);
 
         // compute both vertex normal and the new position
         // the new position is the average of the one-ring
@@ -33,7 +33,8 @@ __global__ static void __launch_bounds__(blockThreads)
 
         // this is the last vertex in the one-ring (before r_id)
         VertexHandle q_id = iter.back();
-        vec3<T>      q(coords(q_id, 0), coords(q_id, 1), coords(q_id, 2));
+
+        vec3<T> q = coords.to_glm<3>(q_id);
 
         vec3<T> new_v(0.0, 0.0, 0.0);
         vec3<T> v_normal(0.0, 0.0, 0.0);
@@ -44,7 +45,7 @@ __global__ static void __launch_bounds__(blockThreads)
             // the current one ring vertex
             const VertexHandle r_id = iter[i];
 
-            const vec3<T> r(coords(r_id, 0), coords(r_id, 1), coords(r_id, 2));
+            const vec3<T> r = coords.to_glm<3>(r_id);
 
             vec3<T> c = glm::cross(q - v, r - v);
 

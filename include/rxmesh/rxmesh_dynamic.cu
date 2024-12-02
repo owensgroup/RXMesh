@@ -1057,6 +1057,7 @@ __inline__ __device__ void bi_assignment_ggp(
     cooperative_groups::thread_block& block,
     const uint16_t                    num_vertices,
     const Bitmask&                    s_owned_v,
+    const bool                        ignore_owned_v,
     const Bitmask&                    s_active_v,
     const uint16_t*                   s_vv_offset,
     const uint16_t*                   s_vv,
@@ -1067,13 +1068,10 @@ __inline__ __device__ void bi_assignment_ggp(
     Bitmask&                          s_partition_b_v,
     int                               num_iter)
 {
-
-
     __shared__ int      s_num_assigned_vertices;
     __shared__ int      s_num_active_vertices;
     __shared__ int      s_num_A_vertices, s_num_B_vertices;
     __shared__ uint16_t s_seed_a, s_seed_b;
-
 
     // compute the total number of active vertices (including not-owned)
     auto compute_num_active_vertices = [&]() {
@@ -1099,7 +1097,10 @@ __inline__ __device__ void bi_assignment_ggp(
 
         bool found_a(false), found_b(false);
         for (uint16_t v = 0; v < num_vertices; ++v) {
-            if (s_active_v(v) && !s_owned_v(v)) {
+            if (s_active_v(v) /* && !s_owned_v(v)*/) {
+                if (!ignore_owned_v && s_owned_v(v)) {
+                    continue;
+                }
                 s_seed_a = v;
                 found_a  = true;
                 break;
@@ -1117,7 +1118,10 @@ __inline__ __device__ void bi_assignment_ggp(
         assert(found_a);
 
         for (uint16_t v = num_vertices - 1; v > 1; --v) {
-            if (s_active_v(v) && !s_owned_v(v) && v != s_seed_a) {
+            if (s_active_v(v) /*&& !s_owned_v(v)*/ && v != s_seed_a) {
+                if (!ignore_owned_v && s_owned_v(v)) {
+                    continue;
+                }
                 s_seed_b = v;
                 found_b  = true;
                 break;
@@ -1189,7 +1193,9 @@ __inline__ __device__ void bi_assignment_ggp(
 
                         const uint16_t nv = s_vv[vv];
 
-                        assert(s_active_v(nv));
+                        if (!s_active_v(nv)) {
+                            continue;
+                        }
 
                         if (!s_assigned_v(nv)) {
                             if (s_partition_a_v(v)) {
@@ -1207,6 +1213,38 @@ __inline__ __device__ void bi_assignment_ggp(
                                 }
                             }
                         }
+                    }
+                } else if (s_active_v(v) && !s_assigned_v(v)) {
+                    // for active vertices that are not connected to anything
+                    // other vertices, we will add then to one of the partitions
+                    // at random (kinda) and put the vertex on the frontier so
+                    // we don't encounter this if condition again
+                    const uint16_t start = s_vv_offset[v];
+                    const uint16_t end   = s_vv_offset[v + 1];
+
+                    // and we have to calculate the neighbors since we might be
+                    // connected to in-active vertices
+                    int num_neighbours = 0;
+
+                    for (uint16_t vv = start; vv < end; ++vv) {
+
+                        const uint16_t nv = s_vv[vv];
+
+                        if (!s_active_v(nv)) {
+                            continue;
+                        }
+                        num_neighbours++;
+                    }
+                    if (num_neighbours == 0) {
+                        if (v % 2 == 0) {
+                            s_partition_a_v.set(v, true);
+                            ::atomicAdd(&s_num_A_vertices, 1);
+                        } else {
+                            s_partition_b_v.set(v, true);
+                            ::atomicAdd(&s_num_B_vertices, 1);
+                        }
+                        s_next_frontier_v.set(v, true);
+                        // printf("\n reg growing %u", v);
                     }
                 }
             }
@@ -1288,25 +1326,41 @@ __inline__ __device__ void bi_assignment_ggp(
         for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
             if (s_active_v(v)) {
                 bool is_a(s_partition_a_v(v));
-                bool on_frontier = !s_owned_v(v);
+                // TODO: line frontier of separators, double check the logic
+                bool on_frontier = (ignore_owned_v) ? false : !s_owned_v(v);
 
                 if (!on_frontier) {
                     const uint16_t start = s_vv_offset[v];
                     const uint16_t end   = s_vv_offset[v + 1];
 
+
+                    // check if the vertex is isolated
+                    int num_neighbours = 0;
+
                     for (uint16_t vv = start; vv < end; ++vv) {
                         const uint16_t nv = s_vv[vv];
-                        if (is_a) {
-                            if (s_partition_b_v(nv)) {
-                                on_frontier = true;
-                                break;
-                            }
-                        } else {
-                            if (s_partition_a_v(nv)) {
-                                on_frontier = true;
-                                break;
+                        if (s_active_v(nv)) {
+                            num_neighbours++;
+                            if (is_a) {
+                                if (s_partition_b_v(nv)) {
+                                    on_frontier = true;
+                                    break;
+                                }
+                            } else {
+                                if (s_partition_a_v(nv)) {
+                                    on_frontier = true;
+                                    break;
+                                }
                             }
                         }
+                    }
+
+                    if (num_neighbours == 0) {
+                        // if the vertex is isolated, then we mark it
+                        // as assigned but we don't put it on the frontier
+                        assert(!on_frontier);
+                        s_assigned_v.set(v, true);
+                        ::atomicAdd(&s_num_assigned_vertices, 1);
                     }
                 }
                 if (on_frontier) {
@@ -1329,6 +1383,8 @@ __inline__ __device__ void bi_assignment_ggp(
     // s_seed_a and s_seed_b. In the last iteration in this while loop, (one of)
     // the most interior seed will be finally written
     auto compute_interior = [&]() {
+        int num_assigned_prv_iter = 0;
+
         while (s_num_assigned_vertices < s_num_active_vertices) {
             block.sync();
             for (uint16_t v = threadIdx.x; v < num_vertices;
@@ -1382,16 +1438,21 @@ __inline__ __device__ void bi_assignment_ggp(
             s_current_frontier_v.copy(block, s_next_frontier_v);
             block.sync();
             s_next_frontier_v.reset(block);
+
+            if (s_num_assigned_vertices == num_assigned_prv_iter) {
+                // means that we have not no made any progress in this iteration
+                // probably because we have a disconnected patch
+                break;
+            }
+            num_assigned_prv_iter = s_num_assigned_vertices;
         }
     };
-
 
     if (threadIdx.x == 0) {
         bootstrap();
     }
     compute_num_active_vertices();
     block.sync();
-
 
     for (int it = 0; it < num_iter; ++it) {
 
@@ -1417,6 +1478,11 @@ __inline__ __device__ void bi_assignment_ggp(
         init_interior();
         block.sync();
 
+        if (s_num_assigned_vertices == 0) {
+            // i.e., there is no frontier means we probably have a disconnected
+            // input
+            break;
+        }
         compute_interior();
         block.sync();
     }
@@ -2929,6 +2995,7 @@ template __inline__ __device__ void detail::bi_assignment_ggp<256>(
     cooperative_groups::thread_block&,
     const uint16_t,
     const Bitmask&,
+    const bool,
     const Bitmask&,
     const uint16_t*,
     const uint16_t*,

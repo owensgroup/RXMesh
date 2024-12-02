@@ -18,9 +18,10 @@ __device__ __inline__ T update_step(
     const T                           infinity_val)
 {
     using namespace rxmesh;
-    const vec3<T> v0(coords(v0_id, 0), coords(v0_id, 1), coords(v0_id, 2));
-    const vec3<T> v1(coords(v1_id, 0), coords(v1_id, 1), coords(v1_id, 2));
-    const vec3<T> v2(coords(v2_id, 0), coords(v2_id, 1), coords(v2_id, 2));
+    const vec3<T> v0 = coords.to_glm<3>(v0_id);
+    const vec3<T> v1 = coords.to_glm<3>(v1_id);
+    const vec3<T> v2 = coords.to_glm<3>(v2_id);
+
     const vec3<T> x0 = v1 - v0;
     const vec3<T> x1 = v2 - v0;
 

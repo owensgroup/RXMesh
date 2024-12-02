@@ -9,11 +9,11 @@
 #include "rxmesh/geometry_util.cuh"
 
 template <typename T, uint32_t blockThreads>
-__global__ static void __launch_bounds__(blockThreads)
-    classify_vertex(const rxmesh::Context                 context,
-                    const rxmesh::VertexAttribute<T>      position,
-                    const rxmesh::VertexAttribute<int8_t> is_vertex_bd,
-                    rxmesh::VertexAttribute<int8_t>       vertex_rank)
+__global__ static void  // __launch_bounds__(blockThreads)
+classify_vertex(const rxmesh::Context                 context,
+                const rxmesh::VertexAttribute<T>      position,
+                const rxmesh::VertexAttribute<int8_t> is_vertex_bd,
+                rxmesh::VertexAttribute<int8_t>       vertex_rank)
 {
     // Compute rank of the quadric metric tensor at a vertex Determine the rank
     // of the primary space at the given vertex(see Jiao07)
@@ -92,18 +92,18 @@ __global__ static void __launch_bounds__(blockThreads)
 
 
 template <typename T, uint32_t blockThreads>
-__global__ static void __launch_bounds__(blockThreads)
-    edge_flip(rxmesh::Context                   context,
-              rxmesh::VertexAttribute<T>        position,
-              rxmesh::VertexAttribute<int8_t>   vertex_rank,
-              rxmesh::EdgeAttribute<EdgeStatus> edge_status,
-              rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
-              rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
-              const T                           edge_flip_min_length_change,
-              const T                           max_volume_change,
-              const T                           min_triangle_area,
-              const T                           min_triangle_angle,
-              const T                           max_triangle_angle)
+__global__ static void  //__launch_bounds__(blockThreads)
+edge_flip(rxmesh::Context                   context,
+          rxmesh::VertexAttribute<T>        position,
+          rxmesh::VertexAttribute<int8_t>   vertex_rank,
+          rxmesh::EdgeAttribute<EdgeStatus> edge_status,
+          rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
+          rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
+          const T                           edge_flip_min_length_change,
+          const T                           max_volume_change,
+          const T                           min_triangle_area,
+          const T                           min_triangle_angle,
+          const T                           max_triangle_angle)
 {
     using namespace rxmesh;
 

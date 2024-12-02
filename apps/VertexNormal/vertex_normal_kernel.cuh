@@ -15,9 +15,9 @@ __global__ static void compute_vertex_normal(const rxmesh::Context      context,
     using namespace rxmesh;
     auto vn_lambda = [&](FaceHandle face_id, VertexIterator& fv) {
         // get the face's three vertices coordinates
-        vec3<T> c0(coords(fv[0], 0), coords(fv[0], 1), coords(fv[0], 2));
-        vec3<T> c1(coords(fv[1], 0), coords(fv[1], 1), coords(fv[1], 2));
-        vec3<T> c2(coords(fv[2], 0), coords(fv[2], 1), coords(fv[2], 2));
+        vec3<T> c0 = coords.to_glm<3>(fv[0]);
+        vec3<T> c1 = coords.to_glm<3>(fv[1]);
+        vec3<T> c2 = coords.to_glm<3>(fv[2]);       
 
         // compute the face normal
         vec3<T> n = cross(c1 - c0, c2 - c0);
