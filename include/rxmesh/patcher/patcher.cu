@@ -112,7 +112,7 @@ Patcher::Patcher(uint32_t                                        patch_size,
     } else {
 
         if (false) {
-            grid();
+            grid(fv);
         } else {
             if (use_metis) {
                 metis_kway(ff_offset, ff_values);
@@ -178,17 +178,40 @@ Patcher::Patcher(uint32_t                                        patch_size,
     GPU_FREE(d_patches_val);
 }
 
-void Patcher::grid()
+void Patcher::grid(const std::vector<std::vector<uint32_t>>& fv)
 {
     // this only work if the input is a mesh coming from create_plane()
     // where are laid out sequenetially and so we can just group them using
     // their id
 
-    m_num_patches = DIVIDE_UP(m_num_faces, m_patch_size);
+    // m_num_patches = DIVIDE_UP(m_num_faces, m_patch_size);
+    // for (uint32_t f = 0; f < m_num_faces; ++f) {
+    //     m_face_patch[f] = f / m_patch_size;
+    // }
+
+    uint32_t num_v          = std::sqrt(m_num_vertices);
+    uint32_t num_v_per_part = std::floor(std::sqrt(float(m_patch_size / 2.f)));
+    uint32_t num_parts      = num_v / num_v_per_part;
+
+    m_num_patches = num_parts * num_parts;
 
     for (uint32_t f = 0; f < m_num_faces; ++f) {
-        m_face_patch[f] = f / m_patch_size;
+        uint32_t minn(std::numeric_limits<uint32_t>::max());
+        for (uint32_t v = 0; v < fv[f].size(); ++v) {
+            minn = std::min(fv[f][v], minn);
+        }
+
+        uint32_t x = minn / num_v;
+        uint32_t y = minn % num_v;
+
+        uint32_t x_id = x / num_v_per_part;
+        uint32_t y_id = y / num_v_per_part;
+
+        uint32_t id = x_id * num_parts + y_id;
+
+        m_face_patch[f] = id;
     }
+
 
     compute_inital_compressed_patches();
 }
