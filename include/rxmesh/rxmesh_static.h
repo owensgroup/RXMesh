@@ -1969,20 +1969,41 @@ class RXMeshStatic : public RXMesh
                 local_mem_per_thread);
 
             RXMESH_TRACE(
-                "RXMeshStatic::check_shared_memory() available total shared "
-                "memory per block = {} (bytes) = {} (Kb)",
-                devProp.sharedMemPerBlock,
-                float(devProp.sharedMemPerBlock) / 1024.0f);
+                "RXMeshStatic::check_shared_memory() max dynamic shared "
+                "memory per block for this function = {} (bytes) = {} "
+                "(Kb)",
+                func_attr.maxDynamicSharedSizeBytes,
+                float(func_attr.maxDynamicSharedSizeBytes) / 1024.0f);
+
+            RXMESH_TRACE(
+                "RXMeshStatic::check_shared_memory() max total shared "
+                "memory per block for the current device = {} (bytes) = {} "
+                "(Kb)",
+                devProp.sharedMemPerBlockOptin,
+                float(devProp.sharedMemPerBlockOptin) / 1024.0f);
         }
 
-        if (smem_bytes_static + smem_bytes_dyn > devProp.sharedMemPerBlock) {
+        if (smem_bytes_dyn > func_attr.maxDynamicSharedSizeBytes) {
             RXMESH_ERROR(
-                " RXMeshStatic::check_shared_memory() shared memory needed for"
-                " input function ({} bytes) exceeds the max shared memory "
-                "per block on the current device ({} bytes)",
+                " RXMeshStatic::check_shared_memory() dynamic shared memory "
+                "needed for input function ({} bytes) exceeds the max dynamic "
+                "shared memory per block for this function ({} bytes)",
+                smem_bytes_dyn,
+                func_attr.maxDynamicSharedSizeBytes);
+            // exit(EXIT_FAILURE);
+        }
+
+
+        if (smem_bytes_static + smem_bytes_dyn >
+            devProp.sharedMemPerBlockOptin) {
+            RXMESH_ERROR(
+                " RXMeshStatic::check_shared_memory() total shared memory "
+                "needed for input function ({} bytes) exceeds the max total "
+                "shared memory per block (opt-in) on the current device ({} "
+                "bytes)",
                 smem_bytes_static + smem_bytes_dyn,
-                devProp.sharedMemPerBlock);
-            exit(EXIT_FAILURE);
+                devProp.sharedMemPerBlockOptin);
+            // exit(EXIT_FAILURE);
         }
 
         if (num_blocks_per_sm == 0) {
@@ -1994,7 +2015,7 @@ class RXMeshStatic : public RXMesh
                 "and/or break the kernel into such that the number of "
                 "registers is less. You may also try reducing the amount of "
                 "additional shared memory you requested");
-            exit(EXIT_FAILURE);
+            // exit(EXIT_FAILURE);
         }
     }
 
