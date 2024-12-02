@@ -104,52 +104,6 @@ struct CustomMaxPair
         return (b.value > a.value) ? b : a;
     }
 };
-template <class T, uint32_t blockSize, typename HandleT>
-__launch_bounds__(blockSize) __global__
-    void arg_max_kernel(const Attribute<T, HandleT> X,
-                    const uint32_t              num_patches,
-                    const uint32_t              num_attributes,
-                    cub::KeyValuePair<int, T>*  d_block_output,
-                    uint32_t                    attribute_id)
-{
-    using LocalT = typename HandleT::LocalT;
-
-    assert(X.get_num_attributes() == 1); //we can only take arg max for a scalar attribute
-
-    uint32_t p_id = blockIdx.x;
-    if (p_id < num_patches) {
-        const uint16_t element_per_patch = X.size(p_id);
-        cub::KeyValuePair<int, T> thread_val;
-        thread_val.value = std::numeric_limits<T>::lowest();
-        thread_val.key   = 0;
-        for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
-
-            if (X.get_patch_info(p_id).is_owned(LocalT(i)) &&
-                !X.get_patch_info(p_id).is_deleted(LocalT(i))) {
-
-                if (attribute_id != INVALID32) 
-                {
-                    CustomMaxPair             max_pair;
-                    cub::KeyValuePair<int, T> current_pair(i, X(p_id, i, attribute_id));
-                    thread_val = max_pair(thread_val, current_pair);
-                }
-            }
-        }
-
-        typedef cub::BlockReduce<cub::KeyValuePair<int, T>, blockSize> BlockReduce;
-        __shared__ typename BlockReduce::TempStorage temp_storage;
-
-
-        cub::KeyValuePair<int, T> block_aggregate =
-            BlockReduce(temp_storage).Reduce(thread_val, CustomMaxPair());
-        if (threadIdx.x == 0) 
-        {
-            d_block_output[blockIdx.x] = block_aggregate;
-        }
-    }
-}
-
-
 
 template <class T, uint32_t blockSize, typename ReductionOp, typename HandleT>
 __launch_bounds__(blockSize) __global__
