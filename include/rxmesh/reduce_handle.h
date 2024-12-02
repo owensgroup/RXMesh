@@ -148,11 +148,17 @@ class ReduceHandle
      */
 
     __device__ __forceinline__ Pair operator()(const Pair& a, const Pair& b) const
+    struct CustomMin
     {
         return (b.value < a.value) ? b : a;
+        __device__ __forceinline__ Pair operator()(const Pair& a, const Pair& b) const
+        {
+            return (b.value < a.value) ? b : a;
         
     }
     
+        }
+    };  
 
     template <typename ReductionOp>
     T reduce(const Attribute<T, HandleT>& attr,
