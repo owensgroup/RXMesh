@@ -119,8 +119,32 @@ class ReduceHandle
         return std::sqrt(reduce_2nd_stage(stream, cub::Sum(), 0));
     }
 
+    T arg_max(const Attribute<T, HandleT>& attr,
+              uint32_t                     attribute_id = INVALID32,
+              cudaStream_t                 stream       = NULL)
+    {
+        if ((attr.get_allocated() & DEVICE) != DEVICE) {
+            RXMESH_ERROR(
+                "ReduceHandle::arg_max() input attribute to should be "
+                "allocated on the device");
+        }
+
+        detail::arg_max_kernel<T, attr.m_block_size>
+            <<<m_max_num_patches, attr1.m_block_size, 0, stream>>>(
+                attr1,
+                m_max_num_patches,
+                attr1.get_num_attributes(),
+                m_d_reduce_1st_stage,
+                attribute_id);
+
+                return (reduce_2nd_stage(stream, CustomMaxPair(), 0));
+
+    }
+
+
+
     /**
-     * @brief performn generic reduction operations on an input attribute
+     * @brief perform generic reduction operations on an input attribute
      * @tparam ReductionOp type of the binary reduction functor having member T
      * operator()(const T &a, const T &b)
      * @param attr input attribute
@@ -148,7 +172,6 @@ class ReduceHandle
      */
 
     
-    };  
 
     template <typename ReductionOp>
     T reduce(const Attribute<T, HandleT>& attr,
@@ -162,6 +185,8 @@ class ReduceHandle
                 "ReduceHandle::reduce() input attribute to should be "
                 "allocated on the device");
         }
+
+        
 
         detail::generic_reduce<T, attr.m_block_size>
             <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
