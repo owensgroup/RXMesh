@@ -147,6 +147,13 @@ class ReduceHandle
      * @return the reduced output on the host
      */
 
+    __device__ __forceinline__ Pair operator()(const Pair& a, const Pair& b) const
+    {
+        return (b.value < a.value) ? b : a;
+        
+    }
+    
+
     template <typename ReductionOp>
     T reduce(const Attribute<T, HandleT>& attr,
              ReductionOp                  reduction_op,
