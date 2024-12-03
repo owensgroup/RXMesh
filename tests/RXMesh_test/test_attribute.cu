@@ -169,7 +169,7 @@ TEST(Attribute, ArgMax)
 
     ReduceHandle reduce_handle(attr);
 
-    uint32_t output = reduce_handle.arg_max(attr);
+    uint32_t output = reduce_handle.arg_maxOrmin(attr,false);//testing argmax
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
