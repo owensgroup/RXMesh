@@ -119,7 +119,9 @@ class ReduceHandle
         return std::sqrt(reduce_2nd_stage(stream, cub::Sum(), 0));
     }
 
-    T arg_max(const Attribute<T, HandleT>& attr,
+    //does either arg max or min depending on second argument is_min
+    T arg_maxOrmin(const Attribute<T, HandleT>& attr,
+              bool                         is_min       = true,
               uint32_t                     attribute_id = INVALID32,
               cudaStream_t                 stream       = NULL)
     {
@@ -129,15 +131,18 @@ class ReduceHandle
                 "allocated on the device");
         }
 
+
+
         detail::arg_max_kernel<T, attr.m_block_size>
             <<<m_max_num_patches, attr1.m_block_size, 0, stream>>>(
-                attr1,
+                attr1, 
+                is_min,
                 m_max_num_patches,
                 attr1.get_num_attributes(),
                 m_d_reduce_1st_stage,
                 attribute_id);
-
-                return (reduce_2nd_stage(stream, CustomMaxPair(), 0));
+        
+                return (reduce_2nd_stage(stream, is_min?detail::CustomMinPair():detail::CustomMaxPair(), 0));
 
     }
 

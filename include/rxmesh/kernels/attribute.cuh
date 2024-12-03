@@ -104,9 +104,21 @@ struct CustomMaxPair
         return (b.value > a.value) ? b : a;
     }
 };
+
+struct CustomMinPair
+{
+    template <typename T>
+    __device__ __forceinline__ cub::KeyValuePair<int, T> operator()(
+        const cub::KeyValuePair<int, T>& a,
+        const cub::KeyValuePair<int, T>& b) const
+    {
+        return (b.value < a.value) ? b : a;
+    }
+};
 template <class T, uint32_t blockSize, typename HandleT>
 __launch_bounds__(blockSize) __global__
     void arg_max_kernel(const Attribute<T, HandleT> X,
+                    bool                        is_min,
                     const uint32_t              num_patches,
                     const uint32_t              num_attributes,
                     cub::KeyValuePair<int, T>*  d_block_output,
@@ -127,11 +139,20 @@ __launch_bounds__(blockSize) __global__
             if (X.get_patch_info(p_id).is_owned(LocalT(i)) &&
                 !X.get_patch_info(p_id).is_deleted(LocalT(i))) {
 
-                if (attribute_id != INVALID32) 
+                if (attribute_id != INVALID32 ) 
                 {
-                    CustomMaxPair             max_pair;
                     cub::KeyValuePair<int, T> current_pair(i, X(p_id, i, attribute_id));
-                    thread_val = max_pair(thread_val, current_pair);
+                    if (is_min) 
+                    {
+                        CustomMinPair             min_pair;
+                        thread_val = min_pair(thread_val, current_pair);
+                    }
+                    else 
+                    {
+                        CustomMaxPair             max_pair;
+                        thread_val = max_pair(thread_val, current_pair);
+                    }
+                    
                 }
             }
         }
@@ -140,8 +161,11 @@ __launch_bounds__(blockSize) __global__
         __shared__ typename BlockReduce::TempStorage temp_storage;
 
 
-        cub::KeyValuePair<int, T> block_aggregate =
-            BlockReduce(temp_storage).Reduce(thread_val, CustomMaxPair());
+        cub::KeyValuePair<int, T> block_aggregate;
+
+        if (is_min) block_aggregate = BlockReduce(temp_storage).Reduce(thread_val, CustomMinPair());
+        else block_aggregate = BlockReduce(temp_storage).Reduce(thread_val, CustomMaxPair());
+
         if (threadIdx.x == 0) 
         {
             d_block_output[blockIdx.x] = block_aggregate;
