@@ -138,6 +138,43 @@ TEST(Attribute, Reduce)
 }
 
 
+TEST(Attribute, ArgMax)
+{
+    using namespace rxmesh;
+
+    CUDA_ERROR(cudaDeviceReset());
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    auto attr = *rx.add_vertex_attribute<float>("v", 1, rxmesh::DEVICE);
+
+    const float val(2.0);
+
+    populate<float>(rx, *attr, val);
+    auto context = rx.get_context();
+    rx.for_each_vertex(
+        rxmesh::HOST,
+        [attr,context](const rxmesh::VertexHandle vh) 
+        {
+            if (context.linear_id(vh)==1)
+            attr(vh) = 10;
+        },
+        NULL,
+        false);
+
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    ReduceHandle reduce_handle(attr);
+
+    uint32_t output = reduce_handle.reduce(attr, detail::CustomMaxPair(), 0);
+
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    EXPECT_EQ(output, 1);
+}
+
+
+
 TEST(Attribute, CopyFrom)
 {
     using namespace rxmesh;
