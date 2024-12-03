@@ -86,8 +86,15 @@ struct PatchStash
     __device__ __inline__ uint8_t insert_patch(uint32_t    patch,
                                                ShmemMutex& mutex)
     {
+        //in case it was there already
+        uint8_t ret = find_patch_index(patch);
+        if (ret != INVALID8) {
+            return ret;
+        }
+
+        //otherwise, we will have to lock access to m_stash 
         mutex.lock();
-        const uint8_t ret = insert_patch(patch);
+        ret = insert_patch(patch);
         mutex.unlock();
         return ret;
     }
