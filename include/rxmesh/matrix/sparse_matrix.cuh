@@ -150,7 +150,7 @@ struct SparseMatrix
     {
     }
 
-    SparseMatrix(const RXMeshStatic& rx) : SparseMatrix(rx, 1){};
+    SparseMatrix(const RXMeshStatic& rx) : SparseMatrix(rx, 1) {};
 
    protected:
     SparseMatrix(const RXMeshStatic& rx, IndexT replicate)
@@ -843,9 +843,8 @@ struct SparseMatrix
 
         std::vector<TripletT> triplets;
         triplets.reserve(non_zeros());
-        for_each([&](int r, int c, T& val) {
-            triplets.push_back({r, c, val});
-        });
+        for_each(
+            [&](int r, int c, T& val) { triplets.push_back({r, c, val}); });
 
         Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT> ret(rows(), cols());
 
@@ -1790,10 +1789,9 @@ struct SparseMatrix
             if constexpr (std::is_same_v<T, double>) {
                 CUSOLVER_ERROR(cusolverSpDcsrlsvqr(handle,
                                                    rows(),
-                                                   non_zeros(),
-                                                   m_d_val,
+                                                   non_zeros(),                                                   
                                                    m_descr,
-                                                   m_d_val,
+                                                   m_d_val,                                                   
                                                    m_d_row_ptr,
                                                    m_d_col_idx,
                                                    d_b,
