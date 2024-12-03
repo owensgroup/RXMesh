@@ -794,6 +794,26 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
+     * @brief Adding a new face attribute similar to another face attribute
+     * in allocation, number of attributes, and layout
+     * @tparam T type of the returned attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param other the other face attribute
+     * @return shared pointer to the created face attribute
+     */
+    template <class T>
+    std::shared_ptr<FaceAttribute<T>> add_face_attribute_like(
+        const std::string&      name,
+        const FaceAttribute<T>& other)
+    {
+        return add_face_attribute<T>(name,
+                                     other.get_num_attributes(),
+                                     other.get_allocated(),
+                                     other.get_layout());
+    }
+
+    /**
      * @brief Adding a new face attribute by reading values from a host buffer
      * f_attributes where the order of faces is the same as the order of
      * faces given to the constructor.The attributes are populated on device
@@ -892,6 +912,26 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
+     * @brief Adding a new edge attribute similar to another edge attribute
+     * in allocation, number of attributes, and layout
+     * @tparam T type of the returned attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param other the other edge attribute
+     * @return shared pointer to the created edge attribute
+     */
+    template <class T>
+    std::shared_ptr<EdgeAttribute<T>> add_edge_attribute_like(
+        const std::string&      name,
+        const EdgeAttribute<T>& other)
+    {
+        return add_edge_attribute<T>(name,
+                                     other.get_num_attributes(),
+                                     other.get_allocated(),
+                                     other.get_layout());
+    }
+
+    /**
      * @brief Adding a new differentiable edge attribute
      * @tparam T the underlying type of the attribute
      * @tparam Size the number of components per edge
@@ -934,6 +974,25 @@ class RXMeshStatic : public RXMesh
             name.c_str(), num_attributes, location, layout, this);
     }
 
+    /**
+     * @brief Adding a new vertex attribute similar to another vertex attribute
+     * in allocation, number of attributes, and layout
+     * @tparam T type of the returned attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param other the other vertex attribute
+     * @return shared pointer to the created vertex attribute
+     */
+    template <class T>
+    std::shared_ptr<VertexAttribute<T>> add_vertex_attribute_like(
+        const std::string&        name,
+        const VertexAttribute<T>& other)
+    {
+        return add_vertex_attribute<T>(name,
+                                       other.get_num_attributes(),
+                                       other.get_allocated(),
+                                       other.get_layout());
+    }
 
     /**
      * @brief Adding a new differentiable vertex attribute
