@@ -110,7 +110,7 @@ class ReduceHandle
 
         detail::norm2_kernel<T, attr.m_block_size>
             <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
-                attr,                
+                attr,
                 m_max_num_patches,
                 attr.get_num_attributes(),
                 m_d_reduce_1st_stage,
@@ -119,9 +119,34 @@ class ReduceHandle
         return std::sqrt(reduce_2nd_stage(stream, cub::Sum(), 0));
     }
 
-    //does either arg max or min depending on second argument is_min
-    T arg_maxOrmin(const Attribute<T, HandleT>& attr,
-              bool                         is_min       = true,
+    T arg_max(const Attribute<T, HandleT>& attr,
+              uint32_t                     attribute_id,
+              cudaStream_t                 stream       = NULL)
+    {
+        if ((attr.get_allocated() & DEVICE) != DEVICE) {
+            RXMESH_ERROR(
+                "ReduceHandle::arg_max() input attribute to should be "
+                "allocated on the device");
+        }
+
+        detail::CustomMaxPair max_pair;
+        detail::arg_max_kernel<T, attr.m_block_size>
+            <<<m_max_num_patches, attr1.m_block_size, 0, stream>>>(
+                attr1,
+                attribute_id,
+                max_pair,
+                m_max_num_patches,
+                attr1.get_num_attributes(),
+                m_d_reduce_1st_stage,
+                attribute_id);
+
+        return (reduce_2nd_stage(
+            stream,
+             detail::CustomMaxPair(),
+            0));
+    }
+
+    T arg_min(const Attribute<T, HandleT>& attr,
               uint32_t                     attribute_id = INVALID32,
               cudaStream_t                 stream       = NULL)
     {
@@ -132,17 +157,19 @@ class ReduceHandle
         }
 
 
+        detail::CustomMinPair min_pair;
 
         detail::arg_max_kernel<T, attr.m_block_size>
             <<<m_max_num_patches, attr1.m_block_size, 0, stream>>>(
-                attr1, 
-                is_min,
+                attr1,
+                attribute_id,
+                min_pair,
                 m_max_num_patches,
                 attr1.get_num_attributes(),
                 m_d_reduce_1st_stage,
                 attribute_id);
         
-                return (reduce_2nd_stage(stream, is_min?detail::CustomMinPair():detail::CustomMaxPair(), 0));
+                return (reduce_2nd_stage(stream, detail::CustomMinPair(), 0));
 
     }
 
