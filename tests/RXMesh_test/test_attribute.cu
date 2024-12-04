@@ -154,13 +154,15 @@ TEST(Attribute, ArgMax)
     auto context = rx.get_context();
 
     uint32_t chosenVertex = 1;
-
+    VertexHandle chosenHandle;
     rx.for_each_vertex(
         rxmesh::HOST,
-        [attr,context,chosenVertex](const rxmesh::VertexHandle vh) 
+        [attr,context,chosenVertex,&chosenHandle](const rxmesh::VertexHandle vh) 
         {
-            if (context.linear_id(vh)==chosenVertex)
-            attr(vh) = 10;
+            if (context.linear_id(vh) == chosenVertex) {
+                attr(vh)     = 10;
+                chosenHandle = vh;
+            }
         },
         NULL,
         false);
@@ -169,11 +171,11 @@ TEST(Attribute, ArgMax)
 
     ReduceHandle reduce_handle(attr);
 
-    uint32_t output = reduce_handle.arg_maxOrmin(attr,false);//testing argmax
+    uint32_t output = reduce_handle.arg_max(attr,0);
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
-    EXPECT_EQ(output, chosenVertex);
+    EXPECT_EQ(output, chosenHandle);
 }
 
 
