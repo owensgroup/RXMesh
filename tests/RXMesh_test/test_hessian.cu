@@ -68,7 +68,7 @@ __global__ static void calc_param_loss(
     rxmesh::DenseMatrix<T, Eigen::RowMajor>             grad,
     rxmesh::HessianSparseMatrix<T, VariableDim>         hess,
     rxmesh::FaceAttribute<T>                            f_obj_func,
-    bool                                                project_hessian = true)
+    bool                                                project_hessian)
 {
     using namespace rxmesh;
 
@@ -253,9 +253,14 @@ void line_search(
             }
         });
 
-        calc_param_loss<T, VariableDim, blockThreads, false>
-            <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
-                rx.get_context(), rest_shape, sol_temp, grad, hess, f_obj_func);
+        rx.run_kernel(lb,
+                      calc_param_loss<T, VariableDim, blockThreads, false>,
+                      rest_shape,
+                      sol_temp,
+                      grad,
+                      hess,
+                      f_obj_func,
+                      true);
 
         T f_new = reducer.reduce(f_obj_func, cub::Sum(), 0);
 
@@ -365,17 +370,13 @@ TEST(DiffAttribute, NewtonMethod)
 
     int num_iterations = 100;
 
-    LaunchBox<blockThreads> lb;
-    rx.prepare_launch_box(
-        {Op::FV}, lb, (void*)calc_rest_shape<T, blockThreads>);
-
-    calc_rest_shape<T, blockThreads>
-        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
-            rx.get_context(), coordinates, rest_shape);
+    rx.run_kernel<blockThreads>(
+        {Op::FV}, calc_rest_shape<T, blockThreads>, coordinates, rest_shape);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
 
+    LaunchBox<blockThreads> lb;
     rx.prepare_launch_box(
         {Op::FV},
         lb,
@@ -398,9 +399,15 @@ TEST(DiffAttribute, NewtonMethod)
     for (iter = 0; iter < num_iterations; ++iter) {
 
         // 1) calcu objective function
-        calc_param_loss<T, VariableDim, blockThreads, true>
-            <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
-                rx.get_context(), rest_shape, uv, grad, hess, f_obj_func);
+        rx.run_kernel(lb,
+                      calc_param_loss<T, VariableDim, blockThreads, true>,
+                      rest_shape,
+                      uv,
+                      grad,
+                      hess,
+                      f_obj_func,
+                      true);
+
 
         T f = reducer.reduce(f_obj_func, cub::Sum(), 0);
 
