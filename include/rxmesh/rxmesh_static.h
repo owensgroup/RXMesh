@@ -20,6 +20,7 @@
 #include "rxmesh/util/timer.h"
 
 #include "rxmesh/kernels/boundary.cuh"
+#include "rxmesh/kernels/query_kernel.cuh"
 
 #if USE_POLYSCOPE
 #include "polyscope/surface_mesh.h"
@@ -646,6 +647,25 @@ class RXMeshStatic : public RXMesh
      * @tparam blockThreads the block size
      * @param lb launch box populated via prepare_launch_box
      * @param kernel the kernel to launch
+     * @param stream to launch the kerenl on
+     * @param ...args input parameters to the kernel
+     */
+    template <uint32_t blockThreads, typename KernelT, typename... ArgsT>
+    void run_kernel(const LaunchBox<blockThreads>& lb,
+                    const KernelT                  kernel,
+                    cudaStream_t                   stream,
+                    ArgsT... args) const
+    {
+        kernel<<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
+            get_context(), args...);
+    }
+
+    /**
+     * @brief Launching a kernel knowing its launch box on the default stream
+     * @tparam ...ArgsT infered
+     * @tparam blockThreads the block size
+     * @param lb launch box populated via prepare_launch_box
+     * @param kernel the kernel to launch
      * @param ...args input parameters to the kernel
      */
     template <uint32_t blockThreads, typename KernelT, typename... ArgsT>
@@ -717,8 +737,68 @@ class RXMeshStatic : public RXMesh
                            is_concurrent,
                            user_shmem);
 
-        kernel<<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
-            get_context(), args...);
+        run_kernel(lb, kernel, args...);
+    }
+
+    /**
+     * @brief launch a kernel that require a query operation. This is limited to
+     * one query only.
+     * @tparam LambdaT inferred
+     * @tparam blockThreads the size of cuda block
+     * @tparam op the type of query operation
+     * @param lb the launch box as initialized by prepare_launch_box
+     * @param user_lambda the user lambda function which has the signature
+     *      [=]__device__(InputHandle h, OutputIterator iter) {
+     *      }
+     * The InputHandle is a vertex, edge, or face handle depending on the input
+     * to the query operation op. The OutputIterator is an vertex, edge, or face
+     * iterator depending on the output of the query operation op.
+     *
+     * @param oriented if the query operation op is oriented
+     * @param stream the stream to launch the kernel on
+     */
+    template <Op op, uint32_t blockThreads, typename LambdaT>
+    void run_query_kernel(const LambdaT user_lambda,
+                          const bool    oriented = false,
+                          cudaStream_t  stream   = NULL)
+    {
+        LaunchBox<blockThreads> lb;
+
+        prepare_launch_box(
+            {op},
+            lb,
+            (void*)detail::query_kernel<blockThreads, op, LambdaT>,
+            oriented);
+
+        run_query_kernel<op>(lb, user_lambda, oriented, stream);
+    }
+
+    /**
+     * @brief launch a kernel that require a query operation. This is limited to
+     * one query only.
+     * @tparam LambdaT inferred
+     * @tparam blockThreads the size of cuda block
+     * @tparam op the type of query operation
+     * @param lb the launch box as initialized by prepare_launch_box
+     * @param user_lambda the user lambda function which has the signature
+     *      [=]__device__(InputHandle h, OutputIterator iter) {
+     *      }
+     * The InputHandle is a vertex, edge, or face handle depending on the input
+     * to the query operation op. The OutputIterator is an vertex, edge, or face
+     * iterator depending on the output of the query operation op.
+     *
+     * @param oriented if the query operation op is oriented
+     * @param stream the stream to launch the kernel on
+     */
+    template <Op op, uint32_t blockThreads, typename LambdaT>
+    void run_query_kernel(LaunchBox<blockThreads> lb,
+                          const LambdaT           user_lambda,
+                          const bool              oriented = false,
+                          cudaStream_t            stream   = NULL)
+    {
+        detail::query_kernel<blockThreads, op>
+            <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
+                get_context(), oriented, user_lambda);
     }
 
 
