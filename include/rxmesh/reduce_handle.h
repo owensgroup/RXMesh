@@ -31,6 +31,8 @@ class ReduceHandle
     ReduceHandle(const Attribute<T, HandleT>& attr)
         : m_max_num_patches(attr.m_max_num_patches)
     {
+        size_t max_element_size = std::max(sizeof(T), sizeof(cub::KeyValuePair<HandleT, T>));
+
         CUDA_ERROR(
             cudaMalloc(&m_d_reduce_1st_stage, m_max_num_patches * sizeof(T)));
 
@@ -107,6 +109,7 @@ class ReduceHandle
                 "ReduceHandle::norm2() input attribute to should be "
                 "allocated on the device");
         }
+        
 
         detail::norm2_kernel<T, attr.m_block_size>
             <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
