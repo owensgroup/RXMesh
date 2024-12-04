@@ -30,8 +30,7 @@ set( SOURCE_LIST
 	test_scalar.cu
 	test_diff_attribute.cu
 	test_inverse.cu
-	test_grad.h
-	test_hessian.cu
+	test_grad.h	
 )
 
 target_sources( RXMesh_test 

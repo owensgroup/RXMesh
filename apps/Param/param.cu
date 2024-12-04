@@ -1,5 +1,3 @@
-#include "gtest/gtest.h"
-
 #include "rxmesh/matrix/sparse_matrix.cuh"
 
 #include "rxmesh/diff/hessian_sparse_matrix.h"
@@ -14,61 +12,17 @@
 
 #include <Eigen/SparseLU>
 
-template <typename T, int blockThreads>
-__global__ static void calc_rest_shape(
-    const rxmesh::Context                               context,
-    const rxmesh::VertexAttribute<T>                    coordinates,
-    const rxmesh::FaceAttribute<Eigen::Matrix<T, 2, 2>> rest_shape)
-{
-    using namespace rxmesh;
-
-    auto func = [&](const FaceHandle& fh, const VertexIterator& iter) {
-        const VertexHandle v0 = iter[0];
-        const VertexHandle v1 = iter[1];
-        const VertexHandle v2 = iter[2];
-
-        assert(v0.is_valid() && v1.is_valid() && v2.is_valid());
-
-        // 3d position
-        Eigen::Vector3<T> ar_3d = coordinates.to_eigen<3>(v0);
-        Eigen::Vector3<T> br_3d = coordinates.to_eigen<3>(v1);
-        Eigen::Vector3<T> cr_3d = coordinates.to_eigen<3>(v2);
-
-        // Local 2D coordinate system
-        Eigen::Vector3<T> n  = (br_3d - ar_3d).cross(cr_3d - ar_3d);
-        Eigen::Vector3<T> b1 = (br_3d - ar_3d).normalized();
-        Eigen::Vector3<T> b2 = n.cross(b1).normalized();
-
-        // Express a, b, c in local 2D coordiante system
-        Eigen::Vector2<T> ar_2d(T(0.0), T(0.0));
-        Eigen::Vector2<T> br_2d((br_3d - ar_3d).dot(b1), T(0.0));
-        Eigen::Vector2<T> cr_2d((cr_3d - ar_3d).dot(b1),
-                                (cr_3d - ar_3d).dot(b2));
-
-        // Save 2-by-2 matrix with edge vectors as colums
-        Eigen::Matrix<T, 2, 2> fout = col_mat(br_2d - ar_2d, cr_2d - ar_2d);
-
-        rest_shape(fh) = fout;
-    };
-
-    auto block = cooperative_groups::this_thread_block();
-
-    Query<blockThreads> query(context);
-
-    ShmemAllocator shrd_alloc;
-
-    query.dispatch<Op::FV>(block, shrd_alloc, func);
-}
+using namespace rxmesh;
 
 template <typename T, int VariableDim, int blockThreads, bool Active>
 __global__ static void calc_param_loss(
-    const rxmesh::Context                               context,
-    const rxmesh::FaceAttribute<Eigen::Matrix<T, 2, 2>> rest_shape,
-    const rxmesh::VertexAttribute<T>                    uv,
-    rxmesh::DenseMatrix<T, Eigen::RowMajor>             grad,
-    rxmesh::HessianSparseMatrix<T, VariableDim>         hess,
-    rxmesh::FaceAttribute<T>                            f_obj_func,
-    bool                                                project_hessian)
+    const Context                               context,
+    const FaceAttribute<Eigen::Matrix<T, 2, 2>> rest_shape,
+    const VertexAttribute<T>                    uv,
+    DenseMatrix<T, Eigen::RowMajor>             grad,
+    HessianSparseMatrix<T, VariableDim>         hess,
+    FaceAttribute<T>                            f_obj_func,
+    bool                                        project_hessian)
 {
     using namespace rxmesh;
 
@@ -187,33 +141,32 @@ __global__ static void calc_param_loss(
 }
 
 template <typename T>
-bool armijo_condition(const T                                        f_curr,
-                      const T                                        f_new,
-                      const T                                        s,
-                      const rxmesh::DenseMatrix<T, Eigen::RowMajor>& dir,
-                      const rxmesh::DenseMatrix<T, Eigen::RowMajor>& grad,
-                      const T armijo_const)
+bool armijo_condition(const T                                f_curr,
+                      const T                                f_new,
+                      const T                                s,
+                      const DenseMatrix<T, Eigen::RowMajor>& dir,
+                      const DenseMatrix<T, Eigen::RowMajor>& grad,
+                      const T                                armijo_const)
 {
     return f_new <= f_curr + armijo_const * s * dir.dot(grad);
 }
 
 
 template <int VariableDim, typename T>
-void line_search(
-    const rxmesh::RXMeshStatic&                          rx,
-    const T                                              current_f,
-    const rxmesh::DenseMatrix<T, Eigen::RowMajor>&       dir,
-    rxmesh::VertexAttribute<T>&                          sol,
-    rxmesh::VertexAttribute<T>&                          sol_temp,
-    rxmesh::DenseMatrix<T, Eigen::RowMajor>&             grad,
-    rxmesh::HessianSparseMatrix<T, VariableDim>&         hess,
-    const rxmesh::FaceAttribute<Eigen::Matrix<T, 2, 2>>& rest_shape,
-    rxmesh::FaceAttribute<T>&                            f_obj_func,
-    rxmesh::FaceReduceHandle<T>&                         reducer,
-    const T                                              s_max        = 1.0,
-    const T                                              shrink       = 0.8,
-    const int                                            max_iters    = 64,
-    const T                                              armijo_const = 1e-4)
+void line_search(const RXMeshStatic&                          rx,
+                 const T                                      current_f,
+                 const DenseMatrix<T, Eigen::RowMajor>&       dir,
+                 VertexAttribute<T>&                          sol,
+                 VertexAttribute<T>&                          sol_temp,
+                 DenseMatrix<T, Eigen::RowMajor>&             grad,
+                 HessianSparseMatrix<T, VariableDim>&         hess,
+                 const FaceAttribute<Eigen::Matrix<T, 2, 2>>& rest_shape,
+                 FaceAttribute<T>&                            f_obj_func,
+                 FaceReduceHandle<T>&                         reducer,
+                 const T                                      s_max     = 1.0,
+                 const T                                      shrink    = 0.8,
+                 const int                                    max_iters = 64,
+                 const T armijo_const                                   = 1e-4)
 {
     // we are going to keep trying to update sol_temp until we reach solution
     // we are satisfied with, then we will copy it to sol. If no good solution
@@ -286,9 +239,9 @@ void line_search(
     }
 }
 
-TEST(DiffAttribute, NewtonMethod)
+int main(int argc, char** argv)
 {
-    using namespace rxmesh;
+    Log::init();
 
     using T = float;
 
@@ -363,15 +316,47 @@ TEST(DiffAttribute, NewtonMethod)
     // rx.get_polyscope_mesh()->updateVertexPositions(coordinates);
     // polyscope::show();
 
-    rx.get_polyscope_mesh()->addVertexParameterizationQuantity("uv_tutte", uv);
+    // rx.get_polyscope_mesh()->addVertexParameterizationQuantity("uv_tutte",
+    // uv);
 
 
     constexpr uint32_t blockThreads = 256;
 
     int num_iterations = 100;
 
-    rx.run_kernel<blockThreads>(
-        {Op::FV}, calc_rest_shape<T, blockThreads>, coordinates, rest_shape);
+
+    rx.run_query_kernel<Op::FV, blockThreads>(
+        [=] __device__(const FaceHandle& fh, const VertexIterator& iter) {
+            const VertexHandle v0 = iter[0];
+            const VertexHandle v1 = iter[1];
+            const VertexHandle v2 = iter[2];
+
+            assert(v0.is_valid() && v1.is_valid() && v2.is_valid());
+
+            // 3d position
+            Eigen::Vector3<T> ar_3d = coordinates.to_eigen<3>(v0);
+            Eigen::Vector3<T> br_3d = coordinates.to_eigen<3>(v1);
+            Eigen::Vector3<T> cr_3d = coordinates.to_eigen<3>(v2);
+
+            // Local 2D coordinate system
+            Eigen::Vector3<T> n  = (br_3d - ar_3d).cross(cr_3d - ar_3d);
+            Eigen::Vector3<T> b1 = (br_3d - ar_3d).normalized();
+            Eigen::Vector3<T> b2 = n.cross(b1).normalized();
+
+            // Express a, b, c in local 2D coordiante system
+            Eigen::Vector2<T> ar_2d(T(0.0), T(0.0));
+            Eigen::Vector2<T> br_2d((br_3d - ar_3d).dot(b1), T(0.0));
+            Eigen::Vector2<T> cr_2d((cr_3d - ar_3d).dot(b1),
+                                    (cr_3d - ar_3d).dot(b2));
+
+            // Save 2-by-2 matrix with edge vectors as colums
+            Eigen::Matrix<T, 2, 2> fout = col_mat(br_2d - ar_2d, cr_2d - ar_2d);
+
+            rest_shape(fh) = fout;
+        });
+
+    // rx.run_kernel<blockThreads>(
+    //     {Op::FV}, calc_rest_shape<T, blockThreads>, coordinates, rest_shape);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
@@ -454,7 +439,7 @@ TEST(DiffAttribute, NewtonMethod)
     }
 
     timer.stop();
-    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
 
     RXMESH_INFO(
         "Paramterization RXMesh: iterations ={}, time= {} (ms), "
@@ -471,6 +456,7 @@ TEST(DiffAttribute, NewtonMethod)
     //     coordinates(vh, 2) = 0;
     // });
     // rx.get_polyscope_mesh()->updateVertexPositions(coordinates);
+
     rx.get_polyscope_mesh()->addVertexParameterizationQuantity("uv_opt", uv);
     polyscope::show();
 #endif
