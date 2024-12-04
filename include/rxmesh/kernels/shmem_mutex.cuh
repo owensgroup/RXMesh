@@ -36,8 +36,10 @@ struct ShmemMutex
     {
 #ifdef __CUDA_ARCH__
         assert(m_mutex);
+        __threadfence();
         while (::atomicCAS(m_mutex, 0, 1) != 0) {
-        }
+            __threadfence();
+        }        
         __threadfence();
 #endif
     }
@@ -49,6 +51,7 @@ struct ShmemMutex
         assert(m_mutex);
         __threadfence();
         ::atomicExch(m_mutex, 0);
+        __threadfence();
 #endif
     }
 
