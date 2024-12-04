@@ -115,13 +115,14 @@ struct CustomMinPair
         return (b.value < a.value) ? b : a;
     }
 };
-template <class T, uint32_t blockSize, typename HandleT>
+template <class T, uint32_t blockSize, typename HandleT, typename Operation>
 __launch_bounds__(blockSize) __global__
     void arg_max_kernel(const Attribute<T, HandleT> X,
-                    bool                        is_min,
+                    uint32_t                    attribute_id,
+                    Operation                   op, //can be either max or min operation
                     const uint32_t              num_patches,
                     const uint32_t              num_attributes,
-                    cub::KeyValuePair<int, T>*  d_block_output,
+                    cub::KeyValuePair<HandleT, T>*  d_block_output,
                     uint32_t                    attribute_id)
 {
     using LocalT = typename HandleT::LocalT;
@@ -131,7 +132,7 @@ __launch_bounds__(blockSize) __global__
     uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
         const uint16_t element_per_patch = X.size(p_id);
-        cub::KeyValuePair<int, T> thread_val;
+        cub::KeyValuePair<HandleT, T> thread_val;
         thread_val.value = std::numeric_limits<T>::lowest();
         thread_val.key   = 0;
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
@@ -141,31 +142,23 @@ __launch_bounds__(blockSize) __global__
 
                 if (attribute_id != INVALID32 ) 
                 {
-                    cub::KeyValuePair<int, T> current_pair(i, X(p_id, i, attribute_id));
-                    if (is_min) 
+                    HandleT handle(p_id, i);
+                    cub::KeyValuePair<HandleT, T> current_pair(handle, X(p_id, i, attribute_id));
+                    thread_val = op(thread_val, current_pair);
+                }
+                else {
+                    for (uint32_t j = 0; j < num_attributes; ++j) 
                     {
-                        CustomMinPair             min_pair;
-                        thread_val = min_pair(thread_val, current_pair);
+                        HandleT                       handle(p_id, i);
+                        cub::KeyValuePair<HandleT, T> current_pair(handle, X(p_id, i, j));
+                        thread_val = op(thread_val, current_pair);
                     }
-                    else 
-                    {
-                        CustomMaxPair             max_pair;
-                        thread_val = max_pair(thread_val, current_pair);
-                    }
-                    
                 }
             }
         }
-
-        typedef cub::BlockReduce<cub::KeyValuePair<int, T>, blockSize> BlockReduce;
+        typedef cub::BlockReduce<cub::KeyValuePair<HandleT, T>, blockSize> BlockReduce;
         __shared__ typename BlockReduce::TempStorage temp_storage;
-
-
-        cub::KeyValuePair<int, T> block_aggregate;
-
-        if (is_min) block_aggregate = BlockReduce(temp_storage).Reduce(thread_val, CustomMinPair());
-        else block_aggregate = BlockReduce(temp_storage).Reduce(thread_val, CustomMaxPair());
-
+        cub::KeyValuePair<int, T> block_aggregate = BlockReduce(temp_storage).Reduce(thread_val, op);
         if (threadIdx.x == 0) 
         {
             d_block_output[blockIdx.x] = block_aggregate;
