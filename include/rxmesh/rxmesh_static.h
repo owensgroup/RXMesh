@@ -639,6 +639,89 @@ class RXMeshStatic : public RXMesh
         }
     }
 
+
+    /**
+     * @brief Launching a kernel knowing its launch box
+     * @tparam ...ArgsT infered
+     * @tparam blockThreads the block size
+     * @param lb launch box populated via prepare_launch_box
+     * @param kernel the kernel to launch
+     * @param ...args input parameters to the kernel
+     */
+    template <uint32_t blockThreads, typename KernelT, typename... ArgsT>
+    void run_kernel(const LaunchBox<blockThreads>& lb,
+                    const KernelT                  kernel,
+                    ArgsT... args) const
+    {
+        kernel<<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(get_context(),
+                                                                 args...);
+    }
+
+    /**
+     * @brief run a kernel that will require a query operation
+     * @tparam ...ArgsT infered
+     * @tparam blockThreads the block size
+     * @param op list of query operations used inside the kernel
+     * @param kernel the kernel to run
+     * @param ...args the inputs to the kernel
+     */
+    template <uint32_t blockThreads, typename KernelT, typename... ArgsT>
+    void run_kernel(const std::vector<Op> op, KernelT kernel, ArgsT... args)
+    {
+        run_kernel<blockThreads>(
+            kernel,
+            op,
+            false,
+            false,
+            false,
+            [](uint32_t v, uint32_t e, uint32_t f) { return 0; },
+            NULL,
+            args...);
+    }
+
+    /**
+     * @brief run a kernel that will require a query operation
+     * @tparam ...ArgsT infered
+     * @tparam blockThreads the block size
+     * @param op list of query operations used inside the kernel
+     * @param kernel the kernel to run
+     * @param oriented are the query operation required to be oriented
+     * @param with_vertex_valence if vertex valence is requested to be
+     * pre-computed and stored in shared memory
+     * @param is_concurrent in case of multiple queries (i.e., op.size() > 1),
+     * this parameter indicates if queries needs to be access at the same time
+     * @param user_shmem a (lambda) function that takes the number of vertices,
+     * edges, and faces and returns additional user-desired shared memory in
+     * bytes. In case no extra shared memory needed, it can be
+     * [](uint32_t v, uint32_t e, uint32_t f) { return 0; }
+     * @param ...args the inputs to the kernel
+     */
+    template <uint32_t blockThreads, typename KernelT, typename... ArgsT>
+    void run_kernel(
+        const KernelT                                       kernel,
+        const std::vector<Op>                               op,
+        const bool                                          oriented,
+        const bool                                          with_vertex_valence,
+        const bool                                          is_concurrent,
+        std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem,
+        cudaStream_t                                        stream,
+        ArgsT... args) const
+    {
+        LaunchBox<blockThreads> lb;
+
+        prepare_launch_box(op,
+                           lb,
+                           kernel,
+                           oriented,
+                           with_vertex_valence,
+                           is_concurrent,
+                           user_shmem);
+
+        kernel<<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
+            get_context(), args...);
+    }
+
+
     /**
      * @brief populate the launch_box with grid size and dynamic shared memory
      * needed for kernel launch
