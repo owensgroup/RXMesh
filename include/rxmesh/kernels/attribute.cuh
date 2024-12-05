@@ -102,6 +102,7 @@ struct CustomMaxPair
     {
         return (b.value > a.value) ? b : a;
     }
+    T default_val = std::numeric_limits<T>::max();
 };
 template <typename T, typename HandleT>
 struct CustomMinPair
@@ -112,10 +113,12 @@ struct CustomMinPair
     {
         return (b.value < a.value) ? b : a;
     }
+    T default_val = std::numeric_limits<T>::lowest();
 };
+
 template <class T, uint32_t blockSize, typename HandleT, typename Operation>
 __launch_bounds__(blockSize) __global__
-    void arg_max_kernel(const Attribute<T, HandleT> X,
+    void arg_minmax_kernel(const Attribute<T, HandleT> X,
                     uint32_t                    attribute_id,
                     Operation                   op, //can be either max or min operation
                     const uint32_t              num_patches,
@@ -131,7 +134,7 @@ __launch_bounds__(blockSize) __global__
     if (p_id < num_patches) {
         const uint16_t element_per_patch = X.size(p_id);
         cub::KeyValuePair<HandleT, T> thread_val;
-        thread_val.value = std::numeric_limits<T>::lowest();
+        thread_val.value = op.default_val;
         thread_val.key   = 0;
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
 
@@ -156,7 +159,7 @@ __launch_bounds__(blockSize) __global__
         }
         typedef cub::BlockReduce<cub::KeyValuePair<HandleT, T>, blockSize> BlockReduce;
         __shared__ typename BlockReduce::TempStorage temp_storage;
-        cub::KeyValuePair<int, T> block_aggregate = BlockReduce(temp_storage).Reduce(thread_val, op);
+        cub::KeyValuePair<HandleT, T> block_aggregate = BlockReduce(temp_storage).Reduce(thread_val, op);
         if (threadIdx.x == 0) 
         {
             d_block_output[blockIdx.x] = block_aggregate;
