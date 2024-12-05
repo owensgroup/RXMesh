@@ -122,6 +122,9 @@ class ReduceHandle
         return std::sqrt(reduce_2nd_stage(stream, cub::Sum(), 0));
     }
 
+
+
+    
     cub::KeyValuePair<HandleT, T> arg_max(const Attribute<T, HandleT>& attr,
               uint32_t                     attribute_id,
               cudaStream_t                 stream       = NULL)
@@ -132,22 +135,22 @@ class ReduceHandle
                 "allocated on the device");
         }
 
-        detail::CustomMaxPair max_pair;
-        detail::arg_minmax_kernel<T, attr.m_block_size, HandleT, detail::CustomMaxPair>
-            <<<m_max_num_patches, attr1.m_block_size, 0, stream>>>(
-                attr1,
+        //detail::CustomMaxPair max_pair;
+        detail::CustomMaxPair<HandleT,T> max_pair;
+        detail::arg_minmax_kernel<T, attr.m_block_size, HandleT, detail::CustomMaxPair<HandleT,T>>
+            <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
+                attr,
                 attribute_id,
                 max_pair,
                 m_max_num_patches,
-                attr1.get_num_attributes(),
+                attr.get_num_attributes(),
                 m_d_reduce_1st_stage);
 
         return (reduce_2nd_stage(
-            stream,
-             detail::CustomMaxPair(),
+            stream, detail::CustomMaxPair<HandleT, T>(),
             0));
     }
-
+    /*
     cub::KeyValuePair<HandleT, T> arg_min(const Attribute<T, HandleT>& attr,
               uint32_t                     attribute_id,
               cudaStream_t                 stream       = NULL)
@@ -172,6 +175,7 @@ class ReduceHandle
         return (reduce_2nd_stage(stream, detail::CustomMinPair(), 0));
 
     }
+    */
 
 
 
