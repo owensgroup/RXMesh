@@ -123,8 +123,7 @@ __launch_bounds__(blockSize) __global__
                     Operation                   op, //can be either max or min operation
                     const uint32_t              num_patches,
                     const uint32_t              num_attributes,
-                    cub::KeyValuePair<HandleT, T>*  d_block_output,
-                    uint32_t                    attribute_id)
+                    cub::KeyValuePair<HandleT, T>*  d_block_output)
 {
     using LocalT = typename HandleT::LocalT;
 
@@ -150,7 +149,7 @@ __launch_bounds__(blockSize) __global__
                 else {
                     for (uint32_t j = 0; j < num_attributes; ++j) 
                     {
-                        HandleT                       handle(p_id, i);
+                        HandleT handle(p_id, i);
                         cub::KeyValuePair<HandleT, T> current_pair(handle, X(p_id, i, j));
                         thread_val = op(thread_val, current_pair);
                     }

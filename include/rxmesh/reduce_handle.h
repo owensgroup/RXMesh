@@ -151,7 +151,7 @@ class ReduceHandle
     }
 
     cub::KeyValuePair<HandleT, T> arg_min(const Attribute<T, HandleT>& attr,
-              uint32_t                     attribute_id = INVALID32,
+              uint32_t                     attribute_id,
               cudaStream_t                 stream       = NULL)
     {
         if ((attr.get_allocated() & DEVICE) != DEVICE) {
