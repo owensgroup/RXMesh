@@ -33,10 +33,10 @@ class ReduceHandle
     {
         size_t max_element_size = std::max(sizeof(T), sizeof(cub::KeyValuePair<HandleT, T>));
 
-        CUDA_ERROR(
-            cudaMalloc(&m_d_reduce_1st_stage, m_max_num_patches * sizeof(T)));
+        CUDA_ERROR(cudaMalloc(&m_d_reduce_1st_stage,
+                              m_max_num_patches * max_element_size));
 
-        CUDA_ERROR(cudaMalloc(&m_d_reduce_2nd_stage, sizeof(T)));
+        CUDA_ERROR(cudaMalloc(&m_d_reduce_2nd_stage, max_element_size));
 
         m_d_reduce_temp_storage = NULL;
         cub::DeviceReduce::Sum(m_d_reduce_temp_storage,
