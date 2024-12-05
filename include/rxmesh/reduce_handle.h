@@ -133,16 +133,14 @@ class ReduceHandle
         }
 
         detail::CustomMaxPair max_pair;
-        detail::arg_minmax_kernel<T, attr.m_block_size>
-        detail::arg_minmax_kernel<T, attr.m_block_size>
+        detail::arg_minmax_kernel<T, attr.m_block_size, HandleT, detail::CustomMaxPair>
             <<<m_max_num_patches, attr1.m_block_size, 0, stream>>>(
                 attr1,
                 attribute_id,
                 max_pair,
                 m_max_num_patches,
                 attr1.get_num_attributes(),
-                m_d_reduce_1st_stage,
-                attribute_id);
+                m_d_reduce_1st_stage);
 
         return (reduce_2nd_stage(
             stream,
@@ -160,20 +158,18 @@ class ReduceHandle
                 "allocated on the device");
         }
 
-
         detail::CustomMinPair min_pair;
 
-        detail::arg_minmax_kernel<T, attr.m_block_size>
+        detail::arg_minmax_kernel<T, attr.m_block_size, HandleT, detail::CustomMinPair>
             <<<m_max_num_patches, attr1.m_block_size, 0, stream>>>(
                 attr1,
                 attribute_id,
                 min_pair,
                 m_max_num_patches,
                 attr1.get_num_attributes(),
-                m_d_reduce_1st_stage,
-                attribute_id);
+                m_d_reduce_1st_stage);
         
-                return (reduce_2nd_stage(stream, detail::CustomMinPair(), 0));
+        return (reduce_2nd_stage(stream, detail::CustomMinPair(), 0));
 
     }
 
