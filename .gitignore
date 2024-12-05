@@ -1,4 +1,5 @@
-output/
+output/*
+!output/.gitkeep
 input/*
 !input/dragon.obj
 !input/diamond.obj
