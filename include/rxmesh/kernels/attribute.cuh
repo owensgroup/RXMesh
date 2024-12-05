@@ -93,28 +93,37 @@ __launch_bounds__(blockSize) __global__
         cub_block_sum<T, blockSize>(thread_val, d_block_output);
     }
 }
-template <typename T, typename HandleT>
+
+template <typename HandleT, typename T>
 struct CustomMaxPair
 {
-    __device__ __forceinline__ cub::KeyValuePair<int, T> operator()(
+    // Default constructor
+    __host__ __device__ CustomMaxPair()
+        : default_val(std::numeric_limits<T>::lowest())
+    {
+    }
+
+    __device__ __forceinline__ cub::KeyValuePair<HandleT, T> operator()(
         const cub::KeyValuePair<HandleT, T>& a,
         const cub::KeyValuePair<HandleT, T>& b) const
     {
         return (b.value > a.value) ? b : a;
     }
-    T default_val = std::numeric_limits<T>::max();
+    T default_val;
 };
-template <typename T, typename HandleT>
+
+template <typename HandleT, typename T>
 struct CustomMinPair
 {
-    __device__ __forceinline__ cub::KeyValuePair<int, T> operator()(
+    __device__ __forceinline__ cub::KeyValuePair<HandleT, T> operator()(
         const cub::KeyValuePair<HandleT, T>& a,
         const cub::KeyValuePair<HandleT, T>& b) const
     {
         return (b.value < a.value) ? b : a;
     }
-    T default_val = std::numeric_limits<T>::lowest();
+    T default_val;
 };
+
 
 template <class T, uint32_t blockSize, typename HandleT, typename Operation>
 __launch_bounds__(blockSize) __global__
