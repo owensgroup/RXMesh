@@ -122,7 +122,7 @@ class ReduceHandle
         return std::sqrt(reduce_2nd_stage(stream, cub::Sum(), 0));
     }
 
-    T arg_max(const Attribute<T, HandleT>& attr,
+    cub::KeyValuePair<HandleT, T> arg_max(const Attribute<T, HandleT>& attr,
               uint32_t                     attribute_id,
               cudaStream_t                 stream       = NULL)
     {
@@ -133,7 +133,8 @@ class ReduceHandle
         }
 
         detail::CustomMaxPair max_pair;
-        detail::arg_max_kernel<T, attr.m_block_size>
+        detail::arg_minmax_kernel<T, attr.m_block_size>
+        detail::arg_minmax_kernel<T, attr.m_block_size>
             <<<m_max_num_patches, attr1.m_block_size, 0, stream>>>(
                 attr1,
                 attribute_id,
@@ -149,7 +150,7 @@ class ReduceHandle
             0));
     }
 
-    T arg_min(const Attribute<T, HandleT>& attr,
+    cub::KeyValuePair<HandleT, T> arg_min(const Attribute<T, HandleT>& attr,
               uint32_t                     attribute_id = INVALID32,
               cudaStream_t                 stream       = NULL)
     {
@@ -162,7 +163,7 @@ class ReduceHandle
 
         detail::CustomMinPair min_pair;
 
-        detail::arg_max_kernel<T, attr.m_block_size>
+        detail::arg_minmax_kernel<T, attr.m_block_size>
             <<<m_max_num_patches, attr1.m_block_size, 0, stream>>>(
                 attr1,
                 attribute_id,
