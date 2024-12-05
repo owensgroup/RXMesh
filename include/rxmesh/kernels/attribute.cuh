@@ -93,24 +93,22 @@ __launch_bounds__(blockSize) __global__
         cub_block_sum<T, blockSize>(thread_val, d_block_output);
     }
 }
-
+template <typename T, typename HandleT>
 struct CustomMaxPair
 {
-    template <typename T>
     __device__ __forceinline__ cub::KeyValuePair<int, T> operator()(
-        const cub::KeyValuePair<int, T>& a,
-        const cub::KeyValuePair<int, T>& b) const
+        const cub::KeyValuePair<HandleT, T>& a,
+        const cub::KeyValuePair<HandleT, T>& b) const
     {
         return (b.value > a.value) ? b : a;
     }
 };
-
+template <typename T, typename HandleT>
 struct CustomMinPair
 {
-    template <typename T>
     __device__ __forceinline__ cub::KeyValuePair<int, T> operator()(
-        const cub::KeyValuePair<int, T>& a,
-        const cub::KeyValuePair<int, T>& b) const
+        const cub::KeyValuePair<HandleT, T>& a,
+        const cub::KeyValuePair<HandleT, T>& b) const
     {
         return (b.value < a.value) ? b : a;
     }
