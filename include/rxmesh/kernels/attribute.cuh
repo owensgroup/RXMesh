@@ -143,7 +143,7 @@ __launch_bounds__(blockSize) __global__
         const uint16_t element_per_patch = X.size(p_id);
         cub::KeyValuePair<HandleT, T> thread_val;
         thread_val.value = op.default_val;
-        thread_val.key   = 0;
+        thread_val.key   = HandleT(p_id,0);
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
 
             if (X.get_patch_info(p_id).is_owned(LocalT(i)) &&
