@@ -155,12 +155,13 @@ TEST(Attribute, ArgMax)
 
     uint32_t chosenVertex = 1;
     VertexHandle chosenHandle;
+    float        chosenValue = 10;
     rx.for_each_vertex(
         rxmesh::HOST,
-        [attr,context,chosenVertex,&chosenHandle](const rxmesh::VertexHandle vh) 
+        [attr,context,chosenVertex,&chosenHandle, chosenValue](const rxmesh::VertexHandle vh) 
         {
             if (context.linear_id(vh) == chosenVertex) {
-                attr(vh)     = 10;
+                attr(vh)     = chosenValue;
                 chosenHandle = vh;
             }
         },
@@ -171,11 +172,11 @@ TEST(Attribute, ArgMax)
 
     ReduceHandle reduce_handle(attr);
 
-    uint32_t output = reduce_handle.arg_max(attr,0);
+    auto output = reduce_handle.arg_max(attr,0); // the output of the function will have to be a cub::KeyValuePair<,>
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
-    EXPECT_EQ(output, chosenHandle);
+    EXPECT_EQ(output.key, chosenHandle); //you can verify the value too, but the key also works.
 }
 
 

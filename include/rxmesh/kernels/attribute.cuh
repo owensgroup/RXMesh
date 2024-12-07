@@ -97,10 +97,9 @@ __launch_bounds__(blockSize) __global__
 template <typename HandleT, typename T>
 struct CustomMaxPair
 {
-    // Default constructor
     __host__ __device__ CustomMaxPair()
-        : default_val(std::numeric_limits<T>::lowest())
     {
+        default_val = (std::numeric_limits<T>::lowest());
     }
 
     __device__ __forceinline__ cub::KeyValuePair<HandleT, T> operator()(
@@ -115,6 +114,10 @@ struct CustomMaxPair
 template <typename HandleT, typename T>
 struct CustomMinPair
 {
+    __host__ __device__ CustomMinPair()
+    {
+        default_val = (std::numeric_limits<T>::max());
+    }
     __device__ __forceinline__ cub::KeyValuePair<HandleT, T> operator()(
         const cub::KeyValuePair<HandleT, T>& a,
         const cub::KeyValuePair<HandleT, T>& b) const
@@ -123,7 +126,17 @@ struct CustomMinPair
     }
     T default_val;
 };
-
+struct CustomSum  // for the purpose of doing the summation with cub since the
+                  // cub::KeyValuePair<,> type needs this to do the reduction
+                  // operation to determine number of bytes
+{
+    __device__ __host__ cub::KeyValuePair<VertexHandle, float> operator()(
+        const cub::KeyValuePair<VertexHandle, float>& a,
+        const cub::KeyValuePair<VertexHandle, float>& b) const
+    {
+        return cub::KeyValuePair<VertexHandle, float>(a.key, a.value + b.value);
+    }
+};
 
 template <class T, uint32_t blockSize, typename HandleT, typename Operation>
 __launch_bounds__(blockSize) __global__
@@ -143,7 +156,7 @@ __launch_bounds__(blockSize) __global__
         const uint16_t element_per_patch = X.size(p_id);
         cub::KeyValuePair<HandleT, T> thread_val;
         thread_val.value = op.default_val;
-        thread_val.key   = HandleT(p_id,0);
+        thread_val.key   = HandleT(p_id, threadIdx.x);
         for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
 
             if (X.get_patch_info(p_id).is_owned(LocalT(i)) &&
