@@ -50,16 +50,16 @@ class ReduceHandle
                                m_d_reduce_2nd_stage,
                                m_max_num_patches);
                                
-        size_t m_reduce_temp_storage_bytes2=0;
+        size_t m_reduce_temp_storage_bytes2=0; // for pair allocated memory
 
         cub::DeviceReduce::Reduce(m_d_reduce_temp_storage,
                                   m_reduce_temp_storage_bytes2,
                                   m_d_reduce_1st_stage_pair,
                                   m_d_reduce_2nd_stage_pair,
                                   m_max_num_patches,
-                                  detail::CustomSum<HandleT,T>(),
+                                  detail::CustomMaxPair<HandleT,T>(), //can be any operator it doesnt really matter since what we want is the number of allocated bytes
                                   cub::KeyValuePair<HandleT, T>(
-                HandleT(), std::numeric_limits<T>::lowest())  // Initial value
+                HandleT(), std::numeric_limits<T>::lowest())  
         );
 
         m_reduce_temp_storage_bytes =
