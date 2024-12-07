@@ -57,7 +57,7 @@ class ReduceHandle
                                   m_d_reduce_1st_stage_pair,
                                   m_d_reduce_2nd_stage_pair,
                                   m_max_num_patches,
-                                  detail::CustomSum(),
+                                  detail::CustomSum<HandleT,T>(),
                                   cub::KeyValuePair<HandleT, T>(
                 HandleT(), std::numeric_limits<T>::lowest())  // Initial value
         );

@@ -126,15 +126,16 @@ struct CustomMinPair
     }
     T default_val;
 };
+template <typename HandleT, typename T>
 struct CustomSum  // for the purpose of doing the summation with cub since the
                   // cub::KeyValuePair<,> type needs this to do the reduction
                   // operation to determine number of bytes
 {
-    __device__ __host__ cub::KeyValuePair<VertexHandle, float> operator()(
-        const cub::KeyValuePair<VertexHandle, float>& a,
-        const cub::KeyValuePair<VertexHandle, float>& b) const
+    __device__ __host__ cub::KeyValuePair<HandleT, T> operator()(
+        const cub::KeyValuePair<HandleT, T>& a,
+        const cub::KeyValuePair<HandleT, T>& b) const
     {
-        return cub::KeyValuePair<VertexHandle, float>(a.key, a.value + b.value);
+        return cub::KeyValuePair<HandleT, T>(a.key, a.value + b.value);
     }
 };
 
