@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include "rxmesh/context.h"
 #include "rxmesh/handle.h"
-//#include "rxmesh/lp_hashtable.cuh"
 #include "rxmesh/patch_stash.cuh"
 #include "rxmesh/util/bitmask_util.h"
 
@@ -110,12 +109,6 @@ struct Iterator
         return lid;
     }
 
-    __device__ HandleT operator*() const
-    {
-        assert(m_patch_output);
-        return ((*this)[m_current]);
-    }
-
     __device__ HandleT back() const
     {
         return ((*this)[size() - 1]);
@@ -124,47 +117,7 @@ struct Iterator
     __device__ HandleT front() const
     {
         return ((*this)[0]);
-    }
-
-    __device__ Iterator& operator++()
-    {
-        // pre
-        m_current = (m_current + 1) % size();
-        return *this;
-    }
-    __device__ Iterator operator++(int)
-    {
-        // post
-        Iterator pre(*this);
-        m_current = (m_current + 1) % size();
-        return pre;
-    }
-
-    __device__ Iterator& operator--()
-    {
-        // pre
-        m_current = (m_current == 0) ? size() - 1 : m_current - 1;
-        return *this;
-    }
-
-    __device__ Iterator operator--(int)
-    {
-        // post
-        Iterator pre(*this);
-        m_current = (m_current == 0) ? size() - 1 : m_current - 1;
-        return pre;
-    }
-
-    __device__ bool operator==(const Iterator& rhs) const
-    {
-        return rhs.m_local_id == m_local_id && rhs.m_patch_id == m_patch_id &&
-               rhs.m_current == m_current;
-    }
-
-    __device__ bool operator!=(const Iterator& rhs) const
-    {
-        return !(*this == rhs);
-    }
+    } 
 
 
    private:
