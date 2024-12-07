@@ -21,14 +21,14 @@ class ReduceHandle
 
     ReduceHandle()                    = default;
     ReduceHandle(const ReduceHandle&) = default;
-
+    
     /**
      * @brief Constructor which allocates internal memory used in all reduce
      * operations
      * @param attr one of Attribute used for subsequent reduction
      * operations
      */
-    ReduceHandle(const Attribute<T, HandleT>& attr)
+    ReduceHandle(const Attribute<T, HandleT>& attr, bool pair=true)
         : m_max_num_patches(attr.m_max_num_patches)
     {
         CUDA_ERROR(
@@ -36,15 +36,40 @@ class ReduceHandle
 
         CUDA_ERROR(cudaMalloc(&m_d_reduce_2nd_stage, sizeof(T)));
 
+        CUDA_ERROR(cudaMalloc(
+            &m_d_reduce_1st_stage_pair,
+            m_max_num_patches * sizeof(cub::KeyValuePair<HandleT, T>)));
+
+        CUDA_ERROR(cudaMalloc(&m_d_reduce_2nd_stage_pair,
+                              sizeof(cub::KeyValuePair<HandleT, T>)));
+
         m_d_reduce_temp_storage = NULL;
-        cub::DeviceReduce::Sum(m_d_reduce_temp_storage,
+         cub::DeviceReduce::Sum(m_d_reduce_temp_storage,
                                m_reduce_temp_storage_bytes,
                                m_d_reduce_1st_stage,
                                m_d_reduce_2nd_stage,
                                m_max_num_patches);
+                               
+        size_t m_reduce_temp_storage_bytes2=0; // for pair allocated memory
+
+        cub::DeviceReduce::Reduce(m_d_reduce_temp_storage,
+                                  m_reduce_temp_storage_bytes2,
+                                  m_d_reduce_1st_stage_pair,
+                                  m_d_reduce_2nd_stage_pair,
+                                  m_max_num_patches,
+                                  detail::CustomMaxPair<HandleT,T>(), //can be any operator it doesnt really matter since what we want is the number of allocated bytes
+                                  cub::KeyValuePair<HandleT, T>(
+                HandleT(), std::numeric_limits<T>::lowest())  
+        );
+
+        m_reduce_temp_storage_bytes =
+            std::max(m_reduce_temp_storage_bytes, m_reduce_temp_storage_bytes2);
 
         CUDA_ERROR(
             cudaMalloc(&m_d_reduce_temp_storage, m_reduce_temp_storage_bytes));
+
+
+
     }
 
     ~ReduceHandle()
@@ -107,10 +132,11 @@ class ReduceHandle
                 "ReduceHandle::norm2() input attribute to should be "
                 "allocated on the device");
         }
+        
 
         detail::norm2_kernel<T, attr.m_block_size>
             <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
-                attr,                
+                attr,
                 m_max_num_patches,
                 attr.get_num_attributes(),
                 m_d_reduce_1st_stage,
@@ -119,8 +145,78 @@ class ReduceHandle
         return std::sqrt(reduce_2nd_stage(stream, cub::Sum(), 0));
     }
 
+
+
+    
+    cub::KeyValuePair<HandleT, T> arg_max(const Attribute<T, HandleT>& attr,
+              uint32_t                     attribute_id,
+              cudaStream_t                 stream       = NULL)
+    {
+        if ((attr.get_allocated() & DEVICE) != DEVICE) {
+            RXMESH_ERROR(
+                "ReduceHandle::arg_max() input attribute to should be "
+                "allocated on the device");
+        }
+
+        //detail::CustomMaxPair max_pair;
+        detail::CustomMaxPair<HandleT,T> max_pair;
+        
+        detail::arg_minmax_kernel<T, attr.m_block_size, HandleT, detail::CustomMaxPair<HandleT,T>>
+            <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
+                attr,
+                attribute_id,
+                max_pair,
+                m_max_num_patches,
+                attr.get_num_attributes(),
+                m_d_reduce_1st_stage_pair);
+          
+        cub::KeyValuePair<HandleT, T> init(HandleT(), max_pair.default_val);
+
+        return reduce_2nd_stage_pair(
+            stream, detail::CustomMaxPair<HandleT, T>(),
+            init 
+        );
+    }
+
+
+
+
+
+    cub::KeyValuePair<HandleT, T> arg_min(const Attribute<T, HandleT>& attr,
+                                          uint32_t     attribute_id,
+                                          cudaStream_t stream = NULL)
+    {
+        if ((attr.get_allocated() & DEVICE) != DEVICE) {
+            RXMESH_ERROR(
+                "ReduceHandle::arg_max() input attribute to should be "
+                "allocated on the device");
+        }
+
+        // detail::CustomMaxPair max_pair;
+        detail::CustomMinPair<HandleT, T> min_pair;
+
+        detail::arg_minmax_kernel<T,
+                                  attr.m_block_size,
+                                  HandleT,
+                                  detail::CustomMinPair<HandleT, T>>
+            <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
+                attr,
+                attribute_id,
+                min_pair,
+                m_max_num_patches,
+                attr.get_num_attributes(),
+                m_d_reduce_1st_stage_pair);
+
+        cub::KeyValuePair<HandleT, T> init(HandleT(), min_pair.default_val);
+
+        return reduce_2nd_stage_pair(
+            stream, detail::CustomMinPair<HandleT, T>(), init);
+    }
+
+
+
     /**
-     * @brief performn generic reduction operations on an input attribute
+     * @brief perform generic reduction operations on an input attribute
      * @tparam ReductionOp type of the binary reduction functor having member T
      * operator()(const T &a, const T &b)
      * @param attr input attribute
@@ -147,6 +243,8 @@ class ReduceHandle
      * @return the reduced output on the host
      */
 
+    
+
     template <typename ReductionOp>
     T reduce(const Attribute<T, HandleT>& attr,
              ReductionOp                  reduction_op,
@@ -159,6 +257,8 @@ class ReduceHandle
                 "ReduceHandle::reduce() input attribute to should be "
                 "allocated on the device");
         }
+
+        
 
         detail::generic_reduce<T, attr.m_block_size>
             <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
@@ -198,9 +298,39 @@ class ReduceHandle
         return h_output;
     }
 
+
+    template <typename ReductionOp>
+    cub::KeyValuePair<HandleT, T> reduce_2nd_stage_pair(
+        cudaStream_t                  stream,
+        ReductionOp                   reduction_op,
+        cub::KeyValuePair<HandleT, T> init)
+    {
+        cub::KeyValuePair<HandleT, T> h_output;
+        
+        cub::DeviceReduce::Reduce(m_d_reduce_temp_storage,
+                                  m_reduce_temp_storage_bytes,
+                (m_d_reduce_1st_stage_pair),
+                (m_d_reduce_2nd_stage_pair),
+                                  m_max_num_patches,
+                                  reduction_op,
+                                  init,
+                                  stream);
+        CUDA_ERROR(cudaMemcpyAsync(&h_output,
+                                   m_d_reduce_2nd_stage_pair,
+                                   sizeof(cub::KeyValuePair<HandleT, T>),
+                                   cudaMemcpyDeviceToHost,
+                                   stream));
+        CUDA_ERROR(cudaStreamSynchronize(stream));
+        
+        return h_output;
+    }
+
+
     size_t   m_reduce_temp_storage_bytes;
     T*       m_d_reduce_1st_stage;
     T*       m_d_reduce_2nd_stage;
+    cub::KeyValuePair<HandleT, T>*  m_d_reduce_1st_stage_pair; 
+    cub::KeyValuePair<HandleT, T>*  m_d_reduce_2nd_stage_pair;
     void*    m_d_reduce_temp_storage;
     uint32_t m_max_num_patches;
 };

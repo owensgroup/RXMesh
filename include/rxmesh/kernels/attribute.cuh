@@ -94,6 +94,90 @@ __launch_bounds__(blockSize) __global__
     }
 }
 
+template <typename HandleT, typename T>
+struct CustomMaxPair
+{
+    __host__ __device__ CustomMaxPair()
+    {
+        default_val = (std::numeric_limits<T>::lowest());
+    }
+
+    __device__ __forceinline__ cub::KeyValuePair<HandleT, T> operator()(
+        const cub::KeyValuePair<HandleT, T>& a,
+        const cub::KeyValuePair<HandleT, T>& b) const
+    {
+        return (b.value > a.value) ? b : a;
+    }
+    T default_val;
+};
+
+template <typename HandleT, typename T>
+struct CustomMinPair
+{
+    __host__ __device__ CustomMinPair()
+    {
+        default_val = (std::numeric_limits<T>::max());
+    }
+    __device__ __forceinline__ cub::KeyValuePair<HandleT, T> operator()(
+        const cub::KeyValuePair<HandleT, T>& a,
+        const cub::KeyValuePair<HandleT, T>& b) const
+    {
+        return (b.value < a.value) ? b : a;
+    }
+    T default_val;
+};
+
+template <class T, uint32_t blockSize, typename HandleT, typename Operation>
+__launch_bounds__(blockSize) __global__
+    void arg_minmax_kernel(const Attribute<T, HandleT> X,
+                    uint32_t                    attribute_id,
+                    Operation                   op, //can be either max or min operation
+                    const uint32_t              num_patches,
+                    const uint32_t              num_attributes,
+                    cub::KeyValuePair<HandleT, T>*  d_block_output)
+{
+    using LocalT = typename HandleT::LocalT;
+
+    assert(X.get_num_attributes() == 1); //we can only take arg max for a scalar attribute
+
+    uint32_t p_id = blockIdx.x;
+    if (p_id < num_patches) {
+        const uint16_t element_per_patch = X.size(p_id);
+        cub::KeyValuePair<HandleT, T> thread_val;
+        thread_val.value = op.default_val;
+        thread_val.key   = HandleT(p_id, threadIdx.x);
+        for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
+
+            if (X.get_patch_info(p_id).is_owned(LocalT(i)) &&
+                !X.get_patch_info(p_id).is_deleted(LocalT(i))) {
+
+                if (attribute_id != INVALID32 ) 
+                {
+                    HandleT handle(p_id, i);
+                    cub::KeyValuePair<HandleT, T> current_pair(handle, X(p_id, i, attribute_id));
+                    thread_val = op(thread_val, current_pair);
+                }
+                else {
+                    for (uint32_t j = 0; j < num_attributes; ++j) 
+                    {
+                        HandleT handle(p_id, i);
+                        cub::KeyValuePair<HandleT, T> current_pair(handle, X(p_id, i, j));
+                        thread_val = op(thread_val, current_pair);
+                    }
+                }
+            }
+        }
+        typedef cub::BlockReduce<cub::KeyValuePair<HandleT, T>, blockSize> BlockReduce;
+        __shared__ typename BlockReduce::TempStorage temp_storage;
+        cub::KeyValuePair<HandleT, T> block_aggregate = BlockReduce(temp_storage).Reduce(thread_val, op);
+        if (threadIdx.x == 0) 
+        {
+            d_block_output[blockIdx.x] = block_aggregate;
+        }
+    }
+}
+
+
 
 template <class T, uint32_t blockSize, typename ReductionOp, typename HandleT>
 __launch_bounds__(blockSize) __global__
