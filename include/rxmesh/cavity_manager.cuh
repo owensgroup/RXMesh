@@ -429,7 +429,7 @@ struct CavityManager
      * @brief construct the cavities boundary loop for all cavities created in
      * this patch
      */
-    template <uint32_t itemPerThread = 5>
+    template <int itemPerThread = 5>
     __device__ __inline__ void construct_cavities_edge_loop(
         cooperative_groups::thread_block& block);
 

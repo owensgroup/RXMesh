@@ -214,7 +214,7 @@ class Patcher
                                 uint32_t*& d_patches_size,
                                 uint32_t*& d_patches_val);
 
-    void grid();
+    void grid(const std::vector<std::vector<uint32_t>>& fv);
 
 
     /**
