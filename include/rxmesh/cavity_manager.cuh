@@ -29,7 +29,6 @@ struct CavityManager
           m_s_q_correspondence_vf(nullptr),
           m_correspondence_size_e(0),
           m_correspondence_size_vf(0),
-          m_s_readd_to_queue(nullptr),
           m_s_ev(nullptr),
           m_s_fe(nullptr),
           m_s_cavity_id_v(nullptr),
@@ -844,8 +843,6 @@ struct CavityManager
 
     // if cavities that share an edge are allowed
     bool m_allow_touching_cavities;
-
-    bool* m_s_readd_to_queue;
 
     // mesh connectivity
     uint16_t *m_s_ev, *m_s_fe;
