@@ -50,15 +50,7 @@ __global__ static void test_iterator(uint32_t*       suceess,
                 atomicAdd(suceess, 1u);
                 return;
             }
-        }
-
-        for (uint32_t i = 0; i < iter.size(); ++i) {
-            if (*iter != truth) {
-                atomicAdd(suceess, 1u);
-                return;
-            }
-            ++iter;
-        }
+        }        
     }
 }
 

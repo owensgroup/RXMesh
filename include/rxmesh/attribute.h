@@ -363,6 +363,14 @@ class Attribute : public AttributeBase
     }
 
     /**
+     * @brief return the memory layout
+     */
+    __host__ __device__ __forceinline__ layoutT get_layout() const
+    {
+        return this->m_layout;
+    }
+
+    /**
      * @brief Check if attribute is allocated on device
      */
     __host__ __device__ __forceinline__ bool is_device_allocated() const

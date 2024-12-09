@@ -14,6 +14,7 @@ void create_plane(std::vector<std::vector<T>>&        verts,
                   std::vector<std::vector<uint32_t>>& tris,
                   uint32_t                            nx,
                   uint32_t                            ny,
+                  int                                 plane      = 1,
                   T                                   dx         = 1.0,
                   const vec3<T>                       low_corner = {0, 0, 0})
 {
@@ -23,10 +24,23 @@ void create_plane(std::vector<std::vector<T>>&        verts,
     for (uint32_t i = 0; i < ny; i++) {
         for (uint32_t j = 0; j < nx; j++) {
 
+            T x, y, z;
 
-            T x = dx * j + low_corner[0];
-            T y = 0.0 + low_corner[1];
-            T z = dx * i + low_corner[2];
+
+            if (plane == 0) {
+                x = 0.0 + low_corner[0];
+                y = dx * j + low_corner[1];
+                z = dx * i + low_corner[2];
+            } else if (plane == 1) {
+                x = dx * j + low_corner[0];
+                y = 0.0 + low_corner[1];
+                z = dx * i + low_corner[2];
+            } else if (plane == 2) {
+                x = dx * j + low_corner[0];
+                y = dx * i + low_corner[1];
+                z = 0.0 + low_corner[2];
+            }
+
 
             std::vector<T> pt({x, y, z});
 

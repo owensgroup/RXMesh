@@ -13,14 +13,15 @@
 #include <Eigen/Dense>
 
 namespace rxmesh {
-
 /**
  * @brief dense matrix use for device and host, inside is a array.
  * The dense matrix is initialized as col major on device.
  * We would only support col major dense matrix for now since that's what
- * cusparse and cusolver wants.
+ * cusparse and cusolver wants. However, there is a limited number of operations
+ * defined on row major matrices.
+ * Order define the storage order of the matrix.
  */
-template <typename T, unsigned int MemAlignSize = 0>
+template <typename T, int Order = Eigen::ColMajor>
 struct DenseMatrix
 {
     using IndexT = int;
@@ -28,26 +29,18 @@ struct DenseMatrix
     template <typename U>
     friend class SparseMatrix;
 
-    using EigenDenseMatrix = Eigen::Map<
-        Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::ColMajor>>;
+    using EigenDenseMatrix =
+        Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Order>>;
 
     DenseMatrix()
         : m_allocated(LOCATION_NONE),
           m_num_rows(0),
           m_num_cols(0),
           m_d_val(nullptr),
-          m_h_val(nullptr),
-          m_col_pad_bytes(0),
-          m_col_pad_idx(0),
-          index_style(true)
+          m_h_val(nullptr)
     {
     }
 
-    bool  index_style;
-    void change_index()
-    {
-        index_style != index_style;        
-    }
 
     DenseMatrix(const RXMesh& rx,
                 IndexT        num_rows,
@@ -59,17 +52,9 @@ struct DenseMatrix
           m_dendescr(NULL),
           m_h_val(nullptr),
           m_d_val(nullptr),
-          m_cublas_handle(nullptr),
-          m_col_pad_bytes(0),
-          m_col_pad_idx(0),
-          index_style(true)
+          m_cublas_handle(nullptr)
     {
 
-        IndexT col_data_bytes = m_num_rows * sizeof(T);
-        if (MemAlignSize != 0 && col_data_bytes % MemAlignSize != 0) {
-            m_col_pad_bytes = MemAlignSize - (col_data_bytes % MemAlignSize);
-            m_col_pad_idx   = m_col_pad_bytes / sizeof(T);
-        }
 
         allocate(location);
 
@@ -91,7 +76,11 @@ struct DenseMatrix
      */
     __host__ __device__ IndexT lead_dim() const
     {
-        return m_num_rows;
+        if constexpr (Order == Eigen::ColMajor) {
+            return m_num_rows;
+        } else {
+            return m_num_cols;
+        }
     }
 
     /**
@@ -326,7 +315,9 @@ struct DenseMatrix
      * data on the device. Only float, double, cuComplex, and cuDoubleComplex
      * are supported
      */
-    __host__ void axpy(DenseMatrix<T>& X, T alpha, cudaStream_t stream = NULL)
+    __host__ void axpy(DenseMatrix<T, Order>& X,
+                       T                      alpha,
+                       cudaStream_t           stream = NULL)
     {
         CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
         if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double> &&
@@ -400,9 +391,9 @@ struct DenseMatrix
      * (cuComplex and cuDoubleComplex), it is optional to use the conjugate of
      * x.
      */
-    __host__ T dot(const DenseMatrix<T>& x,
-                   bool                  use_conjugate = false,
-                   cudaStream_t          stream        = NULL) const
+    __host__ T dot(const DenseMatrix<T, Order>& x,
+                   bool                         use_conjugate = false,
+                   cudaStream_t                 stream        = NULL) const
     {
         CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
         if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double> &&
@@ -579,7 +570,7 @@ struct DenseMatrix
      * The results are computed for the data on the device. Only float, double,
      * cuComplex, and cuDoubleComplex are supported.
      */
-    __host__ void swap(DenseMatrix<T>& X, cudaStream_t stream = NULL)
+    __host__ void swap(DenseMatrix<T, Order>& X, cudaStream_t stream = NULL)
     {
         CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
         if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double> &&
@@ -675,11 +666,11 @@ struct DenseMatrix
                                locationT      location = DEVICE) const
     {
         if ((location & HOST) == HOST) {
-            return m_h_val + ld_idx * (m_num_rows + m_col_pad_idx);
+            return m_h_val + ld_idx * m_num_rows;
         }
 
         if ((location & DEVICE) == DEVICE) {
-            return m_d_val + ld_idx * (m_num_rows + m_col_pad_idx);
+            return m_d_val + ld_idx * m_num_rows;
         }
 
         if ((location & m_allocated) != location) {
@@ -697,11 +688,11 @@ struct DenseMatrix
     __host__ T* col_data(const uint32_t ld_idx, locationT location = DEVICE)
     {
         if ((location & HOST) == HOST) {
-            return m_h_val + ld_idx * (m_num_rows + m_col_pad_idx);
+            return m_h_val + ld_idx * m_num_rows;
         }
 
         if ((location & DEVICE) == DEVICE) {
-            return m_d_val + ld_idx * (m_num_rows + m_col_pad_idx);
+            return m_d_val + ld_idx * m_num_rows;
         }
 
         if ((location & m_allocated) != location) {
@@ -718,7 +709,7 @@ struct DenseMatrix
      */
     __host__ __device__ IndexT bytes() const
     {
-        return (m_num_rows + m_col_pad_idx) * m_num_cols * sizeof(T);
+        return m_num_rows * m_num_cols * sizeof(T);
     }
 
     /**
@@ -776,10 +767,10 @@ struct DenseMatrix
      * @param target_flag defines where we will copy to
      * @param stream used to launch kernel/memcpy
      */
-    __host__ void copy_from(DenseMatrix<T>& source,
-                            locationT       source_flag = LOCATION_ALL,
-                            locationT       target_flag = LOCATION_ALL,
-                            cudaStream_t    stream      = NULL)
+    __host__ void copy_from(DenseMatrix<T, Order>& source,
+                            locationT              source_flag = LOCATION_ALL,
+                            locationT              target_flag = LOCATION_ALL,
+                            cudaStream_t           stream      = NULL)
     {
         if (rows() != source.rows() || cols() != source.cols()) {
             RXMESH_ERROR(
@@ -905,8 +896,8 @@ struct DenseMatrix
     __host__ __device__ __inline__ int get_index(uint32_t row,
                                                  uint32_t col) const
     {
-        if (index_style) {
-            return col * (m_num_rows + m_col_pad_idx) + row;
+        if constexpr (Order == Eigen::ColMajor) {
+            return col * m_num_rows + row;
         } else {
             return col + row * m_num_cols;
         }
@@ -921,9 +912,6 @@ struct DenseMatrix
     IndexT               m_num_cols;
     T*                   m_d_val;
     T*                   m_h_val;
-
-    IndexT m_col_pad_bytes;
-    IndexT m_col_pad_idx;
 };
 
 }  // namespace rxmesh

@@ -23,9 +23,6 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     m_s_num_edges    = counts + 1;
     m_s_num_faces    = counts + 2;
 
-    __shared__ bool readd[1];
-    m_s_readd_to_queue = readd;
-
     __shared__ bool slice[1];
     m_s_should_slice = slice;
 
@@ -39,7 +36,6 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     m_s_recover = recover;
 
     if (threadIdx.x == 0) {
-        m_s_readd_to_queue[0] = false;
         m_s_should_slice[0]   = false;
         m_s_remove_fill_in[0] = false;
         m_s_recover[0]        = false;
@@ -68,14 +64,34 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
 
             // bool locked = true;
             // if (s_patch_id % 3 != iteration % 3) {
-            //     // if (false) {
             //     locked = false;
             // } else {
-            //     locked = true;
-            //     // locked =
-            //     //
+            //     locked =
             //     m_context.m_patches_info[s_patch_id].lock.acquire_lock(
-            //     //     blockIdx.x);
+            //         blockIdx.x);
+            // }
+
+            // bool     locked = true;
+            // uint32_t np     = sqrtf(m_context.get_num_patches());
+            // uint32_t px     = s_patch_id / np;
+            // uint32_t py     = s_patch_id % np;
+            //
+            // uint32_t color_id;
+            // if (px % 2 == 0 && py % 2 == 0) {
+            //     color_id = 1;
+            // } else if (px % 2 == 1 && py % 2 == 0) {
+            //     color_id = 2;
+            // } else if (px % 2 == 0 && py % 2 == 1) {
+            //     color_id = 3;
+            // } else if (px % 2 == 1 && py % 2 == 1) {
+            //     color_id = 4;
+            // }
+            // if (color_id == iteration % 5 || iteration % 5 == 0) {
+            //     locked =
+            //     m_context.m_patches_info[s_patch_id].lock.acquire_lock(
+            //         blockIdx.x);
+            // } else {
+            //     locked = false;
             // }
 
             if (!locked) {
@@ -1859,7 +1875,6 @@ CavityManager<blockThreads, cop>::add_vertex()
     if (v_id == INVALID16) {
         m_s_should_slice[0]   = true;
         m_s_remove_fill_in[0] = true;
-        m_s_readd_to_queue[0] = true;
         return VertexHandle();
     }
     assert(v_id < m_patch_info.vertices_capacity[0]);
@@ -1894,7 +1909,6 @@ __device__ __inline__ DEdgeHandle CavityManager<blockThreads, cop>::add_edge(
     if (e_id == INVALID16) {
         m_s_should_slice[0]   = true;
         m_s_remove_fill_in[0] = true;
-        m_s_readd_to_queue[0] = true;
         return DEdgeHandle();
     }
     assert(e_id < m_patch_info.edges_capacity[0]);
@@ -1935,7 +1949,6 @@ __device__ __inline__ FaceHandle CavityManager<blockThreads, cop>::add_face(
     if (f_id == INVALID16) {
         m_s_should_slice[0]   = true;
         m_s_remove_fill_in[0] = true;
-        m_s_readd_to_queue[0] = true;
         return FaceHandle();
     }
     assert(f_id < m_patch_info.faces_capacity[0]);
@@ -3780,7 +3793,6 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
     for (int vp = threadIdx.x; vp < int(num_elements); vp += blockThreads) {
         assert(vp < s_ownership_change.size());
         if (s_ownership_change(vp)) {
-            // m_s_readd_to_queue[0] = true;
             assert(vp < s_owned_bitmask.size());
             assert(!s_owned_bitmask(vp));
 
@@ -4250,7 +4262,7 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::epilogue(
     // re-add the patch to the queue if there is ownership change
     // or we could not lock all neighbor patches (and thus could not write to
     // global memory)
-    if ((m_s_readd_to_queue[0] || !m_write_to_gmem) && get_num_cavities() > 0) {
+    if ((m_s_should_slice[0] || !m_write_to_gmem) && get_num_cavities() > 0) {
         push();
     }
 

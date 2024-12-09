@@ -260,7 +260,7 @@ inline void tutte_embedding(RXMeshStatic&                     rx,
                             const VertexAttribute<BoundaryT>& v_boundary,
                             VertexAttribute<T>&               uv)
 {
-    SparseMatrix<float> L(rx);
+    SparseMatrix<T> L(rx);
 
     detail::map_vertices_to_circle(rx, coordinates, v_boundary, uv);
 
@@ -276,7 +276,7 @@ inline void tutte_embedding(RXMeshStatic&             rx,
 {
     auto v_boundary = *rx.add_vertex_attribute<bool>("rx:vBnd", 1);
 
-    SparseMatrix<float> L(rx);
+    SparseMatrix<T> L(rx);
 
     rx.get_boundary_vertices(v_boundary);
 
