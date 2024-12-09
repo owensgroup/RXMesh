@@ -704,6 +704,7 @@ struct CavityManager
     template <typename HandleT>
     __device__ __inline__ void populate_correspondence(
         cooperative_groups::thread_block& block,
+        const PatchInfo&                  q_patch_info,
         const uint8_t                     q_stash,
         uint16_t*                         s_correspondence,
         uint8_t*                          s_correspondence_stash,
@@ -756,6 +757,118 @@ struct CavityManager
      */
     __device__ __inline__ void recover_faces_through_edges();
 
+    /**
+     * @brief return the shared-memory not-owned hash table and hash table stash
+     * associated to specific type.
+     */
+    template <typename HandleT>
+    __device__ __inline__ std::pair<LPPair*, LPPair*> get_s_table()
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return std::pair<LPPair*, LPPair*>(m_s_table_v, m_s_table_stash_v);
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return std::pair<LPPair*, LPPair*>(m_s_table_e, m_s_table_stash_e);
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return std::pair<LPPair*, LPPair*>(m_s_table_f, m_s_table_stash_f);
+        }
+    }
+
+    /**
+     * @brief return the number of elements as stored in shared memory based on
+     * template paramter
+     */
+    template <typename HandleT>
+    __device__ __inline__ uint32_t get_num_elements()
+    {
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return m_s_num_vertices[0];
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return m_s_num_edges[0];
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return m_s_num_faces[0];
+        }
+    }
+
+
+    /**
+     * @brief check if an element owned from information stored in shared memory
+     * based on template parameter
+     */
+    template <typename HandleT>
+    __device__ __inline__ bool is_owned(uint16_t b)
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            assert(b < m_s_owned_mask_v.size());
+            return m_s_owned_mask_v(b);
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            assert(b < m_s_owned_mask_e.size());
+            return m_s_owned_mask_e(b);
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            assert(b < m_s_owned_mask_f.size());
+            return m_s_owned_mask_f(b);
+        }
+    }
+
+
+    /**
+     * @brief check if an element active from information stored in shared
+     * memory based on template parameter
+     */
+    template <typename HandleT>
+    __device__ __inline__ bool is_active(uint16_t b)
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            assert(b < m_s_active_mask_v.size());
+            return m_s_active_mask_v(b);
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            assert(b < m_s_active_mask_e.size());
+            return m_s_active_mask_e(b);
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            assert(b < m_s_active_mask_f.size());
+            return m_s_active_mask_f(b);
+        }
+    }
+
+
+    /**
+     * @brief check if an element is in cavity from information stored in shared
+     * memory based on template parameter
+     */
+    template <typename HandleT>
+    __device__ __inline__ bool is_in_cavity(uint16_t b)
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            assert(b < m_s_in_cavity_v.size());
+            return m_s_in_cavity_v(b);
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            assert(b < m_s_in_cavity_e.size());
+            return m_s_in_cavity_e(b);
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            assert(b < m_s_in_cavity_f.size());
+            return m_s_in_cavity_f(b);
+        }
+    }
 
     // indicate if this block can write its updates to global memory during
     // epilogue
@@ -856,9 +969,9 @@ struct CavityManager
     LPPair *m_s_table_stash_v, *m_s_table_stash_e, *m_s_table_stash_f;
 
     // store the number of elements. we use pointers since the number of mesh
-    // elements could change
-    // while they should be represented using uint16_t, we use uint32_t since we
-    // need to use atomicMax which is only supported 32 and 64 bit
+    // elements could change while they should be represented using uint16_t, we
+    // use uint32_t since we need to use atomicMax which is only supported 32
+    // and 64 bit
     uint32_t *m_s_num_vertices, *m_s_num_edges, *m_s_num_faces;
 
     // store the boundary edges of all cavities in compact format (similar to

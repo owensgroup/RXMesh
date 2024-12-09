@@ -2578,6 +2578,9 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
 
     // init src_v bitmask
     m_s_src_mask_v.reset(block);
+
+    // initialize connect_mask and src_e bitmask
+    m_s_src_connect_mask_v.reset(block);
     block.sync();
 
 
@@ -2618,10 +2621,6 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
         const uint16_t q_num_vertices = q_patch_info.num_vertices[0];
         const uint16_t q_num_edges    = q_patch_info.num_edges[0];
 
-        // initialize connect_mask and src_e bitmask
-        m_s_src_connect_mask_v.reset(block);
-
-        block.sync();
 
         // in m_s_src_connect_mask_v, mark the vertices connected to
         // vertices in m_s_src_mask_v
@@ -2648,6 +2647,7 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
         }
 
         populate_correspondence<VertexHandle>(block,
+                                              q_patch_info,
                                               q_stash_id,
                                               m_s_q_correspondence_vf,
                                               m_s_q_correspondence_stash_vf,
@@ -2834,6 +2834,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         }
 
         populate_correspondence<VertexHandle>(block,
+                                              q_patch_info,
                                               q_stash_id,
                                               m_s_q_correspondence_vf,
                                               m_s_q_correspondence_stash_vf,
@@ -2909,6 +2910,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         }
 
         populate_correspondence<EdgeHandle>(block,
+                                            q_patch_info,
                                             q_stash_id,
                                             m_s_q_correspondence_e,
                                             m_s_q_correspondence_stash_e,
@@ -3135,6 +3137,7 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         }
 
         populate_correspondence<FaceHandle>(block,
+                                            q_patch_info,
                                             q_stash_id,
                                             m_s_q_correspondence_vf,
                                             m_s_q_correspondence_stash_vf,
@@ -3613,8 +3616,10 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
     // we have cached this lid before
     if (corres != INVALID16) {
         src_patch_stash_id = q_correspondence_stash[lid];
-        assert(src_patch_stash_id < PatchStash::stash_size);
-        src_patch = m_s_patch_stash.get_patch(src_patch_stash_id);
+        // assert(src_patch_stash_id < PatchStash::stash_size);
+        src_patch = (src_patch_stash_id == INVALID8) ?
+                        m_patch_info.patch_id :
+                        m_s_patch_stash.get_patch(src_patch_stash_id);
         return corres;
     }
 
@@ -3645,27 +3650,27 @@ __device__ __inline__ uint16_t CavityManager<blockThreads, cop>::find_copy(
     // otherwise, we do a search over the not-owned elements in the dest
     // patch. For every not-owned element, we map it to its owner patch and
     // check against lid-src_patch pair
-    for (int i = 0; i < int(dest_patch_num_elements); ++i) {
-        assert(i < dest_patch_owned_mask.size());
-        assert(i < dest_patch_active_mask.size());
-        assert(i < dest_in_cavity.size());
-        if (!dest_patch_owned_mask(i) &&
-            (dest_patch_active_mask(i) || dest_in_cavity(i))) {
-
-            const LPPair lp =
-                m_patch_info.get_lp<HandleT>().find(i, s_table, s_stash);
-
-            if (m_s_patch_stash.get_patch(lp) == src_patch &&
-                lp.local_id_in_owner_patch() == lid) {
-                q_correspondence[lid_in]       = i;
-                q_correspondence_stash[lid_in] = lp.patch_stash_id();
-                assert(q_correspondence_stash[lid_in] < PatchStash::stash_size);
-                src_patch_stash_id = lp.patch_stash_id();
-                src_patch = m_s_patch_stash.get_patch(src_patch_stash_id);
-                return i;
-            }
-        }
-    }
+    // for (int i = 0; i < int(dest_patch_num_elements); ++i) {
+    //    assert(i < dest_patch_owned_mask.size());
+    //    assert(i < dest_patch_active_mask.size());
+    //    assert(i < dest_in_cavity.size());
+    //    if (!dest_patch_owned_mask(i) &&
+    //        (dest_patch_active_mask(i) || dest_in_cavity(i))) {
+    //
+    //        const LPPair lp =
+    //            m_patch_info.get_lp<HandleT>().find(i, s_table, s_stash);
+    //
+    //        if (m_s_patch_stash.get_patch(lp) == src_patch &&
+    //            lp.local_id_in_owner_patch() == lid) {
+    //            q_correspondence[lid_in]       = i;
+    //            q_correspondence_stash[lid_in] = lp.patch_stash_id();
+    //            assert(q_correspondence_stash[lid_in] <
+    //            PatchStash::stash_size); src_patch_stash_id =
+    //            lp.patch_stash_id(); src_patch =
+    //            m_s_patch_stash.get_patch(src_patch_stash_id); return i;
+    //        }
+    //    }
+    //}
     return INVALID16;
 }
 
@@ -3674,6 +3679,7 @@ template <typename HandleT>
 __device__ __inline__ void
 CavityManager<blockThreads, cop>::populate_correspondence(
     cooperative_groups::thread_block& block,
+    const PatchInfo&                  q_patch_info,
     const uint8_t                     q_stash,
     uint16_t*                         s_correspondence,
     uint8_t*                          s_correspondence_stash,
@@ -3681,6 +3687,7 @@ CavityManager<blockThreads, cop>::populate_correspondence(
     const LPPair*                     s_table,
     const LPPair*                     s_stash)
 {
+    using LocalT = typename HandleT::LocalT;
 
     fill_n<blockThreads>(
         s_correspondence, s_correspondence_size, uint16_t(INVALID16));
@@ -3712,6 +3719,140 @@ CavityManager<blockThreads, cop>::populate_correspondence(
                 pair.patch_stash_id();
             assert(s_correspondence_stash[pair.local_id_in_owner_patch()] <
                    PatchStash::stash_size);
+        }
+    }
+
+
+    // for other not-owned elements in q, we store the local id in the owner
+    // patch and patch stash id (in q patch stash). When we store the local id
+    // in the owner patch, we set the high bit to one to mark these elements
+    // differently for the next for loop, where we check if these elements
+    // exists in p
+    int q_num_elements = q_patch_info.get_num_elements<HandleT>()[0];
+    assert(q_num_elements <= s_correspondence_size);
+
+    for (int b = threadIdx.x; b < q_num_elements; b += blockThreads) {
+        const LocalT l = LocalT(b);
+
+        if (!q_patch_info.is_owned(l) && !q_patch_info.is_deleted(l)) {
+            const LPPair lp =
+                q_patch_info.get_lp<HandleT>().find(b, nullptr, nullptr);
+
+            assert(s_correspondence[b] == INVALID16);
+            assert(lp.patch_stash_id() < PatchStash::stash_size);
+
+            // set the high bit to one
+            uint16_t s = lp.local_id_in_owner_patch();
+            s |= (1 << 15);
+
+            s_correspondence[b] = s;
+
+            // patch stash id in q's patch stash
+            s_correspondence_stash[b] = lp.patch_stash_id();
+
+            // TODO assert that this entry is actually owned by the other patch
+        }
+    }
+    block.sync();
+
+
+    // The for loop above could result into q's not-owned element that are
+    // 1) don't exists at all in p.
+    // 2) elements where the owner patch is p. This will
+    // handle in this for loop
+    // 3) elements where the owner patch is k and these
+    // elements have a copy in p. This will be handle in the next for loop
+    //
+    // To handle 1) and 3), we have to convert q's patch stash id to p's patch
+    // stash id and this is what we do in this for loop
+
+    for (int b = threadIdx.x; b < q_num_elements; b += blockThreads) {
+        // if the highest bit is set
+        const uint16_t corres = s_correspondence[b];
+        if (corres != INVALID16 && (corres & (1 << 15))) {
+            const uint8_t  q_stash_id = s_correspondence_stash[b];
+            const uint32_t k_patch =
+                q_patch_info.patch_stash.get_patch(q_stash_id);
+
+            assert(k_patch != INVALID32);
+
+            // Case 2
+            if (k_patch == patch_id()) {
+                // clear the high bit
+                s_correspondence[b]       = corres & ~(1 << 15);
+                s_correspondence_stash[b] = INVALID8;
+                continue;
+            }
+
+            // Case 1, early exit, i.e., if the k patch is not in p's patch
+            // stash, then the element is for sure not in p at all
+
+            const uint8_t p_stash_id =
+                m_s_patch_stash.find_patch_index(k_patch);
+
+            // Could be either INVALID8 or the actual patch stash ID in p's
+            // patch stash
+            s_correspondence_stash[b] = p_stash_id;
+
+            if (p_stash_id == INVALID8) {
+                // if this patch is not in p, then reset this correspondence
+                // entry
+                s_correspondence[b] = INVALID16;
+            }
+        }
+    }
+    block.sync();
+
+
+    // Now, in s_correspondence, there are some elements that are stored where
+    // we have the local index in the owner patch and the patch stash in p.
+    // some of these elements have a corresponding copy in p and we want to
+    // replace thier entries with the local index in p. Of course these are
+    // not-owned elements in p. So, there are different way of doing this.
+    // 1) outer for loop on the correspondance, and inner loop on p's table and
+    // p's table stash
+    // 2) outer loop on p's not-owned elements and find the LPPair, then inner
+    // for loop in the correspondance
+    // We go with 2) since we have "probably" have smaller number of
+    // correspondance to search through than number of not-owned elements
+
+    const int num_elements = get_num_elements<HandleT>();
+
+    // outer
+    for (int b = threadIdx.x; b < num_elements; b += blockThreads) {
+        if (!is_owned<HandleT>(b) &&
+            (is_active<HandleT>(b) || is_in_cavity<HandleT>(b))) {
+
+            const LPPair lp =
+                m_patch_info.get_lp<HandleT>().find(b, s_table, s_stash);
+
+            assert(lp.local_id == b);
+
+            // inner
+            for (int c = 0; c < q_num_elements; ++c) {
+                uint16_t corres = s_correspondence[c];
+                if (corres != INVALID16 && (corres & (1 << 15))) {
+                    corres &= ~(1 << 15);
+                    if (corres == lp.local_id_in_owner_patch() &&
+                        s_correspondence_stash[c] == lp.patch_stash_id()) {
+                        s_correspondence[c] = lp.local_id();
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    block.sync();
+
+    // finally reset the correspondance element where their high bit is set to
+    // one since these elements are not-owned in q but they don't appear in p
+    for (int b = threadIdx.x; b < q_num_elements; b += blockThreads) {
+        // if the highest bit is set
+        const uint16_t corres = s_correspondence[b];
+        if (corres != INVALID16 && (corres & (1 << 15))) {
+            s_correspondence[b]       = INVALID32;
+            s_correspondence_stash[b] = INVALID8;
         }
     }
 }
