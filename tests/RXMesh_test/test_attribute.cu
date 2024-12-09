@@ -138,6 +138,49 @@ TEST(Attribute, Reduce)
 }
 
 
+TEST(Attribute, ArgMax)
+{
+    using namespace rxmesh;
+
+    CUDA_ERROR(cudaDeviceReset());
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    auto attr = *rx.add_vertex_attribute<float>("v", 1, rxmesh::DEVICE);
+
+    const float val(2.0);
+
+    populate<float>(rx, *attr, val);
+    auto context = rx.get_context();
+
+    uint32_t chosenVertex = 1;
+    VertexHandle chosenHandle;
+    float        chosenValue = 10;
+    rx.for_each_vertex(
+        rxmesh::HOST,
+        [attr,context,chosenVertex,&chosenHandle, chosenValue](const rxmesh::VertexHandle vh) 
+        {
+            if (context.linear_id(vh) == chosenVertex) {
+                attr(vh)     = chosenValue;
+                chosenHandle = vh;
+            }
+        },
+        NULL,
+        false);
+
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    ReduceHandle reduce_handle(attr);
+
+    auto output = reduce_handle.arg_max(attr,0); // the output of the function will have to be a cub::KeyValuePair<,>
+
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    EXPECT_EQ(output.key, chosenHandle); //you can verify the value too, but the key also works.
+}
+
+
+
 TEST(Attribute, CopyFrom)
 {
     using namespace rxmesh;
