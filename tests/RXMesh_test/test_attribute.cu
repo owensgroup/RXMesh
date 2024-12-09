@@ -150,7 +150,7 @@ TEST(Attribute, ArgMax)
 
     const float val(2.0);
 
-    populate<float>(rx, *attr, val);
+    populate<float>(rx, attr, val);
     auto context = rx.get_context();
 
     uint32_t chosenVertex = 1;
