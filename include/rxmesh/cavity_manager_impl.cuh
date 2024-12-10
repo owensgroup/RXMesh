@@ -3826,7 +3826,7 @@ CavityManager<blockThreads, cop>::populate_correspondence(
             const LPPair lp =
                 m_patch_info.get_lp<HandleT>().find(b, s_table, s_stash);
 
-            assert(lp.local_id == b);
+            assert(lp.local_id() == b);
 
             // inner
             for (int c = 0; c < q_num_elements; ++c) {
