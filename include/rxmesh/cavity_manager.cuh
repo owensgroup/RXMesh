@@ -779,7 +779,7 @@ struct CavityManager
 
     /**
      * @brief return the number of elements as stored in shared memory based on
-     * template paramter
+     * template parameter
      */
     template <typename HandleT>
     __device__ __inline__ uint32_t get_num_elements()
@@ -870,6 +870,15 @@ struct CavityManager
         }
     }
 
+    /**
+     * @brief build patch stash mapper that maps q's patch stash index to p's
+     * patch stash index
+     */
+    __device__ __inline__ void build_patch_stash_mapper(
+        cooperative_groups::thread_block& block,
+        const PatchInfo&                  q_patch_info);
+
+
     // indicate if this block can write its updates to global memory during
     // epilogue
     bool m_write_to_gmem;
@@ -879,7 +888,7 @@ struct CavityManager
 
     // the prefix sum of the cavities sizes. the size of the cavity is the
     // number of boundary edges in the cavity
-    // this also could have be uint16_t but we use itn since we do atomicAdd on
+    // this also could have be uint16_t but we use it since we do atomicAdd on
     // it
     int* m_s_cavity_size_prefix;
 
@@ -980,6 +989,11 @@ struct CavityManager
 
     // patch stash stored in shared memory
     PatchStash m_s_patch_stash;
+
+    // indexed by q's patch stash id and returns the corresponding p's patch
+    // stash id. if the patch corresponds to p itself, we stores INVALID8-1
+    // if the patch does not exits in p's patch stash, we store INVALID8
+    uint8_t* m_s_patch_stash_mapper;
 
     PatchInfo m_patch_info;
     Context   m_context;

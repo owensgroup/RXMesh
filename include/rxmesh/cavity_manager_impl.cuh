@@ -380,6 +380,9 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
         m_s_patch_stash.m_stash[i] = m_patch_info.patch_stash.m_stash[i];
     }
 
+    __shared__ uint8_t p_st2[PatchStash::stash_size];
+    m_s_patch_stash_mapper = p_st2;
+
     // cavity prefix sum
     // this assertion is because when we allocated dynamic shared memory
     // during kernel launch we assumed the number of cavities is at most
@@ -2703,15 +2706,6 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
                 if (!inserted) {
                     m_s_should_slice[0] = true;
                 }
-                // if (!inserted) {
-                //     printf("\n p= %u, load factor = %f, stash load factor =
-                //     %f",
-                //            patch_id(),
-                //            m_patch_info.lp_v.compute_load_factor(m_s_table_v),
-                //            m_patch_info.lp_v.compute_load_factor(
-                //                m_s_table_stash_v));
-                // }
-                //  assert(inserted);
             }
             block.sync();
         }
@@ -3276,7 +3270,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_vertex(
                 assert(owner_stash_id < m_s_patches_to_lock_mask.size());
                 m_s_patches_to_lock_mask.set(owner_stash_id, true);
             } else if (o != q && o != m_patch_info.patch_id &&
-                       o_stash != INVALID4) {
+                       o_stash != INVALID8) {
                 assert(o_stash != INVALID8);
                 assert(o_stash < m_s_patches_to_lock_mask.size());
                 m_s_patches_to_lock_mask.set(o_stash, true);
@@ -3418,7 +3412,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
                 assert(owner_stash_id < m_s_patches_to_lock_mask.size());
                 m_s_patches_to_lock_mask.set(owner_stash_id, true);
             } else if (o != q && o != m_patch_info.patch_id &&
-                       o_stash != INVALID4) {
+                       o_stash != INVALID8) {
                 assert(o_stash != INVALID8);
                 assert(o_stash < m_s_patches_to_lock_mask.size());
                 m_s_patches_to_lock_mask.set(o_stash, true);
@@ -3520,7 +3514,7 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
                 assert(owner_stash_id < m_s_patches_to_lock_mask.size());
                 m_s_patches_to_lock_mask.set(owner_stash_id, true);
             } else if (o != q && o != m_patch_info.patch_id &&
-                       o_stash != INVALID4) {
+                       o_stash != INVALID8) {
                 assert(o_stash != INVALID8);
                 assert(o_stash < m_s_patches_to_lock_mask.size());
                 m_s_patches_to_lock_mask.set(o_stash, true);
@@ -3723,11 +3717,25 @@ CavityManager<blockThreads, cop>::populate_correspondence(
     }
 
 
+    // build patch stash mapper
+    build_patch_stash_mapper(block, q_patch_info);
+    block.sync();
+
+
     // for other not-owned elements in q, we store the local id in the owner
     // patch and patch stash id (in q patch stash). When we store the local id
     // in the owner patch, we set the high bit to one to mark these elements
     // differently for the next for loop, where we check if these elements
     // exists in p
+
+    // The q's not-owned element could be
+    // 1) don't exists at all in p.
+    // 2) elements where the owner patch is p.
+    // 3) elements where the owner patch is k and these
+    // elements have a copy in p. This will be handle in the next for loop
+    //
+    // To handle 1) and 3), we have to convert q's patch stash id to p's patch
+    // stash id and this is what we do in this for loop as well
     int q_num_elements = q_patch_info.get_num_elements<HandleT>()[0];
     assert(q_num_elements <= s_correspondence_size);
 
@@ -3740,65 +3748,53 @@ CavityManager<blockThreads, cop>::populate_correspondence(
 
             assert(s_correspondence[b] == INVALID16);
             assert(lp.patch_stash_id() < PatchStash::stash_size);
+            assert(lp.patch_stash_id() != INVALID8);
+
 
             // set the high bit to one
             uint16_t s = lp.local_id_in_owner_patch();
-            s |= (1 << 15);
 
-            s_correspondence[b] = s;
+
+            // it might sound wise to assert that the k_patch (which is the
+            // patch  point to by lp) is the owning patch of s. But, we are not
+            // even sure if we are going to use s at all. Also, later on, we
+            // check if k_pach is the owner (ensure_ownership) and if it is
+            // dirty in migrate() However, in there, we do this check on the
+            // patches that we are sure that we are going to change their
+            // ownership.
+            //
+            // const uint32_t k_patch =
+            //     q_patch_info.patch_stash.get_patch(lp.patch_stash_id());
+            // assert(m_context.m_patches_info[k_patch].is_owned(LocalT(s)));
+
 
             // patch stash id in q's patch stash
-            s_correspondence_stash[b] = lp.patch_stash_id();
-
-            // TODO assert that this entry is actually owned by the other patch
-        }
-    }
-    block.sync();
-
-
-    // The for loop above could result into q's not-owned element that are
-    // 1) don't exists at all in p.
-    // 2) elements where the owner patch is p. This will
-    // handle in this for loop
-    // 3) elements where the owner patch is k and these
-    // elements have a copy in p. This will be handle in the next for loop
-    //
-    // To handle 1) and 3), we have to convert q's patch stash id to p's patch
-    // stash id and this is what we do in this for loop
-
-    for (int b = threadIdx.x; b < q_num_elements; b += blockThreads) {
-        // if the highest bit is set
-        const uint16_t corres = s_correspondence[b];
-        if (corres != INVALID16 && (corres & (1 << 15))) {
-            const uint8_t  q_stash_id = s_correspondence_stash[b];
-            const uint32_t k_patch =
-                q_patch_info.patch_stash.get_patch(q_stash_id);
-
-            assert(k_patch != INVALID32);
+            const uint8_t p_stash_id =
+                m_s_patch_stash_mapper[lp.patch_stash_id()];
 
             // Case 2
-            if (k_patch == patch_id()) {
-                // clear the high bit
-                s_correspondence[b]       = corres & ~(1 << 15);
+            if (p_stash_id == INVALID8 - 1u) {
                 s_correspondence_stash[b] = INVALID8;
-                continue;
+            } else {
+
+                // Case 1, early exit, i.e., if the owner patch is not in p's
+                // patch stash, then the element is for sure not in p at all
+
+                // Could be either INVALID8 or the actual patch stash ID in p's
+                // patch stash
+                s_correspondence_stash[b] = p_stash_id;
+
+                if (p_stash_id == INVALID8) {
+                    // if this patch is not in p, then reset this correspondence
+                    // entry
+                    s = INVALID16;
+                } else {
+                    // otherwise, mark this element by setting its highest bit
+                    s |= (1 << 15);
+                }
             }
 
-            // Case 1, early exit, i.e., if the k patch is not in p's patch
-            // stash, then the element is for sure not in p at all
-
-            const uint8_t p_stash_id =
-                m_s_patch_stash.find_patch_index(k_patch);
-
-            // Could be either INVALID8 or the actual patch stash ID in p's
-            // patch stash
-            s_correspondence_stash[b] = p_stash_id;
-
-            if (p_stash_id == INVALID8) {
-                // if this patch is not in p, then reset this correspondence
-                // entry
-                s_correspondence[b] = INVALID16;
-            }
+            s_correspondence[b] = s;
         }
     }
     block.sync();
@@ -3807,14 +3803,15 @@ CavityManager<blockThreads, cop>::populate_correspondence(
     // Now, in s_correspondence, there are some elements that are stored where
     // we have the local index in the owner patch and the patch stash in p.
     // some of these elements have a corresponding copy in p and we want to
-    // replace thier entries with the local index in p. Of course these are
+    // replace their entries with the local index in p. Of course these are
     // not-owned elements in p. So, there are different way of doing this.
-    // 1) outer for loop on the correspondance, and inner loop on p's table and
+    // 1) outer for loop on the correspondence, and inner loop on p's table and
     // p's table stash
     // 2) outer loop on p's not-owned elements and find the LPPair, then inner
-    // for loop in the correspondance
+    // for loop in the correspondence
     // We go with 2) since we have "probably" have smaller number of
-    // correspondance to search through than number of not-owned elements
+    // correspondence to search through than number of not-owned elements
+
 
     const int num_elements = get_num_elements<HandleT>();
 
@@ -3845,7 +3842,7 @@ CavityManager<blockThreads, cop>::populate_correspondence(
 
     block.sync();
 
-    // finally reset the correspondance element where their high bit is set to
+    // finally reset the correspondence element where their high bit is set to
     // one since these elements are not-owned in q but they don't appear in p
     for (int b = threadIdx.x; b < q_num_elements; b += blockThreads) {
         // if the highest bit is set
@@ -3857,6 +3854,31 @@ CavityManager<blockThreads, cop>::populate_correspondence(
     }
 }
 
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::build_patch_stash_mapper(
+    cooperative_groups::thread_block& block,
+    const PatchInfo&                  q_patch_info)
+{
+    // build patch stash mapper that maps q's patch stash index to p's patch
+    // stash index
+    for (int q_stash_id = threadIdx.x; q_stash_id < PatchStash::stash_size;
+         q_stash_id += blockThreads) {
+
+        const uint32_t k_patch = q_patch_info.patch_stash.get_patch(q_stash_id);
+
+        if (k_patch != INVALID32) {
+            const uint8_t p_stash_id =
+                m_s_patch_stash.find_patch_index(k_patch);
+            m_s_patch_stash_mapper[q_stash_id] = p_stash_id;
+        } else if (k_patch == patch_id()) {
+            m_s_patch_stash_mapper[q_stash_id] = INVALID8 - 1u;
+        } else {
+            m_s_patch_stash_mapper[q_stash_id] = INVALID8;
+        }
+    }
+}
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
