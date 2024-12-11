@@ -697,6 +697,12 @@ struct CavityManager
         const LPPair*                     s_table,
         const LPPair*                     s_stash);
 
+
+    /**
+     * @brief return false if one of the locked patches are dirty
+     */
+    __device__ __inline__ bool ensure_locked_patches_are_not_dirty();
+
     /**
      * @brief give a patch q, we store the corresponding element in p in
      * s_correspondence. Thus, s_correspondence is indexed via q's index space
@@ -989,6 +995,12 @@ struct CavityManager
 
     // patch stash stored in shared memory
     PatchStash m_s_patch_stash;
+
+    // patch stash for new patches added to the patch during migration
+    PatchStash m_s_new_patch_stash;
+
+    // to indicate if a new patch has been added to the stash
+    bool* m_s_new_patch_added;
 
     // indexed by q's patch stash id and returns the corresponding p's patch
     // stash id. if the patch corresponds to p itself, we stores INVALID8-1

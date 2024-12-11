@@ -18,28 +18,27 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
     __shared__ uint32_t s_patch_id;
 
 
-    __shared__ uint32_t counts[3];
-    m_s_num_vertices = counts + 0;
-    m_s_num_edges    = counts + 1;
-    m_s_num_faces    = counts + 2;
+    __shared__ uint32_t s_uint32[3];
+    m_s_num_vertices = s_uint32 + 0;
+    m_s_num_edges    = s_uint32 + 1;
+    m_s_num_faces    = s_uint32 + 2;
 
-    __shared__ bool slice[1];
-    m_s_should_slice = slice;
+    __shared__ bool s_bool[4];
+    m_s_should_slice    = s_bool + 0;
+    m_s_remove_fill_in  = s_bool + 1;
+    m_s_recover         = s_bool + 2;
+    m_s_new_patch_added = s_bool + 3;
 
-    __shared__ bool fill[1];
-    m_s_remove_fill_in = fill;
-
-    __shared__ int num_cavities[1];
-    m_s_num_cavities = num_cavities;
-
-    __shared__ bool recover[1];
-    m_s_recover = recover;
+    __shared__ int s_int[1];
+    m_s_num_cavities = s_int;
 
     if (threadIdx.x == 0) {
-        m_s_should_slice[0]   = false;
-        m_s_remove_fill_in[0] = false;
-        m_s_recover[0]        = false;
-        m_s_num_cavities[0]   = 0;
+        m_s_should_slice[0]    = false;
+        m_s_remove_fill_in[0]  = false;
+        m_s_recover[0]         = false;
+        m_s_new_patch_added[0] = false;
+        m_s_num_cavities[0]    = 0;
+
 
         // get a patch
         s_patch_id = m_context.m_patch_scheduler.pop();
@@ -374,10 +373,14 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
 
     // patch stash
     __shared__ uint32_t p_st[PatchStash::stash_size];
-    m_s_patch_stash.m_stash = p_st;
+    __shared__ uint32_t p_new_st[PatchStash::stash_size];
+    m_s_patch_stash.m_stash     = p_st;
+    m_s_new_patch_stash.m_stash = p_new_st;
+
     for (int i = threadIdx.x; i < int(PatchStash::stash_size);
          i += blockThreads) {
-        m_s_patch_stash.m_stash[i] = m_patch_info.patch_stash.m_stash[i];
+        m_s_patch_stash.m_stash[i]     = m_patch_info.patch_stash.m_stash[i];
+        m_s_new_patch_stash.m_stash[i] = INVALID32;
     }
 
     __shared__ uint8_t p_st2[PatchStash::stash_size];
@@ -2452,19 +2455,12 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
                                         m_s_table_stash_v)) {
         return false;
     }
-    block.sync();
 
     // make sure non of the q patches are dirty
-    for (int st = 0; st < PatchStash::stash_size; ++st) {
-        assert(st < m_s_locked_patches_mask.size());
-        if (m_s_locked_patches_mask(st)) {
-            const uint32_t q = m_s_patch_stash.get_patch(st);
-            if (m_context.m_patches_info[q].is_dirty()) {
-                return false;
-            }
-        }
+    if (!ensure_locked_patches_are_not_dirty()) {
+        return false;
     }
-    block.sync();
+
 
     // full migrate
     for (int st = 0; st < PatchStash::stash_size; ++st) {
@@ -2478,18 +2474,11 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     block.sync();
 
 
-    // since we may have added new patches during full migration, make sure non
+    // since we may have locked new patches during full migration, make sure non
     // of the q patches are dirty
-    for (int st = 0; st < PatchStash::stash_size; ++st) {
-        assert(st < m_s_locked_patches_mask.size());
-        if (m_s_locked_patches_mask(st)) {
-            const uint32_t q = m_s_patch_stash.get_patch(st);
-            if (m_context.m_patches_info[q].is_dirty()) {
-                return false;
-            }
-        }
+    if (!ensure_locked_patches_are_not_dirty()) {
+        return false;
     }
-
 
     set_ownership_change_bitmask(block);
     block.sync();
@@ -3110,15 +3099,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 if (!inserted) {
                     m_s_should_slice[0] = true;
                 }
-                // if (!inserted) {
-                //     printf("\n p= %u, load factor = %f, stash load factor =
-                //     %f",
-                //            patch_id(),
-                //            m_patch_info.lp_e.compute_load_factor(m_s_table_e),
-                //            m_patch_info.lp_e.compute_load_factor(
-                //                m_s_table_stash_e));
-                // }
-                //  assert(inserted);
             }
             block.sync();
         }
@@ -3182,15 +3162,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 if (!inserted) {
                     m_s_should_slice[0] = true;
                 }
-                // if (!inserted) {
-                //     printf("\n p= %u, load factor = %f, stash load factor =
-                //     %f",
-                //            patch_id(),
-                //            m_patch_info.lp_f.compute_load_factor(m_s_table_f),
-                //            m_patch_info.lp_f.compute_load_factor(
-                //                m_s_table_stash_f));
-                // }
-                //  assert(inserted);
             }
             block.sync();
         }
@@ -3915,6 +3886,22 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::ensure_ownership(
     return s_all_good;
 }
 
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ bool
+CavityManager<blockThreads, cop>::ensure_locked_patches_are_not_dirty()
+{
+    for (int st = 0; st < PatchStash::stash_size; ++st) {
+        assert(st < m_s_locked_patches_mask.size());
+        if (m_s_locked_patches_mask(st)) {
+            const uint32_t q = m_s_patch_stash.get_patch(st);
+            if (m_context.m_patches_info[q].is_dirty()) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ void CavityManager<blockThreads, cop>::change_ownership(
