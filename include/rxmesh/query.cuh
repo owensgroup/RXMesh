@@ -65,8 +65,7 @@ struct Query
 
         for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
             if (!m_patch_info.is_deleted(LocalEdgeT(e))) {
-                const uint16_t v0 = m_patch_info.ev[2 * e + 0].id;
-                const uint16_t v1 = m_patch_info.ev[2 * e + 1].id;
+                auto [v0, v1] = m_patch_info.get_edge_vertices(e);
                 atomicAdd(m_s_valence + v0, uint8_t(1));
                 atomicAdd(m_s_valence + v1, uint8_t(1));
                 assert(m_s_valence[v0] < 255);

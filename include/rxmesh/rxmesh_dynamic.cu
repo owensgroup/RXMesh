@@ -1840,10 +1840,10 @@ __global__ static void check_not_owned(const Context           context,
                     // printf("\n 6 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 } else {
-                    uint16_t vw0 =
-                        owner_patch_info.ev[2 * e_owned.local_id() + 0].id;
-                    uint16_t vw1 =
-                        owner_patch_info.ev[2 * e_owned.local_id() + 1].id;
+
+                    auto [vw0, vw1] =
+                        owner_patch_info.get_edge_vertices(e_owned.local_id());
+
                     uint32_t pw0(e_owned.patch_id()), pw1(e_owned.patch_id());
 
                     get_owned_v(vw0, pw0, owner_patch_info);

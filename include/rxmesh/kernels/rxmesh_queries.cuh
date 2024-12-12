@@ -128,16 +128,12 @@ __device__ __forceinline__ void e_v_diamond(
                true);
 
     c = 2 * int(num_edges);
-    for (int e = threadIdx.x; e < c; e += blockThreads) {
-        uint16_t edge    = e / 2;
-        uint16_t local_v = e % 2;
 
-        const uint16_t vertex = patch_info.ev[2 * edge + local_v].id;
-
-        local_v *= 2;
-
-        s_output_value[4 * edge + local_v] = vertex;
-    }
+    for (int e = threadIdx.x; e < int(num_edges); e += blockThreads) {
+        auto [v0, v1] = patch_info.get_edge_vertices(e);
+        s_output_value[4 * e + 0] = v0;
+        s_output_value[4 * e + 2] = v1;
+    }    
     block.sync();
 
     c = 3 * int(num_faces);

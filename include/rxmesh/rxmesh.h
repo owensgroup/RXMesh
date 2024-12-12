@@ -11,6 +11,8 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
 
+#include "rxmesh/util/timer.h"
+
 class RXMeshTest;
 
 namespace rxmesh {
@@ -78,6 +80,31 @@ class RXMesh
                                   cudaMemcpyDeviceToHost));
         }
         return m_num_faces;
+    }
+
+    /**
+     * @brief return the number of mesh elements (vertices, edges, or faces)
+     * based on a template paramter input.
+     */
+    template <typename HandleT>
+    uint32_t get_num_elements() const
+    {
+        static_assert(
+            std::is_same_v<HandleT, VertexHandle> ||
+                std::is_same_v<HandleT, EdgeHandle> ||
+                std::is_same_v<HandleT, FaceHandle>,
+            "Template paramter should be either Vertex/Edge/FaceHandle");
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return get_num_vertices();
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return get_num_edges();
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return get_num_faces();
+        }
     }
 
     /**
@@ -523,6 +550,10 @@ class RXMesh
                                    PatchInfo&                   h_patch_info,
                                    PatchInfo&                   d_patch_info);
 
+    void patch_graph_coloring();
+
+    void populate_patch_stash();
+
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
     friend class ::RXMeshTest;
@@ -582,5 +613,7 @@ class RXMesh
     float m_capacity_factor, m_lp_hashtable_load_factor, m_patch_alloc_factor;
 
     double m_topo_memory_mega_bytes;
+
+    Timers<CPUTimer> m_timers;
 };
 }  // namespace rxmesh

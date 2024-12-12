@@ -266,8 +266,7 @@ __global__ static void slice_patches(Context        context,
 
             for (uint16_t e = start; e < end; ++e) {
                 uint16_t edge = s_vv[e];
-                uint16_t v0   = pi.ev[2 * edge].id;
-                uint16_t v1   = pi.ev[2 * edge + 1].id;
+                auto [v0, v1] = pi.get_edge_vertices(edge);
                 assert(v0 != INVALID16 && v1 != INVALID16);
                 assert(v0 == v || v1 == v);
                 s_vv[e] = (v0 == v) * v1 + (v1 == v) * v0;

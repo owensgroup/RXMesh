@@ -40,7 +40,7 @@ struct ALIGN(16) PatchInfo
           vertices_capacity(nullptr),
           edges_capacity(nullptr),
           faces_capacity(nullptr),
-          patch_id(INVALID32){};
+          patch_id(INVALID32) {};
 
     __device__ __host__            PatchInfo(const PatchInfo& other) = default;
     __device__ __host__            PatchInfo(PatchInfo&&)            = default;
@@ -70,6 +70,8 @@ struct ALIGN(16) PatchInfo
 
     // The index of this patch
     uint32_t patch_id;
+
+    uint32_t color;
 
     // neighbor patches stash
     PatchStash patch_stash;
@@ -158,6 +160,24 @@ struct ALIGN(16) PatchInfo
         } else {
             return get_handle<HandleT>(lp);
         }
+    }
+
+    /**
+     * @brief return the edge two vertices by reading them from memory as a
+     * single 32-bit
+     */
+    __device__ __inline__ std::pair<uint16_t, uint16_t> get_edge_vertices(
+        const uint16_t e_id) const
+    {
+        const uint32_t uin32_val = reinterpret_cast<const uint32_t*>(ev)[e_id];
+
+        uint16_t v0 = detail::extract_low_bits<16>(uin32_val);
+        uint16_t v1 = detail::extract_high_bits<16>(uin32_val);
+
+        assert(v0 == ev[2 * e_id + 0].id);
+        assert(v1 == ev[2 * e_id + 1].id);
+
+        return std::make_pair(v0, v1);        
     }
 
     /**

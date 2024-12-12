@@ -265,9 +265,11 @@ inline void set_edge_tag(rxmesh::RXMeshDynamic&      rx,
 TEST(RXMeshDynamic, RandomFlips)
 {
     using namespace rxmesh;
-    
+
     RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
-                     STRINGIFY(INPUT_DIR) "sphere3_patches");
+                     STRINGIFY(INPUT_DIR) "sphere3_patches",
+                     256,
+                     1.8);
 
     const uint32_t num_vertices = rx.get_num_vertices();
     const uint32_t num_edges    = rx.get_num_edges();
@@ -383,9 +385,11 @@ TEST(RXMeshDynamic, RandomFlips)
 TEST(RXMeshDynamic, RandomCollapse)
 {
     using namespace rxmesh;
-    
+
     RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "sphere3.obj",
-                     STRINGIFY(INPUT_DIR) "sphere3_patches");
+                     STRINGIFY(INPUT_DIR) "sphere3_patches",
+                     256,
+                     1.8);
 
     auto coords = rx.get_input_vertex_coordinates();
 
