@@ -694,7 +694,7 @@ class RXMeshStatic : public RXMesh
             false,
             false,
             false,
-            [](uint32_t v, uint32_t e, uint32_t f) { return 0; },
+            [](uint32_t v, uint32_t e, uint32_t f) -> size_t { return 0; },
             NULL,
             args...);
     }
@@ -718,7 +718,7 @@ class RXMeshStatic : public RXMesh
      */
     template <uint32_t blockThreads, typename KernelT, typename... ArgsT>
     void run_kernel(
-        const KernelT                                       kernel,
+        KernelT                                             kernel,
         const std::vector<Op>                               op,
         const bool                                          oriented,
         const bool                                          with_vertex_valence,
@@ -731,7 +731,7 @@ class RXMeshStatic : public RXMesh
 
         prepare_launch_box(op,
                            lb,
-                           kernel,
+                           (void*)kernel,
                            oriented,
                            with_vertex_valence,
                            is_concurrent,
@@ -1766,7 +1766,8 @@ class RXMeshStatic : public RXMesh
             for_each_face(
                 HOST,
                 [&](const FaceHandle& fh) {
-                    for (uint32_t i = 0; i < attribute.get_num_attributes(); ++i) {
+                    for (uint32_t i = 0; i < attribute.get_num_attributes();
+                         ++i) {
                         file << attribute(fh, i) << " ";
                     }
                     file << "\n";
@@ -1800,7 +1801,8 @@ class RXMeshStatic : public RXMesh
             for_each_vertex(
                 HOST,
                 [&](const VertexHandle& vh) {
-                    for (uint32_t i = 0; i < attribute.get_num_attributes(); ++i) {
+                    for (uint32_t i = 0; i < attribute.get_num_attributes();
+                         ++i) {
                         file << attribute(vh, i) << " ";
                     }
                     file << "\n";

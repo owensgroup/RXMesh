@@ -148,9 +148,11 @@ inline void map_vertices_to_circle(RXMeshStatic&             rx,
 
     constexpr uint32_t blockThreads = 256;
 
-    VertexHandle* d_next_v = nullptr;
+    VertexHandle*      d_next_v = nullptr;
+    const VertexHandle h_next_v = VertexHandle();
     CUDA_ERROR(cudaMalloc((void**)&d_next_v, sizeof(VertexHandle)));
-    CUDA_ERROR(cudaMemset(d_next_v, INVALID64, sizeof(VertexHandle)));
+    CUDA_ERROR(cudaMemcpy(
+        d_next_v, &h_next_v, sizeof(VertexHandle), cudaMemcpyHostToDevice));
 
 
     LaunchBox<blockThreads> lb;
@@ -171,7 +173,8 @@ inline void map_vertices_to_circle(RXMeshStatic&             rx,
                               d_next_v,
                               sizeof(VertexHandle),
                               cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemset(d_next_v, INVALID64, sizeof(VertexHandle)));
+        CUDA_ERROR(cudaMemcpy(
+            d_next_v, &h_next_v, sizeof(VertexHandle), cudaMemcpyHostToDevice));
         if (current_v.is_valid()) {
             last_v = current_v;
         }

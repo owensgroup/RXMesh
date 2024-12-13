@@ -20,7 +20,7 @@ struct HessianSparseMatrix : public SparseMatrix<T>
 
     using ScalarT = Scalar<T, K, true>;
 
-    using IndexT = SparseMatrix<T>::IndexT;
+    using IndexT = typename SparseMatrix<T>::IndexT;
 
 
     HessianSparseMatrix(const RXMeshStatic& rx) : SparseMatrix<T>(rx, K)
@@ -37,8 +37,8 @@ struct HessianSparseMatrix : public SparseMatrix<T>
                                             const IndexT        local_i,
                                             const IndexT        local_j) const
     {
-        const IndexT r_id = this->get_row_id(row_v) * m_replicate + local_i;
-        const IndexT c_id = this->get_row_id(col_v) * m_replicate + local_j;
+        const IndexT r_id = this->get_row_id(row_v) * this->m_replicate + local_i;
+        const IndexT c_id = this->get_row_id(col_v) * this->m_replicate + local_j;
 
         return SparseMatrix<T>::operator()(r_id, c_id);
     }
@@ -52,8 +52,8 @@ struct HessianSparseMatrix : public SparseMatrix<T>
                                       const IndexT        local_i,
                                       const IndexT        local_j)
     {
-        const IndexT r_id = this->get_row_id(row_v) * m_replicate + local_i;
-        const IndexT c_id = this->get_row_id(col_v) * m_replicate + local_j;
+        const IndexT r_id = this->get_row_id(row_v) * this->m_replicate + local_i;
+        const IndexT c_id = this->get_row_id(col_v) * this->m_replicate + local_j;
 
         return SparseMatrix<T>::operator()(r_id, c_id);
     }
