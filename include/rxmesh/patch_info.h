@@ -122,7 +122,10 @@ struct ALIGN(16) PatchInfo
     {
 #ifdef __CUDA_ARCH__
         return atomic_read(dirty) != 0;
+#else
+        return dirty[0] != 0;
 #endif
+    
     }
 
     template <typename HandleT>
@@ -361,7 +364,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if a vertex within this patch is owned by it
      */
-    __device__ __host__ __inline__ const bool is_owned(LocalVertexT vh) const
+    __device__ __host__ __inline__ bool is_owned(LocalVertexT vh) const
     {
         assert(vh.id != INVALID16);
         return detail::is_owned(vh.id, get_owned_mask<VertexHandle>());
@@ -370,7 +373,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if an edge within this patch is owned by it
      */
-    __device__ __host__ __inline__ const bool is_owned(LocalEdgeT eh) const
+    __device__ __host__ __inline__ bool is_owned(LocalEdgeT eh) const
     {
         assert(eh.id != INVALID16);
         return detail::is_owned(eh.id, get_owned_mask<EdgeHandle>());
@@ -379,7 +382,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if a face within this patch is owned by it
      */
-    __device__ __host__ __inline__ const bool is_owned(LocalFaceT fh) const
+    __device__ __host__ __inline__ bool is_owned(LocalFaceT fh) const
     {
         assert(fh.id != INVALID16);
         return detail::is_owned(fh.id, get_owned_mask<FaceHandle>());
@@ -388,7 +391,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if a vertex within this patch is deleted
      */
-    __device__ __host__ __inline__ const bool is_deleted(LocalVertexT vh) const
+    __device__ __host__ __inline__ bool is_deleted(LocalVertexT vh) const
     {
         assert(vh.id != INVALID16);
         return detail::is_deleted(vh.id, get_active_mask<VertexHandle>());
@@ -397,7 +400,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if an edge within this patch is deleted
      */
-    __device__ __host__ __inline__ const bool is_deleted(LocalEdgeT eh) const
+    __device__ __host__ __inline__ bool is_deleted(LocalEdgeT eh) const
     {
         assert(eh.id != INVALID16);
         return detail::is_deleted(eh.id, get_active_mask<EdgeHandle>());
@@ -406,7 +409,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if a face within this patch is deleted
      */
-    __device__ __host__ __inline__ const bool is_deleted(LocalFaceT fh) const
+    __device__ __host__ __inline__ bool is_deleted(LocalFaceT fh) const
     {
         assert(fh.id != INVALID16);
         return detail::is_deleted(fh.id, get_active_mask<FaceHandle>());

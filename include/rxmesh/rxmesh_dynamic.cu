@@ -2949,7 +2949,7 @@ void RXMeshDynamic::update_polyscope(std::string new_name)
 }
 
 
-template __inline__ __device__ void detail::slice<256>(
+template __device__ void detail::slice<256>(
     Context&,
     cooperative_groups::thread_block&,
     PatchInfo&,
@@ -2974,7 +2974,7 @@ template __inline__ __device__ void detail::slice<256>(
     Bitmask&,
     Bitmask&);
 
-template __inline__ __device__ void detail::bi_assignment<256>(
+template __device__ void detail::bi_assignment<256>(
     cooperative_groups::thread_block&,
     const uint16_t,
     const uint16_t,
@@ -2991,7 +2991,7 @@ template __inline__ __device__ void detail::bi_assignment<256>(
     Bitmask&,
     Bitmask&);
 
-template __inline__ __device__ void detail::bi_assignment_ggp<256>(
+template __device__ void detail::bi_assignment_ggp<256>(
     cooperative_groups::thread_block&,
     const uint16_t,
     const Bitmask&,

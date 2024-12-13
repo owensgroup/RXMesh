@@ -13,7 +13,7 @@ namespace rxmesh {
 struct PatchScheduler
 {
     __device__ __host__ PatchScheduler()
-        : list(nullptr), count(nullptr), capacity(0){};
+        : count(nullptr), capacity(0), list(nullptr){};
     __device__ __host__ PatchScheduler(const PatchScheduler& other) = default;
     __device__ __host__ PatchScheduler(PatchScheduler&&)            = default;
     __device__ __host__ PatchScheduler& operator=(const PatchScheduler&) =
@@ -55,6 +55,9 @@ struct PatchScheduler
 
 
 #endif
+#else
+    //to silcence the compiler warning 
+    return true;
 #endif
     }
 
@@ -88,6 +91,9 @@ struct PatchScheduler
         }
         return pid;
 #endif
+#else 
+    //to silcence the compiler warning 
+    return INVALID32;
 #endif
     }
 

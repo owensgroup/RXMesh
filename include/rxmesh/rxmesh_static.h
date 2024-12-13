@@ -1766,7 +1766,7 @@ class RXMeshStatic : public RXMesh
             for_each_face(
                 HOST,
                 [&](const FaceHandle& fh) {
-                    for (int i = 0; i < attribute.get_num_attributes(); ++i) {
+                    for (uint32_t i = 0; i < attribute.get_num_attributes(); ++i) {
                         file << attribute(fh, i) << " ";
                     }
                     file << "\n";
@@ -1800,7 +1800,7 @@ class RXMeshStatic : public RXMesh
             for_each_vertex(
                 HOST,
                 [&](const VertexHandle& vh) {
-                    for (int i = 0; i < attribute.get_num_attributes(); ++i) {
+                    for (uint32_t i = 0; i < attribute.get_num_attributes(); ++i) {
                         file << attribute(vh, i) << " ";
                     }
                     file << "\n";
@@ -2205,7 +2205,7 @@ class RXMeshStatic : public RXMesh
                 float(devProp.sharedMemPerBlockOptin) / 1024.0f);
         }
 
-        if (smem_bytes_dyn > func_attr.maxDynamicSharedSizeBytes) {
+        if (int(smem_bytes_dyn) > func_attr.maxDynamicSharedSizeBytes) {
             RXMESH_ERROR(
                 " RXMeshStatic::check_shared_memory() dynamic shared memory "
                 "needed for input function ({} bytes) exceeds the max dynamic "

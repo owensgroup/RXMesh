@@ -331,7 +331,7 @@ class RXMesh
     /**
      * @brief return the number of owned vertices in a patch
      */
-    const uint16_t get_num_owned_vertices(const uint32_t p) const
+    uint16_t get_num_owned_vertices(const uint32_t p) const
     {
         return m_h_num_owned_v[p];
     }
@@ -339,7 +339,7 @@ class RXMesh
     /**
      * @brief return the number of owned edges in a patch
      */
-    const uint16_t get_num_owned_edges(const uint32_t p) const
+    uint16_t get_num_owned_edges(const uint32_t p) const
     {
         return m_h_num_owned_e[p];
     }
@@ -347,7 +347,7 @@ class RXMesh
     /**
      * @brief return the number of owned faces in a patch
      */
-    const uint16_t get_num_owned_faces(const uint32_t p) const
+    uint16_t get_num_owned_faces(const uint32_t p) const
     {
         return m_h_num_owned_f[p];
     }
@@ -356,7 +356,7 @@ class RXMesh
     /**
      * @brief return the number of vertices in a patch
      */
-    const uint16_t get_num_vertices(const uint32_t p) const
+    uint16_t get_num_vertices(const uint32_t p) const
     {
         return m_h_patches_info[p].num_vertices[0];
     }
@@ -364,7 +364,7 @@ class RXMesh
     /**
      * @brief return the number of edges in a patch
      */
-    const uint16_t get_num_edges(const uint32_t p) const
+    uint16_t get_num_edges(const uint32_t p) const
     {
         return m_h_patches_info[p].num_edges[0];
     }
@@ -372,7 +372,7 @@ class RXMesh
     /**
      * @brief return the number of faces in a patch
      */
-    const uint16_t get_num_faces(const uint32_t p) const
+    uint16_t get_num_faces(const uint32_t p) const
     {
         return m_h_patches_info[p].num_faces[0];
     }
@@ -403,7 +403,7 @@ class RXMesh
      * @brief return the amount of allocated memory for topology information in
      * megabytes
      */
-    const double get_topology_memory_mg() const
+    double get_topology_memory_mg() const
     {
         return m_topo_memory_mega_bytes;
     }

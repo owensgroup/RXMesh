@@ -468,6 +468,7 @@ struct SparseMatrix
             }
         }
         assert(1 != 1);
+        return get_val_at(0);
     }
 
     /**
@@ -485,6 +486,7 @@ struct SparseMatrix
             }
         }
         assert(1 != 1);
+        return T(0);
     }
 
     /**
@@ -529,8 +531,7 @@ struct SparseMatrix
     /**
      * @brief return the row index corresponding to specific vertex handle
      */
-    __device__ __host__ const uint32_t
-    get_row_id(const VertexHandle& handle) const
+    __device__ __host__ uint32_t get_row_id(const VertexHandle& handle) const
     {
         auto id = handle.unpack();
         return m_context.vertex_prefix()[id.first] + id.second;
@@ -1789,9 +1790,9 @@ struct SparseMatrix
             if constexpr (std::is_same_v<T, double>) {
                 CUSOLVER_ERROR(cusolverSpDcsrlsvqr(handle,
                                                    rows(),
-                                                   non_zeros(),                                                   
+                                                   non_zeros(),
                                                    m_descr,
-                                                   m_d_val,                                                   
+                                                   m_d_val,
                                                    m_d_row_ptr,
                                                    m_d_col_idx,
                                                    d_b,

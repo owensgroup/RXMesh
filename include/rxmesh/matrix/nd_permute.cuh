@@ -217,10 +217,10 @@ void heavy_max_matching(const RXMeshStatic&      rx,
     }
     if (v_weight_sum != rx.get_num_vertices()) {
         RXMESH_ERROR(
-            "Unexpected behavior in heavy_max_matching as the sum of the
-            " " patch graph's vertex weight ({}) does not match the number of
-            " " vertices in the mesh({})
-                .", v_weight_sum,
+            "Unexpected behavior in heavy_max_matching as the sum of the patch "
+            "graph's vertex weight ({}) does not match the number of vertices "
+            "in the mesh({}).",
+            v_weight_sum,
             rx.get_num_vertices());
     }
 
@@ -338,7 +338,7 @@ void heavy_max_matching(const RXMeshStatic&      rx,
 #endif
 
 
-    for (int i = 0; i < l.nodes.size(); ++i) {
+    for (size_t i = 0; i < l.nodes.size(); ++i) {
         const auto& node = l.nodes[i];
         // the neighbors to this node is the union of neighbors of node.lch and
         // node.rch. We don't store node.lcu/node.rch, but instead we store
@@ -500,13 +500,13 @@ __global__ static void extract_separators(const Context        context,
                                           const int*           d_patch_proj_l,
                                           const int*           d_patch_proj_l1,
                                           VertexAttribute<int> v_index,
-                                          //VertexAttribute<int> v_render,
-                                          int*                 d_permute,
-                                          int                  current_level,
-                                          int                  depth,
-                                          const int*           d_dfs_index,
-                                          int*                 d_count,
-                                          int*                 d_cut_size)
+                                          // VertexAttribute<int> v_render,
+                                          int*       d_permute,
+                                          int        current_level,
+                                          int        depth,
+                                          const int* d_dfs_index,
+                                          int*       d_count,
+                                          int*       d_cut_size)
 {
     // d_patch_proj_l is the patch projection on this level
     // d_patch_proj_l1 is the patch projection on the next level (i.e.,

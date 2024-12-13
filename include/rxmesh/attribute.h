@@ -341,7 +341,7 @@ class Attribute : public AttributeBase
     /**
      * @brief return the amount of allocated memory in megabytes
      */
-    const double get_memory_mg() const
+    double get_memory_mg() const
     {
         return m_memory_mega_bytes;
     }
@@ -412,7 +412,7 @@ class Attribute : public AttributeBase
 #pragma omp parallel for
             for (int p = 0; p < static_cast<int>(m_rxmesh->get_num_patches());
                  ++p) {
-                for (int e = 0; e < capacity(p); ++e) {
+                for (uint32_t e = 0; e < capacity(p); ++e) {
                     m_h_attr[p][e] = value;
                 }
             }

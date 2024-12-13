@@ -13,20 +13,19 @@ namespace rxmesh {
 namespace detail {
 
 template <uint32_t blockThreads>
-__inline__ __device__ void bi_assignment_ggp(
-    cooperative_groups::thread_block& block,
-    const uint16_t                    num_vertices,
-    const Bitmask&                    s_owned_v,
-    const bool                        ignore_owned_v,
-    const Bitmask&                    s_active_v,
-    const uint16_t*                   m_s_vv_offset,
-    const uint16_t*                   m_s_vv,
-    Bitmask&                          s_assigned_v,
-    Bitmask&                          s_current_frontier_v,
-    Bitmask&                          s_next_frontier_v,
-    Bitmask&                          s_partition_a_v,
-    Bitmask&                          s_partition_b_v,
-    int                               num_iter);
+__device__ void bi_assignment_ggp(cooperative_groups::thread_block& block,
+                                  const uint16_t  num_vertices,
+                                  const Bitmask&  s_owned_v,
+                                  const bool      ignore_owned_v,
+                                  const Bitmask&  s_active_v,
+                                  const uint16_t* m_s_vv_offset,
+                                  const uint16_t* m_s_vv,
+                                  Bitmask&        s_assigned_v,
+                                  Bitmask&        s_current_frontier_v,
+                                  Bitmask&        s_next_frontier_v,
+                                  Bitmask&        s_partition_a_v,
+                                  Bitmask&        s_partition_b_v,
+                                  int             num_iter);
 }
 
 

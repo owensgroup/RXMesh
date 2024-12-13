@@ -39,7 +39,10 @@ struct PatchLock
         }
         atomicExch(spin, id);
         return true;
+#else
+        return true;
 #endif
+    
     }
 
     /**

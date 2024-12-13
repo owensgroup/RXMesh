@@ -52,11 +52,11 @@ struct universal_hash
     }
 
     universal_hash(const universal_hash&) = default;
-    __host__ __device__ universal_hash() : m_hash_x(0u), m_hash_y(0u){};
-    universal_hash(universal_hash&&) = default;
+    __host__ __device__ universal_hash() : m_hash_x(0u), m_hash_y(0u) {};
+    universal_hash(universal_hash&&)                 = default;
     universal_hash& operator=(universal_hash const&) = default;
-    universal_hash& operator=(universal_hash&&) = default;
-    ~universal_hash()                           = default;
+    universal_hash& operator=(universal_hash&&)      = default;
+    ~universal_hash()                                = default;
 
     static constexpr uint32_t prime_divisor = 4294967291u;
 
@@ -105,14 +105,13 @@ struct MurmurHash3_32
     {
     }
 
-    MurmurHash3_32(const MurmurHash3_32&) = default;
-    MurmurHash3_32(MurmurHash3_32&&)      = default;
+    MurmurHash3_32(const MurmurHash3_32&)            = default;
+    MurmurHash3_32(MurmurHash3_32&&)                 = default;
     MurmurHash3_32& operator=(MurmurHash3_32 const&) = default;
-    MurmurHash3_32& operator=(MurmurHash3_32&&) = default;
-    ~MurmurHash3_32()                           = default;
+    MurmurHash3_32& operator=(MurmurHash3_32&&)      = default;
+    ~MurmurHash3_32()                                = default;
 
-    constexpr uint32_t __host__ __device__
-    operator()(Key const& key) const noexcept
+    uint32_t __host__ __device__ operator()(Key const& key) const noexcept
     {
         constexpr int        len     = sizeof(Key);
         const uint8_t* const data    = (const uint8_t*)&key;
@@ -179,12 +178,12 @@ struct MurmurHash3_32
 // Taken from https://github.com/skeeto/hash-prospector
 struct hash16_xm2
 {
-    hash16_xm2()                  = default;
-    hash16_xm2(const hash16_xm2&) = default;
-    hash16_xm2(hash16_xm2&&)      = default;
+    hash16_xm2()                             = default;
+    hash16_xm2(const hash16_xm2&)            = default;
+    hash16_xm2(hash16_xm2&&)                 = default;
     hash16_xm2& operator=(hash16_xm2 const&) = default;
-    hash16_xm2& operator=(hash16_xm2&&) = default;
-    ~hash16_xm2()                       = default;
+    hash16_xm2& operator=(hash16_xm2&&)      = default;
+    ~hash16_xm2()                            = default;
 
     constexpr uint16_t __host__ __device__
     operator()(uint16_t key) const noexcept

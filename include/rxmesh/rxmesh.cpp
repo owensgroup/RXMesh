@@ -19,13 +19,23 @@ RXMesh::RXMesh(uint32_t patch_size)
     : m_num_edges(0),
       m_num_faces(0),
       m_num_vertices(0),
+      m_max_edge_capacity(0),
+      m_max_face_capacity(0),
+      m_max_vertex_capacity(0),
       m_input_max_valence(0),
       m_input_max_edge_incident_faces(0),
       m_input_max_face_adjacent_faces(0),
-      m_num_patches(0),
-      m_patch_size(patch_size),
       m_is_input_edge_manifold(true),
       m_is_input_closed(true),
+      m_num_patches(0),
+      m_max_num_patches(0),
+      m_patch_size(patch_size),     
+      m_max_capacity_lp_v(0),
+      m_max_capacity_lp_e(0),
+      m_max_capacity_lp_f(0),     
+      m_max_vertices_per_patch(0), 
+      m_max_edges_per_patch(0),
+      m_max_faces_per_patch(0),
       m_h_vertex_prefix(nullptr),
       m_h_edge_prefix(nullptr),
       m_h_face_prefix(nullptr),
@@ -34,16 +44,10 @@ RXMesh::RXMesh(uint32_t patch_size)
       m_d_face_prefix(nullptr),
       m_d_patches_info(nullptr),
       m_h_patches_info(nullptr),
-      m_capacity_factor(0),
-      m_lp_hashtable_load_factor(0),
-      m_max_capacity_lp_v(0),
-      m_max_capacity_lp_e(0),
-      m_max_capacity_lp_f(0),
-      m_patch_alloc_factor(0),
-      m_max_edge_capacity(0),
-      m_max_face_capacity(0),
-      m_max_vertex_capacity(0),
-      m_topo_memory_mega_bytes(0)
+      m_capacity_factor(0.f),
+      m_lp_hashtable_load_factor(0.f),      
+      m_patch_alloc_factor(0.f),      
+      m_topo_memory_mega_bytes(0.0)
 {
 }
 
@@ -683,8 +687,7 @@ void RXMesh::build_single_patch_topology(
     const uint32_t r_end = m_patcher->get_external_ribbon_offset()[patch_id];
 
     const uint16_t patch_num_edges = m_h_patches_ltog_e[patch_id].size();
-    const uint16_t patch_num_faces = m_h_patches_ltog_f[patch_id].size();
-
+    
     const uint32_t edges_cap = m_max_edge_capacity;
 
     const uint32_t faces_cap = m_max_face_capacity;

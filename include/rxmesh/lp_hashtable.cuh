@@ -126,7 +126,7 @@ struct LPHashTable
         if (m_is_on_device) {
             CUDA_ERROR(cudaMemset(m_table, INVALID8, num_bytes()));
         } else {
-            std::memset(m_table, INVALID8, num_bytes());
+            std::fill_n(m_table, m_capacity, LPPair());            
         }
     }
 

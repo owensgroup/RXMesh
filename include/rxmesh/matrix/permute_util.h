@@ -33,10 +33,10 @@ bool is_unique_permutation(uint32_t size, T* h_permute)
 template <typename T>
 void inverse_permutation(uint32_t size, T* perm, T* helper)
 {
-    for (int i = 0; i < size; ++i) {
+    for (uint32_t i = 0; i < size; ++i) {
         helper[perm[i]] = i;
     }
-    for (int i = 0; i < size; ++i) {
+    for (uint32_t i = 0; i < size; ++i) {
         perm[i] = helper[i];
     }
 }

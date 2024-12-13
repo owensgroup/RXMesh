@@ -213,7 +213,7 @@ struct DenseMatrix
      * @brief accessing a specific value in the matrix using the row and col
      * index. Can be used on both host and device
      */
-    __host__ __device__ T& operator()(const uint32_t row, const uint32_t col)
+    __host__ __device__ T& operator()(const IndexT row, const IndexT col)
     {
         assert(row < m_num_rows);
         assert(col < m_num_cols);
@@ -229,8 +229,8 @@ struct DenseMatrix
      * @brief accessing a specific value in the matrix using the row and col
      * index. Can be used on both host and device
      */
-    __host__ __device__ const T& operator()(const uint32_t row,
-                                            const uint32_t col) const
+    __host__ __device__ const T& operator()(const IndexT row,
+                                            const IndexT col) const
     {
         assert(row < m_num_rows);
         assert(col < m_num_cols);
@@ -247,7 +247,7 @@ struct DenseMatrix
      * @brief access the matrix using vertex/edge/face handle as a row index.
      */
     template <typename HandleT>
-    __host__ __device__ T& operator()(const HandleT handle, const uint32_t col)
+    __host__ __device__ T& operator()(const HandleT handle, const IndexT col)
     {
         return this->operator()(get_row_id(handle), col);
     }
@@ -257,7 +257,7 @@ struct DenseMatrix
      */
     template <typename HandleT>
     __host__ __device__ const T& operator()(const HandleT  handle,
-                                            const uint32_t col) const
+                                            const IndexT col) const
     {
         return this->operator()(get_row_id(handle), col);
     }
@@ -620,11 +620,11 @@ struct DenseMatrix
      * handle
      */
     template <typename HandleT>
-    __host__ __device__ const uint32_t get_row_id(const HandleT handle) const
+    __host__ __device__ IndexT get_row_id(const HandleT handle) const
     {
         auto id = handle.unpack();
 
-        uint32_t row;
+        IndexT row;
 
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             row = m_context.vertex_prefix()[id.first] + id.second;
@@ -662,7 +662,7 @@ struct DenseMatrix
     /**
      * @brief return the raw pointer pf a column.
      */
-    __host__ const T* col_data(const uint32_t ld_idx,
+    __host__ const T* col_data(const IndexT ld_idx,
                                locationT      location = DEVICE) const
     {
         if ((location & HOST) == HOST) {
@@ -685,7 +685,7 @@ struct DenseMatrix
     /**
      * @brief return the raw pointer pf a column.
      */
-    __host__ T* col_data(const uint32_t ld_idx, locationT location = DEVICE)
+    __host__ T* col_data(const IndexT ld_idx, locationT location = DEVICE)
     {
         if ((location & HOST) == HOST) {
             return m_h_val + ld_idx * m_num_rows;
@@ -893,8 +893,8 @@ struct DenseMatrix
     /**
      * @brief return the 1d indext given the row and column id
      */
-    __host__ __device__ __inline__ int get_index(uint32_t row,
-                                                 uint32_t col) const
+    __host__ __device__ __inline__ int get_index(IndexT row,
+                                                 IndexT col) const
     {
         if constexpr (Order == Eigen::ColMajor) {
             return col * m_num_rows + row;
