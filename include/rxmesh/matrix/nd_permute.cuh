@@ -1804,9 +1804,12 @@ void heavy_max_matching_with_partition(const RXMeshStatic&      rx,
                 Node<integer_t> node = max_match_tree0.levels[i].nodes[j];
                 level.nodes.push_back(node);
 
-                //check
-                //print node.lch and node.rch and j
-                RXMESH_INFO("0 - node.lch: {}, node.rch: {}, j: {}", node.lch, node.rch, j);
+                // check
+                // print node.lch and node.rch and j
+                RXMESH_INFO("0 - node.lch: {}, node.rch: {}, j: {}",
+                            node.lch,
+                            node.rch,
+                            j);
 
                 std::replace(curr_patch_proj.begin(),
                              curr_patch_proj.end(),
@@ -1825,9 +1828,12 @@ void heavy_max_matching_with_partition(const RXMeshStatic&      rx,
                 node.rch += prev_n1_offset;
                 level.nodes.push_back(node);
 
-                //check
-                //print node.lch and node.rch and j
-                RXMESH_INFO("1 - node.lch: {}, node.rch: {}, j: {}", node.lch, node.rch, j + curr_n1_offset);
+                // check
+                // print node.lch and node.rch and j
+                RXMESH_INFO("1 - node.lch: {}, node.rch: {}, j: {}",
+                            node.lch,
+                            node.rch,
+                            j + curr_n1_offset);
 
                 std::replace(curr_patch_proj.begin(),
                              curr_patch_proj.end(),
@@ -1859,6 +1865,231 @@ void heavy_max_matching_with_partition(const RXMeshStatic&      rx,
     last_level.nodes.push_back(Node<integer_t>(0, 1));
     last_level.patch_proj = std::vector<integer_t>(n, 0);
     max_match_tree.levels.push_back(last_level);
+}
+
+
+// Helper data structure for priority queue
+struct MinDegreeNode
+{
+    int vertex;
+    int degree; // "degree" here = sum of adjacent edge weights
+
+    bool operator>(const MinDegreeNode &rhs) const {
+        return degree > rhs.degree;
+    }
+};
+
+std::vector<int> minimum_degree_ordering_avg_weights(const Graph<int> &graph)
+{
+    const int n = graph.n;
+
+    // Step 1: Compute initial weighted degree
+    std::vector<int> weighted_degree(n, 0);
+    for (int v = 0; v < n; ++v) {
+        int start = graph.xadj[v];
+        int end   = graph.xadj[v+1];
+        int deg_sum = 0;
+        for (int idx = start; idx < end; ++idx) {
+            deg_sum += graph.e_weights[idx];
+        }
+        weighted_degree[v] = deg_sum;
+    }
+
+    // Step 2: Create a single min-priority queue for all vertices
+    std::priority_queue<MinDegreeNode, std::vector<MinDegreeNode>, std::greater<MinDegreeNode>> pq;
+    pq = {}; // ensure empty
+    for (int v = 0; v < n; ++v) {
+        pq.push({v, weighted_degree[v]});
+    }
+
+    // Step 3: Keep track of eliminated vertices
+    std::vector<bool> eliminated(n, false);
+
+    // Result ordering
+    std::vector<int> ordering;
+    ordering.reserve(n);
+
+    // We also might want a quick way to lookup the weight of (u,v).
+    // For naive code, we just re-scan adjacency. For bigger graphs,
+    // you might want a hash map or a separate structure.
+
+    // Helper to find weight of edge (u, v). 
+    // Returns 0 if no edge found. (We assume undirected or stored as needed.)
+    auto get_edge_weight = [&](int u, int v){
+        int start = graph.xadj[u];
+        int end   = graph.xadj[u+1];
+        for(int idx = start; idx < end; ++idx){
+            if(graph.adjncy[idx] == v){
+                return graph.e_weights[idx];
+            }
+        }
+        return 0; // or -1 if you want to detect "no edge"
+    };
+
+    // Step 4: Main loop
+    int eliminated_count = 0;
+    while (eliminated_count < n)
+    {
+        // Pop from PQ any vertex already eliminated
+        while (!pq.empty() && eliminated[pq.top().vertex]) {
+            pq.pop();
+        }
+        if (pq.empty()) break; // no vertices left
+
+        // Extract the minimum-degree vertex
+        MinDegreeNode mn = pq.top();
+        pq.pop();
+        int chosen_vertex = mn.vertex;
+        if (eliminated[chosen_vertex]) {
+            continue;
+        }
+
+        // Eliminate chosen_vertex
+        eliminated[chosen_vertex] = true;
+        ordering.push_back(chosen_vertex);
+        eliminated_count++;
+
+        // Gather neighbors that are still active
+        std::vector<int> neighbors;
+        int vstart = graph.xadj[chosen_vertex];
+        int vend   = graph.xadj[chosen_vertex+1];
+        neighbors.reserve(vend - vstart);
+        for(int idx = vstart; idx < vend; ++idx){
+            int nbr = graph.adjncy[idx];
+            if(!eliminated[nbr]){
+                neighbors.push_back(nbr);
+            }
+        }
+
+        // Step 5: Update degrees of neighbors in a quotient-graph sense
+        // Each neighbor loses the edge to chosen_vertex,
+        // and gains edges to the other neighbors. 
+        // Instead of adding a fixed 1, let's compute the *average* of the edge weights to chosen_vertex.
+
+        // First, collect the weights from chosen_vertex to each neighbor.
+        // We'll store them in a small map or array for quick reference:
+        std::vector<int> neighbor_weights(neighbors.size(), 0);
+        for (size_t i = 0; i < neighbors.size(); ++i){
+            int nbr = neighbors[i];
+            neighbor_weights[i] = get_edge_weight(chosen_vertex, nbr);
+        }
+
+        // Subtract the weight to chosen_vertex from each neighbor's weighted_degree
+        for (size_t i = 0; i < neighbors.size(); ++i) {
+            int nbr = neighbors[i];
+            weighted_degree[nbr] -= neighbor_weights[i];
+        }
+
+        // Now form clique among neighbors. For every pair (n1, n2) of neighbors:
+        //   If an edge does not exist, add a new edge whose weight is
+        //   average( weight(chosen_vertex,n1), weight(chosen_vertex,n2) ).
+        for (size_t i = 0; i < neighbors.size(); ++i) {
+            int n1 = neighbors[i];
+            int w1 = neighbor_weights[i];
+
+            for (size_t j = i+1; j < neighbors.size(); ++j) {
+                int n2 = neighbors[j];
+                int w2 = neighbor_weights[j];
+
+                // Check if n1 and n2 are already connected
+                int existing_weight_n1n2 = get_edge_weight(n1, n2);
+                if (existing_weight_n1n2 == 0) {
+                    // no edge => create a new edge in the quotient graph
+                    // Weighted MD heuristics might do something more sophisticated,
+                    // but let's do the naive approach:
+                    int new_edge_weight = (w1 + w2) / 2; // average
+
+                    // We increment each neighbor’s degree by the new weight.
+                    weighted_degree[n1] += new_edge_weight;
+                    weighted_degree[n2] += new_edge_weight;
+
+                    // If you want to store this new edge in the actual adjacency (to maintain consistency),
+                    // you'd have to modify 'graph.adjncy' and 'graph.e_weights' to reflect the new edge (n1,n2).
+                    // That is more complicated; we'd have to expand the adjacency structure dynamically.
+                    // For demonstration, we're only updating the "weighted_degree" values.
+                }
+                else {
+                    // There's already an edge (n1,n2). 
+                    // Some Weighted MD variants might also update that existing weight (like merging).
+                    // For simplicity, we won't re-add it, but in a rigorous approach,
+                    // you might need to unify or update that weight.
+                }
+            }
+        }
+
+        // Step 6: Re-insert (or push updated) neighbors into PQ
+        for (auto nbr : neighbors) {
+            if (!eliminated[nbr]) {
+                pq.push({nbr, weighted_degree[nbr]});
+            }
+        }
+    }
+
+    return ordering;
+}
+
+
+template <typename integer_t>
+void min_degree_reordering(const RXMeshStatic&      rx,
+                           const Graph<integer_t>&  graph,
+                           MaxMatchTree<integer_t>& max_match_tree)
+{
+    std::vector<integer_t> min_degree_ordering =
+        minimum_degree_ordering_avg_weights(graph);
+
+    // check the ordering
+    RXMESH_INFO(
+        "Ordering Size {}, Graph Size {}", min_degree_ordering.size(), graph.n);
+    // print the ordering
+    std::cout << "Ordering: ";
+    for (int i = 0; i < min_degree_ordering.size(); ++i) {
+        std::cout << min_degree_ordering[i] << " ";
+    }
+    std::cout << std::endl;
+
+    // create the max match tree
+    max_match_tree.levels.clear();
+
+    for (int i = 0; i < min_degree_ordering.size() - 1; ++i) {
+        max_match_tree.levels.insert(max_match_tree.levels.begin(),
+                                     Level<integer_t>());
+        auto& level = max_match_tree.levels.front();
+
+        if (i == 0) {
+            level.nodes.push_back(Node<integer_t>(0, 1));
+        } else {
+            level.nodes = max_match_tree.levels[1].nodes;
+            level.nodes.push_back(Node<integer_t>(i, i + 1));
+        }
+
+        level.patch_proj = std::vector<integer_t>(graph.n, i);
+        for (int j = 0; j < i; ++j) {
+            level.patch_proj[min_degree_ordering[j]] = j;
+        }
+
+        // check the patch projection
+        std::cout << "Patch projection for level " << i << std::endl;
+        for (int j = 0; j < graph.n; ++j) {
+            std::cout << level.patch_proj[j] << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    // fill the last level of the max match tree
+
+    Level<integer_t>& level = max_match_tree.levels.front();
+    for (int i = 0; i < level.nodes.size(); ++i) {
+        Node<integer_t>& node = level.nodes[i];
+
+        node.lch = min_degree_ordering[i];
+        node.rch = min_degree_ordering[i];
+
+        if (i == level.nodes.size() - 1) {
+            node.rch = min_degree_ordering[i + 1];
+        }
+    }
+
+    max_match_tree.print();
 }
 
 
@@ -2507,8 +2738,11 @@ void nd_permute(RXMeshStatic& rx, int* h_permute)
     // RXMESH_INFO("GGGP Max Match Tree");
     // ggp_max_match_tree.print();
 
-    // test
-    heavy_max_matching_with_partition(rx, p_graph, max_match_tree);
+    // RXMESH_INFO("Max Match with Partition");
+    // heavy_max_matching_with_partition(rx, p_graph, max_match_tree);
+
+    RXMESH_INFO("min_degree_reordering");
+    min_degree_reordering(rx, p_graph, max_match_tree);
 
     permute_separators(rx,
                        v_index,
