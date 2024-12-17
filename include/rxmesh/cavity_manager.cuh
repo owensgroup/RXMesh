@@ -584,6 +584,14 @@ struct CavityManager
                                               const uint16_t q_face,
                                               PatchInfo&     q_patch_info,
                                               FuncT          should_migrate);
+    /**
+     * @brief Add a new patch to the patch stash and return the stash id
+     * Internally, if the patch is actually new (i.e., it was not stored in
+     * the patch stash before), we also indicate that we have added a new patch
+     * (using m_s_new_patch_added)
+     */
+    __device__ __inline__ uint8_t add_new_patch_to_patch_stash(
+        const uint32_t new_patch);
 
     /**
      * @brief given a local vertex in a patch, find its corresponding local
@@ -672,8 +680,23 @@ struct CavityManager
     __device__ __inline__ bool lock_patches_to_lock(
         cooperative_groups::thread_block& block);
 
+
     /**
-     * @brief prepare m_s_ribbonize_v with vertices that need to be ribbonize
+     * @brief lock new patches added to the patch stash
+     */
+    __device__ __inline__ bool lock_new_added_patches(
+        cooperative_groups::thread_block& block);
+
+
+    /**
+     * @brief lock neighbour patches
+     */
+    __device__ __inline__ bool lock_neighbour_patches(
+        cooperative_groups::thread_block& block);
+
+    /**
+     * @brief prepare m_s_ribbonize_v with vertices that need to be
+     * ribbonize
      */
     __device__ __inline__ void pre_ribbonize(
         cooperative_groups::thread_block& block);
@@ -883,6 +906,13 @@ struct CavityManager
     __device__ __inline__ void build_patch_stash_mapper(
         cooperative_groups::thread_block& block,
         const PatchInfo&                  q_patch_info);
+
+    /**
+     * @brief verify that what we read in shared memory is consistent with
+     * global memory
+     */
+    __device__ __inline__ void verify_reading_from_global_memory(
+        cooperative_groups::thread_block& block) const;
 
 
     // indicate if this block can write its updates to global memory during

@@ -55,43 +55,22 @@ __device__ __inline__ CavityManager<blockThreads, cop>::CavityManager(
             }
         }
 
+        // filter based on color
+        // uint32_t color = INVALID32;
+        // if (s_patch_id != INVALID32) {
+        //    color = m_context.m_patches_info[s_patch_id].color;
+        //    if (color != iteration) {
+        //        push(s_patch_id);
+        //        s_patch_id = INVALID32;
+        //    }
+        //}
+
+
         // try to lock the patch
         if (s_patch_id != INVALID32) {
             bool locked =
                 m_context.m_patches_info[s_patch_id].lock.acquire_lock(
                     blockIdx.x);
-
-            // bool locked = true;
-            // if (s_patch_id % 3 != iteration % 3) {
-            //     locked = false;
-            // } else {
-            //     locked =
-            //     m_context.m_patches_info[s_patch_id].lock.acquire_lock(
-            //         blockIdx.x);
-            // }
-
-            // bool     locked = true;
-            // uint32_t np     = sqrtf(m_context.get_num_patches());
-            // uint32_t px     = s_patch_id / np;
-            // uint32_t py     = s_patch_id % np;
-            //
-            // uint32_t color_id;
-            // if (px % 2 == 0 && py % 2 == 0) {
-            //     color_id = 1;
-            // } else if (px % 2 == 1 && py % 2 == 0) {
-            //     color_id = 2;
-            // } else if (px % 2 == 0 && py % 2 == 1) {
-            //     color_id = 3;
-            // } else if (px % 2 == 1 && py % 2 == 1) {
-            //     color_id = 4;
-            // }
-            // if (color_id == iteration % 5 || iteration % 5 == 0) {
-            //     locked =
-            //     m_context.m_patches_info[s_patch_id].lock.acquire_lock(
-            //         blockIdx.x);
-            // } else {
-            //     locked = false;
-            // }
 
             if (!locked) {
                 // if we can not, we add it again to the queue
@@ -379,8 +358,9 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
 
     for (int i = threadIdx.x; i < int(PatchStash::stash_size);
          i += blockThreads) {
-        m_s_patch_stash.m_stash[i]     = m_patch_info.patch_stash.m_stash[i];
-        m_s_new_patch_stash.m_stash[i] = INVALID32;
+        const uint32_t pp              = m_patch_info.patch_stash.m_stash[i];
+        m_s_patch_stash.m_stash[i]     = pp;
+        m_s_new_patch_stash.m_stash[i] = pp;
     }
 
     __shared__ uint8_t p_st2[PatchStash::stash_size];
@@ -406,6 +386,57 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     cooperative_groups::wait(block);
     block.sync();
 }
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ void
+CavityManager<blockThreads, cop>::verify_reading_from_global_memory(
+    cooperative_groups::thread_block& block) const
+{
+    assert(m_s_num_vertices[0] == m_patch_info.num_vertices[0]);
+    assert(m_s_num_edges[0] == m_patch_info.num_edges[0]);
+    assert(m_s_num_faces[0] == m_patch_info.num_faces[0]);
+
+
+    // active and owned vertices
+    for (int v = threadIdx.x; v < int(m_s_num_vertices[0]); v += blockThreads) {
+        assert(v < m_s_active_mask_v.size());
+        assert(m_s_active_mask_v(v) ==
+               !m_patch_info.is_deleted(LocalVertexT(v)));
+
+        assert(m_s_owned_mask_v(v) == m_patch_info.is_owned(LocalVertexT(v)));
+    }
+
+    // active and owned edges
+    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
+        assert(e < m_s_active_mask_e.size());
+        assert(m_s_active_mask_e(e) == !m_patch_info.is_deleted(LocalEdgeT(e)));
+        assert(m_s_owned_mask_e(e) == m_patch_info.is_owned(LocalEdgeT(e)));
+    }
+
+    // active and owned faces
+    for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
+        assert(f < m_s_active_mask_f.size());
+        assert(m_s_active_mask_f(f) == !m_patch_info.is_deleted(LocalFaceT(f)));
+        assert(m_s_owned_mask_f(f) == m_patch_info.is_owned(LocalFaceT(f)));
+    }
+
+    // EV
+    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
+        if (m_s_active_mask_e(e)) {
+            assert(m_s_ev[2 * e + 0] == m_patch_info.ev[2 * e + 0].id);
+            assert(m_s_ev[2 * e + 1] == m_patch_info.ev[2 * e + 1].id);
+        }
+    }
+
+    // FE
+    for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
+        if (m_s_active_mask_f(f)) {
+            assert(m_s_fe[3 * f + 0] == m_patch_info.fe[3 * f + 0].id);
+            assert(m_s_fe[3 * f + 1] == m_patch_info.fe[3 * f + 1].id);
+        }
+    }
+}
+
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
@@ -666,6 +697,11 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::prologue(
     if (get_num_cavities() <= 0) {
         return false;
     }
+
+#ifndef NDEBUG
+    verify_reading_from_global_memory(block);
+    block.sync();
+#endif
 
     // construct cavity graph
     construct_cavity_graph(block);
@@ -2168,6 +2204,7 @@ __device__ __forceinline__ bool CavityManager<blockThreads, cop>::lock(
             if (okay) {
                 assert(stash_id < m_s_locked_patches_mask.size());
                 m_s_locked_patches_mask.set(stash_id);
+                m_s_patches_to_lock_mask.set(stash_id);
             }
         }
         s_success = okay;
@@ -2436,6 +2473,17 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     pre_ribbonize(block);
     block.sync();
 
+    // lock all neighbors and make sure non is dirty
+    if (!lock_neighbour_patches(block)) {
+        return false;
+    }
+
+    // make sure non of the locked q patches are dirty
+    if (!ensure_locked_patches_are_not_dirty()) {
+        return false;
+    }
+
+
     // soft migrate
     for (int st = 0; st < PatchStash::stash_size; ++st) {
         const uint32_t q = m_s_patch_stash.get_patch(st);
@@ -2447,7 +2495,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     }
     block.sync();
 
-    // early quit if we have not locked the owner patch (but a proxy)
     if (!ensure_ownership<VertexHandle>(block,
                                         m_s_num_vertices[0],
                                         m_s_ownership_change_mask_v,
@@ -2456,11 +2503,10 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
         return false;
     }
 
-    // make sure non of the q patches are dirty
+    // make sure non of the locked q patches are dirty
     if (!ensure_locked_patches_are_not_dirty()) {
         return false;
     }
-
 
     // full migrate
     for (int st = 0; st < PatchStash::stash_size; ++st) {
@@ -2472,7 +2518,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
         }
     }
     block.sync();
-
 
     // since we may have locked new patches during full migration, make sure non
     // of the q patches are dirty
@@ -2505,6 +2550,54 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate(
     return true;
 }
 
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ bool
+CavityManager<blockThreads, cop>::lock_neighbour_patches(
+    cooperative_groups::thread_block& block)
+{
+    // TODO since the whole block locks the whole thing, then we can use
+    // different warps to locks different patches rather than relies on a single
+    // thread to do the job
+    block.sync();
+    for (int st = 0; st < PatchStash::stash_size; ++st) {
+        assert(st < m_s_locked_patches_mask.size());
+        const uint32_t patch = m_s_patch_stash.get_patch(st);
+        if (patch != INVALID32) {
+            if (!lock(block, st, patch)) {
+                return false;
+            } else {
+                assert(m_s_locked_patches_mask(st));
+            }
+        }
+    }
+    return true;
+}
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ bool
+CavityManager<blockThreads, cop>::lock_new_added_patches(
+    cooperative_groups::thread_block& block)
+{
+    block.sync();
+    for (int st = 0; st < PatchStash::stash_size; ++st) {
+        if (m_s_patch_stash.get_patch(st) !=
+            m_s_new_patch_stash.get_patch(st)) {
+            // it is a new patch
+            uint32_t new_patch = m_s_patch_stash.get_patch(st);
+
+            if (!lock(block, st, new_patch)) {
+                return false;
+            } else {
+                assert(st < m_s_locked_patches_mask.size());
+                assert(m_s_locked_patches_mask(st));
+                if (threadIdx.x == 0) {
+                    m_s_new_patch_stash.m_stash[st] = new_patch;
+                }
+            }
+        }
+    }
+    return true;
+}
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ bool
@@ -2618,8 +2711,8 @@ CavityManager<blockThreads, cop>::soft_migrate_from_patch(
         // vertices in m_s_src_mask_v
         for (int e = threadIdx.x; e < int(q_num_edges); e += blockThreads) {
             if (!q_patch_info.is_deleted(LocalEdgeT(e))) {
-                const uint16_t v0q = q_patch_info.ev[2 * e + 0].id;
-                const uint16_t v1q = q_patch_info.ev[2 * e + 1].id;
+
+                auto [v0q, v1q] = q_patch_info.get_edge_vertices(e);
 
                 assert(v0q < m_s_src_mask_v.size());
 
@@ -2797,8 +2890,9 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         // vertices in m_s_src_mask_v
         for (int e = threadIdx.x; e < int(q_num_edges); e += blockThreads) {
             if (!q_patch_info.is_deleted(LocalEdgeT(e))) {
-                const uint16_t v0q = q_patch_info.ev[2 * e + 0].id;
-                const uint16_t v1q = q_patch_info.ev[2 * e + 1].id;
+
+                auto [v0q, v1q] = q_patch_info.get_edge_vertices(e);
+
 
                 assert(v0q < m_s_src_mask_v.size());
                 if (m_s_src_mask_v(v0q)) {
@@ -2950,15 +3044,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
                 if (!inserted) {
                     m_s_should_slice[0] = true;
                 }
-                // if (!inserted) {
-                //     printf("\n p= %u, load factor = %f, stash load factor =
-                //     %f",
-                //            patch_id(),
-                //            m_patch_info.lp_e.compute_load_factor(m_s_table_e),
-                //            m_patch_info.lp_e.compute_load_factor(
-                //                m_s_table_stash_e));
-                // }
-                //  assert(inserted);
             }
             block.sync();
         }
@@ -3174,7 +3259,6 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         }
     }
 
-
     return true;
 }
 
@@ -3273,8 +3357,8 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_edge(
         // edge v0q--v1q where o0 (defined below) is owner
         // patch of v0q and o1 (defined below) is owner
         // patch for v1q
-        uint16_t v0q = q_patch_info.ev[2 * q_edge + 0].id;
-        uint16_t v1q = q_patch_info.ev[2 * q_edge + 1].id;
+
+        auto [v0q, v1q] = q_patch_info.get_edge_vertices(q_edge);
 
         if (should_migrate(q_edge, v0q, v1q)) {
 
@@ -3496,6 +3580,26 @@ __device__ __inline__ LPPair CavityManager<blockThreads, cop>::migrate_face(
     return ret;
 }
 
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __inline__ uint8_t
+CavityManager<blockThreads, cop>::add_new_patch_to_patch_stash(
+    const uint32_t new_patch)
+{
+    // first check if the patch is in the stash already,
+    //  then we use mutex, do the check again, and add the patch if it's not
+    //  there. if the patch is new, then we indicate this in
+    //  m_s_new_patch_added
+
+    uint8_t ret =
+        m_s_patch_stash.insert_patch(new_patch, m_s_patch_stash_mutex);
+
+    if (m_s_new_patch_stash.get_patch(ret) == INVALID32) {
+        m_s_new_patch_added[0] = true;
+    }
+
+    return ret;
+}
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __inline__ uint16_t
@@ -3819,7 +3923,7 @@ CavityManager<blockThreads, cop>::populate_correspondence(
         // if the highest bit is set
         const uint16_t corres = s_correspondence[b];
         if (corres != INVALID16 && (corres & (1 << 15))) {
-            s_correspondence[b]       = INVALID32;
+            s_correspondence[b]       = INVALID16;
             s_correspondence_stash[b] = INVALID8;
         }
     }
@@ -3839,12 +3943,12 @@ CavityManager<blockThreads, cop>::build_patch_stash_mapper(
 
         const uint32_t k_patch = q_patch_info.patch_stash.get_patch(q_stash_id);
 
-        if (k_patch != INVALID32) {
+        if (k_patch == patch_id()) {
+            m_s_patch_stash_mapper[q_stash_id] = INVALID8 - 1u;
+        } else if (k_patch != INVALID32) {
             const uint8_t p_stash_id =
                 m_s_patch_stash.find_patch_index(k_patch);
             m_s_patch_stash_mapper[q_stash_id] = p_stash_id;
-        } else if (k_patch == patch_id()) {
-            m_s_patch_stash_mapper[q_stash_id] = INVALID8 - 1u;
         } else {
             m_s_patch_stash_mapper[q_stash_id] = INVALID8;
         }
