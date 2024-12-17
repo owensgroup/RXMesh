@@ -47,17 +47,21 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
         perm.indices()[i] = h_permute[i];
     }
 
+    RXMESH_INFO(" Before perm_mat\n");
+
     Eigen::SparseMatrix<float> permuted_mat(eigen_mat.rows(), eigen_mat.rows());
 
     Eigen::internal::permute_symm_to_fullsymm<Eigen::Lower, false>(
         eigen_mat, permuted_mat, perm.indices().data());
 
-    // export_to_plain_text(permuted_mat,
-    //                      std::string("C:\\Github\\Matlab_Reordering_Trial\\")
-    //                      +
-    //                          st + std::string(".txt"));
-    //
-    // return 0;
+    RXMESH_INFO(" After perm_mat\n");
+
+    // tmp fix that EIGEN doesn't work
+    export_to_plain_text(permuted_mat,
+                         std::string("/home/ericyuan/Projects/RXMesh/build/output/")
+                         + st + std::string(".txt"));
+    
+    return 0;
 
     // compute Cholesky factorization on the permuted matrix
 
@@ -65,7 +69,11 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
                          Eigen::Lower,
                          Eigen::NaturalOrdering<int>>
         solver;
+
+    solver.analyzePattern(permuted_mat);
     solver.compute(permuted_mat);
+
+    RXMESH_INFO(" After solver\n");
 
     if (solver.info() != Eigen::Success) {
         RXMESH_ERROR(
@@ -75,13 +83,19 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
         return -1;
     }
 
+    RXMESH_INFO(" before lower_mat\n");
+
     // extract nnz from lower matrix
     Eigen::SparseMatrix<float> lower_mat = solver.matrixL();
 
     // std::cout << "ff\n" << ff << "\n";
 
+    RXMESH_INFO(" After lower_mat\n");
+
     // these are the nnz on (strictly) the lower part
     int lower_nnz = lower_mat.nonZeros() - lower_mat.rows();
+
+    RXMESH_INFO(" After lower_nnz\n");
 
     // multiply by two to account for lower and upper parts of the matrix
     // add rows() to account for entries along the diagonal
