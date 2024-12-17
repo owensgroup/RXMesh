@@ -34,6 +34,15 @@ class RXMesh
         return m_num_vertices;
     }
 
+    /**
+     * @brief return the number of colors from the 2-ring graph coloring
+     * @return
+     */
+    uint32_t get_num_colors() const
+    {
+        return m_num_colors;
+    }
+
     uint32_t get_num_vertices(bool from_device)
     {
         if (from_device) {
@@ -613,6 +622,8 @@ class RXMesh
     float m_capacity_factor, m_lp_hashtable_load_factor, m_patch_alloc_factor;
 
     double m_topo_memory_mega_bytes;
+
+    uint32_t m_num_colors;
 
     Timers<CPUTimer> m_timers;
 };

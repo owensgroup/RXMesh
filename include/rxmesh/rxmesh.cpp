@@ -29,11 +29,11 @@ RXMesh::RXMesh(uint32_t patch_size)
       m_is_input_closed(true),
       m_num_patches(0),
       m_max_num_patches(0),
-      m_patch_size(patch_size),     
+      m_patch_size(patch_size),
       m_max_capacity_lp_v(0),
       m_max_capacity_lp_e(0),
-      m_max_capacity_lp_f(0),     
-      m_max_vertices_per_patch(0), 
+      m_max_capacity_lp_f(0),
+      m_max_vertices_per_patch(0),
       m_max_edges_per_patch(0),
       m_max_faces_per_patch(0),
       m_h_vertex_prefix(nullptr),
@@ -45,9 +45,10 @@ RXMesh::RXMesh(uint32_t patch_size)
       m_d_patches_info(nullptr),
       m_h_patches_info(nullptr),
       m_capacity_factor(0.f),
-      m_lp_hashtable_load_factor(0.f),      
-      m_patch_alloc_factor(0.f),      
-      m_topo_memory_mega_bytes(0.0)
+      m_lp_hashtable_load_factor(0.f),
+      m_patch_alloc_factor(0.f),
+      m_topo_memory_mega_bytes(0.0),
+      m_num_colors(0)
 {
 }
 
@@ -100,12 +101,13 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     RXMESH_INFO("populate_patch_stash time = {} (ms)",
                 m_timers.elapsed_millis("populate_patch_stash"));
 
-    //m_timers.add("coloring");
-    //m_timers.start("coloring");
-    //patch_graph_coloring();
-    //m_timers.stop("coloring");
-    //RXMESH_INFO("patch graph coloring time = {} (ms)",
-    //            m_timers.elapsed_millis("coloring"));
+    m_timers.add("coloring");
+    m_timers.start("coloring");
+    patch_graph_coloring();
+    m_timers.stop("coloring");
+    RXMESH_INFO("Num colors = {}", m_num_colors);
+    RXMESH_INFO("patch graph coloring time = {} (ms)",
+                m_timers.elapsed_millis("coloring"));
 
 
     m_timers.add("build_device");
@@ -1405,6 +1407,8 @@ void RXMesh::patch_graph_coloring()
     std::vector<uint32_t> ids(m_num_patches);
     fill_with_random_numbers(ids.data(), ids.size());
 
+    m_num_colors = 0;
+
     // init all colors
     for (uint32_t p_id : ids) {
         m_h_patches_info[p_id].color = INVALID32;
@@ -1412,10 +1416,22 @@ void RXMesh::patch_graph_coloring()
 
     // assign colors
     for (uint32_t p_id : ids) {
-        PatchInfo& patch = m_h_patches_info[p_id];
-
-        // put neighbour colors in a set
+        PatchInfo&         patch = m_h_patches_info[p_id];
         std::set<uint32_t> neighbours_color;
+
+        // One Ring
+        // put neighbour colors in a set
+        // for (uint32_t i = 0; i < patch.patch_stash.stash_size; ++i) {
+        //    uint32_t n = patch.patch_stash.get_patch(i);
+        //    if (n != INVALID32) {
+        //        uint32_t c = m_h_patches_info[n].color;
+        //        if (c != INVALID32) {
+        //            neighbours_color.insert(c);
+        //        }
+        //    }
+        //}
+
+        // Two Ring
         for (uint32_t i = 0; i < patch.patch_stash.stash_size; ++i) {
             uint32_t n = patch.patch_stash.get_patch(i);
             if (n != INVALID32) {
@@ -1423,16 +1439,30 @@ void RXMesh::patch_graph_coloring()
                 if (c != INVALID32) {
                     neighbours_color.insert(c);
                 }
+
+
+                for (uint32_t j = 0; j < patch.patch_stash.stash_size; ++j) {
+                    uint32_t nn = m_h_patches_info[n].patch_stash.get_patch(j);
+                    if (nn != INVALID32 && nn != patch.patch_id) {
+                        uint32_t cc = m_h_patches_info[nn].color;
+                        if (cc != INVALID32) {
+                            neighbours_color.insert(cc);
+                        }
+                    }
+                }
             }
         }
 
         // find the min color id that is not in the list/set
         for (uint32_t i = 0; i < m_num_patches; ++i) {
             if (neighbours_color.find(i) == neighbours_color.end()) {
-                patch.color = i;
+                patch.color  = i;
+                m_num_colors = std::max(m_num_colors, patch.color);
                 break;
             }
         }
     }
+
+    m_num_colors++;
 }
 }  // namespace rxmesh
