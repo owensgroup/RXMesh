@@ -844,9 +844,12 @@ CavityManager<blockThreads, cop>::construct_cavity_graph(
                 assert(!m_patch_info.is_deleted(LocalFaceT(f)));
 
                 // edges tag
-                const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
-                const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
-                const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
+                const uint16_t e0 =
+                    static_cast<uint16_t>(m_s_fe[3 * f + 0] >> 1);
+                const uint16_t e1 =
+                    static_cast<uint16_t>(m_s_fe[3 * f + 1] >> 1);
+                const uint16_t e2 =
+                    static_cast<uint16_t>(m_s_fe[3 * f + 2] >> 1);
 
                 const uint16_t c0 = m_s_cavity_id_e[e0];
                 const uint16_t c1 = m_s_cavity_id_e[e1];
@@ -925,9 +928,12 @@ CavityManager<blockThreads, cop>::construct_cavity_graph(
 
                 const uint16_t f_cavity = m_s_cavity_id_f[f];
 
-                const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
-                const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
-                const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
+                const uint16_t e0 =
+                    static_cast<uint16_t>(m_s_fe[3 * f + 0] >> 1);
+                const uint16_t e1 =
+                    static_cast<uint16_t>(m_s_fe[3 * f + 1] >> 1);
+                const uint16_t e2 =
+                    static_cast<uint16_t>(m_s_fe[3 * f + 2] >> 1);
 
                 add_edge_scatter(m_s_cavity_id_e, e0, f_cavity);
                 add_edge_scatter(m_s_cavity_id_e, e1, f_cavity);
@@ -1222,9 +1228,9 @@ CavityManager<blockThreads, cop>::mark_edges_through_faces()
 
             const uint16_t f_cavity = m_s_cavity_id_f[f];
 
-            const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
-            const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
-            const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
+            const uint16_t e0 = static_cast<uint16_t>(m_s_fe[3 * f + 0] >> 1);
+            const uint16_t e1 = static_cast<uint16_t>(m_s_fe[3 * f + 1] >> 1);
+            const uint16_t e2 = static_cast<uint16_t>(m_s_fe[3 * f + 2] >> 1);
 
             assert(m_s_active_mask_e(e0));
             assert(m_s_active_mask_e(e0));
@@ -1272,9 +1278,9 @@ CavityManager<blockThreads, cop>::mark_faces_through_edges()
         if (m_s_active_mask_f(f)) {
 
             // edges tag
-            const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
-            const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
-            const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
+            const uint16_t e0 = static_cast<uint16_t>(m_s_fe[3 * f + 0] >> 1);
+            const uint16_t e1 = static_cast<uint16_t>(m_s_fe[3 * f + 1] >> 1);
+            const uint16_t e2 = static_cast<uint16_t>(m_s_fe[3 * f + 2] >> 1);
 
 
             assert(!m_patch_info.is_deleted(LocalFaceT(f)));
@@ -1469,9 +1475,10 @@ CavityManager<blockThreads, cop>::deactivate_boundary_cavities(
         assert(f < m_s_in_cavity_f.size());
         if (m_s_active_mask_f(f) || m_s_in_cavity_f(f)) {
 
-            const uint16_t edges[3] = {m_s_fe[3 * f + 0] >> 1,
-                                       m_s_fe[3 * f + 1] >> 1,
-                                       m_s_fe[3 * f + 2] >> 1};
+            const uint16_t edges[3] = {
+                static_cast<uint16_t>(m_s_fe[3 * f + 0] >> 1),
+                static_cast<uint16_t>(m_s_fe[3 * f + 1] >> 1),
+                static_cast<uint16_t>(m_s_fe[3 * f + 2] >> 1)};
 
             for (int i = 0; i < 3; ++i) {
                 const uint16_t e = edges[i];
@@ -1627,9 +1634,9 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
         // we could check on if the face is deleted but we only mark faces
         // that are not deleted so no need to double check this
         if (face_cavity != INVALID16) {
-            const uint16_t e0 = m_s_fe[3 * f + 0] >> 1;
-            const uint16_t e1 = m_s_fe[3 * f + 1] >> 1;
-            const uint16_t e2 = m_s_fe[3 * f + 2] >> 1;
+            const uint16_t e0 = static_cast<uint16_t>(m_s_fe[3 * f + 0] >> 1);
+            const uint16_t e1 = static_cast<uint16_t>(m_s_fe[3 * f + 1] >> 1);
+            const uint16_t e2 = static_cast<uint16_t>(m_s_fe[3 * f + 2] >> 1);
 
             const uint16_t c0 = m_s_cavity_id_e[e0];
             const uint16_t c1 = m_s_cavity_id_e[e1];
@@ -1693,7 +1700,8 @@ CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
             if (face_cavity != INVALID16) {
                 for (int i = 0; i < 3; ++i) {
 
-                    const uint16_t e = m_s_fe[3 * f + i] >> 1;
+                    const uint16_t e =
+                        static_cast<uint16_t>(m_s_fe[3 * f + i] >> 1);
 
                     const uint16_t e_bd_cavity_id =
                         m_s_boudary_edges_cavity_id[e];
@@ -2386,18 +2394,16 @@ CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
         assert(f < m_s_active_mask_f.size());
         assert(f < m_s_in_cavity_f.size());
 
-        const uint16_t edges[3] = {m_s_fe[3 * f + 0] >> 1,
-                                   m_s_fe[3 * f + 1] >> 1,
-                                   m_s_fe[3 * f + 2] >> 1};
+        const uint16_t edges[3] = {
+            static_cast<uint16_t>(m_s_fe[3 * f + 0] >> 1),
+            static_cast<uint16_t>(m_s_fe[3 * f + 1] >> 1),
+            static_cast<uint16_t>(m_s_fe[3 * f + 2] >> 1)};
 
         if (!m_s_owned_mask_f(f) && m_s_in_cavity_f(f)) {
             m_s_ownership_change_mask_f.set(f, true);
         }
         if (!m_s_owned_mask_f(f) && m_s_active_mask_f(f)) {
 
-            const uint16_t edges[3] = {m_s_fe[3 * f + 0] >> 1,
-                                       m_s_fe[3 * f + 1] >> 1,
-                                       m_s_fe[3 * f + 2] >> 1};
             for (int i = 0; i < 3; ++i) {
                 const uint16_t e = edges[i];
                 assert(e < m_s_active_mask_e.size());
@@ -3066,9 +3072,12 @@ __device__ __inline__ bool CavityManager<blockThreads, cop>::migrate_from_patch(
         for (int f = threadIdx.x; f < int(q_num_faces); f += blockThreads) {
             if (!q_patch_info.is_deleted(LocalFaceT(f))) {
 
-                const uint16_t e0 = q_patch_info.fe[3 * f + 0].id >> 1;
-                const uint16_t e1 = q_patch_info.fe[3 * f + 1].id >> 1;
-                const uint16_t e2 = q_patch_info.fe[3 * f + 2].id >> 1;
+                const uint16_t e0 =
+                    static_cast<uint16_t>(q_patch_info.fe[3 * f + 0].id >> 1);
+                const uint16_t e1 =
+                    static_cast<uint16_t>(q_patch_info.fe[3 * f + 1].id >> 1);
+                const uint16_t e2 =
+                    static_cast<uint16_t>(q_patch_info.fe[3 * f + 2].id >> 1);
 
                 assert(!q_patch_info.is_deleted(LocalEdgeT(e0)));
                 assert(!q_patch_info.is_deleted(LocalEdgeT(e1)));
@@ -4190,7 +4199,8 @@ __device__ __inline__ void CavityManager<blockThreads, cop>::recover_faces()
                 m_s_active_mask_f.set(f, true);
 #ifndef NDEBUG
                 for (int i = 0; i < 3; ++i) {
-                    const uint16_t e = m_s_fe[3 * f + i] >> 1;
+                    const uint16_t e =
+                        static_cast<uint16_t>(m_s_fe[3 * f + i] >> 1);
                     assert(m_s_recover_e(e) || m_s_active_mask_e(e));
                 }
 #endif
@@ -4255,7 +4265,8 @@ CavityManager<blockThreads, cop>::recover_edges_through_faces()
     for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
         if (m_s_recover_f(f)) {
             for (int i = 0; i < 3; ++i) {
-                const uint16_t e = m_s_fe[3 * f + i] >> 1;
+                const uint16_t e =
+                    static_cast<uint16_t>(m_s_fe[3 * f + i] >> 1);
                 assert(e < m_s_num_edges[0]);
                 assert(!m_patch_info.is_deleted(LocalEdgeT(e)));
                 m_s_recover_e.set(e, true);
@@ -4305,7 +4316,8 @@ CavityManager<blockThreads, cop>::recover_faces_through_edges()
             bool recover = false;
 
             for (int i = 0; i < 3; ++i) {
-                const uint16_t e = m_s_fe[3 * f + i] >> 1;
+                const uint16_t e =
+                    static_cast<uint16_t>(m_s_fe[3 * f + i] >> 1);
                 if (e < m_s_num_edges[0]) {
                     if (m_s_recover_e(e)) {
                         recover = true;
