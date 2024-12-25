@@ -72,7 +72,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
         // queue.
         PriorityQueueT priority_queue(rx.get_num_edges());
         to_collapse->reset(false, DEVICE);
-        rx.prepare_launch_box(
+        rx.update_launch_box(
             {Op::EV},
             launch_box,
             (void*)compute_edge_priorities<float, blockThreads>,
@@ -126,12 +126,17 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
 
         timers.stop("PriorityQueue");
 
-        {
-            to_collapse->move(DEVICE, HOST);
-            rx.get_polyscope_mesh()->addEdgeScalarQuantity("ToCollapse",
-                                                           *to_collapse);
-            polyscope::show();
-        }
+        //{
+        //    to_collapse->move(DEVICE, HOST);
+        //
+        //    rx.update_polyscope();
+        //    auto ps_mesh = rx.get_polyscope_mesh();
+        //    ps_mesh->updateVertexPositions(*coords);
+        //
+        //    rx.get_polyscope_mesh()->addEdgeScalarQuantity("ToCollapse",
+        //                                                   *to_collapse);
+        //    polyscope::show();
+        //}
 
 
         // loop over the mesh, and try to collapse
@@ -175,19 +180,23 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
             timers.start("Cleanup");
             rx.cleanup();
             timers.stop("Cleanup");
-        }
 
-        {
-            rx.update_polyscope();
+            {
+                //rx.update_host();
+                //coords->move(DEVICE, HOST);
+                //EXPECT_TRUE(rx.validate());
 
-            auto ps_mesh = rx.get_polyscope_mesh();
-            ps_mesh->updateVertexPositions(*coords);
-            ps_mesh->setEnabled(false);
-
-            rx.render_vertex_patch();
-            rx.render_edge_patch();
-            rx.render_face_patch();
-            polyscope::show();
+                // rx.update_polyscope();
+                //
+                // auto ps_mesh = rx.get_polyscope_mesh();
+                // ps_mesh->updateVertexPositions(*coords);
+                // ps_mesh->setEnabled(false);
+                //
+                // rx.render_vertex_patch();
+                // rx.render_edge_patch();
+                // rx.render_face_patch();
+                // polyscope::show();
+            }
         }
     }
     timers.stop("Total");
