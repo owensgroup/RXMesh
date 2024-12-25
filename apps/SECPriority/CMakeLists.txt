@@ -4,6 +4,7 @@ set(SOURCE_LIST
     secp.cu
 	secp_rxmesh.cuh
 	secp_kernels.cuh
+	secp_pair.h
 )
 
 target_sources(SECPriority
