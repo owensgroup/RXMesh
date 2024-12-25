@@ -28,8 +28,8 @@ source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "SECPriority" FILES ${SOURCE_
 # NVIDIA.
 CPMAddPackage(
     NAME cuco
-    GITHUB_REPOSITORY porumbes/cuCollections
-    GIT_TAG b857b47b812f6e618e5f4e3e3cdcbfa5a3764898
+    GITHUB_REPOSITORY ahdhn/cuCollections
+    GIT_TAG 160eb3e76193b2f87fe2c83f3bdc70fec3ab5aaa
     OPTIONS
        "BUILD_TESTS OFF"
        "BUILD_BENCHMARKS OFF"

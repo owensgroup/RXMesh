@@ -1,15 +1,15 @@
 #pragma once
-#include "rxmesh/cavity_manager.cuh"
 #include "../Remesh/link_condition.cuh"
+#include "rxmesh/cavity_manager.cuh"
 
 #include <cooperative_groups.h>
 #include <cuda_runtime.h>
 
 template <typename T, uint32_t blockThreads>
-__global__ static void secp(rxmesh::Context                   context,
-                            rxmesh::VertexAttribute<T>        coords,
-                            const int                         reduce_threshold,
-                            rxmesh::EdgeAttribute<bool>       e_pop_attr)
+__global__ static void secp(rxmesh::Context             context,
+                            rxmesh::VertexAttribute<T>  coords,
+                            const int                   reduce_threshold,
+                            rxmesh::EdgeAttribute<bool> e_pop_attr)
 {
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
@@ -44,25 +44,29 @@ __global__ static void secp(rxmesh::Context                   context,
     for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
         assert(eh.local_id() < cavity.patch_info().num_edges[0]);
 
-        //edge_mask.set(eh.local_id(), e_pop_attr(eh));
-        if(true == e_pop_attr(eh))
-        {
-           edge_mask.set(eh.local_id(), true);
+        // edge_mask.set(eh.local_id(), e_pop_attr(eh));
+        if (true == e_pop_attr(eh)) {
+            edge_mask.set(eh.local_id(), true);
         }
-
     });
     block.sync();
 
     // 2a) check edge link condition.
-    link_condition(block, cavity.patch_info(), ev_query, 
-                   edge_mask, v0_mask, v1_mask, 0, 1);
+    link_condition(block,
+                   cavity.patch_info(),
+                   ev_query,
+                   edge_mask,
+                   v0_mask,
+                   v1_mask,
+                   0,
+                   1);
     block.sync();
 
     for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
         assert(eh.local_id() < cavity.patch_info().num_edges[0]);
         if (edge_mask(eh.local_id())) {
             cavity.create(eh);
-        } 
+        }
     });
     block.sync();
 
@@ -136,21 +140,22 @@ __global__ static void secp(rxmesh::Context                   context,
     block.sync();
 }
 
-//template <typename View, typename InputIt>
+// template <typename View, typename InputIt>
 template <typename T, uint32_t blockThreads>
-__global__ static void  compute_edge_priorities(
+__global__ static void compute_edge_priorities(
     rxmesh::Context                  context,
     const rxmesh::VertexAttribute<T> coords,
     PQView_t                         pq_view,
     size_t                           pq_num_bytes)
 {
     using namespace rxmesh;
-    namespace cg = cooperative_groups;
+    namespace cg       = cooperative_groups;
     cg::thread_block g = cg::this_thread_block();
-    ShmemAllocator      shrd_alloc;
+    ShmemAllocator   shrd_alloc;
 
     Query<blockThreads> query(context);
-    auto intermediatePairs = shrd_alloc.alloc<PriorityPair_t>(query.get_patch_info().num_edges[0]);
+    auto                intermediatePairs =
+        shrd_alloc.alloc<PriorityPair_t>(query.get_patch_info().num_edges[0]);
     __shared__ int pair_counter;
     pair_counter = 0;
 
@@ -164,20 +169,20 @@ __global__ static void  compute_edge_priorities(
         T len2 = glm::distance2(p0, p1);
 
         auto p_e = rxmesh::detail::unpack(eh.unique_id());
-        //printf("p_id:%u\te_id:%hu\n", p_e.first, p_e.second);
-        //printf("e_id:%llu\t, len:%f\n", eh.unique_id(), len2);
+        // printf("p_id:%u\te_id:%hu\n", p_e.first, p_e.second);
+        // printf("e_id:%llu\t, len:%f\n", eh.unique_id(), len2);
 
         // repack the EdgeHandle into smaller 32 bits for
         // use with priority queue. Need to check elsewhere
         // that there are less than 2^16 patches.
         auto id32 = unique_id32(p_e.second, (uint16_t)p_e.first);
-        //auto p_e_32 = unpack32(id32);
-        //printf("32bit p_id:%hu\te_id:%hu\n", p_e_32.first, p_e_32.second);
+        // auto p_e_32 = unpack32(id32);
+        // printf("32bit p_id:%hu\te_id:%hu\n", p_e_32.first, p_e_32.second);
 
         PriorityPair_t p{len2, id32};
-        //PriorityPair_t p{len2, eh};
+        // PriorityPair_t p{len2, eh};
 
-        auto val_counter = atomicAdd(&pair_counter, 1);
+        auto val_counter               = atomicAdd(&pair_counter, 1);
         intermediatePairs[val_counter] = p;
     };
 
@@ -185,41 +190,44 @@ __global__ static void  compute_edge_priorities(
     query.dispatch<Op::EV>(block, shrd_alloc, edge_len);
     block.sync();
 
-    char * pq_shrd_mem = shrd_alloc.alloc(pq_num_bytes);
-    pq_view.push(block, intermediatePairs, intermediatePairs + pair_counter, pq_shrd_mem);
+    char* pq_shrd_mem = shrd_alloc.alloc(pq_num_bytes);
+    pq_view.push(block,
+                 intermediatePairs,
+                 intermediatePairs + pair_counter,
+                 pq_shrd_mem);
 }
 
 template <uint32_t blockThreads>
 __global__ static void pop_and_mark_edges_to_collapse(
-    PQView_t pq_view,
+    PQView_t                    pq_view,
     rxmesh::EdgeAttribute<bool> marked_edges,
-    uint32_t pop_num_edges)
+    uint32_t                    pop_num_edges)
 {
     // setup shared memory array to store the popped pairs
-    // 
+    //
     // device api pop pairs
     namespace cg = cooperative_groups;
     using namespace rxmesh;
-    ShmemAllocator      shrd_alloc;
+    ShmemAllocator shrd_alloc;
 
-    auto intermediatePairs = shrd_alloc.alloc<PriorityPair_t>(blockThreads);
-    char * pq_shrd_mem = shrd_alloc.alloc(pq_view.get_shmem_size(blockThreads));
+    auto  intermediatePairs = shrd_alloc.alloc<PriorityPair_t>(blockThreads);
+    char* pq_shrd_mem  = shrd_alloc.alloc(pq_view.get_shmem_size(blockThreads));
     cg::thread_block g = cg::this_thread_block();
-    pq_view.pop(g, intermediatePairs, intermediatePairs + blockThreads, pq_shrd_mem);
+    pq_view.pop(
+        g, intermediatePairs, intermediatePairs + blockThreads, pq_shrd_mem);
 
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int tid       = blockIdx.x * blockDim.x + threadIdx.x;
     int local_tid = threadIdx.x;
 
     // Make sure the index is within bounds
-    if(tid < pop_num_edges)
-    {
-        //printf("tid: %d\n", tid);
-        //unpack the uid to get the patch and edge ids
+    if (tid < pop_num_edges) {
+        // printf("tid: %d\n", tid);
+        // unpack the uid to get the patch and edge ids
         auto p_e = unpack32(intermediatePairs[local_tid].second);
-        //printf("32bit p_id:%hu\te_id:%hu\n", p_e.first, p_e.second);
+        // printf("32bit p_id:%hu\te_id:%hu\n", p_e.first, p_e.second);
         rxmesh::EdgeHandle eh(p_e.first, rxmesh::LocalEdgeT(p_e.second));
 
-        //use the eh to index into a passed in edge attribute
+        // use the eh to index into a passed in edge attribute
         marked_edges(eh) = true;
     }
 }
