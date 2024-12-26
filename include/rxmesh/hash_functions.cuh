@@ -45,9 +45,13 @@ struct universal_hash
     {
     }
 
+    template <typename T>
     constexpr uint32_t __host__ __device__ __inline__ operator()(
-        const uint16_t k) const
+        const T k) const
     {
+        static_assert(std::is_same_v<T, uint16_t> ||
+                      std::is_same_v<T, uint32_t>);
+
         return (((m_hash_x ^ k) + m_hash_y) % prime_divisor);
     }
 

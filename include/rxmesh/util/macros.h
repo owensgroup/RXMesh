@@ -35,6 +35,7 @@ constexpr int MAX_OVERLAP_CAVITIES = 4;
 // 4-bit
 #define INVALID4 0xFu
 
+#define WARP_SIZE 32
 
 #define BYTES_TO_MEGABYTES(bytes) (double(bytes) / double(1024.0 * 1024.0))
 
@@ -54,7 +55,8 @@ constexpr int MAX_OVERLAP_CAVITIES = 4;
             __FILE__,                                                         \
             __LINE__,                                                         \
             blockIdx.x,                                                       \
-            threadIdx.x); /*asm("trap;");*/                                   \
+            threadIdx.x);                                                     \
+        asm("trap;");                                                         \
     }
 #else
 #define myAssert(condition)                                        \
@@ -75,11 +77,8 @@ inline void HandleError(cudaError_t err, const char* file, int line)
     if (err != cudaSuccess) {
         Log::get_logger()->error("Line {} File {}", line, file);
         Log::get_logger()->error("CUDA ERROR: {}", cudaGetErrorString(err));
-#ifdef _WIN32
-        system("pause");
-#else
+
         exit(EXIT_FAILURE);
-#endif
     }
 }
 #define CUDA_ERROR(err) (HandleError(err, __FILE__, __LINE__))
@@ -94,11 +93,8 @@ inline void cusparseHandleError(cusparseStatus_t status,
         Log::get_logger()->error("Line {} File {}", line, file);
         Log::get_logger()->error("CUSPARSE ERROR: {}",
                                  cusparseGetErrorString(status));
-#ifdef _WIN32
-        system("pause");
-#else
+
         exit(EXIT_FAILURE);
-#endif
     }
     return;
 }
@@ -137,11 +133,8 @@ static inline void cusolverHandleError(cusolverStatus_t status,
         Log::get_logger()->error("Line {} File {}", line, file);
         Log::get_logger()->error("CUSOLVER ERROR: {}",
                                  cusolverGetErrorString(status));
-#ifdef _WIN32
-        system("pause");
-#else
+
         exit(EXIT_FAILURE);
-#endif
     }
     return;
 }
@@ -158,11 +151,8 @@ inline void cublasHandleError(cublasStatus_t status,
         Log::get_logger()->error("Line {} File {}", line, file);
         Log::get_logger()->error("CUBLAS ERROR: {}",
                                  cublasGetStatusString(status));
-#ifdef _WIN32
-        system("pause");
-#else
+
         exit(EXIT_FAILURE);
-#endif
     }
     return;
 }
