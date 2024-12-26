@@ -118,14 +118,15 @@ __device__ __forceinline__ void e_v_diamond(
     int c = 4 * int(num_edges);
     for (int e = threadIdx.x; e < c; e += blockThreads) {
         s_output_value[e] = INVALID16;
-    }
-    block.sync();
+    }    
 
     load_async(block,
                reinterpret_cast<uint16_t*>(patch_info.fe),
                3 * num_faces,
                s_fe,
                true);
+
+    block.sync();
 
     c = 2 * int(num_edges);
 
