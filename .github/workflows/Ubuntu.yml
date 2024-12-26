@@ -2,12 +2,12 @@ name: Ubuntu
 on: [push, pull_request, workflow_dispatch]
 jobs:
   UbuntuRun:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
-      - uses: Jimver/cuda-toolkit@v0.2.14
+      - uses: Jimver/cuda-toolkit@v0.2.19
         id: cuda-toolkit
         with:
-          cuda: '12.3.2'
+          cuda: '12.6.0'
           linux-local-args: '["--toolkit"]'   
       - run: sudo apt-get update 
       - run: sudo apt-get install -y xorg-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev
