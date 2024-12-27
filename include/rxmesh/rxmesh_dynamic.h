@@ -639,7 +639,7 @@ class RXMeshDynamic : public RXMeshStatic
     explicit RXMeshDynamic(const std::string file_path,
                            const std::string patcher_file             = "",
                            const uint32_t    patch_size               = 256,
-                           const float       capacity_factor          = 4.0,
+                           const float       capacity_factor          = 3.5,
                            const float       patch_alloc_factor       = 5.0,
                            const float       lp_hashtable_load_factor = 0.5)
         : RXMeshStatic(file_path,
@@ -658,7 +658,7 @@ class RXMeshDynamic : public RXMeshStatic
     explicit RXMeshDynamic(std::vector<std::vector<uint32_t>>& fv,
                            const std::string patcher_file             = "",
                            const uint32_t    patch_size               = 256,
-                           const float       capacity_factor          = 4.0,
+                           const float       capacity_factor          = 3.5,
                            const float       patch_alloc_factor       = 5.0,
                            const float       lp_hashtable_load_factor = 0.5)
         : RXMeshStatic(fv,
@@ -787,7 +787,7 @@ class RXMeshDynamic : public RXMeshStatic
 
         if (is_dyn) {
 
-            // connecivity (FE and EV) shared memory
+            // connectivity (FE and EV) shared memory
             size_t connectivity_shmem = 0;
             connectivity_shmem += 3 * face_cap * sizeof(uint16_t) +
                                   2 * edge_cap * sizeof(uint16_t) +
@@ -826,6 +826,15 @@ class RXMeshDynamic : public RXMeshStatic
                     sizeof(uint16_t) +
                 ShmemAllocator::default_alignment;
 
+            // q hash table
+            size_t q_table_shmem = 0;
+            //q_table_shmem +=
+            //    max_lp_hashtable_capacity<LocalVertexT>() * sizeof(LPPair);
+            //q_table_shmem +=
+            //    max_lp_hashtable_capacity<LocalEdgeT>() * sizeof(LPPair);
+            //q_table_shmem +=
+            //    max_lp_hashtable_capacity<LocalFaceT>() * sizeof(LPPair);
+            //q_table_shmem += 3 * ShmemAllocator::default_alignment;
 
             // active, owned, migrate(for vertices only), src bitmask (for
             // vertices and edges only), src connect (for vertices and edges
@@ -848,7 +857,8 @@ class RXMeshDynamic : public RXMeshStatic
             // memory and other things
             launch_box.smem_bytes_dyn = std::max(
                 connectivity_shmem + cavity_id_shmem + cavity_bdr_shmem +
-                    cavity_size_shmem + bitmasks_shmem + cavity_creator_shmem,
+                    cavity_size_shmem + bitmasks_shmem + cavity_creator_shmem +
+                    q_table_shmem,
                 static_shmem + cavity_id_shmem + cavity_creator_shmem);
         } else {
             launch_box.smem_bytes_dyn = static_shmem;

@@ -57,8 +57,8 @@ __device__ __forceinline__ CavityManager2<blockThreads, cop>::CavityManager2(
         }
 
         // filter based on color
-        //uint32_t color = INVALID32;
-        //if (s_patch_id != INVALID32) {
+        // uint32_t color = INVALID32;
+        // if (s_patch_id != INVALID32) {
         //    color = m_context.m_patches_info[s_patch_id].color;
         //    if (color != iteration) {
         //        push(s_patch_id);
@@ -356,9 +356,6 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
         m_s_new_patch_stash.m_stash[i] = pp;
     }
 
-    __shared__ uint8_t p_st2[PatchStash::stash_size];
-    m_s_patch_stash_mapper = p_st2;
-
     // cavity prefix sum
     // this assertion is because when we allocated dynamic shared memory
     // during kernel launch we assumed the number of cavities is at most
@@ -375,6 +372,11 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
     m_s_active_cavity_bitmask = Bitmask(m_s_num_cavities[0], shrd_alloc);
     assert(m_s_active_cavity_bitmask.m_bitmask);
     m_s_active_cavity_bitmask.set(block);
+
+    // q hash table
+    // m_s_q_table_v = shrd_alloc.alloc<LPPair>(m_context.m_max_lp_capacity_v);
+    // m_s_q_table_e = shrd_alloc.alloc<LPPair>(m_context.m_max_lp_capacity_e);
+    // m_s_q_table_f = shrd_alloc.alloc<LPPair>(m_context.m_max_lp_capacity_f);
 
     cooperative_groups::wait(block);
     block.sync();
@@ -2867,12 +2869,11 @@ CavityManager2<blockThreads, cop>::soft_migrate_from_patch(
 
         PatchInfo q_patch_info = m_context.m_patches_info[q];
 
-        // build patch stash mapper
-        build_patch_stash_mapper(block, q_patch_info);
-
         const uint16_t q_num_vertices = q_patch_info.num_vertices[0];
         const uint16_t q_num_edges    = q_patch_info.num_edges[0];
 
+        // load q vertex hash table in shared memory
+        // q_patch_info.lp_v.load_in_shared_memory(m_s_q_table_v, true);
 
         // in m_s_src_connect_mask_v, mark the vertices connected to
         // vertices in m_s_src_mask_v
@@ -3038,8 +3039,10 @@ CavityManager2<blockThreads, cop>::migrate_from_patch(
 
         PatchInfo q_patch_info = m_context.m_patches_info[q];
 
-        // build patch stash mapper
-        build_patch_stash_mapper(block, q_patch_info);
+        // load q hash table in shared memory
+        // q_patch_info.lp_v.load_in_shared_memory(m_s_q_table_v, false);
+        // q_patch_info.lp_e.load_in_shared_memory(m_s_q_table_e, false);
+        // q_patch_info.lp_f.load_in_shared_memory(m_s_q_table_f, true);
 
         const uint16_t q_num_vertices = q_patch_info.num_vertices[0];
         const uint16_t q_num_edges    = q_patch_info.num_edges[0];
@@ -3445,8 +3448,10 @@ CavityManager2<blockThreads, cop>::migrate_edge(const uint32_t q,
                 // vq -> mapped to its local index in owner
                 // patch o-> mapped to the owner patch vp->
                 // mapped to the corresponding local index in p
-                uint16_t v0p = find_copy_vertex(v0q, o0, o0_st);
-                uint16_t v1p = find_copy_vertex(v1q, o1, o1_st);
+
+                const uint16_t v0p = find_copy_vertex(v0q, o0, o0_st);
+                const uint16_t v1p = find_copy_vertex(v1q, o1, o1_st);
+
 
                 assert(v0q < m_context.m_patches_info[o0].num_vertices[0]);
                 assert(v1q < m_context.m_patches_info[o1].num_vertices[0]);
@@ -3589,7 +3594,8 @@ CavityManager2<blockThreads, cop>::find_copy_vertex(uint16_t& local_id,
                                                     uint32_t& patch,
                                                     uint8_t&  patch_stash_id)
 {
-    return find_copy<VertexHandle>(local_id, patch, patch_stash_id);
+    return find_copy<VertexHandle>(
+        local_id, patch, patch_stash_id, m_s_q_table_v);
 }
 
 template <uint32_t blockThreads, CavityOp cop>
@@ -3598,7 +3604,8 @@ CavityManager2<blockThreads, cop>::find_copy_edge(uint16_t& local_id,
                                                   uint32_t& patch,
                                                   uint8_t&  patch_stash_id)
 {
-    return find_copy<EdgeHandle>(local_id, patch, patch_stash_id);
+    return find_copy<EdgeHandle>(
+        local_id, patch, patch_stash_id, m_s_q_table_e);
 }
 
 template <uint32_t blockThreads, CavityOp cop>
@@ -3607,7 +3614,8 @@ CavityManager2<blockThreads, cop>::find_copy_face(uint16_t& local_id,
                                                   uint32_t& patch,
                                                   uint8_t&  patch_stash_id)
 {
-    return find_copy<FaceHandle>(local_id, patch, patch_stash_id);
+    return find_copy<FaceHandle>(
+        local_id, patch, patch_stash_id, m_s_q_table_f);
 }
 
 
@@ -3635,9 +3643,10 @@ CavityManager2<blockThreads, cop>::add_new_patch_to_patch_stash(
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
 __device__ __forceinline__ uint16_t
-CavityManager2<blockThreads, cop>::find_copy(uint16_t& q_local_id,
-                                             uint32_t& q_patch,
-                                             uint8_t&  q_stash_id_in_p)
+CavityManager2<blockThreads, cop>::find_copy(uint16_t&     q_local_id,
+                                             uint32_t&     q_patch,
+                                             uint8_t&      q_stash_id_in_p,
+                                             const LPPair* q_table)
 {
 
     assert(!m_context.m_patches_info[q_patch].is_deleted(
@@ -3647,8 +3656,8 @@ CavityManager2<blockThreads, cop>::find_copy(uint16_t& q_local_id,
     if (!m_context.m_patches_info[q_patch].is_owned(
             HandleT::LocalT(q_local_id))) {
 
-        HandleT owner =
-            m_context.m_patches_info[q_patch].find<HandleT>(q_local_id);
+        HandleT owner = m_context.m_patches_info[q_patch].find<HandleT>(
+            q_local_id /*, q_table*/);
 
         assert(owner.is_valid());
 
@@ -3682,32 +3691,6 @@ CavityManager2<blockThreads, cop>::find_copy(uint16_t& q_local_id,
     }
 
     return INVALID16;
-}
-
-
-template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::build_patch_stash_mapper(
-    cooperative_groups::thread_block& block,
-    const PatchInfo&                  q_patch_info)
-{
-    // build patch stash mapper that maps q's patch stash index to p's patch
-    // stash index
-    for (int q_stash_id = threadIdx.x; q_stash_id < PatchStash::stash_size;
-         q_stash_id += blockThreads) {
-
-        const uint32_t k_patch = q_patch_info.patch_stash.get_patch(q_stash_id);
-
-        if (k_patch == patch_id()) {
-            m_s_patch_stash_mapper[q_stash_id] = INVALID8 - 1u;
-        } else if (k_patch != INVALID32) {
-            const uint8_t p_stash_id =
-                m_s_patch_stash.find_patch_index(k_patch);
-            m_s_patch_stash_mapper[q_stash_id] = p_stash_id;
-        } else {
-            m_s_patch_stash_mapper[q_stash_id] = INVALID8;
-        }
-    }
 }
 
 

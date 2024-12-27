@@ -660,7 +660,8 @@ struct CavityManager2
     template <typename HandleT>
     __device__ __forceinline__ uint16_t find_copy(uint16_t& lid,
                                                   uint32_t& src_patch,
-                                                  uint8_t&  src_patch_stash_id);
+                                                  uint8_t&  src_patch_stash_id,
+                                                  const LPPair* q_table);
 
 
     /**
@@ -918,14 +919,6 @@ struct CavityManager2
     }
 
     /**
-     * @brief build patch stash mapper that maps q's patch stash index to p's
-     * patch stash index
-     */
-    __device__ __forceinline__ void build_patch_stash_mapper(
-        cooperative_groups::thread_block& block,
-        const PatchInfo&                  q_patch_info);
-
-    /**
      * @brief verify that what we read in shared memory is consistent with
      * global memory
      */
@@ -1003,6 +996,8 @@ struct CavityManager2
     InverseLPHashTable m_inv_lp_e;
     InverseLPHashTable m_inv_lp_f;
 
+    LPPair *m_s_q_table_v, *m_s_q_table_e, *m_s_q_table_f;
+
     // For an edge on the boundary of a cavity, here we store the cavity ID of
     // such edges (only the boundary ones). We then use this to filter out
     // cavities if they are touching when they user does not want cavities to
@@ -1042,10 +1037,6 @@ struct CavityManager2
     // to indicate if a new patch has been added to the stash
     bool* m_s_new_patch_added;
 
-    // indexed by q's patch stash id and returns the corresponding p's patch
-    // stash id. if the patch corresponds to p itself, we stores INVALID8-1
-    // if the patch does not exits in p's patch stash, we store INVALID8
-    uint8_t* m_s_patch_stash_mapper;
 
     PatchInfo m_patch_info;
     Context   m_context;
