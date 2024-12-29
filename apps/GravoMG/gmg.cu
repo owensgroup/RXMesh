@@ -5,7 +5,117 @@
 #include "rxmesh/matrix/sparse_matrix.cuh"
 #include "rxmesh/util/bitmask_util.h"
 
+#include "cuda_runtime.h"
+
 using namespace rxmesh;
+class BitMatrix
+{
+   public:
+    int       N;         // Size of the matrix
+    int       row_size;  // Number of 32-bit integers per row
+    uint32_t* d_data;    // Device pointer for GPU
+
+    // Constructor
+    __host__ BitMatrix(int size) : N(size)
+    {
+        row_size = (N + 31) / 32;  // Number of integers per row
+        cudaMalloc(&d_data, row_size * N * sizeof(uint32_t));
+        cudaMemset(
+            d_data, 0, row_size * N * sizeof(uint32_t));  // Initialize to 0
+    }
+
+    // Destructor
+    __host__ ~BitMatrix()
+    {
+        cudaFree(d_data);
+    }
+
+    // Helper function to calculate index and bit position
+    __device__ inline std::pair<int, int> getIndex(int row, int col) const
+    {
+        int bit_index    = row * N + col;
+        int int_index    = bit_index / 32;  // Which 32-bit integer
+        int bit_position = bit_index % 32;  // Position within the integer
+        return {int_index, bit_position};
+    }
+
+    __device__ inline void set(int row, int col, bool value)
+    {
+        auto [int_index, bit_position] = getIndex(row, col);
+        uint32_t* address              = &d_data[int_index];
+        uint32_t  mask                 = 1 << bit_position;
+
+        uint32_t old_val, new_val;
+        do {
+            old_val = *address;  // Read the current value
+            if (value) {
+                new_val = old_val | mask;  // Set the bit
+            } else {
+                new_val = old_val & ~mask;  // Clear the bit
+            }
+        } while (atomicCAS(address, old_val, new_val) != old_val);
+    }
+    __device__ inline bool trySet(int row, int col)
+    {
+        auto [int_index, bit_position] = getIndex(row, col);
+        uint32_t* address              = &d_data[int_index];
+        uint32_t  mask                 = 1 << bit_position;
+
+        uint32_t old_val, new_val;
+        do {
+            old_val = *address;  // Read the current value
+            if (old_val & mask)
+                return false;          // Already set, another thread got it
+            new_val = old_val | mask;  // Set the bit
+        } while (atomicCAS(address, old_val, new_val) != old_val);
+
+        return true;  // Successfully set
+    }
+
+   __device__ inline bool get(int row, int col) const
+    {
+        auto [int_index, bit_position] = getIndex(row, col);
+        const uint32_t value = atomicCAS(&d_data[int_index], 0, 0);  // Atomic read
+        return (value >> bit_position) & 1;
+    }
+};
+
+
+
+
+template <typename T, uint32_t blockThreads>
+__global__ static void findNumberOfCoarseNeighbors(
+    const rxmesh::Context        context,
+    rxmesh::VertexAttribute<int> clustered_vertices,
+    BitMatrix bitMatrix,
+    int* number_of_neighbors)
+{
+
+    auto cluster = [&](VertexHandle v_id, VertexIterator& vv) {
+        for (int i = 0; i < vv.size(); i++) {
+            
+            if (clustered_vertices(v_id, 0) != clustered_vertices(vv[i], 0)) 
+            {
+                if (bitMatrix.trySet(clustered_vertices(v_id, 0),
+                                     clustered_vertices(vv[i], 0))) {
+                    printf("\nFound %d with %d since the matrix value is 0",
+                           clustered_vertices(v_id, 0),
+                           clustered_vertices(vv[i], 0));
+
+                    atomicAdd(&number_of_neighbors[clustered_vertices(v_id, 0)],
+                              1);
+                }
+
+
+            }
+        }
+    };
+    auto                block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, cluster);
+}
+
 
 
 template <typename T, uint32_t blockThreads>
@@ -26,12 +136,12 @@ __global__ static void cluster_points(const rxmesh::Context      context,
                 distance(vv[i], 0);
 
 
-            if (dist < distance(v_id, 0)) {
+            if (dist < distance(v_id, 0) && clustered_vertices(vv[i], 0)!=-1) {
                 distance(v_id, 0) = dist;
                 *flag             = 15;
                 clustered_vertices(v_id, 0) = clustered_vertices(vv[i], 0);
 
-            }
+            } 
         }
     };
     auto                block = cooperative_groups::this_thread_block();
@@ -83,7 +193,7 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bumpy-cube.obj");
 
     auto vertex_pos = *rx.get_input_vertex_coordinates();
     
@@ -95,6 +205,7 @@ int main(int argc, char** argv)
     auto sample_level_bitmask = *rx.add_vertex_attribute<uint16_t>("bitmask", 1);
     auto clustered_vertex = *rx.add_vertex_attribute<int>("clustering", 1);
 
+    auto number_of_neighbors_coarse =*rx.add_vertex_attribute<int>("number of neighbors", 1);
 
 
     int* flagger;
@@ -112,11 +223,11 @@ int main(int argc, char** argv)
 
 
     float ratio = 8;
+    int   N     = rx.get_num_vertices();
     int   numberOfLevels = 1;
-    int   numberOfSamples = 30;
-    int   currentLevel    = 1; //first coarse mesh
+    int   currentLevel    = 4; //first coarse mesh
+    int   numberOfSamples = N / (ratio * currentLevel);
     
-    int N = rx.get_num_vertices();
 
     std::random_device rd;  // Will be used to obtain a seed for the random number engine
     std::mt19937 gen(rd());  // Standard mersenne_twister_engine seeded with rd()
@@ -174,18 +285,19 @@ int main(int argc, char** argv)
                     rx.get_context(), vertex_pos, distance, flagger);
             cudaDeviceSynchronize();
             //std::cout << "\nflag: "<<*flagger
-           //           << "\n\niteration: " << j << std::endl;
+            //          << "\n\niteration: " << j << std::endl;
 
             j++;
 
         } while (*flagger != 0);
+
 
         // reduction step
         farthestPoint = reducer.arg_max(distance, 0);
         seed          = rx.linear_id(farthestPoint.key);
     }
 
-
+    std::cout << "\nSampling iterations: " << j;
 
 
     sample_number.move(DEVICE, HOST);
@@ -207,10 +319,10 @@ int main(int argc, char** argv)
              sample_level_bitmask,
              distance,
              currentLevel,
-            clustered_vertex] __device__(const rxmesh::VertexHandle vh) {
+            clustered_vertex, context] __device__(const rxmesh::VertexHandle vh) {
                 if (sample_number(vh,0) > -1) //we could replace this with the bitmask check instead
                 {
-                    clustered_vertex(vh, 0) = sample_number(vh,0);
+                 clustered_vertex(vh, 0) =  sample_number(vh,0);
                     distance(vh, 0)         = 0;
                 } else {
                         distance(vh, 0)      = INFINITY;
@@ -225,16 +337,60 @@ int main(int argc, char** argv)
                 <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
                     rx.get_context(), vertex_pos, distance,clustered_vertex, flagger);
             cudaDeviceSynchronize();
+             j++;
         } while (*flagger != 0);
 
         clustered_vertex.move(DEVICE, HOST);
+    int* number_of_neighbors;
+    cudaMallocManaged(&number_of_neighbors, numberOfSamples * sizeof(int));
+    for (int i=0;i<numberOfSamples;i++) {
+        number_of_neighbors[i] = 0;
+    }
 
-    
+
+    BitMatrix bitMatrix(numberOfSamples*numberOfSamples);
+
+    cudaDeviceSynchronize();
+
+        //find number of neighbors
+        //construct row pointers -> prefix sum
+        //then populate the row pointers
+
+    rxmesh::LaunchBox<CUDABlockSize> nn;
+    rx.prepare_launch_box(
+        {rxmesh::Op::VV}, nn, (void*)findNumberOfCoarseNeighbors<float, CUDABlockSize>);
+
+
+    findNumberOfCoarseNeighbors<float, CUDABlockSize>
+        <<<nn.blocks, nn.num_threads, nn.smem_bytes_dyn>>>(
+            rx.get_context(), clustered_vertex, bitMatrix,number_of_neighbors);
+    cudaDeviceSynchronize();
+
+
+
+
+
+
+
+    //for debug purposes
+    rx.for_each_vertex(
+        rxmesh::DEVICE,
+        [sample_number,
+         clustered_vertex,
+         number_of_neighbors,
+        number_of_neighbors_coarse,
+         context] __device__(const rxmesh::VertexHandle vh) {
+                           number_of_neighbors_coarse(vh, 0) = number_of_neighbors[sample_number(vh, 0)];
+        });
+
+    number_of_neighbors_coarse.move(DEVICE, HOST);
+
     rx.get_polyscope_mesh()->addVertexScalarQuantity("sample_number",sample_number);
     rx.get_polyscope_mesh()->addVertexScalarQuantity("distance", distance);
     rx.get_polyscope_mesh()->addVertexScalarQuantity("sample_level_bitmask",sample_level_bitmask);
     rx.get_polyscope_mesh()->addVertexScalarQuantity("clusterPoint", clustered_vertex);
-
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("number of neighbors", number_of_neighbors_coarse);
+    
 
 
 #if USE_POLYSCOPE
