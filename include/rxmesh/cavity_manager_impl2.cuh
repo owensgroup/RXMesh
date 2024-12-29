@@ -194,27 +194,6 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
                        m_s_fe,
                        true);
 
-#ifndef NDEBUG
-    // EV
-    cooperative_groups::wait(block);
-    block.sync();
-    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
-        if (m_s_active_mask_e(e)) {
-            assert(m_s_ev[2 * e + 0] == m_patch_info.ev[2 * e + 0].id);
-            assert(m_s_ev[2 * e + 1] == m_patch_info.ev[2 * e + 1].id);
-        }
-    }
-
-    // FE
-    for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
-        if (m_s_active_mask_f(f)) {
-            assert(m_s_fe[3 * f + 0] == m_patch_info.fe[3 * f + 0].id);
-            assert(m_s_fe[3 * f + 1] == m_patch_info.fe[3 * f + 1].id);
-        }
-    }
-
-#endif
-
 
     auto alloc_masks = [&](uint16_t        num_elements,
                            Bitmask&        owned,
@@ -310,6 +289,28 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
 
 
     assert(2 * get_num_cavities() <= max_face_cap);
+
+#ifndef NDEBUG
+    // EV
+    cooperative_groups::wait(block);
+    block.sync();
+    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
+        if (m_s_active_mask_e(e)) {
+            assert(m_s_ev[2 * e + 0] == m_patch_info.ev[2 * e + 0].id);
+            assert(m_s_ev[2 * e + 1] == m_patch_info.ev[2 * e + 1].id);
+        }
+    }
+
+    // FE
+    for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
+        if (m_s_active_mask_f(f)) {
+            assert(m_s_fe[3 * f + 0] == m_patch_info.fe[3 * f + 0].id);
+            assert(m_s_fe[3 * f + 1] == m_patch_info.fe[3 * f + 1].id);
+            assert(m_s_fe[3 * f + 2] == m_patch_info.fe[3 * f + 2].id);
+        }
+    }
+
+#endif
 
     // boundary edges
     uint16_t sz =
@@ -446,6 +447,7 @@ CavityManager2<blockThreads, cop>::verify_reading_from_global_memory(
         if (m_s_active_mask_f(f)) {
             assert(m_s_fe[3 * f + 0] == m_patch_info.fe[3 * f + 0].id);
             assert(m_s_fe[3 * f + 1] == m_patch_info.fe[3 * f + 1].id);
+            assert(m_s_fe[3 * f + 2] == m_patch_info.fe[3 * f + 2].id);
         }
     }
 }
