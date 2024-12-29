@@ -81,8 +81,6 @@ class BitMatrix
 };
 
 
-
-
 template <typename T, uint32_t blockThreads>
 __global__ static void findNumberOfCoarseNeighbors(
     const rxmesh::Context        context,
@@ -98,10 +96,10 @@ __global__ static void findNumberOfCoarseNeighbors(
             {
                 if (bitMatrix.trySet(clustered_vertices(v_id, 0),
                                      clustered_vertices(vv[i], 0))) {
-                    printf("\nFound %d with %d since the matrix value is 0",
+                    /* printf("\nFound %d with %d since the matrix value is 0",
                            clustered_vertices(v_id, 0),
                            clustered_vertices(vv[i], 0));
-
+                    */
                     atomicAdd(&number_of_neighbors[clustered_vertices(v_id, 0)],
                               1);
                 }
@@ -193,7 +191,7 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bumpy-cube.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto vertex_pos = *rx.get_input_vertex_coordinates();
     
@@ -225,8 +223,8 @@ int main(int argc, char** argv)
     float ratio = 8;
     int   N     = rx.get_num_vertices();
     int   numberOfLevels = 1;
-    int   currentLevel    = 4; //first coarse mesh
-    int   numberOfSamples = N / (ratio * currentLevel);
+    int   currentLevel    = 1; //first coarse mesh
+    int   numberOfSamples = N / powf(ratio , currentLevel);
     
 
     std::random_device rd;  // Will be used to obtain a seed for the random number engine
@@ -276,7 +274,6 @@ int main(int argc, char** argv)
                                }
                            });
 
-        //j = 0;
         do {
             cudaDeviceSynchronize();
             *flagger = 0;
@@ -340,21 +337,17 @@ int main(int argc, char** argv)
              j++;
         } while (*flagger != 0);
 
-        clustered_vertex.move(DEVICE, HOST);
+    clustered_vertex.move(DEVICE, HOST);
+    std::cout << "\Clustering iterations: " << j;
+
+    //find number of neighbors x
     int* number_of_neighbors;
     cudaMallocManaged(&number_of_neighbors, numberOfSamples * sizeof(int));
-    for (int i=0;i<numberOfSamples;i++) {
+    for (int i = 0; i < numberOfSamples; i++) {
         number_of_neighbors[i] = 0;
     }
-
-
-    BitMatrix bitMatrix(numberOfSamples*numberOfSamples);
-
+    BitMatrix bitMatrix(numberOfSamples * numberOfSamples);
     cudaDeviceSynchronize();
-
-        //find number of neighbors
-        //construct row pointers -> prefix sum
-        //then populate the row pointers
 
     rxmesh::LaunchBox<CUDABlockSize> nn;
     rx.prepare_launch_box(
@@ -366,6 +359,49 @@ int main(int argc, char** argv)
             rx.get_context(), clustered_vertex, bitMatrix,number_of_neighbors);
     cudaDeviceSynchronize();
 
+    // construct row pointers -> prefix sum
+    // Number of rows in your matrix
+    int num_rows = numberOfSamples;  // Set this appropriately
+
+    // Allocate unified memory for row counts and row pointers
+    int* row_ptr;
+
+    cudaMallocManaged(&row_ptr, (num_rows + 1) * sizeof(int));
+    
+
+    // Temporary storage for CUB
+    void*  d_cub_temp_storage = nullptr;
+    size_t temp_storage_bytes = 0;
+
+    // Compute the required temporary storage size
+    cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
+                                  temp_storage_bytes,
+                                  number_of_neighbors,
+                                  row_ptr,
+                                  num_rows + 1);
+
+    // Allocate temporary storage
+    cudaMallocManaged(&d_cub_temp_storage, temp_storage_bytes);
+
+    // Perform the prefix sum
+    cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
+                                  temp_storage_bytes,
+                                  number_of_neighbors,
+                                  row_ptr,
+                                  num_rows + 1);
+
+    cudaDeviceSynchronize();  // Synchronize to ensure prefix sum completion
+
+    // Free the temporary storage
+    cudaFree(d_cub_temp_storage);
+    /*
+    printf("\nFINAL ROW POINTERS\n");
+    for (int i = 0; i <= num_rows; ++i) {
+        printf("row_ptr[%d] = %d\n", i, row_ptr[i]);
+        printf("add %d values\n", number_of_neighbors[i]);
+
+    }
+    */
 
 
 
