@@ -268,13 +268,11 @@ struct CavityManager2
      */
     template <typename... AttributesT>
     __device__ __forceinline__ void update_attributes(
-        cooperative_groups::thread_block& block,
         AttributesT&&... attributes)
     {
         // use fold expersion to iterate over each attribute
         // https://stackoverflow.com/a/60136761
         ([&] { update_attribute(attributes); }(), ...);
-        block.sync();
     }
 
     /**
@@ -692,13 +690,6 @@ struct CavityManager2
     template <typename AttributeT>
     __device__ __forceinline__ void update_attribute(AttributeT& attribute);
 
-    /**
-     * @brief lock patches marked in m_s_patches_to_lock_mask. Return true
-     * if all patches were locked and false otherwise. Update
-     */
-    __device__ __forceinline__ bool lock_patches_to_lock(
-        cooperative_groups::thread_block& block);
-
 
     /**
      * @brief lock new patches added to the patch stash
@@ -980,9 +971,6 @@ struct CavityManager2
     // indicate if the vertex is connected to a vertex on the cavity boundary
     // i.e., need to be ribbonized
     Bitmask m_s_connect_cavity_bdry_v;
-
-    // indicate which patch (in the patch stash) should be locked
-    Bitmask m_s_patches_to_lock_mask;
 
     // indicate which patch (in the patch stash) is actually locked
     Bitmask m_s_locked_patches_mask;
