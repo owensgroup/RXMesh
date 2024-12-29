@@ -194,6 +194,28 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
                        m_s_fe,
                        true);
 
+#ifndef NDEBUG
+    // EV
+    cooperative_groups::wait(block);
+    block.sync();
+    for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
+        if (m_s_active_mask_e(e)) {
+            assert(m_s_ev[2 * e + 0] == m_patch_info.ev[2 * e + 0].id);
+            assert(m_s_ev[2 * e + 1] == m_patch_info.ev[2 * e + 1].id);
+        }
+    }
+
+    // FE
+    for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
+        if (m_s_active_mask_f(f)) {
+            assert(m_s_fe[3 * f + 0] == m_patch_info.fe[3 * f + 0].id);
+            assert(m_s_fe[3 * f + 1] == m_patch_info.fe[3 * f + 1].id);
+        }
+    }
+
+#endif
+
+
     auto alloc_masks = [&](uint16_t        num_elements,
                            Bitmask&        owned,
                            Bitmask&        active,
@@ -410,6 +432,8 @@ CavityManager2<blockThreads, cop>::verify_reading_from_global_memory(
     }
 
     // EV
+    cooperative_groups::wait(block);
+    block.sync();
     for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         if (m_s_active_mask_e(e)) {
             assert(m_s_ev[2 * e + 0] == m_patch_info.ev[2 * e + 0].id);
@@ -749,7 +773,7 @@ __device__ __forceinline__ bool CavityManager2<blockThreads, cop>::prologue(
     block.sync();
 
     // update attributes
-    update_attributes(block, attributes...);
+    update_attributes(attributes...);
     block.sync();
 
 
@@ -2759,11 +2783,6 @@ CavityManager2<blockThreads, cop>::soft_migrate_from_patch(
     // migration so 1. we don't have to lock them during migrate, 2. we can fail
     // fast since if we can not lock a patch now, we could just quit
 
-    __shared__ bool s_ok_q;
-    if (threadIdx.x == 0) {
-        s_ok_q = true;
-    }
-
     // first check if the patch (q) is locked,
     // if locked, then it is safe to read from it
     // if not, then lock it and remember that it was not locked since if we
@@ -2779,6 +2798,8 @@ CavityManager2<blockThreads, cop>::soft_migrate_from_patch(
     // initialize connect_mask and src_e bitmask
     m_s_src_connect_mask_v.reset(block);
     block.sync();
+
+    int pred = 0;
 
     m_inv_lp_v.for_each<blockThreads>(
         [&](const uint16_t local_id,
@@ -2805,16 +2826,17 @@ CavityManager2<blockThreads, cop>::soft_migrate_from_patch(
                 assert(local_id_in_owner_patch != INVALID16);
 
                 if (owner_patch == q) {
-                    s_ok_q = false;
+                    pred = 1;
                     assert(local_id_in_owner_patch < m_s_src_mask_v.size());
                     m_s_src_mask_v.set(local_id_in_owner_patch, true);
                 }
             }
         });
-    block.sync();
+
+    const int any_q = __syncthreads_or(pred);
 
 
-    if (!s_ok_q) {
+    if (any_q) {
 
         PatchInfo q_patch_info = m_context.m_patches_info[q];
 
@@ -2916,15 +2938,11 @@ CavityManager2<blockThreads, cop>::migrate_from_patch(
     assert(q_stash_id < m_s_locked_patches_mask.size());
     assert(m_s_locked_patches_mask(q_stash_id));
 
-    __shared__ int s_ok_q;
-    if (threadIdx.x == 0) {
-        s_ok_q = 0;
-    }
-
     // init src_v bitmask
     m_s_src_mask_v.reset(block);
     block.sync();
 
+    int pred = 0;
 
     m_inv_lp_v.for_each<blockThreads>(
         [&](const uint16_t local_id,
@@ -2969,16 +2987,17 @@ CavityManager2<blockThreads, cop>::migrate_from_patch(
                     // of migrate assert(m_context.m_patches_info[q].is_owned(
                     //    LocalVertexT(v_owner.local_id())));
 
-                    ::atomicAdd(&s_ok_q, 1);
+                    pred = 1;
                     assert(local_id_in_owner_patch < m_s_src_mask_v.size());
                     m_s_src_mask_v.set(local_id_in_owner_patch, true);
                 }
             }
         });
-    block.sync();
+
+    const int any_q = __syncthreads_or(pred);
 
 
-    if (s_ok_q != 0) {
+    if (any_q) {
 
         PatchInfo q_patch_info = m_context.m_patches_info[q];
 
@@ -3645,11 +3664,7 @@ CavityManager2<blockThreads, cop>::ensure_ownership(
     const Bitmask&                    s_ownership_change,
     const InverseLPHashTable&         s_inv_table)
 {
-    __shared__ bool s_all_good;
-    if (threadIdx.x == 0) {
-        s_all_good = true;
-    }
-    block.sync();
+    int pred = 1;
 
     s_inv_table.for_each<blockThreads>(
         [&](const uint16_t local_id,
@@ -3673,13 +3688,13 @@ CavityManager2<blockThreads, cop>::ensure_ownership(
 
                 if (!m_context.m_patches_info[owner_patch].is_owned(
                         HandleT::LocalT(local_id_in_owner_patch))) {
-                    s_all_good = false;
+                    pred = 0;
                 }
             }
         });
 
-    block.sync();
-    return s_all_good;
+    const int all_good = __syncthreads_and(pred);
+    return all_good;
 }
 
 template <uint32_t blockThreads, CavityOp cop>
