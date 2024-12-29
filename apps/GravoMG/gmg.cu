@@ -404,8 +404,51 @@ int main(int argc, char** argv)
     */
 
 
+    // then populate the row pointers
+    int* value_ptr;
+
+    cudaMallocManaged(&value_ptr, row_ptr[num_rows] * sizeof(int));
+
+    rx.for_each_vertex(
+        rxmesh::DEVICE,
+        [sample_number,
+         bitMatrix,
+         number_of_neighbors, row_ptr,
+         value_ptr, numberOfSamples] __device__(const rxmesh::VertexHandle v_id) {
+        int number = sample_number(v_id, 0);
+        if (number != -1) {
+            /// find start pointer
+            int start_pointer = row_ptr[number];
+            /// find end pointer
+            int end_pointer = row_ptr[number + 1];
 
 
+            /// for each pointer, go to the bitmatrix, read the neighbors one
+            /// after the other, if we find a 1, add it to the list
+            int j = 0;
+            for (int i = 0; i < numberOfSamples; i++) {
+                if (bitMatrix.get(number, i)) {
+                    value_ptr[start_pointer + j] = i;
+                    j++;
+                }
+            }
+            if (j != number_of_neighbors[number]) {
+                printf(
+                    "ERROR: Number of neighbors does not match number of "
+                    "entries");
+            }
+        }
+    });
+
+    cudaDeviceSynchronize();
+    printf("\nCSR Array: \n");
+     for (int i = 0; i <= num_rows; ++i) {
+        printf("row_ptr[%d] = %d\n", i, row_ptr[i]);
+        printf("add %d values\n", number_of_neighbors[i]);
+        for (int q = row_ptr[i]; q < row_ptr[i + 1]; q++) {
+            printf("vertex %d\n", value_ptr[q]);
+        }
+    }
 
 
     //for debug purposes
