@@ -194,6 +194,16 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
                        m_s_fe,
                        true);
 
+    // for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
+    //     m_s_ev[2 * e + 0] = m_patch_info.ev[2 * e + 0].id;
+    //     m_s_ev[2 * e + 1] = m_patch_info.ev[2 * e + 1].id;
+    // }
+    // for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
+    //     m_s_fe[3 * f + 0] = m_patch_info.fe[3 * f + 0].id;
+    //     m_s_fe[3 * f + 1] = m_patch_info.fe[3 * f + 1].id;
+    //     m_s_fe[3 * f + 2] = m_patch_info.fe[3 * f + 2].id;
+    // }
+
 
     auto alloc_masks = [&](uint16_t        num_elements,
                            Bitmask&        owned,
@@ -232,6 +242,16 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
                            active.num_bytes(),
                            reinterpret_cast<char*>(active.m_bitmask),
                            true);
+
+        // for (int i = threadIdx.x; i < int(owned.num_bytes() / 4);
+        //      i += blockThreads) {
+        //     owned.m_bitmask[i] = g_owned[i];
+        // }
+        //
+        // for (int i = threadIdx.x; i < int(active.num_bytes() / 4);
+        //      i += blockThreads) {
+        //     active.m_bitmask[i] = g_active[i];
+        // }
 
         ownership.reset(block);
         in_cavity.reset(block);
@@ -706,6 +726,7 @@ __device__ __forceinline__ bool CavityManager2<blockThreads, cop>::prologue(
     ShmemAllocator&                   shrd_alloc,
     AttributesT&&... attributes)
 {
+    block.sync();
     if (get_num_cavities() <= 0) {
         return false;
     }
@@ -2241,9 +2262,13 @@ CavityManager2<blockThreads, cop>::invert_hashtable(
                                        pair.local_id_in_owner_patch(),
                                        pair.patch_stash_id());
 
+            assert(!m_patch_info.is_dirty());
+            assert(m_patch_info.lock.is_locked());
+            assert(b == pair.local_id());
             assert(pair.m_pair == found.m_pair);
         }
     }
+    block.sync();
 #endif
 }
 
