@@ -61,6 +61,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
     int num_passes = 0;
 
     CUDA_ERROR(cudaProfilerStart());
+    //PriorityQueueT priority_queue(rx.get_num_edges());
 
     timers.start("Total");
     while (rx.get_num_vertices(true) > final_num_vertices) {
@@ -71,6 +72,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
         // rebuild every round? Not necessarily a great way to use a priority
         // queue.
         PriorityQueueT priority_queue(rx.get_num_edges());
+        //priority_queue.clear();
         to_collapse->reset(false, DEVICE);
         rx.update_launch_box(
             {Op::EV},
