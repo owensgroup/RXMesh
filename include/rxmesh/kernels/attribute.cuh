@@ -2,6 +2,7 @@
 #include <cub/block/block_reduce.cuh>
 #include "rxmesh/util/macros.h"
 
+#include "rxmesh/arg_ops.h"
 
 namespace rxmesh {
 
@@ -10,7 +11,7 @@ class Attribute;
 
 namespace detail {
 
-template <class T, uint32_t blockSize>
+template <uint32_t blockSize, class T>
 __device__ __forceinline__ void cub_block_sum(const T thread_val,
                                               T*      d_block_output)
 {
@@ -19,6 +20,23 @@ __device__ __forceinline__ void cub_block_sum(const T thread_val,
     T block_sum = BlockReduce(temp_storage).Sum(thread_val);
     if (threadIdx.x == 0) {
         d_block_output[blockIdx.x] = block_sum;
+    }
+}
+
+template <uint32_t blockSize, class T, typename ReductionOp>
+__device__ __forceinline__ void cub_block_reduce(const T     thread_val,
+                                                 T*          d_block_output,
+                                                 ReductionOp reduction_op)
+{
+    typedef cub::BlockReduce<T, blockSize> BlockReduce;
+
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+
+    T block_aggregate =
+        BlockReduce(temp_storage).Reduce(thread_val, reduction_op);
+
+    if (threadIdx.x == 0) {
+        d_block_output[blockIdx.x] = block_aggregate;
     }
 }
 
@@ -52,7 +70,7 @@ __launch_bounds__(blockSize) __global__
             }
         }
 
-        cub_block_sum<T, blockSize>(thread_val, d_block_output);
+        cub_block_sum<blockSize>(thread_val, d_block_output);
     }
 }
 
@@ -90,7 +108,49 @@ __launch_bounds__(blockSize) __global__
             }
         }
 
-        cub_block_sum<T, blockSize>(thread_val, d_block_output);
+        cub_block_sum<blockSize>(thread_val, d_block_output);
+    }
+}
+
+template <class T, uint32_t blockSize, typename HandleT, typename Operation>
+__launch_bounds__(blockSize) __global__
+    void arg_minmax_kernel(const Attribute<T, HandleT> X,
+                           uint32_t                    attribute_id,
+                           Operation                   reduction_op,
+                           const uint32_t              num_patches,
+                           const uint32_t              num_attributes,
+                           KeyValuePair<HandleT, T>*   d_block_output)
+{
+    using LocalT = typename HandleT::LocalT;
+
+    uint32_t p_id = blockIdx.x;
+    if (p_id < num_patches) {
+        const uint16_t           element_per_patch = X.size(p_id);
+        KeyValuePair<HandleT, T> thread_val;
+        thread_val.value = reduction_op.default_val();
+        thread_val.key   = HandleT(p_id, threadIdx.x);
+        for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockSize) {
+
+            if (X.get_patch_info(p_id).is_owned(LocalT(i)) &&
+                !X.get_patch_info(p_id).is_deleted(LocalT(i))) {
+
+                if (attribute_id != INVALID32) {
+                    HandleT                  handle(p_id, i);
+                    KeyValuePair<HandleT, T> current_pair(
+                        handle, X(p_id, i, attribute_id));
+                    thread_val = reduction_op(thread_val, current_pair);
+                } else {
+                    for (uint32_t j = 0; j < num_attributes; ++j) {
+                        HandleT                  handle(p_id, i);
+                        KeyValuePair<HandleT, T> current_pair(handle,
+                                                              X(p_id, i, j));
+                        thread_val = reduction_op(thread_val, current_pair);
+                    }
+                }
+            }
+        }
+
+        cub_block_reduce<blockSize>(thread_val, d_block_output, reduction_op);
     }
 }
 
@@ -125,14 +185,8 @@ __launch_bounds__(blockSize) __global__
                 }
             }
         }
-        typedef cub::BlockReduce<T, blockSize>       BlockReduce;
-        __shared__ typename BlockReduce::TempStorage temp_storage;
 
-        T block_aggregate =
-            BlockReduce(temp_storage).Reduce(thread_val, reduction_op);
-        if (threadIdx.x == 0) {
-            d_block_output[blockIdx.x] = block_aggregate;
-        }
+        cub_block_reduce<blockSize>(thread_val, d_block_output, reduction_op);
     }
 }
 

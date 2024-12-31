@@ -150,7 +150,7 @@ struct SparseMatrix
     {
     }
 
-    SparseMatrix(const RXMeshStatic& rx) : SparseMatrix(rx, 1){};
+    SparseMatrix(const RXMeshStatic& rx) : SparseMatrix(rx, 1) {};
 
    protected:
     SparseMatrix(const RXMeshStatic& rx, IndexT replicate)
@@ -468,6 +468,7 @@ struct SparseMatrix
             }
         }
         assert(1 != 1);
+        return get_val_at(0);
     }
 
     /**
@@ -485,6 +486,7 @@ struct SparseMatrix
             }
         }
         assert(1 != 1);
+        return T(0);
     }
 
     /**
@@ -529,8 +531,7 @@ struct SparseMatrix
     /**
      * @brief return the row index corresponding to specific vertex handle
      */
-    __device__ __host__ const uint32_t
-    get_row_id(const VertexHandle& handle) const
+    __device__ __host__ uint32_t get_row_id(const VertexHandle& handle) const
     {
         auto id = handle.unpack();
         return m_context.vertex_prefix()[id.first] + id.second;
@@ -843,9 +844,8 @@ struct SparseMatrix
 
         std::vector<TripletT> triplets;
         triplets.reserve(non_zeros());
-        for_each([&](int r, int c, T& val) {
-            triplets.push_back({r, c, val});
-        });
+        for_each(
+            [&](int r, int c, T& val) { triplets.push_back({r, c, val}); });
 
         Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT> ret(rows(), cols());
 
@@ -1791,7 +1791,6 @@ struct SparseMatrix
                 CUSOLVER_ERROR(cusolverSpDcsrlsvqr(handle,
                                                    rows(),
                                                    non_zeros(),
-                                                   m_d_val,
                                                    m_descr,
                                                    m_d_val,
                                                    m_d_row_ptr,

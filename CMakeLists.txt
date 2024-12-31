@@ -141,7 +141,9 @@ set(cuda_flags
 	-Xcompiler=$<$<CXX_COMPILER_ID:MSVC>:${MSVC_XCOMPILER_FLAGS}>
     #Disables warning
     #177-D "function XXX was declared but never referenced"
-    -Xcudafe "--display_error_number --diag_suppress=177"    
+    #174-D "expression has no effect"
+    #20054-D "dynamic initialization is not supported for a function-scope static __shared__ variable within a __device__/__global__ function"
+    -Xcudafe "--display_error_number --diag_suppress=177 --diag_suppress=174 --diag_suppress=20054"    
     -rdc=true
 	-lineinfo	
 	--expt-extended-lambda	

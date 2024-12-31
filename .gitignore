@@ -1,4 +1,5 @@
-output/
+output/*
+!output/.gitkeep
 input/*
 !input/dragon.obj
 !input/diamond.obj
@@ -16,3 +17,7 @@ build_debug/
 include/rxmesh/util/git_sha1.cpp
 .vscode/
 scripts/*.log
+scripts/*.ini
+scripts/*.nsys-rep
+scripts/*.sqlite
+scripts/*.obj

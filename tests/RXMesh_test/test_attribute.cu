@@ -1,8 +1,8 @@
 #include "gtest/gtest.h"
 #include "rxmesh/attribute.h"
 #include "rxmesh/reduce_handle.h"
-#include "rxmesh/util/macros.h"
 #include "rxmesh/rxmesh_static.h"
+#include "rxmesh/util/macros.h"
 
 template <typename T>
 void populate(rxmesh::RXMeshStatic& rx, rxmesh::VertexAttribute<T>& v, T val)
@@ -135,6 +135,50 @@ TEST(Attribute, Reduce)
         false);
 
     EXPECT_EQ(output, result);
+}
+
+
+TEST(Attribute, ArgMax)
+{
+    using namespace rxmesh;
+
+    CUDA_ERROR(cudaDeviceReset());
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bumpy-cube.obj");
+
+    auto attr = *rx.add_vertex_attribute<float>("v", 1);
+
+    const float val(2.0);
+
+    populate<float>(rx, attr, val);
+
+    attr.move(DEVICE, HOST);
+
+    uint32_t chosenVertex = rx.get_num_vertices() - 1;
+
+    VertexHandle chosenHandle;
+
+    float chosenValue = 10;
+
+    rx.for_each_vertex(rxmesh::HOST, [&](const rxmesh::VertexHandle vh) {
+        if (rx.linear_id(vh) == chosenVertex) {
+            attr(vh)     = chosenValue;
+            chosenHandle = vh;
+        }
+    });
+
+    EXPECT_TRUE(chosenHandle.is_valid());
+
+    attr.move(HOST, DEVICE);
+
+    ReduceHandle reduce_handle(attr);
+
+    auto output = reduce_handle.arg_max(attr);
+
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    EXPECT_EQ(output.key, chosenHandle);
+    EXPECT_EQ(output.value, chosenValue);
 }
 
 

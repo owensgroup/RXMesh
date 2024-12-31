@@ -45,11 +45,13 @@ split_edges(rxmesh::Context                   context,
     auto should_split = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         // iter[0] and iter[2] are the edge two vertices
         // iter[1] and iter[3] are the two opposite vertices
-        //    0
-        //  / | \
-        // 3  |  1
-        // \  |  /
-        //    2
+        /*
+            0
+          / | \
+         3  |  1
+         \  |  /
+            2
+        */
 
         if (edge_status(eh) == UNSEEN) {
             // make sure it is not boundary edge
@@ -58,12 +60,13 @@ split_edges(rxmesh::Context                   context,
                 is_edge_bd(eh) == 0) {
 
                 assert(iter.size() == 4);
-
-                //    a
-                //  / | \
-                // c  |  d
-                // \  |  /
-                //    b
+                /*
+                    a
+                  / | \
+                 c  |  d
+                 \  |  /
+                    b
+                */
 
                 const VertexHandle ah = iter[0];
                 const VertexHandle bh = iter[2];

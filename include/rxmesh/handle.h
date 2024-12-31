@@ -137,7 +137,7 @@ struct VertexHandle
         return unpack().second;
     }
 
-   private:
+   protected:
     uint64_t m_handle;
 };
 
@@ -237,7 +237,7 @@ struct EdgeHandle
         return unpack().second;
     }
 
-   private:
+   protected:
     uint64_t m_handle;
 };
 
@@ -385,7 +385,7 @@ struct DEdgeHandle
         return unpack().second >> 1;
     }
 
-   private:
+   protected:
     uint64_t m_handle;
 };
 
@@ -483,7 +483,7 @@ struct FaceHandle
         return unpack().second;
     }
 
-   private:
+   protected:
     uint64_t m_handle;
 };
 }  // namespace rxmesh

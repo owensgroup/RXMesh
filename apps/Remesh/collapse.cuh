@@ -52,12 +52,13 @@ __global__ static void __launch_bounds__(blockThreads)
 
         // iter[0] and iter[2] are the edge two vertices
         // iter[1] and iter[3] are the two opposite vertices
-        //    0
-        //  / | \
-        // 3  |  1
-        // \  |  /
-        //    2
-
+        /*
+            0
+          / | \
+         3  |  1
+         \  |  /
+            2
+        */
 
         if (edge_status(eh) == UNSEEN /*&& edge_link(eh) == 2*/) {
             const VertexIterator iter =
@@ -507,7 +508,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
 {
     using namespace rxmesh;
 
-    constexpr uint32_t blockThreads = 512;
+    constexpr uint32_t blockThreads = 256;
 
     edge_status->reset(UNSEEN, DEVICE);
 

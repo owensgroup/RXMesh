@@ -142,11 +142,13 @@ edge_flip(rxmesh::Context                   context,
     auto should_flip = [&](const EdgeHandle& eh, const VertexIterator& iter) {
         // iter[0] and iter[2] are the edge two vertices
         // iter[1] and iter[3] are the two opposite vertices
-        //    0
-        //  / | \
-        // 3  |  1
-        // \  |  /
-        //    2
+        /*
+            0
+          / | \
+         3  |  1
+         \  |  /
+            2
+        */
 
         if (edge_status(eh) == UNSEEN) {
             // make sure it is not boundary edge

@@ -26,17 +26,21 @@ class Context
           m_num_faces(nullptr),
           m_num_vertices(nullptr),
           m_num_patches(nullptr),
+          m_max_num_vertices(nullptr), 
+          m_max_num_edges(nullptr), 
+          m_max_num_faces(nullptr),          
           m_d_vertex_prefix(nullptr),
           m_d_edge_prefix(nullptr),
           m_d_face_prefix(nullptr),
           m_h_vertex_prefix(nullptr),
           m_h_edge_prefix(nullptr),
-          m_h_face_prefix(nullptr),
-          m_capacity_factor(0.0f),
-          m_patches_info(nullptr),
+          m_h_face_prefix(nullptr),                    
           m_max_lp_capacity_v(0),
           m_max_lp_capacity_e(0),
-          m_max_lp_capacity_f(0)
+          m_max_lp_capacity_f(0),
+          m_patches_info(nullptr),
+          m_capacity_factor(0.0f),
+          m_max_num_patches(0)
     {
     }
 
@@ -185,9 +189,7 @@ class Context
      */
     template <typename HandleT>
     __device__ __host__ __inline__ uint32_t linear_id(HandleT input) const
-    {
-        using LocalT = typename HandleT::LocalT;
-
+    {        
         assert(input.is_valid());
 
         assert(input.patch_id() < m_num_patches[0]);

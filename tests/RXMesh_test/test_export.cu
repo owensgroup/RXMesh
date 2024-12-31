@@ -22,11 +22,11 @@ TEST(RXMeshStatic, Export)
     rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
         v_attr_scalar(vh, 0) = rand() % 100;
 
-        for (int i = 0; i < v_attr_vec2.get_num_attributes(); ++i) {
+        for (uint32_t i = 0; i < v_attr_vec2.get_num_attributes(); ++i) {
             v_attr_vec2(vh, i) = rand() % 100;
         }
 
-        for (int i = 0; i < v_attr_vec3.get_num_attributes(); ++i) {
+        for (uint32_t i = 0; i < v_attr_vec3.get_num_attributes(); ++i) {
             v_attr_vec3(vh, i) = rand() % 100;
         }
     });
@@ -35,11 +35,11 @@ TEST(RXMeshStatic, Export)
     rx.for_each_face(HOST, [&](const FaceHandle& fh) {
         f_attr_scalar(fh, 0) = rand() % 100;
 
-        for (int i = 0; i < f_attr_vec2.get_num_attributes(); ++i) {
+        for (uint32_t i = 0; i < f_attr_vec2.get_num_attributes(); ++i) {
             f_attr_vec2(fh, i) = rand() % 100;
         }
 
-        for (int i = 0; i < f_attr_vec3.get_num_attributes(); ++i) {
+        for (uint32_t i = 0; i < f_attr_vec3.get_num_attributes(); ++i) {
             f_attr_vec3(fh, i) = rand() % 100;
         }
     });

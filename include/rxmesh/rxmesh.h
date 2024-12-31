@@ -11,6 +11,8 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
 
+#include "rxmesh/util/timer.h"
+
 class RXMeshTest;
 
 namespace rxmesh {
@@ -30,6 +32,15 @@ class RXMesh
     uint32_t get_num_vertices() const
     {
         return m_num_vertices;
+    }
+
+    /**
+     * @brief return the number of colors from the 2-ring graph coloring
+     * @return
+     */
+    uint32_t get_num_colors() const
+    {
+        return m_num_colors;
     }
 
     uint32_t get_num_vertices(bool from_device)
@@ -78,6 +89,31 @@ class RXMesh
                                   cudaMemcpyDeviceToHost));
         }
         return m_num_faces;
+    }
+
+    /**
+     * @brief return the number of mesh elements (vertices, edges, or faces)
+     * based on a template paramter input.
+     */
+    template <typename HandleT>
+    uint32_t get_num_elements() const
+    {
+        static_assert(
+            std::is_same_v<HandleT, VertexHandle> ||
+                std::is_same_v<HandleT, EdgeHandle> ||
+                std::is_same_v<HandleT, FaceHandle>,
+            "Template paramter should be either Vertex/Edge/FaceHandle");
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return get_num_vertices();
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return get_num_edges();
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return get_num_faces();
+        }
     }
 
     /**
@@ -304,7 +340,7 @@ class RXMesh
     /**
      * @brief return the number of owned vertices in a patch
      */
-    const uint16_t get_num_owned_vertices(const uint32_t p) const
+    uint16_t get_num_owned_vertices(const uint32_t p) const
     {
         return m_h_num_owned_v[p];
     }
@@ -312,7 +348,7 @@ class RXMesh
     /**
      * @brief return the number of owned edges in a patch
      */
-    const uint16_t get_num_owned_edges(const uint32_t p) const
+    uint16_t get_num_owned_edges(const uint32_t p) const
     {
         return m_h_num_owned_e[p];
     }
@@ -320,7 +356,7 @@ class RXMesh
     /**
      * @brief return the number of owned faces in a patch
      */
-    const uint16_t get_num_owned_faces(const uint32_t p) const
+    uint16_t get_num_owned_faces(const uint32_t p) const
     {
         return m_h_num_owned_f[p];
     }
@@ -329,7 +365,7 @@ class RXMesh
     /**
      * @brief return the number of vertices in a patch
      */
-    const uint16_t get_num_vertices(const uint32_t p) const
+    uint16_t get_num_vertices(const uint32_t p) const
     {
         return m_h_patches_info[p].num_vertices[0];
     }
@@ -337,7 +373,7 @@ class RXMesh
     /**
      * @brief return the number of edges in a patch
      */
-    const uint16_t get_num_edges(const uint32_t p) const
+    uint16_t get_num_edges(const uint32_t p) const
     {
         return m_h_patches_info[p].num_edges[0];
     }
@@ -345,7 +381,7 @@ class RXMesh
     /**
      * @brief return the number of faces in a patch
      */
-    const uint16_t get_num_faces(const uint32_t p) const
+    uint16_t get_num_faces(const uint32_t p) const
     {
         return m_h_patches_info[p].num_faces[0];
     }
@@ -376,7 +412,7 @@ class RXMesh
      * @brief return the amount of allocated memory for topology information in
      * megabytes
      */
-    const double get_topology_memory_mg() const
+    double get_topology_memory_mg() const
     {
         return m_topo_memory_mega_bytes;
     }
@@ -523,6 +559,10 @@ class RXMesh
                                    PatchInfo&                   h_patch_info,
                                    PatchInfo&                   d_patch_info);
 
+    void patch_graph_coloring();
+
+    void populate_patch_stash();
+
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
     friend class ::RXMeshTest;
@@ -582,5 +622,9 @@ class RXMesh
     float m_capacity_factor, m_lp_hashtable_load_factor, m_patch_alloc_factor;
 
     double m_topo_memory_mega_bytes;
+
+    uint32_t m_num_colors;
+
+    Timers<CPUTimer> m_timers;
 };
 }  // namespace rxmesh

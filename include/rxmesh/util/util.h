@@ -471,7 +471,9 @@ __host__ __inline__ cudaDataType_t cuda_type()
         RXMESH_ERROR(
             "Unsupported type. Sparse/Dense Matrix in RXMesh can support "
             "different data type but for the solver, only float, double, "
-            "cuComplex, and cuDoubleComplex are supported");
+            "cuComplex, and cuDoubleComplex are supported");    
+        //to silence compiler warning 
+        return CUDA_R_32F;    
     }
 }
 }  // namespace rxmesh

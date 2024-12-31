@@ -4,6 +4,7 @@ set(SOURCE_LIST
     secp.cu
 	secp_rxmesh.cuh
 	secp_kernels.cuh
+	secp_pair.h
 )
 
 target_sources(SECPriority
@@ -28,14 +29,13 @@ source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "SECPriority" FILES ${SOURCE_
 # NVIDIA.
 CPMAddPackage(
     NAME cuco
-    GITHUB_REPOSITORY andrewbriand/cuCollections
-    GIT_TAG d58dd9fedde721a264c8ae960f7393a3a3b08c58
+    GITHUB_REPOSITORY ahdhn/cuCollections
+    GIT_TAG 160eb3e76193b2f87fe2c83f3bdc70fec3ab5aaa
     OPTIONS
        "BUILD_TESTS OFF"
        "BUILD_BENCHMARKS OFF"
        "BUILD_EXAMPLES OFF"
 )
-
 target_link_libraries(SECPriority     
     PRIVATE RXMesh
     PRIVATE gtest_main	

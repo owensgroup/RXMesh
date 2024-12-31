@@ -10,7 +10,7 @@ struct arg
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "dragon.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     float       target        = 0.1;
-    float       edgefrac = 0.1;
+    float       edgefrac      = 0.1;
     uint32_t    device_id     = 0;
     char**      argv;
     int         argc;

@@ -1840,10 +1840,10 @@ __global__ static void check_not_owned(const Context           context,
                     // printf("\n 6 owned = %u", patch_id);
                     ::atomicAdd(d_check, 1);
                 } else {
-                    uint16_t vw0 =
-                        owner_patch_info.ev[2 * e_owned.local_id() + 0].id;
-                    uint16_t vw1 =
-                        owner_patch_info.ev[2 * e_owned.local_id() + 1].id;
+
+                    auto [vw0, vw1] =
+                        owner_patch_info.get_edge_vertices(e_owned.local_id());
+
                     uint32_t pw0(e_owned.patch_id()), pw1(e_owned.patch_id());
 
                     get_owned_v(vw0, pw0, owner_patch_info);
@@ -2949,7 +2949,7 @@ void RXMeshDynamic::update_polyscope(std::string new_name)
 }
 
 
-template __inline__ __device__ void detail::slice<256>(
+template __device__ void detail::slice<256>(
     Context&,
     cooperative_groups::thread_block&,
     PatchInfo&,
@@ -2974,7 +2974,7 @@ template __inline__ __device__ void detail::slice<256>(
     Bitmask&,
     Bitmask&);
 
-template __inline__ __device__ void detail::bi_assignment<256>(
+template __device__ void detail::bi_assignment<256>(
     cooperative_groups::thread_block&,
     const uint16_t,
     const uint16_t,
@@ -2991,7 +2991,7 @@ template __inline__ __device__ void detail::bi_assignment<256>(
     Bitmask&,
     Bitmask&);
 
-template __inline__ __device__ void detail::bi_assignment_ggp<256>(
+template __device__ void detail::bi_assignment_ggp<256>(
     cooperative_groups::thread_block&,
     const uint16_t,
     const Bitmask&,

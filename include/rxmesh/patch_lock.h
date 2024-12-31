@@ -10,12 +10,12 @@ namespace rxmesh {
  */
 struct PatchLock
 {
-    __device__ __host__ PatchLock() : lock(nullptr), spin(nullptr){};
-    __device__ __host__ PatchLock(const PatchLock& other) = default;
-    __device__ __host__ PatchLock(PatchLock&&)            = default;
+    __device__ __host__ PatchLock() : lock(nullptr), spin(nullptr) {};
+    __device__ __host__ PatchLock(const PatchLock& other)      = default;
+    __device__ __host__ PatchLock(PatchLock&&)                 = default;
     __device__ __host__ PatchLock& operator=(const PatchLock&) = default;
-    __device__ __host__ PatchLock& operator=(PatchLock&&) = default;
-    __device__                     __host__ ~PatchLock()  = default;
+    __device__ __host__ PatchLock& operator=(PatchLock&&)      = default;
+    __device__                     __host__ ~PatchLock()       = default;
 
 
     /**
@@ -39,7 +39,10 @@ struct PatchLock
         }
         atomicExch(spin, id);
         return true;
+#else
+        return true;
 #endif
+    
     }
 
     /**
@@ -58,7 +61,7 @@ struct PatchLock
     /**
      * @brief check if the patch is locked
      */
-    __device__ bool is_locked()
+    __device__ bool is_locked() const
     {
 #ifdef __CUDA_ARCH__
         return atomic_read(lock) == LOCKED;

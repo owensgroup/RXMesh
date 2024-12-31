@@ -20,8 +20,8 @@ TEST(RXMeshStatic, DenseMatrixToEigen)
 
     // ensure that the content of Eigen matrix is the same as the RXMesh
     // DenseMatrix
-    for (uint32_t i = 0; i < rx_mat.rows(); ++i) {
-        for (uint32_t j = 0; j < rx_mat.cols(); ++j) {
+    for (int i = 0; i < rx_mat.rows(); ++i) {
+        for (int j = 0; j < rx_mat.cols(); ++j) {
             EXPECT_NEAR(rx_mat(i, j), eigen_mat(i, j), 0.0000001);
         }
     }
@@ -31,8 +31,8 @@ TEST(RXMeshStatic, DenseMatrixToEigen)
     const float scalar = 5.f;
     eigen_mat *= scalar;
 
-    for (uint32_t i = 0; i < rx_mat.rows(); ++i) {
-        for (uint32_t j = 0; j < rx_mat.cols(); ++j) {
+    for (int i = 0; i < rx_mat.rows(); ++i) {
+        for (int j = 0; j < rx_mat.cols(); ++j) {
             EXPECT_NEAR(rx_mat_copy(i, j), rx_mat(i, j) / scalar, 0.0000001);
         }
     }
@@ -52,8 +52,8 @@ TEST(RXMeshStatic, DenseMatrixASum)
 
     float res = 0;
 
-    for (uint32_t i = 0; i < mat.rows(); ++i) {
-        for (uint32_t j = 0; j < mat.cols(); ++j) {
+    for (int i = 0; i < mat.rows(); ++i) {
+        for (int j = 0; j < mat.cols(); ++j) {
             res += std::abs(mat(i, j));
         }
     }
@@ -88,8 +88,8 @@ TEST(RXMeshStatic, DenseMatrixAXPY)
 
     Y.move(DEVICE, HOST);
 
-    for (uint32_t i = 0; i < Y.rows(); ++i) {
-        for (uint32_t j = 0; j < Y.cols(); ++j) {
+    for (int i = 0; i < Y.rows(); ++i) {
+        for (int j = 0; j < Y.cols(); ++j) {
             EXPECT_NEAR(Y_copy(i, j) + 0.5 * X_copy(i, j), Y(i, j), 0.001);
         }
     }
@@ -120,8 +120,8 @@ TEST(RXMeshStatic, DenseMatrixDot)
     cuComplex res = make_cuComplex(0.f, 0.f);
 
 
-    for (uint32_t i = 0; i < y.rows(); ++i) {
-        for (uint32_t j = 0; j < y.cols(); ++j) {
+    for (int i = 0; i < y.rows(); ++i) {
+        for (int j = 0; j < y.cols(); ++j) {
             // for complex number (rx, ix) and (ry+iy), the result of the
             // multiplication is (rx.ry-ix.iy) + i(rx.iy + ix.ry)
 
@@ -156,8 +156,8 @@ TEST(RXMeshStatic, DenseMatrixNorm2)
 
     float res = 0.f;
 
-    for (uint32_t i = 0; i < x.rows(); ++i) {
-        for (uint32_t j = 0; j < x.cols(); ++j) {
+    for (int i = 0; i < x.rows(); ++i) {
+        for (int j = 0; j < x.cols(); ++j) {
 
             cuComplex x_val = x(i, j);
 
@@ -192,8 +192,8 @@ TEST(RXMeshStatic, DenseMatrixMulitply)
 
     x.move(DEVICE, HOST);
 
-    for (uint32_t i = 0; i < x.rows(); ++i) {
-        for (uint32_t j = 0; j < x.cols(); ++j) {
+    for (int i = 0; i < x.rows(); ++i) {
+        for (int j = 0; j < x.cols(); ++j) {
 
             cuComplex x_val = x(i, j);
 
@@ -233,8 +233,8 @@ TEST(RXMeshStatic, DenseMatrixSwap)
     x.move(DEVICE, HOST);
     y.move(DEVICE, HOST);
 
-    for (uint32_t i = 0; i < x.rows(); ++i) {
-        for (uint32_t j = 0; j < x.cols(); ++j) {
+    for (int i = 0; i < x.rows(); ++i) {
+        for (int j = 0; j < x.cols(); ++j) {
 
             EXPECT_NEAR(y(i, j), copy(i, j), 0.001);
         }
