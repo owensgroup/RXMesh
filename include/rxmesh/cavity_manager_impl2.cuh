@@ -1886,8 +1886,6 @@ CavityManager2<blockThreads, cop>::for_each_cavity(
             }
         }
     }
-
-    block.sync();
 }
 
 
@@ -2667,7 +2665,6 @@ __device__ __forceinline__ bool CavityManager2<blockThreads, cop>::migrate(
             }
         }
     }
-    block.sync();
 
     if (!ensure_ownership<VertexHandle>(
             block, m_s_ownership_change_mask_v, m_inv_lp_v)) {
@@ -2720,38 +2717,35 @@ CavityManager2<blockThreads, cop>::lock_neighbour_patches(
     // since the whole block locks the whole thing, then we can use
     // different warps to locks different patches rather than relies on a single
     // thread to do the job
-    //__shared__ bool s_success;
-    // if (threadIdx.x == 0) {
-    //    s_success = true;
-    //}
-    // block.sync();
+
+    // int pred = 1;
     //
-    // int lid       = lane_id();
-    // int wid       = warp_id();
-    // int num_warps = block.size() / WARP_SIZE;
+    // const int lid = lane_id();
+    // const int wid = warp_id();
+    //
+    // constexpr int num_warps = blockThreads / WARP_SIZE;
     //
     // for (int st = wid; st < PatchStash::stash_size; st += num_warps) {
-    //    const uint32_t q = m_s_patch_stash.get_patch(st);
-    //    if (lid == 0 && q != INVALID32) {
-    //        assert(st < m_s_locked_patches_mask.size());
-    //        bool okay = m_s_locked_patches_mask(st);
-    //        if (!okay) {
-    //            okay =
-    //                m_context.m_patches_info[q].lock.acquire_lock(blockIdx.x);
-    //            if (okay) {
-    //                assert(st < m_s_locked_patches_mask.size());
-    //                m_s_locked_patches_mask.set(st, true);
-    //            } else {
-    //                s_success = false;
-    //            }
-    //        }
-    //    }
-    //    __syncwarp();
-    //}
+    //     const uint32_t q = m_s_patch_stash.get_patch(st);
+    //     if (lid == 0 && q != INVALID32) {
+    //         assert(st < m_s_locked_patches_mask.size());
+    //         bool okay = m_s_locked_patches_mask(st);
+    //         if (!okay) {
+    //             okay =
+    //                 m_context.m_patches_info[q].lock.acquire_lock(blockIdx.x);
+    //             if (okay) {
+    //                 assert(st < m_s_locked_patches_mask.size());
+    //                 m_s_locked_patches_mask.set(st, true);
+    //             } else {
+    //                 pred = 0;
+    //             }
+    //         }
+    //     }
+    // }
     //
-    // block.sync();
+    // int all_okay = __syncthreads_and(pred);
     //
-    // return s_success;
+    // return all_okay;
 
 
     block.sync();
@@ -2774,25 +2768,60 @@ __device__ __forceinline__ bool
 CavityManager2<blockThreads, cop>::lock_new_added_patches(
     cooperative_groups::thread_block& block)
 {
-    block.sync();
-    for (int st = 0; st < PatchStash::stash_size; ++st) {
-        if (m_s_patch_stash.get_patch(st) !=
-            m_s_new_patch_stash.get_patch(st)) {
-            // it is a new patch
-            uint32_t new_patch = m_s_patch_stash.get_patch(st);
+    // block.sync();
+    // for (int st = 0; st < PatchStash::stash_size; ++st) {
+    //     if (m_s_patch_stash.get_patch(st) !=
+    //         m_s_new_patch_stash.get_patch(st)) {
+    //         // it is a new patch
+    //         uint32_t new_patch = m_s_patch_stash.get_patch(st);
+    //
+    //         if (!lock(block, st, new_patch)) {
+    //             return false;
+    //         } else {
+    //             assert(st < m_s_locked_patches_mask.size());
+    //             assert(m_s_locked_patches_mask(st));
+    //             if (threadIdx.x == 0) {
+    //                 m_s_new_patch_stash.m_stash[st] = new_patch;
+    //             }
+    //         }
+    //     }
+    // }
+    // return true;
 
-            if (!lock(block, st, new_patch)) {
-                return false;
-            } else {
+
+    int pred = 1;
+
+    const int lid = lane_id();
+    const int wid = warp_id();
+
+    constexpr int num_warps = blockThreads / WARP_SIZE;
+
+    for (int st = wid; st < PatchStash::stash_size; st += num_warps) {
+        if (lid == 0 && m_s_patch_stash.get_patch(st) !=
+                            m_s_new_patch_stash.get_patch(st)) {
+            assert(st < m_s_locked_patches_mask.size());
+
+            // it is a new patch
+            const uint32_t q = m_s_patch_stash.get_patch(st);
+            if (q == INVALID32) {
+                continue;
+            }
+
+            int okay =
+                m_context.m_patches_info[q].lock.acquire_lock(blockIdx.x);
+            if (okay) {
                 assert(st < m_s_locked_patches_mask.size());
-                assert(m_s_locked_patches_mask(st));
-                if (threadIdx.x == 0) {
-                    m_s_new_patch_stash.m_stash[st] = new_patch;
-                }
+                m_s_locked_patches_mask.set(st, true);
+                m_s_new_patch_stash.m_stash[st] = q;
+            } else {
+                pred = 0;
             }
         }
     }
-    return true;
+
+    int all_okay = __syncthreads_and(pred);
+
+    return all_okay;
 }
 
 template <uint32_t blockThreads, CavityOp cop>
