@@ -1,6 +1,6 @@
 #pragma once
 #include "../Remesh/link_condition.cuh"
-#include "rxmesh/cavity_manager.cuh"
+#include "rxmesh/cavity_manager2.cuh"
 
 #include "secp_pair.h"
 
@@ -12,8 +12,8 @@ __global__ static void secp(rxmesh::Context             context,
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CavityManager<blockThreads, CavityOp::EV> cavity(
-        block, context, shrd_alloc, true);
+    CavityManager2<blockThreads, CavityOp::EV> cavity(
+        block, context, shrd_alloc, 0, true);
 
     const uint32_t pid = cavity.patch_id();
 
