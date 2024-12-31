@@ -44,16 +44,17 @@ TEST(RXMeshStatic, EVDiamond)
     auto coords = *rx.get_input_vertex_coordinates();
 
     rx.for_each_edge(HOST, [&](const EdgeHandle& eh) {
-        //      v3
-        //    /   \
-        //   /     \
-        //  /       \
-        // v0--->---v2
-        //  \       /
-        //   \     /
-        //    \   /
-        //     v1
-
+        /* 
+              v3
+            /   \
+           /     \
+          /       \
+         v0--->---v2
+          \       /
+           \     /
+            \   /
+             v1
+        */
         auto v0 = output(eh, 0);
         auto v1 = output(eh, 1);
         auto v2 = output(eh, 2);

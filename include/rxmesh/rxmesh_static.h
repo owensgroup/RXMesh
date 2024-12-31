@@ -20,6 +20,7 @@
 #include "rxmesh/util/timer.h"
 
 #include "rxmesh/kernels/boundary.cuh"
+#include "rxmesh/kernels/query_kernel.cuh"
 
 #if USE_POLYSCOPE
 #include "polyscope/surface_mesh.h"
@@ -639,6 +640,168 @@ class RXMeshStatic : public RXMesh
         }
     }
 
+
+    /**
+     * @brief Launching a kernel knowing its launch box
+     * @tparam ...ArgsT infered
+     * @tparam blockThreads the block size
+     * @param lb launch box populated via prepare_launch_box
+     * @param kernel the kernel to launch
+     * @param stream to launch the kerenl on
+     * @param ...args input parameters to the kernel
+     */
+    template <uint32_t blockThreads, typename KernelT, typename... ArgsT>
+    void run_kernel(const LaunchBox<blockThreads>& lb,
+                    const KernelT                  kernel,
+                    cudaStream_t                   stream,
+                    ArgsT... args) const
+    {
+        kernel<<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
+            get_context(), args...);
+    }
+
+    /**
+     * @brief Launching a kernel knowing its launch box on the default stream
+     * @tparam ...ArgsT infered
+     * @tparam blockThreads the block size
+     * @param lb launch box populated via prepare_launch_box
+     * @param kernel the kernel to launch
+     * @param ...args input parameters to the kernel
+     */
+    template <uint32_t blockThreads, typename KernelT, typename... ArgsT>
+    void run_kernel(const LaunchBox<blockThreads>& lb,
+                    const KernelT                  kernel,
+                    ArgsT... args) const
+    {
+        kernel<<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(get_context(),
+                                                                 args...);
+    }
+
+    /**
+     * @brief run a kernel that will require a query operation
+     * @tparam ...ArgsT infered
+     * @tparam blockThreads the block size
+     * @param op list of query operations used inside the kernel
+     * @param kernel the kernel to run
+     * @param ...args the inputs to the kernel
+     */
+    template <uint32_t blockThreads, typename KernelT, typename... ArgsT>
+    void run_kernel(const std::vector<Op> op, KernelT kernel, ArgsT... args)
+    {
+        run_kernel<blockThreads>(
+            kernel,
+            op,
+            false,
+            false,
+            false,
+            [](uint32_t v, uint32_t e, uint32_t f) -> size_t { return 0; },
+            NULL,
+            args...);
+    }
+
+    /**
+     * @brief run a kernel that will require a query operation
+     * @tparam ...ArgsT infered
+     * @tparam blockThreads the block size
+     * @param op list of query operations used inside the kernel
+     * @param kernel the kernel to run
+     * @param oriented are the query operation required to be oriented
+     * @param with_vertex_valence if vertex valence is requested to be
+     * pre-computed and stored in shared memory
+     * @param is_concurrent in case of multiple queries (i.e., op.size() > 1),
+     * this parameter indicates if queries needs to be access at the same time
+     * @param user_shmem a (lambda) function that takes the number of vertices,
+     * edges, and faces and returns additional user-desired shared memory in
+     * bytes. In case no extra shared memory needed, it can be
+     * [](uint32_t v, uint32_t e, uint32_t f) { return 0; }
+     * @param ...args the inputs to the kernel
+     */
+    template <uint32_t blockThreads, typename KernelT, typename... ArgsT>
+    void run_kernel(
+        KernelT                                             kernel,
+        const std::vector<Op>                               op,
+        const bool                                          oriented,
+        const bool                                          with_vertex_valence,
+        const bool                                          is_concurrent,
+        std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem,
+        cudaStream_t                                        stream,
+        ArgsT... args) const
+    {
+        LaunchBox<blockThreads> lb;
+
+        prepare_launch_box(op,
+                           lb,
+                           (void*)kernel,
+                           oriented,
+                           with_vertex_valence,
+                           is_concurrent,
+                           user_shmem);
+
+        run_kernel(lb, kernel, args...);
+    }
+
+    /**
+     * @brief launch a kernel that require a query operation. This is limited to
+     * one query only.
+     * @tparam LambdaT inferred
+     * @tparam blockThreads the size of cuda block
+     * @tparam op the type of query operation
+     * @param lb the launch box as initialized by prepare_launch_box
+     * @param user_lambda the user lambda function which has the signature
+     *      [=]__device__(InputHandle h, OutputIterator iter) {
+     *      }
+     * The InputHandle is a vertex, edge, or face handle depending on the input
+     * to the query operation op. The OutputIterator is an vertex, edge, or face
+     * iterator depending on the output of the query operation op.
+     *
+     * @param oriented if the query operation op is oriented
+     * @param stream the stream to launch the kernel on
+     */
+    template <Op op, uint32_t blockThreads, typename LambdaT>
+    void run_query_kernel(const LambdaT user_lambda,
+                          const bool    oriented = false,
+                          cudaStream_t  stream   = NULL)
+    {
+        LaunchBox<blockThreads> lb;
+
+        prepare_launch_box(
+            {op},
+            lb,
+            (void*)detail::query_kernel<blockThreads, op, LambdaT>,
+            oriented);
+
+        run_query_kernel<op>(lb, user_lambda, oriented, stream);
+    }
+
+    /**
+     * @brief launch a kernel that require a query operation. This is limited to
+     * one query only.
+     * @tparam LambdaT inferred
+     * @tparam blockThreads the size of cuda block
+     * @tparam op the type of query operation
+     * @param lb the launch box as initialized by prepare_launch_box
+     * @param user_lambda the user lambda function which has the signature
+     *      [=]__device__(InputHandle h, OutputIterator iter) {
+     *      }
+     * The InputHandle is a vertex, edge, or face handle depending on the input
+     * to the query operation op. The OutputIterator is an vertex, edge, or face
+     * iterator depending on the output of the query operation op.
+     *
+     * @param oriented if the query operation op is oriented
+     * @param stream the stream to launch the kernel on
+     */
+    template <Op op, uint32_t blockThreads, typename LambdaT>
+    void run_query_kernel(LaunchBox<blockThreads> lb,
+                          const LambdaT           user_lambda,
+                          const bool              oriented = false,
+                          cudaStream_t            stream   = NULL)
+    {
+        detail::query_kernel<blockThreads, op>
+            <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
+                get_context(), oriented, user_lambda);
+    }
+
+
     /**
      * @brief populate the launch_box with grid size and dynamic shared memory
      * needed for kernel launch
@@ -794,6 +957,26 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
+     * @brief Adding a new face attribute similar to another face attribute
+     * in allocation, number of attributes, and layout
+     * @tparam T type of the returned attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param other the other face attribute
+     * @return shared pointer to the created face attribute
+     */
+    template <class T>
+    std::shared_ptr<FaceAttribute<T>> add_face_attribute_like(
+        const std::string&      name,
+        const FaceAttribute<T>& other)
+    {
+        return add_face_attribute<T>(name,
+                                     other.get_num_attributes(),
+                                     other.get_allocated(),
+                                     other.get_layout());
+    }
+
+    /**
      * @brief Adding a new face attribute by reading values from a host buffer
      * f_attributes where the order of faces is the same as the order of
      * faces given to the constructor.The attributes are populated on device
@@ -892,6 +1075,26 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
+     * @brief Adding a new edge attribute similar to another edge attribute
+     * in allocation, number of attributes, and layout
+     * @tparam T type of the returned attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param other the other edge attribute
+     * @return shared pointer to the created edge attribute
+     */
+    template <class T>
+    std::shared_ptr<EdgeAttribute<T>> add_edge_attribute_like(
+        const std::string&      name,
+        const EdgeAttribute<T>& other)
+    {
+        return add_edge_attribute<T>(name,
+                                     other.get_num_attributes(),
+                                     other.get_allocated(),
+                                     other.get_layout());
+    }
+
+    /**
      * @brief Adding a new differentiable edge attribute
      * @tparam T the underlying type of the attribute
      * @tparam Size the number of components per edge
@@ -934,6 +1137,25 @@ class RXMeshStatic : public RXMesh
             name.c_str(), num_attributes, location, layout, this);
     }
 
+    /**
+     * @brief Adding a new vertex attribute similar to another vertex attribute
+     * in allocation, number of attributes, and layout
+     * @tparam T type of the returned attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param other the other vertex attribute
+     * @return shared pointer to the created vertex attribute
+     */
+    template <class T>
+    std::shared_ptr<VertexAttribute<T>> add_vertex_attribute_like(
+        const std::string&        name,
+        const VertexAttribute<T>& other)
+    {
+        return add_vertex_attribute<T>(name,
+                                       other.get_num_attributes(),
+                                       other.get_allocated(),
+                                       other.get_layout());
+    }
 
     /**
      * @brief Adding a new differentiable vertex attribute
@@ -1544,7 +1766,8 @@ class RXMeshStatic : public RXMesh
             for_each_face(
                 HOST,
                 [&](const FaceHandle& fh) {
-                    for (int i = 0; i < attribute.get_num_attributes(); ++i) {
+                    for (uint32_t i = 0; i < attribute.get_num_attributes();
+                         ++i) {
                         file << attribute(fh, i) << " ";
                     }
                     file << "\n";
@@ -1578,7 +1801,8 @@ class RXMeshStatic : public RXMesh
             for_each_vertex(
                 HOST,
                 [&](const VertexHandle& vh) {
-                    for (int i = 0; i < attribute.get_num_attributes(); ++i) {
+                    for (uint32_t i = 0; i < attribute.get_num_attributes();
+                         ++i) {
                         file << attribute(vh, i) << " ";
                     }
                     file << "\n";
@@ -1983,7 +2207,7 @@ class RXMeshStatic : public RXMesh
                 float(devProp.sharedMemPerBlockOptin) / 1024.0f);
         }
 
-        if (smem_bytes_dyn > func_attr.maxDynamicSharedSizeBytes) {
+        if (int(smem_bytes_dyn) > func_attr.maxDynamicSharedSizeBytes) {
             RXMESH_ERROR(
                 " RXMeshStatic::check_shared_memory() dynamic shared memory "
                 "needed for input function ({} bytes) exceeds the max dynamic "

@@ -88,18 +88,22 @@ __global__ static void __launch_bounds__(blockThreads)
 
             // first check if the edge formed by v0-v1 is a delaunay edge
             // where v2 and v3 are the opposite vertices to the edge
-            //    0
-            //  / | \
-            // 3  |  2
-            // \  |  /
-            //    1
+            /*
+                0
+              / | \
+             3  |  2
+             \  |  /
+                1
+            */
             // if not delaunay, then we check if flipping it won't create a
             // foldover The case below would create a fold over
-            //      0
-            //    / | \
-            //   /  1  \
-            //  / /  \  \
-            //  2       3
+            /*
+                  0
+                / | \
+               /  1  \
+              / /  \  \
+              2       3
+            */
 
 
             T lambda = angle_between_three_vertices(V0, V2, V1);
@@ -203,11 +207,13 @@ inline uint32_t count_non_delaunay_edges(TriMesh& mesh)
     for (TriMesh::VertexIter v0_it = mesh.vertices_begin();
          v0_it != mesh.vertices_end();
          ++v0_it) {
-        //    0
-        //  / | \
-        // 3  |  2
-        // \  |  /
-        //    1
+        /*
+            0
+          / | \
+         3  |  2
+         \  |  /
+            1
+        */
         TriMesh::VertexHandle v0 = *v0_it;
 
         if (mesh.is_boundary(v0)) {

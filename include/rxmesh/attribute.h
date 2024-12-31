@@ -196,31 +196,28 @@ class Attribute : public AttributeBase
             std::make_shared<DenseMatrix<T>>(*m_rxmesh, rows(), cols());
 
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            m_rxmesh->for_each_vertex(HOST, [&](const VertexHandle vh) {
-                uint32_t i = m_rxmesh->linear_id(vh);
+            m_rxmesh->for_each_vertex(HOST, [&](const VertexHandle vh) {                
 
                 for (uint32_t j = 0; j < cols(); ++j) {
-                    (*mat)(i, j) = this->operator()(vh, j);
+                    (*mat)(vh, j) = this->operator()(vh, j);
                 }
             });
         }
 
         if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            m_rxmesh->for_each_edge(HOST, [&](const EdgeHandle eh) {
-                uint32_t i = m_rxmesh->linear_id(eh);
+            m_rxmesh->for_each_edge(HOST, [&](const EdgeHandle eh) {                
 
                 for (uint32_t j = 0; j < cols(); ++j) {
-                    (*mat)(i, j) = this->operator()(eh, j);
+                    (*mat)(eh, j) = this->operator()(eh, j);
                 }
             });
         }
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            m_rxmesh->for_each_face(HOST, [&](const FaceHandle fh) {
-                uint32_t i = m_rxmesh->linear_id(fh);
+            m_rxmesh->for_each_face(HOST, [&](const FaceHandle fh) {                
 
                 for (uint32_t j = 0; j < cols(); ++j) {
-                    (*mat)(i, j) = this->operator()(fh, j);
+                    (*mat)(fh, j) = this->operator()(fh, j);
                 }
             });
         }
@@ -244,30 +241,24 @@ class Attribute : public AttributeBase
 
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             m_rxmesh->for_each_vertex(HOST, [&](const VertexHandle vh) {
-                uint32_t i = m_rxmesh->linear_id(vh);
-
                 for (uint32_t j = 0; j < cols(); ++j) {
-                    this->operator()(vh, j) = (*mat)(i, j);
+                    this->operator()(vh, j) = (*mat)(vh, j);
                 }
             });
         }
 
         if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
             m_rxmesh->for_each_edge(HOST, [&](const EdgeHandle eh) {
-                uint32_t i = m_rxmesh->linear_id(eh);
-
                 for (uint32_t j = 0; j < cols(); ++j) {
-                    this->operator()(eh, j) = (*mat)(i, j);
+                    this->operator()(eh, j) = (*mat)(eh, j);
                 }
             });
         }
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             m_rxmesh->for_each_face(HOST, [&](const FaceHandle fh) {
-                uint32_t i = m_rxmesh->linear_id(fh);
-
                 for (uint32_t j = 0; j < cols(); ++j) {
-                    this->operator()(fh, j) = (*mat)(i, j);
+                    this->operator()(fh, j) = (*mat)(fh, j);
                 }
             });
         }
@@ -341,7 +332,7 @@ class Attribute : public AttributeBase
     /**
      * @brief return the amount of allocated memory in megabytes
      */
-    const double get_memory_mg() const
+    double get_memory_mg() const
     {
         return m_memory_mega_bytes;
     }
@@ -360,6 +351,14 @@ class Attribute : public AttributeBase
     __host__ __device__ __forceinline__ locationT get_allocated() const
     {
         return this->m_allocated;
+    }
+
+    /**
+     * @brief return the memory layout
+     */
+    __host__ __device__ __forceinline__ layoutT get_layout() const
+    {
+        return this->m_layout;
     }
 
     /**
@@ -404,7 +403,7 @@ class Attribute : public AttributeBase
 #pragma omp parallel for
             for (int p = 0; p < static_cast<int>(m_rxmesh->get_num_patches());
                  ++p) {
-                for (int e = 0; e < capacity(p); ++e) {
+                for (uint32_t e = 0; e < capacity(p); ++e) {
                     m_h_attr[p][e] = value;
                 }
             }

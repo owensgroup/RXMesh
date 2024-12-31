@@ -12,64 +12,62 @@ namespace rxmesh {
 namespace detail {
 
 template <uint32_t blockThreads>
-__inline__ __device__ void bi_assignment(
-    cooperative_groups::thread_block& block,
-    const uint16_t                    num_vertices,
-    const uint16_t                    num_edges,
-    const uint16_t                    num_faces,
-    const Bitmask&                    s_owned_v,
-    const Bitmask&                    s_owned_e,
-    const Bitmask&                    s_owned_f,
-    const Bitmask&                    s_active_v,
-    const Bitmask&                    s_active_e,
-    const Bitmask&                    s_active_f,
-    const uint16_t*                   s_ev,
-    const uint16_t*                   s_fv,
-    Bitmask&                          s_new_p_owned_v,
-    Bitmask&                          s_new_p_owned_e,
-    Bitmask&                          s_new_p_owned_f);
+__device__ void bi_assignment(cooperative_groups::thread_block& block,
+                              const uint16_t                    num_vertices,
+                              const uint16_t                    num_edges,
+                              const uint16_t                    num_faces,
+                              const Bitmask&                    s_owned_v,
+                              const Bitmask&                    s_owned_e,
+                              const Bitmask&                    s_owned_f,
+                              const Bitmask&                    s_active_v,
+                              const Bitmask&                    s_active_e,
+                              const Bitmask&                    s_active_f,
+                              const uint16_t*                   s_ev,
+                              const uint16_t*                   s_fv,
+                              Bitmask&                          s_new_p_owned_v,
+                              Bitmask&                          s_new_p_owned_e,
+                              Bitmask& s_new_p_owned_f);
 
 
 template <uint32_t blockThreads>
-__inline__ __device__ void bi_assignment_ggp(
-    cooperative_groups::thread_block& block,
-    const uint16_t                    num_vertices,
-    const Bitmask&                    s_owned_v,
-    const bool                        ignore_owned_v,
-    const Bitmask&                    s_active_v,
-    const uint16_t*                   m_s_vv_offset,
-    const uint16_t*                   m_s_vv,
-    Bitmask&                          s_assigned_v,
-    Bitmask&                          s_current_frontier_v,
-    Bitmask&                          s_next_frontier_v,
-    Bitmask&                          s_partition_a_v,
-    Bitmask&                          s_partition_b_v,
-    int                               num_iter);
+__device__ void bi_assignment_ggp(cooperative_groups::thread_block& block,
+                                  const uint16_t  num_vertices,
+                                  const Bitmask&  s_owned_v,
+                                  const bool      ignore_owned_v,
+                                  const Bitmask&  s_active_v,
+                                  const uint16_t* m_s_vv_offset,
+                                  const uint16_t* m_s_vv,
+                                  Bitmask&        s_assigned_v,
+                                  Bitmask&        s_current_frontier_v,
+                                  Bitmask&        s_next_frontier_v,
+                                  Bitmask&        s_partition_a_v,
+                                  Bitmask&        s_partition_b_v,
+                                  int             num_iter);
 
 template <uint32_t blockThreads>
-__inline__ __device__ void slice(Context&                          context,
-                                 cooperative_groups::thread_block& block,
-                                 PatchInfo&                        pi,
-                                 const uint32_t                    new_patch_id,
-                                 const uint16_t                    num_vertices,
-                                 const uint16_t                    num_edges,
-                                 const uint16_t                    num_faces,
-                                 PatchStash& s_new_patch_stash,
-                                 // PatchStash&     s_original_patch_stash,
-                                 Bitmask&        s_owned_v,
-                                 Bitmask&        s_owned_e,
-                                 Bitmask&        s_owned_f,
-                                 const Bitmask&  s_active_v,
-                                 const Bitmask&  s_active_e,
-                                 const Bitmask&  s_active_f,
-                                 const uint16_t* s_ev,
-                                 const uint16_t* s_fe,
-                                 Bitmask&        s_new_p_active_v,
-                                 Bitmask&        s_new_p_active_e,
-                                 Bitmask&        s_new_p_active_f,
-                                 Bitmask&        s_new_p_owned_v,
-                                 Bitmask&        s_new_p_owned_e,
-                                 Bitmask&        s_new_p_owned_f);
+__device__ void slice(Context&                          context,
+                      cooperative_groups::thread_block& block,
+                      PatchInfo&                        pi,
+                      const uint32_t                    new_patch_id,
+                      const uint16_t                    num_vertices,
+                      const uint16_t                    num_edges,
+                      const uint16_t                    num_faces,
+                      PatchStash&                       s_new_patch_stash,
+                      // PatchStash&     s_original_patch_stash,
+                      Bitmask&        s_owned_v,
+                      Bitmask&        s_owned_e,
+                      Bitmask&        s_owned_f,
+                      const Bitmask&  s_active_v,
+                      const Bitmask&  s_active_e,
+                      const Bitmask&  s_active_f,
+                      const uint16_t* s_ev,
+                      const uint16_t* s_fe,
+                      Bitmask&        s_new_p_active_v,
+                      Bitmask&        s_new_p_active_e,
+                      Bitmask&        s_new_p_active_f,
+                      Bitmask&        s_new_p_owned_v,
+                      Bitmask&        s_new_p_owned_e,
+                      Bitmask&        s_new_p_owned_f);
 
 template <uint32_t blockThreads, typename AttributeT>
 __inline__ __device__ void post_slicing_update_attributes(
@@ -266,8 +264,7 @@ __global__ static void slice_patches(Context        context,
 
             for (uint16_t e = start; e < end; ++e) {
                 uint16_t edge = s_vv[e];
-                uint16_t v0   = pi.ev[2 * edge].id;
-                uint16_t v1   = pi.ev[2 * edge + 1].id;
+                auto [v0, v1] = pi.get_edge_vertices(edge);
                 assert(v0 != INVALID16 && v1 != INVALID16);
                 assert(v0 == v || v1 == v);
                 s_vv[e] = (v0 == v) * v1 + (v1 == v) * v0;
@@ -642,7 +639,7 @@ class RXMeshDynamic : public RXMeshStatic
     explicit RXMeshDynamic(const std::string file_path,
                            const std::string patcher_file             = "",
                            const uint32_t    patch_size               = 256,
-                           const float       capacity_factor          = 1.8,
+                           const float       capacity_factor          = 3.5,
                            const float       patch_alloc_factor       = 5.0,
                            const float       lp_hashtable_load_factor = 0.5)
         : RXMeshStatic(file_path,
@@ -661,7 +658,7 @@ class RXMeshDynamic : public RXMeshStatic
     explicit RXMeshDynamic(std::vector<std::vector<uint32_t>>& fv,
                            const std::string patcher_file             = "",
                            const uint32_t    patch_size               = 256,
-                           const float       capacity_factor          = 1.8,
+                           const float       capacity_factor          = 3.5,
                            const float       patch_alloc_factor       = 5.0,
                            const float       lp_hashtable_load_factor = 0.5)
         : RXMeshStatic(fv,
@@ -764,6 +761,12 @@ class RXMeshDynamic : public RXMeshStatic
         std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem =
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const
     {
+        // TODO this has to be customized for different GPU arch
+        int max_shmem_bytes = 64 * 1024;
+        CUDA_ERROR(
+            cudaFuncSetAttribute(kernel,
+                                 cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                 max_shmem_bytes));
 
         launch_box.blocks = this->m_num_patches;
 
@@ -784,13 +787,13 @@ class RXMeshDynamic : public RXMeshStatic
 
         if (is_dyn) {
 
-            // connecivity (FE and EV) shared memory
+            // connectivity (FE and EV) shared memory
             size_t connectivity_shmem = 0;
             connectivity_shmem += 3 * face_cap * sizeof(uint16_t) +
                                   2 * edge_cap * sizeof(uint16_t) +
                                   2 * ShmemAllocator::default_alignment;
 
-            // cavity ID (which overlapped with hashtable shared memory)
+            // cavity ID (which overlapped with the inverted hashtable)
             size_t cavity_id_shmem = 0;
             cavity_id_shmem += std::max(
                 vertex_cap * sizeof(uint16_t),
@@ -802,11 +805,6 @@ class RXMeshDynamic : public RXMeshStatic
                 face_cap * sizeof(uint16_t),
                 max_lp_hashtable_capacity<LocalFaceT>() * sizeof(LPPair));
             cavity_id_shmem += 3 * ShmemAllocator::default_alignment;
-
-            // cavity boundary edges
-            size_t cavity_bdr_shmem = 0;
-            cavity_bdr_shmem +=
-                edge_cap * sizeof(uint16_t) + ShmemAllocator::default_alignment;
 
             // store cavity size (assume number of cavities is half the patch
             // size)
@@ -820,14 +818,23 @@ class RXMeshDynamic : public RXMeshStatic
             size_t cavity_creator_shmem = half_face_cap * sizeof(uint16_t) +
                                           ShmemAllocator::default_alignment;
 
-            // size_t q_lp_shmem =
-            //     std::max(max_lp_hashtable_capacity<LocalVertexT>(),
-            //              max_lp_hashtable_capacity<LocalEdgeT>());
-            //
-            // q_lp_shmem =
-            //     std::max(q_lp_shmem,
-            //              size_t(max_lp_hashtable_capacity<LocalFaceT>())) *
-            //     sizeof(LPPair);
+            // cavity boundary edges (overlaps with cavity graph)
+            size_t cavity_bdr_shmem = 0;
+            cavity_bdr_shmem +=
+                std::max(edge_cap,
+                         uint16_t(MAX_OVERLAP_CAVITIES * half_face_cap)) *
+                    sizeof(uint16_t) +
+                ShmemAllocator::default_alignment;
+
+            // q hash table
+            size_t q_table_shmem = 0;
+            //q_table_shmem +=
+            //    max_lp_hashtable_capacity<LocalVertexT>() * sizeof(LPPair);
+            //q_table_shmem +=
+            //    max_lp_hashtable_capacity<LocalEdgeT>() * sizeof(LPPair);
+            //q_table_shmem +=
+            //    max_lp_hashtable_capacity<LocalFaceT>() * sizeof(LPPair);
+            //q_table_shmem += 3 * ShmemAllocator::default_alignment;
 
             // active, owned, migrate(for vertices only), src bitmask (for
             // vertices and edges only), src connect (for vertices and edges
@@ -844,24 +851,14 @@ class RXMeshDynamic : public RXMeshStatic
             // active cavity bitmask
             bitmasks_shmem += detail::mask_num_bytes(face_cap);
 
-
-            // correspondence buffer
-            static_assert(LPPair::PatchStashNumBits <= 8);
-
-            const size_t cv = (sizeof(uint16_t) + sizeof(uint8_t)) * vertex_cap;
-            const size_t ce = (sizeof(uint16_t) + sizeof(uint8_t)) * edge_cap;
-            const size_t cf = (sizeof(uint16_t) + sizeof(uint8_t)) * face_cap;
-            const size_t correspond_shmem =
-                ce + std::max(cv, cf) + 4 * ShmemAllocator::default_alignment;
-
             // shared memory is the max of 1. static query shared memory + the
             // cavity ID shared memory (since we need to mark seed elements) 2.
             // dynamic rxmesh shared memory which includes cavity ID shared
             // memory and other things
             launch_box.smem_bytes_dyn = std::max(
                 connectivity_shmem + cavity_id_shmem + cavity_bdr_shmem +
-                    cavity_size_shmem + bitmasks_shmem + correspond_shmem +
-                    cavity_creator_shmem,
+                    cavity_size_shmem + bitmasks_shmem + cavity_creator_shmem +
+                    q_table_shmem,
                 static_shmem + cavity_id_shmem + cavity_creator_shmem);
         } else {
             launch_box.smem_bytes_dyn = static_shmem;

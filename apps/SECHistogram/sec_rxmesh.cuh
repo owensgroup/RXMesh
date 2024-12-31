@@ -100,11 +100,11 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
         rx.reset_scheduler();
         while (!rx.is_queue_empty() &&
                rx.get_num_vertices(true) > final_num_vertices) {
-            RXMESH_INFO(" Queue size = {}, reduce_threshold = {}, #V= {}",
-                        rx.get_context().m_patch_scheduler.size(),
-                        reduce_threshold,
-                        rx.get_num_vertices(true));
-
+            //RXMESH_INFO(" Queue size = {}, reduce_threshold = {}, #V= {}",
+            //            rx.get_context().m_patch_scheduler.size(),
+            //            reduce_threshold,
+            //            rx.get_num_vertices(true));
+            //
             rx.update_launch_box(
                 {Op::EV},
                 launch_box,

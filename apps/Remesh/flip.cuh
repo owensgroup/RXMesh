@@ -387,7 +387,7 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
 
     using namespace rxmesh;
 
-    constexpr uint32_t blockThreads = 512;
+    constexpr uint32_t blockThreads = 256;
 
     edge_status->reset(UNSEEN, DEVICE);
 

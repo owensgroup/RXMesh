@@ -89,12 +89,13 @@ edge_collapse(rxmesh::Context                   context,
                                const VertexIterator& iter) {
         // iter[0] and iter[2] are the edge two vertices
         // iter[1] and iter[3] are the two opposite vertices
-        //    0a
-        //  /  | \
-        // c3  |  1d
-        //  \  |  /
-        //    2b
-
+        /*
+            0a
+          /  | \
+         c3  |  1d
+          \  |  /
+            2b
+        */
         const VertexHandle ah = iter[0];
         const VertexHandle bh = iter[2];
         const VertexHandle ch = iter[1];

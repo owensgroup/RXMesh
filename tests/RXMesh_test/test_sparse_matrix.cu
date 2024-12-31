@@ -429,8 +429,8 @@ TEST(RXMeshStatic, SparseMatrixToEigen)
     eigen_solver.compute(A_eigen);
     X_eigen = eigen_solver.solve(B_eigen);
 
-    for (uint32_t i = 0; i < X_copy.rows(); ++i) {
-        for (uint32_t j = 0; j < X_copy.cols(); ++j) {
+    for (int i = 0; i < X_copy.rows(); ++i) {
+        for (int j = 0; j < X_copy.cols(); ++j) {
             EXPECT_NEAR(X_eigen(i, j), X_copy(i, j), 0.0000001);
         }
     }

@@ -152,7 +152,7 @@ constexpr __device__ __host__ __forceinline__ bool is_owned(
     return is_set_bit(local_id, owned_bitmask);
 }
 
-template <uint16_t NumBits, typename T>
+template <int NumBits, typename T>
 constexpr __device__ __host__ __forceinline__ T extract_low_bits(const T input)
 {
     static_assert(std::is_same_v<T, uint16_t> || std::is_same_v<T, uint32_t>);
@@ -160,7 +160,7 @@ constexpr __device__ __host__ __forceinline__ T extract_low_bits(const T input)
     return input & ((1 << NumBits) - 1);
 }
 
-template <uint16_t NumBits, typename T>
+template <int NumBits, typename T>
 constexpr __device__ __host__ __forceinline__ T extract_high_bits(const T input)
 {
     static_assert(std::is_same_v<T, uint16_t> || std::is_same_v<T, uint32_t>);

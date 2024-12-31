@@ -53,7 +53,7 @@ TEST(Apps, SurfaceTracking)
 
     float spacing = 6.f / float(Arg.n);
 
-    create_plane(verts, fv, Arg.n, Arg.n, spacing, lower_corner);
+    create_plane(verts, fv, Arg.n, Arg.n, 1, spacing, lower_corner);
 
     RXMeshDynamic rx(fv);
 

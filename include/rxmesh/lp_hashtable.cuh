@@ -62,11 +62,11 @@ struct LPHashTable
           m_is_on_device(false)
     {
     }
-    LPHashTable(const LPHashTable& other) = default;
-    LPHashTable(LPHashTable&&)            = default;
+    LPHashTable(const LPHashTable& other)      = default;
+    LPHashTable(LPHashTable&&)                 = default;
     LPHashTable& operator=(const LPHashTable&) = default;
-    LPHashTable& operator=(LPHashTable&&) = default;
-    ~LPHashTable()                        = default;
+    LPHashTable& operator=(LPHashTable&&)      = default;
+    ~LPHashTable()                             = default;
 
     /**
      * @brief Constructor using the hash table capacity.This is used as
@@ -125,8 +125,11 @@ struct LPHashTable
     {
         if (m_is_on_device) {
             CUDA_ERROR(cudaMemset(m_table, INVALID8, num_bytes()));
+            CUDA_ERROR(
+                cudaMemset(m_stash, INVALID8, stash_size * sizeof(LPPair)));
         } else {
-            std::memset(m_table, INVALID8, num_bytes());
+            std::fill_n(m_table, m_capacity, LPPair());
+            std::fill_n(m_stash, stash_size, LPPair());
         }
     }
 
@@ -187,7 +190,7 @@ struct LPHashTable
      * @brief compute current load factor
      */
     __host__ __device__ __inline__ float compute_load_factor(
-        LPPair* s_table = nullptr)const 
+        LPPair* s_table = nullptr) const
     {
         auto lf = [&]() {
             uint32_t m = 0;
@@ -212,7 +215,7 @@ struct LPHashTable
      * @brief compute current load factor for the stash
      */
     __host__ __device__ __inline__ float compute_stash_load_factor(
-        LPPair* s_stash = nullptr)const 
+        LPPair* s_stash = nullptr) const
     {
         auto lf = [&]() {
             uint32_t m = 0;
@@ -316,8 +319,8 @@ struct LPHashTable
      * @return true if the insertion succeeded and false otherwise
      */
     __host__ __device__ __inline__ bool insert(LPPair           pair,
-                                               volatile LPPair* table,
-                                               volatile LPPair* stash)
+                                               volatile LPPair* table = nullptr,
+                                               volatile LPPair* stash = nullptr)
     {
 #ifndef __CUDA_ARCH__
         // on the host, these two should be nullprt since there is no shared
@@ -413,9 +416,10 @@ struct LPHashTable
      * device)
      * @return a LPPair pair that contains the key and its associated value
      */
-    __host__ __device__ __inline__ LPPair find(const typename LPPair::KeyT key,
-                                               const LPPair* table,
-                                               const LPPair* stash) const
+    __host__ __device__ __inline__ LPPair find(
+        const typename LPPair::KeyT key,
+        const LPPair*               table = nullptr,
+        const LPPair*               stash = nullptr) const
     {
         uint32_t bucket_id(0);
         bool     in_stash(false);
@@ -508,11 +512,12 @@ struct LPHashTable
      * device) Otherwise, it should be null
      * @return a LPPair pair that contains the key and its associated value
      */
-    __host__ __device__ __inline__ LPPair find(const typename LPPair::KeyT key,
-                                               uint32_t&     bucket_id,
-                                               bool&         in_stash,
-                                               const LPPair* table,
-                                               const LPPair* stash) const
+    __host__ __device__ __inline__ LPPair find(
+        const typename LPPair::KeyT key,
+        uint32_t&                   bucket_id,
+        bool&                       in_stash,
+        const LPPair*               table = nullptr,
+        const LPPair*               stash = nullptr) const
     {
 
 #ifndef __CUDA_ARCH__
