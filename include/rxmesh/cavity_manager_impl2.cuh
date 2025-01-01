@@ -342,6 +342,13 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
     // cavity graph
     m_s_cavity_graph = m_s_boudary_edges_cavity_id;
 
+    // temp inv lp buffer
+    m_temp_inv_lp_capacity = sz;
+    m_s_temp_inv_lp = reinterpret_cast<LPPair*>(m_s_boudary_edges_cavity_id);
+
+    __shared__ int inv_lp_sz;
+    m_s_temp_inv_lp_size = &inv_lp_sz;
+
     // bitmask used for maximal independent set calculation
     assert(get_num_cavities() <= m_s_in_cavity_f.size());
     m_s_active_cavity_mis =
@@ -2894,6 +2901,8 @@ CavityManager2<blockThreads, cop>::soft_migrate_from_patch(
 
     if (any_q) {
 
+        m_s_temp_inv_lp_size[0] = 0;
+
         PatchInfo q_patch_info = m_context.m_patches_info[q];
 
         const uint16_t q_num_vertices = q_patch_info.num_vertices[0];
@@ -2930,22 +2939,11 @@ CavityManager2<blockThreads, cop>::soft_migrate_from_patch(
 
         // make sure there is a copy in p for any vertex in
         // m_s_src_connect_mask_v
-        const uint16_t q_num_vertices_up =
-            ROUND_UP_TO_NEXT_MULTIPLE(q_num_vertices, blockThreads);
-
-        // we need to make sure that no other thread is query the
-        // vertex hashtable before adding items to it. So, we need
-        // to sync the whole block before adding a new vertex but
-        // some threads may not be participant in this for-loop.
-        // So, we round up the end of the loop to be multiple of the
-        // blockthreads and check inside the loop so we don't access
-        // non-existing vertices
-        for (int v = threadIdx.x; v < int(q_num_vertices_up);
-             v += blockThreads) {
+        for (int v = threadIdx.x; v < int(q_num_vertices); v += blockThreads) {
             if (m_s_should_slice[0]) {
                 return false;
             }
-            LPPair lp = migrate_vertex(
+            migrate_vertex(
                 q,
                 q_stash_id,
                 q_num_vertices,
@@ -2956,21 +2954,13 @@ CavityManager2<blockThreads, cop>::soft_migrate_from_patch(
                     return m_s_src_connect_mask_v(vertex);
                 },
                 true);
-            // we need to make sure that no other
-            // thread is querying the hashtable while we
-            // insert in it
-            block.sync();
-            if (m_s_should_slice[0]) {
-                return false;
-            }
-            if (!lp.is_sentinel()) {
-                bool inserted = m_inv_lp_v.insert(m_patch_info.lp_v, lp);
-                if (!inserted) {
-                    m_s_should_slice[0] = true;
-                }
-            }
-            block.sync();
         }
+
+        block.sync();
+        insert_inv_lp(m_patch_info.lp_v, m_inv_lp_v);
+        block.sync();
+
+
         if (m_s_should_slice[0]) {
             return false;
         }
@@ -3095,51 +3085,32 @@ CavityManager2<blockThreads, cop>::migrate_from_patch(
                 }
             }
         }
+
+        m_s_temp_inv_lp_size[0] = 0;
         block.sync();
 
 
         // 3. make sure there is a copy in p for any vertex in
         // m_s_src_connect_mask_v
-        const uint16_t q_num_vertices_up =
-            ROUND_UP_TO_NEXT_MULTIPLE(q_num_vertices, blockThreads);
 
-        // we need to make sure that no other thread is query the
-        // vertex hashtable before adding items to it. So, we need
-        // to sync the whole block before adding a new vertex but
-        // some threads may not be participant in this for-loop.
-        // So, we round up the end of the loop to be multiple of the
-        // blockthreads and check inside the loop so we don't access
-        // non-existing vertices
-        for (int v = threadIdx.x; v < int(q_num_vertices_up);
-             v += blockThreads) {
+        for (int v = threadIdx.x; v < int(q_num_vertices); v += blockThreads) {
             if (m_s_should_slice[0]) {
                 return false;
             }
-            LPPair lp = migrate_vertex(
-                q,
-                q_stash_id,
-                q_num_vertices,
-                v,
-                q_patch_info,
-                [&](const uint16_t vertex) {
-                    assert(vertex < m_s_src_connect_mask_v.size());
-                    return m_s_src_connect_mask_v(vertex);
-                });
-            // we need to make sure that no other
-            // thread is querying the hashtable while we
-            // insert in it
-            block.sync();
-            if (m_s_should_slice[0]) {
-                return false;
-            }
-            if (!lp.is_sentinel()) {
-                bool inserted = m_inv_lp_v.insert(m_patch_info.lp_v, lp);
-                if (!inserted) {
-                    m_s_should_slice[0] = true;
-                }
-            }
-            block.sync();
+            migrate_vertex(q,
+                           q_stash_id,
+                           q_num_vertices,
+                           v,
+                           q_patch_info,
+                           [&](const uint16_t vertex) {
+                               assert(vertex < m_s_src_connect_mask_v.size());
+                               return m_s_src_connect_mask_v(vertex);
+                           });
         }
+
+        block.sync();
+        insert_inv_lp(m_patch_info.lp_v, m_inv_lp_v);
+        block.sync();
 
         if (m_s_should_slice[0]) {
             return false;
@@ -3148,19 +3119,17 @@ CavityManager2<blockThreads, cop>::migrate_from_patch(
         if (!lock_new_added_patches(block)) {
             return false;
         }
+
+        m_s_temp_inv_lp_size[0] = 0;
         block.sync();
 
 
-        // same story as with the loop that adds vertices
-        const uint16_t q_num_edges_up =
-            ROUND_UP_TO_NEXT_MULTIPLE(q_num_edges, blockThreads);
-
         // 4. move edges since we now have a copy of the vertices in p
-        for (int e = threadIdx.x; e < int(q_num_edges_up); e += blockThreads) {
+        for (int e = threadIdx.x; e < int(q_num_edges); e += blockThreads) {
             if (m_s_should_slice[0]) {
                 return false;
             }
-            LPPair lp = migrate_edge(
+            migrate_edge(
                 q,
                 q_stash_id,
                 q_num_edges,
@@ -3183,26 +3152,19 @@ CavityManager2<blockThreads, cop>::migrate_from_patch(
                     }
                     return false;
                 });
-
-            block.sync();
-            if (m_s_should_slice[0]) {
-                return false;
-            }
-            if (!lp.is_sentinel()) {
-                bool inserted = m_inv_lp_e.insert(m_patch_info.lp_e, lp);
-                if (!inserted) {
-                    m_s_should_slice[0] = true;
-                }
-            }
-            block.sync();
-        }
-        if (m_s_should_slice[0]) {
-            return false;
         }
 
-        if (!lock_new_added_patches(block)) {
-            return false;
-        }
+        block.sync();
+        // insert_inv_lp(m_patch_info.lp_e, m_inv_lp_e);
+        // block.sync();
+        //
+        // if (m_s_should_slice[0]) {
+        //     return false;
+        // }
+        //
+        // if (!lock_new_added_patches(block)) {
+        //     return false;
+        // }
 
 
         // 5. in m_s_src_connect_mask_e, mark the edges connected to
@@ -3252,38 +3214,34 @@ CavityManager2<blockThreads, cop>::migrate_from_patch(
                 }
             }
         }
+
+        // m_s_temp_inv_lp_size[0] = 0;
         block.sync();
 
         // make sure that there is a copy of edge in
         // m_s_src_connect_mask_e in q
-        for (int e = threadIdx.x; e < int(q_num_edges_up); e += blockThreads) {
+        for (int e = threadIdx.x; e < int(q_num_edges); e += blockThreads) {
             if (m_s_should_slice[0]) {
                 return false;
             }
-            LPPair lp =
-                migrate_edge(q,
-                             q_stash_id,
-                             q_num_edges,
-                             e,
-                             q_patch_info,
-                             [&](const uint16_t edge,
-                                 const uint16_t v0q,
-                                 const uint16_t v1q) {
-                                 assert(edge < m_s_src_connect_mask_e.size());
-                                 return m_s_src_connect_mask_e(edge);
-                             });
-            block.sync();
-            if (m_s_should_slice[0]) {
-                return false;
-            }
-            if (!lp.is_sentinel()) {
-                bool inserted = m_inv_lp_e.insert(m_patch_info.lp_e, lp);
-                if (!inserted) {
-                    m_s_should_slice[0] = true;
-                }
-            }
-            block.sync();
+
+            migrate_edge(q,
+                         q_stash_id,
+                         q_num_edges,
+                         e,
+                         q_patch_info,
+                         [&](const uint16_t edge,
+                             const uint16_t v0q,
+                             const uint16_t v1q) {
+                             assert(edge < m_s_src_connect_mask_e.size());
+                             return m_s_src_connect_mask_e(edge);
+                         });
         }
+
+        block.sync();
+        insert_inv_lp(m_patch_info.lp_e, m_inv_lp_e);
+        block.sync();
+
         if (m_s_should_slice[0]) {
             return false;
         }
@@ -3291,46 +3249,39 @@ CavityManager2<blockThreads, cop>::migrate_from_patch(
         if (!lock_new_added_patches(block)) {
             return false;
         }
+
+        m_s_temp_inv_lp_size[0] = 0;
         block.sync();
 
-        // same story as with the loop that adds vertices
-        const uint16_t q_num_faces_up =
-            ROUND_UP_TO_NEXT_MULTIPLE(q_num_faces, blockThreads);
 
         // 6.  move face since we now have a copy of the edges in p
-        for (int f = threadIdx.x; f < int(q_num_faces_up); f += blockThreads) {
+        for (int f = threadIdx.x; f < int(q_num_faces); f += blockThreads) {
             if (m_s_should_slice[0]) {
                 return false;
             }
-            LPPair lp = migrate_face(q,
-                                     q_stash_id,
-                                     q_num_faces,
-                                     f,
-                                     q_patch_info,
-                                     [&](const uint16_t face,
-                                         const uint16_t e0q,
-                                         const uint16_t e1q,
-                                         const uint16_t e2q) {
-                                         assert(e0q < m_s_src_mask_e.size());
-                                         assert(e1q < m_s_src_mask_e.size());
-                                         assert(e2q < m_s_src_mask_e.size());
+            migrate_face(q,
+                         q_stash_id,
+                         q_num_faces,
+                         f,
+                         q_patch_info,
+                         [&](const uint16_t face,
+                             const uint16_t e0q,
+                             const uint16_t e1q,
+                             const uint16_t e2q) {
+                             assert(e0q < m_s_src_mask_e.size());
+                             assert(e1q < m_s_src_mask_e.size());
+                             assert(e2q < m_s_src_mask_e.size());
 
-                                         return m_s_src_mask_e(e0q) ||
-                                                m_s_src_mask_e(e1q) ||
-                                                m_s_src_mask_e(e2q);
-                                     });
-            block.sync();
-            if (m_s_should_slice[0]) {
-                return false;
-            }
-            if (!lp.is_sentinel()) {
-                bool inserted = m_inv_lp_f.insert(m_patch_info.lp_f, lp);
-                if (!inserted) {
-                    m_s_should_slice[0] = true;
-                }
-            }
-            block.sync();
+                             return m_s_src_mask_e(e0q) ||
+                                    m_s_src_mask_e(e1q) || m_s_src_mask_e(e2q);
+                         });
         }
+
+        block.sync();
+        insert_inv_lp(m_patch_info.lp_f, m_inv_lp_f);
+        block.sync();
+
+
         if (m_s_should_slice[0]) {
             return false;
         }
@@ -3344,9 +3295,25 @@ CavityManager2<blockThreads, cop>::migrate_from_patch(
     return true;
 }
 
+
+template <uint32_t blockThreads, CavityOp cop>
+__device__ __forceinline__ void
+CavityManager2<blockThreads, cop>::insert_inv_lp(const LPHashTable&  table,
+                                                 InverseLPHashTable& inv_lp)
+{
+    int sz = m_s_temp_inv_lp_size[0];
+    for (int v = threadIdx.x; v < int(sz); v += blockThreads) {
+        assert(!m_s_temp_inv_lp[v].is_sentinel());
+        bool inserted = inv_lp.insert(table, m_s_temp_inv_lp[v]);
+        if (!inserted) {
+            m_s_should_slice[0] = true;
+        }
+    }
+}
+
 template <uint32_t blockThreads, CavityOp cop>
 template <typename FuncT>
-__device__ __forceinline__ LPPair
+__device__ __forceinline__ void
 CavityManager2<blockThreads, cop>::migrate_vertex(
     const uint32_t q,
     const uint8_t  q_stash_id,
@@ -3356,9 +3323,8 @@ CavityManager2<blockThreads, cop>::migrate_vertex(
     FuncT          should_migrate,
     bool           add_to_connect_cavity_bdry_v)
 {
-    LPPair ret;
-    if (q_vertex < q_num_vertices &&
-        !q_patch_info.is_deleted(LocalVertexT(q_vertex))) {
+
+    if (!q_patch_info.is_deleted(LocalVertexT(q_vertex))) {
 
         if (should_migrate(q_vertex)) {
             uint16_t vq      = q_vertex;
@@ -3379,7 +3345,7 @@ CavityManager2<blockThreads, cop>::migrate_vertex(
                                  false);
                 if (vp == INVALID16) {
                     m_s_should_slice[0] = true;
-                    return ret;
+                    return;
                 }
 
                 assert(vq < m_context.m_patches_info[o].num_vertices[0]);
@@ -3400,7 +3366,12 @@ CavityManager2<blockThreads, cop>::migrate_vertex(
 
                 assert(o_stash != INVALID8);
                 assert(o_stash < PatchStash::stash_size);
-                ret = LPPair(vp, vq, o_stash);
+                LPPair ret = LPPair(vp, vq, o_stash);
+
+
+                int id = ::atomicAdd(m_s_temp_inv_lp_size, 1);
+                assert(id < m_temp_inv_lp_capacity);
+                m_s_temp_inv_lp[id] = ret;
             }
             if (add_to_connect_cavity_bdry_v) {
                 assert(vp < m_s_connect_cavity_bdry_v.size());
@@ -3408,20 +3379,18 @@ CavityManager2<blockThreads, cop>::migrate_vertex(
             }
         }
     }
-    return ret;
 }
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename FuncT>
-__device__ __forceinline__ LPPair
-CavityManager2<blockThreads, cop>::migrate_edge(const uint32_t q,
-                                                const uint8_t  q_stash_id,
-                                                const uint16_t q_num_edges,
-                                                const uint16_t q_edge,
-                                                PatchInfo&     q_patch_info,
-                                                FuncT          should_migrate)
+__device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_edge(
+    const uint32_t q,
+    const uint8_t  q_stash_id,
+    const uint16_t q_num_edges,
+    const uint16_t q_edge,
+    PatchInfo&     q_patch_info,
+    FuncT          should_migrate)
 {
-    LPPair ret;
 
     if (q_edge < q_num_edges && !q_patch_info.is_deleted(LocalEdgeT(q_edge))) {
 
@@ -3452,7 +3421,7 @@ CavityManager2<blockThreads, cop>::migrate_edge(const uint32_t q,
                                  false);
                 if (ep == INVALID16) {
                     m_s_should_slice[0] = true;
-                    return ret;
+                    return;
                 }
                 assert(ep < m_patch_info.edges_capacity[0]);
 
@@ -3498,26 +3467,26 @@ CavityManager2<blockThreads, cop>::migrate_edge(const uint32_t q,
                 assert(o_stash < PatchStash::stash_size);
                 assert(o_stash != INVALID8);
 
-                ret = LPPair(ep, eq, o_stash);
+                LPPair ret = LPPair(ep, eq, o_stash);
+
+                int id = ::atomicAdd(m_s_temp_inv_lp_size, 1);
+                assert(id < m_temp_inv_lp_capacity);
+                m_s_temp_inv_lp[id] = ret;
             }
         }
     }
-
-
-    return ret;
 }
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename FuncT>
-__device__ __forceinline__ LPPair
-CavityManager2<blockThreads, cop>::migrate_face(const uint32_t q,
-                                                const uint8_t  q_stash_id,
-                                                const uint16_t q_num_faces,
-                                                const uint16_t q_face,
-                                                PatchInfo&     q_patch_info,
-                                                FuncT          should_migrate)
+__device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_face(
+    const uint32_t q,
+    const uint8_t  q_stash_id,
+    const uint16_t q_num_faces,
+    const uint16_t q_face,
+    PatchInfo&     q_patch_info,
+    FuncT          should_migrate)
 {
-    LPPair ret;
 
     if (q_face < q_num_faces && !q_patch_info.is_deleted(LocalFaceT(q_face))) {
 
@@ -3549,7 +3518,7 @@ CavityManager2<blockThreads, cop>::migrate_face(const uint32_t q,
 
                 if (fp == INVALID16) {
                     m_s_should_slice[0] = true;
-                    return ret;
+                    return;
                 }
                 assert(fp < m_patch_info.faces_capacity[0]);
 
@@ -3597,12 +3566,14 @@ CavityManager2<blockThreads, cop>::migrate_face(const uint32_t q,
                 assert(o_stash != INVALID8);
                 assert(o_stash < PatchStash::stash_size);
 
-                ret = LPPair(fp, fq, o_stash);
+                LPPair ret = LPPair(fp, fq, o_stash);
+
+                int id = ::atomicAdd(m_s_temp_inv_lp_size, 1);
+                assert(id < m_temp_inv_lp_capacity);
+                m_s_temp_inv_lp[id] = ret;
             }
         }
     }
-
-    return ret;
 }
 
 
@@ -4112,11 +4083,11 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::epilogue(
             m_patch_info.num_vertices[0] = m_s_num_vertices[0];
             m_patch_info.num_edges[0]    = m_s_num_edges[0];
             m_patch_info.num_faces[0]    = m_s_num_faces[0];
-        }
 
-        ::atomicMax(m_context.m_max_num_vertices, m_s_num_vertices[0]);
-        ::atomicMax(m_context.m_max_num_edges, m_s_num_edges[0]);
-        ::atomicMax(m_context.m_max_num_faces, m_s_num_faces[0]);
+            ::atomicMax(m_context.m_max_num_vertices, m_s_num_vertices[0]);
+            ::atomicMax(m_context.m_max_num_edges, m_s_num_edges[0]);
+            ::atomicMax(m_context.m_max_num_faces, m_s_num_faces[0]);
+        }
 
         // store connectivity
         detail::store<blockThreads>(

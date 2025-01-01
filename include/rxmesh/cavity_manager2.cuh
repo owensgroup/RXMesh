@@ -574,14 +574,14 @@ struct CavityManager2
      * of q_vertex in this patch. If it does not exist, create such a copy.
      */
     template <typename FuncT>
-    __device__ __forceinline__ LPPair
-    migrate_vertex(const uint32_t q,
-                   const uint8_t  q_stash_id,
-                   const uint16_t q_num_vertices,
-                   const uint16_t q_vertex,
-                   PatchInfo&     q_patch_info,
-                   FuncT          should_migrate,
-                   bool           add_to_connect_cavity_bdry_v = false);
+    __device__ __forceinline__ void migrate_vertex(
+        const uint32_t q,
+        const uint8_t  q_stash_id,
+        const uint16_t q_num_vertices,
+        const uint16_t q_vertex,
+        PatchInfo&     q_patch_info,
+        FuncT          should_migrate,
+        bool           add_to_connect_cavity_bdry_v = false);
 
 
     /**
@@ -589,12 +589,12 @@ struct CavityManager2
      * of q_edge in this patch. If it does not exist, create such a copy.
      */
     template <typename FuncT>
-    __device__ __forceinline__ LPPair migrate_edge(const uint32_t q,
-                                                   const uint8_t  q_stash_id,
-                                                   const uint16_t q_num_edges,
-                                                   const uint16_t q_edge,
-                                                   PatchInfo&     q_patch_info,
-                                                   FuncT should_migrate);
+    __device__ __forceinline__ void migrate_edge(const uint32_t q,
+                                                 const uint8_t  q_stash_id,
+                                                 const uint16_t q_num_edges,
+                                                 const uint16_t q_edge,
+                                                 PatchInfo&     q_patch_info,
+                                                 FuncT          should_migrate);
 
 
     /**
@@ -602,12 +602,12 @@ struct CavityManager2
      * of q_face in this patch. If it does not exist, create such a copy.
      */
     template <typename FuncT>
-    __device__ __forceinline__ LPPair migrate_face(const uint32_t q,
-                                                   const uint8_t  q_stash_id,
-                                                   const uint16_t q_num_faces,
-                                                   const uint16_t q_face,
-                                                   PatchInfo&     q_patch_info,
-                                                   FuncT should_migrate);
+    __device__ __forceinline__ void migrate_face(const uint32_t q,
+                                                 const uint8_t  q_stash_id,
+                                                 const uint16_t q_num_faces,
+                                                 const uint16_t q_face,
+                                                 PatchInfo&     q_patch_info,
+                                                 FuncT          should_migrate);
 
     /**
      * @brief Add a new patch to the patch stash and return the stash id
@@ -917,6 +917,9 @@ struct CavityManager2
         cooperative_groups::thread_block& block) const;
 
 
+    __device__ __forceinline__ void insert_inv_lp(const LPHashTable&  table,
+                                                  InverseLPHashTable& inv_lp);
+
     // indicate if this block can write its updates to global memory during
     // epilogue
     bool m_write_to_gmem;
@@ -1074,6 +1077,16 @@ struct CavityManager2
 
     // indicate if a cavity is in the maximal independent set
     Bitmask m_s_cavity_mis;
+
+    // during migration, we need to both access the inverse hash table and
+    // insert in it. Thus, we separate the operations such that we access the
+    // hash table and for the LPPair we need to insert, we add them to this temp
+    // buffer (that overlaps with m_s_boudary_edges_cavity_id). Then, after
+    // finishing accessing the hashtable, we insert in it what we stored in this
+    // temp buffer.
+    int*    m_s_temp_inv_lp_size;
+    int     m_temp_inv_lp_capacity;
+    LPPair* m_s_temp_inv_lp;
 };
 
 }  // namespace rxmesh
