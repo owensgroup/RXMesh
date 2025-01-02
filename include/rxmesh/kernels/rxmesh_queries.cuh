@@ -13,6 +13,70 @@
 namespace rxmesh {
 namespace detail {
 
+template <uint32_t rowOffset, uint32_t blockThreads>
+__device__ __forceinline__ void block_mat_transpose(
+    const uint32_t  num_rows,
+    const uint32_t  num_cols,
+    uint16_t*       mat,
+    uint16_t*       output,
+    uint16_t*       temp_size,   // size = num_cols +1
+    uint16_t*       temp_local,  // size = num_cols
+    const uint32_t* row_active_mask,
+    int             shift)
+{
+    const uint32_t nnz = num_rows * rowOffset;
+
+    const uint32_t half_nnz = DIVIDE_UP(nnz, 2);
+
+    const uint32_t* mat_32 = reinterpret_cast<const uint32_t*>(mat);
+
+    fill_n<blockThreads>(temp_size, num_cols + 1, uint16_t(0));
+    fill_n<blockThreads>(temp_local, num_cols, uint16_t(0));
+    __syncthreads();
+
+    for (int i = threadIdx.x; i < half_nnz; i += blockThreads) {
+        const uint32_t c  = mat_32[i];
+        const uint16_t c0 = detail::extract_low_bits<16>(c);
+        const uint16_t c1 = detail::extract_high_bits<16>(c);
+
+        assert(c0 < num_cols);
+
+        atomicAdd(temp_size + c0, 1u);
+
+        if (i * 2 + 1 < nnz) {
+            assert(c1 < num_cols);
+            atomicAdd(temp_size + c1, 1u);
+        }
+    }
+    __syncthreads();
+
+    cub_block_exclusive_sum<uint16_t, blockThreads>(temp_size, num_cols);
+
+
+    for (int i = threadIdx.x; i < nnz; i += blockThreads) {
+        const uint16_t col_id = mat[i];
+
+        assert(col_id < num_cols);
+
+        const uint16_t local_id = atomicAdd(temp_local + col_id, 1u);
+
+        const uint16_t prefix = temp_size[col_id];
+
+        assert(local_id < temp_size[col_id + 1] - temp_size[col_id]);
+
+        const uint16_t row_id = uint16_t(i) / rowOffset;
+
+        output[local_id + prefix] = row_id;
+    }
+
+    __syncthreads();
+
+    for (int i = threadIdx.x; i < num_cols + 1; i += blockThreads) {
+        mat[i] = temp_size[i];
+    }
+}
+
+
 template <uint32_t rowOffset,
           uint32_t blockThreads,
           int      itemPerThread = TRANSPOSE_ITEM_PER_THREAD>
