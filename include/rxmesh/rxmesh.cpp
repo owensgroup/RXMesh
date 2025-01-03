@@ -952,7 +952,7 @@ void RXMesh::build_device()
         BYTES_TO_MEGABYTES(get_max_num_patches() * sizeof(PatchInfo));
 
 
-    // #pragma omp parallel for
+#pragma omp parallel for
     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
 
         const uint16_t p_num_vertices =
@@ -1357,7 +1357,7 @@ void RXMesh::allocate_extra_patches()
     const uint16_t p_edges_capacity    = get_per_patch_max_edge_capacity();
     const uint16_t p_faces_capacity    = get_per_patch_max_face_capacity();
 
-    // #pragma omp parallel for
+#pragma omp parallel for
     for (int p = get_num_patches(); p < static_cast<int>(get_max_num_patches());
          ++p) {
 

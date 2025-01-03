@@ -5,7 +5,6 @@ __device__ __forceinline__ CavityManager2<blockThreads, cop>::CavityManager2(
     cooperative_groups::thread_block& block,
     Context&                          context,
     ShmemAllocator&                   shrd_alloc,
-    int                               iteration,
     bool                              preserve_cavity,
     bool                              allow_touching_cavities,
     uint32_t                          current_p)

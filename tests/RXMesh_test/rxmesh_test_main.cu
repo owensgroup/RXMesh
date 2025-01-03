@@ -67,10 +67,10 @@ int main(int argc, char** argv)
     }
 
 
-    RXMESH_TRACE("input= {}", rxmesh_args.obj_file_name);
-    RXMESH_TRACE("output_folder= {}", rxmesh_args.output_folder);
-    RXMESH_TRACE("num_run= {}", rxmesh_args.num_run);
-    RXMESH_TRACE("device_id= {}", rxmesh_args.device_id);
+    RXMESH_INFO("input= {}", rxmesh_args.obj_file_name);
+    RXMESH_INFO("output_folder= {}", rxmesh_args.output_folder);
+    RXMESH_INFO("num_run= {}", rxmesh_args.num_run);
+    RXMESH_INFO("device_id= {}", rxmesh_args.device_id);
 
     cuda_query(rxmesh_args.device_id);
 

@@ -61,7 +61,6 @@ struct CavityManager2
     CavityManager2(cooperative_groups::thread_block& block,
                    Context&                          context,
                    ShmemAllocator&                   shrd_alloc,
-                   int                               iteration,
                    bool                              preserve_cavity,
                    bool     allow_touching_cavities = true,
                    uint32_t current_p               = 0);
