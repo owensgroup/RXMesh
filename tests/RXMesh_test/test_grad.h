@@ -143,6 +143,6 @@ TEST(DiffAttribute, SmoothingGradDescent)
 #if USE_POLYSCOPE
     v_opt_pos.move(DEVICE, HOST);
     rx.get_polyscope_mesh()->updateVertexPositions(v_opt_pos);
-    polyscope::show();
+    //polyscope::show();
 #endif
 }

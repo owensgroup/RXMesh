@@ -146,9 +146,14 @@ __global__ static void hashtable_calibration(const Context context)
         return;
     }
 
+    PatchInfo pi = context.m_patches_info[pid];
+    if (pi.patch_id == INVALID32) {
+        return;
+    }
+
     ShmemMutex patch_stash_mutex;
     patch_stash_mutex.alloc();
-    PatchInfo pi = context.m_patches_info[pid];
+
 
     hashtable_calibration<blockThreads, VertexHandle>(
         context, pi, patch_stash_mutex);
@@ -428,6 +433,10 @@ __global__ static void remove_surplus_elements(Context context)
     }
 
     PatchInfo pi = context.m_patches_info[pid];
+
+    if (pi.patch_id == INVALID32) {
+        return;
+    }
 
     context.m_patches_info[pid].child_id = INVALID32;
 
@@ -2131,6 +2140,22 @@ __global__ static void check_ribbon_faces(const Context               context,
     }
 }
 
+
+__global__ static void reset(uint32_t* v,
+                             uint32_t* e,
+                             uint32_t* f,
+                             uint32_t* max_v,
+                             uint32_t* max_e,
+                             uint32_t* max_f)
+{
+    v[0]     = 0;
+    e[0]     = 0;
+    f[0]     = 0;
+    max_v[0] = 0;
+    max_e[0] = 0;
+    max_f[0] = 0;
+}
+
 }  // namespace detail
 
 
@@ -2607,51 +2632,60 @@ bool RXMeshDynamic::validate()
 
 void RXMeshDynamic::cleanup()
 {
-    CUDA_ERROR(cudaMemcpy(&m_num_patches,
-                          m_rxmesh_context.m_num_patches,
-                          sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
+    // CUDA_ERROR(cudaMemcpy(&m_num_patches,
+    //                       m_rxmesh_context.m_num_patches,
+    //                       sizeof(uint32_t),
+    //                       cudaMemcpyDeviceToHost));
 
     constexpr uint32_t block_size = 256;
-    const uint32_t     grid_size  = get_num_patches();
+    const uint32_t     grid_size  = get_max_num_patches();
 
-    CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
-                          this->m_rxmesh_context.m_max_num_vertices,
-                          sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
+    // CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
+    //                       this->m_rxmesh_context.m_max_num_vertices,
+    //                       sizeof(uint32_t),
+    //                       cudaMemcpyDeviceToHost));
+    //
+    // CUDA_ERROR(cudaMemcpy(&this->m_max_edges_per_patch,
+    //                       this->m_rxmesh_context.m_max_num_edges,
+    //                       sizeof(uint32_t),
+    //                       cudaMemcpyDeviceToHost));
+    //
+    // CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
+    //                       this->m_rxmesh_context.m_max_num_faces,
+    //                       sizeof(uint32_t),
+    //                       cudaMemcpyDeviceToHost));
 
-    CUDA_ERROR(cudaMemcpy(&this->m_max_edges_per_patch,
-                          this->m_rxmesh_context.m_max_num_edges,
-                          sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
+    // CUDA_ERROR(
+    //     cudaMemset(m_rxmesh_context.m_num_vertices, 0, sizeof(uint32_t)));
+    // CUDA_ERROR(cudaMemset(m_rxmesh_context.m_num_edges, 0,
+    // sizeof(uint32_t))); CUDA_ERROR(cudaMemset(m_rxmesh_context.m_num_faces,
+    // 0, sizeof(uint32_t)));
+    //
+    // CUDA_ERROR(
+    //     cudaMemset(m_rxmesh_context.m_max_num_vertices, 0,
+    //     sizeof(uint32_t)));
+    // CUDA_ERROR(
+    //     cudaMemset(m_rxmesh_context.m_max_num_edges, 0, sizeof(uint32_t)));
+    // CUDA_ERROR(
+    //     cudaMemset(m_rxmesh_context.m_max_num_faces, 0, sizeof(uint32_t)));
 
-    CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
-                          this->m_rxmesh_context.m_max_num_faces,
-                          sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
-
-    CUDA_ERROR(
-        cudaMemset(m_rxmesh_context.m_num_vertices, 0, sizeof(uint32_t)));
-    CUDA_ERROR(cudaMemset(m_rxmesh_context.m_num_edges, 0, sizeof(uint32_t)));
-    CUDA_ERROR(cudaMemset(m_rxmesh_context.m_num_faces, 0, sizeof(uint32_t)));
-
-    CUDA_ERROR(
-        cudaMemset(m_rxmesh_context.m_max_num_vertices, 0, sizeof(uint32_t)));
-    CUDA_ERROR(
-        cudaMemset(m_rxmesh_context.m_max_num_edges, 0, sizeof(uint32_t)));
-    CUDA_ERROR(
-        cudaMemset(m_rxmesh_context.m_max_num_faces, 0, sizeof(uint32_t)));
-
+    detail::reset<<<1, 1>>>(m_rxmesh_context.m_num_vertices,
+                            m_rxmesh_context.m_num_edges,
+                            m_rxmesh_context.m_num_faces,
+                            m_rxmesh_context.m_max_num_vertices,
+                            m_rxmesh_context.m_max_num_edges,
+                            m_rxmesh_context.m_max_num_faces);
 
     uint32_t dyn_shmem = 0;
 
-    dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
+    dyn_shmem +=
+        3 * detail::mask_num_bytes(get_per_patch_max_vertex_capacity()) +
+        3 * ShmemAllocator::default_alignment;
+
+    dyn_shmem += 3 * detail::mask_num_bytes(get_per_patch_max_edge_capacity()) +
                  3 * ShmemAllocator::default_alignment;
 
-    dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
-                 3 * ShmemAllocator::default_alignment;
-
-    dyn_shmem += 3 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
+    dyn_shmem += 3 * detail::mask_num_bytes(get_per_patch_max_face_capacity()) +
                  3 * ShmemAllocator::default_alignment;
 
     uint32_t hash_table_shmem =
@@ -2664,8 +2698,8 @@ void RXMeshDynamic::cleanup()
 
     uint32_t connect_shmem =
         2 * ShmemAllocator::default_alignment +
-        (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
-        (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+        (3 * get_per_patch_max_face_capacity()) * sizeof(uint16_t) +
+        (2 * get_per_patch_max_edge_capacity()) * sizeof(uint16_t);
 
     dyn_shmem += std::max(hash_table_shmem, connect_shmem);
 
@@ -2675,20 +2709,20 @@ void RXMeshDynamic::cleanup()
     detail::remove_surplus_elements<block_size>
         <<<grid_size, block_size, dyn_shmem>>>(this->m_rxmesh_context);
 
-    CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
-                          this->m_rxmesh_context.m_max_num_vertices,
-                          sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
-
-    CUDA_ERROR(cudaMemcpy(&this->m_max_edges_per_patch,
-                          this->m_rxmesh_context.m_max_num_edges,
-                          sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
-
-    CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
-                          this->m_rxmesh_context.m_max_num_faces,
-                          sizeof(uint32_t),
-                          cudaMemcpyDeviceToHost));
+    // CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
+    //                       this->m_rxmesh_context.m_max_num_vertices,
+    //                       sizeof(uint32_t),
+    //                       cudaMemcpyDeviceToHost));
+    //
+    // CUDA_ERROR(cudaMemcpy(&this->m_max_edges_per_patch,
+    //                       this->m_rxmesh_context.m_max_num_edges,
+    //                       sizeof(uint32_t),
+    //                       cudaMemcpyDeviceToHost));
+    //
+    // CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
+    //                       this->m_rxmesh_context.m_max_num_faces,
+    //                       sizeof(uint32_t),
+    //                       cudaMemcpyDeviceToHost));
 }
 
 void RXMeshDynamic::update_host()
@@ -2949,30 +2983,29 @@ void RXMeshDynamic::update_polyscope(std::string new_name)
 }
 
 
-template __device__ void detail::slice<256>(
-    Context&,
-    cooperative_groups::thread_block&,
-    PatchInfo&,
-    const uint32_t,
-    const uint16_t,
-    const uint16_t,
-    const uint16_t,
-    PatchStash&,
-    // PatchStash&,
-    Bitmask&,
-    Bitmask&,
-    Bitmask&,
-    const Bitmask&,
-    const Bitmask&,
-    const Bitmask&,
-    const uint16_t*,
-    const uint16_t*,
-    Bitmask&,
-    Bitmask&,
-    Bitmask&,
-    Bitmask&,
-    Bitmask&,
-    Bitmask&);
+template __device__ void detail::slice<256>(Context&,
+                                            cooperative_groups::thread_block&,
+                                            PatchInfo&,
+                                            const uint32_t,
+                                            const uint16_t,
+                                            const uint16_t,
+                                            const uint16_t,
+                                            PatchStash&,
+                                            // PatchStash&,
+                                            Bitmask&,
+                                            Bitmask&,
+                                            Bitmask&,
+                                            const Bitmask&,
+                                            const Bitmask&,
+                                            const Bitmask&,
+                                            const uint16_t*,
+                                            const uint16_t*,
+                                            Bitmask&,
+                                            Bitmask&,
+                                            Bitmask&,
+                                            Bitmask&,
+                                            Bitmask&,
+                                            Bitmask&);
 
 template __device__ void detail::bi_assignment<256>(
     cooperative_groups::thread_block&,
