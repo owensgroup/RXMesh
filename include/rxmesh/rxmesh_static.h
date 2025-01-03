@@ -1816,11 +1816,7 @@ class RXMeshStatic : public RXMesh
     size_t calc_shared_memory(const Op   op,
                               const bool oriented,
                               bool       use_capacity) const
-    {
-        // Operations that uses matrix transpose needs a template parameter
-        // that is by default TRANSPOSE_ITEM_PER_THREAD. Here we check if
-        // this default parameter is valid otherwise, it needs to be increased.
-
+    {        
         uint32_t max_v(this->m_max_vertices_per_patch),
             max_e(this->m_max_edges_per_patch),
             max_f(this->m_max_faces_per_patch);
@@ -1829,26 +1825,6 @@ class RXMeshStatic : public RXMesh
             max_v = get_per_patch_max_vertex_capacity();
             max_e = get_per_patch_max_edge_capacity();
             max_f = get_per_patch_max_face_capacity();
-        }
-
-        if (op == Op::VV || op == Op::VE) {
-            if (2 * max_e > blockThreads * TRANSPOSE_ITEM_PER_THREAD) {
-                RXMESH_ERROR(
-                    "RXMeshStatic::calc_shared_memory() "
-                    "TRANSPOSE_ITEM_PER_THREAD = {} needs "
-                    "to be increased for op = {}",
-                    TRANSPOSE_ITEM_PER_THREAD,
-                    op_to_string(op));
-            }
-        } else if (op == Op::VE || op == Op::EF || op == Op::FF) {
-            if (3 * max_f > blockThreads * TRANSPOSE_ITEM_PER_THREAD) {
-                RXMESH_ERROR(
-                    "RXMeshStatic::calc_shared_memory() "
-                    "TRANSPOSE_ITEM_PER_THREAD = {} needs "
-                    "to be increased for op = {}",
-                    TRANSPOSE_ITEM_PER_THREAD,
-                    op_to_string(op));
-            }
         }
 
 
