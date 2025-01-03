@@ -473,8 +473,7 @@ __device__ __forceinline__ void orient_edges_around_vertices(
     shrd_alloc.dealloc<uint16_t>(3 * num_faces);
 }
 
-template <uint32_t blockThreads,
-          uint32_t itemPerThread = TRANSPOSE_ITEM_PER_THREAD>
+template <uint32_t blockThreads>
 __device__ __forceinline__ void v_e(const uint16_t  num_vertices,
                                     const uint16_t  num_edges,
                                     ShmemAllocator& shrd_alloc,
