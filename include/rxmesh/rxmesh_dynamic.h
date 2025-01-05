@@ -123,6 +123,12 @@ __global__ static void slice_patches(Context        context,
         return;
     }
 
+    PatchInfo pi = context.m_patches_info[pid];
+
+    if (pi.patch_id == INVALID32) {
+        return;
+    }
+
     auto alloc_masks = [&](uint16_t        num_elements,
                            Bitmask&        owned,
                            Bitmask&        active,
@@ -155,7 +161,7 @@ __global__ static void slice_patches(Context        context,
                            false);
     };
 
-    PatchInfo pi = context.m_patches_info[pid];
+
     if (pi.should_slice) {
         const uint16_t num_vertices = pi.num_vertices[0];
         const uint16_t num_edges    = pi.num_edges[0];
@@ -520,20 +526,20 @@ __global__ static void slice_patches(Context        context,
                    s_new_num_vertices + s_old_num_vertices);
             assert(s_total_num_edges == s_new_num_edges + s_old_num_edges);
             assert(s_total_num_faces == s_new_num_faces + s_old_num_faces);
-            //printf(
-            //    "\n slicing %u into %u, #Vt= %u, #Vo= %u, #Vn= %u, #Et= %u, "
-            //    "#Eo= %u, #En= %u, #Ft= %u, #Fo= %u, #Fn= %u",
-            //    pi.patch_id,
-            //    s_new_patch_id,
-            //    s_total_num_vertices,
-            //    s_old_num_vertices,
-            //    s_new_num_vertices,
-            //    s_total_num_edges,
-            //    s_old_num_edges,
-            //    s_new_num_edges,
-            //    s_total_num_faces,
-            //    s_old_num_faces,
-            //    s_new_num_faces);
+            // printf(
+            //     "\n slicing %u into %u, #Vt= %u, #Vo= %u, #Vn= %u, #Et= %u, "
+            //     "#Eo= %u, #En= %u, #Ft= %u, #Fo= %u, #Fn= %u",
+            //     pi.patch_id,
+            //     s_new_patch_id,
+            //     s_total_num_vertices,
+            //     s_old_num_vertices,
+            //     s_new_num_vertices,
+            //     s_total_num_edges,
+            //     s_old_num_edges,
+            //     s_new_num_edges,
+            //     s_total_num_faces,
+            //     s_old_num_faces,
+            //     s_new_num_faces);
         }
 
         // check ribbons for new and old patch
@@ -919,7 +925,7 @@ class RXMeshDynamic : public RXMeshStatic
     void slice_patches(AttributesT... attributes)
     {
 
-        const uint32_t grid_size = get_num_patches();
+        const uint32_t grid_size = get_max_num_patches();
 
         // CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
         //                       this->m_rxmesh_context.m_max_num_vertices,
@@ -975,7 +981,7 @@ class RXMeshDynamic : public RXMeshStatic
                             false);
 
         detail::slice_patches<block_size><<<grid_size, block_size, dyn_shmem>>>(
-            this->m_rxmesh_context, get_num_patches(), attributes...);
+            this->m_rxmesh_context, get_max_num_patches(), attributes...);
 
         CUDA_ERROR(cudaGetLastError());
     }
