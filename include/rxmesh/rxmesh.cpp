@@ -366,6 +366,36 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
         m_h_face_prefix[p + 1]   = m_h_face_prefix[p] + m_h_num_owned_f[p];
     }
 
+    // the hash table capacity should be at least 2* the size of the stash
+    m_max_capacity_lp_v = 2 * LPHashTable::stash_size;
+    m_max_capacity_lp_e = 2 * LPHashTable::stash_size;
+    m_max_capacity_lp_f = 2 * LPHashTable::stash_size;
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
+        m_max_capacity_lp_v = std::max(
+            m_max_capacity_lp_v,
+            static_cast<uint16_t>(
+                std::ceil(m_capacity_factor *
+                          static_cast<float>(m_h_patches_ltog_v[p].size() -
+                                             m_h_num_owned_v[p]) /
+                          m_lp_hashtable_load_factor)));
+
+        m_max_capacity_lp_e = std::max(
+            m_max_capacity_lp_e,
+            static_cast<uint16_t>(
+                std::ceil(m_capacity_factor *
+                          static_cast<float>(m_h_patches_ltog_e[p].size() -
+                                             m_h_num_owned_e[p]) /
+                          m_lp_hashtable_load_factor)));
+
+        m_max_capacity_lp_f = std::max(
+            m_max_capacity_lp_f,
+            static_cast<uint16_t>(
+                std::ceil(m_capacity_factor *
+                          static_cast<float>(m_h_patches_ltog_f[p].size() -
+                                             m_h_num_owned_f[p]) /
+                          m_lp_hashtable_load_factor)));
+    }
+
     m_timers.start("cudaMalloc");
     CUDA_ERROR(cudaMalloc((void**)&m_d_vertex_prefix, patches_1_bytes));
     // m_topo_memory_mega_bytes += BYTES_TO_MEGABYTES(patches_1_bytes);
@@ -980,17 +1010,6 @@ void RXMesh::build_device()
     }
 
 
-    for (uint32_t p = 0; p < get_num_patches(); ++p) {
-        m_max_capacity_lp_v = std::max(m_max_capacity_lp_v,
-                                       m_h_patches_info[p].lp_v.get_capacity());
-
-        m_max_capacity_lp_e = std::max(m_max_capacity_lp_e,
-                                       m_h_patches_info[p].lp_e.get_capacity());
-
-        m_max_capacity_lp_f = std::max(m_max_capacity_lp_f,
-                                       m_h_patches_info[p].lp_f.get_capacity());
-    }
-
     // make sure that if a patch stash of patch p has patch q, then q's patch
     // stash should have p in it
     for (uint32_t p = 0; p < get_num_patches(); ++p) {
@@ -1234,17 +1253,9 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
 
         const uint16_t num_not_owned = num_elements - num_owned_elements;
 
-        uint16_t capacity = cap;
-
-        if (patch_id != INVALID32) {
-            capacity = static_cast<uint16_t>(std::ceil(
-                m_capacity_factor * static_cast<float>(num_not_owned) /
-                m_lp_hashtable_load_factor));
-        }
-
         m_timers.start("LPHashTable");
-        h_hashtable = LPHashTable(capacity, false);
-        d_hashtable = LPHashTable(capacity, true);
+        h_hashtable = LPHashTable(cap, false);
+        d_hashtable = LPHashTable(cap, true);
         m_timers.stop("LPHashTable");
 
         m_topo_memory_mega_bytes += BYTES_TO_MEGABYTES(d_hashtable.num_bytes());
@@ -1342,7 +1353,7 @@ void RXMesh::allocate_extra_patches()
     const uint16_t p_edges_capacity    = get_per_patch_max_edge_capacity();
     const uint16_t p_faces_capacity    = get_per_patch_max_face_capacity();
 
-#pragma omp parallel for
+    // #pragma omp parallel for
     for (int p = get_num_patches(); p < static_cast<int>(get_max_num_patches());
          ++p) {
 
@@ -1372,18 +1383,6 @@ void RXMesh::allocate_extra_patches()
                                   m_h_patches_ltog_f[0],
                                   m_h_patches_info[p],
                                   m_d_patches_info[p]);
-    }
-
-
-    for (uint32_t p = get_num_patches(); p < get_max_num_patches(); ++p) {
-        m_max_capacity_lp_v = std::max(m_max_capacity_lp_v,
-                                       m_h_patches_info[p].lp_v.get_capacity());
-
-        m_max_capacity_lp_e = std::max(m_max_capacity_lp_e,
-                                       m_h_patches_info[p].lp_e.get_capacity());
-
-        m_max_capacity_lp_f = std::max(m_max_capacity_lp_f,
-                                       m_h_patches_info[p].lp_f.get_capacity());
     }
 }
 
