@@ -652,7 +652,9 @@ __inline__ __device__ void copy_to_hashtable(
 
             original_patch_stash.m_stash[pair.patch_stash_id()] = vh.patch_id();
         }*/
-
+        assert(v < s_new_p_active.size());
+        assert(v < s_new_p_owned.size());
+        assert(v < s_owned.size());
         if (s_new_p_active(v) && !s_new_p_owned(v)) {
             LPPair lp;
             // if the element is originally owned by the patch

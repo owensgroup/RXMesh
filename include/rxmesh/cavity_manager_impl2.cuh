@@ -23,11 +23,12 @@ __device__ __forceinline__ CavityManager2<blockThreads, cop>::CavityManager2(
     m_s_num_edges    = s_uint32 + 1;
     m_s_num_faces    = s_uint32 + 2;
 
-    __shared__ bool s_bool[4];
+    __shared__ bool s_bool[5];
     m_s_should_slice    = s_bool + 0;
     m_s_remove_fill_in  = s_bool + 1;
     m_s_recover         = s_bool + 2;
     m_s_new_patch_added = s_bool + 3;
+    m_s_migrated        = s_bool + 4;
 
     __shared__ int s_int[1];
     m_s_num_cavities = s_int;
@@ -37,6 +38,7 @@ __device__ __forceinline__ CavityManager2<blockThreads, cop>::CavityManager2(
         m_s_remove_fill_in[0]  = false;
         m_s_recover[0]         = false;
         m_s_new_patch_added[0] = false;
+        m_s_migrated[0]        = false;
         m_s_num_cavities[0]    = 0;
 
 
@@ -160,13 +162,20 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
     const uint16_t max_face_cap =
         static_cast<uint16_t>(m_context.m_max_num_faces[0]);
 
+    __shared__ LPPair s_inv_st_v[LPHashTable::stash_size];
+    __shared__ LPPair s_inv_st_e[LPHashTable::stash_size];
+    __shared__ LPPair s_inv_st_f[LPHashTable::stash_size];
+
     // inverted hash table
     m_inv_lp_v = InverseLPHashTable(m_patch_info.lp_v,
-                                    reinterpret_cast<LPPair*>(m_s_cavity_id_v));
+                                    reinterpret_cast<LPPair*>(m_s_cavity_id_v),
+                                    s_inv_st_v);
     m_inv_lp_e = InverseLPHashTable(m_patch_info.lp_e,
-                                    reinterpret_cast<LPPair*>(m_s_cavity_id_e));
+                                    reinterpret_cast<LPPair*>(m_s_cavity_id_e),
+                                    s_inv_st_e);
     m_inv_lp_f = InverseLPHashTable(m_patch_info.lp_f,
-                                    reinterpret_cast<LPPair*>(m_s_cavity_id_f));
+                                    reinterpret_cast<LPPair*>(m_s_cavity_id_f),
+                                    s_inv_st_f);
 
     assert(max_vertex_cap >= m_s_num_vertices[0]);
     assert(max_edge_cap >= m_s_num_edges[0]);
@@ -787,6 +796,7 @@ __device__ __forceinline__ bool CavityManager2<blockThreads, cop>::prologue(
     if (!migrate(block)) {
         block.sync();
         m_write_to_gmem = false;
+        m_s_migrated[0] = false;
         return false;
     }
 
@@ -3371,6 +3381,7 @@ CavityManager2<blockThreads, cop>::migrate_vertex(
                 int id = ::atomicAdd(m_s_temp_inv_lp_size, 1);
                 assert(id < m_temp_inv_lp_capacity);
                 m_s_temp_inv_lp[id] = ret;
+                m_s_migrated[0] = true;
             }
             if (add_to_connect_cavity_bdry_v) {
                 assert(vp < m_s_connect_cavity_bdry_v.size());
@@ -3471,6 +3482,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_edge(
                 int id = ::atomicAdd(m_s_temp_inv_lp_size, 1);
                 assert(id < m_temp_inv_lp_capacity);
                 m_s_temp_inv_lp[id] = ret;
+                m_s_migrated[0] = true;
             }
         }
     }
@@ -3570,6 +3582,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_face(
                 int id = ::atomicAdd(m_s_temp_inv_lp_size, 1);
                 assert(id < m_temp_inv_lp_capacity);
                 m_s_temp_inv_lp[id] = ret;
+                m_s_migrated[0] = true;
             }
         }
     }
@@ -4261,7 +4274,8 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::epilogue(
     // re-add the patch to the queue if there is ownership change
     // or we could not lock all neighbor patches (and thus could not write to
     // global memory)
-    if ((m_s_should_slice[0] || !m_write_to_gmem) && get_num_cavities() > 0) {
+    if ((m_s_should_slice[0] || !m_write_to_gmem /*|| m_s_migrated[0]*/) &&
+        get_num_cavities() > 0) {
         push();
     }
 

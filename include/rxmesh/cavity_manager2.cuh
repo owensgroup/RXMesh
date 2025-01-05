@@ -1086,6 +1086,8 @@ struct CavityManager2
     int*    m_s_temp_inv_lp_size;
     int     m_temp_inv_lp_capacity;
     LPPair* m_s_temp_inv_lp;
+
+    bool* m_s_migrated;
 };
 
 }  // namespace rxmesh
