@@ -58,14 +58,14 @@ __device__ __forceinline__ CavityManager2<blockThreads, cop>::CavityManager2(
         }
 
         // filter based on color
-        //        uint32_t color = INVALID32;
-        //        if (s_patch_id != INVALID32) {
-        //            color = m_context.m_patches_info[s_patch_id].color;
-        //            if (color != iteration) {
-        //                push(s_patch_id);
-        //                s_patch_id = INVALID32;
-        //            }
-        //        }
+        // uint32_t color = INVALID32;
+        // if (s_patch_id != INVALID32) {
+        //    color = m_context.m_patches_info[s_patch_id].color;
+        //    if (color != iteration) {
+        //        push(s_patch_id);
+        //        s_patch_id = INVALID32;
+        //    }
+        //}
 
         // try to lock the patch
         if (s_patch_id != INVALID32) {

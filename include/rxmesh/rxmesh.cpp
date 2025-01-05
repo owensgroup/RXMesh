@@ -719,7 +719,7 @@ void RXMesh::build_single_patch_topology(
     const uint32_t r_end = m_patcher->get_external_ribbon_offset()[patch_id];
 
     const uint16_t patch_num_edges = m_h_patches_ltog_e[patch_id].size();
-    
+
     const uint32_t edges_cap = m_max_edge_capacity;
 
     const uint32_t faces_cap = m_max_face_capacity;

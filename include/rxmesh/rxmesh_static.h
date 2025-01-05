@@ -1816,7 +1816,7 @@ class RXMeshStatic : public RXMesh
     size_t calc_shared_memory(const Op   op,
                               const bool oriented,
                               bool       use_capacity) const
-    {        
+    {
         uint32_t max_v(this->m_max_vertices_per_patch),
             max_e(this->m_max_edges_per_patch),
             max_f(this->m_max_faces_per_patch);

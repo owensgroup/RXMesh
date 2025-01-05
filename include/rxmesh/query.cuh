@@ -55,6 +55,10 @@ struct Query
         cooperative_groups::thread_block& block,
         ShmemAllocator&                   shrd_alloc)
     {
+        if (get_patch_id() == INVALID32) {
+            return;
+        }
+
         const uint16_t num_vertices = m_patch_info.num_vertices[0];
         const uint16_t num_edges    = m_patch_info.num_edges[0];
 
@@ -180,7 +184,9 @@ struct Query
                                         const bool      oriented        = false,
                                         const bool      allow_not_owned = false)
     {
-
+        if (get_patch_id() == INVALID32) {
+            return;
+        }
         // Extract the type of the input parameters of the compute lambda
         // function.
         // The first parameter should be Vertex/Edge/FaceHandle and second
@@ -239,6 +245,10 @@ struct Query
                                         const bool      oriented        = false,
                                         const bool      allow_not_owned = true)
     {
+        if (get_patch_id() == INVALID32) {
+            return;
+        }
+
         m_op           = op;
         m_shmem_before = shrd_alloc.get_allocated_size_bytes();
 
@@ -269,6 +279,10 @@ struct Query
         cooperative_groups::thread_block& block,
         computeT                          compute_op)
     {
+        if (get_patch_id() == INVALID32) {
+            return;
+        }
+
         using ComputeTraits    = detail::FunctionTraits<computeT>;
         using ComputeHandleT   = typename ComputeTraits::template arg<0>::type;
         using ComputeIteratorT = typename ComputeTraits::template arg<1>::type;
@@ -328,6 +342,10 @@ struct Query
     __device__ __inline__ void epilogue(cooperative_groups::thread_block& block,
                                         ShmemAllocator& shrd_alloc)
     {
+        if (get_patch_id() == INVALID32) {
+            return;
+        }
+
         // cleanup shared memory allocation
         shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() -
                            m_shmem_before);

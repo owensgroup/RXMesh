@@ -742,7 +742,7 @@ class RXMeshDynamic : public RXMeshStatic
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const
     {
         // TODO this has to be customized for different GPU arch
-        int max_shmem_bytes = 64 * 1024;
+        int max_shmem_bytes = 89 * 1024;
         CUDA_ERROR(
             cudaFuncSetAttribute(kernel,
                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
@@ -754,7 +754,7 @@ class RXMeshDynamic : public RXMeshStatic
         size_t static_shmem = 0;
         for (auto o : op) {
             size_t sh =
-                this->calc_shared_memory<blockThreads>(o, oriented, is_dyn);
+                this->calc_shared_memory<blockThreads>(o, oriented, true);
             if (is_concurrent) {
                 static_shmem += sh;
             } else {

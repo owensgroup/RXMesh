@@ -181,7 +181,7 @@ Patcher::Patcher(uint32_t                                        patch_size,
 void Patcher::grid(const std::vector<std::vector<uint32_t>>& fv)
 {
     // this only work if the input is a mesh coming from create_plane()
-    // where are laid out sequenetially and so we can just group them using
+    // where are laid out sequentially and so we can just group them using
     // their id
 
     // m_num_patches = DIVIDE_UP(m_num_faces, m_patch_size);
