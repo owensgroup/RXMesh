@@ -1031,26 +1031,23 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
 
 
     m_timers.start("malloc");
-    uint16_t* h_counts = (uint16_t*)malloc(6 * sizeof(uint16_t));
+    uint16_t* h_counts = (uint16_t*)malloc(3 * sizeof(uint16_t));
     m_timers.stop("malloc");
 
-    h_patch_info.num_faces            = h_counts;
-    h_patch_info.num_faces[0]         = p_num_faces;
-    h_patch_info.num_edges            = h_counts + 1;
-    h_patch_info.num_edges[0]         = p_num_edges;
-    h_patch_info.num_vertices         = h_counts + 2;
-    h_patch_info.num_vertices[0]      = p_num_vertices;
-    h_patch_info.faces_capacity       = h_counts + 3;
-    h_patch_info.faces_capacity[0]    = p_faces_capacity;
-    h_patch_info.edges_capacity       = h_counts + 4;
-    h_patch_info.edges_capacity[0]    = p_edges_capacity;
-    h_patch_info.vertices_capacity    = h_counts + 5;
-    h_patch_info.vertices_capacity[0] = p_vertices_capacity;
-    h_patch_info.patch_id             = patch_id;
-    h_patch_info.dirty                = (int*)malloc(sizeof(int));
-    h_patch_info.dirty[0]             = 0;
-    h_patch_info.child_id             = INVALID32;
-    h_patch_info.should_slice         = false;
+    h_patch_info.num_faces         = h_counts;
+    h_patch_info.num_faces[0]      = p_num_faces;
+    h_patch_info.num_edges         = h_counts + 1;
+    h_patch_info.num_edges[0]      = p_num_edges;
+    h_patch_info.num_vertices      = h_counts + 2;
+    h_patch_info.num_vertices[0]   = p_num_vertices;
+    h_patch_info.vertices_capacity = p_vertices_capacity;
+    h_patch_info.edges_capacity    = p_edges_capacity;
+    h_patch_info.faces_capacity    = p_faces_capacity;
+    h_patch_info.patch_id          = patch_id;
+    h_patch_info.dirty             = (int*)malloc(sizeof(int));
+    h_patch_info.dirty[0]          = 0;
+    h_patch_info.child_id          = INVALID32;
+    h_patch_info.should_slice      = false;
 
 
     uint16_t* d_counts;
@@ -1060,15 +1057,15 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
     m_timers.stop("cudaMalloc");
 
 
-    m_topo_memory_mega_bytes += BYTES_TO_MEGABYTES(6 * sizeof(uint16_t));
+    m_topo_memory_mega_bytes += BYTES_TO_MEGABYTES(3 * sizeof(uint16_t));
 
     PatchInfo d_patch;
     d_patch.num_faces         = d_counts;
     d_patch.num_edges         = d_counts + 1;
     d_patch.num_vertices      = d_counts + 2;
-    d_patch.faces_capacity    = d_counts + 3;
-    d_patch.edges_capacity    = d_counts + 4;
-    d_patch.vertices_capacity = d_counts + 5;
+    d_patch.vertices_capacity = p_vertices_capacity;
+    d_patch.edges_capacity    = p_edges_capacity;
+    d_patch.faces_capacity    = p_faces_capacity;
     d_patch.patch_id          = patch_id;
     d_patch.color             = h_patch_info.color;
     d_patch.patch_stash       = PatchStash(true);
@@ -1090,18 +1087,6 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
                           cudaMemcpyHostToDevice));
     CUDA_ERROR(cudaMemcpy(d_patch.num_vertices,
                           h_patch_info.num_vertices,
-                          sizeof(uint16_t),
-                          cudaMemcpyHostToDevice));
-    CUDA_ERROR(cudaMemcpy(d_patch.faces_capacity,
-                          h_patch_info.faces_capacity,
-                          sizeof(uint16_t),
-                          cudaMemcpyHostToDevice));
-    CUDA_ERROR(cudaMemcpy(d_patch.edges_capacity,
-                          h_patch_info.edges_capacity,
-                          sizeof(uint16_t),
-                          cudaMemcpyHostToDevice));
-    CUDA_ERROR(cudaMemcpy(d_patch.vertices_capacity,
-                          h_patch_info.vertices_capacity,
                           sizeof(uint16_t),
                           cudaMemcpyHostToDevice));
 

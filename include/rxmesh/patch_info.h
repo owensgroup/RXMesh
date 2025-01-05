@@ -37,9 +37,9 @@ struct ALIGN(16) PatchInfo
           num_vertices(nullptr),
           num_edges(nullptr),
           num_faces(nullptr),
-          vertices_capacity(nullptr),
-          edges_capacity(nullptr),
-          faces_capacity(nullptr),
+          vertices_capacity(0),
+          edges_capacity(0),
+          faces_capacity(0),
           patch_id(INVALID32) {};
 
     __device__ __host__            PatchInfo(const PatchInfo& other) = default;
@@ -66,7 +66,7 @@ struct ALIGN(16) PatchInfo
 
     // Capacity of v/e/f. This controls the allocations of ev, fe,
     // active_mask_v/e/f, owned_mask_v/e/f
-    uint16_t *vertices_capacity, *edges_capacity, *faces_capacity;
+    uint16_t vertices_capacity, edges_capacity, faces_capacity;
 
     // The index of this patch
     uint32_t patch_id;
@@ -125,7 +125,6 @@ struct ALIGN(16) PatchInfo
 #else
         return dirty[0] != 0;
 #endif
-    
     }
 
     template <typename HandleT>
@@ -180,7 +179,7 @@ struct ALIGN(16) PatchInfo
         assert(v0 == ev[2 * e_id + 0].id);
         assert(v1 == ev[2 * e_id + 1].id);
 
-        return std::make_pair(v0, v1);        
+        return std::make_pair(v0, v1);
     }
 
     /**
@@ -221,7 +220,7 @@ struct ALIGN(16) PatchInfo
      * @tparam HandleT
      */
     template <typename HandleT>
-    __device__ __host__ __inline__ const uint16_t* get_capacity() const
+    __device__ __host__ __inline__ const uint16_t get_capacity() const
     {
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             return vertices_capacity;

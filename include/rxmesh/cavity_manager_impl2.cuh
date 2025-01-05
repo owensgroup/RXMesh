@@ -109,9 +109,9 @@ __device__ __forceinline__ CavityManager2<blockThreads, cop>::CavityManager2(
 
     m_patch_info = m_context.m_patches_info[s_patch_id];
 
-    const uint32_t vert_cap = m_patch_info.vertices_capacity[0];
-    const uint32_t edge_cap = m_patch_info.edges_capacity[0];
-    const uint32_t face_cap = m_patch_info.faces_capacity[0];
+    const uint32_t vert_cap = m_patch_info.vertices_capacity;
+    const uint32_t edge_cap = m_patch_info.edges_capacity;
+    const uint32_t face_cap = m_patch_info.faces_capacity;
 
     const uint32_t vert_cap_bytes = sizeof(uint16_t) * vert_cap;
     const uint32_t edge_cap_bytes = sizeof(uint16_t) * edge_cap;
@@ -151,9 +151,9 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
 {
     m_s_patch_stash_mutex.alloc();
 
-    const uint16_t vert_cap = m_patch_info.vertices_capacity[0];
-    const uint16_t edge_cap = m_patch_info.edges_capacity[0];
-    const uint16_t face_cap = m_patch_info.faces_capacity[0];
+    const uint16_t vert_cap = m_patch_info.vertices_capacity;
+    const uint16_t edge_cap = m_patch_info.edges_capacity;
+    const uint16_t face_cap = m_patch_info.faces_capacity;
 
     const uint16_t max_vertex_cap =
         static_cast<uint16_t>(m_context.m_max_num_vertices[0]);
@@ -1107,13 +1107,12 @@ CavityManager2<blockThreads, cop>::calc_cavity_maximal_independent_set(
     m_s_ownership_change_mask_f.reset(block);
     m_s_cavity_mis.reset(block);
 
-    fill_n<blockThreads>(m_s_cavity_id_v,
-                         m_patch_info.vertices_capacity[0],
-                         uint16_t(INVALID16));
     fill_n<blockThreads>(
-        m_s_cavity_id_e, m_patch_info.edges_capacity[0], uint16_t(INVALID16));
+        m_s_cavity_id_v, m_patch_info.vertices_capacity, uint16_t(INVALID16));
     fill_n<blockThreads>(
-        m_s_cavity_id_f, m_patch_info.faces_capacity[0], uint16_t(INVALID16));
+        m_s_cavity_id_e, m_patch_info.edges_capacity, uint16_t(INVALID16));
+    fill_n<blockThreads>(
+        m_s_cavity_id_f, m_patch_info.faces_capacity, uint16_t(INVALID16));
 
     block.sync();
 
@@ -1699,17 +1698,17 @@ CavityManager2<blockThreads, cop>::construct_cavities_edge_loop(
                     // we use here atomicMin so at least one cavity will move on
                     // if there is too many competing for the same edge
                     if (c0 == INVALID16) {
-                        assert(e0 < m_patch_info.edges_capacity[0]);
+                        assert(e0 < m_patch_info.edges_capacity);
                         atomicMin(m_s_boudary_edges_cavity_id + e0,
                                   face_cavity);
                     }
                     if (c1 == INVALID16) {
-                        assert(e1 < m_patch_info.edges_capacity[0]);
+                        assert(e1 < m_patch_info.edges_capacity);
                         atomicMin(m_s_boudary_edges_cavity_id + e1,
                                   face_cavity);
                     }
                     if (c2 == INVALID16) {
-                        assert(e2 < m_patch_info.edges_capacity[0]);
+                        assert(e2 < m_patch_info.edges_capacity);
                         atomicMin(m_s_boudary_edges_cavity_id + e2,
                                   face_cavity);
                     }
@@ -1950,7 +1949,7 @@ CavityManager2<blockThreads, cop>::add_vertex()
 
     uint16_t v_id = add_element(m_s_active_mask_v,
                                 m_s_num_vertices,
-                                m_patch_info.vertices_capacity[0],
+                                m_patch_info.vertices_capacity,
                                 m_s_in_cavity_v,
                                 m_s_owned_mask_v,
                                 m_preserve_cavity,
@@ -1960,7 +1959,7 @@ CavityManager2<blockThreads, cop>::add_vertex()
         m_s_remove_fill_in[0] = true;
         return VertexHandle();
     }
-    assert(v_id < m_patch_info.vertices_capacity[0]);
+    assert(v_id < m_patch_info.vertices_capacity);
     assert(m_s_active_mask_v(v_id));
     assert(v_id < m_s_owned_mask_v.size());
 
@@ -1983,7 +1982,7 @@ CavityManager2<blockThreads, cop>::add_edge(const VertexHandle src,
 
     uint16_t e_id = add_element(m_s_active_mask_e,
                                 m_s_num_edges,
-                                m_patch_info.edges_capacity[0],
+                                m_patch_info.edges_capacity,
                                 m_s_in_cavity_e,
                                 m_s_owned_mask_e,
                                 m_preserve_cavity,
@@ -1994,7 +1993,7 @@ CavityManager2<blockThreads, cop>::add_edge(const VertexHandle src,
         m_s_remove_fill_in[0] = true;
         return DEdgeHandle();
     }
-    assert(e_id < m_patch_info.edges_capacity[0]);
+    assert(e_id < m_patch_info.edges_capacity);
     assert(e_id < m_s_active_mask_e.size());
     assert(m_s_active_mask_e(e_id));
     assert(m_s_active_mask_v(src.local_id()));
@@ -2024,7 +2023,7 @@ CavityManager2<blockThreads, cop>::add_face(const DEdgeHandle e0,
 
     uint16_t f_id = add_element(m_s_active_mask_f,
                                 m_s_num_faces,
-                                m_patch_info.faces_capacity[0],
+                                m_patch_info.faces_capacity,
                                 m_s_in_cavity_f,
                                 m_s_owned_mask_f,
                                 m_preserve_cavity,
@@ -2034,7 +2033,7 @@ CavityManager2<blockThreads, cop>::add_face(const DEdgeHandle e0,
         m_s_remove_fill_in[0] = true;
         return FaceHandle();
     }
-    assert(f_id < m_patch_info.faces_capacity[0]);
+    assert(f_id < m_patch_info.faces_capacity);
     assert(f_id < m_s_active_mask_f.size());
     assert(m_s_active_mask_f(f_id));
     assert(f_id < m_s_fill_in_f.size());
@@ -3347,7 +3346,7 @@ CavityManager2<blockThreads, cop>::migrate_vertex(
             if (vp == INVALID16) {
                 vp = add_element(m_s_active_mask_v,
                                  m_s_num_vertices,
-                                 m_patch_info.vertices_capacity[0],
+                                 m_patch_info.vertices_capacity,
                                  m_s_in_cavity_v,
                                  m_s_owned_mask_v,
                                  true,
@@ -3362,7 +3361,7 @@ CavityManager2<blockThreads, cop>::migrate_vertex(
                 // active bitmask is set in add_element
 
                 // since it is owned by some other patch
-                assert(vp < m_patch_info.vertices_capacity[0]);
+                assert(vp < m_patch_info.vertices_capacity);
                 assert(vp < m_s_owned_mask_v.size());
                 m_s_owned_mask_v.reset(vp, true);
 
@@ -3381,7 +3380,7 @@ CavityManager2<blockThreads, cop>::migrate_vertex(
                 int id = ::atomicAdd(m_s_temp_inv_lp_size, 1);
                 assert(id < m_temp_inv_lp_capacity);
                 m_s_temp_inv_lp[id] = ret;
-                m_s_migrated[0] = true;
+                m_s_migrated[0]     = true;
             }
             if (add_to_connect_cavity_bdry_v) {
                 assert(vp < m_s_connect_cavity_bdry_v.size());
@@ -3424,7 +3423,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_edge(
             if (ep == INVALID16) {
                 ep = add_element(m_s_active_mask_e,
                                  m_s_num_edges,
-                                 m_patch_info.edges_capacity[0],
+                                 m_patch_info.edges_capacity,
                                  m_s_in_cavity_e,
                                  m_s_owned_mask_e,
                                  true,
@@ -3433,7 +3432,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_edge(
                     m_s_should_slice[0] = true;
                     return;
                 }
-                assert(ep < m_patch_info.edges_capacity[0]);
+                assert(ep < m_patch_info.edges_capacity);
 
                 assert(eq < m_context.m_patches_info[o].num_edges[0]);
 
@@ -3482,7 +3481,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_edge(
                 int id = ::atomicAdd(m_s_temp_inv_lp_size, 1);
                 assert(id < m_temp_inv_lp_capacity);
                 m_s_temp_inv_lp[id] = ret;
-                m_s_migrated[0] = true;
+                m_s_migrated[0]     = true;
             }
         }
     }
@@ -3521,7 +3520,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_face(
             if (fp == INVALID16) {
                 fp = add_element(m_s_active_mask_f,
                                  m_s_num_faces,
-                                 m_patch_info.faces_capacity[0],
+                                 m_patch_info.faces_capacity,
                                  m_s_in_cavity_f,
                                  m_s_owned_mask_f,
                                  true,
@@ -3531,7 +3530,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_face(
                     m_s_should_slice[0] = true;
                     return;
                 }
-                assert(fp < m_patch_info.faces_capacity[0]);
+                assert(fp < m_patch_info.faces_capacity);
 
                 assert(fq < m_context.m_patches_info[o].num_faces[0]);
 
@@ -3582,7 +3581,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_face(
                 int id = ::atomicAdd(m_s_temp_inv_lp_size, 1);
                 assert(id < m_temp_inv_lp_capacity);
                 m_s_temp_inv_lp[id] = ret;
-                m_s_migrated[0] = true;
+                m_s_migrated[0]     = true;
             }
         }
     }

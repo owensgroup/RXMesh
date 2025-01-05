@@ -520,111 +520,80 @@ __global__ static void slice_patches(Context        context,
                    s_new_num_vertices + s_old_num_vertices);
             assert(s_total_num_edges == s_new_num_edges + s_old_num_edges);
             assert(s_total_num_faces == s_new_num_faces + s_old_num_faces);
-            // printf(
-            //     "\n slicing %u into %u, #Vt= %u, #Vo= %u, #Vn= %u, #Et= %u, "
-            //     "#Eo= %u, #En= %u, #Ft= %u, #Fo= %u, #Fn= %u",
-            //     pi.patch_id,
-            //     s_new_patch_id,
-            //     s_total_num_vertices,
-            //     s_old_num_vertices,
-            //     s_new_num_vertices,
-            //     s_total_num_edges,
-            //     s_old_num_edges,
-            //     s_new_num_edges,
-            //     s_total_num_faces,
-            //     s_old_num_faces,
-            //     s_new_num_faces);
+            //printf(
+            //    "\n slicing %u into %u, #Vt= %u, #Vo= %u, #Vn= %u, #Et= %u, "
+            //    "#Eo= %u, #En= %u, #Ft= %u, #Fo= %u, #Fn= %u",
+            //    pi.patch_id,
+            //    s_new_patch_id,
+            //    s_total_num_vertices,
+            //    s_old_num_vertices,
+            //    s_new_num_vertices,
+            //    s_total_num_edges,
+            //    s_old_num_edges,
+            //    s_new_num_edges,
+            //    s_total_num_faces,
+            //    s_old_num_faces,
+            //    s_new_num_faces);
         }
 
         // check ribbons for new and old patch
 
-        // auto check_ribbon =
-        //     [](PatchInfo& info, char* name, PatchInfo& other_info) {
-        //         // vertices
-        //         for (uint16_t v = threadIdx.x; v < info.num_vertices[0];
-        //              v += blockThreads) {
-        //             if (!info.is_deleted(LocalVertexT(v)) &&
-        //                 !info.is_owned(LocalVertexT(v))) {
-        //
-        //                 LPPair lp = info.get_lp<VertexHandle>().find(
-        //                     v, nullptr, nullptr);
-        //
-        //                 if (lp.is_sentinel()) {
-        //                     printf(
-        //                         "\n @@ %s - vertex: B=%u, T= %u, patch_id "
-        //                         "= %u, v= %u, other_info.is_deleted= %d, "
-        //                         "other_info.is_owned= %d",
-        //                         name,
-        //                         blockIdx.x,
-        //                         threadIdx.x,
-        //                         info.patch_id,
-        //                         v,
-        //                         other_info.is_deleted(LocalVertexT(v)),
-        //                         other_info.is_owned(LocalVertexT(v)));
-        //                 }
-        //                 myAssert(!lp.is_sentinel());
-        //             }
-        //         }
-        //
-        //
-        //         // edges
-        //         for (uint16_t e = threadIdx.x; e < info.num_edges[0];
-        //              e += blockThreads) {
-        //             if (!info.is_deleted(LocalEdgeT(e)) &&
-        //                 !info.is_owned(LocalEdgeT(e))) {
-        //
-        //                 LPPair lp =
-        //                     info.get_lp<EdgeHandle>().find(e, nullptr,
-        //                     nullptr);
-        //
-        //                 if (lp.is_sentinel()) {
-        //                     printf(
-        //                         "\n @@ %s - edge: B=%u, T= %u, patch_id = "
-        //                         "%u, e= %u, other_info.is_deleted= %d, "
-        //                         "other_info.is_owned= %d",
-        //                         name,
-        //                         blockIdx.x,
-        //                         threadIdx.x,
-        //                         info.patch_id,
-        //                         e,
-        //                         other_info.is_deleted(LocalEdgeT(e)),
-        //                         other_info.is_owned(LocalEdgeT(e)));
-        //                 }
-        //                 myAssert(!lp.is_sentinel());
-        //             }
-        //         }
-        //
-        //
-        //         // faces
-        //         for (uint16_t f = threadIdx.x; f < info.num_faces[0];
-        //              f += blockThreads) {
-        //             if (!info.is_deleted(LocalFaceT(f)) &&
-        //                 !info.is_owned(LocalFaceT(f))) {
-        //
-        //                 LPPair lp =
-        //                     info.get_lp<FaceHandle>().find(f, nullptr,
-        //                     nullptr);
-        //
-        //                 if (lp.is_sentinel()) {
-        //                     printf(
-        //                         "\n @@ %s - face: B=%u, T= %u, patch_id = "
-        //                         "%u, f= %u, other_info.is_deleted= %d, "
-        //                         "other_info.is_owned= %d",
-        //                         name,
-        //                         blockIdx.x,
-        //                         threadIdx.x,
-        //                         info.patch_id,
-        //                         f,
-        //                         other_info.is_deleted(LocalFaceT(f)),
-        //                         other_info.is_owned(LocalFaceT(f)));
-        //                 }
-        //                 myAssert(!lp.is_sentinel());
-        //             }
-        //         }
-        //     };
-        //
-        // check_ribbon(old_pi, "old_pi", new_pi);
-        // check_ribbon(new_pi, "new_pi", old_pi);
+        auto check_ribbon = [](PatchInfo& info) {
+            // vertices
+            for (uint16_t v = threadIdx.x; v < info.num_vertices[0];
+                 v += blockThreads) {
+                if (!info.is_deleted(LocalVertexT(v)) &&
+                    !info.is_owned(LocalVertexT(v))) {
+
+                    LPPair lp =
+                        info.get_lp<VertexHandle>().find(v, nullptr, nullptr);
+
+                    if (lp.is_sentinel()) {
+                        assert(!lp.is_sentinel());
+                    } else {
+                        assert(lp.local_id() == v);
+                    }
+                }
+            }
+
+            // edges
+            for (uint16_t e = threadIdx.x; e < info.num_edges[0];
+                 e += blockThreads) {
+                if (!info.is_deleted(LocalEdgeT(e)) &&
+                    !info.is_owned(LocalEdgeT(e))) {
+
+                    LPPair lp =
+                        info.get_lp<EdgeHandle>().find(e, nullptr, nullptr);
+
+                    if (lp.is_sentinel()) {
+                        assert(!lp.is_sentinel());
+                    } else {
+                        assert(lp.local_id() == e);
+                    }
+                }
+            }
+
+
+            // faces
+            for (uint16_t f = threadIdx.x; f < info.num_faces[0];
+                 f += blockThreads) {
+                if (!info.is_deleted(LocalFaceT(f)) &&
+                    !info.is_owned(LocalFaceT(f))) {
+
+                    LPPair lp =
+                        info.get_lp<FaceHandle>().find(f, nullptr, nullptr);
+
+                    if (lp.is_sentinel()) {
+                        assert(!lp.is_sentinel());
+                    } else {
+                        assert(lp.local_id() == f);
+                    }
+                }
+            }
+        };
+
+        check_ribbon(old_pi);
+        check_ribbon(new_pi);
 
 #endif
     }

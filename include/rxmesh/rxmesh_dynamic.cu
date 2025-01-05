@@ -2780,14 +2780,14 @@ void RXMeshDynamic::update_host()
 
         // resize topology (don't update capacity here)
         if (m_h_patches_info[p].num_edges[0] >
-            m_h_patches_info[p].edges_capacity[0]) {
+            m_h_patches_info[p].edges_capacity) {
             free(m_h_patches_info[p].ev);
             m_h_patches_info[p].ev = (LocalVertexT*)malloc(
                 m_h_patches_info[p].num_edges[0] * 2 * sizeof(LocalVertexT));
         }
 
         if (m_h_patches_info[p].num_faces[0] >
-            m_h_patches_info[p].faces_capacity[0]) {
+            m_h_patches_info[p].faces_capacity) {
             free(m_h_patches_info[p].fe);
             m_h_patches_info[p].fe = (LocalEdgeT*)malloc(
                 m_h_patches_info[p].num_faces[0] * 3 * sizeof(LocalEdgeT));
@@ -2808,17 +2808,17 @@ void RXMeshDynamic::update_host()
 
         // resize mask (update capacity)
         resize_masks(m_h_patches_info[p].num_vertices[0],
-                     m_h_patches_info[p].vertices_capacity[0],
+                     m_h_patches_info[p].vertices_capacity,
                      m_h_patches_info[p].active_mask_v,
                      m_h_patches_info[p].owned_mask_v);
 
         resize_masks(m_h_patches_info[p].num_edges[0],
-                     m_h_patches_info[p].edges_capacity[0],
+                     m_h_patches_info[p].edges_capacity,
                      m_h_patches_info[p].active_mask_e,
                      m_h_patches_info[p].owned_mask_e);
 
         resize_masks(m_h_patches_info[p].num_faces[0],
-                     m_h_patches_info[p].faces_capacity[0],
+                     m_h_patches_info[p].faces_capacity,
                      m_h_patches_info[p].active_mask_f,
                      m_h_patches_info[p].owned_mask_f);
 
