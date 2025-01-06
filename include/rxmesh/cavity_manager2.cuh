@@ -449,7 +449,6 @@ struct CavityManager2
      * @brief construct the cavities boundary loop for all cavities created in
      * this patch
      */
-    template <int itemPerThread = 5>
     __device__ __forceinline__ void construct_cavities_edge_loop(
         cooperative_groups::thread_block& block);
 
@@ -655,10 +654,11 @@ struct CavityManager2
      * index in dest_patch
      */
     template <typename HandleT>
-    __device__ __forceinline__ uint16_t find_copy(uint16_t& lid,
-                                                  uint32_t& src_patch,
-                                                  uint8_t&  src_patch_stash_id,
-                                                  const LPPair* q_table);
+    __device__ __forceinline__ uint16_t
+    find_copy(uint16_t&     lid,
+              uint32_t&     src_patch,
+              uint8_t&      src_patch_stash_id,
+              const LPPair* q_table = nullptr);
 
 
     /**
@@ -986,8 +986,6 @@ struct CavityManager2
     InverseLPHashTable m_inv_lp_e;
     InverseLPHashTable m_inv_lp_f;
 
-    LPPair *m_s_q_table_v, *m_s_q_table_e, *m_s_q_table_f;
-
     // For an edge on the boundary of a cavity, here we store the cavity ID of
     // such edges (only the boundary ones). We then use this to filter out
     // cavities if they are touching when they user does not want cavities to
@@ -1050,9 +1048,8 @@ struct CavityManager2
     // cavity
     bool m_preserve_cavity;
 
-    // LPPair*  m_s_table_q;
-    // LPPair*  m_s_table_stash_q;
-    // uint32_t m_s_table_q_size;
+    // face local offset used in construct_cavities_edge_loop
+    uint8_t* m_s_face_local_offset;
 
     // Cavity graph is a graph where cavities are nodes and two nodes forms an
     // edge if the two cavities they represent are overlapping. We use this

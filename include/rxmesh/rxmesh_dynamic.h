@@ -807,16 +807,6 @@ class RXMeshDynamic : public RXMeshStatic
                     sizeof(uint16_t) +
                 ShmemAllocator::default_alignment;
 
-            // q hash table
-            size_t q_table_shmem = 0;
-            // q_table_shmem +=
-            //     max_lp_hashtable_capacity<LocalVertexT>() * sizeof(LPPair);
-            // q_table_shmem +=
-            //     max_lp_hashtable_capacity<LocalEdgeT>() * sizeof(LPPair);
-            // q_table_shmem +=
-            //     max_lp_hashtable_capacity<LocalFaceT>() * sizeof(LPPair);
-            // q_table_shmem += 3 * ShmemAllocator::default_alignment;
-
             // active, owned, migrate(for vertices only), src bitmask (for
             // vertices and edges only), src connect (for vertices and edges
             // only), ownership owned_cavity_bdry (for vertices only), ribbonize
@@ -832,6 +822,9 @@ class RXMeshDynamic : public RXMeshStatic
             // active cavity bitmask
             bitmasks_shmem += detail::mask_num_bytes(face_cap);
 
+            // the local offset of faces used in construct_cavities_edge_loop
+            size_t face_offset_shmem = face_cap * sizeof(uint8_t);
+
             // shared memory is the max of 1. static query shared memory + the
             // cavity ID shared memory (since we need to mark seed elements) 2.
             // dynamic rxmesh shared memory which includes cavity ID shared
@@ -840,19 +833,18 @@ class RXMeshDynamic : public RXMeshStatic
                 "RXMeshDynamic::update_launch_box() connectivity_shmem= "
                 "{}, cavity_id_shmem= {}, cavity_bdr_shmem= {}, "
                 "cavity_size_shmem= {}, bitmasks_shmem= {}, "
-                "cavity_creator_shmem={}, q_table_shmem={}, static_shmem= {}",
+                "cavity_creator_shmem={}, static_shmem= {}",
                 connectivity_shmem,
                 cavity_id_shmem,
                 cavity_bdr_shmem,
                 cavity_size_shmem,
                 bitmasks_shmem,
                 cavity_creator_shmem,
-                q_table_shmem,
                 static_shmem);
             launch_box.smem_bytes_dyn = std::max(
                 connectivity_shmem + cavity_id_shmem + cavity_bdr_shmem +
                     cavity_size_shmem + bitmasks_shmem + cavity_creator_shmem +
-                    q_table_shmem,
+                    face_offset_shmem,
                 static_shmem + cavity_id_shmem + cavity_creator_shmem);
         } else {
             launch_box.smem_bytes_dyn = static_shmem;
