@@ -69,7 +69,7 @@ edge_collapse(rxmesh::Context                   context,
 
     // a bitmask that indicates which edge we want to flip
     // we also use it to mark updated edges (for edge_status)
-    Bitmask edge_mask(cavity.patch_info().edges_capacity[0], shrd_alloc);
+    Bitmask edge_mask(cavity.patch_info().edges_capacity, shrd_alloc);
     edge_mask.reset(block);
 
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();

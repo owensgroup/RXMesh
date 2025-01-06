@@ -38,7 +38,7 @@ split_edges(rxmesh::Context                   context,
         return;
     }
 
-    Bitmask is_updated(cavity.patch_info().edges_capacity[0], shrd_alloc);
+    Bitmask is_updated(cavity.patch_info().edges_capacity, shrd_alloc);
 
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
