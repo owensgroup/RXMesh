@@ -267,7 +267,8 @@ __global__ static void slice_patches(Context        context,
                           shrd_alloc,
                           s_ev,
                           s_vv,
-                          s_active_e.m_bitmask);
+                          s_active_e.m_bitmask,
+                          s_active_v.m_bitmask);
         block.sync();
         for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
             uint16_t start = s_vv_offset[v];
