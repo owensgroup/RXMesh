@@ -2,6 +2,7 @@
 #include <cuda_profiler_api.h>
 
 #include "rxmesh/cavity_manager.cuh"
+#include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
@@ -43,7 +44,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
     ShmemAllocator shrd_alloc;
 
-    CavityManager<blockThreads, CavityOp::E> cavity(
+    CavityManager2<blockThreads, CavityOp::E> cavity(
         block, context, shrd_alloc, false, false);
 
 
@@ -184,8 +185,7 @@ __global__ static void __launch_bounds__(blockThreads)
     edge_flip_1(rxmesh::Context                        context,
                 const rxmesh::VertexAttribute<T>       coords,
                 const rxmesh::VertexAttribute<uint8_t> v_valence,
-                rxmesh::EdgeAttribute<EdgeStatus>      edge_status,
-                int*                                   d_buffer)
+                rxmesh::EdgeAttribute<EdgeStatus>      edge_status)
 {
     using namespace rxmesh;
 
@@ -193,7 +193,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
     ShmemAllocator shrd_alloc;
 
-    CavityManager<blockThreads, CavityOp::E> cavity(
+    CavityManager2<blockThreads, CavityOp::E> cavity(
         block, context, shrd_alloc, false, false);
 
 
@@ -205,7 +205,7 @@ __global__ static void __launch_bounds__(blockThreads)
         return;
     }
 
-    Bitmask is_updated(cavity.patch_info().edges_capacity[0], shrd_alloc);
+    Bitmask is_updated(cavity.patch_info().edges_capacity, shrd_alloc);
 
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
@@ -225,71 +225,71 @@ __global__ static void __launch_bounds__(blockThreads)
         // iter[0] and iter[2] are the edge two vertices
         // iter[1] and iter[3] are the two opposite vertices
 
-
         // we use the local index since we are only interested in the
         // valence which computed on the local index space
         if (edge_status(eh) == UNSEEN) {
-            if (iter[1].is_valid() && iter[3].is_valid() &&
-                iter[0].is_valid() && iter[2].is_valid()) {
 
-                if (iter[0] == iter[1] || iter[0] == iter[2] ||
-                    iter[0] == iter[3] || iter[1] == iter[2] ||
-                    iter[1] == iter[3] || iter[2] == iter[3]) {
-                    edge_status(eh) = SKIP;
-                    return;
-                }
+            // don't split boundary edges
+            if (!iter[0].is_valid() || !iter[1].is_valid() ||
+                !iter[2].is_valid() || !iter[3].is_valid()) {
+                return;
+            }
 
-                // since we only deal with closed meshes without boundaries
-                constexpr int target_valence = 6;
+            // degenerate cases
+            if (iter[0] == iter[1] || iter[0] == iter[2] ||
+                iter[0] == iter[3] || iter[1] == iter[2] ||
+                iter[1] == iter[3] || iter[2] == iter[3]) {
+                return;
+            }
+
+            // since we only deal with closed meshes without boundaries
+            constexpr int target_valence = 6;
 
 
-                const int valence_a = v_valence(iter[0]);
-                const int valence_b = v_valence(iter[2]);
-                const int valence_c = v_valence(iter[1]);
-                const int valence_d = v_valence(iter[3]);
+            const int valence_a = v_valence(iter[0]);
+            const int valence_b = v_valence(iter[2]);
+            const int valence_c = v_valence(iter[1]);
+            const int valence_d = v_valence(iter[3]);
 
-                // clang-format off
+            // clang-format off
                 const int deviation_pre =
                     (valence_a - target_valence) * (valence_a - target_valence) +
                     (valence_b - target_valence) * (valence_b - target_valence) +
                     (valence_c - target_valence) * (valence_c - target_valence) +
                     (valence_d - target_valence) * (valence_d - target_valence);
-                // clang-format on
+            // clang-format on
 
-                // clang-format off
+            // clang-format off
                 const int deviation_post =
                     (valence_a - 1 - target_valence)*(valence_a - 1 - target_valence) +
                     (valence_b - 1 - target_valence)*(valence_b - 1 - target_valence) +
                     (valence_c + 1 - target_valence)*(valence_c + 1 - target_valence) +
                     (valence_d + 1 - target_valence)*(valence_d + 1 - target_valence);
-                // clang-format on
+            // clang-format on
 
-                if (deviation_pre > deviation_post) {
-                    uint16_t v_c(iter.local(1)), v_d(iter.local(3));
+            if (deviation_pre > deviation_post) {
+                uint16_t v_c(iter.local(1)), v_d(iter.local(3));
 
-                    bool added = false;
+                bool added = false;
 
-                    if (iter[1].patch_id() == cavity.patch_id()) {
-                        uint16_t ret =
-                            ::atomicCAS(v_info + 2 * v_c, INVALID16, v_d);
-                        if (ret == INVALID16) {
-                            added               = true;
-                            v_info[2 * v_c + 1] = eh.local_id();
-                            e_flip.set(eh.local_id(), true);
-                        }
-                    }
-
-                    if (iter[3].patch_id() == cavity.patch_id() && !added) {
-                        uint16_t ret =
-                            ::atomicCAS(v_info + 2 * v_d, INVALID16, v_c);
-                        if (ret == INVALID16) {
-                            v_info[2 * v_d + 1] = eh.local_id();
-                            e_flip.set(eh.local_id(), true);
-                        }
+                if (iter[1].patch_id() == cavity.patch_id()) {
+                    uint16_t ret =
+                        ::atomicCAS(v_info + 2 * v_c, INVALID16, v_d);
+                    if (ret == INVALID16) {
+                        added               = true;
+                        v_info[2 * v_c + 1] = eh.local_id();
+                        e_flip.set(eh.local_id(), true);
                     }
                 }
-            } else {
-                edge_status(eh) = SKIP;
+
+                if (iter[3].patch_id() == cavity.patch_id() && !added) {
+                    uint16_t ret =
+                        ::atomicCAS(v_info + 2 * v_d, INVALID16, v_c);
+                    if (ret == INVALID16) {
+                        v_info[2 * v_d + 1] = eh.local_id();
+                        e_flip.set(eh.local_id(), true);
+                    }
+                }
             }
         }
     };
@@ -363,9 +363,6 @@ __global__ static void __launch_bounds__(blockThreads)
     block.sync();
 
     if (cavity.is_successful()) {
-        // if (threadIdx.x == 0) {
-        //     ::atomicAdd(d_buffer, s_num_flips);
-        // }
         for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (is_updated(eh.local_id())) {
                 edge_status(eh) = ADDED;
@@ -389,6 +386,34 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
 
     constexpr uint32_t blockThreads = 256;
 
+    LaunchBox<blockThreads> lb_valence;
+
+    rx.update_launch_box({},
+                         lb_valence,
+                         (void*)compute_valence<blockThreads>,
+                         false,
+                         false,
+                         true);
+
+    LaunchBox<blockThreads> lb_flip;
+
+
+    rx.prepare_launch_box({Op::EVDiamond, Op::VV},
+                          lb_flip,
+                          //(void*)edge_flip<T, blockThreads>,
+                          (void*)edge_flip_1<T, blockThreads>,
+                          true,
+                          false,
+                          false,
+                          false,
+                          [&](uint32_t v, uint32_t e, uint32_t f) {
+                              return detail::mask_num_bytes(e) +
+                                     2 * v * sizeof(uint16_t) +
+                                     2 * ShmemAllocator::default_alignment;
+                              // 2 * detail::mask_num_bytes(v) +
+                              // 3 * ShmemAllocator::default_alignment;
+                          });
+
     edge_status->reset(UNSEEN, DEVICE);
 
     int prv_remaining_work = rx.get_num_edges();
@@ -405,51 +430,21 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
             // RXMESH_INFO(" Queue size = {}",
             //             rx.get_context().m_patch_scheduler.size());
             num_inner_iter++;
-            LaunchBox<blockThreads> launch_box;
 
-            rx.update_launch_box({},
-                                 launch_box,
-                                 (void*)compute_valence<blockThreads>,
-                                 false,
-                                 false,
-                                 true);
 
             timers.start("Flip");
             compute_valence<blockThreads>
-                <<<launch_box.blocks,
-                   launch_box.num_threads,
-                   launch_box.smem_bytes_dyn>>>(rx.get_context(), *v_valence);
+                <<<lb_valence.blocks,
+                   lb_valence.num_threads,
+                   lb_valence.smem_bytes_dyn>>>(rx.get_context(), *v_valence);
 
             // link_condition(rx, edge_link);
 
-            rx.update_launch_box(
-                {Op::EVDiamond, Op::VV},
-                launch_box,
-                //(void*)edge_flip<T, blockThreads>,
-                (void*)edge_flip_1<T, blockThreads>,
-                true,
-                false,
-                false,
-                false,
-                [&](uint32_t v, uint32_t e, uint32_t f) {
-                    return detail::mask_num_bytes(e) +
-                           2 * v * sizeof(uint16_t) +
-                           2 * ShmemAllocator::default_alignment;
-                    // 2 * detail::mask_num_bytes(v) +
-                    // 3 * ShmemAllocator::default_alignment;
-                });
+            edge_flip_1<T, blockThreads><<<lb_flip.blocks,
+                                           lb_flip.num_threads,
+                                           lb_flip.smem_bytes_dyn>>>(
+                rx.get_context(), *coords, *v_valence, *edge_status);
 
-            // CUDA_ERROR(cudaMemset(d_buffer, 0, sizeof(int)));
-
-            edge_flip_1<T, blockThreads>
-                <<<launch_box.blocks,  // DIVIDE_UP(launch_box.blocks, 8),
-                   launch_box.num_threads,
-                   launch_box.smem_bytes_dyn>>>(rx.get_context(),
-                                                *coords,
-                                                *v_valence,
-                                                *edge_status,
-                                                //*edge_link,
-                                                d_buffer);
             timers.stop("Flip");
 
             timers.start("FlipCleanup");

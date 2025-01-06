@@ -2,6 +2,7 @@
 #include <cuda_profiler_api.h>
 
 #include "rxmesh/cavity_manager.cuh"
+#include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
 #include "util.cuh"
@@ -13,14 +14,13 @@ __global__ static void __launch_bounds__(blockThreads)
                   const rxmesh::VertexAttribute<T>  coords,
                   rxmesh::EdgeAttribute<EdgeStatus> edge_status,
                   const T                           low_edge_len_sq,
-                  const T                           high_edge_len_sq,
-                  int*                              d_buffer)
+                  const T                           high_edge_len_sq)
 {
 
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CavityManager<blockThreads, CavityOp::EV> cavity(
+    CavityManager2<blockThreads, CavityOp::EV> cavity(
         block, context, shrd_alloc, true);
 
     const uint32_t pid = cavity.patch_id();
@@ -220,9 +220,6 @@ __global__ static void __launch_bounds__(blockThreads)
     block.sync();
 
     if (cavity.is_successful()) {
-        // if (threadIdx.x == 0) {
-        //    ::atomicAdd(d_buffer, s_num_collapses);
-        //}
         for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (edge_mask(eh.local_id()) || cavity.is_recovered(eh)) {
                 edge_status(eh) = ADDED;
@@ -237,14 +234,13 @@ __global__ static void __launch_bounds__(blockThreads)
                     const rxmesh::VertexAttribute<T>  coords,
                     rxmesh::EdgeAttribute<EdgeStatus> edge_status,
                     const T                           low_edge_len_sq,
-                    const T                           high_edge_len_sq,
-                    int*                              d_buffer)
+                    const T                           high_edge_len_sq)
 {
 
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CavityManager<blockThreads, CavityOp::EV> cavity(
+    CavityManager2<blockThreads, CavityOp::EV> cavity(
         block, context, shrd_alloc, true);
 
     const uint32_t pid = cavity.patch_id();
@@ -260,7 +256,7 @@ __global__ static void __launch_bounds__(blockThreads)
     }
 
 
-    Bitmask is_updated(cavity.patch_info().edges_capacity[0], shrd_alloc);
+    Bitmask is_updated(cavity.patch_info().edges_capacity, shrd_alloc);
 
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
@@ -290,35 +286,35 @@ __global__ static void __launch_bounds__(blockThreads)
             const VertexHandle v3 = iter[3];
 
             // don't collapse boundary edges
-            if (v0.is_valid() && v1.is_valid() && v2.is_valid() &&
-                v3.is_valid()) {
+            if (!v0.is_valid() || !v1.is_valid() || !v2.is_valid() ||
+                !v3.is_valid()) {
+                return;
+            }
 
-                // degenerate cases
-                if (v0 == v1 || v0 == v2 || v0 == v3 || v1 == v2 || v1 == v3 ||
-                    v2 == v3) {
-                    edge_status(eh) = SKIP;
-                    return;
-                }
+            // degenerate cases
+            if (v0 == v1 || v0 == v2 || v0 == v3 || v1 == v2 || v1 == v3 ||
+                v2 == v3) {
+                return;
+            }
 
-                const vec3<T> p0 = coords.to_glm<3>(v0);
-                const vec3<T> p1 = coords.to_glm<3>(v1);
+            const vec3<T> p0 = coords.to_glm<3>(v0);
+            const vec3<T> p1 = coords.to_glm<3>(v1);
 
-                const T edge_len_sq = glm::distance2(p0, p1);
+            const T edge_len_sq = glm::distance2(p0, p1);
 
-                if (edge_len_sq < low_edge_len_sq) {
+            if (edge_len_sq < low_edge_len_sq) {
 
-                    const uint16_t c0(iter.local(0)), c1(iter.local(2));
+                const uint16_t c0(iter.local(0)), c1(iter.local(2));
 
-                    uint16_t ret = ::atomicCAS(v_info + 2 * c0, INVALID16, c1);
+                uint16_t ret = ::atomicCAS(v_info + 2 * c0, INVALID16, c1);
+                if (ret == INVALID16) {
+                    v_info[2 * c0 + 1] = eh.local_id();
+                    e_collapse.set(eh.local_id(), true);
+                } else {
+                    ret = ::atomicCAS(v_info + 2 * c1, INVALID16, c0);
                     if (ret == INVALID16) {
-                        v_info[2 * c0 + 1] = eh.local_id();
+                        v_info[2 * c1 + 1] = eh.local_id();
                         e_collapse.set(eh.local_id(), true);
-                    } else {
-                        ret = ::atomicCAS(v_info + 2 * c1, INVALID16, c0);
-                        if (ret == INVALID16) {
-                            v_info[2 * c1 + 1] = eh.local_id();
-                            e_collapse.set(eh.local_id(), true);
-                        }
                     }
                 }
             }
@@ -405,7 +401,7 @@ __global__ static void __launch_bounds__(blockThreads)
             for (uint16_t i = 0; i < size; ++i) {
                 const VertexHandle vvv = cavity.get_cavity_vertex(c, i);
 
-                const vec3<T> vp = coords.to_glm<3>(vvv);               
+                const vec3<T> vp = coords.to_glm<3>(vvv);
 
                 const T edge_len_sq = glm::distance2(vp, new_p);
                 if (edge_len_sq > high_edge_len_sq) {
@@ -484,9 +480,6 @@ __global__ static void __launch_bounds__(blockThreads)
     block.sync();
 
     if (cavity.is_successful()) {
-        // if (threadIdx.x == 0) {
-        //     ::atomicAdd(d_buffer, s_num_collapses);
-        // }
         for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
             if (is_updated(eh.local_id()) || cavity.is_recovered(eh)) {
                 edge_status(eh) = ADDED;
@@ -514,9 +507,26 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
 
     int prv_remaining_work = rx.get_num_edges();
 
+    LaunchBox<blockThreads> lb;
+    rx.prepare_launch_box({Op::EVDiamond, Op::VV},
+                          lb,
+                          (void*)edge_collapse_1<T, blockThreads>,
+                          true,
+                          false,
+                          false,
+                          false,
+                          [&](uint32_t v, uint32_t e, uint32_t f) {
+                              return detail::mask_num_bytes(e) +
+                                     2 * v * sizeof(uint16_t) +
+                                     2 * ShmemAllocator::default_alignment;
+                              // 2 * detail::mask_num_bytes(v) +
+                              // 3 * ShmemAllocator::default_alignment;
+                          });
+
 
     int num_outer_iter = 0;
     int num_inner_iter = 0;
+
     // int   num_collapses  = 0;
 
     timers.start("CollapseTotal");
@@ -530,36 +540,16 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
 
             // link_condition(rx, edge_link);
 
-            LaunchBox<blockThreads> launch_box;
-            rx.update_launch_box(
-                {Op::EVDiamond, Op::VV},
-                launch_box,
-                (void*)edge_collapse_1<T, blockThreads>,
-                true,
-                false,
-                false,
-                false,
-                [&](uint32_t v, uint32_t e, uint32_t f) {
-                    return detail::mask_num_bytes(e) +
-                           2 * v * sizeof(uint16_t) +
-                           2 * ShmemAllocator::default_alignment;
-                    // 2 * detail::mask_num_bytes(v) +
-                    // 3 * ShmemAllocator::default_alignment;
-                });
-
-            // CUDA_ERROR(cudaMemset(d_buffer, 0, sizeof(int)));
 
             timers.start("Collapse");
             edge_collapse_1<T, blockThreads>
-                <<<launch_box.blocks,  // DIVIDE_UP(launch_box.blocks, 8),
-                   launch_box.num_threads,
-                   launch_box.smem_bytes_dyn>>>(rx.get_context(),
-                                                *coords,
-                                                *edge_status,
-                                                //*edge_link,
-                                                low_edge_len_sq,
-                                                high_edge_len_sq,
-                                                d_buffer);
+                <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
+                    rx.get_context(),
+                    *coords,
+                    *edge_status,
+                    low_edge_len_sq,
+                    high_edge_len_sq);
+
             timers.stop("Collapse");
 
             timers.start("CollapseCleanup");
