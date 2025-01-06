@@ -11,7 +11,8 @@ template <typename T, uint32_t blockThreads>
 __global__ static void __launch_bounds__(blockThreads)
     vertex_smoothing(const rxmesh::Context            context,
                      const rxmesh::VertexAttribute<T> coords,
-                     rxmesh::VertexAttribute<T>       new_coords)
+                     rxmesh::VertexAttribute<T>       new_coords,
+                     rxmesh::VertexAttribute<bool>    v_boundary)
 {
     // VV to compute vertex sum and normal
     using namespace rxmesh;
@@ -19,6 +20,13 @@ __global__ static void __launch_bounds__(blockThreads)
 
     auto smooth = [&](VertexHandle v_id, VertexIterator& iter) {
         if (iter.size() == 0) {
+            return;
+        }
+
+        if (v_boundary(v_id)) {
+            new_coords(v_id, 0) = coords(v_id, 0);
+            new_coords(v_id, 1) = coords(v_id, 1);
+            new_coords(v_id, 2) = coords(v_id, 2);
             return;
         }
 
@@ -94,10 +102,12 @@ __global__ static void __launch_bounds__(blockThreads)
 }
 
 template <typename T>
-inline void tangential_relaxation(rxmesh::RXMeshDynamic&           rx,
-                                  rxmesh::VertexAttribute<T>*      coords,
-                                  rxmesh::VertexAttribute<T>*      new_coords,
-                                  rxmesh::Timers<rxmesh::GPUTimer> timers)
+inline void tangential_relaxation(rxmesh::RXMeshDynamic&         rx,
+                                  rxmesh::VertexAttribute<T>*    coords,
+                                  rxmesh::VertexAttribute<T>*    new_coords,
+                                  rxmesh::VertexAttribute<bool>* v_boundary,
+                                  const int num_smooth_iters,
+                                  rxmesh::Timers<rxmesh::GPUTimer>& timers)
 {
     using namespace rxmesh;
 
@@ -111,10 +121,13 @@ inline void tangential_relaxation(rxmesh::RXMeshDynamic&           rx,
                          true);
 
     timers.start("SmoothTotal");
-    vertex_smoothing<T, blockThreads>
-        <<<launch_box.blocks,
-           launch_box.num_threads,
-           launch_box.smem_bytes_dyn>>>(rx.get_context(), *coords, *new_coords);
+    for (int i = 0; i < num_smooth_iters; ++i) {
+        vertex_smoothing<T, blockThreads><<<launch_box.blocks,
+                                            launch_box.num_threads,
+                                            launch_box.smem_bytes_dyn>>>(
+            rx.get_context(), *coords, *new_coords, *v_boundary);
+        std::swap(new_coords, coords);
+    }
     timers.stop("SmoothTotal");
 
     RXMESH_INFO("Relax time {} (ms)", timers.elapsed_millis("SmoothTotal"));

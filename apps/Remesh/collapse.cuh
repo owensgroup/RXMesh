@@ -233,6 +233,7 @@ __global__ static void __launch_bounds__(blockThreads)
     edge_collapse_1(rxmesh::Context                   context,
                     const rxmesh::VertexAttribute<T>  coords,
                     rxmesh::EdgeAttribute<EdgeStatus> edge_status,
+                    rxmesh::VertexAttribute<bool>     v_boundary,
                     const T                           low_edge_len_sq,
                     const T                           high_edge_len_sq)
 {
@@ -291,6 +292,12 @@ __global__ static void __launch_bounds__(blockThreads)
                 return;
             }
 
+            // don't touch boundary vertices
+            if (v_boundary(v0) || v_boundary(v1) || v_boundary(v2) ||
+                v_boundary(v3)) {
+                return;
+            }
+
             // degenerate cases
             if (v0 == v1 || v0 == v2 || v0 == v3 || v1 == v2 || v1 == v3 ||
                 v2 == v3) {
@@ -321,7 +328,7 @@ __global__ static void __launch_bounds__(blockThreads)
         }
     };
 
-    // 1. mark edge that we want to collapse based on the edge lenght
+    // 1. mark edge that we want to collapse based on the edge length
     Query<blockThreads> query(context, cavity.patch_id());
     query.dispatch<Op::EVDiamond>(block, shrd_alloc, should_collapse);
     block.sync();
@@ -375,7 +382,7 @@ __global__ static void __launch_bounds__(blockThreads)
     shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
 
     // create the cavity
-    if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
+    if (cavity.prologue(block, shrd_alloc, coords, edge_status, v_boundary)) {
 
         is_updated.reset(block);
         block.sync();
@@ -494,10 +501,11 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
                                  rxmesh::VertexAttribute<T>*        coords,
                                  rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
                                  rxmesh::EdgeAttribute<int8_t>*     edge_link,
+                                 rxmesh::VertexAttribute<bool>*     v_boundary,
                                  const T low_edge_len_sq,
                                  const T high_edge_len_sq,
-                                 rxmesh::Timers<rxmesh::GPUTimer> timers,
-                                 int*                             d_buffer)
+                                 rxmesh::Timers<rxmesh::GPUTimer>& timers,
+                                 int*                              d_buffer)
 {
     using namespace rxmesh;
 
@@ -547,6 +555,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
                     rx.get_context(),
                     *coords,
                     *edge_status,
+                    *v_boundary,
                     low_edge_len_sq,
                     high_edge_len_sq);
 
@@ -557,12 +566,36 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
             timers.stop("CollapseCleanup");
 
             timers.start("CollapseSlice");
-            rx.slice_patches(*coords, *edge_status /*, *edge_link */);
+            rx.slice_patches(
+                *coords, *edge_status, *v_boundary /*, *edge_link */);
             timers.stop("CollapseSlice");
 
             timers.start("CollapseCleanup");
             rx.cleanup();
             timers.stop("CollapseCleanup");
+
+            bool show = false;
+            if (show) {
+
+                rx.update_host();
+                EXPECT_TRUE(rx.validate());
+
+                coords->move(DEVICE, HOST);
+                edge_status->move(DEVICE, HOST);
+                rx.update_polyscope();
+                auto ps_mesh = rx.get_polyscope_mesh();
+                ps_mesh->updateVertexPositions(*coords);
+                ps_mesh->setEnabled(false);
+
+                ps_mesh->addEdgeScalarQuantity("EdgeStatus", *edge_status);
+                ps_mesh->addVertexScalarQuantity("BoundaryV", *v_boundary);
+
+                rx.render_vertex_patch();
+                rx.render_edge_patch();
+                rx.render_face_patch()->setEnabled(false);
+
+                polyscope::show();
+            }
         }
 
         int remaining_work = is_done(rx, edge_status, d_buffer);

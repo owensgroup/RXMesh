@@ -11,6 +11,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void edge_split(rxmesh::Context                   context,
                                   const rxmesh::VertexAttribute<T>  coords,
                                   rxmesh::EdgeAttribute<EdgeStatus> edge_status,
+                                  rxmesh::VertexAttribute<bool>     v_boundary,
                                   const T high_edge_len_sq,
                                   const T low_edge_len_sq,
                                   int     iteration)
@@ -58,6 +59,12 @@ __global__ static void edge_split(rxmesh::Context                   context,
             if (!vc.is_valid() || !vd.is_valid() || !va.is_valid() ||
                 !vb.is_valid()) {
                 edge_status(eh) = SKIP;
+                return;
+            }
+
+            // don't touch boundary vertices
+            if (v_boundary(va) || v_boundary(vb) || v_boundary(vc) ||
+                v_boundary(vd)) {
                 return;
             }
 
@@ -115,7 +122,7 @@ __global__ static void edge_split(rxmesh::Context                   context,
 
     shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
 
-    if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
+    if (cavity.prologue(block, shrd_alloc, coords, edge_status, v_boundary)) {
 
 
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
@@ -200,10 +207,11 @@ template <typename T>
 inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
                              rxmesh::VertexAttribute<T>*        coords,
                              rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
-                             const T                          high_edge_len_sq,
-                             const T                          low_edge_len_sq,
-                             rxmesh::Timers<rxmesh::GPUTimer> timers,
-                             int*                             d_buffer)
+                             rxmesh::VertexAttribute<bool>*     v_boundary,
+                             const T                           high_edge_len_sq,
+                             const T                           low_edge_len_sq,
+                             rxmesh::Timers<rxmesh::GPUTimer>& timers,
+                             int*                              d_buffer)
 {
     using namespace rxmesh;
 
@@ -253,6 +261,7 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
                     rx.get_context(),
                     *coords,
                     *edge_status,
+                    *v_boundary,
                     high_edge_len_sq,
                     low_edge_len_sq,
                     num_inner_iter % rx.get_num_colors());
@@ -269,7 +278,7 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
             timers.stop("SplitCleanup");
 
             timers.start("SplitSlice");
-            rx.slice_patches(*coords, *edge_status);
+            rx.slice_patches(*coords, *edge_status, *v_boundary);
             timers.stop("SplitSlice");
 
             timers.start("SplitCleanup");

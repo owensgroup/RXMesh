@@ -223,6 +223,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     auto v_valence = rx.add_vertex_attribute<uint8_t>("Valence", 1);
 
+    auto v_boundary = rx.add_vertex_attribute<bool>("BoundaryV", 1);
 
     auto edge_len       = rx.add_edge_attribute<float>("edgeLen", 1);
     auto vertex_valence = rx.add_vertex_attribute<int>("vertexValence", 1);
@@ -236,6 +237,8 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     CUDA_ERROR(cudaMallocManaged((void**)&d_buffer, sizeof(int)));
 
     auto edge_link = rx.add_edge_attribute<int8_t>("edgeLink", 1);
+
+    rx.get_boundary_vertices(*v_boundary);
 
     // edge_link->move(DEVICE, HOST);
     // rx.get_polyscope_mesh()->addEdgeScalarQuantity("edgeLink", *edge_link);
@@ -300,6 +303,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
         split_long_edges(rx,
                          coords.get(),
                          edge_status.get(),
+                         v_boundary.get(),
                          high_edge_len_sq,
                          low_edge_len_sq,
                          timers,
@@ -310,6 +314,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
                              coords.get(),
                              edge_status.get(),
                              edge_link.get(),
+                             v_boundary.get(),
                              low_edge_len_sq,
                              high_edge_len_sq,
                              timers,
@@ -322,11 +327,17 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
                           v_valence.get(),
                           edge_status.get(),
                           edge_link.get(),
+                          v_boundary.get(),
                           timers,
                           d_buffer);
 
         RXMESH_INFO(" Vertex Smoothing -- iter {}", iter);
-        tangential_relaxation(rx, coords.get(), new_coords.get(), timers);
+        tangential_relaxation(rx,
+                              coords.get(),
+                              new_coords.get(),
+                              v_boundary.get(),
+                              Arg.num_smooth_iters,
+                              timers);
         std::swap(new_coords, coords);
     }
 
@@ -374,6 +385,14 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
                           edge_status->get_memory_mg() +
                           vertex_valence->get_memory_mg());
 
+    RXMESH_INFO("Split Total Time {} (ms)",
+                timers.elapsed_millis("SplitTotal"));
+    RXMESH_INFO("Collapse Total Time {} (ms)",
+                timers.elapsed_millis("CollapseTotal"));
+    RXMESH_INFO("Flip Total Time {} (ms)",
+                timers.elapsed_millis("FlipTotal"));
+    RXMESH_INFO("Smooth Total Time {} (ms)",
+                timers.elapsed_millis("SmoothTotal"));   
 
     report.add_member("split_time_ms", timers.elapsed_millis("SplitTotal"));
     report.add_member("collapse_time_ms",

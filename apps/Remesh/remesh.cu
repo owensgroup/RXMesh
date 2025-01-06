@@ -3,13 +3,17 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
 
+#include "rxmesh/geometry_factory.h"
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
-    std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    float       relative_len  = 1.0;
-    uint32_t    num_iter      = 3;
-    uint32_t    device_id     = 0;
+    std::string obj_file_name    = STRINGIFY(INPUT_DIR) "cloth.obj";
+    std::string output_folder    = STRINGIFY(OUTPUT_DIR);
+    uint32_t    nx               = 66;
+    uint32_t    ny               = 66;
+    float       relative_len     = 1.0;
+    int         num_smooth_iters = 5;
+    uint32_t    num_iter         = 1;
+    uint32_t    device_id        = 0;
     char**      argv;
     int         argc;
 } Arg;
@@ -23,6 +27,13 @@ TEST(Apps, Remesh)
     // Select device
     cuda_query(Arg.device_id);
 
+    // std::vector<std::vector<float>>    verts;
+    // std::vector<std::vector<uint32_t>> fv;
+    // create_plane(verts, fv, Arg.nx, Arg.ny);
+    // RXMeshDynamic rx(fv);
+    // rx.add_vertex_coordinates(verts, "Coords");
+
+
     RXMeshDynamic rx(Arg.obj_file_name);
     // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
     //         "_patches");
@@ -31,7 +42,12 @@ TEST(Apps, Remesh)
     //                  STRINGIFY(OUTPUT_DIR) +
     //                      extract_file_name(Arg.obj_file_name) + "_patches");
     //
-    // ASSERT_TRUE(rx.is_closed());
+
+    ASSERT_TRUE(rx.is_edge_manifold());
+
+    // rx.export_obj("grid_" + std::to_string(Arg.nx) + "_" +
+    //                   std::to_string(Arg.ny) + ".obj",
+    //               *rx.get_input_vertex_coordinates());
 
     remesh_rxmesh(rx);
 }
@@ -84,6 +100,13 @@ int main(int argc, char** argv)
             Arg.relative_len =
                 std::stof(get_cmd_option(argv, argv + argc, "-relative_len"));
         }
+
+        if (cmd_option_exists(argv, argc + argv, "-nx")) {
+            Arg.nx = atoi(get_cmd_option(argv, argv + argc, "-nx"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-ny")) {
+            Arg.ny = atoi(get_cmd_option(argv, argv + argc, "-ny"));
+        }
     }
 
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
@@ -91,6 +114,8 @@ int main(int argc, char** argv)
     RXMESH_TRACE("device_id= {}", Arg.device_id);
     RXMESH_TRACE("num_iter= {}", Arg.num_iter);
     RXMESH_TRACE("relative_len= {}", Arg.relative_len);
+    RXMESH_TRACE("nx= {}", Arg.nx);
+    RXMESH_TRACE("ny= {}", Arg.ny);
 
 
     return RUN_ALL_TESTS();

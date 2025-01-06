@@ -185,7 +185,8 @@ __global__ static void __launch_bounds__(blockThreads)
     edge_flip_1(rxmesh::Context                        context,
                 const rxmesh::VertexAttribute<T>       coords,
                 const rxmesh::VertexAttribute<uint8_t> v_valence,
-                rxmesh::EdgeAttribute<EdgeStatus>      edge_status)
+                rxmesh::EdgeAttribute<EdgeStatus>      edge_status,
+                rxmesh::VertexAttribute<bool>          v_boundary)
 {
     using namespace rxmesh;
 
@@ -232,6 +233,12 @@ __global__ static void __launch_bounds__(blockThreads)
             // don't split boundary edges
             if (!iter[0].is_valid() || !iter[1].is_valid() ||
                 !iter[2].is_valid() || !iter[3].is_valid()) {
+                return;
+            }
+
+            // don't touch boundary vertices
+            if (v_boundary(iter[0]) || v_boundary(iter[1]) ||
+                v_boundary(iter[2]) || v_boundary(iter[3])) {
                 return;
             }
 
@@ -332,7 +339,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
     shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
 
-    if (cavity.prologue(block, shrd_alloc, coords, edge_status)) {
+    if (cavity.prologue(block, shrd_alloc, coords, edge_status, v_boundary)) {
 
         is_updated.reset(block);
         block.sync();
@@ -378,7 +385,8 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
                               rxmesh::VertexAttribute<uint8_t>*  v_valence,
                               rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
                               rxmesh::EdgeAttribute<int8_t>*     edge_link,
-                              rxmesh::Timers<rxmesh::GPUTimer>   timers,
+                              rxmesh::VertexAttribute<bool>*     v_boundary,
+                              rxmesh::Timers<rxmesh::GPUTimer>&  timers,
                               int*                               d_buffer)
 {
 
@@ -440,10 +448,14 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
 
             // link_condition(rx, edge_link);
 
-            edge_flip_1<T, blockThreads><<<lb_flip.blocks,
-                                           lb_flip.num_threads,
-                                           lb_flip.smem_bytes_dyn>>>(
-                rx.get_context(), *coords, *v_valence, *edge_status);
+            edge_flip_1<T, blockThreads>
+                <<<lb_flip.blocks,
+                   lb_flip.num_threads,
+                   lb_flip.smem_bytes_dyn>>>(rx.get_context(),
+                                             *coords,
+                                             *v_valence,
+                                             *edge_status,
+                                             *v_boundary);
 
             timers.stop("Flip");
 
@@ -452,7 +464,7 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
             timers.stop("FlipCleanup");
 
             timers.start("FlipSlice");
-            rx.slice_patches(*coords, *edge_status /*,edge_link*/);
+            rx.slice_patches(*coords, *edge_status, *v_boundary /*,edge_link*/);
             timers.stop("FlipSlice");
 
             timers.start("FlipCleanup");
@@ -466,9 +478,6 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
             break;
         }
         prv_remaining_work = remaining_work;
-        // RXMESH_INFO("num_flips {}, time {}",
-        //             num_flips,
-        //             app_time + slice_time + cleanup_time);
     }
     timers.stop("FlipTotal");
 
