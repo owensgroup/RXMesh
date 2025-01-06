@@ -1191,10 +1191,16 @@ CavityManager2<blockThreads, cop>::add_edge_to_cavity_graph(const uint16_t c0,
 
     // decide which cavity to deactivate
     // we choose the one with more overlaps
-    // printf("\n deactiaving !!!!!!!!!!! ");
-    if (c0_id > c1_id) {
+    if (c0_id > c1_id && c0_id != MAX_OVERLAP_CAVITIES) {
         clear(c0, c0_id);
-    } else {
+    } else if (c0_id > c1_id && c1_id != MAX_OVERLAP_CAVITIES) {
+        clear(c1, c1_id);
+    }
+
+    // if we can prioritize based on overlapping size
+    if (c0_id != MAX_OVERLAP_CAVITIES) {
+        clear(c0, c0_id);
+    } else if (c1_id != MAX_OVERLAP_CAVITIES) {
         clear(c1, c1_id);
     }
 }

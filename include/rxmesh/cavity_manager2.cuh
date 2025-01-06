@@ -338,7 +338,7 @@ struct CavityManager2
     /**
      * @brief try to add an edge in the cavity graph that connects the two nodes
      * that represents the cavities c0 and c1. If we can not add the edge
-     * (because if the space constraints), we deactivate the cavity with more
+     * (because of the space constraints), we deactivate the cavity with more
      * overlaps
      */
     __device__ __forceinline__ void add_edge_to_cavity_graph(const uint16_t c0,

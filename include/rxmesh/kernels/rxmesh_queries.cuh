@@ -416,6 +416,9 @@ __device__ __forceinline__ void orient_edges_around_vertices(
         // TODO if the vertex is not owned by this patch, then there is no
         // reason to orient its edges because no serious computation is done on
         // it
+        if (patch_info.is_deleted(LocalVertexT(v))) {
+            continue;
+        }
 
         int start = int(s_output_offset[v]);
         int end   = int(s_output_offset[v + 1]);
@@ -601,6 +604,10 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
     const uint32_t* s_ev_duplicate32 =
         reinterpret_cast<const uint32_t*>(s_ev_duplicate);
     for (uint32_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+        if (detail::is_deleted(v, active_mask_v)) {
+            continue;
+        }
+
         uint32_t start = s_output_offset[v];
         uint32_t end   = s_output_offset[v + 1];
 
@@ -616,6 +623,10 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
             // uint16_t v1 = s_ev_duplicate[2 * edge + 1];
 
             assert(v0 != INVALID16 && v1 != INVALID16);
+
+            assert(!detail::is_deleted(v0, active_mask_v));
+            assert(!detail::is_deleted(v1, active_mask_v));
+
             assert(v0 == v || v1 == v);
             // s_output_value[e] = (v0 == v) ? v1 : v0;
             s_output_value[e] = (v0 == v) * v1 + (v1 == v) * v0;
