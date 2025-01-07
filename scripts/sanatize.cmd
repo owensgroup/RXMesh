@@ -6,10 +6,11 @@
 
 setlocal enabledelayedexpansion
 
-for /l %%i in (1,1,20) do (
+for /l %%i in (1,1,100) do (
     echo *****************************************
     echo ********* Running iteration %%i *********
     echo *****************************************
-    call compute-sanitizer --log-file sanitize_memcheck_%%i.log --tool memcheck --check-cache-control ..\build\bin\Release\Remesh.exe -nx 30 -ny 50000
+    call compute-sanitizer --log-file sanitize_memcheck_%%i.log --tool memcheck --check-cache-control ..\build\bin\Debug\Remesh.exe -nx 330 -ny 330
+	call compute-sanitizer --log-file sanitize_racecheck_%%i.log --tool racecheck ..\build\bin\Debug\Remesh.exe -nx 330 -ny 330	
 )
 endlocal

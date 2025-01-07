@@ -1,6 +1,8 @@
 @echo off
 set REPORT_NAME=report
-set EXE=..\build\bin\Release\Remesh.exe -nx 800 -ny 800
+::set EXE=..\build\bin\Release\Remesh.exe -nx 330 -ny 330
+::set EXE=..\build\bin\Release\SECPriority.exe -input ..\input\rocker-arm.obj
+set EXE=..\build\bin\Release\RXMesh_test.exe  --gtest_filter=RXMeshStatic.Queries -input ..\input\Nefertiti.obj -num_run 10
 
 nsys profile -t cuda,nvtx --force-overwrite true -o %REPORT_NAME% %EXE% 
 
