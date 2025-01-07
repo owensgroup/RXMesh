@@ -15,9 +15,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void __launch_bounds__(blockThreads)
     delaunay_edge_flip(rxmesh::Context            context,
                        rxmesh::VertexAttribute<T> coords,
-                       int*                       d_flipped,
-                       uint32_t*                  num_successful,
-                       uint32_t*                  num_sliced)
+                       int*                       d_flipped)
 {
     using namespace rxmesh;
     using vec3           = glm::vec<3, T, glm::defaultp>;
@@ -60,7 +58,7 @@ __global__ static void __launch_bounds__(blockThreads)
         // if not a boundary edge
         if (v2.is_valid() && v3.is_valid()) {
 
-            if (v0 == v1 || v0 == v2 || v0 == v3 ||v1 == v2 || v1 == v3 ||
+            if (v0 == v1 || v0 == v2 || v0 == v3 || v1 == v2 || v1 == v3 ||
                 v2 == v3) {
                 return;
             }
@@ -70,7 +68,7 @@ __global__ static void __launch_bounds__(blockThreads)
             const vec3 V0 = coords.to_glm<3>(v0);
             const vec3 V1 = coords.to_glm<3>(v1);
             const vec3 V2 = coords.to_glm<3>(v2);
-            const vec3 V3 = coords.to_glm<3>(v3);            
+            const vec3 V3 = coords.to_glm<3>(v3);
 
             // find the angle between S, M, Q vertices (i.e., angle at M)
             auto angle_between_three_vertices = [](const vec3& S,
@@ -165,10 +163,6 @@ __global__ static void __launch_bounds__(blockThreads)
     // create cavities
     if (cavity.prologue(block, shrd_alloc, coords)) {
 
-        if (threadIdx.x == 0) {
-            ::atomicAdd(num_successful, 1);
-        }
-
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
 
@@ -189,12 +183,6 @@ __global__ static void __launch_bounds__(blockThreads)
             d_flipped[0] = 1;
         });
     }
-
-    // if (threadIdx.x == 0) {
-    //     if (cavity.should_slice()) {
-    //         ::atomicAdd(num_sliced, 1);
-    //     }
-    // }
 
     cavity.epilogue(block);
 }
@@ -257,7 +245,9 @@ inline uint32_t count_non_delaunay_edges(TriMesh& mesh)
     return num_non_delaunay;
 }
 
-inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
+inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
+                            bool                   with_verify,
+                            bool                   skip_mcf)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -275,35 +265,34 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     const uint32_t num_edges    = rx.get_num_edges();
     const uint32_t num_faces    = rx.get_num_faces();
 
+    if (!skip_mcf) {
+        MCFData mcf_data_before = mcf_rxmesh_cg<float>(rx, false);
+        report.add_member("mcf_before_time", mcf_data_before.total_time);
+        report.add_member("mcf_before_num_iter", mcf_data_before.num_iter);
+        report.add_member("mcf_before_matvec_time",
+                          mcf_data_before.matvec_time);
+        report.add_member(
+            "mcf_before_time_per_iter",
+            mcf_data_before.total_time / float(mcf_data_before.num_iter));
+    }
 
-    MCFData mcf_data_before = mcf_rxmesh_cg<float>(rx, false);
-    report.add_member("mcf_before_time", mcf_data_before.total_time);
-    report.add_member("mcf_before_num_iter", mcf_data_before.num_iter);
-    report.add_member("mcf_before_matvec_time", mcf_data_before.matvec_time);
-    report.add_member(
-        "mcf_before_time_per_iter",
-        mcf_data_before.total_time / float(mcf_data_before.num_iter));
 
     auto coords = rx.get_input_vertex_coordinates();
 
     EXPECT_TRUE(rx.validate());
 
-    int*      d_flipped        = nullptr;
-    uint32_t* d_num_successful = nullptr;
-    uint32_t* d_num_sliced     = nullptr;
+    int* d_flipped = nullptr;
     CUDA_ERROR(cudaMalloc((void**)&d_flipped, sizeof(int)));
-    CUDA_ERROR(cudaMalloc((void**)&d_num_successful, sizeof(uint32_t)));
-    CUDA_ERROR(cudaMalloc((void**)&d_num_sliced, sizeof(uint32_t)));
 
-    int h_flipped = 1;
-
+    int h_flipped  = 1;
     int outer_iter = 0;
 
-    float total_time = 0;
+    Timers<GPUTimer> timers;
 
-    float app_time     = 0;
-    float slice_time   = 0;
-    float cleanup_time = 0;
+    timers.add("Total");
+    timers.add("App");
+    timers.add("Slice");
+    timers.add("Cleanup");
 
     RXMESH_INFO("Input mesh #Vertices {}", rx.get_num_vertices());
     RXMESH_INFO("Input mesh #Edges {}", rx.get_num_edges());
@@ -312,14 +301,21 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
 
     CUDA_ERROR(cudaProfilerStart());
 
-    size_t   max_smem_bytes_dyn           = 0;
-    size_t   max_smem_bytes_static        = 0;
-    uint32_t max_num_registers_per_thread = 0;
-    uint32_t max_num_blocks               = 0;
+    LaunchBox<blockThreads> launch_box;
+    rx.prepare_launch_box({Op::EVDiamond, Op::VV},
+                          launch_box,
+                          (void*)delaunay_edge_flip<float, blockThreads>,
+                          true,
+                          false,
+                          false,
+                          false,
+                          [&](uint32_t v, uint32_t e, uint32_t f) {
+                              return detail::mask_num_bytes(e) +
+                                     2 * v * sizeof(uint16_t) +
+                                     2 * ShmemAllocator::default_alignment;
+                          });
 
-    GPUTimer timer;
-    timer.start();
-
+    timers.start("Total");
     while (h_flipped != 0) {
         CUDA_ERROR(cudaMemset(d_flipped, 0, sizeof(int)));
 
@@ -327,107 +323,54 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
         rx.reset_scheduler();
         int inner_iter = 0;
         while (!rx.is_queue_empty()) {
-            LaunchBox<blockThreads> launch_box;
-            rx.update_launch_box(
-                {Op::EVDiamond, Op::VV},
-                launch_box,
-                (void*)delaunay_edge_flip<float, blockThreads>,
-                true,
-                false,
-                false,
-                false,
-                [&](uint32_t v, uint32_t e, uint32_t f) {
-                    return detail::mask_num_bytes(e) +
-                           2 * v * sizeof(uint16_t) +
-                           2 * ShmemAllocator::default_alignment;
-                });
 
-            max_smem_bytes_dyn =
-                std::max(max_smem_bytes_dyn, launch_box.smem_bytes_dyn);
-            max_smem_bytes_static =
-                std::max(max_smem_bytes_static, launch_box.smem_bytes_static);
-            max_num_registers_per_thread =
-                std::max(max_num_registers_per_thread,
-                         launch_box.num_registers_per_thread);
-            max_num_blocks =
-                std::max(max_num_blocks, DIVIDE_UP(launch_box.blocks, 8));
-
-            GPUTimer app_timer;
-            app_timer.start();
+            timers.start("App");
             delaunay_edge_flip<float, blockThreads>
                 <<<DIVIDE_UP(launch_box.blocks, 8),
                    launch_box.num_threads,
-                   launch_box.smem_bytes_dyn>>>(rx.get_context(),
-                                                *coords,
-                                                d_flipped,
-                                                d_num_successful,
-                                                d_num_sliced);
-            app_timer.stop();
+                   launch_box.smem_bytes_dyn>>>(
+                    rx.get_context(), *coords, d_flipped);
+            timers.stop("App");
 
-            GPUTimer slice_timer;
-            slice_timer.start();
+            timers.start("Slice");
             rx.slice_patches(*coords);
-            slice_timer.stop();
+            timers.stop("Slice");
 
-            GPUTimer cleanup_timer;
-            cleanup_timer.start();
+            timers.start("Cleanup");
             rx.cleanup();
-            cleanup_timer.stop();
-
-            app_time += app_timer.elapsed_millis();
-            slice_time += slice_timer.elapsed_millis();
-            cleanup_time += cleanup_timer.elapsed_millis();
-
-            // uint32_t h_num_successful, h_num_sliced;
-            // CUDA_ERROR(cudaMemcpy(&h_num_successful,
-            //                       d_num_successful,
-            //                       sizeof(uint32_t),
-            //                       cudaMemcpyDeviceToHost));
-            //
-            // CUDA_ERROR(cudaMemcpy(&h_num_sliced,
-            //                       d_num_sliced,
-            //                       sizeof(uint32_t),
-            //                       cudaMemcpyDeviceToHost));
-            //
-            // RXMESH_INFO("num_patches = {}, num_successful= {}, num_sliced =
-            // {}",
-            //             rx.get_num_patches(),
-            //             h_num_successful,
-            //             h_num_sliced);
-            //  break;
+            timers.stop("Cleanup");
         }
         CUDA_ERROR(cudaMemcpy(
             &h_flipped, d_flipped, sizeof(int), cudaMemcpyDeviceToHost));
         // break;
         outer_iter++;
     }
-    timer.stop();
-    total_time = timer.elapsed_millis();
+    timers.stop("Total");
 
     CUDA_ERROR(cudaDeviceSynchronize());
     CUDA_ERROR(cudaGetLastError());
     CUDA_ERROR(cudaProfilerStop());
 
     RXMESH_INFO("delaunay_rxmesh() RXMesh Delaunay Edge Flip took {} (ms)",
-                total_time);
-    RXMESH_INFO("delaunay_rxmesh() App time {} (ms)", app_time);
-    RXMESH_INFO("delaunay_rxmesh() Slice timer {} (ms)", slice_time);
-    RXMESH_INFO("delaunay_rxmesh() Cleanup timer {} (ms)", cleanup_time);
+                timers.elapsed_millis("Total"));
+    RXMESH_INFO("delaunay_rxmesh() App time {} (ms)",
+                timers.elapsed_millis("App"));
+    RXMESH_INFO("delaunay_rxmesh() Slice timer {} (ms)",
+                timers.elapsed_millis("Slice"));
+    RXMESH_INFO("delaunay_rxmesh() Cleanup timer {} (ms)",
+                timers.elapsed_millis("Cleanup"));
 
 
     rx.update_host();
 
-    report.add_member("delaunay_edge_flip_time", total_time);
-    report.add_member("delaunay_edge_flip_app_time", app_time);
-    report.add_member("delaunay_edge_flip_slice_time", slice_time);
-    report.add_member("delaunay_edge_flip_cleanup_time", cleanup_time);
-
-    report.add_member("max_smem_bytes_dyn", max_smem_bytes_dyn);
-    report.add_member("max_smem_bytes_static", max_smem_bytes_static);
-    report.add_member("max_num_registers_per_thread",
-                      max_num_registers_per_thread);
-    report.add_member("max_num_blocks", max_num_blocks);
-
+    report.add_member("delaunay_edge_flip_time",
+                      timers.elapsed_millis("Total"));
+    report.add_member("delaunay_edge_flip_app_time",
+                      timers.elapsed_millis("App"));
+    report.add_member("delaunay_edge_flip_slice_time",
+                      timers.elapsed_millis("Slice"));
+    report.add_member("delaunay_edge_flip_cleanup_time",
+                      timers.elapsed_millis("Cleanup"));
 
     report.model_data(Arg.obj_file_name + "_after", rx, "model_after");
 
@@ -460,28 +403,31 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx, bool with_verify = true)
     rx.get_polyscope_mesh()->setEnabled(false);
 #endif
 
-    MCFData mcf_data_after = mcf_rxmesh_cg<float>(rx, true);
-    report.add_member("mcf_after_time", mcf_data_after.total_time);
-    report.add_member("mcf_after_num_iter", mcf_data_after.num_iter);
-    report.add_member("mcf_after_matvec_time", mcf_data_after.matvec_time);
-    report.add_member(
-        "mcf_after_time_per_iter",
-        mcf_data_after.total_time / float(mcf_data_after.num_iter));
-
+    if (!skip_mcf) {
+        MCFData mcf_data_after = mcf_rxmesh_cg<float>(rx, true);
+        report.add_member("mcf_after_time", mcf_data_after.total_time);
+        report.add_member("mcf_after_num_iter", mcf_data_after.num_iter);
+        report.add_member("mcf_after_matvec_time", mcf_data_after.matvec_time);
+        report.add_member(
+            "mcf_after_time_per_iter",
+            mcf_data_after.total_time / float(mcf_data_after.num_iter));
 
 #if USE_POLYSCOPE
-    rx.update_polyscope();
-    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-    rx.get_polyscope_mesh()->setEnabled(false);
+        rx.update_polyscope();
+        rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+        rx.get_polyscope_mesh()->setEnabled(false);
 
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
+        rx.render_vertex_patch();
+        rx.render_edge_patch();
+        rx.render_face_patch();
+#endif
+    }
+
+#if USE_POLYSCOPE
     polyscope::show();
 #endif
+
     CUDA_ERROR(cudaFree(d_flipped));
-    CUDA_ERROR(cudaFree(d_num_successful));
-    CUDA_ERROR(cudaFree(d_num_sliced));
 
     report.write(Arg.output_folder + "/rxmesh_delaunay",
                  "Delaunay_RXMesh_" + extract_file_name(Arg.obj_file_name));
