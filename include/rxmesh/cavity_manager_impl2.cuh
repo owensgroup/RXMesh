@@ -129,7 +129,7 @@ __device__ __forceinline__ CavityManager2<blockThreads, cop>::CavityManager2(
         std::max(face_cap_bytes, m_patch_info.lp_f.num_bytes())));
     assert(m_s_cavity_id_f);
 
-    const uint16_t assumed_num_cavities = m_context.m_max_num_faces[0] / 2;
+    const uint16_t assumed_num_cavities = DIVIDE_UP(face_cap, 2);
     m_s_cavity_creator = shrd_alloc.alloc<uint16_t>(assumed_num_cavities);
     assert(m_s_cavity_creator);
     fill_n<blockThreads>(
@@ -155,13 +155,6 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
     const uint16_t edge_cap = m_patch_info.edges_capacity;
     const uint16_t face_cap = m_patch_info.faces_capacity;
 
-    const uint16_t max_vertex_cap =
-        static_cast<uint16_t>(m_context.m_max_num_vertices[0]);
-    const uint16_t max_edge_cap =
-        static_cast<uint16_t>(m_context.m_max_num_edges[0]);
-    const uint16_t max_face_cap =
-        static_cast<uint16_t>(m_context.m_max_num_faces[0]);
-
     __shared__ LPPair s_inv_st_v[LPHashTable::stash_size];
     __shared__ LPPair s_inv_st_e[LPHashTable::stash_size];
     __shared__ LPPair s_inv_st_f[LPHashTable::stash_size];
@@ -177,13 +170,9 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
                                     reinterpret_cast<LPPair*>(m_s_cavity_id_f),
                                     s_inv_st_f);
 
-    assert(max_vertex_cap >= m_s_num_vertices[0]);
-    assert(max_edge_cap >= m_s_num_edges[0]);
-    assert(max_face_cap >= m_s_num_faces[0]);
-
-    assert(vert_cap >= m_s_num_vertices[0]);
-    assert(edge_cap >= m_s_num_edges[0]);
-    assert(face_cap >= m_s_num_faces[0]);
+    assert(m_context.m_max_num_vertices[0] >= m_s_num_vertices[0]);
+    assert(m_context.m_max_num_edges[0] >= m_s_num_edges[0]);
+    assert(m_context.m_max_num_faces[0] >= m_s_num_faces[0]);
 
     // load EV and FE
     m_s_ev = shrd_alloc.alloc<uint16_t>(2 * edge_cap);
@@ -283,9 +272,9 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
     assert(m_s_owned_cavity_bdry_v.m_bitmask);
     m_s_connect_cavity_bdry_v = Bitmask(vert_cap, shrd_alloc);
     assert(m_s_connect_cavity_bdry_v.m_bitmask);
-    m_s_src_mask_v = Bitmask(max_vertex_cap, shrd_alloc);
+    m_s_src_mask_v = Bitmask(vert_cap, shrd_alloc);
     assert(m_s_src_mask_v.m_bitmask);
-    m_s_src_connect_mask_v = Bitmask(max_vertex_cap, shrd_alloc);
+    m_s_src_connect_mask_v = Bitmask(vert_cap, shrd_alloc);
     assert(m_s_src_connect_mask_v.m_bitmask);
 
 
@@ -299,9 +288,9 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
                 m_s_in_cavity_e,
                 m_patch_info.owned_mask_e,
                 m_patch_info.active_mask_e);
-    m_s_src_mask_e = Bitmask(std::max(max_edge_cap, edge_cap), shrd_alloc);
+    m_s_src_mask_e = Bitmask(edge_cap, shrd_alloc);
     assert(m_s_src_mask_e.m_bitmask);
-    m_s_src_connect_mask_e = Bitmask(max_edge_cap, shrd_alloc);
+    m_s_src_connect_mask_e = Bitmask(edge_cap, shrd_alloc);
     assert(m_s_src_connect_mask_e.m_bitmask);
 
     // faces masks
@@ -316,7 +305,7 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
                 m_patch_info.active_mask_f);
 
 
-    assert(2 * get_num_cavities() <= max_face_cap);
+    assert(2 * get_num_cavities() <= face_cap);
 
 #ifndef NDEBUG
     // EV
@@ -377,9 +366,8 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
     m_s_locked_patches_mask.reset(block);
 
     // cavity boundary edges
-    m_s_cavity_boundary_edges = shrd_alloc.alloc<uint16_t>(m_s_num_edges[0]);
+    m_s_cavity_boundary_edges = shrd_alloc.alloc<uint16_t>(edge_cap);
     assert(m_s_cavity_boundary_edges);
-
 
     // lp stash
     __shared__ LPPair st_v[LPHashTable::stash_size];
@@ -415,7 +403,7 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
     // this assertion is because when we allocated dynamic shared memory
     // during kernel launch we assumed the number of cavities is at most
     // half the number of faces in the patch
-    assert(m_s_num_cavities[0] <= m_s_num_faces[0] / 2);
+    assert(m_s_num_cavities[0] + 1 <= DIVIDE_UP(face_cap, 2));
     m_s_cavity_size_prefix = shrd_alloc.alloc<int>(m_s_num_cavities[0] + 1);
     assert(m_s_cavity_size_prefix);
 
@@ -448,6 +436,7 @@ CavityManager2<blockThreads, cop>::verify_reading_from_global_memory(
         assert(m_s_active_mask_v(v) ==
                !m_patch_info.is_deleted(LocalVertexT(v)));
 
+        assert(v < m_s_owned_mask_v.size());
         assert(m_s_owned_mask_v(v) == m_patch_info.is_owned(LocalVertexT(v)));
     }
 
@@ -455,6 +444,7 @@ CavityManager2<blockThreads, cop>::verify_reading_from_global_memory(
     for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         assert(e < m_s_active_mask_e.size());
         assert(m_s_active_mask_e(e) == !m_patch_info.is_deleted(LocalEdgeT(e)));
+        assert(e < m_s_owned_mask_e.size());
         assert(m_s_owned_mask_e(e) == m_patch_info.is_owned(LocalEdgeT(e)));
     }
 
@@ -462,6 +452,7 @@ CavityManager2<blockThreads, cop>::verify_reading_from_global_memory(
     for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
         assert(f < m_s_active_mask_f.size());
         assert(m_s_active_mask_f(f) == !m_patch_info.is_deleted(LocalFaceT(f)));
+        assert(f < m_s_owned_mask_f.size());
         assert(m_s_owned_mask_f(f) == m_patch_info.is_owned(LocalFaceT(f)));
     }
 
@@ -842,6 +833,8 @@ CavityManager2<blockThreads, cop>::construct_cavity_graph(
     // try to add an edge between c_a and c_b
     auto add_edge_gather = [&](const uint16_t c_a, const uint16_t c_b) {
         if (c_a != INVALID16 && c_b != INVALID16 && c_a != c_b) {
+            assert(c_a < m_s_active_cavity_bitmask.size());
+            assert(c_b < m_s_active_cavity_bitmask.size());
             if (m_s_active_cavity_bitmask(c_a) &&
                 m_s_active_cavity_bitmask(c_b)) {
                 add_edge_to_cavity_graph(c_a, c_b);
@@ -853,6 +846,7 @@ CavityManager2<blockThreads, cop>::construct_cavity_graph(
                                 const uint16_t element_id,
                                 const uint16_t cavity_id) {
         if (cavity_id != INVALID16) {
+            assert(cavity_id < m_s_active_cavity_bitmask.size());
             if (m_s_active_cavity_bitmask(cavity_id)) {
                 uint16_t prv_cavity =
                     atomicMin(&element_cavity_id[element_id], cavity_id);
@@ -869,6 +863,7 @@ CavityManager2<blockThreads, cop>::construct_cavity_graph(
 
     auto is_active_cavity = [&](const uint16_t cavity_id) -> bool {
         if (cavity_id != INVALID16) {
+            assert(cavity_id < m_s_active_cavity_bitmask.size());
             if (m_s_active_cavity_bitmask(cavity_id)) {
                 return true;
             } else {
@@ -1115,11 +1110,13 @@ CavityManager2<blockThreads, cop>::calc_cavity_maximal_independent_set(
     block.sync();
 
     for (int c = threadIdx.x; c < num_cavities; c += blockThreads) {
+        assert(c < m_s_active_cavity_bitmask.size());
         if (m_s_active_cavity_bitmask(c)) {
             const uint16_t creator = m_s_cavity_creator[c];
             assert(creator != INVALID16);
             if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                           cop == CavityOp::VE || cop == CavityOp::VF) {
+                assert(creator < m_s_active_mask_v.size());
                 assert(m_s_active_mask_v(creator));
                 m_s_cavity_id_v[creator] = c;
                 assert(m_s_active_mask_v(creator));
@@ -1172,6 +1169,7 @@ CavityManager2<blockThreads, cop>::add_edge_to_cavity_graph(const uint16_t c0,
 
     auto clear = [&](const uint16_t c, const uint16_t index) {
         m_s_cavity_graph_mutex.lock(c);
+        assert(c < m_s_active_cavity_bitmask.size());
         m_s_active_cavity_bitmask.reset(c, true);
         assert(c * MAX_OVERLAP_CAVITIES + index <
                MAX_OVERLAP_CAVITIES * get_num_cavities());
@@ -1244,6 +1242,9 @@ CavityManager2<blockThreads, cop>::mark_vertices_through_edges()
             const uint16_t v0 = m_s_ev[2 * e + 0];
             const uint16_t v1 = m_s_ev[2 * e + 1];
 
+            assert(v0 < m_s_active_mask_v.size());
+            assert(v1 < m_s_active_mask_v.size());
+
             assert(m_s_active_mask_v(v0));
             assert(m_s_active_mask_v(v1));
 
@@ -1293,6 +1294,9 @@ CavityManager2<blockThreads, cop>::mark_edges_through_vertices()
 
             const uint16_t c0 = m_s_cavity_id_v[v0];
             const uint16_t c1 = m_s_cavity_id_v[v1];
+
+            assert(v0 < m_s_active_mask_v.size());
+            assert(v1 < m_s_active_mask_v.size());
 
             assert(m_s_active_mask_v(v0));
             assert(m_s_active_mask_v(v1));
@@ -1347,6 +1351,7 @@ CavityManager2<blockThreads, cop>::mark_element_scatter(
     const uint16_t cavity_id)
 {
     if (cavity_id != INVALID16) {
+        assert(cavity_id < m_s_active_cavity_bitmask.size());
         if (m_s_active_cavity_bitmask(cavity_id)) {
             uint16_t prv_cavity =
                 atomicMin(&element_cavity_id[element_id], cavity_id);
@@ -1377,6 +1382,7 @@ CavityManager2<blockThreads, cop>::mark_element_gather(
     const uint16_t cavity_id)
 {
     if (cavity_id != INVALID16) {
+        assert(cavity_id < m_s_active_cavity_bitmask.size());
         if (m_s_active_cavity_bitmask(cavity_id)) {
             const uint16_t prv_element_cavity_id =
                 element_cavity_id[element_id];
@@ -1533,6 +1539,8 @@ CavityManager2<blockThreads, cop>::deactivate_boundary_cavities(
 
                 assert(e < m_s_owned_mask_e.size());
                 assert(f < m_s_owned_mask_f.size());
+                assert(v0 < m_s_owned_mask_v.size());
+                assert(v1 < m_s_owned_mask_v.size());
                 if (!m_s_owned_mask_f(f) || !m_s_owned_mask_e(e) ||
                     !m_s_owned_mask_v(v0) || !m_s_owned_mask_v(v1)) {
                     assert(v0 < m_s_owned_cavity_bdry_v.size());
@@ -1852,6 +1860,9 @@ CavityManager2<blockThreads, cop>::sort_cavities_edge_loop()
                     uint32_t v0 = m_s_ev[2 * ee + 0];
                     uint32_t v1 = m_s_ev[2 * ee + 1];
 
+                    assert(v0 < m_s_active_mask_v.size());
+                    assert(v1 < m_s_active_mask_v.size());
+
                     assert(m_s_active_mask_v(v0));
                     assert(m_s_active_mask_v(v1));
                     if (v0 == end_vertex || v1 == end_vertex) {
@@ -1921,6 +1932,9 @@ CavityManager2<blockThreads, cop>::get_cavity_vertex(uint16_t c,
     const uint16_t v0 = m_s_ev[2 * edge];
     const uint16_t v1 = m_s_ev[2 * edge + 1];
 
+    assert(v0 < m_s_active_mask_v.size());
+    assert(v1 < m_s_active_mask_v.size());
+
     assert(m_s_active_mask_v(v0));
     assert(m_s_active_mask_v(v1));
     return VertexHandle(m_patch_info.patch_id, ((dir == 0) ? v0 : v1));
@@ -1945,6 +1959,7 @@ CavityManager2<blockThreads, cop>::add_vertex()
         return VertexHandle();
     }
     assert(v_id < m_patch_info.vertices_capacity);
+    assert(v_id < m_s_active_mask_v.size());
     assert(m_s_active_mask_v(v_id));
     assert(v_id < m_s_owned_mask_v.size());
 
@@ -1981,6 +1996,10 @@ CavityManager2<blockThreads, cop>::add_edge(const VertexHandle src,
     assert(e_id < m_patch_info.edges_capacity);
     assert(e_id < m_s_active_mask_e.size());
     assert(m_s_active_mask_e(e_id));
+
+    assert(src.local_id() < m_s_active_mask_v.size());
+    assert(dest.local_id() < m_s_active_mask_v.size());
+
     assert(m_s_active_mask_v(src.local_id()));
     assert(m_s_active_mask_v(dest.local_id()));
 
@@ -2120,6 +2139,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::get_vertices(
     assert(eh.patch_id() == m_patch_info.patch_id);
     assert(eh.local_id() < m_s_num_edges[0]);
     // assert(m_s_active_mask_e(eh.local_id()));
+    assert(eh.local_id() < m_s_owned_mask_e.size());
     assert(m_s_owned_mask_e(eh.local_id()));
 
     v0 = VertexHandle(m_patch_info.patch_id, m_s_ev[2 * eh.local_id() + 0]);
@@ -2128,6 +2148,8 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::get_vertices(
     // assert(m_s_active_mask_v(v0.local_id()));
     // assert(m_s_active_mask_v(v1.local_id()));
 
+    assert(v0.local_id() < m_s_owned_mask_v.size());
+    assert(v1.local_id() < m_s_owned_mask_v.size());
     assert(m_s_owned_mask_v(v0.local_id()));
     assert(m_s_owned_mask_v(v1.local_id()));
 }
@@ -2142,7 +2164,8 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::get_edges(
     assert(fh.patch_id() == m_patch_info.patch_id);
     assert(fh.local_id() < m_s_num_faces[0]);
     // assert(m_s_active_mask_e(fh.local_id()));
-    assert(m_s_owned_mask_e(fh.local_id()));
+    assert(fh.local_id() < m_s_owned_mask_f.size());
+    assert(m_s_owned_mask_f(fh.local_id()));
 
     e0 = EdgeHandle(m_patch_info.patch_id, m_s_fe[3 * fh.local_id() + 0]);
     e1 = EdgeHandle(m_patch_info.patch_id, m_s_fe[3 * fh.local_id() + 1]);
@@ -2151,6 +2174,10 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::get_edges(
     // assert(m_s_active_mask_e(e0.local_id()));
     // assert(m_s_active_mask_e(e1.local_id()));
     // assert(m_s_active_mask_e(e2.local_id()));
+
+    assert(e0.local_id() < m_s_owned_mask_e.size());
+    assert(e1.local_id() < m_s_owned_mask_e.size());
+    assert(e2.local_id() < m_s_owned_mask_e.size());
 
     assert(m_s_owned_mask_e(e0.local_id()));
     assert(m_s_owned_mask_e(e1.local_id()));
@@ -2470,6 +2497,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::pre_migrate(
     for_each_cavity(block, [&](uint16_t c, uint16_t size) {
         for (int i = 0; i < int(size); ++i) {
             uint16_t vertex = get_cavity_vertex(c, i).local_id();
+            assert(vertex < m_s_active_mask_v.size());
             assert(m_s_active_mask_v(vertex));
             assert(vertex < m_s_owned_mask_v.size());
             if (m_s_owned_mask_v(vertex)) {
@@ -2509,6 +2537,8 @@ CavityManager2<blockThreads, cop>::pre_ribbonize(
 
             assert(v0 < m_s_num_vertices[0]);
             assert(v1 < m_s_num_vertices[0]);
+            assert(v0 < m_s_active_mask_v.size());
+            assert(v1 < m_s_active_mask_v.size());
             assert(m_s_active_mask_v(v0) || m_s_in_cavity_v(v0));
             assert(m_s_active_mask_v(v1) || m_s_in_cavity_v(v1));
 
@@ -2550,6 +2580,7 @@ CavityManager2<blockThreads, cop>::set_ownership_change_bitmask(
     block.sync();
 
     for (int v = threadIdx.x; v < int(m_s_num_vertices[0]); v += blockThreads) {
+        assert(v < m_s_owned_mask_v.size());
         if (!m_s_owned_mask_v(v) && m_s_in_cavity_v(v)) {
             m_s_ownership_change_mask_v.set(v, true);
         }
@@ -2581,6 +2612,8 @@ CavityManager2<blockThreads, cop>::set_ownership_change_bitmask(
 
                 assert(v0 < m_s_in_cavity_v.size());
                 assert(v1 < m_s_in_cavity_v.size());
+                assert(v0 < m_s_active_mask_v.size());
+                assert(v1 < m_s_active_mask_v.size());
                 assert(m_s_active_mask_v(v0) || m_s_in_cavity_v(v0));
                 assert(m_s_active_mask_v(v1) || m_s_in_cavity_v(v1));
 
@@ -2601,6 +2634,7 @@ CavityManager2<blockThreads, cop>::set_ownership_change_bitmask(
 
         if (m_s_ownership_change_mask_f(f)) {
             for (int e = 0; e < 3; ++e) {
+                assert(edges[e] < m_s_owned_mask_e.size());
                 if (!m_s_owned_mask_e(edges[e]) &&
                     m_s_active_mask_e(edges[e])) {
                     m_s_ownership_change_mask_e.set(edges[e], true);
@@ -2622,6 +2656,7 @@ CavityManager2<blockThreads, cop>::set_ownership_change_bitmask(
             for (int i = 0; i < 2; ++i) {
                 const uint16_t v = m_s_ev[2 * e + i];
                 assert(v < m_s_in_cavity_v.size());
+                assert(v < m_s_active_mask_v.size());
                 assert(m_s_active_mask_v(v) || m_s_in_cavity_v(v));
                 assert(v < m_s_owned_cavity_bdry_v.size());
                 assert(v < m_s_not_owned_cavity_bdry_v.size());
@@ -2868,6 +2903,7 @@ CavityManager2<blockThreads, cop>::soft_migrate_from_patch(
                 // we don't check if this vertex is active in global memory
                 // since, it could have been activated/added only in shared
                 // memory (through a previous call to mirgate_from_patch)
+                assert(local_id < m_s_active_mask_v.size());
                 assert(m_s_active_mask_v(local_id));
                 assert(local_id < m_s_owned_mask_v.size());
                 assert(!m_s_owned_mask_v(local_id));
@@ -3003,6 +3039,7 @@ CavityManager2<blockThreads, cop>::migrate_from_patch(
                 // since, it could have been activated/added only in shared
                 // memory (through a previous call to mirgate_from_patch)
                 assert(local_id < m_s_in_cavity_v.size());
+                assert(local_id < m_s_active_mask_v.size());
                 assert(m_s_active_mask_v(local_id) ||
                        m_s_in_cavity_v(local_id));
 
@@ -3939,6 +3976,7 @@ CavityManager2<blockThreads, cop>::recover_edges()
 #ifndef NDEBUG
                 for (int i = 0; i < 2; ++i) {
                     const uint16_t v = m_s_ev[2 * e + i];
+                    assert(v < m_s_active_mask_v.size());
                     assert(m_s_recover_v(v) || m_s_active_mask_v(v));
                 }
 #endif
@@ -3954,6 +3992,7 @@ CavityManager2<blockThreads, cop>::recover_vertices()
     for (int v = threadIdx.x; v < int(m_s_num_vertices[0]); v += blockThreads) {
         if (m_s_recover_v(v)) {
             if (!m_patch_info.is_deleted(LocalVertexT(v))) {
+                assert(v < m_s_active_mask_v.size());
                 m_s_active_mask_v.set(v, true);
             }
         }
@@ -3972,6 +4011,7 @@ CavityManager2<blockThreads, cop>::recover_vertices_through_edges()
                 assert(v < m_s_num_vertices[0]);
                 assert(!m_patch_info.is_deleted(LocalVertexT(v)));
                 m_s_recover_v.set(v, true);
+                assert(v < m_s_active_mask_v.size());
                 m_s_active_mask_v.set(v, true);
             }
         }
@@ -4091,9 +4131,11 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::epilogue(
             for (int v = threadIdx.x; v < int(m_s_active_mask_v.size());
                  v += blockThreads) {
                 if (m_s_in_cavity_v(v)) {
+                    assert(v < m_s_active_mask_v.size());
                     assert(!m_s_active_mask_v(v));
                 }
                 if (m_s_fill_in_v(v)) {
+                    assert(v < m_s_active_mask_v.size());
                     assert(m_s_active_mask_v(v));
                 }
             }
@@ -4184,9 +4226,11 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::epilogue(
             for (int v = threadIdx.x; v < int(m_s_active_mask_v.size());
                  v += blockThreads) {
                 if (m_s_in_cavity_v(v)) {
+                    assert(v < m_s_active_mask_v.size());
                     m_s_active_mask_v.set(v, true);
                 }
                 if (m_s_fill_in_v(v)) {
+                    assert(v < m_s_active_mask_v.size());
                     m_s_active_mask_v.reset(v, true);
                 }
             }

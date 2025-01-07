@@ -770,12 +770,14 @@ class RXMeshDynamic : public RXMeshStatic
         if (is_dyn) {
 
             // connectivity (FE and EV) shared memory
+            //$$ m_s_ev, m_s_fe
             size_t connectivity_shmem = 0;
             connectivity_shmem += 3 * face_cap * sizeof(uint16_t) +
                                   2 * edge_cap * sizeof(uint16_t) +
                                   2 * ShmemAllocator::default_alignment;
 
             // cavity ID (which overlapped with the inverted hashtable)
+            //$$ m_s_cavity_id_v, m_s_cavity_id_e, m_s_cavity_id_f
             size_t cavity_id_shmem = 0;
             cavity_id_shmem += std::max(
                 vertex_cap * sizeof(uint16_t),
@@ -792,17 +794,28 @@ class RXMeshDynamic : public RXMeshStatic
             // size)
             const uint16_t half_face_cap = DIVIDE_UP(face_cap, 2);
 
+            // stores (and compute) the size (the prefix sum) of cavity sizes
+            //$$ m_s_cavity_size_prefix
             size_t cavity_size_shmem = 0;
             cavity_size_shmem +=
                 half_face_cap * sizeof(int) + ShmemAllocator::default_alignment;
 
+            // cavity boundary edges used to store the cavities (outer) edges
+            // in compressed/compact sparse format
+            size_t cavity_boundary_edges = 0;
+            cavity_boundary_edges +=
+                edge_cap * sizeof(uint16_t) + ShmemAllocator::default_alignment;
+
             // cavity src element
+            //$$ m_s_cavity_creator
             size_t cavity_creator_shmem = half_face_cap * sizeof(uint16_t) +
                                           ShmemAllocator::default_alignment;
 
             // cavity boundary edges (overlaps with cavity graph)
-            size_t cavity_bdr_shmem = 0;
-            cavity_bdr_shmem +=
+            //$$ m_s_boudary_edges_cavity_id | m_s_cavity_graph |
+            // m_s_temp_inv_lp
+            size_t boudary_edges_cavity_id = 0;
+            boudary_edges_cavity_id +=
                 std::max(edge_cap,
                          uint16_t(MAX_OVERLAP_CAVITIES * half_face_cap)) *
                     sizeof(uint16_t) +
@@ -824,28 +837,32 @@ class RXMeshDynamic : public RXMeshStatic
             bitmasks_shmem += detail::mask_num_bytes(face_cap);
 
             // the local offset of faces used in construct_cavities_edge_loop
-            size_t face_offset_shmem = face_cap * sizeof(uint8_t);
+            //$$ m_s_face_local_offset
+            size_t face_offset_shmem =
+                face_cap * sizeof(uint8_t) + ShmemAllocator::default_alignment;
 
             // shared memory is the max of 1. static query shared memory + the
             // cavity ID shared memory (since we need to mark seed elements) 2.
             // dynamic rxmesh shared memory which includes cavity ID shared
             // memory and other things
-            RXMESH_TRACE(
-                "RXMeshDynamic::update_launch_box() connectivity_shmem= "
-                "{}, cavity_id_shmem= {}, cavity_bdr_shmem= {}, "
-                "cavity_size_shmem= {}, bitmasks_shmem= {}, "
-                "cavity_creator_shmem={}, static_shmem= {}",
-                connectivity_shmem,
-                cavity_id_shmem,
-                cavity_bdr_shmem,
-                cavity_size_shmem,
-                bitmasks_shmem,
-                cavity_creator_shmem,
-                static_shmem);
+
+            // RXMESH_TRACE(
+            //     "RXMeshDynamic::update_launch_box() connectivity_shmem= "
+            //     "{}, cavity_id_shmem= {}, boudary_edges_cavity_id= {}, "
+            //     "cavity_size_shmem= {}, bitmasks_shmem= {}, "
+            //     "cavity_creator_shmem={}, static_shmem= {}",
+            //     connectivity_shmem,
+            //     cavity_id_shmem,
+            //     boudary_edges_cavity_id,
+            //     cavity_size_shmem,
+            //     bitmasks_shmem,
+            //     cavity_creator_shmem,
+            //     static_shmem);
+
             launch_box.smem_bytes_dyn = std::max(
-                connectivity_shmem + cavity_id_shmem + cavity_bdr_shmem +
-                    cavity_size_shmem + bitmasks_shmem + cavity_creator_shmem +
-                    face_offset_shmem,
+                connectivity_shmem + cavity_id_shmem + boudary_edges_cavity_id +
+                    cavity_size_shmem + cavity_boundary_edges + bitmasks_shmem +
+                    cavity_creator_shmem + face_offset_shmem,
                 static_shmem + cavity_id_shmem + cavity_creator_shmem);
         } else {
             launch_box.smem_bytes_dyn = static_shmem;

@@ -1014,6 +1014,7 @@ struct CavityManager2
 
     // store the boundary edges of all cavities in compact format (similar to
     // CSR for sparse matrices using m_s_cavity_size_prefix but no value ptr)
+    // overlap with m_s_boudary_edges_cavity_id
     uint16_t* m_s_cavity_boundary_edges;
 
     // patch stash stored in shared memory

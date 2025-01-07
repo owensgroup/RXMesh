@@ -24,7 +24,7 @@ __global__ static void secp(rxmesh::Context             context,
     // we first use this mask to set the edge we want to collapse (and then
     // filter them). Then after cavity.prologue, we reuse this bitmask to mark
     // the newly added edges
-    Bitmask edge_mask(cavity.patch_info().edges_capacity[0], shrd_alloc);
+    Bitmask edge_mask(cavity.patch_info().edges_capacity, shrd_alloc);
     edge_mask.reset(block);
 
     // we use this bitmask to mark the other end of to-be-collapse edge during

@@ -23,7 +23,7 @@ __global__ static void __launch_bounds__(blockThreads)
             return;
         }
 
-        if (v_boundary(v_id)) {
+        if (v_boundary(v_id) || iter.size() == 0) {
             new_coords(v_id, 0) = coords(v_id, 0);
             new_coords(v_id, 1) = coords(v_id, 1);
             new_coords(v_id, 2) = coords(v_id, 2);

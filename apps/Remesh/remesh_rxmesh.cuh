@@ -389,10 +389,9 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
                 timers.elapsed_millis("SplitTotal"));
     RXMESH_INFO("Collapse Total Time {} (ms)",
                 timers.elapsed_millis("CollapseTotal"));
-    RXMESH_INFO("Flip Total Time {} (ms)",
-                timers.elapsed_millis("FlipTotal"));
+    RXMESH_INFO("Flip Total Time {} (ms)", timers.elapsed_millis("FlipTotal"));
     RXMESH_INFO("Smooth Total Time {} (ms)",
-                timers.elapsed_millis("SmoothTotal"));   
+                timers.elapsed_millis("SmoothTotal"));
 
     report.add_member("split_time_ms", timers.elapsed_millis("SplitTotal"));
     report.add_member("collapse_time_ms",

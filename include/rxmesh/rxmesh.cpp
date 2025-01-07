@@ -156,9 +156,6 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                           m_h_vertex_prefix,
                           m_h_edge_prefix,
                           m_h_face_prefix,
-                          max_lp_hashtable_capacity<LocalVertexT>(),
-                          max_lp_hashtable_capacity<LocalEdgeT>(),
-                          max_lp_hashtable_capacity<LocalFaceT>(),
                           m_d_patches_info,
                           sch);
     m_timers.stop("context.init");
