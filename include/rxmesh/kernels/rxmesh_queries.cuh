@@ -614,6 +614,8 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
         for (uint32_t e = start; e < end; ++e) {
             const uint16_t edge = s_output_value[e];
 
+            assert(!detail::is_deleted(edge, active_mask_e));
+
             const uint32_t two_v = s_ev_duplicate32[edge];
 
             const uint16_t v0 = detail::extract_low_bits<16>(two_v);
