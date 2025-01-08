@@ -12,6 +12,7 @@ set(SOURCE_LIST
 	noise.h	
 	collapser.cuh
 	link_condition.cuh
+	util.cuh
 )
 
 
