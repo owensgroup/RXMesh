@@ -131,13 +131,13 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
             max_num_blocks =
                 std::max(max_num_blocks, DIVIDE_UP(launch_box.blocks, 8));
 
-            timers.start("APP");
-            sec<float, blockThreads><<<DIVIDE_UP(launch_box.blocks, 8),
+            timers.start("App");
+            sec<float, blockThreads><<<launch_box.blocks,
                                        launch_box.num_threads,
                                        launch_box.smem_bytes_dyn>>>(
                 rx.get_context(), *coords, histo, reduce_threshold);
 
-            timers.stop("APP");
+            timers.stop("App");
 
             timers.start("Cleanup");
             rx.cleanup();
@@ -145,7 +145,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
             timers.start("Slice");
             rx.slice_patches(*coords);
-            timers.stop("Cleanup");
+            timers.stop("Slice");
 
             timers.start("Cleanup");
             rx.cleanup();
@@ -153,7 +153,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
         }
     }
     timers.stop("Total");
-
+    CUDA_ERROR(cudaDeviceSynchronize());
     CUDA_ERROR(cudaProfilerStop());
 
     RXMESH_INFO("sec_rxmesh() RXMesh SEC took {} (ms), num_passes= {}",

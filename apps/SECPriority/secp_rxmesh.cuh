@@ -61,7 +61,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
     int num_passes = 0;
 
     CUDA_ERROR(cudaProfilerStart());
-    //PriorityQueueT priority_queue(rx.get_num_edges());
+    // PriorityQueueT priority_queue(rx.get_num_edges());
 
     timers.start("Total");
     while (rx.get_num_vertices(true) > final_num_vertices) {
@@ -72,7 +72,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
         // rebuild every round? Not necessarily a great way to use a priority
         // queue.
         PriorityQueueT priority_queue(rx.get_num_edges());
-        //priority_queue.clear();
+        // priority_queue.clear();
         to_collapse->reset(false, DEVICE);
         rx.update_launch_box(
             {Op::EV},
@@ -165,7 +165,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
                 });
 
             timers.start("App");
-            secp<float, blockThreads><<<DIVIDE_UP(launch_box.blocks, 8),
+            secp<float, blockThreads><<<launch_box.blocks,
                                         launch_box.num_threads,
                                         launch_box.smem_bytes_dyn>>>(
                 rx.get_context(), *coords, *to_collapse);
@@ -184,9 +184,9 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
             timers.stop("Cleanup");
 
             {
-                //rx.update_host();
-                //coords->move(DEVICE, HOST);
-                //EXPECT_TRUE(rx.validate());
+                // rx.update_host();
+                // coords->move(DEVICE, HOST);
+                // EXPECT_TRUE(rx.validate());
 
                 // rx.update_polyscope();
                 //
@@ -202,7 +202,7 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
         }
     }
     timers.stop("Total");
-
+    CUDA_ERROR(cudaDeviceSynchronize());
 
     CUDA_ERROR(cudaProfilerStop());
 
