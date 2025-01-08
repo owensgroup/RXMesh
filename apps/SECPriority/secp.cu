@@ -30,7 +30,7 @@ TEST(Apps, SECPriority)
     const std::string p_file = STRINGIFY(OUTPUT_DIR) +
                                extract_file_name(Arg.obj_file_name) +
                                "_patches";
-    RXMeshDynamic rx(Arg.obj_file_name, p_file);
+    RXMeshDynamic rx(Arg.obj_file_name);
     if (!std::filesystem::exists(p_file)) {
         rx.save(p_file);
     }

@@ -4,8 +4,8 @@
 #include "rxmesh/rxmesh_dynamic.h"
 
 #include "histogram.cuh"
-#include "sec_kernels.cuh"
 #include "rxmesh/util/report.h"
+#include "sec_kernels.cuh"
 
 inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
                        const uint32_t         final_num_vertices)
@@ -27,11 +27,15 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
 
     LaunchBox<blockThreads> launch_box;
 
-    float total_time   = 0;
-    float app_time     = 0;
-    float slice_time   = 0;
-    float cleanup_time = 0;
-    float histo_time   = 0;
+    Timers<GPUTimer> timers;
+    timers.add("Total");
+    timers.add("App");
+    timers.add("Slice");
+    timers.add("Cleanup");
+    timers.add("Histo");
+
+
+    float histo_time = 0;
 
     const int num_bins = 256;
 
@@ -52,13 +56,12 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     int num_passes = 0;
 
     CUDA_ERROR(cudaProfilerStart());
-    GPUTimer timer;
-    timer.start();
+
+    timers.start("Total");
     while (rx.get_num_vertices(true) > final_num_vertices) {
         ++num_passes;
 
-        GPUTimer histo_timer;
-        histo_timer.start();
+        timers.start("Histo");
 
         // compute max-min histogram
         histo.init();
@@ -92,18 +95,16 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
         const int reduce_threshold =
             std::max(1, int(Arg.reduce_ratio * float(num_edges_before)));
 
+        timers.stop("Histo");
 
-        histo_timer.stop();
-
-        histo_time += histo_timer.elapsed_millis();
 
         rx.reset_scheduler();
         while (!rx.is_queue_empty() &&
                rx.get_num_vertices(true) > final_num_vertices) {
-            //RXMESH_INFO(" Queue size = {}, reduce_threshold = {}, #V= {}",
-            //            rx.get_context().m_patch_scheduler.size(),
-            //            reduce_threshold,
-            //            rx.get_num_vertices(true));
+            // RXMESH_INFO(" Queue size = {}, reduce_threshold = {}, #V= {}",
+            //             rx.get_context().m_patch_scheduler.size(),
+            //             reduce_threshold,
+            //             rx.get_num_vertices(true));
             //
             rx.update_launch_box(
                 {Op::EV},
@@ -130,51 +131,41 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
             max_num_blocks =
                 std::max(max_num_blocks, DIVIDE_UP(launch_box.blocks, 8));
 
-            GPUTimer app_timer;
-            app_timer.start();
+            timers.start("APP");
             sec<float, blockThreads><<<DIVIDE_UP(launch_box.blocks, 8),
                                        launch_box.num_threads,
                                        launch_box.smem_bytes_dyn>>>(
                 rx.get_context(), *coords, histo, reduce_threshold);
 
-            app_timer.stop();
+            timers.stop("APP");
 
-            GPUTimer cleanup_timer;
-            cleanup_timer.start();
+            timers.start("Cleanup");
             rx.cleanup();
-            cleanup_timer.stop();
+            timers.stop("Cleanup");
 
-            GPUTimer slice_timer;
-            slice_timer.start();
+            timers.start("Slice");
             rx.slice_patches(*coords);
-            slice_timer.stop();
+            timers.stop("Cleanup");
 
-            GPUTimer cleanup_timer2;
-            cleanup_timer2.start();
+            timers.start("Cleanup");
             rx.cleanup();
-            cleanup_timer2.stop();
-
-
-            CUDA_ERROR(cudaDeviceSynchronize());
-            CUDA_ERROR(cudaGetLastError());
-
-            app_time += app_timer.elapsed_millis();
-            slice_time += slice_timer.elapsed_millis();
-            cleanup_time += cleanup_timer.elapsed_millis();
-            cleanup_time += cleanup_timer2.elapsed_millis();
+            timers.stop("Cleanup");
         }
     }
-    timer.stop();
-    total_time += timer.elapsed_millis();
+    timers.stop("Total");
+
     CUDA_ERROR(cudaProfilerStop());
 
     RXMESH_INFO("sec_rxmesh() RXMesh SEC took {} (ms), num_passes= {}",
-                total_time,
+                timers.elapsed_millis("Total"),
                 num_passes);
-    RXMESH_INFO("sec_rxmesh() Histo time {} (ms)", histo_time);
-    RXMESH_INFO("sec_rxmesh() App time {} (ms)", app_time);
-    RXMESH_INFO("sec_rxmesh() Slice timer {} (ms)", slice_time);
-    RXMESH_INFO("sec_rxmesh() Cleanup timer {} (ms)", cleanup_time);
+    RXMESH_INFO("sec_rxmesh() Histo time {} (ms)",
+                timers.elapsed_millis("Histo"));
+    RXMESH_INFO("sec_rxmesh() App time {} (ms)", timers.elapsed_millis("App"));
+    RXMESH_INFO("sec_rxmesh() Slice timer {} (ms)",
+                timers.elapsed_millis("Slice"));
+    RXMESH_INFO("sec_rxmesh() Cleanup timer {} (ms)",
+                timers.elapsed_millis("Cleanup"));
 
     RXMESH_INFO("#Vertices {}", rx.get_num_vertices(true));
     RXMESH_INFO("#Edges {}", rx.get_num_edges(true));
@@ -192,11 +183,11 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     report.add_member("max_num_registers_per_thread",
                       max_num_registers_per_thread);
     report.add_member("max_num_blocks", max_num_blocks);
-    report.add_member("secs_remesh_time", total_time);
-    report.add_member("histogram_time", histo_time);
-    report.add_member("app_time", app_time);
-    report.add_member("slice_time", slice_time);
-    report.add_member("cleanup_time", cleanup_time);
+    report.add_member("secs_remesh_time", timers.elapsed_millis("Total"));
+    report.add_member("histogram_time", timers.elapsed_millis("Histo"));
+    report.add_member("app_time", timers.elapsed_millis("App"));
+    report.add_member("slice_time", timers.elapsed_millis("Slice"));
+    report.add_member("cleanup_time", timers.elapsed_millis("Cleanup"));
     report.add_member("attributes_memory_mg", coords->get_memory_mg());
     report.model_data(Arg.obj_file_name + "_after", rx, "model_after");
 

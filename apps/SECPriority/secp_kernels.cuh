@@ -72,7 +72,7 @@ __global__ static void secp(rxmesh::Context             context,
 
     // create the cavity
     if (cavity.prologue(block, shrd_alloc, coords, to_collapse)) {
-        edge_mask.reset(block);
+        // edge_mask.reset(block);
         block.sync();
 
         // fill in the cavities
@@ -98,7 +98,7 @@ __global__ static void secp(rxmesh::Context             context,
                     cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
 
                 if (e0.is_valid()) {
-                    edge_mask.set(e0.local_id(), true);
+                    // edge_mask.set(e0.local_id(), true);
 
                     const DEdgeHandle e_init = e0;
 
@@ -118,9 +118,9 @@ __global__ static void secp(rxmesh::Context             context,
                             break;
                         }
 
-                        if (i != size - 1) {
-                            edge_mask.set(e1.local_id(), true);
-                        }
+                        // if (i != size - 1) {
+                        //     edge_mask.set(e1.local_id(), true);
+                        // }
 
                         const FaceHandle new_f = cavity.add_face(e0, e, e1);
 
@@ -135,7 +135,7 @@ __global__ static void secp(rxmesh::Context             context,
     }
 
     cavity.epilogue(block);
-    block.sync();
+    //block.sync();
 }
 
 // template <typename View, typename InputIt>
