@@ -1,6 +1,6 @@
 #include <cuda_profiler_api.h>
 #include <glm/glm.hpp>
-#include "rxmesh/cavity_manager.cuh"
+#include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 #include "rxmesh/util/report.h"
@@ -21,7 +21,7 @@ __global__ static void __launch_bounds__(blockThreads)
     using vec3           = glm::vec<3, T, glm::defaultp>;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CavityManager<blockThreads, CavityOp::E> cavity(
+    CavityManager2<blockThreads, CavityOp::E> cavity(
         block, context, shrd_alloc, false);
 
     const uint32_t pid = cavity.patch_id();
@@ -424,7 +424,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
     }
 
 #if USE_POLYSCOPE
-    polyscope::show();
+    //polyscope::show();
 #endif
 
     CUDA_ERROR(cudaFree(d_flipped));
