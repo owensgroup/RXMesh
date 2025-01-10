@@ -22,6 +22,180 @@ int  total_num_iter;
 
 rxmesh::Timers<rxmesh::GPUTimer> timers;
 
+rxmesh::VertexAttribute<int>* v_err;
+
+template <typename T, uint32_t blockThreads>
+__global__ void ckeck_kernel_fv(const rxmesh::Context            context,
+                                const rxmesh::VertexAttribute<T> position,
+                                rxmesh::VertexAttribute<int>     v_attr)
+{
+    using namespace rxmesh;
+    auto block = cooperative_groups::this_thread_block();
+
+    auto ch = [&](FaceHandle vf, VertexIterator& iter) {
+        assert(!isnan(position(iter[0], 0)));
+        assert(!isnan(position(iter[0], 1)));
+        assert(!isnan(position(iter[0], 2)));
+
+        assert(!isnan(position(iter[1], 0)));
+        assert(!isnan(position(iter[1], 1)));
+        assert(!isnan(position(iter[1], 2)));
+
+        assert(!isnan(position(iter[2], 0)));
+        assert(!isnan(position(iter[2], 1)));
+        assert(!isnan(position(iter[2], 2)));
+
+        bool all_zero =
+            position(iter[0], 0) == 0 && position(iter[0], 1) == 0 &&
+            position(iter[0], 2) == 0 && position(iter[1], 0) == 0 &&
+            position(iter[1], 1) == 0 && position(iter[1], 2) == 0 &&
+            position(iter[2], 0) == 0 && position(iter[2], 1) == 0 &&
+            position(iter[2], 2) == 0;
+
+        if (all_zero) {
+            printf("\n v0= %f, %f, %f, v1= %f, %f, %f, v2= %f, %f, %f",
+                   position(iter[0], 0),
+                   position(iter[0], 1),
+                   position(iter[0], 2),
+                   position(iter[1], 0),
+                   position(iter[1], 1),
+                   position(iter[1], 2),
+                   position(iter[2], 0),
+                   position(iter[2], 1),
+                   position(iter[2], 2));
+
+            v_attr(iter[0]) = 1;
+            v_attr(iter[1]) = 1;
+            v_attr(iter[2]) = 1;
+        }
+
+        // assert(!all_zero);
+    };
+
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::FV>(block, shrd_alloc, ch);
+}
+
+
+template <typename T, uint32_t blockThreads>
+__global__ void ckeck_kernel_ev(const rxmesh::Context            context,
+                                const rxmesh::VertexAttribute<T> position,
+                                rxmesh::VertexAttribute<int>     v_attr)
+{
+    using namespace rxmesh;
+    auto block = cooperative_groups::this_thread_block();
+
+    auto ch = [&](EdgeHandle eh, VertexIterator& iter) {
+        assert(!isnan(position(iter[0], 0)));
+        assert(!isnan(position(iter[0], 1)));
+        assert(!isnan(position(iter[0], 2)));
+
+        assert(!isnan(position(iter[1], 0)));
+        assert(!isnan(position(iter[1], 1)));
+        assert(!isnan(position(iter[1], 2)));
+
+        bool all_zero =
+            position(iter[0], 0) == 0 && position(iter[0], 1) == 0 &&
+            position(iter[0], 2) == 0 && position(iter[1], 0) == 0 &&
+            position(iter[1], 1) == 0 && position(iter[1], 2) == 0;
+
+
+        if (all_zero) {
+            printf("\n v0= %f, %f, %f, v1= %f, %f, %f,",
+                   position(iter[0], 0),
+                   position(iter[0], 1),
+                   position(iter[0], 2),
+                   position(iter[1], 0),
+                   position(iter[1], 1),
+                   position(iter[1], 2));
+
+            v_attr(iter[0]) = 1;
+            v_attr(iter[1]) = 1;
+        }
+
+        // assert(!all_zero);
+    };
+
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::EV>(block, shrd_alloc, ch);
+}
+
+
+template <typename T>
+void check(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>& position)
+{
+
+    using namespace rxmesh;
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+    auto viz = [&]() {
+        rx.update_host();
+
+        v_err->move(DEVICE, HOST);
+
+        int err = 0;
+
+
+        rx.for_each_vertex(
+            HOST,
+            [&](VertexHandle vh) {
+                if ((*v_err)(vh) == 1) {
+                    err = 1;
+                }
+            },
+            NULL,
+            false);
+
+        if (err == 1) {
+
+            position.move(DEVICE, HOST);
+
+            rx.update_polyscope();
+
+            rx.render_vertex_patch();
+            rx.render_edge_patch();
+            rx.render_face_patch();
+
+            auto ps_mesh = rx.get_polyscope_mesh();
+            ps_mesh->updateVertexPositions(position);
+            ps_mesh->setEdgeWidth(1.0);
+            ps_mesh->setEnabled(true);
+            ps_mesh->addVertexScalarQuantity("vErr", *v_err);
+
+            polyscope::show();
+            ps_mesh->setEnabled(false);
+        }
+    };
+
+    constexpr uint32_t blockThreads = 256;
+
+    v_err->reset(0, DEVICE);
+
+    LaunchBox<blockThreads> launch_box;
+    rx.update_launch_box(
+        {Op::FV}, launch_box, (void*)ckeck_kernel_fv<T, blockThreads>, false);
+
+    ckeck_kernel_fv<T, blockThreads>
+        <<<launch_box.blocks,
+           launch_box.num_threads,
+           launch_box.smem_bytes_dyn>>>(rx.get_context(), position, *v_err);
+    CUDA_ERROR(cudaDeviceSynchronize());
+    viz();
+
+    v_err->reset(0, DEVICE);
+    rx.update_launch_box(
+        {Op::EV}, launch_box, (void*)ckeck_kernel_ev<T, blockThreads>, false);
+    ckeck_kernel_ev<T, blockThreads>
+        <<<launch_box.blocks,
+           launch_box.num_threads,
+           launch_box.smem_bytes_dyn>>>(rx.get_context(), position, *v_err);
+    CUDA_ERROR(cudaDeviceSynchronize());
+    viz();
+}
+
 template <typename T>
 void update_polyscope(rxmesh::RXMeshDynamic&      rx,
                       rxmesh::VertexAttribute<T>& current_position,
@@ -35,6 +209,10 @@ void update_polyscope(rxmesh::RXMeshDynamic&      rx,
     new_position.move(DEVICE, HOST);
 
     rx.update_polyscope();
+
+    rx.render_vertex_patch();
+    rx.render_edge_patch();
+    rx.render_face_patch();
 
     // rx.export_obj("tracking.obj", current_position);
 
@@ -188,13 +366,15 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
 
 template <typename T>
 void classify_vertices(rxmesh::RXMeshDynamic&                 rx,
-                       const rxmesh::VertexAttribute<T>*      position,
+                       rxmesh::VertexAttribute<T>*            position,
                        const rxmesh::VertexAttribute<int8_t>* is_vertex_bd,
                        rxmesh::VertexAttribute<int8_t>*       vertex_rank)
 {
     using namespace rxmesh;
 
-    constexpr uint32_t blockThreads = 384;
+    rx.get_num_patches(true);
+
+    constexpr uint32_t blockThreads = 256;
 
     vertex_rank->reset(0, DEVICE);
 
@@ -202,7 +382,7 @@ void classify_vertices(rxmesh::RXMeshDynamic&                 rx,
     rx.update_launch_box({Op::VV},
                          launch_box,
                          (void*)classify_vertex<T, blockThreads>,
-                         true,
+                         false,
                          true);
 
     classify_vertex<T, blockThreads><<<launch_box.blocks,
@@ -390,18 +570,20 @@ void collapser(rxmesh::RXMeshDynamic&             rx,
 template <typename T>
 void smoother(rxmesh::RXMeshDynamic&                 rx,
               const rxmesh::VertexAttribute<int8_t>* is_vertex_bd,
-              const rxmesh::VertexAttribute<T>*      current_position,
+              rxmesh::VertexAttribute<T>*            current_position,
               rxmesh::VertexAttribute<T>*            new_position)
 {
     using namespace rxmesh;
 
-    constexpr uint32_t blockThreads = 384;
+    rx.get_num_patches(true);
+
+    constexpr uint32_t blockThreads = 256;
 
     LaunchBox<blockThreads> launch_box;
     rx.update_launch_box({Op::VV},
                          launch_box,
                          (void*)null_space_smooth_vertex<T, blockThreads>,
-                         true,
+                         false,
                          true);
 
     timers.start("SmoothTotal");
@@ -467,6 +649,9 @@ void advance_sim(T                                  sim_dt,
            (sim.m_curr_t + accum_dt < sim.m_max_t)) {
         total_num_iter++;
 
+
+        RXMESH_INFO("total_num_iter {}", total_num_iter);
+
         timers.start("MeshImprove");
         // improve the mesh (also update new_position)
         improve_mesh(rx,
@@ -493,7 +678,7 @@ void advance_sim(T                                  sim_dt,
         // CUDA_ERROR(cudaDeviceSynchronize());
 
         // update polyscope
-        update_polyscope(rx, *current_position, *new_position);
+        // update_polyscope(rx, *current_position, *new_position);
     }
 
     sim.m_curr_t += accum_dt;
@@ -623,6 +808,7 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     CUDA_ERROR(cudaMallocManaged((void**)&d_buffer, sizeof(int)));
 
+    // v_err = rx.add_vertex_attribute<int>("vError", 1).get();
 
     // compute avergae edge length
     float avg_edge_len = compute_avg_edge_length(rx, *current_position);
