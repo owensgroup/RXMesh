@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rxmesh/cavity_manager.cuh"
+#include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/query.cuh"
 
 enum class EdgeSplitPredicate
@@ -14,7 +14,7 @@ enum class EdgeSplitPredicate
 template <typename T, uint32_t blockThreads>
 __global__ static void  //__launch_bounds__(blockThreads)
 split_edges(rxmesh::Context                   context,
-            const rxmesh::VertexAttribute<T>  position,
+            rxmesh::VertexAttribute<T>        position,
             rxmesh::EdgeAttribute<EdgeStatus> edge_status,
             rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
             rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
@@ -30,7 +30,7 @@ split_edges(rxmesh::Context                   context,
 
     ShmemAllocator shrd_alloc;
 
-    CavityManager<blockThreads, CavityOp::E> cavity(
+    CavityManager2<blockThreads, CavityOp::E> cavity(
         block, context, shrd_alloc, true, false);
 
 
@@ -94,6 +94,10 @@ split_edges(rxmesh::Context                   context,
 
                 const vec3<T> vd(
                     position(dh, 0), position(dh, 1), position(dh, 2));
+
+
+                assert(!(va[0] == 0 && va[1] == 0 && va[2] == 0 && vb[0] == 0 &&
+                         vb[1] == 0 && vb[2] == 0));
 
 
                 // test the predicate
@@ -200,12 +204,28 @@ split_edges(rxmesh::Context                   context,
 
             if (new_v.is_valid()) {
 
+                assert(!(position(v0, 0) == 0 && position(v0, 1) == 0 &&
+                         position(v0, 2) == 0 && position(v1, 0) == 0 &&
+                         position(v1, 1) == 0 && position(v1, 2) == 0));
+
                 position(new_v, 0) =
                     T(0.5) * (position(v0, 0) + position(v1, 0));
                 position(new_v, 1) =
                     T(0.5) * (position(v0, 1) + position(v1, 1));
                 position(new_v, 2) =
                     T(0.5) * (position(v0, 2) + position(v1, 2));
+
+                assert(!isnan(position(v0, 0)));
+                assert(!isnan(position(v0, 1)));
+                assert(!isnan(position(v0, 2)));
+
+                assert(!isnan(position(v1, 0)));
+                assert(!isnan(position(v1, 1)));
+                assert(!isnan(position(v1, 2)));
+
+                assert(!isnan(position(new_v, 0)));
+                assert(!isnan(position(new_v, 1)));
+                assert(!isnan(position(new_v, 2)));
 
                 DEdgeHandle e0 =
                     cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));

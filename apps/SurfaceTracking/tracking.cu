@@ -83,9 +83,10 @@ int main(int argc, char** argv)
             RXMESH_INFO("\nUsage: ShortestEdgeCollapse.exe < -option X>\n"
                         " -h:          Display this massage and exit\n"
                         " -n:          Number of point along x(or y) direction. Default is {} \n"
+                        " -d:          Simulation duration. Default is {} \n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -device_id:  GPU device ID. Default is {}",
-            Arg.n, Arg.output_folder, Arg.device_id);
+            Arg.n,Arg.end_sim_t, Arg.output_folder, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
@@ -100,6 +101,9 @@ int main(int argc, char** argv)
         }
         if (cmd_option_exists(argv, argc + argv, "-n")) {
             Arg.n = atoi(get_cmd_option(argv, argv + argc, "-n"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-d")) {
+            Arg.end_sim_t = atof(get_cmd_option(argv, argv + argc, "-d"));
         }
     }
 

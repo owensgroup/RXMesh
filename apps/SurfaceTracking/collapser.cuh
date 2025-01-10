@@ -2,7 +2,7 @@
 
 #include <Eigen/Dense>
 
-#include "rxmesh/cavity_manager.cuh"
+#include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/query.cuh"
 
 #include "rxmesh/geometry_util.cuh"
@@ -27,7 +27,7 @@ edge_collapse(rxmesh::Context                   context,
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CavityManager<blockThreads, CavityOp::EV> cavity(
+    CavityManager2<blockThreads, CavityOp::EV> cavity(
         block, context, shrd_alloc, true);
 
     const uint32_t pid = cavity.patch_id();
@@ -194,6 +194,18 @@ edge_collapse(rxmesh::Context                   context,
             const vec3<T> p0(position(v0, 0), position(v0, 1), position(v0, 2));
             const vec3<T> p1(position(v1, 0), position(v1, 1), position(v1, 2));
 
+            assert(!isnan(new_p[0]));
+            assert(!isnan(new_p[1]));
+            assert(!isnan(new_p[2]));
+
+            assert(!isnan(p0[0]));
+            assert(!isnan(p0[1]));
+            assert(!isnan(p0[2]));
+
+            assert(!isnan(p1[0]));
+            assert(!isnan(p1[1]));
+            assert(!isnan(p1[2]));
+
             // check if the new triangles will be bad i.e., will have normal
             // inversion, will have tiny area, will have bad angles
             bool is_bad = false;
@@ -212,6 +224,15 @@ edge_collapse(rxmesh::Context                   context,
                         position(vi, 0), position(vi, 1), position(vi, 2));
                     const vec3<T> pj(
                         position(vj, 0), position(vj, 1), position(vj, 2));
+
+                    assert(!isnan(pi[0]));
+                    assert(!isnan(pi[1]));
+                    assert(!isnan(pi[2]));
+
+                    assert(!isnan(pj[0]));
+                    assert(!isnan(pj[1]));
+                    assert(!isnan(pj[2]));
+
 
                     // the new triangle will be pi-pj-new_p
 

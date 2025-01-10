@@ -3,7 +3,6 @@
 
 #include <Eigen/Dense>
 
-#include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/query.cuh"
 
 
@@ -22,6 +21,10 @@ null_space_smooth_vertex(const rxmesh::Context                 context,
         const vec3<T> v(current_position(vh, 0),
                         current_position(vh, 1),
                         current_position(vh, 2));
+
+        assert(!isnan(v[0]));
+        assert(!isnan(v[1]));
+        assert(!isnan(v[2]));
 
         if (is_vertex_bd(vh) == 1) {
             new_position(vh, 0) = v[0];
@@ -45,6 +48,10 @@ null_space_smooth_vertex(const rxmesh::Context                 context,
         for (uint32_t i = 0; i < iter.size(); ++i) {
 
             const VertexHandle rh = iter[i];
+
+            assert(vh != qh);
+            assert(rh != qh);
+            assert(vh != rh);
 
             const vec3<T> r(current_position(rh, 0),
                             current_position(rh, 1),
@@ -79,10 +86,16 @@ null_space_smooth_vertex(const rxmesh::Context                 context,
         eigenvalues[1] = eigen_solver.eigenvalues().real()[1];
         eigenvalues[2] = eigen_solver.eigenvalues().real()[2];
 
+        assert(eigenvalues[0] <= eigenvalues[1]);
+        assert(eigenvalues[1] <= eigenvalues[2]);
+
         // compute basis for null space
         Eigen::Matrix<T, 3, 3> tt;
         tt << 0, 0, 0, 0, 0, 0, 0, 0, 0;
         for (uint32_t i = 0; i < 3; ++i) {
+
+            assert(!isnan(eigenvalues[i]));
+
             if (eigenvalues[i] < G_EIGENVALUE_RANK_RATIO * eigenvalues[2]) {
                 tt(i, 0) = A(0, i);
                 tt(i, 1) = A(1, i);
@@ -129,6 +142,8 @@ null_space_smooth_vertex(const rxmesh::Context                 context,
             // triangle area
             const T area = T(0.5) * glm::length(c);
 
+            assert(!isnan(area));
+
             // centriod
             constexpr T third = T(1) / T(3);
 
@@ -140,20 +155,37 @@ null_space_smooth_vertex(const rxmesh::Context                 context,
             t(1) += area * center[1];
             t(2) += area * center[2];
 
+            assert(!isnan(t(0)));
+            assert(!isnan(t(1)));
+            assert(!isnan(t(2)));
 
             ph = rh;
             p  = r;
         }
 
+
+        assert(sum_areas > std::numeric_limits<T>::min());
+
+        assert(!isnan(sum_areas));
+
         t = null_space_projection * t;
         t /= sum_areas;
+
+        assert(!isnan(v[0]));
+        assert(!isnan(v[1]));
+        assert(!isnan(v[2]));
 
         new_position(vh, 0) = v[0] + t(0);
         new_position(vh, 1) = v[1] + t(1);
         new_position(vh, 2) = v[2] + t(2);
+
+
+        assert(!isnan(new_position(vh, 0)));
+        assert(!isnan(new_position(vh, 1)));
+        assert(!isnan(new_position(vh, 2)));
     };
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, smooth, true);
+    query.dispatch<Op::VV>(block, shrd_alloc, smooth, true); 
 }

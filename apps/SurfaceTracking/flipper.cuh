@@ -2,7 +2,7 @@
 
 #include <Eigen/Dense>
 
-#include "rxmesh/cavity_manager.cuh"
+#include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/query.cuh"
 
 #include "link_condition.cuh"
@@ -47,6 +47,9 @@ classify_vertex(const rxmesh::Context                 context,
 
             const VertexHandle rh = iter[i];
 
+            assert(vh != qh);
+            assert(rh != qh);
+            assert(vh != rh);
             const vec3<T> r(position(rh, 0), position(rh, 1), position(rh, 2));
 
             // triangle normal
@@ -111,7 +114,7 @@ edge_flip(rxmesh::Context                   context,
 
     ShmemAllocator shrd_alloc;
 
-    CavityManager<blockThreads, CavityOp::E> cavity(
+    CavityManager2<blockThreads, CavityOp::E> cavity(
         block, context, shrd_alloc, false, false);
 
 

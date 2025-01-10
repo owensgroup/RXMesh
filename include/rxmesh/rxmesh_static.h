@@ -1828,12 +1828,12 @@ class RXMeshStatic : public RXMesh
         }
 
 
-        if (oriented && !(op == Op::VV || op == Op::VE)) {
-            RXMESH_ERROR(
-                "RXMeshStatic::calc_shared_memory() Oriented is only "
-                "allowed on VV and VE. The input op is {}",
-                op_to_string(op));
-        }
+        //if (oriented && !(op == Op::VV || op == Op::VE)) {
+        //    RXMESH_ERROR(
+        //        "RXMeshStatic::calc_shared_memory() Oriented is only "
+        //        "allowed on VV and VE. The input op is {}",
+        //        op_to_string(op));
+        //}
 
         if ((op == Op::EVDiamond || op == Op::EE) &&
             !m_is_input_edge_manifold) {
