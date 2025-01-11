@@ -128,38 +128,26 @@ __global__ static void __launch_bounds__(blockThreads)
 
 template <uint32_t blockThreads>
 __global__ static void __launch_bounds__(blockThreads)
-    init_boundary_edges_vertices(const rxmesh::Context           context,
-                                 rxmesh::EdgeAttribute<int8_t>   is_edge_bd,
-                                 rxmesh::VertexAttribute<int8_t> is_vertex_bd)
+    init_boundary_edges(const rxmesh::Context           context,
+                        rxmesh::EdgeAttribute<int8_t>   is_edge_bd,
+                        rxmesh::VertexAttribute<int8_t> is_vertex_bd)
 {
     using namespace rxmesh;
     auto block = cooperative_groups::this_thread_block();
 
-    auto bd_edges = [&](EdgeHandle eh, FaceIterator& iter) {
-        assert(iter.size() == 1 || iter.size() == 2);
-
-        if (iter.size() == 1) {
-            is_edge_bd(eh) = 1;
+    auto bd_edge = [&](EdgeHandle eh, VertexIterator& iter) {
+        for (int i = 0; i < iter.size(); ++i) {
+            if (iter[i].is_valid()) {
+                if (is_vertex_bd(iter[i])) {
+                    is_edge_bd(eh) = 1;
+                }
+            }
         }
     };
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::EF>(block, shrd_alloc, bd_edges);
-    block.sync();
-
-    auto bd_vertices = [&](EdgeHandle eh, VertexIterator& iter) {
-        assert(iter.size() == 2);
-
-        if (is_edge_bd(eh) == 1) {
-            // possible race condition but it is okay since they all write the
-            // same value
-            is_vertex_bd(iter[0]) = 1;
-            is_vertex_bd(iter[1]) = 1;
-        }
-    };
-
-    query.dispatch<Op::EV>(block, shrd_alloc, bd_vertices);
+    query.dispatch<Op::EV>(block, shrd_alloc, bd_edge);
 }
 
 template <typename T>
@@ -196,25 +184,22 @@ T compute_avg_edge_length(rxmesh::RXMeshDynamic&      rx,
 }
 
 
-void init_boundary(rxmesh::RXMeshDynamic&           rx,
-                   rxmesh::VertexAttribute<int8_t>& is_vertex_bd,
-                   rxmesh::EdgeAttribute<int8_t>&   is_edge_bd)
+void init_boundary(rxmesh::RXMeshDynamic&                 rx,
+                   const rxmesh::VertexAttribute<int8_t>& is_vertex_bd,
+                   rxmesh::EdgeAttribute<int8_t>&         is_edge_bd)
 {
     using namespace rxmesh;
 
-    constexpr uint32_t blockThreads = 512;
+    constexpr uint32_t blockThreads = 256;
 
-    LaunchBox<blockThreads> launch_box;
+    LaunchBox<blockThreads> lb;
 
-    rx.update_launch_box({Op::EF, Op::EV},
-                         launch_box,
-                         (void*)init_boundary_edges_vertices<blockThreads>,
-                         false);
+    rx.update_launch_box(
+        {Op::EV}, lb, (void*)init_boundary_edges<blockThreads>, false);
 
-    init_boundary_edges_vertices<blockThreads><<<launch_box.blocks,
-                                                 launch_box.num_threads,
-                                                 launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), is_edge_bd, is_vertex_bd);
+    init_boundary_edges<blockThreads>
+        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
+            rx.get_context(), is_edge_bd, is_vertex_bd);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 }

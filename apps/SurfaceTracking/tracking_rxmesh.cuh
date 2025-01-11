@@ -196,6 +196,50 @@ void check(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>& position)
     viz();
 }
 
+template <typename T, typename U>
+void check2(rxmesh::RXMeshDynamic&      rx,
+            rxmesh::VertexAttribute<T>& v_attr,
+            rxmesh::VertexAttribute<U>& position)
+{
+    using namespace rxmesh;
+
+    rx.update_host();
+
+    v_attr.move(DEVICE, HOST);
+
+    int err = 0;
+    rx.for_each_vertex(
+        HOST,
+        [&](VertexHandle vh) {
+            if (v_attr(vh) == 1) {
+                err = 1;
+                printf("\n Error!!!");
+            }
+        },
+        NULL,
+        false);
+
+    if (err == 1) {
+        position.move(DEVICE, HOST);
+
+        rx.export_obj("tracking_xx.obj", position);
+
+        rx.update_polyscope();
+        rx.render_vertex_patch();
+        rx.render_edge_patch();
+        rx.render_face_patch();
+
+        auto ps_mesh = rx.get_polyscope_mesh();
+        ps_mesh->updateVertexPositions(position);
+        ps_mesh->setEdgeWidth(1.0);
+        ps_mesh->setEnabled(true);
+        ps_mesh->addVertexScalarQuantity("vErr", v_attr);
+
+        polyscope::show();
+        ps_mesh->setEnabled(false);
+    }
+}
+
 template <typename T>
 void update_polyscope(rxmesh::RXMeshDynamic&      rx,
                       rxmesh::VertexAttribute<T>& current_position,
@@ -372,7 +416,6 @@ void classify_vertices(rxmesh::RXMeshDynamic&                 rx,
 {
     using namespace rxmesh;
 
-    rx.get_num_patches(true);
 
     constexpr uint32_t blockThreads = 256;
 
@@ -575,7 +618,6 @@ void smoother(rxmesh::RXMeshDynamic&                 rx,
 {
     using namespace rxmesh;
 
-    rx.get_num_patches(true);
 
     constexpr uint32_t blockThreads = 256;
 
@@ -822,6 +864,8 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     Arg.splitter_max_edge_length *= Arg.splitter_max_edge_length;
 
     // init boundary vertices and edges
+    rx.get_boundary_vertices(*is_vertex_bd);
+
     init_boundary(rx, *is_vertex_bd, *is_edge_bd);
 
 #if USE_POLYSCOPE
