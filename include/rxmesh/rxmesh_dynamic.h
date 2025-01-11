@@ -993,6 +993,8 @@ class RXMeshDynamic : public RXMeshStatic
         detail::slice_patches<block_size><<<grid_size, block_size, dyn_shmem>>>(
             this->m_rxmesh_context, get_max_num_patches(), attributes...);
 
+        this->get_num_patches(true);
+
         CUDA_ERROR(cudaGetLastError());
     }
 
