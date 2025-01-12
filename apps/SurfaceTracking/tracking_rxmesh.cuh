@@ -274,14 +274,15 @@ template <typename T>
 void splitter(rxmesh::RXMeshDynamic&             rx,
               rxmesh::VertexAttribute<T>*        position,
               rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
-              rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
-              rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
+              rxmesh::VertexAttribute<int8_t>*   is_vertex_bd)
 {
     using namespace rxmesh;
 
     constexpr uint32_t blockThreads = 256;
 
     //=== long edges pass
+
+    // RXMESH_INFO("Split long edges");
 
     LaunchBox<blockThreads> launch_box;
 
@@ -314,7 +315,6 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
                                                 *position,
                                                 *edge_status,
                                                 *is_vertex_bd,
-                                                *is_edge_bd,
                                                 Arg.splitter_max_edge_length,
                                                 Arg.min_triangle_area,
                                                 Arg.min_triangle_angle,
@@ -327,13 +327,17 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
             timers.stop("SplitEdgeCleanup");
 
             timers.start("SplitEdgeSlice");
-            rx.slice_patches(
-                *position, *edge_status, *is_vertex_bd, *is_edge_bd);
+            rx.slice_patches(*position, *edge_status, *is_vertex_bd);
             timers.stop("SplitEdgeSlice");
 
             timers.start("SplitEdgeCleanup");
             rx.cleanup();
             timers.stop("SplitEdgeCleanup");
+
+            //{
+            //    rx.update_host();
+            //    rx.validate();
+            //}
         }
 
         int remaining_work = is_done(rx, edge_status, d_buffer);
@@ -347,6 +351,9 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
 
 
     //=== large angle pass
+
+    // RXMESH_INFO("Split Angles");
+
     rx.update_launch_box({Op::EVDiamond},
                          launch_box,
                          (void*)split_edges<T, blockThreads>,
@@ -376,7 +383,6 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
                                                 *position,
                                                 *edge_status,
                                                 *is_vertex_bd,
-                                                *is_edge_bd,
                                                 Arg.splitter_max_edge_length,
                                                 Arg.min_triangle_area,
                                                 Arg.min_triangle_angle,
@@ -389,13 +395,17 @@ void splitter(rxmesh::RXMeshDynamic&             rx,
             timers.stop("SplitAngCleanup");
 
             timers.start("SplitAngSlice");
-            rx.slice_patches(
-                *position, *edge_status, *is_vertex_bd, *is_edge_bd);
+            rx.slice_patches(*position, *edge_status, *is_vertex_bd);
             timers.stop("SplitAngSlice");
 
             timers.start("SplitAngCleanup");
             rx.cleanup();
             timers.stop("SplitAngCleanup");
+
+            //{
+            //    rx.update_host();
+            //    rx.validate();
+            //}
         }
 
         int remaining_work = is_done(rx, edge_status, d_buffer);
@@ -416,6 +426,12 @@ void classify_vertices(rxmesh::RXMeshDynamic&                 rx,
 {
     using namespace rxmesh;
 
+    RXMESH_INFO("Classify");
+
+    //{
+    //    rx.update_host();
+    //    rx.validate();
+    //}
 
     constexpr uint32_t blockThreads = 256;
 
@@ -432,6 +448,8 @@ void classify_vertices(rxmesh::RXMeshDynamic&                 rx,
                                        launch_box.num_threads,
                                        launch_box.smem_bytes_dyn>>>(
         rx.get_context(), *position, *is_vertex_bd, *vertex_rank);
+
+    // check2(rx, *v_err, *position);
 }
 
 template <typename T>
@@ -439,8 +457,7 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
              rxmesh::VertexAttribute<T>*        position,
              rxmesh::VertexAttribute<int8_t>*   vertex_rank,
              rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
-             rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
-             rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
+             rxmesh::VertexAttribute<int8_t>*   is_vertex_bd)
 {
     using namespace rxmesh;
 
@@ -487,7 +504,6 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
                                                 *vertex_rank,
                                                 *edge_status,
                                                 *is_vertex_bd,
-                                                *is_edge_bd,
                                                 Arg.edge_flip_min_length_change,
                                                 Arg.max_volume_change,
                                                 Arg.min_triangle_area,
@@ -500,16 +516,18 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
             timers.stop("FlipCleanup");
 
             timers.start("FlipSlice");
-            rx.slice_patches(*position,
-                             *vertex_rank,
-                             *edge_status,
-                             *is_vertex_bd,
-                             *is_edge_bd);
+            rx.slice_patches(
+                *position, *vertex_rank, *edge_status, *is_vertex_bd);
             timers.stop("FlipSlice");
 
             timers.start("FlipCleanup");
             rx.cleanup();
             timers.stop("FlipCleanup");
+
+            //{
+            //    rx.update_host();
+            //    rx.validate();
+            //}
         }
 
         int remaining_work = is_done(rx, edge_status, d_buffer);
@@ -528,8 +546,7 @@ void collapser(rxmesh::RXMeshDynamic&             rx,
                rxmesh::VertexAttribute<T>*        position,
                rxmesh::VertexAttribute<int8_t>*   vertex_rank,
                rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
-               rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
-               rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
+               rxmesh::VertexAttribute<int8_t>*   is_vertex_bd)
 {
     using namespace rxmesh;
 
@@ -572,7 +589,6 @@ void collapser(rxmesh::RXMeshDynamic&             rx,
                                                 *vertex_rank,
                                                 *edge_status,
                                                 *is_vertex_bd,
-                                                *is_edge_bd,
                                                 Arg.collapser_min_edge_length,
                                                 Arg.max_volume_change,
                                                 Arg.min_triangle_area,
@@ -585,16 +601,18 @@ void collapser(rxmesh::RXMeshDynamic&             rx,
             timers.stop("CollapseCleanup");
 
             timers.start("CollapseSlice");
-            rx.slice_patches(*position,
-                             *vertex_rank,
-                             *edge_status,
-                             *is_vertex_bd,
-                             *is_edge_bd);
+            rx.slice_patches(
+                *position, *vertex_rank, *edge_status, *is_vertex_bd);
             timers.stop("CollapseSlice");
 
             timers.start("CollapseCleanup");
             rx.cleanup();
             timers.stop("CollapseCleanup");
+
+            //{
+            //    rx.update_host();
+            //    rx.validate();
+            //}
         }
 
         int remaining_work = is_done(rx, edge_status, d_buffer);
@@ -618,6 +636,10 @@ void smoother(rxmesh::RXMeshDynamic&                 rx,
 {
     using namespace rxmesh;
 
+    //{
+    //    rx.update_host();
+    //    rx.validate();
+    //}
 
     constexpr uint32_t blockThreads = 256;
 
@@ -629,12 +651,18 @@ void smoother(rxmesh::RXMeshDynamic&                 rx,
                          true);
 
     timers.start("SmoothTotal");
-    null_space_smooth_vertex<T, blockThreads><<<launch_box.blocks,
-                                                launch_box.num_threads,
-                                                launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *is_vertex_bd, *current_position, *new_position);
+    null_space_smooth_vertex<T, blockThreads>
+        <<<launch_box.blocks,
+           launch_box.num_threads,
+           launch_box.smem_bytes_dyn>>>(rx.get_context(),
+                                        *is_vertex_bd,
+                                        *current_position,
+                                        *new_position,
+                                        *v_err);
 
     timers.stop("SmoothTotal");
+
+    // check2(rx, *v_err, *new_position);
 }
 
 
@@ -644,30 +672,29 @@ void improve_mesh(rxmesh::RXMeshDynamic&             rx,
                   rxmesh::VertexAttribute<T>*        new_position,
                   rxmesh::VertexAttribute<int8_t>*   vertex_rank,
                   rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
-                  rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
-                  rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
+                  rxmesh::VertexAttribute<int8_t>*   is_vertex_bd)
 {
     // edge splitting
-    splitter(rx, current_position, edge_status, is_vertex_bd, is_edge_bd);
+    // RXMESH_INFO("Splitter");
+    splitter(rx, current_position, edge_status, is_vertex_bd);
+
+    // update_polyscope(rx, *current_position, *new_position);
 
     // edge flipping
-    flipper(rx,
-            current_position,
-            vertex_rank,
-            edge_status,
-            is_vertex_bd,
-            is_edge_bd);
+    // RXMESH_INFO("Flipper");
+    flipper(rx, current_position, vertex_rank, edge_status, is_vertex_bd);
+    // update_polyscope(rx, *current_position, *new_position);
 
     // edge collapsing
-    collapser(rx,
-              current_position,
-              vertex_rank,
-              edge_status,
-              is_vertex_bd,
-              is_edge_bd);
+    // RXMESH_INFO("Collapser");
+    collapser(rx, current_position, vertex_rank, edge_status, is_vertex_bd);
+    // update_polyscope(rx, *current_position, *new_position);
 
     // null-space smoothing
+    // RXMESH_INFO("Smoother");
     smoother(rx, is_vertex_bd, current_position, new_position);
+
+    // update_polyscope(rx, *new_position, *current_position);
 }
 
 template <typename T>
@@ -680,8 +707,7 @@ void advance_sim(T                                  sim_dt,
                  rxmesh::VertexAttribute<T>*&       new_position,
                  rxmesh::VertexAttribute<int8_t>*   vertex_rank,
                  rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
-                 rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
-                 rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
+                 rxmesh::VertexAttribute<int8_t>*   is_vertex_bd)
 {
     using namespace rxmesh;
 
@@ -701,8 +727,7 @@ void advance_sim(T                                  sim_dt,
                      new_position,
                      vertex_rank,
                      edge_status,
-                     is_vertex_bd,
-                     is_edge_bd);
+                     is_vertex_bd);
         timers.stop("MeshImprove");
 
         std::swap(current_position, new_position);
@@ -741,8 +766,7 @@ void advance_frame(Simulation<T>&                     sim,
                    rxmesh::VertexAttribute<T>*&       new_position,
                    rxmesh::VertexAttribute<int8_t>*   vertex_rank,
                    rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
-                   rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
-                   rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
+                   rxmesh::VertexAttribute<int8_t>*   is_vertex_bd)
 {
     if (!sim.m_currently_advancing_simulation) {
         sim.m_currently_advancing_simulation = true;
@@ -760,8 +784,7 @@ void advance_frame(Simulation<T>&                     sim,
                         new_position,
                         vertex_rank,
                         edge_status,
-                        is_vertex_bd,
-                        is_edge_bd);
+                        is_vertex_bd);
             frame_stepper.advance_step(dt);
         }
 
@@ -781,8 +804,7 @@ void run_simulation(Simulation<T>&                     sim,
                     rxmesh::VertexAttribute<T>*        new_position,
                     rxmesh::VertexAttribute<int8_t>*   vertex_rank,
                     rxmesh::EdgeAttribute<EdgeStatus>* edge_status,
-                    rxmesh::VertexAttribute<int8_t>*   is_vertex_bd,
-                    rxmesh::EdgeAttribute<int8_t>*     is_edge_bd)
+                    rxmesh::VertexAttribute<int8_t>*   is_vertex_bd)
 {
     sim.m_running = true;
     while (sim.m_running) {
@@ -794,8 +816,7 @@ void run_simulation(Simulation<T>&                     sim,
                       new_position,
                       vertex_rank,
                       edge_status,
-                      is_vertex_bd,
-                      is_edge_bd);
+                      is_vertex_bd);
     }
     sim.m_running = false;
 }
@@ -838,9 +859,6 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     auto is_vertex_bd = rx.add_vertex_attribute<int8_t>("vBoundary", 1);
     is_vertex_bd->reset(0, LOCATION_ALL);
 
-    auto is_edge_bd = rx.add_edge_attribute<int8_t>("eBoundary", 1);
-    is_edge_bd->reset(0, LOCATION_ALL);
-
 
     FrameStepper<float> frame_stepper(Arg.frame_dt);
 
@@ -866,7 +884,6 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     // init boundary vertices and edges
     rx.get_boundary_vertices(*is_vertex_bd);
 
-    init_boundary(rx, *is_vertex_bd, *is_edge_bd);
 
 #if USE_POLYSCOPE
     polyscope::options::groundPlaneHeightFactor = 0.2;
@@ -917,8 +934,7 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
                    new_position.get(),
                    vertex_rank.get(),
                    edge_status.get(),
-                   is_vertex_bd.get(),
-                   is_edge_bd.get());
+                   is_vertex_bd.get());
 
     timers.stop("Total");
 
@@ -983,7 +999,7 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
         "attributes_memory_mg",
         current_position->get_memory_mg() + edge_status->get_memory_mg() +
             new_position->get_memory_mg() + vertex_rank->get_memory_mg() +
-            is_vertex_bd->get_memory_mg() + is_edge_bd->get_memory_mg());
+            is_vertex_bd->get_memory_mg());
 
     for (auto t : timers.m_total_time) {
         report.add_member(t.first, t.second);

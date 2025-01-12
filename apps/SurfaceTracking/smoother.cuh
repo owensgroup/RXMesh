@@ -49,6 +49,10 @@ null_space_smooth_vertex(const rxmesh::Context                 context,
 
             const VertexHandle rh = iter[i];
 
+            if (vh == qh || rh == qh || vh == rh) {
+                return;
+            }
+
             assert(vh != qh);
             assert(rh != qh);
             assert(vh != rh);
@@ -60,7 +64,14 @@ null_space_smooth_vertex(const rxmesh::Context                 context,
             // triangle normal
             const vec3<T> c = glm::cross(q - v, r - v);
 
-            assert(glm::length(c) >= std::numeric_limits<T>::min());
+            if (glm::length(c) <= std::numeric_limits<T>::min()) {
+                new_position(vh, 0) = v[0];
+                new_position(vh, 1) = v[1];
+                new_position(vh, 2) = v[2];
+                return;
+            }
+
+            // assert(glm::length(c) >= std::numeric_limits<T>::min());
 
             const vec3<T> n = glm::normalize(c);
 
@@ -187,5 +198,5 @@ null_space_smooth_vertex(const rxmesh::Context                 context,
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, smooth, true); 
+    query.dispatch<Op::VV>(block, shrd_alloc, smooth, true);
 }

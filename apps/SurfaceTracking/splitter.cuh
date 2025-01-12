@@ -17,7 +17,6 @@ split_edges(rxmesh::Context                   context,
             rxmesh::VertexAttribute<T>        position,
             rxmesh::EdgeAttribute<EdgeStatus> edge_status,
             rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
-            rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
             const T                           splitter_max_edge_length,
             const T                           min_triangle_area,
             const T                           min_triangle_angle,
@@ -56,8 +55,7 @@ split_edges(rxmesh::Context                   context,
         if (edge_status(eh) == UNSEEN) {
             // make sure it is not boundary edge
 
-            if (iter[1].is_valid() && iter[3].is_valid() &&
-                is_edge_bd(eh) == 0) {
+            if (iter[1].is_valid() && iter[3].is_valid()) {
 
                 assert(iter.size() == 4);
                 /*
@@ -184,12 +182,8 @@ split_edges(rxmesh::Context                   context,
 
     shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
 
-    if (cavity.prologue(block,
-                        shrd_alloc,
-                        position,
-                        edge_status,
-                        is_vertex_bd,
-                        is_edge_bd)) {
+    if (cavity.prologue(
+            block, shrd_alloc, position, edge_status, is_vertex_bd)) {
 
         is_updated.reset(block);
         block.sync();

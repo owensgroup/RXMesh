@@ -47,6 +47,11 @@ classify_vertex(const rxmesh::Context                 context,
 
             const VertexHandle rh = iter[i];
 
+            if (vh == qh || rh == qh || vh == rh) {               
+                vertex_rank(vh) = 4;
+                return;
+            }
+
             assert(vh != qh);
             assert(rh != qh);
             assert(vh != rh);
@@ -55,7 +60,10 @@ classify_vertex(const rxmesh::Context                 context,
             // triangle normal
             const vec3<T> c = glm::cross(q - v, r - v);
 
-            assert(glm::length(c) > std::numeric_limits<T>::min());
+            if (glm::length(c) <= std::numeric_limits<T>::min()) {
+                vertex_rank(vh) = 4;
+                return;
+            }
 
             const vec3<T> n = glm::normalize(c);
 
@@ -101,7 +109,6 @@ edge_flip(rxmesh::Context                   context,
           rxmesh::VertexAttribute<int8_t>   vertex_rank,
           rxmesh::EdgeAttribute<EdgeStatus> edge_status,
           rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
-          rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
           const T                           edge_flip_min_length_change,
           const T                           max_volume_change,
           const T                           min_triangle_area,
@@ -156,8 +163,7 @@ edge_flip(rxmesh::Context                   context,
         if (edge_status(eh) == UNSEEN) {
             // make sure it is not boundary edge
 
-            if (iter[1].is_valid() && iter[3].is_valid() &&
-                is_edge_bd(eh) == 0) {
+            if (iter[1].is_valid() && iter[3].is_valid()) {
 
                 assert(iter.size() == 4);
 
@@ -335,8 +341,7 @@ edge_flip(rxmesh::Context                   context,
                         position,
                         vertex_rank,
                         edge_status,
-                        is_vertex_bd,
-                        is_edge_bd)) {
+                        is_vertex_bd)) {
 
         edge_mask.reset(block);
         block.sync();

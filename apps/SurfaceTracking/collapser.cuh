@@ -17,7 +17,6 @@ edge_collapse(rxmesh::Context                   context,
               rxmesh::VertexAttribute<int8_t>   vertex_rank,
               rxmesh::EdgeAttribute<EdgeStatus> edge_status,
               rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
-              rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
               const T                           collapser_min_edge_length,
               const T                           max_volume_change,
               const T                           min_triangle_area,
@@ -104,8 +103,8 @@ edge_collapse(rxmesh::Context                   context,
         assert(ah.is_valid() && bh.is_valid());
 
         // don't collapse boundary vertices
-        if (ch.is_valid() && dh.is_valid() && is_edge_bd(eh) == 0 &&
-            is_vertex_bd(ah) == 0 && is_vertex_bd(bh) == 0) {
+        if (ch.is_valid() && dh.is_valid() && is_vertex_bd(ah) == 0 &&
+            is_vertex_bd(bh) == 0) {
 
             // vertices position
             const vec3<T> va(position(ah, 0), position(ah, 1), position(ah, 2));
@@ -116,9 +115,9 @@ edge_collapse(rxmesh::Context                   context,
             bool should_it = true;
 
             // prevent collapses on the boundary
-            if (is_vertex_bd(ch) || is_vertex_bd(dh)) {
-                should_it = false;
-            }
+            // if (is_vertex_bd(ch) || is_vertex_bd(dh)) {
+            //    should_it = false;
+            //}
 
             // degenerate cases
             if (ah == bh || ah == ch || ah == dh || bh == ch || bh == dh ||
@@ -176,8 +175,7 @@ edge_collapse(rxmesh::Context                   context,
                         position,
                         vertex_rank,
                         edge_status,
-                        is_vertex_bd,
-                        is_edge_bd)) {
+                        is_vertex_bd)) {
 
         edge_mask.reset(block);
         block.sync();
