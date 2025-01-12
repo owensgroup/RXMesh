@@ -651,14 +651,10 @@ void smoother(rxmesh::RXMeshDynamic&                 rx,
                          true);
 
     timers.start("SmoothTotal");
-    null_space_smooth_vertex<T, blockThreads>
-        <<<launch_box.blocks,
-           launch_box.num_threads,
-           launch_box.smem_bytes_dyn>>>(rx.get_context(),
-                                        *is_vertex_bd,
-                                        *current_position,
-                                        *new_position,
-                                        *v_err);
+    null_space_smooth_vertex<T, blockThreads><<<launch_box.blocks,
+                                                launch_box.num_threads,
+                                                launch_box.smem_bytes_dyn>>>(
+        rx.get_context(), *is_vertex_bd, *current_position, *new_position);
 
     timers.stop("SmoothTotal");
 
