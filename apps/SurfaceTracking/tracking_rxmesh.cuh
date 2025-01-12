@@ -426,7 +426,7 @@ void classify_vertices(rxmesh::RXMeshDynamic&                 rx,
 {
     using namespace rxmesh;
 
-    RXMESH_INFO("Classify");
+    // RXMESH_INFO("Classify");
 
     //{
     //    rx.update_host();
