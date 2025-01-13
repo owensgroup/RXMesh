@@ -25,7 +25,7 @@ TEST(Apps, SEC)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshDynamic rx(Arg.obj_file_name);
+    RXMeshDynamic rx(Arg.obj_file_name, "", 256, 3.5, 1.5);
 
     // const std::string p_file = STRINGIFY(OUTPUT_DIR) +
     //                            extract_file_name(Arg.obj_file_name) +

@@ -516,20 +516,20 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
     int prv_remaining_work = rx.get_num_edges();
 
     LaunchBox<blockThreads> lb;
-    rx.prepare_launch_box({Op::EVDiamond, Op::VV},
-                          lb,
-                          (void*)edge_collapse_1<T, blockThreads>,
-                          true,
-                          false,
-                          false,
-                          false,
-                          [&](uint32_t v, uint32_t e, uint32_t f) {
-                              return detail::mask_num_bytes(e) +
-                                     2 * v * sizeof(uint16_t) +
-                                     2 * ShmemAllocator::default_alignment;
-                              // 2 * detail::mask_num_bytes(v) +
-                              // 3 * ShmemAllocator::default_alignment;
-                          });
+    rx.update_launch_box({Op::EVDiamond, Op::VV},
+                         lb,
+                         (void*)edge_collapse_1<T, blockThreads>,
+                         true,
+                         false,
+                         false,
+                         false,
+                         [&](uint32_t v, uint32_t e, uint32_t f) {
+                             return detail::mask_num_bytes(e) +
+                                    2 * v * sizeof(uint16_t) +
+                                    2 * ShmemAllocator::default_alignment;
+                             // 2 * detail::mask_num_bytes(v) +
+                             // 3 * ShmemAllocator::default_alignment;
+                         });
 
 
     int num_outer_iter = 0;
@@ -574,6 +574,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
             rx.cleanup();
             timers.stop("CollapseCleanup");
 
+#ifdef USE_POLYSCOPE
             bool show = false;
             if (show) {
 
@@ -596,6 +597,7 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
 
                 polyscope::show();
             }
+#endif
         }
 
         int remaining_work = is_done(rx, edge_status, d_buffer);
@@ -608,13 +610,13 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
     timers.stop("CollapseTotal");
 
     // RXMESH_INFO("total num_collapses {}", num_collapses);
-    RXMESH_INFO("num_outer_iter {}", num_outer_iter);
-    RXMESH_INFO("num_inner_iter {}", num_inner_iter);
-    RXMESH_INFO("Collapse total time {} (ms)",
-                timers.elapsed_millis("CollapseTotal"));
-    RXMESH_INFO("Collapse time {} (ms)", timers.elapsed_millis("Collapse"));
-    RXMESH_INFO("Collapse slice time {} (ms)",
-                timers.elapsed_millis("CollapseSlice"));
-    RXMESH_INFO("Collapse cleanup time {} (ms)",
-                timers.elapsed_millis("CollapseCleanup"));
+    // RXMESH_INFO("num_outer_iter {}", num_outer_iter);
+    // RXMESH_INFO("num_inner_iter {}", num_inner_iter);
+    // RXMESH_INFO("Collapse total time {} (ms)",
+    //            timers.elapsed_millis("CollapseTotal"));
+    // RXMESH_INFO("Collapse time {} (ms)", timers.elapsed_millis("Collapse"));
+    // RXMESH_INFO("Collapse slice time {} (ms)",
+    //            timers.elapsed_millis("CollapseSlice"));
+    // RXMESH_INFO("Collapse cleanup time {} (ms)",
+    //            timers.elapsed_millis("CollapseCleanup"));
 }

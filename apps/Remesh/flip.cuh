@@ -406,21 +406,21 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
     LaunchBox<blockThreads> lb_flip;
 
 
-    rx.prepare_launch_box({Op::EVDiamond, Op::VV},
-                          lb_flip,
-                          //(void*)edge_flip<T, blockThreads>,
-                          (void*)edge_flip_1<T, blockThreads>,
-                          true,
-                          false,
-                          false,
-                          false,
-                          [&](uint32_t v, uint32_t e, uint32_t f) {
-                              return detail::mask_num_bytes(e) +
-                                     2 * v * sizeof(uint16_t) +
-                                     2 * ShmemAllocator::default_alignment;
-                              // 2 * detail::mask_num_bytes(v) +
-                              // 3 * ShmemAllocator::default_alignment;
-                          });
+    rx.update_launch_box({Op::EVDiamond, Op::VV},
+                         lb_flip,
+                         //(void*)edge_flip<T, blockThreads>,
+                         (void*)edge_flip_1<T, blockThreads>,
+                         true,
+                         false,
+                         false,
+                         false,
+                         [&](uint32_t v, uint32_t e, uint32_t f) {
+                             return detail::mask_num_bytes(e) +
+                                    2 * v * sizeof(uint16_t) +
+                                    2 * ShmemAllocator::default_alignment;
+                             // 2 * detail::mask_num_bytes(v) +
+                             // 3 * ShmemAllocator::default_alignment;
+                         });
 
     edge_status->reset(UNSEEN, DEVICE);
 
@@ -482,11 +482,12 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
     timers.stop("FlipTotal");
 
     // RXMESH_INFO("total num_flips {}", num_flips);
-    RXMESH_INFO("num_outer_iter {}", num_outer_iter);
-    RXMESH_INFO("num_inner_iter {}", num_inner_iter);
-    RXMESH_INFO("Flip total time {} (ms)", timers.elapsed_millis("FlipTotal"));
-    RXMESH_INFO("Flip time {} (ms)", timers.elapsed_millis("Flip"));
-    RXMESH_INFO("Flip slice time {} (ms)", timers.elapsed_millis("FlipSlice"));
-    RXMESH_INFO("Flip cleanup time {} (ms)",
-                timers.elapsed_millis("FlipCleanup"));
+    // RXMESH_INFO("num_outer_iter {}", num_outer_iter);
+    // RXMESH_INFO("num_inner_iter {}", num_inner_iter);
+    // RXMESH_INFO("Flip total time {} (ms)",
+    // timers.elapsed_millis("FlipTotal")); RXMESH_INFO("Flip time {} (ms)",
+    // timers.elapsed_millis("Flip")); RXMESH_INFO("Flip slice time {} (ms)",
+    // timers.elapsed_millis("FlipSlice")); RXMESH_INFO("Flip cleanup time {}
+    // (ms)",
+    //            timers.elapsed_millis("FlipCleanup"));
 }

@@ -226,17 +226,17 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
     int num_inner_iter = 0;
 
     LaunchBox<blockThreads> lb;
-    rx.prepare_launch_box({Op::EVDiamond},
-                          lb,
-                          (void*)edge_split<T, blockThreads>,
-                          true,
-                          false,
-                          false,
-                          false,
-                          [&](uint32_t v, uint32_t e, uint32_t f) {
-                              return detail::mask_num_bytes(e) +
-                                     ShmemAllocator::default_alignment;
-                          });
+    rx.update_launch_box({Op::EVDiamond},
+                         lb,
+                         (void*)edge_split<T, blockThreads>,
+                         true,
+                         false,
+                         false,
+                         false,
+                         [&](uint32_t v, uint32_t e, uint32_t f) {
+                             return detail::mask_num_bytes(e) +
+                                    ShmemAllocator::default_alignment;
+                         });
 
     timers.start("SplitTotal");
 
@@ -374,13 +374,13 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
     //     " "max_f_lf={},", min_v_lf, max_v_lf, min_e_lf, max_e_lf, min_f_lf,
     //     max_f_lf);
 
-    RXMESH_INFO("num_outer_iter {}", num_outer_iter);
-    RXMESH_INFO("num_inner_iter {}", num_inner_iter);
-    RXMESH_INFO("Split total time {} (ms)",
-                timers.elapsed_millis("SplitTotal"));
-    RXMESH_INFO("Split time {} (ms)", timers.elapsed_millis("Split"));
-    RXMESH_INFO("Split slice time {} (ms)",
-                timers.elapsed_millis("SplitSlice"));
-    RXMESH_INFO("Split cleanup time {} (ms)",
-                timers.elapsed_millis("SplitCleanup"));
+    // RXMESH_INFO("num_outer_iter {}", num_outer_iter);
+    // RXMESH_INFO("num_inner_iter {}", num_inner_iter);
+    // RXMESH_INFO("Split total time {} (ms)",
+    //             timers.elapsed_millis("SplitTotal"));
+    // RXMESH_INFO("Split time {} (ms)", timers.elapsed_millis("Split"));
+    // RXMESH_INFO("Split slice time {} (ms)",
+    //             timers.elapsed_millis("SplitSlice"));
+    // RXMESH_INFO("Split cleanup time {} (ms)",
+    //             timers.elapsed_millis("SplitCleanup"));
 }

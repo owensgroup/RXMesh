@@ -34,7 +34,7 @@ TEST(Apps, Remesh)
     // rx.add_vertex_coordinates(verts, "Coords");
 
 
-    RXMeshDynamic rx(Arg.obj_file_name);
+    RXMeshDynamic rx(Arg.obj_file_name, "", 256, 4.0, 2);
     // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
     //         "_patches");
 

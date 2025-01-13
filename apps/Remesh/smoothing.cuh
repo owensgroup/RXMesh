@@ -130,5 +130,5 @@ inline void tangential_relaxation(rxmesh::RXMeshDynamic&         rx,
     }
     timers.stop("SmoothTotal");
 
-    RXMESH_INFO("Relax time {} (ms)", timers.elapsed_millis("SmoothTotal"));
+    // RXMESH_INFO("Relax time {} (ms)", timers.elapsed_millis("SmoothTotal"));
 }

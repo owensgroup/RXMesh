@@ -126,6 +126,7 @@ __global__ void ckeck_kernel_ev(const rxmesh::Context            context,
 template <typename T>
 void check(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>& position)
 {
+#if USE_POLYSCOPE
 
     using namespace rxmesh;
 
@@ -194,6 +195,7 @@ void check(rxmesh::RXMeshDynamic& rx, rxmesh::VertexAttribute<T>& position)
            launch_box.smem_bytes_dyn>>>(rx.get_context(), position, *v_err);
     CUDA_ERROR(cudaDeviceSynchronize());
     viz();
+#endif
 }
 
 template <typename T, typename U>
@@ -201,6 +203,7 @@ void check2(rxmesh::RXMeshDynamic&      rx,
             rxmesh::VertexAttribute<T>& v_attr,
             rxmesh::VertexAttribute<U>& position)
 {
+#if USE_POLYSCOPE
     using namespace rxmesh;
 
     rx.update_host();
@@ -238,6 +241,7 @@ void check2(rxmesh::RXMeshDynamic&      rx,
         polyscope::show();
         ps_mesh->setEnabled(false);
     }
+#endif
 }
 
 template <typename T>
