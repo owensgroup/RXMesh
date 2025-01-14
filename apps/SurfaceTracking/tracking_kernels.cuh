@@ -21,7 +21,7 @@ __inline__ __device__ rxmesh::vec3<T> potential(const FlowNoise3<T>& noise,
     constexpr T height_factor = 0.5;
 
     const rxmesh::vec3<T> centre(0.0, 1.0, 0.0);
-    const T               radius = 4.0;
+    const T               radius = 5.0;
 
     T sx = x / noise.noise_lengthscale;
     T sy = y / noise.noise_lengthscale;

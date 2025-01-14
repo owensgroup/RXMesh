@@ -1822,13 +1822,7 @@ CavityManager2<blockThreads, cop>::sort_cavities_edge_loop()
             if constexpr (cop == CavityOp::E) {
                 // we pick one end vertex of the edge to be the starting point
                 // of the cavity boundary loop
-                uint16_t cavity_edge_src_vertex;
-                for (int e = 0; e < m_s_num_edges[0]; ++e) {
-                    if (m_s_cavity_id_e[e] == c) {
-                        cavity_edge_src_vertex = m_s_ev[2 * e];
-                        break;
-                    }
-                }
+                const uint16_t cavity_edge_src_vertex = m_s_cavity_creator[c];
 
                 for (int e = start; e < end; ++e) {
                     uint32_t edge = m_s_cavity_boundary_edges[e];
