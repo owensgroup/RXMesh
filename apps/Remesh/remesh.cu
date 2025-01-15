@@ -68,8 +68,7 @@ int main(int argc, char** argv)
             // clang-format off
             RXMESH_INFO("\nUsage: Remesh.exe < -option X>\n"
                         " -h:              Display this massage and exit\n"
-                        " -input:          Input file. Input file should be under the input/ subdirectory\n"
-                        "                  Default is {} \n"
+                        " -input:          Input obj file. Default is {} \n"
                         "                  Hint: Only accept OBJ files\n"
                         " -num_iter:       Number of remeshing iterations. Default is {}\n"
                         " -relative_len:   Target edge length as a ratio of the input mesh average edge length. Default is {}\n"
