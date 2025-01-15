@@ -12,6 +12,7 @@ input/*
 !input/plane_5.obj
 !input/sphere1.obj
 !input/bunnyhead.obj
+!input/el_topo_sphere_1280.obj
 build/
 build_debug/
 include/rxmesh/util/git_sha1.cpp
