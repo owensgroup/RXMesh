@@ -12,7 +12,7 @@ struct arg
     uint32_t    ny               = 66;
     float       relative_len     = 1.0;
     int         num_smooth_iters = 5;
-    uint32_t    num_iter         = 1;
+    uint32_t    num_iter         = 3;
     uint32_t    device_id        = 0;
     char**      argv;
     int         argc;
