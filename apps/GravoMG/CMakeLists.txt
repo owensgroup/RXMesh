@@ -19,4 +19,6 @@ target_link_libraries(GravoMG
     PRIVATE RXMesh
 )
 
+target_include_directories(GravoMG PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
+
 #gtest_discover_tests( GravoMG )
