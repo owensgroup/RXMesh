@@ -870,6 +870,7 @@ class RXMeshDynamic : public RXMeshStatic
 
         launch_box.smem_bytes_dyn += user_shmem(vertex_cap, edge_cap, face_cap);
 
+        launch_box.smem_bytes_dyn = 80 * 1024;
         if (with_vertex_valence) {
             if (get_input_max_valence() > 256) {
                 RXMESH_ERROR(
@@ -935,6 +936,16 @@ class RXMeshDynamic : public RXMeshStatic
     void slice_patches(AttributesT... attributes)
     {
 
+        constexpr uint32_t block_size = 256;
+
+        int max_shmem_bytes = 89 * 1024;
+
+        CUDA_ERROR(
+            cudaFuncSetAttribute((void*)detail::slice_patches<block_size>,
+                                 cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                 max_shmem_bytes));
+
+
         const uint32_t grid_size = get_max_num_patches();
 
         // CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
@@ -976,8 +987,6 @@ class RXMeshDynamic : public RXMeshStatic
         dyn_shmem += PatchStash::stash_size * sizeof(uint32_t) +
                      ShmemAllocator::default_alignment;
 
-        constexpr uint32_t block_size = 256;
-
         size_t   smem_bytes_static;
         uint32_t num_reg_per_thread;
         size_t   local_mem_per_thread;
@@ -995,7 +1004,7 @@ class RXMeshDynamic : public RXMeshStatic
 
         this->get_num_patches(true);
 
-        CUDA_ERROR(cudaGetLastError());
+        // CUDA_ERROR(cudaGetLastError());
     }
 
 
