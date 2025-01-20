@@ -94,17 +94,9 @@ __device__ void computeBarycentricCoordinates(const Eigen::Vector3f& v0,
     // Compute barycentric coordinates
     float lambda0 = 0, lambda1 = 0, lambda2 = 0;
 
-    // Sub-area with respect to v0
-    Eigen::Vector3f normal1 = (v1 - p).cross(v2 - p);
-    lambda0                 = normal1.squaredNorm() / area2;
-
-    // Sub-area with respect to v1
-    Eigen::Vector3f normal2 = (v2 - p).cross(v0 - p);
-    lambda1                 = normal2.squaredNorm() / area2;
-
-    // Sub-area with respect to v2
-    Eigen::Vector3f normal3 = (v0 - p).cross(v1 - p);
-    lambda2                 = normal3.squaredNorm() / area2;
+    lambda0 = (v1 - p).cross(v2 - p).dot(normal) / area2;
+    lambda1 = (v2 - p).cross(v0 - p).dot(normal) / area2;
+    lambda2 = (v0 - p).cross(v1 - p).dot(normal) / area2;
 
     a = lambda0;
     b = lambda1;
