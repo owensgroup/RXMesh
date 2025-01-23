@@ -7,6 +7,17 @@ struct Vec3
 };
 
 
+// used from 2nd level onwards
+struct VertexData
+{
+    int     cluster;
+    float   distance;
+    uint8_t bitmask;
+    Vec3    position;
+    int     sample_number;
+    int     linear_id;
+};
+
 
 struct CSR
 {
@@ -188,7 +199,8 @@ void clusterCSR(int    n,
                 float* distance,
                 int*   clusterVertices,
                 int*   flag,
-                CSR    csr)
+                CSR    csr,
+                VertexData* vertex_data)
 {
     thrust::device_vector<int> samples(n);
     thrust::sequence(samples.begin(), samples.end());
@@ -199,24 +211,28 @@ void clusterCSR(int    n,
         samples.end(),
         [=] __device__(int number) {
             // V-V query
-            for (int i = csr.row_ptr[number]; i < csr.row_ptr[number + 1];
-                 i++) {
-                int   current_v = csr.value_ptr[i];
+            Vec3 ourPos = vertex_data[number].position;
+
+            for (int i = csr.row_ptr[number]; i < csr.row_ptr[number + 1];i++) 
+            {
+                int current_v = csr.value_ptr[i];
+
+                Vec3 currentPos = vertex_data[current_v].position;
                 float dist =
-                    sqrtf(powf(vertex_pos[number].x - vertex_pos[current_v].x,
+                    sqrtf(powf(ourPos.x - currentPos.x,
                                2) +
-                          powf(vertex_pos[number].y - vertex_pos[current_v].y,
+                          powf(ourPos.y - currentPos.y,
                                2) +
-                          powf(vertex_pos[number].z - vertex_pos[current_v].z,
+                                   powf(ourPos.z - currentPos.z,
                                2)) +
                     distance[current_v];
 
-
-                if (dist < distance[number] &&
-                    clusterVertices[current_v] != -1) {
+                if (dist < distance[number] && vertex_data[current_v].cluster!=-1)
+                {
                     distance[number]        = dist;
                     *flag                   = 15;
                     clusterVertices[number] = clusterVertices[current_v];
+                    vertex_data[number].cluster = vertex_data[current_v].cluster;
                 }
             }
         });
