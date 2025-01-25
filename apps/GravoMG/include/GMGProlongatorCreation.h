@@ -177,7 +177,7 @@ void createProlongationOperator(int  numberOfSamples,
                             // find distance , if less than min dist, find bary
                             // coords, save them
                             float distance = projectedDistance(v1, v2, v3, q);
-                            if (distance < min_distance) {
+                            if (distance < min_distance ) {
 
                                 min_distance      = distance;
                                 selectedv1        = v1;
@@ -210,12 +210,21 @@ void createProlongationOperator(int  numberOfSamples,
             computeBarycentricCoordinates(
                 selectedv1, selectedv2, selectedv3, q, b1, b2, b3);
 
+        if (b1!=b1 || b2!=b2 || b3!=b3) {
+                printf("\n%d %f %f %f Selected: %d %d %d",
+                       number,
+                       vertex_pos[number].x,
+                       vertex_pos[number].y,
+                       vertex_pos[number].z,
+                       cluster_point,
+                       selected_neighbor,
+                       selected_neighbor_of_neighbor);
+        }
 
             // put it inside prolongation row, it will be unique so no race
             // condition
             int l = number;
 
-        //printf("\n %d final coords: %f %f %f", l, b1, b2, b3);
 
 
             prolongation_operator[l * numberOfSamples + cluster_point]     = b1;
@@ -224,6 +233,16 @@ void createProlongationOperator(int  numberOfSamples,
                                   selected_neighbor_of_neighbor]           = b3;
                                   
         });
+
+    /*
+    std::cout << "\n\n\n";
+    for (int i = 0; i < N; i++) {
+        std::cout << "\n" << i << " ";
+        for (int j = 0; j < numberOfSamples; j++) {
+            std::cout << prolongation_operator[i * numberOfSamples + j] << " ";
+        }
+    }
+    */
 }
 
 void createProlongationOperator(int  numberOfSamples,
@@ -369,6 +388,7 @@ void createProlongationOperator(int  numberOfSamples,
         });
 
         cudaDeviceSynchronize();
+
     /*
     std::cout << "\n\n\n";
     for (int i=0;i<N;i++) {
@@ -378,4 +398,5 @@ void createProlongationOperator(int  numberOfSamples,
         }
     }
     */
+    
 }
