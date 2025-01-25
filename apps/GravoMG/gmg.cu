@@ -150,7 +150,7 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bumpy-cube.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto vertex_pos = *rx.get_input_vertex_coordinates();
 
@@ -580,8 +580,33 @@ int main(int argc, char** argv)
 
     csr2.printCSR();
 
-    
-   
+
+    float* prolongationOperator2;
+    cudaMallocManaged(&prolongationOperator2,
+                      sizeof(float) * numberOfSamples * num_rows);
+
+
+    createProlongationOperator(num_rows,
+                               csr2.row_ptr,
+                               csr2.value_ptr,
+                               number_of_neighbors2,
+                               numberOfSamples,
+                               oldVdata,
+                               prolongationOperator2);
+
+    cudaDeviceSynchronize();  // Ensure data is synchronized before accessing
+
+    std::cout << "\n\n\n";
+    for (int i = 0; i < numberOfSamples; i++) {
+        std::cout << "\n" << i << " ";
+        for (int j = 0; j < num_rows; j++) {
+            std::cout << prolongationOperator2[i * numberOfSamples + j] << " ";
+        }
+    }
+
+
+
+
 
      Eigen::MatrixXd verts2;
     Eigen::MatrixXi faces2;
