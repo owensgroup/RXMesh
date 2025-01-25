@@ -10,14 +10,36 @@
 
 
 #include "include/GMGProlongatorCreation.h"
+std::vector<int> intPointerArrayToVector(int* array, size_t size)
+{
+    return std::vector<int>(array, array + size);
+}
+
+
+void CreateNextLevelData(int      N,
+                         int      numberOfSamples,
+                         VertexData* vData_old,
+                         VertexData* vData_new)
+{
+
+    thrust::device_vector<int> samples(N);
+    thrust::sequence(samples.begin(), samples.end());
+
+    thrust::for_each(thrust::device,
+                     samples.begin(),
+                     samples.end(),
+        [=] __device__(int number) { vData_new[number].distance = 0;
+                     });
+}
+
 
 
 
 void numberOfNeighbors(int              numberOfSamples,
-                       VertexNeighbors* neighbors,
-                       int*             vertexClusters,
-                       int              N,
-                       CSR              csr
+                       VertexNeighbors* neighbors ,
+    int              N,
+                       CSR              csr,
+                        VertexData* vData, int* number_of_neighbors
 
 )
 {
@@ -33,16 +55,15 @@ void numberOfNeighbors(int              numberOfSamples,
                      samples.begin(),
                      samples.end(),
                      [=] __device__(int number) {
-                         int currentCluster = vertexClusters[number];
-
+                         //int currentCluster = vertexClusters[number];
+                         int currentCluster = vData[number].cluster;
 
                          //neighbors[currentCluster].getNeighbors(neighborList);
                          for (int i = csr.row_ptr[number]; i < csr.row_ptr[number+1];i++) {
                              int currentNode = csr.value_ptr[i];
-                             if (vertexClusters[currentNode]!=currentCluster) {
+                             if (vData[currentNode].cluster != currentCluster) {
                                  //neighbors
-                                 neighbors[currentCluster].addNeighbor(
-                                     currentNode);
+                                 neighbors[currentCluster].addNeighbor(vData[currentNode].cluster);
                              }
                          }
 
@@ -50,6 +71,22 @@ void numberOfNeighbors(int              numberOfSamples,
                          // neighbors[0].getNeighbors().size();//this is the
                          // neighbor count
                      });
+
+
+     thrust::device_vector<int> samples2(numberOfSamples);
+    thrust::sequence(samples2.begin(), samples2.end());
+
+    thrust::for_each(thrust::device,
+                     samples.begin(),
+                     samples.end(),
+                     [=] __device__(int number) {
+
+                        number_of_neighbors[number] =
+                             neighbors[number].getNumberOfNeighbors();
+
+                     });
+
+
 }
 
 
@@ -57,9 +94,8 @@ void numberOfNeighbors(int              numberOfSamples,
 
 void setCluster(int    n,
                 float* distance,
-    int* clusterVertices,            
-    uint8_t* bitmask,
-    int currentLevel)
+    int currentLevel,
+    VertexData* vertex_data)
 {
     thrust::device_vector<int> samples(n);
     thrust::sequence(samples.begin(), samples.end());
@@ -74,20 +110,34 @@ void setCluster(int    n,
                          // set distance as infinity or 0 based on whether it is
                          // not or is a sample
 
-                         if ((bitmask[number] & (1 << currentLevel-1)) != 0) 
+                         if ((vertex_data[number].bitmask & (1 << currentLevel-1)) != 0) 
                          {
-                            printf( "\nvertex %d is being used as a cluster point",number);
-                             clusterVertices[number] = clusterVertices[number]; //dont change from previous level
                             distance[number]        = 0;
-
+                             vertex_data[number].cluster =
+                                 vertex_data[number].sample_number;
+                            
+                             printf(
+                                "\n%d which is sample %d is now a cluster vertex",
+                                number,
+                                vertex_data[number].sample_number);
+                                
                          }
                          else 
                          {
-                             clusterVertices[number] = -1;
+                             vertex_data[number].cluster =-1;
+                             /*
+                             printf(
+                                 "\n%d which is sample %d is not a cluster "
+                                 "vertex",
+                                 number,
+                                 vertex_data[number].sample_number);
+                                 */
                              distance[number]        = INFINITY;
                          }
         });
 }
+
+
 
 
 
@@ -100,7 +150,7 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bumpy-cube.obj");
 
     auto vertex_pos = *rx.get_input_vertex_coordinates();
 
@@ -214,6 +264,13 @@ int main(int argc, char** argv)
                                        sample_level_bitmask(vh, 0) |= (1 << k);
                                        bitmask[seed] |= (1 << k);
                                    }
+
+                                   /* printf(
+                                       "\n\n Sample %d, vertex %d is level %d",
+                                          i, 
+                                          seed,
+                                          currentSampleLevel);
+                                          */
                                } else {
                                    if (i == 0) {
                                        distance(vh, 0)      = INFINITY;
@@ -381,7 +438,7 @@ int main(int argc, char** argv)
     int num_rows = numberOfSamples; // Set this appropriately
     CSR csr(num_rows, number_of_neighbors, vertexNeighbors, N);
 
-    csr.printCSR();
+    //csr.printCSR();
 
     cudaDeviceSynchronize(); // Ensure data is synchronized before accessing
 
@@ -413,8 +470,14 @@ int main(int argc, char** argv)
                                 prolongation_operator);
                                 
     cudaDeviceSynchronize();
-
-
+   /*
+    for (int i=0;i<N;i++) {
+        std::cout << "\n" << i << " ";
+        for (int k=0;k<numberOfSamples;k++) {
+            std::cout << prolongation_operator[i * numberOfSamples + k] << " ";
+        }
+    }
+    */
 
     Eigen::MatrixXd verts;
     Eigen::MatrixXi faces;
@@ -424,33 +487,117 @@ int main(int argc, char** argv)
  
     csr.GetRenderData(vertexPositions, faceIndices, sample_pos);
 
-    polyscope::registerSurfaceMesh("dragon level 1", vertexPositions, faceIndices);
+    polyscope::registerSurfaceMesh("mesh level 1", vertexPositions, faceIndices);
 
+
+    //set 1st level node data
+    VertexData* oldVdata;
+    cudaMallocManaged(&oldVdata, sizeof(VertexData) * numberOfSamples);
+
+    rx.for_each_vertex(rxmesh::DEVICE,
+                       [sample_number,
+                        oldVdata,
+                        clustered_vertex,
+                        bitmask,
+                        vertex_pos,
+
+                        context] __device__(const rxmesh::VertexHandle vh) {
+
+
+            if (sample_number(vh, 0) != -1) {
+                //printf("\nputting data for sample %d", sample_number(vh, 0));
+
+                oldVdata[sample_number(vh, 0)].distance = 0;
+                oldVdata[sample_number(vh, 0)].linear_id =
+                    context.linear_id(vh);
+                oldVdata[sample_number(vh, 0)].sample_number =
+                    sample_number(vh, 0);
+                oldVdata[sample_number(vh, 0)].bitmask =
+                    bitmask[context.linear_id(vh)];
+                oldVdata[sample_number(vh, 0)].position.x = vertex_pos(vh, 0);
+                oldVdata[sample_number(vh, 0)].position.y = vertex_pos(vh, 1);
+                oldVdata[sample_number(vh, 0)].position.z = vertex_pos(vh, 2);
+                oldVdata[sample_number(vh, 0)].cluster =
+                    clustered_vertex(vh, 0);
+            }
+
+                       });
     
 
     ////////////////////////////////////////////////////////////////////////////////////////
     ///
     ///next levels
+    ///
 
-    setCluster(numberOfSamples,
-               distanceArray,
-               clusterVertices,
-               bitmask,
-               currentLevel);
+    ///
+    ///let's make the process loop
+    ///
 
+   
+    
+    setCluster(numberOfSamples, distanceArray, currentLevel+1, oldVdata);
 
     do {
-
         *flagger = 0;
         clusterCSR(numberOfSamples,
                    sample_pos,
                    distanceArray,
-                   clusterVertices,
+                   vertexCluster,
                    flagger,
-                   csr);
+                   csr,oldVdata);
         cudaDeviceSynchronize();
     } while (*flagger != 0);
 
+    std::vector<int> a = intPointerArrayToVector(vertexCluster,numberOfSamples);
+
+    polyscope::getSurfaceMesh("mesh level 1")
+        ->addVertexScalarQuantity("cluster Vertex", a);
+
+    //neighbor stuff
+    
+    VertexNeighbors* vertexNeighbors2;
+    err = cudaMallocManaged(&vertexNeighbors2,
+                            numberOfSamples * sizeof(VertexNeighbors));
+
+    int* number_of_neighbors2;
+    cudaMallocManaged(&number_of_neighbors2,
+                      numberOfSamples * sizeof(int));
+
+
+    numberOfNeighbors(numberOfSamples / 8,
+                      vertexNeighbors2,
+                      numberOfSamples,
+                      csr,
+                      oldVdata,number_of_neighbors2);
+
+
+        cudaDeviceSynchronize();
+    num_rows = numberOfSamples / 8;  // Set this appropriately
+    CSR csr2(num_rows,
+             number_of_neighbors2,
+             vertexNeighbors2,
+             numberOfSamples);
+
+    csr2.printCSR();
+
+    
+   
+
+     Eigen::MatrixXd verts2;
+    Eigen::MatrixXi faces2;
+    std::vector<std::array<double, 3>>
+        vertexPositions2;                           // To store vertex positions
+    std::vector<std::vector<size_t>> faceIndices2;  // To store face indices
+
+    csr2.GetRenderData(vertexPositions2, faceIndices2, sample_pos);
+
+    polyscope::registerSurfaceMesh(
+        "mesh level 2", vertexPositions2, faceIndices2);
+        
+
+
+
+    //////////////////////////////////////////////////////////////////
 
     /*
     rx.for_each_vertex(

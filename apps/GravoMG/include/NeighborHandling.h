@@ -58,7 +58,7 @@ struct NeighborNode
     __device__ bool addNeighbor(int neighbor)
     {
         if (count < CHUNK_SIZE) {
-            printf("\nneighbor added %d", neighbor);
+            //printf("\nneighbor added %d", neighbor);
             neighbors[count++] = neighbor;
             return true;
         }
