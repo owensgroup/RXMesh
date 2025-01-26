@@ -89,22 +89,45 @@ struct CSR
                 const int n = vns[number].getNumberOfNeighbors();
 
                 int start_pointer = row_ptr_raw[number];
-                int j             = 0;
+                int count            = 0;
 
+               
+                /*
                 for (int i = 0; i < n; i++) {
 
-                    value_ptr_raw[start_pointer + j] = neighbors[j];
+                    value_ptr_raw[start_pointer+j] = neighbors[j];
                     j++;
                 }
+                */
+
+                for (int i = 0; i < n; i++) {
+                    int key = neighbors[i];  // Value to insert
+                    int j   = i - 1;
+
+                    // Shift elements in value_ptr_raw to make space for the key
+                    while (j >= 0 && value_ptr_raw[start_pointer + j] > key) {
+                        value_ptr_raw[start_pointer + j + 1] =
+                            value_ptr_raw[start_pointer + j];
+                        j--;
+                    }
+
+                    // Insert the key in its sorted position
+                    value_ptr_raw[start_pointer + j + 1] = key;
+                    count++;
+                }
+
+
+
 
                 free(neighbors);
 
-                if (j != n) {
+                if (count != n) {
                     printf(
                         "ERROR: Number of neighbors does not match for sample "
                         "%d\n",
                         number);
                 }
+
             });
     }
 
@@ -120,46 +143,11 @@ struct CSR
         }
     }
 
-#include <Eigen/Dense>
-
-    void GetRenderData(
-        Eigen::MatrixXd& vertexPositions,  // To store vertex positions (N x 3)
-        Eigen::MatrixXi& faceIndices,      // To store face indices (F x 3)
-        Vec3*            vertex_pos  // Array of vertex positions (assumed 3D)
-    )
-    {
-        // Initialize vertex positions
-        vertexPositions.resize(num_rows, 3);
-        for (int i = 0; i < num_rows; ++i) {
-            vertexPositions(i, 0) = vertex_pos[i].x;  // x-coordinate
-            vertexPositions(i, 1) = vertex_pos[i].y;  // y-coordinate
-            vertexPositions(i, 2) = vertex_pos[i].z;  // z-coordinate
-        }
-
-        // Collect faces from the CSR structure
-        std::vector<Eigen::Vector3i> faceList;  // Temporary container for faces
-        for (int i = 0; i < num_rows; ++i) {
-            int neighbors_count = row_ptr[i + 1] - row_ptr[i];
-            if (neighbors_count >= 3) {  // Process only if it can form faces
-                for (int j = row_ptr[i]; j < row_ptr[i + 1] - 2; ++j) {
-                    // Create a triangular face (i, value_ptr[j],
-                    // value_ptr[j+1])
-                    faceList.emplace_back(i, value_ptr[j], value_ptr[j + 1]);
-                }
-            }
-        }
-
-        // Convert faceList to Eigen::MatrixXi
-        faceIndices.resize(faceList.size(), 3);
-        for (size_t i = 0; i < faceList.size(); ++i) {
-            faceIndices.row(i) = faceList[i];
-        }
-    }
     void GetRenderData(
         std::vector<std::array<double, 3>>&
             vertexPositions,  // To store vertex positions
         std::vector<std::vector<size_t>>& faceIndices,  // To store face indices
-        Vec3* vertex_pos  // Array of vertex positions (assumed 3D)
+        Vec3* vertex_pos // Array of vertex positions (assumed 3D)
     )
     {
         // Initialize vertex positions
@@ -177,10 +165,42 @@ struct CSR
                 for (int j = row_ptr[i]; j < row_ptr[i + 1] - 2; ++j) {
                     // Create a triangular face (i, value_ptr[j],
                     // value_ptr[j+1])
-                    faceIndices.push_back(
-                        {static_cast<size_t>(i),
-                         static_cast<size_t>(value_ptr[j]),
-                         static_cast<size_t>(value_ptr[j + 1])});
+
+
+                    int a = i, b = value_ptr[j], c = value_ptr[j + 1];
+
+                    
+                     Eigen::Vector3<float> v1{vertex_pos[a].x,
+                                             vertex_pos[a].y,
+                                             vertex_pos[a].z};
+                    Eigen::Vector3<float> v2{
+                        vertex_pos[b].x, vertex_pos[b].y, vertex_pos[b].z};
+                    Eigen::Vector3<float> v3{
+                        vertex_pos[c].x, vertex_pos[c].y, vertex_pos[c].z};
+                    
+                    
+                    Eigen::Vector3f edge1 = v2 - v1;
+                    Eigen::Vector3f edge2 = v3 - v1;
+
+                    // Cross product gives us the normal vector
+                    Eigen::Vector3f normal = edge1.cross(edge2);
+
+                    // Check the z-component of the normal (assuming
+                    // Z-up coordinate system) If normal.z() < 0,
+                    // the vertices are in a clockwise order
+                    if (normal.z() < 0) {
+                        faceIndices.push_back(
+                            {
+                            static_cast<size_t>(a), static_cast<size_t>(b),
+                                static_cast<size_t>(c)
+                            });
+                    } else
+                        faceIndices.push_back({static_cast<size_t>(a),
+                                               static_cast<size_t>(c),
+                                               static_cast<size_t>(b)});
+                            
+
+                    
                 }
             }
         }

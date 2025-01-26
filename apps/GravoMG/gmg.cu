@@ -150,7 +150,7 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     auto vertex_pos = *rx.get_input_vertex_coordinates();
 
@@ -183,7 +183,7 @@ int main(int argc, char** argv)
 
     float ratio           = 8;
     int   N               = rx.get_num_vertices();
-    int   numberOfLevels  = 4;
+    int   numberOfLevels  = 3;
     int   currentLevel    = 1; // first coarse mesh
     int   numberOfSamplesForFirstLevel = N / powf(ratio, 1);//start
     int   numberOfSamples = N / powf(ratio, currentLevel);//start
@@ -239,7 +239,7 @@ int main(int argc, char** argv)
                                distance,
                                i,
                                currentSampleLevel,
-             sample_pos,
+                               sample_pos,
                                vertex_pos] __device__(
                            const rxmesh::VertexHandle vh) {
                                if (seed == context.linear_id(vh)) {
@@ -474,12 +474,13 @@ int main(int argc, char** argv)
     std::vector<std::array<double, 3>>
         vertexPositions;                            // To store vertex positions
         std::vector<std::vector<size_t>> faceIndices;  // To store face indices
- 
+
     csr.GetRenderData(vertexPositions, faceIndices, sample_pos);
 
-    polyscope::registerSurfaceMesh("mesh level 1", vertexPositions, faceIndices);
+    polyscope::registerSurfaceMesh(
+        "mesh level 1", vertexPositions, faceIndices);
 
-
+    
     //set 1st level node data
     VertexData* oldVdata;
     cudaMallocManaged(&oldVdata, sizeof(VertexData) * numberOfSamples);
@@ -512,6 +513,7 @@ int main(int argc, char** argv)
 
                        });
     
+
 
     ////////////////////////////////////////////////////////////////////////////////////////
     ///
@@ -598,7 +600,7 @@ int main(int argc, char** argv)
                          vertexNeighbors2,
                          currentNumberOfVertices);
 
-        // currentCSR.printCSR();
+        currentCSR.printCSR();
 
         currentCSR.GetRenderData(vertexPositionsArray[level - 1],
                                  faceIndicesArray[level - 1],
@@ -609,8 +611,6 @@ int main(int argc, char** argv)
             "mesh level " + std::to_string(level + 1),
             vertexPositionsArray[level - 1],
             faceIndicesArray[level - 1]);
-
-
 
         float* prolongationOperator2;
         cudaMallocManaged(&prolongationOperator2,
@@ -626,17 +626,11 @@ int main(int argc, char** argv)
                                    currentNumberOfVertices,
                                    oldVdata,
                                    prolongationOperator2);
-
         cudaDeviceSynchronize();  // Ensure data is synchronized before
                                   // accessing
-
-
         currentNumberOfSamples /= 8;
         currentNumberOfVertices /= 8;
         lastCSR = currentCSR;
-
-    
-
     }
 
     cudaDeviceSynchronize();
@@ -657,83 +651,6 @@ int main(int argc, char** argv)
             }
         }
     }
-
-   
-    /*
-    setCluster(numberOfSamples, distanceArray, currentLevel+1, oldVdata);
-
-    do {
-        *flagger = 0;
-        clusterCSR(numberOfSamples,
-                   sample_pos,
-                   distanceArray,
-                   vertexCluster,
-                   flagger,
-                   csr,oldVdata);
-        cudaDeviceSynchronize();
-    } while (*flagger != 0);
-
-    std::vector<int> a = intPointerArrayToVector(vertexCluster,numberOfSamples);
-
-    polyscope::getSurfaceMesh("mesh level 1")
-        ->addVertexScalarQuantity("cluster Vertex", a);
-
-    //neighbor stuff
-    
-    VertexNeighbors* vertexNeighbors2;
-    err = cudaMallocManaged(&vertexNeighbors2,
-                            numberOfSamples * sizeof(VertexNeighbors));
-
-    int* number_of_neighbors2;
-    cudaMallocManaged(&number_of_neighbors2,
-                      numberOfSamples * sizeof(int));
-
-
-    numberOfNeighbors(numberOfSamples / 8,
-                      vertexNeighbors2,
-                      numberOfSamples,
-                      csr,
-                      oldVdata,number_of_neighbors2);
-
-
-        cudaDeviceSynchronize();
-    num_rows = numberOfSamples / 8;  // Set this appropriately
-    CSR csr2(num_rows,
-             number_of_neighbors2,
-             vertexNeighbors2,
-             numberOfSamples);
-
-    csr2.printCSR();
-
-
-    float* prolongationOperator2;
-    cudaMallocManaged(&prolongationOperator2,
-                      sizeof(float) * numberOfSamples * num_rows);
-
-
-    createProlongationOperator(num_rows,
-                               csr2.row_ptr,
-                               csr2.value_ptr,
-                               number_of_neighbors2,
-                               numberOfSamples,
-                               oldVdata,
-                               prolongationOperator2);
-
-    cudaDeviceSynchronize();  // Ensure data is synchronized before accessing
-
-
-     Eigen::MatrixXd verts2;
-    Eigen::MatrixXi faces2;
-    std::vector<std::array<double, 3>>
-        vertexPositions2;                           // To store vertex positions
-    std::vector<std::vector<size_t>> faceIndices2;  // To store face indices
-
-    csr2.GetRenderData(vertexPositions2, faceIndices2, sample_pos);
-
-    polyscope::registerSurfaceMesh(
-        "mesh level 2", vertexPositions2, faceIndices2);
-        
-        */
 
 
     //////////////////////////////////////////////////////////////////

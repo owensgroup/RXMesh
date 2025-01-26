@@ -180,13 +180,31 @@ void createProlongationOperator(int  numberOfSamples,
                             if (distance < min_distance ) {
 
                                 min_distance      = distance;
-                                selectedv1        = v1;
-                                selectedv2        = v2;
-                                selectedv3        = v3;
                                 selected_neighbor = neighbor;
                                 selected_neighbor_of_neighbor =
                                     neighbor_of_neighbor;
+                                
+                                selectedv1        = v1;
+                                selectedv2        = v2;
+                                selectedv3        = v3;
 
+                                Eigen::Vector3f edge1 = v2 - v1;
+                                Eigen::Vector3f edge2 = v3 - v1;
+
+                                // Cross product gives us the normal vector
+                                Eigen::Vector3f normal = edge1.cross(edge2);
+
+                                // Check the z-component of the normal (assuming
+                                // Z-up coordinate system) If normal.z() < 0,
+                                // the vertices are in a clockwise order
+                                if (normal.z() < 0) 
+                                {
+                                    Eigen::Vector3f temp = selectedv2;
+                                    selectedv2 = selectedv3;
+                                    selectedv3 = temp;
+                                    selected_neighbor = neighbor_of_neighbor;
+                                    selected_neighbor_of_neighbor = neighbor;
+                                }
                                 
                             }
                         }
@@ -322,25 +340,31 @@ void createProlongationOperator(int  numberOfSamples,
                             float distance = projectedDistance(v1, v2, v3, q);
                             if (distance < min_distance) {
 
-                                min_distance      = distance;
-                                selectedv1        = v1;
-                                selectedv2        = v2;
-                                selectedv3        = v3;
+                                 min_distance      = distance;
                                 selected_neighbor = neighbor;
                                 selected_neighbor_of_neighbor =
                                     neighbor_of_neighbor;
 
-                                /*
-                                printf("\n%d selected %d %d %d",
-                                       number,
-                                       cluster_point,
-                                       neighbor,
-                                       neighbor_of_neighbor);
-                                */
+                                selectedv1 = v1;
+                                selectedv2 = v2;
+                                selectedv3 = v3;
 
-                                //printf("\n%d v1 %f %f %f",cluster_point, v1(0), v1(1), v1(2));
-                                //printf("\n%d v2 %f %f %f",neighbor, v2(0), v2(1), v2(2));
-                                //printf("\n%d v3 %f %f %f",neighbor_of_neighbor, v3(0), v3(1), v3(2));
+                                Eigen::Vector3f edge1 = v2 - v1;
+                                Eigen::Vector3f edge2 = v3 - v1;
+
+                                // Cross product gives us the normal vector
+                                Eigen::Vector3f normal = edge1.cross(edge2);
+
+                                // Check the z-component of the normal (assuming
+                                // Z-up coordinate system) If normal.z() < 0,
+                                // the vertices are in a clockwise order
+                                if (normal.z() < 0) {
+                                    Eigen::Vector3f temp = selectedv2;
+                                    selectedv2           = selectedv3;
+                                    selectedv3           = temp;
+                                    selected_neighbor    = neighbor_of_neighbor;
+                                    selected_neighbor_of_neighbor = neighbor;
+                                }
 
                             }
 
@@ -366,6 +390,19 @@ void createProlongationOperator(int  numberOfSamples,
             float b1 = 0, b2 = 0, b3 = 0;
             computeBarycentricCoordinates(
                 selectedv1, selectedv2, selectedv3, q, b1, b2, b3);
+                
+            if (b1 != b1 || b2 != b2 || b3 != b3) 
+            {
+                printf("\nDEGENERATE TRIANGLE FOUND \n %d %f %f %f Selected: %d %d %d",
+                       number,
+                    vData[number].position.x,
+                    vData[number].position.y,
+                    vData[number].position.z,
+                       cluster_point,
+                       selected_neighbor,
+                       selected_neighbor_of_neighbor);
+            }
+
 
               //printf("\n %d final coords: %f %f %f", number, b1, b2, b3);
 
