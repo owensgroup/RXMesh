@@ -24,6 +24,7 @@ struct CSR
     int* row_ptr;
     int* value_ptr;
     int* number_of_neighbors;
+    float* data_ptr;
     int  num_rows;
     CSR(int n_rows, int* num_of_neighbors, VertexNeighbors* vns, int N)
     {
@@ -57,10 +58,12 @@ struct CSR
         cudaDeviceSynchronize();
 
         cudaMallocManaged(&value_ptr, row_ptr[num_rows] * sizeof(int));
+        cudaMallocManaged(&data_ptr, row_ptr[num_rows] * sizeof(float));
+
         cudaDeviceSynchronize();
 
         createValuePointer(
-            num_rows, row_ptr, value_ptr, number_of_neighbors, vns, N);
+            num_rows, row_ptr, value_ptr, number_of_neighbors, vns, N,data_ptr);
     }
 
 
@@ -69,7 +72,8 @@ struct CSR
                             int*             value_ptr_raw,
                             int*             number_of_neighbors_raw,
                             VertexNeighbors* vns,
-                            int              N)
+                            int              N,
+        float* data_pointer)
     {
         thrust::device_vector<int> samples(numberOfSamples);
         thrust::sequence(samples.begin(), samples.end());
@@ -90,17 +94,17 @@ struct CSR
 
                 int start_pointer = row_ptr_raw[number];
                 int count            = 0;
-
-               
                 /*
-                for (int i = 0; i < n; i++) {
-
+                int j             = 0;
+                for (int i = 0; i < n; i++) 
+                {
                     value_ptr_raw[start_pointer+j] = neighbors[j];
+                    data_ptr[start_pointer+j] = 1;
                     j++;
                 }
                 */
 
-                for (int i = 0; i < n; i++) {
+                 for (int i = 0; i < n; i++) {
                     int key = neighbors[i];  // Value to insert
                     int j   = i - 1;
 
@@ -113,11 +117,10 @@ struct CSR
 
                     // Insert the key in its sorted position
                     value_ptr_raw[start_pointer + j + 1] = key;
+                    data_pointer[start_pointer + count]  = 1;  // default value
+
                     count++;
                 }
-
-
-
 
                 free(neighbors);
 
@@ -138,7 +141,7 @@ struct CSR
             printf("row_ptr[%d] = %d\n", i, row_ptr[i]);
             printf("add %d values\n", number_of_neighbors[i]);
             for (int q = row_ptr[i]; q < row_ptr[i + 1]; q++) {
-                printf("vertex %d\n", value_ptr[q]);
+                printf("vertex %d value: %f\n", value_ptr[q], data_ptr[q]);
             }
         }
     }
