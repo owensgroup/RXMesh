@@ -26,14 +26,37 @@ struct CSR
     int* number_of_neighbors;
     float* data_ptr;
     int  num_rows;
+
+    //CSR(SparseMatrix<float> A, int number_of_values)
+    CSR(SparseMatrix<float> A,
+        const int*                A_row_pointer,
+        const int*                A_column_pointer,
+        int                 number_of_values)
+    {
+        num_rows = A.rows();
+        cudaMallocManaged(&row_ptr, (num_rows + 1) * sizeof(int));
+        cudaMallocManaged(&data_ptr, sizeof(float) * A.cols()*A.rows());
+        cudaMallocManaged(&value_ptr, sizeof(int) * A.cols()*A.rows());
+        cudaDeviceSynchronize();
+
+          for (int i = 0; i < num_rows; ++i) 
+          {
+            row_ptr[i] = A_row_pointer[i];
+            for (int q = A_row_pointer[i]; q < A_row_pointer[i + 1]; q++) 
+            {
+                value_ptr[q] =  A_column_pointer[q];
+                data_ptr[q] = A(i, A_column_pointer[q]);
+            }
+          }
+          cudaDeviceSynchronize();
+    }
+
     CSR(int n_rows, int* num_of_neighbors, VertexNeighbors* vns, int N)
     {
 
         num_rows = n_rows;
         cudaMallocManaged(&row_ptr, (num_rows + 1) * sizeof(int));
         cudaDeviceSynchronize();
-
-        number_of_neighbors = num_of_neighbors;
 
 
         // Temporary storage for CUB
@@ -43,14 +66,14 @@ struct CSR
         // Compute the required temporary storage size
         cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
                                       temp_storage_bytes,
-                                      number_of_neighbors,
+                                      num_of_neighbors,
                                       row_ptr,
                                       num_rows + 1);
 
         cudaMallocManaged(&d_cub_temp_storage, temp_storage_bytes);
         cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
                                       temp_storage_bytes,
-                                      number_of_neighbors,
+                                      num_of_neighbors,
                                       row_ptr,
                                       num_rows + 1);
 
@@ -63,7 +86,7 @@ struct CSR
         cudaDeviceSynchronize();
 
         createValuePointer(
-            num_rows, row_ptr, value_ptr, number_of_neighbors, vns, N,data_ptr);
+            num_rows, row_ptr, value_ptr, num_of_neighbors, vns, N,data_ptr);
     }
 
 
@@ -139,7 +162,7 @@ struct CSR
         printf("\nCSR Array: \n");
         for (int i = 0; i < num_rows; ++i) {
             printf("row_ptr[%d] = %d\n", i, row_ptr[i]);
-            printf("add %d values\n", number_of_neighbors[i]);
+            printf("add %d values\n", row_ptr[i + 1] - row_ptr[i]);
             for (int q = row_ptr[i]; q < row_ptr[i + 1]; q++) {
                 printf("vertex %d value: %f\n", value_ptr[q], data_ptr[q]);
             }
