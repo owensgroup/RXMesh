@@ -187,14 +187,15 @@ class GMGVCycle
     int              pre_relax_iterations  = 2;
     int              post_relax_iterations = 2;
     int              number_of_levels;
+    int              max_number_of_levels;
     std::vector<int> numberOfSamplesPerLevel;
 
     std::vector<CSR> prolongationOperators;
-    CSR    LHS;
+    std::vector<CSR> LHS;
     float* RHS;
     float* X;
 
-    void VCycle(CSR A, VectorCSR f, VectorCSR v)
+    void VCycle(CSR A, VectorCSR f, VectorCSR v, int currentLevel)
     {
         // pre-relaxation
         gauss_jacobi_CSR(A, v.vector, f.vector, pre_relax_iterations);
@@ -212,17 +213,27 @@ class GMGVCycle
 
         // coarsen residual
 
-        float* y;
-        //cudaMallocManaged(&y,sizeof(float))
-        // SpMV_CSR(A.row_ptr,A.value_ptr,A.data_ptr,R.)
+        VectorCSR y(prolongationOperators[currentLevel].num_rows);
+        SpMV_CSR(prolongationOperators[currentLevel].row_ptr,
+                 prolongationOperators[currentLevel].value_ptr,
+                 prolongationOperators[currentLevel].data_ptr,
+                 R.vector,
+                 y.vector,
+                 prolongationOperators[currentLevel].num_rows);
 
-        // if(not max coarse level)
-        //  vcycle
-        // else
-        // return final solution
+        if(currentLevel<max_number_of_levels) {
+            VCycle(LHS[currentLevel + 1], y, v, currentLevel + 1);
+        } else {
+            //direct solve
+            //return direct solve
+        }
+      
         // prolongate
+
         // post smooth
+
         // reutrn post smoothed vector
+
     }
 
 
