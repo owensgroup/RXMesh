@@ -10,6 +10,11 @@
 
 
 #include "include/GMGProlongatorCreation.h"
+
+#include "include/VCycle.h"
+
+#include "include/RXMeshMCFSetup.h"
+
 std::vector<int> intPointerArrayToVector(int* array, size_t size)
 {
     return std::vector<int>(array, array + size);
@@ -150,13 +155,15 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
-
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
+    
     auto vertex_pos = *rx.get_input_vertex_coordinates();
 
+    
     //attribute to sample,store and order samples
     auto sample_number = *rx.add_vertex_attribute<int>("sample_number", 1);
     auto distance      = *rx.add_vertex_attribute<float>("distance", 1);
+
 
 
     auto sample_level_bitmask = *rx.add_vertex_attribute<
@@ -179,6 +186,8 @@ int main(int argc, char** argv)
     rx.prepare_launch_box({rxmesh::Op::VV},
                           lb,
                           (void*)sample_points<float, CUDABlockSize>);
+
+
 
 
     float ratio           = 8;
@@ -215,7 +224,7 @@ int main(int argc, char** argv)
 
     cudaDeviceSynchronize();
 
-
+    
     // pre processing step
     //gathers samples for every level
     int j = 0;
@@ -254,13 +263,6 @@ int main(int argc, char** argv)
                                         k++) {
                                        sample_level_bitmask(vh, 0) |= (1 << k);
                                    }
-
-                                   /* printf(
-                                       "\n\n Sample %d, vertex %d is level %d",
-                                          i, 
-                                          seed,
-                                          currentSampleLevel);
-                                          */
                                } else {
                                    if (i == 0) {
                                        distance(vh, 0)      = INFINITY;
@@ -279,9 +281,6 @@ int main(int argc, char** argv)
                     distance,
                     flagger);
             cudaDeviceSynchronize();
-            //std::cout << "\nflag: "<<*flagger
-            //          << "\n\niteration: " << j << std::endl;
-
             j++;
 
         } while (*flagger != 0);
@@ -415,12 +414,6 @@ int main(int argc, char** argv)
                                number_of_neighbors[clustered_vertex(vh, 0)] =
                                    vertexNeighbors[sample_number(vh, 0)].
                                    getNumberOfNeighbors();
-
-
-                               /* printf("\n vertex %d : %d neighbors",
-                       sample_number(vh, 0),
-                       vertexNeighbors[sample_number(vh, 0)].getNumberOfNeighbors());
-                       */
                            }
                        });
     cudaDeviceSynchronize();
@@ -460,14 +453,6 @@ int main(int argc, char** argv)
                                 prolongation_operator);
                                 
     cudaDeviceSynchronize();
-   /*
-    for (int i=0;i<N;i++) {
-        std::cout << "\n" << i << " ";
-        for (int k=0;k<numberOfSamples;k++) {
-            std::cout << prolongation_operator[i * numberOfSamples + k] << " ";
-        }
-    }
-    */
 
     Eigen::MatrixXd verts;
     Eigen::MatrixXi faces;
@@ -652,6 +637,102 @@ int main(int argc, char** argv)
         }
     }
 
+    
+    
+
+    ////////////////////////////////////////////////////
+
+
+    //make prolongation operators into CSR matrices
+
+
+    
+
+
+
+    /*
+    //contruct equations as CSR matrices
+
+    //construct X
+
+    
+    constexpr uint32_t blockThreads = 256;
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    auto coords = rx.get_input_vertex_coordinates();
+
+    SparseMatrix<float> A_mat(rx);
+    DenseMatrix<float>  B_mat(rx, rx.get_num_vertices(), 3);
+
+
+    std::shared_ptr<DenseMatrix<float>> X_mat = coords->to_matrix();
+    // B set up
+    LaunchBox<blockThreads> launch_box_B;
+    rx.prepare_launch_box({Op::VV},
+                          launch_box_B,
+                          (void*)mcf_B_setup<float, blockThreads>);
+
+    mcf_B_setup<float, blockThreads><<<launch_box_B.blocks,
+                                       launch_box_B.num_threads,
+                                       launch_box_B.smem_bytes_dyn>>>(
+        rx.get_context(), *coords, B_mat,true);
+
+    
+
+    // A and X set up
+    LaunchBox<blockThreads> launch_box_A_X;
+    rx.prepare_launch_box({Op::VV},
+                          launch_box_A_X,
+                          (void*)mcf_A_setup<float, blockThreads>,
+                          true);
+
+    mcf_A_setup<float, blockThreads>
+        <<<launch_box_A_X.blocks,
+           launch_box_A_X.num_threads,
+           launch_box_A_X.smem_bytes_dyn>>>(rx.get_context(),
+                                            *coords,
+                                            A_mat,
+                                            false,0.001);
+
+    A_mat.move(DEVICE, HOST);
+
+    int numberOfValuesInA=0;
+
+    printf("\nCSR Array: \n");
+    for (int i = 0; i < A_mat.rows(); ++i) {
+         printf("row_ptr[%d] = %d\n", i, A_mat.row_ptr()[i]);
+        //printf("add %d values\n", number_of_neighbors[i]);
+        for (int q = A_mat.row_ptr()[i]; q < A_mat.row_ptr()[i + 1]; q++) {
+            printf("vertex: %d   value: %f \n", A_mat.col_idx()[q],
+                   A_mat(i, A_mat.col_idx()[q]));
+            numberOfValuesInA++;
+        }
+    }
+
+    CSR A_csr(A_mat,A_mat.row_ptr(),A_mat.col_idx(),numberOfValuesInA);
+
+    A_csr.printCSR();
+
+    float* v;
+    float* y;
+    cudaMallocManaged(&v, sizeof(float) * A_csr.num_rows);
+    cudaMallocManaged(&y, sizeof(float) * A_csr.num_rows);
+    cudaDeviceSynchronize();
+
+    for (int i = 0; i < A_csr.num_rows; i++)
+        v[i] = i;
+
+    SpMV_CSR(
+        A_csr.row_ptr, A_csr.value_ptr, A_csr.data_ptr, v, y, A_csr.num_rows);
+
+    printf("Vector: ");
+    for (int i=0;i<A_csr.num_rows;i++) {
+        
+    }
+    
+
+    */
 
     //////////////////////////////////////////////////////////////////
 
@@ -757,7 +838,7 @@ int main(int argc, char** argv)
 
 
     });
-    */
+    
 
 
     std::cout << std::endl;
@@ -790,7 +871,7 @@ int main(int argc, char** argv)
     rx.get_polyscope_mesh()->addVertexScalarQuantity(
         "number of neighbors",
         number_of_neighbors_coarse);
-
+        */
 
 #if USE_POLYSCOPE
     polyscope::show();
