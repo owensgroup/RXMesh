@@ -19,6 +19,7 @@ struct VertexData
 };
 
 
+
 struct CSR
 {
     int* row_ptr;
@@ -26,19 +27,84 @@ struct CSR
     int* number_of_neighbors;
     float* data_ptr;
     int  num_rows;
+    int    non_zeros;// number of non-zero values
+    CSR(){}
+    CSR(int number_of_rows, int num_cols) //to be used only if we're multiplying and this is used as result
+    {
+        num_rows=number_of_rows;
+        cudaMallocManaged(&row_ptr, sizeof(int) * (num_rows + 1));
+        cudaMallocManaged(&value_ptr, sizeof(int) * num_rows);
+        cudaMallocManaged(&data_ptr, sizeof(float) * num_rows);
+        non_zeros = num_rows;
 
-    //CSR(SparseMatrix<float> A, int number_of_values)
+        cudaDeviceSynchronize();
+         for (int i = 0; i < num_rows; ++i) 
+         {
+            row_ptr[i] = i;
+         }
+         row_ptr[num_rows] = non_zeros;  // Ensure the last element is properly set
+         // Initialize values and data
+         for (int i = 0; i < non_zeros; ++i) {
+             value_ptr[i] = 2;     // Column indices (modify as per structure)
+             data_ptr[i]  = i;  // Example values
+         }
+
+
+        cudaDeviceSynchronize();
+
+    }
+
+    CSR(int number_of_rows)
+    {
+        // 3 values per row
+        // take a row, look through all values,
+        // or just allocate 3 x number of rows x float
+        // allocate values in parallel
+        num_rows = number_of_rows;
+        cudaMallocManaged(&row_ptr, sizeof(int) * (num_rows+1));
+        cudaMallocManaged(&value_ptr, sizeof(int) * num_rows * 3);
+        cudaMallocManaged(&data_ptr, sizeof(float) * num_rows * 3);
+        non_zeros = num_rows * 3;
+
+        cudaDeviceSynchronize();
+
+        for (int i = 0; i < num_rows; ++i) {
+            row_ptr[i] = 3*i;
+        }
+        row_ptr[num_rows] =
+            non_zeros;  // Ensure the last element is properly set
+
+        cudaDeviceSynchronize();
+    }
+
+    __device__ void setValue(int   row,
+                  int   colNumber1,
+                  int   colNumber2,
+                  int   colNumber3,
+                  float value1,
+                  float value2,
+                  float value3)  // implicitly, this can only be called 3 times
+    {
+        int q            = row_ptr[row];
+        value_ptr[q]     = colNumber1;
+        value_ptr[q + 1] = colNumber2;
+        value_ptr[q + 2] = colNumber3;
+        data_ptr[q]      = value1;
+        data_ptr[q + 1]  = value2;
+        data_ptr[q + 2]  = value3;
+    }
+
     CSR(SparseMatrix<float> A,
         const int*                A_row_pointer,
         const int*                A_column_pointer,
         int                 number_of_values)
     {
         num_rows = A.rows();
+        non_zeros = A.non_zeros();
         cudaMallocManaged(&row_ptr, (num_rows + 1) * sizeof(int));
-        cudaMallocManaged(&data_ptr, sizeof(float) * A.cols()*A.rows());
-        cudaMallocManaged(&value_ptr, sizeof(int) * A.cols()*A.rows());
+        cudaMallocManaged(&data_ptr, sizeof(float) * A.non_zeros());
+        cudaMallocManaged(&value_ptr, sizeof(int) * A.non_zeros());
         cudaDeviceSynchronize();
-
           for (int i = 0; i < num_rows; ++i) 
           {
             row_ptr[i] = A_row_pointer[i];
@@ -48,17 +114,18 @@ struct CSR
                 data_ptr[q] = A(i, A_column_pointer[q]);
             }
           }
+          row_ptr[num_rows] =non_zeros;  // Ensure the last element is properly set
+
           cudaDeviceSynchronize();
     }
 
+    //used for the mesh
     CSR(int n_rows, int* num_of_neighbors, VertexNeighbors* vns, int N)
     {
 
         num_rows = n_rows;
         cudaMallocManaged(&row_ptr, (num_rows + 1) * sizeof(int));
         cudaDeviceSynchronize();
-
-
         // Temporary storage for CUB
         void*  d_cub_temp_storage = nullptr;
         size_t temp_storage_bytes = 0;
@@ -83,6 +150,7 @@ struct CSR
         cudaMallocManaged(&value_ptr, row_ptr[num_rows] * sizeof(int));
         cudaMallocManaged(&data_ptr, row_ptr[num_rows] * sizeof(float));
 
+        non_zeros = row_ptr[num_rows];
         cudaDeviceSynchronize();
 
         createValuePointer(
@@ -157,9 +225,83 @@ struct CSR
             });
     }
 
+    //rearrange CSR
+    // when we get the CSR data as mesh data, we rearrange it, this will be useful for later.
+    // look up a vertex, look up the first neighbor, if the first neighbor and third are neighbors, that's a triangle. Move to that next neighbor, 
+    __device__ void swap(int& a, int& b)
+    {
+        int temp = a;
+        a        = b;
+        b        = temp;
+    }
+
+    void rearrange(int* row_ptr_raw, int* value_ptr_raw, int n)
+    {
+        thrust::device_vector<int> samples(n);
+        thrust::sequence(samples.begin(), samples.end());  // Fill 0,1,2,...,N
+
+        thrust::for_each(
+            thrust::device,
+            samples.begin(),
+            samples.end(),
+            [=] __device__(int number) {
+                int start_pointer = row_ptr_raw[number];
+                int end_pointer   = row_ptr_raw[number + 1];
+
+                // Step 1: Extract neighbors
+                int num_neighbors = end_pointer - start_pointer;
+                if (num_neighbors < 2)
+                    return;  // No need to reorder if <=1 neighbor
+
+                // Step 2: Find triangle-based connectivity
+                __shared__ int
+                    adjacency[128];  // Assumes max neighbors per vertex < 128
+
+                for (int i = 0; i < num_neighbors; i++) {
+                    int neighbor = value_ptr_raw[start_pointer + i];
+
+                    // Scan neighbor's connections
+                    int neighbor_start = row_ptr_raw[neighbor];
+                    int neighbor_end   = row_ptr_raw[neighbor + 1];
+
+                    for (int j = neighbor_start; j < neighbor_end; j++) {
+                        int neighbor_of_neighbor = value_ptr_raw[j];
+
+                        // If neighbor_of_neighbor is also a direct neighbor of
+                        // 'number'
+                        for (int k = 0; k < num_neighbors; k++) {
+                            if (value_ptr_raw[start_pointer + k] ==
+                                neighbor_of_neighbor) {
+                                adjacency[i] =
+                                    neighbor_of_neighbor;  // Store adjacency
+                                                           // relation
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Step 3: Reorder based on adjacency
+                // Basic insertion-sort-like reordering to respect triangle
+                // adjacency
+                for (int i = 1; i < num_neighbors; i++) {
+                    for (int j = i; j > 0; j--) {
+                        if (adjacency[j] > adjacency[j - 1]) {
+                            swap(value_ptr_raw[start_pointer + j],
+                                 value_ptr_raw[start_pointer + j - 1]);
+                            swap(adjacency[j], adjacency[j - 1]);
+                        }
+                    }
+                }
+            });
+    }
+
+
+
     void printCSR()
     {
-        printf("\nCSR Array: \n");
+        printf("\nCSR Array:");
+        std::cout << "\nNumber of non-zeros = " << non_zeros << "\n";
         for (int i = 0; i < num_rows; ++i) {
             printf("row_ptr[%d] = %d\n", i, row_ptr[i]);
             printf("add %d values\n", row_ptr[i + 1] - row_ptr[i]);
@@ -176,6 +318,8 @@ struct CSR
         Vec3* vertex_pos // Array of vertex positions (assumed 3D)
     )
     {
+        rearrange(row_ptr, value_ptr, num_rows);
+
         // Initialize vertex positions
         vertexPositions.resize(num_rows);
         for (int i = 0; i < num_rows; ++i) {
@@ -282,4 +426,554 @@ void clusterCSR(int    n,
                 }
             }
         });
+}
+
+CSR transposeCSR(const CSR& A, int numberOfColumns)
+{
+    int num_rows = A.num_rows;
+    // Step 1: Count elements in each column using numberOfColumns
+    int* col_counts;
+    cudaMallocManaged(&col_counts, numberOfColumns * sizeof(int));
+    cudaMemset(col_counts, 0, numberOfColumns * sizeof(int));
+
+    for (int i = 0; i < num_rows; i++) {
+        for (int j = A.row_ptr[i]; j < A.row_ptr[i + 1]; j++) {
+            col_counts[A.value_ptr[j]]++;
+        }
+    }
+
+    // Step 2: Compute row_ptr for transposed matrix
+    int* trans_row_ptr;
+    cudaMallocManaged(&trans_row_ptr, (numberOfColumns + 1) * sizeof(int));
+    trans_row_ptr[0] = 0;
+    for (int i = 0; i < numberOfColumns; i++) {  // Use numberOfColumns here
+        trans_row_ptr[i + 1] = trans_row_ptr[i] + col_counts[i];
+    }
+
+    int    nnz = trans_row_ptr[numberOfColumns];  // Use numberOfColumns
+    int*   trans_value_ptr;
+    float* trans_data_ptr;
+    cudaMallocManaged(&trans_value_ptr, nnz * sizeof(int));
+    cudaMallocManaged(&trans_data_ptr, nnz * sizeof(float));
+
+    // Step 3: Populate transposed matrix
+    int* next;
+    cudaMallocManaged(&next,
+                      numberOfColumns * sizeof(int));  // Use numberOfColumns
+    cudaMemcpy(next,
+               trans_row_ptr,
+               numberOfColumns * sizeof(int),
+               cudaMemcpyDeviceToDevice);
+
+    for (int i = 0; i < num_rows; i++) {
+        for (int j = A.row_ptr[i]; j < A.row_ptr[i + 1]; j++) {
+            int col               = A.value_ptr[j];
+            int dest              = next[col]++;
+            trans_value_ptr[dest] = i;
+            trans_data_ptr[dest]  = A.data_ptr[j];
+        }
+    }
+
+    // Cleanup and return
+    cudaFree(col_counts);
+    cudaFree(next);
+
+    CSR AT(numberOfColumns);
+    cudaFree(AT.row_ptr);
+    cudaFree(AT.value_ptr);
+    cudaFree(AT.data_ptr);
+    AT.row_ptr   = trans_row_ptr;
+    AT.value_ptr = trans_value_ptr;
+    AT.data_ptr  = trans_data_ptr;
+    AT.num_rows  = numberOfColumns;
+    AT.non_zeros = nnz;  // Make sure to set this
+    return AT;
+}
+
+__global__ void csrMultiplyKernel(int*   A_row_ptr,
+                                  int*   A_col_idx,
+                                  float* A_vals,
+                                  int    A_rows,
+                                  int*   B_row_ptr,
+                                  int*   B_col_idx,
+                                  float* B_vals,
+                                  int    B_cols,
+                                  int*   C_row_ptr,
+                                  int*   C_col_idx,
+                                  float* C_vals)
+{
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row >= A_rows)
+        return;
+
+    int start_A = A_row_ptr[row];
+    int end_A   = A_row_ptr[row + 1];
+
+    printf("\n entered kernel further for row %d from %d to %d",
+        row, start_A, end_A);
+
+
+    for (int i = start_A; i < end_A; i++) {
+        int   col_A = A_col_idx[i];
+        float val_A = A_vals[i];
+
+        int start_B = B_row_ptr[col_A];
+        int end_B   = B_row_ptr[col_A + 1];
+
+
+
+        for (int j = start_B; j < end_B; j++) {
+            int   col_B = B_col_idx[j];
+            float val_B = B_vals[j];
+
+            atomicAdd(&C_vals[C_row_ptr[row] + col_B], val_A * val_B);
+            printf("\n New value of C at %d is %f",
+                   C_row_ptr[row] + col_B,
+                C_vals[C_row_ptr[row] + col_B]);
+
+        }
+
+    }
+}
+
+CSR csrMultiply(CSR& A, CSR& B)
+{
+    int *  d_A_row_ptr, *d_A_col_idx, *d_B_row_ptr, *d_B_col_idx;
+    float *d_A_vals, *d_B_vals;
+    
+
+    cudaMallocManaged(&d_A_row_ptr, (A.num_rows + 1) * sizeof(int));
+    cudaMallocManaged(&d_A_col_idx, A.non_zeros * sizeof(int));
+    cudaMallocManaged(&d_A_vals, A.non_zeros * sizeof(float));
+    cudaMallocManaged(&d_B_row_ptr, (B.num_rows + 1) * sizeof(int));
+    cudaMallocManaged(&d_B_col_idx, B.non_zeros * sizeof(int));
+    cudaMallocManaged(&d_B_vals, B.non_zeros * sizeof(float));
+
+
+
+    cudaMemcpy(d_A_row_ptr,
+               A.row_ptr,
+               A.num_rows * sizeof(int),
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_A_col_idx,
+               A.value_ptr,
+               A.non_zeros * sizeof(int),
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_A_vals,
+               A.data_ptr,
+               A.non_zeros * sizeof(float),
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B_row_ptr,
+               B.row_ptr,
+               B.num_rows * sizeof(int),
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B_col_idx,
+               B.value_ptr,
+               B.non_zeros * sizeof(int),
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B_vals,
+               B.data_ptr,
+               B.non_zeros * sizeof(float),
+               cudaMemcpyHostToDevice);
+
+    CSR C;
+    int *  d_C_row_ptr = C.row_ptr, *d_C_col_idx = C.value_ptr;
+    float* d_C_vals=C.data_ptr;
+
+    C.num_rows = (A.num_rows + 1);
+    
+
+    cudaMallocManaged(&d_C_row_ptr, (A.num_rows + 1) * sizeof(int));
+    cudaMallocManaged(&d_C_col_idx, A.num_rows * B.num_rows * sizeof(int));
+    cudaMallocManaged(&d_C_vals, A.num_rows * B.num_rows * sizeof(float));
+    cudaDeviceSynchronize();
+
+    //std::cout << "\n Number of rows in A: " << A.num_rows;
+    //A.printCSR();
+    /* std::cout << "\nNumber of rows in B: " << B.num_rows;
+    B.printCSR();*/
+
+    dim3 blockDim(256);
+    dim3 gridDim((A.num_rows + blockDim.x - 1) / blockDim.x);
+
+
+    csrMultiplyKernel<<<gridDim, blockDim>>>(d_A_row_ptr,
+                                             d_A_col_idx,
+                                             d_A_vals,
+                                             A.num_rows,
+                                             d_B_row_ptr,
+                                             d_B_col_idx,
+                                             d_B_vals,
+                                             B.num_rows,
+                                             d_C_row_ptr,
+                                             d_C_col_idx,
+                                             d_C_vals);
+
+    cudaDeviceSynchronize();
+    C.row_ptr = d_C_row_ptr;
+    C.value_ptr = d_C_col_idx;
+    C.data_ptr=d_C_vals;
+
+    //std::cout << "First row: " << C.row_ptr[0];
+    printf("\nCSR Array: \n");
+    for (int i = 0; i < C.num_rows; ++i) {
+        printf("row_ptr[%d] = %d\n", i, d_C_row_ptr[i]);
+        printf("add %d values\n", d_C_row_ptr[i + 1] - d_C_row_ptr[i]);
+        for (int q = d_C_row_ptr[i]; q < d_C_row_ptr[i + 1]; q++) {
+            printf("vertex %d value: %f\n", d_C_col_idx[q], d_C_vals[q]);
+        }
+    }
+
+    //C.printCSR();
+
+
+
+
+    /*
+    cudaMemcpy(C.row_ptr,
+               d_C_row_ptr,
+               (A.num_rows + 1) * sizeof(int),
+               cudaMemcpyDeviceToHost);
+    cudaMemcpy(C.value_ptr,
+               d_C_col_idx,
+               A.num_rows * B.num_rows * sizeof(int),
+               cudaMemcpyDeviceToHost);
+    cudaMemcpy(C.data_ptr,
+               d_C_vals,
+               A.num_rows * B.num_rows * sizeof(float),
+               cudaMemcpyDeviceToHost);
+               */
+
+    cudaFree(d_A_row_ptr);
+    cudaFree(d_A_col_idx);
+    cudaFree(d_A_vals);
+    cudaFree(d_B_row_ptr);
+    cudaFree(d_B_col_idx);
+    cudaFree(d_B_vals);
+    //cudaFree(d_C_row_ptr);
+    //cudaFree(d_C_col_idx);
+    //cudaFree(d_C_vals);
+
+    return C;
+}
+
+
+// CUDA error checking
+#define CHECK_CUDA(call)                                              \
+    {                                                                 \
+        cudaError_t status = (call);                                  \
+        if (status != cudaSuccess) {                                  \
+            std::cerr << "CUDA Error: " << cudaGetErrorString(status) \
+                      << " at line " << __LINE__ << std::endl;        \
+            exit(EXIT_FAILURE);                                       \
+        }                                                             \
+    }
+
+#define CHECK_CUSPARSE(call)                                                 \
+    {                                                                        \
+        cusparseStatus_t status = (call);                                    \
+        if (status != CUSPARSE_STATUS_SUCCESS) {                             \
+            std::cerr << "cuSPARSE Error at line " << __LINE__ << std::endl; \
+            exit(EXIT_FAILURE);                                              \
+        }                                                                    \
+    }
+
+CSR multiplyCSR(int    A_rows,
+                 int    A_cols,
+                 int    B_cols,
+                 int*   d_A_rowPtr,
+                 int*   d_A_colIdx,
+                 float* d_A_values,
+                 int    nnzA,
+                 int*   d_B_rowPtr,
+                 int*   d_B_colIdx,
+                 float* d_B_values,
+                 int    nnzB)
+{
+    // Create cuSPARSE handle
+    cusparseHandle_t handle;
+    CHECK_CUSPARSE(cusparseCreate(&handle));
+
+    // Create sparse matrix descriptors
+    cusparseSpMatDescr_t matA, matB, matC;
+    CHECK_CUSPARSE(cusparseCreateCsr(&matA,
+                                     A_rows,
+                                     A_cols,
+                                     nnzA,
+                                     d_A_rowPtr,
+                                     d_A_colIdx,
+                                     d_A_values,
+                                     CUSPARSE_INDEX_32I,
+                                     CUSPARSE_INDEX_32I,
+                                     CUSPARSE_INDEX_BASE_ZERO,
+                                     CUDA_R_32F));
+
+    CHECK_CUSPARSE(cusparseCreateCsr(&matB,
+                                     A_cols,
+                                     B_cols,
+                                     nnzB,
+                                     d_B_rowPtr,
+                                     d_B_colIdx,
+                                     d_B_values,
+                                     CUSPARSE_INDEX_32I,
+                                     CUSPARSE_INDEX_32I,
+                                     CUSPARSE_INDEX_BASE_ZERO,
+                                     CUDA_R_32F));
+
+    // Create an empty descriptor for matC
+    CHECK_CUSPARSE(cusparseCreateCsr(&matC,
+                                     A_rows,
+                                     B_cols,
+                                     0,
+                                     nullptr,
+                                     nullptr,
+                                     nullptr,
+                                     CUSPARSE_INDEX_32I,
+                                     CUSPARSE_INDEX_32I,
+                                     CUSPARSE_INDEX_BASE_ZERO,
+                                     CUDA_R_32F));
+
+    // Allocate workspace buffer for SpGEMM
+    float                 alpha = 1.0f, beta = 0.0f;
+    cusparseSpGEMMDescr_t spgemmDesc;
+    CHECK_CUSPARSE(cusparseSpGEMM_createDescr(&spgemmDesc));
+
+    // PHASE 1: Work estimation
+    size_t bufferSize1 = 0;
+    void*  dBuffer1    = nullptr;
+    CHECK_CUSPARSE(
+        cusparseSpGEMM_workEstimation(handle,
+                                      CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                      CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                      &alpha,
+                                      matA,
+                                      matB,
+                                      &beta,
+                                      matC,
+                                      CUDA_R_32F,
+                                      CUSPARSE_SPGEMM_DEFAULT,
+                                      spgemmDesc,
+                                      &bufferSize1,
+                                      nullptr));
+    CHECK_CUDA(cudaMalloc(&dBuffer1, bufferSize1));
+
+    // Execute work estimation
+    CHECK_CUSPARSE(
+        cusparseSpGEMM_workEstimation(handle,
+                                      CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                      CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                      &alpha,
+                                      matA,
+                                      matB,
+                                      &beta,
+                                      matC,
+                                      CUDA_R_32F,
+                                      CUSPARSE_SPGEMM_DEFAULT,
+                                      spgemmDesc,
+                                      &bufferSize1,
+                                      dBuffer1));
+
+    // PHASE 2: Compute non-zero pattern of C
+    size_t bufferSize2 = 0;
+    void*  dBuffer2    = nullptr;
+    CHECK_CUSPARSE(cusparseSpGEMM_compute(handle,
+                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                          &alpha,
+                                          matA,
+                                          matB,
+                                          &beta,
+                                          matC,
+                                          CUDA_R_32F,
+                                          CUSPARSE_SPGEMM_DEFAULT,
+                                          spgemmDesc,
+                                          &bufferSize2,
+                                          nullptr));
+    CHECK_CUDA(cudaMalloc(&dBuffer2, bufferSize2));
+
+    // Execute non-zero pattern computation
+    CHECK_CUSPARSE(cusparseSpGEMM_compute(handle,
+                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                          &alpha,
+                                          matA,
+                                          matB,
+                                          &beta,
+                                          matC,
+                                          CUDA_R_32F,
+                                          CUSPARSE_SPGEMM_DEFAULT,
+                                          spgemmDesc,
+                                          &bufferSize2,
+                                          dBuffer2));
+
+    // Get the size of matrix C
+    int64_t C_rows, C_cols, nnzC;
+    CHECK_CUSPARSE(cusparseSpMatGetSize(matC, &C_rows, &C_cols, &nnzC));
+
+    std::cout << "Matrix C dimensions:" << std::endl;
+    std::cout << "Rows: " << C_rows << std::endl;
+    std::cout << "Cols: " << C_cols << std::endl;
+    std::cout << "Non-zero elements: " << nnzC << std::endl;
+
+    // Allocate memory for matrix C
+    int*   d_C_rowPtr;
+    int*   d_C_colIdx;
+    float* d_C_values;
+    CHECK_CUDA(cudaMalloc(&d_C_rowPtr, (A_rows + 1) * sizeof(int)));
+    CHECK_CUDA(cudaMalloc(&d_C_colIdx, nnzC * sizeof(int)));
+    CHECK_CUDA(cudaMalloc(&d_C_values, nnzC * sizeof(float)));
+
+    // Set pointers for matrix C
+    CHECK_CUSPARSE(
+        cusparseCsrSetPointers(matC, d_C_rowPtr, d_C_colIdx, d_C_values));
+
+    // PHASE 3: Compute actual values
+    CHECK_CUSPARSE(cusparseSpGEMM_copy(handle,
+                                       CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                       CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                       &alpha,
+                                       matA,
+                                       matB,
+                                       &beta,
+                                       matC,
+                                       CUDA_R_32F,
+                                       CUSPARSE_SPGEMM_DEFAULT,
+                                       spgemmDesc));
+
+    // Synchronize to ensure completion
+    CHECK_CUDA(cudaDeviceSynchronize());
+
+    // First, copy the computed data to host to filter zeros
+        int* h_C_rowPtr = new int[A_rows + 1];
+    int*     h_C_colIdx = new int[nnzC];
+    float*   h_C_values = new float[nnzC];
+
+    CHECK_CUDA(cudaMemcpy(h_C_rowPtr,
+                          d_C_rowPtr,
+                          (A_rows + 1) * sizeof(int),
+                          cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(
+        h_C_colIdx, d_C_colIdx, nnzC * sizeof(int), cudaMemcpyDeviceToHost));
+    CHECK_CUDA(cudaMemcpy(
+        h_C_values, d_C_values, nnzC * sizeof(float), cudaMemcpyDeviceToHost));
+
+    // Count actual non-zeros and create filtered arrays
+    const float      ZERO_THRESHOLD = 1e-6f;  // Adjust this threshold as needed
+    std::vector<int> filtered_rowPtr(A_rows + 1, 0);
+    std::vector<int> filtered_colIdx;
+    std::vector<float> filtered_values;
+    filtered_colIdx.reserve(nnzC);  // Reserve max possible size
+    filtered_values.reserve(nnzC);
+
+    // Process first row pointer
+    filtered_rowPtr[0] = 0;
+
+    // Filter out zeros and build new CSR structure
+    int actual_nnz = 0;
+    for (int i = 0; i < A_rows; i++) {
+        int row_start = h_C_rowPtr[i];
+        int row_end   = h_C_rowPtr[i + 1];
+
+        for (int j = row_start; j < row_end; j++) {
+            if (std::abs(h_C_values[j]) > ZERO_THRESHOLD ||
+                    h_C_values[j] != 0.0f)
+            {
+                filtered_colIdx.push_back(h_C_colIdx[j]);
+                filtered_values.push_back(h_C_values[j]);
+                actual_nnz++;
+            }
+        }
+        filtered_rowPtr[i + 1] = actual_nnz;
+    }
+
+    // Create new CSR object
+    CSR result;  // Using your two-parameter constructor
+    result.num_rows = A_rows;
+
+    // Allocate new memory with correct sizes
+    result.non_zeros = actual_nnz;
+    cudaMallocManaged(&result.row_ptr, (A_rows + 1) * sizeof(int));
+    cudaMallocManaged(&result.value_ptr, actual_nnz * sizeof(int));
+    cudaMallocManaged(&result.data_ptr, actual_nnz * sizeof(float));
+
+    // Copy filtered data to result CSR
+    cudaMemcpy(result.row_ptr,
+               filtered_rowPtr.data(),
+               (A_rows + 1) * sizeof(int),
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(result.value_ptr,
+               filtered_colIdx.data(),
+               actual_nnz * sizeof(int),
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(result.data_ptr,
+               filtered_values.data(),
+               actual_nnz * sizeof(float),
+               cudaMemcpyHostToDevice);
+
+
+    // Print the results
+    /*
+    std::cout << "\nMatrix C in CSR format:" << std::endl;
+    std::cout << "Row Pointers: ";
+    for (int i = 0; i <= A_rows; i++) {
+        std::cout << h_C_rowPtr[i] << " ";
+    }
+    std::cout << "\n\nColumn Indices: ";
+    for (int64_t i = 0; i < nnzC; i++) {
+        std::cout << h_C_colIdx[i] << " ";
+    }
+    std::cout << "\n\nValues: ";
+    for (int64_t i = 0; i < nnzC; i++) {
+        std::cout << h_C_values[i] << " ";
+    }
+    std::cout << std::endl;
+
+    
+    // Print in matrix form for better visualization
+    std::cout << "\nMatrix C in readable format:" << std::endl;
+    for (int i = 0; i < A_rows; i++) {
+        int row_start = h_C_rowPtr[i];
+        int row_end   = h_C_rowPtr[i + 1];
+
+        // Print each row
+        for (int j = 0; j < B_cols; j++) {
+            bool found = false;
+            // Look for column j in current row
+            for (int k = row_start; k < row_end; k++) {
+                if (h_C_colIdx[k] == j) {
+                    std::cout << std::setw(8) << std::fixed
+                              << std::setprecision(2) << h_C_values[k] << " ";
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                std::cout << std::setw(8) << "0.00"
+                          << " ";
+            }
+        }
+        std::cout << std::endl;
+    }
+    */
+
+    // Cleanup host memory
+    delete[] h_C_rowPtr;
+    delete[] h_C_colIdx;
+    delete[] h_C_values;
+
+    // Cleanup device memory
+    CHECK_CUSPARSE(cusparseDestroySpMat(matA));
+    CHECK_CUSPARSE(cusparseDestroySpMat(matB));
+    CHECK_CUSPARSE(cusparseDestroySpMat(matC));
+    CHECK_CUSPARSE(cusparseSpGEMM_destroyDescr(spgemmDesc));
+    CHECK_CUSPARSE(cusparseDestroy(handle));
+
+    CHECK_CUDA(cudaFree(dBuffer1));
+    CHECK_CUDA(cudaFree(dBuffer2));
+    CHECK_CUDA(cudaFree(d_C_rowPtr));
+    CHECK_CUDA(cudaFree(d_C_colIdx));
+    CHECK_CUDA(cudaFree(d_C_values));
+
+
+    return result;
 }

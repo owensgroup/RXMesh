@@ -155,7 +155,7 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
     
     auto vertex_pos = *rx.get_input_vertex_coordinates();
 
@@ -443,15 +443,34 @@ int main(int argc, char** argv)
     cudaMallocManaged(&prolongation_operator,
                       N * numberOfSamples * sizeof(float));
     cudaDeviceSynchronize();
+    std::vector<CSR> operatorsCSR;
+    operatorsCSR.push_back(CSR(N));
+
+    std::vector<CSR> prolongationOperatorCSR;  // work on allocating these for v cycle
+
+    CSR firstOperator(N);
+
    createProlongationOperator(csr.num_rows,
                                 csr.row_ptr,
                                 csr.value_ptr,
                                 csr.number_of_neighbors,
                                 N,
                                 vertexCluster,
-                                vertices, sample_pos,
+                                vertices, sample_pos, firstOperator.value_ptr, firstOperator.data_ptr,
                                 prolongation_operator);
-                                
+
+   prolongationOperatorCSR.push_back(firstOperator);
+
+    /*
+    createProlongationOperator(csr.num_rows,
+                              csr.row_ptr,
+                              csr.value_ptr,firstOperator.value_ptr,firstOperator.data_ptr,
+                              csr.number_of_neighbors,
+                              N,
+                              vertexCluster,
+                              vertices,
+                              sample_pos);
+      */                          
     cudaDeviceSynchronize();
 
     Eigen::MatrixXd verts;
@@ -496,7 +515,7 @@ int main(int argc, char** argv)
                     clustered_vertex(vh, 0);
             }
 
-                       });
+    });
     
 
 
@@ -509,8 +528,10 @@ int main(int argc, char** argv)
 
     CSR lastCSR                 = csr;
     CSR currentCSR              = csr;
-    int currentNumberOfVertices = numberOfSamples;
-    int currentNumberOfSamples  = numberOfSamples / ratio;
+    int currentNumberOfVertices = N;
+    //numberOfSamples;
+    int currentNumberOfSamples = numberOfSamples;
+    /// ratio;
     std::vector<float*> prolongationOperators;
     prolongationOperators.resize(numberOfLevels-1);
 
@@ -533,7 +554,16 @@ int main(int argc, char** argv)
     faceIndicesArray.resize(numberOfLevels);
     clustering.resize(numberOfLevels);
 
+
+   CSR a(numberOfSamples);
+
+    //operatorsCSR.resize(numberOfLevels-1);
+
     for (int level = 1; level < numberOfLevels - 1; level++) {
+
+        currentNumberOfSamples /= 8;
+        currentNumberOfVertices /= 8;
+        a = CSR(currentNumberOfVertices);
 
         std::cout << "\nlevel : " << level;
         std::cout << "\n current number of samples: " << currentNumberOfSamples;
@@ -542,6 +572,7 @@ int main(int argc, char** argv)
         setCluster(currentNumberOfVertices, distanceArray, level + 1, oldVdata);
 
         do {
+
             *flagger = 0;
             clusterCSR(currentNumberOfVertices,
                        sample_pos,
@@ -553,12 +584,13 @@ int main(int argc, char** argv)
             cudaDeviceSynchronize();
         } while (*flagger != 0);
 
-        //clustering[level - 1].resize(currentNumberOfVertices);
-        //clustering[level-1]=intPointerArrayToVector(vertexCluster, currentNumberOfVertices);
+        clustering[level - 1].resize(currentNumberOfVertices);
+        clustering[level - 1] = intPointerArrayToVector(vertexCluster, currentNumberOfVertices);
 
 
-        //polyscope::getSurfaceMesh("mesh level " + std::to_string(level))
-        //->addVertexScalarQuantity("clustered vertices", clustering[level-1]);
+        polyscope::getSurfaceMesh("mesh level " 
+            + std::to_string(level))
+        ->addVertexScalarQuantity("clustered vertices", clustering[level - 1]);
 
 
         VertexNeighbors* vertexNeighbors2;
@@ -611,15 +643,25 @@ int main(int argc, char** argv)
                                    currentNumberOfVertices,
                                    oldVdata,
                                    prolongationOperator2);
-        cudaDeviceSynchronize();  // Ensure data is synchronized before
-                                  // accessing
-        currentNumberOfSamples /= 8;
-        currentNumberOfVertices /= 8;
-        lastCSR = currentCSR;
+
+
+        createProlongationOperator(currentNumberOfSamples,
+                                   currentCSR.row_ptr,
+                                   currentCSR.value_ptr,
+                                   a.value_ptr,
+                                   a.data_ptr,
+                                   number_of_neighbors2,
+                                   currentNumberOfVertices,
+                                   oldVdata);
+        prolongationOperatorCSR.push_back(a);
+
+        cudaDeviceSynchronize();  // Ensure data is synchronized before accessing
+        
+        lastCSR = currentCSR; //next mesh level
     }
 
     cudaDeviceSynchronize();
-    for (int q = 2; q < numberOfLevels - 1; q++) {
+  /*  for (int q = 1; q < numberOfLevels - 1; q++) {
         std::cout << "\n\n Level: " << q << " to " << q + 1;
         int rows = N / static_cast<int>(std::round(powf(ratio, q)));
         int cols =
@@ -635,25 +677,23 @@ int main(int argc, char** argv)
                 std::cout << prolongationOperators[q][index] << " ";
             }
         }
-    }
+    }*/
 
+    // make prolongation operators into CSR matrices
     
-    
+    std::cout << "\n\n\n\n\nOPERATOR CSR: \n";
+    //a.printCSR();
+
+    for (int i = 0; i < prolongationOperatorCSR.size();i++) 
+    {
+        std::cout << "\nOperator : " << i << "\n";
+        prolongationOperatorCSR[i].printCSR();
+    }
 
     ////////////////////////////////////////////////////
 
-
-    //make prolongation operators into CSR matrices
-
-
     
-
-
-
-    /*
     //contruct equations as CSR matrices
-
-    //construct X
 
     
     constexpr uint32_t blockThreads = 256;
@@ -693,47 +733,130 @@ int main(int argc, char** argv)
            launch_box_A_X.smem_bytes_dyn>>>(rx.get_context(),
                                             *coords,
                                             A_mat,
-                                            false,0.001);
+                                            true,0.001);
 
     A_mat.move(DEVICE, HOST);
+    B_mat.move(DEVICE, HOST);
 
     int numberOfValuesInA=0;
-
-    printf("\nCSR Array: \n");
-    for (int i = 0; i < A_mat.rows(); ++i) {
-         printf("row_ptr[%d] = %d\n", i, A_mat.row_ptr()[i]);
+    for (int i = 0; i < B_mat.rows(); ++i) {
+         //printf("row_ptr[%d] = %d\n", i, A_mat.row_ptr()[i]);
         //printf("add %d values\n", number_of_neighbors[i]);
         for (int q = A_mat.row_ptr()[i]; q < A_mat.row_ptr()[i + 1]; q++) {
-            printf("vertex: %d   value: %f \n", A_mat.col_idx()[q],
-                   A_mat(i, A_mat.col_idx()[q]));
+           /* printf("vertex: %d   value: %f \n", A_mat.col_idx()[q],
+                   A_mat(i, A_mat.col_idx()[q]));*/
             numberOfValuesInA++;
         }
     }
 
-    CSR A_csr(A_mat,A_mat.row_ptr(),A_mat.col_idx(),numberOfValuesInA);
+    CSR A_csr(A_mat,A_mat.row_ptr(),A_mat.col_idx(),A_mat.non_zeros());
+    VectorCSR B_v(B_mat.rows());
 
-    A_csr.printCSR();
+    
+    std::cout << "\nRHS:";
+    std::cout << "\n Number of rows of B:"<<B_mat.rows();
 
-    float* v;
-    float* y;
-    cudaMallocManaged(&v, sizeof(float) * A_csr.num_rows);
-    cudaMallocManaged(&y, sizeof(float) * A_csr.num_rows);
-    cudaDeviceSynchronize();
+    for (int i=0;i<B_mat.rows();i++) {
+        std::cout << "\n";
+        for (int q = 0; q < B_mat.cols(); q++) 
+        std::cout << B_mat(i, q) << " ";
 
-    for (int i = 0; i < A_csr.num_rows; i++)
-        v[i] = i;
-
-    SpMV_CSR(
-        A_csr.row_ptr, A_csr.value_ptr, A_csr.data_ptr, v, y, A_csr.num_rows);
-
-    printf("Vector: ");
-    for (int i=0;i<A_csr.num_rows;i++) {
-        
     }
     
 
+
+    //A_csr.printCSR();
+    /*
+    std::vector<CSR> equationsPerLevel;
+    equationsPerLevel.push_back(A_csr);
+
+    currentNumberOfSamples = numberOfSamples;
+
+    CSR result = A_csr;
+
+    //make all the equations for each level
+    /*
+    for (int i=0;i<numberOfLevels-1;i++) 
+    {
+
+        result = multiplyCSR(result.num_rows,
+                                 result.num_rows,
+                                 currentNumberOfSamples,
+                                 result.row_ptr,
+                                 result.value_ptr,
+                                 result.data_ptr,
+                                 result.non_zeros,
+                             prolongationOperatorCSR[i].row_ptr,
+                             prolongationOperatorCSR[i].value_ptr,
+                             prolongationOperatorCSR[i].data_ptr,
+                             prolongationOperatorCSR[i].non_zeros);
+
+        CSR transposeOperator =
+        transposeCSR(prolongationOperatorCSR[i], currentNumberOfSamples);
+
+        result = multiplyCSR(transposeOperator.num_rows,
+                         prolongationOperatorCSR[i].num_rows,
+                         numberOfSamples,
+                         transposeOperator.row_ptr,
+                         transposeOperator.value_ptr,
+                         transposeOperator.data_ptr,
+                         transposeOperator.non_zeros,
+                         result.row_ptr,
+                         result.value_ptr,
+                         result.data_ptr,
+                         result.non_zeros);
+
+        equationsPerLevel.push_back(result);
+
+        currentNumberOfSamples/=ratio;
+        //std::cout << "Equation level " << i << "\n\n";
+        //equationsPerLevel[i].printCSR();
+    }
+   
+
+
+
+    
+    cudaDeviceSynchronize();
+    /*
+    std::cout << "\n\n\n\n\n\n";
+    std::cout << "first\n";
+
+    CSR t1(3, 3);
+    CSR t2(3, 3);
+
+    t1.printCSR();
+    std::cout << "\n\n\n\n\n\n";
+    std::cout << "second\n";
+    t2.printCSR();
+
+    VectorCSR vectorTest(3);
+    VectorCSR vectorResult(3);
+
+    for (int i=0;i<3;i++) {
+        vectorTest.vector[i] = i+1+i;
+    }
+
+    SpMV_CSR(t1.row_ptr,
+             t1.value_ptr,
+             t1.data_ptr,
+             vectorTest.vector,
+             vectorResult.vector,
+             3);
+
+    std::cout << "\nVector result: ";
+    for (int i=0;i<3;i++) {
+        std::cout << "\n";
+        std::cout << vectorResult.vector[i];
+    }
     */
 
+    //GMGVCycle gmg;
+
+    //gmg.prolongationOperators = prolongationOperatorCSR;
+    //gmg.LHS                   = equationsPerLevel;
+
+    
     //////////////////////////////////////////////////////////////////
 
     /*
