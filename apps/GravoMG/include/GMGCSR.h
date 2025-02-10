@@ -810,11 +810,12 @@ CSR multiplyCSR(int    A_rows,
     int64_t C_rows, C_cols, nnzC;
     CHECK_CUSPARSE(cusparseSpMatGetSize(matC, &C_rows, &C_cols, &nnzC));
 
+    /*
     std::cout << "Matrix C dimensions:" << std::endl;
     std::cout << "Rows: " << C_rows << std::endl;
     std::cout << "Cols: " << C_cols << std::endl;
     std::cout << "Non-zero elements: " << nnzC << std::endl;
-
+    */
     // Allocate memory for matrix C
     int*   d_C_rowPtr;
     int*   d_C_colIdx;

@@ -101,10 +101,7 @@ __device__ void computeBarycentricCoordinates(const Eigen::Vector3f& v0,
     a = lambda0;
     b = lambda1;
     c = lambda2;
-     printf("\ncalculated coords are %f, %f, %f", lambda0, lambda1, lambda2);
-
-    // Return the barycentric coordinates
-    // return std::make_tuple(lambda0, lambda1, lambda2);
+     //printf("\ncalculated coords are %f, %f, %f", lambda0, lambda1, lambda2);
 }
 
 void createProlongationOperator(int  numberOfSamples,
@@ -230,14 +227,14 @@ void createProlongationOperator(int  numberOfSamples,
                 selectedv1, selectedv2, selectedv3, q, b1, b2, b3);
 
         if (b1!=b1 || b2!=b2 || b3!=b3) {
-                printf("\n%d %f %f %f Selected: %d %d %d",
+                /* printf("\n%d %f %f %f Selected: %d %d %d",
                        number,
                        vertex_pos[number].x,
                        vertex_pos[number].y,
                        vertex_pos[number].z,
                        cluster_point,
                        selected_neighbor,
-                       selected_neighbor_of_neighbor);
+                       selected_neighbor_of_neighbor);*/
         }
 
             // put it inside prolongation row, it will be unique so no race
@@ -258,7 +255,7 @@ void createProlongationOperator(int  numberOfSamples,
                                   
         });
 
-    
+    /*
     std::cout << "\n\n\n";
     for (int i = 0; i < N; i++) {
         std::cout << "\n" << i << " ";
@@ -266,7 +263,7 @@ void createProlongationOperator(int  numberOfSamples,
             std::cout << prolongation_operator[i * numberOfSamples + j] << " ";
         }
     }
-
+    */
     
 }
 
@@ -464,7 +461,7 @@ void createProlongationOperator(int         numberOfSamples,
             // go through every triangle of my cluster
             const int cluster_point = vData[number].cluster;
 
-            printf("\n cluster point of %d is %d", number, cluster_point);
+            //printf("\n cluster point of %d is %d", number, cluster_point);
 
             const int start_pointer = row_ptr[cluster_point];
             const int end_pointer   = row_ptr[cluster_point + 1];

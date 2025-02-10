@@ -155,11 +155,14 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "torus.obj");
+    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
+    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bumpy-cube.obj");
+    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
     
     auto vertex_pos = *rx.get_input_vertex_coordinates();
 
-    
     //attribute to sample,store and order samples
     auto sample_number = *rx.add_vertex_attribute<int>("sample_number", 1);
     auto distance      = *rx.add_vertex_attribute<float>("distance", 1);
@@ -421,8 +424,6 @@ int main(int argc, char** argv)
     int num_rows = numberOfSamples; // Set this appropriately
     CSR csr(num_rows, number_of_neighbors, vertexNeighbors, N);
 
-    //csr.printCSR();
-
     cudaDeviceSynchronize(); // Ensure data is synchronized before accessing
 
    
@@ -461,16 +462,6 @@ int main(int argc, char** argv)
 
    prolongationOperatorCSR.push_back(firstOperator);
 
-    /*
-    createProlongationOperator(csr.num_rows,
-                              csr.row_ptr,
-                              csr.value_ptr,firstOperator.value_ptr,firstOperator.data_ptr,
-                              csr.number_of_neighbors,
-                              N,
-                              vertexCluster,
-                              vertices,
-                              sample_pos);
-      */                          
     cudaDeviceSynchronize();
 
     Eigen::MatrixXd verts;
@@ -617,7 +608,7 @@ int main(int argc, char** argv)
                          vertexNeighbors2,
                          currentNumberOfVertices);
 
-        currentCSR.printCSR();
+        //currentCSR.printCSR();
 
         currentCSR.GetRenderData(vertexPositionsArray[level - 1],
                                  faceIndicesArray[level - 1],
@@ -680,15 +671,6 @@ int main(int argc, char** argv)
     }*/
 
     // make prolongation operators into CSR matrices
-    
-    std::cout << "\n\n\n\n\nOPERATOR CSR: \n";
-    //a.printCSR();
-
-    for (int i = 0; i < prolongationOperatorCSR.size();i++) 
-    {
-        std::cout << "\nOperator : " << i << "\n";
-        prolongationOperatorCSR[i].printCSR();
-    }
 
     ////////////////////////////////////////////////////
 
@@ -750,23 +732,30 @@ int main(int argc, char** argv)
     }
 
     CSR A_csr(A_mat,A_mat.row_ptr(),A_mat.col_idx(),A_mat.non_zeros());
-    VectorCSR B_v(B_mat.rows());
+    VectorCSR3D B_v(B_mat.rows());
 
     
     std::cout << "\nRHS:";
     std::cout << "\n Number of rows of B:"<<B_mat.rows();
 
     for (int i=0;i<B_mat.rows();i++) {
-        std::cout << "\n";
-        for (int q = 0; q < B_mat.cols(); q++) 
-        std::cout << B_mat(i, q) << " ";
+        //std::cout << "\n";
+        B_v.vector[i*3] = B_mat(i, 0);
+        B_v.vector[i*3+1] = B_mat(i, 1);
+        B_v.vector[i*3+2] = B_mat(i, 2);
+        /*
+        std::cout << B_mat(i, 0) << " - B1 ";
+        std::cout << B_mat(i, 1) << " - B2 ";
+        std::cout << B_mat(i, 2) << " - B3 ";
+
+        std::cout << B_v.vector[i * 3] << " = B1 ";
+        std::cout << B_v.vector[i * 3+1] << " = B2 ";
+        std::cout << B_v.vector[i * 3+2] << " = B3 ";
+        */
 
     }
+
     
-
-
-    //A_csr.printCSR();
-    /*
     std::vector<CSR> equationsPerLevel;
     equationsPerLevel.push_back(A_csr);
 
@@ -775,7 +764,7 @@ int main(int argc, char** argv)
     CSR result = A_csr;
 
     //make all the equations for each level
-    /*
+    
     for (int i=0;i<numberOfLevels-1;i++) 
     {
 
@@ -818,26 +807,24 @@ int main(int argc, char** argv)
 
     
     cudaDeviceSynchronize();
+
+    ////////////////////////////////////
     /*
     std::cout << "\n\n\n\n\n\n";
     std::cout << "first\n";
 
     CSR t1(3, 3);
-    CSR t2(3, 3);
 
-    t1.printCSR();
-    std::cout << "\n\n\n\n\n\n";
-    std::cout << "second\n";
-    t2.printCSR();
-
-    VectorCSR vectorTest(3);
-    VectorCSR vectorResult(3);
+    VectorCSR3D vectorTest(3);
+    VectorCSR3D vectorResult(3);
 
     for (int i=0;i<3;i++) {
-        vectorTest.vector[i] = i+1+i;
+        vectorTest.vector[i*3] = i+1;
+        vectorTest.vector[i*3 + 1] = i + 1;
+        vectorTest.vector[i*3+2] = i+1;
     }
 
-    SpMV_CSR(t1.row_ptr,
+    SpMV_CSR_3D(t1.row_ptr,
              t1.value_ptr,
              t1.data_ptr,
              vectorTest.vector,
@@ -845,18 +832,49 @@ int main(int argc, char** argv)
              3);
 
     std::cout << "\nVector result: ";
-    for (int i=0;i<3;i++) {
+    for (int i=0;i<vectorResult.n;i++) {
         std::cout << "\n";
-        std::cout << vectorResult.vector[i];
+        std::cout << vectorResult.vector[i*3] << " ";
+        std::cout << vectorResult.vector[i*3+1] << " ";
+        std::cout << vectorResult.vector[i*3+2] << " ";
     }
     */
+    //////////////////////////////////////////////
+    GMGVCycle gmg(N);
 
-    //GMGVCycle gmg;
+    gmg.prolongationOperators = prolongationOperatorCSR;
+    gmg.LHS                   = equationsPerLevel;
+    gmg.RHS                   = B_v;
+    gmg.max_number_of_levels  = numberOfLevels-1;
 
-    //gmg.prolongationOperators = prolongationOperatorCSR;
-    //gmg.LHS                   = equationsPerLevel;
 
+    std::cout << "\nNumber of equations LHS:" << gmg.LHS.size();
+    std::cout << "\nNumber of operators:" << gmg.prolongationOperators.size();
+    std::cout << "\nMax level:" << gmg.max_number_of_levels;
+
+    for (int i=0;i<25;i++)
+        gmg.VCycle(gmg.LHS[0], gmg.RHS, gmg.X, 0);
+ 
+    std::cout << "\nFinal output: \n";
+    std::vector<std::array<double, 3>> vertexMeshPositions;
+    vertexMeshPositions.resize(gmg.X.n);
+
+    for (int i = 0; i < gmg.X.n; i++) {
+        /* std::cout << "\n";
+        std::cout << i << " : ";
+        std::cout << gmg.X.vector[i] << " ";
+        std::cout << gmg.X.vector[i * 3 + 1] << " ";
+        std::cout << gmg.X.vector[i*3+2];
+        */
+        vertexMeshPositions[i] = {
+            gmg.X.vector[3*i], gmg.X.vector[i * 3 + 1], gmg.X.vector[i * 3 + 2]};
+    }
     
+     polyscope::registerSurfaceMesh("output mesh", vertexMeshPositions,
+        rx.get_polyscope_mesh()->faces);
+
+
+
     //////////////////////////////////////////////////////////////////
 
     /*
