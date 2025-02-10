@@ -23,7 +23,7 @@ TEST(Apps, DelaunayEdgeFlip)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshDynamic rx(Arg.obj_file_name, "", 256, 1.8, 2.0);
+    RXMeshDynamic rx(Arg.obj_file_name, "", 512, 2.0, 2.0);
     // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
     //        "_patches");
 

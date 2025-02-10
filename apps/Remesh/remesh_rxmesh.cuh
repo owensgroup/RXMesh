@@ -299,7 +299,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
 
     timers.start("Total");
     for (uint32_t iter = 0; iter < Arg.num_iter; ++iter) {
-        // RXMESH_INFO(" Edge Split -- iter {}", iter);
+        RXMESH_INFO(" Edge Split -- iter {}", iter);
         split_long_edges(rx,
                          coords.get(),
                          edge_status.get(),
@@ -309,7 +309,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
                          timers,
                          d_buffer);
 
-        // RXMESH_INFO(" Edge Collapse -- iter {}", iter);
+        RXMESH_INFO(" Edge Collapse -- iter {}", iter);
         collapse_short_edges(rx,
                              coords.get(),
                              edge_status.get(),
@@ -321,7 +321,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
                              d_buffer);
 
 
-        // RXMESH_INFO(" Edge Flip -- iter {}", iter);
+        RXMESH_INFO(" Edge Flip -- iter {}", iter);
         equalize_valences(rx,
                           coords.get(),
                           v_valence.get(),
@@ -331,7 +331,7 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
                           timers,
                           d_buffer);
 
-        // RXMESH_INFO(" Vertex Smoothing -- iter {}", iter);
+        RXMESH_INFO(" Vertex Smoothing -- iter {}", iter);
         tangential_relaxation(rx,
                               coords.get(),
                               new_coords.get(),

@@ -415,9 +415,9 @@ inline void equalize_valences(rxmesh::RXMeshDynamic&             rx,
                          false,
                          false,
                          [&](uint32_t v, uint32_t e, uint32_t f) {
-                             return detail::mask_num_bytes(e) +
+                             return 2 * detail::mask_num_bytes(e) +
                                     2 * v * sizeof(uint16_t) +
-                                    2 * ShmemAllocator::default_alignment;
+                                    4 * ShmemAllocator::default_alignment;
                              // 2 * detail::mask_num_bytes(v) +
                              // 3 * ShmemAllocator::default_alignment;
                          });
