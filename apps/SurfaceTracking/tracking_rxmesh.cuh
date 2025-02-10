@@ -24,6 +24,7 @@ rxmesh::Timers<rxmesh::GPUTimer> timers;
 
 rxmesh::VertexAttribute<int>* v_err;
 
+float total_time;
 
 template <typename T>
 void update_polyscope(rxmesh::RXMeshDynamic&      rx,
@@ -247,7 +248,7 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
 
     LaunchBox<blockThreads> launch_box;
 
-    rx.update_launch_box({Op::EVDiamond},
+    rx.update_launch_box({Op::EVDiamond, Op::VV},
                          launch_box,
                          (void*)edge_flip<T, blockThreads>,
                          true,
@@ -255,9 +256,10 @@ void flipper(rxmesh::RXMeshDynamic&             rx,
                          false,
                          false,
                          [&](uint32_t v, uint32_t e, uint32_t f) {
-                             return detail::mask_num_bytes(e) +
+                             return 2 * detail::mask_num_bytes(e) +
+                                    2 * v * sizeof(uint16_t) +
                                     2 * detail::mask_num_bytes(v) +
-                                    3 * ShmemAllocator::default_alignment;
+                                    4 * ShmemAllocator::default_alignment;
                          });
 
     edge_status->reset(UNSEEN, DEVICE);
@@ -479,6 +481,9 @@ void advance_sim(T                                  sim_dt,
 
         RXMESH_INFO("total_num_iter {}", total_num_iter);
 
+        GPUTimer timeit;
+        timeit.start();
+
         timers.start("MeshImprove");
         // improve the mesh (also update new_position)
         improve_mesh(rx,
@@ -505,6 +510,10 @@ void advance_sim(T                                  sim_dt,
 
         // update polyscope
         // update_polyscope(rx, *current_position, *new_position);
+        timeit.stop();
+
+        total_time += timeit.elapsed_millis();
+        RXMESH_INFO("total_time {}", total_time);
     }
 
     sim.m_curr_t += accum_dt;
@@ -680,6 +689,7 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
     timers.add("Advect");
 
     total_num_iter = 0;
+    total_time     = 0;
 
     CUDA_ERROR(cudaProfilerStart());
 
@@ -767,7 +777,7 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
                  "Tracking_RXMesh_" + extract_file_name(Arg.plane_name));
 
 
-    // update_polyscope(rx, *current_position, *new_position);
+    update_polyscope(rx, *current_position, *new_position);
 
     noise.free();
     GPU_FREE(d_buffer);

@@ -13,13 +13,14 @@ inline float deg2rad(float deg)
 
 struct arg
 {
-    std::string output_folder               = STRINGIFY(OUTPUT_DIR);
-    std::string plane_name                  = "";
-    int         n                           = 60;  // grid point along x and y
-    uint32_t    device_id                   = 0;
-    float       frame_dt                    = 0.05;
-    float       sim_dt                      = 0.05;
-    float       end_sim_t                   = 5.0;
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "el_topo_sphere_1280.obj";
+    std::string output_folder = STRINGIFY(OUTPUT_DIR);
+    std::string plane_name    = "";
+    int         n             = 60;  // grid point along x and y
+    uint32_t    device_id     = 0;
+    float       frame_dt      = 0.05;
+    float       sim_dt        = 0.05;
+    float       end_sim_t     = 5.0;
     float       max_volume_change           = 0.0005;
     float       min_edge_length             = 0.5;
     float       collapser_min_edge_length   = 0;
@@ -42,26 +43,28 @@ TEST(Apps, SurfaceTracking)
     // Select device
     cuda_query(Arg.device_id);
 
-    std::vector<std::vector<float>> verts;
+    // std::vector<std::vector<float>> verts;
+    //
+    // std::vector<std::vector<uint32_t>> fv;
+    //
+    // const vec3<float> lower_corner(-3.0, 0.0, -3.0);
+    //
+    // Arg.plane_name =
+    //     "plane" + std::to_string(Arg.n) + "x" + std::to_string(Arg.n);
+    //
+    // float spacing = 6.f / float(Arg.n);
+    //
+    // create_plane(verts, fv, Arg.n, Arg.n, 1, spacing, lower_corner);
+    //
+    //  RXMeshDynamic rx(fv, "", 256, 5.0, 3);
+    // rx.add_vertex_coordinates(verts, "plane");
 
-    std::vector<std::vector<uint32_t>> fv;
+    RXMeshDynamic rx(Arg.obj_file_name, "", 256, 3.5, 5);
 
-    const vec3<float> lower_corner(-3.0, 0.0, -3.0);
-
-    Arg.plane_name =
-        "plane" + std::to_string(Arg.n) + "x" + std::to_string(Arg.n);
-
-    float spacing = 6.f / float(Arg.n);
-
-    create_plane(verts, fv, Arg.n, Arg.n, 1, spacing, lower_corner);
-
-    RXMeshDynamic rx(fv);
 
     // RXMeshDynamic rx(fv, STRINGIFY(OUTPUT_DIR) + Arg.plane_name +
     // "_patches"); rx.save(STRINGIFY(OUTPUT_DIR) + Arg.plane_name +
     // "_patches");
-
-    rx.add_vertex_coordinates(verts, "plane");
 
     tracking_rxmesh(rx);
 }
@@ -82,13 +85,19 @@ int main(int argc, char** argv)
             // clang-format off
             RXMESH_INFO("\nUsage: ShortestEdgeCollapse.exe < -option X>\n"
                         " -h:          Display this massage and exit\n"
+                        " -input:      Input obj file. Default is {} \n"
                         " -n:          Number of point along x(or y) direction. Default is {} \n"
                         " -d:          Simulation duration. Default is {} \n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -device_id:  GPU device ID. Default is {}",
-            Arg.n,Arg.end_sim_t, Arg.output_folder, Arg.device_id);
+            Arg.obj_file_name, Arg.n, Arg.end_sim_t, Arg.output_folder, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-input")) {
+            Arg.obj_file_name =
+                std::string(get_cmd_option(argv, argv + argc, "-input"));
         }
 
         if (cmd_option_exists(argv, argc + argv, "-o")) {

@@ -57,6 +57,8 @@ __device__ __forceinline__ void block_mat_transpose(
         if (!is_deleted(r, row_active_mask)) {
             uint32_t c = mat[i];
 
+            assert(c != INVALID16);
+
             c = c >> shift;
 
             assert(c < num_cols);
@@ -566,6 +568,10 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
         s_ev_duplicate = shrd_alloc.alloc<uint16_t>(2 * num_edges);
         for (int i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
             s_ev_duplicate[i] = s_output_offset[i];
+            if (detail::is_deleted(i / 2, active_mask_e)) {
+                s_ev_duplicate[i]  = INVALID16;
+                s_output_offset[i] = INVALID16;
+            }
         }
         // we should sync here to avoid writing to s_ev before reading it into
         // s_ev_duplicate but we rely on the sync in block_mat_transpose

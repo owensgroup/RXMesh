@@ -47,7 +47,7 @@ classify_vertex(const rxmesh::Context                 context,
 
             const VertexHandle rh = iter[i];
 
-            if (vh == qh || rh == qh || vh == rh) {               
+            if (vh == qh || rh == qh || vh == rh) {
                 vertex_rank(vh) = 4;
                 return;
             }
@@ -122,7 +122,7 @@ edge_flip(rxmesh::Context                   context,
     ShmemAllocator shrd_alloc;
 
     CavityManager2<blockThreads, CavityOp::E> cavity(
-        block, context, shrd_alloc, false, false);
+        block, context, shrd_alloc, true, false);
 
 
     if (cavity.patch_id() == INVALID32) {
@@ -136,6 +136,12 @@ edge_flip(rxmesh::Context                   context,
 
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
+    // for each edge we want to flip, we its id in one of its opposite vertices
+    // along with the other opposite vertex
+    uint16_t* v_info =
+        shrd_alloc.alloc<uint16_t>(2 * cavity.patch_info().num_vertices[0]);
+    fill_n<blockThreads>(
+        v_info, 2 * cavity.patch_info().num_vertices[0], uint16_t(INVALID16));
 
     // we use this bitmask to mark the other end of to-be-collapse edge during
     // checking for the link condition
@@ -299,7 +305,32 @@ edge_flip(rxmesh::Context                   context,
                 }
 
                 if (flip_it) {
-                    edge_mask.set(eh.local_id(), true);
+                    // edge_mask.set(eh.local_id(), true);
+
+                    bool added = false;
+
+                    uint16_t v_c(iter.local(1)), v_d(iter.local(3));
+
+                    if (ch.patch_id() == cavity.patch_id()) {
+
+
+                        uint16_t ret =
+                            ::atomicCAS(v_info + 2 * v_c, INVALID16, v_d);
+                        if (ret == INVALID16) {
+                            added               = true;
+                            v_info[2 * v_c + 1] = eh.local_id();
+                            edge_mask.set(eh.local_id(), true);
+                        }
+                    }
+
+                    if (dh.patch_id() == cavity.patch_id() && !added) {
+                        uint16_t ret =
+                            ::atomicCAS(v_info + 2 * v_d, INVALID16, v_c);
+                        if (ret == INVALID16) {
+                            v_info[2 * v_d + 1] = eh.local_id();
+                            edge_mask.set(eh.local_id(), true);
+                        }
+                    }
                 }
             }
         }
@@ -323,8 +354,31 @@ edge_flip(rxmesh::Context                   context,
         block, cavity.patch_info(), query, edge_mask, v0_mask, v1_mask, 0, 2);
     block.sync();
 
+    query.epilogue(block, shrd_alloc);
 
-    // 3. create cavity for the surviving edges
+
+    // 3. make sure that the two vertices opposite to a flipped edge are not
+    // connected
+    auto check_edges = [&](const VertexHandle& vh, const VertexIterator& iter) {
+        uint16_t opposite_v = v_info[2 * vh.local_id()];
+        if (opposite_v != INVALID16) {
+            bool is_valid = true;
+            for (uint16_t v = 0; v < iter.size(); ++v) {
+                if (iter.local(v) == opposite_v) {
+                    is_valid = false;
+                    break;
+                }
+            }
+            if (!is_valid) {
+                edge_mask.reset(v_info[2 * vh.local_id() + 1], true);
+            }
+        }
+    };
+    query.dispatch<Op::VV>(block, shrd_alloc, check_edges);
+    block.sync();
+
+
+    // 4. create cavity for the surviving edges
     for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
         if (edge_mask(eh.local_id())) {
             cavity.create(eh);
