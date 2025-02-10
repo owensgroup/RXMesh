@@ -652,25 +652,6 @@ int main(int argc, char** argv)
     }
 
     cudaDeviceSynchronize();
-  /*  for (int q = 1; q < numberOfLevels - 1; q++) {
-        std::cout << "\n\n Level: " << q << " to " << q + 1;
-        int rows = N / static_cast<int>(std::round(powf(ratio, q)));
-        int cols =
-            numberOfSamples / static_cast<int>(std::round(powf(ratio, q)));
-        std::cout << " Rows: " << rows;
-        std::cout << " Cols: " << cols;
-
-        for (int l = 0; l < rows; l++) {
-            std::cout << "\n" << l << ": ";
-            for (int m = 0; m < cols; m++) {
-                int index = l * cols + m;
-                auto a     = prolongationOperators[q][index];
-                std::cout << prolongationOperators[q][index] << " ";
-            }
-        }
-    }*/
-
-    // make prolongation operators into CSR matrices
 
     ////////////////////////////////////////////////////
 
@@ -720,17 +701,6 @@ int main(int argc, char** argv)
     A_mat.move(DEVICE, HOST);
     B_mat.move(DEVICE, HOST);
 
-    int numberOfValuesInA=0;
-    for (int i = 0; i < B_mat.rows(); ++i) {
-         //printf("row_ptr[%d] = %d\n", i, A_mat.row_ptr()[i]);
-        //printf("add %d values\n", number_of_neighbors[i]);
-        for (int q = A_mat.row_ptr()[i]; q < A_mat.row_ptr()[i + 1]; q++) {
-           /* printf("vertex: %d   value: %f \n", A_mat.col_idx()[q],
-                   A_mat(i, A_mat.col_idx()[q]));*/
-            numberOfValuesInA++;
-        }
-    }
-
     CSR A_csr(A_mat,A_mat.row_ptr(),A_mat.col_idx(),A_mat.non_zeros());
     VectorCSR3D B_v(B_mat.rows());
 
@@ -739,19 +709,9 @@ int main(int argc, char** argv)
     std::cout << "\n Number of rows of B:"<<B_mat.rows();
 
     for (int i=0;i<B_mat.rows();i++) {
-        //std::cout << "\n";
         B_v.vector[i*3] = B_mat(i, 0);
         B_v.vector[i*3+1] = B_mat(i, 1);
         B_v.vector[i*3+2] = B_mat(i, 2);
-        /*
-        std::cout << B_mat(i, 0) << " - B1 ";
-        std::cout << B_mat(i, 1) << " - B2 ";
-        std::cout << B_mat(i, 2) << " - B3 ";
-
-        std::cout << B_v.vector[i * 3] << " = B1 ";
-        std::cout << B_v.vector[i * 3+1] << " = B2 ";
-        std::cout << B_v.vector[i * 3+2] << " = B3 ";
-        */
 
     }
 
