@@ -220,7 +220,7 @@ struct ALIGN(16) PatchInfo
      * @tparam HandleT
      */
     template <typename HandleT>
-    __device__ __host__ __inline__ const uint16_t get_capacity() const
+    __device__ __host__ __inline__ uint16_t get_capacity() const
     {
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             return vertices_capacity;
