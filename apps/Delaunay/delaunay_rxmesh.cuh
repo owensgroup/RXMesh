@@ -326,15 +326,15 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
 
             timers.start("App");
             delaunay_edge_flip<float, blockThreads>
-                <<<DIVIDE_UP(launch_box.blocks, 8),
+                <<<launch_box.blocks,
                    launch_box.num_threads,
                    launch_box.smem_bytes_dyn>>>(
                     rx.get_context(), *coords, d_flipped);
             timers.stop("App");
 
-            timers.start("Slice");
-            rx.slice_patches(*coords);
-            timers.stop("Slice");
+            // timers.start("Slice");
+            // rx.slice_patches(*coords);
+            // timers.stop("Slice");
 
             timers.start("Cleanup");
             rx.cleanup();

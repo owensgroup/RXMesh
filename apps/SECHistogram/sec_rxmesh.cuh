@@ -143,13 +143,13 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
             rx.cleanup();
             timers.stop("Cleanup");
 
-            timers.start("Slice");
-            rx.slice_patches(*coords);
-            timers.stop("Slice");
-
-            timers.start("Cleanup");
-            rx.cleanup();
-            timers.stop("Cleanup");
+            // timers.start("Slice");
+            // rx.slice_patches(*coords);
+            // timers.stop("Slice");
+            //
+            // timers.start("Cleanup");
+            // rx.cleanup();
+            // timers.stop("Cleanup");
         }
     }
     timers.stop("Total");
@@ -198,9 +198,9 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     ps_mesh->updateVertexPositions(*coords);
     ps_mesh->setEnabled(false);
 
-    rx.render_vertex_patch();
-    rx.render_edge_patch();
-    rx.render_face_patch();
+    // rx.render_vertex_patch();
+    // rx.render_edge_patch();
+    // rx.render_face_patch();
     polyscope::show();
 #endif
 
