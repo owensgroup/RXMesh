@@ -29,6 +29,45 @@ struct CSR
     int  num_rows;
     int    non_zeros;// number of non-zero values
     CSR(){}
+
+    CSR(int a, int b, int c)
+    {
+        num_rows = 3;
+        cudaMallocManaged(&row_ptr, sizeof(int) * (num_rows + 1));
+        cudaMallocManaged(&value_ptr, sizeof(int) * num_rows * 3);
+        cudaMallocManaged(&data_ptr, sizeof(float) * num_rows * 3);
+        non_zeros = 9;
+
+        // Point 1: heavy diagonal influence (6) with small neighbor influence
+        // (-1)
+        value_ptr[0] = 0;
+        data_ptr[0]  = 6;  // diagonal
+        value_ptr[1] = 1;
+        data_ptr[1]  = -1;  // connection to point 2
+        value_ptr[2] = 2;
+        data_ptr[2]  = -1;  // connection to point 3
+
+        // Point 2: similar pattern
+        value_ptr[3] = 0;
+        data_ptr[3]  = -1;  // connection to point 1
+        value_ptr[4] = 1;
+        data_ptr[4]  = 6;  // diagonal
+        value_ptr[5] = 2;
+        data_ptr[5]  = -1;  // connection to point 3
+
+        // Point 3: similar pattern
+        value_ptr[6] = 0;
+        data_ptr[6]  = -1;  // connection to point 1
+        value_ptr[7] = 1;
+        data_ptr[7]  = -1;  // connection to point 2
+        value_ptr[8] = 2;
+        data_ptr[8]  = 6;  // diagonal
+
+        row_ptr[0]        = 0;
+        row_ptr[1]        = 3;
+        row_ptr[2]        = 6;
+        row_ptr[num_rows] = non_zeros;
+    }
     CSR(int number_of_rows, int num_cols) //to be used only if we're multiplying and this is used as result
     {
         num_rows=number_of_rows;
@@ -48,7 +87,7 @@ struct CSR
              value_ptr[i] = 2;     // Column indices (modify as per structure)
              data_ptr[i]  = i;  // Example values
          }
-
+         
 
         cudaDeviceSynchronize();
 

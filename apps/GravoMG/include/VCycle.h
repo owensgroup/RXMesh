@@ -26,7 +26,8 @@ struct VectorCSR3D
     {
         n = number_of_elements;
         cudaMallocManaged(
-            &vector, sizeof(float) * n * 3); 
+            &vector, sizeof(float) * n * 3);
+
     }
 
     ~VectorCSR3D()
@@ -292,27 +293,42 @@ struct GaussJacobiUpdate3D
 
     __device__ void operator()(int i)
     {
-        float sum_x = 0.0f;
-        float sum_y = 0.0f;
-        float sum_z = 0.0f;
-        float diag  = 1.0f;
+        float sum_x    = 0.0f;
+        float sum_y    = 0.0f;
+        float sum_z    = 0.0f;
+        float diag     = 0.0f;
+        bool  has_diag = false;
 
+        // Loop over non-zero elements in the row
         for (int j = row_ptr[i]; j < row_ptr[i + 1]; ++j) {
-            int   col = value_ptr[j];
-            float val = data_ptr[j];
+            int   col = value_ptr[j];  // Column index of non-zero element
+            float val = data_ptr[j];   // Value of the non-zero element
 
             if (col == i) {
-                diag = val;
+                // If it's a diagonal element, store its value
+                diag     = val;
+                has_diag = true;
             } else {
+                // Sum non-diagonal elements
                 sum_x += val * x_old[col * 3];
                 sum_y += val * x_old[col * 3 + 1];
                 sum_z += val * x_old[col * 3 + 2];
             }
         }
 
-        x_new[i * 3]     = (b[i * 3] - sum_x) / diag;
-        x_new[i * 3 + 1] = (b[i * 3 + 1] - sum_y) / diag;
-        x_new[i * 3 + 2] = (b[i * 3 + 2] - sum_z) / diag;
+        // If the diagonal was found, perform the update
+        if (has_diag) {
+            x_new[i * 3]     = (b[i * 3] - sum_x) / diag;
+            x_new[i * 3 + 1] = (b[i * 3 + 1] - sum_y) / diag;
+            x_new[i * 3 + 2] = (b[i * 3 + 2] - sum_z) / diag;
+        } else {
+            // If diagonal is missing, skip this row update or use fallback
+            // You could either retain the previous guess or use some
+            // approximation for the diagonal
+            x_new[i * 3]     = x_old[i * 3];  // Retain the old value
+            x_new[i * 3 + 1] = x_old[i * 3 + 1];
+            x_new[i * 3 + 2] = x_old[i * 3 + 2];
+        }
     }
 };
 
@@ -360,6 +376,8 @@ class GMGVCycle
     int              post_relax_iterations = 2;
     int              max_number_of_levels;
     std::vector<int> numberOfSamplesPerLevel;
+    float            omega=0.7;
+    int            directSolveIterations=100;
 
     std::vector<CSR>       prolongationOperators;
     std::vector<CSR>       LHS;
@@ -374,8 +392,7 @@ class GMGVCycle
         // R = f - Av
         VectorCSR3D R(A.num_rows);
         Compute_R_3D(A, v.vector, f.vector, R.vector, A.num_rows);
-
-        // Restrict the residual 
+        //  Restrict the residual
         VectorCSR3D restricted_residual(
             prolongationOperators[currentLevel].num_rows / 8);
         CSR transposeProlongation(
@@ -388,10 +405,9 @@ class GMGVCycle
                     R.vector,
                     restricted_residual.vector,
                     transposeProlongation.num_rows);
-
-        //correction vector 
         VectorCSR3D coarse_correction(
             prolongationOperators[currentLevel].num_rows / 8);
+
 
         if (currentLevel < max_number_of_levels - 1) {
             // next level
@@ -400,11 +416,12 @@ class GMGVCycle
                    coarse_correction,
                    currentLevel + 1);
         } else {
-            // Direct solve 
+            // Direct solve
             gauss_jacobi_CSR_3D(
-                A, coarse_correction.vector, restricted_residual.vector, 50);
-        }
+                A, coarse_correction.vector, restricted_residual.vector, directSolveIterations);
+            std::cout << "\nDirect solve completed ";
 
+        }
         // Prolongate
         VectorCSR3D fine_correction(A.num_rows);
         SpMV_CSR_3D(prolongationOperators[currentLevel].row_ptr,
@@ -415,10 +432,10 @@ class GMGVCycle
                     A.num_rows);
 
         // Add correction 
+        
         for (int i = 0; i < A.num_rows; i++) {
-            v.vector[i] += fine_correction.vector[i];
+            v.vector[i] += omega*fine_correction.vector[i];
         }
-
         // Post-smoothing
         gauss_jacobi_CSR_3D(A, v.vector, f.vector, post_relax_iterations);
     }
