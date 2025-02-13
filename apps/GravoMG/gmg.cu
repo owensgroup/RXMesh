@@ -207,7 +207,15 @@ int main(int argc, char** argv)
 
     float ratio           = 8;
     int   N               = rx.get_num_vertices();
-    int   numberOfLevels  = 2;
+    int   numberOfLevels  = 0;
+    for (int i=0;i<16;i++) {
+        if ((int)N / (int)powf(ratio, i) > 8) {
+            numberOfLevels++;
+        }
+    }
+    std::cout << "\n Mesh can have " << numberOfLevels << " levels";
+
+
     int   currentLevel    = 1; // first coarse mesh
     int   numberOfSamplesForFirstLevel = N / powf(ratio, 1);//start
     int   numberOfSamples = N / powf(ratio, currentLevel);//start
