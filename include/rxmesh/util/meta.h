@@ -45,8 +45,8 @@ struct FunctionTraits<ReturnType (ClassType::*)(Args...) const>
                                           std::remove_reference_t<type_rc>,
                                           type_rc>;
         using type   = std::conditional_t<std::is_const_v<type_c>,
-                                        std::remove_const_t<type_c>,
-                                        type_c>;
+                                          std::remove_const_t<type_c>,
+                                          type_c>;
     };
 };
 
@@ -89,7 +89,7 @@ namespace detail {
  */
 
 template <typename, typename = void>
-struct HasPassiveType : std::false_type
+struct is_scalar : std::false_type
 {
 };
 
@@ -97,16 +97,16 @@ struct HasPassiveType : std::false_type
  * @brief Specialization: When T::PassiveType exists
  */
 template <typename T>
-struct HasPassiveType<T, std::void_t<typename T::PassiveType>> : std::true_type
+struct is_scalar<T, std::void_t<typename T::PassiveType>> : std::true_type
 {
 };
+}  // namespace detail
 
 /**
- * @brief Helper alias to simplify the check
+ * @brief check if a type is a Scalar
  */
 template <typename T>
-constexpr bool HasPassiveType_v = HasPassiveType<T>::value;
-}  // namespace detail
+inline constexpr bool is_scalar_v = detail::is_scalar<T>::value;
 
 
 /**
@@ -116,7 +116,7 @@ constexpr bool HasPassiveType_v = HasPassiveType<T>::value;
  * (e.g., float, double), then the returned type is T itself.
  */
 template <typename T>
-using PassiveType = typename std::
-    conditional<detail::HasPassiveType_v<T>, typename T::PassiveType, T>::type;
+using PassiveType =
+    typename std::conditional<is_scalar_v<T>, typename T::PassiveType, T>::type;
 
 }  // namespace rxmesh
