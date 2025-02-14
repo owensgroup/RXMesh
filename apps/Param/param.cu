@@ -7,7 +7,6 @@
 
 #include "rxmesh/algo/tutte_embedding.h"
 #include "rxmesh/diff/hessian_projection.h"
-#include "rxmesh/util/inverse.h"
 
 
 #include <Eigen/SparseLU>

@@ -3,7 +3,6 @@
 #include "rxmesh/diff/scalar.h"
 
 #include "rxmesh/rxmesh_static.h"
-#include "rxmesh/util/inverse.h"
 
 
 #define RX_ASSERT_NEAR(val1, val2, eps, d_err)                           \
@@ -751,7 +750,7 @@ __global__ static void test_min_quadratic(int* d_err, T eps = 1e-9)
                     2.0 * x[1] + 6.0 * x[2] + 10;
 
     // Solve for minimum
-    typename Real3::HessType f_hess_inv = inverse(f.Hess);
+    typename Real3::HessType f_hess_inv = f.Hess.inverse();
 
     const Eigen::Vector<T, 3> x_min = -f_hess_inv * f.grad;
 
@@ -772,7 +771,7 @@ __global__ static void test_triangle_distortion(int* d_err, T eps = 1e-9)
     const Eigen::Matrix<T, 2, 1> cr(1.0, 2.0);
     const Eigen::Matrix<T, 2, 2> Mr = col_mat(br - ar, cr - ar);
 
-    auto Mr_inv = inverse(Mr);
+    const Eigen::Matrix<T, 2, 2> Mr_inv = Mr.inverse();
 
     // active variables vector for vertex positions a, b, c
 
@@ -791,8 +790,7 @@ __global__ static void test_triangle_distortion(int* d_err, T eps = 1e-9)
 
     const Eigen::Matrix<Real6, 2, 2> J = M * Mr_inv;
 
-    auto J_inv = inverse(J);
-    // auto J_inv = J.inverse();
+    const Eigen::Matrix<Real6, 2, 2> J_inv = J.inverse();
 
     const Real6 E = J.squaredNorm() + J_inv.squaredNorm();
 

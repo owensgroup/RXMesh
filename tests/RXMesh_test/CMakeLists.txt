@@ -28,8 +28,7 @@ set( SOURCE_LIST
 	test_export.cu
 	test_svd.cu
 	test_scalar.cu
-	test_diff_attribute.cu
-	test_inverse.cu
+	test_diff_attribute.cu	
 	test_grad.h	
 )
 
