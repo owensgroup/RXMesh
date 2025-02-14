@@ -761,7 +761,7 @@ int main(int argc, char** argv)
     VectorCSR3D B_v(B_mat.rows());
 
 
-    A_csr.printCSR();
+    //A_csr.printCSR();
 
     std::cout << "\nRHS:";
     std::cout << "\n Number of rows of B:"<<B_mat.rows();
@@ -842,9 +842,7 @@ int main(int argc, char** argv)
     std::cout << "\nNumber of operators:" << gmg.prolongationOperators.size();
     std::cout << "\nMax level:" << gmg.max_number_of_levels;
 
-        for (int i = 0; i<gmg.X.n;i++) {
-            gmg.X.vector[i] = 0;
-        }
+        
 
         //gauss_jacobi_CSR_3D(gmg.LHS[0], gmg.X.vector, gmg.RHS.vector, 1000);
 
@@ -893,17 +891,15 @@ int main(int argc, char** argv)
 
 
         if (ImGui::Button("Run V Cycles again")) {
-
-            for (int i = 0; i < gmg.X.n; i++) 
-            {
-                gmg.X.vector[i] = 0;
-            }
+            std::cout << "\n---------------NEW SOLVE INITIATED--------------------\n";
+            gmg.X.reset();
 
             for (int i=0;i<numberOfVCycles;i++)
                 gmg.VCycle(gmg.LHS[0], gmg.RHS, gmg.X, 0);
 
 
-
+           // vertexMeshPositions.clear();
+           // vertexMeshPositions.resize(gmg.X.n);
 
             for (int i = 0; i < gmg.X.n; i++)
             {
@@ -917,11 +913,10 @@ int main(int argc, char** argv)
                 std::cout << gmg.X.vector[3 * i + 1] << " ";
                 std::cout << gmg.X.vector[3 * i + 2] << " ";
                 */
-
+                
                 vertexMeshPositions[i] = {gmg.X.vector[3 * i],
                                           gmg.X.vector[3 * i + 1],
                                           gmg.X.vector[3 * i + 2]};
-                                          
             }
             
             //polyscope::removeSurfaceMesh("output mesh");

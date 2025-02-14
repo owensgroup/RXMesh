@@ -25,9 +25,17 @@ struct VectorCSR3D
     VectorCSR3D(int number_of_elements)
     {
         n = number_of_elements;
-        cudaMallocManaged(
-            &vector, sizeof(float) * n * 3);
+        cudaMallocManaged(&vector, sizeof(float) * n * 3);
 
+        reset();
+    }
+
+    void reset()
+    {
+        // TODO:  make this faster, a O(n) used this many times may not be preferable
+
+        for (int i = 0; i < n*3; i++)
+            vector[i] = 0;
     }
 
     ~VectorCSR3D()
@@ -376,7 +384,7 @@ class GMGVCycle
     int              post_relax_iterations = 2;
     int              max_number_of_levels;
     std::vector<int> numberOfSamplesPerLevel;
-    float            omega=0.7;
+    float            omega=0.5;
     int            directSolveIterations=100;
 
     std::vector<CSR>       prolongationOperators;
