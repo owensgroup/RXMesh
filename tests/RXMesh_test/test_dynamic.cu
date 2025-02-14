@@ -439,7 +439,7 @@ TEST(RXMeshDynamic, RandomCollapse)
         RXMESH_INFO("iter = {}", ++iter);
         LaunchBox<blockThreads> launch_box;
         rx.prepare_launch_box(
-            {}, launch_box, (void*)random_flips<blockThreads>);
+            {}, launch_box, (void*)random_collapses<blockThreads>);
         random_collapses<blockThreads><<<launch_box.blocks,
                                          launch_box.num_threads,
                                          launch_box.smem_bytes_dyn>>>(
