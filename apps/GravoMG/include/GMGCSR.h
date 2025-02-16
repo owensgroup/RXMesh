@@ -274,70 +274,18 @@ struct CSR
         b        = temp;
     }
 
-    void rearrange(int* row_ptr_raw, int* value_ptr_raw, int n)
+    __device__ bool isNeighbor(int n1, int n2)
     {
-        thrust::device_vector<int> samples(n);
-        thrust::sequence(samples.begin(), samples.end());  // Fill 0,1,2,...,N
-
-        thrust::for_each(
-            thrust::device,
-            samples.begin(),
-            samples.end(),
-            [=] __device__(int number) {
-                int start_pointer = row_ptr_raw[number];
-                int end_pointer   = row_ptr_raw[number + 1];
-
-                // Step 1: Extract neighbors
-                int num_neighbors = end_pointer - start_pointer;
-                if (num_neighbors < 2)
-                    return;  // No need to reorder if <=1 neighbor
-
-                // Step 2: Find triangle-based connectivity
-                __shared__ int
-                    adjacency[128];  // Assumes max neighbors per vertex < 128
-
-                for (int i = 0; i < num_neighbors; i++) {
-                    int neighbor = value_ptr_raw[start_pointer + i];
-
-                    // Scan neighbor's connections
-                    int neighbor_start = row_ptr_raw[neighbor];
-                    int neighbor_end   = row_ptr_raw[neighbor + 1];
-
-                    for (int j = neighbor_start; j < neighbor_end; j++) {
-                        int neighbor_of_neighbor = value_ptr_raw[j];
-
-                        // If neighbor_of_neighbor is also a direct neighbor of
-                        // 'number'
-                        for (int k = 0; k < num_neighbors; k++) {
-                            if (value_ptr_raw[start_pointer + k] ==
-                                neighbor_of_neighbor) {
-                                adjacency[i] =
-                                    neighbor_of_neighbor;  // Store adjacency
-                                                           // relation
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // Step 3: Reorder based on adjacency
-                // Basic insertion-sort-like reordering to respect triangle
-                // adjacency
-                for (int i = 1; i < num_neighbors; i++) {
-                    for (int j = i; j > 0; j--) {
-                        if (adjacency[j] > adjacency[j - 1]) {
-                            swap(value_ptr_raw[start_pointer + j],
-                                 value_ptr_raw[start_pointer + j - 1]);
-                            swap(adjacency[j], adjacency[j - 1]);
-                        }
-                    }
-                }
-            });
+        int start_pointer = row_ptr[n1];
+        int end_pointer   = row_ptr[n1 + 1];
+        for (int i=start_pointer;i<end_pointer;i++) {
+            if (value_ptr[i] == n2)
+                return true;
+        }
+        return false;
     }
 
-
-
-    void printCSR()
+     void printCSR()
     {
         printf("\nCSR Array:");
         std::cout << "\nNumber of non-zeros = " << non_zeros << "\n";
@@ -350,6 +298,76 @@ struct CSR
         }
     }
 
+    void rearrange(int* row_ptr_raw,
+                   int* value_ptr_raw,
+                   int  num_rows,
+                   int  non_zeros)
+    {
+        thrust::device_vector<int> temp_values(value_ptr_raw,
+                                               value_ptr_raw + non_zeros);
+        int* temp_ptr = thrust::raw_pointer_cast(temp_values.data());
+
+        thrust::device_vector<int> samples(num_rows);
+        thrust::sequence(samples.begin(), samples.end());
+
+        // Limit how far we look ahead to avoid timeout
+        const int MAX_LOOKAHEAD = 4;
+
+        thrust::for_each(
+            thrust::device,
+            samples.begin(),
+            samples.end(),
+            [=] __device__(int row) {
+                int start_pointer = row_ptr_raw[row];
+                int end_pointer   = row_ptr_raw[row + 1];
+                int num_neighbors = end_pointer - start_pointer;
+
+                if (num_neighbors < 2)
+                    return;
+
+                // Single pass through the row
+                for (int i = start_pointer; i < end_pointer - 1; i++) {
+                    int current = temp_ptr[i];
+                    int next    = temp_ptr[i + 1];
+
+                    // Quick check if current and next are already connected
+                    bool already_connected = false;
+                    int  current_start     = row_ptr_raw[current];
+                    int  current_end       = row_ptr_raw[current + 1];
+
+                    for (int k = current_start; k < current_end; k++) {
+                        if (value_ptr_raw[k] == next) {
+                            already_connected = true;
+                            break;
+                        }
+                    }
+
+                    if (!already_connected) {
+                        // Look only a few positions ahead
+                        int max_look = min(i + 1 + MAX_LOOKAHEAD, end_pointer);
+
+                        for (int j = i + 2; j < max_look; j++) {
+                            int candidate = temp_ptr[j];
+
+                            // Check if current and candidate are connected
+                            for (int k = current_start; k < current_end; k++) {
+                                if (value_ptr_raw[k] == candidate) {
+                                    thrust::swap(temp_ptr[i + 1], temp_ptr[j]);
+                                    goto next_vertex;
+                                }
+                            }
+                        }
+                    }
+                next_vertex:
+                    continue;
+                }
+            });
+
+        // Copy back the rearranged values
+        thrust::copy(temp_values.begin(), temp_values.end(), value_ptr_raw);
+    }
+   
+
     void GetRenderData(
         std::vector<std::array<double, 3>>&
             vertexPositions,  // To store vertex positions
@@ -357,7 +375,7 @@ struct CSR
         Vec3* vertex_pos // Array of vertex positions (assumed 3D)
     )
     {
-        rearrange(row_ptr, value_ptr, num_rows);
+        rearrange(row_ptr, value_ptr, num_rows,non_zeros);
 
         // Initialize vertex positions
         vertexPositions.resize(num_rows);
@@ -370,46 +388,35 @@ struct CSR
         faceIndices.clear();
         for (int i = 0; i < num_rows; ++i) {
             int neighbors_count = row_ptr[i + 1] - row_ptr[i];
-            if (neighbors_count >= 3) {  // Process only if it can form faces
-                for (int j = row_ptr[i]; j < row_ptr[i + 1] - 2; ++j) {
+            if (neighbors_count >= 2) {  // Process only if it can form faces
+                for (int j = row_ptr[i]; j < row_ptr[i + 1]; ++j) {
                     // Create a triangular face (i, value_ptr[j],
                     // value_ptr[j+1])
 
+                    int a, b, c;
+                    if (j == row_ptr[i+1]-1) {
+                        a = i;
+                        b = value_ptr[j];
+                        c = value_ptr[row_ptr[i]];
+                    } else {
+                        a = i;
+                        b = value_ptr[j];
+                        c = value_ptr[j + 1];
+                    }
+                    // check if b,c are neighbors
+                    int n1_start = row_ptr[b];
+                    int n1_end = row_ptr[b+1];
+                    for (int k=n1_start;k<n1_end;k++) {
+                        if (c == value_ptr[k]) {
+                            std::cout << "\n Triangle formed with " << a
+                                      << " and " << b << " and " << c;
 
-                    int a = i, b = value_ptr[j], c = value_ptr[j + 1];
-
-                    
-                     Eigen::Vector3<float> v1{vertex_pos[a].x,
-                                             vertex_pos[a].y,
-                                             vertex_pos[a].z};
-                    Eigen::Vector3<float> v2{
-                        vertex_pos[b].x, vertex_pos[b].y, vertex_pos[b].z};
-                    Eigen::Vector3<float> v3{
-                        vertex_pos[c].x, vertex_pos[c].y, vertex_pos[c].z};
-                    
-                    
-                    Eigen::Vector3f edge1 = v2 - v1;
-                    Eigen::Vector3f edge2 = v3 - v1;
-
-                    // Cross product gives us the normal vector
-                    Eigen::Vector3f normal = edge1.cross(edge2);
-
-                    // Check the z-component of the normal (assuming
-                    // Z-up coordinate system) If normal.z() < 0,
-                    // the vertices are in a clockwise order
-                    if (normal.z() < 0) {
-                        faceIndices.push_back(
-                            {
-                            static_cast<size_t>(a), static_cast<size_t>(b),
-                                static_cast<size_t>(c)
-                            });
-                    } else
-                        faceIndices.push_back({static_cast<size_t>(a),
-                                               static_cast<size_t>(c),
-                                               static_cast<size_t>(b)});
-                            
-
-                    
+                            faceIndices.push_back({static_cast<size_t>(a),
+                                                   static_cast<size_t>(b),
+                                                   static_cast<size_t>(c)});
+                            break;
+                        }
+                    }
                 }
             }
         }
