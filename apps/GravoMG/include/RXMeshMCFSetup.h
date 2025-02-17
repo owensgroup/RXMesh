@@ -337,3 +337,39 @@ __global__ static void mcf_A_setup(
         [](VertexHandle) { return true; },
         !use_uniform_laplace);
 }
+
+
+void setupMCF(RXMeshStatic&        rx,
+              SparseMatrix<float>& A_mat,
+              DenseMatrix<float>&  B_mat)
+{
+    constexpr uint32_t blockThreads = 256;
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    auto coords = rx.get_input_vertex_coordinates();
+
+    std::shared_ptr<DenseMatrix<float>> X_mat = coords->to_matrix();
+    // B set up
+    LaunchBox<blockThreads> launch_box_B;
+    rx.prepare_launch_box(
+        {Op::VV}, launch_box_B, (void*)mcf_B_setup<float, blockThreads>);
+
+    mcf_B_setup<float, blockThreads><<<launch_box_B.blocks,
+                                       launch_box_B.num_threads,
+                                       launch_box_B.smem_bytes_dyn>>>(
+        rx.get_context(), *coords, B_mat, true);
+
+
+    // A and X set up
+    LaunchBox<blockThreads> launch_box_A_X;
+    rx.prepare_launch_box({Op::VV},
+                          launch_box_A_X,
+                          (void*)mcf_A_setup<float, blockThreads>,
+                          true);
+
+    mcf_A_setup<float, blockThreads><<<launch_box_A_X.blocks,
+                                       launch_box_A_X.num_threads,
+                                       launch_box_A_X.smem_bytes_dyn>>>(
+        rx.get_context(), *coords, A_mat, true, 10);
+}

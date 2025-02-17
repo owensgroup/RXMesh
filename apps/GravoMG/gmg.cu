@@ -22,26 +22,6 @@ std::vector<int> intPointerArrayToVector(int* array, size_t size)
     return std::vector<int>(array, array + size);
 }
 
-
-void CreateNextLevelData(int      N,
-                         int      numberOfSamples,
-                         VertexData* vData_old,
-                         VertexData* vData_new)
-{
-
-    thrust::device_vector<int> samples(N);
-    thrust::sequence(samples.begin(), samples.end());
-
-    thrust::for_each(thrust::device,
-                     samples.begin(),
-                     samples.end(),
-        [=] __device__(int number) { vData_new[number].distance = 0;
-                     });
-}
-
-
-
-
 void numberOfNeighbors(int              numberOfSamples,
                        VertexNeighbors* neighbors ,
     int              N,
@@ -145,10 +125,203 @@ void setCluster(int    n,
 }
 
 
+void createProlongationOperators(int N, int numberOfSamples, int numberOfLevels, float ratio, Vec3* sample_pos, CSR csr, std::vector<CSR>& prolongationOperatorCSR, VertexData* oldVdata, float* distanceArray, int* vertexCluster)
+{
+    cudaDeviceSynchronize();
+    int* flag;
+    cudaMallocManaged(&flag, sizeof(int));
+    *flag = 0;
+
+    cudaError_t err;
+    CSR         lastCSR                 = csr;
+    CSR         currentCSR              = csr;
+    int         currentNumberOfVertices = N;
+    //numberOfSamples;
+    int currentNumberOfSamples = numberOfSamples;
+    /// ratio;
+
+    std::vector<Eigen::MatrixXd> vertsArray;
+    std::vector<Eigen::MatrixXi> facesArray;
+    std::vector<std::vector<std::array<double, 3>>> vertexPositionsArray;  // To store vertex positions
+    std::vector<std::vector<std::vector<size_t>>> faceIndicesArray;  // To store face indices
+
+    std::vector<std::vector<int>> clustering;
+
+    vertsArray.resize(numberOfLevels);
+    facesArray.resize(numberOfLevels);
+    vertexPositionsArray.resize(numberOfLevels);
+    faceIndicesArray.resize(numberOfLevels);
+    clustering.resize(numberOfLevels);
 
 
+    CSR a(numberOfSamples);
+
+    //operatorsCSR.resize(numberOfLevels-1);
+
+    for (int level = 1; level < numberOfLevels - 1; level++) {
+
+        currentNumberOfSamples /= ratio;
+        currentNumberOfVertices /= ratio;
+        a = CSR(currentNumberOfVertices);
+
+        std::cout << "\nlevel : " << level;
+        std::cout << "\n current number of samples: " << currentNumberOfSamples;
+        std::cout << "\n current number of vertices: "
+            << currentNumberOfVertices;
+        setCluster(currentNumberOfVertices, distanceArray, level + 1, oldVdata);
+
+        do {
+
+            *flag = 0;
+            clusterCSR(currentNumberOfVertices,
+                       sample_pos,
+                       distanceArray,
+                       vertexCluster,
+                       flag,
+                       lastCSR,
+                       oldVdata);
+            cudaDeviceSynchronize();
+        } while (*flag != 0);
+
+        clustering[level - 1].resize(currentNumberOfVertices);
+        clustering[level - 1] = intPointerArrayToVector(vertexCluster, currentNumberOfVertices);
 
 
+        polyscope::getSurfaceMesh("mesh level " 
+                                  + std::to_string(level))
+            ->addVertexScalarQuantity("clustered vertices", clustering[level - 1]);
+
+
+        VertexNeighbors* vertexNeighbors2;
+        err = cudaMallocManaged(
+            &vertexNeighbors2,
+            currentNumberOfVertices * sizeof(VertexNeighbors));
+
+        int* number_of_neighbors2;
+        cudaMallocManaged(&number_of_neighbors2,
+                          currentNumberOfVertices * sizeof(int));
+
+
+        numberOfNeighbors(currentNumberOfSamples,
+                          vertexNeighbors2,
+                          currentNumberOfVertices,
+                          lastCSR,
+                          oldVdata,
+                          number_of_neighbors2);
+
+
+        cudaDeviceSynchronize();
+        currentCSR = CSR(currentNumberOfSamples,
+                         number_of_neighbors2,
+                         vertexNeighbors2,
+                         currentNumberOfVertices);
+
+        currentCSR.printCSR();
+
+        currentCSR.GetRenderData(vertexPositionsArray[level - 1],
+                                 faceIndicesArray[level - 1],
+                                 sample_pos);
+
+
+        polyscope::registerSurfaceMesh(
+            "mesh level " + std::to_string(level + 1),
+            vertexPositionsArray[level - 1],
+            faceIndicesArray[level - 1]);
+
+
+        createProlongationOperator(currentNumberOfSamples,
+                                   currentCSR.row_ptr,
+                                   currentCSR.value_ptr,
+                                   a.value_ptr,
+                                   a.data_ptr,
+                                   number_of_neighbors2,
+                                   currentNumberOfVertices,
+                                   oldVdata);
+        prolongationOperatorCSR.push_back(a);
+
+        cudaDeviceSynchronize(); // Ensure data is synchronized before accessing
+        
+        lastCSR = currentCSR; //next mesh level
+    }
+    cudaFree(flag);
+    cudaDeviceSynchronize();
+}
+
+void constructLHS(CSR A_csr, std::vector<CSR> prolongationOperatorCSR, std::vector<CSR>& equationsPerLevel, int numberOfLevels, int numberOfSamples, float ratio)
+{
+    int currentNumberOfSamples = numberOfSamples;
+
+    CSR result = A_csr;
+
+    //make all the equations for each level
+    
+    for (int i =0;i<numberOfLevels-1;i++) 
+    {
+        result = multiplyCSR(result.num_rows,
+                             result.num_rows,
+                             currentNumberOfSamples,
+                             result.row_ptr,
+                             result.value_ptr,
+                             result.data_ptr,
+                             result.non_zeros,
+                             prolongationOperatorCSR[i].row_ptr,
+                             prolongationOperatorCSR[i].value_ptr,
+                             prolongationOperatorCSR[i].data_ptr,
+                             prolongationOperatorCSR[i].non_zeros);
+
+        CSR transposeOperator =
+            transposeCSR(prolongationOperatorCSR[i], currentNumberOfSamples);
+
+        result = multiplyCSR(transposeOperator.num_rows,
+                             prolongationOperatorCSR[i].num_rows,
+                             numberOfSamples,
+                             transposeOperator.row_ptr,
+                             transposeOperator.value_ptr,
+                             transposeOperator.data_ptr,
+                             transposeOperator.non_zeros,
+                             result.row_ptr,
+                             result.value_ptr,
+                             result.data_ptr,
+                             result.non_zeros);
+
+        equationsPerLevel.push_back(result);
+
+        currentNumberOfSamples/=ratio;
+        std::cout << "Equation level " << i << "\n\n";
+        equationsPerLevel[i].printCSR();
+    }
+}
+
+void setVertexData(RXMeshStatic &rx, Context &context, VertexData* oldVdata, Attribute<float, VertexHandle> vertex_pos, Attribute<int, VertexHandle> sample_number, Attribute<unsigned short, VertexHandle> sample_level_bitmask, Attribute<int, VertexHandle> clustered_vertex)
+{
+    rx.for_each_vertex(rxmesh::DEVICE,
+                       [sample_number,
+                           oldVdata,
+                           clustered_vertex,
+                           vertex_pos,
+                           sample_level_bitmask,
+                           context] __device__(const rxmesh::VertexHandle vh) {
+
+
+                           if (sample_number(vh, 0) != -1) {
+                               //printf("\nputting data for sample %d", sample_number(vh, 0));
+
+                               oldVdata[sample_number(vh, 0)].distance  = 0;
+                               oldVdata[sample_number(vh, 0)].linear_id =
+                                   context.linear_id(vh);
+                               oldVdata[sample_number(vh, 0)].sample_number =
+                                   sample_number(vh, 0);
+                               oldVdata[sample_number(vh, 0)].bitmask =
+                                   sample_level_bitmask(vh, 0);
+                               oldVdata[sample_number(vh, 0)].position.x = vertex_pos(vh, 0);
+                               oldVdata[sample_number(vh, 0)].position.y = vertex_pos(vh, 1);
+                               oldVdata[sample_number(vh, 0)].position.z = vertex_pos(vh, 2);
+                               oldVdata[sample_number(vh, 0)].cluster =
+                                   clustered_vertex(vh, 0);
+                           }
+
+                       });
+}
 
 int main(int argc, char** argv)
 {
@@ -161,17 +334,17 @@ int main(int argc, char** argv)
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "torus.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bumpy-cube.obj");
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
+    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
-    /*
+    
     std::vector<std::vector<float>>    planeVerts;
     std::vector<std::vector<uint32_t>> planeFaces;
-    uint32_t                           nx = 7;
-    uint32_t                           ny = 6;
+    uint32_t                           nx = 15;
+    uint32_t                           ny = 15;
     create_plane(planeVerts, planeFaces, nx, ny);
     RXMeshStatic rx(planeFaces);
     rx.add_vertex_coordinates(planeVerts, "plane");
-    */
+    
     
     auto vertex_pos = *rx.get_input_vertex_coordinates();
 
@@ -205,14 +378,15 @@ int main(int argc, char** argv)
 
 
 
-    float ratio           = 8;
+    float ratio           = 5;
     int   N               = rx.get_num_vertices();
     int   numberOfLevels  = 0;
     for (int i=0;i<16;i++) {
-        if ((int)N / (int)powf(ratio, i) > 8) {
+        if ((int)N / (int)powf(ratio, i) > 6) {
             numberOfLevels++;
         }
     }
+    
     std::cout << "\n Mesh can have " << numberOfLevels << " levels";
 
 
@@ -226,7 +400,8 @@ int main(int argc, char** argv)
     std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
     std::uniform_int_distribution<> dist(0, N - 1);
     // From 0 to (number of points - 1)
-    int seed = dist(gen);
+    int seed = 20;
+    //dist(gen);
 
     std::cout << "\nSeed: " << seed;
 
@@ -320,10 +495,7 @@ int main(int argc, char** argv)
     sample_number.move(DEVICE, HOST);
     distance.move(DEVICE, HOST);
     sample_level_bitmask.move(DEVICE, HOST);
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ///
-    ///
-    /// first level
+
 
     rxmesh::LaunchBox<CUDABlockSize> cb;
     rx.prepare_launch_box(
@@ -384,12 +556,12 @@ int main(int argc, char** argv)
                            clustered_vertex,
                            context,vertexCluster] __device__(
                        const rxmesh::VertexHandle vh) {
-                           vertexCluster[context.linear_id(vh)] =
-                               clustered_vertex(vh, 0);
-
-
+                           vertexCluster[context.linear_id(vh)] = clustered_vertex(vh, 0);
                        });
     cudaDeviceSynchronize();
+
+
+
 
     int* number_of_neighbors;
     cudaMallocManaged(&number_of_neighbors, numberOfSamples * sizeof(int));
@@ -404,8 +576,6 @@ int main(int argc, char** argv)
         nn,
         (void*)findNumberOfCoarseNeighbors<float, CUDABlockSize>);
 
-
-    //find number of neighbors without the bit matrix
 
 
     // Allocate memory for vertex neighbors
@@ -460,10 +630,7 @@ int main(int argc, char** argv)
         });
 
 
-    float* prolongation_operator;
-    cudaMallocManaged(&prolongation_operator,
-                      N * numberOfSamples * sizeof(float));
-    cudaDeviceSynchronize();
+   
     std::vector<CSR> operatorsCSR;
     operatorsCSR.push_back(CSR(N));
 
@@ -477,11 +644,12 @@ int main(int argc, char** argv)
                                 csr.number_of_neighbors,
                                 N,
                                 vertexCluster,
-                                vertices, sample_pos, firstOperator.value_ptr, firstOperator.data_ptr,
-                                prolongation_operator);
+                                vertices, sample_pos, firstOperator.value_ptr, firstOperator.data_ptr);
 
    prolongationOperatorCSR.push_back(firstOperator);
 
+   std::cout << "\nFIRST OPERATOR:";
+    firstOperator.printCSR();
     cudaDeviceSynchronize();
 
     Eigen::MatrixXd verts;
@@ -495,273 +663,39 @@ int main(int argc, char** argv)
     polyscope::registerSurfaceMesh(
         "mesh level 1", vertexPositions, faceIndices);
 
-    
+
+
+
     //set 1st level node data
     VertexData* oldVdata;
     cudaMallocManaged(&oldVdata, sizeof(VertexData) * numberOfSamples);
+    setVertexData(rx,
+            context,
+            oldVdata,
+            vertex_pos,
+            sample_number,
+            sample_level_bitmask,
+            clustered_vertex);
 
-    rx.for_each_vertex(rxmesh::DEVICE,
-                       [sample_number,
-                        oldVdata,
-                        clustered_vertex,
-                        vertex_pos,
-         sample_level_bitmask,
-                        context] __device__(const rxmesh::VertexHandle vh) {
+    createProlongationOperators(N,
+                                numberOfSamples,
+                                numberOfLevels,
+                                ratio,
+                                sample_pos,
+                                csr,
+                                prolongationOperatorCSR,
+                                oldVdata,
+                                distanceArray,
+                                vertexCluster);
 
-
-            if (sample_number(vh, 0) != -1) {
-                //printf("\nputting data for sample %d", sample_number(vh, 0));
-
-                oldVdata[sample_number(vh, 0)].distance = 0;
-                oldVdata[sample_number(vh, 0)].linear_id =
-                    context.linear_id(vh);
-                oldVdata[sample_number(vh, 0)].sample_number =
-                    sample_number(vh, 0);
-                oldVdata[sample_number(vh, 0)].bitmask =
-                    sample_level_bitmask(vh, 0);
-                oldVdata[sample_number(vh, 0)].position.x = vertex_pos(vh, 0);
-                oldVdata[sample_number(vh, 0)].position.y = vertex_pos(vh, 1);
-                oldVdata[sample_number(vh, 0)].position.z = vertex_pos(vh, 2);
-                oldVdata[sample_number(vh, 0)].cluster =
-                    clustered_vertex(vh, 0);
-            }
-
-    });
-    
-
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    ///
-    ///next levels
-
-
-
-
-    CSR lastCSR                 = csr;
-    CSR currentCSR              = csr;
-    int currentNumberOfVertices = N;
-    //numberOfSamples;
-    int currentNumberOfSamples = numberOfSamples;
-    /// ratio;
-    std::vector<float*> prolongationOperators;
-    prolongationOperators.resize(numberOfLevels-1);
-
-    prolongationOperators[0] = prolongation_operator;
-
-    std::vector<Eigen::MatrixXd> vertsArray;
-    std::vector<Eigen::MatrixXi> facesArray;
-    std::vector<std::vector<std::array<double, 3>>>
-        vertexPositionsArray;  // To store vertex positions
-    std::vector<std::vector<std::vector<size_t>>>
-        faceIndicesArray;  // To store face indices
-
-    std::vector<std::vector<int>> clustering;
-
-
-
-    vertsArray.resize(numberOfLevels);
-    facesArray.resize(numberOfLevels);
-    vertexPositionsArray.resize(numberOfLevels);
-    faceIndicesArray.resize(numberOfLevels);
-    clustering.resize(numberOfLevels);
-
-
-   CSR a(numberOfSamples);
-
-    //operatorsCSR.resize(numberOfLevels-1);
-
-    for (int level = 1; level < numberOfLevels - 1; level++) {
-
-        currentNumberOfSamples /= 8;
-        currentNumberOfVertices /= 8;
-        a = CSR(currentNumberOfVertices);
-
-        std::cout << "\nlevel : " << level;
-        std::cout << "\n current number of samples: " << currentNumberOfSamples;
-        std::cout << "\n current number of vertices: "
-                  << currentNumberOfVertices;
-        setCluster(currentNumberOfVertices, distanceArray, level + 1, oldVdata);
-
-        do {
-
-            *flagger = 0;
-            clusterCSR(currentNumberOfVertices,
-                       sample_pos,
-                       distanceArray,
-                       vertexCluster,
-                       flagger,
-                       lastCSR,
-                       oldVdata);
-            cudaDeviceSynchronize();
-        } while (*flagger != 0);
-
-        clustering[level - 1].resize(currentNumberOfVertices);
-        clustering[level - 1] = intPointerArrayToVector(vertexCluster, currentNumberOfVertices);
-
-
-        polyscope::getSurfaceMesh("mesh level " 
-            + std::to_string(level))
-        ->addVertexScalarQuantity("clustered vertices", clustering[level - 1]);
-
-
-        VertexNeighbors* vertexNeighbors2;
-        err = cudaMallocManaged(
-            &vertexNeighbors2,
-            currentNumberOfVertices * sizeof(VertexNeighbors));
-
-        int* number_of_neighbors2;
-        cudaMallocManaged(&number_of_neighbors2,
-                          currentNumberOfVertices * sizeof(int));
-
-
-        numberOfNeighbors(currentNumberOfSamples,
-                          vertexNeighbors2,
-                          currentNumberOfVertices,
-                          lastCSR,
-                          oldVdata,
-                          number_of_neighbors2);
-
-
-        cudaDeviceSynchronize();
-        currentCSR = CSR(currentNumberOfSamples,
-                         number_of_neighbors2,
-                         vertexNeighbors2,
-                         currentNumberOfVertices);
-
-        //currentCSR.printCSR();
-
-        currentCSR.GetRenderData(vertexPositionsArray[level - 1],
-                                 faceIndicesArray[level - 1],
-                                 sample_pos);
-
-
-        polyscope::registerSurfaceMesh(
-            "mesh level " + std::to_string(level + 1),
-            vertexPositionsArray[level - 1],
-            faceIndicesArray[level - 1]);
-
-        float* prolongationOperator2;
-        cudaMallocManaged(&prolongationOperator2,
-                          sizeof(float) * currentNumberOfSamples * currentNumberOfVertices);
-        cudaDeviceSynchronize();
-        prolongationOperators[level] = prolongationOperator2;
-        cudaDeviceSynchronize();
-
-        createProlongationOperator(currentNumberOfSamples,
-                                   currentCSR.row_ptr,
-                                   currentCSR.value_ptr,
-                                   number_of_neighbors2,
-                                   currentNumberOfVertices,
-                                   oldVdata,
-                                   prolongationOperator2);
-
-
-        createProlongationOperator(currentNumberOfSamples,
-                                   currentCSR.row_ptr,
-                                   currentCSR.value_ptr,
-                                   a.value_ptr,
-                                   a.data_ptr,
-                                   number_of_neighbors2,
-                                   currentNumberOfVertices,
-                                   oldVdata);
-        prolongationOperatorCSR.push_back(a);
-
-        cudaDeviceSynchronize();  // Ensure data is synchronized before accessing
-        
-        lastCSR = currentCSR; //next mesh level
-    }
-
-    cudaDeviceSynchronize();
-
-    ////////////////////////////////////////////////////
-    /*
-    std::cout << "\n\n\n\n\n\n";
-    std::cout << "first\n";
-
-    CSR t1(3, 3,3);
-
-    VectorCSR3D b(3);
-    VectorCSR3D vectorResult(3);
-    for (int i = 0; i < vectorResult.n * 3; i++) {
-        vectorResult.vector[i] = 0.0f;
-    }
-    // Set right hand side - different for each component of each point
-    b.vector[0] = 4.0;  // Point 1 (x,y,z)
-    b.vector[1] = 2.0;
-    b.vector[2] = 1.0;
-
-    b.vector[3] = 3.0;  // Point 2 (x,y,z)
-    b.vector[4] = 5.0;
-    b.vector[5] = 2.0;
-
-    b.vector[6] = 1.0;  // Point 3 (x,y,z)
-    b.vector[7] = 2.0;
-    b.vector[8] = 6.0;
-
-
-    t1.printCSR();
-
-    gauss_jacobi_CSR_3D(t1, vectorResult.vector, b.vector, 50);
-    
-    std::cout << "\nVector result: ";
-    for (int i = 0; i < vectorResult.n; i++) {
-        std::cout << "\n";
-        std::cout << vectorResult.vector[i * 3] << " ";
-        std::cout << vectorResult.vector[i * 3 + 1] << " ";
-        std::cout << vectorResult.vector[i * 3 + 2] << " ";
-    }
-    
-    */
     //contruct equations as CSR matrices
-
-    
-    constexpr uint32_t blockThreads = 256;
-
-    uint32_t num_vertices = rx.get_num_vertices();
-
-    auto coords = rx.get_input_vertex_coordinates();
-
     SparseMatrix<float> A_mat(rx);
     DenseMatrix<float>  B_mat(rx, rx.get_num_vertices(), 3);
-
-
-    std::shared_ptr<DenseMatrix<float>> X_mat = coords->to_matrix();
-    // B set up
-    LaunchBox<blockThreads> launch_box_B;
-    rx.prepare_launch_box({Op::VV},
-                          launch_box_B,
-                          (void*)mcf_B_setup<float, blockThreads>);
-
-    mcf_B_setup<float, blockThreads><<<launch_box_B.blocks,
-                                       launch_box_B.num_threads,
-                                       launch_box_B.smem_bytes_dyn>>>(
-        rx.get_context(), *coords, B_mat,true);
-
-    
-
-    // A and X set up
-    LaunchBox<blockThreads> launch_box_A_X;
-    rx.prepare_launch_box({Op::VV},
-                          launch_box_A_X,
-                          (void*)mcf_A_setup<float, blockThreads>,
-                          true);
-
-    mcf_A_setup<float, blockThreads>
-        <<<launch_box_A_X.blocks,
-           launch_box_A_X.num_threads,
-           launch_box_A_X.smem_bytes_dyn>>>(rx.get_context(),
-                                            *coords,
-                                            A_mat,
-                                            true,10);
-
+    setupMCF(rx, A_mat, B_mat);
     A_mat.move(DEVICE, HOST);
     B_mat.move(DEVICE, HOST);
-
     CSR A_csr(A_mat,A_mat.row_ptr(),A_mat.col_idx(),A_mat.non_zeros());
     VectorCSR3D B_v(B_mat.rows());
-
-
-    //A_csr.printCSR();
 
     std::cout << "\nRHS:";
     std::cout << "\n Number of rows of B:"<<B_mat.rows();
@@ -770,63 +704,20 @@ int main(int argc, char** argv)
         B_v.vector[i*3] = B_mat(i, 0);
         B_v.vector[i*3+1] = B_mat(i, 1);
         B_v.vector[i*3+2] = B_mat(i, 2);
-
     }
-
-    
     std::vector<CSR> equationsPerLevel;
     equationsPerLevel.push_back(A_csr);
 
-    currentNumberOfSamples = numberOfSamples;
+    constructLHS(A_csr,
+                 prolongationOperatorCSR,
+                 equationsPerLevel,
+                 numberOfLevels,
+                 numberOfSamples,
+                 ratio);
 
-    CSR result = A_csr;
-
-    //make all the equations for each level
-    
-    for (int i=0;i<numberOfLevels-1;i++) 
-    {
-
-        result = multiplyCSR(result.num_rows,
-                                 result.num_rows,
-                                 currentNumberOfSamples,
-                                 result.row_ptr,
-                                 result.value_ptr,
-                                 result.data_ptr,
-                                 result.non_zeros,
-                             prolongationOperatorCSR[i].row_ptr,
-                             prolongationOperatorCSR[i].value_ptr,
-                             prolongationOperatorCSR[i].data_ptr,
-                             prolongationOperatorCSR[i].non_zeros);
-
-        CSR transposeOperator =
-        transposeCSR(prolongationOperatorCSR[i], currentNumberOfSamples);
-
-        result = multiplyCSR(transposeOperator.num_rows,
-                         prolongationOperatorCSR[i].num_rows,
-                         numberOfSamples,
-                         transposeOperator.row_ptr,
-                         transposeOperator.value_ptr,
-                         transposeOperator.data_ptr,
-                         transposeOperator.non_zeros,
-                         result.row_ptr,
-                         result.value_ptr,
-                         result.data_ptr,
-                         result.non_zeros);
-
-        equationsPerLevel.push_back(result);
-
-        currentNumberOfSamples/=ratio;
-        //std::cout << "Equation level " << i << "\n\n";
-        //equationsPerLevel[i].printCSR();
-    }
-   
-
-
-
-    
     cudaDeviceSynchronize();
 
-
+    
     GMGVCycle gmg(N);
 
     gmg.prolongationOperators = prolongationOperatorCSR;
@@ -836,15 +727,12 @@ int main(int argc, char** argv)
     gmg.max_number_of_levels  = 0;
     gmg.post_relax_iterations = 5;
     gmg.pre_relax_iterations = 5;
+    gmg.ratio                 = ratio;
 
 
     std::cout << "\nNumber of equations LHS:" << gmg.LHS.size();
     std::cout << "\nNumber of operators:" << gmg.prolongationOperators.size();
     std::cout << "\nMax level:" << gmg.max_number_of_levels;
-
-        
-
-        //gauss_jacobi_CSR_3D(gmg.LHS[0], gmg.X.vector, gmg.RHS.vector, 1000);
 
 
     int numberOfVCycles=2;
@@ -879,8 +767,7 @@ int main(int argc, char** argv)
      
     auto polyscope_callback = [&]() mutable {
 
-//        menu();
-         ImGui::Begin("GMG Parameters");
+        ImGui::Begin("GMG Parameters");
 
         ImGui::InputInt("Number of Levels", &gmg.max_number_of_levels);
         ImGui::InputInt("Number of V cycles", &numberOfVCycles);
@@ -928,151 +815,20 @@ int main(int argc, char** argv)
 
         ImGui::End();
     };
-    
-      polyscope::state::userCallback = polyscope_callback;
 
-    
-
-    //////////////////////////////////////////////////////////////////
-
-    /*
-    rx.for_each_vertex(
-        rxmesh::DEVICE,
-        [sample_number,
-         clustered_vertex,
-         number_of_neighbors,
-         row_ptr,value_ptr,
-         context,
-        vertices,vertex_pos, prolongation_operator,numberOfSamples] __device__(const rxmesh::VertexHandle vh) {
-
-        //go through every triangle of my cluster
-        const int cluster_point = clustered_vertex(vh, 0);
-        const int start_pointer = row_ptr[clustered_vertex(vh,0)];
-        const int end_pointer = row_ptr[clustered_vertex(vh,0)+1];
-
-        float min_distance = 99999;
-        Eigen::Vector3<float> selectedv1{0,0,0}, selectedv2{0, 0, 0},
-            selectedv3{0, 0, 0};
-        const Eigen::Vector3<float> q{
-            vertex_pos(vh, 0), vertex_pos(vh, 1), vertex_pos(vh, 2)};
-
-        int neighbor=0;
-        int selected_neighbor=0;
-        int neighbor_of_neighbor=0;
-        int selected_neighbor_of_neighbor=0;
-
-
-        for (int i=start_pointer;i<end_pointer;i++) {
-
-            float distance;
-             // get the neighbor vertex
-            neighbor = value_ptr[i];  // assuming col_idx stores column
-                                        // indices of neighbors in csr.
-
-            // get the range of neighbors for this neighbor
-            const int neighbor_start = row_ptr[neighbor];
-            const int neighbor_end   = row_ptr[neighbor + 1];
-
-            for (int j = neighbor_start; j < neighbor_end; j++) {
-                neighbor_of_neighbor = value_ptr[j];
-
-                for (int k=i+1;k<end_pointer;k++)
-                {
-                    if (value_ptr[k]==neighbor_of_neighbor) 
-                    { 
-
-
-                        
-                        Eigen::Vector3<float> v1{vertices[cluster_point].x,
-                                                 vertices[cluster_point].y,
-                                                 vertices[cluster_point].z};
-                        Eigen::Vector3<float> v2{vertices[neighbor].x,
-                                                 vertices[neighbor].y,
-                                                 vertices[neighbor].z};
-                        Eigen::Vector3<float> v3{
-                            vertices[neighbor_of_neighbor].x,
-                            vertices[neighbor_of_neighbor].y,
-                            vertices[neighbor_of_neighbor].z};
-
-                        //find distance , if less than min dist, find bary coords, save them
-                        float distance = projectedDistance(v1, v2, v3, q);
-                        if (distance<min_distance) {
-                            
-                            min_distance = distance;
-                            selectedv1   = v1;
-                            selectedv2   = v2;
-                            selectedv3   = v3;
-                            selected_neighbor = neighbor;
-                            selected_neighbor_of_neighbor =neighbor_of_neighbor;
-                        }
-                    }
-                }
-            }
-        }
-        // take the best bary coords
-        auto [b1, b2, b3] = computeBarycentricCoordinates(
-            selectedv1, selectedv2, selectedv3, q);
-        // put it inside prolongation row, it will be unique so no race
-        // condition
-        int l = context.linear_id(vh);
-
-        printf("\n %d final coords: %f %f %f", l, b1, b2, b3);
-
-
-        //prolongation_operator[l * numberOfSamples + cluster_point]        = b1;
-        //prolongation_operator[l * numberOfSamples + selected_neighbor] = b2;
-        //prolongation_operator[l * numberOfSamples + selected_neighbor_of_neighbor]              = b3;
-
-        
-        prolongation_operator[l * numberOfSamples + cluster_point] =
-            cluster_point;
-        prolongation_operator[l * numberOfSamples + selected_neighbor] =
-            selected_neighbor;
-        prolongation_operator[l * numberOfSamples +
-                              selected_neighbor_of_neighbor] =
-            selected_neighbor_of_neighbor;
-
-        //printf("\n%d at %d", l, l * numberOfSamples);
-
-
-
-    });
-    
-
-
-    std::cout << std::endl;
-    std::cout << std::endl;
-
-    cudaDeviceSynchronize();
-
-
-
-
-    cudaFree(vertices);
-    cudaMallocManaged(&vertices, sizeof(Vec3) * csr.num_rows);
-
-    float* distances;
-    cudaMallocManaged(&distances, sizeof(float) * csr.num_rows);
-
+    polyscope::state::userCallback = polyscope_callback;
 
     number_of_neighbors_coarse.move(DEVICE, HOST);
 
-    rx.get_polyscope_mesh()->addVertexScalarQuantity(
-        "sample_number",
-        sample_number);
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("sample_number",
+                                                     sample_number);
     rx.get_polyscope_mesh()->addVertexScalarQuantity("distance", distance);
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("sample_level_bitmask",
+                                                     sample_level_bitmask);
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("clusterPoint",
+                                                     clustered_vertex);
     rx.get_polyscope_mesh()->addVertexScalarQuantity(
-        "sample_level_bitmask",
-        sample_level_bitmask);
-    rx.get_polyscope_mesh()->addVertexScalarQuantity(
-        "clusterPoint",
-        clustered_vertex);
-    rx.get_polyscope_mesh()->addVertexScalarQuantity(
-        "number of neighbors",
-        number_of_neighbors_coarse);
-        */
-
-
+        "number of neighbors", number_of_neighbors_coarse);
 
 
 
@@ -1113,5 +869,44 @@ for (int i=0;i<vectorResult.n;i++) {
     std::cout << vectorResult.vector[i*3+1] << " ";
     std::cout << vectorResult.vector[i*3+2] << " ";
 }
+*/
+
+    /*
+std::cout << "\n\n\n\n\n\n";
+std::cout << "first\n";
+
+CSR t1(3, 3,3);
+
+VectorCSR3D b(3);
+VectorCSR3D vectorResult(3);
+for (int i = 0; i < vectorResult.n * 3; i++) {
+    vectorResult.vector[i] = 0.0f;
+}
+// Set right hand side - different for each component of each point
+b.vector[0] = 4.0;  // Point 1 (x,y,z)
+b.vector[1] = 2.0;
+b.vector[2] = 1.0;
+
+b.vector[3] = 3.0;  // Point 2 (x,y,z)
+b.vector[4] = 5.0;
+b.vector[5] = 2.0;
+
+b.vector[6] = 1.0;  // Point 3 (x,y,z)
+b.vector[7] = 2.0;
+b.vector[8] = 6.0;
+
+
+t1.printCSR();
+
+gauss_jacobi_CSR_3D(t1, vectorResult.vector, b.vector, 50);
+
+std::cout << "\nVector result: ";
+for (int i = 0; i < vectorResult.n; i++) {
+    std::cout << "\n";
+    std::cout << vectorResult.vector[i * 3] << " ";
+    std::cout << vectorResult.vector[i * 3 + 1] << " ";
+    std::cout << vectorResult.vector[i * 3 + 2] << " ";
+}
+
 */
 //////////////////////////////////////////////
