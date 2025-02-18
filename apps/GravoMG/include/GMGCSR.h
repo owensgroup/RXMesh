@@ -1,22 +1,6 @@
 #pragma once
 
 
-struct Vec3
-{
-    float x, y, z;
-};
-
-
-// used from 2nd level onwards
-struct VertexData
-{
-    int     cluster;
-    float   distance;
-    uint8_t bitmask;
-    Vec3    position;
-    int     sample_number;
-    int     linear_id;
-};
 
 
 
@@ -264,26 +248,7 @@ struct CSR
             });
     }
 
-    //rearrange CSR
-    // when we get the CSR data as mesh data, we rearrange it, this will be useful for later.
-    // look up a vertex, look up the first neighbor, if the first neighbor and third are neighbors, that's a triangle. Move to that next neighbor, 
-    __device__ void swap(int& a, int& b)
-    {
-        int temp = a;
-        a        = b;
-        b        = temp;
-    }
-
-    __device__ bool isNeighbor(int n1, int n2)
-    {
-        int start_pointer = row_ptr[n1];
-        int end_pointer   = row_ptr[n1 + 1];
-        for (int i=start_pointer;i<end_pointer;i++) {
-            if (value_ptr[i] == n2)
-                return true;
-        }
-        return false;
-    }
+   
 
      void printCSR()
     {
@@ -390,9 +355,7 @@ struct CSR
             int neighbors_count = row_ptr[i + 1] - row_ptr[i];
             if (neighbors_count >= 2) {  // Process only if it can form faces
                 for (int j = row_ptr[i]; j < row_ptr[i + 1]; ++j) {
-                    // Create a triangular face (i, value_ptr[j],
-                    // value_ptr[j+1])
-
+                    // Create a triangular face 
                     int a, b, c;
                     if (j == row_ptr[i+1]-1) {
                         a = i;
@@ -422,6 +385,16 @@ struct CSR
         }
     }
 
+
+    void render(Vec3* vertex_pos)
+    {
+        std::vector<std::array<double, 3>> vertexPositions;  // To store vertex positions
+        std::vector<std::vector<size_t>> faceIndices;  // To store face indices
+
+        GetRenderData(vertexPositions, faceIndices, vertex_pos);
+        polyscope::registerSurfaceMesh(
+            "mesh level 1", vertexPositions, faceIndices);
+    }
 
     ~CSR()
     {
@@ -532,7 +505,7 @@ CSR transposeCSR(const CSR& A, int numberOfColumns)
     AT.value_ptr = trans_value_ptr;
     AT.data_ptr  = trans_data_ptr;
     AT.num_rows  = numberOfColumns;
-    AT.non_zeros = nnz;  // Make sure to set this
+    AT.non_zeros = nnz;
     return AT;
 }
 
@@ -696,10 +669,7 @@ CSR csrMultiply(CSR& A, CSR& B)
     cudaFree(d_B_row_ptr);
     cudaFree(d_B_col_idx);
     cudaFree(d_B_vals);
-    //cudaFree(d_C_row_ptr);
-    //cudaFree(d_C_col_idx);
-    //cudaFree(d_C_vals);
-
+   
     return C;
 }
 
@@ -905,11 +875,11 @@ CSR multiplyCSR(int    A_rows,
         h_C_values, d_C_values, nnzC * sizeof(float), cudaMemcpyDeviceToHost));
 
     // Count actual non-zeros and create filtered arrays
-    const float      ZERO_THRESHOLD = 1e-6f;  // Adjust this threshold as needed
+    const float      ZERO_THRESHOLD = 1e-6f;  
     std::vector<int> filtered_rowPtr(A_rows + 1, 0);
     std::vector<int> filtered_colIdx;
     std::vector<float> filtered_values;
-    filtered_colIdx.reserve(nnzC);  // Reserve max possible size
+    filtered_colIdx.reserve(nnzC);  
     filtered_values.reserve(nnzC);
 
     // Process first row pointer
@@ -934,7 +904,7 @@ CSR multiplyCSR(int    A_rows,
     }
 
     // Create new CSR object
-    CSR result;  // Using your two-parameter constructor
+    CSR result; 
     result.num_rows = A_rows;
 
     // Allocate new memory with correct sizes

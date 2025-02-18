@@ -1,10 +1,5 @@
 #pragma once
 
-
-//set up equations
-// lhs, x, rhs
-// set up the v cycle to solve it
-
 #include "include/GMGCSR.h"
 
 struct VectorCSR
@@ -29,15 +24,20 @@ struct VectorCSR3D
 
         reset();
     }
-
     void reset()
     {
         // TODO:  make this faster, a O(n) used this many times may not be preferable
-
         for (int i = 0; i < n*3; i++)
             vector[i] = 0;
     }
-
+    void print()
+    {
+        for (int i = 0; i < n; i++) {
+            std::cout << vector[3 * i] << " ";
+            std::cout << vector[3 * i + 1] << " ";
+            std::cout << vector[3 * i + 2] << " ";
+        }
+    }
     ~VectorCSR3D()
     {
         cudaFree(vector);
@@ -92,6 +92,9 @@ struct GaussJacobiUpdate
             }
         }
         x_new[i] = (b[i] - sum) / diag;
+        if (x_new[i] != x_new[i]) {
+            printf("\nNAN FOUND at ROW %d : %f",i, x_new[i]);
+        }
     }
 };
 
@@ -330,10 +333,7 @@ struct GaussJacobiUpdate3D
             x_new[i * 3 + 1] = (b[i * 3 + 1] - sum_y) / diag;
             x_new[i * 3 + 2] = (b[i * 3 + 2] - sum_z) / diag;
         } else {
-            // If diagonal is missing, skip this row update or use fallback
-            // You could either retain the previous guess or use some
-            // approximation for the diagonal
-            x_new[i * 3]     = x_old[i * 3];  // Retain the old value
+            x_new[i * 3]     = x_old[i * 3];  
             x_new[i * 3 + 1] = x_old[i * 3 + 1];
             x_new[i * 3 + 2] = x_old[i * 3 + 2];
         }
@@ -386,26 +386,52 @@ class GMGVCycle
     std::vector<int> numberOfSamplesPerLevel;
     float            omega=0.5;
     int            directSolveIterations=100;
+    float            ratio                 = 8;
+    int              numberOfCycles       = 2;
 
     std::vector<CSR>       prolongationOperators;
     std::vector<CSR>       LHS;
     VectorCSR3D RHS;
     VectorCSR3D                 X;  // final solution
-
     void VCycle(CSR& A, VectorCSR3D& f, VectorCSR3D& v, int currentLevel)
     {
+        printf("\n=== Level %d ===", currentLevel);
+        printf("\nGrid size: %d", A.num_rows);
+
+        // Debug: Check input vector norms
+        float f_norm = 0.0f, v_norm = 0.0f;
+        for (int i = 0; i < A.num_rows * 3; i++) {
+            f_norm += f.vector[i] * f.vector[i];
+            v_norm += v.vector[i] * v.vector[i];
+        }
+        printf("\nInput norms - f: %e, v: %e", sqrt(f_norm), sqrt(v_norm));
+
         // Pre-smoothing
+        printf("\nPre-smoothing...");
         gauss_jacobi_CSR_3D(A, v.vector, f.vector, pre_relax_iterations);
 
-        // R = f - Av
+        // Calculate residual on current grid
         VectorCSR3D R(A.num_rows);
+        printf("\nCalculating residual...");
         Compute_R_3D(A, v.vector, f.vector, R.vector, A.num_rows);
-        //  Restrict the residual
-        VectorCSR3D restricted_residual(
-            prolongationOperators[currentLevel].num_rows / 8);
-        CSR transposeProlongation(
-            transposeCSR(prolongationOperators[currentLevel],
-                         prolongationOperators[currentLevel].num_rows / 8));
+
+        // Create coarse grid vectors
+        int coarse_size = prolongationOperators[currentLevel].num_rows / ratio;
+        VectorCSR3D restricted_residual(coarse_size);
+        VectorCSR3D coarse_correction(coarse_size);
+
+        // Restrict the residual
+        printf("\nRestricting residual...");
+        CSR transposeProlongation =
+            transposeCSR(prolongationOperators[currentLevel], coarse_size);
+
+        // Debug: Check restriction operator
+        float rest_norm = 0.0f;
+        for (int i = 0; i < transposeProlongation.non_zeros; i++) {
+            rest_norm += transposeProlongation.data_ptr[i] *
+                         transposeProlongation.data_ptr[i];
+        }
+        printf("\nRestriction operator norm: %e", sqrt(rest_norm));
 
         SpMV_CSR_3D(transposeProlongation.row_ptr,
                     transposeProlongation.value_ptr,
@@ -413,23 +439,46 @@ class GMGVCycle
                     R.vector,
                     restricted_residual.vector,
                     transposeProlongation.num_rows);
-        VectorCSR3D coarse_correction(
-            prolongationOperators[currentLevel].num_rows / 8);
 
+        // Debug: Check restricted residual
+        float rr_norm = 0.0f;
+        for (int i = 0; i < coarse_size * 3; i++) {
+            rr_norm +=
+                restricted_residual.vector[i] * restricted_residual.vector[i];
+        }
+        printf("\nRestricted residual norm: %e", sqrt(rr_norm));
 
         if (currentLevel < max_number_of_levels - 1) {
-            // next level
-            VCycle(LHS[currentLevel + 1],
+            VCycle(LHS[currentLevel+1],
                    restricted_residual,
                    coarse_correction,
                    currentLevel + 1);
         } else {
-            // Direct solve
-            gauss_jacobi_CSR_3D(
-                A, coarse_correction.vector, restricted_residual.vector, directSolveIterations);
-            std::cout << "\nDirect solve completed ";
+            printf("\nPerforming direct solve...");
+            // Initialize coarse correction to zero
+            for (int i = 0; i < coarse_size * 3; i++) {
+                coarse_correction.vector[i] = 0.0f;
+            }
 
+            gauss_jacobi_CSR_3D(A,
+                                coarse_correction.vector,
+                                restricted_residual.vector,
+                                directSolveIterations);
         }
+
+        // Debug: Check coarse correction
+        float cc_norm = 0.0f;
+        for (int i = 0; i < coarse_size * 3; i++) {
+            cc_norm +=
+                coarse_correction.vector[i] * coarse_correction.vector[i];
+            if (std::isnan(coarse_correction.vector[i])) {
+                printf(
+                    "\nWARNING: NaN detected in coarse correction at index %d",
+                    i);
+            }
+        }
+        printf("\nCoarse correction norm: %e", sqrt(cc_norm));
+
         // Prolongate
         VectorCSR3D fine_correction(A.num_rows);
         SpMV_CSR_3D(prolongationOperators[currentLevel].row_ptr,
@@ -437,15 +486,34 @@ class GMGVCycle
                     prolongationOperators[currentLevel].data_ptr,
                     coarse_correction.vector,
                     fine_correction.vector,
-                    A.num_rows);
+                    prolongationOperators[currentLevel].num_rows);
 
-        // Add correction 
-        
-        for (int i = 0; i < A.num_rows; i++) {
-            v.vector[i] += omega*fine_correction.vector[i];
+        // Debug: Check fine correction
+        float fc_norm = 0.0f;
+        for (int i = 0; i < A.num_rows * 3; i++) {
+            fc_norm += fine_correction.vector[i] * fine_correction.vector[i];
         }
+        printf("\nFine correction norm: %e", sqrt(fc_norm));
+
+        // Add correction with relaxation factor
+        for (int i = 0; i < A.num_rows * 3; i++) {
+            v.vector[i] += omega * fine_correction.vector[i];
+        }
+
         // Post-smoothing
+        printf("\nPost-smoothing...");
         gauss_jacobi_CSR_3D(A, v.vector, f.vector, post_relax_iterations);
+
+        printf("\n=== Completed Level %d ===\n", currentLevel);
+    }
+
+
+    void solve()
+    {
+        //cudaMallocManaged(&X.vector, X.n * sizeof(float) * 3);
+        X.reset();
+        for (int i = 0; i < numberOfCycles; i++)
+            VCycle(LHS[0], RHS, X, 0);
     }
 
     GMGVCycle(){}
@@ -456,3 +524,52 @@ class GMGVCycle
 
     ~GMGVCycle(){}
 };
+
+void constructLHS(CSR               A_csr,
+                  std::vector<CSR>  prolongationOperatorCSR,
+                  std::vector<CSR>& equationsPerLevel,
+                  int               numberOfLevels,
+                  int               numberOfSamples,
+                  float             ratio)
+{
+    int currentNumberOfSamples = numberOfSamples;
+
+    CSR result = A_csr;
+
+    // make all the equations for each level
+
+    for (int i = 0; i < numberOfLevels - 1; i++) {
+        result = multiplyCSR(result.num_rows,
+                             result.num_rows,
+                             currentNumberOfSamples,
+                             result.row_ptr,
+                             result.value_ptr,
+                             result.data_ptr,
+                             result.non_zeros,
+                             prolongationOperatorCSR[i].row_ptr,
+                             prolongationOperatorCSR[i].value_ptr,
+                             prolongationOperatorCSR[i].data_ptr,
+                             prolongationOperatorCSR[i].non_zeros);
+
+        CSR transposeOperator =
+            transposeCSR(prolongationOperatorCSR[i], currentNumberOfSamples);
+
+        result = multiplyCSR(transposeOperator.num_rows,
+                             prolongationOperatorCSR[i].num_rows,
+                             numberOfSamples,
+                             transposeOperator.row_ptr,
+                             transposeOperator.value_ptr,
+                             transposeOperator.data_ptr,
+                             transposeOperator.non_zeros,
+                             result.row_ptr,
+                             result.value_ptr,
+                             result.data_ptr,
+                             result.non_zeros);
+
+        equationsPerLevel.push_back(result);
+
+        currentNumberOfSamples /= ratio;
+        std::cout << "Equation level " << i << "\n\n";
+        equationsPerLevel[i].printCSR();
+    }
+}
