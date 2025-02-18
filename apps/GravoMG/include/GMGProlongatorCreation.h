@@ -823,7 +823,6 @@ void createProlongationOperators(int               N,
                                  faceIndicesArray[level - 1],
                                  sample_pos);
 
-
         polyscope::registerSurfaceMesh(
             "mesh level " + std::to_string(level + 1),
             vertexPositionsArray[level - 1],

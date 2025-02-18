@@ -50,10 +50,9 @@ public:
 
 void GPUGMG::ConstructOperators(RXMeshStatic &rx)
 {
-    VertexAttributesRXMesh vertexAttributes(rx);
-    auto                   context = rx.get_context();
 
-    constexpr uint32_t CUDABlockSize = 512;
+    //set up initial variables
+   
     N                                = rx.get_num_vertices();
     int currentLevel                 = 1;                   // first coarse mesh
     int numberOfSamplesForFirstLevel = N / powf(ratio, 1);  // start
@@ -70,8 +69,15 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     cudaMallocManaged(&distanceArray, N * sizeof(int));
     cudaMallocManaged(&clusterVertices, N * sizeof(int));
 
+
+     VertexAttributesRXMesh vertexAttributes(rx);
+    auto                   context = rx.get_context();
+
+    constexpr uint32_t CUDABlockSize = 512;
     cudaDeviceSynchronize();
 
+
+    //FPS sampling
     sampler(rx,
             vertexAttributes,
             ratio,
@@ -81,12 +87,17 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
             sample_pos);
 
 
+
     rxmesh::LaunchBox<CUDABlockSize> cb;
     rx.prepare_launch_box(
         {rxmesh::Op::VV}, cb, (void*)cluster_points<float, CUDABlockSize>);
 
+
+    //clustering
     clusteringRXMesh(rx, vertexAttributes, currentLevel, vertices);
 
+
+    //move rxmesh cluster data to a normal pointer on device
     int* vertexCluster;
     cudaMallocManaged(&vertexCluster, sizeof(int) * N);
     rx.for_each_vertex(rxmesh::DEVICE,
@@ -98,6 +109,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     cudaDeviceSynchronize();
 
 
+    //neighbor handling
     int* number_of_neighbors;
     cudaMallocManaged(&number_of_neighbors, numberOfSamples * sizeof(int));
     for (int i = 0; i < numberOfSamples; i++) {
@@ -105,6 +117,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     }
     cudaDeviceSynchronize();
 
+    //find number of neighbors on the coarse mesh using RXMesh
     rxmesh::LaunchBox<CUDABlockSize> nn;
     rx.prepare_launch_box(
         {rxmesh::Op::VV},
@@ -116,6 +129,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     cudaError_t      err = cudaMallocManaged(
         &vertexNeighbors, numberOfSamples * sizeof(VertexNeighbors));
 
+    // launch kernel
     findNumberOfCoarseNeighbors<float, CUDABlockSize>
         <<<nn.blocks, nn.num_threads, nn.smem_bytes_dyn>>>(
             rx.get_context(),
@@ -124,7 +138,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
             vertexNeighbors);
     cudaDeviceSynchronize();
 
-
+    
     rx.for_each_vertex(
         rxmesh::DEVICE,
         [numberOfSamples,
@@ -139,8 +153,10 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
                         .getNumberOfNeighbors();
             }
         });
+        
     cudaDeviceSynchronize();
 
+    //constructing the first operator 
     int num_rows = numberOfSamples;  // Set this appropriately
     CSR csr(num_rows, number_of_neighbors, vertexNeighbors, N);
 
@@ -163,6 +179,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     cudaDeviceSynchronize();
     prolongationOperatorCSR.push_back(firstOperator);
 
+    //render the first level
     csr.render(sample_pos);
 
     // set 1st level node data
@@ -170,6 +187,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     cudaMallocManaged(&oldVdata, sizeof(VertexData) * numberOfSamples);
     setVertexData(rx, context, oldVdata, vertexAttributes);
 
+    //create all the operators for moving between each level
     createProlongationOperators(N,
                                 numberOfSamples,
                                 numberOfLevels,
@@ -181,7 +199,11 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
                                 distanceArray,
                                 vertexCluster);
 
+
+
     // contruct equations as CSR matrices
+
+    //for now this is hard coded to use the MCF, we can abstract this later to handle different Lx=b
     SparseMatrix<float> A_mat(rx);
     DenseMatrix<float>  B_mat(rx, rx.get_num_vertices(), 3);
     setupMCF(rx, A_mat, B_mat);
@@ -192,6 +214,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     std::cout << "\nRHS:";
     std::cout << "\n Number of rows of B:" << B_mat.rows();
 
+    //copy the RHS to our CSR structure
     for (int i = 0; i < B_mat.rows(); i++) {
         B_v.vector[i * 3]     = B_mat(i, 0);
         B_v.vector[i * 3 + 1] = B_mat(i, 1);
@@ -200,6 +223,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
    
     equationsPerLevel.push_back(A_csr);
 
+    //construct the equations
     constructLHS(A_csr,
                  prolongationOperatorCSR,
                  equationsPerLevel,
