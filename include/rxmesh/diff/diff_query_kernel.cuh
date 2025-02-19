@@ -6,6 +6,7 @@
 #include "rxmesh/context.h"
 #include "rxmesh/iterator.cuh"
 #include "rxmesh/query.cuh"
+#include "rxmesh/util/meta.h"
 
 #include "rxmesh/diff/hessian_projection.h"
 #include "rxmesh/diff/hessian_sparse_matrix.h"
@@ -18,7 +19,8 @@
 namespace rxmesh {
 namespace detail {
 template <uint32_t blockThreads,
-          typename HandleT,
+          typename LossHandleT,
+          typename ObjHandleT,
           Op op,
           typename ScalarT,
           bool Active,
@@ -26,44 +28,49 @@ template <uint32_t blockThreads,
           int  VariableDim,
           typename LambdaT>
 __global__ static void diff_kernel(
-    const Context                                                    context,
-    DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>&     grad,
-    HessianSparseMatrix<typename ScalarT::PassiveType, VariableDim>& hess,
-    Attribute<typename ScalarT::PassiveType, HandleT>                obj_func,
-    const bool                                                       oriented,
-    LambdaT                                                          user_func)
+    const Context                                                   context,
+    DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>     grad,
+    HessianSparseMatrix<typename ScalarT::PassiveType, VariableDim> hess,
+    Attribute<typename ScalarT::PassiveType, LossHandleT>           loss,
+    Attribute<typename ScalarT::PassiveType, ObjHandleT>            objective,
+    const bool                                                      oriented,
+    LambdaT                                                         user_func)
 {
+
+    using IteratorT = typename IteratorType<op>::type;
+
     using PassiveT = typename ScalarT::PassiveType;
 
     auto block = cooperative_groups::this_thread_block();
 
-    // TODO this eval function should accommidate different Ios
-    auto eval = [&](const HandleT& fh, const VertexIterator& iter) {
+
+    auto eval = [&](const LossHandleT& fh, const IteratorT& iter) {
         if constexpr (Active) {
             // eval the objective function
 
-            DiffHandle<ScalarT, HandleT> diff_handle;
+            DiffHandle<ScalarT, LossHandleT> diff_handle(fh);
 
-            ScalarT res = user_func(diff_handle, iter);
+            ScalarT res = user_func(diff_handle, iter, objective);
 
             // function
-            obj_func(fh) = res.val;
+            loss(fh) = res.val;
 
             // gradient
             for (uint16_t vertex = 0; vertex < iter.size(); ++vertex) {
                 for (int local = 0; local < VariableDim; ++local) {
+
                     ::atomicAdd(
                         &grad(iter[vertex], local),
                         res.grad[index_mapping<VariableDim>(vertex, local)]);
                 }
             }
 
-            // project hessian to PD matrix
+            // project Hessian to PD matrix
             if constexpr (ProjectHess) {
                 project_positive_definite(res.Hess);
             }
 
-            // hessian
+            // Hessian
             for (int vertex_i = 0; vertex_i < iter.size(); ++vertex_i) {
                 const VertexHandle vi = iter[vertex_i];
 
@@ -85,12 +92,12 @@ __global__ static void diff_kernel(
                 }
             }
         } else {
-            
-            DiffHandle<PassiveT, HandleT> diff_handle;
 
-            PassiveT res = user_func(diff_handle, iter);
+            DiffHandle<PassiveT, LossHandleT> diff_handle(fh);
 
-            obj_func(fh) = res;
+            PassiveT res = user_func(diff_handle, iter, objective);
+
+            loss(fh) = res;
         }
     };
 

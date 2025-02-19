@@ -1,109 +1,132 @@
-#if 0
 #pragma once
 
 #include "rxmesh/diff/diff_handle.h"
 
+#include "rxmesh/iterator.cuh"
+#include "rxmesh/types.h"
+
 namespace rxmesh {
 
-template <typename DiffHandle, int StencilSize>
-struct DiffIterator : public Iterator<typename DiffHandle::HandleT>
+/**
+ * @brief Helper struct to get the iterator type based on a query operation
+ */
+template <Op op>
+struct IteratorType
 {
-    using HandleT = typename DiffHandle::HandleT;
-    using LocalT  = typename HandleT::LocalT;
-
-    __device__ DiffIterator() : Iterator<HandleT>()
-    {
-    }
-
-    DiffIterator(const Iterator<HandleT>& rhs) : Iterator<HandleT>(rhs)
-    {
-    }
-
-    __device__ DiffIterator(const Context& context,
-                            const uint16_t local_id,
-                            const uint32_t patch_id)
-        : Iterator<HandleT>(context, local_id, patch_id)
-    {
-    }
-
-    __device__ DiffIterator(const Context&     context,
-                            const uint16_t     local_id,
-                            const LocalT*      patch_output,
-                            const uint16_t*    patch_offset,
-                            const uint32_t     offset_size,
-                            const uint32_t     patch_id,
-                            const uint32_t*    output_owned_bitmask,
-                            const LPHashTable& output_lp_hashtable,
-                            const LPPair*      s_table,
-                            const PatchStash   patch_stash,
-                            int                shift = 0)
-        : Iterator<HandleT>(context,
-                            local_id,
-                            patch_output,
-                            patch_offset,
-                            offset_size,
-                            patch_id,
-                            output_owned_bitmask,
-                            output_lp_hashtable,
-                            s_table,
-                            patch_stash,
-                            shift)
-    {
-    }
-
-    DiffIterator(const DiffIterator&) = default;
-
-    __device__ HandleT operator[](const uint16_t i) const
-    {
-        if (i + m_begin >= m_end) {
-            return HandleT();
-        }
-        assert(m_patch_output);
-        assert(i + m_begin < m_end);
-        uint16_t lid = (m_patch_output[m_begin + i].id) >> m_shift;
-        if (lid == INVALID16) {
-            return HandleT();
-        }
-        HandleT ret(m_patch_id, lid);
-
-        if (detail::is_owned(lid, m_output_owned_bitmask)) {
-            return ret;
-        } else {
-            return m_context.get_owner_handle(ret, nullptr, m_s_table);
-        }
-    }
-
-    __device__ HandleT back() const
-    {
-        return ((*this)[size() - 1]);
-    }
-
-    __device__ HandleT front() const
-    {
-        return ((*this)[0]);
-    }
-
-
-    __device__ bool operator==(const Iterator& rhs) const
-    {
-        return rhs.m_local_id == m_local_id && rhs.m_patch_id == m_patch_id &&
-               rhs.m_current == m_current;
-    }
-
-    __device__ bool operator!=(const Iterator& rhs) const
-    {
-        return !(*this == rhs);
-    }
+    using type = void;
 };
 
-template <bool IsActive>
-using DiffVertexIterator = DiffIterator<DiffVertexHandle<IsActive>>;
+template <>
+struct IteratorType<Op::VV>
+{
+    using type = VertexIterator;
+};
 
-template <bool IsActive>
-using DiffEdgeIterator = DiffIterator<DiffVertexHandle<IsActive>>;
+template <>
+struct IteratorType<Op::VE>
+{
+    using type = EdgeIterator;
+};
 
-template <bool IsActive>
-using DiffFaceIterator = DiffIterator<DiffVertexHandle<IsActive>>;
+template <>
+struct IteratorType<Op::VF>
+{
+    using type = FaceIterator;
+};
+
+
+template <>
+struct IteratorType<Op::EV>
+{
+    using type = VertexIterator;
+};
+
+template <>
+struct IteratorType<Op::EVDiamond>
+{
+    using type = VertexIterator;
+};
+
+template <>
+struct IteratorType<Op::EE>
+{
+    using type = EdgeIterator;
+};
+
+template <>
+struct IteratorType<Op::EF>
+{
+    using type = FaceIterator;
+};
+
+
+template <>
+struct IteratorType<Op::FV>
+{
+    using type = VertexIterator;
+};
+
+template <>
+struct IteratorType<Op::FE>
+{
+    using type = EdgeIterator;
+};
+
+template <>
+struct IteratorType<Op::FF>
+{
+    using type = FaceIterator;
+};
+
+
+/**
+ * @brief 
+ * @tparam T 
+ * @tparam DiffHandleT 
+ * @tparam IteratorT 
+ * @tparam PassiveT 
+ * @tparam VariableDim 
+ * @param handle 
+ * @param iter 
+ * @param attr 
+ * @param index 
+ * @return 
+ */
+template <typename T,
+          int VariableDim,
+          typename DiffHandleT,
+          typename IteratorT,
+          typename PassiveT>
+__device__ __inline__ Eigen::Vector<T, VariableDim> iter_val(
+    const DiffHandleT& handle,  // used to get the scalar type
+    const IteratorT&   iter,
+    const Attribute<PassiveT, typename IteratorT::Handle>& attr,
+    int                                                    index)
+{
+    Eigen::Vector<T, VariableDim> ret;
+
+    assert(index < iter.size());
+
+    assert(VariableDim == attr.get_num_attributes());
+
+
+    // val
+    for (int j = 0; j < VariableDim; ++j) {
+        if constexpr (DiffHandleT::IsActive) {
+            ret[j].val = attr(iter[index], j);
+        } else {
+            ret[j] = attr(iter[index], j);
+        }
+    }
+
+    // init grad
+    if constexpr (DiffHandleT::IsActive) {
+        for (int j = 0; j < VariableDim; ++j) {
+            ret[j].grad[index * VariableDim + j] = 1;
+        }
+    }
+
+    return ret;
+}
 
 }  // namespace rxmesh
-#endif

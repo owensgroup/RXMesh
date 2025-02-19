@@ -7,6 +7,8 @@
 
 namespace rxmesh {
 
+// Return the underlying type of a DiffHandle which could be a Scalar<T> where T
+// is a passive type or a passive type (e.g., float, double)
 #define ACTIVE_TYPE(H) typename std::decay_t<decltype(H)>::Active
 
 /**
@@ -16,16 +18,24 @@ namespace rxmesh {
 template <typename ActiveT, typename HandleT>
 struct DiffHandle : public HandleT
 {
-    using Handle  = HandleT;
-    using LocalT  = typename Handle::LocalT;
-    bool IsActive = is_scalar_v<ActiveT>;
-    using Active  = ActiveT;
+    using Handle                   = HandleT;
+    using LocalT                   = typename Handle::LocalT;
+    constexpr static bool IsActive = is_scalar_v<ActiveT>;
+    using Active                   = ActiveT;
 
 
     /**
      * @brief Default constructor
      */
     constexpr __device__ __host__ DiffHandle() : Handle()
+    {
+    }
+
+    /**
+     * @brief Constructor from HandleT
+     */
+    constexpr __device__ __host__ DiffHandle(HandleT handle)
+        : DiffHandle(handle.unique_id())
     {
     }
 
@@ -64,5 +74,20 @@ struct DiffHandle : public HandleT
     {
         return !(*this == rhs);
     }
+
+    constexpr __device__ __host__ __inline__ bool is_active() const
+    {
+        return IsActive;
+    }
 };
+
+template <typename ActiveT>
+using DiffVertexHandle = DiffHandle<ActiveT, VertexHandle>;
+
+template <typename ActiveT>
+using DiffEdgeHandle = DiffHandle<ActiveT, EdgeHandle>;
+
+template <typename ActiveT>
+using DiffFaceHandle = DiffHandle<ActiveT, FaceHandle>;
+
 }  // namespace rxmesh

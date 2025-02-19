@@ -4,6 +4,8 @@
 
 #include "rxmesh/geometry_util.cuh"
 
+#include "rxmesh/matrix/sparse_matrix.cuh"
+
 namespace rxmesh {
 
 namespace detail {

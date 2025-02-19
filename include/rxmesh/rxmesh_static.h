@@ -1326,6 +1326,45 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
+     * @brief Adding a new attribute similar to another attribute in allocation,
+     * number of attributes, and layout. The type of the attribute (vertex,edge,
+     * or face) is derived automatically from the input attribute (other)
+     * @tparam T type of the returned attribute
+     * @tparam HandleT handle type of the returned attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param other the other attribute
+     * @return shared pointer to the created attribute
+     */
+    template <class T, class HandleT>
+    std::shared_ptr<Attribute<T, HandleT>> add_attribute_like(
+        const std::string&           name,
+        const Attribute<T, HandleT>& other)
+    {
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return add_vertex_attribute<T>(name,
+                                           other.get_num_attributes(),
+                                           other.get_allocated(),
+                                           other.get_layout());
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return add_edge_attribute<T>(name,
+                                         other.get_num_attributes(),
+                                         other.get_allocated(),
+                                         other.get_layout());
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return add_face_attribute<T>(name,
+                                         other.get_num_attributes(),
+                                         other.get_allocated(),
+                                         other.get_layout());
+        }
+    }
+
+    /**
      * @brief Checks if an attribute exists given its name
      * @param name the attribute name
      * @return True if the attribute exists. False otherwise.

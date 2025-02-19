@@ -11,6 +11,7 @@ template <typename HandleT>
 struct Iterator
 {
     using LocalT = typename HandleT::LocalT;
+    using Handle = HandleT;
 
     __device__ __inline__ Iterator()
         : m_context(Context()),

@@ -107,7 +107,7 @@ struct DenseMatrix
     {
 
         bool do_device = (location & DEVICE) == DEVICE;
-        bool do_host   = (location & DEVICE) == DEVICE;
+        bool do_host   = (location & HOST) == HOST;
 
         if (do_device && do_host) {
             std::fill_n(m_h_val, rows() * cols(), val);
@@ -256,8 +256,8 @@ struct DenseMatrix
      * @brief access the matrix using vertex/edge/face handle as a row index.
      */
     template <typename HandleT>
-    __host__ __device__ const T& operator()(const HandleT  handle,
-                                            const IndexT col) const
+    __host__ __device__ const T& operator()(const HandleT handle,
+                                            const IndexT  col) const
     {
         return this->operator()(get_row_id(handle), col);
     }
@@ -663,7 +663,7 @@ struct DenseMatrix
      * @brief return the raw pointer pf a column.
      */
     __host__ const T* col_data(const IndexT ld_idx,
-                               locationT      location = DEVICE) const
+                               locationT    location = DEVICE) const
     {
         if ((location & HOST) == HOST) {
             return m_h_val + ld_idx * m_num_rows;
@@ -891,15 +891,18 @@ struct DenseMatrix
 
 
     /**
-     * @brief return the 1d indext given the row and column id
+     * @brief return the 1d index given the row and column id
      */
-    __host__ __device__ __inline__ int get_index(IndexT row,
-                                                 IndexT col) const
+    __host__ __device__ __inline__ int get_index(IndexT row, IndexT col) const
     {
         if constexpr (Order == Eigen::ColMajor) {
-            return col * m_num_rows + row;
+            const int ret = col * m_num_rows + row;
+            assert(ret < rows() * cols());
+            return ret;
         } else {
-            return col + row * m_num_cols;
+            const int ret = col + row * m_num_cols;
+            assert(ret < rows() * cols());
+            return ret;
         }
     }
 

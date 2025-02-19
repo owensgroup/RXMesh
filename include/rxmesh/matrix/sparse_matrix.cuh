@@ -359,7 +359,7 @@ struct SparseMatrix
     __host__ void reset(T val, locationT location, cudaStream_t stream = NULL)
     {
         bool do_device = (location & DEVICE) == DEVICE;
-        bool do_host   = (location & DEVICE) == DEVICE;
+        bool do_host   = (location & HOST) == HOST;
 
         if (do_device && do_host) {
             std::fill_n(m_h_val, m_nnz, val);
