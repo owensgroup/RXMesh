@@ -331,7 +331,7 @@ struct GaussJacobiUpdate3D
         // If the diagonal was found, perform the update
         if (!has_diag)
         printf("\n%d does not have diagonal", i);
-        if (has_diag) {
+        if (has_diag && abs(diag) > 10e-8f) {
             x_new[i * 3]     =(b[i * 3] - sum_x) / diag;
             x_new[i * 3 + 1] =(b[i * 3 + 1] - sum_y) / diag;
             x_new[i * 3 + 2] =(b[i * 3 + 2] - sum_z) / diag;
