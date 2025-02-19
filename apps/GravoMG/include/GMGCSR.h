@@ -371,8 +371,8 @@ struct CSR
                     int n1_end = row_ptr[b+1];
                     for (int k=n1_start;k<n1_end;k++) {
                         if (c == value_ptr[k]) {
-                            std::cout << "\n Triangle formed with " << a
-                                      << " and " << b << " and " << c;
+                            //std::cout << "\n Triangle formed with " << a
+                            //          << " and " << b << " and " << c;
 
                             faceIndices.push_back({static_cast<size_t>(a),
                                                    static_cast<size_t>(b),
@@ -634,6 +634,7 @@ CSR csrMultiply(CSR& A, CSR& B)
     C.data_ptr=d_C_vals;
 
     //std::cout << "First row: " << C.row_ptr[0];
+    /*
     printf("\nCSR Array: \n");
     for (int i = 0; i < C.num_rows; ++i) {
         printf("row_ptr[%d] = %d\n", i, d_C_row_ptr[i]);
@@ -642,7 +643,7 @@ CSR csrMultiply(CSR& A, CSR& B)
             printf("vertex %d value: %f\n", d_C_col_idx[q], d_C_vals[q]);
         }
     }
-
+    */
     //C.printCSR();
 
 

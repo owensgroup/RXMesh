@@ -696,10 +696,11 @@ void setCluster(int         n,
                 distance[number]            = 0;
                 vertex_data[number].cluster = vertex_data[number].sample_number;
 
+                /*
                 printf("\n%d which is sample %d is now a cluster vertex",
                        number,
                        vertex_data[number].sample_number);
-
+                       */
             } else {
                 vertex_data[number].cluster = -1;
                 distance[number]            = INFINITY;
@@ -817,7 +818,7 @@ void createProlongationOperators(int               N,
                          vertexNeighbors2,
                          currentNumberOfVertices);
 
-        currentCSR.printCSR();
+        //currentCSR.printCSR();
 
         currentCSR.GetRenderData(vertexPositionsArray[level - 1],
                                  faceIndicesArray[level - 1],

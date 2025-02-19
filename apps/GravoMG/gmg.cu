@@ -26,7 +26,7 @@ public:
 
     GPUGMG()
     {
-        ratio          = 5;
+        ratio          = 3;
         numberOfLevels = 0;
     }
     GPUGMG(RXMeshStatic& rx)
@@ -34,7 +34,7 @@ public:
     {
         N              = rx.get_num_vertices();
 
-        ratio          = 5;
+        ratio          = 7;
         numberOfLevels = 0;
         for (int i = 0; i < 16; i++) {
             if ((int)N / (int)powf(ratio, i) > 6) {
@@ -211,8 +211,8 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     B_mat.move(DEVICE, HOST);
     CSR A_csr(A_mat, A_mat.row_ptr(), A_mat.col_idx(), A_mat.non_zeros());
 
-    std::cout << "\nRHS:";
-    std::cout << "\n Number of rows of B:" << B_mat.rows();
+    //std::cout << "\nRHS:";
+    //std::cout << "\n Number of rows of B:" << B_mat.rows();
 
     //copy the RHS to our CSR structure
     for (int i = 0; i < B_mat.rows(); i++) {
@@ -248,22 +248,36 @@ int main(int argc, char** argv)
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "torus.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bumpy-cube.obj");
-    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
+    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere1.obj");
+
+    /*
     std::vector<std::vector<float>>    planeVerts;
     std::vector<std::vector<uint32_t>> planeFaces;
-    uint32_t                           nx = 15;
-    uint32_t                           ny = 15;
+    uint32_t                           nx = 10;
+    uint32_t                           ny = 10;
     create_plane(planeVerts, planeFaces, nx, ny);
     RXMeshStatic rx(planeFaces);
     rx.add_vertex_coordinates(planeVerts, "plane");
+    */
 
     GPUGMG g(rx);
     g.ConstructOperators(rx);
-    
+
+
+    //for (int i = 0;i < g.equationsPerLevel.size(); i++)
+    //    g.equationsPerLevel[i].printCSR();
+
+
+
+
+
+
 
     
     GMGVCycle gmg(g.N);
 
+    
     gmg.prolongationOperators = g.prolongationOperatorCSR;
     gmg.LHS                   = g.equationsPerLevel;
     gmg.RHS                   = g.B_v;
@@ -271,16 +285,17 @@ int main(int argc, char** argv)
     gmg.post_relax_iterations = 5;
     gmg.pre_relax_iterations  = 5;
     gmg.ratio                 = g.ratio;
-    std::cout << "\nNumber of equations LHS:" << gmg.LHS.size();
-    std::cout << "\nNumber of operators:" << gmg.prolongationOperators.size();
-    std::cout << "\nMax level:" << gmg.max_number_of_levels;
+    //std::cout << "\nNumber of equations LHS:" << gmg.LHS.size();
+    //std::cout << "\nNumber of operators:" << gmg.prolongationOperators.size();
+    //std::cout << "\nMax level:" << gmg.max_number_of_levels;
     
     gmg.solve();
-
+    
 
 
 
     //rendering and interactive
+    
     std::vector<std::array<double, 3>> vertexMeshPositions;
     vertexMeshPositions.resize(gmg.X.n);
 

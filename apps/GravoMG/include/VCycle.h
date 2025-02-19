@@ -301,7 +301,7 @@ struct GaussJacobiUpdate3D
           x_new(x_new)
     {
     }
-
+    
     __device__ void operator()(int i)
     {
         float sum_x    = 0.0f;
@@ -314,24 +314,30 @@ struct GaussJacobiUpdate3D
         for (int j = row_ptr[i]; j < row_ptr[i + 1]; ++j) {
             int   col = value_ptr[j];  // Column index of non-zero element
             float val = data_ptr[j];   // Value of the non-zero element
-
+            
             if (col == i) {
                 // If it's a diagonal element, store its value
                 diag     = val;
                 has_diag = true;
-            } else {
+            }
+            else {
                 // Sum non-diagonal elements
                 sum_x += val * x_old[col * 3];
                 sum_y += val * x_old[col * 3 + 1];
                 sum_z += val * x_old[col * 3 + 2];
             }
         }
-
+        //float w = 0.85;
         // If the diagonal was found, perform the update
+        if (!has_diag)
+        printf("\n%d does not have diagonal", i);
         if (has_diag) {
-            x_new[i * 3]     = (b[i * 3] - sum_x) / diag;
-            x_new[i * 3 + 1] = (b[i * 3 + 1] - sum_y) / diag;
-            x_new[i * 3 + 2] = (b[i * 3 + 2] - sum_z) / diag;
+            x_new[i * 3]     =(b[i * 3] - sum_x) / diag;
+            x_new[i * 3 + 1] =(b[i * 3 + 1] - sum_y) / diag;
+            x_new[i * 3 + 2] =(b[i * 3 + 2] - sum_z) / diag;
+            //if (i==0)
+            //printf("\n %d %f", i, x_new[i * 3]);
+
         } else {
             x_new[i * 3]     = x_old[i * 3];  
             x_new[i * 3 + 1] = x_old[i * 3 + 1];
@@ -371,6 +377,10 @@ void gauss_jacobi_CSR_3D(const CSR& A, float* vec_x, float* vec_b, int max_iter)
                    thrust::raw_pointer_cast(x),
                    N * 3 * sizeof(float),
                    cudaMemcpyDeviceToDevice);
+        cudaMemcpy(vec_x,
+                   thrust::raw_pointer_cast(x),
+                   N * 3 * sizeof(float),
+                   cudaMemcpyDeviceToHost);
     }
 
     cudaFree(x_new_raw);
@@ -569,7 +579,7 @@ void constructLHS(CSR               A_csr,
         equationsPerLevel.push_back(result);
 
         currentNumberOfSamples /= ratio;
-        std::cout << "Equation level " << i << "\n\n";
-        equationsPerLevel[i].printCSR();
+        //std::cout << "Equation level " << i << "\n\n";
+        //equationsPerLevel[i].printCSR();
     }
 }

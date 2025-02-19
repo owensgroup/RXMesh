@@ -274,7 +274,7 @@ void sampler(RXMeshStatic&          rx,
         rd());  // Standard mersenne_twister_engine seeded with rd()
     std::uniform_int_distribution<> dist(0, N - 1);
     // From 0 to (number of points - 1)
-    int seed = 20;  // dist(gen);
+    int seed = 0;  // dist(gen);
 
     std::cout << "\nSeed: " << seed;
 
