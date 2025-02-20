@@ -98,7 +98,7 @@ struct NetwtonSolver
         for (int i = 0; i < max_iters; ++i) {
 
             // update solution
-            problem.rx.for_each<ObjHandleT>(
+            problem.rx.template for_each<ObjHandleT>(
                 DEVICE,
                 [s     = s,
                  dir   = dir,
@@ -130,7 +130,7 @@ struct NetwtonSolver
         }
 
         if (update) {
-            problem.rx.for_each<ObjHandleT>(
+            problem.rx.template for_each<ObjHandleT>(
                 DEVICE,
                 [t_obj = *temp_objective,
                  obj   = *problem.objective] __device__(const ObjHandleT& h) {
