@@ -329,14 +329,19 @@ struct GaussJacobiUpdate3D
         }
         //float w = 0.85;
         // If the diagonal was found, perform the update
-        if (!has_diag)
-        printf("\n%d does not have diagonal", i);
+        if (!has_diag)printf("\n%d does not have diagonal", i);
         if (has_diag && abs(diag) > 10e-8f) {
             x_new[i * 3]     =(b[i * 3] - sum_x) / diag;
             x_new[i * 3 + 1] =(b[i * 3 + 1] - sum_y) / diag;
             x_new[i * 3 + 2] =(b[i * 3 + 2] - sum_z) / diag;
             //if (i==0)
             //printf("\n %d %f", i, x_new[i * 3]);
+
+            /*printf("\n thread= %d val= %f, %f, %f",
+                   i,
+                   x_new[i * 3],
+                   x_new[i * 3 + 1],
+                   x_new[i * 3 + 2]);*/
 
         } else {
             x_new[i * 3]     = x_old[i * 3];  
@@ -433,7 +438,11 @@ class GMGVCycle
         // Restrict the residual
         printf("\nRestricting residual...");
         CSR transposeProlongation =
-            transposeCSR(prolongationOperators[currentLevel], coarse_size);
+            transposeCSR(prolongationOperators[currentLevel]);
+            //transposeCSR(prolongationOperators[currentLevel], coarse_size);
+
+        if (currentLevel>=1)
+        transposeProlongation.printCSR();
 
         // Debug: Check restriction operator
         float rest_norm = 0.0f;
@@ -449,6 +458,9 @@ class GMGVCycle
                     R.vector,
                     restricted_residual.vector,
                     transposeProlongation.num_rows);
+
+
+       
 
         // Debug: Check restricted residual
         float rr_norm = 0.0f;
@@ -470,7 +482,12 @@ class GMGVCycle
                 coarse_correction.vector[i] = 0.0f;
             }
 
-            gauss_jacobi_CSR_3D(A,
+             std::cout << "\nRestricted residual number of rows: "<<restricted_residual.n;
+            //restricted_residual.print();
+
+            std::cout << "\nNumber of rows in A : " << LHS[currentLevel + 1].num_rows;
+
+            gauss_jacobi_CSR_3D(LHS[currentLevel+1],
                                 coarse_correction.vector,
                                 restricted_residual.vector,
                                 directSolveIterations);
@@ -482,9 +499,9 @@ class GMGVCycle
             cc_norm +=
                 coarse_correction.vector[i] * coarse_correction.vector[i];
             if (std::isnan(coarse_correction.vector[i])) {
-                printf(
-                    "\nWARNING: NaN detected in coarse correction at index %d",
-                    i);
+                //printf(
+                  //  "\nWARNING: NaN detected in coarse correction at index %d",
+                   // i);
             }
         }
         printf("\nCoarse correction norm: %e", sqrt(cc_norm));
@@ -549,6 +566,7 @@ void constructLHS(CSR               A_csr,
     // make all the equations for each level
 
     for (int i = 0; i < numberOfLevels - 1; i++) {
+        
         result = multiplyCSR(result.num_rows,
                              result.num_rows,
                              currentNumberOfSamples,
@@ -560,9 +578,23 @@ void constructLHS(CSR               A_csr,
                              prolongationOperatorCSR[i].value_ptr,
                              prolongationOperatorCSR[i].data_ptr,
                              prolongationOperatorCSR[i].non_zeros);
+                             
+        /*result = multiplyCSR(result.num_rows,
+                             result.num_rows,
+                             currentNumberOfSamples,
+                             result.row_ptr,
+                             result.value_ptr,
+                             result.data_ptr,
+                             result.non_zeros,
+                             prolongationOperatorCSR[i].row_ptr,
+                             prolongationOperatorCSR[i].value_ptr,
+                             prolongationOperatorCSR[i].data_ptr,
+                             prolongationOperatorCSR[i].non_zeros,
+                            1);*/
 
+        
         CSR transposeOperator =
-            transposeCSR(prolongationOperatorCSR[i], currentNumberOfSamples);
+            transposeCSR(prolongationOperatorCSR[i]);
 
         result = multiplyCSR(transposeOperator.num_rows,
                              prolongationOperatorCSR[i].num_rows,
@@ -579,7 +611,13 @@ void constructLHS(CSR               A_csr,
         equationsPerLevel.push_back(result);
 
         currentNumberOfSamples /= ratio;
-        //std::cout << "Equation level " << i << "\n\n";
-        //equationsPerLevel[i].printCSR();
+        std::cout << "Equation level " << i << "\n\n";
+        prolongationOperatorCSR[i].printCSR();
+        //std::cout << "\n TRANSPOSE : \n";
+        //transposeOperator.printCSR();
+        //result.printCSR();
+
     }
+    //prolongationOperatorCSR[numberOfLevels-2].printCSR();
+
 }
