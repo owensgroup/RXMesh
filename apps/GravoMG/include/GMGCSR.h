@@ -447,68 +447,7 @@ void clusterCSR(int    n,
             }
         });
 }
-/*
-CSR transposeCSR(const CSR& A, int numberOfColumns)
-{
-    int num_rows = A.num_rows;
-    // Step 1: Count elements in each column using numberOfColumns
-    int* col_counts;
-    cudaMallocManaged(&col_counts, numberOfColumns * sizeof(int));
-    cudaMemset(col_counts, 0, numberOfColumns * sizeof(int));
 
-    for (int i = 0; i < num_rows; i++) {
-        for (int j = A.row_ptr[i]; j < A.row_ptr[i + 1]; j++) {
-            col_counts[A.value_ptr[j]]++;
-        }
-    }
-
-    // Step 2: Compute row_ptr for transposed matrix
-    int* trans_row_ptr;
-    cudaMallocManaged(&trans_row_ptr, (numberOfColumns + 1) * sizeof(int));
-    trans_row_ptr[0] = 0;
-    for (int i = 0; i < numberOfColumns; i++) {  // Use numberOfColumns here
-        trans_row_ptr[i + 1] = trans_row_ptr[i] + col_counts[i];
-    }
-
-    int    nnz = trans_row_ptr[numberOfColumns];  // Use numberOfColumns
-    int*   trans_value_ptr;
-    float* trans_data_ptr;
-    cudaMallocManaged(&trans_value_ptr, nnz * sizeof(int));
-    cudaMallocManaged(&trans_data_ptr, nnz * sizeof(float));
-
-    // Step 3: Populate transposed matrix
-    int* next;
-    cudaMallocManaged(&next,
-                      numberOfColumns * sizeof(int));  // Use numberOfColumns
-    cudaMemcpy(next,
-               trans_row_ptr,
-               numberOfColumns * sizeof(int),
-               cudaMemcpyDeviceToDevice);
-
-    for (int i = 0; i < num_rows; i++) {
-        for (int j = A.row_ptr[i]; j < A.row_ptr[i + 1]; j++) {
-            int col               = A.value_ptr[j];
-            int dest              = next[col]++;
-            trans_value_ptr[dest] = i;
-            trans_data_ptr[dest]  = A.data_ptr[j];
-        }
-    }
-
-    // Cleanup and return
-    cudaFree(col_counts);
-    cudaFree(next);
-
-    CSR AT(numberOfColumns);
-    cudaFree(AT.row_ptr);
-    cudaFree(AT.value_ptr);
-    cudaFree(AT.data_ptr);
-    AT.row_ptr   = trans_row_ptr;
-    AT.value_ptr = trans_value_ptr;
-    AT.data_ptr  = trans_data_ptr;
-    AT.num_rows  = numberOfColumns;
-    AT.non_zeros = nnz;
-    return AT;
-}
 CSR transposeCSR(const CSR& input)
 {
     // Create handle for cuSPARSE operations
