@@ -548,10 +548,10 @@ void createProlongationOperators(int               N,
         currentNumberOfVertices /= ratio;
         a = CSR(currentNumberOfVertices);
 
-        std::cout << "\nlevel : " << level;
+        /*std::cout << "\nlevel : " << level;
         std::cout << "\n current number of samples: " << currentNumberOfSamples;
         std::cout << "\n current number of vertices: "
-                  << currentNumberOfVertices;
+                  << currentNumberOfVertices;*/
         setCluster(currentNumberOfVertices, distanceArray, level + 1, oldVdata);
 
         do {
@@ -567,7 +567,7 @@ void createProlongationOperators(int               N,
             cudaDeviceSynchronize();
         } while (*flag != 0);
 
-        clustering[level - 1].resize(currentNumberOfVertices);
+        /*clustering[level - 1].resize(currentNumberOfVertices);
         clustering[level - 1] =
             intPointerArrayToVector(vertexCluster, currentNumberOfVertices);
 
@@ -577,11 +577,10 @@ void createProlongationOperators(int               N,
                                       clustering[level - 1]);
 
 
-        if (level==1) {
+        if (level == 1) {
             polyscope::getSurfaceMesh("mesh level " + std::to_string(level))
-                ->addVertexScalarQuantity("debugged vertices",
-                                          vertexDebug);
-        }
+                ->addVertexScalarQuantity("debugged vertices", vertexDebug);
+        }*/
 
         VertexNeighbors* vertexNeighbors2;
         err = cudaMallocManaged(
@@ -606,18 +605,18 @@ void createProlongationOperators(int               N,
                          number_of_neighbors2,
                          vertexNeighbors2,
                          currentNumberOfVertices);
-        if (level==1) {
+       /* if (level==1) {
             currentCSR.printCSR();
-        }
+        }*/
         
-        currentCSR.GetRenderData(vertexPositionsArray[level - 1],
+        /*currentCSR.GetRenderData(vertexPositionsArray[level - 1],
                                  faceIndicesArray[level - 1],
-                                 sample_pos);
+                                 sample_pos);*/
 
-        polyscope::registerSurfaceMesh(
+        /*polyscope::registerSurfaceMesh(
             "mesh level " + std::to_string(level + 1),
             vertexPositionsArray[level - 1],
-            faceIndicesArray[level - 1]);
+            faceIndicesArray[level - 1]);*/
 
 
         createProlongationOperator(currentNumberOfSamples,
@@ -629,12 +628,19 @@ void createProlongationOperators(int               N,
                                    currentNumberOfVertices,
                                    oldVdata);
         prolongationOperatorCSR.push_back(a);
-        a.printCSR(true);
+        //a.printCSR(true);
         cudaDeviceSynchronize();  // Ensure data is synchronized before
                                   // accessing
 
+
+        
+       
+
+
         lastCSR = currentCSR;  // next mesh level
     }
+    //stop a timer here
+
     cudaFree(flag);
     cudaDeviceSynchronize();
 }

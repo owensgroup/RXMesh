@@ -79,10 +79,6 @@ __global__ static void findNumberOfCoarseNeighbors(
                 int a = clustered_vertices(vv[i], 0);
                 int b = clustered_vertices(v_id, 0);
 
-
-                // atomicAdd(&number_of_neighbors[clustered_vertices(v_id,
-                // 0)],1);
-
                 vns[b].addNeighbor(a);
 
 
@@ -222,8 +218,8 @@ void clusteringRXMesh(RXMeshStatic&           rx,
         j++;
     } while (*flagger != 0);
 
-    vertexAttributes.clustered_vertex.move(DEVICE, HOST);
-    std::cout << "\Clustering iterations: " << j;
+    //vertexAttributes.clustered_vertex.move(DEVICE, HOST);
+    //std::cout << "\Clustering iterations: " << j;
 }
 
 
@@ -276,7 +272,7 @@ void sampler(RXMeshStatic&          rx,
     // From 0 to (number of points - 1)
     int seed = 0;  // dist(gen);
 
-    std::cout << "\nSeed: " << seed;
+    //std::cout << "\nSeed: " << seed;
 
     VertexReduceHandle<float>              reducer(vertexAttributes.distance);
     cub::KeyValuePair<VertexHandle, float> farthestPoint;
@@ -293,15 +289,16 @@ void sampler(RXMeshStatic&          rx,
 
     int j                  = 0;
     int currentSampleLevel = numberOfLevels;
-    std::cout << "levels:" << numberOfLevels;
+    
+   /* std::cout << "levels:" << numberOfLevels;
 
     for (int q = 0; q < numberOfLevels; q++) {
         std::cout << "\n  level " << q << " : " << N / powf(ratio, q);
-    }
+    }*/
     for (int i = 0; i < numberOfSamplesForFirstLevel; i++) {
         if (i == N / (int)powf(ratio, currentSampleLevel)) {
             currentSampleLevel--;
-            std::cout << "\nNext sample level: " << currentSampleLevel;
+            //std::cout << "\nNext sample level: " << currentSampleLevel;
         }
 
         rx.for_each_vertex(
@@ -352,10 +349,7 @@ void sampler(RXMeshStatic&          rx,
         seed          = rx.linear_id(farthestPoint.key);
     }
 
-    std::cout << "\nSampling iterations: " << j;
+    //std::cout << "\nSampling iterations: " << j;
 
 
-    vertexAttributes.sample_number.move(DEVICE, HOST);
-    vertexAttributes.distance.move(DEVICE, HOST);
-    vertexAttributes.sample_level_bitmask.move(DEVICE, HOST);
 }
