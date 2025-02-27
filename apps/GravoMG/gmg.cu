@@ -52,6 +52,16 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
 {
 
     //set up initial variables
+
+    Timers<GPUTimer> timers;
+    timers.add("Total");
+    timers.add("Sampling");
+    timers.add("Clustering level 1");
+    timers.add("Neighbors level 1");
+    timers.add("Constructing level 1");
+    timers.add("Constructing operators without level 1");
+    timers.add("Constructing LHS");
+
    
     N                                = rx.get_num_vertices();
     int currentLevel                 = 1;                   // first coarse mesh
@@ -78,6 +88,9 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
 
 
     //FPS sampling
+    timers.start("Total");
+    timers.start("Sampling");
+
     sampler(rx,
             vertexAttributes,
             ratio,
@@ -86,7 +99,8 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
             numberOfSamplesForFirstLevel,
             sample_pos);
 
-
+    timers.stop("Total");
+    timers.stop("Sampling");
 
     rxmesh::LaunchBox<CUDABlockSize> cb;
     rx.prepare_launch_box(
@@ -94,18 +108,28 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
 
 
     //clustering
+    timers.start("Total");
+    //timers.start("Clustering");
+
     clusteringRXMesh(rx, vertexAttributes, currentLevel, vertices);
+    timers.stop("Total");
+    //timers.stop("Clustering");
 
 
     //move rxmesh cluster data to a normal pointer on device
     int* vertexCluster;
     cudaMallocManaged(&vertexCluster, sizeof(int) * N);
+
+    timers.start("Total");
+
     rx.for_each_vertex(rxmesh::DEVICE,
                        [vertexAttributes, context, vertexCluster] __device__(
                            const rxmesh::VertexHandle vh) {
                            vertexCluster[context.linear_id(vh)] =
                                vertexAttributes.clustered_vertex(vh, 0);
                        });
+    timers.stop("Total");
+
     cudaDeviceSynchronize();
 
 
@@ -119,6 +143,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
 
     //find number of neighbors on the coarse mesh using RXMesh
     rxmesh::LaunchBox<CUDABlockSize> nn;
+
     rx.prepare_launch_box(
         {rxmesh::Op::VV},
         nn,
@@ -130,6 +155,9 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
         &vertexNeighbors, numberOfSamples * sizeof(VertexNeighbors));
 
     // launch kernel
+    timers.start("Total");
+    //timers.start("Neighbors level 1");
+
     findNumberOfCoarseNeighbors<float, CUDABlockSize>
         <<<nn.blocks, nn.num_threads, nn.smem_bytes_dyn>>>(
             rx.get_context(),
@@ -137,8 +165,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
             number_of_neighbors,
             vertexNeighbors);
     cudaDeviceSynchronize();
-
-    
+   
     rx.for_each_vertex(
         rxmesh::DEVICE,
         [numberOfSamples,
@@ -153,11 +180,15 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
                         .getNumberOfNeighbors();
             }
         });
+    timers.stop("Total");
+    //timers.stop("Neighbors level 1");
+
         
     cudaDeviceSynchronize();
 
     //constructing the first operator 
     int num_rows = numberOfSamples;  // Set this appropriately
+
     CSR csr(num_rows, number_of_neighbors, vertexNeighbors, N);
 
     cudaDeviceSynchronize();  // Ensure data is synchronized before accessing
@@ -165,6 +196,9 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     std::vector<CSR> operatorsCSR;
     operatorsCSR.push_back(CSR(N));
     CSR firstOperator(N);
+
+    timers.start("Total");
+    //timers.start("Constructing level 1");
 
     createProlongationOperator(csr.num_rows,
                                csr.row_ptr,
@@ -176,11 +210,14 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
                                sample_pos,
                                firstOperator.value_ptr,
                                firstOperator.data_ptr);
+    timers.stop("Total");
+    //timers.stop("Constructing level 1");
+
     cudaDeviceSynchronize();
     prolongationOperatorCSR.push_back(firstOperator);
 
     //render the first level
-    csr.render(sample_pos);
+    //csr.render(sample_pos);
 
     // set 1st level node data
     VertexData* oldVdata;
@@ -188,6 +225,9 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     setVertexData(rx, context, oldVdata, vertexAttributes);
 
     //create all the operators for moving between each level
+    timers.start("Total");
+    //timers.start("Constructing operators without level 1");
+
     createProlongationOperators(N,
                                 numberOfSamples,
                                 numberOfLevels,
@@ -199,6 +239,8 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
                                 distanceArray,
                                 vertexCluster);
 
+    timers.stop("Total");
+    //timers.stop("Constructing operators without level 1");
 
 
     // contruct equations as CSR matrices
@@ -224,16 +266,37 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     equationsPerLevel.push_back(A_csr);
 
     //construct the equations
+    timers.start("Total");
+    //timers.start("Constructing LHS");
+
     constructLHS(A_csr,
                  prolongationOperatorCSR,
                  equationsPerLevel,
                  numberOfLevels,
                  numberOfSamples,
                  ratio);
+    timers.stop("Total");
+    //timers.stop("Constructing LHS");
 
+
+
+    std::cout << "\nTotal prolongation construction time: " << timers.elapsed_millis("Total");
+    std::cout << "\nSampling time : " << timers.elapsed_millis("Sampling");
+    //std::cout << "\nClustering level 1 time: " << timers.elapsed_millis("Clustering level 1");
+    //std::cout << "\nNeighbors level 1 time: " << timers.elapsed_millis("Neighbors level 1");
+    //std::cout << "\nOperator level 1 construction time: " << timers.elapsed_millis("Constructing level 1al");
+    //std::cout << "\nAll operators but level 1 construction time: " << timers.elapsed_millis("Constructing operators without level 1");
+    //std::cout << "\nLHS construction time: " << timers.elapsed_millis("Constructing LHS");
+                 
     cudaDeviceSynchronize();
 
-    vertexAttributes.addToPolyscope(rx);
+    //timers.stop("Total");
+
+    
+    vertexAttributes.sample_number.move(DEVICE, HOST);
+    vertexAttributes.distance.move(DEVICE, HOST);
+    vertexAttributes.sample_level_bitmask.move(DEVICE, HOST);
+    vertexAttributes.addToPolyscope(rx);//add vertex attributes to finest mesh
 }
 
 
@@ -248,8 +311,11 @@ int main(int argc, char** argv)
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "torus.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bumpy-cube.obj");
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
+    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere1.obj");
+    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "rocker-arm.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "nefertiti.obj");
+    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "beetle.obj");
 
     /*
     std::vector<std::vector<float>>    planeVerts;
@@ -268,15 +334,7 @@ int main(int argc, char** argv)
     //for (int i = 0;i < g.equationsPerLevel.size(); i++)
     //    g.equationsPerLevel[i].printCSR();
 
-
-
-
-
-
-
-    
     GMGVCycle gmg(g.N);
-
     
     gmg.prolongationOperators = g.prolongationOperatorCSR;
     gmg.LHS                   = g.equationsPerLevel;
@@ -289,16 +347,15 @@ int main(int argc, char** argv)
     //std::cout << "\nNumber of operators:" << gmg.prolongationOperators.size();
     //std::cout << "\nMax level:" << gmg.max_number_of_levels;
     
-    gmg.solve();
-    
-
-
+    //gmg.solve();
 
     //rendering and interactive
-    
+    Timers<GPUTimer> timers;
+    timers.add("solve");
+
+
     std::vector<std::array<double, 3>> vertexMeshPositions;
     vertexMeshPositions.resize(gmg.X.n);
-
 
     auto polyscope_callback = [&]() mutable {
         ImGui::Begin("GMG Parameters");
@@ -315,11 +372,19 @@ int main(int argc, char** argv)
 
 
         if (ImGui::Button("Run V Cycles again")) {
-            std::cout
-                << "\n---------------NEW SOLVE INITIATED--------------------\n";
-            gmg.solve();
-            // renderOutputMesh(gmg.X, rx);
+            std::cout<< "\n---------------NEW SOLVE INITIATED--------------------\n";
 
+            gmg.X.reset();
+            //start measuring time from here
+
+            timers.start("solve");
+            gmg.solve();
+            timers.stop("solve");
+
+            std::cout << "\nSolving time: " << timers.elapsed_millis("solve");
+
+            // renderOutputMesh(gmg.X, rx);
+            
             for (int i = 0; i < gmg.X.n; i++) {
                 vertexMeshPositions[i] = {gmg.X.vector[3 * i],
                                           gmg.X.vector[3 * i + 1],
@@ -334,16 +399,6 @@ int main(int argc, char** argv)
     };
 
     polyscope::state::userCallback = polyscope_callback;
-    // gmg.solve();
-    // renderOutputMesh(gmg.X, rx);
-
-
-    //interactiveMenu(gmg, rx);
-    
-
-
-
-    //g.gmg.solve();
 
 
 
