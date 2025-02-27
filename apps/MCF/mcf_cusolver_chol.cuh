@@ -164,7 +164,6 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                                        launch_box_B.smem_bytes_dyn>>>(
         rx.get_context(), *coords, B_mat, Arg.use_uniform_laplace);
 
-
     // A and X set up
     LaunchBox<blockThreads> launch_box_A_X;
     rx.prepare_launch_box({Op::VV},
@@ -301,14 +300,17 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     // move the results to the host
     // if we use LU, the data will be on the host and we should not move the
     // device to the host
-    // X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
+     X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // copy the results to attributes
-    // coords->from_matrix(X_mat.get());
+     coords->from_matrix(X_mat.get());
 
 #if USE_POLYSCOPE
-    // rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-    // polyscope::show();
+     polyscope::registerSurfaceMesh("old mesh",
+                                    rx.get_polyscope_mesh()->vertices,
+                                    rx.get_polyscope_mesh()->faces);
+     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+     polyscope::show();
 #endif
 
     B_mat.release();

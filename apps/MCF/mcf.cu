@@ -14,15 +14,15 @@
 
 struct arg
 {
-    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "dragon.obj";
+    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "nefertiti.obj";
     std::string output_folder       = STRINGIFY(OUTPUT_DIR);
-    std::string perm_method         = "gpund";
+    std::string perm_method         = "nstdis";
     std::string solver              = "chol";
     uint32_t    device_id           = 0;
-    float       time_step           = 0.001;
+    float       time_step           = 10;
     float       cg_tolerance        = 1e-6;
     uint32_t    max_num_cg_iter     = 1000;
-    bool        use_uniform_laplace = false;
+    bool        use_uniform_laplace = true;
     char**      argv;
     int         argc;
 } Arg;
