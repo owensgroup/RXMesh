@@ -250,15 +250,23 @@ struct CSR
 
    
 
-     void printCSR()
+     void printCSR(bool showOnlyNAN=false)
     {
         printf("\nCSR Array:");
         std::cout << "\nNumber of non-zeros = " << non_zeros << "\n";
         for (int i = 0; i < num_rows; ++i) {
-            //printf("row_ptr[%d] = %d\n", i, row_ptr[i]);
-            //printf("add %d values\n", row_ptr[i + 1] - row_ptr[i]);
-            for (int q = row_ptr[i]; q < row_ptr[i + 1]; q++) {
-                if (/*!data_ptr[q] ||*/ std::isnan(data_ptr[q]))
+            if (!showOnlyNAN) 
+            {
+                printf("row_ptr[%d] = %d\n", i, row_ptr[i]);
+                printf("add %d values\n", row_ptr[i + 1] - row_ptr[i]);
+            }
+            for (int q = row_ptr[i]; q < row_ptr[i + 1]; q++) 
+            {
+                if (/*!data_ptr[q] ||*/ std::isnan(data_ptr[q]) && showOnlyNAN) 
+                {
+                    printf("row_ptr[%d] = %d\n", i, row_ptr[i]);
+                    printf("vertex %d value: %f\n", value_ptr[q], data_ptr[q]);
+                } else if (!showOnlyNAN)
                     printf("vertex %d value: %f\n", value_ptr[q], data_ptr[q]);
             }
         }

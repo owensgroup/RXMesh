@@ -366,6 +366,13 @@ void createProlongationOperator(int         numberOfSamples,
             computeBarycentricCoordinates(
                 selectedv1, selectedv2, selectedv3, q, b1, b2, b3);
 
+
+            if (isnan(b1)||isnan(b2)||isnan(b3)) 
+            {
+
+                printf("\nNAN found for vertex %d", number);
+            }
+
             // Store results
             int l                         = number;
             operator_value_ptr[l * 3]     = cluster_point;
@@ -375,115 +382,6 @@ void createProlongationOperator(int         numberOfSamples,
             operator_data_ptr[l * 3 + 1]  = b2;
             operator_data_ptr[l * 3 + 2]  = b3;
         });
-
-
-        /*
-            int neighbor                      = 0;
-            int selected_neighbor             = 0;
-            int neighbor_of_neighbor          = 0;
-            int selected_neighbor_of_neighbor = 0;
-
-
-            for (int i = start_pointer; i < end_pointer; i++) {
-                // Get the neighbor vertex
-                neighbor = value_ptr[i];  // Assuming col_idx stores column
-                                          // indices of neighbors in CSR.
-
-                // Get the range of neighbors for this neighbor
-                const int neighbor_start = row_ptr[neighbor];
-                const int neighbor_end   = row_ptr[neighbor + 1];
-
-                for (int j = neighbor_start; j < neighbor_end; j++) {
-                    neighbor_of_neighbor = value_ptr[j];
-
-                    for (int k = i + 1; k < end_pointer; k++) {
-                        if (value_ptr[k] == neighbor_of_neighbor) {
-
-
-                            Eigen::Vector3<float> v1{
-                                vData[cluster_point].position.x,
-                                vData[cluster_point].position.y,
-                                vData[cluster_point].position.z};
-
-                            Eigen::Vector3<float> v2{
-                                vData[neighbor].position.x,
-                                vData[neighbor].position.y,
-                                vData[neighbor].position.z};
-
-                            Eigen::Vector3<float> v3{
-                                vData[neighbor_of_neighbor].position.x,
-                                vData[neighbor_of_neighbor].position.y,
-                                vData[neighbor_of_neighbor].position.z};
-
-
-                            // find distance , if less than min dist, find bary
-                            // coords, save them
-                            float distance = projectedDistance(v1, v2, v3, q);
-                            if (distance < min_distance) {
-
-                                min_distance      = distance;
-                                selected_neighbor = neighbor;
-                                selected_neighbor_of_neighbor =
-                                    neighbor_of_neighbor;
-
-                                selectedv1 = v1;
-                                selectedv2 = v2;
-                                selectedv3 = v3;
-
-
-                                
-                            }
-                        }
-                    }
-                }
-            }
-
-
-
-            float b1 = 0, b2 = 0, b3 = 0;
-            computeBarycentricCoordinates(
-                selectedv1, selectedv2, selectedv3, q, b1, b2, b3);
-
-            if (b1 != b1 || b2 != b2 || b3 != b3) {
-                printf(
-                    "\nDEGENERATE TRIANGLE FOUND \n %d %f %f %f Selected:%d %d %d value: %f %f %f ",
-                    number,
-                    vData[number].position.x,
-                    vData[number].position.y,
-                    vData[number].position.z,
-                    cluster_point,
-                    selected_neighbor,
-                    selected_neighbor_of_neighbor,
-                    b1,b2,b3);
-            }
-
-
-            // printf("\n %d final coords: %f %f %f", number, b1, b2, b3);
-
-
-            // put it inside prolongation row, it will be unique so no race
-            // condition
-            int l = number;
-
-            // printf("\nfirst b goes into %d x %d + %d = %d",
-            // l,
-            // numberOfSamples,
-            // cluster_point,
-            // l * numberOfSamples + cluster_point);
-
-            operator_value_ptr[l * 3]   = cluster_point;
-            operator_value_ptr[l * 3+1]   = selected_neighbor;
-            operator_value_ptr[l * 3+2]   = selected_neighbor_of_neighbor;
-            operator_data_ptr[l * 3] = b1;
-            operator_data_ptr[l * 3 + 1]  = b2;
-            operator_data_ptr[l * 3 + 2]  = b3;
-
-            //prolongation_operator[l * numberOfSamples + cluster_point]     = b1;
-            //prolongation_operator[l * numberOfSamples + selected_neighbor] = b2;
-            //prolongation_operator[l * numberOfSamples + selected_neighbor_of_neighbor]           = b3;
-        });
-        */
-
 
     cudaDeviceSynchronize();
     /*
@@ -516,18 +414,19 @@ void numberOfNeighbors(int              numberOfSamples,
                      samples.begin(),
                      samples.end(),
                      [=] __device__(int number) {
-                         // int currentCluster = vertexClusters[number];
                          int currentCluster = vData[number].cluster;
 
-                         // neighbors[currentCluster].getNeighbors(neighborList);
                          for (int i = csr.row_ptr[number];
                               i < csr.row_ptr[number + 1];
                               i++) {
                              int currentNode = csr.value_ptr[i];
                              if (vData[currentNode].cluster != currentCluster) {
-                                 // neighbors
+                                 // add neighbors
                                  neighbors[currentCluster].addNeighbor(
                                      vData[currentNode].cluster);
+                                 neighbors[currentNode].addNeighbor(
+                                     currentCluster);
+
                              }
                          }
                      });
@@ -630,6 +529,17 @@ void createProlongationOperators(int               N,
 
     CSR a(numberOfSamples);
 
+    //DEBUGGING LEVEL 1
+    std::vector<int> vertexDebug;
+    vertexDebug.resize(numberOfSamples);
+
+    for (int i=0;i<numberOfSamples;i++) {
+        if (i == 6 /*|| i == 811 || i == 945 || i == 470*/)
+            vertexDebug[i] = 1;
+        else
+            vertexDebug[i] = 0;
+    }
+
     // operatorsCSR.resize(numberOfLevels-1);
 
     for (int level = 1; level < numberOfLevels - 1; level++) {
@@ -667,6 +577,12 @@ void createProlongationOperators(int               N,
                                       clustering[level - 1]);
 
 
+        if (level==1) {
+            polyscope::getSurfaceMesh("mesh level " + std::to_string(level))
+                ->addVertexScalarQuantity("debugged vertices",
+                                          vertexDebug);
+        }
+
         VertexNeighbors* vertexNeighbors2;
         err = cudaMallocManaged(
             &vertexNeighbors2,
@@ -690,9 +606,10 @@ void createProlongationOperators(int               N,
                          number_of_neighbors2,
                          vertexNeighbors2,
                          currentNumberOfVertices);
-
-        //currentCSR.printCSR();
-
+        if (level==1) {
+            currentCSR.printCSR();
+        }
+        
         currentCSR.GetRenderData(vertexPositionsArray[level - 1],
                                  faceIndicesArray[level - 1],
                                  sample_pos);
@@ -712,7 +629,7 @@ void createProlongationOperators(int               N,
                                    currentNumberOfVertices,
                                    oldVdata);
         prolongationOperatorCSR.push_back(a);
-        a.printCSR();
+        a.printCSR(true);
         cudaDeviceSynchronize();  // Ensure data is synchronized before
                                   // accessing
 
