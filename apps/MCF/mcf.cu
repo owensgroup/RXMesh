@@ -16,7 +16,7 @@ struct arg
 {
     std::string obj_file_name       = STRINGIFY(INPUT_DIR) "dragon.obj";
     std::string output_folder       = STRINGIFY(OUTPUT_DIR);
-    std::string perm_method         = "gpund";
+    std::string perm_method         = "nstdis";
     std::string solver              = "chol";
     uint32_t    device_id           = 0;
     float       time_step           = 0.001;

@@ -2541,7 +2541,7 @@ inline void permute_separators(RXMeshStatic&              rx,
     auto v_render = *rx.add_vertex_attribute<int>("Render", 1);
     v_render.reset(-1, LOCATION_ALL);
 
-
+#ifdef USE_POLYSCOPE
     for (int l = depth - 1; l >= 0; --l) {
         rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
             int proj     = max_match_tree.levels[l].patch_proj[vh.patch_id()];
@@ -2550,6 +2550,7 @@ inline void permute_separators(RXMeshStatic&              rx,
         rx.get_polyscope_mesh()->addVertexScalarQuantity(
             "Match " + std::to_string(l), v_render);
     }
+#endif
 
     int sum_edge_cut = 0;
 
