@@ -108,9 +108,7 @@ __inline__ __device__ void post_slicing_update_attributes(
 }
 
 
-template <uint32_t blockThreads,
-          uint32_t itemPerThread,
-          typename... AttributesT>
+template <uint32_t blockThreads, typename... AttributesT>
 __global__ static void slice_patches(Context        context,
                                      const uint32_t current_num_patches,
                                      AttributesT... attributes)
@@ -122,6 +120,12 @@ __global__ static void slice_patches(Context        context,
 
     const uint32_t pid = blockIdx.x;
     if (pid >= current_num_patches) {
+        return;
+    }
+
+    PatchInfo pi = context.m_patches_info[pid];
+
+    if (pi.patch_id == INVALID32) {
         return;
     }
 
@@ -157,7 +161,7 @@ __global__ static void slice_patches(Context        context,
                            false);
     };
 
-    PatchInfo pi = context.m_patches_info[pid];
+
     if (pi.should_slice) {
         const uint16_t num_vertices = pi.num_vertices[0];
         const uint16_t num_edges    = pi.num_edges[0];
@@ -207,7 +211,8 @@ __global__ static void slice_patches(Context        context,
         }
 
 
-        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * 2 * num_edges);
+        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(
+            2 * num_edges + std::max(2 * num_edges, num_vertices + 1));
         uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
         uint16_t* s_fv = s_fe;
 
@@ -253,10 +258,17 @@ __global__ static void slice_patches(Context        context,
 
 #ifdef SLICE_GGP
         // compute VV
-        uint16_t* s_vv        = &s_ev[num_vertices + 1];
         uint16_t* s_vv_offset = s_ev;
-        v_e<blockThreads, itemPerThread>(
-            num_vertices, num_edges, s_ev, s_vv, s_active_e.m_bitmask);
+
+        uint16_t* s_vv = &s_ev[2 * num_edges];
+
+        v_e<blockThreads>(num_vertices,
+                          num_edges,
+                          shrd_alloc,
+                          s_ev,
+                          s_vv,
+                          s_active_e.m_bitmask,
+                          s_active_v.m_bitmask);
         block.sync();
         for (uint16_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
             uint16_t start = s_vv_offset[v];
@@ -533,93 +545,62 @@ __global__ static void slice_patches(Context        context,
 
         // check ribbons for new and old patch
 
-        // auto check_ribbon =
-        //     [](PatchInfo& info, char* name, PatchInfo& other_info) {
-        //         // vertices
-        //         for (uint16_t v = threadIdx.x; v < info.num_vertices[0];
-        //              v += blockThreads) {
-        //             if (!info.is_deleted(LocalVertexT(v)) &&
-        //                 !info.is_owned(LocalVertexT(v))) {
-        //
-        //                 LPPair lp = info.get_lp<VertexHandle>().find(
-        //                     v, nullptr, nullptr);
-        //
-        //                 if (lp.is_sentinel()) {
-        //                     printf(
-        //                         "\n @@ %s - vertex: B=%u, T= %u, patch_id "
-        //                         "= %u, v= %u, other_info.is_deleted= %d, "
-        //                         "other_info.is_owned= %d",
-        //                         name,
-        //                         blockIdx.x,
-        //                         threadIdx.x,
-        //                         info.patch_id,
-        //                         v,
-        //                         other_info.is_deleted(LocalVertexT(v)),
-        //                         other_info.is_owned(LocalVertexT(v)));
-        //                 }
-        //                 myAssert(!lp.is_sentinel());
-        //             }
-        //         }
-        //
-        //
-        //         // edges
-        //         for (uint16_t e = threadIdx.x; e < info.num_edges[0];
-        //              e += blockThreads) {
-        //             if (!info.is_deleted(LocalEdgeT(e)) &&
-        //                 !info.is_owned(LocalEdgeT(e))) {
-        //
-        //                 LPPair lp =
-        //                     info.get_lp<EdgeHandle>().find(e, nullptr,
-        //                     nullptr);
-        //
-        //                 if (lp.is_sentinel()) {
-        //                     printf(
-        //                         "\n @@ %s - edge: B=%u, T= %u, patch_id = "
-        //                         "%u, e= %u, other_info.is_deleted= %d, "
-        //                         "other_info.is_owned= %d",
-        //                         name,
-        //                         blockIdx.x,
-        //                         threadIdx.x,
-        //                         info.patch_id,
-        //                         e,
-        //                         other_info.is_deleted(LocalEdgeT(e)),
-        //                         other_info.is_owned(LocalEdgeT(e)));
-        //                 }
-        //                 myAssert(!lp.is_sentinel());
-        //             }
-        //         }
-        //
-        //
-        //         // faces
-        //         for (uint16_t f = threadIdx.x; f < info.num_faces[0];
-        //              f += blockThreads) {
-        //             if (!info.is_deleted(LocalFaceT(f)) &&
-        //                 !info.is_owned(LocalFaceT(f))) {
-        //
-        //                 LPPair lp =
-        //                     info.get_lp<FaceHandle>().find(f, nullptr,
-        //                     nullptr);
-        //
-        //                 if (lp.is_sentinel()) {
-        //                     printf(
-        //                         "\n @@ %s - face: B=%u, T= %u, patch_id = "
-        //                         "%u, f= %u, other_info.is_deleted= %d, "
-        //                         "other_info.is_owned= %d",
-        //                         name,
-        //                         blockIdx.x,
-        //                         threadIdx.x,
-        //                         info.patch_id,
-        //                         f,
-        //                         other_info.is_deleted(LocalFaceT(f)),
-        //                         other_info.is_owned(LocalFaceT(f)));
-        //                 }
-        //                 myAssert(!lp.is_sentinel());
-        //             }
-        //         }
-        //     };
-        //
-        // check_ribbon(old_pi, "old_pi", new_pi);
-        // check_ribbon(new_pi, "new_pi", old_pi);
+        auto check_ribbon = [](PatchInfo& info) {
+            // vertices
+            for (uint16_t v = threadIdx.x; v < info.num_vertices[0];
+                 v += blockThreads) {
+                if (!info.is_deleted(LocalVertexT(v)) &&
+                    !info.is_owned(LocalVertexT(v))) {
+
+                    LPPair lp =
+                        info.get_lp<VertexHandle>().find(v, nullptr, nullptr);
+
+                    if (lp.is_sentinel()) {
+                        assert(!lp.is_sentinel());
+                    } else {
+                        assert(lp.local_id() == v);
+                    }
+                }
+            }
+
+            // edges
+            for (uint16_t e = threadIdx.x; e < info.num_edges[0];
+                 e += blockThreads) {
+                if (!info.is_deleted(LocalEdgeT(e)) &&
+                    !info.is_owned(LocalEdgeT(e))) {
+
+                    LPPair lp =
+                        info.get_lp<EdgeHandle>().find(e, nullptr, nullptr);
+
+                    if (lp.is_sentinel()) {
+                        assert(!lp.is_sentinel());
+                    } else {
+                        assert(lp.local_id() == e);
+                    }
+                }
+            }
+
+
+            // faces
+            for (uint16_t f = threadIdx.x; f < info.num_faces[0];
+                 f += blockThreads) {
+                if (!info.is_deleted(LocalFaceT(f)) &&
+                    !info.is_owned(LocalFaceT(f))) {
+
+                    LPPair lp =
+                        info.get_lp<FaceHandle>().find(f, nullptr, nullptr);
+
+                    if (lp.is_sentinel()) {
+                        assert(!lp.is_sentinel());
+                    } else {
+                        assert(lp.local_id() == f);
+                    }
+                }
+            }
+        };
+
+        check_ribbon(old_pi);
+        check_ribbon(new_pi);
 
 #endif
     }
@@ -762,7 +743,7 @@ class RXMeshDynamic : public RXMeshStatic
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const
     {
         // TODO this has to be customized for different GPU arch
-        int max_shmem_bytes = 64 * 1024;
+        int max_shmem_bytes = 89 * 1024;
         CUDA_ERROR(
             cudaFuncSetAttribute(kernel,
                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
@@ -773,7 +754,8 @@ class RXMeshDynamic : public RXMeshStatic
         // static query shared memory
         size_t static_shmem = 0;
         for (auto o : op) {
-            size_t sh = this->calc_shared_memory<blockThreads>(o, oriented);
+            size_t sh =
+                this->calc_shared_memory<blockThreads>(o, oriented, true);
             if (is_concurrent) {
                 static_shmem += sh;
             } else {
@@ -788,12 +770,14 @@ class RXMeshDynamic : public RXMeshStatic
         if (is_dyn) {
 
             // connectivity (FE and EV) shared memory
+            //$$ m_s_ev, m_s_fe
             size_t connectivity_shmem = 0;
             connectivity_shmem += 3 * face_cap * sizeof(uint16_t) +
                                   2 * edge_cap * sizeof(uint16_t) +
                                   2 * ShmemAllocator::default_alignment;
 
             // cavity ID (which overlapped with the inverted hashtable)
+            //$$ m_s_cavity_id_v, m_s_cavity_id_e, m_s_cavity_id_f
             size_t cavity_id_shmem = 0;
             cavity_id_shmem += std::max(
                 vertex_cap * sizeof(uint16_t),
@@ -810,31 +794,32 @@ class RXMeshDynamic : public RXMeshStatic
             // size)
             const uint16_t half_face_cap = DIVIDE_UP(face_cap, 2);
 
+            // stores (and compute) the size (the prefix sum) of cavity sizes
+            //$$ m_s_cavity_size_prefix
             size_t cavity_size_shmem = 0;
             cavity_size_shmem +=
                 half_face_cap * sizeof(int) + ShmemAllocator::default_alignment;
 
+            // cavity boundary edges used to store the cavities (outer) edges
+            // in compressed/compact sparse format
+            size_t cavity_boundary_edges = 0;
+            cavity_boundary_edges +=
+                edge_cap * sizeof(uint16_t) + ShmemAllocator::default_alignment;
+
             // cavity src element
+            //$$ m_s_cavity_creator
             size_t cavity_creator_shmem = half_face_cap * sizeof(uint16_t) +
                                           ShmemAllocator::default_alignment;
 
             // cavity boundary edges (overlaps with cavity graph)
-            size_t cavity_bdr_shmem = 0;
-            cavity_bdr_shmem +=
+            //$$ m_s_boudary_edges_cavity_id | m_s_cavity_graph |
+            // m_s_temp_inv_lp
+            size_t boudary_edges_cavity_id = 0;
+            boudary_edges_cavity_id +=
                 std::max(edge_cap,
                          uint16_t(MAX_OVERLAP_CAVITIES * half_face_cap)) *
                     sizeof(uint16_t) +
                 ShmemAllocator::default_alignment;
-
-            // q hash table
-            size_t q_table_shmem = 0;
-            //q_table_shmem +=
-            //    max_lp_hashtable_capacity<LocalVertexT>() * sizeof(LPPair);
-            //q_table_shmem +=
-            //    max_lp_hashtable_capacity<LocalEdgeT>() * sizeof(LPPair);
-            //q_table_shmem +=
-            //    max_lp_hashtable_capacity<LocalFaceT>() * sizeof(LPPair);
-            //q_table_shmem += 3 * ShmemAllocator::default_alignment;
 
             // active, owned, migrate(for vertices only), src bitmask (for
             // vertices and edges only), src connect (for vertices and edges
@@ -851,14 +836,33 @@ class RXMeshDynamic : public RXMeshStatic
             // active cavity bitmask
             bitmasks_shmem += detail::mask_num_bytes(face_cap);
 
+            // the local offset of faces used in construct_cavities_edge_loop
+            //$$ m_s_face_local_offset
+            size_t face_offset_shmem =
+                face_cap * sizeof(uint8_t) + ShmemAllocator::default_alignment;
+
             // shared memory is the max of 1. static query shared memory + the
             // cavity ID shared memory (since we need to mark seed elements) 2.
             // dynamic rxmesh shared memory which includes cavity ID shared
             // memory and other things
+
+            // RXMESH_TRACE(
+            //     "RXMeshDynamic::update_launch_box() connectivity_shmem= "
+            //     "{}, cavity_id_shmem= {}, boudary_edges_cavity_id= {}, "
+            //     "cavity_size_shmem= {}, bitmasks_shmem= {}, "
+            //     "cavity_creator_shmem={}, static_shmem= {}",
+            //     connectivity_shmem,
+            //     cavity_id_shmem,
+            //     boudary_edges_cavity_id,
+            //     cavity_size_shmem,
+            //     bitmasks_shmem,
+            //     cavity_creator_shmem,
+            //     static_shmem);
+
             launch_box.smem_bytes_dyn = std::max(
-                connectivity_shmem + cavity_id_shmem + cavity_bdr_shmem +
-                    cavity_size_shmem + bitmasks_shmem + cavity_creator_shmem +
-                    q_table_shmem,
+                connectivity_shmem + cavity_id_shmem + boudary_edges_cavity_id +
+                    cavity_size_shmem + cavity_boundary_edges + bitmasks_shmem +
+                    cavity_creator_shmem + face_offset_shmem,
                 static_shmem + cavity_id_shmem + cavity_creator_shmem);
         } else {
             launch_box.smem_bytes_dyn = static_shmem;
@@ -866,6 +870,7 @@ class RXMeshDynamic : public RXMeshStatic
 
         launch_box.smem_bytes_dyn += user_shmem(vertex_cap, edge_cap, face_cap);
 
+        launch_box.smem_bytes_dyn = 80 * 1024;
         if (with_vertex_valence) {
             if (get_input_max_valence() > 256) {
                 RXMESH_ERROR(
@@ -873,9 +878,8 @@ class RXMeshDynamic : public RXMeshStatic
                     "greater than 256 and thus using uint8_t to store the "
                     "vertex valence will lead to overflow");
             }
-            launch_box.smem_bytes_dyn +=
-                this->m_max_vertices_per_patch * sizeof(uint8_t) +
-                ShmemAllocator::default_alignment;
+            launch_box.smem_bytes_dyn += vertex_cap * sizeof(uint8_t) +
+                                         ShmemAllocator::default_alignment;
         }
 
         check_shared_memory(launch_box.smem_bytes_dyn,
@@ -932,169 +936,75 @@ class RXMeshDynamic : public RXMeshStatic
     void slice_patches(AttributesT... attributes)
     {
 
-        const uint32_t grid_size = get_num_patches();
+        constexpr uint32_t block_size = 256;
 
-        CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
-                              this->m_rxmesh_context.m_max_num_vertices,
-                              sizeof(uint32_t),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(&this->m_max_edges_per_patch,
-                              this->m_rxmesh_context.m_max_num_edges,
-                              sizeof(uint32_t),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
-                              this->m_rxmesh_context.m_max_num_faces,
-                              sizeof(uint32_t),
-                              cudaMemcpyDeviceToHost));
+        int max_shmem_bytes = 89 * 1024;
+
+        CUDA_ERROR(
+            cudaFuncSetAttribute((void*)detail::slice_patches<block_size>,
+                                 cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                 max_shmem_bytes));
+
+
+        const uint32_t grid_size = get_max_num_patches();
+
+        // CUDA_ERROR(cudaMemcpy(&this->m_max_vertices_per_patch,
+        //                       this->m_rxmesh_context.m_max_num_vertices,
+        //                       sizeof(uint32_t),
+        //                       cudaMemcpyDeviceToHost));
+        // CUDA_ERROR(cudaMemcpy(&this->m_max_edges_per_patch,
+        //                       this->m_rxmesh_context.m_max_num_edges,
+        //                       sizeof(uint32_t),
+        //                       cudaMemcpyDeviceToHost));
+        // CUDA_ERROR(cudaMemcpy(&this->m_max_faces_per_patch,
+        //                       this->m_rxmesh_context.m_max_num_faces,
+        //                       sizeof(uint32_t),
+        //                       cudaMemcpyDeviceToHost));
+
+        const uint16_t cap_v = get_per_patch_max_vertex_capacity();
+        const uint16_t cap_e = get_per_patch_max_edge_capacity();
+        const uint16_t cap_f = get_per_patch_max_face_capacity();
 
         // ev, fe
         uint32_t dyn_shmem =
-            2 * ShmemAllocator::default_alignment +
-            (3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
-            (2 * 2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            4 * ShmemAllocator::default_alignment +
+            (3 * cap_f) * sizeof(uint16_t) +
+            (2 * cap_e + std::max(2 * cap_e, cap_v + 1)) * sizeof(uint16_t);
+
+        // temp memory needed for block_mat_transpose for EV
+        dyn_shmem += (2 * cap_v + 1) * sizeof(uint16_t);
 
         // active_v/e/f, owned_v/e/f, patch_v/e/f
-        dyn_shmem +=
-            7 * detail::mask_num_bytes(this->m_max_vertices_per_patch) +
-            7 * ShmemAllocator::default_alignment;
+        dyn_shmem += 7 * detail::mask_num_bytes(cap_v) +
+                     7 * ShmemAllocator::default_alignment;
 
-        dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_edges_per_patch) +
+        dyn_shmem += 4 * detail::mask_num_bytes(cap_e) +
                      4 * ShmemAllocator::default_alignment;
 
-        dyn_shmem += 4 * detail::mask_num_bytes(this->m_max_faces_per_patch) +
+        dyn_shmem += 4 * detail::mask_num_bytes(cap_f) +
                      4 * ShmemAllocator::default_alignment;
 
         dyn_shmem += PatchStash::stash_size * sizeof(uint32_t) +
                      ShmemAllocator::default_alignment;
 
-        constexpr uint32_t block_size = 256;
+        size_t   smem_bytes_static;
+        uint32_t num_reg_per_thread;
+        size_t   local_mem_per_thread;
 
-        auto launch = [&](int add_item) {
-            if (add_item == 0) {
-                detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD>
-                    <<<grid_size, block_size, dyn_shmem>>>(
-                        this->m_rxmesh_context,
-                        get_num_patches(),
-                        attributes...);
-            } else if (add_item == 1) {
-                detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD + 1>
-                    <<<grid_size, block_size, dyn_shmem>>>(
-                        this->m_rxmesh_context,
-                        get_num_patches(),
-                        attributes...);
-            } else if (add_item == 2) {
-                detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD + 2>
-                    <<<grid_size, block_size, dyn_shmem>>>(
-                        this->m_rxmesh_context,
-                        get_num_patches(),
-                        attributes...);
-            } else if (add_item == 3) {
-                detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD + 3>
-                    <<<grid_size, block_size, dyn_shmem>>>(
-                        this->m_rxmesh_context,
-                        get_num_patches(),
-                        attributes...);
-            } else if (add_item == 4) {
-                detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD + 4>
-                    <<<grid_size, block_size, dyn_shmem>>>(
-                        this->m_rxmesh_context,
-                        get_num_patches(),
-                        attributes...);
-            } else if (add_item == 5) {
-                detail::slice_patches<block_size, TRANSPOSE_ITEM_PER_THREAD + 5>
-                    <<<grid_size, block_size, dyn_shmem>>>(
-                        this->m_rxmesh_context,
-                        get_num_patches(),
-                        attributes...);
-            } else {
-                RXMESH_ERROR(
-                    "RXMeshDynamic::slice_patches() can not find good "
-                    "configuration to  run slice_patches kernel");
-            }
-        };
+        check_shared_memory(dyn_shmem,
+                            smem_bytes_static,
+                            num_reg_per_thread,
+                            local_mem_per_thread,
+                            block_size,
+                            (void*)detail::slice_patches<block_size>,
+                            false);
 
+        detail::slice_patches<block_size><<<grid_size, block_size, dyn_shmem>>>(
+            this->m_rxmesh_context, get_max_num_patches(), attributes...);
 
-        auto check = [&](int add_item) {
-            size_t   smem_bytes_static;
-            uint32_t num_reg_per_thread;
-            size_t   local_mem_per_thread;
+        this->get_num_patches(true);
 
-            if (add_item == 0) {
-                check_shared_memory(
-                    dyn_shmem,
-                    smem_bytes_static,
-                    num_reg_per_thread,
-                    local_mem_per_thread,
-                    block_size,
-                    (void*)detail::slice_patches<block_size,
-                                                 TRANSPOSE_ITEM_PER_THREAD + 0>,
-                    false);
-            } else if (add_item == 1) {
-                check_shared_memory(
-                    dyn_shmem,
-                    smem_bytes_static,
-                    num_reg_per_thread,
-                    local_mem_per_thread,
-                    block_size,
-                    (void*)detail::slice_patches<block_size,
-                                                 TRANSPOSE_ITEM_PER_THREAD + 1>,
-                    false);
-            } else if (add_item == 2) {
-                check_shared_memory(
-                    dyn_shmem,
-                    smem_bytes_static,
-                    num_reg_per_thread,
-                    local_mem_per_thread,
-                    block_size,
-                    (void*)detail::slice_patches<block_size,
-                                                 TRANSPOSE_ITEM_PER_THREAD + 2>,
-                    false);
-            } else if (add_item == 3) {
-                check_shared_memory(
-                    dyn_shmem,
-                    smem_bytes_static,
-                    num_reg_per_thread,
-                    local_mem_per_thread,
-                    block_size,
-                    (void*)detail::slice_patches<block_size,
-                                                 TRANSPOSE_ITEM_PER_THREAD + 3>,
-                    false);
-            } else if (add_item == 4) {
-                check_shared_memory(
-                    dyn_shmem,
-                    smem_bytes_static,
-                    num_reg_per_thread,
-                    local_mem_per_thread,
-                    block_size,
-                    (void*)detail::slice_patches<block_size,
-                                                 TRANSPOSE_ITEM_PER_THREAD + 4>,
-                    false);
-            } else if (add_item == 5) {
-                check_shared_memory(
-                    dyn_shmem,
-                    smem_bytes_static,
-                    num_reg_per_thread,
-                    local_mem_per_thread,
-                    block_size,
-                    (void*)detail::slice_patches<block_size,
-                                                 TRANSPOSE_ITEM_PER_THREAD + 5>,
-                    false);
-            } else {
-                RXMESH_ERROR(
-                    "RXMeshDynamic::slice_patches() can not find good "
-                    "configuration to run slice_patches kernel");
-            }
-        };
-
-        for (uint32_t it = 0; it < 6; ++it) {
-            if (2 * this->m_max_edges_per_patch <=
-                block_size * (TRANSPOSE_ITEM_PER_THREAD + it)) {
-                check(it);
-                launch(it);
-                break;
-            }
-        }
-        CUDA_ERROR(cudaGetLastError());
+        // CUDA_ERROR(cudaGetLastError());
     }
 
 

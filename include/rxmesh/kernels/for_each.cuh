@@ -132,6 +132,9 @@ __device__ __inline__ void for_each(const Context& context, computeT compute_op)
 
     const uint32_t p_id = blockIdx.x;
     if (p_id < context.m_num_patches[0]) {
+        if (context.m_patches_info[p_id].patch_id == INVALID32) {
+            return;
+        }
         if constexpr (op == Op::V) {
             static_assert(
                 std::is_same_v<ComputeHandleT, VertexHandle>,

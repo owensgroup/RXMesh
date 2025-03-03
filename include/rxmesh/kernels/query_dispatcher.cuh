@@ -105,7 +105,6 @@ __device__ __inline__ void query_block_dispatcher(
         output_lp_hashtable = patch_info.lp_f;
     }
 
-
     // load table async
     auto alloc_then_load_table = [&](bool with_wait) {
         s_table = shrd_alloc.template alloc<LPPair>(
@@ -113,36 +112,36 @@ __device__ __inline__ void query_block_dispatcher(
         output_lp_hashtable.load_in_shared_memory(s_table, with_wait);
     };
 
-    if constexpr (op != Op::FV && op != Op::VV && op != Op::FF &&
-                  op != Op::EVDiamond) {
-        if (op != Op::EV && oriented) {
-            alloc_then_load_table(false);
-        }
-    }
+    //if constexpr (op != Op::FV && op != Op::VV && op != Op::FF &&
+    //              op != Op::EVDiamond) {
+    //    if (op != Op::EV && oriented) {
+    //        alloc_then_load_table(false);
+    //    }
+    //}
 
 
     // we  cache the result of (is_active && is_owned && is_compute_set) in
     // shared memory to check on it later
     bool is_participant = false;
-    block_loop<uint16_t,
-               blockThreads,
-               true>(num_src_in_patch, [&](const uint16_t local_id) {
-        bool is_par = false;
-        if (local_id < num_src_in_patch) {
-            bool is_del = is_deleted(local_id, input_active_mask);
-            bool is_own =
-                allow_not_owned || is_owned(local_id, input_owned_mask);
-            bool is_act = compute_active_set({patch_info.patch_id, local_id});
-            is_par      = !is_del && is_own && is_act;
-        }
-        is_participant     = is_participant || is_par;
-        uint32_t warp_mask = __ballot_sync(0xFFFFFFFF, is_par);
-        uint32_t lane_id   = threadIdx.x % 32;
-        if (lane_id == 0) {
-            uint32_t mask_id               = local_id / 32;
-            s_participant_bitmask[mask_id] = warp_mask;
-        }
-    });
+    block_loop<uint16_t, blockThreads, true>(
+        num_src_in_patch, [&](const uint16_t local_id) {
+            bool is_par = false;
+            if (local_id < num_src_in_patch) {
+                bool is_del = is_deleted(local_id, input_active_mask);
+                bool is_own =
+                    allow_not_owned || is_owned(local_id, input_owned_mask);
+                bool is_act =
+                    compute_active_set({patch_info.patch_id, local_id});
+                is_par = !is_del && is_own && is_act;
+            }
+            is_participant     = is_participant || is_par;
+            uint32_t warp_mask = __ballot_sync(0xFFFFFFFF, is_par);
+            uint32_t lane_id   = threadIdx.x % 32;
+            if (lane_id == 0) {
+                uint32_t mask_id               = local_id / 32;
+                s_participant_bitmask[mask_id] = warp_mask;
+            }
+        });
 
 
     if (__syncthreads_or(is_participant) == 0) {
@@ -161,15 +160,19 @@ __device__ __inline__ void query_block_dispatcher(
                             s_output_value,
                             oriented);
 
-    if constexpr (op == Op::FV || op == Op::VV || op == Op::FF ||
-                  op == Op::EVDiamond) {
-        block.sync();
-        alloc_then_load_table(true);
-    }
-    if (op == Op::EV && oriented) {
-        block.sync();
-        alloc_then_load_table(true);
-    }
+    block.sync();
+    alloc_then_load_table(true);
+
+    //if constexpr (op == Op::FV || op == Op::VV || op == Op::FF ||
+    //              op == Op::EVDiamond || op == Op::VE || op == Op::VF) {
+    //    block.sync();
+    //    alloc_then_load_table(true);
+    //}
+    //if (op == Op::EV && oriented) {
+    //    printf("\n YESS \n");
+    //    block.sync();
+    //    alloc_then_load_table(true);
+    //}
     block.sync();
 }
 

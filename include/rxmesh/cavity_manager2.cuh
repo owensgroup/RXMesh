@@ -61,7 +61,6 @@ struct CavityManager2
     CavityManager2(cooperative_groups::thread_block& block,
                    Context&                          context,
                    ShmemAllocator&                   shrd_alloc,
-                   int                               iteration,
                    bool                              preserve_cavity,
                    bool     allow_touching_cavities = true,
                    uint32_t current_p               = 0);
@@ -339,7 +338,7 @@ struct CavityManager2
     /**
      * @brief try to add an edge in the cavity graph that connects the two nodes
      * that represents the cavities c0 and c1. If we can not add the edge
-     * (because if the space constraints), we deactivate the cavity with more
+     * (because of the space constraints), we deactivate the cavity with more
      * overlaps
      */
     __device__ __forceinline__ void add_edge_to_cavity_graph(const uint16_t c0,
@@ -450,7 +449,6 @@ struct CavityManager2
      * @brief construct the cavities boundary loop for all cavities created in
      * this patch
      */
-    template <int itemPerThread = 5>
     __device__ __forceinline__ void construct_cavities_edge_loop(
         cooperative_groups::thread_block& block);
 
@@ -574,14 +572,14 @@ struct CavityManager2
      * of q_vertex in this patch. If it does not exist, create such a copy.
      */
     template <typename FuncT>
-    __device__ __forceinline__ LPPair
-    migrate_vertex(const uint32_t q,
-                   const uint8_t  q_stash_id,
-                   const uint16_t q_num_vertices,
-                   const uint16_t q_vertex,
-                   PatchInfo&     q_patch_info,
-                   FuncT          should_migrate,
-                   bool           add_to_connect_cavity_bdry_v = false);
+    __device__ __forceinline__ void migrate_vertex(
+        const uint32_t q,
+        const uint8_t  q_stash_id,
+        const uint16_t q_num_vertices,
+        const uint16_t q_vertex,
+        PatchInfo&     q_patch_info,
+        FuncT          should_migrate,
+        bool           add_to_connect_cavity_bdry_v = false);
 
 
     /**
@@ -589,12 +587,12 @@ struct CavityManager2
      * of q_edge in this patch. If it does not exist, create such a copy.
      */
     template <typename FuncT>
-    __device__ __forceinline__ LPPair migrate_edge(const uint32_t q,
-                                                   const uint8_t  q_stash_id,
-                                                   const uint16_t q_num_edges,
-                                                   const uint16_t q_edge,
-                                                   PatchInfo&     q_patch_info,
-                                                   FuncT should_migrate);
+    __device__ __forceinline__ void migrate_edge(const uint32_t q,
+                                                 const uint8_t  q_stash_id,
+                                                 const uint16_t q_num_edges,
+                                                 const uint16_t q_edge,
+                                                 PatchInfo&     q_patch_info,
+                                                 FuncT          should_migrate);
 
 
     /**
@@ -602,12 +600,12 @@ struct CavityManager2
      * of q_face in this patch. If it does not exist, create such a copy.
      */
     template <typename FuncT>
-    __device__ __forceinline__ LPPair migrate_face(const uint32_t q,
-                                                   const uint8_t  q_stash_id,
-                                                   const uint16_t q_num_faces,
-                                                   const uint16_t q_face,
-                                                   PatchInfo&     q_patch_info,
-                                                   FuncT should_migrate);
+    __device__ __forceinline__ void migrate_face(const uint32_t q,
+                                                 const uint8_t  q_stash_id,
+                                                 const uint16_t q_num_faces,
+                                                 const uint16_t q_face,
+                                                 PatchInfo&     q_patch_info,
+                                                 FuncT          should_migrate);
 
     /**
      * @brief Add a new patch to the patch stash and return the stash id
@@ -656,10 +654,11 @@ struct CavityManager2
      * index in dest_patch
      */
     template <typename HandleT>
-    __device__ __forceinline__ uint16_t find_copy(uint16_t& lid,
-                                                  uint32_t& src_patch,
-                                                  uint8_t&  src_patch_stash_id,
-                                                  const LPPair* q_table);
+    __device__ __forceinline__ uint16_t
+    find_copy(uint16_t&     lid,
+              uint32_t&     src_patch,
+              uint8_t&      src_patch_stash_id,
+              const LPPair* q_table = nullptr);
 
 
     /**
@@ -917,6 +916,9 @@ struct CavityManager2
         cooperative_groups::thread_block& block) const;
 
 
+    __device__ __forceinline__ void insert_inv_lp(const LPHashTable&  table,
+                                                  InverseLPHashTable& inv_lp);
+
     // indicate if this block can write its updates to global memory during
     // epilogue
     bool m_write_to_gmem;
@@ -984,8 +986,6 @@ struct CavityManager2
     InverseLPHashTable m_inv_lp_e;
     InverseLPHashTable m_inv_lp_f;
 
-    LPPair *m_s_q_table_v, *m_s_q_table_e, *m_s_q_table_f;
-
     // For an edge on the boundary of a cavity, here we store the cavity ID of
     // such edges (only the boundary ones). We then use this to filter out
     // cavities if they are touching when they user does not want cavities to
@@ -1014,6 +1014,7 @@ struct CavityManager2
 
     // store the boundary edges of all cavities in compact format (similar to
     // CSR for sparse matrices using m_s_cavity_size_prefix but no value ptr)
+    // overlap with m_s_boudary_edges_cavity_id
     uint16_t* m_s_cavity_boundary_edges;
 
     // patch stash stored in shared memory
@@ -1048,9 +1049,8 @@ struct CavityManager2
     // cavity
     bool m_preserve_cavity;
 
-    // LPPair*  m_s_table_q;
-    // LPPair*  m_s_table_stash_q;
-    // uint32_t m_s_table_q_size;
+    // face local offset used in construct_cavities_edge_loop
+    uint8_t* m_s_face_local_offset;
 
     // Cavity graph is a graph where cavities are nodes and two nodes forms an
     // edge if the two cavities they represent are overlapping. We use this
@@ -1074,6 +1074,18 @@ struct CavityManager2
 
     // indicate if a cavity is in the maximal independent set
     Bitmask m_s_cavity_mis;
+
+    // during migration, we need to both access the inverse hash table and
+    // insert in it. Thus, we separate the operations such that we access the
+    // hash table and for the LPPair we need to insert, we add them to this temp
+    // buffer (that overlaps with m_s_boudary_edges_cavity_id). Then, after
+    // finishing accessing the hashtable, we insert in it what we stored in this
+    // temp buffer.
+    int*    m_s_temp_inv_lp_size;
+    int     m_temp_inv_lp_capacity;
+    LPPair* m_s_temp_inv_lp;
+
+    bool* m_s_migrated;
 };
 
 }  // namespace rxmesh

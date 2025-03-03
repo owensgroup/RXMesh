@@ -85,10 +85,10 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
 
     report.add_test(td);
 
-    RXMESH_TRACE(" {} {} time = {} (ms) \n",
-                 td.test_name.c_str(),
-                 (passed ? " passed " : " failed "),
-                 total_time / float(rxmesh_args.num_run));
+    RXMESH_INFO(" {} {} time = {} (ms) \n",
+                td.test_name.c_str(),
+                (passed ? " passed " : " failed "),
+                total_time / float(rxmesh_args.num_run));
 }
 
 TEST(RXMeshStatic, Queries)

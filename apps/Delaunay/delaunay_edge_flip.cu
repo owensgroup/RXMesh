@@ -8,6 +8,7 @@ struct arg
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "torus.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     bool        verify        = true;
+    bool        skip_mcf      = false;
     uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
@@ -22,7 +23,7 @@ TEST(Apps, DelaunayEdgeFlip)
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshDynamic rx(Arg.obj_file_name, "", 256, 1.8, 2.0);
+    RXMeshDynamic rx(Arg.obj_file_name, "", 512, 2.0, 2.0);
     // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
     //        "_patches");
 
@@ -32,10 +33,13 @@ TEST(Apps, DelaunayEdgeFlip)
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
-    ASSERT_TRUE(rx.is_closed())
-        << "mcf_rxmesh only takes watertight/closed mesh without boundaries";
+    if (!Arg.skip_mcf) {
+        ASSERT_TRUE(rx.is_closed())
+            << "mcf_rxmesh only takes watertight/closed mesh without "
+               "boundaries";
+    }
 
-    delaunay_rxmesh(rx, Arg.verify);
+    delaunay_rxmesh(rx, Arg.verify, Arg.skip_mcf);
 }
 
 
@@ -58,6 +62,7 @@ int main(int argc, char** argv)
                         "              Default is {} \n"
                         "              Hint: Only accept OBJ files\n"
                         " -no_verify:  Do not verify the output using OpenMesh. By default the results are verified\n"
+                        " -skip_mcf:   Skip running MCF before and after Delaunay edge flip. Default is false.\n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -device_id:  GPU device ID. Default is {}",
             Arg.obj_file_name, Arg.output_folder, Arg.device_id);
@@ -80,12 +85,16 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-no_verify")) {
             Arg.verify = false;
         }
+        if (cmd_option_exists(argv, argc + argv, "-skip_mcf")) {
+            Arg.skip_mcf = true;
+        }
     }
 
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
     RXMESH_TRACE("verify= {}", Arg.verify);
+    RXMESH_TRACE("skip_mcf= {}", Arg.skip_mcf);
 
     return RUN_ALL_TESTS();
 }

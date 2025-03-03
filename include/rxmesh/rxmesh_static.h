@@ -834,8 +834,8 @@ class RXMeshStatic : public RXMesh
         launch_box.smem_bytes_dyn = 0;
 
         for (auto o : op) {
-            size_t sh =
-                this->template calc_shared_memory<blockThreads>(o, oriented);
+            size_t sh = this->template calc_shared_memory<blockThreads>(
+                o, oriented, false);
             if (is_concurrent) {
                 launch_box.smem_bytes_dyn += sh;
             } else {
@@ -1326,6 +1326,45 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
+     * @brief Adding a new attribute similar to another attribute in allocation,
+     * number of attributes, and layout. The type of the attribute (vertex,edge,
+     * or face) is derived automatically from the input attribute (other)
+     * @tparam T type of the returned attribute
+     * @tparam HandleT handle type of the returned attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param other the other attribute
+     * @return shared pointer to the created attribute
+     */
+    template <class T, class HandleT>
+    std::shared_ptr<Attribute<T, HandleT>> add_attribute_like(
+        const std::string&           name,
+        const Attribute<T, HandleT>& other)
+    {
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return add_vertex_attribute<T>(name,
+                                           other.get_num_attributes(),
+                                           other.get_allocated(),
+                                           other.get_layout());
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return add_edge_attribute<T>(name,
+                                         other.get_num_attributes(),
+                                         other.get_allocated(),
+                                         other.get_layout());
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return add_face_attribute<T>(name,
+                                         other.get_num_attributes(),
+                                         other.get_allocated(),
+                                         other.get_layout());
+        }
+    }
+
+    /**
      * @brief Checks if an attribute exists given its name
      * @param name the attribute name
      * @return True if the attribute exists. False otherwise.
@@ -1377,6 +1416,12 @@ class RXMeshStatic : public RXMesh
         boundary_v.reset(0, LOCATION_ALL);
 
         constexpr uint32_t blockThreads = 256;
+
+        int max_shmem_bytes = 89 * 1024;
+        CUDA_ERROR(cudaFuncSetAttribute(
+            (void*)detail::identify_boundary_vertices<blockThreads, T>,
+            cudaFuncAttributeMaxDynamicSharedMemorySize,
+            max_shmem_bytes));
 
         LaunchBox<blockThreads> lb;
 
@@ -1813,40 +1858,27 @@ class RXMeshStatic : public RXMesh
     }
 
     template <uint32_t blockThreads>
-    size_t calc_shared_memory(const Op op, const bool oriented) const
+    size_t calc_shared_memory(const Op   op,
+                              const bool oriented,
+                              bool       use_capacity) const
     {
-        // Operations that uses matrix transpose needs a template parameter
-        // that is by default TRANSPOSE_ITEM_PER_THREAD. Here we check if
-        // this default parameter is valid otherwise, it needs to be increased.
-        if (op == Op::VV || op == Op::VE) {
-            if (2 * this->m_max_edges_per_patch >
-                blockThreads * TRANSPOSE_ITEM_PER_THREAD) {
-                RXMESH_ERROR(
-                    "RXMeshStatic::calc_shared_memory() "
-                    "TRANSPOSE_ITEM_PER_THREAD = {} needs "
-                    "to be increased for op = {}",
-                    TRANSPOSE_ITEM_PER_THREAD,
-                    op_to_string(op));
-            }
-        } else if (op == Op::VE || op == Op::EF || op == Op::FF) {
-            if (3 * this->m_max_faces_per_patch >
-                blockThreads * TRANSPOSE_ITEM_PER_THREAD) {
-                RXMESH_ERROR(
-                    "RXMeshStatic::calc_shared_memory() "
-                    "TRANSPOSE_ITEM_PER_THREAD = {} needs "
-                    "to be increased for op = {}",
-                    TRANSPOSE_ITEM_PER_THREAD,
-                    op_to_string(op));
-            }
+        uint32_t max_v(this->m_max_vertices_per_patch),
+            max_e(this->m_max_edges_per_patch),
+            max_f(this->m_max_faces_per_patch);
+
+        if (use_capacity) {
+            max_v = get_per_patch_max_vertex_capacity();
+            max_e = get_per_patch_max_edge_capacity();
+            max_f = get_per_patch_max_face_capacity();
         }
 
 
-        if (oriented && !(op == Op::VV || op == Op::VE)) {
-            RXMESH_ERROR(
-                "RXMeshStatic::calc_shared_memory() Oriented is only "
-                "allowed on VV and VE. The input op is {}",
-                op_to_string(op));
-        }
+        // if (oriented && !(op == Op::VV || op == Op::VE)) {
+        //     RXMESH_ERROR(
+        //         "RXMeshStatic::calc_shared_memory() Oriented is only "
+        //         "allowed on VV and VE. The input op is {}",
+        //         op_to_string(op));
+        // }
 
         if ((op == Op::EVDiamond || op == Op::EE) &&
             !m_is_input_edge_manifold) {
@@ -1861,7 +1893,7 @@ class RXMeshStatic : public RXMesh
 
         if (op == Op::FE) {
             // only FE will be loaded
-            dynamic_smem = 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
+            dynamic_smem = 3 * max_f * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalFaceT>();
@@ -1879,7 +1911,7 @@ class RXMeshStatic : public RXMesh
 
         } else if (op == Op::EV) {
             // only EV will be loaded
-            dynamic_smem = 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            dynamic_smem = 2 * max_e * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalEdgeT>();
@@ -1899,8 +1931,8 @@ class RXMeshStatic : public RXMesh
             // We load both FE and EV. We don't change EV.
             // FE are updated to contain FV instead of FE by reading from
             // EV. After that, we can throw EV away so we can load hashtable
-            dynamic_smem += 3 * this->m_max_faces_per_patch * sizeof(uint16_t);
-            dynamic_smem += 2 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            dynamic_smem += 3 * max_f * sizeof(uint16_t);
+            dynamic_smem += 2 * max_e * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalFaceT>();
@@ -1911,11 +1943,9 @@ class RXMeshStatic : public RXMesh
             //  stores vertex LP hashtable
             uint32_t table_bytes =
                 sizeof(LPPair) * max_lp_hashtable_capacity<LocalVertexT>();
-            if (table_bytes >
-                2 * this->m_max_edges_per_patch * sizeof(uint16_t)) {
+            if (table_bytes > 2 * max_e * sizeof(uint16_t)) {
 
-                dynamic_smem += table_bytes - 2 * this->m_max_edges_per_patch *
-                                                  sizeof(uint16_t);
+                dynamic_smem += table_bytes - 2 * max_e * sizeof(uint16_t);
             }
             // for possible padding for alignment
             // 5 since there are 5 calls for ShmemAllocator.alloc
@@ -1928,18 +1958,15 @@ class RXMeshStatic : public RXMesh
             // for the actual output
             // The prefix sum will be stored in place (where EV is loaded)
             // The output will be stored in another buffer with size equal to
-            // the EV (i.e., 2*#edges) since this output buffer will stored the
+            // the EV (i.e., 2*#edges) since this output buffer will store the
             // nnz and the nnz of a matrix the same before/after transpose
             // Normally, the number of vertices is way less than 2*#E but in
             // dynamic mesh, we can not predicate these numbers since some
             // of these edges could be deleted (marked deleted in the bitmask)
             // so, we allocate the buffer that hold EV (which will also hold the
             // offset) to be the max of #V and 2#E
-            dynamic_smem = std::max(this->m_max_vertices_per_patch,
-                                    2 * this->m_max_edges_per_patch) *
-                           sizeof(uint16_t);
-            dynamic_smem +=
-                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            dynamic_smem = std::max(max_v + 1, 2 * max_e) * sizeof(uint16_t);
+            dynamic_smem += (2 * max_e) * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalVertexT>();
@@ -1951,6 +1978,9 @@ class RXMeshStatic : public RXMesh
             uint32_t lp_smem =
                 sizeof(LPPair) * max_lp_hashtable_capacity<LocalEdgeT>();
 
+            // temp memory needed for block_mat_transpose to store the prefix
+            // and local incremental
+            uint32_t temp_size_local = (2 * max_v + 1) * sizeof(uint16_t);
 
             // For oriented VE, we additionally need to store FE and EF
             // along with the (transposed) VE. FE needs 3*max_num_faces. Since
@@ -1959,24 +1989,23 @@ class RXMeshStatic : public RXMesh
             // write on the same place as the extra EV)
 
             uint32_t fe_ef_smem =
-                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t) +
-                (3 * this->m_max_faces_per_patch) * sizeof(uint16_t);
+                (2 * max_e) * sizeof(uint16_t) + (3 * max_f) * sizeof(uint16_t);
 
             if (oriented) {
-                dynamic_smem += std::max(lp_smem, fe_ef_smem);
+                dynamic_smem +=
+                    std::max(std::max(lp_smem, fe_ef_smem), temp_size_local);
             } else {
-                dynamic_smem += lp_smem;
+                dynamic_smem += std::max(temp_size_local, lp_smem);
             }
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
-            dynamic_smem += ShmemAllocator::default_alignment * 6;
+            dynamic_smem += ShmemAllocator::default_alignment * 8;
 
         } else if (op == Op::EF) {
             // same as Op::VE but with faces
-            dynamic_smem =
-                (2 * 3 * this->m_max_faces_per_patch) * sizeof(uint16_t) +
-                sizeof(uint16_t) + sizeof(uint16_t);
+            dynamic_smem = std::max(max_e + 1, 3 * max_f) * sizeof(uint16_t);
+            dynamic_smem += (3 * max_f) * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalEdgeT>();
@@ -1984,25 +2013,27 @@ class RXMeshStatic : public RXMesh
             // store not-owned bitmask
             dynamic_smem += max_bitmask_size<LocalFaceT>();
 
+            // temp memory needed for block_mat_transpose to store the prefix
+            // and local incremental
+            uint32_t temp_size_local = (2 * max_e + 1) * sizeof(uint16_t);
+
             // stores the face LP hashtable
-            dynamic_smem +=
+            uint32_t lp_smem =
                 sizeof(LPPair) * max_lp_hashtable_capacity<LocalFaceT>();
+
+            dynamic_smem += std::max(temp_size_local, lp_smem);
 
             // for possible padding for alignment
             // 4 since there are 4 calls for ShmemAllocator.alloc
-            dynamic_smem += ShmemAllocator::default_alignment * 4;
+            dynamic_smem += ShmemAllocator::default_alignment * 6;
 
         } else if (op == Op::VF) {
             // load EV and FE simultaneously. Changes FE to FV using EV. Then
             // transpose FV in place and use EV to store the values/output while
             // using FV to store the prefix sum. Thus, the space used to store
             // EV should be max(3*#faces, 2*#edges)
-            dynamic_smem = std::max(3 * this->m_max_faces_per_patch,
-                                    1 + this->m_max_vertices_per_patch) *
-                           sizeof(uint16_t);
-            dynamic_smem += std::max(3 * this->m_max_faces_per_patch,
-                                     2 * this->m_max_edges_per_patch) *
-                                sizeof(uint16_t) +
+            dynamic_smem = std::max(3 * max_f, 1 + max_v) * sizeof(uint16_t);
+            dynamic_smem += std::max(3 * max_f, 2 * max_e) * sizeof(uint16_t) +
                             sizeof(uint16_t);
 
             // store participant bitmask
@@ -2011,9 +2042,17 @@ class RXMeshStatic : public RXMesh
             // store not-owned bitmask
             dynamic_smem += max_bitmask_size<LocalFaceT>();
 
+            // temp memory needed for block_mat_transpose to store the prefix
+            // and local incremental
+            uint32_t temp_size_local = (2 * max_v + 1) * sizeof(uint16_t);
+
             // stores the face LP hashtable
-            dynamic_smem +=
+            uint32_t lp_shmem =
                 sizeof(LPPair) * max_lp_hashtable_capacity<LocalFaceT>();
+
+            // we load the hashtable after we transpose, thus we take the max
+            // of the (temp) memory needed for transpose and LP hashtable
+            dynamic_smem += std::max(temp_size_local, lp_shmem);
 
             // for possible padding for alignment
             // 5 since there are 5 calls for ShmemAllocator.alloc
@@ -2023,11 +2062,8 @@ class RXMeshStatic : public RXMesh
             // similar to VE but we also need to store the EV even after
             // we do the transpose. After that, we can throw EV away and load
             // the hash table
-            dynamic_smem = std::max(this->m_max_vertices_per_patch + 1,
-                                    2 * this->m_max_edges_per_patch) *
-                           sizeof(uint16_t);
-            dynamic_smem +=
-                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            dynamic_smem = std::max(max_v + 1, 2 * max_e) * sizeof(uint16_t);
+            dynamic_smem += (2 * max_e) * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalVertexT>();
@@ -2036,8 +2072,11 @@ class RXMeshStatic : public RXMesh
             dynamic_smem += max_bitmask_size<LocalVertexT>();
 
             // duplicate EV
-            uint32_t ev_smem =
-                (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+            uint32_t ev_smem = (2 * max_e) * sizeof(uint16_t);
+
+            // temp memory needed for block_mat_transpose to store the prefix
+            // and local incremental
+            uint32_t temp_size_local = (2 * max_v + 1) * sizeof(uint16_t);
 
             // stores the vertex LP hashtable
             uint32_t lp_smem =
@@ -2050,14 +2089,14 @@ class RXMeshStatic : public RXMesh
                 // 2*max_num_edges since every edge is neighbor to maximum of
                 // two faces (which we write on the same place as the extra EV).
                 // With VV, we need to reload EV again (since it is overwritten)
+                uint32_t fe_smem = (3 * max_f) * sizeof(uint16_t);
 
-                uint32_t fe_smem =
-                    (3 * this->m_max_faces_per_patch) * sizeof(uint16_t);
-
-                dynamic_smem += std::max(lp_smem, ev_smem + fe_smem);
+                dynamic_smem +=
+                    std::max(std::max(lp_smem, ev_smem + temp_size_local),
+                             fe_smem + ev_smem);
 
             } else {
-                dynamic_smem += std::max(lp_smem, ev_smem);
+                dynamic_smem += std::max(lp_smem, ev_smem + temp_size_local);
             }
 
 
@@ -2073,10 +2112,17 @@ class RXMeshStatic : public RXMesh
             // Since we have so many boundary faces (due to ribbons), they will
             // make up this averaging
 
-            dynamic_smem = (3 * this->m_max_faces_per_patch +        // FE
-                            2 * (3 * this->m_max_faces_per_patch) +  // EF
-                            4 * this->m_max_faces_per_patch) *       // FF
-                           sizeof(uint16_t);
+            uint32_t fe_smem = 3 * max_f * sizeof(uint16_t);
+            uint32_t ef_smem = (std::max(max_e + 1, 3 * max_f) + (3 * max_f)) *
+                               sizeof(uint16_t);
+
+
+            // temp memory needed for block_mat_transpose to store the prefix
+            // and local incremental
+            uint32_t temp_size_local = (2 * max_e + 1) * sizeof(uint16_t);
+
+            // the output FF
+            dynamic_smem += 4 * max_f * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalFaceT>();
@@ -2084,17 +2130,25 @@ class RXMeshStatic : public RXMesh
             // store not-owned bitmask
             dynamic_smem += max_bitmask_size<LocalFaceT>();
 
+            // stores vertex LP hashtable
+            uint32_t lp_smem =
+                sizeof(LPPair) * max_lp_hashtable_capacity<LocalFaceT>();
+
+            dynamic_smem +=
+                std::max(lp_smem, ef_smem + std::max(fe_smem, temp_size_local));
+
             // for possible padding for alignment
             // 6 since there are 6 calls for ShmemAllocator.alloc
-            dynamic_smem += ShmemAllocator::default_alignment * 6;
+            dynamic_smem += ShmemAllocator::default_alignment * 9;
+
+
         } else if (op == Op::EVDiamond) {
             // to load EV and also store the results which contains 4 vertices
             // for each edge
-            dynamic_smem = 4 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            dynamic_smem = 4 * max_e * sizeof(uint16_t);
 
             // to store FE
-            uint32_t fe_smem =
-                3 * this->m_max_faces_per_patch * sizeof(uint16_t);
+            uint32_t fe_smem = 3 * max_f * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalEdgeT>();
@@ -2113,7 +2167,7 @@ class RXMeshStatic : public RXMesh
             dynamic_smem += ShmemAllocator::default_alignment * 5;
         } else if (op == Op::EE) {
             // to store the results i.e., 4 edges for each edge
-            dynamic_smem = 4 * this->m_max_edges_per_patch * sizeof(uint16_t);
+            dynamic_smem = 4 * max_e * sizeof(uint16_t);
 
             // store participant bitmask
             dynamic_smem += max_bitmask_size<LocalEdgeT>();
@@ -2135,8 +2189,7 @@ class RXMeshStatic : public RXMesh
             if (op == Op::VE) {
                 // For VE, we need to add the extra memory we needed for VV that
                 // load EV beside the VE
-                dynamic_smem +=
-                    (2 * this->m_max_edges_per_patch) * sizeof(uint16_t);
+                dynamic_smem += (2 * max_e) * sizeof(uint16_t);
             }
             // For oriented VV or VE, we additionally need to store FE and EF
             // along with the (transposed) VE. FE needs 3*max_num_faces. Since
@@ -2145,8 +2198,7 @@ class RXMeshStatic : public RXMesh
             // write on the same place as the extra EV). With VV, we need
             // to reload EV again (since it is overwritten) but we don't need to
             // do this for VE
-            dynamic_smem +=
-                (3 * this->m_max_faces_per_patch) * sizeof(uint16_t);
+            dynamic_smem += (3 * max_f) * sizeof(uint16_t);
         }
 
         return dynamic_smem;

@@ -82,7 +82,11 @@ __inline__ __device__ void link_condition(
             }
 
             block.sync();
-            if (s_num_shared_one_ring > 2) {
+
+            // that means we will also not collapse/flip a boundary edge
+            // since a boundary edge has less than 2 vertices shared between
+            // the one ring of the edge two end vertices
+            if (threadIdx.x == 0 && s_num_shared_one_ring != 2) {
                 edge_mask.reset(e, true);
             }
         }

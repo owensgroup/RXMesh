@@ -2,7 +2,7 @@
 
 #include <Eigen/Dense>
 
-#include "rxmesh/cavity_manager.cuh"
+#include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/query.cuh"
 
 #include "rxmesh/geometry_util.cuh"
@@ -17,7 +17,6 @@ edge_collapse(rxmesh::Context                   context,
               rxmesh::VertexAttribute<int8_t>   vertex_rank,
               rxmesh::EdgeAttribute<EdgeStatus> edge_status,
               rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
-              rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
               const T                           collapser_min_edge_length,
               const T                           max_volume_change,
               const T                           min_triangle_area,
@@ -27,7 +26,7 @@ edge_collapse(rxmesh::Context                   context,
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CavityManager<blockThreads, CavityOp::EV> cavity(
+    CavityManager2<blockThreads, CavityOp::EV> cavity(
         block, context, shrd_alloc, true);
 
     const uint32_t pid = cavity.patch_id();
@@ -69,7 +68,7 @@ edge_collapse(rxmesh::Context                   context,
 
     // a bitmask that indicates which edge we want to flip
     // we also use it to mark updated edges (for edge_status)
-    Bitmask edge_mask(cavity.patch_info().edges_capacity[0], shrd_alloc);
+    Bitmask edge_mask(cavity.patch_info().edges_capacity, shrd_alloc);
     edge_mask.reset(block);
 
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
@@ -104,8 +103,8 @@ edge_collapse(rxmesh::Context                   context,
         assert(ah.is_valid() && bh.is_valid());
 
         // don't collapse boundary vertices
-        if (ch.is_valid() && dh.is_valid() && is_edge_bd(eh) == 0 &&
-            is_vertex_bd(ah) == 0 && is_vertex_bd(bh) == 0) {
+        if (ch.is_valid() && dh.is_valid() && is_vertex_bd(ah) == 0 &&
+            is_vertex_bd(bh) == 0) {
 
             // vertices position
             const vec3<T> va(position(ah, 0), position(ah, 1), position(ah, 2));
@@ -116,9 +115,9 @@ edge_collapse(rxmesh::Context                   context,
             bool should_it = true;
 
             // prevent collapses on the boundary
-            if (is_vertex_bd(ch) || is_vertex_bd(dh)) {
-                should_it = false;
-            }
+            // if (is_vertex_bd(ch) || is_vertex_bd(dh)) {
+            //    should_it = false;
+            //}
 
             // degenerate cases
             if (ah == bh || ah == ch || ah == dh || bh == ch || bh == dh ||
@@ -176,8 +175,7 @@ edge_collapse(rxmesh::Context                   context,
                         position,
                         vertex_rank,
                         edge_status,
-                        is_vertex_bd,
-                        is_edge_bd)) {
+                        is_vertex_bd)) {
 
         edge_mask.reset(block);
         block.sync();
@@ -193,6 +191,18 @@ edge_collapse(rxmesh::Context                   context,
 
             const vec3<T> p0(position(v0, 0), position(v0, 1), position(v0, 2));
             const vec3<T> p1(position(v1, 0), position(v1, 1), position(v1, 2));
+
+            assert(!isnan(new_p[0]));
+            assert(!isnan(new_p[1]));
+            assert(!isnan(new_p[2]));
+
+            assert(!isnan(p0[0]));
+            assert(!isnan(p0[1]));
+            assert(!isnan(p0[2]));
+
+            assert(!isnan(p1[0]));
+            assert(!isnan(p1[1]));
+            assert(!isnan(p1[2]));
 
             // check if the new triangles will be bad i.e., will have normal
             // inversion, will have tiny area, will have bad angles
@@ -212,6 +222,15 @@ edge_collapse(rxmesh::Context                   context,
                         position(vi, 0), position(vi, 1), position(vi, 2));
                     const vec3<T> pj(
                         position(vj, 0), position(vj, 1), position(vj, 2));
+
+                    assert(!isnan(pi[0]));
+                    assert(!isnan(pi[1]));
+                    assert(!isnan(pi[2]));
+
+                    assert(!isnan(pj[0]));
+                    assert(!isnan(pj[1]));
+                    assert(!isnan(pj[2]));
+
 
                     // the new triangle will be pi-pj-new_p
 

@@ -181,7 +181,7 @@ Patcher::Patcher(uint32_t                                        patch_size,
 void Patcher::grid(const std::vector<std::vector<uint32_t>>& fv)
 {
     // this only work if the input is a mesh coming from create_plane()
-    // where are laid out sequenetially and so we can just group them using
+    // where are laid out sequentially and so we can just group them using
     // their id
 
     // m_num_patches = DIVIDE_UP(m_num_faces, m_patch_size);
@@ -195,21 +195,28 @@ void Patcher::grid(const std::vector<std::vector<uint32_t>>& fv)
 
     m_num_patches = num_parts * num_parts;
 
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
-        uint32_t minn(std::numeric_limits<uint32_t>::max());
-        for (uint32_t v = 0; v < fv[f].size(); ++v) {
-            minn = std::min(fv[f][v], minn);
-        }
-
-        uint32_t x = minn / num_v;
-        uint32_t y = minn % num_v;
+    auto calc_id = [&](uint32_t vid) {
+        uint32_t x = vid / num_v;
+        uint32_t y = vid % num_v;
 
         uint32_t x_id = x / num_v_per_part;
         uint32_t y_id = y / num_v_per_part;
 
         uint32_t id = x_id * num_parts + y_id;
 
-        m_face_patch[f] = id;
+        return id;
+    };
+
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        // uint32_t minn(std::numeric_limits<uint32_t>::max());
+        // for (uint32_t v = 0; v < fv[f].size(); ++v) {
+        //     minn = std::min(fv[f][v], minn);
+        // }
+        uint32_t id0 = calc_id(fv[f][0]);
+        uint32_t id1 = calc_id(fv[f][1]);
+        uint32_t id2 = calc_id(fv[f][2]);
+
+        m_face_patch[f] = std::max(id0, std::max(id1, id2));
     }
 
 

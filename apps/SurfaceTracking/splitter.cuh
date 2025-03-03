@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rxmesh/cavity_manager.cuh"
+#include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/query.cuh"
 
 enum class EdgeSplitPredicate
@@ -14,10 +14,9 @@ enum class EdgeSplitPredicate
 template <typename T, uint32_t blockThreads>
 __global__ static void  //__launch_bounds__(blockThreads)
 split_edges(rxmesh::Context                   context,
-            const rxmesh::VertexAttribute<T>  position,
+            rxmesh::VertexAttribute<T>        position,
             rxmesh::EdgeAttribute<EdgeStatus> edge_status,
             rxmesh::VertexAttribute<int8_t>   is_vertex_bd,
-            rxmesh::EdgeAttribute<int8_t>     is_edge_bd,
             const T                           splitter_max_edge_length,
             const T                           min_triangle_area,
             const T                           min_triangle_angle,
@@ -30,15 +29,15 @@ split_edges(rxmesh::Context                   context,
 
     ShmemAllocator shrd_alloc;
 
-    CavityManager<blockThreads, CavityOp::E> cavity(
-        block, context, shrd_alloc, true, false);
+    CavityManager2<blockThreads, CavityOp::E> cavity(
+        block, context, shrd_alloc, true);
 
 
     if (cavity.patch_id() == INVALID32) {
         return;
     }
 
-    Bitmask is_updated(cavity.patch_info().edges_capacity[0], shrd_alloc);
+    Bitmask is_updated(cavity.patch_info().edges_capacity, shrd_alloc);
 
     uint32_t shmem_before = shrd_alloc.get_allocated_size_bytes();
 
@@ -57,7 +56,8 @@ split_edges(rxmesh::Context                   context,
             // make sure it is not boundary edge
 
             if (iter[1].is_valid() && iter[3].is_valid() &&
-                is_edge_bd(eh) == 0) {
+                iter[0].is_valid() && iter[2].is_valid()) {
+                // interior edge
 
                 assert(iter.size() == 4);
                 /*
@@ -94,6 +94,10 @@ split_edges(rxmesh::Context                   context,
 
                 const vec3<T> vd(
                     position(dh, 0), position(dh, 1), position(dh, 2));
+
+
+                assert(!(va[0] == 0 && va[1] == 0 && va[2] == 0 && vb[0] == 0 &&
+                         vb[1] == 0 && vb[2] == 0));
 
 
                 // test the predicate
@@ -166,6 +170,8 @@ split_edges(rxmesh::Context                   context,
 
                 if (split_it) {
                     cavity.create(eh);
+                } else {
+                    edge_status(eh) = SKIP;
                 }
             } else {
                 edge_status(eh) = SKIP;
@@ -180,12 +186,8 @@ split_edges(rxmesh::Context                   context,
 
     shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - shmem_before);
 
-    if (cavity.prologue(block,
-                        shrd_alloc,
-                        position,
-                        edge_status,
-                        is_vertex_bd,
-                        is_edge_bd)) {
+    if (cavity.prologue(
+            block, shrd_alloc, position, edge_status, is_vertex_bd)) {
 
         is_updated.reset(block);
         block.sync();
@@ -193,47 +195,68 @@ split_edges(rxmesh::Context                   context,
         cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
             assert(size == 4);
 
-            const VertexHandle v0 = cavity.get_cavity_vertex(c, 0);
-            const VertexHandle v1 = cavity.get_cavity_vertex(c, 2);
+            if (size == 4) {
 
-            const VertexHandle new_v = cavity.add_vertex();
 
-            if (new_v.is_valid()) {
+                const VertexHandle v0 = cavity.get_cavity_vertex(c, 0);
+                const VertexHandle v1 = cavity.get_cavity_vertex(c, 2);
 
-                position(new_v, 0) =
-                    T(0.5) * (position(v0, 0) + position(v1, 0));
-                position(new_v, 1) =
-                    T(0.5) * (position(v0, 1) + position(v1, 1));
-                position(new_v, 2) =
-                    T(0.5) * (position(v0, 2) + position(v1, 2));
+                const VertexHandle new_v = cavity.add_vertex();
 
-                DEdgeHandle e0 =
-                    cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
-                const DEdgeHandle e_init = e0;
+                if (new_v.is_valid()) {
 
-                if (e0.is_valid()) {
-                    is_updated.set(e0.local_id(), true);
+                    assert(!(position(v0, 0) == 0 && position(v0, 1) == 0 &&
+                             position(v0, 2) == 0 && position(v1, 0) == 0 &&
+                             position(v1, 1) == 0 && position(v1, 2) == 0));
 
-                    for (uint16_t i = 0; i < size; ++i) {
-                        const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+                    position(new_v, 0) =
+                        T(0.5) * (position(v0, 0) + position(v1, 0));
+                    position(new_v, 1) =
+                        T(0.5) * (position(v0, 1) + position(v1, 1));
+                    position(new_v, 2) =
+                        T(0.5) * (position(v0, 2) + position(v1, 2));
 
-                        const DEdgeHandle e1 =
-                            (i == size - 1) ?
-                                e_init.get_flip_dedge() :
-                                cavity.add_edge(
-                                    cavity.get_cavity_vertex(c, i + 1), new_v);
-                        if (!e1.is_valid()) {
-                            break;
+                    assert(!isnan(position(v0, 0)));
+                    assert(!isnan(position(v0, 1)));
+                    assert(!isnan(position(v0, 2)));
+
+                    assert(!isnan(position(v1, 0)));
+                    assert(!isnan(position(v1, 1)));
+                    assert(!isnan(position(v1, 2)));
+
+                    assert(!isnan(position(new_v, 0)));
+                    assert(!isnan(position(new_v, 1)));
+                    assert(!isnan(position(new_v, 2)));
+
+                    DEdgeHandle e0 =
+                        cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
+                    const DEdgeHandle e_init = e0;
+
+                    if (e0.is_valid()) {
+                        is_updated.set(e0.local_id(), true);
+
+                        for (uint16_t i = 0; i < size; ++i) {
+                            const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+
+                            const DEdgeHandle e1 =
+                                (i == size - 1) ?
+                                    e_init.get_flip_dedge() :
+                                    cavity.add_edge(
+                                        cavity.get_cavity_vertex(c, i + 1),
+                                        new_v);
+                            if (!e1.is_valid()) {
+                                break;
+                            }
+                            if (i != size - 1) {
+                                is_updated.set(e1.local_id(), true);
+                            }
+
+                            const FaceHandle f = cavity.add_face(e0, e, e1);
+                            if (!f.is_valid()) {
+                                break;
+                            }
+                            e0 = e1.get_flip_dedge();
                         }
-                        if (i != size - 1) {
-                            is_updated.set(e1.local_id(), true);
-                        }
-
-                        const FaceHandle f = cavity.add_face(e0, e, e1);
-                        if (!f.is_valid()) {
-                            break;
-                        }
-                        e0 = e1.get_flip_dedge();
                     }
                 }
             }

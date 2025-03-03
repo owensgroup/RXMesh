@@ -4,6 +4,7 @@
 
 #include "rxmesh/kernels/collective.cuh"
 #include "rxmesh/kernels/rxmesh_queries.cuh"
+#include "rxmesh/kernels/shmem_allocator.cuh"
 #include "rxmesh/kernels/util.cuh"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
@@ -18,6 +19,33 @@ __global__ static void test_block_mat_transpose_kernel(uint16_t*      d_src,
 
     rxmesh::detail::block_mat_transpose<rowOffset, blockThreads, itemPerThread>(
         num_rows, num_cols, d_src, d_output, d_row_bitmask, 0);
+}
+
+template <uint32_t rowOffset, uint32_t blockThreads>
+__global__ static void test_block_mat_transpose_kernel_shmem(
+    uint16_t*      d_src,
+    const uint32_t num_rows,
+    const uint32_t num_cols,
+    uint16_t*      d_output,
+    uint32_t*      d_row_bitmask,
+    uint32_t*      d_col_bitmask)
+{
+    using namespace rxmesh;
+
+    ShmemAllocator shrd_alloc;
+
+    uint16_t* s_temp_size  = shrd_alloc.alloc<uint16_t>(num_cols + 1);
+    uint16_t* s_temp_local = shrd_alloc.alloc<uint16_t>(num_cols);
+
+    rxmesh::detail::block_mat_transpose<rowOffset, blockThreads>(num_rows,
+                                                                 num_cols,
+                                                                 d_src,
+                                                                 d_output,
+                                                                 s_temp_size,
+                                                                 s_temp_local,
+                                                                 d_row_bitmask,
+                                                                 d_col_bitmask,
+                                                                 0);
 }
 
 template <typename T, uint32_t blockThreads>
@@ -237,7 +265,7 @@ TEST(Util, BlockMatrixTranspose)
     }
 
     uint32_t* d_bitmask    = nullptr;
-    uint32_t  bitmask_size = DIVIDE_UP(numRows * rowOffset, 32);
+    uint32_t  bitmask_size = DIVIDE_UP(std::max(numRows, numCols), 32);
     CUDA_ERROR(cudaMalloc((void**)&d_bitmask, bitmask_size * sizeof(uint32_t)));
     CUDA_ERROR(cudaMemset(d_bitmask, 0xFF, bitmask_size * sizeof(uint32_t)));
 
@@ -250,9 +278,15 @@ TEST(Util, BlockMatrixTranspose)
                           cudaMemcpyHostToDevice));
 
 
-    test_block_mat_transpose_kernel<rowOffset, threads, item_per_thread>
-        <<<blocks, threads, numRows * rowOffset * sizeof(uint32_t)>>>(
-            d_src, numRows, numCols, d_offset, d_bitmask);
+    // test_block_mat_transpose_kernel<rowOffset, threads, item_per_thread>
+    //     <<<blocks, threads, 0>>>(d_src, numRows, numCols, d_offset,
+    //     d_bitmask);
+
+    const size_t shmem = 2 * (numCols + 1) * sizeof(uint16_t) +
+                         2 * ShmemAllocator::default_alignment;
+    test_block_mat_transpose_kernel_shmem<rowOffset, threads>
+        <<<blocks, threads, shmem>>>(
+            d_src, numRows, numCols, d_offset, d_bitmask, d_bitmask);
 
     CUDA_ERROR(cudaDeviceSynchronize());
     CUDA_ERROR(cudaGetLastError());

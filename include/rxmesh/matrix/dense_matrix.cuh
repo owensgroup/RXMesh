@@ -36,8 +36,11 @@ struct DenseMatrix
         : m_allocated(LOCATION_NONE),
           m_num_rows(0),
           m_num_cols(0),
+          m_dendescr(NULL),
           m_d_val(nullptr),
-          m_h_val(nullptr)
+          m_h_val(nullptr),
+          m_cublas_handle(nullptr),
+          m_user_managed(false)
     {
     }
 
@@ -52,23 +55,38 @@ struct DenseMatrix
           m_dendescr(NULL),
           m_h_val(nullptr),
           m_d_val(nullptr),
-          m_cublas_handle(nullptr)
+          m_cublas_handle(nullptr),
+          m_user_managed(false)
     {
-
-
         allocate(location);
+        init_cublas();
+    }
 
-        CUSPARSE_ERROR(cusparseCreateDnMat(&m_dendescr,
-                                           m_num_rows,
-                                           m_num_cols,
-                                           m_num_rows,  // leading dim
-                                           m_d_val,
-                                           cuda_type<T>(),
-                                           CUSPARSE_ORDER_COL));
+    /**
+     * @brief constructor with user managed mode where the device and host
+     * pointers are passed by the user. They are allocated (and will be freed)
+     * by the user
+     * @param num_rows number of rows in the matrix
+     * @param num_cols number of columns in the matrix
+     * @param d_ptr device pointer to 1D array containing the matrix values
+     * @param h_ptr host pointer to 1D array containing the matrix values
+     */
+    DenseMatrix(IndexT num_rows, IndexT num_cols, T* d_ptr, T* h_ptr)
+        : DenseMatrix()
+    {
+        m_user_managed = true;
 
-        CUBLAS_ERROR(cublasCreate(&m_cublas_handle));
-        CUBLAS_ERROR(
-            cublasSetPointerMode(m_cublas_handle, CUBLAS_POINTER_MODE_HOST));
+        m_allocated = m_allocated | DEVICE;
+        m_allocated = m_allocated | HOST;
+
+
+        m_num_rows = num_rows;
+        m_num_cols = num_cols;
+
+        m_h_val = h_ptr;
+        m_d_val = d_ptr;
+
+        init_cublas();
     }
 
     /**
@@ -107,7 +125,7 @@ struct DenseMatrix
     {
 
         bool do_device = (location & DEVICE) == DEVICE;
-        bool do_host   = (location & DEVICE) == DEVICE;
+        bool do_host   = (location & HOST) == HOST;
 
         if (do_device && do_host) {
             std::fill_n(m_h_val, rows() * cols(), val);
@@ -245,20 +263,24 @@ struct DenseMatrix
 
     /**
      * @brief access the matrix using vertex/edge/face handle as a row index.
+     * This can only be used in non user-managed mode
      */
     template <typename HandleT>
     __host__ __device__ T& operator()(const HandleT handle, const IndexT col)
     {
+        assert(!m_user_managed);
         return this->operator()(get_row_id(handle), col);
     }
 
     /**
      * @brief access the matrix using vertex/edge/face handle as a row index.
+     * This can only be used in non user-managed mode
      */
     template <typename HandleT>
-    __host__ __device__ const T& operator()(const HandleT  handle,
-                                            const IndexT col) const
+    __host__ __device__ const T& operator()(const HandleT handle,
+                                            const IndexT  col) const
     {
+        assert(!m_user_managed);
         return this->operator()(get_row_id(handle), col);
     }
 
@@ -617,11 +639,13 @@ struct DenseMatrix
 
     /**
      * @brief return the row index corresponding to specific vertex/edge/face
-     * handle
+     * handle. This can only be used non user-managed mode
      */
     template <typename HandleT>
     __host__ __device__ IndexT get_row_id(const HandleT handle) const
     {
+        assert(!m_user_managed);
+
         auto id = handle.unpack();
 
         IndexT row;
@@ -663,7 +687,7 @@ struct DenseMatrix
      * @brief return the raw pointer pf a column.
      */
     __host__ const T* col_data(const IndexT ld_idx,
-                               locationT      location = DEVICE) const
+                               locationT    location = DEVICE) const
     {
         if ((location & HOST) == HOST) {
             return m_h_val + ld_idx * m_num_rows;
@@ -850,17 +874,21 @@ struct DenseMatrix
      */
     __host__ void release(locationT location = LOCATION_ALL)
     {
-        if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
-            free(m_h_val);
-            m_h_val     = nullptr;
-            m_allocated = m_allocated & (~HOST);
+        if (!m_user_managed) {
+
+            if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
+                free(m_h_val);
+                m_h_val     = nullptr;
+                m_allocated = m_allocated & (~HOST);
+            }
+
+            if (((location & DEVICE) == DEVICE) &&
+                ((m_allocated & DEVICE) == DEVICE)) {
+                GPU_FREE(m_d_val);
+                m_allocated = m_allocated & (~DEVICE);
+            }
         }
 
-        if (((location & DEVICE) == DEVICE) &&
-            ((m_allocated & DEVICE) == DEVICE)) {
-            GPU_FREE(m_d_val);
-            m_allocated = m_allocated & (~DEVICE);
-        }
         if ((location & LOCATION_ALL) == LOCATION_ALL) {
             CUSPARSE_ERROR(cusparseDestroyDnMat(m_dendescr));
         }
@@ -891,16 +919,37 @@ struct DenseMatrix
 
 
     /**
-     * @brief return the 1d indext given the row and column id
+     * @brief return the 1d index given the row and column id
      */
-    __host__ __device__ __inline__ int get_index(IndexT row,
-                                                 IndexT col) const
+    __host__ __device__ __inline__ int get_index(IndexT row, IndexT col) const
     {
         if constexpr (Order == Eigen::ColMajor) {
-            return col * m_num_rows + row;
+            const int ret = col * m_num_rows + row;
+            assert(ret < rows() * cols());
+            return ret;
         } else {
-            return col + row * m_num_cols;
+            const int ret = col + row * m_num_cols;
+            assert(ret < rows() * cols());
+            return ret;
         }
+    }
+
+    /**
+     * @brief initialize cublas
+     */
+    __host__ void init_cublas()
+    {
+        CUSPARSE_ERROR(cusparseCreateDnMat(&m_dendescr,
+                                           m_num_rows,
+                                           m_num_cols,
+                                           m_num_rows,  // leading dim
+                                           m_d_val,
+                                           cuda_type<T>(),
+                                           CUSPARSE_ORDER_COL));
+
+        CUBLAS_ERROR(cublasCreate(&m_cublas_handle));
+        CUBLAS_ERROR(
+            cublasSetPointerMode(m_cublas_handle, CUBLAS_POINTER_MODE_HOST));
     }
 
 
@@ -912,6 +961,7 @@ struct DenseMatrix
     IndexT               m_num_cols;
     T*                   m_d_val;
     T*                   m_h_val;
+    bool                 m_user_managed;
 };
 
 }  // namespace rxmesh

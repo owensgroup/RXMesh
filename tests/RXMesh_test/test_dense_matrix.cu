@@ -247,3 +247,42 @@ TEST(RXMeshStatic, DenseMatrixSwap)
 
     EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 }
+
+
+TEST(RXMeshStatic, DenseMatrixUserManaged)
+{
+    using namespace rxmesh;
+    using T = float;
+
+    int rows = 10;
+    int cols = 3;
+
+    std::vector<T> h_ptr(rows * cols);
+
+    fill_with_random_numbers(h_ptr.data(), rows * cols);
+
+    T* d_ptr(nullptr);
+    CUDA_ERROR(cudaMalloc((void**)&d_ptr, sizeof(T) * rows * cols));
+
+    DenseMatrix<T> mat(rows, cols, d_ptr, h_ptr.data());
+
+    mat.move(HOST, DEVICE);
+
+    T norm2_res = mat.norm2();
+
+    T res = 0;
+
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+
+            res += h_ptr[i * cols + j] * h_ptr[i * cols + j];
+        }
+    }
+
+    EXPECT_NEAR(norm2_res, std::sqrt(res), 1e-5);
+
+    mat.release();
+    GPU_FREE(d_ptr);
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+}

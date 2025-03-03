@@ -30,7 +30,7 @@ source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "SECPriority" FILES ${SOURCE_
 CPMAddPackage(
     NAME cuco
     GITHUB_REPOSITORY ahdhn/cuCollections
-    GIT_TAG 160eb3e76193b2f87fe2c83f3bdc70fec3ab5aaa
+    GIT_TAG 9dc051e5fa7283be991404d63da6250d18574541
     OPTIONS
        "BUILD_TESTS OFF"
        "BUILD_BENCHMARKS OFF"

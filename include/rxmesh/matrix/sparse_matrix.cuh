@@ -146,11 +146,63 @@ struct SparseMatrix
           m_d_solver_b(nullptr),
           m_d_solver_x(nullptr),
           m_allocated(LOCATION_NONE),
-          m_current_solver(Solver::NONE)
+          m_current_solver(Solver::NONE),
+          m_is_user_managed(false)
     {
     }
 
     SparseMatrix(const RXMeshStatic& rx) : SparseMatrix(rx, 1) {};
+
+
+    /**
+     * @brief Construct the matrix using user-managed buffers (i.e., buffers
+     * that are allocated by the user and will be freed by the user)
+     * @param num_rows number of row in the matrix
+     * @param num_cols number of columns in the matrix
+     * @param nnz number of non-zero values in the matrix
+     * @param d_row_ptr device pointer to the row pointer
+     * @param d_col_idx device pointer to the column index
+     * @param d_val device point to the value pointer
+     * @param h_row_ptr host pointer to the row pointer
+     * @param h_col_idx host pointer to the column index
+     * @param h_val host point to the value pointer
+     */
+    SparseMatrix(IndexT  num_rows,
+                 IndexT  num_cols,
+                 IndexT  nnz,
+                 IndexT* d_row_ptr,
+                 IndexT* d_col_idx,
+                 T*      d_val,
+                 IndexT* h_row_ptr,
+                 IndexT* h_col_idx,
+                 T*      h_val)
+        : SparseMatrix()
+    {
+        m_replicate = 1;
+
+        m_is_user_managed = true;
+
+        m_d_row_ptr = d_row_ptr;
+        m_d_col_idx = d_col_idx;
+        m_d_val     = d_val;
+
+        m_h_row_ptr = h_row_ptr;
+        m_h_col_idx = h_col_idx;
+        m_h_val     = h_val;
+
+        m_num_rows = num_rows;
+        m_num_cols = num_cols;
+        m_nnz      = nnz;
+
+        m_allocated = m_allocated | DEVICE;
+        m_allocated = m_allocated | HOST;
+
+        // create cusparse matrix
+        init_cusparse();
+#ifndef NDEBUG
+        check_repeated_indices();
+#endif
+    }
 
    protected:
     SparseMatrix(const RXMeshStatic& rx, IndexT replicate)
@@ -187,7 +239,8 @@ struct SparseMatrix
           m_d_solver_b(nullptr),
           m_d_solver_x(nullptr),
           m_allocated(LOCATION_NONE),
-          m_current_solver(Solver::NONE)
+          m_current_solver(Solver::NONE),
+          m_is_user_managed(false)
     {
         using namespace rxmesh;
         constexpr uint32_t blockThreads = 256;
@@ -258,33 +311,6 @@ struct SparseMatrix
         CUDA_ERROR(cudaMemset(m_d_val, 0, m_nnz * sizeof(T)));
         m_allocated = m_allocated | DEVICE;
 
-        // create cusparse matrix
-        CUSPARSE_ERROR(cusparseCreateMatDescr(&m_descr));
-        CUSPARSE_ERROR(
-            cusparseSetMatType(m_descr, CUSPARSE_MATRIX_TYPE_GENERAL));
-        CUSPARSE_ERROR(
-            cusparseSetMatDiagType(m_descr, CUSPARSE_DIAG_TYPE_NON_UNIT));
-        CUSPARSE_ERROR(
-            cusparseSetMatIndexBase(m_descr, CUSPARSE_INDEX_BASE_ZERO));
-
-        CUSPARSE_ERROR(cusparseCreateCsr(&m_spdescr,
-                                         m_num_rows,
-                                         m_num_cols,
-                                         m_nnz,
-                                         m_d_row_ptr,
-                                         m_d_col_idx,
-                                         m_d_val,
-                                         CUSPARSE_INDEX_32I,
-                                         CUSPARSE_INDEX_32I,
-                                         CUSPARSE_INDEX_BASE_ZERO,
-                                         cuda_type<T>()));
-
-        CUSPARSE_ERROR(cusparseCreate(&m_cusparse_handle));
-        CUSOLVER_ERROR(cusolverSpCreate(&m_cusolver_sphandle));
-
-        CUSOLVER_ERROR(cusolverSpCreateCsrcholInfo(&m_chol_info));
-
-        CUSOLVER_ERROR(cusolverSpCreateCsrqrInfo(&m_qr_info));
 
         // allocate the host
         m_h_val = static_cast<T*>(malloc(m_nnz * sizeof(T)));
@@ -305,30 +331,12 @@ struct SparseMatrix
 
         m_allocated = m_allocated | HOST;
 
-        CUSPARSE_ERROR(cusparseSetPointerMode(m_cusparse_handle,
-                                              CUSPARSE_POINTER_MODE_HOST));
+
+        // create cusparse matrix
+        init_cusparse();
 
 #ifndef NDEBUG
-        // sanity check: no repeated indices in the col_id for a specific row
-        for (IndexT r = 0; r < rows(); ++r) {
-            IndexT start = m_h_row_ptr[r];
-            IndexT stop  = m_h_row_ptr[r + 1];
-
-            std::set<IndexT> cols;
-            for (IndexT i = start; i < stop; ++i) {
-                IndexT c = m_h_col_idx[i];
-                if (cols.find(c) != cols.end()) {
-                    RXMESH_ERROR(
-                        "SparseMatrix::SparseMatrix() Error in constructing "
-                        "the sparse matrix. Row {} contains repeated column "
-                        "indices {}",
-                        r,
-                        c);
-                }
-                cols.insert(c);
-            }
-        }
-
+        check_repeated_indices();
 #endif
     }
 
@@ -359,7 +367,7 @@ struct SparseMatrix
     __host__ void reset(T val, locationT location, cudaStream_t stream = NULL)
     {
         bool do_device = (location & DEVICE) == DEVICE;
-        bool do_host   = (location & DEVICE) == DEVICE;
+        bool do_host   = (location & HOST) == HOST;
 
         if (do_device && do_host) {
             std::fill_n(m_h_val, m_nnz, val);
@@ -437,20 +445,24 @@ struct SparseMatrix
     }
 
     /**
-     * @brief access the matrix using VertexHandle
+     * @brief access the matrix using VertexHandle. This function can only be
+     * called if the memory is Not user-managed
      */
     __device__ __host__ const T& operator()(const VertexHandle& row_v,
                                             const VertexHandle& col_v) const
     {
+        assert(!m_is_user_managed);
         return this->operator()(get_row_id(row_v), get_row_id(col_v));
     }
 
     /**
-     * @brief access the matrix using VertexHandle
+     * @brief access the matrix using VertexHandle. This function can only be
+     * called if the memory is Not user-managed
      */
     __device__ __host__ T& operator()(const VertexHandle& row_v,
                                       const VertexHandle& col_v)
     {
+        assert(!m_is_user_managed);
         return this->operator()(get_row_id(row_v), get_row_id(col_v));
     }
 
@@ -1632,6 +1644,9 @@ struct SparseMatrix
    protected:
     __host__ void release(locationT location)
     {
+        if (m_is_user_managed) {
+            return;
+        }
         if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
             free(m_h_val);
             free(m_h_row_ptr);
@@ -1933,6 +1948,66 @@ struct SparseMatrix
         thrust::gather(thrust::device, t_p, t_p + size, t_i, t_o);
     }
 
+   private:
+    void init_cusparse()
+    {
+
+
+        CUSPARSE_ERROR(cusparseCreateMatDescr(&m_descr));
+        CUSPARSE_ERROR(
+            cusparseSetMatType(m_descr, CUSPARSE_MATRIX_TYPE_GENERAL));
+        CUSPARSE_ERROR(
+            cusparseSetMatDiagType(m_descr, CUSPARSE_DIAG_TYPE_NON_UNIT));
+        CUSPARSE_ERROR(
+            cusparseSetMatIndexBase(m_descr, CUSPARSE_INDEX_BASE_ZERO));
+
+        CUSPARSE_ERROR(cusparseCreateCsr(&m_spdescr,
+                                         m_num_rows,
+                                         m_num_cols,
+                                         m_nnz,
+                                         m_d_row_ptr,
+                                         m_d_col_idx,
+                                         m_d_val,
+                                         CUSPARSE_INDEX_32I,
+                                         CUSPARSE_INDEX_32I,
+                                         CUSPARSE_INDEX_BASE_ZERO,
+                                         cuda_type<T>()));
+
+        CUSPARSE_ERROR(cusparseCreate(&m_cusparse_handle));
+        CUSOLVER_ERROR(cusolverSpCreate(&m_cusolver_sphandle));
+
+
+        CUSOLVER_ERROR(cusolverSpCreateCsrcholInfo(&m_chol_info));
+
+        CUSOLVER_ERROR(cusolverSpCreateCsrqrInfo(&m_qr_info));
+
+        CUSPARSE_ERROR(cusparseSetPointerMode(m_cusparse_handle,
+                                              CUSPARSE_POINTER_MODE_HOST));
+    }
+
+    void check_repeated_indices()
+    {
+        // sanity check: no repeated indices in the col_id for a specific row
+        for (IndexT r = 0; r < rows(); ++r) {
+            IndexT start = m_h_row_ptr[r];
+            IndexT stop  = m_h_row_ptr[r + 1];
+
+            std::set<IndexT> cols;
+            for (IndexT i = start; i < stop; ++i) {
+                IndexT c = m_h_col_idx[i];
+                if (cols.find(c) != cols.end()) {
+                    RXMESH_ERROR(
+                        "SparseMatrix::check_repeated_indices() Error in "
+                        "constructing the sparse matrix. Row {} contains "
+                        "repeated column indices {}",
+                        r,
+                        c);
+                }
+                cols.insert(c);
+            }
+        }
+    }
+
     const Context        m_context;
     cusparseHandle_t     m_cusparse_handle;
     cusolverSpHandle_t   m_cusolver_sphandle;
@@ -1997,6 +2072,9 @@ struct SparseMatrix
     // flags
     bool      m_use_reorder;
     locationT m_allocated;
+
+    // indicate if memory allocation is used managed
+    bool m_is_user_managed;
 };
 
 }  // namespace rxmesh

@@ -6,6 +6,7 @@
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
 
+#include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
 
 template <uint32_t blockThreads, typename IndexT = int>
@@ -439,4 +440,85 @@ TEST(RXMeshStatic, SparseMatrixToEigen)
     X_mat.release();
     B_mat.release();
     X_copy.release();
+}
+
+
+TEST(RXMeshStatic, SparseMatrixUserManaged)
+{
+    using namespace rxmesh;
+    using T = float;
+
+    int rows = 10;
+    int cols = 10;
+    int nnz  = static_cast<int>(0.2 * rows * cols);
+
+    std::random_device                 rd;
+    std::mt19937                       gen(rd());
+    std::uniform_real_distribution<T>  value_dist(0.0, 1.0);
+    std::uniform_int_distribution<int> row_dist(0, rows - 1);
+    std::uniform_int_distribution<int> col_dist(0, cols - 1);
+
+    std::vector<Eigen::Triplet<T>> triplets;
+    for (int i = 0; i < nnz; ++i) {
+        int    r   = row_dist(gen);
+        int    c   = col_dist(gen);
+        double val = value_dist(gen);
+        triplets.emplace_back(r, c, val);
+    }
+
+    Eigen::SparseMatrix<T, Eigen::RowMajor, int> eigen_mat(rows, cols);
+    eigen_mat.setFromTriplets(triplets.begin(), triplets.end());
+    eigen_mat.makeCompressed();
+
+    int* h_row_ptr = eigen_mat.outerIndexPtr();  // Row pointers
+    int* h_col_idx = eigen_mat.innerIndexPtr();  // Column indices
+    T*   h_val     = eigen_mat.valuePtr();       // Nonzero values
+
+    int *d_row_ptr(nullptr), *d_col_idx(nullptr);
+    T*   d_val(nullptr);
+
+    CUDA_ERROR(cudaMalloc((void**)&d_row_ptr, sizeof(int) * (rows + 1)));
+    CUDA_ERROR(cudaMalloc((void**)&d_col_idx, sizeof(int) * nnz));
+    CUDA_ERROR(cudaMalloc((void**)&d_val, sizeof(T) * nnz));
+
+    CUDA_ERROR(cudaMemcpy(d_row_ptr,
+                          h_row_ptr,
+                          sizeof(int) * (rows + 1),
+                          cudaMemcpyHostToDevice));
+
+    CUDA_ERROR(cudaMemcpy(
+        d_col_idx, h_col_idx, sizeof(int) * nnz, cudaMemcpyHostToDevice));
+    CUDA_ERROR(
+        cudaMemcpy(d_val, h_val, sizeof(T) * nnz, cudaMemcpyHostToDevice));
+
+
+    SparseMatrix mat(rows,
+                     cols,
+                     nnz,
+                     d_row_ptr,
+                     d_col_idx,
+                     d_val,
+                     h_row_ptr,
+                     h_col_idx,
+                     h_val);
+
+
+    EXPECT_EQ(rows, mat.rows());
+    EXPECT_EQ(cols, mat.cols());
+    EXPECT_EQ(nnz, mat.non_zeros());
+
+    for (int row = 0; row < eigen_mat.outerSize(); ++row) {
+        for (Eigen::SparseMatrix<T, Eigen::RowMajor>::InnerIterator it(
+                 eigen_mat, row);
+             it;
+             ++it) {
+            EXPECT_NEAR(it.value(), mat(it.row(), it.col()), 1e-6);            
+        }
+    }
+
+    GPU_FREE(d_row_ptr);
+    GPU_FREE(d_col_idx);
+    GPU_FREE(d_val);
+
+    mat.release();
 }

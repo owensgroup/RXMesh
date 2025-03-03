@@ -19,30 +19,17 @@ struct InverseLPHashTable
     ~InverseLPHashTable()                                    = default;
 
     explicit __device__ InverseLPHashTable(const LPHashTable& lp_table,
-                                           LPPair*            s_ptr)
+                                           LPPair*            s_ptr,
+                                           LPPair*            s_stash)
     {
         m_capacity = lp_table.m_capacity;
         m_s_table  = s_ptr;
 
-        __shared__ LPPair st[LPHashTable::stash_size];
-        m_s_stash = st;
+        m_s_stash = s_stash;
 
         assert(m_s_table);
         assert(m_s_stash);
-    }
-
-    explicit __device__ InverseLPHashTable(const LPHashTable& lp_table,
-                                           ShmemAllocator&    shrd_alloc)
-    {
-        m_capacity = lp_table.m_capacity;
-        m_s_table  = shrd_alloc.alloc<LPPair>(m_capacity);
-
-        __shared__ LPPair st[LPHashTable::stash_size];
-        m_s_stash = st;
-
-        assert(m_s_table);
-        assert(m_s_stash);
-    }
+    } 
 
     /**
      * @brief Reset the hash table to sentinel key-value (tombstone). This API

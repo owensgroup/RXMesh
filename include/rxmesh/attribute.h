@@ -288,9 +288,9 @@ class Attribute : public AttributeBase
     capacity(const uint32_t p) const
     {
 #ifdef __CUDA_ARCH__
-        return m_d_patches_info[p].get_capacity<HandleT>()[0];
+        return m_d_patches_info[p].get_capacity<HandleT>();
 #else
-        return m_h_patches_info[p].get_capacity<HandleT>()[0];
+        return m_h_patches_info[p].get_capacity<HandleT>();
 #endif
     }
 
