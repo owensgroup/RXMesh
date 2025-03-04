@@ -65,6 +65,30 @@ __global__ static void sparse_mat_edge_len_test(
     query.dispatch<Op::VV>(block, shrd_alloc, compute_edge_len);
 }
 
+
+template <uint32_t blockThreads, typename T>
+__global__ static void test_transpose(const rxmesh::Context   context,
+                                      rxmesh::SparseMatrix<T> mat,
+                                      rxmesh::SparseMatrix<T> trans_mat,
+                                      int*                    err_count)
+{
+    using namespace rxmesh;
+
+    for_each<Op::V, blockThreads>(context, [&](VertexHandle& vh) {
+        int row_id  = mat.get_row_id(vh);
+        int row_nnz = mat.non_zeros(row_id);
+
+        for (int i = 0; i < row_nnz; ++i) {
+            int col_id = mat.col_id(row_id, i);
+
+            if (std::abs(mat(row_id, col_id) - trans_mat(col_id, row_id)) >
+                1e-6) {
+                atomicAdd(err_count, 1);
+            }
+        }
+    });
+}
+
 template <typename T>
 __global__ void spmat_multi_hardwired_kernel(T*                      vec,
                                              rxmesh::SparseMatrix<T> sparse_mat,
@@ -512,7 +536,7 @@ TEST(RXMeshStatic, SparseMatrixUserManaged)
                  eigen_mat, row);
              it;
              ++it) {
-            EXPECT_NEAR(it.value(), mat(it.row(), it.col()), 1e-6);            
+            EXPECT_NEAR(it.value(), mat(it.row(), it.col()), 1e-6);
         }
     }
 
@@ -521,4 +545,45 @@ TEST(RXMeshStatic, SparseMatrixUserManaged)
     GPU_FREE(d_val);
 
     mat.release();
+}
+
+
+TEST(RXMeshStatic, SparseMatrixTranspose)
+{
+    using namespace rxmesh;
+    using T = float;
+
+    std::random_device                rd;
+    std::mt19937                      gen(rd());
+    std::uniform_real_distribution<T> value_dist(0.0, 1.0);
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    SparseMatrix<T> mat(rx);
+
+    for (int i = 0; i < mat.non_zeros(); ++i) {
+        mat.get_val_at(i) = value_dist(gen);
+    }
+    mat.move(HOST, DEVICE);
+
+    SparseMatrix<T> mat_trans = mat.transpose();
+
+    int* d_err_count(nullptr);
+    CUDA_ERROR(cudaMalloc((void**)&d_err_count, sizeof(int)));
+    CUDA_ERROR(cudaMemset(d_err_count, 0, sizeof(int)));
+
+    rx.run_kernel<256>(
+        {Op::V}, test_transpose<256, T>, mat, mat_trans, d_err_count);
+
+    int h_err_count = 0;
+    CUDA_ERROR(cudaMemcpy(
+        &h_err_count, d_err_count, sizeof(int), cudaMemcpyDeviceToHost));
+
+    EXPECT_EQ(h_err_count, 0);
+
+    mat.release();
+    mat_trans.release();
+    GPU_FREE(d_err_count);
 }
