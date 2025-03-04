@@ -1608,6 +1608,31 @@ struct SparseMatrix
         post_analyze_alloc(solver);
         factorize(solver);
     }
+    __host__ void pre_solve(Solver        solver,
+                            PermuteMethod reorder = PermuteMethod::NSTDIS)
+    {
+        if (solver != Solver::CHOL && solver != Solver::QR) {
+            RXMESH_WARN(
+                "SparseMatrix::pre_solve() the low-level API only works for "
+                "Cholesky and QR solvers");
+            return;
+        }
+        m_current_solver = solver;
+
+        permute_alloc(reorder);
+        CUSOLVER_ERROR(cusolverSpXcsrmetisndHost(m_cusolver_sphandle,
+                                                 m_num_rows,
+                                                 m_nnz,
+                                                 m_descr,
+                                                 m_h_solver_row_ptr,
+                                                 m_h_solver_col_idx,
+                                                 NULL,
+                                                 m_h_permute));
+        //permute(rx, reorder);
+        analyze_pattern(solver);
+        post_analyze_alloc(solver);
+        factorize(solver);
+    }
 
     /**
      * @brief The lower level api of solving the linear system after using
