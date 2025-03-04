@@ -443,6 +443,19 @@ class GMGVCycle
             VCycle(LHS[0], RHS, X, 0);
     }
 
+    /**
+     * \brief Function to set prolongation operators, as well as calculate restriction operators
+     * \param prolongationOperatorCSR the prolongation operators calculated beforehand
+     */
+    void SetProlongationOperators(std::vector<CSR> &prolongationOperatorCSR)
+    {
+        prolongationOperators = prolongationOperatorCSR;
+        for (int i=0;i<prolongationOperators.size();i++) {
+            prolongationOperatorsTransposed.push_back(
+                transposeCSR(prolongationOperatorCSR[i]));
+        }
+    }
+
     GMGVCycle(){}
     GMGVCycle(int initialNumberOfRows) : X(initialNumberOfRows)
     {
@@ -454,6 +467,7 @@ class GMGVCycle
 
 void constructLHS(CSR               A_csr,
                   std::vector<CSR>  prolongationOperatorCSR,
+                  std::vector<CSR>  prolongationOperatorCSRTranspose,
                   std::vector<CSR>& equationsPerLevel,
                   int               numberOfLevels,
                   int               numberOfSamples,
@@ -493,8 +507,8 @@ void constructLHS(CSR               A_csr,
                             1);*/
 
         
-        CSR transposeOperator =
-            transposeCSR(prolongationOperatorCSR[i]);
+        CSR transposeOperator = prolongationOperatorCSRTranspose[i];
+           // transposeCSR(prolongationOperatorCSR[i]);
 
         result = multiplyCSR(transposeOperator.num_rows,
                              prolongationOperatorCSR[i].num_rows,
