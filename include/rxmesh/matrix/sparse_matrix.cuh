@@ -198,7 +198,7 @@ struct SparseMatrix
         m_allocated = m_allocated | HOST;
 
         // create cusparse matrix
-        init_cusparse();
+        init_cusparse(*this);
 #ifndef NDEBUG
         check_repeated_indices();
 #endif
@@ -333,7 +333,7 @@ struct SparseMatrix
 
 
         // create cusparse matrix
-        init_cusparse();
+        init_cusparse(*this);
 
 #ifndef NDEBUG
         check_repeated_indices();
@@ -409,6 +409,28 @@ struct SparseMatrix
     {
         return m_nnz;
     }
+
+    /**
+     * @brief return number of non-zero values at certain row
+     */
+    __device__ __host__ IndexT non_zeros(int row_id) const
+    {
+        assert(row_id < rows());
+        return row_ptr()[row_id + 1] - row_ptr()[row_id];
+    }
+
+    /**
+     * @brief return the col index for specific row at specific nnz index.
+     * Useful when iterating over nnz of a row
+     */
+    __device__ __host__ IndexT col_id(int row_id, int nnz_index) const
+    {
+        assert(row_id < rows());
+        assert(nnz_index < non_zeros(row_id));
+
+        return col_idx()[row_ptr()[row_id] + nnz_index];
+    }
+
 
     /**
      * @brief return the number of non-zero values on and below the diagonal
@@ -577,6 +599,85 @@ struct SparseMatrix
         GPU_FREE(m_solver_buffer);
         GPU_FREE(m_d_cusparse_spmm_buffer);
         GPU_FREE(m_d_cusparse_spmv_buffer);
+    }
+
+
+    /**
+     * @brief return another SparseMatrix that is the transpose of this
+     * SparseMatrix. This function allocate memory on both host and device.
+     * Thus, it is not recommended to call it during the application multiple
+     * times
+     */
+    __host__ SparseMatrix<T> transpose() const
+    {
+        SparseMatrix<T> ret;
+
+        ret.m_num_rows        = m_num_cols;
+        ret.m_num_cols        = m_num_rows;
+        ret.m_nnz             = m_nnz;
+        ret.m_context         = m_context;
+        ret.m_replicate       = m_replicate;
+        ret.m_allocated       = m_allocated;
+        ret.m_is_user_managed = false;
+
+        CUDA_ERROR(cudaMalloc((void**)&ret.m_d_row_ptr,
+                              (m_num_cols + 1) * sizeof(IndexT)));
+        CUDA_ERROR(
+            cudaMalloc((void**)&ret.m_d_col_idx, m_nnz * sizeof(IndexT)));
+        CUDA_ERROR(cudaMalloc((void**)&ret.m_d_val, m_nnz * sizeof(T)));
+
+        ret.m_h_val = static_cast<T*>(malloc(m_nnz * sizeof(T)));
+        ret.m_h_row_ptr =
+            static_cast<IndexT*>(malloc((m_num_cols + 1) * sizeof(IndexT)));
+        ret.m_h_col_idx = static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
+
+        init_cusparse(ret);
+
+        size_t buffer_size(0);
+
+        CUSPARSE_ERROR(cusparseCsr2cscEx2_bufferSize(
+            ret.m_cusparse_handle,
+            m_num_rows,
+            m_num_cols,
+            m_nnz,
+            m_d_val,
+            m_d_row_ptr,
+            m_d_col_idx,
+            ret.m_d_val,
+            ret.m_d_row_ptr,
+            ret.m_d_col_idx,
+            cuda_type<T>(),
+            CUSPARSE_ACTION_NUMERIC,
+            CUSPARSE_INDEX_BASE_ZERO,
+            CUSPARSE_CSR2CSC_ALG_DEFAULT,  // CUSPARSE_CSR2CSC_ALG1
+            &buffer_size));
+
+        void* buffer(nullptr);
+
+        CUDA_ERROR(cudaMalloc((void**)&buffer, buffer_size));
+
+        CUSPARSE_ERROR(cusparseCsr2cscEx2(
+            ret.m_cusparse_handle,
+            m_num_rows,
+            m_num_cols,
+            m_nnz,
+            m_d_val,
+            m_d_row_ptr,
+            m_d_col_idx,
+            ret.m_d_val,
+            ret.m_d_row_ptr,
+            ret.m_d_col_idx,
+            cuda_type<T>(),
+            CUSPARSE_ACTION_NUMERIC,
+            CUSPARSE_INDEX_BASE_ZERO,
+            CUSPARSE_CSR2CSC_ALG_DEFAULT,  // CUSPARSE_CSR2CSC_ALG1
+            buffer));
+
+        GPU_FREE(buffer);
+
+        ret.move(DEVICE, HOST);
+
+        return ret;
     }
 
     /**
@@ -1949,39 +2050,37 @@ struct SparseMatrix
     }
 
    private:
-    void init_cusparse()
+    void init_cusparse(SparseMatrix<T>& mat) const
     {
-
-
-        CUSPARSE_ERROR(cusparseCreateMatDescr(&m_descr));
+        CUSPARSE_ERROR(cusparseCreateMatDescr(&mat.m_descr));
         CUSPARSE_ERROR(
-            cusparseSetMatType(m_descr, CUSPARSE_MATRIX_TYPE_GENERAL));
+            cusparseSetMatType(mat.m_descr, CUSPARSE_MATRIX_TYPE_GENERAL));
         CUSPARSE_ERROR(
-            cusparseSetMatDiagType(m_descr, CUSPARSE_DIAG_TYPE_NON_UNIT));
+            cusparseSetMatDiagType(mat.m_descr, CUSPARSE_DIAG_TYPE_NON_UNIT));
         CUSPARSE_ERROR(
-            cusparseSetMatIndexBase(m_descr, CUSPARSE_INDEX_BASE_ZERO));
+            cusparseSetMatIndexBase(mat.m_descr, CUSPARSE_INDEX_BASE_ZERO));
 
-        CUSPARSE_ERROR(cusparseCreateCsr(&m_spdescr,
-                                         m_num_rows,
-                                         m_num_cols,
-                                         m_nnz,
-                                         m_d_row_ptr,
-                                         m_d_col_idx,
-                                         m_d_val,
+        CUSPARSE_ERROR(cusparseCreateCsr(&mat.m_spdescr,
+                                         mat.m_num_rows,
+                                         mat.m_num_cols,
+                                         mat.m_nnz,
+                                         mat.m_d_row_ptr,
+                                         mat.m_d_col_idx,
+                                         mat.m_d_val,
                                          CUSPARSE_INDEX_32I,
                                          CUSPARSE_INDEX_32I,
                                          CUSPARSE_INDEX_BASE_ZERO,
                                          cuda_type<T>()));
 
-        CUSPARSE_ERROR(cusparseCreate(&m_cusparse_handle));
-        CUSOLVER_ERROR(cusolverSpCreate(&m_cusolver_sphandle));
+        CUSPARSE_ERROR(cusparseCreate(&mat.m_cusparse_handle));
+        CUSOLVER_ERROR(cusolverSpCreate(&mat.m_cusolver_sphandle));
 
 
-        CUSOLVER_ERROR(cusolverSpCreateCsrcholInfo(&m_chol_info));
+        CUSOLVER_ERROR(cusolverSpCreateCsrcholInfo(&mat.m_chol_info));
 
-        CUSOLVER_ERROR(cusolverSpCreateCsrqrInfo(&m_qr_info));
+        CUSOLVER_ERROR(cusolverSpCreateCsrqrInfo(&mat.m_qr_info));
 
-        CUSPARSE_ERROR(cusparseSetPointerMode(m_cusparse_handle,
+        CUSPARSE_ERROR(cusparseSetPointerMode(mat.m_cusparse_handle,
                                               CUSPARSE_POINTER_MODE_HOST));
     }
 
@@ -2008,7 +2107,7 @@ struct SparseMatrix
         }
     }
 
-    const Context        m_context;
+    Context              m_context;
     cusparseHandle_t     m_cusparse_handle;
     cusolverSpHandle_t   m_cusolver_sphandle;
     cusparseSpMatDescr_t m_spdescr;
