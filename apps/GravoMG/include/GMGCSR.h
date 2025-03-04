@@ -413,7 +413,6 @@ struct CSR
 
 
 void clusterCSR(int    n,
-                Vec3*  vertex_pos,
                 float* distance,
                 int*   clusterVertices,
                 int*   flag,

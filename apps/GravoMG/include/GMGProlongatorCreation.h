@@ -105,6 +105,19 @@ __device__ void computeBarycentricCoordinates(const Eigen::Vector3f& v0,
      //printf("\ncalculated coords are %f, %f, %f", lambda0, lambda1, lambda2);
 }
 
+/**
+ * \brief Function to create prolongation operator for  level 1
+ * \param numberOfSamples Number of samples for the first level
+ * \param row_ptr row pointer of the mesh CSR 
+ * \param value_ptr column index pointer for the mesh CSR
+ * \param number_of_neighbors pointer containing number of neighbors for each vertex in coarse mesh
+ * \param N number of vertices in fine mesh
+ * \param clustered_vertex pointer which gives the cluster each vertex is associated with
+ * \param vertex_pos position of each fine vertex
+ * \param sample_pos position of each coarse vertex
+ * \param operator_value_ptr column index pointer for first prolongation operator
+ * \param operator_data_ptr pointer for associated value for a given column in a given row
+ */
 void createProlongationOperator(int  numberOfSamples,
                                 int* row_ptr,
                                 int* value_ptr,
@@ -259,7 +272,7 @@ void createProlongationOperator(int  numberOfSamples,
                     }
                 }
             }
-
+            assert(selectedv1 != selectedv2 && selectedv2 != selectedv3 & selectedv1 != selectedv3);
             // Compute barycentric coordinates for the closest triangle
             float b1 = 0, b2 = 0, b3 = 0;
             computeBarycentricCoordinates(
@@ -278,13 +291,19 @@ void createProlongationOperator(int  numberOfSamples,
     
 }
 
-
-void createProlongationOperator(int         numberOfSamples,
-                                int*        row_ptr,
+/**
+ * \brief Constructs prolongation operator for a level beyond 1
+ * \param row_ptr row pointer for next level csr mesh
+ * \param value_ptr column index pointer for next level csr mesh
+ * \param operator_value_ptr prolongation operator column index pointer
+ * \param operator_data_ptr prolongation operator value pointer
+ * \param N 
+ * \param vData 
+ */
+void createProlongationOperator(int*        row_ptr,
                                 int*        value_ptr,
                                 int* operator_value_ptr,
                                 float*        operator_data_ptr,
-                                int*        number_of_neighbors,
                                 int         N,
                                 VertexData* vData)
 {
@@ -360,7 +379,7 @@ void createProlongationOperator(int         numberOfSamples,
                     }
                 }
             }
-
+            assert(selectedv1 != selectedv2 && selectedv2 != selectedv3 && selectedv3 != selectedv1);
             // Compute barycentric coordinates for the closest triangle
             float b1 = 0, b2 = 0, b3 = 0;
             computeBarycentricCoordinates(
@@ -445,7 +464,13 @@ void numberOfNeighbors(int              numberOfSamples,
 }
 
 
-
+/**
+ * \brief Determine cluster for a set of vertices at a certain level
+ * \param n 
+ * \param distance 
+ * \param currentLevel 
+ * \param vertex_data 
+ */
 void setCluster(int         n,
                 float*      distance,
                 int         currentLevel,
@@ -479,14 +504,31 @@ void setCluster(int         n,
             }
         });
 }
-
-
-
+/**
+ * \brief Used to convert our pointers to polyscope usable quantities
+ * \param array the original pointer array
+ * \param size size of pointer
+ * \return 
+ */
 std::vector<int> intPointerArrayToVector(int* array, size_t size)
 {
     return std::vector<int>(array, array + size);
 }
 
+/**
+ * \brief Create prolongation operator CSR for all levels beyond level 1
+ * \param N 
+ * \param numberOfSamples 
+ * \param numberOfLevels 
+ * \param ratio 
+ * \param sample_pos 
+ * \param csr 
+ * \param prolongationOperatorCSR 
+ * \param prolongationOperatorCSRTransposed 
+ * \param oldVdata 
+ * \param distanceArray 
+ * \param vertexCluster 
+ */
 void createProlongationOperators(int               N,
                                  int               numberOfSamples,
                                  int               numberOfLevels,
@@ -530,17 +572,6 @@ void createProlongationOperators(int               N,
 
     CSR a(numberOfSamples);
 
-    //DEBUGGING LEVEL 1
-    std::vector<int> vertexDebug;
-    vertexDebug.resize(numberOfSamples);
-
-    for (int i=0;i<numberOfSamples;i++) {
-        if (i == 6 /*|| i == 811 || i == 945 || i == 470*/)
-            vertexDebug[i] = 1;
-        else
-            vertexDebug[i] = 0;
-    }
-
     // operatorsCSR.resize(numberOfLevels-1);
 
     for (int level = 1; level < numberOfLevels - 1; level++) {
@@ -559,7 +590,6 @@ void createProlongationOperators(int               N,
 
             *flag = 0;
             clusterCSR(currentNumberOfVertices,
-                       sample_pos,
                        distanceArray,
                        vertexCluster,
                        flag,
@@ -606,10 +636,7 @@ void createProlongationOperators(int               N,
                          number_of_neighbors2,
                          vertexNeighbors2,
                          currentNumberOfVertices);
-       /* if (level==1) {
-            currentCSR.printCSR();
-        }*/
-        
+       
         /*currentCSR.GetRenderData(vertexPositionsArray[level - 1],
                                  faceIndicesArray[level - 1],
                                  sample_pos);*/
@@ -620,12 +647,10 @@ void createProlongationOperators(int               N,
             faceIndicesArray[level - 1]);*/
 
 
-        createProlongationOperator(currentNumberOfSamples,
-                                   currentCSR.row_ptr,
+        createProlongationOperator(currentCSR.row_ptr,
                                    currentCSR.value_ptr,
                                    a.value_ptr,
                                    a.data_ptr,
-                                   number_of_neighbors2,
                                    currentNumberOfVertices,
                                    oldVdata);
         prolongationOperatorCSR.push_back(a);
@@ -633,12 +658,6 @@ void createProlongationOperators(int               N,
         //a.printCSR(true);
         cudaDeviceSynchronize();  // Ensure data is synchronized before
                                   // accessing
-
-
-        
-       
-
-
         lastCSR = currentCSR;  // next mesh level
     }
     //stop a timer here
