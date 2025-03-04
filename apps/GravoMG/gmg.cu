@@ -21,6 +21,7 @@ public:
     int       N;
     int       numberOfLevels;
     std::vector<CSR> prolongationOperatorCSR;
+    std::vector<CSR> prolongationOperatorCSRTranspose;
     std::vector<CSR> equationsPerLevel;
     VectorCSR3D      B_v;
 
@@ -215,6 +216,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
 
     cudaDeviceSynchronize();
     prolongationOperatorCSR.push_back(firstOperator);
+    prolongationOperatorCSRTranspose.push_back(transposeCSR(firstOperator));
 
     //render the first level
     //csr.render(sample_pos);
@@ -235,6 +237,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
                                 sample_pos,
                                 csr,
                                 prolongationOperatorCSR,
+        prolongationOperatorCSRTranspose,
                                 oldVdata,
                                 distanceArray,
                                 vertexCluster);
@@ -242,7 +245,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     timers.stop("Total");
     //timers.stop("Constructing operators without level 1");
 
-
+    
     // contruct equations as CSR matrices
 
     //for now this is hard coded to use the MCF, we can abstract this later to handle different Lx=b
@@ -255,7 +258,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
 
     //std::cout << "\nRHS:";
     //std::cout << "\n Number of rows of B:" << B_mat.rows();
-
+    
     //copy the RHS to our CSR structure
     for (int i = 0; i < B_mat.rows(); i++) {
         B_v.vector[i * 3]     = B_mat(i, 0);
@@ -264,13 +267,13 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     }
    
     equationsPerLevel.push_back(A_csr);
-
+    
     //construct the equations
     timers.start("Total");
     //timers.start("Constructing LHS");
 
     constructLHS(A_csr,
-                 prolongationOperatorCSR,
+                 prolongationOperatorCSR,prolongationOperatorCSRTranspose,
                  equationsPerLevel,
                  numberOfLevels,
                  numberOfSamples,
@@ -278,7 +281,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     timers.stop("Total");
     //timers.stop("Constructing LHS");
 
-
+    
 
     std::cout << "\nTotal prolongation construction time: " << timers.elapsed_millis("Total");
     std::cout << "\nSampling time : " << timers.elapsed_millis("Sampling");
@@ -289,7 +292,7 @@ void GPUGMG::ConstructOperators(RXMeshStatic &rx)
     //std::cout << "\nLHS construction time: " << timers.elapsed_millis("Constructing LHS");
                  
     cudaDeviceSynchronize();
-
+    
     //timers.stop("Total");
 
     
@@ -307,14 +310,14 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "torus.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bumpy-cube.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere1.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "rocker-arm.obj");
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "nefertiti.obj");
+    //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "nefertiti.obj");
     //RXMeshStatic rx(STRINGIFY(INPUT_DIR) "beetle.obj");
 
     /*
@@ -331,22 +334,18 @@ int main(int argc, char** argv)
     g.ConstructOperators(rx);
 
 
-    //for (int i = 0;i < g.equationsPerLevel.size(); i++)
-    //    g.equationsPerLevel[i].printCSR();
-
     GMGVCycle gmg(g.N);
     
     gmg.prolongationOperators = g.prolongationOperatorCSR;
+    gmg.prolongationOperatorsTransposed = g.prolongationOperatorCSRTranspose;
+    //gmg.SetProlongationOperators(g.prolongationOperatorCSR);
     gmg.LHS                   = g.equationsPerLevel;
     gmg.RHS                   = g.B_v;
     gmg.max_number_of_levels  = 0;
     gmg.post_relax_iterations = 5;
     gmg.pre_relax_iterations  = 5;
     gmg.ratio                 = g.ratio;
-    //std::cout << "\nNumber of equations LHS:" << gmg.LHS.size();
-    //std::cout << "\nNumber of operators:" << gmg.prolongationOperators.size();
-    //std::cout << "\nMax level:" << gmg.max_number_of_levels;
-    
+
     //gmg.solve();
 
     //rendering and interactive
@@ -379,6 +378,7 @@ int main(int argc, char** argv)
 
             timers.start("solve");
             gmg.solve();
+
             timers.stop("solve");
 
             std::cout << "\nSolving time: " << timers.elapsed_millis("solve");

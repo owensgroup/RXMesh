@@ -494,6 +494,7 @@ void createProlongationOperators(int               N,
                                  Vec3*             sample_pos,
                                  CSR               csr,
                                  std::vector<CSR>& prolongationOperatorCSR,
+                                 std::vector<CSR>& prolongationOperatorCSRTransposed,
                                  VertexData*       oldVdata,
                                  float*            distanceArray,
                                  int*              vertexCluster)
@@ -628,6 +629,7 @@ void createProlongationOperators(int               N,
                                    currentNumberOfVertices,
                                    oldVdata);
         prolongationOperatorCSR.push_back(a);
+        prolongationOperatorCSRTransposed.push_back(transposeCSR(a));
         //a.printCSR(true);
         cudaDeviceSynchronize();  // Ensure data is synchronized before
                                   // accessing
