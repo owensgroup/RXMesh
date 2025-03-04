@@ -1,6 +1,10 @@
 #pragma once
 
 #include "include/GMGCSR.h"
+
+/**
+ * \brief Class for holding n 3D vectors
+ */
 struct VectorCSR3D
 {
     float* vector;
@@ -8,6 +12,7 @@ struct VectorCSR3D
     VectorCSR3D(){}
     VectorCSR3D(int number_of_elements)
     {
+        assert(number_of_elements > 0);
         n = number_of_elements;
         cudaMallocManaged(&vector, sizeof(float) * n * 3);
 
@@ -72,7 +77,15 @@ __global__ void csr_spmv_3d(const int*   row_ptr,
     y[row * 3 + 2] = sum_z;
 }
 
-// SpMV wrapper
+/**
+ * @brief  Wrapper for cuda implementation of Matrix Vector multiplication
+ * @param  Row_ptr Row pointer for CSR matrix
+ * @param  col_idx Column pointer for CSR matrix
+ * @param  values Value pointer for CSR matrix
+ * @param  v vector v
+ * @param  y new resulting vector y
+ * @param  m number of rows in CSR matrix
+ */
 void SpMV_CSR_3D(const int*   row_ptr,
                  const int*   col_idx,
                  const float* values,
@@ -167,7 +180,9 @@ struct GaussJacobiUpdate3D
         }
         //float w = 0.85;
         // If the diagonal was found, perform the update
-        if (!has_diag)printf("\n%d does not have diagonal", i);
+        if (!has_diag)
+            printf("\n%d does not have diagonal", i);
+        assert(has_diag);
         if (has_diag && abs(diag) > 10e-8f) {
             x_new[i * 3]     =(b[i * 3] - sum_x) / diag;
             x_new[i * 3 + 1] =(b[i * 3 + 1] - sum_y) / diag;
@@ -189,6 +204,13 @@ struct GaussJacobiUpdate3D
     }
 };
 
+/**
+ * \brief Parallel gauss jacobi implementation to solve Ax=b
+ * \param A 
+ * \param vec_x 
+ * \param vec_b 
+ * \param max_iter number of iterations
+ */
 void gauss_jacobi_CSR_3D(const CSR& A, float* vec_x, float* vec_b, int max_iter)
 {
     int N = A.num_rows;
@@ -230,6 +252,11 @@ void gauss_jacobi_CSR_3D(const CSR& A, float* vec_x, float* vec_b, int max_iter)
     cudaDeviceSynchronize();
 }
 
+
+/**
+ * @brief After computing prolongation operators, this class is used to solve the given Lx=b equation, given certain parameters
+ * for the V cycle
+ */
 class GMGVCycle
 {
    public:
@@ -243,9 +270,19 @@ class GMGVCycle
     int              numberOfCycles       = 2;
 
     std::vector<CSR>       prolongationOperators;
+    std::vector<CSR>       prolongationOperatorsTransposed;
     std::vector<CSR>       LHS;
     VectorCSR3D RHS;
     VectorCSR3D                 X;  // final solution
+
+    
+    /**
+     * @brief Solve the equation Av=f using V Cycle
+     * @param A the LHS 
+     * @param f The RHS
+     * @param v The variables we are solving for
+     * @param currentLevel The current level of the multigrid V cycle, this usually starts from 0
+     */
     void VCycle(CSR& A, VectorCSR3D& f, VectorCSR3D& v, int currentLevel)
     {
         //printf("\n=== Level %d ===", currentLevel);
@@ -275,9 +312,8 @@ class GMGVCycle
 
         // Restrict the residual
         //printf("\nRestricting residual...");
-        CSR transposeProlongation =
-            transposeCSR(prolongationOperators[currentLevel]);
-            //transposeCSR(prolongationOperators[currentLevel], coarse_size);
+        CSR transposeProlongation = prolongationOperatorsTransposed[currentLevel];
+            //transposeCSR(prolongationOperators[currentLevel]);
 
         //if (currentLevel>=1)
         //transposeProlongation.printCSR();
@@ -313,18 +349,43 @@ class GMGVCycle
                    restricted_residual,
                    coarse_correction,
                    currentLevel + 1);
-        } else {
+        }
+        else {
             //printf("\nPerforming direct solve...");
             // Initialize coarse correction to zero
             for (int i = 0; i < coarse_size * 3; i++) {
                 coarse_correction.vector[i] = 0.0f;
             }
 
+            assert(restricted_residual.n == coarse_correction.n);
+
             // std::cout << "\nRestricted residual number of rows: "<<restricted_residual.n;
             //restricted_residual.print();
 
             //std::cout << "\nNumber of rows in A : " << LHS[currentLevel + 1].num_rows;
 
+          /*  SparseMatrix<float> A_mat(LHS[currentLevel + 1].num_rows,
+                                    LHS[currentLevel + 1].num_rows,
+                                    LHS[currentLevel + 1].non_zeros,
+                                    LHS[currentLevel+1].row_ptr,
+                                    LHS[currentLevel+1].value_ptr,
+                                    LHS[currentLevel + 1].data_ptr,
+                                    LHS[currentLevel + 1].row_ptr,
+                                    LHS[currentLevel + 1].value_ptr,
+                                    LHS[currentLevel + 1].data_ptr);
+            DenseMatrix<float>  B_mat(restricted_residual.n, 3,restricted_residual.vector,restricted_residual.vector);
+            
+            auto X_mat =
+                std::make_shared<DenseMatrix<float>>(coarse_correction.n,
+                                                     3,
+                                                     coarse_correction.vector,
+                                                     coarse_correction.vector);
+
+            A_mat.pre_solve(Solver::CHOL);
+            A_mat.solve(B_mat, *X_mat);
+*/
+
+            
             gauss_jacobi_CSR_3D(LHS[currentLevel+1],
                                 coarse_correction.vector,
                                 restricted_residual.vector,
@@ -372,10 +433,11 @@ class GMGVCycle
         //printf("\n=== Completed Level %d ===\n", currentLevel);
     }
 
-
+    /**
+     * @brief Solve the system using GMG and Vcycle
+     */
     void solve()
     {
-        //cudaMallocManaged(&X.vector, X.n * sizeof(float) * 3);
         //X.reset();
         for (int i = 0; i < numberOfCycles; i++)
             VCycle(LHS[0], RHS, X, 0);
