@@ -77,6 +77,9 @@ struct NeighborNode
     }
 };
 
+/**
+ * \brief used to store neighbors per vertex in parallel
+ */
 class VertexNeighbors
 {
 public:

@@ -26,7 +26,6 @@ struct VertexData
 };
 
 
-
 struct VertexAttributesRXMesh
 {
     VertexAttribute<float>    vertex_pos;
@@ -93,7 +92,16 @@ __global__ static void findNumberOfCoarseNeighbors(
     query.dispatch<Op::VV>(block, shrd_alloc, cluster);
 }
 
-
+/**
+ * \brief Clustering after sampling via thrust
+ * \tparam T 
+ * \tparam blockThreads 
+ * \param context 
+ * \param vertex_pos 
+ * \param distance 
+ * \param clustered_vertices 
+ * \param flag 
+ */
 template <typename T, uint32_t blockThreads>
 __global__ static void cluster_points(
     const rxmesh::Context        context,
@@ -128,7 +136,15 @@ __global__ static void cluster_points(
 }
 
 
-
+/**
+ * \brief FPS Sampling via thrust
+ * \tparam T 
+ * \tparam blockThreads 
+ * \param context 
+ * \param vertex_pos 
+ * \param distance 
+ * \param flag 
+ */
 template <typename T, uint32_t blockThreads>
 __global__ static void sample_points(const rxmesh::Context      context,
                                      rxmesh::VertexAttribute<T> vertex_pos,
@@ -163,7 +179,13 @@ __global__ static void sample_points(const rxmesh::Context      context,
 }
 
 
-
+/**
+ * \brief Clustering the data after sampling via RXMesh
+ * \param rx 
+ * \param vertexAttributes 
+ * \param currentLevel 
+ * \param vertices 
+ */
 void clusteringRXMesh(RXMeshStatic&           rx,
                       VertexAttributesRXMesh& vertexAttributes,
                       int                     currentLevel,
@@ -223,7 +245,13 @@ void clusteringRXMesh(RXMeshStatic&           rx,
 }
 
 
-
+/**
+ * \brief Set vertex data from RXMesh to standard pointer data for processing further multigrid levels. This also reindexes the data according to sample number
+ * \param rx 
+ * \param context 
+ * \param oldVdata 
+ * \param vertexAttribute 
+ */
 void setVertexData(RXMeshStatic&          rx,
                    Context&               context,
                    VertexData*            oldVdata,
@@ -255,13 +283,23 @@ void setVertexData(RXMeshStatic&          rx,
         });
 }
 
-void sampler(RXMeshStatic&          rx,
-             VertexAttributesRXMesh vertexAttributes,
-             float                  ratio,
-             int                    N,
-             int                    numberOfLevels,
-             int                    numberOfSamplesForFirstLevel,
-             Vec3*                  sample_pos)
+/**
+ * \brief For FPS Sampling in parallel
+ * \param rx 
+ * \param vertexAttributes 
+ * \param ratio 
+ * \param N 
+ * \param numberOfLevels 
+ * \param numberOfSamplesForFirstLevel 
+ * \param sample_pos 
+ */
+void FPSSampler(RXMeshStatic&          rx,
+                VertexAttributesRXMesh vertexAttributes,
+                float                  ratio,
+                int                    N,
+                int                    numberOfLevels,
+                int                    numberOfSamplesForFirstLevel,
+                Vec3*                  sample_pos)
 {
 
     std::random_device rd;
