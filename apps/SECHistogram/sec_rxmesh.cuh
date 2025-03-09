@@ -3,7 +3,7 @@
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
-#include "histogram.cuh"
+#include "rxmesh/util/histogram.cuh"
 #include "rxmesh/util/report.h"
 #include "sec_kernels.cuh"
 
@@ -34,12 +34,9 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     timers.add("Cleanup");
     timers.add("Histo");
 
-
-    float histo_time = 0;
-
     const int num_bins = 256;
 
-    CostHistogram<float> histo(num_bins);
+    Histogram<float> histo(num_bins);
 
     RXMESH_INFO("#Vertices {}", rx.get_num_vertices());
     RXMESH_INFO("#Edges {}", rx.get_num_edges());

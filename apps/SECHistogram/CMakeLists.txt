@@ -3,8 +3,7 @@ add_executable(SECHistogram)
 set(SOURCE_LIST
     sec.cu  
 	sec_rxmesh.cuh
-	sec_kernels.cuh
-	histogram.cuh	
+	sec_kernels.cuh	
 	link_condition.cuh
 )
 
