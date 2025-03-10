@@ -62,6 +62,21 @@ struct DenseMatrix
         init_cublas();
     }
 
+    DenseMatrix(IndexT    num_rows,
+                IndexT    num_cols,
+                locationT location = LOCATION_ALL)
+        : m_num_rows(num_rows),
+          m_num_cols(num_cols),
+          m_dendescr(NULL),
+          m_h_val(nullptr),
+          m_d_val(nullptr),
+          m_cublas_handle(nullptr),
+          m_user_managed(false)
+    {
+        allocate(location);
+        init_cublas();
+    }
+
     /**
      * @brief constructor with user managed mode where the device and host
      * pointers are passed by the user. They are allocated (and will be freed)
@@ -953,7 +968,7 @@ struct DenseMatrix
     }
 
 
-    const Context        m_context;
+    Context              m_context;
     cusparseDnMatDescr_t m_dendescr;
     cublasHandle_t       m_cublas_handle;
     locationT            m_allocated;

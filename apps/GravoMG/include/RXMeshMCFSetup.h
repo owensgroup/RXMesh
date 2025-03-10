@@ -1,10 +1,12 @@
 #pragma once
 
+#include "rxmesh/rxmesh_static.h"
 
-#include "rxmesh/attribute.h"
-#include "rxmesh/context.h"
-#include "rxmesh/geometry_util.cuh"
 #include "rxmesh/query.cuh"
+
+#include "rxmesh/matrix/sparse_matrix.cuh"
+
+#include "rxmesh/geometry_util.cuh"
 
 /**
  * edge_cotan_weight()
@@ -339,10 +341,12 @@ __global__ static void mcf_A_setup(
 }
 
 
-void setupMCF(RXMeshStatic&        rx,
-              SparseMatrix<float>& A_mat,
-              DenseMatrix<float>&  B_mat)
+void setupMCF(rxmesh::RXMeshStatic&        rx,
+              rxmesh::SparseMatrix<float>& A_mat,
+              rxmesh::DenseMatrix<float>&  B_mat)
 {
+    using namespace rxmesh;
+
     constexpr uint32_t blockThreads = 256;
 
     uint32_t num_vertices = rx.get_num_vertices();

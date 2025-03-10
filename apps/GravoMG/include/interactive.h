@@ -1,27 +1,42 @@
 #pragma once
 #include <imgui.h>
 
+#include "rxmesh/rxmesh_static.h"
 
-/*
+#include "VCycle.h"
 
-void renderOutputMesh(VectorCSR3D X, RXMeshStatic &rx)
+#ifdef USE_POLYSCOPE
+void render_output_mesh(VectorCSR3D X, rxmesh::RXMeshStatic& rx)
 {
     std::vector<std::array<double, 3>> vertexMeshPositions;
     vertexMeshPositions.resize(X.n);
 
     for (int i = 0; i < X.n; i++) {
-        vertexMeshPositions[i] = {X.vector[3 * i],
-                                  X.vector[3 * i + 1],
-                                  X.vector[3 * i + 2]};
+        vertexMeshPositions[i] = {
+            X.vector[3 * i], X.vector[3 * i + 1], X.vector[3 * i + 2]};
     }
-     polyscope::registerSurfaceMesh("output mesh",
-                                  vertexMeshPositions,
-                                rx.get_polyscope_mesh()->faces);
+    polyscope::registerSurfaceMesh(
+        "output mesh", vertexMeshPositions, rx.get_polyscope_mesh()->faces);
 }
 
-void interactiveMenu(GMGVCycle &gmg, RXMeshStatic &rx)
+// template <typename T>
+// void render_output_mesh(rxmesh::DenseMatrix<T>& X, rxmesh::RXMeshStatic& rx)
+//{
+//     std::vector<std::array<double, 3>> vertexMeshPositions;
+//     vertexMeshPositions.resize(X.rows());
+//
+//     for (int i = 0; i < X.rows(); i++) {
+//         vertexMeshPositions[i] = {X(i, 0), X(i, 1), X(i, 2)};
+//     }
+//     polyscope::registerSurfaceMesh(
+//         "output mesh", vertexMeshPositions, rx.get_polyscope_mesh()->faces);
+// }
+
+
+void interactive_menu(GMGVCycle& gmg, rxmesh::RXMeshStatic& rx)
 {
-    
+    Timers<GPUTimer> timers;
+    timers.add("solve");
 
     auto polyscope_callback = [&]() mutable {
         ImGui::Begin("GMG Parameters");
@@ -38,11 +53,16 @@ void interactiveMenu(GMGVCycle &gmg, RXMeshStatic &rx)
 
 
         if (ImGui::Button("Run V Cycles again")) {
-            std::cout
-                << "\n---------------NEW SOLVE INITIATED--------------------\n";
-            gmg.X.reset();
+            RXMESH_TRACE("==== NEW SOLVE INITIATED====");
+            // gmg.X.reset();
+
+            timers.start("solve");
             gmg.solve();
-            renderOutputMesh(gmg.X, rx);
+            timers.stop("solve");
+
+            RXMESH_TRACE("Solving time: {}", timers.elapsed_millis("solve"));
+
+            render_output_mesh(gmg.X, rx);
         }
 
         ImGui::End();
@@ -50,5 +70,6 @@ void interactiveMenu(GMGVCycle &gmg, RXMeshStatic &rx)
 
     polyscope::state::userCallback = polyscope_callback;
 
+    polyscope::show();
 }
-*/
+#endif

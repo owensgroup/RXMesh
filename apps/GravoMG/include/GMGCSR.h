@@ -1,8 +1,12 @@
 #pragma once
 
+#include "rxmesh/matrix/sparse_matrix.cuh"
 
+#include "NeighborHandling.h"
 
+#include "GMGRXMeshKernels.h"
 
+namespace rxmesh {
 
 struct CSR
 {
@@ -207,18 +211,9 @@ struct CSR
                 const int n = vns[number].getNumberOfNeighbors();
 
                 int start_pointer = row_ptr_raw[number];
-                int count            = 0;
-                /*
-                int j             = 0;
-                for (int i = 0; i < n; i++) 
-                {
-                    value_ptr_raw[start_pointer+j] = neighbors[j];
-                    data_ptr[start_pointer+j] = 1;
-                    j++;
-                }
-                */
+                int count         = 0;               
 
-                 for (int i = 0; i < n; i++) {
+                for (int i = 0; i < n; i++) {
                     int key = neighbors[i];  // Value to insert
                     int j   = i - 1;
 
@@ -248,22 +243,19 @@ struct CSR
             });
     }
 
-   
 
-     void printCSR(bool showOnlyNAN=false)
+    void printCSR(bool showOnlyNAN = false)
     {
         printf("\nCSR Array:");
         std::cout << "\nNumber of non-zeros = " << non_zeros << "\n";
         for (int i = 0; i < num_rows; ++i) {
-            if (!showOnlyNAN) 
-            {
+            if (!showOnlyNAN) {
                 printf("row_ptr[%d] = %d\n", i, row_ptr[i]);
                 printf("add %d values\n", row_ptr[i + 1] - row_ptr[i]);
             }
-            for (int q = row_ptr[i]; q < row_ptr[i + 1]; q++) 
-            {
-                if (/*!data_ptr[q] ||*/ std::isnan(data_ptr[q]) && showOnlyNAN) 
-                {
+            for (int q = row_ptr[i]; q < row_ptr[i + 1]; q++) {
+                if (/*!data_ptr[q] ||*/ std::isnan(data_ptr[q]) &&
+                    showOnlyNAN) {
                     printf("row_ptr[%d] = %d\n", i, row_ptr[i]);
                     printf("vertex %d value: %f\n", value_ptr[q], data_ptr[q]);
                 } else if (!showOnlyNAN)
@@ -340,16 +332,16 @@ struct CSR
         // Copy back the rearranged values
         thrust::copy(temp_values.begin(), temp_values.end(), value_ptr_raw);
     }
-   
+
 
     void GetRenderData(
         std::vector<std::array<double, 3>>&
             vertexPositions,  // To store vertex positions
         std::vector<std::vector<size_t>>& faceIndices,  // To store face indices
-        Vec3* vertex_pos // Array of vertex positions (assumed 3D)
+        Vec3* vertex_pos  // Array of vertex positions (assumed 3D)
     )
     {
-        rearrange(row_ptr, value_ptr, num_rows,non_zeros);
+        rearrange(row_ptr, value_ptr, num_rows, non_zeros);
 
         // Initialize vertex positions
         vertexPositions.resize(num_rows);
@@ -364,9 +356,9 @@ struct CSR
             int neighbors_count = row_ptr[i + 1] - row_ptr[i];
             if (neighbors_count >= 2) {  // Process only if it can form faces
                 for (int j = row_ptr[i]; j < row_ptr[i + 1]; ++j) {
-                    // Create a triangular face 
+                    // Create a triangular face
                     int a, b, c;
-                    if (j == row_ptr[i+1]-1) {
+                    if (j == row_ptr[i + 1] - 1) {
                         a = i;
                         b = value_ptr[j];
                         c = value_ptr[row_ptr[i]];
@@ -377,11 +369,11 @@ struct CSR
                     }
                     // check if b,c are neighbors
                     int n1_start = row_ptr[b];
-                    int n1_end = row_ptr[b+1];
-                    for (int k=n1_start;k<n1_end;k++) {
+                    int n1_end   = row_ptr[b + 1];
+                    for (int k = n1_start; k < n1_end; k++) {
                         if (c == value_ptr[k]) {
-                            //std::cout << "\n Triangle formed with " << a
-                            //          << " and " << b << " and " << c;
+                            // std::cout << "\n Triangle formed with " << a
+                            //           << " and " << b << " and " << c;
 
                             faceIndices.push_back({static_cast<size_t>(a),
                                                    static_cast<size_t>(b),
@@ -397,7 +389,8 @@ struct CSR
 
     void render(Vec3* vertex_pos)
     {
-        std::vector<std::array<double, 3>> vertexPositions;  // To store vertex positions
+        std::vector<std::array<double, 3>>
+            vertexPositions;  // To store vertex positions
         std::vector<std::vector<size_t>> faceIndices;  // To store face indices
 
         GetRenderData(vertexPositions, faceIndices, vertex_pos);
@@ -411,12 +404,11 @@ struct CSR
 };
 
 
-
-void clusterCSR(int    n,
-                float* distance,
-                int*   clusterVertices,
-                int*   flag,
-                CSR    csr,
+void clusterCSR(int         n,
+                float*      distance,
+                int*        clusterVertices,
+                int*        flag,
+                CSR         csr,
                 VertexData* vertex_data)
 {
     thrust::device_vector<int> samples(n);
@@ -430,26 +422,23 @@ void clusterCSR(int    n,
             // V-V query
             Vec3 ourPos = vertex_data[number].position;
 
-            for (int i = csr.row_ptr[number]; i < csr.row_ptr[number + 1];i++) 
-            {
+            for (int i = csr.row_ptr[number]; i < csr.row_ptr[number + 1];
+                 i++) {
                 int current_v = csr.value_ptr[i];
 
-                Vec3 currentPos = vertex_data[current_v].position;
-                float dist =
-                    sqrtf(powf(ourPos.x - currentPos.x,
-                               2) +
-                          powf(ourPos.y - currentPos.y,
-                               2) +
-                                   powf(ourPos.z - currentPos.z,
-                               2)) +
-                    distance[current_v];
+                Vec3  currentPos = vertex_data[current_v].position;
+                float dist       = sqrtf(powf(ourPos.x - currentPos.x, 2) +
+                                   powf(ourPos.y - currentPos.y, 2) +
+                                   powf(ourPos.z - currentPos.z, 2)) +
+                             distance[current_v];
 
-                if (dist < distance[number] && vertex_data[current_v].cluster!=-1)
-                {
+                if (dist < distance[number] &&
+                    vertex_data[current_v].cluster != -1) {
                     distance[number]        = dist;
                     *flag                   = 15;
                     clusterVertices[number] = clusterVertices[current_v];
-                    vertex_data[number].cluster = vertex_data[current_v].cluster;
+                    vertex_data[number].cluster =
+                        vertex_data[current_v].cluster;
                 }
             }
         });
@@ -590,7 +579,9 @@ __global__ void csrMultiplyKernel(int*   A_row_ptr,
     int end_A   = A_row_ptr[row + 1];
 
     printf("\n entered kernel further for row %d from %d to %d",
-        row, start_A, end_A);
+           row,
+           start_A,
+           end_A);
 
 
     for (int i = start_A; i < end_A; i++) {
@@ -601,26 +592,23 @@ __global__ void csrMultiplyKernel(int*   A_row_ptr,
         int end_B   = B_row_ptr[col_A + 1];
 
 
-
         for (int j = start_B; j < end_B; j++) {
             int   col_B = B_col_idx[j];
             float val_B = B_vals[j];
 
-            atomicAdd(&C_vals[C_row_ptr[row] + col_B], val_A * val_B);
+            ::atomicAdd(&C_vals[C_row_ptr[row] + col_B], val_A * val_B);
             printf("\n New value of C at %d is %f",
                    C_row_ptr[row] + col_B,
-                C_vals[C_row_ptr[row] + col_B]);
-
+                   C_vals[C_row_ptr[row] + col_B]);
         }
-
     }
 }
 
-CSR csrMultiply(CSR& A, CSR& B) 
+CSR csrMultiply(CSR& A, CSR& B)
 {
     int *  d_A_row_ptr, *d_A_col_idx, *d_B_row_ptr, *d_B_col_idx;
     float *d_A_vals, *d_B_vals;
-    
+
 
     cudaMallocManaged(&d_A_row_ptr, (A.num_rows + 1) * sizeof(int));
     cudaMallocManaged(&d_A_col_idx, A.non_zeros * sizeof(int));
@@ -628,7 +616,6 @@ CSR csrMultiply(CSR& A, CSR& B)
     cudaMallocManaged(&d_B_row_ptr, (B.num_rows + 1) * sizeof(int));
     cudaMallocManaged(&d_B_col_idx, B.non_zeros * sizeof(int));
     cudaMallocManaged(&d_B_vals, B.non_zeros * sizeof(float));
-
 
 
     cudaMemcpy(d_A_row_ptr,
@@ -656,20 +643,20 @@ CSR csrMultiply(CSR& A, CSR& B)
                B.non_zeros * sizeof(float),
                cudaMemcpyHostToDevice);
 
-    CSR C;
+    CSR    C;
     int *  d_C_row_ptr = C.row_ptr, *d_C_col_idx = C.value_ptr;
-    float* d_C_vals=C.data_ptr;
+    float* d_C_vals = C.data_ptr;
 
     C.num_rows = (A.num_rows + 1);
-    
+
 
     cudaMallocManaged(&d_C_row_ptr, (A.num_rows + 1) * sizeof(int));
     cudaMallocManaged(&d_C_col_idx, A.num_rows * B.num_rows * sizeof(int));
     cudaMallocManaged(&d_C_vals, A.num_rows * B.num_rows * sizeof(float));
     cudaDeviceSynchronize();
 
-    //std::cout << "\n Number of rows in A: " << A.num_rows;
-    //A.printCSR();
+    // std::cout << "\n Number of rows in A: " << A.num_rows;
+    // A.printCSR();
     /* std::cout << "\nNumber of rows in B: " << B.num_rows;
     B.printCSR();*/
 
@@ -690,11 +677,11 @@ CSR csrMultiply(CSR& A, CSR& B)
                                              d_C_vals);
 
     cudaDeviceSynchronize();
-    C.row_ptr = d_C_row_ptr;
+    C.row_ptr   = d_C_row_ptr;
     C.value_ptr = d_C_col_idx;
-    C.data_ptr=d_C_vals;
+    C.data_ptr  = d_C_vals;
 
-    //std::cout << "First row: " << C.row_ptr[0];
+    // std::cout << "First row: " << C.row_ptr[0];
     /*
     printf("\nCSR Array: \n");
     for (int i = 0; i < C.num_rows; ++i) {
@@ -705,9 +692,7 @@ CSR csrMultiply(CSR& A, CSR& B)
         }
     }
     */
-    //C.printCSR();
-
-
+    // C.printCSR();
 
 
     /*
@@ -731,52 +716,31 @@ CSR csrMultiply(CSR& A, CSR& B)
     cudaFree(d_B_row_ptr);
     cudaFree(d_B_col_idx);
     cudaFree(d_B_vals);
-   
+
     return C;
 }
 
 
-// CUDA error checking
-#define CHECK_CUDA(call)                                              \
-    {                                                                 \
-        cudaError_t status = (call);                                  \
-        if (status != cudaSuccess) {                                  \
-            std::cerr << "CUDA Error: " << cudaGetErrorString(status) \
-                      << " at line " << __LINE__ << std::endl;        \
-            exit(EXIT_FAILURE);                                       \
-        }                                                             \
-    }
-
-#define CHECK_CUSPARSE(call)                                                 \
-    {                                                                        \
-        cusparseStatus_t status = (call);                                    \
-        if (status != CUSPARSE_STATUS_SUCCESS) {                             \
-            std::cerr << "cuSPARSE Error at line " << __LINE__ << std::endl; \
-            exit(EXIT_FAILURE);                                              \
-        }                                                                    \
-    }
-
-
 CSR multiplyCSR(int    A_rows,
-                 int    A_cols,
-                 int    B_cols,
-                 int*   d_A_rowPtr,
-                 int*   d_A_colIdx,
-                 float* d_A_values,
-                 int    nnzA,
-                 int*   d_B_rowPtr,
-                 int*   d_B_colIdx,
-                 float* d_B_values,
+                int    A_cols,
+                int    B_cols,
+                int*   d_A_rowPtr,
+                int*   d_A_colIdx,
+                float* d_A_values,
+                int    nnzA,
+                int*   d_B_rowPtr,
+                int*   d_B_colIdx,
+                float* d_B_values,
                 int    nnzB,
-                int transpose =0)
+                int    transpose = 0)
 {
     // Create cuSPARSE handle
     cusparseHandle_t handle;
-    CHECK_CUSPARSE(cusparseCreate(&handle));
+    CUSPARSE_ERROR(cusparseCreate(&handle));
 
     // Create sparse matrix descriptors
     cusparseSpMatDescr_t matA, matB, matC;
-    CHECK_CUSPARSE(cusparseCreateCsr(&matA,
+    CUSPARSE_ERROR(cusparseCreateCsr(&matA,
                                      A_rows,
                                      A_cols,
                                      nnzA,
@@ -788,7 +752,7 @@ CSR multiplyCSR(int    A_rows,
                                      CUSPARSE_INDEX_BASE_ZERO,
                                      CUDA_R_32F));
 
-    CHECK_CUSPARSE(cusparseCreateCsr(&matB,
+    CUSPARSE_ERROR(cusparseCreateCsr(&matB,
                                      A_cols,
                                      B_cols,
                                      nnzB,
@@ -801,7 +765,7 @@ CSR multiplyCSR(int    A_rows,
                                      CUDA_R_32F));
 
     // Create an empty descriptor for matC
-    CHECK_CUSPARSE(cusparseCreateCsr(&matC,
+    CUSPARSE_ERROR(cusparseCreateCsr(&matC,
                                      A_rows,
                                      B_cols,
                                      0,
@@ -816,18 +780,18 @@ CSR multiplyCSR(int    A_rows,
     // Allocate workspace buffer for SpGEMM
     float                 alpha = 1.0f, beta = 0.0f;
     cusparseSpGEMMDescr_t spgemmDesc;
-    CHECK_CUSPARSE(cusparseSpGEMM_createDescr(&spgemmDesc));
+    CUSPARSE_ERROR(cusparseSpGEMM_createDescr(&spgemmDesc));
 
     // PHASE 1: Work estimation
     size_t bufferSize1 = 0;
     void*  dBuffer1    = nullptr;
-    //MAKE THIS DO THE TRANSPOSE, DONT TRANSPOSE EXPLICITLY
+    // MAKE THIS DO THE TRANSPOSE, DONT TRANSPOSE EXPLICITLY
 
     auto operation = CUSPARSE_OPERATION_NON_TRANSPOSE;
     if (transpose == 1)
         operation = CUSPARSE_OPERATION_TRANSPOSE;
     ;
-    CHECK_CUSPARSE(
+    CUSPARSE_ERROR(
         cusparseSpGEMM_workEstimation(handle,
                                       operation,
                                       CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -841,10 +805,10 @@ CSR multiplyCSR(int    A_rows,
                                       spgemmDesc,
                                       &bufferSize1,
                                       nullptr));
-    CHECK_CUDA(cudaMalloc(&dBuffer1, bufferSize1));
+    CUDA_ERROR(cudaMalloc(&dBuffer1, bufferSize1));
 
     // Execute work estimation
-    CHECK_CUSPARSE(
+    CUSPARSE_ERROR(
         cusparseSpGEMM_workEstimation(handle,
                                       operation,
                                       CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -862,7 +826,7 @@ CSR multiplyCSR(int    A_rows,
     // PHASE 2: Compute non-zero pattern of C
     size_t bufferSize2 = 0;
     void*  dBuffer2    = nullptr;
-    CHECK_CUSPARSE(cusparseSpGEMM_compute(handle,
+    CUSPARSE_ERROR(cusparseSpGEMM_compute(handle,
                                           operation,
                                           CUSPARSE_OPERATION_NON_TRANSPOSE,
                                           &alpha,
@@ -875,10 +839,10 @@ CSR multiplyCSR(int    A_rows,
                                           spgemmDesc,
                                           &bufferSize2,
                                           nullptr));
-    CHECK_CUDA(cudaMalloc(&dBuffer2, bufferSize2));
+    CUDA_ERROR(cudaMalloc(&dBuffer2, bufferSize2));
 
     // Execute non-zero pattern computation
-    CHECK_CUSPARSE(cusparseSpGEMM_compute(handle,
+    CUSPARSE_ERROR(cusparseSpGEMM_compute(handle,
                                           operation,
                                           CUSPARSE_OPERATION_NON_TRANSPOSE,
                                           &alpha,
@@ -894,7 +858,7 @@ CSR multiplyCSR(int    A_rows,
 
     // Get the size of matrix C
     int64_t C_rows, C_cols, nnzC;
-    CHECK_CUSPARSE(cusparseSpMatGetSize(matC, &C_rows, &C_cols, &nnzC));
+    CUSPARSE_ERROR(cusparseSpMatGetSize(matC, &C_rows, &C_cols, &nnzC));
 
     /*
     std::cout << "Matrix C dimensions:" << std::endl;
@@ -906,16 +870,16 @@ CSR multiplyCSR(int    A_rows,
     int*   d_C_rowPtr;
     int*   d_C_colIdx;
     float* d_C_values;
-    CHECK_CUDA(cudaMalloc(&d_C_rowPtr, (A_rows + 1) * sizeof(int)));
-    CHECK_CUDA(cudaMalloc(&d_C_colIdx, nnzC * sizeof(int)));
-    CHECK_CUDA(cudaMalloc(&d_C_values, nnzC * sizeof(float)));
+    CUDA_ERROR(cudaMalloc(&d_C_rowPtr, (A_rows + 1) * sizeof(int)));
+    CUDA_ERROR(cudaMalloc(&d_C_colIdx, nnzC * sizeof(int)));
+    CUDA_ERROR(cudaMalloc(&d_C_values, nnzC * sizeof(float)));
 
     // Set pointers for matrix C
-    CHECK_CUSPARSE(
+    CUSPARSE_ERROR(
         cusparseCsrSetPointers(matC, d_C_rowPtr, d_C_colIdx, d_C_values));
 
     // PHASE 3: Compute actual values
-    CHECK_CUSPARSE(cusparseSpGEMM_copy(handle,
+    CUSPARSE_ERROR(cusparseSpGEMM_copy(handle,
                                        operation,
                                        CUSPARSE_OPERATION_NON_TRANSPOSE,
                                        &alpha,
@@ -928,28 +892,28 @@ CSR multiplyCSR(int    A_rows,
                                        spgemmDesc));
 
     // Synchronize to ensure completion
-    CHECK_CUDA(cudaDeviceSynchronize());
+    CUDA_ERROR(cudaDeviceSynchronize());
 
     // First, copy the computed data to host to filter zeros
-        int* h_C_rowPtr = new int[A_rows + 1];
-    int*     h_C_colIdx = new int[nnzC];
-    float*   h_C_values = new float[nnzC];
+    int*   h_C_rowPtr = new int[A_rows + 1];
+    int*   h_C_colIdx = new int[nnzC];
+    float* h_C_values = new float[nnzC];
 
-    CHECK_CUDA(cudaMemcpy(h_C_rowPtr,
+    CUDA_ERROR(cudaMemcpy(h_C_rowPtr,
                           d_C_rowPtr,
                           (A_rows + 1) * sizeof(int),
                           cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(
+    CUDA_ERROR(cudaMemcpy(
         h_C_colIdx, d_C_colIdx, nnzC * sizeof(int), cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(
+    CUDA_ERROR(cudaMemcpy(
         h_C_values, d_C_values, nnzC * sizeof(float), cudaMemcpyDeviceToHost));
 
     // Count actual non-zeros and create filtered arrays
-    const float      ZERO_THRESHOLD = 1e-6f;  
-    std::vector<int> filtered_rowPtr(A_rows + 1, 0);
-    std::vector<int> filtered_colIdx;
+    const float        ZERO_THRESHOLD = 1e-6f;
+    std::vector<int>   filtered_rowPtr(A_rows + 1, 0);
+    std::vector<int>   filtered_colIdx;
     std::vector<float> filtered_values;
-    filtered_colIdx.reserve(nnzC);  
+    filtered_colIdx.reserve(nnzC);
     filtered_values.reserve(nnzC);
 
     // Process first row pointer
@@ -963,8 +927,7 @@ CSR multiplyCSR(int    A_rows,
 
         for (int j = row_start; j < row_end; j++) {
             if (std::abs(h_C_values[j]) > ZERO_THRESHOLD ||
-                    h_C_values[j] != 0.0f)
-            {
+                h_C_values[j] != 0.0f) {
                 filtered_colIdx.push_back(h_C_colIdx[j]);
                 filtered_values.push_back(h_C_values[j]);
                 actual_nnz++;
@@ -974,7 +937,7 @@ CSR multiplyCSR(int    A_rows,
     }
 
     // Create new CSR object
-    CSR result; 
+    CSR result;
     result.num_rows = A_rows;
 
     // Allocate new memory with correct sizes
@@ -1015,7 +978,7 @@ CSR multiplyCSR(int    A_rows,
     }
     std::cout << std::endl;
 
-    
+
     // Print in matrix form for better visualization
     std::cout << "\nMatrix C in readable format:" << std::endl;
     for (int i = 0; i < A_rows; i++) {
@@ -1041,7 +1004,7 @@ CSR multiplyCSR(int    A_rows,
         }
         std::cout << std::endl;
     }*/
-    
+
 
     // Cleanup host memory
     delete[] h_C_rowPtr;
@@ -1049,248 +1012,20 @@ CSR multiplyCSR(int    A_rows,
     delete[] h_C_values;
 
     // Cleanup device memory
-    CHECK_CUSPARSE(cusparseDestroySpMat(matA));
-    CHECK_CUSPARSE(cusparseDestroySpMat(matB));
-    CHECK_CUSPARSE(cusparseDestroySpMat(matC));
-    CHECK_CUSPARSE(cusparseSpGEMM_destroyDescr(spgemmDesc));
-    CHECK_CUSPARSE(cusparseDestroy(handle));
+    CUSPARSE_ERROR(cusparseDestroySpMat(matA));
+    CUSPARSE_ERROR(cusparseDestroySpMat(matB));
+    CUSPARSE_ERROR(cusparseDestroySpMat(matC));
+    CUSPARSE_ERROR(cusparseSpGEMM_destroyDescr(spgemmDesc));
+    CUSPARSE_ERROR(cusparseDestroy(handle));
 
-    CHECK_CUDA(cudaFree(dBuffer1));
-    CHECK_CUDA(cudaFree(dBuffer2));
-    CHECK_CUDA(cudaFree(d_C_rowPtr));
-    CHECK_CUDA(cudaFree(d_C_colIdx));
-    CHECK_CUDA(cudaFree(d_C_values));
+    CUDA_ERROR(cudaFree(dBuffer1));
+    CUDA_ERROR(cudaFree(dBuffer2));
+    CUDA_ERROR(cudaFree(d_C_rowPtr));
+    CUDA_ERROR(cudaFree(d_C_colIdx));
+    CUDA_ERROR(cudaFree(d_C_values));
 
 
     return result;
 }
 
-/*
-CSR multiplyCSR(int    A_rows,
-                int    A_cols,
-                int    B_cols,
-                int*   d_A_rowPtr,
-                int*   d_A_colIdx,
-                float* d_A_values,
-                int    nnzA,
-                int*   d_B_rowPtr,
-                int*   d_B_colIdx,
-                float* d_B_values,
-                int    nnzB,
-                int    transpose = 0)
-{
-    // Create cuSPARSE handle
-    cusparseHandle_t handle;
-    CHECK_CUSPARSE(cusparseCreate(&handle));
-
-    // If transpose is needed, transpose A to CSC format
-    int*   d_AT_rowPtr = d_A_rowPtr;
-    int*   d_AT_colIdx = d_A_colIdx;
-    float* d_AT_values = d_A_values;
-    if (transpose == 1) {
-        CHECK_CUDA(cudaMalloc(&d_AT_rowPtr, (A_cols + 1) * sizeof(int)));
-        CHECK_CUDA(cudaMalloc(&d_AT_colIdx, nnzA * sizeof(int)));
-        CHECK_CUDA(cudaMalloc(&d_AT_values, nnzA * sizeof(float)));
-
-        size_t bufferSize = 0;
-        void*  dBuffer    = nullptr;
-        CHECK_CUSPARSE(cusparseCsr2cscEx2_bufferSize(handle,
-                                                     A_rows,
-                                                     A_cols,
-                                                     nnzA,
-                                                     d_A_values,
-                                                     d_A_rowPtr,
-                                                     d_A_colIdx,
-                                                     d_AT_values,
-                                                     d_AT_colIdx,
-                                                     d_AT_rowPtr,
-                                                     CUDA_R_32F,
-                                                     CUSPARSE_ACTION_NUMERIC,
-                                                     CUSPARSE_INDEX_BASE_ZERO,
-                                                     CUSPARSE_CSR2CSC_ALG1,
-                                                     &bufferSize));
-
-        CHECK_CUDA(cudaMalloc(&dBuffer, bufferSize));
-
-        CHECK_CUSPARSE(cusparseCsr2cscEx2(handle,
-                                          A_rows,
-                                          A_cols,
-                                          nnzA,
-                                          d_A_values,
-                                          d_A_rowPtr,
-                                          d_A_colIdx,
-                                          d_AT_values,
-                                          d_AT_colIdx,
-                                          d_AT_rowPtr,
-                                          CUDA_R_32F,
-                                          CUSPARSE_ACTION_NUMERIC,
-                                          CUSPARSE_INDEX_BASE_ZERO,
-                                          CUSPARSE_CSR2CSC_ALG1,
-                                          dBuffer));
-
-        cudaFree(dBuffer);
-    }
-
-    // Create sparse matrix descriptors
-    cusparseSpMatDescr_t matA, matB, matC;
-    CHECK_CUSPARSE(cusparseCreateCsr(&matA,
-                                     transpose ? A_cols : A_rows,
-                                     transpose ? A_rows : A_cols,
-                                     nnzA,
-                                     d_AT_rowPtr,
-                                     d_AT_colIdx,
-                                     d_AT_values,
-                                     CUSPARSE_INDEX_32I,
-                                     CUSPARSE_INDEX_32I,
-                                     CUSPARSE_INDEX_BASE_ZERO,
-                                     CUDA_R_32F));
-
-    CHECK_CUSPARSE(cusparseCreateCsr(&matB,
-                                     transpose ? A_rows : A_cols,
-                                     B_cols,
-                                     nnzB,
-                                     d_B_rowPtr,
-                                     d_B_colIdx,
-                                     d_B_values,
-                                     CUSPARSE_INDEX_32I,
-                                     CUSPARSE_INDEX_32I,
-                                     CUSPARSE_INDEX_BASE_ZERO,
-                                     CUDA_R_32F));
-
-    // Create an empty descriptor for matC
-    CHECK_CUSPARSE(cusparseCreateCsr(&matC,
-                                     transpose ? A_cols : A_rows,
-                                     B_cols,
-                                     0,
-                                     nullptr,
-                                     nullptr,
-                                     nullptr,
-                                     CUSPARSE_INDEX_32I,
-                                     CUSPARSE_INDEX_32I,
-                                     CUSPARSE_INDEX_BASE_ZERO,
-                                     CUDA_R_32F));
-
-    // Allocate workspace buffer for SpGEMM
-    float                 alpha = 1.0f, beta = 0.0f;
-    cusparseSpGEMMDescr_t spgemmDesc;
-    CHECK_CUSPARSE(cusparseSpGEMM_createDescr(&spgemmDesc));
-
-    // PHASE 1: Work estimation
-    size_t bufferSize1 = 0;
-    void*  dBuffer1    = nullptr;
-
-    CHECK_CUSPARSE(
-        cusparseSpGEMM_workEstimation(handle,
-                                      CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                      CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                      &alpha,
-                                      matA,
-                                      matB,
-                                      &beta,
-                                      matC,
-                                      CUDA_R_32F,
-                                      CUSPARSE_SPGEMM_DEFAULT,
-                                      spgemmDesc,
-                                      &bufferSize1,
-                                      nullptr));
-    CHECK_CUDA(cudaMalloc(&dBuffer1, bufferSize1));
-
-    // Execute work estimation
-    CHECK_CUSPARSE(
-        cusparseSpGEMM_workEstimation(handle,
-                                      CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                      CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                      &alpha,
-                                      matA,
-                                      matB,
-                                      &beta,
-                                      matC,
-                                      CUDA_R_32F,
-                                      CUSPARSE_SPGEMM_DEFAULT,
-                                      spgemmDesc,
-                                      &bufferSize1,
-                                      dBuffer1));
-
-    // PHASE 2: Compute non-zero pattern of C
-    size_t bufferSize2 = 0;
-    void*  dBuffer2    = nullptr;
-    CHECK_CUSPARSE(cusparseSpGEMM_compute(handle,
-                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                          &alpha,
-                                          matA,
-                                          matB,
-                                          &beta,
-                                          matC,
-                                          CUDA_R_32F,
-                                          CUSPARSE_SPGEMM_DEFAULT,
-                                          spgemmDesc,
-                                          &bufferSize2,
-                                          nullptr));
-    CHECK_CUDA(cudaMalloc(&dBuffer2, bufferSize2));
-
-    // Execute non-zero pattern computation
-    CHECK_CUSPARSE(cusparseSpGEMM_compute(handle,
-                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                          &alpha,
-                                          matA,
-                                          matB,
-                                          &beta,
-                                          matC,
-                                          CUDA_R_32F,
-                                          CUSPARSE_SPGEMM_DEFAULT,
-                                          spgemmDesc,
-                                          &bufferSize2,
-                                          dBuffer2));
-
-    // Get the size of matrix C
-    int64_t C_rows, C_cols, nnzC;
-    CHECK_CUSPARSE(cusparseSpMatGetSize(matC, &C_rows, &C_cols, &nnzC));
-
-    // Allocate memory for matrix C
-    int*   d_C_rowPtr;
-    int*   d_C_colIdx;
-    float* d_C_values;
-    CHECK_CUDA(cudaMalloc(&d_C_rowPtr,
-                          (transpose ? A_cols : A_rows + 1) * sizeof(int)));
-    CHECK_CUDA(cudaMalloc(&d_C_colIdx, nnzC * sizeof(int)));
-    CHECK_CUDA(cudaMalloc(&d_C_values, nnzC * sizeof(float)));
-
-    // Set pointers for matrix C
-    CHECK_CUSPARSE(
-        cusparseCsrSetPointers(matC, d_C_rowPtr, d_C_colIdx, d_C_values));
-
-    // PHASE 3: Compute actual values
-    CHECK_CUSPARSE(cusparseSpGEMM_copy(handle,
-                                       CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                       CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                       &alpha,
-                                       matA,
-                                       matB,
-                                       &beta,
-                                       matC,
-                                       CUDA_R_32F,
-                                       CUSPARSE_SPGEMM_DEFAULT,
-                                       spgemmDesc));
-
-    // Synchronize to ensure completion
-    CHECK_CUDA(cudaDeviceSynchronize());
-
-    // Clean up temporary allocations
-    if (transpose == 1) {
-        cudaFree(d_AT_rowPtr);
-        cudaFree(d_AT_colIdx);
-        cudaFree(d_AT_values);
-    }
-
-    // Return computed CSR matrix
-    CSR result;
-    result.num_rows  = transpose ? A_cols : A_rows;
-    result.non_zeros = nnzC;
-    result.row_ptr   = d_C_rowPtr;
-    result.value_ptr = d_C_colIdx;
-    result.data_ptr  = d_C_values;
-
-    return result;
-}*/
+}  // namespace rxmesh
