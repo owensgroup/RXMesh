@@ -216,7 +216,7 @@ void clustering(RXMeshStatic&     rx,
 
             // if (sample_number(vh, 0) > -1)
             if ((vertexAttributes.sample_level_bitmask(vh, 0) &
-                 (1 << (currentLevel - 1))) != 0) {
+                 (1 << (currentLevel - 1))) != 0 ) {
                 vertexAttributes.clustered_vertex(vh, 0) =
                     vertexAttributes.sample_number(vh, 0);
                 vertexAttributes.distance(vh, 0) = 0;

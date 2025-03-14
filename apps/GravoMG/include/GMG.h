@@ -22,26 +22,25 @@ struct GMG
     float m_ratio;
     int   m_num_levels;  // numberOfLevels
     int   m_num_rows;
-    int*  m_d_flag;  // TODO release
+    int*  m_d_flag;
 
-    std::vector<int> m_num_samples;
 
-    std::vector<DenseMatrix<float>> m_samples_pos;
+    std::vector<int>                m_num_samples;  // fine+levels
+    std::vector<DenseMatrix<float>> m_samples_pos;  // levels
 
-    // VertexAttributes
-    DenseMatrix<float>              m_vertex_pos;  // vertex_pos
-    std::vector<DenseMatrix<int>>   m_sample_id;   // sample_number
-    VertexAttribute<float>          m_distance;    // distance
-    std::vector<DenseMatrix<float>> m_distance_mat;
-    DenseMatrix<uint16_t> m_sample_level_bitmask;  // sample_level_bitmask
+    std::vector<DenseMatrix<int>> m_sample_neighbor_size;            // levels
+    std::vector<DenseMatrix<int>> m_sample_neighbor_size_prefix;     // levels
+    std::vector<DenseMatrix<int>> m_sample_neighbor;                 // levels
+    std::vector<SparseMatrixConstantNNZRow<float, 3>> m_prolong_op;  // levels
 
-    std::vector<DenseMatrix<int>> m_vertex_cluster;  // clustered_vertex
+    std::vector<DenseMatrix<int>>   m_sample_id;       // fine+levels
+    std::vector<DenseMatrix<float>> m_distance_mat;    // fine+levels
+    std::vector<DenseMatrix<int>>   m_vertex_cluster;  // fine+levels
 
-    std::vector<DenseMatrix<int>> m_sample_neighbor_size;
-    std::vector<DenseMatrix<int>> m_sample_neighbor_size_prefix;
-    std::vector<DenseMatrix<int>> m_sample_neighbor;
+    DenseMatrix<float>     m_vertex_pos;            // fine
+    VertexAttribute<float> m_distance;              // fine
+    DenseMatrix<uint16_t>  m_sample_level_bitmask;  // fine
 
-    std::vector<SparseMatrixConstantNNZRow<float, 3>> m_prolong_op;
 
     // we reuse cub temp storage for all level (since level has the largest
     // storage) and only re-allocate if we have to
@@ -53,54 +52,69 @@ struct GMG
     DenseMatrix<int> m_mutex;
 
 
-    GMG(RXMeshStatic& rx, SparseMatrix<T>& A, DenseMatrix<T>& B)
+    GMG(RXMeshStatic&    rx,
+        SparseMatrix<T>& A,
+        DenseMatrix<T>&  B,
+        int              reduction_ratio       = 7,
+        int              num_samples_threshold = 6)
+        : m_ratio(reduction_ratio)
     {
-        constexpr uint32_t blockThreads = 512;
+        constexpr uint32_t blockThreads = 256;
 
-        m_ratio      = 7;
-        m_num_levels = 0;
+        m_num_rows = A.rows();
+
+        m_num_samples.push_back(m_num_rows);
         for (int i = 0; i < 16; i++) {
-            if ((int)m_num_rows / (int)powf(m_ratio, i) > 6) {
-                m_num_levels++;
+            int s = DIVIDE_UP(m_num_rows, std::pow(m_ratio, i));
+            if (s > num_samples_threshold) {
+                m_num_samples.push_back(s);
             }
         }
+        m_num_levels = m_num_samples.size();
 
 
         // init variables and alloc memory
 
-        m_num_rows = A.rows();
+        // sample_id, m_distance_mat, and vertex_cluster are stored for the fine
+        // mesh and all levels.
+        // m_samples_pos, m_prolong_op,
+        // m_sample_neighbor_size, and m_sample_neighbor_size_prefix are
+        // allocated only for coarse levels
+        for (int l = 0; l < m_num_samples.size(); ++l) {
+            int level_num_samples = m_num_samples[l];
 
-        int current_level = 1;  // first coarse mesh
-        m_num_samples.push_back(m_num_rows / powf(m_ratio, current_level));
+            if (l > 0) {
+                m_samples_pos.emplace_back(rx, level_num_samples, 3);
+                m_prolong_op.emplace_back(
+                    rx, level_num_samples, level_num_samples);
 
-        m_samples_pos.emplace_back(rx, m_num_samples[0], 3);
+                // we allocate +1 for cub prefix sum
+                m_sample_neighbor_size.emplace_back(
+                    rx, level_num_samples + 1, 1);
+                m_sample_neighbor_size.back().reset(0, DEVICE);
+
+                m_sample_neighbor_size_prefix.emplace_back(
+                    rx, level_num_samples + 1, 1);
+                m_sample_neighbor_size_prefix.back().reset(0, DEVICE);
+            }
+
+            m_sample_id.emplace_back(rx, level_num_samples, 1);
+            m_vertex_cluster.emplace_back(rx, level_num_samples, 1);
+            m_vertex_cluster.back().reset(std::numeric_limits<int>::max(),
+                                          LOCATION_ALL);
+            m_distance_mat.emplace_back(rx, level_num_samples, 1);
+        }
 
 
         m_vertex_pos = *rx.get_input_vertex_coordinates()->to_matrix();
-        m_sample_id.emplace_back(rx, m_num_rows, 1);
-        m_distance             = *rx.add_vertex_attribute<float>("d", 1);
+        m_distance   = *rx.add_vertex_attribute<float>("d", 1);
         m_sample_level_bitmask = DenseMatrix<uint16_t>(rx, m_num_rows, 1);
 
-        m_vertex_cluster.emplace_back(rx, m_num_rows, 1);
-        m_vertex_cluster[0].reset(std::numeric_limits<int>::max(),
-                                  LOCATION_ALL);
 
         CUDA_ERROR(cudaMalloc((void**)&m_d_flag, sizeof(int)));
 
         m_mutex = DenseMatrix<int>(rx, m_num_samples[0], 1);
 
-        m_prolong_op.emplace_back(rx, m_num_samples[0], m_num_samples[0]);
-
-        // TODO allocate all levels here
-        // TODO we know how many samples we will have at each level, so we can
-        // allocate most memories
-        //
-        // we allocate +1 for cub prefix sum
-        m_sample_neighbor_size.emplace_back(rx, m_num_samples[0] + 1, 1);
-        m_sample_neighbor_size[0].reset(0, DEVICE);
-
-        m_sample_neighbor_size_prefix.emplace_back(rx, m_num_samples[0] + 1, 1);
-        m_sample_neighbor_size_prefix[0].reset(0, DEVICE);
 
         // allocate CUB stuff here
         m_cub_temp_bytes = 0;
@@ -132,7 +146,7 @@ struct GMG
 
         // 2) clustering
         clustering_1st_level(rx,
-                             current_level,
+                             1,  // first coarse level
                              m_vertex_pos,
                              m_sample_level_bitmask,
                              m_distance,
