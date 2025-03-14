@@ -5,6 +5,7 @@
 
 #include "NeighborHandling.h"
 
+// ** DONE
 // Function to compute the projected distance from a point to a triangle
 __device__ float projectedDistance(const Eigen::Vector3f& v0,
                                    const Eigen::Vector3f& v1,
@@ -37,6 +38,7 @@ __device__ float projectedDistance(const Eigen::Vector3f& v0,
 }
 
 
+// ** DONE
 __device__ std::tuple<float, float, float> computeBarycentricCoordinates(
     const Eigen::Vector3f& v0,
     const Eigen::Vector3f& v1,
@@ -73,6 +75,7 @@ __device__ std::tuple<float, float, float> computeBarycentricCoordinates(
     return std::make_tuple(lambda0, lambda1, lambda2);
 }
 
+// ** DONE
 __device__ void computeBarycentricCoordinates(const Eigen::Vector3f& v0,
                                               const Eigen::Vector3f& v1,
                                               const Eigen::Vector3f& v2,
@@ -109,23 +112,28 @@ __device__ void computeBarycentricCoordinates(const Eigen::Vector3f& v0,
  * \param row_ptr row pointer of the mesh CSR
  * \param value_ptr column index pointer for the mesh CSR
  * \param number_of_neighbors pointer containing number of neighbors for each
- * vertex in coarse mesh \param N number of vertices in fine mesh \param
- * clustered_vertex pointer which gives the cluster each vertex is associated
- * with \param vertex_pos position of each fine vertex \param sample_pos
- * position of each coarse vertex \param operator_value_ptr column index pointer
- * for first prolongation operator \param operator_data_ptr pointer for
- * associated value for a given column in a given row
+ * vertex in coarse mesh
+ * \param N number of vertices in fine mesh
+ * \param clustered_vertex pointer which gives the cluster each vertex is
+ * associated with
+ * \param vertex_pos position of each fine vertex
+ * \param sample_pos position of each coarse vertex
+ * \param operator_value_ptr column
+ * index pointer for first prolongation operator
+ * \param operator_data_ptr
+ * pointer for associated value for a given column in a given row
  */
-void createProlongationOperator(int  numberOfSamples,
-                                int* row_ptr,
-                                int* value_ptr,
-                                int* number_of_neighbors,
-                                int  N,
-                                int*   clustered_vertex,
-                                Vec3*  vertex_pos,
-                                Vec3*  sample_pos,
-                                int*   operator_value_ptr,
-                                float* operator_data_ptr)
+// ** DONE
+void create1stProlongationOperator(int    numberOfSamples,
+                                   int*   row_ptr,
+                                   int*   value_ptr,
+                                   int*   number_of_neighbors,
+                                   int    N,
+                                   int*   clustered_vertex,
+                                   Vec3*  vertex_pos,
+                                   Vec3*  sample_pos,
+                                   int*   operator_value_ptr,
+                                   float* operator_data_ptr)
 {
     thrust::device_vector<int> samples(N);
     thrust::sequence(samples.begin(), samples.end());
@@ -224,6 +232,7 @@ void createProlongationOperator(int  numberOfSamples,
  * \param N
  * \param vData
  */
+// ** DONE
 void createProlongationOperator(int*        row_ptr,
                                 int*        value_ptr,
                                 int*        operator_value_ptr,
@@ -241,9 +250,6 @@ void createProlongationOperator(int*        row_ptr,
         [=] __device__(int number) {
             // go through every triangle of my cluster
             const int cluster_point = vData[number].cluster;
-
-            // printf("\n cluster point of %d is %d", number, cluster_point);
-
             const int start_pointer = row_ptr[cluster_point];
             const int end_pointer   = row_ptr[cluster_point + 1];
 
@@ -253,8 +259,9 @@ void createProlongationOperator(int*        row_ptr,
             const Eigen::Vector3<float> q{vData[number].position.x,
                                           vData[number].position.y,
                                           vData[number].position.z};
-            int                         selected_neighbor             = 0;
-            int                         selected_neighbor_of_neighbor = 0;
+
+            int selected_neighbor             = 0;
+            int selected_neighbor_of_neighbor = 0;
 
             // We need at least 2 neighbors to form a triangle
             int neighbors_count = end_pointer - start_pointer;
@@ -393,6 +400,7 @@ void numberOfNeighbors(int              numberOfSamples,
  * \param currentLevel
  * \param vertex_data
  */
+// ** DONE
 void setCluster(int         n,
                 float*      distance,
                 int         currentLevel,
@@ -468,20 +476,20 @@ void createProlongationOperators(
     int currentNumberOfSamples = numberOfSamples;
     /// ratio;
 
-    std::vector<Eigen::MatrixXd> vertsArray;
-    std::vector<Eigen::MatrixXi> facesArray;
-    std::vector<std::vector<std::array<double, 3>>>
-        vertexPositionsArray;  // To store vertex positions
-    std::vector<std::vector<std::vector<size_t>>>
-        faceIndicesArray;  // To store face indices
-
-    std::vector<std::vector<int>> clustering;
-
-    vertsArray.resize(numberOfLevels);
-    facesArray.resize(numberOfLevels);
-    vertexPositionsArray.resize(numberOfLevels);
-    faceIndicesArray.resize(numberOfLevels);
-    clustering.resize(numberOfLevels);
+    // std::vector<Eigen::MatrixXd> vertsArray;
+    // std::vector<Eigen::MatrixXi> facesArray;
+    // std::vector<std::vector<std::array<double, 3>>>
+    //     vertexPositionsArray;  // To store vertex positions
+    // std::vector<std::vector<std::vector<size_t>>>
+    //     faceIndicesArray;  // To store face indices
+    //
+    // std::vector<std::vector<int>> clustering;
+    //
+    // vertsArray.resize(numberOfLevels);
+    // facesArray.resize(numberOfLevels);
+    // vertexPositionsArray.resize(numberOfLevels);
+    // faceIndicesArray.resize(numberOfLevels);
+    // clustering.resize(numberOfLevels);
 
 
     CSR a(numberOfSamples);

@@ -11,6 +11,9 @@ set(SOURCE_LIST
 	include/VCycle.h
 	include/GPUGMG.h
 	include/GMG.h
+	include/GMG_kernels.h
+	include/FPSSampler.h
+	include/cluster.h
 )
 
 target_sources(GravoMG 

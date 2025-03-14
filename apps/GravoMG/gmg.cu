@@ -12,15 +12,55 @@
 
 #include "rxmesh/geometry_factory.h"
 
+#include "include/GMG.h"
+
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "bumpy-cube.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "torus.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     uint32_t    device_id     = 0;
     bool        offline       = false;
     char**      argv;
     int         argc;
 } Arg;
+
+
+TEST(Apps, GMGRefactor)
+{
+    using namespace rxmesh;
+
+    using T = float;
+
+    cuda_query(Arg.device_id);
+
+    RXMeshStatic rx(Arg.obj_file_name);
+
+    /*
+    std::vector<std::vector<float>>    planeVerts;
+    std::vector<std::vector<uint32_t>> planeFaces;
+    uint32_t                           nx = 10;
+    uint32_t                           ny = 10;
+    create_plane(planeVerts, planeFaces, nx, ny);
+    RXMeshStatic rx(planeFaces);
+    rx.add_vertex_coordinates(planeVerts, "plane");
+    */
+
+    ASSERT_TRUE(rx.is_edge_manifold());
+
+    SparseMatrix<float> A_mat(rx);
+    DenseMatrix<float>  B_mat(rx, rx.get_num_vertices(), 3);
+    setupMCF(rx, A_mat, B_mat);
+
+    GMG<T> gmg(rx, A_mat, B_mat);
+
+    // auto samples = *rx.add_vertex_attribute<int>("s", 1);
+    // gmg.m_sample_id.move(DEVICE, HOST);
+    // samples.from_matrix(&gmg.m_sample_id);
+    //
+    // auto ps_mesh = rx.get_polyscope_mesh();
+    // ps_mesh->addVertexScalarQuantity("samples", samples);
+    // polyscope::show();
+}
 
 TEST(Apps, GMG)
 {

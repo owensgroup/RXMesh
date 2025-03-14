@@ -2074,7 +2074,7 @@ struct SparseMatrix
         thrust::gather(thrust::device, t_p, t_p + size, t_i, t_o);
     }
 
-   private:
+   protected:
     void init_cusparse(SparseMatrix<T>& mat) const
     {
         CUSPARSE_ERROR(cusparseCreateMatDescr(&mat.m_descr));

@@ -47,31 +47,19 @@ void GPUGMG::ConstructOperators(RXMeshStatic& rx)
 
     // set up initial variables
 
-    Timers<GPUTimer> timers;
-    timers.add("Total");
-    timers.add("Sampling");
-    timers.add("Clustering level 1");
-    timers.add("Neighbors level 1");
-    timers.add("Constructing level 1");
-    timers.add("Constructing operators without level 1");
-    timers.add("Constructing LHS");
-
-
     N                                = rx.get_num_vertices();
     int currentLevel                 = 1;                   // first coarse mesh
     int numberOfSamplesForFirstLevel = N / powf(ratio, 1);  // start
     int numberOfSamples              = N / powf(ratio, currentLevel);  // start
 
     Vec3*  vertices;
-    Vec3*  sample_pos;
+    Vec3*  sample_pos;  // m_samples_pos
     float* distanceArray;
-    int*   clusterVertices;
 
     // Allocate unified memory
     cudaMallocManaged(&sample_pos, numberOfSamples * sizeof(Vec3));
     cudaMallocManaged(&vertices, N * sizeof(Vec3));
     cudaMallocManaged(&distanceArray, N * sizeof(int));
-    cudaMallocManaged(&clusterVertices, N * sizeof(int));
 
 
     VertexAttributes vertexAttributes(rx);
@@ -82,9 +70,6 @@ void GPUGMG::ConstructOperators(RXMeshStatic& rx)
 
 
     // FPS sampling
-    timers.start("Total");
-    timers.start("Sampling");
-
     FPSSampler(rx,
                vertexAttributes,
                ratio,
@@ -93,28 +78,14 @@ void GPUGMG::ConstructOperators(RXMeshStatic& rx)
                numberOfSamplesForFirstLevel,
                sample_pos);
 
-    timers.stop("Total");
-    timers.stop("Sampling");
-
-    rxmesh::LaunchBox<CUDABlockSize> cb;
-    rx.prepare_launch_box(
-        {rxmesh::Op::VV}, cb, (void*)cluster_points<float, CUDABlockSize>);
-
 
     // clustering
-    timers.start("Total");
-    // timers.start("Clustering");
-
     clustering(rx, vertexAttributes, currentLevel, vertices);
-    timers.stop("Total");
-    // timers.stop("Clustering");
 
 
     // move rxmesh cluster data to a normal pointer on device
     int* vertexCluster;
     cudaMallocManaged(&vertexCluster, sizeof(int) * N);
-
-    timers.start("Total");
 
     rx.for_each_vertex(rxmesh::DEVICE,
                        [vertexAttributes, context, vertexCluster] __device__(
@@ -122,7 +93,6 @@ void GPUGMG::ConstructOperators(RXMeshStatic& rx)
                            vertexCluster[context.linear_id(vh)] =
                                vertexAttributes.clustered_vertex(vh, 0);
                        });
-    timers.stop("Total");
 
     cudaDeviceSynchronize();
 
@@ -148,9 +118,6 @@ void GPUGMG::ConstructOperators(RXMeshStatic& rx)
     cudaError_t      err = cudaMallocManaged(
         &vertexNeighbors, numberOfSamples * sizeof(VertexNeighbors));
 
-    // launch kernel
-    timers.start("Total");
-    // timers.start("Neighbors level 1");
 
     findNumberOfCoarseNeighbors<float, CUDABlockSize>
         <<<nn.blocks, nn.num_threads, nn.smem_bytes_dyn>>>(
@@ -174,8 +141,6 @@ void GPUGMG::ConstructOperators(RXMeshStatic& rx)
                         .getNumberOfNeighbors();
             }
         });
-    timers.stop("Total");
-    // timers.stop("Neighbors level 1");
 
 
     cudaDeviceSynchronize();
@@ -191,21 +156,16 @@ void GPUGMG::ConstructOperators(RXMeshStatic& rx)
     operatorsCSR.push_back(CSR(N));
     CSR firstOperator(N);
 
-    timers.start("Total");
-    // timers.start("Constructing level 1");
-
-    createProlongationOperator(csr.num_rows,
-                               csr.row_ptr,
-                               csr.value_ptr,
-                               csr.number_of_neighbors,
-                               N,
-                               vertexCluster,
-                               vertices,
-                               sample_pos,
-                               firstOperator.value_ptr,
-                               firstOperator.data_ptr);
-    timers.stop("Total");
-    // timers.stop("Constructing level 1");
+    create1stProlongationOperator(csr.num_rows,
+                                  csr.row_ptr,
+                                  csr.value_ptr,
+                                  csr.number_of_neighbors,
+                                  N,
+                                  vertexCluster,
+                                  vertices,
+                                  sample_pos,
+                                  firstOperator.value_ptr,
+                                  firstOperator.data_ptr);
 
     cudaDeviceSynchronize();
     prolongationOperatorCSR.push_back(firstOperator);
@@ -220,8 +180,6 @@ void GPUGMG::ConstructOperators(RXMeshStatic& rx)
     setVertexData(rx, context, oldVdata, vertexAttributes);
 
     // create all the operators for moving between each level
-    timers.start("Total");
-    // timers.start("Constructing operators without level 1");
 
     createProlongationOperators(N,
                                 numberOfSamples,
@@ -234,9 +192,6 @@ void GPUGMG::ConstructOperators(RXMeshStatic& rx)
                                 oldVdata,
                                 distanceArray,
                                 vertexCluster);
-
-    timers.stop("Total");
-    // timers.stop("Constructing operators without level 1");
 
 
     // contruct equations as CSR matrices
@@ -263,8 +218,6 @@ void GPUGMG::ConstructOperators(RXMeshStatic& rx)
     equationsPerLevel.push_back(A_csr);
 
     // construct the equations
-    timers.start("Total");
-    // timers.start("Constructing LHS");
 
     constructLHS(A_csr,
                  prolongationOperatorCSR,
@@ -273,27 +226,8 @@ void GPUGMG::ConstructOperators(RXMeshStatic& rx)
                  numberOfLevels,
                  numberOfSamples,
                  ratio);
-    timers.stop("Total");
-    // timers.stop("Constructing LHS");
-
-
-    std::cout << "\nTotal prolongation construction time: "
-              << timers.elapsed_millis("Total");
-    std::cout << "\nSampling time : " << timers.elapsed_millis("Sampling");
-    // std::cout << "\nClustering level 1 time: " <<
-    // timers.elapsed_millis("Clustering level 1"); std::cout << "\nNeighbors
-    // level 1 time: " << timers.elapsed_millis("Neighbors level 1"); std::cout
-    // << "\nOperator level 1 construction time: " <<
-    // timers.elapsed_millis("Constructing level 1al"); std::cout << "\nAll
-    // operators but level 1 construction time: " <<
-    // timers.elapsed_millis("Constructing operators without level 1");
-    // std::cout << "\nLHS construction time: " <<
-    // timers.elapsed_millis("Constructing LHS");
 
     cudaDeviceSynchronize();
-
-    // timers.stop("Total");
-
 
     vertexAttributes.sample_number.move(DEVICE, HOST);
     vertexAttributes.distance.move(DEVICE, HOST);

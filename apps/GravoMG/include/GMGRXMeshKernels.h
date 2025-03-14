@@ -25,7 +25,7 @@ struct VertexData
     int     linear_id;
 };
 
-
+//** DONE
 struct VertexAttributes
 {
     VertexAttribute<float>    vertex_pos;
@@ -62,6 +62,7 @@ struct VertexAttributes
 
 class VertexNeighbors;
 
+//** DONE
 template <typename T, uint32_t blockThreads>
 __global__ static void findNumberOfCoarseNeighbors(
     const rxmesh::Context        context,
@@ -71,6 +72,7 @@ __global__ static void findNumberOfCoarseNeighbors(
 {
 
     auto cluster = [&](VertexHandle v_id, VertexIterator& vv) {
+        int num = 0;
         for (int i = 0; i < vv.size(); i++) {
 
             if (clustered_vertices(v_id, 0) != clustered_vertices(vv[i], 0)) {
@@ -78,12 +80,13 @@ __global__ static void findNumberOfCoarseNeighbors(
                 int b = clustered_vertices(v_id, 0);
 
                 vns[b].addNeighbor(a);
-
+                num++;
 
                 // neighbor adding logic here where we say that b is a neighbor
                 // of a
             }
         }
+        printf("\n v_id = %d, num= %d", context.linear_id(v_id), num);
     };
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
@@ -101,6 +104,7 @@ __global__ static void findNumberOfCoarseNeighbors(
  * \param clustered_vertices
  * \param flag
  */
+//** DONE
 template <typename T, uint32_t blockThreads>
 __global__ static void cluster_points(
     const rxmesh::Context        context,
@@ -144,6 +148,7 @@ __global__ static void cluster_points(
  * \param distance
  * \param flag
  */
+//** DONE
 template <typename T, uint32_t blockThreads>
 __global__ static void sample_points(const rxmesh::Context      context,
                                      rxmesh::VertexAttribute<T> vertex_pos,
@@ -160,16 +165,11 @@ __global__ static void sample_points(const rxmesh::Context      context,
                       powf(vertex_pos(v_id, 2) - vertex_pos(vv[i], 2), 2)) +
                 distance(vv[i], 0);
 
-            // printf("\nVertex: %u Distance : %f", context.linear_id(v_id),
-            // dist);
-
-
             if (dist < distance(v_id, 0)) {
                 distance(v_id, 0) = dist;
                 *flag             = 15;
             }
         }
-        // printf("\nFLAG : %d", *flag);
     };
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
@@ -185,6 +185,7 @@ __global__ static void sample_points(const rxmesh::Context      context,
  * \param currentLevel
  * \param vertices
  */
+//** DONE
 void clustering(RXMeshStatic&     rx,
                 VertexAttributes& vertexAttributes,
                 int               currentLevel,
@@ -290,6 +291,7 @@ void setVertexData(RXMeshStatic&    rx,
  * \param numberOfSamplesForFirstLevel
  * \param sample_pos
  */
+//** DONE
 void FPSSampler(RXMeshStatic&    rx,
                 VertexAttributes vertexAttributes,
                 float            ratio,

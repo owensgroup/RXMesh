@@ -10,13 +10,15 @@ namespace rxmesh {
 
 struct CSR
 {
-    int* row_ptr;
-    int* value_ptr;
-    int* number_of_neighbors;
+    int*   row_ptr;
+    int*   value_ptr;
+    int*   number_of_neighbors;
     float* data_ptr;
-    int  num_rows;
-    int    non_zeros;// number of non-zero values
-    CSR(){}
+    int    num_rows;
+    int    non_zeros;  // number of non-zero values
+    CSR()
+    {
+    }
 
     CSR(int a, int b, int c)
     {
@@ -56,29 +58,30 @@ struct CSR
         row_ptr[2]        = 6;
         row_ptr[num_rows] = non_zeros;
     }
-    CSR(int number_of_rows, int num_cols) //to be used only if we're multiplying and this is used as result
+    CSR(int number_of_rows,
+        int num_cols)  // to be used only if we're multiplying and this is used
+                       // as result
     {
-        num_rows=number_of_rows;
+        num_rows = number_of_rows;
         cudaMallocManaged(&row_ptr, sizeof(int) * (num_rows + 1));
         cudaMallocManaged(&value_ptr, sizeof(int) * num_rows);
         cudaMallocManaged(&data_ptr, sizeof(float) * num_rows);
         non_zeros = num_rows;
 
         cudaDeviceSynchronize();
-         for (int i = 0; i < num_rows; ++i) 
-         {
+        for (int i = 0; i < num_rows; ++i) {
             row_ptr[i] = i;
-         }
-         row_ptr[num_rows] = non_zeros;  // Ensure the last element is properly set
-         // Initialize values and data
-         for (int i = 0; i < non_zeros; ++i) {
-             value_ptr[i] = 2;     // Column indices (modify as per structure)
-             data_ptr[i]  = i;  // Example values
-         }
-         
+        }
+        row_ptr[num_rows] =
+            non_zeros;  // Ensure the last element is properly set
+        // Initialize values and data
+        for (int i = 0; i < non_zeros; ++i) {
+            value_ptr[i] = 2;  // Column indices (modify as per structure)
+            data_ptr[i]  = i;  // Example values
+        }
+
 
         cudaDeviceSynchronize();
-
     }
 
     CSR(int number_of_rows)
@@ -88,7 +91,7 @@ struct CSR
         // or just allocate 3 x number of rows x float
         // allocate values in parallel
         num_rows = number_of_rows;
-        cudaMallocManaged(&row_ptr, sizeof(int) * (num_rows+1));
+        cudaMallocManaged(&row_ptr, sizeof(int) * (num_rows + 1));
         cudaMallocManaged(&value_ptr, sizeof(int) * num_rows * 3);
         cudaMallocManaged(&data_ptr, sizeof(float) * num_rows * 3);
         non_zeros = num_rows * 3;
@@ -96,7 +99,7 @@ struct CSR
         cudaDeviceSynchronize();
 
         for (int i = 0; i < num_rows; ++i) {
-            row_ptr[i] = 3*i;
+            row_ptr[i] = 3 * i;
         }
         row_ptr[num_rows] =
             non_zeros;  // Ensure the last element is properly set
@@ -104,13 +107,14 @@ struct CSR
         cudaDeviceSynchronize();
     }
 
-    __device__ void setValue(int   row,
-                  int   colNumber1,
-                  int   colNumber2,
-                  int   colNumber3,
-                  float value1,
-                  float value2,
-                  float value3)  // implicitly, this can only be called 3 times
+    __device__ void setValue(
+        int   row,
+        int   colNumber1,
+        int   colNumber2,
+        int   colNumber3,
+        float value1,
+        float value2,
+        float value3)  // implicitly, this can only be called 3 times
     {
         int q            = row_ptr[row];
         value_ptr[q]     = colNumber1;
@@ -122,31 +126,30 @@ struct CSR
     }
 
     CSR(SparseMatrix<float> A,
-        const int*                A_row_pointer,
-        const int*                A_column_pointer,
+        const int*          A_row_pointer,
+        const int*          A_column_pointer,
         int                 number_of_values)
     {
-        num_rows = A.rows();
+        num_rows  = A.rows();
         non_zeros = A.non_zeros();
         cudaMallocManaged(&row_ptr, (num_rows + 1) * sizeof(int));
         cudaMallocManaged(&data_ptr, sizeof(float) * A.non_zeros());
         cudaMallocManaged(&value_ptr, sizeof(int) * A.non_zeros());
         cudaDeviceSynchronize();
-          for (int i = 0; i < num_rows; ++i) 
-          {
+        for (int i = 0; i < num_rows; ++i) {
             row_ptr[i] = A_row_pointer[i];
-            for (int q = A_row_pointer[i]; q < A_row_pointer[i + 1]; q++) 
-            {
-                value_ptr[q] =  A_column_pointer[q];
-                data_ptr[q] = A(i, A_column_pointer[q]);
+            for (int q = A_row_pointer[i]; q < A_row_pointer[i + 1]; q++) {
+                value_ptr[q] = A_column_pointer[q];
+                data_ptr[q]  = A(i, A_column_pointer[q]);
             }
-          }
-          row_ptr[num_rows] =non_zeros;  // Ensure the last element is properly set
+        }
+        row_ptr[num_rows] =
+            non_zeros;  // Ensure the last element is properly set
 
-          cudaDeviceSynchronize();
+        cudaDeviceSynchronize();
     }
 
-    //used for the mesh
+    // used for the mesh
     CSR(int n_rows, int* num_of_neighbors, VertexNeighbors* vns, int N)
     {
 
@@ -181,7 +184,7 @@ struct CSR
         cudaDeviceSynchronize();
 
         createValuePointer(
-            num_rows, row_ptr, value_ptr, num_of_neighbors, vns, N,data_ptr);
+            num_rows, row_ptr, value_ptr, num_of_neighbors, vns, N, data_ptr);
     }
 
 
@@ -191,7 +194,7 @@ struct CSR
                             int*             number_of_neighbors_raw,
                             VertexNeighbors* vns,
                             int              N,
-        float* data_pointer)
+                            float*           data_pointer)
     {
         thrust::device_vector<int> samples(numberOfSamples);
         thrust::sequence(samples.begin(), samples.end());
@@ -211,7 +214,7 @@ struct CSR
                 const int n = vns[number].getNumberOfNeighbors();
 
                 int start_pointer = row_ptr_raw[number];
-                int count         = 0;               
+                int count         = 0;
 
                 for (int i = 0; i < n; i++) {
                     int key = neighbors[i];  // Value to insert
@@ -239,7 +242,6 @@ struct CSR
                         "%d\n",
                         number);
                 }
-
             });
     }
 
@@ -403,7 +405,7 @@ struct CSR
     }
 };
 
-
+// ** DONE
 void clusterCSR(int         n,
                 float*      distance,
                 int*        clusterVertices,

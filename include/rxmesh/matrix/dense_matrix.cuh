@@ -246,7 +246,7 @@ struct DenseMatrix
      * @brief accessing a specific value in the matrix using the row and col
      * index. Can be used on both host and device
      */
-    __host__ __device__ T& operator()(const IndexT row, const IndexT col)
+    __host__ __device__ T& operator()(const IndexT row, const IndexT col = 0)
     {
         assert(row < m_num_rows);
         assert(col < m_num_cols);
@@ -263,7 +263,7 @@ struct DenseMatrix
      * index. Can be used on both host and device
      */
     __host__ __device__ const T& operator()(const IndexT row,
-                                            const IndexT col) const
+                                            const IndexT col = 0) const
     {
         assert(row < m_num_rows);
         assert(col < m_num_cols);
@@ -281,7 +281,8 @@ struct DenseMatrix
      * This can only be used in non user-managed mode
      */
     template <typename HandleT>
-    __host__ __device__ T& operator()(const HandleT handle, const IndexT col)
+    __host__ __device__ T& operator()(const HandleT handle,
+                                      const IndexT  col = 0)
     {
         assert(!m_user_managed);
         return this->operator()(get_row_id(handle), col);
@@ -293,7 +294,7 @@ struct DenseMatrix
      */
     template <typename HandleT>
     __host__ __device__ const T& operator()(const HandleT handle,
-                                            const IndexT  col) const
+                                            const IndexT  col = 0) const
     {
         assert(!m_user_managed);
         return this->operator()(get_row_id(handle), col);
@@ -905,7 +906,9 @@ struct DenseMatrix
         }
 
         if ((location & LOCATION_ALL) == LOCATION_ALL) {
-            CUSPARSE_ERROR(cusparseDestroyDnMat(m_dendescr));
+            if (m_dendescr) {
+                CUSPARSE_ERROR(cusparseDestroyDnMat(m_dendescr));
+            }
         }
     }
 
@@ -954,13 +957,18 @@ struct DenseMatrix
      */
     __host__ void init_cublas()
     {
-        CUSPARSE_ERROR(cusparseCreateDnMat(&m_dendescr,
-                                           m_num_rows,
-                                           m_num_cols,
-                                           m_num_rows,  // leading dim
-                                           m_d_val,
-                                           cuda_type<T>(),
-                                           CUSPARSE_ORDER_COL));
+        if (std::is_floating_point_v<T> || std::is_same_v<T, int> ||
+            std::is_same_v<T, cuComplex> ||
+            std::is_same_v<T, cuDoubleComplex>) {
+
+            CUSPARSE_ERROR(cusparseCreateDnMat(&m_dendescr,
+                                               m_num_rows,
+                                               m_num_cols,
+                                               m_num_rows,  // leading dim
+                                               m_d_val,
+                                               cuda_type<T>(),
+                                               CUSPARSE_ORDER_COL));
+        }
 
         CUBLAS_ERROR(cublasCreate(&m_cublas_handle));
         CUBLAS_ERROR(
