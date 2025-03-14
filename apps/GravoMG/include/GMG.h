@@ -72,8 +72,9 @@ struct GMG
         }
         m_num_levels = m_num_samples.size();
 
-
-        // init variables and alloc memory
+        //============
+        // 1) init variables and alloc memory
+        //============
 
         // sample_id, m_distance_mat, and vertex_cluster are stored for the fine
         // mesh and all levels.
@@ -113,7 +114,7 @@ struct GMG
 
         CUDA_ERROR(cudaMalloc((void**)&m_d_flag, sizeof(int)));
 
-        m_mutex = DenseMatrix<int>(rx, m_num_samples[0], 1);
+        m_mutex = DenseMatrix<int>(rx, m_num_samples[1], 1);
 
 
         // allocate CUB stuff here
@@ -123,15 +124,13 @@ struct GMG
             m_cub_temp_bytes,
             m_sample_neighbor_size[0].data(DEVICE),
             m_sample_neighbor_size_prefix[0].data(DEVICE),
-            m_num_samples[0] + 1);
+            m_num_samples[1] + 1);
         CUDA_ERROR(cudaMalloc((void**)&m_d_cub_temp_storage, m_cub_temp_bytes));
 
 
-        // =====================
-        // ====== Level 1 ======
-        // =====================
-
-        // 1) FPS sampling
+        //============
+        // 2) Sampling
+        //============
         FPSSampler(rx,
                    m_distance,
                    m_vertex_pos,
@@ -141,10 +140,12 @@ struct GMG
                    m_ratio,
                    m_num_rows,
                    m_num_levels,
-                   m_num_samples[0],
+                   m_num_samples[1],
                    m_d_flag);
 
-        // 2) clustering
+        //============
+        // 3) Clustering
+        //============
         clustering_1st_level(rx,
                              1,  // first coarse level
                              m_vertex_pos,
@@ -154,8 +155,11 @@ struct GMG
                              m_vertex_cluster[0],
                              m_d_flag);
 
-        // 3) create compressed representation of
-        // 3.a) for each sample, count the number of neighbor samples
+        //============
+        // 4) Create coarse mesh compressed representation of
+        //============
+        //
+        // 4.a) for each sample, count the number of neighbor samples
         // TODO this need to be fixed
         rx.run_kernel<blockThreads>(
             {Op::VV},
@@ -165,25 +169,25 @@ struct GMG
             m_mutex);
 
 
-        // 3.b) compute the exclusive sum of the number of neighbor samples
+        // 4.b) compute the exclusive sum of the number of neighbor samples
         cub::DeviceScan::ExclusiveSum(
             m_d_cub_temp_storage,
             m_cub_temp_bytes,
             m_sample_neighbor_size[0].data(DEVICE),
             m_sample_neighbor_size_prefix[0].data(DEVICE),
-            m_num_samples[0] + 1);
+            m_num_samples[1] + 1);
 
-        // 3.c) allocate memory to store the neighbor samples
+        // 4.c) allocate memory to store the neighbor samples
         int s = 0;
         CUDA_ERROR(
             cudaMemcpy(&s,
-                       m_sample_neighbor_size[0].data() + m_num_samples[0],
+                       m_sample_neighbor_size[0].data() + m_num_samples[1],
                        sizeof(int),
                        cudaMemcpyDeviceToHost));
 
         m_sample_neighbor.emplace_back(DenseMatrix<int>(rx, s, 1));
 
-        // 3.d) store the neighbor samples in the compressed format
+        // 4.d) store the neighbor samples in the compressed format
         // TODO this need to be fixed
         rx.run_kernel<blockThreads>(
             {Op::VV},
@@ -194,16 +198,19 @@ struct GMG
             m_sample_neighbor[0],
             m_mutex);
 
+        //============
+        // 5) Create prolongation operator
+        //============
+        create_all_prolongation();
 
-        // move prolongation operator from device to host
+        // move prolongation operator from device to host (for no obvious
+        // reason)
         for (auto& prolong_op : m_prolong_op) {
             prolong_op.move_col_idx(DEVICE, HOST);
             prolong_op.move(DEVICE, HOST);
         }
 
-        create_all_prolongation();
-
-        // release memory
+        // release temp memory
         GPU_FREE(m_d_flag);
         GPU_FREE(m_d_cub_temp_storage);
     }
@@ -213,9 +220,6 @@ struct GMG
      */
     void create_all_prolongation()
     {
-        int current_num_vertices = m_num_rows;
-        int current_num_samples  = m_num_samples[0];
-
         for (int level = 1; level < m_num_levels - 1; level++) {
 
             int current_num_vertices = m_num_samples[level];
