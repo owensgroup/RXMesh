@@ -29,10 +29,11 @@ struct GMG
     std::vector<DenseMatrix<float>> m_samples_pos;
 
     // VertexAttributes
-    DenseMatrix<float>     m_vertex_pos;            // vertex_pos
-    DenseMatrix<int>       m_sample_id;             // sample_number
-    VertexAttribute<float> m_distance;              // distance
-    DenseMatrix<uint16_t>  m_sample_level_bitmask;  // sample_level_bitmask
+    DenseMatrix<float>              m_vertex_pos;  // vertex_pos
+    std::vector<DenseMatrix<int>>   m_sample_id;   // sample_number
+    VertexAttribute<float>          m_distance;    // distance
+    std::vector<DenseMatrix<float>> m_distance_mat;
+    DenseMatrix<uint16_t> m_sample_level_bitmask;  // sample_level_bitmask
 
     std::vector<DenseMatrix<int>> m_vertex_cluster;  // clustered_vertex
 
@@ -76,8 +77,8 @@ struct GMG
 
 
         m_vertex_pos = *rx.get_input_vertex_coordinates()->to_matrix();
-        m_sample_id  = DenseMatrix<int>(rx, m_num_rows, 1);
-        m_distance   = *rx.add_vertex_attribute<float>("d", 1);
+        m_sample_id.emplace_back(rx, m_num_rows, 1);
+        m_distance             = *rx.add_vertex_attribute<float>("d", 1);
         m_sample_level_bitmask = DenseMatrix<uint16_t>(rx, m_num_rows, 1);
 
         m_vertex_cluster.emplace_back(rx, m_num_rows, 1);
@@ -91,9 +92,9 @@ struct GMG
         m_prolong_op.emplace_back(rx, m_num_samples[0], m_num_samples[0]);
 
         // TODO allocate all levels here
-        // TODO we know how many samples we will have at each level, so we can 
-        // allocate most memories 
-        // 
+        // TODO we know how many samples we will have at each level, so we can
+        // allocate most memories
+        //
         // we allocate +1 for cub prefix sum
         m_sample_neighbor_size.emplace_back(rx, m_num_samples[0] + 1, 1);
         m_sample_neighbor_size[0].reset(0, DEVICE);
@@ -120,7 +121,7 @@ struct GMG
         FPSSampler(rx,
                    m_distance,
                    m_vertex_pos,
-                   m_sample_id,
+                   m_sample_id[0],
                    m_sample_level_bitmask,
                    m_samples_pos[0],
                    m_ratio,
@@ -135,7 +136,7 @@ struct GMG
                              m_vertex_pos,
                              m_sample_level_bitmask,
                              m_distance,
-                             m_sample_id,
+                             m_sample_id[0],
                              m_vertex_cluster[0],
                              m_d_flag);
 
@@ -186,6 +187,8 @@ struct GMG
             prolong_op.move(DEVICE, HOST);
         }
 
+        create_all_prolongation();
+
         // release memory
         GPU_FREE(m_d_flag);
         GPU_FREE(m_d_cub_temp_storage);
@@ -196,73 +199,34 @@ struct GMG
      */
     void create_all_prolongation()
     {
-        int currentNumberOfVertices = m_num_rows;
-        int currentNumberOfSamples  = m_num_samples[0];
+        int current_num_vertices = m_num_rows;
+        int current_num_samples  = m_num_samples[0];
 
         for (int level = 1; level < m_num_levels - 1; level++) {
 
-            currentNumberOfSamples /= m_ratio;
-            currentNumberOfVertices /= m_ratio;
+            int current_num_vertices = m_num_samples[level];
+            int current_num_samples  = m_num_samples[level + 1];
 
-            a = CSR(currentNumberOfVertices);
+            // TODO i think the indexing here is not right
+            clustering_nth_level(
+                current_num_vertices,
+                level + 1,
+                m_sample_neighbor_size[level],
+                m_sample_neighbor[level],
+                m_vertex_cluster[level],
+                m_distance_mat[level],  // TODO figure out this distance
+                m_sample_id[level],
+                m_sample_level_bitmask,
+                m_samples_pos[level],
+                m_d_flag);
 
-           
-            //??
-            clustering_nth_level();
-
-            //setCluster(
-            //    currentNumberOfVertices, distanceArray, level + 1, oldVdata);
-            //
-            //do {
-            //
-            //    *flag = 0;
-            //    clusterCSR(currentNumberOfVertices,
-            //               distanceArray,
-            //               vertexCluster,
-            //               flag,
-            //               lastCSR,
-            //               oldVdata);
-            //    CUDA_ERROR(cudaDeviceSynchronize());
-            //} while (*flag != 0);
-
-
-            VertexNeighbors* vertexNeighbors2;
-            CUDA_ERROR(cudaMallocManaged(
-                &vertexNeighbors2,
-                currentNumberOfVertices * sizeof(VertexNeighbors)));
-
-            int* number_of_neighbors2;
-            CUDA_ERROR(cudaMallocManaged(
-                &number_of_neighbors2, currentNumberOfVertices * sizeof(int)));
-
-
-            numberOfNeighbors(currentNumberOfSamples,
-                              vertexNeighbors2,
-                              currentNumberOfVertices,
-                              lastCSR,
-                              oldVdata,
-                              number_of_neighbors2);
-
-
-            CUDA_ERROR(cudaDeviceSynchronize());
-
-            currentCSR = CSR(currentNumberOfSamples,
-                             number_of_neighbors2,
-                             vertexNeighbors2,
-                             currentNumberOfVertices);
-
-            createProlongationOperator(currentCSR.row_ptr,
-                                       currentCSR.value_ptr,
-                                       a.value_ptr,
-                                       a.data_ptr,
-                                       currentNumberOfVertices,
-                                       oldVdata);
-            prolongationOperatorCSR.push_back(a);
-            prolongationOperatorCSRTransposed.push_back(transposeCSR(a));
-
-            CUDA_ERROR(cudaDeviceSynchronize());
-
-            lastCSR = currentCSR;
+            // TODO i think the indexing here is not right
+            create_prolongation(current_num_vertices,
+                                m_sample_neighbor_size_prefix[level],
+                                m_sample_neighbor[level],
+                                m_prolong_op[level],
+                                m_samples_pos[level],
+                                m_vertex_cluster[level]);
         }
     }
 
