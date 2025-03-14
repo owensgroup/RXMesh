@@ -59,8 +59,6 @@ struct GMG
         int              num_samples_threshold = 6)
         : m_ratio(reduction_ratio)
     {
-        constexpr uint32_t blockThreads = 256;
-
         m_num_rows = A.rows();
 
         m_num_samples.push_back(m_num_rows);
@@ -131,6 +129,41 @@ struct GMG
         //============
         // 2) Sampling
         //============
+        sampling(rx);
+
+        //============
+        // 3) Clustering
+        //============
+        clustering(rx);
+
+
+        //============
+        // 4) Create coarse mesh compressed representation of
+        //============
+        create_compressed_representation(rx);
+
+        //============
+        // 5) Create prolongation operator
+        //============
+        create_all_prolongation();
+
+        // move prolongation operator from device to host (for no obvious
+        // reason)
+        for (auto& prolong_op : m_prolong_op) {
+            prolong_op.move_col_idx(DEVICE, HOST);
+            prolong_op.move(DEVICE, HOST);
+        }
+
+        // release temp memory
+        GPU_FREE(m_d_flag);
+        GPU_FREE(m_d_cub_temp_storage);
+    }
+
+    /**
+     * @brief Create samples for all levels
+     */
+    void sampling(RXMeshStatic& rx)
+    {
         FPSSampler(rx,
                    m_distance,
                    m_vertex_pos,
@@ -142,10 +175,14 @@ struct GMG
                    m_num_levels,
                    m_num_samples[1],
                    m_d_flag);
+    }
 
-        //============
-        // 3) Clustering
-        //============
+    /**
+     * @brief compute clustering at all levels in the hierarchy
+     * TODO right now we only cluster the fine mesh only
+     */
+    void clustering(RXMeshStatic& rx)
+    {
         clustering_1st_level(rx,
                              1,  // first coarse level
                              m_vertex_pos,
@@ -154,11 +191,16 @@ struct GMG
                              m_sample_id[0],
                              m_vertex_cluster[0],
                              m_d_flag);
+    }
 
-        //============
-        // 4) Create coarse mesh compressed representation of
-        //============
-        //
+    /**
+     * @brief create compressed represent for all levels in the hierarchy
+     * TODO right now we only create this for the 1st coarse level only
+     */
+    void create_compressed_representation(RXMeshStatic& rx)
+    {
+        constexpr uint32_t blockThreads = 256;
+
         // 4.a) for each sample, count the number of neighbor samples
         // TODO this need to be fixed
         rx.run_kernel<blockThreads>(
@@ -197,23 +239,8 @@ struct GMG
             m_sample_neighbor_size_prefix[0],
             m_sample_neighbor[0],
             m_mutex);
-
-        //============
-        // 5) Create prolongation operator
-        //============
-        create_all_prolongation();
-
-        // move prolongation operator from device to host (for no obvious
-        // reason)
-        for (auto& prolong_op : m_prolong_op) {
-            prolong_op.move_col_idx(DEVICE, HOST);
-            prolong_op.move(DEVICE, HOST);
-        }
-
-        // release temp memory
-        GPU_FREE(m_d_flag);
-        GPU_FREE(m_d_cub_temp_storage);
     }
+
 
     /**
      * @brief Create prolongation operator for all levels beyond the 1st level
