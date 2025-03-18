@@ -16,6 +16,13 @@
 
 namespace rxmesh {
 
+enum class Sampling
+{
+    Rand   = 0,
+    FPS    = 1,
+    KMeans = 2,
+};
+
 template <typename T>
 struct GMG
 {
@@ -55,6 +62,7 @@ struct GMG
     GMG(RXMeshStatic&    rx,
         SparseMatrix<T>& A,
         DenseMatrix<T>&  B,
+        Sampling         sam                   = Sampling::FPS,
         int              reduction_ratio       = 7,
         int              num_samples_threshold = 6)
         : m_ratio(reduction_ratio)
@@ -129,7 +137,25 @@ struct GMG
         //============
         // 2) Sampling
         //============
-        sampling(rx);
+        switch (sam) {
+            case Sampling::Rand: {
+                random_sampling(rx);
+                break;
+            }
+            case Sampling::FPS: {
+                fps_sampling(rx);
+                break;
+            }
+            case Sampling::KMeans: {
+                kmeans_sampling(rx);
+                break;
+            }
+            default: {
+                RXMESH_ERROR("GMG::GMG() Invalid input Sampling");
+                break;
+            }
+        }
+
 
         //============
         // 3) Clustering
@@ -160,9 +186,9 @@ struct GMG
     }
 
     /**
-     * @brief Create samples for all levels
+     * @brief Samples for all levels using FPS sampling
      */
-    void sampling(RXMeshStatic& rx)
+    void fps_sampling(RXMeshStatic& rx)
     {
         FPSSampler(rx,
                    m_distance,
@@ -176,6 +202,23 @@ struct GMG
                    m_num_samples[1],
                    m_d_flag);
     }
+
+    /**
+     * @brief Samples for all levels using random sampling
+     * TODO implement this
+     */
+    void random_sampling(RXMeshStatic& rx)
+    {
+    }
+
+    /**
+     * @brief Samples for all levels using k-means
+     * TODO implement this
+     */
+    void kmeans_sampling(RXMeshStatic& rx)
+    {
+    }
+
 
     /**
      * @brief compute clustering at all levels in the hierarchy
