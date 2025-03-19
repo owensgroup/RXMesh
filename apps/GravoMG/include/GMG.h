@@ -13,6 +13,7 @@
 #include "GMG_kernels.h"
 #include "NeighborHandling.h"
 #include "cluster.h"
+#include "hashtable.h"
 
 namespace rxmesh {
 
@@ -26,6 +27,9 @@ enum class Sampling
 template <typename T>
 struct GMG
 {
+    // In indexing, we always using L=0 to refer to the fine mesh.
+    // The index of the first coarse level is L=1.
+
     float m_ratio;
     int   m_num_levels;  // numberOfLevels
     int   m_num_rows;
@@ -48,16 +52,15 @@ struct GMG
     VertexAttribute<float> m_distance;              // fine
     DenseMatrix<uint16_t>  m_sample_level_bitmask;  // fine
 
+    GPUHashTable<Edge> m_edge_hash_table;
+
 
     // we reuse cub temp storage for all level (since level has the largest
     // storage) and only re-allocate if we have to
     void*  m_d_cub_temp_storage;
     size_t m_cub_temp_bytes;
 
-    // mutex used in populating neighbor samples. allocated based on samples
-    // on first level and then used in other levels
-    DenseMatrix<int> m_mutex;
-
+    
 
     GMG(RXMeshStatic&    rx,
         SparseMatrix<T>& A,
@@ -65,7 +68,8 @@ struct GMG
         Sampling         sam                   = Sampling::FPS,
         int              reduction_ratio       = 7,
         int              num_samples_threshold = 6)
-        : m_ratio(reduction_ratio)
+        : m_ratio(reduction_ratio),
+          m_edge_hash_table(GPUHashTable(DIVIDE_UP(rx.get_num_edges(), 2)))
     {
         m_num_rows = A.rows();
 
@@ -119,9 +123,7 @@ struct GMG
 
 
         CUDA_ERROR(cudaMalloc((void**)&m_d_flag, sizeof(int)));
-
-        m_mutex = DenseMatrix<int>(rx, m_num_samples[1], 1);
-
+                
 
         // allocate CUB stuff here
         m_cub_temp_bytes = 0;
@@ -157,16 +159,19 @@ struct GMG
         }
 
 
-        //============
-        // 3) Clustering
-        //============
-        clustering(rx);
+        for (int l = 1; l < m_num_levels; ++l) {
+
+            //============
+            // 3) Clustering
+            //============
+            clustering(rx, l);
 
 
-        //============
-        // 4) Create coarse mesh compressed representation of
-        //============
-        create_compressed_representation(rx);
+            //============
+            // 4) Create coarse mesh compressed representation of
+            //============
+            create_compressed_representation(rx, l);
+        }
 
         //============
         // 5) Create prolongation operator
@@ -222,66 +227,159 @@ struct GMG
 
     /**
      * @brief compute clustering at all levels in the hierarchy
-     * TODO right now we only cluster the fine mesh only
      */
-    void clustering(RXMeshStatic& rx)
+    void clustering(RXMeshStatic& rx, int l)
     {
-        clustering_1st_level(rx,
-                             1,  // first coarse level
-                             m_vertex_pos,
-                             m_sample_level_bitmask,
-                             m_distance,
-                             m_sample_id[0],
-                             m_vertex_cluster[0],
-                             m_d_flag);
+        if (l == 1) {
+            clustering_1st_level(rx,
+                                 1,  // first coarse level
+                                 m_vertex_pos,
+                                 m_sample_level_bitmask,
+                                 m_distance,
+                                 m_sample_id[0],
+                                 m_vertex_cluster[0],
+                                 m_d_flag);
+        } else {
+            clustering_nth_level(m_num_samples[0],
+                                 l,
+                                 m_sample_neighbor_size_prefix[l - 1],
+                                 m_sample_neighbor[l - 1],
+                                 m_vertex_cluster[l],
+                                 m_distance_mat[l],
+                                 m_sample_id[l],
+                                 m_sample_level_bitmask,
+                                 m_samples_pos[l - 1],
+                                 m_d_flag);
+        }
     }
 
     /**
-     * @brief create compressed represent for all levels in the hierarchy
-     * TODO right now we only create this for the 1st coarse level only
+     * @brief create compressed represent for specific level in the hierarchy
      */
-    void create_compressed_representation(RXMeshStatic& rx)
+    void create_compressed_representation(RXMeshStatic& rx, uint32_t level)
     {
         constexpr uint32_t blockThreads = 256;
 
-        // 4.a) for each sample, count the number of neighbor samples
-        // TODO this need to be fixed
-        rx.run_kernel<blockThreads>(
-            {Op::VV},
-            detail::count_num_neighbor_samples<blockThreads>,
-            m_vertex_cluster[0],
-            m_sample_neighbor_size[0],
-            m_mutex);
+        m_edge_hash_table.clear();
+
+        // a) for each sample, count the number of neighbor samples
+        if (level == 1) {
+            // if we are building the compressed format for level 1, then we use
+            // the mesh itself to tell us who is neighbor to whom on the at
+            // level (1)
+            rx.run_kernel<blockThreads>(
+                {Op::VV},
+                detail::count_neighbors_1st_level<blockThreads>,
+                m_vertex_cluster[0],
+                m_edge_hash_table);
+        } else {
+            // if we are building the compressed format for any other level,
+            // then we use level-1 to tell us how to get the neighbor of that
+            // level
+
+            auto& vertex_cluster = m_vertex_cluster[level - 2];
+            auto& prv_sample_neighbor_size_prefix =
+                m_sample_neighbor_size_prefix[level - 2];
+            auto& prv_sample_neighbor = m_sample_neighbor[level - 2];
+
+            // the number of parallel stuff we wanna do is equal to the number
+            // of the samples in the previous level
+
+            uint32_t blocks = DIVIDE_UP(
+                prv_sample_neighbor_size_prefix.rows() - 1, blockThreads);
+
+            assert(prv_sample_neighbor_size_prefix.rows() - 1 ==
+                   m_num_samples[level - 1]);
+
+            for_each_item<<<blocks, blockThreads>>>(
+                prv_sample_neighbor_size_prefix.rows() - 1,
+                [=] __device__(int i) mutable {
+                    int start = prv_sample_neighbor_size_prefix(i);
+                    int end   = prv_sample_neighbor_size_prefix(i + 1);
+                    for (int j = start; j < end; ++j) {
+                        int n = prv_sample_neighbor(j);
+
+                        int a = vertex_cluster(i);
+                        int b = vertex_cluster(n);
+
+                        if (a != b) {
+                            Edge e(a, b);
+                            m_edge_hash_table.insert(e);
+                        }
+                    }
+                });
+        }
 
 
-        // 4.b) compute the exclusive sum of the number of neighbor samples
-        cub::DeviceScan::ExclusiveSum(
-            m_d_cub_temp_storage,
-            m_cub_temp_bytes,
-            m_sample_neighbor_size[0].data(DEVICE),
-            m_sample_neighbor_size_prefix[0].data(DEVICE),
-            m_num_samples[1] + 1);
+        // b) iterate over all entries in the hashtable, for non sentinel
+        // entries, find
+        uint32_t blocks =
+            DIVIDE_UP(m_edge_hash_table.get_capacity(), blockThreads);
 
-        // 4.c) allocate memory to store the neighbor samples
+        auto& sample_neighbor_size = m_sample_neighbor_size[level - 1];
+
+        auto& sample_neighbor_size_prefix =
+            m_sample_neighbor_size_prefix[level - 1];
+
+        auto& sample_neighbor = m_sample_neighbor[level - 1];
+
+
+        for_each_item<<<blocks, blockThreads>>>(
+            m_edge_hash_table.get_capacity(),
+            [=] __device__(uint32_t i) mutable {
+                const Edge e = m_edge_hash_table.m_table[i];
+
+                if (e != Edge::sentinel()) {
+                    std::pair<int, int> p = e.unpack();
+
+                    ::atomicAdd(&sample_neighbor_size(p.first), 1);
+                    ::atomicAdd(&sample_neighbor_size(p.second), 1);
+                }
+            });
+
+        // c) compute the exclusive sum of the number of neighbor samples
+        cub::DeviceScan::ExclusiveSum(m_d_cub_temp_storage,
+                                      m_cub_temp_bytes,
+                                      sample_neighbor_size.data(DEVICE),
+                                      sample_neighbor_size_prefix.data(DEVICE),
+                                      m_num_samples[1] + 1);
+
+        // d) allocate memory to store the neighbor samples
         int s = 0;
-        CUDA_ERROR(
-            cudaMemcpy(&s,
-                       m_sample_neighbor_size[0].data() + m_num_samples[1],
-                       sizeof(int),
-                       cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(&s,
+                              sample_neighbor_size.data() + m_num_samples[1],
+                              sizeof(int),
+                              cudaMemcpyDeviceToHost));
 
+        // e) allocate memory for sample_neighbour
         m_sample_neighbor.emplace_back(DenseMatrix<int>(rx, s, 1));
 
-        // 4.d) store the neighbor samples in the compressed format
-        // TODO this need to be fixed
-        rx.run_kernel<blockThreads>(
-            {Op::VV},
-            detail::populate_neighbor_samples<blockThreads>,
-            m_vertex_cluster[0],
-            m_sample_neighbor_size[0],
-            m_sample_neighbor_size_prefix[0],
-            m_sample_neighbor[0],
-            m_mutex);
+        sample_neighbor_size.reset(0, DEVICE);
+
+        // f) store the neighbor samples in the compressed format
+        for_each_item<<<blocks, blockThreads>>>(
+            m_edge_hash_table.get_capacity(),
+            [=] __device__(uint32_t i) mutable {
+                const Edge e = m_edge_hash_table.m_table[i];
+
+                if (e != Edge::sentinel()) {
+                    std::pair<int, int> p = e.unpack();
+
+                    // add a to b
+                    // and add b to a
+                    int a = p.first;
+                    int b = p.second;
+
+                    int a_id = ::atomicAdd(&sample_neighbor_size(a), 1);
+                    int b_id = ::atomicAdd(&sample_neighbor_size(b), 1);
+
+                    int a_pre = sample_neighbor_size_prefix(a);
+                    int b_pre = sample_neighbor_size_prefix(b);
+
+                    sample_neighbor(a_pre + a_id) = b;
+                    sample_neighbor(b_pre + b_id) = a;
+                }
+            });
     }
 
 
@@ -293,28 +391,14 @@ struct GMG
         for (int level = 1; level < m_num_levels - 1; level++) {
 
             int current_num_vertices = m_num_samples[level];
-            int current_num_samples  = m_num_samples[level + 1];
-
-            // TODO i think the indexing here is not right
-            clustering_nth_level(
-                current_num_vertices,
-                level + 1,
-                m_sample_neighbor_size[level],
-                m_sample_neighbor[level],
-                m_vertex_cluster[level],
-                m_distance_mat[level],  // TODO figure out this distance
-                m_sample_id[level],
-                m_sample_level_bitmask,
-                m_samples_pos[level],
-                m_d_flag);
 
             // TODO i think the indexing here is not right
             create_prolongation(current_num_vertices,
-                                m_sample_neighbor_size_prefix[level],
-                                m_sample_neighbor[level],
-                                m_prolong_op[level],
+                                m_sample_neighbor_size_prefix[level - 1],
+                                m_sample_neighbor[level - 1],
+                                m_prolong_op[level - 1],
                                 m_samples_pos[level],
-                                m_vertex_cluster[level]);
+                                m_vertex_cluster[level - 1]);
         }
     }
 

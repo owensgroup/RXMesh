@@ -14,6 +14,7 @@ set(SOURCE_LIST
 	include/GMG_kernels.h
 	include/FPSSampler.h
 	include/cluster.h
+	include/hashtable.h
 )
 
 target_sources(GravoMG 

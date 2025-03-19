@@ -6,105 +6,71 @@
 
 #include "NeighborHandling.h"
 
+#include "hashtable.h"
+
 namespace rxmesh {
 namespace detail {
 
-
-__device__ __inline__ void mutex_lock(int* mutex)
-{
-    assert(mutex);
-    __threadfence();
-    while (::atomicCAS(mutex, 0, 1) != 0) {
-        __threadfence();
-    }
-    __threadfence();
-}
-
-__device__ __inline__ void mutex_unlock(int* mutex)
-{
-    assert(mutex);
-    __threadfence();
-    ::atomicExch(mutex, 0);
-    __threadfence();
-}
-
-
 template <uint32_t blockThreads>
-__global__ static void count_num_neighbor_samples(
+__global__ static void count_neighbors_1st_level(
     const Context          context,
-    const DenseMatrix<int> clustered_vertices,
-    DenseMatrix<int>       sample_neighbor_size,
-    DenseMatrix<int>       mutex)
+    const DenseMatrix<int> vertex_cluster,
+    GPUHashTable<Edge>     edge_hash_table)
 {
 
-    auto add_neighbour = [&](VertexHandle v_id, VertexIterator& vv) {
-        int b = clustered_vertices(v_id, 0);
+    auto count = [&](EdgeHandle eh, VertexIterator& iter) {
+        assert(iter.size() == 2);
 
-        for (int i = 0; i < vv.size(); i++) {
+        VertexHandle v0 = iter[0];
+        VertexHandle v1 = iter[1];
 
-            int a = clustered_vertices(vv[i], 0);
+        int v0_sample = vertex_cluster(v0);
+        int v1_sample = vertex_cluster(v1);
 
-            if (b != a) {
-
-                mutex_lock(&mutex(b));
-
-                // TODO this is not enough. because different v_id could add
-                // the same a to b
-                sample_neighbor_size(b)++;
-
-                mutex_unlock(&mutex(b));
-            }
+        if (v0_sample != v1_sample) {
+            Edge e(v0_sample, v1_sample);
+            edge_hash_table.insert(e);
         }
     };
+
 
     auto block = cooperative_groups::this_thread_block();
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, add_neighbour);
+    query.dispatch<Op::EV>(block, shrd_alloc, count);
 }
 
-
 template <uint32_t blockThreads>
-__global__ static void populate_neighbor_samples(
+__global__ static void count_neighbors_nth_level(
     const Context          context,
-    const DenseMatrix<int> clustered_vertices,
-    DenseMatrix<int>       sample_neighbor_size,
-    const DenseMatrix<int> sample_neighbor_size_prefix,
-    DenseMatrix<int>       sample_neighbor,
-    DenseMatrix<int>       mutex)
+    const DenseMatrix<int> vertex_cluster,
+    const DenseMatrix<int> prv_sample_neighbor_size_prefix,
+    const DenseMatrix<int> prv_sample_neighbor,
+    GPUHashTable<Edge>     edge_hash_table)
 {
 
-    auto add_neighbour = [&](VertexHandle v_id, VertexIterator& vv) {
-        int d     = 0;
-        int start = sample_neighbor_size_prefix(v_id);
+    auto count = [&](EdgeHandle eh, VertexIterator& iter) {
+        assert(iter.size() == 2);
 
-        int b = clustered_vertices(v_id);
+        VertexHandle v0 = iter[0];
+        VertexHandle v1 = iter[1];
 
-        for (int i = 0; i < vv.size(); i++) {
-            int a = clustered_vertices(vv[i]);
+        int v0_sample = vertex_cluster(v0);
+        int v1_sample = vertex_cluster(v1);
 
-
-            if (b != a) {
-                // TODO this is gonna create race condition
-                sample_neighbor(start + d) = b;
-                d++;
-            }
+        if (v0_sample != v1_sample) {
+            Edge e(v0_sample, v1_sample);
+            edge_hash_table.insert(e);
         }
-
-        assert(d == sample_neighbor_size(v_id));
-
-        int v_idx = context.linear_id(v_id);
-
-        assert(d == sample_neighbor_size_prefix(v_idx + 1) -
-                        sample_neighbor_size_prefix(v_idx));
     };
+
 
     auto block = cooperative_groups::this_thread_block();
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, add_neighbour);
+    query.dispatch<Op::EV>(block, shrd_alloc, count);
 }
 
 

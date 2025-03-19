@@ -110,7 +110,7 @@ inline void clustering_nth_level(int               num_samples,
 
     // previously "set_cluster()"
     for_each_item<<<blocks, threads>>>(
-        num_samples, [=] __device__(int id) mutable {
+        num_samples, [=] __device__(int id) mutable {            
             // take bitmask
             // if sample, the cluster is its own
             // if not a sample, set cluster as -1
@@ -132,7 +132,8 @@ inline void clustering_nth_level(int               num_samples,
         // previously "clusterCSR()"
 
         for_each_item<<<blocks, threads>>>(
-            num_samples, [=] __device__(int id) mutable {
+            num_samples, [=] __device__(int id) mutable {               
+
                 const float sample_x = samples_pos(id, 0);
                 const float sample_y = samples_pos(id, 1);
                 const float sample_z = samples_pos(id, 2);
