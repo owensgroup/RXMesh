@@ -235,18 +235,18 @@ void GPUGMG::ConstructOperators(RXMeshStatic& rx)
     vertexAttributes.addToPolyscope(rx);  // add vertex attributes to finest
                                           // mesh
 
-    auto levels = *rx.add_vertex_attribute<int>("level", 1);
-    for (int i = 0; i < numberOfLevels; ++i) {
-        levels.reset(0, HOST);
-
-        rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
-            if ((vertexAttributes.sample_level_bitmask(vh, 0) &
-                 (1 << (i - 1))) != 0) {
-                levels(vh) = 1;
-            }
-        });
-
-        rx.get_polyscope_mesh()->addVertexScalarQuantity(
-            "Level_" + std::to_string(i), levels);
-    }
+    //auto levels = *rx.add_vertex_attribute<int>("level", 1);
+    //for (int i = 0; i < numberOfLevels; ++i) {
+    //    levels.reset(0, HOST);
+    //
+    //    rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
+    //        if ((vertexAttributes.sample_level_bitmask(vh, 0) &
+    //             (1 << (i - 1))) != 0) {
+    //            levels(vh) = 1;
+    //        }
+    //    });
+    //
+    //    rx.get_polyscope_mesh()->addVertexScalarQuantity(
+    //        "Level_" + std::to_string(i), levels);
+    //}
 }

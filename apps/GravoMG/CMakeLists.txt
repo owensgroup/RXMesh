@@ -16,6 +16,7 @@ set(SOURCE_LIST
 	include/cluster.h
 	include/hashtable.h
 	include/v_cycle.h
+	include/jacobi_solver.h
 )
 
 target_sources(GravoMG 

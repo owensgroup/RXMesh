@@ -9,10 +9,10 @@
 
 #include "rxmesh/matrix/sparse_matrix_constant_nnz_row.h"
 
-#include "FPSSampler.h"
-#include "GMG_kernels.h"
 #include "NeighborHandling.h"
 #include "cluster.h"
+#include "fps_sampler.h"
+#include "gmg_kernels.h"
 #include "hashtable.h"
 
 namespace rxmesh {
@@ -29,6 +29,8 @@ struct GMG
 {
     // In indexing, we always using L=0 to refer to the fine mesh.
     // The index of the first coarse level is L=1.
+
+    GMG(const GMG&) = delete;
 
     float m_ratio;
     int   m_num_levels;  // numberOfLevels
@@ -60,18 +62,15 @@ struct GMG
     void*  m_d_cub_temp_storage;
     size_t m_cub_temp_bytes;
 
-    
 
-    GMG(RXMeshStatic&    rx,
-        SparseMatrix<T>& A,
-        DenseMatrix<T>&  B,
-        Sampling         sam                   = Sampling::FPS,
-        int              reduction_ratio       = 7,
-        int              num_samples_threshold = 6)
+    GMG(RXMeshStatic& rx,
+        Sampling      sam                   = Sampling::FPS,
+        int           reduction_ratio       = 7,
+        int           num_samples_threshold = 6)
         : m_ratio(reduction_ratio),
           m_edge_hash_table(GPUHashTable(DIVIDE_UP(rx.get_num_edges(), 2)))
     {
-        m_num_rows = A.rows();
+        m_num_rows = rx.get_num_vertices();
 
         m_num_samples.push_back(m_num_rows);
         for (int i = 0; i < 16; i++) {
@@ -97,7 +96,7 @@ struct GMG
             if (l > 0) {
                 m_samples_pos.emplace_back(rx, level_num_samples, 3);
                 m_prolong_op.emplace_back(
-                    rx, level_num_samples, level_num_samples);
+                    rx, level_num_samples, m_num_samples[l - 1]);
 
                 // we allocate +1 for cub prefix sum
                 m_sample_neighbor_size.emplace_back(
@@ -123,7 +122,7 @@ struct GMG
 
 
         CUDA_ERROR(cudaMalloc((void**)&m_d_flag, sizeof(int)));
-                
+
 
         // allocate CUB stuff here
         m_cub_temp_bytes = 0;

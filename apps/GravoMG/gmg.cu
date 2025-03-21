@@ -12,7 +12,8 @@
 
 #include "rxmesh/geometry_factory.h"
 
-#include "include/GMG.h"
+#include "include/gmg.h"
+#include "include/v_cycle.h"
 
 struct arg
 {
@@ -49,9 +50,13 @@ TEST(Apps, GMGRefactor)
 
     SparseMatrix<float> A_mat(rx);
     DenseMatrix<float>  B_mat(rx, rx.get_num_vertices(), 3);
+    DenseMatrix<float>  X_mat(rx, rx.get_num_vertices(), 3);
     setupMCF(rx, A_mat, B_mat);
 
-    GMG<T> gmg(rx, A_mat, B_mat);
+    GMG<T> gmg(rx);
+
+    VCycle<T> v_cyc(gmg, rx, A_mat, B_mat);
+    v_cyc.solve(gmg, A_mat, B_mat, X_mat, 2);
 
     // auto samples = *rx.add_vertex_attribute<int>("s", 1);
     // gmg.m_sample_id.move(DEVICE, HOST);
