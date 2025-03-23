@@ -20,11 +20,8 @@ int main(int argc, char** argv)
     cuda_query(device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
-    //RXMeshStatic rx2(STRINGIFY(INPUT_DIR) "sphere3.obj");
     constexpr uint32_t blockThreads = 256;
 
-
-    // Different attributes used throughout the application
     auto input_coord = rx.get_input_vertex_coordinates();
      
     // B in CG
@@ -58,10 +55,6 @@ int main(int argc, char** argv)
                               launch_box_init_B.smem_bytes_dyn>>>(
         rx.get_context(), *X, *B, true);
 
-    
-    // CG scalars
-    float alpha(0), beta(0), delta_new(0), delta_old(0);
-
 
     auto mcf_matvec = [launch_box_matvec, input_coord](
                           rxmesh::RXMeshStatic&                 rx,
@@ -74,8 +67,10 @@ int main(int argc, char** argv)
                 rx.get_context(), *input_coord, input, output, true, 10);
     };
 
+    CG<float> cg(*X, *B, mcf_matvec, 1000, 10, 0.000001);
 
-    cg_solver<float>(rx, *X, *B,mcf_matvec,0.000001);
+    cg.solve(rx);
+
     X->move(rxmesh::DEVICE, rxmesh::HOST);
 
     rx.get_polyscope_mesh()->updateVertexPositions(*X);
