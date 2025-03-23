@@ -28,10 +28,15 @@ struct VCycle
     // Here we store the rhs and x for the levels.
     // rhs and x of the fine are user inputs and we should not copy them
 
-    std::vector<DenseMatrix<T>>  m_rhs;  // levels
-    std::vector<DenseMatrix<T>>  m_x;    // levels
-    std::vector<SparseMatrix<T>> m_a;    // levels
-    std::vector<DenseMatrix<T>>  m_r;    // fine + levels
+    std::vector<DenseMatrix<T>> m_rhs;  // levels
+    std::vector<DenseMatrix<T>> m_x;    // levels
+    std::vector<DenseMatrix<T>> m_r;    // fine + levels
+
+
+    std::vector<SparseMatrix<T>> m_a;          // levels
+    std::vector<int*>            m_a_row_ptr;  // levels
+    std::vector<int*>            m_a_col_idx;  // levels
+    std::vector<T*>              m_a_val;      // levels
 
     // TODO abstract away the solver type
     std::vector<JacobiSolver<T>> m_smoother;  // fine + levels
@@ -77,17 +82,34 @@ struct VCycle
         }
 
 
+        m_a_row_ptr.resize(gmg.m_num_levels, nullptr);
+        m_a_col_idx.resize(gmg.m_num_levels, nullptr);
+        m_a_val.resize(gmg.m_num_levels, nullptr);
+
         // construct m_a for all levels
-        pt_A_p(gmg.m_prolong_op[0], A, m_a[0]);
+        pt_A_p(gmg.m_prolong_op[0],
+               A,
+               m_a[0],
+               m_a_row_ptr[0],
+               m_a_col_idx[0],
+               m_a_val[0]);
+        // TODO construct m_a[0]
         for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
-            pt_A_p(gmg.m_prolong_op[1], m_a[l - 1], m_a[l]);
+            pt_A_p(gmg.m_prolong_op[1],
+                   m_a[l - 1],
+                   m_a_row_ptr[l],
+                   m_a_col_idx[l],
+                   m_a_val[l]);
+            // TODO construct m_a[l]
         }
     }
 
 
     void pt_A_p(SparseMatrixConstantNNZRow<T, 3>& p,
                 SparseMatrix<T>&                  A,
-                SparseMatrix<T>&                  out)
+                int*&                             c_row_ptr,
+                int*&                             c_col_idx,
+                T*&                               c_val)
     {
         // TODO
 

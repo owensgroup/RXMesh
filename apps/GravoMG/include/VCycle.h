@@ -255,21 +255,19 @@ class GMGVCycle
      */
     void VCycle(CSR& A, VectorCSR3D& f, VectorCSR3D& v, int currentLevel)
     {
-        // Pre-smoothing        
+        // Pre-smoothing $$
         gauss_jacobi_CSR_3D(A, v.vector, f.vector, pre_relax_iterations);
 
-        // Calculate residual on current grid
+        // Calculate residual on current grid $$
         VectorCSR3D R(A.num_rows);
-        
         Compute_R_3D(A, v.vector, f.vector, R.vector, A.num_rows);
 
-        // Create coarse grid vectors
+        // Create coarse grid vectors $$
         int coarse_size = prolongationOperators[currentLevel].num_rows / ratio;
         VectorCSR3D restricted_residual(coarse_size);
         VectorCSR3D coarse_correction(coarse_size);
 
-        // Restrict the residual
-        
+        // Restrict the residual $$
         CSR transposeProlongation =
             prolongationOperatorsTransposed[currentLevel];
 
@@ -285,19 +283,19 @@ class GMGVCycle
                    restricted_residual,
                    coarse_correction,
                    currentLevel + 1);
-        } else {            
+        } else {
             //  Initialize coarse correction to zero
             for (int i = 0; i < coarse_size * 3; i++) {
                 coarse_correction.vector[i] = 0.0f;
             }
 
-            assert(restricted_residual.n == coarse_correction.n);           
+            assert(restricted_residual.n == coarse_correction.n);
 
             gauss_jacobi_CSR_3D(LHS[currentLevel + 1],
                                 coarse_correction.vector,
                                 restricted_residual.vector,
                                 directSolveIterations);
-        }       
+        }
 
         // Prolongate
         VectorCSR3D fine_correction(A.num_rows);
@@ -306,10 +304,14 @@ class GMGVCycle
                     prolongationOperators[currentLevel].data_ptr,
                     coarse_correction.vector,
                     fine_correction.vector,
-                    prolongationOperators[currentLevel].num_rows);        
+                    prolongationOperators[currentLevel].num_rows);
 
-        // Post-smoothing        
-        gauss_jacobi_CSR_3D(A, v.vector, f.vector, post_relax_iterations);        
+        for (int i = 0; i < v.n * 3; i++) {
+            v.vector[i] += fine_correction.vector[i];
+        }
+
+        // Post-smoothing $$
+        gauss_jacobi_CSR_3D(A, v.vector, f.vector, post_relax_iterations);
     }
 
     /**
