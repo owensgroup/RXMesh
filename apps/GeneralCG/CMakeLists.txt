@@ -15,8 +15,11 @@ set_property(TARGET GeneralCG PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "GeneralCG" FILES ${SOURCE_LIST})
 
+target_include_directories(GravoMG PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
+
 target_link_libraries(GeneralCG     
     PRIVATE RXMesh
 )
+
 
 #gtest_discover_tests( GeneralCG )
