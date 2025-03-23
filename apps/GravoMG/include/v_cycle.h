@@ -87,12 +87,8 @@ struct VCycle
         m_a_val.resize(gmg.m_num_levels, nullptr);
 
         // construct m_a for all levels
-        pt_A_p(gmg.m_prolong_op[0],
-               A,
-               m_a[0],
-               m_a_row_ptr[0],
-               m_a_col_idx[0],
-               m_a_val[0]);
+        pt_A_p(
+            gmg.m_prolong_op[0], A, m_a_row_ptr[0], m_a_col_idx[0], m_a_val[0]);
         // TODO construct m_a[0]
         for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
             pt_A_p(gmg.m_prolong_op[1],
