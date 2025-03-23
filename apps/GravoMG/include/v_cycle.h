@@ -31,10 +31,12 @@ struct VCycle
     std::vector<DenseMatrix<T>>  m_rhs;  // levels
     std::vector<DenseMatrix<T>>  m_x;    // levels
     std::vector<SparseMatrix<T>> m_a;    // levels
-    std::vector<DenseMatrix<T>>  m_r;    // levels
+    std::vector<DenseMatrix<T>>  m_r;    // fine + levels
 
     // TODO abstract away the solver type
-    std::vector<JacobiSolver<T>> m_coarse_solver;  // fine + levels
+    std::vector<JacobiSolver<T>> m_smoother;  // fine + levels
+
+    JacobiSolver<T> m_coarse_solver;
 
 
     VCycle(GMG<T>&          gmg,
@@ -51,31 +53,45 @@ struct VCycle
           m_omega(omega)
     {
         // allocate memory for coarsened LHS and RHS
-        m_coarse_solver.emplace_back(gmg.m_num_samples[0],
-                                     gmg.m_num_samples[0]);
+        m_smoother.emplace_back(gmg.m_num_samples[0], gmg.m_num_samples[0]);
 
         m_r.emplace_back(rx, gmg.m_num_samples[0], rhs.cols());
 
         for (int l = 1; l < gmg.m_num_levels; ++l) {
             m_rhs.emplace_back(rx, gmg.m_num_samples[l], rhs.cols());
             m_x.emplace_back(rx, gmg.m_num_samples[l], rhs.cols());
-            m_coarse_solver.emplace_back(A.rows(), A.cols());
-            m_coarse_solver.emplace_back(gmg.m_num_samples[l],
-                                         gmg.m_num_samples[l]);
 
             m_r.emplace_back(rx, gmg.m_num_samples[l], rhs.cols());
+
+            gmg.m_prolong_op[l - 1].alloc_multiply_buffer(
+                m_r.back(), m_rhs.back(), true);
+
+            if (l > gmg.m_num_levels - 1) {
+                m_smoother.emplace_back(gmg.m_num_samples[l],
+                                        gmg.m_num_samples[l]);
+            } else {
+                // coarsest level
+                m_coarse_solver =
+                    JacobiSolver<T>(gmg.m_num_samples[l], gmg.m_num_samples[l]);
+            }
         }
 
 
-        // TODO construct m_a for all levels
+        // construct m_a for all levels
+        pt_A_p(gmg.m_prolong_op[0], A, m_a[0]);
+        for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
+            pt_A_p(gmg.m_prolong_op[1], m_a[l - 1], m_a[l]);
+        }
     }
 
-#if 0
+
     void pt_A_p(SparseMatrixConstantNNZRow<T, 3>& p,
                 SparseMatrix<T>&                  A,
                 SparseMatrix<T>&                  out)
     {
+        // TODO
 
+#if 0
         // Create an empty descriptor for matC
         CUSPARSE_ERROR(cusparseCreateCsr(&out.m_spdescr,
                                          p.rows(),
@@ -291,8 +307,9 @@ struct VCycle
 
 
         return result;
-    }
 #endif
+    }
+
     /**
      * @brief run the solver.
      */
@@ -311,44 +328,45 @@ struct VCycle
                GMG<T>&          gmg,
                SparseMatrix<T>& A,
                DenseMatrix<T>&  f,  // rhs
-               DenseMatrix<T>&  v)   // x
+               DenseMatrix<T>&  v   // x
+    )
     {
         constexpr int numCols = 3;
 
-        // pre-smoothing
-        m_coarse_solver[level].template solve<numCols>(
-            A, f, v, m_num_pre_relax);
+        if (level > gmg.m_num_levels - 1) {
+            // pre-smoothing
+            m_smoother[level].template solve<numCols>(A, f, v, m_num_pre_relax);
 
 
-        // calc residual
-        calc_residual<numCols>(A, v, f, m_r[level]);
+            // calc residual
+            calc_residual<numCols>(A, v, f, m_r[level]);
 
-        // restrict residual TODO
+            // restrict residual
+            gmg.m_prolong_op[level + 1].multiply(
+                m_r[level], m_rhs[level], true);
+
+            // recurse
+            cycle(level + 1, gmg, m_a[level], m_rhs[level], m_x[level]);
+
+            // prolong
+            // x = x + P*u
+            gmg.m_prolong_op[level + 1].multiply(
+                v, m_x[level], false, false, T(1.0), T(1.0));
 
 
-        // recurse TODO
-        if (level == gmg.m_num_levels - 1) {
-            // the coarsest level
+            // post-smoothing
+            m_smoother[level].template solve<numCols>(
+                A, f, v, m_num_post_relax);
+
         } else {
-            // solve();
+            // the coarsest level
+            m_coarse_solver.template solve<numCols>(A, f, v, m_num_post_relax);
         }
-
-
-        // prolong TODO
-
-
-        // post-smoothing
-        m_coarse_solver[level].template solve<numCols>(
-            A, f, v, m_num_post_relax);
     }
 
 
     /**
      * @brief compute r = f - A.v
-     * @param A
-     * @param v
-     * @param f
-     * @param r
      */
     template <int numCol>
     void calc_residual(const SparseMatrix<T>& A,

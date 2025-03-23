@@ -95,8 +95,6 @@ struct GMG
 
             if (l > 0) {
                 m_samples_pos.emplace_back(rx, level_num_samples, 3);
-                m_prolong_op.emplace_back(
-                    rx, level_num_samples, m_num_samples[l - 1]);
 
                 // we allocate +1 for cub prefix sum
                 m_sample_neighbor_size.emplace_back(
@@ -106,6 +104,10 @@ struct GMG
                 m_sample_neighbor_size_prefix.emplace_back(
                     rx, level_num_samples + 1, 1);
                 m_sample_neighbor_size_prefix.back().reset(0, DEVICE);
+            }
+            if (l < m_num_samples.size() - 1) {
+                m_prolong_op.emplace_back(
+                    rx, level_num_samples, m_num_samples[l + 1]);
             }
 
             m_sample_id.emplace_back(rx, level_num_samples, 1);

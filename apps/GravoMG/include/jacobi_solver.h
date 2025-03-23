@@ -12,6 +12,10 @@ struct JacobiSolver
 {
     DenseMatrix<T> m_x_new;
 
+    __host__ JacobiSolver()
+    {
+    }
+
     __host__ JacobiSolver(int num_rows, int num_cols)
         : m_x_new(num_rows, num_cols)
     {
