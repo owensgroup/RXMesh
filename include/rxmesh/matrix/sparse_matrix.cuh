@@ -2191,6 +2191,7 @@ struct SparseMatrix
         }
     }
 
+   public:
     Context              m_context;
     cusparseHandle_t     m_cusparse_handle;
     cusolverSpHandle_t   m_cusolver_sphandle;

@@ -13,6 +13,22 @@ enum class CoarseSolver
     CG          = 2,
 };
 
+/**
+ * @brief the coarse A
+ */
+template <typename T>
+struct CoarseA
+{
+    SparseMatrix<T> a;
+
+    T*   d_val;
+    T*   h_val;
+    int* d_row_ptr;
+    int* h_row_ptr;
+    int* d_col_idx;
+    int* h_col_idx;
+};
+
 template <typename T>
 struct VCycle
 {
@@ -33,10 +49,7 @@ struct VCycle
     std::vector<DenseMatrix<T>> m_r;    // fine + levels
 
 
-    std::vector<SparseMatrix<T>> m_a;          // levels
-    std::vector<int*>            m_a_row_ptr;  // levels
-    std::vector<int*>            m_a_col_idx;  // levels
-    std::vector<T*>              m_a_val;      // levels
+    std::vector<CoarseA<T>> m_a;  // levels
 
     // TODO abstract away the solver type
     std::vector<JacobiSolver<T>> m_smoother;  // fine + levels
@@ -81,39 +94,43 @@ struct VCycle
             }
         }
 
-
-        m_a_row_ptr.resize(gmg.m_num_levels, nullptr);
-        m_a_col_idx.resize(gmg.m_num_levels, nullptr);
-        m_a_val.resize(gmg.m_num_levels, nullptr);
-
         // construct m_a for all levels
-        pt_A_p(
-            gmg.m_prolong_op[0], A, m_a_row_ptr[0], m_a_col_idx[0], m_a_val[0]);
-        // TODO construct m_a[0]
+        pt_A_p(gmg.m_prolong_op[0], A, m_a[0]);
         for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
-            pt_A_p(gmg.m_prolong_op[1],
-                   m_a[l - 1],
-                   m_a_row_ptr[l],
-                   m_a_col_idx[l],
-                   m_a_val[l]);
-            // TODO construct m_a[l]
+            pt_A_p(gmg.m_prolong_op[1], m_a[l - 1].a, m_a[l]);
         }
     }
 
 
-    void pt_A_p(SparseMatrixConstantNNZRow<T, 3>& p,
+    void pt_A_p(SparseMatrixConstantNNZRow<T, 3>& P,
                 SparseMatrix<T>&                  A,
-                int*&                             c_row_ptr,
-                int*&                             c_col_idx,
-                T*&                               c_val)
+                CoarseA<T>&                       C)
     {
-        // TODO
+        // S = transpose(P) * A
+        // C = S * A
 
-#if 0
-        // Create an empty descriptor for matC
-        CUSPARSE_ERROR(cusparseCreateCsr(&out.m_spdescr,
-                                         p.rows(),
-                                         B_cols,
+        cusparseSpGEMMDescr_t spgemmDesc;
+        CUSPARSE_ERROR(cusparseSpGEMM_createDescr(&spgemmDesc));
+
+        cusparseSpMatDescr_t S_spmat;
+        cusparseSpMatDescr_t C_spmat;
+
+        int     s_rows = P.cols();
+        int     s_cols = A.cols();
+        int64_t s_nnz  = 0;
+
+        int     c_rows = P.cols();
+        int     c_cols = P.cols();
+        int64_t c_nnz  = 0;
+
+        int*   s_rowPtr;
+        int*   s_colIdx;
+        float* s_values;
+
+        // Create an empty descriptor for C and S
+        CUSPARSE_ERROR(cusparseCreateCsr(&S_spmat,
+                                         s_rows,
+                                         s_cols,
                                          0,
                                          nullptr,
                                          nullptr,
@@ -123,209 +140,86 @@ struct VCycle
                                          CUSPARSE_INDEX_BASE_ZERO,
                                          CUDA_R_32F));
 
-        // Allocate workspace buffer for SpGEMM
-        float                 alpha = 1.0f, beta = 0.0f;
-        cusparseSpGEMMDescr_t spgemmDesc;
-        CUSPARSE_ERROR(cusparseSpGEMM_createDescr(&spgemmDesc));
-
-        // phase 1: work estimation
-        size_t bufferSize1 = 0;
-        void*  dBuffer1    = nullptr;
-
-        // MAKE THIS DO THE TRANSPOSE, DONT TRANSPOSE EXPLICITLY
-        auto operation = CUSPARSE_OPERATION_NON_TRANSPOSE;
-        if (transpose == 1)
-            operation = CUSPARSE_OPERATION_TRANSPOSE;
-
-        CUSPARSE_ERROR(
-            cusparseSpGEMM_workEstimation(handle,
-                                          operation,
-                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                          &alpha,
-                                          A.m_spdescr,
-                                          B.m_spdescr,
-                                          &beta,
-                                          matC,
-                                          cuda_type<T>(),
-                                          CUSPARSE_SPGEMM_DEFAULT,
-                                          spgemmDesc,
-                                          &bufferSize1,
-                                          nullptr));
-
-        CUDA_ERROR(cudaMalloc(&dBuffer1, bufferSize1));
-
-        // Execute work estimation
-        CUSPARSE_ERROR(
-            cusparseSpGEMM_workEstimation(handle,
-                                          operation,
-                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                          &alpha,
-                                          A.m_spdescr,
-                                          B.m_spdescr,
-                                          &beta,
-                                          matC,
-                                          cuda_type<T>(),
-                                          CUSPARSE_SPGEMM_DEFAULT,
-                                          spgemmDesc,
-                                          &bufferSize1,
-                                          dBuffer1));
-
-        // Phase 2: Compute non-zero pattern of C
-        size_t bufferSize2 = 0;
-        void*  dBuffer2    = nullptr;
-        CUSPARSE_ERROR(cusparseSpGEMM_compute(handle,
-                                              operation,
-                                              CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                              &alpha,
-                                              A.m_spdescr,
-                                              B.m_spdescr,
-                                              &beta,
-                                              matC,
-                                              cuda_type<T>(),
-                                              CUSPARSE_SPGEMM_DEFAULT,
-                                              spgemmDesc,
-                                              &bufferSize2,
-                                              nullptr));
-        CUDA_ERROR(cudaMalloc(&dBuffer2, bufferSize2));
-
-        // Execute non-zero pattern computation
-        CUSPARSE_ERROR(cusparseSpGEMM_compute(handle,
-                                              operation,
-                                              CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                              &alpha,
-                                              A.m_spdescr,
-                                              B.m_spdescr,
-                                              &beta,
-                                              matC,
-                                              cuda_type<T>(),
-                                              CUSPARSE_SPGEMM_DEFAULT,
-                                              spgemmDesc,
-                                              &bufferSize2,
-                                              dBuffer2));
-
-        // Get the size of matrix C
-        int64_t C_rows, C_cols, nnzC;
-        CUSPARSE_ERROR(cusparseSpMatGetSize(matC, &C_rows, &C_cols, &nnzC));
+        CUSPARSE_ERROR(cusparseCreateCsr(&C_spmat,
+                                         c_rows,
+                                         c_cols,
+                                         0,
+                                         nullptr,
+                                         nullptr,
+                                         nullptr,
+                                         CUSPARSE_INDEX_32I,
+                                         CUSPARSE_INDEX_32I,
+                                         CUSPARSE_INDEX_BASE_ZERO,
+                                         CUDA_R_32F));
 
 
-        // Allocate memory for matrix C
-        int*   d_C_rowPtr;
-        int*   d_C_colIdx;
-        float* d_C_values;
-        CUDA_ERROR(cudaMalloc(&d_C_rowPtr, (A.rows() + 1) * sizeof(int)));
-        CUDA_ERROR(cudaMalloc(&d_C_colIdx, nnzC * sizeof(int)));
-        CUDA_ERROR(cudaMalloc(&d_C_values, nnzC * sizeof(T)));
-
-        // Set pointers for matrix C
-        CUSPARSE_ERROR(
-            cusparseCsrSetPointers(matC, d_C_rowPtr, d_C_colIdx, d_C_values));
-
-        // Phase 3: Compute actual values
-        CUSPARSE_ERROR(cusparseSpGEMM_copy(handle,
-                                           operation,
-                                           CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                           &alpha,
-                                           A.m_spdescr,
-                                           B.m_spdescr,
-                                           &beta,
-                                           matC,
-                                           cuda_type<T>(),
-                                           CUSPARSE_SPGEMM_DEFAULT,
-                                           spgemmDesc));
+        // S = transpose(P) *A
+        sparse_gemm(A.m_cusparse_handle,
+                    P.m_spdescr,
+                    A.m_spdescr,
+                    CUSPARSE_OPERATION_TRANSPOSE,
+                    s_rows,
+                    s_cols,
+                    s_nnz,
+                    s_rowPtr,
+                    s_colIdx,
+                    s_values,
+                    S_spmat,
+                    spgemmDesc);
 
 
-        // First, copy the computed data to host to filter zeros
-        int*   h_C_rowPtr = new int[A_rows + 1];
-        int*   h_C_colIdx = new int[nnzC];
-        float* h_C_values = new float[nnzC];
+        // C = S * P
+        sparse_gemm(A.m_cusparse_handle,
+                    S_spmat,
+                    P.m_spdescr,
+                    CUSPARSE_OPERATION_NON_TRANSPOSE,
+                    c_rows,
+                    c_cols,
+                    c_nnz,
+                    C.d_row_ptr,
+                    C.d_col_idx,
+                    C.d_val,
+                    C_spmat,
+                    spgemmDesc);
 
-        CUDA_ERROR(cudaMemcpy(h_C_rowPtr,
-                              d_C_rowPtr,
-                              (A_rows + 1) * sizeof(int),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(h_C_colIdx,
-                              d_C_colIdx,
-                              nnzC * sizeof(int),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(h_C_values,
-                              d_C_values,
-                              nnzC * sizeof(float),
+        // Alloc C on the host
+        C.h_row_ptr = static_cast<int*>(malloc((c_rows + 1) * sizeof(int)));
+        C.h_col_idx = static_cast<int*>(malloc(c_nnz * sizeof(int)));
+        C.h_val     = static_cast<T*>(malloc(c_nnz * sizeof(T)));
+
+        // move C to the host
+        CUDA_ERROR(cudaMemcpy(C.h_row_ptr,
+                              C.d_row_ptr,
+                              (c_rows + 1) * sizeof(int),
                               cudaMemcpyDeviceToHost));
 
-        // Count actual non-zeros and create filtered arrays
-        const float        ZERO_THRESHOLD = 1e-6f;
-        std::vector<int>   filtered_rowPtr(A_rows + 1, 0);
-        std::vector<int>   filtered_colIdx;
-        std::vector<float> filtered_values;
-        filtered_colIdx.reserve(nnzC);
-        filtered_values.reserve(nnzC);
+        CUDA_ERROR(cudaMemcpy(C.h_col_idx,
+                              C.d_col_idx,
+                              c_nnz * sizeof(int),
+                              cudaMemcpyDeviceToHost));
 
-        // Process first row pointer
-        filtered_rowPtr[0] = 0;
+        CUDA_ERROR(cudaMemcpy(
+            C.h_val, C.d_val, c_nnz * sizeof(T), cudaMemcpyDeviceToHost));
 
-        // Filter out zeros and build new CSR structure
-        int actual_nnz = 0;
-        for (int i = 0; i < A_rows; i++) {
-            int row_start = h_C_rowPtr[i];
-            int row_end   = h_C_rowPtr[i + 1];
+        // Create C SparseMatrix
+        C.a = SparseMatrix<T>(c_rows,
+                              c_cols,
+                              c_nnz,
+                              C.d_row_ptr,
+                              C.d_col_idx,
+                              C.d_val,
+                              C.h_row_ptr,
+                              C.h_col_idx,
+                              C.h_val);
 
-            for (int j = row_start; j < row_end; j++) {
-                if (std::abs(h_C_values[j]) > ZERO_THRESHOLD ||
-                    h_C_values[j] != 0.0f) {
-                    filtered_colIdx.push_back(h_C_colIdx[j]);
-                    filtered_values.push_back(h_C_values[j]);
-                    actual_nnz++;
-                }
-            }
-            filtered_rowPtr[i + 1] = actual_nnz;
-        }
+        // clean up
+        GPU_FREE(s_rowPtr);
+        GPU_FREE(s_colIdx);
+        GPU_FREE(s_values);
 
-        // Create new CSR object
-        CSR result;
-        result.num_rows = A_rows;
-
-        // Allocate new memory with correct sizes
-        result.non_zeros = actual_nnz;
-        cudaMallocManaged(&result.row_ptr, (A_rows + 1) * sizeof(int));
-        cudaMallocManaged(&result.value_ptr, actual_nnz * sizeof(int));
-        cudaMallocManaged(&result.data_ptr, actual_nnz * sizeof(float));
-
-        // Copy filtered data to result CSR
-        cudaMemcpy(result.row_ptr,
-                   filtered_rowPtr.data(),
-                   (A_rows + 1) * sizeof(int),
-                   cudaMemcpyHostToDevice);
-        cudaMemcpy(result.value_ptr,
-                   filtered_colIdx.data(),
-                   actual_nnz * sizeof(int),
-                   cudaMemcpyHostToDevice);
-        cudaMemcpy(result.data_ptr,
-                   filtered_values.data(),
-                   actual_nnz * sizeof(float),
-                   cudaMemcpyHostToDevice);
-
-
-        // Cleanup host memory
-        delete[] h_C_rowPtr;
-        delete[] h_C_colIdx;
-        delete[] h_C_values;
-
-        // Cleanup device memory
-        CUSPARSE_ERROR(cusparseDestroySpMat(matA));
-        CUSPARSE_ERROR(cusparseDestroySpMat(matB));
-        CUSPARSE_ERROR(cusparseDestroySpMat(matC));
+        CUSPARSE_ERROR(cusparseDestroySpMat(S_spmat));
+        CUSPARSE_ERROR(cusparseDestroySpMat(C_spmat));
         CUSPARSE_ERROR(cusparseSpGEMM_destroyDescr(spgemmDesc));
-        CUSPARSE_ERROR(cusparseDestroy(handle));
-
-        CUDA_ERROR(cudaFree(dBuffer1));
-        CUDA_ERROR(cudaFree(dBuffer2));
-        CUDA_ERROR(cudaFree(d_C_rowPtr));
-        CUDA_ERROR(cudaFree(d_C_colIdx));
-        CUDA_ERROR(cudaFree(d_C_values));
-
-
-        return result;
-#endif
     }
 
     /**
@@ -342,12 +236,15 @@ struct VCycle
         }
     }
 
+    /**
+     * @brief implement one step/cycle of the V cycle (bootstrap the recursive
+     * call)
+     */
     void cycle(int              level,
                GMG<T>&          gmg,
                SparseMatrix<T>& A,
                DenseMatrix<T>&  f,  // rhs
-               DenseMatrix<T>&  v   // x
-    )
+               DenseMatrix<T>&  v)   // x
     {
         constexpr int numCols = 3;
 
@@ -364,7 +261,7 @@ struct VCycle
                 m_r[level], m_rhs[level], true);
 
             // recurse
-            cycle(level + 1, gmg, m_a[level], m_rhs[level], m_x[level]);
+            cycle(level + 1, gmg, m_a[level].a, m_rhs[level], m_x[level]);
 
             // prolong
             // x = x + P*u
@@ -423,6 +320,132 @@ struct VCycle
                     r(row, c) = f(row, c) - av[c];
                 }
             });
+    }
+
+   private:
+    void sparse_gemm(const cusparseHandle_t      handle,
+                     const cusparseSpMatDescr_t  A,
+                     const cusparseSpMatDescr_t  B,
+                     const cusparseOperation_t   op_a,
+                     const int                   c_rows,
+                     const int                   c_cols,
+                     int64_t&                    c_nnz,
+                     int*&                       c_rowPtr,
+                     int*&                       c_colIdx,
+                     float*&                     c_values,
+                     const cusparseSpMatDescr_t& C_spmat,
+                     cusparseSpGEMMDescr_t       spgemmDesc)
+    {
+        // C = op(A)*B
+
+
+        // Ask bufferSize1 bytes for external memory
+        size_t bufferSize1 = 0;
+        void*  dBuffer1    = nullptr;
+
+        // Allocate workspace buffer for SpGEMM
+        float alpha = 1.0f, beta = 0.0f;
+
+
+        CUSPARSE_ERROR(
+            cusparseSpGEMM_workEstimation(handle,
+                                          op_a,
+                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                          &alpha,
+                                          A,
+                                          B,
+                                          &beta,
+                                          C_spmat,
+                                          CUDA_R_32F,
+                                          CUSPARSE_SPGEMM_DEFAULT,
+                                          spgemmDesc,
+                                          &bufferSize1,
+                                          nullptr));
+
+        CUDA_ERROR(cudaMalloc(&dBuffer1, bufferSize1));
+
+        // Execute work estimation
+        // inspect the matrices op(A) and B to understand the memory
+        // requirement for the next step
+        CUSPARSE_ERROR(
+            cusparseSpGEMM_workEstimation(handle,
+                                          op_a,
+                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                          &alpha,
+                                          A,
+                                          B,
+                                          &beta,
+                                          C_spmat,
+                                          CUDA_R_32F,
+                                          CUSPARSE_SPGEMM_DEFAULT,
+                                          spgemmDesc,
+                                          &bufferSize1,
+                                          dBuffer1));
+
+        // ask bufferSize2 bytes for external memory
+        size_t bufferSize2 = 0;
+        void*  dBuffer2    = nullptr;
+        CUSPARSE_ERROR(cusparseSpGEMM_compute(handle,
+                                              op_a,
+                                              CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                              &alpha,
+                                              A,
+                                              B,
+                                              &beta,
+                                              C_spmat,
+                                              CUDA_R_32F,
+                                              CUSPARSE_SPGEMM_DEFAULT,
+                                              spgemmDesc,
+                                              &bufferSize2,
+                                              nullptr));
+        CUDA_ERROR(cudaMalloc(&dBuffer2, bufferSize2));
+
+        // compute the intermediate product of A * B
+        CUSPARSE_ERROR(cusparseSpGEMM_compute(handle,
+                                              op_a,
+                                              CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                              &alpha,
+                                              A,
+                                              B,
+                                              &beta,
+                                              C_spmat,
+                                              CUDA_R_32F,
+                                              CUSPARSE_SPGEMM_DEFAULT,
+                                              spgemmDesc,
+                                              &bufferSize2,
+                                              dBuffer2));
+
+        // get matrix C non-zero entries C_nnz1
+        int64_t cr, cc;
+        CUSPARSE_ERROR(cusparseSpMatGetSize(C_spmat, &cr, &cc, &c_nnz));
+        assert(c_rows == cr);
+        assert(c_rows == cc);
+
+
+        // allocate matrix C
+        CUDA_ERROR(cudaMalloc(&c_rowPtr, (c_rows + 1) * sizeof(int)));
+        CUDA_ERROR(cudaMalloc(&c_colIdx, c_nnz * sizeof(int)));
+        CUDA_ERROR(cudaMalloc(&c_values, c_nnz * sizeof(T)));
+
+        // update S_spmat with the new pointers
+        CUSPARSE_ERROR(
+            cusparseCsrSetPointers(C_spmat, c_rowPtr, c_colIdx, c_values));
+
+        // copy the final products to the matrix C
+        CUSPARSE_ERROR(cusparseSpGEMM_copy(handle,
+                                           op_a,
+                                           CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                           &alpha,
+                                           A,
+                                           B,
+                                           &beta,
+                                           C_spmat,
+                                           CUDA_R_32F,
+                                           CUSPARSE_SPGEMM_DEFAULT,
+                                           spgemmDesc));
+
+        GPU_FREE(dBuffer1);
+        GPU_FREE(dBuffer2);
     }
 };
 }  // namespace rxmesh

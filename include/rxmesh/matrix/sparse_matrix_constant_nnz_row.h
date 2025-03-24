@@ -28,35 +28,40 @@ struct SparseMatrixConstantNNZRow : public SparseMatrix<T>
         m_num_cols = num_cols * m_replicate;
         m_nnz      = m_num_rows * RowNNZ;
 
+        int num_row_1 = m_num_rows + 1;
+
         // alloc device
-        CUDA_ERROR(cudaMalloc((void**)&m_d_row_ptr,
-                              (m_num_rows + 1) * sizeof(IndexT)));
         CUDA_ERROR(cudaMalloc((void**)&m_d_col_idx, m_nnz * sizeof(IndexT)));
         CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_nnz * sizeof(T)));
+        CUDA_ERROR(
+            cudaMalloc((void**)&m_d_row_ptr, num_row_1 * sizeof(IndexT)));
+
+
         m_allocated = m_allocated | DEVICE;
 
         // alloc host
-        m_h_val = static_cast<T*>(malloc(m_nnz * sizeof(T)));
-        m_h_row_ptr =
-            static_cast<IndexT*>(malloc((m_num_rows + 1) * sizeof(IndexT)));
+        m_h_val     = static_cast<T*>(malloc(m_nnz * sizeof(T)));
+        m_h_row_ptr = static_cast<IndexT*>(malloc(num_row_1 * sizeof(IndexT)));
         m_h_col_idx = static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
         m_allocated = m_allocated | HOST;
 
-        for (int i = 0; i < m_num_rows + 1; ++i) {
-            m_h_val[i] = i * RowNNZ;
+        for (int i = 0; i < num_row_1; ++i) {
+            m_h_row_ptr[i] = i * RowNNZ;
         }
 
         // copy to device
-        CUDA_ERROR(cudaMemcpy(m_h_row_ptr,
-                              m_d_row_ptr,
-                              (m_num_rows + 1) * sizeof(IndexT),
-                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(m_d_row_ptr,
+                              m_h_row_ptr,
+                              num_row_1 * sizeof(IndexT),
+                              cudaMemcpyHostToDevice));
 
         // create cusparse matrix
         init_cusparse(*this);
 
 #ifndef NDEBUG
-        check_repeated_indices();
+        // can not do this check because it is done on m_h_col_idx which is not
+        //  populated yet
+        // check_repeated_indices();
 #endif
     }
 
