@@ -22,6 +22,7 @@
 #include <random>
 
 #include "rxmesh/hash_functions.cuh"
+#include "rxmesh/kernels/util.cuh"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/prime_numbers.h"
 
@@ -32,7 +33,7 @@ struct Edge
 {
     uint64_t m_key;
 
-    __host__ __device__ Edge() : m_key(sentinel()) {};
+    __host__ __device__ Edge() : m_key(INVALID64) {};
     __host__ __device__ Edge(uint64_t k) : m_key(k) {};
     Edge(const Edge& other)      = default;
     Edge(Edge&&)                 = default;
@@ -57,9 +58,9 @@ struct Edge
         return std::make_pair(a, b);
     }
 
-    static constexpr __device__ __host__ uint64_t sentinel()
+    constexpr __device__ __host__ bool is_sentinel() const
     {
-        return INVALID64;
+        return m_key == INVALID64;
     }
 
     __host__ __device__ friend bool operator==(const Edge& a, const Edge& b)
@@ -79,7 +80,7 @@ struct GPUHashTable
 {
     using HashT = Hash64To32XOR;
 
-    static constexpr uint8_t stash_size = 128;
+    static constexpr uint32_t stash_size = 128;
 
     __device__ __host__ GPUHashTable()
         : m_table(nullptr),
@@ -101,10 +102,12 @@ struct GPUHashTable
     explicit GPUHashTable(const uint32_t capacity)
         : m_capacity(std::max(capacity, uint32_t(2)))
     {
+
         m_capacity = find_next_prime_number(m_capacity);
 
         CUDA_ERROR(cudaMalloc((void**)&m_table, num_bytes()));
         CUDA_ERROR(cudaMalloc((void**)&m_stash, stash_size * sizeof(T)));
+
 
         clear();
 
@@ -112,7 +115,7 @@ struct GPUHashTable
         double lg_input_size = (float)(log((double)m_capacity) / log(2.0));
         const unsigned max_iter_const = 7;
         m_max_cuckoo_chains =
-            static_cast<uint16_t>(max_iter_const * lg_input_size);
+            static_cast<uint32_t>(max_iter_const * lg_input_size);
 
 
         // std::mt19937 rng(2);
@@ -124,7 +127,7 @@ struct GPUHashTable
     /**
      * @brief Get the hash table capacity
      */
-    __host__ __device__ __inline__ uint16_t get_capacity() const
+    __host__ __device__ __inline__ uint32_t get_capacity() const
     {
         return m_capacity;
     }
@@ -135,18 +138,27 @@ struct GPUHashTable
      */
     __host__ void clear()
     {
+        uint32_t len     = std::max(m_capacity, stash_size);
         uint32_t threads = 256;
-        uint32_t blocks  = DIVIDE_UP(get_capacity(), threads);
+        uint32_t blocks  = DIVIDE_UP(len, threads);
+
+        // it is weird that cuda extended lambda function can not capture member
+        // variables and end up with a slight error
+        uint32_t capacity = m_capacity;
+        uint32_t st       = stash_size;
+
+        T* table = m_table;
+        T* stash = m_stash;
 
         for_each_item<<<blocks, threads>>>(
-            get_capacity(),
-            [=] __device__(int i) mutable { m_table[i] = T::sentinel(); });
-
-        blocks = DIVIDE_UP(stash_size, threads);
-
-        for_each_item<<<blocks, threads>>>(
-            stash_size,
-            [=] __device__(int i) mutable { m_stash[i] = T::sentinel(); });
+            len, [capacity, st, table, stash] __device__(uint32_t i) mutable {
+                if (i < capacity) {
+                    table[i].m_key = INVALID64;
+                }
+                if (i < st) {
+                    stash[i].m_key = INVALID64;
+                }
+            });
     }
 
 
@@ -193,7 +205,7 @@ struct GPUHashTable
     {
         auto bucket_id = m_hasher0(pair.key()) % m_capacity;
 
-        uint16_t cuckoo_counter = 0;
+        uint32_t cuckoo_counter = 0;
 
         do {
             const auto input_key = pair.key();
@@ -204,7 +216,7 @@ struct GPUHashTable
             // compare against initial key to avoid duplicated
             // i.e., if we are inserting a pair such that its key already
             // exists, this comparison would allow updating the pair
-            if (pair == T::sentinel() || pair.key() == input_key) {
+            if (pair.is_sentinel() || pair.key() == input_key) {
                 return true;
             } else {
                 auto bucket0 = m_hasher0(pair.key()) % m_capacity;
@@ -233,10 +245,10 @@ struct GPUHashTable
             T prv;
 
             prv.m_key = ::atomicCAS(reinterpret_cast<uint64_t*>(m_stash + i),
-                                    T::sentinel(),
+                                    INVALID64,
                                     pair.m_key);
 
-            if (prv == T::sentinel() || prv.key() == input_key) {
+            if (prv.is_sentinel() || prv.key() == input_key) {
                 return true;
             }
         }
@@ -251,8 +263,8 @@ struct GPUHashTable
     HashT    m_hasher1;
     HashT    m_hasher2;
     HashT    m_hasher3;
-    uint16_t m_capacity;
-    uint16_t m_max_cuckoo_chains;
+    uint32_t m_capacity;
+    uint32_t m_max_cuckoo_chains;
     bool     m_is_on_device;
 };
 }  // namespace rxmesh
