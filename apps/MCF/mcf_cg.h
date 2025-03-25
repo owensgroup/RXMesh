@@ -220,8 +220,15 @@ void mcf_cg(rxmesh::RXMeshStatic& rx)
 
     // output to obj
     // rxmesh.export_obj("mcf_rxmesh.obj", *X);
-
-
+#if USE_POLYSCOPE
+    polyscope::registerSurfaceMesh("old mesh",
+                                   rx.get_polyscope_mesh()->vertices,
+                                   rx.get_polyscope_mesh()->faces);
+    rx.get_polyscope_mesh()->updateVertexPositions(*X);
+    
+    polyscope::show();
+#endif
+    
     // Finalize report
     report.add_member("start_residual", delta_0);
     report.add_member("end_residual", delta_new);

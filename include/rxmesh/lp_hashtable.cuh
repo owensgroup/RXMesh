@@ -81,12 +81,7 @@ struct LPHashTable
             CUDA_ERROR(cudaMalloc((void**)&m_table, num_bytes()));
             CUDA_ERROR(
                 cudaMalloc((void**)&m_stash, stash_size * sizeof(LPPair)));
-
-            std::vector<LPPair> temp(stash_size, LPPair::sentinel_pair());
-            CUDA_ERROR(cudaMemcpy(m_stash,
-                                  temp.data(),
-                                  stash_size * sizeof(LPPair),
-                                  cudaMemcpyHostToDevice));
+            
         } else {
             m_table = (LPPair*)malloc(num_bytes());
             m_stash = (LPPair*)malloc(stash_size * sizeof(LPPair));

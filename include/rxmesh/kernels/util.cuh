@@ -237,4 +237,16 @@ __forceinline__ __device__ unsigned warp_id()
     return ret;
 }
 
+
+template <typename FuncT>
+__global__ void for_each_item(uint32_t length, FuncT func)
+{
+    const uint32_t stride = blockDim.x * gridDim.x;
+    uint32_t       i      = blockDim.x * blockIdx.x + threadIdx.x;
+    while (i < length) {
+        func(i);
+        i += stride;
+    }
+}
+
 }  // namespace rxmesh

@@ -69,16 +69,32 @@ inline uint32_t find_next_prime_number(uint16_t input)
         return 0;
     }
 
-    if (input > prime_numbers[size - 1]) {
-        RXMESH_ERROR(
-            "find_next_prime_number() can not find the next prime number for "
-            "{} because it is out of range ({}, {})",
-            input,
-            prime_numbers[0],
-            prime_numbers[size - 1]);
-    }
+    if (input <= prime_numbers[size - 1]) {
+        // common case
+        return *(std::upper_bound(prime_numbers, prime_numbers + size, input));
+    } else {
+        //slow case 
+        auto isPrime = [](int n) {
+            // Skip even numbers and multiples of 3
+            if (n % 2 == 0 || n % 3 == 0) {
+                return false;
+            }
 
-    return *(std::upper_bound(prime_numbers, prime_numbers + size, input));
+            for (int i = 5; i * i <= n; i += 6) {
+                if (n % i == 0 || n % (i + 2) == 0) {
+                    return false;
+                }
+            }
+
+            return true;
+        };
+
+        int candidate = input + 1;
+        while (!isPrime(candidate)) {
+            candidate++;
+        }
+        return candidate;
+    }
 }
 
 }  // namespace rxmesh
