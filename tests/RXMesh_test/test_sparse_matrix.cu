@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 
 #include "rxmesh/attribute.h"
-#include "rxmesh/matrix/dense_matrix.cuh"
+#include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/matrix/sparse_matrix.cuh"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"

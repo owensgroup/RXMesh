@@ -13,7 +13,7 @@
 #include "thrust/scatter.h"
 
 #include "cusolverSp_LOWLEVEL_PREVIEW.h"
-#include "rxmesh/matrix/dense_matrix.cuh"
+#include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/matrix/permute_util.h"
 #include "rxmesh/matrix/sparse_matrix_kernels.cuh"
 
@@ -260,14 +260,16 @@ struct SparseMatrix
             cudaMemset(m_d_row_ptr, 0, (m_num_rows + 1) * sizeof(IndexT)));
 
         LaunchBox<blockThreads> launch_box;
-        rx.prepare_launch_box({Op::VV},
-                              launch_box,
-                              (void*)detail::sparse_mat_prescan<blockThreads>);
+        rx.prepare_launch_box(
+            {Op::VV},
+            launch_box,
+            (void*)detail::sparse_mat_prescan<Op::VV, blockThreads>);
 
-        detail::sparse_mat_prescan<blockThreads><<<launch_box.blocks,
-                                                   launch_box.num_threads,
-                                                   launch_box.smem_bytes_dyn>>>(
-            m_context, m_d_row_ptr, m_replicate);
+        detail::sparse_mat_prescan<Op::VV, blockThreads>
+            <<<launch_box.blocks,
+               launch_box.num_threads,
+               launch_box.smem_bytes_dyn>>>(
+                m_context, m_d_row_ptr, m_replicate);
 
         // prefix sum using CUB.
         void*  d_cub_temp_storage = nullptr;
@@ -295,11 +297,12 @@ struct SparseMatrix
 
         // column index allocation and init
         CUDA_ERROR(cudaMalloc((void**)&m_d_col_idx, m_nnz * sizeof(IndexT)));
-        rx.prepare_launch_box({Op::VV},
-                              launch_box,
-                              (void*)detail::sparse_mat_col_fill<blockThreads>);
+        rx.prepare_launch_box(
+            {Op::VV},
+            launch_box,
+            (void*)detail::sparse_mat_col_fill<Op::VV, blockThreads>);
 
-        detail::sparse_mat_col_fill<blockThreads>
+        detail::sparse_mat_col_fill<Op::VV, blockThreads>
             <<<launch_box.blocks,
                launch_box.num_threads,
                launch_box.smem_bytes_dyn>>>(

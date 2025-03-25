@@ -5,7 +5,7 @@
 #include "rxmesh/diff/element_valence.h"
 #include "rxmesh/diff/hessian_sparse_matrix.h"
 #include "rxmesh/diff/term.h"
-#include "rxmesh/matrix/dense_matrix.cuh"
+#include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/types.h"
 
 namespace rxmesh {

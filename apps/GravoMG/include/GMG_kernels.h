@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rxmesh/context.h"
-#include "rxmesh/matrix/dense_matrix.cuh"
+#include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/query.cuh"
 
 #include "NeighborHandling.h"

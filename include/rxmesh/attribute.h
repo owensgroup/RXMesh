@@ -14,7 +14,7 @@
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/util.h"
 
-#include "rxmesh/matrix/dense_matrix.cuh"
+#include "rxmesh/matrix/dense_matrix.h"
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/fwd.hpp>

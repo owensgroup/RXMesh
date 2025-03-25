@@ -4,7 +4,7 @@
 
 #include "rxmesh/rxmesh_static.h"
 
-#include "rxmesh/matrix/dense_matrix.cuh"
+#include "rxmesh/matrix/dense_matrix.h"
 
 #include "rxmesh/util/svd3_cuda.h"
 

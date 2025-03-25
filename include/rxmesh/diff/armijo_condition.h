@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rxmesh/matrix/dense_matrix.cuh"
+#include "rxmesh/matrix/dense_matrix.h"
 
 namespace rxmesh {
 

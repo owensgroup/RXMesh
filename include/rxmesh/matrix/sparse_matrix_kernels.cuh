@@ -10,20 +10,23 @@ namespace rxmesh {
 namespace detail {
 
 // this is the function for the CSR calculation
-template <uint32_t blockThreads, typename IndexT = int>
+template <Op op, uint32_t blockThreads, typename IndexT = int>
 __global__ static void sparse_mat_prescan(const rxmesh::Context context,
                                           IndexT*               row_ptr,
                                           IndexT                replicate)
 {
     using namespace rxmesh;
 
-    auto init_lambda = [&](VertexHandle& v_id, const VertexIterator& iter) {
+    using HandleT = typename InputHandle<op>::type;
+    using IterT   = typename IteratorType<op>::type;
+
+    auto init_lambda = [&](HandleT& v_id, const IterT& iter) {
         auto     ids      = v_id.unpack();
         uint32_t patch_id = ids.first;
         uint16_t local_id = ids.second;
         IndexT   size     = iter.size() + 1;
         size *= replicate;
-        IndexT offset = context.vertex_prefix()[patch_id] + local_id;
+        IndexT offset = context.prefix<HandleT>()[patch_id] + local_id;
         offset *= replicate;
 
         for (IndexT i = 0; i < replicate; ++i) {
@@ -34,10 +37,10 @@ __global__ static void sparse_mat_prescan(const rxmesh::Context context,
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
+    query.dispatch<op>(block, shrd_alloc, init_lambda);
 }
 
-template <uint32_t blockThreads, typename IndexT = int>
+template <Op op, uint32_t blockThreads, typename IndexT = int>
 __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
                                            IndexT*               row_ptr,
                                            IndexT*               col_idx,
@@ -45,12 +48,15 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
 {
     using namespace rxmesh;
 
-    auto col_fillin = [&](VertexHandle& v_id, const VertexIterator& iter) {
+    using HandleT = typename InputHandle<op>::type;
+    using IterT   = typename IteratorType<op>::type;
+
+    auto col_fillin = [&](HandleT& v_id, const IterT& iter) {
         auto     ids      = v_id.unpack();
         uint32_t patch_id = ids.first;
         uint16_t local_id = ids.second;
 
-        IndexT v_global = context.vertex_prefix()[patch_id] + local_id;
+        IndexT v_global = context.prefix<HandleT>()[patch_id] + local_id;
         v_global *= replicate;
 
         // "block" diagonal entries (which is stored as the first entry in the
@@ -70,7 +76,8 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
             uint32_t q_patch_id = q_ids.first;
             uint16_t q_local_id = q_ids.second;
 
-            IndexT q_global = context.vertex_prefix()[q_patch_id] + q_local_id;
+            IndexT q_global =
+                context.prefix<HandleT>()[q_patch_id] + q_local_id;
             q_global *= replicate;
 
             for (IndexT i = 0; i < replicate; ++i) {
@@ -87,7 +94,7 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, col_fillin);
+    query.dispatch<op>(block, shrd_alloc, col_fillin);
 }
 
 }  // namespace detail

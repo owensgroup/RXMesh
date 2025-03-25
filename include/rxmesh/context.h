@@ -119,6 +119,22 @@ class Context
 #endif
     }
 
+    template <typename HandleT>
+    __device__ __host__ __inline__ const uint32_t* prefix() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return vertex_prefix();
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return edge_prefix();
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return face_prefix();
+        }
+    }
+
     /**
      * @brief get the owner handle of a given mesh element handle
      * @param handle the mesh element handle

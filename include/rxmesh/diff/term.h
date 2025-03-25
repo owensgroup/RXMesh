@@ -7,7 +7,7 @@
 
 #include "rxmesh/diff/diff_query_kernel.cuh"
 #include "rxmesh/diff/hessian_sparse_matrix.h"
-#include "rxmesh/matrix/dense_matrix.cuh"
+#include "rxmesh/matrix/dense_matrix.h"
 
 
 namespace rxmesh {

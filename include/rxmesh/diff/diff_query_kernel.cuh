@@ -11,7 +11,7 @@
 #include "rxmesh/diff/hessian_projection.h"
 #include "rxmesh/diff/hessian_sparse_matrix.h"
 #include "rxmesh/diff/scalar.h"
-#include "rxmesh/matrix/dense_matrix.cuh"
+#include "rxmesh/matrix/dense_matrix.h"
 
 #include "rxmesh/diff/diff_handle.h"
 #include "rxmesh/diff/diff_iterator.h"
