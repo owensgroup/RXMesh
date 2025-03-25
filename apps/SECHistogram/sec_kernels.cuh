@@ -1,12 +1,14 @@
 #pragma once
 #include "rxmesh/cavity_manager2.cuh"
 
+#include "rxmesh/util/histogram.cuh"
+
 #include "link_condition.cuh"
 
 template <typename T, uint32_t blockThreads>
 __global__ static void sec(rxmesh::Context            context,
                            rxmesh::VertexAttribute<T> coords,
-                           const CostHistogram<T>     histo,
+                           const rxmesh::Histogram<T> histo,
                            const int                  reduce_threshold)
 {
     using namespace rxmesh;
@@ -162,7 +164,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void compute_min_max_cost(
     rxmesh::Context                  context,
     const rxmesh::VertexAttribute<T> coords,
-    CostHistogram<T>                 histo)
+    rxmesh::Histogram<T>             histo)
 {
     using namespace rxmesh;
 
@@ -190,7 +192,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void populate_histogram(
     rxmesh::Context                  context,
     const rxmesh::VertexAttribute<T> coords,
-    CostHistogram<T>                 histo)
+    rxmesh::Histogram<T>             histo)
 {
     using namespace rxmesh;
 

@@ -4,6 +4,8 @@
 #include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/query.cuh"
 
+#include "link_condition.cuh"
+
 template <typename T>
 using Vec3 = glm::vec<3, T, glm::defaultp>;
 
@@ -12,19 +14,6 @@ using Vec4 = glm::vec<4, T, glm::defaultp>;
 
 template <typename T>
 using Mat4 = glm::mat<4, 4, T, glm::defaultp>;
-
-template <typename T>
-__device__ __host__ __inline__ int bin_id(const T   cost,
-                                          const T*  d_min_max_edge_cost,
-                                          const int num_bins)
-{
-    const T min_v = d_min_max_edge_cost[0];
-    const T max_v = d_min_max_edge_cost[1];
-
-    const int id = std::floor(((cost - min_v) * num_bins) / (max_v - min_v));
-
-    return std::min(id, num_bins - 1);
-}
 
 template <typename T>
 __device__ __inline__ __host__ T
@@ -138,7 +127,7 @@ __global__ static void compute_edge_cost(
     const rxmesh::VertexAttribute<T> vertex_quadrics,
     rxmesh::EdgeAttribute<T>         edge_cost,
     rxmesh::EdgeAttribute<T>         edge_col_coord,
-    T*                               min_max_cost)
+    rxmesh::Histogram<T>             histo)
 {
     using namespace rxmesh;
 
@@ -157,8 +146,9 @@ __global__ static void compute_edge_cost(
                        vertex_quadrics,
                        edge_cost,
                        edge_col_coord);
-        atomicMin(min_max_cost, edge_cost(edge_id));
-        atomicMax(min_max_cost + 1, edge_cost(edge_id));
+
+        atomicMin(histo.min_value(), edge_cost(edge_id));
+        atomicMax(histo.max_value(), edge_cost(edge_id));
     };
 
     Query<blockThreads> query(context);
@@ -227,7 +217,7 @@ __global__ static void compute_vertex_quadric_fv(
 
 template <typename T, uint32_t blockThreads>
 __global__ static void simplify(rxmesh::Context            context,
-                                const CostHistogram<T>     histo,
+                                const rxmesh::Histogram<T> histo,
                                 rxmesh::VertexAttribute<T> coords,
                                 rxmesh::VertexAttribute<T> vertex_quadrics,
                                 rxmesh::EdgeAttribute<T>   edge_cost,
@@ -254,7 +244,7 @@ __global__ static void simplify(rxmesh::Context            context,
     }
     block.sync();
 
-    
+
     auto collapse = [&](const VertexHandle& vh, const EdgeIterator& iter) {
         // TODO handle boundary edges
 
@@ -347,6 +337,162 @@ __global__ static void simplify(rxmesh::Context            context,
                                        vertex_quadrics,
                                        edge_cost,
                                        edge_col_coord);
+
+                        const FaceHandle new_f = cavity.add_face(e0, e, e1);
+
+                        if (!new_f.is_valid()) {
+                            break;
+                        }
+                        e0 = e1.get_flip_dedge();
+                    }
+                }
+            }
+        });
+    }
+
+    cavity.epilogue(block);
+}
+
+
+template <typename T, uint32_t blockThreads>
+__global__ static void simplify_ev(rxmesh::Context            context,
+                                   rxmesh::VertexAttribute<T> coords,
+                                   const rxmesh::Histogram<T> histo,
+                                   const int                  reduce_threshold,
+                                   rxmesh::VertexAttribute<T> vertex_quadrics,
+                                   rxmesh::EdgeAttribute<T>   edge_cost,
+                                   rxmesh::EdgeAttribute<T>   edge_col_coord)
+{
+    using namespace rxmesh;
+    auto           block = cooperative_groups::this_thread_block();
+    ShmemAllocator shrd_alloc;
+    CavityManager2<blockThreads, CavityOp::EV> cavity(
+        block, context, shrd_alloc, true);
+
+    const uint32_t pid = cavity.patch_id();
+
+    if (pid == INVALID32) {
+        return;
+    }
+
+    // we first use this mask to set the edge we want to collapse (and then
+    // filter them). Then after cavity.prologue, we reuse this bitmask to mark
+    // the newly added edges
+    Bitmask edge_mask(cavity.patch_info().edges_capacity, shrd_alloc);
+    edge_mask.reset(block);
+
+    // we use this bitmask to mark the other end of to-be-collapse edge during
+    // checking for the link condition
+    Bitmask v0_mask(cavity.patch_info().num_vertices[0], shrd_alloc);
+    Bitmask v1_mask(cavity.patch_info().num_vertices[0], shrd_alloc);
+
+
+    // Precompute EV
+    Query<blockThreads> ev_query(context, pid);
+    ev_query.prologue<Op::EV>(block, shrd_alloc);
+
+
+    // 1) mark edge we want to collapse
+    for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+        assert(eh.local_id() < cavity.patch_info().num_edges[0]);
+        T cost = edge_cost(eh);
+        if (histo.below_threshold(cost, reduce_threshold)) {
+            edge_mask.set(eh.local_id(), true);
+        }
+    });
+    block.sync();
+
+
+    // 2) check edge link condition.
+    link_condition(
+        block, cavity.patch_info(), ev_query, edge_mask, v0_mask, v1_mask);
+
+
+    block.sync();
+
+    for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
+        assert(eh.local_id() < cavity.patch_info().num_edges[0]);
+        if (edge_mask(eh.local_id())) {
+            cavity.create(eh);
+        }
+    });
+    block.sync();
+
+    ev_query.epilogue(block, shrd_alloc);
+
+    // create the cavity
+    if (cavity.prologue(block,
+                        shrd_alloc,
+                        coords,
+                        vertex_quadrics,
+                        edge_cost,
+                        edge_col_coord)) {
+
+        edge_mask.reset(block);
+        block.sync();
+
+        // fill in the cavities
+        cavity.for_each_cavity(block, [&](uint16_t c, uint16_t size) {
+            const EdgeHandle src = cavity.template get_creator<EdgeHandle>(c);
+
+            // TODO handle boundary edges
+
+            VertexHandle v0, v1;
+
+            cavity.get_vertices(src, v0, v1);
+
+            const VertexHandle new_v = cavity.add_vertex();
+
+            if (new_v.is_valid()) {
+
+                // coords(new_v, 0) = edge_col_coord(src, 0);
+                // coords(new_v, 1) = edge_col_coord(src, 1);
+                // coords(new_v, 2) = edge_col_coord(src, 2);
+
+                coords(new_v, 0) = (coords(v0, 0) + coords(v1, 0)) * T(0.5);
+                coords(new_v, 1) = (coords(v0, 1) + coords(v1, 1)) * T(0.5);
+                coords(new_v, 2) = (coords(v0, 2) + coords(v1, 2)) * T(0.5);
+
+                for (int i = 0; i < 16; ++i) {
+                    vertex_quadrics(new_v, i) =
+                        vertex_quadrics(v0, i) + vertex_quadrics(v1, i);
+                }
+
+                DEdgeHandle e0 =
+                    cavity.add_edge(new_v, cavity.get_cavity_vertex(c, 0));
+
+                if (e0.is_valid()) {
+                    edge_mask.set(e0.local_id(), true);
+
+                    const DEdgeHandle e_init = e0;
+
+                    for (uint16_t i = 0; i < size; ++i) {
+                        const DEdgeHandle e = cavity.get_cavity_edge(c, i);
+
+                        const VertexHandle v_end =
+                            cavity.get_cavity_vertex(c, (i + 1) % size);
+
+                        const DEdgeHandle e1 =
+                            (i == size - 1) ?
+                                e_init.get_flip_dedge() :
+                                cavity.add_edge(
+                                    cavity.get_cavity_vertex(c, i + 1), new_v);
+
+                        if (!e1.is_valid()) {
+                            break;
+                        }
+
+                        calc_edge_cost(e1.get_edge_handle(),
+                                       v_end,
+                                       new_v,
+                                       coords,
+                                       vertex_quadrics,
+                                       edge_cost,
+                                       edge_col_coord);
+
+                        if (i != size - 1) {
+                            edge_mask.set(e1.local_id(), true);
+                        }
 
                         const FaceHandle new_f = cavity.add_face(e0, e, e1);
 

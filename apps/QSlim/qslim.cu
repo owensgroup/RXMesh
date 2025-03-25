@@ -7,22 +7,23 @@ struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "torus.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    target        = 0;
+    float       target        = 0.1;
+    float       reduce_ratio  = 0.1;
     uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
 } Arg;
 
-#include "simplification_rxmesh.cuh"
+#include "qslim_rxmesh.cuh"
 
-TEST(Apps, Simplification)
+TEST(Apps, QSlim)
 {
     using namespace rxmesh;
 
     // Select device
     cuda_query(Arg.device_id);
 
-    RXMeshDynamic rx(Arg.obj_file_name);
+    RXMeshDynamic rx(Arg.obj_file_name, "", 256, 3.5, 1.5);
     // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
     //        "_patches");
 
@@ -32,7 +33,11 @@ TEST(Apps, Simplification)
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
-    simplification_rxmesh(rx, Arg.target);
+    ASSERT_TRUE(rx.is_closed());
+
+    uint32_t final_num_vertices = Arg.target * rx.get_num_vertices();
+
+    qslim_rxmesh(rx, final_num_vertices);
 }
 
 
@@ -49,15 +54,16 @@ int main(int argc, char** argv)
     if (argc > 1) {
         if (cmd_option_exists(argv, argc + argv, "-h")) {
             // clang-format off
-            RXMESH_INFO("\nUsage: Simplification.exe < -option X>\n"
+            RXMESH_INFO("\nUsage: QSlim.exe < -option X>\n"
                         " -h:          Display this massage and exit\n"
                         " -input:      Input file. Input file should be under the input/ subdirectory\n"
                         "              Default is {} \n"
                         "              Hint: Only accept OBJ files\n"
-                        " -target:     The final/target number of faces in the output mesh\n"
+                        " -target:     The fraction of output #vertices from the input. Default is {}\n"
+                        " -r:          Reduction ratio. Default is {}\n"
                         " -o:          JSON file output folder. Default is {} \n"
                         " -device_id:  GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.output_folder, Arg.device_id);
+            Arg.obj_file_name,Arg.target, Arg.reduce_ratio, Arg.output_folder, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
@@ -75,7 +81,10 @@ int main(int argc, char** argv)
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
         }
         if (cmd_option_exists(argv, argc + argv, "-target")) {
-            Arg.target = false;
+            Arg.target = atof(get_cmd_option(argv, argv + argc, "-target"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-r")) {
+            Arg.reduce_ratio = atof(get_cmd_option(argv, argv + argc, "-r"));
         }
     }
 
@@ -83,6 +92,7 @@ int main(int argc, char** argv)
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
     RXMESH_TRACE("target= {}", Arg.target);
+    RXMESH_TRACE("reduce_ratio= {}", Arg.reduce_ratio);
 
     return RUN_ALL_TESTS();
 }
