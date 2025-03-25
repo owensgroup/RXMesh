@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string>
 #include "rxmesh/local.h"
+#include "rxmesh/types.h"
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
@@ -485,5 +486,175 @@ struct FaceHandle
 
    protected:
     uint64_t m_handle;
+};
+
+
+/**
+ * @brief Helper struct to get the input handle type based on a query operation
+ */
+template <Op op>
+struct InputHandle
+{
+    using type = void;
+};
+
+template <>
+struct InputHandle<Op::V>
+{
+    using type = VertexHandle;
+};
+template <>
+struct InputHandle<Op::VV>
+{
+    using type = VertexHandle;
+};
+
+template <>
+struct InputHandle<Op::VE>
+{
+    using type = VertexHandle;
+};
+
+template <>
+struct InputHandle<Op::VF>
+{
+    using type = VertexHandle;
+};
+
+template <>
+struct InputHandle<Op::E>
+{
+    using type = EdgeHandle;
+};
+template <>
+struct InputHandle<Op::EV>
+{
+    using type = EdgeHandle;
+};
+
+template <>
+struct InputHandle<Op::EVDiamond>
+{
+    using type = EdgeHandle;
+};
+
+template <>
+struct InputHandle<Op::EE>
+{
+    using type = EdgeHandle;
+};
+
+template <>
+struct InputHandle<Op::EF>
+{
+    using type = EdgeHandle;
+};
+
+template <>
+struct InputHandle<Op::F>
+{
+    using type = FaceHandle;
+};
+template <>
+struct InputHandle<Op::FV>
+{
+    using type = FaceHandle;
+};
+
+template <>
+struct InputHandle<Op::FE>
+{
+    using type = FaceHandle;
+};
+
+template <>
+struct InputHandle<Op::FF>
+{
+    using type = FaceHandle;
+};
+
+
+/**
+ * @brief Helper struct to get the output handle type based on a query operation
+ */
+template <Op op>
+struct OutputHandle
+{
+    using type = void;
+};
+
+template <>
+struct OutputHandle<Op::V>
+{
+    using type = VertexHandle;
+};
+template <>
+struct OutputHandle<Op::VV>
+{
+    using type = VertexHandle;
+};
+
+template <>
+struct OutputHandle<Op::VE>
+{
+    using type = EdgeHandle;
+};
+
+template <>
+struct OutputHandle<Op::VF>
+{
+    using type = FaceHandle;
+};
+
+template <>
+struct OutputHandle<Op::E>
+{
+    using type = EdgeHandle;
+};
+template <>
+struct OutputHandle<Op::EV>
+{
+    using type = VertexHandle;
+};
+
+template <>
+struct OutputHandle<Op::EVDiamond>
+{
+    using type = VertexHandle;
+};
+
+template <>
+struct OutputHandle<Op::EE>
+{
+    using type = EdgeHandle;
+};
+
+template <>
+struct OutputHandle<Op::EF>
+{
+    using type = FaceHandle;
+};
+
+template <>
+struct OutputHandle<Op::F>
+{
+    using type = FaceHandle;
+};
+template <>
+struct OutputHandle<Op::FV>
+{
+    using type = VertexHandle;
+};
+
+template <>
+struct OutputHandle<Op::FE>
+{
+    using type = EdgeHandle;
+};
+
+template <>
+struct OutputHandle<Op::FF>
+{
+    using type = FaceHandle;
 };
 }  // namespace rxmesh
