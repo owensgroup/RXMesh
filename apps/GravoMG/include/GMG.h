@@ -68,7 +68,8 @@ struct GMG
         int           reduction_ratio       = 7,
         int           num_samples_threshold = 6)
         : m_ratio(reduction_ratio),
-          m_edge_hash_table(GPUHashTable(DIVIDE_UP(rx.get_num_edges(), 2)))
+          m_edge_hash_table(
+              GPUHashTable<Edge>(DIVIDE_UP(rx.get_num_edges(), 2)))
     {
         m_num_rows = rx.get_num_vertices();
 
@@ -330,7 +331,7 @@ struct GMG
             [=] __device__(uint32_t i) mutable {
                 const Edge e = m_edge_hash_table.m_table[i];
 
-                if (e != Edge::sentinel()) {
+                if (!e.is_sentinel()) {
                     std::pair<int, int> p = e.unpack();
 
                     ::atomicAdd(&sample_neighbor_size(p.first), 1);
@@ -363,7 +364,7 @@ struct GMG
             [=] __device__(uint32_t i) mutable {
                 const Edge e = m_edge_hash_table.m_table[i];
 
-                if (e != Edge::sentinel()) {
+                if (!e.is_sentinel()) {
                     std::pair<int, int> p = e.unpack();
 
                     // add a to b
