@@ -1,0 +1,30 @@
+#include "rxmesh/rxmesh_static.h"
+
+#include "rxmesh/matrix/dense_matrix.h"
+#include "rxmesh/matrix/sparse_matrix2.h"
+
+namespace rxmesh {
+
+template <typename SpMatT>
+struct SolverBase
+{
+    using Type = typename SpMatT::Type;
+
+    SolverBase(SpMatT* mat) : m_mat(mat)
+    {
+    }
+
+    virtual ~SolverBase()
+    {
+    }
+
+    virtual void pre_solve(RXMeshStatic& rx) = 0;
+
+    virtual void solve(const DenseMatrix<Type>& B_mat,
+                       DenseMatrix<Type>&       X_mat,
+                       cudaStream_t             stream = NULL) = 0;
+
+    SpMatT* m_mat;
+};
+
+}  // namespace rxmesh
