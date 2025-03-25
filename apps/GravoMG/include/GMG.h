@@ -264,6 +264,8 @@ struct GMG
 
         m_edge_hash_table.clear();
 
+        auto edge_hash_table = m_edge_hash_table;
+
         // a) for each sample, count the number of neighbor samples
         if (level == 1) {
             // if we are building the compressed format for level 1, then we use
@@ -293,9 +295,13 @@ struct GMG
             assert(prv_sample_neighbor_size_prefix.rows() - 1 ==
                    m_num_samples[level - 1]);
 
+
             for_each_item<<<blocks, blockThreads>>>(
                 prv_sample_neighbor_size_prefix.rows() - 1,
-                [=] __device__(int i) mutable {
+                [edge_hash_table,
+                 prv_sample_neighbor_size_prefix,
+                 prv_sample_neighbor,
+                 vertex_cluster] __device__(int i) mutable {
                     int start = prv_sample_neighbor_size_prefix(i);
                     int end   = prv_sample_neighbor_size_prefix(i + 1);
                     for (int j = start; j < end; ++j) {
@@ -306,7 +312,7 @@ struct GMG
 
                         if (a != b) {
                             Edge e(a, b);
-                            m_edge_hash_table.insert(e);
+                            edge_hash_table.insert(e);
                         }
                     }
                 });
@@ -328,8 +334,9 @@ struct GMG
 
         for_each_item<<<blocks, blockThreads>>>(
             m_edge_hash_table.get_capacity(),
-            [=] __device__(uint32_t i) mutable {
-                const Edge e = m_edge_hash_table.m_table[i];
+            [edge_hash_table,
+             sample_neighbor_size] __device__(uint32_t i) mutable {
+                const Edge e = edge_hash_table.m_table[i];
 
                 if (!e.is_sentinel()) {
                     std::pair<int, int> p = e.unpack();
@@ -361,8 +368,11 @@ struct GMG
         // f) store the neighbor samples in the compressed format
         for_each_item<<<blocks, blockThreads>>>(
             m_edge_hash_table.get_capacity(),
-            [=] __device__(uint32_t i) mutable {
-                const Edge e = m_edge_hash_table.m_table[i];
+            [edge_hash_table,
+             sample_neighbor_size,
+             sample_neighbor_size_prefix,
+             sample_neighbor] __device__(uint32_t i) mutable {
+                const Edge e = edge_hash_table.m_table[i];
 
                 if (!e.is_sentinel()) {
                     std::pair<int, int> p = e.unpack();

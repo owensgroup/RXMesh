@@ -32,12 +32,13 @@ struct JacobiSolver
 
         uint32_t blocks = DIVIDE_UP(A.rows(), blockThreads);
 
+        DenseMatrix<T> x_new = m_x_new;
 
         for (int iter = 0; iter < num_iter; ++iter) {
 
             for_each_item<<<blocks, blockThreads>>>(
 
-                A.rows(), [=] __device__(int row) mutable {
+                A.rows(), [x_new, A, b, x] __device__(int row) mutable {
                     T    diag     = 0.0f;
                     bool has_diag = false;
 
@@ -72,12 +73,12 @@ struct JacobiSolver
 
                     if (has_diag && abs(diag) > 10e-8f) {
                         for (int c = 0; c < numCol; ++c) {
-                            m_x_new(row, c) = (b(row, c) - sum[c]) / diag;
+                            x_new(row, c) = (b(row, c) - sum[c]) / diag;
                         }
 
                     } else {
                         for (int c = 0; c < numCol; ++c) {
-                            m_x_new(row, c) = x(row, c);
+                            x_new(row, c) = x(row, c);
                         }
                     }
                 });
