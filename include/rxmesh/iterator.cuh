@@ -3,6 +3,7 @@
 #include "rxmesh/context.h"
 #include "rxmesh/handle.h"
 #include "rxmesh/patch_stash.cuh"
+#include "rxmesh/types.h"
 #include "rxmesh/util/bitmask_util.h"
 
 namespace rxmesh {
@@ -163,5 +164,91 @@ using VertexIterator = Iterator<VertexHandle>;
 using EdgeIterator   = Iterator<EdgeHandle>;
 using DEdgeIterator  = Iterator<DEdgeHandle>;
 using FaceIterator   = Iterator<FaceHandle>;
+
+
+/**
+ * @brief Helper struct to get the iterator type based on a query operation
+ */
+template <Op op>
+struct IteratorType
+{
+    using type = void;
+};
+
+template <>
+struct IteratorType<Op::V>
+{
+    using type = VertexIterator;
+};
+template <>
+struct IteratorType<Op::VV>
+{
+    using type = VertexIterator;
+};
+
+template <>
+struct IteratorType<Op::VE>
+{
+    using type = EdgeIterator;
+};
+
+template <>
+struct IteratorType<Op::VF>
+{
+    using type = FaceIterator;
+};
+
+template <>
+struct IteratorType<Op::E>
+{
+    using type = VertexIterator;
+};
+template <>
+struct IteratorType<Op::EV>
+{
+    using type = VertexIterator;
+};
+
+template <>
+struct IteratorType<Op::EVDiamond>
+{
+    using type = VertexIterator;
+};
+
+template <>
+struct IteratorType<Op::EE>
+{
+    using type = EdgeIterator;
+};
+
+template <>
+struct IteratorType<Op::EF>
+{
+    using type = FaceIterator;
+};
+
+template <>
+struct IteratorType<Op::F>
+{
+    using type = VertexIterator;
+};
+template <>
+struct IteratorType<Op::FV>
+{
+    using type = VertexIterator;
+};
+
+template <>
+struct IteratorType<Op::FE>
+{
+    using type = EdgeIterator;
+};
+
+template <>
+struct IteratorType<Op::FF>
+{
+    using type = FaceIterator;
+};
+
 
 }  // namespace rxmesh
