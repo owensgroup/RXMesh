@@ -4,18 +4,18 @@
 #include "cub/device/device_scan.cuh"
 #include "rxmesh/util/macros.h"
 
+namespace rxmesh {
 template <typename T>
-struct CostHistogram
+struct Histogram
 {
-    __device__ __host__ CostHistogram()                           = default;
-    __device__ __host__ CostHistogram(const CostHistogram& other) = default;
-    __device__ __host__ CostHistogram(CostHistogram&&)            = default;
-    __device__ __host__ CostHistogram& operator=(const CostHistogram&) =
-        default;
-    __device__ __host__ CostHistogram& operator=(CostHistogram&&) = default;
-    __device__                         __host__ ~CostHistogram()  = default;
+    __device__ __host__            Histogram()                       = default;
+    __device__ __host__            Histogram(const Histogram& other) = default;
+    __device__ __host__            Histogram(Histogram&&)            = default;
+    __device__ __host__ Histogram& operator=(const Histogram&)       = default;
+    __device__ __host__ Histogram& operator=(Histogram&&)            = default;
+    __device__                     __host__ ~Histogram()             = default;
 
-    CostHistogram(int num)
+    Histogram(int num)
         : num_bins(num),
           d_bins(nullptr),
           d_min_max_edge_cost(nullptr),
@@ -157,3 +157,4 @@ struct CostHistogram
     void*  d_scan_temp_storage;
     size_t temp_storage_bytes;
 };
+}  // namespace rxmesh

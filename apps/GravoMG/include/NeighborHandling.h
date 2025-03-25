@@ -1,10 +1,10 @@
 #pragma once
 
-#include "cuda_runtime.h"
 #include <cassert>
 #include <iostream>
 #include <memory>
 #include <vector>
+#include "cuda_runtime.h"
 
 struct Mutex
 {
@@ -16,7 +16,6 @@ struct Mutex
 
     __device__ Mutex() : m_mutex(0)
     {
-
     }
     __device__ void lock()
     {
@@ -58,7 +57,6 @@ struct NeighborNode
     __device__ bool addNeighbor(int neighbor)
     {
         if (count < CHUNK_SIZE) {
-            //printf("\nneighbor added %d", neighbor);
             neighbors[count++] = neighbor;
             return true;
         }
@@ -82,10 +80,10 @@ struct NeighborNode
  */
 class VertexNeighbors
 {
-public:
+   public:
     __device__ VertexNeighbors() : head(nullptr), tail(nullptr), mutex()
     {
-        //cudaMallocManaged(mutex, sizeof(Mutex));
+        // cudaMallocManaged(mutex, sizeof(Mutex));
         cudaMallocManaged(&neighborsList, sizeof(int) * 64);
     }
 
@@ -95,7 +93,6 @@ public:
         mutex.lock();
         if (containsNeighbor(neighbor)) {
             mutex.unlock();
-            //printf("\nneighbor %d exists", neighbor);
             return;  // Neighbor already exists, do nothing
         }
         if (!tail || !tail->addNeighbor(neighbor)) {
@@ -103,29 +100,25 @@ public:
             NeighborNode* newNode = new NeighborNode();
             if (tail) {
                 tail->next = newNode;
-            }
-            else {
+            } else {
                 head = newNode;
             }
             tail = newNode;
             tail->addNeighbor(neighbor);  // Add the neighbor to the new node
-            //printf("\nneighbor %d added",neighbor);
-
+            // printf("\nneighbor %d added",neighbor);
         }
         mutex.unlock();
     }
 
     // Retrieve all neighbors
-    __device__ int getNumberOfNeighbors(/*int* thread_neighbors,*/ int max_neighbors = 0) const
+    __device__ int getNumberOfNeighbors(int max_neighbors = 0) const
     {
-        int           count = 0;  // Track the number of neighbors added
+        int           count   = 0;  // Track the number of neighbors added
         NeighborNode* current = head;
 
         // Traverse the linked list
-        while (current) {// && count < max_neighbors) {
-            for (int i = 0; i < current->count;
-                /* && count < max_neighbors;*/ ++i) {
-                //thread_neighbors[count] = current->neighbors[i];
+        while (current) {
+            for (int i = 0; i < current->count; ++i) {
                 ++count;
             }
             current = current->next;  // Move to the next node in the list
@@ -136,20 +129,17 @@ public:
 
     __device__ void getNeighbors(int* thread_neighbors) const
     {
-        int           count = 0;  // Track the number of neighbors added
+        int           count   = 0;  // Track the number of neighbors added
         NeighborNode* current = head;
 
         // Traverse the linked list
-        while (current) {  // && count < max_neighbors) {
-            for (int i = 0; i < current->count;
-                /* && count < max_neighbors;*/ ++i) {
+        while (current) {
+            for (int i = 0; i < current->count; ++i) {
                 thread_neighbors[count] = current->neighbors[i];
                 ++count;
             }
             current = current->next;  // Move to the next node in the list
         }
-
-        //return count;  // Return the total number of neighbors added
     }
 
 
@@ -159,16 +149,16 @@ public:
         NeighborNode* current = head;
         while (current) {
             NeighborNode* temp = current;
-            current = current->next;
+            current            = current->next;
             delete temp;
         }
     }
 
-private:
-    int* neighborsList;
+   private:
+    int*          neighborsList;
     NeighborNode* head;
     NeighborNode* tail;
-    mutable Mutex      mutex;
+    mutable Mutex mutex;
 
     // Check if a neighbor already exists in the list
     __device__ bool containsNeighbor(int neighbor) const

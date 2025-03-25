@@ -734,7 +734,9 @@ struct SparseMatrix
      */
     __host__ void alloc_multiply_buffer(const DenseMatrix<T>& B_mat,
                                         DenseMatrix<T>&       C_mat,
-                                        cudaStream_t          stream = 0)
+                                        bool         is_a_transpose = false,
+                                        bool         is_b_transpose = false,
+                                        cudaStream_t stream         = 0)
     {
         T alpha;
         T beta;
@@ -744,11 +746,26 @@ struct SparseMatrix
         cusparseDnMatDescr_t matC    = C_mat.m_dendescr;
         void*                dBuffer = NULL;
 
+        cusparseOperation_t opA, opB;
+
+        opA = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
+                                  CUSPARSE_OPERATION_TRANSPOSE;
+        opB = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
+                                  CUSPARSE_OPERATION_TRANSPOSE;
+
+        if (std::is_same_v<T, cuComplex> ||
+            std::is_same_v<T, cuDoubleComplex>) {
+            opA = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
+                                      CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
+            opB = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
+                                      CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
+        }
+
         CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
 
         CUSPARSE_ERROR(cusparseSpMM_bufferSize(m_cusparse_handle,
-                                               CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                               CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                               opA,
+                                               opB,
                                                &alpha,
                                                matA,
                                                matB,
@@ -763,9 +780,11 @@ struct SparseMatrix
     /**
      * @brief multiply the sparse matrix by a dense matrix. The function
      * performs the multiplication as
-     * C = A*B
+     * C = alpha.op(A) * op(B) + beta.C
      * where A is the sparse matrix, B is a dense matrix, and the result is a
      * dense matrix C.
+     * Op could be transpose (or conjugate transpose) set via is_a/b_transpose
+     * alpha and beta are scalar.
      * This method requires extra buffer allocation for cusparse. User may want
      * to call first alloce_multiply_buffer() (with the same parameters) first
      * to do the allocation and so timing this method will reflect the timing
@@ -773,32 +792,72 @@ struct SparseMatrix
      * alloce_multiply_buffer() if it is not called before. Note that this
      * allocation happens only once and we then reuse it
      */
-    __host__ void multiply(DenseMatrix<T>& B_mat,
-                           DenseMatrix<T>& C_mat,
-                           cudaStream_t    stream = 0)
+    __host__ void multiply(const DenseMatrix<T>& B_mat,
+                           DenseMatrix<T>&       C_mat,
+                           bool                  is_a_transpose = false,
+                           bool                  is_b_transpose = false,
+                           T                     alpha          = 1.,
+                           T                     beta           = 0.,
+                           cudaStream_t          stream         = 0)
     {
-        assert(cols() == B_mat.rows());
-        assert(rows() == C_mat.rows());
-        assert(B_mat.cols() == C_mat.cols());
-
-        T alpha;
-        T beta;
-
-        if constexpr (std::is_same_v<T, cuComplex>) {
-            alpha = make_cuComplex(1.f, 1.f);
-            beta  = make_cuComplex(0.f, 0.f);
+        if (!is_a_transpose && !is_b_transpose) {
+            assert(cols() == B_mat.rows());
+            assert(rows() == C_mat.rows());
+            assert(B_mat.cols() == C_mat.cols());
         }
 
-        if constexpr (std::is_same_v<T, cuDoubleComplex>) {
-            alpha = make_cuDoubleComplex(1.0, 1.0);
-            beta  = make_cuDoubleComplex(0.0, 0.0);
+        if (is_a_transpose && !is_b_transpose) {
+            assert(rows() == B_mat.rows());
+            assert(cols() == C_mat.rows());
+            assert(B_mat.cols() == C_mat.cols());
         }
 
-        if constexpr (!std::is_same_v<T, cuComplex> &&
-                      !std::is_same_v<T, cuDoubleComplex>) {
-            alpha = T(1);
-            beta  = T(0);
+        if (!is_a_transpose && is_b_transpose) {
+            assert(cols() == B_mat.cols());
+            assert(rows() == C_mat.rows());
+            assert(B_mat.rows() == C_mat.cols());
         }
+
+        if (is_a_transpose && is_b_transpose) {
+            assert(rows() == B_mat.cols());
+            assert(cols() == C_mat.rows());
+            assert(B_mat.rows() == C_mat.cols());
+        }
+
+        cusparseOperation_t opA, opB;
+
+        opA = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
+                                  CUSPARSE_OPERATION_TRANSPOSE;
+        opB = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
+                                  CUSPARSE_OPERATION_TRANSPOSE;
+
+        if (std::is_same_v<T, cuComplex> ||
+            std::is_same_v<T, cuDoubleComplex>) {
+            opA = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
+                                      CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
+            opB = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
+                                      CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
+        }
+
+        // T alpha;
+        // T beta;
+        //
+        // if constexpr (std::is_same_v<T, cuComplex>) {
+        //     alpha = make_cuComplex(1.f, 1.f);
+        //     beta  = make_cuComplex(0.f, 0.f);
+        // }
+        //
+        // if constexpr (std::is_same_v<T, cuDoubleComplex>) {
+        //     alpha = make_cuDoubleComplex(1.0, 1.0);
+        //     beta  = make_cuDoubleComplex(0.0, 0.0);
+        // }
+        //
+        // if constexpr (!std::is_same_v<T, cuComplex> &&
+        //               !std::is_same_v<T, cuDoubleComplex>) {
+        //     alpha = T(1);
+        //     beta  = T(0);
+        // }
+
 
         // A_mat.create_cusparse_handle();
         cusparseSpMatDescr_t matA = m_spdescr;
@@ -815,8 +874,8 @@ struct SparseMatrix
 
         // execute SpMM
         CUSPARSE_ERROR(cusparseSpMM(m_cusparse_handle,
-                                    CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                    CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                    opA,
+                                    opB,
                                     &alpha,
                                     matA,
                                     matB,
@@ -1628,7 +1687,7 @@ struct SparseMatrix
                                                  m_h_solver_col_idx,
                                                  NULL,
                                                  m_h_permute));
-        //permute(rx, reorder);
+        // permute(rx, reorder);
         analyze_pattern(solver);
         post_analyze_alloc(solver);
         factorize(solver);
@@ -2074,7 +2133,7 @@ struct SparseMatrix
         thrust::gather(thrust::device, t_p, t_p + size, t_i, t_o);
     }
 
-   private:
+   protected:
     void init_cusparse(SparseMatrix<T>& mat) const
     {
         CUSPARSE_ERROR(cusparseCreateMatDescr(&mat.m_descr));
@@ -2132,6 +2191,7 @@ struct SparseMatrix
         }
     }
 
+   public:
     Context              m_context;
     cusparseHandle_t     m_cusparse_handle;
     cusolverSpHandle_t   m_cusolver_sphandle;

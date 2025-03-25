@@ -25,8 +25,8 @@ struct VertexData
     int     linear_id;
 };
 
-
-struct VertexAttributesRXMesh
+//** DONE
+struct VertexAttributes
 {
     VertexAttribute<float>    vertex_pos;
     VertexAttribute<int>      sample_number;
@@ -35,7 +35,7 @@ struct VertexAttributesRXMesh
     VertexAttribute<int>      clustered_vertex;
     VertexAttribute<int>      number_of_neighbors_coarse;
 
-    VertexAttributesRXMesh(RXMeshStatic& rx)
+    VertexAttributes(RXMeshStatic& rx)
     {
         vertex_pos    = *rx.get_input_vertex_coordinates();
         sample_number = *rx.add_vertex_attribute<int>("sample_number", 1);
@@ -48,14 +48,13 @@ struct VertexAttributesRXMesh
 
     void addToPolyscope(RXMeshStatic& rx)
     {
-        rx.get_polyscope_mesh()->addVertexScalarQuantity(
-            "sample_number", sample_number);
-        rx.get_polyscope_mesh()->addVertexScalarQuantity(
-            "distance", distance);
-        rx.get_polyscope_mesh()->addVertexScalarQuantity(
-            "sample_level_bitmask", sample_level_bitmask);
-        rx.get_polyscope_mesh()->addVertexScalarQuantity(
-            "clusterPoint", clustered_vertex);
+        rx.get_polyscope_mesh()->addVertexScalarQuantity("sample_number",
+                                                         sample_number);
+        rx.get_polyscope_mesh()->addVertexScalarQuantity("distance", distance);
+        rx.get_polyscope_mesh()->addVertexScalarQuantity("sample_level_bitmask",
+                                                         sample_level_bitmask);
+        rx.get_polyscope_mesh()->addVertexScalarQuantity("clusterPoint",
+                                                         clustered_vertex);
         rx.get_polyscope_mesh()->addVertexScalarQuantity(
             "number of neighbors", number_of_neighbors_coarse);
     }
@@ -63,6 +62,7 @@ struct VertexAttributesRXMesh
 
 class VertexNeighbors;
 
+//** DONE
 template <typename T, uint32_t blockThreads>
 __global__ static void findNumberOfCoarseNeighbors(
     const rxmesh::Context        context,
@@ -72,6 +72,7 @@ __global__ static void findNumberOfCoarseNeighbors(
 {
 
     auto cluster = [&](VertexHandle v_id, VertexIterator& vv) {
+        int num = 0;
         for (int i = 0; i < vv.size(); i++) {
 
             if (clustered_vertices(v_id, 0) != clustered_vertices(vv[i], 0)) {
@@ -79,12 +80,13 @@ __global__ static void findNumberOfCoarseNeighbors(
                 int b = clustered_vertices(v_id, 0);
 
                 vns[b].addNeighbor(a);
-
+                num++;
 
                 // neighbor adding logic here where we say that b is a neighbor
                 // of a
             }
         }
+        printf("\n v_id = %d, num= %d", context.linear_id(v_id), num);
     };
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
@@ -94,14 +96,15 @@ __global__ static void findNumberOfCoarseNeighbors(
 
 /**
  * \brief Clustering after sampling via thrust
- * \tparam T 
- * \tparam blockThreads 
- * \param context 
- * \param vertex_pos 
- * \param distance 
- * \param clustered_vertices 
- * \param flag 
+ * \tparam T
+ * \tparam blockThreads
+ * \param context
+ * \param vertex_pos
+ * \param distance
+ * \param clustered_vertices
+ * \param flag
  */
+//** DONE
 template <typename T, uint32_t blockThreads>
 __global__ static void cluster_points(
     const rxmesh::Context        context,
@@ -138,13 +141,14 @@ __global__ static void cluster_points(
 
 /**
  * \brief FPS Sampling via thrust
- * \tparam T 
- * \tparam blockThreads 
- * \param context 
- * \param vertex_pos 
- * \param distance 
- * \param flag 
+ * \tparam T
+ * \tparam blockThreads
+ * \param context
+ * \param vertex_pos
+ * \param distance
+ * \param flag
  */
+//** DONE
 template <typename T, uint32_t blockThreads>
 __global__ static void sample_points(const rxmesh::Context      context,
                                      rxmesh::VertexAttribute<T> vertex_pos,
@@ -161,16 +165,11 @@ __global__ static void sample_points(const rxmesh::Context      context,
                       powf(vertex_pos(v_id, 2) - vertex_pos(vv[i], 2), 2)) +
                 distance(vv[i], 0);
 
-            // printf("\nVertex: %u Distance : %f", context.linear_id(v_id),
-            // dist);
-
-
             if (dist < distance(v_id, 0)) {
                 distance(v_id, 0) = dist;
                 *flag             = 15;
             }
         }
-        // printf("\nFLAG : %d", *flag);
     };
     auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
@@ -181,15 +180,16 @@ __global__ static void sample_points(const rxmesh::Context      context,
 
 /**
  * \brief Clustering the data after sampling via RXMesh
- * \param rx 
- * \param vertexAttributes 
- * \param currentLevel 
- * \param vertices 
+ * \param rx
+ * \param vertexAttributes
+ * \param currentLevel
+ * \param vertices
  */
-void clusteringRXMesh(RXMeshStatic&           rx,
-                      VertexAttributesRXMesh& vertexAttributes,
-                      int                     currentLevel,
-                      Vec3*                   vertices)
+//** DONE
+void clustering(RXMeshStatic&     rx,
+                VertexAttributes& vertexAttributes,
+                int               currentLevel,
+                Vec3*             vertices)
 {
 
     int* flagger;
@@ -216,7 +216,7 @@ void clusteringRXMesh(RXMeshStatic&           rx,
 
             // if (sample_number(vh, 0) > -1)
             if ((vertexAttributes.sample_level_bitmask(vh, 0) &
-                 (1 << (currentLevel - 1))) != 0) {
+                 (1 << (currentLevel - 1))) != 0 ) {
                 vertexAttributes.clustered_vertex(vh, 0) =
                     vertexAttributes.sample_number(vh, 0);
                 vertexAttributes.distance(vh, 0) = 0;
@@ -240,22 +240,20 @@ void clusteringRXMesh(RXMeshStatic&           rx,
         j++;
     } while (*flagger != 0);
 
-    //vertexAttributes.clustered_vertex.move(DEVICE, HOST);
-    //std::cout << "\Clustering iterations: " << j;
+    // vertexAttributes.clustered_vertex.move(DEVICE, HOST);
+    // std::cout << "\Clustering iterations: " << j;
 }
 
 
 /**
- * \brief Set vertex data from RXMesh to standard pointer data for processing further multigrid levels. This also reindexes the data according to sample number
- * \param rx 
- * \param context 
- * \param oldVdata 
- * \param vertexAttribute 
+ * \brief Set vertex data from RXMesh to standard pointer data for processing
+ * further multigrid levels. This also reindexes the data according to sample
+ * number \param rx \param context \param oldVdata \param vertexAttribute
  */
-void setVertexData(RXMeshStatic&          rx,
-                   Context&               context,
-                   VertexData*            oldVdata,
-                   VertexAttributesRXMesh vertexAttribute)
+void setVertexData(RXMeshStatic&    rx,
+                   Context&         context,
+                   VertexData*      oldVdata,
+                   VertexAttributes vertexAttribute)
 {
     rx.for_each_vertex(
         rxmesh::DEVICE,
@@ -285,21 +283,22 @@ void setVertexData(RXMeshStatic&          rx,
 
 /**
  * \brief For FPS Sampling in parallel
- * \param rx 
- * \param vertexAttributes 
- * \param ratio 
- * \param N 
- * \param numberOfLevels 
- * \param numberOfSamplesForFirstLevel 
- * \param sample_pos 
+ * \param rx
+ * \param vertexAttributes
+ * \param ratio
+ * \param N
+ * \param numberOfLevels
+ * \param numberOfSamplesForFirstLevel
+ * \param sample_pos
  */
-void FPSSampler(RXMeshStatic&          rx,
-                VertexAttributesRXMesh vertexAttributes,
-                float                  ratio,
-                int                    N,
-                int                    numberOfLevels,
-                int                    numberOfSamplesForFirstLevel,
-                Vec3*                  sample_pos)
+//** DONE
+void FPSSampler(RXMeshStatic&    rx,
+                VertexAttributes vertexAttributes,
+                float            ratio,
+                int              N,
+                int              numberOfLevels,
+                int              numberOfSamplesForFirstLevel,
+                Vec3*            sample_pos)
 {
 
     std::random_device rd;
@@ -310,7 +309,7 @@ void FPSSampler(RXMeshStatic&          rx,
     // From 0 to (number of points - 1)
     int seed = 0;  // dist(gen);
 
-    //std::cout << "\nSeed: " << seed;
+    // std::cout << "\nSeed: " << seed;
 
     VertexReduceHandle<float>              reducer(vertexAttributes.distance);
     cub::KeyValuePair<VertexHandle, float> farthestPoint;
@@ -327,16 +326,16 @@ void FPSSampler(RXMeshStatic&          rx,
 
     int j                  = 0;
     int currentSampleLevel = numberOfLevels;
-    
-   /* std::cout << "levels:" << numberOfLevels;
 
-    for (int q = 0; q < numberOfLevels; q++) {
-        std::cout << "\n  level " << q << " : " << N / powf(ratio, q);
-    }*/
+    /* std::cout << "levels:" << numberOfLevels;
+
+     for (int q = 0; q < numberOfLevels; q++) {
+         std::cout << "\n  level " << q << " : " << N / powf(ratio, q);
+     }*/
     for (int i = 0; i < numberOfSamplesForFirstLevel; i++) {
         if (i == N / (int)powf(ratio, currentSampleLevel)) {
             currentSampleLevel--;
-            //std::cout << "\nNext sample level: " << currentSampleLevel;
+            // std::cout << "\nNext sample level: " << currentSampleLevel;
         }
 
         rx.for_each_vertex(
@@ -387,7 +386,5 @@ void FPSSampler(RXMeshStatic&          rx,
         seed          = rx.linear_id(farthestPoint.key);
     }
 
-    //std::cout << "\nSampling iterations: " << j;
-
-
+    // std::cout << "\nSampling iterations: " << j;
 }

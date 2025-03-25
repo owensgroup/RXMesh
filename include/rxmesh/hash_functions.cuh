@@ -201,6 +201,26 @@ struct hash16_xm2
     }
 };
 
+// hashing 64bit to 32bit
+struct Hash64To32XOR
+{
+    uint32_t seed;
+
+    __host__ __device__ constexpr Hash64To32XOR() : seed(2166136261u)
+    {
+    }
+
+    __host__ __device__ constexpr Hash64To32XOR(uint32_t s) : seed(s)
+    {
+    }
+
+    constexpr uint32_t __host__ __device__ __inline__ operator()(
+        const uint64_t k) const
+    {
+        return (uint32_t)(k ^ (k >> 32) ^ seed);
+    }
+};
+
 template <typename HashT, typename RNG>
 HashT initialize_hf(RNG& rng)
 {
@@ -223,6 +243,11 @@ HashT initialize_hf(RNG& rng)
 
     if constexpr (std::is_same_v<HashT, hash16_xm2>) {
         return hash16_xm2();
+    }
+
+    if constexpr (std::is_same_v<HashT, Hash64To32XOR>) {
+        uint32_t x = rng();
+        return Hash64To32XOR(x);
     }
 }
 }  // namespace rxmesh
