@@ -120,58 +120,57 @@ enum class Op
 /**
  * @brief define the transpose of a give query operation
  */
-template <Op op>
-constexpr Op transpose()
+static Op transpose(Op op)
 {
-    if constexpr (op == Op::V) {
+    if (op == Op::V) {
         return Op::V;
     }
 
-    if constexpr (op == Op::E) {
+    if (op == Op::E) {
         return Op::E;
     }
 
-    if constexpr (op == Op::F) {
+    if (op == Op::F) {
         return Op::F;
     }
 
-    if constexpr (op == Op::VV) {
+    if (op == Op::VV) {
         return Op::VV;
     }
 
-    if constexpr (op == Op::VE) {
+    if (op == Op::VE) {
         return Op::EV;
     }
 
-    if constexpr (op == Op::VF) {
+    if (op == Op::VF) {
         return Op::FV;
     }
 
-    if constexpr (op == Op::FV) {
+    if (op == Op::FV) {
         return Op::VF;
     }
 
-    if constexpr (op == Op::FE) {
+    if (op == Op::FE) {
         return Op::EF;
     }
 
-    if constexpr (op == Op::FF) {
+    if (op == Op::FF) {
         return Op::FF;
     }
 
-    if constexpr (op == Op::EV) {
+    if (op == Op::EV) {
         return Op::VE;
     }
 
-    if constexpr (op == Op::EE) {
+    if (op == Op::EE) {
         return Op::EE;
     }
 
-    if constexpr (op == Op::EF) {
+    if (op == Op::EF) {
         return Op::FE;
     }
 
-    if constexpr (op == Op::EVDiamond) {
+    if (op == Op::EVDiamond) {
         return Op::INVALID;
     }
 }

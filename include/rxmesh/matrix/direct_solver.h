@@ -1,3 +1,4 @@
+#pragma once 
 #include "rxmesh/matrix/solver_base.h"
 
 #include "rxmesh/matrix/permute_method.h"
@@ -21,7 +22,7 @@ template <typename SpMatT>
 struct DirectSolver : public SolverBase<SpMatT>
 {
     using IndexT = typename SpMatT::IndexT;
-    using Type   = typename SpMat::T;
+    using Type   = typename SpMatT::Type;
 
     DirectSolver(SpMatT* mat, PermuteMethod perm)
         : SolverBase<SpMatT>(mat),
@@ -30,16 +31,16 @@ struct DirectSolver : public SolverBase<SpMatT>
           m_use_permute(false)
     {
         // cuSparse matrix descriptor
-        CUSPARSE_ERROR(cusparseCreateMatDescr(&mat.m_descr));
+        CUSPARSE_ERROR(cusparseCreateMatDescr(&m_descr));
         CUSPARSE_ERROR(
-            cusparseSetMatType(mat.m_descr, CUSPARSE_MATRIX_TYPE_GENERAL));
+            cusparseSetMatType(m_descr, CUSPARSE_MATRIX_TYPE_GENERAL));
         CUSPARSE_ERROR(
-            cusparseSetMatDiagType(mat.m_descr, CUSPARSE_DIAG_TYPE_NON_UNIT));
+            cusparseSetMatDiagType(m_descr, CUSPARSE_DIAG_TYPE_NON_UNIT));
         CUSPARSE_ERROR(
-            cusparseSetMatIndexBase(mat.m_descr, CUSPARSE_INDEX_BASE_ZERO));
+            cusparseSetMatIndexBase(m_descr, CUSPARSE_INDEX_BASE_ZERO));
 
         // cuSparse sp handle
-        CUSOLVER_ERROR(cusolverSpCreate(&mat.m_cusolver_sphandle));
+        CUSOLVER_ERROR(cusolverSpCreate(&m_cusolver_sphandle));
     }
 
     virtual ~DirectSolver()
@@ -71,7 +72,7 @@ struct DirectSolver : public SolverBase<SpMatT>
      */
     virtual void permute(RXMeshStatic& rx)
     {
-        permute_alloc(m_perm);
+        permute_alloc();
 
         if (m_perm == PermuteMethod::NONE) {
             RXMESH_WARN(
@@ -187,8 +188,10 @@ struct DirectSolver : public SolverBase<SpMatT>
                                    m_h_permute_map,
                                    m_mat->non_zeros() * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
-        permute_gather(
-            m_d_permute_map, m_d_val, m_d_solver_val, m_mat->non_zeros());
+        permute_gather(m_d_permute_map,
+                       m_mat->val_ptr(DEVICE),
+                       m_d_solver_val,
+                       m_mat->non_zeros());
 
 
         free(perm_buffer_cpu);
@@ -213,9 +216,9 @@ struct DirectSolver : public SolverBase<SpMatT>
         }
 
         if (!m_perm_allocated) {
-            m_reorder_allocated = true;
+            m_perm_allocated = true;
             CUDA_ERROR(cudaMalloc((void**)&m_d_solver_val,
-                                  m_mat->non_zeros() * sizeof(T)));
+                                  m_mat->non_zeros() * sizeof(Type)));
             CUDA_ERROR(cudaMalloc((void**)&m_d_solver_row_ptr,
                                   (m_mat->rows() + 1) * sizeof(IndexT)));
             CUDA_ERROR(cudaMalloc((void**)&m_d_solver_col_idx,
@@ -236,10 +239,10 @@ struct DirectSolver : public SolverBase<SpMatT>
             CUDA_ERROR(cudaMalloc((void**)&m_d_permute_map,
                                   m_mat->non_zeros() * sizeof(IndexT)));
 
-            CUDA_ERROR(
-                cudaMalloc((void**)&m_d_solver_x, m_mat->cols() * sizeof(T)));
-            CUDA_ERROR(
-                cudaMalloc((void**)&m_d_solver_b, m_mat->rows() * sizeof(T)));
+            CUDA_ERROR(cudaMalloc((void**)&m_d_solver_x,
+                                  m_mat->cols() * sizeof(Type)));
+            CUDA_ERROR(cudaMalloc((void**)&m_d_solver_b,
+                                  m_mat->rows() * sizeof(Type)));
         }
         std::memcpy(m_h_solver_row_ptr,
                     m_mat->row_ptr(),
@@ -269,22 +272,28 @@ struct DirectSolver : public SolverBase<SpMatT>
         }
     }
 
-    __host__ void permute_scatter(IndexT* d_p, T* d_in, T* d_out, IndexT size)
+    __host__ void permute_scatter(IndexT* d_p,
+                                  Type*   d_in,
+                                  Type*   d_out,
+                                  IndexT  size)
     {
         // d_out[d_p[i]] = d_in[i]
         thrust::device_ptr<IndexT> t_p(d_p);
-        thrust::device_ptr<T>      t_i(d_in);
-        thrust::device_ptr<T>      t_o(d_out);
+        thrust::device_ptr<Type>   t_i(d_in);
+        thrust::device_ptr<Type>   t_o(d_out);
 
         thrust::scatter(thrust::device, t_i, t_i + size, t_p, t_o);
     }
 
-    __host__ void permute_gather(IndexT* d_p, T* d_in, T* d_out, IndexT size)
+    __host__ void permute_gather(IndexT* d_p,
+                                 Type*   d_in,
+                                 Type*   d_out,
+                                 IndexT  size)
     {
         // d_out[i] = d_in[d_p[i]]
         thrust::device_ptr<IndexT> t_p(d_p);
-        thrust::device_ptr<T>      t_i(d_in);
-        thrust::device_ptr<T>      t_o(d_out);
+        thrust::device_ptr<Type>   t_i(d_in);
+        thrust::device_ptr<Type>   t_o(d_out);
 
         thrust::gather(thrust::device, t_p, t_p + size, t_i, t_o);
     }

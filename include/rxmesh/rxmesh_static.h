@@ -686,7 +686,9 @@ class RXMeshStatic : public RXMesh
      * @param ...args the inputs to the kernel
      */
     template <uint32_t blockThreads, typename KernelT, typename... ArgsT>
-    void run_kernel(const std::vector<Op> op, KernelT kernel, ArgsT... args)
+    void run_kernel(const std::vector<Op> op,
+                    KernelT               kernel,
+                    ArgsT... args) const
     {
         run_kernel<blockThreads>(
             kernel,
@@ -760,7 +762,7 @@ class RXMeshStatic : public RXMesh
     template <Op op, uint32_t blockThreads, typename LambdaT>
     void run_query_kernel(const LambdaT user_lambda,
                           const bool    oriented = false,
-                          cudaStream_t  stream   = NULL)
+                          cudaStream_t  stream   = NULL) const
     {
         LaunchBox<blockThreads> lb;
 
@@ -794,7 +796,7 @@ class RXMeshStatic : public RXMesh
     void run_query_kernel(LaunchBox<blockThreads> lb,
                           const LambdaT           user_lambda,
                           const bool              oriented = false,
-                          cudaStream_t            stream   = NULL)
+                          cudaStream_t            stream   = NULL) const
     {
         detail::query_kernel<blockThreads, op>
             <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(

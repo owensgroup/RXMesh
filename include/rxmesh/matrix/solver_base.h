@@ -1,3 +1,5 @@
+#pragma once
+
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/matrix/dense_matrix.h"
@@ -20,9 +22,9 @@ struct SolverBase
 
     virtual void pre_solve(RXMeshStatic& rx) = 0;
 
-    virtual void solve(const DenseMatrix<Type>& B_mat,
-                       DenseMatrix<Type>&       X_mat,
-                       cudaStream_t             stream = NULL) = 0;
+    virtual void solve(DenseMatrix<Type>& B_mat,
+                       DenseMatrix<Type>& X_mat,
+                       cudaStream_t       stream = NULL) = 0;
 
     SpMatT* m_mat;
 };

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "rxmesh/matrix/direct_solver.h"
 
 #include "cusolverSp_LOWLEVEL_PREVIEW.h"
@@ -33,9 +35,9 @@ struct QRSolver : public DirectSolver<SpMatT>
     }
 
 
-    virtual void solve(const DenseMatrix<Type>& B_mat,
-                       DenseMatrix<Type>&       X_mat,
-                       cudaStream_t             stream = NULL) override
+    virtual void solve(DenseMatrix<Type>& B_mat,
+                       DenseMatrix<Type>& X_mat,
+                       cudaStream_t       stream = NULL) override
     {
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
         for (int i = 0; i < B_mat.cols(); ++i) {
@@ -56,10 +58,8 @@ struct QRSolver : public DirectSolver<SpMatT>
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
 
         for (int i = 0; i < B_mat.cols(); ++i) {
-            cusolver_qr(m_cusolver_sphandle,
-                        B_mat.col_data(i, DEVICE),
-                        X_mat.col_data(i, DEVICE),
-                        stream);
+            cusolver_qr(
+                B_mat.col_data(i, DEVICE), X_mat.col_data(i, DEVICE), stream);
         }
     }
 
@@ -214,9 +214,9 @@ struct QRSolver : public DirectSolver<SpMatT>
 
         if constexpr (std::is_same_v<T, float>) {
             CUSOLVER_ERROR(cusolverSpScsrqrFactor(m_cusolver_sphandle,
-                                                  m_num_rows,
-                                                  m_num_cols,
-                                                  m_nnz,
+                                                  m_mat->rows(),
+                                                  m_mat->cols(),
+                                                  m_mat->non_zeros(),
                                                   nullptr,
                                                   nullptr,
                                                   m_qr_info,
@@ -225,9 +225,9 @@ struct QRSolver : public DirectSolver<SpMatT>
 
         if constexpr (std::is_same_v<T, cuComplex>) {
             CUSOLVER_ERROR(cusolverSpCcsrqrFactor(m_cusolver_sphandle,
-                                                  m_num_rows,
-                                                  m_num_cols,
-                                                  m_nnz,
+                                                  m_mat->rows(),
+                                                  m_mat->cols(),
+                                                  m_mat->non_zeros(),
                                                   nullptr,
                                                   nullptr,
                                                   m_qr_info,
@@ -235,9 +235,9 @@ struct QRSolver : public DirectSolver<SpMatT>
         }
         if constexpr (std::is_same_v<T, double>) {
             CUSOLVER_ERROR(cusolverSpDcsrqrFactor(m_cusolver_sphandle,
-                                                  m_num_rows,
-                                                  m_num_cols,
-                                                  m_nnz,
+                                                  m_mat->rows(),
+                                                  m_mat->cols(),
+                                                  m_mat->non_zeros(),
                                                   nullptr,
                                                   nullptr,
                                                   m_qr_info,
@@ -245,9 +245,9 @@ struct QRSolver : public DirectSolver<SpMatT>
         }
         if constexpr (std::is_same_v<T, cuDoubleComplex>) {
             CUSOLVER_ERROR(cusolverSpZcsrqrFactor(m_cusolver_sphandle,
-                                                  m_num_rows,
-                                                  m_num_cols,
-                                                  m_nnz,
+                                                  m_mat->rows(),
+                                                  m_mat->cols(),
+                                                  m_mat->non_zeros(),
                                                   nullptr,
                                                   nullptr,
                                                   m_qr_info,

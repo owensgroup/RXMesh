@@ -1,3 +1,5 @@
+#pragma once
+
 #include "rxmesh/matrix/direct_solver.h"
 
 namespace rxmesh {
@@ -29,16 +31,14 @@ struct LUSolver : public DirectSolver<SpMatT>
      * the host. After solving, moving B to the device is the caller's
      * responsiblity
      */
-    virtual void solve(const DenseMatrix<Type>& B_mat,
-                       DenseMatrix<Type>&       X_mat,
-                       cudaStream_t             stream = NULL) override
+    virtual void solve(DenseMatrix<Type>& B_mat,
+                       DenseMatrix<Type>& X_mat,
+                       cudaStream_t       stream = NULL) override
     {
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
         for (int i = 0; i < B_mat.cols(); ++i) {
-            cusolver_qr(m_cusolver_sphandle,
-                        B_mat.col_data(i, HOST),
-                        X_mat.col_data(i, HOST),
-                        stream);
+            cusolver_lu(
+                B_mat.col_data(i, HOST), X_mat.col_data(i, HOST), stream);
         }
     }
 
@@ -48,7 +48,7 @@ struct LUSolver : public DirectSolver<SpMatT>
      * @brief wrapper for cuSolver API for solving linear systems using cuSolver
      * High-level API
      */
-    void cusolver_lu(const T* d_b, T* d_x, cudaStream_t stream)
+    void cusolver_lu(T* d_b, T* d_x, cudaStream_t stream)
     {
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
 

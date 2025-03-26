@@ -2,18 +2,12 @@
 #include <algorithm>
 #include "cusolverSp.h"
 #include "cusparse.h"
-#include "rxmesh/attribute.h"
-#include "rxmesh/context.h"
 
-#include "rxmesh/launch_box.h"
-
+#include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/matrix/dense_matrix.h"
-#include "rxmesh/matrix/permute_util.h"
 #include "rxmesh/matrix/sparse_matrix_kernels.cuh"
 
-#include "rxmesh/matrix/mgnd_permute.cuh"
-#include "rxmesh/matrix/nd_permute.cuh"
 
 #include <Eigen/Sparse>
 
@@ -28,15 +22,12 @@ namespace rxmesh {
  * for matrix-vector multiplication and linear solver (using cuSolver and
  * cuSparse as a back-end.
  */
-template <Op op, typename T>
+template <typename T>
 struct SparseMatrix2
 {
     using IndexT = int;
 
     using Type = T;
-
-    using InputHandleT  = InputHandle<op>::type;
-    using OutputHandleT = OutputHandle<op>::type;
 
     using EigenSparseMatrix =
         Eigen::Map<const Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT>>;
@@ -59,13 +50,14 @@ struct SparseMatrix2
           m_spmv_buffer_size(0),
           m_d_cusparse_spmm_buffer(nullptr),
           m_d_cusparse_spmv_buffer(nullptr),
-          m_solver_buffer(nullptr),
           m_allocated(LOCATION_NONE),
-          m_is_user_managed(false)
+          m_is_user_managed(false),
+          m_op(Op::INVALID)
     {
     }
 
-    SparseMatrix2(const RXMeshStatic& rx) : SparseMatrix2(rx, 1) {};
+    SparseMatrix2(const RXMeshStatic& rx, Op op = Op::VV)
+        : SparseMatrix2(rx, op, 1) {};
 
 
     /**
@@ -119,7 +111,7 @@ struct SparseMatrix2
     }
 
    protected:
-    SparseMatrix2(const RXMeshStatic& rx, IndexT replicate)
+    SparseMatrix2(const RXMeshStatic& rx, Op op, IndexT replicate)
         : m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
           m_d_val(nullptr),
@@ -137,14 +129,43 @@ struct SparseMatrix2
           m_spmv_buffer_size(0),
           m_d_cusparse_spmm_buffer(nullptr),
           m_d_cusparse_spmv_buffer(nullptr),
-          m_solver_buffer(nullptr),
           m_allocated(LOCATION_NONE),
-          m_is_user_managed(false)
+          m_is_user_managed(false),
+          m_op(op)
     {
         constexpr uint32_t blockThreads = 256;
 
-        m_num_rows = rx.get_num_elements<InputHandleT> * m_replicate;
-        m_num_cols = rx.get_num_elements<OutputHandleT> * m_replicate;
+        // num rows
+        if (m_op == Op::VV || m_op == Op::VE || m_op == Op::VF) {
+            m_num_rows = rx.get_num_vertices();
+        } else if (m_op == Op::EV || m_op == Op::EE || m_op == Op::EF) {
+            m_num_rows = rx.get_num_edges();
+        } else if (m_op == Op::FV || m_op == Op::FE || m_op == Op::FF) {
+            m_num_rows = rx.get_num_faces();
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix2 Unsupported query operation for constructing "
+                "the sparse matrix. Input operation is {}",
+                op_to_string(m_op));
+        }
+
+        // num cols
+        if (m_op == Op::VV || m_op == Op::EV || m_op == Op::FV) {
+            m_num_cols = rx.get_num_vertices();
+        } else if (m_op == Op::VE || m_op == Op::EE || m_op == Op::FE) {
+            m_num_cols = rx.get_num_edges();
+        } else if (m_op == Op::VF || m_op == Op::EF || m_op == Op::FF) {
+            m_num_cols = rx.get_num_faces();
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix2 Unsupported query operation for constructing "
+                "the sparse matrix. Input operation is {}",
+                op_to_string(m_op));
+        }
+
+
+        m_num_rows *= m_replicate;
+        m_num_cols *= m_replicate;
 
         // row pointer allocation and init with prefix sum for CSR
         CUDA_ERROR(cudaMalloc((void**)&m_d_row_ptr,
@@ -153,11 +174,61 @@ struct SparseMatrix2
         CUDA_ERROR(
             cudaMemset(m_d_row_ptr, 0, (m_num_rows + 1) * sizeof(IndexT)));
 
-        rx.run_kernel<blockThreads>(
-            {op},
-            detail::sparse_mat_prescan<op, blockThreads>,
-            m_d_row_ptr,
-            m_replicate);
+        if (m_op == Op::VV) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_prescan<Op::VV, blockThreads>,
+                m_d_row_ptr,
+                m_replicate);
+        } else if (m_op == Op::VE) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_prescan<Op::VE, blockThreads>,
+                m_d_row_ptr,
+                m_replicate);
+        } else if (m_op == Op::VF) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_prescan<Op::VF, blockThreads>,
+                m_d_row_ptr,
+                m_replicate);
+        } else if (m_op == Op::EV) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_prescan<Op::EV, blockThreads>,
+                m_d_row_ptr,
+                m_replicate);
+        } else if (m_op == Op::EF) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_prescan<Op::EF, blockThreads>,
+                m_d_row_ptr,
+                m_replicate);
+        } else if (m_op == Op::FV) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_prescan<Op::FV, blockThreads>,
+                m_d_row_ptr,
+                m_replicate);
+        } else if (m_op == Op::FE) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_prescan<Op::FE, blockThreads>,
+                m_d_row_ptr,
+                m_replicate);
+        } else if (m_op == Op::FF) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_prescan<Op::FF, blockThreads>,
+                m_d_row_ptr,
+                m_replicate);
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix2 Unsupported query operation for constructing "
+                "the sparse matrix. Input operation is {}",
+                op_to_string(m_op));
+        }
+
 
         // prefix sum using CUB.
         void*  d_cub_temp_storage = nullptr;
@@ -186,12 +257,75 @@ struct SparseMatrix2
         // column index allocation and init
         CUDA_ERROR(cudaMalloc((void**)&m_d_col_idx, m_nnz * sizeof(IndexT)));
 
-        rx.run_kernel<blockThreads>(
-            {op},
-            detail::sparse_mat_col_fill<op, blockThreads>,
-            m_d_row_ptr,
-            m_d_col_idx,
-            m_replicate);
+        if (m_op == Op::VV) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_col_fill<Op::VV, blockThreads>,
+                m_d_row_ptr,
+                m_d_col_idx,
+                m_replicate);
+
+        } else if (m_op == Op::VE) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_col_fill<Op::VE, blockThreads>,
+                m_d_row_ptr,
+                m_d_col_idx,
+                m_replicate);
+
+        } else if (m_op == Op::VF) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_col_fill<Op::VF, blockThreads>,
+                m_d_row_ptr,
+                m_d_col_idx,
+                m_replicate);
+
+        } else if (m_op == Op::EV) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_col_fill<Op::EV, blockThreads>,
+                m_d_row_ptr,
+                m_d_col_idx,
+                m_replicate);
+
+        } else if (m_op == Op::EF) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_col_fill<Op::EF, blockThreads>,
+                m_d_row_ptr,
+                m_d_col_idx,
+                m_replicate);
+
+        } else if (m_op == Op::FV) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_col_fill<Op::FV, blockThreads>,
+                m_d_row_ptr,
+                m_d_col_idx,
+                m_replicate);
+
+        } else if (m_op == Op::FE) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_col_fill<Op::FE, blockThreads>,
+                m_d_row_ptr,
+                m_d_col_idx,
+                m_replicate);
+        } else if (m_op == Op::FF) {
+            rx.run_kernel<blockThreads>(
+                {m_op},
+                detail::sparse_mat_col_fill<Op::FF, blockThreads>,
+                m_d_row_ptr,
+                m_d_col_idx,
+                m_replicate);
+
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix2 Unsupported query operation for constructing "
+                "the sparse matrix. Input operation is {}",
+                op_to_string(m_op));
+        }
 
 
         // allocate value ptr
@@ -273,6 +407,11 @@ struct SparseMatrix2
         }
     }
 
+
+    __device__ __host__ Op get_op() const
+    {
+        return m_op;
+    }
 
     /**
      * @brief return number of rows
@@ -359,11 +498,15 @@ struct SparseMatrix2
      * operation. This function can only be called if the memory is Not
      * user-managed
      */
+    template <typename InputHandleT, typename OutputHandleT>
     __device__ __host__ const T& operator()(const InputHandleT&  row_v,
                                             const OutputHandleT& col_v) const
     {
+        // TODO check on the InputHandleT and OutputHandleT if they are
+        // compatible with m_op
         assert(!m_is_user_managed);
-        return this->operator()(get_row_id(row_v), get_row_id(col_v));
+        return this->operator()(static_cast<IndexT>(get_row_id(row_v)),
+                                static_cast<IndexT>(get_row_id(col_v)));
     }
 
     /**
@@ -371,11 +514,15 @@ struct SparseMatrix2
      * operation. This function can only be called if the memory is Not
      * user-managed
      */
+    template <typename InputHandleT, typename OutputHandleT>
     __device__ __host__ T& operator()(const InputHandleT&  row_v,
                                       const OutputHandleT& col_v)
     {
+        // TODO check on the InputHandleT and OutputHandleT if they are
+        // compatible with m_op
         assert(!m_is_user_managed);
-        return this->operator()(get_row_id(row_v), get_row_id(col_v));
+        return this->operator()(static_cast<IndexT>(get_row_id(row_v)),
+                                static_cast<IndexT>(get_row_id(col_v)));
     }
 
     /**
@@ -417,7 +564,7 @@ struct SparseMatrix2
      * @brief return the row pointer of the CSR matrix
      * @return
      */
-    __device__ __host__ const IndexT* row_ptr() const
+    __device__ __host__ IndexT* row_ptr() const
     {
 #ifdef __CUDA_ARCH__
         return m_d_row_ptr;
@@ -430,7 +577,7 @@ struct SparseMatrix2
      * @brief return the row pointer of the CSR matrix
      * @return
      */
-    __device__ __host__ const IndexT* row_ptr(locationT location) const
+    __device__ __host__ IndexT* row_ptr(locationT location) const
     {
         if (location == HOST) {
             return m_h_row_ptr;
@@ -446,7 +593,7 @@ struct SparseMatrix2
      * @brief return the column index pointer of the CSR matrix
      * @return
      */
-    __device__ __host__ const IndexT* col_idx() const
+    __device__ __host__ IndexT* col_idx() const
     {
 #ifdef __CUDA_ARCH__
         return m_d_col_idx;
@@ -460,7 +607,7 @@ struct SparseMatrix2
      * @brief return the column index pointer of the CSR matrix
      * @return
      */
-    __device__ __host__ const IndexT* col_idx(locationT location) const
+    __device__ __host__ IndexT* col_idx(locationT location) const
     {
         if (location == HOST) {
             return m_h_col_idx;
@@ -476,7 +623,7 @@ struct SparseMatrix2
      * @brief return the value pointer of the CSR matrix
      * @return
      */
-    __device__ __host__ const IndexT* val_ptr(locationT location) const
+    __device__ __host__ T* val_ptr(locationT location) const
     {
         if (location == HOST) {
             return m_h_val;
@@ -507,7 +654,7 @@ struct SparseMatrix2
     __device__ __host__ uint32_t get_row_id(const HandleT& handle) const
     {
         auto id = handle.unpack();
-        return m_context.prefix<HandleT>()[id.first] + id.second;
+        return m_context.template prefix<HandleT>()[id.first] + id.second;
     }
 
     /**
@@ -518,7 +665,6 @@ struct SparseMatrix2
         release(LOCATION_ALL);
         CUSPARSE_ERROR(cusparseDestroy(m_cusparse_handle));
 
-        GPU_FREE(m_solver_buffer);
         GPU_FREE(m_d_cusparse_spmm_buffer);
         GPU_FREE(m_d_cusparse_spmv_buffer);
     }
@@ -532,14 +678,14 @@ struct SparseMatrix2
      */
     __host__ SparseMatrix2<T> transpose() const
     {
-        if (op == Op::EVDiamond) {
+        if (m_op == Op::EVDiamond) {
             RXMESH_ERROR(
                 "SparseMatrix2<T>::transpose() there is not transpose for "
                 "SparseMatrix2 with EVDiamond.");
             return *this;
         }
 
-        SparseMatrix2<transpose<op>(), T> ret;
+        SparseMatrix2<T> ret;
 
         ret.m_num_rows        = m_num_cols;
         ret.m_num_cols        = m_num_rows;
@@ -548,6 +694,8 @@ struct SparseMatrix2
         ret.m_replicate       = m_replicate;
         ret.m_allocated       = m_allocated;
         ret.m_is_user_managed = false;
+        ret.m_op              = transpose(m_op);
+
 
         CUDA_ERROR(cudaMalloc((void**)&ret.m_d_row_ptr,
                               (m_num_cols + 1) * sizeof(IndexT)));
@@ -939,7 +1087,7 @@ struct SparseMatrix2
     /**
      * @brief copy the matrix to Eigen SparseMatirx
      */
-    __host__ Eigen::SparseMatrix2<T, Eigen::RowMajor, IndexT> to_eigen_copy()
+    __host__ Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT> to_eigen_copy()
     {
         using TripletT = Eigen::Triplet<T>;
 
@@ -948,7 +1096,7 @@ struct SparseMatrix2
         for_each(
             [&](int r, int c, T& val) { triplets.push_back({r, c, val}); });
 
-        Eigen::SparseMatrix2<T, Eigen::RowMajor, IndexT> ret(rows(), cols());
+        Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT> ret(rows(), cols());
 
         // std::sort(
         //     triplets.begin(), triplets.end(), [](TripletT& a, TripletT& b) {
@@ -1093,6 +1241,8 @@ struct SparseMatrix2
 
     // indicate if memory allocation is used managed
     bool m_is_user_managed;
+
+    Op m_op;
 };
 
 }  // namespace rxmesh

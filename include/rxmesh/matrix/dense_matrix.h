@@ -29,6 +29,9 @@ struct DenseMatrix
     template <typename U>
     friend class SparseMatrix;
 
+    template <typename U>
+    friend class SparseMatrix2;
+
     using EigenDenseMatrix =
         Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Order>>;
 
