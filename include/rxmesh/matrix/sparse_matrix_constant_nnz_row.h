@@ -1,15 +1,15 @@
 #pragma once
 
-#include "rxmesh/matrix/sparse_matrix.cuh"
+#include "rxmesh/matrix/sparse_matrix2.h"
 
 namespace rxmesh {
 /**
  * @brief Implement sparse matrix where the number of nnz per is fixed
  */
 template <typename T, int RowNNZ>
-struct SparseMatrixConstantNNZRow : public SparseMatrix<T>
+struct SparseMatrixConstantNNZRow : public SparseMatrix2<T>
 {
-    using IndexT = SparseMatrix<T>::IndexT;
+    using IndexT = SparseMatrix2<T>::IndexT;
 
     /**
      * @brief the constructor only builds the row_ptr. The user is responsible
@@ -19,7 +19,7 @@ struct SparseMatrixConstantNNZRow : public SparseMatrix<T>
     SparseMatrixConstantNNZRow(const RXMeshStatic& rx,
                                IndexT              num_rows,
                                IndexT              num_cols)
-        : SparseMatrix<T>()
+        : SparseMatrix2<T>()
     {
         m_context   = rx.get_context();
         m_replicate = 1;

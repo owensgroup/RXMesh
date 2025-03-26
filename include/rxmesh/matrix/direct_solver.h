@@ -122,7 +122,7 @@ struct DirectSolver : public SolverBase<SpMatT>
         } else if (m_perm == PermuteMethod::GPUND) {
             nd_permute(rx, m_h_permute);
         } else {
-            RXMESH_ERROR("SparseMatrix::permute() incompatible permute method");
+            RXMESH_ERROR("DirectSolver::permute() incompatible permute method");
         }
 
 

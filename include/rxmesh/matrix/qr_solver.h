@@ -196,7 +196,7 @@ struct QRSolver : public DirectSolver<SpMatT>
                                                  m_qr_info));
         }
 
-        RXMESH_INFO(
+        RXMESH_TRACE(
             "QRSolver::post_analyze_alloc() internalDataInBytes= {}, "
             "workspaceInBytes= {}",
             m_internalDataInBytes,

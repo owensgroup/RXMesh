@@ -120,7 +120,7 @@ enum class Op
 /**
  * @brief define the transpose of a give query operation
  */
-static Op transpose(Op op)
+static Op transpose_op(Op op)
 {
     if (op == Op::V) {
         return Op::V;

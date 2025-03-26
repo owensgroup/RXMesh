@@ -694,7 +694,7 @@ struct SparseMatrix2
         ret.m_replicate       = m_replicate;
         ret.m_allocated       = m_allocated;
         ret.m_is_user_managed = false;
-        ret.m_op              = transpose(m_op);
+        ret.m_op              = transpose_op(m_op);
 
 
         CUDA_ERROR(cudaMalloc((void**)&ret.m_d_row_ptr,

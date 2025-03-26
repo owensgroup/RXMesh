@@ -146,7 +146,7 @@ struct CholeskySolver : public DirectSolver<SpMatT>
         }
 
 
-        RXMESH_INFO(
+        RXMESH_TRACE(
             "CholeskySolver::post_analyze_alloc() internalDataInBytes= {}, "
             "workspaceInBytes= {}",
             m_internalDataInBytes,

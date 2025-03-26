@@ -1,7 +1,7 @@
 #pragma once
 
 
-#include "rxmesh/matrix/sparse_matrix.cuh"
+#include "rxmesh/matrix/sparse_matrix2.h"
 
 #include "rxmesh/diff/scalar.h"
 
@@ -14,16 +14,17 @@ namespace rxmesh {
  *
  */
 template <typename T, int K>
-struct HessianSparseMatrix : public SparseMatrix<T>
+struct HessianSparseMatrix : public SparseMatrix2<T>
 {
     static constexpr int K_ = K;
 
     using ScalarT = Scalar<T, K, true>;
 
-    using IndexT = typename SparseMatrix<T>::IndexT;
+    using IndexT = typename SparseMatrix2<T>::IndexT;
 
 
-    HessianSparseMatrix(const RXMeshStatic& rx) : SparseMatrix<T>(rx, K)
+    HessianSparseMatrix(const RXMeshStatic& rx, Op op = Op::VV)
+        : SparseMatrix2<T>(rx, K)
     {
     }
 
@@ -37,10 +38,12 @@ struct HessianSparseMatrix : public SparseMatrix<T>
                                             const IndexT        local_i,
                                             const IndexT        local_j) const
     {
-        const IndexT r_id = this->get_row_id(row_v) * this->m_replicate + local_i;
-        const IndexT c_id = this->get_row_id(col_v) * this->m_replicate + local_j;
+        const IndexT r_id =
+            this->get_row_id(row_v) * this->m_replicate + local_i;
+        const IndexT c_id =
+            this->get_row_id(col_v) * this->m_replicate + local_j;
 
-        return SparseMatrix<T>::operator()(r_id, c_id);
+        return SparseMatrix2<T>::operator()(r_id, c_id);
     }
 
     /**
@@ -52,10 +55,12 @@ struct HessianSparseMatrix : public SparseMatrix<T>
                                       const IndexT        local_i,
                                       const IndexT        local_j)
     {
-        const IndexT r_id = this->get_row_id(row_v) * this->m_replicate + local_i;
-        const IndexT c_id = this->get_row_id(col_v) * this->m_replicate + local_j;
+        const IndexT r_id =
+            this->get_row_id(row_v) * this->m_replicate + local_i;
+        const IndexT c_id =
+            this->get_row_id(col_v) * this->m_replicate + local_j;
 
-        return SparseMatrix<T>::operator()(r_id, c_id);
+        return SparseMatrix2<T>::operator()(r_id, c_id);
     }
 
 

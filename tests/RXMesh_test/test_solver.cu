@@ -12,6 +12,9 @@
 #include "rxmesh/matrix/lu_solver.h"
 #include "rxmesh/matrix/qr_solver.h"
 
+#include <Eigen/Sparse>
+#include <Eigen/SparseCholesky>
+
 using namespace rxmesh;
 
 template <typename T, uint32_t blockThreads>
@@ -76,9 +79,9 @@ void test_solver(RXMeshStatic&     rx,
 {
     setup_matrix(rx, A, B, X);
 
-    //Needed for LU but does not hurt other solvers 
+    // Needed for LU but does not hurt other solvers
     A.move(DEVICE, HOST);
-    B.move(DEVICE, HOST);    
+    B.move(DEVICE, HOST);
 
     solver.pre_solve(rx);
 
@@ -95,16 +98,18 @@ void test_solver(RXMeshStatic&     rx,
     A.multiply(X, Ax);
 
     Ax.move(DEVICE, HOST);
-    
+
 
     for (int i = 0; i < Ax.rows(); ++i) {
         for (int j = 0; j < Ax.cols(); ++j) {
             EXPECT_NEAR(Ax(i, j), B(i, j), 1e-3);
         }
     }
+
+    Ax.release();
 }
 
-TEST(RXMeshStatic, CholeskySolve)
+TEST(Solver, Cholesky)
 {
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
@@ -118,10 +123,14 @@ TEST(RXMeshStatic, CholeskySolve)
     CholeskySolver solver(&A);
 
     test_solver(rx, solver, A, B, X, true);
+
+    A.release();
+    X.release();
+    B.release();
 }
 
 
-TEST(RXMeshStatic, QRSolve)
+TEST(Solver, QR)
 {
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
@@ -135,10 +144,14 @@ TEST(RXMeshStatic, QRSolve)
     QRSolver solver(&A);
 
     test_solver(rx, solver, A, B, X, true);
+
+    A.release();
+    X.release();
+    B.release();
 }
 
 
-TEST(RXMeshStatic, LUSolve)
+TEST(Solver, LU)
 {
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
@@ -151,4 +164,53 @@ TEST(RXMeshStatic, LUSolve)
     LUSolver solver(&A);
 
     test_solver(rx, solver, A, B, X, false);
+
+    A.release();
+    X.release();
+    B.release();
+}
+
+
+TEST(Solver, CompareEigen)
+{
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    SparseMatrix2<float> A(rx, Op::VV);
+    DenseMatrix<float>   X(rx, num_vertices, 3);
+    DenseMatrix<float>   B(rx, num_vertices, 3);
+
+    CholeskySolver solver(&A);
+
+    test_solver(rx, solver, A, B, X, true);
+
+    DenseMatrix<float> X_copy(rx, num_vertices, 3);
+    X_copy.copy_from(X, DEVICE, HOST);
+
+    auto A_eigen = A.to_eigen();
+    auto X_eigen = X.to_eigen();
+    auto B_eigen = B.to_eigen();
+
+    // Note: there is a bug with Eigen if we use the default reordering
+    // which is Eigen::AMDOrdering<int>
+    // (https://gitlab.com/libeigen/eigen/-/issues/2839)
+    Eigen::SimplicialLDLT<Eigen::SparseMatrix<float>,
+                          Eigen::UpLoType::Lower,
+                          Eigen::COLAMDOrdering<int>>
+        eigen_solver;
+
+    eigen_solver.compute(A_eigen);
+    X_eigen = eigen_solver.solve(B_eigen);
+
+    for (int i = 0; i < X_copy.rows(); ++i) {
+        for (int j = 0; j < X_copy.cols(); ++j) {
+            EXPECT_NEAR(X_eigen(i, j), X_copy(i, j), 1e-5);
+        }
+    }
+
+    A.release();
+    X.release();
+    B.release();
+    X_copy.release();
 }
