@@ -1,7 +1,9 @@
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
 
-#include "rxmesh/matrix/sparse_matrix.cuh"
+#include "rxmesh/matrix/sparse_matrix2.h"
+
+#include "rxmesh/matrix/qr_solver.h"
 
 #include "Eigen/Dense"
 
@@ -15,7 +17,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void calc_edge_weights_mat(
     const rxmesh::Context      context,
     rxmesh::VertexAttribute<T> coords,
-    rxmesh::SparseMatrix<T>    edge_weights)
+    rxmesh::SparseMatrix2<T>   edge_weights)
 {
 
     auto calc_weights = [&](EdgeHandle edge_id, VertexIterator& vv) {
@@ -64,7 +66,7 @@ __global__ static void calculate_rotation_matrix(
     rxmesh::VertexAttribute<T> ref_vertex_pos,
     rxmesh::VertexAttribute<T> deformed_vertex_pos,
     rxmesh::VertexAttribute<T> rotations,
-    rxmesh::SparseMatrix<T>    weight_matrix)
+    rxmesh::SparseMatrix2<T>   weight_matrix)
 {
     auto cal_rot = [&](VertexHandle v_id, VertexIterator& vv) {
         Eigen::Matrix3f S = Eigen::Matrix3f::Zero();
@@ -124,7 +126,7 @@ __global__ static void calculate_b(
     rxmesh::VertexAttribute<T> ref_vertex_pos,
     rxmesh::VertexAttribute<T> deformed_vertex_pos,
     rxmesh::VertexAttribute<T> rotations,
-    rxmesh::SparseMatrix<T>    weight_mat,
+    rxmesh::SparseMatrix2<T>   weight_mat,
     rxmesh::DenseMatrix<T>     b_mat,
     rxmesh::VertexAttribute<T> constraints)
 {
@@ -181,8 +183,8 @@ __global__ static void calculate_b(
 template <typename T, uint32_t blockThreads>
 __global__ static void calculate_system_matrix(
     const rxmesh::Context      context,
-    rxmesh::SparseMatrix<T>    weight_matrix,
-    rxmesh::SparseMatrix<T>    laplace_mat,
+    rxmesh::SparseMatrix2<T>   weight_matrix,
+    rxmesh::SparseMatrix2<T>   laplace_mat,
     rxmesh::VertexAttribute<T> constraints)
 
 {
@@ -223,7 +225,7 @@ int main(int argc, char** argv)
 
     polyscope::view::upDir = polyscope::UpDir::ZUp;
 
-    constexpr uint32_t CUDABlockSize = 256;
+    constexpr uint32_t blockThreads = 256;
 
     // stays same across computation
     auto ref_vertex_pos = *rx.get_input_vertex_coordinates();
@@ -245,11 +247,11 @@ int main(int argc, char** argv)
 
     // compute weights
     auto weights = rx.add_edge_attribute<float>("edgeWeights", 1);
-    SparseMatrix<float> weight_matrix(rx);
+    SparseMatrix2<float> weight_matrix(rx);
     weight_matrix.reset(0.f, LOCATION_ALL);
 
     // system matrix
-    SparseMatrix<float> laplace_mat(rx);
+    SparseMatrix2<float> laplace_mat(rx);
     laplace_mat.reset(0.f, LOCATION_ALL);
 
     // rotation matrix as a very attribute where every vertex has 3x3 matrix
@@ -260,14 +262,10 @@ int main(int argc, char** argv)
     b_mat.reset(0.f, LOCATION_ALL);
 
     // obtain cotangent weight matrix
-    rxmesh::LaunchBox<CUDABlockSize> lb;
-    rx.prepare_launch_box({rxmesh::Op::EVDiamond},
-                          lb,
-                          (void*)calc_edge_weights_mat<float, CUDABlockSize>);
-
-    calc_edge_weights_mat<float, CUDABlockSize>
-        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
-            rx.get_context(), ref_vertex_pos, weight_matrix);
+    rx.run_kernel<blockThreads>({Op::EVDiamond},
+                                calc_edge_weights_mat<float, blockThreads>,
+                                ref_vertex_pos,
+                                weight_matrix);
 
     // set constraints
     const vec3<float> sphere_center(0.1818329, -0.99023, 0.325066);
@@ -296,29 +294,28 @@ int main(int argc, char** argv)
 #endif
 
     // Calculate system matrix
-    rx.prepare_launch_box({rxmesh::Op::VV},
-                          lb,
-                          (void*)calculate_system_matrix<float, CUDABlockSize>);
-
-    calculate_system_matrix<float, CUDABlockSize>
-        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
-            rx.get_context(), weight_matrix, laplace_mat, constraints);
+    rx.run_kernel<blockThreads>({Op::VV},
+                                calculate_system_matrix<float, blockThreads>,
+                                weight_matrix,
+                                laplace_mat,
+                                constraints);
 
     // pre_solve laplace_mat
-    laplace_mat.pre_solve(rx, Solver::QR, PermuteMethod::NSTDIS);
+    QRSolver solver(&laplace_mat);
+    solver.pre_solve(rx);
 
     // launch box for rotation matrix calculation
-    rxmesh::LaunchBox<CUDABlockSize> lb_rot;
+    rxmesh::LaunchBox<blockThreads> lb_rot;
     rx.prepare_launch_box(
         {rxmesh::Op::VV},
         lb_rot,
-        (void*)calculate_rotation_matrix<float, CUDABlockSize>);
+        (void*)calculate_rotation_matrix<float, blockThreads>);
 
 
     // launch box for b matrix calculation
-    rxmesh::LaunchBox<CUDABlockSize> lb_b_mat;
+    rxmesh::LaunchBox<blockThreads> lb_b_mat;
     rx.prepare_launch_box(
-        {rxmesh::Op::VV}, lb_b_mat, (void*)calculate_b<float, CUDABlockSize>);
+        {rxmesh::Op::VV}, lb_b_mat, (void*)calculate_b<float, blockThreads>);
 
 
     // how many times will arap algorithm run?
@@ -350,27 +347,25 @@ int main(int argc, char** argv)
         // process step
         for (int i = 0; i < iterations; i++) {
             // solver for rotation
-            calculate_rotation_matrix<float, CUDABlockSize>
-                <<<lb_rot.blocks, lb_rot.num_threads, lb_rot.smem_bytes_dyn>>>(
-                    rx.get_context(),
-                    ref_vertex_pos,
-                    deformed_vertex_pos,
-                    rotations,
-                    weight_matrix);
+            rx.run_kernel<blockThreads>(
+                lb_rot,
+                calculate_rotation_matrix<float, blockThreads>,
+                ref_vertex_pos,
+                deformed_vertex_pos,
+                rotations,
+                weight_matrix);
 
             // solve for position
-            calculate_b<float, CUDABlockSize>
-                <<<lb_b_mat.blocks,
-                   lb_b_mat.num_threads,
-                   lb_b_mat.smem_bytes_dyn>>>(rx.get_context(),
-                                              ref_vertex_pos,
-                                              deformed_vertex_pos,
-                                              rotations,
-                                              weight_matrix,
-                                              b_mat,
-                                              constraints);
+            rx.run_kernel<blockThreads>(lb_b_mat,
+                                        calculate_b<float, blockThreads>,
+                                        ref_vertex_pos,
+                                        deformed_vertex_pos,
+                                        rotations,
+                                        weight_matrix,
+                                        b_mat,
+                                        constraints);
 
-            laplace_mat.solve(b_mat, *deformed_vertex_pos_mat);
+            solver.solve(b_mat, *deformed_vertex_pos_mat);
         }
 
         // move mat to the host
