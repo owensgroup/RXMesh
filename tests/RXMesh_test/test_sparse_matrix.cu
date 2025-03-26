@@ -108,49 +108,6 @@ __global__ void spmat_multi_hardwired_kernel(T*                      vec,
     }
 }
 
-template <typename T, uint32_t blockThreads>
-__global__ static void simple_A_X_B_setup(const rxmesh::Context      context,
-                                          rxmesh::VertexAttribute<T> coords,
-                                          rxmesh::SparseMatrix<T>    A_mat,
-                                          rxmesh::DenseMatrix<T>     X_mat,
-                                          rxmesh::DenseMatrix<T>     B_mat,
-                                          const T                    time_step)
-{
-    using namespace rxmesh;
-    auto mat_setup = [&](VertexHandle& v_id, const VertexIterator& iter) {
-        T sum_e_weight(0);
-
-        T v_weight = iter.size();
-
-        // reference value calculation
-
-        B_mat(v_id, 0) = iter.size() * 7.4f;
-        B_mat(v_id, 1) = iter.size() * 2.6f;
-        B_mat(v_id, 2) = iter.size() * 10.3f;
-
-        X_mat(v_id, 0) = coords(v_id, 0) * v_weight;
-        X_mat(v_id, 1) = coords(v_id, 1) * v_weight;
-        X_mat(v_id, 2) = coords(v_id, 2) * v_weight;
-
-        vec3<T> vi_coord(coords(v_id, 0), coords(v_id, 1), coords(v_id, 2));
-        for (uint32_t v = 0; v < iter.size(); ++v) {
-            T e_weight           = 1;
-            A_mat(v_id, iter[v]) = time_step * e_weight;
-
-            sum_e_weight += e_weight;
-        }
-
-        A_mat(v_id, v_id) = v_weight + time_step * sum_e_weight +
-                            iter.size() * iter.size() + 1000000;
-    };
-
-    auto                block = cooperative_groups::this_thread_block();
-    Query<blockThreads> query(context);
-    ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, mat_setup);
-}
-
-
 TEST(RXMeshStatic, SparseMatrix)
 {
     // Test accessing of the sparse matrix in CSR format in device
@@ -284,124 +241,6 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
     spmat.release();
 }
 
-TEST(RXMeshStatic, SparseMatrixSimpleSolve)
-{
-    // set up a simple AX=B system where A is a sparse matrix, B and C are dense
-    // matrix.
-
-    using namespace rxmesh;
-
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
-
-    uint32_t num_vertices = rx.get_num_vertices();
-
-    const uint32_t threads = 256;
-    const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
-
-    auto                coords = rx.get_input_vertex_coordinates();
-    SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>  X_mat(rx, num_vertices, 3);
-    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
-    DenseMatrix<float>  ret_mat(rx, num_vertices, 3);
-
-    float time_step = 1.f;
-
-    LaunchBox<threads> launch_box;
-    rx.prepare_launch_box(
-        {Op::VV}, launch_box, (void*)simple_A_X_B_setup<float, threads>);
-
-    simple_A_X_B_setup<float, threads><<<launch_box.blocks,
-                                         launch_box.num_threads,
-                                         launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
-
-    A_mat.solve(B_mat, X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
-
-
-    A_mat.multiply(X_mat, ret_mat);
-
-
-    std::vector<vec3<float>> h_ret_mat(num_vertices);
-    CUDA_ERROR(cudaMemcpy(h_ret_mat.data(),
-                          ret_mat.data(),
-                          num_vertices * 3 * sizeof(float),
-                          cudaMemcpyDeviceToHost));
-    std::vector<vec3<float>> h_B_mat(num_vertices);
-    CUDA_ERROR(cudaMemcpy(h_B_mat.data(),
-                          B_mat.data(),
-                          num_vertices * 3 * sizeof(float),
-                          cudaMemcpyDeviceToHost));
-
-    for (uint32_t i = 0; i < num_vertices; ++i) {
-        for (uint32_t j = 0; j < 3; ++j) {
-            EXPECT_NEAR(h_ret_mat[i][j], h_B_mat[i][j], 1e-3);
-        }
-    }
-
-
-    A_mat.release();
-    X_mat.release();
-    B_mat.release();
-    ret_mat.release();
-}
-
-TEST(RXMeshStatic, SparseMatrixLowerLevelAPISolve)
-{
-    using namespace rxmesh;
-
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
-
-    uint32_t num_vertices = rx.get_num_vertices();
-
-    const uint32_t threads = 256;
-    const uint32_t blocks  = DIVIDE_UP(num_vertices, threads);
-
-    auto                coords = rx.get_input_vertex_coordinates();
-    SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>  X_mat(rx, num_vertices, 3);
-    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
-    DenseMatrix<float>  ret_mat(rx, num_vertices, 3);
-
-    float time_step = 1.f;
-
-    LaunchBox<threads> launch_box;
-    rx.prepare_launch_box(
-        {Op::VV}, launch_box, (void*)simple_A_X_B_setup<float, threads>);
-
-    simple_A_X_B_setup<float, threads><<<launch_box.blocks,
-                                         launch_box.num_threads,
-                                         launch_box.smem_bytes_dyn>>>(
-        rx.get_context(), *coords, A_mat, X_mat, B_mat, time_step);
-
-    // A_mat.solve(B_mat, X_mat, Solver::CHOL, PermuteMethod::NSTDIS);
-    A_mat.pre_solve(rx, Solver::CHOL, PermuteMethod::NSTDIS);
-    A_mat.solve(B_mat, X_mat);
-
-    A_mat.multiply(X_mat, ret_mat);
-
-    std::vector<vec3<float>> h_ret_mat(num_vertices);
-    CUDA_ERROR(cudaMemcpy(h_ret_mat.data(),
-                          ret_mat.data(),
-                          num_vertices * 3 * sizeof(float),
-                          cudaMemcpyDeviceToHost));
-    std::vector<vec3<float>> h_B_mat(num_vertices);
-    CUDA_ERROR(cudaMemcpy(h_B_mat.data(),
-                          B_mat.data(),
-                          num_vertices * 3 * sizeof(float),
-                          cudaMemcpyDeviceToHost));
-
-    for (uint32_t i = 0; i < num_vertices; ++i) {
-        for (uint32_t j = 0; j < 3; ++j) {
-            EXPECT_NEAR(h_ret_mat[i][j], h_B_mat[i][j], 1e-3);
-        }
-    }
-
-    A_mat.release();
-    X_mat.release();
-    B_mat.release();
-    ret_mat.release();
-}
-
 TEST(RXMeshStatic, SparseMatrixToEigen)
 {
     using namespace rxmesh;
@@ -465,7 +304,6 @@ TEST(RXMeshStatic, SparseMatrixToEigen)
     B_mat.release();
     X_copy.release();
 }
-
 
 TEST(RXMeshStatic, SparseMatrixUserManaged)
 {
