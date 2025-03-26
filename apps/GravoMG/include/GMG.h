@@ -73,11 +73,12 @@ struct GMG
     {
         m_num_rows = rx.get_num_vertices();
 
-        m_num_samples.push_back(m_num_rows);
+        //m_num_samples.push_back(m_num_rows);
         for (int i = 0; i < 16; i++) {
             int s = DIVIDE_UP(m_num_rows, std::pow(m_ratio, i));
             if (s > num_samples_threshold) {
                 m_num_samples.push_back(s);
+                std::cout << "\nNumber of samples for level " << i << ": " << s;
             }
         }
         m_num_levels = m_num_samples.size();
@@ -130,7 +131,7 @@ struct GMG
         // allocate CUB stuff here
         m_cub_temp_bytes = 0;
         cub::DeviceScan::ExclusiveSum(
-            m_d_cub_temp_storage,
+            nullptr,
             m_cub_temp_bytes,
             m_sample_neighbor_size[0].data(DEVICE),
             m_sample_neighbor_size_prefix[0].data(DEVICE),
@@ -162,6 +163,7 @@ struct GMG
 
 
         for (int l = 1; l < m_num_levels; ++l) {
+        for (int l = 1; l < 2 /*m_num_levels*/; ++l) {
 
             //============
             // 3) Clustering
