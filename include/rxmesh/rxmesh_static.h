@@ -643,11 +643,11 @@ class RXMeshStatic : public RXMesh
 
     /**
      * @brief Launching a kernel knowing its launch box
-     * @tparam ...ArgsT infered
+     * @tparam ...ArgsT inferred
      * @tparam blockThreads the block size
      * @param lb launch box populated via prepare_launch_box
      * @param kernel the kernel to launch
-     * @param stream to launch the kerenl on
+     * @param stream to launch the kernel on
      * @param ...args input parameters to the kernel
      */
     template <uint32_t blockThreads, typename KernelT, typename... ArgsT>

@@ -14,7 +14,7 @@
 
 struct arg
 {
-    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "nefertiti.obj";
+    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "dragon.obj";
     std::string output_folder       = STRINGIFY(OUTPUT_DIR);
     std::string perm_method         = "nstdis";
     std::string solver              = "chol";

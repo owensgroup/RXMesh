@@ -1,8 +1,11 @@
 #pragma once
 #include "rxmesh/attribute.h"
 #include "rxmesh/matrix/dense_matrix.h"
-#include "rxmesh/matrix/sparse_matrix.cuh"
+#include "rxmesh/matrix/sparse_matrix2.h"
 #include "rxmesh/rxmesh_static.h"
+
+#include "rxmesh/matrix/cholesky_solver.h"
+#include "rxmesh/matrix/lu_solver.h"
 
 #include "mcf_kernels.cuh"
 
@@ -62,7 +65,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void mcf_A_setup(
     const rxmesh::Context            context,
     const rxmesh::VertexAttribute<T> coords,
-    rxmesh::SparseMatrix<T>          A_mat,
+    rxmesh::SparseMatrix2<T>         A_mat,
     const bool                       use_uniform_laplace,  // for non-uniform
     const T                          time_step)
 {
@@ -143,8 +146,8 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
 
     auto coords = rx.get_input_vertex_coordinates();
 
-    SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
+    SparseMatrix2<float> A_mat(rx);
+    DenseMatrix<float>   B_mat(rx, num_vertices, 3);
 
     std::shared_ptr<DenseMatrix<float>> X_mat = coords->to_matrix();
 
@@ -181,22 +184,6 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                                             Arg.time_step);
 
 
-    // To Use LU, we have to move the data to the host
-    // A_mat.move(DEVICE, HOST);
-    // B_mat.move(DEVICE, HOST);
-    // X_mat->move(DEVICE, HOST);
-    // A_mat.solve(B_mat, *X_mat, Solver::LU, permute_method);
-
-    // Solving using QR or CHOL
-    // A_mat.solve(B_mat, *X_mat, Solver::QR, permute_method);
-    // A_mat.solve(B_mat, *X_mat, Solver::CHOL, permute_method);
-
-
-    // pre-solve
-    // A_mat.pre_solve(rx, Solver::CHOL, permute_method);
-    // Solve
-    // A_mat.solve(B_mat, *X_mat);
-
     Report report("MCF_Chol");
     report.command_line(Arg.argc, Arg.argv);
     report.device();
@@ -212,12 +199,25 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
 
     float total_time = 0;
 
+    CholeskySolver solver(&A_mat, permute_method);
+
+    // To Use LU, we have to move the data to the host
+    // LUSolver solver(&A_mat, permute_method);
+    // A_mat.move(DEVICE, HOST);
+    // B_mat.move(DEVICE, HOST);
+    // X_mat->move(DEVICE, HOST);
+
+    // pre-solve
+    // solver.pre_solve(rx);
+    // Solve
+    // solver.solve(B_mat, *X_mat);
+
     CPUTimer timer;
     GPUTimer gtimer;
 
     timer.start();
     gtimer.start();
-    A_mat.permute_alloc(permute_method);
+    solver.permute_alloc();
     timer.stop();
     gtimer.stop();
     RXMESH_INFO("permute_alloc took {} (ms), {} (ms)",
@@ -230,7 +230,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
 
     timer.start();
     gtimer.start();
-    A_mat.permute(rx, permute_method);
+    solver.permute(rx);
     timer.stop();
     gtimer.stop();
     RXMESH_INFO("permute took {} (ms), {} (ms)",
@@ -243,7 +243,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
 
     timer.start();
     gtimer.start();
-    A_mat.analyze_pattern(Solver::CHOL);
+    solver.analyze_pattern();
     timer.stop();
     gtimer.stop();
     RXMESH_INFO("analyze_pattern took {} (ms), {} (ms)",
@@ -257,7 +257,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
 
     timer.start();
     gtimer.start();
-    A_mat.post_analyze_alloc(Solver::CHOL);
+    solver.post_analyze_alloc();
     timer.stop();
     gtimer.stop();
     RXMESH_INFO("post_analyze_alloc took {} (ms), {} (ms)",
@@ -270,7 +270,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
 
     timer.start();
     gtimer.start();
-    A_mat.factorize(Solver::CHOL);
+    solver.factorize();
     timer.stop();
     gtimer.stop();
     RXMESH_INFO("factorize took {} (ms), {} (ms)",
@@ -283,7 +283,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
 
     timer.start();
     gtimer.start();
-    A_mat.solve(B_mat, *X_mat);
+    solver.solve(B_mat, *X_mat);
     timer.stop();
     gtimer.stop();
     RXMESH_INFO("solve took {} (ms), {} (ms)",
@@ -300,17 +300,17 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     // move the results to the host
     // if we use LU, the data will be on the host and we should not move the
     // device to the host
-     X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
+    X_mat->move(rxmesh::DEVICE, rxmesh::HOST);
 
     // copy the results to attributes
-     coords->from_matrix(X_mat.get());
+    coords->from_matrix(X_mat.get());
 
 #if USE_POLYSCOPE
-     polyscope::registerSurfaceMesh("old mesh",
-                                    rx.get_polyscope_mesh()->vertices,
-                                    rx.get_polyscope_mesh()->faces);
-     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-     polyscope::show();
+    polyscope::registerSurfaceMesh("old mesh",
+                                   rx.get_polyscope_mesh()->vertices,
+                                   rx.get_polyscope_mesh()->faces);
+    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    polyscope::show();
 #endif
 
     B_mat.release();
