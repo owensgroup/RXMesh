@@ -7,7 +7,9 @@
 #include "rxmesh/matrix/mgnd_permute.cuh"
 #include "rxmesh/matrix/nd_permute.cuh"
 #include "rxmesh/matrix/permute_util.h"
-#include "rxmesh/matrix/sparse_matrix.cuh"
+#include "rxmesh/matrix/sparse_matrix2.h"
+
+#include "rxmesh/matrix/cholesky_solver.h"
 
 #include "count_nnz_fillin.h"
 
@@ -44,9 +46,9 @@ void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
 
 template <typename T, typename EigeMatT>
-void with_metis(rxmesh::RXMeshStatic&          rx,
-                const rxmesh::SparseMatrix<T>& rx_mat,
-                const EigeMatT&                eigen_mat)
+void with_metis(rxmesh::RXMeshStatic&           rx,
+                const rxmesh::SparseMatrix2<T>& rx_mat,
+                const EigeMatT&                 eigen_mat)
 {
     EXPECT_TRUE(rx_mat.rows() == eigen_mat.rows());
     EXPECT_TRUE(rx_mat.cols() == eigen_mat.cols());
@@ -185,19 +187,20 @@ void with_gpu_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 }
 
 template <typename T, typename EigeMatT>
-void with_amd(rxmesh::RXMeshStatic&    rx,
-              rxmesh::SparseMatrix<T>& rx_mat,
-              const EigeMatT&          eigen_mat)
+void with_amd(rxmesh::RXMeshStatic&     rx,
+              rxmesh::SparseMatrix2<T>& rx_mat,
+              const EigeMatT&           eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
-    rx_mat.permute_alloc(rxmesh::PermuteMethod::SYMAMD);
-    rx_mat.permute(rx, rxmesh::PermuteMethod::SYMAMD);
+    rxmesh::CholeskySolver solver(&rx_mat, rxmesh::PermuteMethod::SYMAMD);
+    solver.permute_alloc();
+    solver.permute(rx);
 
-    const int* h_perm = rx_mat.get_h_permute();
+    const int* h_perm = solver.get_h_permute();
 
     std::memcpy(h_permute.data(),
-                rx_mat.get_h_permute(),
+                solver.get_h_permute(),
                 h_permute.size() * sizeof(int));
 
 
@@ -217,19 +220,20 @@ void with_amd(rxmesh::RXMeshStatic&    rx,
 }
 
 template <typename T, typename EigeMatT>
-void with_symrcm(rxmesh::RXMeshStatic&    rx,
-                 rxmesh::SparseMatrix<T>& rx_mat,
-                 const EigeMatT&          eigen_mat)
+void with_symrcm(rxmesh::RXMeshStatic&     rx,
+                 rxmesh::SparseMatrix2<T>& rx_mat,
+                 const EigeMatT&           eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
-    rx_mat.permute_alloc(rxmesh::PermuteMethod::SYMRCM);
-    rx_mat.permute(rx, rxmesh::PermuteMethod::SYMRCM);
+    rxmesh::CholeskySolver solver(&rx_mat, rxmesh::PermuteMethod::SYMRCM);
+    solver.permute_alloc();
+    solver.permute(rx);
 
-    const int* h_perm = rx_mat.get_h_permute();
+    const int* h_perm = solver.get_h_permute();
 
     std::memcpy(h_permute.data(),
-                rx_mat.get_h_permute(),
+                solver.get_h_permute(),
                 h_permute.size() * sizeof(int));
 
     EXPECT_TRUE(
@@ -261,7 +265,7 @@ TEST(Apps, NDReorder)
     // }
 
     // VV matrix
-    rxmesh::SparseMatrix<float> rx_mat(rx);
+    rxmesh::SparseMatrix2<float> rx_mat(rx);
 
     // populate an SPD matrix
     rx_mat.for_each([](int r, int c, float& val) {

@@ -1,4 +1,5 @@
-#include "rxmesh/matrix/sparse_matrix.cuh"
+#include "rxmesh/matrix/cholesky_solver.h"
+#include "rxmesh/matrix/sparse_matrix2.h"
 #include "rxmesh/query.cuh"
 #include "rxmesh/reduce_handle.h"
 #include "rxmesh/rxmesh_static.h"
@@ -9,7 +10,7 @@ using namespace rxmesh;
 template <uint32_t blockThreads>
 __global__ static void area_term(const Context              context,
                                  const VertexAttribute<int> v_bd,
-                                 SparseMatrix<cuComplex>    E)
+                                 SparseMatrix2<cuComplex>   E)
 {
     using namespace rxmesh;
 
@@ -37,7 +38,7 @@ __global__ static void area_term(const Context              context,
 template <uint32_t blockThreads>
 __global__ static void conformal_energy(const Context                context,
                                         const VertexAttribute<float> coord,
-                                        SparseMatrix<cuComplex>      E)
+                                        SparseMatrix2<cuComplex>     E)
 {
     using namespace rxmesh;
 
@@ -121,7 +122,7 @@ int main(int argc, char** argv)
     int          num_bd_vertices = rh.reduce(v_bd, cub::Sum(), 0);
 
     // compute conformal energy matrix Lc
-    SparseMatrix<cuComplex> Lc(rx);
+    SparseMatrix2<cuComplex> Lc(rx);
     Lc.reset(make_cuComplex(0.f, 0.f), LOCATION_ALL);
     rxmesh::LaunchBox<CUDABlockSize> lb;
     rx.prepare_launch_box(
@@ -141,7 +142,7 @@ int main(int argc, char** argv)
     DenseMatrix<cuComplex> eb(rx, rx.get_num_vertices(), 1);
     eb.reset(make_cuComplex(0.f, 0.f), LOCATION_ALL);
 
-    SparseMatrix<cuComplex> B(rx);
+    SparseMatrix2<cuComplex> B(rx);
     B.reset(make_cuComplex(0.f, 0.f), LOCATION_ALL);
 
     float nb = 1.f / std::sqrt(float(num_bd_vertices));
@@ -161,7 +162,8 @@ int main(int argc, char** argv)
     uv_mat.fill_random();
 
     // factorize the matrix
-    Lc.pre_solve(rx, Solver::CHOL, PermuteMethod::NSTDIS);
+    CholeskySolver solver(&Lc);
+    solver.pre_solve(rx);
 
     // the power method
     int iterations = 32;
@@ -178,7 +180,7 @@ int main(int argc, char** argv)
                                            cuCmulf(eb(vh, 0), T2));
                            });
 
-        Lc.solve(T1, uv_mat);
+        solver.solve(T1, uv_mat);
 
         float norm = uv_mat.norm2();
 

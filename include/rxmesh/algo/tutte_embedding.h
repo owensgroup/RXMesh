@@ -4,7 +4,8 @@
 
 #include "rxmesh/geometry_util.cuh"
 
-#include "rxmesh/matrix/sparse_matrix.cuh"
+#include "rxmesh/matrix/lu_solver.h"
+#include "rxmesh/matrix/sparse_matrix2.h"
 
 namespace rxmesh {
 
@@ -58,7 +59,7 @@ template <typename T, typename BoundaryT, int blockThreads>
 __global__ static void setup_L(const Context                    context,
                                const VertexAttribute<T>         coordinates,
                                const VertexAttribute<BoundaryT> v_boundary,
-                               SparseMatrix<T>                  L)
+                               SparseMatrix2<T>                 L)
 {
 
     auto func = [&](const EdgeHandle& eh, const VertexIterator& iter) {
@@ -210,7 +211,7 @@ inline void harmonic(RXMeshStatic&                     rx,
                      const VertexAttribute<T>&         coordinates,
                      const VertexAttribute<BoundaryT>& v_boundary,
                      VertexAttribute<T>&               uv,
-                     SparseMatrix<T>&                  L)
+                     SparseMatrix2<T>&                 L)
 {
     auto rhs = *uv.to_matrix();
     auto sol =
@@ -234,7 +235,9 @@ inline void harmonic(RXMeshStatic&                     rx,
     rhs.move(DEVICE, HOST);
     sol.move(DEVICE, HOST);
 
-    L.solve(rhs, sol, Solver::LU, PermuteMethod::NSTDIS);
+    LUSolver solver(&L, PermuteMethod::NSTDIS);
+    solver.pre_solver(rx);
+    solver.solve(rhs, sol);
 
     // sol.move(DEVICE, HOST);
 
@@ -252,7 +255,7 @@ inline void tutte_embedding(RXMeshStatic&               rx,
                             const VertexAttribute<T>&   coordinates,
                             VertexAttribute<BoundaryT>& v_boundary,
                             VertexAttribute<T>&         uv,
-                            SparseMatrix<T>&            L)
+                            SparseMatrix2<T>&           L)
 {
     detail::map_vertices_to_circle(rx, coordinates, v_boundary, uv);
 
@@ -265,7 +268,7 @@ inline void tutte_embedding(RXMeshStatic&                     rx,
                             const VertexAttribute<BoundaryT>& v_boundary,
                             VertexAttribute<T>&               uv)
 {
-    SparseMatrix<T> L(rx);
+    SparseMatrix2<T> L(rx);
 
     detail::map_vertices_to_circle(rx, coordinates, v_boundary, uv);
 
@@ -281,7 +284,7 @@ inline void tutte_embedding(RXMeshStatic&             rx,
 {
     auto v_boundary = *rx.add_vertex_attribute<bool>("rx:vBnd", 1);
 
-    SparseMatrix<T> L(rx);
+    SparseMatrix2<T> L(rx);
 
     rx.get_boundary_vertices(v_boundary);
 

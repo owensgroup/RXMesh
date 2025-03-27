@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rxmesh/matrix/sparse_matrix.cuh"
+#include "rxmesh/matrix/sparse_matrix2.h"
 
 #include <Eigen/Sparse>
 
@@ -108,7 +108,7 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
  * Eigen::SimplicialCholeskyBase::analyzePattern_preordered
  */
 template <typename T>
-int count_nnz_fillin(const rxmesh::SparseMatrix<T>& mat)
+int count_nnz_fillin(const rxmesh::SparseMatrix2<T>& mat)
 {
     const int size = mat.rows();
 
