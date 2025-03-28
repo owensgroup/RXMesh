@@ -26,6 +26,7 @@ struct SolverBase
                        DenseMatrix<Type>& X_mat,
                        cudaStream_t       stream = NULL) = 0;
 
+   protected:
     SpMatT* m_mat;
 };
 

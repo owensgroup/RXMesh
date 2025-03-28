@@ -9,6 +9,8 @@
 
 #include "mcf_kernels.cuh"
 
+#include "rxmesh/matrix/cg_solver.h"
+
 template <typename T>
 void axpy(rxmesh::RXMeshStatic&             rx,
           rxmesh::VertexAttribute<T>&       y,
@@ -71,149 +73,64 @@ void mcf_cg(rxmesh::RXMeshStatic& rx)
     // Different attributes used throughout the application
     auto input_coord = rx.get_input_vertex_coordinates();
 
-    // S in CG
-    auto S = rx.add_vertex_attribute<T>("S", 3, rxmesh::DEVICE, rxmesh::SoA);
-    S->reset(0.0, rxmesh::DEVICE);
-
-    // P in CG
-    auto P = rx.add_vertex_attribute<T>("P", 3, rxmesh::DEVICE, rxmesh::SoA);
-    P->reset(0.0, rxmesh::DEVICE);
-
-    // R in CG
-    auto R = rx.add_vertex_attribute<T>("R", 3, rxmesh::DEVICE, rxmesh::SoA);
-    R->reset(0.0, rxmesh::DEVICE);
-
-    // B in CG
+    // RHS
     auto B = rx.add_vertex_attribute<T>("B", 3, rxmesh::DEVICE, rxmesh::SoA);
     B->reset(0.0, rxmesh::DEVICE);
 
-    // X in CG (the output)
+    // the unknowns
     auto X = rx.add_vertex_attribute<T>("X", 3, rxmesh::LOCATION_ALL);
     X->copy_from(*input_coord, rxmesh::DEVICE, rxmesh::DEVICE);
 
-    VertexReduceHandle<T> reduce_handle(*X);
+    // init kernel to initialize RHS (B)
+    LaunchBox<blockThreads> lb;
+    rx.prepare_launch_box(
+        {Op::VV}, lb, (void*)init_B<T, blockThreads>, !Arg.use_uniform_laplace);
+    init_B<T, blockThreads><<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
+        rx.get_context(), *X, *B, Arg.use_uniform_laplace);
 
-    // RXMesh launch box
-    LaunchBox<blockThreads> launch_box_init_B;
-    LaunchBox<blockThreads> launch_box_matvec;
+    // matvec launch box
     rx.prepare_launch_box({rxmesh::Op::VV},
-                          launch_box_init_B,
-                          (void*)init_B<T, blockThreads>,
-                          !Arg.use_uniform_laplace);
-    rx.prepare_launch_box({rxmesh::Op::VV},
-                          launch_box_matvec,
+                          lb,
                           (void*)rxmesh_matvec<T, blockThreads>,
                           !Arg.use_uniform_laplace);
 
 
-    // init kernel to initialize RHS (B)
-    init_B<T, blockThreads><<<launch_box_init_B.blocks,
-                              launch_box_init_B.num_threads,
-                              launch_box_init_B.smem_bytes_dyn>>>(
-        rx.get_context(), *X, *B, Arg.use_uniform_laplace);
+    CGSolver<T, VertexHandle> solver(
+        rx,
+        [&](const VertexAttribute<T>& in,
+            VertexAttribute<T>&       out,
+            cudaStream_t              stream) {
+            rx.run_kernel(lb,
+                          rxmesh_matvec<T, blockThreads>,
+                          stream,
+                          *input_coord,
+                          in,
+                          out,
+                          Arg.use_uniform_laplace,
+                          Arg.time_step);
+        },
+        X->get_num_attributes(),
+        Arg.max_num_cg_iter,
+        0.0,
+        Arg.cg_tolerance * Arg.cg_tolerance);
 
-    // CG scalars
-    T alpha(0), beta(0), delta_new(0), delta_old(0);
+    solver.pre_solve(X.get(), B.get());
 
     GPUTimer timer;
     timer.start();
 
-    // s = Ax
-    rxmesh_matvec<T, blockThreads>
-        <<<launch_box_matvec.blocks,
-           launch_box_matvec.num_threads,
-           launch_box_matvec.smem_bytes_dyn>>>(rx.get_context(),
-                                               *input_coord,
-                                               *X,
-                                               *S,
-                                               Arg.use_uniform_laplace,
-                                               Arg.time_step);
-
-    // r = b - s = b - Ax
-    // p=rk
-    init_PR(rx, *B, *S, *R, *P);
-
-
-    // delta_new = <r,r>
-    delta_new = reduce_handle.norm2(*R);
-    delta_new *= delta_new;
-
-    const T delta_0(delta_new);
-
-    uint32_t num_cg_iter_taken = 0;
-
-    GPUTimer matvec_timer;
-    float    matvec_time = 0;
-
-
-    while (num_cg_iter_taken < Arg.max_num_cg_iter) {
-        // s = Ap
-        matvec_timer.start();
-        rxmesh_matvec<T, blockThreads>
-            <<<launch_box_matvec.blocks,
-               launch_box_matvec.num_threads,
-               launch_box_matvec.smem_bytes_dyn>>>(rx.get_context(),
-                                                   *input_coord,
-                                                   *P,
-                                                   *S,
-                                                   Arg.use_uniform_laplace,
-                                                   Arg.time_step);
-        matvec_timer.stop();
-        matvec_time += matvec_timer.elapsed_millis();
-
-        // alpha = delta_new / <s,p>
-        alpha = reduce_handle.dot(*S, *P);
-        alpha = delta_new / alpha;
-
-        // x =  alpha*p + x
-        axpy(rx, *X, *P, alpha, 1.f);
-
-        // r = - alpha*s + r
-        axpy(rx, *R, *S, -alpha, 1.f);
-
-
-        // delta_old = delta_new
-        CUDA_ERROR(cudaStreamSynchronize(0));
-        delta_old = delta_new;
-
-
-        // delta_new = <r,r>
-        delta_new = reduce_handle.norm2(*R);
-        delta_new *= delta_new;
-
-        CUDA_ERROR(cudaStreamSynchronize(0));
-
-
-        // exit if error is getting too low across three coordinates
-        if (delta_new < Arg.cg_tolerance * Arg.cg_tolerance * delta_0) {
-            break;
-        }
-
-        // beta = delta_new/delta_old
-        beta = delta_new / delta_old;
-
-        // p = beta*p + r
-        axpy(rx, *P, *R, 1.f, beta);
-
-        ++num_cg_iter_taken;
-
-        CUDA_ERROR(cudaStreamSynchronize(0));
-    }
+    solver.solve(X.get(), B.get());
 
     timer.stop();
     CUDA_ERROR(cudaDeviceSynchronize());
-    CUDA_ERROR(cudaGetLastError());
     CUDA_ERROR(cudaProfilerStop());
 
 
     RXMESH_TRACE(
-        "mcf_rxmesh() took {} (ms) and {} iterations (i.e., {} ms/iter), "
-        "mat_vec time {} (ms) (i.e., {} ms/iter)",
+        "mcf_rxmesh() took {} (ms) and {} iterations (i.e., {} ms/iter)",
         timer.elapsed_millis(),
-        num_cg_iter_taken,
-        timer.elapsed_millis() / float(num_cg_iter_taken),
-        matvec_time,
-        matvec_time / float(num_cg_iter_taken));
+        solver.iter_taken(),
+        timer.elapsed_millis() / float(solver.iter_taken()));
 
     // move output to host
     X->move(rxmesh::DEVICE, rxmesh::HOST);
@@ -225,25 +142,24 @@ void mcf_cg(rxmesh::RXMeshStatic& rx)
                                    rx.get_polyscope_mesh()->vertices,
                                    rx.get_polyscope_mesh()->faces);
     rx.get_polyscope_mesh()->updateVertexPositions(*X);
-    
+
     polyscope::show();
 #endif
-    
+
     // Finalize report
-    report.add_member("start_residual", delta_0);
-    report.add_member("end_residual", delta_new);
-    report.add_member("num_cg_iter_taken", num_cg_iter_taken);
+    report.add_member("start_residual", solver.start_residual());
+    report.add_member("end_residual", solver.final_residual());
+    report.add_member("num_cg_iter_taken", solver.iter_taken());
     report.add_member("total_time (ms)", timer.elapsed_millis());
-    report.add_member("matvec_time (ms)", matvec_time);
     TestData td;
     td.test_name   = "MCF";
-    td.num_threads = launch_box_matvec.num_threads;
-    td.num_blocks  = launch_box_matvec.blocks;
-    td.dyn_smem    = launch_box_matvec.smem_bytes_dyn;
-    td.static_smem = launch_box_matvec.smem_bytes_static;
-    td.num_reg     = launch_box_matvec.num_registers_per_thread;
+    td.num_threads = lb.num_threads;
+    td.num_blocks  = lb.blocks;
+    td.dyn_smem    = lb.smem_bytes_dyn;
+    td.static_smem = lb.smem_bytes_static;
+    td.num_reg     = lb.num_registers_per_thread;
     td.passed.push_back(true);
-    td.time_ms.push_back(timer.elapsed_millis() / float(num_cg_iter_taken));
+    td.time_ms.push_back(timer.elapsed_millis() / float(solver.iter_taken()));
     report.add_test(td);
     report.write(Arg.output_folder + "/rxmesh",
                  "MCF_RXMesh_" + extract_file_name(Arg.obj_file_name));

@@ -5,6 +5,8 @@
 
 #include "rxmesh/arg_ops.h"
 
+#include "rxmesh/rxmesh.h"
+
 namespace rxmesh {
 namespace detail {
 
@@ -35,7 +37,25 @@ class ReduceHandle
      * operations
      */
     ReduceHandle(const Attribute<T, HandleT>& attr)
-        : m_max_num_patches(attr.m_max_num_patches)
+        : ReduceHandle(attr.m_max_num_patches)
+    {
+    }
+
+    /**
+     * @brief Constructor which allocates internal memory used in all reduce
+     * operations
+     * @param rx could be instance of RXMeshStatic or RXMeshDynamic
+     */
+    ReduceHandle(const RXMesh& rx) : ReduceHandle(rx.get_num_patches())
+    {
+    }
+
+    /**
+     * @brief Constructor which allocates internal memory used in all reduce
+     * operations
+     * @param num_patches is the number of patches in the mesh
+     */
+    ReduceHandle(const uint32_t num_patches) : m_max_num_patches(num_patches)
     {
         size_t type_size = std::max(sizeof(T), sizeof(KeyValue));
 
