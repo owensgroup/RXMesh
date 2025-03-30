@@ -48,7 +48,7 @@ struct LUSolver : public DirectSolver<SpMatT, DenseMatOrder>
      * @brief wrapper for cuSolver API for solving linear systems using cuSolver
      * High-level API
      */
-    void cusolver_lu(T* d_b, T* d_x, cudaStream_t stream)
+    void cusolver_lu(T* h_b, T* h_x, cudaStream_t stream)
     {
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
 
@@ -66,10 +66,10 @@ struct LUSolver : public DirectSolver<SpMatT, DenseMatOrder>
                                                    m_mat->val_ptr(HOST),
                                                    m_mat->row_ptr(HOST),
                                                    m_mat->col_idx(HOST),
-                                                   d_b,
+                                                   h_b,
                                                    tol,
                                                    permute_to_int(),
-                                                   d_x,
+                                                   h_x,
                                                    &singularity));
         }
 
@@ -81,10 +81,10 @@ struct LUSolver : public DirectSolver<SpMatT, DenseMatOrder>
                                                    m_mat->val_ptr(HOST),
                                                    m_mat->row_ptr(HOST),
                                                    m_mat->col_idx(HOST),
-                                                   d_b,
+                                                   h_b,
                                                    tol,
                                                    permute_to_int(),
-                                                   d_x,
+                                                   h_x,
                                                    &singularity));
         }
 
@@ -96,10 +96,10 @@ struct LUSolver : public DirectSolver<SpMatT, DenseMatOrder>
                                                    m_mat->val_ptr(HOST),
                                                    m_mat->row_ptr(HOST),
                                                    m_mat->col_idx(HOST),
-                                                   d_b,
+                                                   h_b,
                                                    tol,
                                                    permute_to_int(),
-                                                   d_x,
+                                                   h_x,
                                                    &singularity));
         }
         if constexpr (std::is_same_v<T, cuDoubleComplex>) {
@@ -110,17 +110,17 @@ struct LUSolver : public DirectSolver<SpMatT, DenseMatOrder>
                                                    m_mat->val_ptr(HOST),
                                                    m_mat->row_ptr(HOST),
                                                    m_mat->col_idx(HOST),
-                                                   d_b,
+                                                   h_b,
                                                    tol,
                                                    permute_to_int(),
-                                                   d_x,
+                                                   h_x,
                                                    &singularity));
         }
 
 
         if (0 <= singularity) {
             RXMESH_WARN(
-                "QRkySolver::cusolver_qr() The matrix is "
+                "LUSolver::cusolver_lu() The matrix is "
                 "singular at row {} under tol ({})",
                 singularity,
                 tol);

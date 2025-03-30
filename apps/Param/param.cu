@@ -18,7 +18,11 @@ void parameterize(RXMeshStatic& rx)
 
     ProblemT problem(rx);
 
-    NetwtonSolver newton_solver(problem, Solver::LU);
+    using HessMatT = typename ProblemT::HessMatT;
+
+    LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+
+    NetwtonSolver newton_solver(problem, &solver);
 
     // TODO this is a AoS and should be converted into SoA
     auto rest_shape =
@@ -116,8 +120,8 @@ void parameterize(RXMeshStatic& rx)
 
             if (M.determinant() <= 0.0) {
                 // assert(false);
-                //  TODO
-                //  return (ScalarT)INFINITY;
+                // TODO
+                // return (ActiveT)INFINITY;
             }
 
             // Get constant 2D rest shape and area of triangle t

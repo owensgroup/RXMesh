@@ -26,6 +26,8 @@ struct DenseMatrix
 {
     using IndexT = int;
 
+    static constexpr int OrderT = Order;
+
     template <typename U>
     friend class SparseMatrix;
 

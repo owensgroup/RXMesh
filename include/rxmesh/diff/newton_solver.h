@@ -4,31 +4,39 @@
 
 #include "rxmesh/diff/armijo_condition.h"
 
+#include "rxmesh/matrix/cg_solver.h"
+#include "rxmesh/matrix/cholesky_solver.h"
+#include "rxmesh/matrix/lu_solver.h"
+#include "rxmesh/matrix/qr_solver.h"
+
 namespace rxmesh {
 
-template <typename T, int VariableDim, typename ObjHandleT>
+template <typename T, int VariableDim, typename ObjHandleT, typename SolverT>
 struct NetwtonSolver
 {
-    DiffScalarProblem<T, VariableDim, ObjHandleT>& problem;
-    DenseMatrix<T, Eigen::RowMajor>                dir;
-    std::shared_ptr<Attribute<T, ObjHandleT>>      temp_objective;
-    Solver                                         solver;
+
+    using DiffProblemT = DiffScalarProblem<T, VariableDim, ObjHandleT>;
+    using HessMatT     = typename DiffProblemT::HessMatT;
+    using DenseMatT    = typename DiffProblemT::DenseMatT;
+
+    DiffProblemT&                             problem;
+    DenseMatT                                 dir;
+    std::shared_ptr<Attribute<T, ObjHandleT>> temp_objective;
+    SolverT*                                  solver;
 
 
     /**
      * @brief
      */
-    NetwtonSolver(DiffScalarProblem<T, VariableDim, ObjHandleT>& p, Solver s)
+    NetwtonSolver(DiffProblemT& p, SolverT* s)
         : problem(p),
-          dir(DenseMatrix<T, Eigen::RowMajor>(p.rx,
-                                              p.grad.rows(),
-                                              p.grad.cols())),
+          dir(DenseMatT(p.rx, p.grad.rows(), p.grad.cols())),
           temp_objective(
               p.rx.add_attribute_like("temp_objective", *p.objective)),
           solver(s)
     {
         // TODO
-        // hess.pre_solve(rx, Solver::CHOL);
+        // solver->pre_solve();
 
         dir.reset(0, LOCATION_ALL);
     }
@@ -50,18 +58,35 @@ struct NetwtonSolver
         // TODO we should refactor (or at least analyze_pattern) once
         problem.grad.multiply(T(-1.f), stream);
 
-        if (solver == Solver::CHOL || solver == Solver::QR) {
-            problem.hess.solve(
-                problem.grad.data(), dir.data(), solver, PermuteMethod::NSTDIS);
-        } else if (solver == Solver::LU) {
-            problem.grad.move(DEVICE, HOST);
-            problem.hess.move(DEVICE, HOST);
-            problem.hess.solve(problem.grad.data(HOST),
-                               dir.data(HOST),
-                               solver,
-                               PermuteMethod::NSTDIS);
+
+        // LU
+        if constexpr (std::is_base_of_v<LUSolver<HessMatT, DenseMatT::OrderT>,
+                                        SolverT>) {
+            problem.grad.move(DEVICE, HOST, stream);
+            problem.hess.move(DEVICE, HOST, stream);
+            CUDA_ERROR(cudaStreamSynchronize(stream));
+
+            solver->pre_solve(problem.rx);
+            solver->solve(problem.grad, dir);
+
             dir.move(HOST, DEVICE);
         }
+
+        // Cholesky or QR
+        if constexpr (std::is_base_of_v<
+                          CholeskySolver<HessMatT, DenseMatT::OrderT>,
+                          SolverT> ||
+                      std::is_base_of_v<QRSolver<HessMatT>, SolverT>) {
+
+            solver->pre_solve(problem.rx);
+            solver->solve(problem.grad, dir);
+        }
+
+        // Iterative (CG)
+        // if constexpr (std::is_base_of<IterativeSolverBase, SolverT>) {
+        //    solver->pre_solve(problem.rx);
+        //    solver->solve(&problem.grad, &dir);
+        //}
     }
 
 

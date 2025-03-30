@@ -16,6 +16,8 @@ namespace rxmesh {
 template <typename T, int K>
 struct HessianSparseMatrix : public SparseMatrix2<T>
 {
+    using Type = T;
+
     static constexpr int K_ = K;
 
     using ScalarT = Scalar<T, K, true>;
@@ -24,7 +26,7 @@ struct HessianSparseMatrix : public SparseMatrix2<T>
 
 
     HessianSparseMatrix(const RXMeshStatic& rx, Op op = Op::VV)
-        : SparseMatrix2<T>(rx, K)
+        : SparseMatrix2<T>(rx, op, K)
     {
     }
 

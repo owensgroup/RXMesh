@@ -22,9 +22,12 @@ namespace rxmesh {
 template <typename T, int VariableDim, typename ObjHandleT>
 struct DiffScalarProblem
 {
+    using HessMatT  = HessianSparseMatrix<T, VariableDim>;
+    using DenseMatT = DenseMatrix<T, Eigen::RowMajor>;
+
     RXMeshStatic&                                     rx;
-    DenseMatrix<T, Eigen::RowMajor>                   grad;
-    HessianSparseMatrix<T, VariableDim>               hess;
+    DenseMatT                                         grad;
+    HessMatT                                          hess;
     std::shared_ptr<Attribute<T, ObjHandleT>>         objective;
     std::vector<std::shared_ptr<Term<T, ObjHandleT>>> terms;
 
@@ -34,11 +37,8 @@ struct DiffScalarProblem
      */
     DiffScalarProblem(RXMeshStatic& rx)
         : rx(rx),
-          grad(
-              DenseMatrix<T, Eigen::RowMajor>(rx,
-                                              rx.get_num_elements<ObjHandleT>(),
-                                              VariableDim)),
-          hess(HessianSparseMatrix<T, VariableDim>(rx)),
+          grad(DenseMatT(rx, rx.get_num_elements<ObjHandleT>(), VariableDim)),
+          hess(HessMatT(rx)),
           objective(rx.add_vertex_attribute<T>("objective", VariableDim))
 
     {

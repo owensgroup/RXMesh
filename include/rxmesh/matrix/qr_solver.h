@@ -433,7 +433,7 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
 
         if (0 <= singularity) {
             RXMESH_WARN(
-                "QRkySolver::cusolver_qr() The matrix is "
+                "QRSolver::cusolver_qr() The matrix is "
                 "singular at row {} under tol ({})",
                 singularity,
                 tol);
