@@ -4,13 +4,13 @@
 
 namespace rxmesh {
 
-template <typename SpMatT>
-struct LUSolver : public DirectSolver<SpMatT>
+template <typename SpMatT, int DenseMatOrder = Eigen::ColMajor>
+struct LUSolver : public DirectSolver<SpMatT, DenseMatOrder>
 {
     using T = typename SpMatT::Type;
 
     LUSolver(SpMatT* mat, PermuteMethod perm = PermuteMethod::NSTDIS)
-        : DirectSolver<SpMatT>(mat, perm)
+        : DirectSolver<SpMatT, DenseMatOrder>(mat, perm)
     {
     }
 
@@ -31,9 +31,9 @@ struct LUSolver : public DirectSolver<SpMatT>
      * the host. After solving, moving B to the device is the caller's
      * responsiblity
      */
-    virtual void solve(DenseMatrix<Type>& B_mat,
-                       DenseMatrix<Type>& X_mat,
-                       cudaStream_t       stream = NULL) override
+    virtual void solve(DenseMatrix<Type, DenseMatOrder>& B_mat,
+                       DenseMatrix<Type, DenseMatOrder>& X_mat,
+                       cudaStream_t                      stream = NULL) override
     {
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
         for (int i = 0; i < B_mat.cols(); ++i) {

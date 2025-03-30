@@ -18,14 +18,14 @@ namespace rxmesh {
  * @brief abstract class for direct solvers--mainly to implement the permute
  * method that is common among all direct solvers
  */
-template <typename SpMatT>
-struct DirectSolver : public SolverBase<SpMatT>
+template <typename SpMatT, int DenseMatOrder = Eigen::ColMajor>
+struct DirectSolver : public SolverBase<SpMatT, DenseMatOrder>
 {
     using IndexT = typename SpMatT::IndexT;
     using Type   = typename SpMatT::Type;
 
     DirectSolver(SpMatT* mat, PermuteMethod perm)
-        : SolverBase<SpMatT>(mat),
+        : SolverBase<SpMatT, DenseMatOrder>(mat),
           m_perm(perm),
           m_perm_allocated(false),
           m_use_permute(false)

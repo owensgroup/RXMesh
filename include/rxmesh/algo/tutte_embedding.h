@@ -236,7 +236,7 @@ inline void harmonic(RXMeshStatic&                     rx,
     sol.move(DEVICE, HOST);
 
     LUSolver solver(&L, PermuteMethod::NSTDIS);
-    solver.pre_solver(rx);
+    solver.pre_solve(rx);
     solver.solve(rhs, sol);
 
     // sol.move(DEVICE, HOST);

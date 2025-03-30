@@ -5,13 +5,13 @@
 #include "cusolverSp_LOWLEVEL_PREVIEW.h"
 namespace rxmesh {
 
-template <typename SpMatT>
-struct QRSolver : public DirectSolver<SpMatT>
+template <typename SpMatT, int DenseMatOrder = Eigen::ColMajor>
+struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
 {
     using T = typename SpMatT::Type;
 
     QRSolver(SpMatT* mat, PermuteMethod perm = PermuteMethod::NSTDIS)
-        : DirectSolver<SpMatT>(mat, perm),
+        : DirectSolver<SpMatT, DenseMatOrder>(mat, perm),
           m_internalDataInBytes(0),
           m_workspaceInBytes(0),
           m_solver_buffer(nullptr)
@@ -35,9 +35,9 @@ struct QRSolver : public DirectSolver<SpMatT>
     }
 
 
-    virtual void solve(DenseMatrix<Type>& B_mat,
-                       DenseMatrix<Type>& X_mat,
-                       cudaStream_t       stream = NULL) override
+    virtual void solve(DenseMatrix<Type, DenseMatOrder>& B_mat,
+                       DenseMatrix<Type, DenseMatOrder>& X_mat,
+                       cudaStream_t                      stream = NULL) override
     {
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
         for (int i = 0; i < B_mat.cols(); ++i) {
@@ -51,9 +51,9 @@ struct QRSolver : public DirectSolver<SpMatT>
      * solve the matrix in one API call. This API is slows specially when
      * solving multiple rhs.
      */
-    void solve_hl_api(const DenseMatrix<T>& B_mat,
-                      DenseMatrix<T>&       X_mat,
-                      cudaStream_t          stream = NULL)
+    void solve_hl_api(const DenseMatrix<T, DenseMatOrder>& B_mat,
+                      DenseMatrix<T, DenseMatOrder>&       X_mat,
+                      cudaStream_t                         stream = NULL)
     {
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
 

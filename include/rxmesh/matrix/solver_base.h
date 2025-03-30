@@ -5,9 +5,10 @@
 #include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/matrix/sparse_matrix2.h"
 
+#include <Eigen/Dense>
 namespace rxmesh {
 
-template <typename SpMatT>
+template <typename SpMatT, int DenseMatOrder = Eigen::ColMajor>
 struct SolverBase
 {
     using Type = typename SpMatT::Type;
@@ -22,9 +23,9 @@ struct SolverBase
 
     virtual void pre_solve(RXMeshStatic& rx) = 0;
 
-    virtual void solve(DenseMatrix<Type>& B_mat,
-                       DenseMatrix<Type>& X_mat,
-                       cudaStream_t       stream = NULL) = 0;
+    virtual void solve(DenseMatrix<Type, DenseMatOrder>& B_mat,
+                       DenseMatrix<Type, DenseMatOrder>& X_mat,
+                       cudaStream_t                      stream = NULL) = 0;
 
    protected:
     SpMatT* m_mat;
