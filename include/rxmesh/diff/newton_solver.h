@@ -26,7 +26,7 @@ struct NetwtonSolver
 
 
     /**
-     * @brief
+     * @brief Newton solver 
      */
     NetwtonSolver(DiffProblemT& p, SolverT* s)
         : problem(p),
@@ -42,7 +42,7 @@ struct NetwtonSolver
     }
 
     /**
-     * @brief
+     * @brief 
      */
     inline void solve(cudaStream_t stream = NULL)
     {
@@ -51,7 +51,7 @@ struct NetwtonSolver
     }
 
     /**
-     * @brief
+     * @brief solve to get newtown direction 
      */
     inline void newton_direction(cudaStream_t stream = NULL)
     {
@@ -91,7 +91,7 @@ struct NetwtonSolver
 
 
     /**
-     * @brief
+     * @brief line search 
      */
     inline void line_search(const T      s_max        = 1.0,
                             const T      shrink       = 0.8,

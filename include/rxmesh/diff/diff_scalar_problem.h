@@ -57,10 +57,10 @@ struct DiffScalarProblem
      * @param oreinted
      */
     template <Op       op,
-              bool     ProjectHess,
+              bool     ProjectHess  = false,
               uint32_t blockThreads = 256,
               typename LambdaT      = void>
-    void add_term(RXMeshStatic& rx, LambdaT t, bool oreinted = false)
+    void add_term(LambdaT t, bool oreinted = false)
     {
 
         constexpr int ElementValence = element_valence<op>();

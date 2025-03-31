@@ -94,7 +94,7 @@ void parameterize(RXMeshStatic& rx)
 
     // add energy term
     problem.template add_term<Op::FV, true>(
-        rx, [=] __device__(const auto& fh, const auto& iter, auto& objective) {
+        [=] __device__(const auto& fh, const auto& iter, auto& objective) {
             // fh is a face handle
             // iter is an iterator over fh's vertices
             // objective is the uv coordinates
