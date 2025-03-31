@@ -12,7 +12,7 @@ void parameterize(RXMeshStatic& rx)
 {
     constexpr int VariableDim = 2;
 
-    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle>;
+    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
 
     auto coordinates = *rx.get_input_vertex_coordinates();
 

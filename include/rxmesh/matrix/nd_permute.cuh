@@ -1879,7 +1879,8 @@ struct MinDegreeNode
     }
 };
 
-std::vector<int> minimum_degree_ordering_avg_weights(const Graph<int> &graph)
+inline std::vector<int> minimum_degree_ordering_avg_weights(
+    const Graph<int>& graph)
 {
     const int n = graph.n;
 

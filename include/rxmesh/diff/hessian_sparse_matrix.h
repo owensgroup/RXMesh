@@ -25,6 +25,10 @@ struct HessianSparseMatrix : public SparseMatrix2<T>
     using IndexT = typename SparseMatrix2<T>::IndexT;
 
 
+    HessianSparseMatrix() : SparseMatrix2<T>()
+    {
+    }
+
     HessianSparseMatrix(const RXMeshStatic& rx, Op op = Op::VV)
         : SparseMatrix2<T>(rx, op, K)
     {

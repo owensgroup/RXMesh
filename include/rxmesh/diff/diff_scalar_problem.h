@@ -19,11 +19,14 @@ namespace rxmesh {
  * @tparam VariableDim the dimensions of the active variable defined on each
  * mesh element under consideration (e.g., 2 for mesh parametrization)
  */
-template <typename T, int VariableDim, typename ObjHandleT>
+template <typename T, int VariableDim, typename ObjHandleT, bool WithHess>
 struct DiffScalarProblem
 {
     using HessMatT  = HessianSparseMatrix<T, VariableDim>;
     using DenseMatT = DenseMatrix<T, Eigen::RowMajor>;
+
+    static constexpr bool WithHessian = WithHess;
+
 
     RXMeshStatic&                                     rx;
     DenseMatT                                         grad;
@@ -38,23 +41,19 @@ struct DiffScalarProblem
     DiffScalarProblem(RXMeshStatic& rx)
         : rx(rx),
           grad(DenseMatT(rx, rx.get_num_elements<ObjHandleT>(), VariableDim)),
-          hess(HessMatT(rx)),
           objective(rx.add_vertex_attribute<T>("objective", VariableDim))
 
     {
         grad.reset(0, LOCATION_ALL);
-        hess.reset(0, LOCATION_ALL);
+
+        if constexpr (WithHessian) {
+            hess = HessMatT(rx);
+            hess.reset(0, LOCATION_ALL);
+        }
     }
 
     /**
-     * @brief
-     * @tparam LambdaT
-     * @tparam op
-     * @tparam ProjectHess
-     * @tparam blockThreads
-     * @param rx
-     * @param t
-     * @param oreinted
+     * @brief add an term to the loss function
      */
     template <Op       op,
               bool     ProjectHess  = false,
@@ -67,7 +66,7 @@ struct DiffScalarProblem
 
         constexpr int NElements = VariableDim * ElementValence;
 
-        using ScalarT = Scalar<T, NElements, true>;
+        using ScalarT = Scalar<T, NElements, WithHessian>;
 
         if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
             auto new_term = std::make_shared<TemplatedTerm<VertexHandle,
@@ -113,12 +112,15 @@ struct DiffScalarProblem
     }
 
     /**
-     * @brief
+     * @brief evaluate all terms
      */
     void eval_terms(cudaStream_t stream = NULL)
     {
         grad.reset(0, DEVICE, stream);
-        hess.reset(0, DEVICE, stream);
+
+        if constexpr (WithHessian) {
+            hess.reset(0, DEVICE, stream);
+        }
 
         for (size_t i = 0; i < terms.size(); ++i) {
             terms[i]->eval_active(*objective, stream);
@@ -127,7 +129,7 @@ struct DiffScalarProblem
 
 
     /**
-     * @brief
+     * @brief return the current loss/energy
      */
     T get_current_loss(cudaStream_t stream = NULL)
     {
@@ -141,7 +143,7 @@ struct DiffScalarProblem
 
 
     /**
-     * @brief
+     * @brief evaluate all terms in
      */
     void eval_terms_passive(Attribute<T, ObjHandleT>* obj    = nullptr,
                             cudaStream_t              stream = NULL)

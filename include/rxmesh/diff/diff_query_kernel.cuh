@@ -41,6 +41,8 @@ __global__ static void diff_kernel(
 
     using PassiveT = typename ScalarT::PassiveType;
 
+    constexpr bool WithHessian = ScalarT::WithHessian_;
+
     auto block = cooperative_groups::this_thread_block();
 
 
@@ -65,28 +67,31 @@ __global__ static void diff_kernel(
                 }
             }
 
-            // project Hessian to PD matrix
-            if constexpr (ProjectHess) {
-                project_positive_definite(res.Hess);
-            }
+            if constexpr (WithHessian) {
+                // project Hessian to PD matrix
+                if constexpr (ProjectHess) {
+                    project_positive_definite(res.Hess);
+                }
 
-            // Hessian
-            for (int vertex_i = 0; vertex_i < iter.size(); ++vertex_i) {
-                const VertexHandle vi = iter[vertex_i];
+                // Hessian
+                for (int vertex_i = 0; vertex_i < iter.size(); ++vertex_i) {
+                    const VertexHandle vi = iter[vertex_i];
 
-                for (int vertex_j = 0; vertex_j < iter.size(); ++vertex_j) {
-                    const VertexHandle vj = iter[vertex_j];
+                    for (int vertex_j = 0; vertex_j < iter.size(); ++vertex_j) {
+                        const VertexHandle vj = iter[vertex_j];
 
-                    for (int local_i = 0; local_i < VariableDim; ++local_i) {
+                        for (int local_i = 0; local_i < VariableDim;
+                             ++local_i) {
 
-                        for (int local_j = 0; local_j < VariableDim;
-                             ++local_j) {
+                            for (int local_j = 0; local_j < VariableDim;
+                                 ++local_j) {
 
-                            ::atomicAdd(&hess(vi, vj, local_i, local_j),
-                                        res.Hess(index_mapping<VariableDim>(
-                                                     vertex_i, local_i),
-                                                 index_mapping<VariableDim>(
-                                                     vertex_j, local_j)));
+                                ::atomicAdd(&hess(vi, vj, local_i, local_j),
+                                            res.Hess(index_mapping<VariableDim>(
+                                                         vertex_i, local_i),
+                                                     index_mapping<VariableDim>(
+                                                         vertex_j, local_j)));
+                            }
                         }
                     }
                 }

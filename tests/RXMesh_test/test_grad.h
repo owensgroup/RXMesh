@@ -6,26 +6,13 @@
 
 #include "rxmesh/diff/diff_scalar_problem.h"
 #include "rxmesh/diff/gradient_descent.h"
+#include "rxmesh/diff/newton_solver.h"
 
-void smoothing_gd()
+
+template <typename ProblemT>
+inline void add_term(ProblemT& problem)
 {
     using namespace rxmesh;
-
-    // RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
-    RXMeshStatic rx(rxmesh_args.obj_file_name);
-
-    using T = float;
-
-    constexpr int VariableDim = 3;
-
-    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle>;
-
-    ProblemT problem(rx);
-
-    auto v_input_pos = *rx.get_input_vertex_coordinates();
-
-    problem.objective->copy_from(v_input_pos, DEVICE, DEVICE);
-
 
     problem.template add_term<Op::EV>(
         [=] __device__(const auto& eh, const auto& iter, auto& objective) {
@@ -45,6 +32,29 @@ void smoothing_gd()
 
             return dist_sq;
         });
+}
+
+TEST(DiffAttribute, SmoothingGD)
+{
+    using namespace rxmesh;
+
+    // RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
+    RXMeshStatic rx(rxmesh_args.obj_file_name);
+
+    using T = float;
+
+    constexpr int VariableDim = 3;
+
+    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, false>;
+
+    ProblemT problem(rx);
+
+    auto v_input_pos = *rx.get_input_vertex_coordinates();
+
+    problem.objective->copy_from(v_input_pos, DEVICE, DEVICE);
+
+
+    add_term(problem);
 
 
     float learning_rate = 0.01;
@@ -60,8 +70,8 @@ void smoothing_gd()
 
         problem.eval_terms();
 
+        // TODO comment out this part for benchmarking
         float energy = problem.get_current_loss();
-
         if (iter % 10 == 0) {
             RXMESH_INFO("Iteration = {}: Energy = {}", iter, energy);
         }
@@ -72,18 +82,97 @@ void smoothing_gd()
 
     EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
-    std::cout << "\nSmoothing RXMesh: " << timer.elapsed_millis() << " (ms),"
+    std::cout << "\nSmoothing GD RXMesh: " << timer.elapsed_millis() << " (ms),"
               << timer.elapsed_millis() / float(num_iterations)
               << " ms per iteration\n";
 
 #if USE_POLYSCOPE
     problem.objective->move(DEVICE, HOST);
     rx.get_polyscope_mesh()->updateVertexPositions(*problem.objective);
-    // polyscope::show();
+    polyscope::show();
 #endif
 }
 
-TEST(DiffAttribute, SmoothingGD)
+TEST(DiffAttribute, SmoothingNewton)
 {
-    smoothing_gd();
+    using namespace rxmesh;
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
+    // RXMeshStatic rx(rxmesh_args.obj_file_name);
+
+    using T = float;
+
+    constexpr int VariableDim = 3;
+
+    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
+
+    ProblemT problem(rx);
+
+    auto v_input_pos = *rx.get_input_vertex_coordinates();
+
+    problem.objective->copy_from(v_input_pos, DEVICE, DEVICE);
+
+    add_term(problem);
+
+
+    using HessMatT = typename ProblemT::HessMatT;
+
+    LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+
+    NetwtonSolver newton(problem, &solver);
+
+    int num_iterations = 100;
+
+    T convergence_eps = 1e-2;
+
+    GPUTimer timer;
+    timer.start();
+
+    for (int iter = 0; iter < num_iterations; ++iter) {
+
+        problem.eval_terms();
+
+
+        float energy = problem.get_current_loss();
+
+        RXMESH_INFO("Iteration = {}: Energy = {}", iter, energy);
+
+
+        newton.newton_direction();
+
+        RXMESH_INFO("newton.dir.norm2() = {}", newton.dir.norm2());
+        RXMESH_INFO("problem.grad.norm2() = {}", problem.grad.norm2());
+
+        if (0.5f * problem.grad.dot(newton.dir) < convergence_eps) {
+            break;
+        }
+
+        newton.line_search();
+    }
+    timer.stop();
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    std::cout << "\nSmoothing Newton RXMesh: " << timer.elapsed_millis()
+              << " (ms)," << timer.elapsed_millis() / float(num_iterations)
+              << " ms per iteration\n";
+
+    // so newton method on this function should lead to a vertex position that
+    // is just zero since the function is quadratic
+
+    problem.objective->move(DEVICE, HOST);
+
+    T f = (*problem.objective)(VertexHandle(0, 0), 0);
+
+    rx.for_each_vertex(
+        HOST,
+        [&](const VertexHandle vh) {
+            for (int i = 0; i < 3; ++i) {
+                EXPECT_NEAR((*problem.objective)(vh, 0), f, 1e-3);
+            }
+        });
+    // #if USE_POLYSCOPE
+    //     rx.get_polyscope_mesh()->updateVertexPositions(*problem.objective);
+    //     polyscope::show();
+    // #endif
 }
