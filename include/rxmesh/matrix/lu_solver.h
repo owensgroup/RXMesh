@@ -36,9 +36,27 @@ struct LUSolver : public DirectSolver<SpMatT, DenseMatOrder>
                        cudaStream_t                      stream = NULL) override
     {
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
-        for (int i = 0; i < B_mat.cols(); ++i) {
-            cusolver_lu(
-                B_mat.col_data(i, HOST), X_mat.col_data(i, HOST), stream);
+
+        if (m_mat->cols() == X_mat.rows() && m_mat->rows() == B_mat.rows() &&
+            X_mat.cols() == B_mat.cols()) {
+            for (int i = 0; i < B_mat.cols(); ++i) {
+                cusolver_lu(B_mat.col_data(i, HOST), X_mat.col_data(i, HOST));
+            }
+        } else if (m_mat->cols() == X_mat.rows() * X_mat.cols() &&
+                   m_mat->rows() == B_mat.rows() * B_mat.cols()) {
+            // the case where we flatten X and B and do one solve
+            cusolver_lu(B_mat.col_data(0, HOST), X_mat.col_data(0, HOST));
+        } else {
+            RXMESH_ERROR(
+                "LUSolver::solve() The sparse matrix size ({}, {}) does not "
+                "match with the rhs size ({}, {}) and the unknown size ({}, "
+                "{})",
+                m_mat->rows(),
+                m_mat->cols(),
+                B_mat.rows(),
+                B_mat.cols(),
+                X_mat.rows(),
+                X_mat.cols());
         }
     }
 
@@ -48,10 +66,8 @@ struct LUSolver : public DirectSolver<SpMatT, DenseMatOrder>
      * @brief wrapper for cuSolver API for solving linear systems using cuSolver
      * High-level API
      */
-    void cusolver_lu(T* h_b, T* h_x, cudaStream_t stream)
+    void cusolver_lu(T* h_b, T* h_x)
     {
-        CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
-
         double tol = 1.e-12;
 
         // -1 if A is invertible under tol.

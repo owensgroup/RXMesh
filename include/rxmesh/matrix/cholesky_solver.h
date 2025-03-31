@@ -41,8 +41,28 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                        cudaStream_t                      stream = NULL) override
     {
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
-        for (int i = 0; i < B_mat.cols(); ++i) {
-            solve(B_mat.col_data(i), X_mat.col_data(i));
+
+        // the case where we solve for multiple rhs
+        if (m_mat->cols() == X_mat.rows() && m_mat->rows() == B_mat.rows() &&
+            X_mat.cols() == B_mat.cols()) {
+            for (int i = 0; i < B_mat.cols(); ++i) {
+                solve(B_mat.col_data(i, DEVICE), X_mat.col_data(i, DEVICE));
+            }
+        } else if (m_mat->cols() == X_mat.rows() * X_mat.cols() &&
+                   m_mat->rows() == B_mat.rows() * B_mat.cols()) {
+            // the case where we flatten X and B and do one solve
+            solve(B_mat.col_data(0, DEVICE), X_mat.col_data(0, DEVICE));
+        } else {
+            RXMESH_ERROR(
+                "CholeskySolver::solve() The sparse matrix size ({}, {}) does "
+                "not match with the rhs size ({}, {}) and the unknown size "
+                "({}, {})",
+                m_mat->rows(),
+                m_mat->cols(),
+                B_mat.rows(),
+                B_mat.cols(),
+                X_mat.rows(),
+                X_mat.cols());
         }
     }
 
