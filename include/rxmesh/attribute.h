@@ -196,8 +196,7 @@ class Attribute : public AttributeBase
             std::make_shared<DenseMatrix<T>>(*m_rxmesh, rows(), cols());
 
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            m_rxmesh->for_each_vertex(HOST, [&](const VertexHandle vh) {                
-
+            m_rxmesh->for_each_vertex(HOST, [&](const VertexHandle vh) {
                 for (uint32_t j = 0; j < cols(); ++j) {
                     (*mat)(vh, j) = this->operator()(vh, j);
                 }
@@ -205,8 +204,7 @@ class Attribute : public AttributeBase
         }
 
         if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            m_rxmesh->for_each_edge(HOST, [&](const EdgeHandle eh) {                
-
+            m_rxmesh->for_each_edge(HOST, [&](const EdgeHandle eh) {
                 for (uint32_t j = 0; j < cols(); ++j) {
                     (*mat)(eh, j) = this->operator()(eh, j);
                 }
@@ -214,8 +212,7 @@ class Attribute : public AttributeBase
         }
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            m_rxmesh->for_each_face(HOST, [&](const FaceHandle fh) {                
-
+            m_rxmesh->for_each_face(HOST, [&](const FaceHandle fh) {
                 for (uint32_t j = 0; j < cols(); ++j) {
                     (*mat)(fh, j) = this->operator()(fh, j);
                 }
@@ -692,6 +689,23 @@ class Attribute : public AttributeBase
             ret[i] = this->operator()(handle, i);
         }
         return ret;
+    }
+
+
+    /**
+     * @brief store an Eigen (small) vector in this attribute. The size of Eigen
+     * vector should match the number of attributes in this attribute
+     */
+    template <int N>
+    __host__ __device__ __inline__ void from_eigen(
+        const HandleT&                handle,
+        const Eigen::Matrix<T, N, 1>& in)
+    {
+        assert(N == get_num_attributes());
+
+        for (Eigen::Index i = 0; i < N; ++i) {
+            this->operator()(handle, i) = in[i];
+        }
     }
 
     /**

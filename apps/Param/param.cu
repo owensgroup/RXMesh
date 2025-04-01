@@ -1,3 +1,5 @@
+// Reference Implementation
+// https://github.com/patr-schm/TinyAD-Examples/blob/main/apps/parametrization_openmesh.cc
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/algo/tutte_embedding.h"
@@ -6,6 +8,30 @@
 #include "rxmesh/diff/newton_solver.h"
 
 using namespace rxmesh;
+
+
+template <typename T>
+void add_mesh_to_polyscope(RXMeshStatic&       rx,
+                           VertexAttribute<T>& v,
+                           std::string         name)
+{
+    if (v.get_num_attributes() == 3) {
+        polyscope::registerSurfaceMesh(name, v, rx.get_polyscope_mesh()->faces);
+    } else {
+        auto v3 = *rx.add_vertex_attribute<T>(name, 3);
+
+        rx.for_each_vertex(HOST, [&](const VertexHandle h) {
+            v3(h, 0) = v(h, 0);
+            v3(h, 1) = v(h, 1);
+            v3(h, 2) = 0;
+        });
+
+        polyscope::registerSurfaceMesh(
+            name, v3, rx.get_polyscope_mesh()->faces);
+
+        rx.remove_attribute(name);
+    }
+}
 
 template <typename T>
 void parameterize(RXMeshStatic& rx)
@@ -57,6 +83,8 @@ void parameterize(RXMeshStatic& rx)
 
     rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
         "uv_tutte", *problem.objective);
+
+    add_mesh_to_polyscope(rx, *problem.objective, "tutte_mesh");
 
     constexpr uint32_t blockThreads = 256;
 
@@ -181,15 +209,12 @@ void parameterize(RXMeshStatic& rx)
 
 
     problem.objective->move(DEVICE, HOST);
-    // rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
-    //     coordinates(vh, 0) = (*problem.objective)(vh, 0);
-    //     coordinates(vh, 1) = (*problem.objective)(vh, 1);
-    //     coordinates(vh, 2) = 0;
-    // });
-    // rx.get_polyscope_mesh()->updateVertexPositions(coordinates);
 
     rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
         "uv_opt", *problem.objective);
+
+    add_mesh_to_polyscope(rx, *problem.objective, "opt_mesh");
+
     polyscope::show();
 }
 
