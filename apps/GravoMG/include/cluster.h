@@ -48,7 +48,7 @@ void clustering_1st_level(RXMeshStatic&           rx,
                           DenseMatrix<int>&       vertex_cluster,
                           int*                    d_flag)
 {
-    constexpr uint32_t blockThreads = 512;
+    constexpr uint32_t blockThreads = 256;
 
     int h_flag = 0;
 
@@ -92,7 +92,7 @@ void clustering_1st_level(RXMeshStatic&           rx,
 /**
  * \brief Clustering the data for any level other than the 1st level
  */
-inline void clustering_nth_level(int               num_samples,
+inline void  clustering_nth_level(int               num_samples,
                                  int               current_level,
                                  DenseMatrix<int>& sample_neighbor_size_prefix,
                                  DenseMatrix<int>& sample_neighbor,
@@ -101,6 +101,7 @@ inline void clustering_nth_level(int               num_samples,
                                  DenseMatrix<int>&      sample_id,
                                  DenseMatrix<uint16_t>& sample_level_bitmask,
                                  DenseMatrix<float>&    samples_pos,
+                                 DenseMatrix<float>&    prev_samples_pos,
                                  int*                   d_flag)
 {
     int h_flag = 0;
@@ -109,67 +110,77 @@ inline void clustering_nth_level(int               num_samples,
     uint32_t blocks  = DIVIDE_UP(num_samples, threads);
 
     // previously "set_cluster()"
+    std::cout << "\nnumber of samples fpr clustering: " << num_samples;
     for_each_item<<<blocks, threads>>>(
-        num_samples, [=] __device__(int id) mutable {            
+        num_samples, [=] __device__(int id) mutable {         //this needs to be smaller, only number of samples   , set all samples vertex cluster and distance, thats it
             // take bitmask
             // if sample, the cluster is its own
             // if not a sample, set cluster as -1
             // set distance as infinity or 0 based on whether
             // it is not or is a sample
-            if ((sample_level_bitmask(id) & (1 << current_level - 1)) != 0) {
+            //if ((sample_level_bitmask(id) & (1 << current_level - 1)) != 0) {
+            if (sample_id(id)!=-1) distance(id)       = 0;
+            else distance(id) = std::numeric_limits<float>::max();
+            printf("\n%d %d", id, sample_id(id));
+            vertex_cluster(id) = sample_id(id);
+                //printf("\n%d : %d", id, sample_id(id));
 
-                distance(id)       = 0;
-                vertex_cluster(id) = sample_id(id);
-
-            } else {
-                distance(id)       = std::numeric_limits<float>::max();
-                vertex_cluster(id) = -1;
-            }
+            //}
+            // else {
+            //    //vertex_cluster(id) = -1;
+            //}
         });
 
+
+    
     do {
+        std::cout << "\nCluster Iteration\n";
         CUDA_ERROR(cudaMemset(d_flag, 0, sizeof(int)));
         // previously "clusterCSR()"
-
         for_each_item<<<blocks, threads>>>(
             num_samples, [=] __device__(int id) mutable {               
 
-                const float sample_x = samples_pos(id, 0);
-                const float sample_y = samples_pos(id, 1);
-                const float sample_z = samples_pos(id, 2);
-
+                const float sample_x = prev_samples_pos(id, 0);
+                const float sample_y = prev_samples_pos(id, 1);
+                const float sample_z = prev_samples_pos(id, 2);
+                
                 const int start = sample_neighbor_size_prefix(id);
                 const int end   = sample_neighbor_size_prefix(id + 1);
-
+                //printf("\ni: %d start: %d end: %d", id, start, end);
                 for (int i = start; i < end; i++) {
-
-
                     int current_v = sample_neighbor(i);
-
-                    const float v_x = samples_pos(current_v, 0);
-                    const float v_y = samples_pos(current_v, 1);
-                    const float v_z = samples_pos(current_v, 2);
-
-
+                    const float v_x = prev_samples_pos(current_v, 0);
+                    const float v_y = prev_samples_pos(current_v, 1);
+                    const float v_z = prev_samples_pos(current_v, 2);
                     float dist = sqrtf(powf(sample_x - v_x, 2) +
                                        powf(sample_y - v_y, 2) +
                                        powf(sample_z - v_z, 2)) +
                                  distance(current_v);
 
+                    //printf("\n%d distance: %f", i, dist);
+
                     if (dist < distance(id) &&
-                        vertex_cluster(current_v) != -1) {
+                        vertex_cluster(current_v) != -1) 
+                    {
                         distance(id) = dist;
                         *d_flag      = 15;
-
                         vertex_cluster(id) = vertex_cluster(current_v);
+                        printf("\nchanged: %d  : %d",i,vertex_cluster(id));
                     }
                 }
             });
-
-
         h_flag = 0;
         CUDA_ERROR(
             cudaMemcpy(&h_flag, d_flag, sizeof(int), cudaMemcpyDeviceToHost));
     } while (h_flag != 0);
+    
+  /* vertex_cluster.move(HOST, DEVICE);
+    std::cout << "final clustering data:";
+    for (int i=0;i<vertex_cluster.rows();i++) {
+        std::cout << "\n" << i << " : " <<vertex_cluster(i);
+    }*/
+
+
+
 }
 }  // namespace rxmesh

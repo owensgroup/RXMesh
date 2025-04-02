@@ -110,14 +110,12 @@ struct GMG
                 m_prolong_op.emplace_back(
                     rx, level_num_samples, m_num_samples[l + 1]);
             }
-
             m_sample_id.emplace_back(rx, level_num_samples, 1);
             m_vertex_cluster.emplace_back(rx, level_num_samples, 1);
             m_vertex_cluster.back().reset(std::numeric_limits<int>::max(),
                                           LOCATION_ALL);
             m_distance_mat.emplace_back(rx, level_num_samples, 1);
         }
-
 
         m_vertex_pos = *rx.get_input_vertex_coordinates()->to_matrix();
         m_distance   = *rx.add_vertex_attribute<float>("d", 1);
@@ -134,7 +132,6 @@ struct GMG
             m_sample_neighbor_size_prefix[0].data(DEVICE),
             m_num_samples[1] + 1);
         CUDA_ERROR(cudaMalloc((void**)&m_d_cub_temp_storage, m_cub_temp_bytes));
-
 
         //============
         // 2) Sampling
@@ -158,6 +155,7 @@ struct GMG
             }
         }
 
+        //exit(0);
 
         for (int l = 1; l < 3 /*m_num_levels*/; ++l) {
 
@@ -255,16 +253,21 @@ struct GMG
             std::cout << "\nm_distance_mat:" << m_distance_mat.size();
             std::cout << "\nm_sample_id:" << m_sample_id.size();
             std::cout << "\nm_samples_pos:" << m_samples_pos.size();
+            std::cout << "\vertex cluster current number of rows:"
+                      << m_vertex_cluster[l - 1].rows();
 
-            clustering_nth_level(m_num_samples[l],
+
+            clustering_nth_level(m_num_samples[l - 1],
                                  l,
-                                 m_sample_neighbor_size_prefix[l - 1],
+                                 m_sample_neighbor_size_prefix[l - 2],
                                  m_sample_neighbor[l - 2],
-                                 m_vertex_cluster[l],
-                                 m_distance_mat[l],
-                                 m_sample_id[l],
+                                 // should make this l-1 i think
+                                 m_vertex_cluster[l - 1],
+                                 m_distance_mat[l - 1],
+                                 m_sample_id[l-1],
                                  m_sample_level_bitmask,
                                  m_samples_pos[l - 1],
+                                 m_samples_pos[l - 2],
                                  m_d_flag);
 
             //exit(0);
@@ -298,8 +301,16 @@ struct GMG
             // level
 
             auto& vertex_cluster = m_vertex_cluster[level - 1];
-            auto& prv_sample_neighbor_size_prefix = m_sample_neighbor_size_prefix[level - 2];
+            auto& prv_sample_neighbor_size_prefix =
+                m_sample_neighbor_size_prefix[level - 2];
             auto& prv_sample_neighbor = m_sample_neighbor[level - 2];
+
+            std::cout << "\nlevel: " << level;
+            std::cout << "\nprv_sample_neighbor_size_prefix: "
+                      << prv_sample_neighbor_size_prefix.rows();
+            std::cout << "\nprv_sample_neighbor: "
+                      << prv_sample_neighbor.rows();
+            std::cout << "\nvertex cluster: " << vertex_cluster.rows();
 
             // the number of parallel stuff we wanna do is equal to the number
             // of the samples in the previous level
@@ -307,8 +318,8 @@ struct GMG
             uint32_t blocks = DIVIDE_UP(
                 prv_sample_neighbor_size_prefix.rows() - 1, blockThreads);
 
-            //assert(prv_sample_neighbor_size_prefix.rows() - 1 ==
-            //       m_num_samples[level - 1]);
+            assert(prv_sample_neighbor_size_prefix.rows() - 1 ==
+                   m_num_samples[level - 1]);
 
 
             for_each_item<<<blocks, blockThreads>>>(
@@ -319,11 +330,17 @@ struct GMG
                  vertex_cluster] __device__(int i) mutable {
                     int start = prv_sample_neighbor_size_prefix(i);
                     int end   = prv_sample_neighbor_size_prefix(i + 1);
+                    printf("\nstart and end: %d and %d", start, end);
                     for (int j = start; j < end; ++j) {
                         int n = prv_sample_neighbor(j);
 
                         int a = vertex_cluster(i);
                         int b = vertex_cluster(n);
+                        printf("\na and b: %d and %d are clusters of %d and %d",
+                               a,
+                               b,
+                               i,
+                               n);
 
                         if (a != b) {
                             Edge e(a, b);
@@ -334,14 +351,14 @@ struct GMG
                 });
         }
 
-
         // b) iterate over all entries in the hashtable, for non sentinel
         // entries, find
         uint32_t blocks =
             DIVIDE_UP(m_edge_hash_table.get_capacity(), blockThreads);
 
-        auto& sample_neighbor_size = m_sample_neighbor_size[level-1];
-        auto& sample_neighbor_size_prefix = m_sample_neighbor_size_prefix[level - 1];
+        auto& sample_neighbor_size = m_sample_neighbor_size[level - 1];
+        auto& sample_neighbor_size_prefix =
+            m_sample_neighbor_size_prefix[level - 1];
 
         /*debug*/
         std::cout << "blocks: " << blocks << ", blockThreads: " << blockThreads
@@ -351,30 +368,28 @@ struct GMG
         std::cout << "\ncolumnvector size: " << sample_neighbor_size.rows();
         std::cout << "\nhash table capacity" << edge_hash_table.get_capacity();
 
-        if (level == 1) {
-
-                    for_each_item<<<blocks, blockThreads>>>(
+        
+            for_each_item<<<blocks, blockThreads>>>(
                 m_edge_hash_table.get_capacity(),
                 [edge_hash_table,
                  sample_neighbor_size] __device__(uint32_t i) mutable {
                     const Edge e = edge_hash_table.m_table[i];
-
                     if (!e.is_sentinel()) {
                         std::pair<int, int> p = e.unpack();
+
                         if (p.first > sample_neighbor_size.rows()) {
                             printf("Unable to process edge (%d, %d)\n",
                                    p.first,
                                    p.second);
-
                         }
-                        //else printf("Processing edge (%d, %d)\n",
-                          //         p.first,
-                            //       p.second);
+                        // else
+                        printf("Processing edge (%d, %d)\n", p.first, p.second);
+
                         ::atomicAdd(&sample_neighbor_size(p.first), 1);
                         ::atomicAdd(&sample_neighbor_size(p.second), 1);
                     }
                 });
-            /*debug*/
+
             int* h_sample_neighbor_size = new int[m_num_samples[level] + 1];
             cudaMemcpy(h_sample_neighbor_size,
                        sample_neighbor_size.data(DEVICE),
@@ -466,75 +481,7 @@ struct GMG
                         sample_neighbor(b_pre + b_id) = a;
                     }
                 });
-        }
-        else {
-            for_each_item<<<blocks, blockThreads>>>(
-                m_edge_hash_table.get_capacity(),
-                [edge_hash_table,
-                 sample_neighbor_size] __device__(uint32_t i) mutable {
-                    const Edge e = edge_hash_table.m_table[i];
-                    if (!e.is_sentinel()) {
-                        std::pair<int, int> p = e.unpack();
-
-                        if(p.first>sample_neighbor_size.rows()) {
-                        printf("Unable to process edge (%d, %d)\n", p.first, p.second);
-                            
-                        }
-                        //else
-                        printf("Processing edge (%d, %d)\n", p.first, p.second);
-
-                        ::atomicAdd(&sample_neighbor_size(p.first), 1);
-                        ::atomicAdd(&sample_neighbor_size(p.second), 1);
-                    }
-                });
-
-            int* h_sample_neighbor_size = new int[m_num_samples[level] + 1];
-            cudaMemcpy(h_sample_neighbor_size,
-                       sample_neighbor_size.data(DEVICE),
-                       (m_num_samples[level] + 1) * sizeof(int),
-                       cudaMemcpyDeviceToHost);
-
-            std::cout << "sample_neighbor_size (after kernel execution):"
-                      << std::endl;
-            for (int i = 0; i < std::min(10, m_num_samples[level] + 1); i++) {
-                std::cout << "sample_neighbor_size[" << i
-                          << "] = " << h_sample_neighbor_size[i] << "\n";
-            }
-
-            delete[] h_sample_neighbor_size;
-            // c) compute the exclusive sum of the number of neighbor samples
-            cudaError_t err = cub::DeviceScan::ExclusiveSum(
-                m_d_cub_temp_storage,
-                m_cub_temp_bytes,
-                sample_neighbor_size.data(DEVICE),
-                sample_neighbor_size_prefix.data(DEVICE),
-                m_num_samples[level] + 1);
-            cudaDeviceSynchronize();  // Ensure execution completes
-
-            if (err != cudaSuccess) {
-                std::cerr << "ExclusiveSum failed: " << cudaGetErrorString(err)
-                          << std::endl;
-            }
-
-            /*debug*/
-            int* h_sample_neighbor_size_prefix =
-                new int[m_num_samples[level] + 1];
-            cudaMemcpy(h_sample_neighbor_size_prefix,
-                       sample_neighbor_size_prefix.data(DEVICE),
-                       (m_num_samples[level] + 1) * sizeof(int),
-                       cudaMemcpyDeviceToHost);
-
-            std::cout << "sample_neighbor_size_prefix (after ExclusiveSum):"
-                      << std::endl;
-            for (int i = 0; i < std::min(20, m_num_samples[level] + 1); i++) {
-                std::cout << "sample_neighbor_size_prefix[" << i
-                          << "] = " << h_sample_neighbor_size_prefix[i] << "\n";
-            }
-
-            delete[] h_sample_neighbor_size_prefix;
-        }
-
-
+        
     }
 
 
