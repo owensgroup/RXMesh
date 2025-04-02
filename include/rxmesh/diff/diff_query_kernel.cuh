@@ -39,6 +39,8 @@ __global__ static void diff_kernel(
 
     using IteratorT = typename IteratorType<op>::type;
 
+    using IterHandleT = typename IteratorT::Handle;
+
     using PassiveT = typename ScalarT::PassiveType;
 
     constexpr bool WithHessian = ScalarT::WithHessian_;
@@ -58,12 +60,11 @@ __global__ static void diff_kernel(
             loss(fh) = res.val;
 
             // gradient
-            for (uint16_t vertex = 0; vertex < iter.size(); ++vertex) {
+            for (uint16_t i = 0; i < iter.size(); ++i) {
                 for (int local = 0; local < VariableDim; ++local) {
 
-                    ::atomicAdd(
-                        &grad(iter[vertex], local),
-                        res.grad[index_mapping<VariableDim>(vertex, local)]);
+                    ::atomicAdd(&grad(iter[i], local),
+                                res.grad[index_mapping<VariableDim>(i, local)]);
                 }
             }
 
@@ -74,11 +75,11 @@ __global__ static void diff_kernel(
                 }
 
                 // Hessian
-                for (int vertex_i = 0; vertex_i < iter.size(); ++vertex_i) {
-                    const VertexHandle vi = iter[vertex_i];
+                for (int i = 0; i < iter.size(); ++i) {
+                    const IterHandleT vi = iter[i];
 
-                    for (int vertex_j = 0; vertex_j < iter.size(); ++vertex_j) {
-                        const VertexHandle vj = iter[vertex_j];
+                    for (int j = 0; j < iter.size(); ++j) {
+                        const IterHandleT vj = iter[j];
 
                         for (int local_i = 0; local_i < VariableDim;
                              ++local_i) {
@@ -88,9 +89,9 @@ __global__ static void diff_kernel(
 
                                 ::atomicAdd(&hess(vi, vj, local_i, local_j),
                                             res.Hess(index_mapping<VariableDim>(
-                                                         vertex_i, local_i),
+                                                         i, local_i),
                                                      index_mapping<VariableDim>(
-                                                         vertex_j, local_j)));
+                                                         j, local_j)));
                             }
                         }
                     }
