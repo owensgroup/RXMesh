@@ -107,8 +107,7 @@ struct GMG
                 m_sample_neighbor_size_prefix.back().reset(0, DEVICE);
             }
             if (l < m_num_samples.size() - 1) {
-                m_prolong_op.emplace_back(
-                    rx, level_num_samples, m_num_samples[l + 1]);
+                m_prolong_op.emplace_back(rx, level_num_samples, m_num_samples[l + 1]);
             }
             m_sample_id.emplace_back(rx, level_num_samples, 1);
             m_vertex_cluster.emplace_back(rx, level_num_samples, 1);
@@ -157,14 +156,12 @@ struct GMG
 
         //exit(0);
 
-        for (int l = 1; l < 3 /*m_num_levels*/; ++l) {
+        for (int l = 1; l < m_num_levels; ++l) {
 
             std::cout << "\nLEVEL: " << l << "\n";
             //    //============
             //    // 3) Clustering
             //    //============
-            std::cout << "\nCLUSTERING: "
-                      << "\n";
 
             clustering(rx, l);
 
@@ -172,8 +169,6 @@ struct GMG
             //    //============
             //    // 4) Create coarse mesh compressed representation of
             //    //============
-            std::cout << "\CREATING: "
-                      << "\n";
 
             create_compressed_representation(rx, l);
         }
@@ -181,18 +176,16 @@ struct GMG
         //============
         // 5) Create prolongation operator
         //============
-        // create_all_prolongation();
-
+        create_all_prolongation();
         // move prolongation operator from device to host (for no obvious
         // reason)
-        /*for (auto& prolong_op : m_prolong_op) {
+        for (auto& prolong_op : m_prolong_op) {
             prolong_op.move_col_idx(DEVICE, HOST);
             prolong_op.move(DEVICE, HOST);
-        }*/
-
+        }
         // release temp memory
-        // GPU_FREE(m_d_flag);
-        // GPU_FREE(m_d_cub_temp_storage);
+         GPU_FREE(m_d_flag);
+         GPU_FREE(m_d_cub_temp_storage);
     }
 
     /**
@@ -211,6 +204,32 @@ struct GMG
                    m_num_levels,
                    m_num_samples[1],
                    m_d_flag);
+
+        constexpr uint32_t blockThreads = 256;
+
+        for (int level = 1; level < m_num_levels - 1; ++level) {
+            uint32_t blocks =
+                DIVIDE_UP(m_sample_id[level - 1].rows(), blockThreads);
+
+            auto& a = m_samples_pos[level - 1];  // Previous level
+            auto& b = m_samples_pos[level];      // Current level
+            auto& c = m_sample_id[level - 1];
+            auto& d = m_sample_id[level];
+
+            for_each_item<<<blocks, blockThreads>>>(
+                a.rows(), [a, b, c, d] __device__(int i) mutable {
+                    if (i < b.rows()) {
+                        d(i, 0) = i;
+                        b(i, 0) = a(i, 0);
+                        b(i, 1) = a(i, 1);
+                        b(i, 2) = a(i, 2);
+                    } else {
+                        d(i, 0) = -1;
+                    }
+                });
+        }
+
+
     }
 
     /**
@@ -244,24 +263,12 @@ struct GMG
                                  m_sample_id[0],
                                  m_vertex_cluster[0],
                                  m_d_flag);
-        } else {
-
-            std::cout << "\nm_num_samples:" << m_num_samples.size();
-            std::cout << "\nm_sample_neighbor_size_prefix:"
-                      << m_sample_neighbor_size_prefix.size();
-            std::cout << "\nm_sample_neighbor:" << m_sample_neighbor.size();
-            std::cout << "\nm_distance_mat:" << m_distance_mat.size();
-            std::cout << "\nm_sample_id:" << m_sample_id.size();
-            std::cout << "\nm_samples_pos:" << m_samples_pos.size();
-            std::cout << "\vertex cluster current number of rows:"
-                      << m_vertex_cluster[l - 1].rows();
-
-
+        } else 
+        {
             clustering_nth_level(m_num_samples[l - 1],
                                  l,
                                  m_sample_neighbor_size_prefix[l - 2],
                                  m_sample_neighbor[l - 2],
-                                 // should make this l-1 i think
                                  m_vertex_cluster[l - 1],
                                  m_distance_mat[l - 1],
                                  m_sample_id[l-1],
@@ -269,8 +276,6 @@ struct GMG
                                  m_samples_pos[l - 1],
                                  m_samples_pos[l - 2],
                                  m_d_flag);
-
-            //exit(0);
         }
     }
 
@@ -305,13 +310,6 @@ struct GMG
                 m_sample_neighbor_size_prefix[level - 2];
             auto& prv_sample_neighbor = m_sample_neighbor[level - 2];
 
-            std::cout << "\nlevel: " << level;
-            std::cout << "\nprv_sample_neighbor_size_prefix: "
-                      << prv_sample_neighbor_size_prefix.rows();
-            std::cout << "\nprv_sample_neighbor: "
-                      << prv_sample_neighbor.rows();
-            std::cout << "\nvertex cluster: " << vertex_cluster.rows();
-
             // the number of parallel stuff we wanna do is equal to the number
             // of the samples in the previous level
 
@@ -330,22 +328,15 @@ struct GMG
                  vertex_cluster] __device__(int i) mutable {
                     int start = prv_sample_neighbor_size_prefix(i);
                     int end   = prv_sample_neighbor_size_prefix(i + 1);
-                    printf("\nstart and end: %d and %d", start, end);
                     for (int j = start; j < end; ++j) {
                         int n = prv_sample_neighbor(j);
 
                         int a = vertex_cluster(i);
                         int b = vertex_cluster(n);
-                        printf("\na and b: %d and %d are clusters of %d and %d",
-                               a,
-                               b,
-                               i,
-                               n);
-
+                       
                         if (a != b) {
                             Edge e(a, b);
                             edge_hash_table.insert(e);
-                            printf("\ninserted %d %d", a, b);
                         }
                     }
                 });
@@ -359,15 +350,6 @@ struct GMG
         auto& sample_neighbor_size = m_sample_neighbor_size[level - 1];
         auto& sample_neighbor_size_prefix =
             m_sample_neighbor_size_prefix[level - 1];
-
-        /*debug*/
-        std::cout << "blocks: " << blocks << ", blockThreads: " << blockThreads
-                  << ", capacity: " << m_edge_hash_table.get_capacity()
-                  << std::endl;
-
-        std::cout << "\ncolumnvector size: " << sample_neighbor_size.rows();
-        std::cout << "\nhash table capacity" << edge_hash_table.get_capacity();
-
         
             for_each_item<<<blocks, blockThreads>>>(
                 m_edge_hash_table.get_capacity(),
@@ -376,14 +358,7 @@ struct GMG
                     const Edge e = edge_hash_table.m_table[i];
                     if (!e.is_sentinel()) {
                         std::pair<int, int> p = e.unpack();
-
-                        if (p.first > sample_neighbor_size.rows()) {
-                            printf("Unable to process edge (%d, %d)\n",
-                                   p.first,
-                                   p.second);
-                        }
-                        // else
-                        printf("Processing edge (%d, %d)\n", p.first, p.second);
+                        assert(p.first < sample_neighbor_size.rows());
 
                         ::atomicAdd(&sample_neighbor_size(p.first), 1);
                         ::atomicAdd(&sample_neighbor_size(p.second), 1);
@@ -395,13 +370,6 @@ struct GMG
                        sample_neighbor_size.data(DEVICE),
                        (m_num_samples[level] + 1) * sizeof(int),
                        cudaMemcpyDeviceToHost);
-
-            std::cout << "sample_neighbor_size (after kernel execution):"
-                      << std::endl;
-            for (int i = 0; i < std::min(10, m_num_samples[level] + 1); i++) {
-                std::cout << "sample_neighbor_size[" << i
-                          << "] = " << h_sample_neighbor_size[i] << "\n";
-            }
 
             delete[] h_sample_neighbor_size;
             // c) compute the exclusive sum of the number of neighbor samples
@@ -418,23 +386,6 @@ struct GMG
                           << std::endl;
             }
 
-            /*debug*/
-            int* h_sample_neighbor_size_prefix =
-                new int[m_num_samples[level] + 1];
-            cudaMemcpy(h_sample_neighbor_size_prefix,
-                       sample_neighbor_size_prefix.data(DEVICE),
-                       (m_num_samples[level] + 1) * sizeof(int),
-                       cudaMemcpyDeviceToHost);
-
-            std::cout << "sample_neighbor_size_prefix (after ExclusiveSum):"
-                      << std::endl;
-            for (int i = 0; i < std::min(20, m_num_samples[level] + 1); i++) {
-                std::cout << "sample_neighbor_size_prefix[" << i
-                          << "] = " << h_sample_neighbor_size_prefix[i] << "\n";
-            }
-
-            delete[] h_sample_neighbor_size_prefix;
-
 
             // d) allocate memory to store the neighbor samples
             int s = 0;
@@ -443,14 +394,10 @@ struct GMG
                 sample_neighbor_size_prefix.data() + m_num_samples[level],
                 sizeof(int),
                 cudaMemcpyDeviceToHost));
-            std::cout << "\nm_num_samples0 " << m_num_samples[0];
-            std::cout << "\nm_num_samples1 " << m_num_samples[1];
-            std::cout << "\nm_num_samples2 " << m_num_samples[2];
-            std::cout << "\nrows: " << s;
 
             // e) allocate memory for sample_neighbour
             m_sample_neighbor.emplace_back(DenseMatrix<int>(rx, s, 1));
-            /*debug*/ auto& sample_neighbor = m_sample_neighbor[level - 1];
+            auto& sample_neighbor = m_sample_neighbor[level - 1];
 
             sample_neighbor_size.reset(0, DEVICE);
 
@@ -481,7 +428,6 @@ struct GMG
                         sample_neighbor(b_pre + b_id) = a;
                     }
                 });
-        
     }
 
 
@@ -490,7 +436,7 @@ struct GMG
      */
     void create_all_prolongation()
     {
-        for (int level = 1; level < m_num_levels - 1; level++) {
+        for (int level = 1; level < m_num_levels; level++) {
 
             int current_num_vertices = m_num_samples[level];
 
@@ -499,7 +445,7 @@ struct GMG
                                 m_sample_neighbor_size_prefix[level - 1],
                                 m_sample_neighbor[level - 1],
                                 m_prolong_op[level - 1],
-                                m_samples_pos[level],
+                                m_samples_pos[level-1],
                                 m_vertex_cluster[level - 1]);
         }
     }
@@ -522,9 +468,10 @@ struct GMG
 
         uint32_t threads = 256;
         uint32_t blocks  = DIVIDE_UP(num_samples, threads);
-
         for_each_item<<<blocks, threads>>>(
             num_samples, [=] __device__(int sample_id) mutable {
+
+            assert(sample_id < num_samples);
                 // go through every triangle of the cluster
                 const int cluster_point = vertex_cluster(sample_id);
                 const int start = sample_neighbor_size_prefix(cluster_point);
@@ -538,7 +485,7 @@ struct GMG
                 const Eigen::Vector3<float> q{samples_pos(sample_id, 0),
                                               samples_pos(sample_id, 1),
                                               samples_pos(sample_id, 2)};
-
+                
                 int selected_neighbor             = 0;
                 int selected_neighbor_of_neighbor = 0;
 
@@ -600,26 +547,58 @@ struct GMG
                         }
                     }
                 }
-                assert(selectedv1 != selectedv2 && selectedv2 != selectedv3 &&
-                       selectedv3 != selectedv1);
-
+                if (selected_neighbor_of_neighbor != 0 &&
+                    selected_neighbor != 0) {
+                    assert(selectedv1 != selectedv2 &&
+                           selectedv2 != selectedv3 &&
+                           selectedv3 != selectedv1);
+                }
                 // Compute barycentric coordinates for the closest triangle
                 float b1 = 0, b2 = 0, b3 = 0;
+                if (selected_neighbor==selected_neighbor_of_neighbor && selected_neighbor==0) {
+                    b1 = 1.0f;
+                } else
                 detail::compute_barycentric(
                     selectedv1, selectedv2, selectedv3, q, b1, b2, b3);
+
+
+
+                if(isnan(b1) || isnan(b2) || isnan(b3)) {
+                    printf("\nNAN FOUND %d : %d %d %d %f %f %f",
+                           sample_id,
+                           cluster_point,
+                           selected_neighbor,
+                           selected_neighbor_of_neighbor,
+                           b1,
+                           b2,
+                           b3);
+                    
+                } else
+                    printf("\n%d : %d %d %d %f %f %f",
+                           sample_id,
+                           cluster_point,
+                           selected_neighbor,
+                           selected_neighbor_of_neighbor,
+                           b1,
+                           b2,
+                           b3);
+
 
                 assert(!isnan(b1));
                 assert(!isnan(b2));
                 assert(!isnan(b3));
 
-                prolong_op.col_idx()[sample_id * 3 + 0] = cluster_point;
-                prolong_op.col_idx()[sample_id * 3 + 1] = selected_neighbor;
-                prolong_op.col_idx()[sample_id * 3 + 2] =
-                    selected_neighbor_of_neighbor;
 
-                prolong_op.get_val_at(sample_id * 3 + 0) = b1;
-                prolong_op.get_val_at(sample_id * 3 + 1) = b2;
+               /* if (selected_neighbor_of_neighbor==0)
+                    prolong_op.col_idx()[sample_id * 3 + 2] = 0;
                 prolong_op.get_val_at(sample_id * 3 + 2) = b3;
+
+                if (selected_neighbor == 0)
+                    prolong_op.col_idx()[sample_id * 3 +  1] = 0;
+                prolong_op.get_val_at(sample_id * 3 + 1) = b2;
+
+                prolong_op.col_idx()[sample_id * 3 + 0] = cluster_point;
+                prolong_op.get_val_at(sample_id * 3 + 0) = b1;*/
             });
     }
 };
