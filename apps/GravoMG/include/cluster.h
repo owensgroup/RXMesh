@@ -92,7 +92,7 @@ void clustering_1st_level(RXMeshStatic&           rx,
 /**
  * \brief Clustering the data for any level other than the 1st level
  */
-inline void  clustering_nth_level(int               num_samples,
+inline void clustering_nth_level(int               num_samples,
                                  int               current_level,
                                  DenseMatrix<int>& sample_neighbor_size_prefix,
                                  DenseMatrix<int>& sample_neighbor,
@@ -111,10 +111,12 @@ inline void  clustering_nth_level(int               num_samples,
 
     // previously "set_cluster()"
     for_each_item<<<blocks, threads>>>(
-        num_samples, [=] __device__(int id) mutable {         
-            //if ((sample_level_bitmask(id) & (1 << current_level - 1)) != 0) {
-            if (sample_id(id)!=-1) distance(id)       = 0;
-            else distance(id) = std::numeric_limits<float>::max();
+        num_samples, [=] __device__(int id) mutable {
+            // if ((sample_level_bitmask(id) & (1 << current_level - 1)) != 0) {
+            if (sample_id(id) != -1)
+                distance(id) = 0;
+            else
+                distance(id) = std::numeric_limits<float>::max();
             vertex_cluster(id) = sample_id(id);
             //}
             // else {
@@ -123,35 +125,32 @@ inline void  clustering_nth_level(int               num_samples,
         });
 
 
-    
     do {
         CUDA_ERROR(cudaMemset(d_flag, 0, sizeof(int)));
         // previously "clusterCSR()"
         for_each_item<<<blocks, threads>>>(
-            num_samples, [=] __device__(int id) mutable {               
-
+            num_samples, [=] __device__(int id) mutable {
                 const float sample_x = prev_samples_pos(id, 0);
                 const float sample_y = prev_samples_pos(id, 1);
                 const float sample_z = prev_samples_pos(id, 2);
-                
+
                 const int start = sample_neighbor_size_prefix(id);
                 const int end   = sample_neighbor_size_prefix(id + 1);
                 for (int i = start; i < end; i++) {
-                    int current_v = sample_neighbor(i);
-                    const float v_x = prev_samples_pos(current_v, 0);
-                    const float v_y = prev_samples_pos(current_v, 1);
-                    const float v_z = prev_samples_pos(current_v, 2);
-                    float dist = sqrtf(powf(sample_x - v_x, 2) +
+                    int         current_v = sample_neighbor(i);
+                    const float v_x       = prev_samples_pos(current_v, 0);
+                    const float v_y       = prev_samples_pos(current_v, 1);
+                    const float v_z       = prev_samples_pos(current_v, 2);
+                    float       dist      = sqrtf(powf(sample_x - v_x, 2) +
                                        powf(sample_y - v_y, 2) +
                                        powf(sample_z - v_z, 2)) +
                                  distance(current_v);
 
 
                     if (dist < distance(id) &&
-                        vertex_cluster(current_v) != -1) 
-                    {
-                        distance(id) = dist;
-                        *d_flag      = 15;
+                        vertex_cluster(current_v) != -1) {
+                        distance(id)       = dist;
+                        *d_flag            = 15;
                         vertex_cluster(id) = vertex_cluster(current_v);
                     }
                 }
@@ -160,6 +159,5 @@ inline void  clustering_nth_level(int               num_samples,
         CUDA_ERROR(
             cudaMemcpy(&h_flag, d_flag, sizeof(int), cudaMemcpyDeviceToHost));
     } while (h_flag != 0);
-
 }
 }  // namespace rxmesh
