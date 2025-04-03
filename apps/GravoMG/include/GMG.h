@@ -441,7 +441,6 @@ struct GMG
 
             int current_num_vertices = m_num_samples[level];
 
-            // TODO i think the indexing here is not right
             create_prolongation(current_num_vertices,
                                 m_sample_neighbor_size_prefix[level - 1],
                                 m_sample_neighbor[level - 1],
@@ -562,43 +561,18 @@ struct GMG
                     detail::compute_barycentric(
                         selectedv1, selectedv2, selectedv3, q, b1, b2, b3);
 
-
-                if (isnan(b1) || isnan(b2) || isnan(b3)) {
-                    printf("\nNAN FOUND %d : %d %d %d %f %f %f",
-                           sample_id,
-                           cluster_point,
-                           selected_neighbor,
-                           selected_neighbor_of_neighbor,
-                           b1,
-                           b2,
-                           b3);
-
-                } else
-                    printf("\n%d : %d %d %d %f %f %f",
-                           sample_id,
-                           cluster_point,
-                           selected_neighbor,
-                           selected_neighbor_of_neighbor,
-                           b1,
-                           b2,
-                           b3);
-
-
                 assert(!isnan(b1));
                 assert(!isnan(b2));
                 assert(!isnan(b3));
 
-
-                /* if (selected_neighbor_of_neighbor==0)
-                     prolong_op.col_idx()[sample_id * 3 + 2] = 0;
+                 prolong_op.col_idx()[sample_id * 3 + 2] = selected_neighbor_of_neighbor;
                  prolong_op.get_val_at(sample_id * 3 + 2) = b3;
 
-                 if (selected_neighbor == 0)
-                     prolong_op.col_idx()[sample_id * 3 +  1] = 0;
+                 prolong_op.col_idx()[sample_id * 3 +  1] = selected_neighbor;
                  prolong_op.get_val_at(sample_id * 3 + 1) = b2;
 
                  prolong_op.col_idx()[sample_id * 3 + 0] = cluster_point;
-                 prolong_op.get_val_at(sample_id * 3 + 0) = b1;*/
+                 prolong_op.get_val_at(sample_id * 3 + 0) = b1;
             });
     }
 };
