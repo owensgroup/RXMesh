@@ -19,6 +19,8 @@ enum class CoarseSolver
 template <typename T>
 struct CoarseA
 {
+
+    CoarseA(){};
     SparseMatrix<T> a;
 
     T*   d_val;
@@ -74,15 +76,20 @@ struct VCycle
         m_smoother.emplace_back(gmg.m_num_samples[0], gmg.m_num_samples[0]);
 
         m_r.emplace_back(rx, gmg.m_num_samples[0], rhs.cols());
-
+        m_rhs.emplace_back(rx, gmg.m_num_samples[0], rhs.cols());
         for (int l = 1; l < gmg.m_num_levels; ++l) {
             m_rhs.emplace_back(rx, gmg.m_num_samples[l], rhs.cols());
             m_x.emplace_back(rx, gmg.m_num_samples[l], rhs.cols());
 
             m_r.emplace_back(rx, gmg.m_num_samples[l], rhs.cols());
 
-            gmg.m_prolong_op[l - 1].alloc_multiply_buffer(
-                m_r.back(), m_rhs.back(), true);
+            //how do I allocate m_a
+            //m_a[l].a.emplace_back(rx, gmg.m_num_samples[l], gmg.m_num_samples[l]);
+
+            std::cout << "\nr: " << m_r.back().rows() << " x "<<m_r.back().cols();
+            std::cout << "\nrhs: " << m_rhs.back().rows() << " x "<<m_rhs.back().cols();
+
+            gmg.m_prolong_op[l - 1].alloc_multiply_buffer(m_r.back(), m_rhs[l-1]);
 
             if (l > gmg.m_num_levels - 1) {
                 m_smoother.emplace_back(gmg.m_num_samples[l],
@@ -94,11 +101,13 @@ struct VCycle
             }
         }
 
+        //m_a.push_back();
+        m_a.resize(gmg.m_num_levels - 1);
         // construct m_a for all levels
         pt_A_p(gmg.m_prolong_op[0], A, m_a[0]);
-        for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
-            pt_A_p(gmg.m_prolong_op[1], m_a[l - 1].a, m_a[l]);
-        }
+        /*for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
+            pt_A_p(gmg.m_prolong_op[l], m_a[l - 1].a, m_a[l]);
+        }*/
     }
 
 
@@ -323,6 +332,7 @@ struct VCycle
     }
 
    private:
+    
     void sparse_gemm(const cusparseHandle_t      handle,
                      const cusparseSpMatDescr_t  A,
                      const cusparseSpMatDescr_t  B,
@@ -447,5 +457,7 @@ struct VCycle
         GPU_FREE(dBuffer1);
         GPU_FREE(dBuffer2);
     }
+    
+
 };
 }  // namespace rxmesh

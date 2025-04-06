@@ -40,6 +40,7 @@ __global__ static void sample_points(const Context          context,
 /**
  * \brief FPS Sampling in parallel
  */
+
 void FPSSampler(RXMeshStatic&           rx,
                 VertexAttribute<float>& distance,
                 DenseMatrix<float>&     vertex_pos,
