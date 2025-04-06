@@ -12,7 +12,7 @@
 #include "NeighborHandling.h"
 #include "cluster.h"
 #include "fps_sampler.h"
-#include "gmg_kernels.h"
+#include "GMG_kernels.h"
 #include "hashtable.h"
 
 namespace rxmesh {
@@ -174,8 +174,8 @@ struct GMG
             create_compressed_representation(rx, l);
         }
 
-        renderFromDenseMatrices(
-            m_sample_neighbor_size, m_sample_neighbor, m_vertex_pos);
+        //renderFromDenseMatrices(
+        //    m_sample_neighbor_size, m_sample_neighbor, m_vertex_pos);
 
         //============
         // 5) Create prolongation operator
