@@ -59,7 +59,7 @@ struct SparseMatrixConstantNNZRow : public SparseMatrix2<T>
                               cudaMemcpyHostToDevice));
 
         // create cusparse matrix
-        init_cusparse(*this);
+        this->init_cusparse(*this);
 
 #ifndef NDEBUG
         // can not do this check because it is done on m_h_col_idx which is not
