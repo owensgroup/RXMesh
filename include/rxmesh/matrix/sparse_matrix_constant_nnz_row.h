@@ -9,7 +9,7 @@ namespace rxmesh {
 template <typename T, int RowNNZ>
 struct SparseMatrixConstantNNZRow : public SparseMatrix2<T>
 {
-    using IndexT = SparseMatrix2<T>::IndexT;
+    using IndexT = typename SparseMatrix2<T>::IndexT;
 
     /**
      * @brief the constructor only builds the row_ptr. The user is responsible
@@ -21,37 +21,40 @@ struct SparseMatrixConstantNNZRow : public SparseMatrix2<T>
                                IndexT              num_cols)
         : SparseMatrix2<T>()
     {
-        m_context   = rx.get_context();
-        m_replicate = 1;
+        this->m_context   = rx.get_context();
+        this->m_replicate = 1;
 
-        m_num_rows = num_rows * m_replicate;
-        m_num_cols = num_cols * m_replicate;
-        m_nnz      = m_num_rows * RowNNZ;
+        this->m_num_rows = num_rows * this->m_replicate;
+        this->m_num_cols = num_cols * this->m_replicate;
+        this->m_nnz      = this->m_num_rows * RowNNZ;
 
-        int num_row_1 = m_num_rows + 1;
+        int num_row_1 = this->m_num_rows + 1;
 
         // alloc device
-        CUDA_ERROR(cudaMalloc((void**)&m_d_col_idx, m_nnz * sizeof(IndexT)));
-        CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_nnz * sizeof(T)));
+        CUDA_ERROR(cudaMalloc((void**)&this->m_d_col_idx,
+                              this->m_nnz * sizeof(IndexT)));
+        CUDA_ERROR(cudaMalloc((void**)&this->m_d_val, this->m_nnz * sizeof(T)));
         CUDA_ERROR(
-            cudaMalloc((void**)&m_d_row_ptr, num_row_1 * sizeof(IndexT)));
+            cudaMalloc((void**)&this->m_d_row_ptr, num_row_1 * sizeof(IndexT)));
 
 
-        m_allocated = m_allocated | DEVICE;
+        this->m_allocated = this->m_allocated | DEVICE;
 
         // alloc host
-        m_h_val     = static_cast<T*>(malloc(m_nnz * sizeof(T)));
-        m_h_row_ptr = static_cast<IndexT*>(malloc(num_row_1 * sizeof(IndexT)));
-        m_h_col_idx = static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
-        m_allocated = m_allocated | HOST;
+        this->m_h_val = static_cast<T*>(malloc(this->m_nnz * sizeof(T)));
+        this->m_h_row_ptr =
+            static_cast<IndexT*>(malloc(num_row_1 * sizeof(IndexT)));
+        this->m_h_col_idx =
+            static_cast<IndexT*>(malloc(this->m_nnz * sizeof(IndexT)));
+        this->m_allocated = this->m_allocated | HOST;
 
         for (int i = 0; i < num_row_1; ++i) {
-            m_h_row_ptr[i] = i * RowNNZ;
+            this->m_h_row_ptr[i] = i * RowNNZ;
         }
 
         // copy to device
-        CUDA_ERROR(cudaMemcpy(m_d_row_ptr,
-                              m_h_row_ptr,
+        CUDA_ERROR(cudaMemcpy(this->m_d_row_ptr,
+                              this->m_h_row_ptr,
                               num_row_1 * sizeof(IndexT),
                               cudaMemcpyHostToDevice));
 
@@ -72,9 +75,9 @@ struct SparseMatrixConstantNNZRow : public SparseMatrix2<T>
     __device__ __host__ IndexT* col_idx()
     {
 #ifdef __CUDA_ARCH__
-        return m_d_col_idx;
+        return this->m_d_col_idx;
 #else
-        return m_h_col_idx;
+        return this->m_h_col_idx;
 #endif
     }
 
@@ -95,7 +98,7 @@ struct SparseMatrixConstantNNZRow : public SparseMatrix2<T>
         }
 
         if ((source == HOST || source == DEVICE) &&
-            ((source & m_allocated) != source)) {
+            ((source & this->m_allocated) != source)) {
             RXMESH_ERROR(
                 "SparseMatrixConstantNNZRow::move_col_idx() moving source is "
                 "not valid because it was not allocated on source i.e., {}",
@@ -104,7 +107,7 @@ struct SparseMatrixConstantNNZRow : public SparseMatrix2<T>
         }
 
         if (((target & HOST) == HOST || (target & DEVICE) == DEVICE) &&
-            ((target & m_allocated) != target)) {
+            ((target & this->m_allocated) != target)) {
             RXMESH_ERROR(
                 "SparseMatrixConstantNNZRow::move_col_idx() target {} is not "
                 "allocated!",
@@ -113,15 +116,15 @@ struct SparseMatrixConstantNNZRow : public SparseMatrix2<T>
         }
 
         if (source == HOST && target == DEVICE) {
-            CUDA_ERROR(cudaMemcpyAsync(m_d_col_idx,
-                                       m_h_col_idx,
-                                       m_nnz * sizeof(IndexT),
+            CUDA_ERROR(cudaMemcpyAsync(this->m_d_col_idx,
+                                       this->m_h_col_idx,
+                                       this->m_nnz * sizeof(IndexT),
                                        cudaMemcpyHostToDevice,
                                        stream));
         } else if (source == DEVICE && target == HOST) {
-            CUDA_ERROR(cudaMemcpyAsync(m_h_col_idx,
-                                       m_d_col_idx,
-                                       m_nnz * sizeof(IndexT),
+            CUDA_ERROR(cudaMemcpyAsync(this->m_h_col_idx,
+                                       this->m_d_col_idx,
+                                       this->m_nnz * sizeof(IndexT),
                                        cudaMemcpyDeviceToHost,
                                        stream));
         }

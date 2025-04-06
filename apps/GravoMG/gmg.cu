@@ -12,7 +12,7 @@
 
 #include "rxmesh/geometry_factory.h"
 
-#include "include/gmg.h"
+#include "include/GMG.h"
 #include "include/v_cycle.h"
 
 struct arg

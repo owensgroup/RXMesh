@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gmg.h"
+#include "GMG.h"
 
 #include "jacobi_solver.h"
 

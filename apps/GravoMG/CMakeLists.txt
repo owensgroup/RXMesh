@@ -10,8 +10,8 @@ set(SOURCE_LIST
 	include/RXMeshMCFSetup.h
 	include/VCycle.h
 	include/GPUGMG.h
-	include/gmg.h
-	include/gmg_kernels.h
+	include/GMG.h
+	include/GMG_kernels.h
 	include/fps_sampler.h
 	include/cluster.h
 	include/hashtable.h
