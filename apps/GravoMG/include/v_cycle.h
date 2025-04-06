@@ -20,7 +20,7 @@ template <typename T>
 struct CoarseA
 {
 
-    CoarseA(){};
+    CoarseA() {};
     SparseMatrix<T> a;
 
     T*   d_val;
@@ -83,13 +83,17 @@ struct VCycle
 
             m_r.emplace_back(rx, gmg.m_num_samples[l], rhs.cols());
 
-            //how do I allocate m_a
-            //m_a[l].a.emplace_back(rx, gmg.m_num_samples[l], gmg.m_num_samples[l]);
+            // how do I allocate m_a
+            // m_a[l].a.emplace_back(rx, gmg.m_num_samples[l],
+            // gmg.m_num_samples[l]);
 
-            std::cout << "\nr: " << m_r.back().rows() << " x "<<m_r.back().cols();
-            std::cout << "\nrhs: " << m_rhs.back().rows() << " x "<<m_rhs.back().cols();
+            std::cout << "\nr: " << m_r.back().rows() << " x "
+                      << m_r.back().cols();
+            std::cout << "\nrhs: " << m_rhs.back().rows() << " x "
+                      << m_rhs.back().cols();
 
-            gmg.m_prolong_op[l - 1].alloc_multiply_buffer(m_r.back(), m_rhs[l-1]);
+            gmg.m_prolong_op[l - 1].alloc_multiply_buffer(m_r.back(),
+                                                          m_rhs[l - 1]);
 
             if (l > gmg.m_num_levels - 1) {
                 m_smoother.emplace_back(gmg.m_num_samples[l],
@@ -101,13 +105,13 @@ struct VCycle
             }
         }
 
-        //m_a.push_back();
+        // m_a.push_back();
         m_a.resize(gmg.m_num_levels - 1);
         // construct m_a for all levels
         pt_A_p(gmg.m_prolong_op[0], A, m_a[0]);
-        /*for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
+        for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
             pt_A_p(gmg.m_prolong_op[l], m_a[l - 1].a, m_a[l]);
-        }*/
+        }
     }
 
 
@@ -117,9 +121,12 @@ struct VCycle
     {
         // S = transpose(P) * A
         // C = S * A
+       
 
         cusparseSpGEMMDescr_t spgemmDesc;
         CUSPARSE_ERROR(cusparseSpGEMM_createDescr(&spgemmDesc));
+
+        SparseMatrix2<T> Pt = P.transpose();
 
         cusparseSpMatDescr_t S_spmat;
         cusparseSpMatDescr_t C_spmat;
@@ -164,9 +171,8 @@ struct VCycle
 
         // S = transpose(P) *A
         sparse_gemm(A.m_cusparse_handle,
-                    P.m_spdescr,
-                    A.m_spdescr,
-                    CUSPARSE_OPERATION_TRANSPOSE,
+                    Pt.m_spdescr,
+                    A.m_spdescr,                    
                     s_rows,
                     s_cols,
                     s_nnz,
@@ -180,8 +186,7 @@ struct VCycle
         // C = S * P
         sparse_gemm(A.m_cusparse_handle,
                     S_spmat,
-                    P.m_spdescr,
-                    CUSPARSE_OPERATION_NON_TRANSPOSE,
+                    P.m_spdescr,                    
                     c_rows,
                     c_cols,
                     c_nnz,
@@ -222,6 +227,7 @@ struct VCycle
                               C.h_val);
 
         // clean up
+        Pt.release();
         GPU_FREE(s_rowPtr);
         GPU_FREE(s_colIdx);
         GPU_FREE(s_values);
@@ -332,11 +338,9 @@ struct VCycle
     }
 
    private:
-    
-    void sparse_gemm(const cusparseHandle_t      handle,
-                     const cusparseSpMatDescr_t  A,
-                     const cusparseSpMatDescr_t  B,
-                     const cusparseOperation_t   op_a,
+    void sparse_gemm(const cusparseHandle_t&     handle,
+                     const cusparseSpMatDescr_t& A,
+                     const cusparseSpMatDescr_t& B,
                      const int                   c_rows,
                      const int                   c_cols,
                      int64_t&                    c_nnz,
@@ -344,7 +348,7 @@ struct VCycle
                      int*&                       c_colIdx,
                      float*&                     c_values,
                      const cusparseSpMatDescr_t& C_spmat,
-                     cusparseSpGEMMDescr_t       spgemmDesc)
+                     cusparseSpGEMMDescr_t&      spgemmDesc)
     {
         // C = op(A)*B
 
@@ -359,7 +363,7 @@ struct VCycle
 
         CUSPARSE_ERROR(
             cusparseSpGEMM_workEstimation(handle,
-                                          op_a,
+                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
                                           CUSPARSE_OPERATION_NON_TRANSPOSE,
                                           &alpha,
                                           A,
@@ -379,7 +383,7 @@ struct VCycle
         // requirement for the next step
         CUSPARSE_ERROR(
             cusparseSpGEMM_workEstimation(handle,
-                                          op_a,
+                                          CUSPARSE_OPERATION_NON_TRANSPOSE,
                                           CUSPARSE_OPERATION_NON_TRANSPOSE,
                                           &alpha,
                                           A,
@@ -396,7 +400,7 @@ struct VCycle
         size_t bufferSize2 = 0;
         void*  dBuffer2    = nullptr;
         CUSPARSE_ERROR(cusparseSpGEMM_compute(handle,
-                                              op_a,
+                                              CUSPARSE_OPERATION_NON_TRANSPOSE,
                                               CUSPARSE_OPERATION_NON_TRANSPOSE,
                                               &alpha,
                                               A,
@@ -412,7 +416,7 @@ struct VCycle
 
         // compute the intermediate product of A * B
         CUSPARSE_ERROR(cusparseSpGEMM_compute(handle,
-                                              op_a,
+                                              CUSPARSE_OPERATION_NON_TRANSPOSE,
                                               CUSPARSE_OPERATION_NON_TRANSPOSE,
                                               &alpha,
                                               A,
@@ -429,7 +433,7 @@ struct VCycle
         int64_t cr, cc;
         CUSPARSE_ERROR(cusparseSpMatGetSize(C_spmat, &cr, &cc, &c_nnz));
         assert(c_rows == cr);
-        assert(c_rows == cc);
+        assert(c_cols == cc);
 
 
         // allocate matrix C
@@ -443,7 +447,7 @@ struct VCycle
 
         // copy the final products to the matrix C
         CUSPARSE_ERROR(cusparseSpGEMM_copy(handle,
-                                           op_a,
+                                           CUSPARSE_OPERATION_NON_TRANSPOSE,
                                            CUSPARSE_OPERATION_NON_TRANSPOSE,
                                            &alpha,
                                            A,
@@ -457,7 +461,5 @@ struct VCycle
         GPU_FREE(dBuffer1);
         GPU_FREE(dBuffer2);
     }
-    
-
 };
 }  // namespace rxmesh
