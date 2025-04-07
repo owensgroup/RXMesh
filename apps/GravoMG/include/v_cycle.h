@@ -101,7 +101,8 @@ struct VCycle
             } else {
                 // coarsest level
                 m_coarse_solver =
-                    JacobiSolver<T>(gmg.m_num_samples[l], gmg.m_num_samples[l]);
+                    //JacobiSolver<T>(gmg.m_num_samples[l], gmg.m_num_samples[l]);
+                    JacobiSolver<T>(gmg.m_num_samples[l], 3);
             }
         }
 
@@ -267,7 +268,6 @@ struct VCycle
             // pre-smoothing
             m_smoother[level].template solve<numCols>(A, f, v, m_num_pre_relax);
 
-
             // calc residual
             calc_residual<numCols>(A, v, f, m_r[level]);
 
@@ -283,7 +283,6 @@ struct VCycle
             gmg.m_prolong_op[level + 1].multiply(
                 v, m_x[level], false, false, T(1.0), T(1.0));
 
-
             // post-smoothing
             m_smoother[level].template solve<numCols>(
                 A, f, v, m_num_post_relax);
@@ -291,6 +290,7 @@ struct VCycle
         } else {
             // the coarsest level
             m_coarse_solver.template solve<numCols>(A, f, v, m_num_post_relax);
+            m_coarse_solver.template solve<numCols>(A, f, v, 100);
         }
     }
 
