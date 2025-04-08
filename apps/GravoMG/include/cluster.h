@@ -4,11 +4,11 @@ namespace rxmesh {
 
 namespace detail {
 template <typename T, uint32_t blockThreads>
-__global__ static void cluster_points(const Context      context,
-                                      DenseMatrix<T>     vertex_pos,
-                                      VertexAttribute<T> distance,
-                                      DenseMatrix<int>   clustered_vertices,
-                                      int*               flag)
+__global__ static void cluster_points(const Context        context,
+                                      const DenseMatrix<T> vertex_pos,
+                                      VertexAttribute<T>   distance,
+                                      DenseMatrix<int>     vertex_cluster,
+                                      int*                 flag)
 {
 
     auto cluster = [&](VertexHandle v_id, VertexIterator& vv) {
@@ -20,10 +20,10 @@ __global__ static void cluster_points(const Context      context,
                       powf(vertex_pos(v_id, 2) - vertex_pos(vv[i], 2), 2)) +
                 distance(vv[i], 0);
 
-            if (dist < distance(v_id, 0) && clustered_vertices(vv[i]) != -1) {
-                distance(v_id, 0)        = dist;
-                *flag                    = 15;
-                clustered_vertices(v_id) = clustered_vertices(vv[i]);
+            if (dist < distance(v_id, 0) && vertex_cluster(vv[i]) != -1) {
+                distance(v_id, 0)    = dist;
+                *flag                = 15;
+                vertex_cluster(v_id) = vertex_cluster(vv[i]);
             }
         }
     };
@@ -39,14 +39,13 @@ __global__ static void cluster_points(const Context      context,
 /**
  * \brief Clustering the data after sampling for the 1st level
  */
-void clustering_1st_level(RXMeshStatic&           rx,
-                          int                     current_level,
-                          DenseMatrix<float>&     vertex_pos,
-                          DenseMatrix<uint16_t>&  sample_level_bitmask,
-                          VertexAttribute<float>& distance,
-                          DenseMatrix<int>&       sample_id,
-                          DenseMatrix<int>&       vertex_cluster,
-                          int*                    d_flag)
+void clustering_1st_level(RXMeshStatic&                rx,
+                          int                          current_level,
+                          const DenseMatrix<float>&    vertex_pos,
+                          const DenseMatrix<uint16_t>& sample_level_bitmask,
+                          VertexAttribute<float>&      distance,
+                          DenseMatrix<int>&            vertex_cluster,
+                          int*                         d_flag)
 {
     constexpr uint32_t blockThreads = 256;
 
@@ -61,18 +60,18 @@ void clustering_1st_level(RXMeshStatic&           rx,
         DEVICE,
         [sample_level_bitmask,
          distance,
-         sample_id,
          vertex_cluster,
          current_level] __device__(const VertexHandle vh) mutable {
             if ((sample_level_bitmask(vh) & (1 << (current_level - 1))) != 0) {
-                vertex_cluster(vh) = sample_id(vh);
-                distance(vh, 0)    = 0;
+                assert(vertex_cluster(vh) != -1);
+                distance(vh) = 0;
             } else {
-                distance(vh, 0)    = std::numeric_limits<float>::max();
-                vertex_cluster(vh) = -1;
+                assert(vertex_cluster(vh) == -1);
+                distance(vh) = std::numeric_limits<float>::max();
             }
         });
 
+    cudaDeviceSynchronize();
     do {
         CUDA_ERROR(cudaMemset(d_flag, 0, sizeof(int)));
         rx.run_kernel<blockThreads>(lb,
@@ -92,17 +91,17 @@ void clustering_1st_level(RXMeshStatic&           rx,
 /**
  * \brief Clustering the data for any level other than the 1st level
  */
-inline void clustering_nth_level(int               num_samples,
-                                 int               current_level,
-                                 DenseMatrix<int>& sample_neighbor_size_prefix,
-                                 DenseMatrix<int>& sample_neighbor,
-                                 DenseMatrix<int>& vertex_cluster,
-                                 DenseMatrix<float>&    distance,
-                                 DenseMatrix<int>&      sample_id,
-                                 DenseMatrix<uint16_t>& sample_level_bitmask,
-                                 DenseMatrix<float>&    samples_pos,
-                                 DenseMatrix<float>&    prev_samples_pos,
-                                 int*                   d_flag)
+inline void clustering_nth_level(
+    int                          num_samples,
+    int                          current_level,
+    const DenseMatrix<int>&      sample_neighbor_size_prefix,
+    const DenseMatrix<int>&      sample_neighbor,
+    DenseMatrix<int>&            vertex_cluster,
+    DenseMatrix<float>&          distance,
+    const DenseMatrix<uint16_t>& sample_level_bitmask,
+    DenseMatrix<float>&          samples_pos,
+    const DenseMatrix<float>&    prev_samples_pos,
+    int*                         d_flag)
 {
     int h_flag = 0;
 
@@ -112,16 +111,13 @@ inline void clustering_nth_level(int               num_samples,
     // previously "set_cluster()"
     for_each_item<<<blocks, threads>>>(
         num_samples, [=] __device__(int id) mutable {
-            // if ((sample_level_bitmask(id) & (1 << current_level - 1)) != 0) {
-            if (sample_id(id) != -1)
+            if ((sample_level_bitmask(id) & (1 << current_level - 1)) != 0) {
+                assert(vertex_cluster(id) != -1);
                 distance(id) = 0;
-            else
+            } else {
+                assert(vertex_cluster(id) == -1);
                 distance(id) = std::numeric_limits<float>::max();
-            vertex_cluster(id) = sample_id(id);
-            //}
-            // else {
-            //    //vertex_cluster(id) = -1;
-            //}
+            }
         });
 
 
@@ -141,7 +137,8 @@ inline void clustering_nth_level(int               num_samples,
                     const float v_x       = prev_samples_pos(current_v, 0);
                     const float v_y       = prev_samples_pos(current_v, 1);
                     const float v_z       = prev_samples_pos(current_v, 2);
-                    float       dist      = sqrtf(powf(sample_x - v_x, 2) +
+
+                    float dist = sqrtf(powf(sample_x - v_x, 2) +
                                        powf(sample_y - v_y, 2) +
                                        powf(sample_z - v_z, 2)) +
                                  distance(current_v);

@@ -44,7 +44,7 @@ __global__ static void sample_points(const Context          context,
 void FPSSampler(RXMeshStatic&           rx,
                 VertexAttribute<float>& distance,
                 DenseMatrix<float>&     vertex_pos,
-                DenseMatrix<int>&       sample_id,
+                DenseMatrix<int>&       vertex_cluster,
                 DenseMatrix<uint16_t>&  sample_level_bitmask,
                 DenseMatrix<float>&     samples_pos,
                 float                   ratio,
@@ -79,7 +79,7 @@ void FPSSampler(RXMeshStatic&           rx,
 
     for (int i = 0; i < numberOfSamplesForFirstLevel; i++) {
 
-        if (i == N / (int)powf(ratio, currentSampleLevel)) {
+        if (i > N / (int)powf(ratio, currentSampleLevel)) {
             currentSampleLevel--;
         }
 
@@ -87,8 +87,8 @@ void FPSSampler(RXMeshStatic&           rx,
             DEVICE, [=] __device__(const VertexHandle vh) mutable {
                 if (seed == context.linear_id(vh)) {
 
-                    sample_id(vh) = i;
-                    distance(vh)  = 0;
+                    vertex_cluster(vh) = i;
+                    distance(vh)       = 0;
 
                     samples_pos(i, 0) = vertex_pos(vh, 0);
                     samples_pos(i, 1) = vertex_pos(vh, 1);
@@ -100,7 +100,6 @@ void FPSSampler(RXMeshStatic&           rx,
                 } else {
                     if (i == 0) {
                         distance(vh, 0) = std::numeric_limits<float>::max();
-                        sample_id(vh)   = -1;
                     }
                 }
             });

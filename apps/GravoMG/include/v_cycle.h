@@ -121,7 +121,7 @@ struct VCycle
     {
         // S = transpose(P) * A
         // C = S * A
-       
+
 
         cusparseSpGEMMDescr_t spgemmDesc;
         CUSPARSE_ERROR(cusparseSpGEMM_createDescr(&spgemmDesc));
@@ -172,7 +172,7 @@ struct VCycle
         // S = transpose(P) *A
         sparse_gemm(A.m_cusparse_handle,
                     Pt.m_spdescr,
-                    A.m_spdescr,                    
+                    A.m_spdescr,
                     s_rows,
                     s_cols,
                     s_nnz,
@@ -186,7 +186,7 @@ struct VCycle
         // C = S * P
         sparse_gemm(A.m_cusparse_handle,
                     S_spmat,
-                    P.m_spdescr,                    
+                    P.m_spdescr,
                     c_rows,
                     c_cols,
                     c_nnz,
@@ -272,9 +272,9 @@ struct VCycle
 
             //// restrict residual
             gmg.m_prolong_op[level].multiply(
-                m_r[level], m_rhs[level+1], true);
+                m_r[level], m_rhs[level + 1], true);
             //// recurse
-            cycle(level + 1, gmg, m_a[level].a, m_rhs[level+1], m_x[level]);
+            cycle(level + 1, gmg, m_a[level].a, m_rhs[level + 1], m_x[level]);
 
             // prolong
             // x = x + P*u

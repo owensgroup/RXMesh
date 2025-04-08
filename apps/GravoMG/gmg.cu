@@ -139,7 +139,7 @@ TEST(Apps, GMG)
 int main(int argc, char** argv)
 {
     using namespace rxmesh;
-    Log::init();
+    Log::init(spdlog::level::info);
 
     ::testing::InitGoogleTest(&argc, argv);
 

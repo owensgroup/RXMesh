@@ -19,18 +19,18 @@ void render_output_mesh(VectorCSR3D X, rxmesh::RXMeshStatic& rx)
         "output mesh", vertexMeshPositions, rx.get_polyscope_mesh()->faces);
 }
 
- template <typename T>
- void render_output_mesh(rxmesh::DenseMatrix<T>& X, rxmesh::RXMeshStatic& rx)
+template <typename T>
+void render_output_mesh(rxmesh::DenseMatrix<T>& X, rxmesh::RXMeshStatic& rx)
 {
-     std::vector<std::array<double, 3>> vertexMeshPositions;
-     vertexMeshPositions.resize(X.rows());
+    std::vector<std::array<double, 3>> vertexMeshPositions;
+    vertexMeshPositions.resize(X.rows());
 
-     for (int i = 0; i < X.rows(); i++) {
-         vertexMeshPositions[i] = {X(i, 0), X(i, 1), X(i, 2)};
-     }
-     polyscope::registerSurfaceMesh(
-         "output mesh", vertexMeshPositions, rx.get_polyscope_mesh()->faces);
- }
+    for (int i = 0; i < X.rows(); i++) {
+        vertexMeshPositions[i] = {X(i, 0), X(i, 1), X(i, 2)};
+    }
+    polyscope::registerSurfaceMesh(
+        "output mesh", vertexMeshPositions, rx.get_polyscope_mesh()->faces);
+}
 
 
 void interactive_menu(GMGVCycle& gmg, rxmesh::RXMeshStatic& rx)

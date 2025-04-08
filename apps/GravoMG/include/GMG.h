@@ -15,6 +15,8 @@
 #include "fps_sampler.h"
 #include "hashtable.h"
 
+#include "polyscope/point_cloud.h"
+
 namespace rxmesh {
 
 enum class Sampling
@@ -149,9 +151,8 @@ struct GMG
     std::vector<DenseMatrix<int>> m_sample_neighbor;                 // levels
     std::vector<SparseMatrixConstantNNZRow<float, 3>> m_prolong_op;  // levels
 
-    std::vector<DenseMatrix<int>>   m_sample_id;       // fine+levels
     std::vector<DenseMatrix<float>> m_distance_mat;    // fine+levels
-    std::vector<DenseMatrix<int>>   m_vertex_cluster;  // fine+levels
+    std::vector<DenseMatrix<int>>   m_vertex_cluster;  // levels
 
     DenseMatrix<float>     m_vertex_pos;            // fine
     VertexAttribute<float> m_distance;              // fine
@@ -168,8 +169,8 @@ struct GMG
 
     GMG(RXMeshStatic& rx,
         Sampling      sam                   = Sampling::FPS,
-        int           reduction_ratio       = 7,
-        int           num_samples_threshold = 6)
+        int           reduction_ratio       = 20,
+        int           num_samples_threshold = 7)
         : m_ratio(reduction_ratio),
           m_edge_hash_table(
               GPUHashTable<Edge>(DIVIDE_UP(rx.get_num_edges(), 2)))
@@ -210,19 +211,22 @@ struct GMG
                 m_sample_neighbor_size_prefix.back().reset(0, DEVICE);
             }
             if (l < m_num_samples.size() - 1) {
+                m_vertex_cluster.emplace_back(rx, level_num_samples, 1);
+                m_vertex_cluster.back().reset(-1, LOCATION_ALL);
+
                 m_prolong_op.emplace_back(
                     rx, level_num_samples, m_num_samples[l + 1]);
             }
-            m_sample_id.emplace_back(rx, level_num_samples, 1);
-            // m_sample_id.emplace_back(rx, m_num_samples[0], 1);
-            m_vertex_cluster.emplace_back(rx, level_num_samples, 1);
-            m_vertex_cluster.back().reset(std::numeric_limits<int>::max(),
-                                          LOCATION_ALL);
+
+
             m_distance_mat.emplace_back(rx, level_num_samples, 1);
         }
 
+
         m_vertex_pos = *rx.get_input_vertex_coordinates()->to_matrix();
         m_distance   = *rx.add_vertex_attribute<float>("d", 1);
+
+
         m_sample_level_bitmask = DenseMatrix<uint16_t>(rx, m_num_rows, 1);
 
         CUDA_ERROR(cudaMalloc((void**)&m_d_flag, sizeof(int)));
@@ -259,21 +263,19 @@ struct GMG
             }
         }
 
-        // exit(0);
 
         for (int l = 1; l < m_num_levels; ++l) {
 
-            std::cout << "\nLEVEL: " << l << "\n";
-            //    //============
-            //    // 3) Clustering
-            //    //============
+            //============
+            // 3) Clustering
+            //============
 
             clustering(rx, l);
 
 
-            //    //============
-            //    // 4) Create coarse mesh compressed representation of
-            //    //============
+            //============
+            // 4) Create coarse mesh compressed representation of
+            //============
 
             create_compressed_representation(rx, l);
         }
@@ -304,7 +306,7 @@ struct GMG
         FPSSampler(rx,
                    m_distance,
                    m_vertex_pos,
-                   m_sample_id[0],
+                   m_vertex_cluster[0],
                    m_sample_level_bitmask,
                    m_samples_pos[0],
                    m_ratio,
@@ -313,38 +315,123 @@ struct GMG
                    m_num_samples[1],
                    m_d_flag);
 
-
         constexpr uint32_t blockThreads = 256;
 
+        for (int level = 2; level < m_num_levels; ++level) {
+            uint32_t blocks = DIVIDE_UP(m_num_samples[level], blockThreads);
 
-        for (int level = 2; level < m_num_levels - 1; ++level) {
-            uint32_t blocks = DIVIDE_UP(m_num_samples[0], blockThreads);
+            auto& current_samples_pos = m_samples_pos[level - 1];
 
-            auto& current_level_samples_pos =
-                m_samples_pos[level];  // Previous level
-            const auto& prev_level_samples_pos =
-                m_samples_pos[0];  // Current level
+            const auto& prv_samples_pos = m_samples_pos[level - 2];
 
+            auto& current_v_cluster = m_vertex_cluster[level - 1];
 
-            auto& prev_sample_id    = m_sample_id[0];
-            auto& current_sample_id = m_sample_id[level];
+            const auto& prv_v_cluster = m_vertex_cluster[level - 2];
 
-            std::cout << "\n\n sample level : " << level;
+            // if (level == 2) {
+            //     // when we are at level 2, we are reading from level 1. Level
+            //     // 1 samples are scatter across the mesh vertices. Thus, only
+            //     // for level 2, we read from the mesh and try to populate the
+            //     // samples position and vertex cluster
+            //     int num_samples = m_num_samples[level];
+            //     rx.for_each_vertex(
+            //         DEVICE,
+            //         [num_samples, current_v_cluster, prv_v_cluster]
+            //         __device__(
+            //             const VertexHandle vh) mutable {
+            //             int tid = blockIdx.x * blockDim.x + threadIdx.x;
+            //             if (tid < num_samples && prv_v_cluster(vh) != -1) {
+            //                 current_v_cluster(tid, 0) = prv_v_cluster(vh, 0);
+            //             }
+            //         });
+            // } else {
+            //     // for other levels, we always take the first N samples from
+            //     the
+            //     // previous level (where N is the m_num_samples[level])
+            //     because
+            //     // in the previous level, the first M samples are the one
+            //     from
+            //     // FPS (where M is m_num_samples[level-1])
+            //
+            //     for_each_item<<<blocks, blockThreads>>>(
+            //         m_num_samples[level],
+            //         [current_v_cluster,
+            //          prv_v_cluster] __device__(int i) mutable {
+            //             current_v_cluster(i, 0) = prv_v_cluster(i, 0);
+            //         });
+            // }
+
             for_each_item<<<blocks, blockThreads>>>(
-                m_num_samples[0],
-                [current_level_samples_pos,
-                 current_sample_id,
-                 prev_level_samples_pos,
-                 prev_sample_id] __device__(int i) mutable {
+                m_num_samples[level],
+                [current_v_cluster,
+                 prv_v_cluster,
+                 current_samples_pos,
+                 prv_samples_pos] __device__(int i) mutable {
+                    current_v_cluster(i, 0) = prv_v_cluster(i, 0);
 
-
-                    
-
-                    
+                    current_samples_pos(i, 0) = prv_samples_pos(i, 0);
+                    current_samples_pos(i, 1) = prv_samples_pos(i, 1);
+                    current_samples_pos(i, 2) = prv_samples_pos(i, 2);
                 });
         }
 
-        exit(1);
+        // m_sample_level_bitmask.move(DEVICE, HOST);
+        // std::vector<int> num_samples(m_num_samples.size());
+        // num_samples.resize(m_num_samples.size(), 0);
+        // rx.for_each_vertex(
+        //     HOST,
+        //     [&](VertexHandle vh) {
+        //         if (m_sample_id[0](vh) == -1) {
+        //             return;
+        //         }
+        //
+        //         for (int i = 1; i < num_samples.size(); ++i) {
+        //             if ((m_sample_level_bitmask(vh) & (1 << i - 1)) != 0) {
+        //                 num_samples[i]++;
+        //             }
+        //         }
+        //     },
+        //     nullptr,
+        //     false);
+
+        // DEBUG Code
+        for (int l = 1; l < m_num_levels; ++l) {
+
+            m_vertex_cluster[l - 1].move(DEVICE, HOST);
+            m_distance.move(DEVICE, HOST);
+
+            if (l == 1) {
+                auto at =
+                    *rx.add_vertex_attribute<int>("C" + std::to_string(l), 1);
+                at.from_matrix(&m_vertex_cluster[l - 1]);
+                rx.get_polyscope_mesh()->addVertexScalarQuantity(
+                    "C" + std::to_string(l), at);
+
+                rx.get_polyscope_mesh()->addVertexScalarQuantity(
+                    "dist" + std::to_string(l), m_distance);
+            } else {
+                std::vector<glm::vec3> points(m_num_samples[l]);
+
+                m_samples_pos[l - 1].move(DEVICE, HOST);
+
+                for (int i = 0; i < m_samples_pos[l - 1].rows(); i++) {
+                    points[i][0] = m_samples_pos[l - 1](i, 0);
+                    points[i][1] = m_samples_pos[l - 1](i, 1);
+                    points[i][2] = m_samples_pos[l - 1](i, 2);
+                }
+
+                std::vector<int> xC(points.size());
+                for (int i = 0; i < points.size(); i++) {
+                    xC[i] = m_vertex_cluster[l - 1](i);
+                }
+
+                polyscope::PointCloud* psCloud = polyscope::registerPointCloud(
+                    "L" + std::to_string(l), points);
+                psCloud->addScalarQuantity("C" + std::to_string(l), xC);
+            }
+
+            polyscope::show();
+        }
     }
 
     /**
@@ -375,8 +462,7 @@ struct GMG
                                  m_vertex_pos,
                                  m_sample_level_bitmask,
                                  m_distance,
-                                 m_sample_id[0],
-                                 m_vertex_cluster[0],
+                                 m_vertex_cluster[l - 1],  // 0
                                  m_d_flag);
         } else {
             clustering_nth_level(m_num_samples[l - 1],
@@ -385,10 +471,9 @@ struct GMG
                                  m_sample_neighbor[l - 2],
                                  m_vertex_cluster[l - 1],
                                  m_distance_mat[l - 1],
-                                 m_sample_id[l - 1],
                                  m_sample_level_bitmask,
-                                 m_samples_pos[l - 1],
-                                 m_samples_pos[l - 2],
+                                 m_samples_pos[0],
+                                 m_samples_pos[0],
                                  m_d_flag);
         }
     }
@@ -558,7 +643,7 @@ struct GMG
                                 m_sample_neighbor_size_prefix[level - 1],
                                 m_sample_neighbor[level - 1],
                                 m_prolong_op[level - 1],
-                                m_samples_pos[level - 1],
+                                m_samples_pos[0],
                                 m_vertex_cluster[level - 1]);
         }
     }
