@@ -32,8 +32,11 @@ struct JacobiSolver
 
         uint32_t blocks = DIVIDE_UP(A.rows(), blockThreads);
 
-        DenseMatrix<T> x_new = m_x_new;
+        DenseMatrix<T> x_new = DenseMatrix<T>(A.rows(), x.cols());  // m_x_new;
 
+        //do this alloc before the runtime solving
+        m_x_new = DenseMatrix<T>(A.rows(), x.cols());
+        
         for (int iter = 0; iter < num_iter; ++iter) {
 
             for_each_item<<<blocks, blockThreads>>>(
@@ -83,8 +86,9 @@ struct JacobiSolver
                     }
                 });
 
-            x.swap(m_x_new);
+            x.swap(x_new);
         }
+        
     }
 };
 }  // namespace rxmesh

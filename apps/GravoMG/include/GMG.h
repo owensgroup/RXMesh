@@ -9,10 +9,10 @@
 
 #include "rxmesh/matrix/sparse_matrix_constant_nnz_row.h"
 
+#include "GMG_kernels.h"
 #include "NeighborHandling.h"
 #include "cluster.h"
 #include "fps_sampler.h"
-#include "GMG_kernels.h"
 #include "hashtable.h"
 
 namespace rxmesh {
@@ -23,6 +23,109 @@ enum class Sampling
     FPS    = 1,
     KMeans = 2,
 };
+
+void rearrangeDenseMatrix(std::vector<DenseMatrix<int>>& m_sample_neighbor_size,
+                          std::vector<DenseMatrix<int>>& m_sample_neighbor)
+{
+    int       num_rows      = m_sample_neighbor_size[0].rows();
+    const int MAX_LOOKAHEAD = 4;
+
+    for (int row = 0; row < num_rows; ++row) {
+        int num_neighbors = m_sample_neighbor_size[0](row, 0);
+        if (num_neighbors < 2)
+            continue;
+
+        for (int i = 0; i < num_neighbors - 1; i++) {
+            int current = m_sample_neighbor[0](row, i);
+            int next    = m_sample_neighbor[0](row, i + 1);
+
+            bool already_connected = false;
+            for (int k = 0; k < m_sample_neighbor_size[0](current, 0); k++) {
+                if (m_sample_neighbor[0](current, k) == next) {
+                    already_connected = true;
+                    break;
+                }
+            }
+
+            if (!already_connected) {
+                int max_look = std::min(i + 1 + MAX_LOOKAHEAD, num_neighbors);
+                for (int j = i + 2; j < max_look; j++) {
+                    int candidate = m_sample_neighbor[0](row, j);
+                    for (int k = 0; k < m_sample_neighbor_size[0](current, 0);
+                         k++) {
+                        if (m_sample_neighbor[0](current, k) == candidate) {
+                            std::swap(m_sample_neighbor[0](row, i + 1),
+                                      m_sample_neighbor[0](row, j));
+                            goto next_vertex;
+                        }
+                    }
+                }
+            }
+        next_vertex:
+            continue;
+        }
+    }
+}
+
+void GetRenderDataFromDenseMatrices(
+    std::vector<std::array<double, 3>>& vertexPositions,
+    std::vector<std::vector<size_t>>&   faceIndices,
+    std::vector<DenseMatrix<int>>&      m_sample_neighbor_size,
+    std::vector<DenseMatrix<int>>&      m_sample_neighbor,
+    DenseMatrix<float>&                 vertex_pos)
+{
+    rearrangeDenseMatrix(m_sample_neighbor_size, m_sample_neighbor);
+
+    int num_rows = m_sample_neighbor_size[0].rows();
+
+    vertexPositions.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        vertexPositions[i] = {
+            vertex_pos(i, 0), vertex_pos(i, 1), vertex_pos(i, 2)};
+    }
+
+    faceIndices.clear();
+    for (int i = 0; i < num_rows; ++i) {
+        int num_neighbors = m_sample_neighbor_size[0](i, 0);
+        if (num_neighbors >= 2) {
+            for (int j = 0; j < num_neighbors; ++j) {
+                int a = i;
+                int b = m_sample_neighbor[0](i, j);
+                int c = (j == num_neighbors - 1) ?
+                            m_sample_neighbor[0](i, 0) :
+                            m_sample_neighbor[0](i, j + 1);
+
+                for (int k = 0; k < m_sample_neighbor_size[0](b, 0); ++k) {
+                    if (m_sample_neighbor[0](b, k) == c) {
+                        faceIndices.push_back({static_cast<size_t>(a),
+                                               static_cast<size_t>(b),
+                                               static_cast<size_t>(c)});
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void renderFromDenseMatrices(
+    std::vector<DenseMatrix<int>>& m_sample_neighbor_size,
+    std::vector<DenseMatrix<int>>& m_sample_neighbor,
+    DenseMatrix<float>&            vertex_pos)
+{
+    std::vector<std::array<double, 3>> vertexPositions;
+    std::vector<std::vector<size_t>>   faceIndices;
+
+    GetRenderDataFromDenseMatrices(vertexPositions,
+                                   faceIndices,
+                                   m_sample_neighbor_size,
+                                   m_sample_neighbor,
+                                   vertex_pos);
+
+    polyscope::registerSurfaceMesh(
+        "dense matrix mesh", vertexPositions, faceIndices);
+}
+
 
 template <typename T>
 struct GMG
@@ -111,6 +214,7 @@ struct GMG
                     rx, level_num_samples, m_num_samples[l + 1]);
             }
             m_sample_id.emplace_back(rx, level_num_samples, 1);
+            // m_sample_id.emplace_back(rx, m_num_samples[0], 1);
             m_vertex_cluster.emplace_back(rx, level_num_samples, 1);
             m_vertex_cluster.back().reset(std::numeric_limits<int>::max(),
                                           LOCATION_ALL);
@@ -174,8 +278,8 @@ struct GMG
             create_compressed_representation(rx, l);
         }
 
-        //renderFromDenseMatrices(
-        //    m_sample_neighbor_size, m_sample_neighbor, m_vertex_pos);
+        // renderFromDenseMatrices(
+        //     m_sample_neighbor_size, m_sample_neighbor, m_vertex_pos);
 
         //============
         // 5) Create prolongation operator
@@ -209,29 +313,38 @@ struct GMG
                    m_num_samples[1],
                    m_d_flag);
 
+
         constexpr uint32_t blockThreads = 256;
 
-        for (int level = 1; level < m_num_levels - 1; ++level) {
-            uint32_t blocks =
-                DIVIDE_UP(m_sample_id[level - 1].rows(), blockThreads);
 
-            auto& a = m_samples_pos[level - 1];  // Previous level
-            auto& b = m_samples_pos[level];      // Current level
-            auto& c = m_sample_id[level - 1];
-            auto& d = m_sample_id[level];
+        for (int level = 2; level < m_num_levels - 1; ++level) {
+            uint32_t blocks = DIVIDE_UP(m_num_samples[0], blockThreads);
 
+            auto& current_level_samples_pos =
+                m_samples_pos[level];  // Previous level
+            const auto& prev_level_samples_pos =
+                m_samples_pos[0];  // Current level
+
+
+            auto& prev_sample_id    = m_sample_id[0];
+            auto& current_sample_id = m_sample_id[level];
+
+            std::cout << "\n\n sample level : " << level;
             for_each_item<<<blocks, blockThreads>>>(
-                a.rows(), [a, b, c, d] __device__(int i) mutable {
-                    if (i < b.rows()) {
-                        d(i, 0) = i;
-                        b(i, 0) = a(i, 0);
-                        b(i, 1) = a(i, 1);
-                        b(i, 2) = a(i, 2);
-                    } else {
-                        d(i, 0) = -1;
-                    }
+                m_num_samples[0],
+                [current_level_samples_pos,
+                 current_sample_id,
+                 prev_level_samples_pos,
+                 prev_sample_id] __device__(int i) mutable {
+
+
+                    
+
+                    
                 });
         }
+
+        exit(1);
     }
 
     /**
@@ -439,7 +552,7 @@ struct GMG
     {
         for (int level = 1; level < m_num_levels; level++) {
 
-            int current_num_vertices = m_num_samples[level];
+            int current_num_vertices = m_num_samples[level - 1];
 
             create_prolongation(current_num_vertices,
                                 m_sample_neighbor_size_prefix[level - 1],
@@ -470,7 +583,8 @@ struct GMG
         uint32_t blocks  = DIVIDE_UP(num_samples, threads);
         for_each_item<<<blocks, threads>>>(
             num_samples, [=] __device__(int sample_id) mutable {
-                assert(sample_id < num_samples);
+                // assert(sample_id < num_samples);
+
                 // go through every triangle of the cluster
                 const int cluster_point = vertex_cluster(sample_id);
                 const int start = sample_neighbor_size_prefix(cluster_point);
@@ -481,9 +595,16 @@ struct GMG
                 Eigen::Vector3<float> selectedv1{0, 0, 0}, selectedv2{0, 0, 0},
                     selectedv3{0, 0, 0};
 
-                const Eigen::Vector3<float> q{samples_pos(sample_id, 0),
-                                              samples_pos(sample_id, 1),
-                                              samples_pos(sample_id, 2)};
+                const Eigen::Vector3<float> q{samples_pos(cluster_point, 0),
+                                              samples_pos(cluster_point, 1),
+                                              samples_pos(cluster_point, 2)};
+
+                /*printf("\nQ %d %d %f %f %f",
+                       sample_id,
+                       cluster_point,
+                       q[0],
+                       q[1],
+                       q[2]);*/
 
                 int selected_neighbor             = 0;
                 int selected_neighbor_of_neighbor = 0;
@@ -531,6 +652,7 @@ struct GMG
                                     samples_pos(v3_idx, 1),
                                     samples_pos(v3_idx, 2)};
 
+
                                 float distance =
                                     detail::projected_distance(v1, v2, v3, q);
 
@@ -554,25 +676,33 @@ struct GMG
                 }
                 // Compute barycentric coordinates for the closest triangle
                 float b1 = 0, b2 = 0, b3 = 0;
-                if (selected_neighbor == selected_neighbor_of_neighbor &&
+                /*if (selected_neighbor == selected_neighbor_of_neighbor &&
                     selected_neighbor == 0) {
                     b1 = 1.0f;
-                } else
-                    detail::compute_barycentric(
-                        selectedv1, selectedv2, selectedv3, q, b1, b2, b3);
+                } else*/
+                detail::compute_barycentric(
+                    selectedv1, selectedv2, selectedv3, q, b1, b2, b3);
 
-                assert(!isnan(b1));
+                printf("\n%d: %d %d %d %f %f %f",
+                       sample_id,
+                       cluster_point,
+                       selected_neighbor,
+                       selected_neighbor_of_neighbor,
+                       b1,
+                       b2,
+                       b3);
+
                 assert(!isnan(b2));
-                assert(!isnan(b3));
 
-                 prolong_op.col_idx()[sample_id * 3 + 2] = selected_neighbor_of_neighbor;
-                 prolong_op.get_val_at(sample_id * 3 + 2) = b3;
+                prolong_op.col_idx()[sample_id * 3 + 2] =
+                    selected_neighbor_of_neighbor;
+                prolong_op.get_val_at(sample_id * 3 + 2) = b3;
 
-                 prolong_op.col_idx()[sample_id * 3 +  1] = selected_neighbor;
-                 prolong_op.get_val_at(sample_id * 3 + 1) = b2;
+                prolong_op.col_idx()[sample_id * 3 + 1]  = selected_neighbor;
+                prolong_op.get_val_at(sample_id * 3 + 1) = b2;
 
-                 prolong_op.col_idx()[sample_id * 3 + 0] = cluster_point;
-                 prolong_op.get_val_at(sample_id * 3 + 0) = b1;
+                prolong_op.col_idx()[sample_id * 3 + 0]  = cluster_point;
+                prolong_op.get_val_at(sample_id * 3 + 0) = b1;
             });
     }
 };

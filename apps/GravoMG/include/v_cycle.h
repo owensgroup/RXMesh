@@ -95,7 +95,7 @@ struct VCycle
             gmg.m_prolong_op[l - 1].alloc_multiply_buffer(m_r.back(),
                                                           m_rhs[l - 1]);
 
-            if (l > gmg.m_num_levels - 1) {
+            if (l < gmg.m_num_levels - 1) {
                 m_smoother.emplace_back(gmg.m_num_samples[l],
                                         gmg.m_num_samples[l]);
             } else {
@@ -263,26 +263,23 @@ struct VCycle
     {
         constexpr int numCols = 3;
 
-        if (level > gmg.m_num_levels - 1) {
+        if (level < gmg.m_num_levels - 1) {
             // pre-smoothing
             m_smoother[level].template solve<numCols>(A, f, v, m_num_pre_relax);
-
 
             // calc residual
             calc_residual<numCols>(A, v, f, m_r[level]);
 
-            // restrict residual
-            gmg.m_prolong_op[level + 1].multiply(
-                m_r[level], m_rhs[level], true);
-
-            // recurse
-            cycle(level + 1, gmg, m_a[level].a, m_rhs[level], m_x[level]);
+            //// restrict residual
+            gmg.m_prolong_op[level].multiply(
+                m_r[level], m_rhs[level+1], true);
+            //// recurse
+            cycle(level + 1, gmg, m_a[level].a, m_rhs[level+1], m_x[level]);
 
             // prolong
             // x = x + P*u
             gmg.m_prolong_op[level + 1].multiply(
                 v, m_x[level], false, false, T(1.0), T(1.0));
-
 
             // post-smoothing
             m_smoother[level].template solve<numCols>(
@@ -291,6 +288,7 @@ struct VCycle
         } else {
             // the coarsest level
             m_coarse_solver.template solve<numCols>(A, f, v, m_num_post_relax);
+            m_coarse_solver.template solve<numCols>(A, f, v, 100);
         }
     }
 

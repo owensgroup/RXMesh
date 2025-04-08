@@ -827,14 +827,14 @@ struct SparseMatrix2
 
         opA = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
                                   CUSPARSE_OPERATION_TRANSPOSE;
-        opB = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
+        opB = (!is_b_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
                                   CUSPARSE_OPERATION_TRANSPOSE;
 
         if (std::is_same_v<T, cuComplex> ||
             std::is_same_v<T, cuDoubleComplex>) {
             opA = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
                                       CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
-            opB = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
+            opB = (!is_b_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
                                       CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
         }
 
@@ -905,14 +905,14 @@ struct SparseMatrix2
 
         opA = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
                                   CUSPARSE_OPERATION_TRANSPOSE;
-        opB = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
+        opB = (!is_b_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
                                   CUSPARSE_OPERATION_TRANSPOSE;
 
         if (std::is_same_v<T, cuComplex> ||
             std::is_same_v<T, cuDoubleComplex>) {
             opA = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
                                       CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
-            opB = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
+            opB = (!is_b_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
                                       CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
         }
 
