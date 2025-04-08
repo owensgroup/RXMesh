@@ -220,7 +220,10 @@ void parameterize(RXMeshStatic& rx)
 
 int main(int argc, char** argv)
 {
-    Log::init(spdlog::level::info);
+    Log::init(spdlog::level::trace);
+
+    const uint32_t device_id = 0;
+    cuda_query(device_id);
 
     using T = float;
 
