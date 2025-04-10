@@ -56,22 +56,23 @@ void clustering_1st_level(RXMeshStatic&                rx,
         {Op::VV}, lb, (void*)detail::cluster_points<float, blockThreads>);
 
     // clustering step
-    rx.for_each_vertex(
-        DEVICE,
-        [sample_level_bitmask,
-         distance,
-         vertex_cluster,
-         current_level] __device__(const VertexHandle vh) mutable {
-            if ((sample_level_bitmask(vh) & (1 << (current_level - 1))) != 0) {
-                assert(vertex_cluster(vh) != -1);
-                distance(vh) = 0;
-            } else {
-                assert(vertex_cluster(vh) == -1);
-                distance(vh) = std::numeric_limits<float>::max();
-            }
-        });
-
-    cudaDeviceSynchronize();
+    // rx.for_each_vertex(
+    //    DEVICE,
+    //    [sample_level_bitmask,
+    //     distance,
+    //     vertex_cluster,
+    //     current_level] __device__(const VertexHandle vh) mutable {
+    //        if ((sample_level_bitmask(vh) & (1 << (current_level - 1))) != 0)
+    //        {
+    //            assert(vertex_cluster(vh) != -1);
+    //            distance(vh) = 0;
+    //        } else {
+    //            assert(vertex_cluster(vh) == -1);
+    //            distance(vh) = std::numeric_limits<float>::max();
+    //        }
+    //    });
+    //
+    // cudaDeviceSynchronize();
     do {
         CUDA_ERROR(cudaMemset(d_flag, 0, sizeof(int)));
         rx.run_kernel<blockThreads>(lb,
@@ -99,7 +100,6 @@ inline void clustering_nth_level(
     DenseMatrix<int>&            vertex_cluster,
     DenseMatrix<float>&          distance,
     const DenseMatrix<uint16_t>& sample_level_bitmask,
-    DenseMatrix<float>&          samples_pos,
     const DenseMatrix<float>&    prev_samples_pos,
     int*                         d_flag)
 {
@@ -109,16 +109,16 @@ inline void clustering_nth_level(
     uint32_t blocks  = DIVIDE_UP(num_samples, threads);
 
     // previously "set_cluster()"
-    for_each_item<<<blocks, threads>>>(
-        num_samples, [=] __device__(int id) mutable {
-            if ((sample_level_bitmask(id) & (1 << current_level - 1)) != 0) {
-                assert(vertex_cluster(id) != -1);
-                distance(id) = 0;
-            } else {
-                assert(vertex_cluster(id) == -1);
-                distance(id) = std::numeric_limits<float>::max();
-            }
-        });
+    // for_each_item<<<blocks, threads>>>(
+    //    num_samples, [=] __device__(int id) mutable {
+    //        if ((sample_level_bitmask(id) & (1 << current_level - 1)) != 0) {
+    //            assert(vertex_cluster(id) != -1);
+    //            distance(id) = 0;
+    //        } else {
+    //            assert(vertex_cluster(id) == -1);
+    //            distance(id) = std::numeric_limits<float>::max();
+    //        }
+    //    });
 
 
     do {
