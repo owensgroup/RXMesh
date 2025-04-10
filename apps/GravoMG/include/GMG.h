@@ -440,6 +440,73 @@ struct GMG
      */
     void random_sampling(RXMeshStatic& rx)
     {
+
+        
+        //populate m_vertex_cluster with random values for each vertex, with associated vertex position
+        // m_vertex_cluster
+        for (int i = 0; i < 2/*m_num_levels-1*/; i++) {
+            std::cout << std::endl << std::endl;
+            std::random_device         rd;
+            std::default_random_engine generator(rd());
+            auto& current_vertex_cluster = m_vertex_cluster[i];
+            std::vector<int> samples(m_num_samples[i]);
+            std::iota(samples.begin(), samples.end(), 1);
+            std::shuffle(samples.begin(), samples.end(), generator);
+            samples.resize(m_num_samples[i + 1]);
+            int j = 0;
+            for (auto& a:samples) {
+                std::cout << "\nsample " << a - 1 << " is sample "<<j;
+                current_vertex_cluster(a-1, 0)=j;
+
+                m_samples_pos[i](j, 0) = m_vertex_pos(a - 1, 0);
+                m_samples_pos[i](j, 1) = m_vertex_pos(a - 1, 1);
+                m_samples_pos[i](j, 2) = m_vertex_pos(a - 1, 2);
+
+                j++;
+            }
+            /*if (i == 0) {
+                auto at =
+                    *rx.add_vertex_attribute<int>("C" + std::to_string(i), 1);
+                at.from_matrix(&m_vertex_cluster[i]);
+                rx.get_polyscope_mesh()->addVertexScalarQuantity(
+                    "C" + std::to_string(i), at);
+                polyscope::show();
+            } */ // current_vertex_cluster.move(HOST, DEVICE);
+        }
+
+        for (int l = 1; l < m_num_levels; ++l) {
+            //m_vertex_cluster[l - 1].move(DEVICE, HOST);
+            //m_distance.move(DEVICE, HOST);
+
+            if (l == 1) {
+                auto at =
+                    *rx.add_vertex_attribute<int>("C" + std::to_string(l), 1);
+                at.from_matrix(&m_vertex_cluster[l - 1]);
+                rx.get_polyscope_mesh()->addVertexScalarQuantity(
+                    "C" + std::to_string(l), at);
+
+                /*rx.get_polyscope_mesh()->addVertexScalarQuantity(
+                    "dist" + std::to_string(l), m_distance);*/
+            } else {
+                std::vector<glm::vec3> points(m_num_samples[l]);
+                m_samples_pos[l - 1].move(DEVICE, HOST);
+                for (int i = 0; i < m_samples_pos[l - 1].rows(); i++) {
+                    points[i][0] = m_samples_pos[l - 1](i, 0);
+                    points[i][1] = m_samples_pos[l - 1](i, 1);
+                    points[i][2] = m_samples_pos[l - 1](i, 2);
+                }
+                std::vector<int> xC(points.size());
+                for (int i = 0; i < points.size(); i++) {
+                    xC[i] = m_vertex_cluster[l - 1](i);
+                }
+                polyscope::PointCloud* psCloud = polyscope::registerPointCloud(
+                    "L" + std::to_string(l), points);
+                psCloud->addScalarQuantity("C" + std::to_string(l), xC);
+            }
+            polyscope::show();
+        }
+
+
     }
 
     /**
