@@ -94,6 +94,9 @@ void mass_spring(RXMeshStatic& rx)
     timer.stop();
 
 
+    RXMESH_INFO("#Faces: {}, #Vertices: {}",
+                rx.get_num_faces(),
+                rx.get_num_vertices());
     RXMESH_INFO(
         "Mass-spring: iterations ={}, time= {} (ms), "
         "timer/iteration= {} ms/iter",

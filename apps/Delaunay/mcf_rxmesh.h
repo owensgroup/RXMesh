@@ -97,7 +97,7 @@ MCFData mcf_rxmesh_cg(rxmesh::RXMeshDynamic& rx, bool update_coordinates)
                           !use_uniform_laplace);
     rx.prepare_launch_box({rxmesh::Op::VV},
                           launch_box_matvec,
-                          (void*)rxmesh_matvec<T, blockThreads>,
+                          (void*)matvec<T, blockThreads>,
                           !use_uniform_laplace);
 
 
@@ -114,9 +114,9 @@ MCFData mcf_rxmesh_cg(rxmesh::RXMeshDynamic& rx, bool update_coordinates)
     timer.start();
 
     // s = Ax
-    rxmesh_matvec<T, blockThreads><<<launch_box_matvec.blocks,
-                                     launch_box_matvec.num_threads,
-                                     launch_box_matvec.smem_bytes_dyn>>>(
+    matvec<T, blockThreads><<<launch_box_matvec.blocks,
+                              launch_box_matvec.num_threads,
+                              launch_box_matvec.smem_bytes_dyn>>>(
         rx.get_context(), *input_coord, *X, *S, use_uniform_laplace, time_step);
 
     // r = b - s = b - Ax
@@ -139,7 +139,7 @@ MCFData mcf_rxmesh_cg(rxmesh::RXMeshDynamic& rx, bool update_coordinates)
     while (num_cg_iter_taken < max_num_cg_iter) {
         // s = Ap
         matvec_timer.start();
-        rxmesh_matvec<T, blockThreads>
+        matvec<T, blockThreads>
             <<<launch_box_matvec.blocks,
                launch_box_matvec.num_threads,
                launch_box_matvec.smem_bytes_dyn>>>(rx.get_context(),

@@ -33,6 +33,8 @@ struct IterativeSolver
                        const StructureT* B,
                        cudaStream_t      stream) = 0;
 
+    virtual std::string name() = 0;
+
     virtual int iter_taken() const
     {
         return m_iter_taken;

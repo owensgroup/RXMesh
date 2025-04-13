@@ -65,6 +65,10 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
         }
     }
 
+    virtual std::string name() override
+    {
+        return std::string("QR");
+    }
 
     /**
      * @brief solve using cuSolver High-Level API that permute, factorize, and
