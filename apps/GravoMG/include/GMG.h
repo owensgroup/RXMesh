@@ -341,6 +341,9 @@ struct GMG
 
             auto& current_v_cluster = m_vertex_cluster[level - 1];
 
+            const auto& prv_v_cluster = m_vertex_cluster[level - 2];
+
+            const auto& pos = m_vertex_pos;
 
             // set sample position of this level
             for_each_item<<<blocks, blockThreads>>>(
@@ -540,7 +543,7 @@ struct GMG
                                  m_vertex_cluster[l],  // 0
                                  m_d_flag);
         } else {
-            clustering_nth_level(m_num_samples[l - 1],
+            clustering_nth_level(m_num_samples[l],
                                  l + 1,
                                  m_sample_neighbor_size_prefix[l - 1],
                                  m_sample_neighbor[l - 1],
@@ -569,7 +572,7 @@ struct GMG
             // the mesh itself to tell us who is neighbor to whom on the at
             // level (1)
             rx.run_kernel<blockThreads>(
-                {Op::VV},
+                {Op::EV},
                 detail::count_neighbors_1st_level<blockThreads>,
                 m_vertex_cluster[0],
                 m_edge_hash_table);
@@ -713,12 +716,23 @@ struct GMG
 
             int current_num_vertices = m_num_samples[level - 1];
 
+            if (level==1)
             create_prolongation(current_num_vertices,
                                 m_sample_neighbor_size_prefix[level - 1],
                                 m_sample_neighbor[level - 1],
                                 m_prolong_op[level - 1],
-                                m_samples_pos[0],
-                                m_vertex_cluster[level - 1]);
+                                m_samples_pos[level-1],
+                                m_vertex_cluster[level - 1],
+                m_vertex_pos);
+
+            else 
+                create_prolongation(current_num_vertices,
+                                    m_sample_neighbor_size_prefix[level - 1],
+                                    m_sample_neighbor[level - 1],
+                                    m_prolong_op[level - 1],
+                                    m_samples_pos[level - 1],
+                                    m_vertex_cluster[level - 1],
+                                    m_samples_pos[level-2]);
         }
     }
 
@@ -735,13 +749,16 @@ struct GMG
                              DenseMatrix<int>& sample_neighbor,
                              SparseMatrixConstantNNZRow<float, 3>& prolong_op,
                              DenseMatrix<float>&                   samples_pos,
-                             DenseMatrix<int>& vertex_cluster)
+                             DenseMatrix<int>& vertex_cluster,
+                             DenseMatrix<float>& vertex_pos)
     {
 
         uint32_t threads = 256;
         uint32_t blocks  = DIVIDE_UP(num_samples, threads);
         for_each_item<<<blocks, threads>>>(
             num_samples, [=] __device__(int sample_id) mutable {
+                bool tri_chosen = false;
+                
                 // assert(sample_id < num_samples);
 
                 // go through every triangle of the cluster
@@ -754,9 +771,13 @@ struct GMG
                 Eigen::Vector3<float> selectedv1{0, 0, 0}, selectedv2{0, 0, 0},
                     selectedv3{0, 0, 0};
 
-                const Eigen::Vector3<float> q{samples_pos(cluster_point, 0),
-                                              samples_pos(cluster_point, 1),
-                                              samples_pos(cluster_point, 2)};
+                /*const Eigen::Vector3<float> q{samples_pos(sample_id, 0),
+                                              samples_pos(sample_id, 1),
+                                              samples_pos(sample_id, 2)};*/
+
+            const Eigen::Vector3<float> q{vertex_pos(sample_id, 0),
+                                              vertex_pos(sample_id, 1),
+                                              vertex_pos(sample_id, 2)};
 
                 /*printf("\nQ %d %d %f %f %f",
                        sample_id,
@@ -770,7 +791,31 @@ struct GMG
 
                 // We need at least 2 neighbors to form a triangle
                 int neighbors_count = end - start;
-                if (neighbors_count >= 2) {
+                if (neighbors_count==2) {
+                    int v1_idx = cluster_point;
+                    int v2_idx = sample_neighbor(start);
+                    int v3_idx = sample_neighbor(start+1);
+                    Eigen::Vector3<float> v1{samples_pos(v1_idx, 0),
+                                             samples_pos(v1_idx, 1),
+                                             samples_pos(v1_idx, 2)};
+
+                    Eigen::Vector3<float> v2{samples_pos(v2_idx, 0),
+                                             samples_pos(v2_idx, 1),
+                                             samples_pos(v2_idx, 2)};
+
+                    Eigen::Vector3<float> v3{samples_pos(v3_idx, 0),
+                                             samples_pos(v3_idx, 1),
+                                             samples_pos(v3_idx, 2)};
+
+                    tri_chosen                    = true;
+                    selectedv1                    = v1;
+                    selectedv2                    = v2;
+                    selectedv3                    = v3;
+                    selected_neighbor             = v2_idx;
+                    selected_neighbor_of_neighbor = v3_idx;
+
+                }
+                else if (neighbors_count >= 2) {
                     // Iterate through all possible triangle combinations
                     for (int j = start; j < end; ++j) {
                         for (int k = j + 1; k < end; ++k) {
@@ -816,6 +861,7 @@ struct GMG
                                     detail::projected_distance(v1, v2, v3, q);
 
                                 if (distance < min_distance) {
+                                    tri_chosen                    = true;
                                     min_distance                  = distance;
                                     selectedv1                    = v1;
                                     selectedv2                    = v2;
@@ -850,6 +896,7 @@ struct GMG
                        b1,
                        b2,
                        b3);
+                assert(tri_chosen);
 
                 assert(!isnan(b2));
 

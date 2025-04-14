@@ -28,8 +28,10 @@ __global__ static void count_neighbors_1st_level(
         int v1_sample = vertex_cluster(v1);
 
         if (v0_sample != v1_sample) {
-            Edge e(v0_sample, v1_sample);
-            edge_hash_table.insert(e);
+            
+            int  min_vertex = std::min(v0_sample, v1_sample);
+            int  max_vertex = std::max(v0_sample, v1_sample);
+            Edge e(min_vertex, max_vertex);
         }
     };
 
