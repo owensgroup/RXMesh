@@ -12,44 +12,10 @@ namespace rxmesh {
 namespace detail {
 
 template <uint32_t blockThreads>
-__global__ static void count_neighbors_1st_level(
+__global__ static void populate_edge_hashtable_1st_level(
     const Context          context,
     const DenseMatrix<int> vertex_cluster,
-    GPUHashTable<Edge>     edge_hash_table)
-{
-
-    auto count = [&](EdgeHandle eh, VertexIterator& iter) {
-        assert(iter.size() == 2);
-
-        VertexHandle v0 = iter[0];
-        VertexHandle v1 = iter[1];
-
-        int v0_sample = vertex_cluster(v0);
-        int v1_sample = vertex_cluster(v1);
-
-        if (v0_sample != v1_sample) {
-            
-            int  min_vertex = std::min(v0_sample, v1_sample);
-            int  max_vertex = std::max(v0_sample, v1_sample);
-            Edge e(min_vertex, max_vertex);
-        }
-    };
-
-
-    auto block = cooperative_groups::this_thread_block();
-
-    Query<blockThreads> query(context);
-    ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::EV>(block, shrd_alloc, count);
-}
-
-template <uint32_t blockThreads>
-__global__ static void count_neighbors_nth_level(
-    const Context          context,
-    const DenseMatrix<int> vertex_cluster,
-    const DenseMatrix<int> prv_sample_neighbor_size_prefix,
-    const DenseMatrix<int> prv_sample_neighbor,
-    GPUHashTable<Edge>     edge_hash_table)
+    GPUStorage<Edge>       edge_storage)
 {
 
     auto count = [&](EdgeHandle eh, VertexIterator& iter) {
@@ -63,7 +29,8 @@ __global__ static void count_neighbors_nth_level(
 
         if (v0_sample != v1_sample) {
             Edge e(v0_sample, v1_sample);
-            edge_hash_table.insert(e);
+            bool inserted = edge_storage.insert(e);
+            assert(inserted);
         }
     };
 

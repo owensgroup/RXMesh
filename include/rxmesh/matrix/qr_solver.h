@@ -82,8 +82,7 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
 
         for (int i = 0; i < B_mat.cols(); ++i) {
-            cusolver_qr(
-                B_mat.col_data(i, DEVICE), X_mat.col_data(i, DEVICE), stream);
+            cusolver_qr(B_mat.col_data(i, DEVICE), X_mat.col_data(i, DEVICE));
         }
     }
 
@@ -386,7 +385,7 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
      * @brief wrapper for cuSolver API for solving linear systems using cuSolver
      * High-level API
      */
-    void cusolver_qr(const T* d_b, T* d_x, cudaStream_t stream)
+    void cusolver_qr(const T* d_b, T* d_x)
     {
 
         double tol = 1.e-12;

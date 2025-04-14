@@ -79,8 +79,8 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
 
         for (int i = 0; i < B_mat.cols(); ++i) {
-            cusolver_cholesky(
-                B_mat.col_data(i, DEVICE), X_mat.col_data(i, DEVICE), stream);
+            cusolver_cholesky(B_mat.col_data(i, DEVICE),
+                              X_mat.col_data(i, DEVICE));
         }
     }
 

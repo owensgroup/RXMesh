@@ -26,109 +26,6 @@ enum class Sampling
     KMeans = 2,
 };
 
-void rearrangeDenseMatrix(std::vector<DenseMatrix<int>>& m_sample_neighbor_size,
-                          std::vector<DenseMatrix<int>>& m_sample_neighbor)
-{
-    int       num_rows      = m_sample_neighbor_size[0].rows();
-    const int MAX_LOOKAHEAD = 4;
-
-    for (int row = 0; row < num_rows; ++row) {
-        int num_neighbors = m_sample_neighbor_size[0](row, 0);
-        if (num_neighbors < 2)
-            continue;
-
-        for (int i = 0; i < num_neighbors - 1; i++) {
-            int current = m_sample_neighbor[0](row, i);
-            int next    = m_sample_neighbor[0](row, i + 1);
-
-            bool already_connected = false;
-            for (int k = 0; k < m_sample_neighbor_size[0](current, 0); k++) {
-                if (m_sample_neighbor[0](current, k) == next) {
-                    already_connected = true;
-                    break;
-                }
-            }
-
-            if (!already_connected) {
-                int max_look = std::min(i + 1 + MAX_LOOKAHEAD, num_neighbors);
-                for (int j = i + 2; j < max_look; j++) {
-                    int candidate = m_sample_neighbor[0](row, j);
-                    for (int k = 0; k < m_sample_neighbor_size[0](current, 0);
-                         k++) {
-                        if (m_sample_neighbor[0](current, k) == candidate) {
-                            std::swap(m_sample_neighbor[0](row, i + 1),
-                                      m_sample_neighbor[0](row, j));
-                            goto next_vertex;
-                        }
-                    }
-                }
-            }
-        next_vertex:
-            continue;
-        }
-    }
-}
-
-void GetRenderDataFromDenseMatrices(
-    std::vector<std::array<double, 3>>& vertexPositions,
-    std::vector<std::vector<size_t>>&   faceIndices,
-    std::vector<DenseMatrix<int>>&      m_sample_neighbor_size,
-    std::vector<DenseMatrix<int>>&      m_sample_neighbor,
-    DenseMatrix<float>&                 vertex_pos)
-{
-    rearrangeDenseMatrix(m_sample_neighbor_size, m_sample_neighbor);
-
-    int num_rows = m_sample_neighbor_size[0].rows();
-
-    vertexPositions.resize(num_rows);
-    for (int i = 0; i < num_rows; ++i) {
-        vertexPositions[i] = {
-            vertex_pos(i, 0), vertex_pos(i, 1), vertex_pos(i, 2)};
-    }
-
-    faceIndices.clear();
-    for (int i = 0; i < num_rows; ++i) {
-        int num_neighbors = m_sample_neighbor_size[0](i, 0);
-        if (num_neighbors >= 2) {
-            for (int j = 0; j < num_neighbors; ++j) {
-                int a = i;
-                int b = m_sample_neighbor[0](i, j);
-                int c = (j == num_neighbors - 1) ?
-                            m_sample_neighbor[0](i, 0) :
-                            m_sample_neighbor[0](i, j + 1);
-
-                for (int k = 0; k < m_sample_neighbor_size[0](b, 0); ++k) {
-                    if (m_sample_neighbor[0](b, k) == c) {
-                        faceIndices.push_back({static_cast<size_t>(a),
-                                               static_cast<size_t>(b),
-                                               static_cast<size_t>(c)});
-                        break;
-                    }
-                }
-            }
-        }
-    }
-}
-
-void renderFromDenseMatrices(
-    std::vector<DenseMatrix<int>>& m_sample_neighbor_size,
-    std::vector<DenseMatrix<int>>& m_sample_neighbor,
-    DenseMatrix<float>&            vertex_pos)
-{
-    std::vector<std::array<double, 3>> vertexPositions;
-    std::vector<std::vector<size_t>>   faceIndices;
-
-    GetRenderDataFromDenseMatrices(vertexPositions,
-                                   faceIndices,
-                                   m_sample_neighbor_size,
-                                   m_sample_neighbor,
-                                   vertex_pos);
-
-    polyscope::registerSurfaceMesh(
-        "dense matrix mesh", vertexPositions, faceIndices);
-}
-
-
 template <typename T>
 struct GMG
 {
@@ -158,7 +55,7 @@ struct GMG
     VertexAttribute<float> m_distance;              // fine
     DenseMatrix<uint16_t>  m_sample_level_bitmask;  // fine
 
-    GPUHashTable<Edge> m_edge_hash_table;
+    GPUStorage<Edge> m_edge_storage;
 
 
     // we reuse cub temp storage for all level (since level has the largest
@@ -172,8 +69,7 @@ struct GMG
         int           reduction_ratio       = 5,
         int           num_samples_threshold = 5)
         : m_ratio(reduction_ratio),
-          m_edge_hash_table(
-              GPUHashTable<Edge>(DIVIDE_UP(rx.get_num_edges(), 2)))
+          m_edge_storage(GPUStorage<Edge>(rx.get_num_edges()))
     {
         m_num_rows = rx.get_num_vertices();
         // m_num_samples.push_back(m_num_rows);
@@ -279,27 +175,11 @@ struct GMG
             //============
 
             create_compressed_representation(rx, l + 1);
-
-            render_point_clouds(rx);
-        }
-        m_sample_neighbor_size[1].move(DEVICE, HOST);
-        m_sample_neighbor[1].move(DEVICE, HOST);
-        m_samples_pos[1].move(DEVICE, HOST);
-        m_sample_neighbor_size_prefix[1].move(DEVICE, HOST);
-        for (int i = 1; i < m_sample_neighbor_size_prefix[1].rows();i++) {
-            std::cout << "\n" << i-1 << " : ";
-            std::cout << " " << m_sample_neighbor_size[1](i-1, 0);
-            for (int j = m_sample_neighbor_size_prefix[1](i-1, 0);
-                 j < m_sample_neighbor_size_prefix[1](i, 0);
-                 j++) {
-
-                    std::cout << std::endl << m_sample_neighbor[1](j);
-
-            }
         }
 
-        // renderFromDenseMatrices(
-        //     m_sample_neighbor_size, m_sample_neighbor, m_vertex_pos);
+        render_hierarchy();
+
+        // render_point_clouds(rx);
 
         //============
         // 5) Create prolongation operator
@@ -412,6 +292,7 @@ struct GMG
 
                 rx.get_polyscope_mesh()->addVertexScalarQuantity(
                     "dist" + std::to_string(l), m_distance);
+                rx.remove_attribute("C" + std::to_string(l));
             } else {
 
                 // Level L points
@@ -455,9 +336,88 @@ struct GMG
                     ->addScalarQuantity("C" + std::to_string(l - 1), prv_xC)
                     ->setEnabled(true);
             }
-
-            polyscope::show();
         }
+        polyscope::show();
+    }
+
+
+    void render_hierarchy()
+    {
+        for (int l = 1; l < m_num_levels; ++l) {
+
+            auto& prefix      = m_sample_neighbor_size_prefix[l - 1];
+            auto& neighbor    = m_sample_neighbor[l - 1];
+            auto& v_pos       = m_samples_pos[l - 1];
+            int   num_samples = m_num_samples[l];
+
+
+            prefix.move(DEVICE, HOST);
+            neighbor.move(DEVICE, HOST);
+            v_pos.move(DEVICE, HOST);
+
+            auto is_connected = [&](int u, int s) {
+                int u_start = prefix(u);
+                int u_end   = prefix(u + 1);
+                for (int i = u_start; i < u_end; ++i) {
+                    if (neighbor(i) == s) {
+                        return true;
+                    }
+                }
+
+                return false;
+            };
+
+            std::vector<std::array<int, 3>> fv;
+
+            std::vector<glm::vec3> pos(num_samples);
+
+            // Neighbor samples are not sorted. Thus we do,
+            // For each samples v and its neighbor u, we iterate over v
+            // neighbors and try to find the samples s such that s is also
+            // connected to u. There should be two s samples (s0, s1). We only
+            // render a triangle u, v, s if u is the smallest index (to avoid
+            // rendering a triangle multiple times)
+
+            for (int v = 0; v < num_samples; ++v) {
+                pos[v][0] = v_pos(v, 0);
+                pos[v][1] = v_pos(v, 1);
+                pos[v][2] = v_pos(v, 2);
+
+                int start = prefix(v);
+                int end   = prefix(v + 1);
+
+                for (int i = start; i < end; ++i) {
+                    int u = neighbor(i);
+                    assert(u != v);
+                    if (v > u) {
+                        continue;
+                    }
+                    // now we iterate over v neighbor
+                    for (int j = start; j < end; ++j) {
+                        if (i == j) {
+                            continue;
+                        }
+                        int s = neighbor(j);
+
+                        assert(v != s);
+                        assert(u != s);
+
+                        if (v > s) {
+                            continue;
+                        }
+
+                        if (is_connected(s, u)) {
+                            std::array<int, 3> t = {u, v, s};
+                            fv.push_back(t);
+                        }
+                    }
+                }
+            }
+
+            polyscope::registerSurfaceMesh(
+                "Level" + std::to_string(l), pos, fv);
+        }
+        polyscope::show();
     }
 
     /**
@@ -467,22 +427,23 @@ struct GMG
     void random_sampling(RXMeshStatic& rx)
     {
 
-        
-        //populate m_vertex_cluster with random values for each vertex, with associated vertex position
-        // m_vertex_cluster
-        for (int i = 0; i < 2/*m_num_levels-1*/; i++) {
+
+        // populate m_vertex_cluster with random values for each vertex, with
+        // associated vertex position
+        //  m_vertex_cluster
+        for (int i = 0; i < 2 /*m_num_levels-1*/; i++) {
             std::cout << std::endl << std::endl;
             std::random_device         rd;
             std::default_random_engine generator(rd());
-            auto& current_vertex_cluster = m_vertex_cluster[i];
+            auto&            current_vertex_cluster = m_vertex_cluster[i];
             std::vector<int> samples(m_num_samples[i]);
             std::iota(samples.begin(), samples.end(), 1);
             std::shuffle(samples.begin(), samples.end(), generator);
             samples.resize(m_num_samples[i + 1]);
             int j = 0;
-            for (auto& a:samples) {
-                std::cout << "\nsample " << a - 1 << " is sample "<<j;
-                current_vertex_cluster(a-1, 0)=j;
+            for (auto& a : samples) {
+                std::cout << "\nsample " << a - 1 << " is sample " << j;
+                current_vertex_cluster(a - 1, 0) = j;
 
                 m_samples_pos[i](j, 0) = m_vertex_pos(a - 1, 0);
                 m_samples_pos[i](j, 1) = m_vertex_pos(a - 1, 1);
@@ -501,8 +462,8 @@ struct GMG
         }
 
         for (int l = 1; l < m_num_levels; ++l) {
-            //m_vertex_cluster[l - 1].move(DEVICE, HOST);
-            //m_distance.move(DEVICE, HOST);
+            // m_vertex_cluster[l - 1].move(DEVICE, HOST);
+            // m_distance.move(DEVICE, HOST);
 
             if (l == 1) {
                 auto at =
@@ -531,8 +492,6 @@ struct GMG
             }
             polyscope::show();
         }
-
-
     }
 
     /**
@@ -577,9 +536,9 @@ struct GMG
     {
         constexpr uint32_t blockThreads = 256;
 
-        m_edge_hash_table.clear();
+        m_edge_storage.clear();
 
-        auto edge_hash_table = m_edge_hash_table;
+        auto edge_storage = m_edge_storage;
 
         // a) for each sample, count the number of neighbor samples
         if (level == 1) {
@@ -588,9 +547,9 @@ struct GMG
             // level (1)
             rx.run_kernel<blockThreads>(
                 {Op::EV},
-                detail::count_neighbors_1st_level<blockThreads>,
+                detail::populate_edge_hashtable_1st_level<blockThreads>,
                 m_vertex_cluster[0],
-                m_edge_hash_table);
+                m_edge_storage);
         } else {
             // if we are building the compressed format for any other level,
             // then we use level-1 to tell us how to get the neighbor of that
@@ -613,7 +572,7 @@ struct GMG
 
             for_each_item<<<blocks, blockThreads>>>(
                 prv_sample_neighbor_size_prefix.rows() - 1,
-                [edge_hash_table,
+                [edge_storage,
                  prv_sample_neighbor_size_prefix,
                  prv_sample_neighbor,
                  vertex_cluster] __device__(int i) mutable {
@@ -627,26 +586,26 @@ struct GMG
 
                         if (a != b) {
                             Edge e(a, b);
-                            edge_hash_table.insert(e);
+                            edge_storage.insert(e);
                         }
                     }
                 });
         }
 
-        // b) iterate over all entries in the hashtable, for non sentinel
-        // entries, find
-        uint32_t blocks =
-            DIVIDE_UP(m_edge_hash_table.get_capacity(), blockThreads);
+
+        // a.2) uniquify the storage
+        m_edge_storage.uniquify();
+
+
+        // b) iterate over all entries in the edge hashtable, for non sentinel
+        // entries, atomic add each vertex to one another
 
         auto& sample_neighbor_size = m_sample_neighbor_size[level - 1];
         auto& sample_neighbor_size_prefix =
             m_sample_neighbor_size_prefix[level - 1];
 
-        for_each_item<<<blocks, blockThreads>>>(
-            m_edge_hash_table.get_capacity(),
-            [edge_hash_table,
-             sample_neighbor_size] __device__(uint32_t i) mutable {
-                const Edge e = edge_hash_table.m_table[i];
+        m_edge_storage.for_each(
+            [sample_neighbor_size] __device__(Edge e) mutable {
                 if (!e.is_sentinel()) {
                     std::pair<int, int> p = e.unpack();
                     assert(p.first < sample_neighbor_size.rows());
@@ -656,29 +615,18 @@ struct GMG
                 }
             });
 
-        int* h_sample_neighbor_size = new int[m_num_samples[level] + 1];
-        cudaMemcpy(h_sample_neighbor_size,
-                   sample_neighbor_size.data(DEVICE),
-                   (m_num_samples[level] + 1) * sizeof(int),
-                   cudaMemcpyDeviceToHost);
 
-        delete[] h_sample_neighbor_size;
         // c) compute the exclusive sum of the number of neighbor samples
-        cudaError_t err = cub::DeviceScan::ExclusiveSum(
+        CUDA_ERROR(cub::DeviceScan::ExclusiveSum(
             m_d_cub_temp_storage,
             m_cub_temp_bytes,
             sample_neighbor_size.data(DEVICE),
             sample_neighbor_size_prefix.data(DEVICE),
-            m_num_samples[level] + 1);
-        cudaDeviceSynchronize();  // Ensure execution completes
+            m_num_samples[level] + 1));
 
-        if (err != cudaSuccess) {
-            std::cerr << "ExclusiveSum failed: " << cudaGetErrorString(err)
-                      << std::endl;
-        }
+        // cudaDeviceSynchronize();  // Ensure execution completes
 
-
-        // d) allocate memory to store the neighbor samples
+        // d) allocate memory for sample_neighbour
         int s = 0;
         CUDA_ERROR(cudaMemcpy(
             &s,
@@ -686,39 +634,34 @@ struct GMG
             sizeof(int),
             cudaMemcpyDeviceToHost));
 
-        // e) allocate memory for sample_neighbour
+
         m_sample_neighbor.emplace_back(DenseMatrix<int>(rx, s, 1));
         auto& sample_neighbor = m_sample_neighbor[level - 1];
 
         sample_neighbor_size.reset(0, DEVICE);
 
-        // f) store the neighbor samples in the compressed format
-        for_each_item<<<blocks, blockThreads>>>(
-            m_edge_hash_table.get_capacity(),
-            [edge_hash_table,
-             sample_neighbor_size,
-             sample_neighbor_size_prefix,
-             sample_neighbor] __device__(uint32_t i) mutable {
-                const Edge e = edge_hash_table.m_table[i];
+        // e) store the neighbor samples in the compressed format
+        m_edge_storage.for_each([sample_neighbor_size,
+                                 sample_neighbor_size_prefix,
+                                 sample_neighbor] __device__(Edge e) mutable {
+            if (!e.is_sentinel()) {
+                std::pair<int, int> p = e.unpack();
 
-                if (!e.is_sentinel()) {
-                    std::pair<int, int> p = e.unpack();
+                // add a to b
+                // and add b to a
+                int a = p.first;
+                int b = p.second;
 
-                    // add a to b
-                    // and add b to a
-                    int a = p.first;
-                    int b = p.second;
+                int a_id = ::atomicAdd(&sample_neighbor_size(a), 1);
+                int b_id = ::atomicAdd(&sample_neighbor_size(b), 1);
 
-                    int a_id = ::atomicAdd(&sample_neighbor_size(a), 1);
-                    int b_id = ::atomicAdd(&sample_neighbor_size(b), 1);
+                int a_pre = sample_neighbor_size_prefix(a);
+                int b_pre = sample_neighbor_size_prefix(b);
 
-                    int a_pre = sample_neighbor_size_prefix(a);
-                    int b_pre = sample_neighbor_size_prefix(b);
-
-                    sample_neighbor(a_pre + a_id) = b;
-                    sample_neighbor(b_pre + b_id) = a;
-                }
-            });
+                sample_neighbor(a_pre + a_id) = b;
+                sample_neighbor(b_pre + b_id) = a;
+            }
+        });
     }
 
 
@@ -731,23 +674,23 @@ struct GMG
 
             int current_num_vertices = m_num_samples[level - 1];
 
-            if (level==1)
-            create_prolongation(current_num_vertices,
-                                m_sample_neighbor_size_prefix[level - 1],
-                                m_sample_neighbor[level - 1],
-                                m_prolong_op[level - 1],
-                                m_samples_pos[level-1],
-                                m_vertex_cluster[level - 1],
-                m_vertex_pos);
-
-            else 
+            if (level == 1)
                 create_prolongation(current_num_vertices,
                                     m_sample_neighbor_size_prefix[level - 1],
                                     m_sample_neighbor[level - 1],
                                     m_prolong_op[level - 1],
                                     m_samples_pos[level - 1],
                                     m_vertex_cluster[level - 1],
-                                    m_samples_pos[level-2]);
+                                    m_vertex_pos);
+
+            else
+                create_prolongation(current_num_vertices,
+                                    m_sample_neighbor_size_prefix[level - 1],
+                                    m_sample_neighbor[level - 1],
+                                    m_prolong_op[level - 1],
+                                    m_samples_pos[level - 1],
+                                    m_vertex_cluster[level - 1],
+                                    m_samples_pos[level - 2]);
         }
     }
 
@@ -764,7 +707,7 @@ struct GMG
                              DenseMatrix<int>& sample_neighbor,
                              SparseMatrixConstantNNZRow<float, 3>& prolong_op,
                              DenseMatrix<float>&                   samples_pos,
-                             DenseMatrix<int>& vertex_cluster,
+                             DenseMatrix<int>&   vertex_cluster,
                              DenseMatrix<float>& vertex_pos)
     {
 
@@ -773,7 +716,7 @@ struct GMG
         for_each_item<<<blocks, threads>>>(
             num_samples, [=] __device__(int sample_id) mutable {
                 bool tri_chosen = false;
-                
+
                 // assert(sample_id < num_samples);
 
                 // go through every triangle of the cluster
@@ -790,7 +733,7 @@ struct GMG
                                               samples_pos(sample_id, 1),
                                               samples_pos(sample_id, 2)};*/
 
-            const Eigen::Vector3<float> q{vertex_pos(sample_id, 0),
+                const Eigen::Vector3<float> q{vertex_pos(sample_id, 0),
                                               vertex_pos(sample_id, 1),
                                               vertex_pos(sample_id, 2)};
 
@@ -806,10 +749,10 @@ struct GMG
 
                 // We need at least 2 neighbors to form a triangle
                 int neighbors_count = end - start;
-                if (neighbors_count==2) {
-                    int v1_idx = cluster_point;
-                    int v2_idx = sample_neighbor(start);
-                    int v3_idx = sample_neighbor(start+1);
+                if (neighbors_count == 2) {
+                    int                   v1_idx = cluster_point;
+                    int                   v2_idx = sample_neighbor(start);
+                    int                   v3_idx = sample_neighbor(start + 1);
                     Eigen::Vector3<float> v1{samples_pos(v1_idx, 0),
                                              samples_pos(v1_idx, 1),
                                              samples_pos(v1_idx, 2)};
@@ -829,8 +772,7 @@ struct GMG
                     selected_neighbor             = v2_idx;
                     selected_neighbor_of_neighbor = v3_idx;
 
-                }
-                else if (neighbors_count >= 2) {
+                } else if (neighbors_count >= 2) {
                     // Iterate through all possible triangle combinations
                     for (int j = start; j < end; ++j) {
                         for (int k = j + 1; k < end; ++k) {

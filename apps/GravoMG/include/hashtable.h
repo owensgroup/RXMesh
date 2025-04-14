@@ -26,6 +26,9 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/prime_numbers.h"
 
+#include <thrust/sort.h>
+#include <thrust/unique.h>
+
 
 namespace rxmesh {
 
@@ -42,7 +45,7 @@ struct Edge
     ~Edge()                      = default;
 
     __device__ __host__ Edge(uint32_t l, uint32_t r)
-        : m_key(static_cast<uint64_t>(std::max(l, r)) << 32 | std::min(l, r))
+        : m_key(static_cast<uint64_t>(std::min(l, r)) << 32 | std::max(l, r))
     {
     }
 
@@ -68,6 +71,11 @@ struct Edge
         return a.m_key == b.m_key;
     }
 
+    __host__ __device__ friend bool operator<(const Edge& a, const Edge& b)
+    {
+        return a.m_key < b.m_key;
+    }
+
     __host__ __device__ friend bool operator!=(const Edge& a, const Edge& b)
     {
 
@@ -75,6 +83,115 @@ struct Edge
     }
 };
 
+
+template <typename T = Edge>
+struct GPUStorage
+{
+    __device__ __host__ GPUStorage() : m_storage(nullptr), m_capacity(0)
+    {
+    }
+    GPUStorage(const GPUStorage& other)      = default;
+    GPUStorage(GPUStorage&&)                 = default;
+    GPUStorage& operator=(const GPUStorage&) = default;
+    GPUStorage& operator=(GPUStorage&&)      = default;
+    ~GPUStorage()                            = default;
+
+
+    explicit GPUStorage(const uint32_t capacity) : m_capacity(capacity)
+    {
+        CUDA_ERROR(cudaMalloc((void**)&m_storage, num_bytes()));
+        CUDA_ERROR(cudaMalloc((void**)&m_count, sizeof(int)));
+        clear();
+    }
+
+    __host__ __device__ __inline__ uint32_t get_capacity() const
+    {
+        return m_capacity;
+    }
+
+    __host__ void clear()
+    {
+        CUDA_ERROR(cudaMemset(m_count, 0, sizeof(int)));
+        CUDA_ERROR(cudaMemset(m_storage, INVALID64, num_bytes()));
+    }
+    __host__ void free()
+    {
+        GPU_FREE(m_storage);
+        GPU_FREE(m_count);
+    }
+
+    __host__ __device__ __inline__ uint32_t num_bytes() const
+    {
+        return m_capacity * sizeof(T);
+    }
+
+
+    template <typename FunT>
+    __host__ void for_each(FunT func)
+    {
+        constexpr uint32_t blockThreads = 256;
+
+        T*   storage = m_storage;
+        int* count   = m_count;
+
+        uint32_t blocks = DIVIDE_UP(m_capacity, blockThreads);
+
+
+        for_each_item<<<blocks, blockThreads>>>(
+            m_capacity, [storage, count, func] __device__(int i) mutable {
+                if (i < count[0]) {
+                    func(storage[i]);
+                }
+            });
+    }
+
+    __device__ __inline__ bool insert(T item)
+    {
+        int prv = ::atomicAdd(m_count, 1);
+        if (prv < m_capacity) {
+            m_storage[prv] = item;
+            return true;
+        }
+        ::atomicAdd(m_count, -1);
+        return false;
+    }
+
+    __host__ void uniquify()
+    {
+        // https://nvidia.github.io/cccl/thrust/api/function_group__stream__compaction_1ga0981eb0b6034017ef622075d6612f68a.html
+
+        int h_count = 0;
+
+        CUDA_ERROR(
+            cudaMemcpy(&h_count, m_count, sizeof(int), cudaMemcpyDeviceToHost));
+
+        thrust::sort(thrust::device, m_storage, m_storage + h_count);
+
+        T* new_end =
+            thrust::unique(thrust::device, m_storage, m_storage + h_count);
+
+        h_count = new_end - m_storage;
+
+        CUDA_ERROR(
+            cudaMemcpy(m_count, &h_count, sizeof(int), cudaMemcpyHostToDevice));
+    }
+
+    __host__ int count()
+    {
+        int h_count = 0;
+
+        CUDA_ERROR(
+            cudaMemcpy(&h_count, m_count, sizeof(int), cudaMemcpyDeviceToHost));
+
+        return h_count;
+    }
+
+    T*       m_storage;
+    int*     m_count;
+    uint32_t m_capacity;
+};
+
+#if 0
 template <typename T = Edge>
 struct GPUHashTable
 {
@@ -191,6 +308,38 @@ struct GPUHashTable
         m_hasher3 = initialize_hf<HashT>(rng);
     }
 
+    template <typename FunT>
+    __host__ void for_each(FunT func)
+    {
+        constexpr uint32_t blockThreads = 256;
+
+        uint32_t capacity = m_capacity;
+        uint32_t st       = stash_size;
+
+        T* table = m_table;
+        T* stash = m_stash;
+
+        uint32_t len    = capacity;
+        uint32_t blocks = DIVIDE_UP(len, blockThreads);
+
+
+        for_each_item<<<blocks, blockThreads>>>(
+            len, [table, func] __device__(uint32_t i) mutable {
+                if (!table[i].is_sentinel()) {
+                    func(table[i]);
+                }
+            });
+
+        len    = st;
+        blocks = DIVIDE_UP(len, blockThreads);
+
+        for_each_item<<<blocks, blockThreads>>>(
+            len, [stash, func] __device__(uint32_t i) mutable {
+                if (!stash[i].is_sentinel()) {
+                    func(stash[i]);
+                }
+            });
+    }
 
     /**
      * @brief Insert new pair in the table. This function can be called from
@@ -201,17 +350,23 @@ struct GPUHashTable
      * device)
      * @return true if the insertion succeeded and false otherwise
      */
-    __host__ __device__ __inline__ bool insert(T pair)
+    __device__ __inline__ bool insert(T pair)
     {
         auto bucket_id = m_hasher0(pair.key()) % m_capacity;
 
         uint32_t cuckoo_counter = 0;
 
-        do {
-            const auto input_key = pair.key();
+        const auto input_key = pair.key();
 
+        do {
+
+#ifdef __CUDA_ARCH__
+
+            __threadfence();
             pair.m_key =
                 ::atomicExch((uint64_t*)m_table + bucket_id, pair.m_key);
+            __threadfence();
+#endif
 
             // compare against initial key to avoid duplicated
             // i.e., if we are inserting a pair such that its key already
@@ -239,14 +394,17 @@ struct GPUHashTable
             cuckoo_counter++;
         } while (cuckoo_counter < m_max_cuckoo_chains);
 
-        const auto input_key = pair.key();
-
         for (uint8_t i = 0; i < stash_size; ++i) {
             T prv;
 
+#ifdef __CUDA_ARCH__
+            __threadfence();
             prv.m_key = ::atomicCAS(reinterpret_cast<uint64_t*>(m_stash + i),
                                     INVALID64,
                                     pair.m_key);
+            __threadfence();
+
+#endif
 
             if (prv.is_sentinel() || prv.key() == input_key) {
                 return true;
@@ -265,6 +423,6 @@ struct GPUHashTable
     HashT    m_hasher3;
     uint32_t m_capacity;
     uint32_t m_max_cuckoo_chains;
-    bool     m_is_on_device;
 };
+#endif
 }  // namespace rxmesh
