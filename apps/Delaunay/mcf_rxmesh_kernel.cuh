@@ -110,12 +110,12 @@ __global__ static void init_B(const rxmesh::Context            context,
  * mcf_matvec()
  */
 template <typename T, uint32_t blockThreads>
-__global__ static void rxmesh_matvec(const rxmesh::Context            context,
-                                     const rxmesh::VertexAttribute<T> coords,
-                                     const rxmesh::VertexAttribute<T> in,
-                                     rxmesh::VertexAttribute<T>       out,
-                                     const bool use_uniform_laplace,
-                                     const T    time_step)
+__global__ static void matvec(const rxmesh::Context            context,
+                              const rxmesh::VertexAttribute<T> coords,
+                              const rxmesh::VertexAttribute<T> in,
+                              rxmesh::VertexAttribute<T>       out,
+                              const bool use_uniform_laplace,
+                              const T    time_step)
 {
 
     // To compute the vertex cotan weight, we use the following configuration

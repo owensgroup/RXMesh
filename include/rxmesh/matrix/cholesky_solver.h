@@ -326,6 +326,11 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
         }
     }
 
+    virtual std::string name() override
+    {
+        return std::string("Cholesky");
+    }
+
    protected:
     /**
      * @brief wrapper for cuSolver API for solving linear systems using cuSolver

@@ -2,15 +2,9 @@
 // Desbrun, Mathieu, et al "Implicit Fairing of Irregular Meshes using Diffusion
 // and Curvature Flow." SIGGRAPH 1999
 
-#include <omp.h>
-
 #include "gtest/gtest.h"
-#include "rxmesh/attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/cuda_query.h"
-#include "rxmesh/util/export_tools.h"
-#include "rxmesh/util/import_obj.h"
-#include "rxmesh/util/log.h"
 
 struct arg
 {
@@ -45,6 +39,8 @@ TEST(App, MCF)
 
     if (Arg.solver == "cg") {
         mcf_cg<dataT>(rx);
+    } else if (Arg.solver == "pcg") {
+        mcf_pcg<dataT>(rx);
     } else {
         mcf_cusolver_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
     }
@@ -70,7 +66,7 @@ int main(int argc, char** argv)
                         " -uniform_laplace:   Use uniform Laplace weights. Default is {} \n"
                         " -dt:                Time step (delta t). Default is {} \n"
                         "                     Hint: should be between (0.001, 1) for cotan Laplace or between (1, 100) for uniform Laplace\n"
-                        " -solver:            Solver to use. Options are CG or Chol. Default is {}\n" 
+                        " -solver:            Solver to use. Options are cg, chol, or pcg. Default is {}\n" 
                         " -eps:               Conjugate gradient tolerance. Default is {}\n"
                         " -perm:              Permutation method for Cholesky factorization. Default is {}\n"
                         " -max_cg_iter:       Conjugate gradient maximum number of iterations. Default is {}\n"                                            
@@ -117,15 +113,15 @@ int main(int argc, char** argv)
         }
     }
 
-    RXMESH_TRACE("input= {}", Arg.obj_file_name);
-    RXMESH_TRACE("output_folder= {}", Arg.output_folder);
-    RXMESH_TRACE("solver= {}", Arg.solver);
-    RXMESH_TRACE("perm= {}", Arg.perm_method);
-    RXMESH_TRACE("max_num_cg_iter= {}", Arg.max_num_cg_iter);
-    RXMESH_TRACE("cg_tolerance= {0:f}", Arg.cg_tolerance);
-    RXMESH_TRACE("use_uniform_laplace= {}", Arg.use_uniform_laplace);
-    RXMESH_TRACE("time_step= {0:f}", Arg.time_step);
-    RXMESH_TRACE("device_id= {}", Arg.device_id);
+    RXMESH_INFO("input= {}", Arg.obj_file_name);
+    RXMESH_INFO("output_folder= {}", Arg.output_folder);
+    RXMESH_INFO("solver= {}", Arg.solver);
+    RXMESH_INFO("perm= {}", Arg.perm_method);
+    RXMESH_INFO("max_num_cg_iter= {}", Arg.max_num_cg_iter);
+    RXMESH_INFO("cg_tolerance= {0:f}", Arg.cg_tolerance);
+    RXMESH_INFO("use_uniform_laplace= {}", Arg.use_uniform_laplace);
+    RXMESH_INFO("time_step= {0:f}", Arg.time_step);
+    RXMESH_INFO("device_id= {}", Arg.device_id);
 
     return RUN_ALL_TESTS();
 }

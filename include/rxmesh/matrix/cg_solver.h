@@ -6,7 +6,9 @@
 
 namespace rxmesh {
 
-
+/**
+ * @brief (Un-preconditioned) matrix-free CG
+ */
 template <typename T, typename HandleT>
 struct CGSolver : public IterativeSolver<T, Attribute<T, HandleT>>
 {
@@ -111,6 +113,10 @@ struct CGSolver : public IterativeSolver<T, Attribute<T, HandleT>>
         m_final_residual = delta_new;
     }
 
+    virtual std::string name() override
+    {
+        return std::string("CG");
+    }
 
     virtual ~CGSolver()
     {
