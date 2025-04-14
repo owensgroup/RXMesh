@@ -169,8 +169,8 @@ struct GMG
 
     GMG(RXMeshStatic& rx,
         Sampling      sam                   = Sampling::FPS,
-        int           reduction_ratio       = 10,
-        int           num_samples_threshold = 7)
+        int           reduction_ratio       = 5,
+        int           num_samples_threshold = 5)
         : m_ratio(reduction_ratio),
           m_edge_hash_table(
               GPUHashTable<Edge>(DIVIDE_UP(rx.get_num_edges(), 2)))
@@ -281,6 +281,21 @@ struct GMG
             create_compressed_representation(rx, l + 1);
 
             render_point_clouds(rx);
+        }
+        m_sample_neighbor_size[1].move(DEVICE, HOST);
+        m_sample_neighbor[1].move(DEVICE, HOST);
+        m_samples_pos[1].move(DEVICE, HOST);
+        m_sample_neighbor_size_prefix[1].move(DEVICE, HOST);
+        for (int i = 1; i < m_sample_neighbor_size_prefix[1].rows();i++) {
+            std::cout << "\n" << i-1 << " : ";
+            std::cout << " " << m_sample_neighbor_size[1](i-1, 0);
+            for (int j = m_sample_neighbor_size_prefix[1](i-1, 0);
+                 j < m_sample_neighbor_size_prefix[1](i, 0);
+                 j++) {
+
+                    std::cout << std::endl << m_sample_neighbor[1](j);
+
+            }
         }
 
         // renderFromDenseMatrices(

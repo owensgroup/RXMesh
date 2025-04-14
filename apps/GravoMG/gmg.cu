@@ -34,17 +34,17 @@ TEST(Apps, GMGRefactor)
 
     cuda_query(Arg.device_id);
 
-    RXMeshStatic rx(Arg.obj_file_name);
+    //RXMeshStatic rx(Arg.obj_file_name);
 
-    /*
+    
     std::vector<std::vector<float>>    planeVerts;
     std::vector<std::vector<uint32_t>> planeFaces;
-    uint32_t                           nx = 10;
-    uint32_t                           ny = 10;
+    uint32_t                           nx = 15;
+    uint32_t                           ny = 15;
     create_plane(planeVerts, planeFaces, nx, ny);
     RXMeshStatic rx(planeFaces);
     rx.add_vertex_coordinates(planeVerts, "plane");
-    */
+    
 
     ASSERT_TRUE(rx.is_edge_manifold());
 
