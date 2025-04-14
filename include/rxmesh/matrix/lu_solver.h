@@ -60,6 +60,10 @@ struct LUSolver : public DirectSolver<SpMatT, DenseMatOrder>
         }
     }
 
+    virtual std::string name() override
+    {
+        return std::string("LU");
+    }
 
    protected:
     /**

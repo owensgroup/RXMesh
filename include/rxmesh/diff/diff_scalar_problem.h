@@ -22,6 +22,10 @@ namespace rxmesh {
 template <typename T, int VariableDim, typename ObjHandleT, bool WithHess>
 struct DiffScalarProblem
 {
+
+    // TODO use ObjHandleT to define the Hessian matrix sparsity
+    // right now, we always assume VV sparsity pattern but we can derive
+    // different sparsity, e.g., FF
     using HessMatT  = HessianSparseMatrix<T, VariableDim>;
     using DenseMatT = DenseMatrix<T, Eigen::RowMajor>;
 
