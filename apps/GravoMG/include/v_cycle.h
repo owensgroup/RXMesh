@@ -82,16 +82,6 @@ struct VCycle
             m_x.emplace_back(rx, gmg.m_num_samples[l], rhs.cols());
 
             m_r.emplace_back(rx, gmg.m_num_samples[l], rhs.cols());
-
-            // how do I allocate m_a
-            // m_a[l].a.emplace_back(rx, gmg.m_num_samples[l],
-            // gmg.m_num_samples[l]);
-
-            std::cout << "\nr: " << m_r.back().rows() << " x "
-                      << m_r.back().cols();
-            std::cout << "\nrhs: " << m_rhs.back().rows() << " x "
-                      << m_rhs.back().cols();
-
             gmg.m_prolong_op[l - 1].alloc_multiply_buffer(m_r.back(),
                                                           m_rhs[l - 1]);
 
@@ -280,15 +270,16 @@ struct VCycle
             // x = x + P*u
             gmg.m_prolong_op[level + 1].multiply(
                 v, m_x[level], false, false, T(1.0), T(1.0));
+                 m_x[level],v, false, false, T(1.0), T(1.0));
 
-            // post-smoothing
+            //// post-smoothing
             m_smoother[level].template solve<numCols>(
                 A, f, v, m_num_post_relax);
 
         } else {
             // the coarsest level
-            m_coarse_solver.template solve<numCols>(A, f, v, m_num_post_relax);
-            m_coarse_solver.template solve<numCols>(A, f, v, 100);
+            //m_coarse_solver.template solve<numCols>(A, f, v, m_num_post_relax);
+            m_coarse_solver.template solve<numCols>(A, f, v, 5);
         }
     }
 

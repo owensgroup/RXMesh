@@ -845,17 +845,12 @@ struct GMG
                 detail::compute_barycentric(
                     selectedv1, selectedv2, selectedv3, q, b1, b2, b3);
 
-                printf("\n%d: %d %d %d %f %f %f",
-                       sample_id,
-                       cluster_point,
-                       selected_neighbor,
-                       selected_neighbor_of_neighbor,
-                       b1,
-                       b2,
-                       b3);
+
                 assert(tri_chosen);
 
+                assert(!isnan(b1));
                 assert(!isnan(b2));
+                assert(!isnan(b3));
 
                 prolong_op.col_idx()[sample_id * 3 + 2] =
                     selected_neighbor_of_neighbor;
