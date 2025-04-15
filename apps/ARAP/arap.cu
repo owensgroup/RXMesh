@@ -1,7 +1,7 @@
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
 
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 
 #include "rxmesh/matrix/qr_solver.h"
 
@@ -17,7 +17,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void calc_edge_weights_mat(
     const rxmesh::Context      context,
     rxmesh::VertexAttribute<T> coords,
-    rxmesh::SparseMatrix2<T>   edge_weights)
+    rxmesh::SparseMatrix<T>   edge_weights)
 {
 
     auto calc_weights = [&](EdgeHandle edge_id, VertexIterator& vv) {
@@ -66,7 +66,7 @@ __global__ static void calculate_rotation_matrix(
     rxmesh::VertexAttribute<T> ref_vertex_pos,
     rxmesh::VertexAttribute<T> deformed_vertex_pos,
     rxmesh::VertexAttribute<T> rotations,
-    rxmesh::SparseMatrix2<T>   weight_matrix)
+    rxmesh::SparseMatrix<T>   weight_matrix)
 {
     auto cal_rot = [&](VertexHandle v_id, VertexIterator& vv) {
         Eigen::Matrix3f S = Eigen::Matrix3f::Zero();
@@ -126,7 +126,7 @@ __global__ static void calculate_b(
     rxmesh::VertexAttribute<T> ref_vertex_pos,
     rxmesh::VertexAttribute<T> deformed_vertex_pos,
     rxmesh::VertexAttribute<T> rotations,
-    rxmesh::SparseMatrix2<T>   weight_mat,
+    rxmesh::SparseMatrix<T>   weight_mat,
     rxmesh::DenseMatrix<T>     b_mat,
     rxmesh::VertexAttribute<T> constraints)
 {
@@ -183,8 +183,8 @@ __global__ static void calculate_b(
 template <typename T, uint32_t blockThreads>
 __global__ static void calculate_system_matrix(
     const rxmesh::Context      context,
-    rxmesh::SparseMatrix2<T>   weight_matrix,
-    rxmesh::SparseMatrix2<T>   laplace_mat,
+    rxmesh::SparseMatrix<T>   weight_matrix,
+    rxmesh::SparseMatrix<T>   laplace_mat,
     rxmesh::VertexAttribute<T> constraints)
 
 {
@@ -247,11 +247,11 @@ int main(int argc, char** argv)
 
     // compute weights
     auto weights = rx.add_edge_attribute<float>("edgeWeights", 1);
-    SparseMatrix2<float> weight_matrix(rx);
+    SparseMatrix<float> weight_matrix(rx);
     weight_matrix.reset(0.f, LOCATION_ALL);
 
     // system matrix
-    SparseMatrix2<float> laplace_mat(rx);
+    SparseMatrix<float> laplace_mat(rx);
     laplace_mat.reset(0.f, LOCATION_ALL);
 
     // rotation matrix as a very attribute where every vertex has 3x3 matrix

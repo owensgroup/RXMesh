@@ -3,7 +3,7 @@
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/matrix/dense_matrix.h"
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 
 #include "rxmesh/query.cuh"
 
@@ -20,7 +20,7 @@ using namespace rxmesh;
 template <typename T, uint32_t blockThreads>
 __global__ static void setup(const Context      context,
                              VertexAttribute<T> coords,
-                             SparseMatrix2<T>   A,
+                             SparseMatrix<T>   A,
                              DenseMatrix<T>     X,
                              DenseMatrix<T>     B)
 {
@@ -57,7 +57,7 @@ __global__ static void setup(const Context      context,
 
 template <typename T>
 void setup_matrix(RXMeshStatic&     rx,
-                  SparseMatrix2<T>& A,
+                  SparseMatrix<T>& A,
                   DenseMatrix<T>&   B,
                   DenseMatrix<T>&   X)
 {
@@ -72,7 +72,7 @@ void setup_matrix(RXMeshStatic&     rx,
 template <typename T, typename SolverT>
 void test_solver(RXMeshStatic&     rx,
                  SolverT&          solver,
-                 SparseMatrix2<T>& A,
+                 SparseMatrix<T>& A,
                  DenseMatrix<T>&   B,
                  DenseMatrix<T>&   X,
                  bool              sol_on_device)
@@ -116,7 +116,7 @@ TEST(Solver, Cholesky)
 
     uint32_t num_vertices = rx.get_num_vertices();
 
-    SparseMatrix2<float> A(rx, Op::VV);
+    SparseMatrix<float> A(rx, Op::VV);
     DenseMatrix<float>   X(rx, num_vertices, 3);
     DenseMatrix<float>   B(rx, num_vertices, 3);
 
@@ -137,7 +137,7 @@ TEST(Solver, QR)
 
     uint32_t num_vertices = rx.get_num_vertices();
 
-    SparseMatrix2<float> A(rx, Op::VV);
+    SparseMatrix<float> A(rx, Op::VV);
     DenseMatrix<float>   X(rx, num_vertices, 3);
     DenseMatrix<float>   B(rx, num_vertices, 3);
 
@@ -157,7 +157,7 @@ TEST(Solver, LU)
 
     uint32_t num_vertices = rx.get_num_vertices();
 
-    SparseMatrix2<float> A(rx, Op::VV);
+    SparseMatrix<float> A(rx, Op::VV);
     DenseMatrix<float>   X(rx, num_vertices, 3);
     DenseMatrix<float>   B(rx, num_vertices, 3);
 
@@ -177,7 +177,7 @@ TEST(Solver, CompareEigen)
 
     uint32_t num_vertices = rx.get_num_vertices();
 
-    SparseMatrix2<float> A(rx, Op::VV);
+    SparseMatrix<float> A(rx, Op::VV);
     DenseMatrix<float>   X(rx, num_vertices, 3);
     DenseMatrix<float>   B(rx, num_vertices, 3);
 

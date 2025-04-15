@@ -5,7 +5,7 @@
 #include "rxmesh/geometry_util.cuh"
 #include "rxmesh/query.cuh"
 
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 
 /**
  * edge_cotan_weight()
@@ -355,7 +355,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void mcf_A_setup(
     const rxmesh::Context            context,
     const rxmesh::VertexAttribute<T> coords,
-    rxmesh::SparseMatrix2<T>         A_mat,
+    rxmesh::SparseMatrix<T>         A_mat,
     const bool                       use_uniform_laplace,  // for non-uniform
     const T                          time_step)
 {

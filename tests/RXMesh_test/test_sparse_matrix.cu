@@ -2,7 +2,7 @@
 
 #include "rxmesh/attribute.h"
 #include "rxmesh/matrix/dense_matrix.h"
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
 
@@ -31,7 +31,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void sparse_mat_edge_len_test(
     const rxmesh::Context      context,
     rxmesh::VertexAttribute<T> coords,
-    rxmesh::SparseMatrix2<T>   sparse_mat,
+    rxmesh::SparseMatrix<T>   sparse_mat,
     T*                         arr_ref)
 {
     using namespace rxmesh;
@@ -67,8 +67,8 @@ __global__ static void sparse_mat_edge_len_test(
 
 template <uint32_t blockThreads, typename T>
 __global__ static void test_transpose(const rxmesh::Context    context,
-                                      rxmesh::SparseMatrix2<T> mat,
-                                      rxmesh::SparseMatrix2<T> trans_mat,
+                                      rxmesh::SparseMatrix<T> mat,
+                                      rxmesh::SparseMatrix<T> trans_mat,
                                       int*                     err_count)
 {
     using namespace rxmesh;
@@ -91,7 +91,7 @@ __global__ static void test_transpose(const rxmesh::Context    context,
 template <typename T>
 __global__ void spmat_multi_hardwired_kernel(
     T*                       vec,
-    rxmesh::SparseMatrix2<T> sparse_mat,
+    rxmesh::SparseMatrix<T> sparse_mat,
     T*                       out,
     const int                N)
 {
@@ -108,7 +108,7 @@ __global__ void spmat_multi_hardwired_kernel(
     }
 }
 
-TEST(RXMeshStatic, SparseMatrix2)
+TEST(RXMeshStatic, SparseMatrix)
 {
     // Test accessing of the sparse matrix in CSR format in device
 
@@ -133,7 +133,7 @@ TEST(RXMeshStatic, SparseMatrix2)
 
     CUDA_ERROR(cudaMalloc((void**)&d_result, (num_vertices) * sizeof(int)));
 
-    SparseMatrix2<int> spmat(rx);
+    SparseMatrix<int> spmat(rx);
     spmat.reset(1, LOCATION_ALL);
 
     spmat_multi_hardwired_kernel<<<blocks, threads>>>(
@@ -199,7 +199,7 @@ TEST(RXMeshStatic, SparseMatrixEdgeLen)
                           num_vertices * sizeof(float),
                           cudaMemcpyHostToDevice));
 
-    SparseMatrix2<float> spmat(rx);
+    SparseMatrix<float> spmat(rx);
 
     float* d_arr_ref;
     float* d_result;
@@ -290,7 +290,7 @@ TEST(RXMeshStatic, SparseMatrixUserManaged)
         cudaMemcpy(d_val, h_val, sizeof(T) * nnz, cudaMemcpyHostToDevice));
 
 
-    SparseMatrix2 mat(rows,
+    SparseMatrix mat(rows,
                       cols,
                       nnz,
                       d_row_ptr,
@@ -335,14 +335,14 @@ TEST(RXMeshStatic, SparseMatrixTranspose)
 
     uint32_t num_vertices = rx.get_num_vertices();
 
-    SparseMatrix2<T> mat(rx);
+    SparseMatrix<T> mat(rx);
 
     for (int i = 0; i < mat.non_zeros(); ++i) {
         mat.get_val_at(i) = value_dist(gen);
     }
     mat.move(HOST, DEVICE);
 
-    SparseMatrix2<T> mat_trans = mat.transpose();
+    SparseMatrix<T> mat_trans = mat.transpose();
 
     int* d_err_count(nullptr);
     CUDA_ERROR(cudaMalloc((void**)&d_err_count, sizeof(int)));

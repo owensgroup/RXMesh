@@ -7,7 +7,7 @@
 #include "rxmesh/matrix/mgnd_permute.cuh"
 #include "rxmesh/matrix/nd_permute.cuh"
 #include "rxmesh/matrix/permute_util.h"
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 
 #include "rxmesh/matrix/cholesky_solver.h"
 
@@ -47,7 +47,7 @@ void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
 template <typename T, typename EigeMatT>
 void with_metis(rxmesh::RXMeshStatic&           rx,
-                const rxmesh::SparseMatrix2<T>& rx_mat,
+                const rxmesh::SparseMatrix<T>& rx_mat,
                 const EigeMatT&                 eigen_mat)
 {
     EXPECT_TRUE(rx_mat.rows() == eigen_mat.rows());
@@ -188,7 +188,7 @@ void with_gpu_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
 template <typename T, typename EigeMatT>
 void with_amd(rxmesh::RXMeshStatic&     rx,
-              rxmesh::SparseMatrix2<T>& rx_mat,
+              rxmesh::SparseMatrix<T>& rx_mat,
               const EigeMatT&           eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
@@ -221,7 +221,7 @@ void with_amd(rxmesh::RXMeshStatic&     rx,
 
 template <typename T, typename EigeMatT>
 void with_symrcm(rxmesh::RXMeshStatic&     rx,
-                 rxmesh::SparseMatrix2<T>& rx_mat,
+                 rxmesh::SparseMatrix<T>& rx_mat,
                  const EigeMatT&           eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
@@ -265,7 +265,7 @@ TEST(Apps, NDReorder)
     // }
 
     // VV matrix
-    rxmesh::SparseMatrix2<float> rx_mat(rx);
+    rxmesh::SparseMatrix<float> rx_mat(rx);
 
     // populate an SPD matrix
     rx_mat.for_each([](int r, int c, float& val) {

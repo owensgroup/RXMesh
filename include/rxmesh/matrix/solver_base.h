@@ -3,7 +3,7 @@
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/matrix/dense_matrix.h"
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 
 #include <Eigen/Dense>
 namespace rxmesh {

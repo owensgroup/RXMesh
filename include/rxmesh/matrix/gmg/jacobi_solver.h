@@ -3,7 +3,7 @@
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/matrix/dense_matrix.h"
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 
 namespace rxmesh {
 
@@ -23,7 +23,7 @@ struct JacobiSolver
 
 
     template <int numCol>
-    __host__ void solve(const SparseMatrix2<T>& A,
+    __host__ void solve(const SparseMatrix<T>& A,
                         const DenseMatrix<T>&   b,
                         DenseMatrix<T>&         x,
                         int                     num_iter)

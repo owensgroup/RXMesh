@@ -23,7 +23,7 @@ namespace rxmesh {
  * cuSparse as a back-end.
  */
 template <typename T>
-struct SparseMatrix2
+struct SparseMatrix
 {
     using IndexT = int;
 
@@ -32,7 +32,7 @@ struct SparseMatrix2
     using EigenSparseMatrix =
         Eigen::Map<const Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT>>;
 
-    SparseMatrix2()
+    SparseMatrix()
         : m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
           m_d_val(nullptr),
@@ -56,8 +56,8 @@ struct SparseMatrix2
     {
     }
 
-    SparseMatrix2(const RXMeshStatic& rx, Op op = Op::VV)
-        : SparseMatrix2(rx, op, 1) {};
+    SparseMatrix(const RXMeshStatic& rx, Op op = Op::VV)
+        : SparseMatrix(rx, op, 1) {};
 
 
     /**
@@ -73,7 +73,7 @@ struct SparseMatrix2
      * @param h_col_idx host pointer to the column index
      * @param h_val host point to the value pointer
      */
-    SparseMatrix2(IndexT  num_rows,
+    SparseMatrix(IndexT  num_rows,
                   IndexT  num_cols,
                   IndexT  nnz,
                   IndexT* d_row_ptr,
@@ -82,7 +82,7 @@ struct SparseMatrix2
                   IndexT* h_row_ptr,
                   IndexT* h_col_idx,
                   T*      h_val)
-        : SparseMatrix2()
+        : SparseMatrix()
     {
         m_replicate = 1;
 
@@ -111,7 +111,7 @@ struct SparseMatrix2
     }
 
    protected:
-    SparseMatrix2(const RXMeshStatic& rx, Op op, IndexT replicate)
+    SparseMatrix(const RXMeshStatic& rx, Op op, IndexT replicate)
         : m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
           m_d_val(nullptr),
@@ -144,7 +144,7 @@ struct SparseMatrix2
             m_num_rows = rx.get_num_faces();
         } else {
             RXMESH_ERROR(
-                "SparseMatrix2 Unsupported query operation for constructing "
+                "SparseMatrix Unsupported query operation for constructing "
                 "the sparse matrix. Input operation is {}",
                 op_to_string(m_op));
         }
@@ -158,7 +158,7 @@ struct SparseMatrix2
             m_num_cols = rx.get_num_faces();
         } else {
             RXMESH_ERROR(
-                "SparseMatrix2 Unsupported query operation for constructing "
+                "SparseMatrix Unsupported query operation for constructing "
                 "the sparse matrix. Input operation is {}",
                 op_to_string(m_op));
         }
@@ -224,7 +224,7 @@ struct SparseMatrix2
                 m_replicate);
         } else {
             RXMESH_ERROR(
-                "SparseMatrix2 Unsupported query operation for constructing "
+                "SparseMatrix Unsupported query operation for constructing "
                 "the sparse matrix. Input operation is {}",
                 op_to_string(m_op));
         }
@@ -322,7 +322,7 @@ struct SparseMatrix2
 
         } else {
             RXMESH_ERROR(
-                "SparseMatrix2 Unsupported query operation for constructing "
+                "SparseMatrix Unsupported query operation for constructing "
                 "the sparse matrix. Input operation is {}",
                 op_to_string(m_op));
         }
@@ -371,7 +371,7 @@ struct SparseMatrix2
     {
         std::ofstream file(file_name);
         if (!file.is_open()) {
-            RXMESH_ERROR("SparseMatrix2::to_file() Can not open file {}",
+            RXMESH_ERROR("SparseMatrix::to_file() Can not open file {}",
                          file_name);
             return;
         }
@@ -671,21 +671,21 @@ struct SparseMatrix2
 
 
     /**
-     * @brief return another SparseMatrix2 that is the transpose of this
-     * SparseMatrix2. This function allocate memory on both host and device.
+     * @brief return another SparseMatrix that is the transpose of this
+     * SparseMatrix. This function allocate memory on both host and device.
      * Thus, it is not recommended to call it during the application multiple
      * times
      */
-    __host__ SparseMatrix2<T> transpose() const
+    __host__ SparseMatrix<T> transpose() const
     {
         if (m_op == Op::EVDiamond) {
             RXMESH_ERROR(
-                "SparseMatrix2<T>::transpose() there is not transpose for "
-                "SparseMatrix2 with EVDiamond.");
+                "SparseMatrix<T>::transpose() there is not transpose for "
+                "SparseMatrix with EVDiamond.");
             return *this;
         }
 
-        SparseMatrix2<T> ret;
+        SparseMatrix<T> ret;
 
         ret.m_num_rows        = m_num_cols;
         ret.m_num_cols        = m_num_rows;
@@ -766,7 +766,7 @@ struct SparseMatrix2
     {
         if (source == target) {
             RXMESH_WARN(
-                "SparseMatrix2::move() source ({}) and target ({}) "
+                "SparseMatrix::move() source ({}) and target ({}) "
                 "are the same.",
                 location_to_string(source),
                 location_to_string(target));
@@ -776,7 +776,7 @@ struct SparseMatrix2
         if ((source == HOST || source == DEVICE) &&
             ((source & m_allocated) != source)) {
             RXMESH_ERROR(
-                "SparseMatrix2::move() moving source is not valid"
+                "SparseMatrix::move() moving source is not valid"
                 " because it was not allocated on source i.e., {}",
                 location_to_string(source));
             return;
@@ -784,7 +784,7 @@ struct SparseMatrix2
 
         if (((target & HOST) == HOST || (target & DEVICE) == DEVICE) &&
             ((target & m_allocated) != target)) {
-            RXMESH_ERROR("SparseMatrix2::move() target {} is not allocated!",
+            RXMESH_ERROR("SparseMatrix::move() target {} is not allocated!",
                          location_to_string(target));
             return;
         }
@@ -1076,7 +1076,7 @@ struct SparseMatrix2
     /**
      * @brief Convert/map this sparse matrix to Eigen sparse matrix. This is a
      * zero-copy conversion so Eigen sparse matrix will point to the same memory
-     * as the host-side of this SparseMatrix2
+     * as the host-side of this SparseMatrix
      */
     __host__ EigenSparseMatrix to_eigen()
     {
@@ -1163,7 +1163,7 @@ struct SparseMatrix2
 
 
    protected:
-    void init_cusparse(SparseMatrix2<T>& mat) const
+    void init_cusparse(SparseMatrix<T>& mat) const
     {
         // cuSparse CSR matrix
         CUSPARSE_ERROR(cusparseCreateCsr(&mat.m_spdescr,
@@ -1196,7 +1196,7 @@ struct SparseMatrix2
                 IndexT c = m_h_col_idx[i];
                 if (cols.find(c) != cols.end()) {
                     RXMESH_ERROR(
-                        "SparseMatrix2::check_repeated_indices() Error in "
+                        "SparseMatrix::check_repeated_indices() Error in "
                         "constructing the sparse matrix. Row {} contains "
                         "repeated column indices {}",
                         r,

@@ -2,7 +2,7 @@
 #include "rxmesh/reduce_handle.h"
 #include "rxmesh/rxmesh_static.h"
 
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 
 using namespace rxmesh;
 

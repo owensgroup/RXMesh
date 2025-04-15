@@ -21,7 +21,7 @@ struct CoarseA
 {
 
     CoarseA() {};
-    SparseMatrix2<T> a;
+    SparseMatrix<T> a;
 
     T*   d_val;
     T*   h_val;
@@ -65,7 +65,7 @@ struct VCycle
 
     VCycle(GMG<T>&               gmg,
            RXMeshStatic&         rx,
-           SparseMatrix2<T>&     A,
+           SparseMatrix<T>&     A,
            const DenseMatrix<T>& rhs,
            CoarseSolver          coarse_solver  = CoarseSolver::Jacobi,
            int                   num_pre_relax  = 2,
@@ -106,7 +106,7 @@ struct VCycle
 
 
     void pt_A_p(SparseMatrixConstantNNZRow<T, 3>& P,
-                SparseMatrix2<T>&                 A,
+                SparseMatrix<T>&                 A,
                 CoarseA<T>&                       C)
     {
         // S = transpose(P) * A
@@ -116,7 +116,7 @@ struct VCycle
         cusparseSpGEMMDescr_t spgemmDesc;
         CUSPARSE_ERROR(cusparseSpGEMM_createDescr(&spgemmDesc));
 
-        SparseMatrix2<T> Pt = P.transpose();
+        SparseMatrix<T> Pt = P.transpose();
 
         cusparseSpMatDescr_t S_spmat;
         cusparseSpMatDescr_t C_spmat;
@@ -206,7 +206,7 @@ struct VCycle
             C.h_val, C.d_val, c_nnz * sizeof(T), cudaMemcpyDeviceToHost));
 
         // Create C SparseMatrix
-        C.a = SparseMatrix2<T>(c_rows,
+        C.a = SparseMatrix<T>(c_rows,
                                c_cols,
                                c_nnz,
                                C.d_row_ptr,
@@ -231,7 +231,7 @@ struct VCycle
      * @brief run the solver.
      */
     void solve(GMG<T>&           gmg,
-               SparseMatrix2<T>& A,
+               SparseMatrix<T>& A,
                DenseMatrix<T>&   rhs,
                DenseMatrix<T>&   result,
                int               num_iter)
@@ -247,7 +247,7 @@ struct VCycle
      */
     void cycle(int                   level,
                GMG<T>&               gmg,
-               SparseMatrix2<T>&     A,
+               SparseMatrix<T>&     A,
                const DenseMatrix<T>& f,  // rhs
                DenseMatrix<T>&       v)        // x
     {
@@ -288,7 +288,7 @@ struct VCycle
      * @brief compute r = f - A.v
      */
     template <int numCol>
-    void calc_residual(const SparseMatrix2<T>& A,
+    void calc_residual(const SparseMatrix<T>& A,
                        const DenseMatrix<T>&   v,
                        const DenseMatrix<T>&   f,
                        DenseMatrix<T>&         r)

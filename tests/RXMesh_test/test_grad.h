@@ -86,11 +86,11 @@ TEST(DiffAttribute, SmoothingGD)
               << timer.elapsed_millis() / float(num_iterations)
               << " ms per iteration\n";
 
-#if USE_POLYSCOPE
-    problem.objective->move(DEVICE, HOST);
-    rx.get_polyscope_mesh()->updateVertexPositions(*problem.objective);
-    polyscope::show();
-#endif
+    // #if USE_POLYSCOPE
+    //     problem.objective->move(DEVICE, HOST);
+    //     rx.get_polyscope_mesh()->updateVertexPositions(*problem.objective);
+    //     polyscope::show();
+    // #endif
 }
 
 TEST(DiffAttribute, SmoothingNewton)

@@ -4,7 +4,7 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/matrix/gmg/gmg.h"
 #include "rxmesh/matrix/gmg/v_cycle.h"
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 #include "rxmesh/reduce_handle.h"
 
 namespace rxmesh {
@@ -18,7 +18,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     using Type = T;
 
     GMGSolver(RXMeshStatic&     rx,
-              SparseMatrix2<T>& A,
+              SparseMatrix<T>& A,
               int               max_iter,
               int               num_pre_relax  = 2,
               int               num_post_relax = 2,
@@ -83,7 +83,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
    protected:
     RXMeshStatic*     m_rx;
-    SparseMatrix2<T>* m_A;
+    SparseMatrix<T>* m_A;
     GMG<T>            m_gmg;
     VCycle<T>         m_v_cycle;
     CoarseSolver      m_coarse_solver;

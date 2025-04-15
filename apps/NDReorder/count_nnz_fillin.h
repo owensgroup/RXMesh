@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 
 #include <Eigen/Sparse>
 
@@ -57,10 +57,11 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
     RXMESH_INFO(" After perm_mat\n");
 
     // tmp fix that EIGEN doesn't work
-    export_to_plain_text(permuted_mat,
-                         std::string("/home/ericyuan/Projects/RXMesh/build/output/")
-                         + st + std::string(".txt"));
-    
+    export_to_plain_text(
+        permuted_mat,
+        std::string("/home/ericyuan/Projects/RXMesh/build/output/") + st +
+            std::string(".txt"));
+
     return 0;
 
     // compute Cholesky factorization on the permuted matrix
@@ -108,7 +109,7 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
  * Eigen::SimplicialCholeskyBase::analyzePattern_preordered
  */
 template <typename T>
-int count_nnz_fillin(const rxmesh::SparseMatrix2<T>& mat)
+int count_nnz_fillin(const rxmesh::SparseMatrix<T>& mat)
 {
     const int size = mat.rows();
 

@@ -5,7 +5,7 @@
 #include "rxmesh/geometry_util.cuh"
 
 #include "rxmesh/matrix/lu_solver.h"
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 
 namespace rxmesh {
 
@@ -59,7 +59,7 @@ template <typename T, typename BoundaryT, int blockThreads>
 __global__ static void setup_L(const Context                    context,
                                const VertexAttribute<T>         coordinates,
                                const VertexAttribute<BoundaryT> v_boundary,
-                               SparseMatrix2<T>                 L)
+                               SparseMatrix<T>                 L)
 {
 
     auto func = [&](const EdgeHandle& eh, const VertexIterator& iter) {
@@ -211,7 +211,7 @@ inline void harmonic(RXMeshStatic&                     rx,
                      const VertexAttribute<T>&         coordinates,
                      const VertexAttribute<BoundaryT>& v_boundary,
                      VertexAttribute<T>&               uv,
-                     SparseMatrix2<T>&                 L)
+                     SparseMatrix<T>&                 L)
 {
     auto rhs = *uv.to_matrix();
     auto sol =
@@ -255,7 +255,7 @@ inline void tutte_embedding(RXMeshStatic&               rx,
                             const VertexAttribute<T>&   coordinates,
                             VertexAttribute<BoundaryT>& v_boundary,
                             VertexAttribute<T>&         uv,
-                            SparseMatrix2<T>&           L)
+                            SparseMatrix<T>&           L)
 {
     detail::map_vertices_to_circle(rx, coordinates, v_boundary, uv);
 
@@ -268,7 +268,7 @@ inline void tutte_embedding(RXMeshStatic&                     rx,
                             const VertexAttribute<BoundaryT>& v_boundary,
                             VertexAttribute<T>&               uv)
 {
-    SparseMatrix2<T> L(rx);
+    SparseMatrix<T> L(rx);
 
     detail::map_vertices_to_circle(rx, coordinates, v_boundary, uv);
 
@@ -284,7 +284,7 @@ inline void tutte_embedding(RXMeshStatic&             rx,
 {
     auto v_boundary = *rx.add_vertex_attribute<bool>("rx:vBnd", 1);
 
-    SparseMatrix2<T> L(rx);
+    SparseMatrix<T> L(rx);
 
     rx.get_boundary_vertices(v_boundary);
 

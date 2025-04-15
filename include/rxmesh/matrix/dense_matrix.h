@@ -29,7 +29,7 @@ struct DenseMatrix
     static constexpr int OrderT = Order;
 
     template <typename U>
-    friend class SparseMatrix2;
+    friend class SparseMatrix;
 
     using EigenDenseMatrix =
         Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Order>>;

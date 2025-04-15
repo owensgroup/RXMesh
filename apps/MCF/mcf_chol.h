@@ -1,7 +1,7 @@
 #pragma once
 #include "rxmesh/attribute.h"
 #include "rxmesh/matrix/dense_matrix.h"
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/matrix/cholesky_solver.h"
@@ -21,7 +21,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
 
     auto coords = rx.get_input_vertex_coordinates();
 
-    SparseMatrix2<float> A_mat(rx);
+    SparseMatrix<float> A_mat(rx);
     DenseMatrix<float>   B_mat(rx, num_vertices, 3);
 
     DenseMatrix<float> X_mat = *coords->to_matrix();

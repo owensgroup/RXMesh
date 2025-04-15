@@ -1,7 +1,7 @@
 #pragma once
 
 
-#include "rxmesh/matrix/sparse_matrix2.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 
 #include "rxmesh/diff/scalar.h"
 
@@ -14,7 +14,7 @@ namespace rxmesh {
  *
  */
 template <typename T, int K>
-struct HessianSparseMatrix : public SparseMatrix2<T>
+struct HessianSparseMatrix : public SparseMatrix<T>
 {
     using Type = T;
 
@@ -22,15 +22,15 @@ struct HessianSparseMatrix : public SparseMatrix2<T>
 
     using ScalarT = Scalar<T, K, true>;
 
-    using IndexT = typename SparseMatrix2<T>::IndexT;
+    using IndexT = typename SparseMatrix<T>::IndexT;
 
 
-    HessianSparseMatrix() : SparseMatrix2<T>()
+    HessianSparseMatrix() : SparseMatrix<T>()
     {
     }
 
     HessianSparseMatrix(const RXMeshStatic& rx, Op op = Op::VV)
-        : SparseMatrix2<T>(rx, op, K)
+        : SparseMatrix<T>(rx, op, K)
     {
     }
 
@@ -49,7 +49,7 @@ struct HessianSparseMatrix : public SparseMatrix2<T>
         const IndexT c_id =
             this->get_row_id(col_v) * this->m_replicate + local_j;
 
-        return SparseMatrix2<T>::operator()(r_id, c_id);
+        return SparseMatrix<T>::operator()(r_id, c_id);
     }
 
     /**
@@ -66,7 +66,7 @@ struct HessianSparseMatrix : public SparseMatrix2<T>
         const IndexT c_id =
             this->get_row_id(col_v) * this->m_replicate + local_j;
 
-        return SparseMatrix2<T>::operator()(r_id, c_id);
+        return SparseMatrix<T>::operator()(r_id, c_id);
     }
 
 
