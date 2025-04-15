@@ -47,6 +47,9 @@ void parameterize(RXMeshStatic& rx)
     using HessMatT = typename ProblemT::HessMatT;
 
     LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+    // CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT>
+    // solver(&problem.hess);
+
 
     NetwtonSolver newton_solver(problem, &solver);
 
@@ -55,6 +58,8 @@ void parameterize(RXMeshStatic& rx)
         *rx.add_face_attribute<Eigen::Matrix<T, 2, 2>>("fRestShape", 1);
 
     tutte_embedding(rx, coordinates, *problem.objective);
+
+    // auto uv = *problem.objective;
 
     // uv(VertexHandle(0, 0), 0) = 1;
     // uv(VertexHandle(0, 0), 1) = 0;
@@ -147,9 +152,8 @@ void parameterize(RXMeshStatic& rx)
             Eigen::Matrix<ActiveT, 2, 2> M = col_mat(b - a, c - a);
 
             if (M.determinant() <= 0.0) {
-                // assert(false);
-                // TODO
-                // return (ActiveT)INFINITY;
+                using PassiveT = PassiveType<ActiveT>;
+                return ActiveT(std::numeric_limits<PassiveT>::max());
             }
 
             // Get constant 2D rest shape and area of triangle t
@@ -184,7 +188,6 @@ void parameterize(RXMeshStatic& rx)
         T f = problem.get_current_loss();
         RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
 
-
         // 3) direction newton
         newton_solver.newton_direction();
 
@@ -202,10 +205,11 @@ void parameterize(RXMeshStatic& rx)
 
     RXMESH_INFO(
         "Parametrization: iterations ={}, time= {} (ms), "
-        "timer/iteration= {} ms/iter",
+        "timer/iteration= {} ms/iter, solver_time = {} (ms)",
         iter,
         timer.elapsed_millis(),
-        timer.elapsed_millis() / float(num_iterations));
+        timer.elapsed_millis() / float(num_iterations),
+        newton_solver.solve_time);
 
 
     problem.objective->move(DEVICE, HOST);

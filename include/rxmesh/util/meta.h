@@ -88,9 +88,10 @@ namespace detail {
  * Primary template: Default case where T::Passive does not exist
  */
 
-template <typename, typename = void>
+template <typename T, typename = void>
 struct is_scalar : std::false_type
 {
+    using type = T;
 };
 
 /**
@@ -99,6 +100,7 @@ struct is_scalar : std::false_type
 template <typename T>
 struct is_scalar<T, std::void_t<typename T::PassiveType>> : std::true_type
 {
+    using type = typename T::PassiveType;
 };
 }  // namespace detail
 
@@ -116,7 +118,7 @@ inline constexpr bool is_scalar_v = detail::is_scalar<T>::value;
  * (e.g., float, double), then the returned type is T itself.
  */
 template <typename T>
-using PassiveType =
-    typename std::conditional<is_scalar_v<T>, typename T::PassiveType, T>::type;
+using PassiveType = typename detail::is_scalar<T>::type;
+
 
 }  // namespace rxmesh

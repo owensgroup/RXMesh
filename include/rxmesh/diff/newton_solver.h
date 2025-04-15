@@ -24,6 +24,7 @@ struct NetwtonSolver
     std::shared_ptr<Attribute<T, ObjHandleT>> temp_objective;
     SolverT*                                  solver;
 
+    float solve_time;
 
     /**
      * @brief Newton solver
@@ -33,7 +34,8 @@ struct NetwtonSolver
           dir(DenseMatT(p.rx, p.grad.rows(), p.grad.cols())),
           temp_objective(
               p.rx.add_attribute_like("temp_objective", *p.objective)),
-          solver(s)
+          solver(s),
+          solve_time(0)
     {
         // TODO
         // solver->pre_solve();
@@ -66,8 +68,15 @@ struct NetwtonSolver
             problem.hess.move(DEVICE, HOST, stream);
             CUDA_ERROR(cudaStreamSynchronize(stream));
 
+            CPUTimer timer;
+            timer.start();
+
             solver->pre_solve(problem.rx);
             solver->solve(problem.grad, dir);
+            timer.stop();
+
+            solve_time += timer.elapsed_millis();
+
 
             dir.move(HOST, DEVICE);
         }
@@ -76,10 +85,19 @@ struct NetwtonSolver
         if constexpr (std::is_base_of_v<
                           CholeskySolver<HessMatT, DenseMatT::OrderT>,
                           SolverT> ||
-                      std::is_base_of_v<QRSolver<HessMatT>, SolverT>) {
+                      std::is_base_of_v<QRSolver<HessMatT, DenseMatT::OrderT>,
+                                        SolverT>) {
 
-            solver->pre_solve(problem.rx);
-            solver->solve(problem.grad, dir);
+            GPUTimer timer;
+            timer.start();
+
+            solver->solve_hl_api(problem.grad, dir);
+
+            //solver->pre_solve(problem.rx);
+            //solver->solve(problem.grad, dir);
+
+            timer.stop();
+            solve_time += timer.elapsed_millis();
         }
 
         // Iterative (CG)
