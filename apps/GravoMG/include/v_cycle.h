@@ -268,8 +268,7 @@ struct VCycle
 
             // prolong
             // x = x + P*u
-            gmg.m_prolong_op[level + 1].multiply(
-                v, m_x[level], false, false, T(1.0), T(1.0));
+            gmg.m_prolong_op[level].multiply(
                  m_x[level],v, false, false, T(1.0), T(1.0));
 
             //// post-smoothing
