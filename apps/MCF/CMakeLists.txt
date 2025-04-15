@@ -4,7 +4,8 @@ set(SOURCE_LIST
     mcf.cu
 	mcf_kernels.cuh
 	mcf_cg.h	
-	mcf_cusolver_chol.cuh	
+	mcf_chol.h	
+	mcf_gmg.h	
 )
 
 target_sources(MCF 

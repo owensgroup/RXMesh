@@ -1,8 +1,10 @@
 #pragma once
 
-#include "rxmesh/rxmesh_static.h"
+#include <random>
 
+#include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/reduce_handle.h"
+#include "rxmesh/rxmesh_static.h"
 
 namespace rxmesh {
 

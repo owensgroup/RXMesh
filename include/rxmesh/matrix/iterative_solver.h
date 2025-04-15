@@ -11,26 +11,22 @@ struct IterativeSolver
 {
     using Type = T;
 
-    IterativeSolver(int max_iter,
-                    T   abs_tol             = 1e-6,
-                    T   rel_tol             = 1e-6,
-                    int reset_residual_freq = std::numeric_limits<int>::max())
+    IterativeSolver(int max_iter, T abs_tol = 1e-6, T rel_tol = 1e-6)
         : m_max_iter(max_iter),
           m_abs_tol(abs_tol),
           m_rel_tol(rel_tol),
           m_iter_taken(0),
-          m_reset_residual_freq(reset_residual_freq),
           m_start_residual(0),
           m_final_residual(0)
     {
     }
 
-    virtual void pre_solve(StructureT*       X,
-                           const StructureT* B,
+    virtual void pre_solve(StructureT&       X,
+                           const StructureT& B,
                            cudaStream_t      stream) = 0;
 
-    virtual void solve(StructureT*       X,
-                       const StructureT* B,
+    virtual void solve(StructureT&       X,
+                       const StructureT& B,
                        cudaStream_t      stream) = 0;
 
     virtual std::string name() = 0;
@@ -66,7 +62,6 @@ struct IterativeSolver
     int m_max_iter;
     T   m_abs_tol, m_rel_tol;
     int m_iter_taken;
-    int m_reset_residual_freq;
     T   m_start_residual;
     T   m_final_residual;
 };

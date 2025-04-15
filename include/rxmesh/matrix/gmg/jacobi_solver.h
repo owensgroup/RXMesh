@@ -3,7 +3,7 @@
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/matrix/dense_matrix.h"
-#include "rxmesh/matrix/sparse_matrix.cuh"
+#include "rxmesh/matrix/sparse_matrix2.h"
 
 namespace rxmesh {
 
@@ -23,10 +23,10 @@ struct JacobiSolver
 
 
     template <int numCol>
-    __host__ void solve(const SparseMatrix<T>& A,
-                        const DenseMatrix<T>&  b,
-                        DenseMatrix<T>&        x,
-                        int                    num_iter)
+    __host__ void solve(const SparseMatrix2<T>& A,
+                        const DenseMatrix<T>&   b,
+                        DenseMatrix<T>&         x,
+                        int                     num_iter)
     {
         constexpr uint32_t blockThreads = 256;
 
@@ -34,9 +34,9 @@ struct JacobiSolver
 
         DenseMatrix<T> x_new = DenseMatrix<T>(A.rows(), x.cols());  // m_x_new;
 
-        //do this alloc before the runtime solving
+        // do this alloc before the runtime solving
         m_x_new = DenseMatrix<T>(A.rows(), x.cols());
-        
+
         for (int iter = 0; iter < num_iter; ++iter) {
 
             for_each_item<<<blocks, blockThreads>>>(
@@ -88,7 +88,6 @@ struct JacobiSolver
 
             x.swap(x_new);
         }
-        
     }
 };
 }  // namespace rxmesh

@@ -29,9 +29,6 @@ struct DenseMatrix
     static constexpr int OrderT = Order;
 
     template <typename U>
-    friend class SparseMatrix;
-
-    template <typename U>
     friend class SparseMatrix2;
 
     using EigenDenseMatrix =

@@ -26,14 +26,14 @@ struct CGSolver : public IterativeSolver<T, Attribute<T, HandleT>>
              int reset_residual_freq = std::numeric_limits<int>::max())
         : IterativeSolver<T, AttributeT>(max_iter,
                                          abs_tol,
-                                         rel_tol,
-                                         reset_residual_freq),
+                                         rel_tol),
           m_rx(&rx),
           m_mat_vec(mat_vec),
           alpha(0),
           beta(0),
           delta_new(0),
           delta_old(0),
+          m_reset_residual_freq(reset_residual_freq),
           reduce_handle(ReduceHandle<T, HandleT>(rx)),
           S(*rx.add_attribute<T, HandleT>("CG:S", unkown_dim)),
           P(*rx.add_attribute<T, HandleT>("CG:P", unkown_dim)),
@@ -41,8 +41,8 @@ struct CGSolver : public IterativeSolver<T, Attribute<T, HandleT>>
     {
     }
 
-    virtual void pre_solve(AttributeT*       X,
-                           const AttributeT* B,
+    virtual void pre_solve(AttributeT&       X,
+                           const AttributeT& B,
                            cudaStream_t      stream = NULL) override
     {
         S.reset(0.0, rxmesh::DEVICE, stream);
@@ -50,16 +50,16 @@ struct CGSolver : public IterativeSolver<T, Attribute<T, HandleT>>
         R.reset(0.0, rxmesh::DEVICE, stream);
 
         // init S
-        m_mat_vec(*X, S, stream);
+        m_mat_vec(X, S, stream);
 
-        init_PR(*B, S, R, P, stream);
+        init_PR(B, S, R, P, stream);
 
         delta_new = reduce_handle.norm2(R, INVALID32, stream);
         delta_new *= delta_new;
     }
 
-    virtual void solve(AttributeT*       X,
-                       const AttributeT* B,
+    virtual void solve(AttributeT&       X,
+                       const AttributeT& B,
                        cudaStream_t      stream = NULL) override
     {
         m_start_residual = delta_new;
@@ -75,14 +75,14 @@ struct CGSolver : public IterativeSolver<T, Attribute<T, HandleT>>
             alpha = delta_new / alpha;
 
             // X =  alpha*P + X
-            axpy(*X, P, alpha, T(1.), stream);
+            axpy(X, P, alpha, T(1.), stream);
 
             // reset residual
             if (m_iter_taken > 0 && m_iter_taken % m_reset_residual_freq == 0) {
                 // s= Ax
-                m_mat_vec(*X, S, stream);
+                m_mat_vec(X, S, stream);
                 // r = b-s
-                subtract(R, *B, S, stream);
+                subtract(R, B, S, stream);
             } else {
                 // r = - alpha*s + r
                 axpy(R, S, -alpha, T(1.), stream);
@@ -190,6 +190,7 @@ struct CGSolver : public IterativeSolver<T, Attribute<T, HandleT>>
     MatVecT       m_mat_vec;
     AttributeT    S, P, R;
     T             alpha, beta, delta_new, delta_old;
+    int           m_reset_residual_freq;
 
     ReduceHandle<T, HandleT> reduce_handle;
 };

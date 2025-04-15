@@ -5,15 +5,13 @@
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/matrix/dense_matrix.h"
-#include "rxmesh/matrix/sparse_matrix.cuh"
-
 #include "rxmesh/matrix/sparse_matrix_constant_nnz_row.h"
 
-#include "GMG_kernels.h"
-#include "NeighborHandling.h"
-#include "cluster.h"
-#include "fps_sampler.h"
-#include "hashtable.h"
+
+#include "rxmesh/matrix/gmg/cluster.h"
+#include "rxmesh/matrix/gmg/fps_sampler.h"
+#include "rxmesh/matrix/gmg/gmg_kernels.h"
+#include "rxmesh/matrix/gmg/hashtable.h"
 
 #include "polyscope/point_cloud.h"
 
@@ -32,7 +30,12 @@ struct GMG
     // In indexing, we always using L=0 to refer to the fine mesh.
     // The index of the first coarse level is L=1.
 
-    GMG(const GMG&) = delete;
+    GMG(const GMG&)            = delete;
+    GMG()                      = default;
+    GMG(GMG&&)                 = default;
+    GMG& operator=(const GMG&) = default;
+    GMG& operator=(GMG&&)      = default;
+    ~GMG()                     = default;
 
     float m_ratio;
     int   m_num_levels;  // numberOfLevels
@@ -66,8 +69,8 @@ struct GMG
 
     GMG(RXMeshStatic& rx,
         Sampling      sam                   = Sampling::FPS,
-        int           reduction_ratio       = 5,
-        int           num_samples_threshold = 5)
+        int           reduction_ratio       = 4,
+        int           num_samples_threshold = 20)
         : m_ratio(reduction_ratio),
           m_edge_storage(GPUStorage<Edge>(rx.get_num_edges()))
     {
@@ -77,7 +80,7 @@ struct GMG
             int s = DIVIDE_UP(m_num_rows, std::pow(m_ratio, i));
             if (s > num_samples_threshold) {
                 m_num_samples.push_back(s);
-                std::cout << "\nNumber of samples for level " << i << ": " << s;
+                RXMESH_TRACE("GMG: #samples at level {}: {}", i, s);
             }
         }
         m_num_levels = m_num_samples.size();
@@ -177,8 +180,7 @@ struct GMG
             create_compressed_representation(rx, l + 1);
         }
 
-        render_hierarchy();
-
+        // render_hierarchy();
         // render_point_clouds(rx);
 
         //============
@@ -268,10 +270,6 @@ struct GMG
                             std::numeric_limits<float>::max();
                     }
                 });
-        }
-
-        if (false) {
-            render_point_clouds(rx);
         }
     }
 
@@ -729,20 +727,10 @@ struct GMG
                 Eigen::Vector3<float> selectedv1{0, 0, 0}, selectedv2{0, 0, 0},
                     selectedv3{0, 0, 0};
 
-                /*const Eigen::Vector3<float> q{samples_pos(sample_id, 0),
-                                              samples_pos(sample_id, 1),
-                                              samples_pos(sample_id, 2)};*/
-
                 const Eigen::Vector3<float> q{vertex_pos(sample_id, 0),
                                               vertex_pos(sample_id, 1),
                                               vertex_pos(sample_id, 2)};
 
-                /*printf("\nQ %d %d %f %f %f",
-                       sample_id,
-                       cluster_point,
-                       q[0],
-                       q[1],
-                       q[2]);*/
 
                 int selected_neighbor             = 0;
                 int selected_neighbor_of_neighbor = 0;

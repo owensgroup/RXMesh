@@ -8,7 +8,7 @@ template <typename T, int VariableDim, typename ObjHandleT>
 struct GradientDescent
 {
 
-    using DiffProblemT = DiffScalarProblem<T, VariableDim, ObjHandleT>;
+    using DiffProblemT = DiffScalarProblem<T, VariableDim, ObjHandleT, false>;
     using HessMatT     = typename DiffProblemT::HessMatT;
     using DenseMatT    = typename DiffProblemT::DenseMatT;
 

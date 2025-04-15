@@ -57,7 +57,7 @@ TEST(DiffAttribute, SmoothingGD)
     add_term(problem);
 
 
-    float learning_rate = 0.01;
+    double learning_rate = 0.01;
 
     GradientDescent gd(problem, learning_rate);
 
@@ -164,13 +164,11 @@ TEST(DiffAttribute, SmoothingNewton)
 
     T f = (*problem.objective)(VertexHandle(0, 0), 0);
 
-    rx.for_each_vertex(
-        HOST,
-        [&](const VertexHandle vh) {
-            for (int i = 0; i < 3; ++i) {
-                EXPECT_NEAR((*problem.objective)(vh, 0), f, 1e-3);
-            }
-        });
+    rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
+        for (int i = 0; i < 3; ++i) {
+            EXPECT_NEAR((*problem.objective)(vh, 0), f, 1e-3);
+        }
+    });
     // #if USE_POLYSCOPE
     //     rx.get_polyscope_mesh()->updateVertexPositions(*problem.objective);
     //     polyscope::show();

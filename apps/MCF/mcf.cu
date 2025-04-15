@@ -8,21 +8,22 @@
 
 struct arg
 {
-    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "dragon.obj";
+    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder       = STRINGIFY(OUTPUT_DIR);
     std::string perm_method         = "nstdis";
-    std::string solver              = "chol";
+    std::string solver              = "gmg";
     uint32_t    device_id           = 0;
     float       time_step           = 10;
     float       cg_tolerance        = 1e-6;
-    uint32_t    max_num_cg_iter     = 1000;
+    uint32_t    max_num_iter        = 1;
     bool        use_uniform_laplace = true;
     char**      argv;
     int         argc;
 } Arg;
 
 #include "mcf_cg.h"
-#include "mcf_cusolver_chol.cuh"
+#include "mcf_chol.h"
+#include "mcf_gmg.h"
 
 
 TEST(App, MCF)
@@ -41,6 +42,8 @@ TEST(App, MCF)
         mcf_cg<dataT>(rx);
     } else if (Arg.solver == "pcg") {
         mcf_pcg<dataT>(rx);
+    } else if (Arg.solver == "gmg") {
+        mcf_gmg<dataT>(rx);
     } else {
         mcf_cusolver_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
     }
@@ -66,12 +69,12 @@ int main(int argc, char** argv)
                         " -uniform_laplace:   Use uniform Laplace weights. Default is {} \n"
                         " -dt:                Time step (delta t). Default is {} \n"
                         "                     Hint: should be between (0.001, 1) for cotan Laplace or between (1, 100) for uniform Laplace\n"
-                        " -solver:            Solver to use. Options are cg, chol, or pcg. Default is {}\n" 
+                        " -solver:            Solver to use. Options are cg, chol, pcg, or gmg. Default is {}\n" 
                         " -eps:               Conjugate gradient tolerance. Default is {}\n"
                         " -perm:              Permutation method for Cholesky factorization. Default is {}\n"
-                        " -max_cg_iter:       Conjugate gradient maximum number of iterations. Default is {}\n"                                            
+                        " -max_iter:          Maximum number of iterations for iterative solvers. Default is {}\n"                                            
                         " -device_id:         GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.output_folder,  (Arg.use_uniform_laplace? "true" : "false"), Arg.time_step, Arg.solver, Arg.cg_tolerance, Arg.perm_method, Arg.max_num_cg_iter, Arg.device_id);
+            Arg.obj_file_name, Arg.output_folder,  (Arg.use_uniform_laplace? "true" : "false"), Arg.time_step, Arg.solver, Arg.cg_tolerance, Arg.perm_method, Arg.max_num_iter, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
@@ -87,9 +90,9 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-dt")) {
             Arg.time_step = std::atof(get_cmd_option(argv, argv + argc, "-dt"));
         }
-        if (cmd_option_exists(argv, argc + argv, "-max_cg_iter")) {
-            Arg.max_num_cg_iter =
-                std::atoi(get_cmd_option(argv, argv + argc, "-max_cg_iter"));
+        if (cmd_option_exists(argv, argc + argv, "-max_iter")) {
+            Arg.max_num_iter =
+                std::atoi(get_cmd_option(argv, argv + argc, "-max_iter"));
         }
 
         if (cmd_option_exists(argv, argc + argv, "-eps")) {
@@ -117,7 +120,7 @@ int main(int argc, char** argv)
     RXMESH_INFO("output_folder= {}", Arg.output_folder);
     RXMESH_INFO("solver= {}", Arg.solver);
     RXMESH_INFO("perm= {}", Arg.perm_method);
-    RXMESH_INFO("max_num_cg_iter= {}", Arg.max_num_cg_iter);
+    RXMESH_INFO("max_num_iter= {}", Arg.max_num_iter);
     RXMESH_INFO("cg_tolerance= {0:f}", Arg.cg_tolerance);
     RXMESH_INFO("use_uniform_laplace= {}", Arg.use_uniform_laplace);
     RXMESH_INFO("time_step= {0:f}", Arg.time_step);

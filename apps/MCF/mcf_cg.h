@@ -25,7 +25,7 @@ void run_cg(rxmesh::RXMeshStatic& rx, SolverT& solver)
     report.add_member("time_step", Arg.time_step);
     report.add_member("cg_tolerance", Arg.cg_tolerance);
     report.add_member("use_uniform_laplace", Arg.use_uniform_laplace);
-    report.add_member("max_num_cg_iter", Arg.max_num_cg_iter);
+    report.add_member("max_num_iter", Arg.max_num_iter);
     report.add_member("blockThreads", blockThreads);
 
     ASSERT_TRUE(rx.is_closed())
@@ -56,12 +56,12 @@ void run_cg(rxmesh::RXMeshStatic& rx, SolverT& solver)
                           !Arg.use_uniform_laplace);
 
 
-    solver.pre_solve(X.get(), B.get());
+    solver.pre_solve(*X, *B);
 
     GPUTimer timer;
     timer.start();
 
-    solver.solve(X.get(), B.get());
+    solver.solve(*X, *B);
 
     timer.stop();
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -144,7 +144,7 @@ void mcf_cg(rxmesh::RXMeshStatic& rx)
     CGSolver<T, VertexHandle> solver(rx,
                                      mat_vec,
                                      input_coord->get_num_attributes(),
-                                     Arg.max_num_cg_iter,
+                                     Arg.max_num_iter,
                                      0.0,
                                      Arg.cg_tolerance * Arg.cg_tolerance);
 
@@ -208,7 +208,7 @@ void mcf_pcg(rxmesh::RXMeshStatic& rx)
                                       mat_vec,
                                       precond_mat_vec,
                                       input_coord->get_num_attributes(),
-                                      Arg.max_num_cg_iter,
+                                      Arg.max_num_iter,
                                       0.0,
                                       Arg.cg_tolerance * Arg.cg_tolerance);
 

@@ -4,9 +4,7 @@
 #include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/query.cuh"
 
-#include "NeighborHandling.h"
-
-#include "hashtable.h"
+#include "rxmesh/matrix/gmg/hashtable.h"
 
 namespace rxmesh {
 namespace detail {

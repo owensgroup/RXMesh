@@ -1,5 +1,8 @@
 #pragma once
 
+#include "rxmesh/matrix/dense_matrix.h"
+#include "rxmesh/rxmesh_static.h"
+
 namespace rxmesh {
 
 namespace detail {
@@ -55,24 +58,6 @@ void clustering_1st_level(RXMeshStatic&                rx,
     rx.prepare_launch_box(
         {Op::VV}, lb, (void*)detail::cluster_points<float, blockThreads>);
 
-    // clustering step
-    // rx.for_each_vertex(
-    //    DEVICE,
-    //    [sample_level_bitmask,
-    //     distance,
-    //     vertex_cluster,
-    //     current_level] __device__(const VertexHandle vh) mutable {
-    //        if ((sample_level_bitmask(vh) & (1 << (current_level - 1))) != 0)
-    //        {
-    //            assert(vertex_cluster(vh) != -1);
-    //            distance(vh) = 0;
-    //        } else {
-    //            assert(vertex_cluster(vh) == -1);
-    //            distance(vh) = std::numeric_limits<float>::max();
-    //        }
-    //    });
-    //
-    // cudaDeviceSynchronize();
     do {
         CUDA_ERROR(cudaMemset(d_flag, 0, sizeof(int)));
         rx.run_kernel<blockThreads>(lb,
@@ -108,22 +93,9 @@ inline void clustering_nth_level(
     uint32_t threads = 256;
     uint32_t blocks  = DIVIDE_UP(num_samples, threads);
 
-    // previously "set_cluster()"
-    // for_each_item<<<blocks, threads>>>(
-    //    num_samples, [=] __device__(int id) mutable {
-    //        if ((sample_level_bitmask(id) & (1 << current_level - 1)) != 0) {
-    //            assert(vertex_cluster(id) != -1);
-    //            distance(id) = 0;
-    //        } else {
-    //            assert(vertex_cluster(id) == -1);
-    //            distance(id) = std::numeric_limits<float>::max();
-    //        }
-    //    });
-
-
     do {
         CUDA_ERROR(cudaMemset(d_flag, 0, sizeof(int)));
-        // previously "clusterCSR()"
+
         for_each_item<<<blocks, threads>>>(
             num_samples, [=] __device__(int id) mutable {
                 const float sample_x = prev_samples_pos(id, 0);

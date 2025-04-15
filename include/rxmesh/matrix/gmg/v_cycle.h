@@ -1,8 +1,8 @@
 #pragma once
 
-#include "GMG.h"
+#include "rxmesh/matrix/gmg/gmg.h"
 
-#include "jacobi_solver.h"
+#include "rxmesh/matrix/gmg/jacobi_solver.h"
 
 namespace rxmesh {
 
@@ -21,7 +21,7 @@ struct CoarseA
 {
 
     CoarseA() {};
-    SparseMatrix<T> a;
+    SparseMatrix2<T> a;
 
     T*   d_val;
     T*   h_val;
@@ -34,11 +34,15 @@ struct CoarseA
 template <typename T>
 struct VCycle
 {
-    VCycle(const VCycle&) = delete;
+    VCycle(const VCycle&)            = delete;
+    VCycle()                         = default;
+    VCycle(VCycle&&)                 = default;
+    VCycle& operator=(const VCycle&) = default;
+    VCycle& operator=(VCycle&&)      = default;
+    ~VCycle()                        = default;
 
     int m_num_pre_relax;
     int m_num_post_relax;
-    T   m_omega;
 
     // For index, the fine mesh is always indexed with 0
     // The first coarse level index is 1
@@ -59,18 +63,14 @@ struct VCycle
     JacobiSolver<T> m_coarse_solver;
 
 
-    VCycle(GMG<T>&          gmg,
-           RXMeshStatic&    rx,
-           SparseMatrix<T>& A,
-           DenseMatrix<T>&  rhs,
-           CoarseSolver     coarse_solver  = CoarseSolver::Jacobi,
-           int              num_cycles     = 2,
-           int              num_pre_relax  = 2,
-           int              num_post_relax = 2,
-           T                omega          = 0.5)
-        : m_num_pre_relax(num_pre_relax),
-          m_num_post_relax(num_post_relax),
-          m_omega(omega)
+    VCycle(GMG<T>&               gmg,
+           RXMeshStatic&         rx,
+           SparseMatrix2<T>&     A,
+           const DenseMatrix<T>& rhs,
+           CoarseSolver          coarse_solver  = CoarseSolver::Jacobi,
+           int                   num_pre_relax  = 2,
+           int                   num_post_relax = 2)
+        : m_num_pre_relax(num_pre_relax), m_num_post_relax(num_post_relax)
     {
         // allocate memory for coarsened LHS and RHS
         m_smoother.emplace_back(gmg.m_num_samples[0], gmg.m_num_samples[0]);
@@ -106,7 +106,7 @@ struct VCycle
 
 
     void pt_A_p(SparseMatrixConstantNNZRow<T, 3>& P,
-                SparseMatrix<T>&                  A,
+                SparseMatrix2<T>&                 A,
                 CoarseA<T>&                       C)
     {
         // S = transpose(P) * A
@@ -206,15 +206,15 @@ struct VCycle
             C.h_val, C.d_val, c_nnz * sizeof(T), cudaMemcpyDeviceToHost));
 
         // Create C SparseMatrix
-        C.a = SparseMatrix<T>(c_rows,
-                              c_cols,
-                              c_nnz,
-                              C.d_row_ptr,
-                              C.d_col_idx,
-                              C.d_val,
-                              C.h_row_ptr,
-                              C.h_col_idx,
-                              C.h_val);
+        C.a = SparseMatrix2<T>(c_rows,
+                               c_cols,
+                               c_nnz,
+                               C.d_row_ptr,
+                               C.d_col_idx,
+                               C.d_val,
+                               C.h_row_ptr,
+                               C.h_col_idx,
+                               C.h_val);
 
         // clean up
         Pt.release();
@@ -230,11 +230,11 @@ struct VCycle
     /**
      * @brief run the solver.
      */
-    void solve(GMG<T>&          gmg,
-               SparseMatrix<T>& A,
-               DenseMatrix<T>&  rhs,
-               DenseMatrix<T>&  result,
-               int              num_iter)
+    void solve(GMG<T>&           gmg,
+               SparseMatrix2<T>& A,
+               DenseMatrix<T>&   rhs,
+               DenseMatrix<T>&   result,
+               int               num_iter)
     {
         for (int i = 0; i < num_iter; ++i) {
             cycle(0, gmg, A, rhs, result);
@@ -245,11 +245,11 @@ struct VCycle
      * @brief implement one step/cycle of the V cycle (bootstrap the recursive
      * call)
      */
-    void cycle(int              level,
-               GMG<T>&          gmg,
-               SparseMatrix<T>& A,
-               DenseMatrix<T>&  f,  // rhs
-               DenseMatrix<T>&  v)   // x
+    void cycle(int                   level,
+               GMG<T>&               gmg,
+               SparseMatrix2<T>&     A,
+               const DenseMatrix<T>& f,  // rhs
+               DenseMatrix<T>&       v)        // x
     {
         constexpr int numCols = 3;
 
@@ -269,7 +269,7 @@ struct VCycle
             // prolong
             // x = x + P*u
             gmg.m_prolong_op[level].multiply(
-                 m_x[level],v, false, false, T(1.0), T(1.0));
+                m_x[level], v, false, false, T(1.0), T(1.0));
 
             //// post-smoothing
             m_smoother[level].template solve<numCols>(
@@ -277,7 +277,8 @@ struct VCycle
 
         } else {
             // the coarsest level
-            //m_coarse_solver.template solve<numCols>(A, f, v, m_num_post_relax);
+            // m_coarse_solver.template solve<numCols>(A, f, v,
+            // m_num_post_relax);
             m_coarse_solver.template solve<numCols>(A, f, v, 5);
         }
     }
@@ -287,10 +288,10 @@ struct VCycle
      * @brief compute r = f - A.v
      */
     template <int numCol>
-    void calc_residual(const SparseMatrix<T>& A,
-                       const DenseMatrix<T>&  v,
-                       const DenseMatrix<T>&  f,
-                       DenseMatrix<T>&        r)
+    void calc_residual(const SparseMatrix2<T>& A,
+                       const DenseMatrix<T>&   v,
+                       const DenseMatrix<T>&   f,
+                       DenseMatrix<T>&         r)
     {
         constexpr uint32_t blockThreads = 256;
 

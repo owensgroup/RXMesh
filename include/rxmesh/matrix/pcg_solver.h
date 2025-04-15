@@ -36,8 +36,8 @@ struct PCGSolver : public CGSolver<T, HandleT>
     {
     }
 
-    virtual void pre_solve(AttributeT*       X,
-                           const AttributeT* B,
+    virtual void pre_solve(AttributeT&       X,
+                           const AttributeT& B,
                            cudaStream_t      stream = NULL) override
     {
         S.reset(0.0, rxmesh::DEVICE, stream);
@@ -46,11 +46,11 @@ struct PCGSolver : public CGSolver<T, HandleT>
 
         // init S
         // S = Ax
-        m_mat_vec(*X, S, stream);
+        m_mat_vec(X, S, stream);
 
         // init R
         // R = B - S
-        init_R(*B, S, R, stream);
+        init_R(B, S, R, stream);
 
         // init P
         // P = inv(M) * R
@@ -60,8 +60,8 @@ struct PCGSolver : public CGSolver<T, HandleT>
         delta_new = std::abs(reduce_handle.dot(R, P, INVALID32, stream));
     }
 
-    virtual void solve(AttributeT*       X,
-                       const AttributeT* B,
+    virtual void solve(AttributeT&       X,
+                       const AttributeT& B,
                        cudaStream_t      stream = NULL) override
     {
         m_start_residual = delta_new;
@@ -77,14 +77,14 @@ struct PCGSolver : public CGSolver<T, HandleT>
             alpha = delta_new / alpha;
 
             // X =  alpha*P + X
-            axpy(*X, P, alpha, T(1.), stream);
+            axpy(X, P, alpha, T(1.), stream);
 
             // reset residual
             if (m_iter_taken > 0 && m_iter_taken % m_reset_residual_freq == 0) {
                 // s= Ax
-                m_mat_vec(*X, S, stream);
+                m_mat_vec(X, S, stream);
                 // r = b-s
-                subtract(R, *B, S, stream);
+                subtract(R, B, S, stream);
             } else {
                 // r = - alpha*s + r
                 axpy(R, S, -alpha, T(1.), stream);
