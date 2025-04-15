@@ -66,7 +66,6 @@ struct NetwtonSolver
                                         SolverT>) {
             problem.grad.move(DEVICE, HOST, stream);
             problem.hess.move(DEVICE, HOST, stream);
-            CUDA_ERROR(cudaStreamSynchronize(stream));
 
             CPUTimer timer;
             timer.start();
@@ -91,10 +90,10 @@ struct NetwtonSolver
             GPUTimer timer;
             timer.start();
 
-            solver->solve_hl_api(problem.grad, dir);
+            // solver->solve_hl_api(problem.grad, dir);
 
-            //solver->pre_solve(problem.rx);
-            //solver->solve(problem.grad, dir);
+            solver->pre_solve(problem.rx);
+            solver->solve(problem.grad, dir);
 
             timer.stop();
             solve_time += timer.elapsed_millis();

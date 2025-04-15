@@ -46,9 +46,8 @@ void parameterize(RXMeshStatic& rx)
 
     using HessMatT = typename ProblemT::HessMatT;
 
-    LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
-    // CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT>
-    // solver(&problem.hess);
+    // LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
 
 
     NetwtonSolver newton_solver(problem, &solver);
@@ -58,33 +57,6 @@ void parameterize(RXMeshStatic& rx)
         *rx.add_face_attribute<Eigen::Matrix<T, 2, 2>>("fRestShape", 1);
 
     tutte_embedding(rx, coordinates, *problem.objective);
-
-    // auto uv = *problem.objective;
-
-    // uv(VertexHandle(0, 0), 0) = 1;
-    // uv(VertexHandle(0, 0), 1) = 0;
-    //
-    // uv(VertexHandle(0, 1), 0) = 0.25;
-    // uv(VertexHandle(0, 1), 1) = -0.25;
-    //
-    // uv(VertexHandle(0, 2), 0) = -1.83697e-16;
-    // uv(VertexHandle(0, 2), 1) = -1;
-    //
-    // uv(VertexHandle(0, 3), 0) = -0.166667;
-    // uv(VertexHandle(0, 3), 1) = -0.166667;
-    //
-    // uv(VertexHandle(0, 4), 0) = -1;
-    // uv(VertexHandle(0, 4), 1) = 1.22465e-16;
-    //
-    // uv(VertexHandle(0, 5), 0) = -0.25;
-    // uv(VertexHandle(0, 5), 1) = 0.25;
-    //
-    // uv(VertexHandle(0, 6), 0) = 6.12323e-17;
-    // uv(VertexHandle(0, 6), 1) = 1;
-    //
-    // uv(VertexHandle(0, 7), 0) = 0.166667;
-    // uv(VertexHandle(0, 7), 1) = 0.166667;
-    // uv.move(HOST, DEVICE);
 
     rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
         "uv_tutte", *problem.objective);
@@ -173,11 +145,21 @@ void parameterize(RXMeshStatic& rx)
 
     T convergence_eps = 1e-2;
 
-    int num_iterations = 100;
+    int num_iterations = 10000;
     int iter;
 
     GPUTimer timer;
     timer.start();
+
+
+    // GradientDescent gd(problem, 1e-9);
+    // for (iter = 0; iter < num_iterations; ++iter) {
+    //     problem.eval_terms();
+    //     T f = problem.get_current_loss();
+    //     RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
+    //     gd.take_step();
+    // }
+
 
     for (iter = 0; iter < num_iterations; ++iter) {
 
