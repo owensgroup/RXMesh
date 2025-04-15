@@ -17,7 +17,7 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "torus.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     uint32_t    device_id     = 0;
     bool        offline       = false;
@@ -35,15 +35,16 @@ TEST(Apps, GMGRefactor)
     cuda_query(Arg.device_id);
 
     //RXMeshStatic rx(Arg.obj_file_name);
+    RXMeshStatic rx(Arg.obj_file_name);
 
     
-    std::vector<std::vector<float>>    planeVerts;
+    /*std::vector<std::vector<float>>    planeVerts;
     std::vector<std::vector<uint32_t>> planeFaces;
-    uint32_t                           nx = 15;
-    uint32_t                           ny = 15;
+    uint32_t                           nx = 25;
+    uint32_t                           ny = 25;
     create_plane(planeVerts, planeFaces, nx, ny);
     RXMeshStatic rx(planeFaces);
-    rx.add_vertex_coordinates(planeVerts, "plane");
+    rx.add_vertex_coordinates(planeVerts, "plane");*/
     
 
     ASSERT_TRUE(rx.is_edge_manifold());
@@ -55,8 +56,9 @@ TEST(Apps, GMGRefactor)
 
     GMG<T> gmg(rx);
 
-    VCycle<T> v_cyc(gmg, rx, A_mat, B_mat);
-    v_cyc.solve(gmg, A_mat, B_mat, X_mat, 2);
+    VCycle<T> v_cyc(gmg, rx, A_mat, B_mat,CoarseSolver::Jacobi,10,5,5);
+    v_cyc.solve(gmg, A_mat, B_mat, X_mat, 1);
+    X_mat.move(DEVICE, HOST);
 
     // auto samples = *rx.add_vertex_attribute<int>("s", 1);
     // gmg.m_sample_id.move(DEVICE, HOST);
@@ -65,6 +67,9 @@ TEST(Apps, GMGRefactor)
     // auto ps_mesh = rx.get_polyscope_mesh();
     // ps_mesh->addVertexScalarQuantity("samples", samples);
     // polyscope::show();
+    render_output_mesh(X_mat, rx);
+
+    polyscope::show();
 }
 
 TEST(Apps, GMG)
