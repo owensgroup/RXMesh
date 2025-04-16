@@ -74,14 +74,14 @@ struct SparseMatrix
      * @param h_val host point to the value pointer
      */
     SparseMatrix(IndexT  num_rows,
-                  IndexT  num_cols,
-                  IndexT  nnz,
-                  IndexT* d_row_ptr,
-                  IndexT* d_col_idx,
-                  T*      d_val,
-                  IndexT* h_row_ptr,
-                  IndexT* h_col_idx,
-                  T*      h_val)
+                 IndexT  num_cols,
+                 IndexT  nnz,
+                 IndexT* d_row_ptr,
+                 IndexT* d_col_idx,
+                 T*      d_val,
+                 IndexT* h_row_ptr,
+                 IndexT* h_col_idx,
+                 T*      h_val)
         : SparseMatrix()
     {
         m_replicate = 1;
@@ -815,43 +815,49 @@ struct SparseMatrix
                                         bool         is_b_transpose = false,
                                         cudaStream_t stream         = 0)
     {
-        T alpha;
-        T beta;
+        if (m_d_cusparse_spmm_buffer == nullptr) {
 
-        cusparseSpMatDescr_t matA    = m_spdescr;
-        cusparseDnMatDescr_t matB    = B_mat.m_dendescr;
-        cusparseDnMatDescr_t matC    = C_mat.m_dendescr;
-        void*                dBuffer = NULL;
+            T alpha;
+            T beta;
 
-        cusparseOperation_t opA, opB;
+            cusparseSpMatDescr_t matA    = m_spdescr;
+            cusparseDnMatDescr_t matB    = B_mat.m_dendescr;
+            cusparseDnMatDescr_t matC    = C_mat.m_dendescr;
+            void*                dBuffer = NULL;
 
-        opA = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
-                                  CUSPARSE_OPERATION_TRANSPOSE;
-        opB = (!is_b_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
-                                  CUSPARSE_OPERATION_TRANSPOSE;
+            cusparseOperation_t opA, opB;
 
-        if (std::is_same_v<T, cuComplex> ||
-            std::is_same_v<T, cuDoubleComplex>) {
             opA = (!is_a_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
-                                      CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
+                                      CUSPARSE_OPERATION_TRANSPOSE;
             opB = (!is_b_transpose) ? CUSPARSE_OPERATION_NON_TRANSPOSE :
-                                      CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
+                                      CUSPARSE_OPERATION_TRANSPOSE;
+
+            if (std::is_same_v<T, cuComplex> ||
+                std::is_same_v<T, cuDoubleComplex>) {
+                opA = (!is_a_transpose) ?
+                          CUSPARSE_OPERATION_NON_TRANSPOSE :
+                          CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
+                opB = (!is_b_transpose) ?
+                          CUSPARSE_OPERATION_NON_TRANSPOSE :
+                          CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
+            }
+
+            CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
+
+            CUSPARSE_ERROR(cusparseSpMM_bufferSize(m_cusparse_handle,
+                                                   opA,
+                                                   opB,
+                                                   &alpha,
+                                                   matA,
+                                                   matB,
+                                                   &beta,
+                                                   matC,
+                                                   cuda_type<T>(),
+                                                   CUSPARSE_SPMM_ALG_DEFAULT,
+                                                   &m_spmm_buffer_size));
+            CUDA_ERROR(
+                cudaMalloc(&m_d_cusparse_spmm_buffer, m_spmm_buffer_size));
         }
-
-        CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
-
-        CUSPARSE_ERROR(cusparseSpMM_bufferSize(m_cusparse_handle,
-                                               opA,
-                                               opB,
-                                               &alpha,
-                                               matA,
-                                               matB,
-                                               &beta,
-                                               matC,
-                                               cuda_type<T>(),
-                                               CUSPARSE_SPMM_ALG_DEFAULT,
-                                               &m_spmm_buffer_size));
-        CUDA_ERROR(cudaMalloc(&m_d_cusparse_spmm_buffer, m_spmm_buffer_size));
     }
 
     /**
@@ -944,9 +950,7 @@ struct SparseMatrix
         CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
 
         // allocate an external buffer if needed
-        if (m_d_cusparse_spmm_buffer == nullptr) {
-            alloc_multiply_buffer(B_mat, C_mat, stream);
-        }
+        alloc_multiply_buffer(B_mat, C_mat, stream);
 
 
         // execute SpMM

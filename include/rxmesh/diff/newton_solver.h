@@ -4,7 +4,7 @@
 
 #include "rxmesh/diff/armijo_condition.h"
 
-#include "rxmesh/matrix/cg_solver.h"
+#include "rxmesh/matrix/cg_mat_free_solver.h"
 #include "rxmesh/matrix/cholesky_solver.h"
 #include "rxmesh/matrix/lu_solver.h"
 #include "rxmesh/matrix/qr_solver.h"

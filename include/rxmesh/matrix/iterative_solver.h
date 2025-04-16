@@ -6,10 +6,11 @@ namespace rxmesh {
 /**
  * @brief abstract class for iterative solvers
  */
-template <typename T, typename StructureT>
+template <typename T, typename Structure>
 struct IterativeSolver
 {
-    using Type = T;
+    using Type       = T;
+    using StructureT = Structure;
 
     IterativeSolver(int max_iter, T abs_tol = 1e-6, T rel_tol = 1e-6)
         : m_max_iter(max_iter),

@@ -1,5 +1,5 @@
 #pragma once
-#include "rxmesh/matrix/cg_solver.h"
+#include "rxmesh/matrix/cg_mat_free_solver.h"
 
 namespace rxmesh {
 
@@ -7,7 +7,7 @@ namespace rxmesh {
  * @brief Jacobi-preconditioned matrix-free CG
  */
 template <typename T, typename HandleT>
-struct PCGSolver : public CGSolver<T, HandleT>
+struct PCGMatFreeSolver : public CGMatFreeSolver<T, HandleT>
 {
     using AttributeT = Attribute<T, HandleT>;
 
@@ -17,21 +17,21 @@ struct PCGSolver : public CGSolver<T, HandleT>
     using PrecondMatVecT =
         std::function<void(const AttributeT&, AttributeT&, cudaStream_t)>;
 
-    PCGSolver(RXMeshStatic&  rx,
-              MatVecT        mat_vec,
-              PrecondMatVecT precond_mat_vec,
-              int            unkown_dim,  // 1D, 2D, 3D
-              int            max_iter,
-              T              abs_tol  = 1e-6,
-              T              rel_tol  = 1e-6,
-              int reset_residual_freq = std::numeric_limits<int>::max())
-        : CGSolver<T, HandleT>(rx,
-                               mat_vec,
-                               unkown_dim,
-                               max_iter,
-                               abs_tol,
-                               rel_tol,
-                               reset_residual_freq),
+    PCGMatFreeSolver(RXMeshStatic&  rx,
+                     MatVecT        mat_vec,
+                     PrecondMatVecT precond_mat_vec,
+                     int            unkown_dim,  // 1D, 2D, 3D
+                     int            max_iter,
+                     T              abs_tol  = 1e-6,
+                     T              rel_tol  = 1e-6,
+                     int reset_residual_freq = std::numeric_limits<int>::max())
+        : CGMatFreeSolver<T, HandleT>(rx,
+                                      mat_vec,
+                                      unkown_dim,
+                                      max_iter,
+                                      abs_tol,
+                                      rel_tol,
+                                      reset_residual_freq),
           m_precond_mat_vec(precond_mat_vec)
     {
     }
@@ -54,7 +54,7 @@ struct PCGSolver : public CGSolver<T, HandleT>
 
         // init P
         // P = inv(M) * R
-        m_precond_mat_vec(R, P, stream);  //??
+        m_precond_mat_vec(R, P, stream);  
 
 
         delta_new = std::abs(reduce_handle.dot(R, P, INVALID32, stream));
@@ -91,7 +91,7 @@ struct PCGSolver : public CGSolver<T, HandleT>
             }
 
             // S = inv(M) *R
-            m_precond_mat_vec(R, S, stream);  //??
+            m_precond_mat_vec(R, S, stream);  
 
             // delta_old = delta_new
             CUDA_ERROR(cudaStreamSynchronize(stream));
@@ -119,10 +119,10 @@ struct PCGSolver : public CGSolver<T, HandleT>
 
     virtual std::string name() override
     {
-        return std::string("PCG");
+        return std::string("PCG Matrix Free");
     }
 
-    virtual ~PCGSolver()
+    virtual ~PCGMatFreeSolver()
     {
     }
 

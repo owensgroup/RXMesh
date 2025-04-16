@@ -22,6 +22,7 @@ struct arg
 } Arg;
 
 #include "mcf_cg.h"
+#include "mcf_cg_mat_free.h"
 #include "mcf_chol.h"
 #include "mcf_gmg.h"
 
@@ -37,15 +38,18 @@ TEST(App, MCF)
     RXMeshStatic rx(Arg.obj_file_name);
 
     ASSERT_TRUE(rx.is_edge_manifold());
-
     if (Arg.solver == "cg") {
         mcf_cg<dataT>(rx);
-    } else if (Arg.solver == "pcg") {
-        mcf_pcg<dataT>(rx);
+    } else if (Arg.solver == "cg_mat_free") {
+        mcf_cg_mat_free<dataT>(rx);
+    } else if (Arg.solver == "pcg_mat_free") {
+        mcf_pcg_mat_free<dataT>(rx);
     } else if (Arg.solver == "gmg") {
         mcf_gmg<dataT>(rx);
-    } else {
+    } else if (Arg.solver == "chol") {
         mcf_cusolver_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
+    } else {
+        RXMESH_ERROR("Unrecognized input solver type: {}", Arg.solver);
     }
 }
 
@@ -69,7 +73,7 @@ int main(int argc, char** argv)
                         " -uniform_laplace:   Use uniform Laplace weights. Default is {} \n"
                         " -dt:                Time step (delta t). Default is {} \n"
                         "                     Hint: should be between (0.001, 1) for cotan Laplace or between (1, 100) for uniform Laplace\n"
-                        " -solver:            Solver to use. Options are cg, chol, pcg, or gmg. Default is {}\n" 
+                        " -solver:            Solver to use. Options are cg_mat_free, pcg_mat_free, cg, pcg, chol, or gmg. Default is {}\n" 
                         " -eps:               Conjugate gradient tolerance. Default is {}\n"
                         " -perm:              Permutation method for Cholesky factorization. Default is {}\n"
                         " -max_iter:          Maximum number of iterations for iterative solvers. Default is {}\n"                                            

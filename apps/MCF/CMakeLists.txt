@@ -4,6 +4,7 @@ set(SOURCE_LIST
     mcf.cu
 	mcf_kernels.cuh
 	mcf_cg.h	
+	mcf_cg_mat_free.h	
 	mcf_chol.h	
 	mcf_gmg.h	
 )

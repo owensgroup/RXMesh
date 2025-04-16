@@ -19,7 +19,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     auto coords = rx.get_input_vertex_coordinates();
 
     SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>   B_mat(rx, num_vertices, 3);
+    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
 
     DenseMatrix<float> X_mat = *(coords->to_matrix());
 
@@ -77,7 +77,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     solver.solve(X_mat, B_mat);
     timer.stop();
     gtimer.stop();
-    RXMESH_INFO("GMG solve took {} (ms), {} (ms)",
+    RXMESH_INFO("solver {} took {} (ms), {} (ms)",
+                solver.name(),
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
     report.add_member(
@@ -107,5 +108,5 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     A_mat.release();
 
     report.write(Arg.output_folder + "/rxmesh",
-                 "MCF_GMG_" + extract_file_name(Arg.obj_file_name));
+                 "MCF_" + solver.name() + extract_file_name(Arg.obj_file_name));
 }
