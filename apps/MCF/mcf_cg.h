@@ -4,12 +4,13 @@
 #include "rxmesh/util/timer.h"
 
 #include "rxmesh/matrix/cg_solver.h"
+#include "rxmesh/matrix/pcg_solver.h"
 
 #include "mcf_kernels.cuh"
 
 
-template <typename T>
-void mcf_cg(rxmesh::RXMeshStatic& rx)
+template <typename T, typename SolverT>
+void run_cg(rxmesh::RXMeshStatic& rx)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -53,11 +54,11 @@ void mcf_cg(rxmesh::RXMeshStatic& rx)
 
     float total_time = 0;
 
-    CGSolver<T> solver(A_mat,
-                       X_mat.cols(),
-                       Arg.max_num_iter,
-                       0.0,
-                       Arg.cg_tolerance * Arg.cg_tolerance);
+    SolverT solver(A_mat,
+                   X_mat.cols(),
+                   Arg.max_num_iter,
+                   0.0,
+                   Arg.cg_tolerance * Arg.cg_tolerance);
 
 
     solver.pre_solve(X_mat, B_mat);
@@ -98,4 +99,20 @@ void mcf_cg(rxmesh::RXMeshStatic& rx)
 
     report.write(Arg.output_folder + "/rxmesh",
                  "MCF_" + solver.name() + extract_file_name(Arg.obj_file_name));
+}
+
+template <typename T>
+void mcf_cg(rxmesh::RXMeshStatic& rx)
+{
+    using namespace rxmesh;
+
+    run_cg<T, CGSolver<T>>(rx);
+}
+
+template <typename T>
+void mcf_pcg(rxmesh::RXMeshStatic& rx)
+{
+    using namespace rxmesh;
+
+    run_cg<T, PCGSolver<T>>(rx);
 }

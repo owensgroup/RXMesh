@@ -128,7 +128,7 @@ struct PCGMatFreeSolver : public CGMatFreeSolver<T, HandleT>
 
 
     /**
-     * @brief initialize the residual and the direction in CG method
+     * @brief initialize the residual
      */
     void init_R(const AttributeT& B,
                 const AttributeT& S,

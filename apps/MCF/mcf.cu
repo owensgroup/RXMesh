@@ -40,6 +40,8 @@ TEST(App, MCF)
     ASSERT_TRUE(rx.is_edge_manifold());
     if (Arg.solver == "cg") {
         mcf_cg<dataT>(rx);
+    } else if (Arg.solver == "pcg") {
+        mcf_pcg<dataT>(rx);
     } else if (Arg.solver == "cg_mat_free") {
         mcf_cg_mat_free<dataT>(rx);
     } else if (Arg.solver == "pcg_mat_free") {
