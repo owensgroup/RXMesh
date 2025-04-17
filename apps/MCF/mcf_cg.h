@@ -73,6 +73,8 @@ void run_cg(rxmesh::RXMeshStatic& rx)
     CUDA_ERROR(cudaDeviceSynchronize());
     CUDA_ERROR(cudaProfilerStop());
 
+    RXMESH_INFO("start_residual {}", solver.start_residual());
+
     RXMESH_INFO("solver {} took {} (ms) and {} iterations (i.e., {} ms/iter)",
                 solver.name(),
                 timer.elapsed_millis(),

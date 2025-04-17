@@ -17,14 +17,14 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 {
     using Type = T;
 
-    GMGSolver(RXMeshStatic&     rx,
+    GMGSolver(RXMeshStatic&    rx,
               SparseMatrix<T>& A,
-              int               max_iter,
-              int               num_pre_relax  = 2,
-              int               num_post_relax = 2,
-              CoarseSolver      coarse_solver  = CoarseSolver::Jacobi,
-              T                 abs_tol        = 1e-6,
-              T                 rel_tol        = 1e-6)
+              int              max_iter,
+              int              num_pre_relax  = 2,
+              int              num_post_relax = 2,
+              CoarseSolver     coarse_solver  = CoarseSolver::Jacobi,
+              T                abs_tol        = 1e-6,
+              T                rel_tol        = 1e-6)
         : IterativeSolver<T, DenseMatrix<T>>(max_iter, abs_tol, rel_tol),
           m_rx(&rx),
           m_A(&A),
@@ -48,6 +48,10 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                               m_num_pre_relax,
                               m_num_post_relax);
 
+        constexpr int numCols = 3;
+        assert(numCols == B.cols());
+        m_v_cycle.template calc_residual<numCols>(
+            m_v_cycle.m_a[0].a, X, B, m_v_cycle.m_r[0]);
         m_start_residual = m_v_cycle.m_r[0].norm2();
     }
 
@@ -82,13 +86,13 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     }
 
    protected:
-    RXMeshStatic*     m_rx;
+    RXMeshStatic*    m_rx;
     SparseMatrix<T>* m_A;
-    GMG<T>            m_gmg;
-    VCycle<T>         m_v_cycle;
-    CoarseSolver      m_coarse_solver;
-    int               m_num_pre_relax;
-    int               m_num_post_relax;
+    GMG<T>           m_gmg;
+    VCycle<T>        m_v_cycle;
+    CoarseSolver     m_coarse_solver;
+    int              m_num_pre_relax;
+    int              m_num_post_relax;
 };
 
 }  // namespace rxmesh

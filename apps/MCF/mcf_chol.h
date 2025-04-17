@@ -158,6 +158,8 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
 
     RXMESH_INFO("total_time {} (ms)", total_time);
 
+    RXMESH_INFO("start_residual {}", solver.start_residual());
+
     // move the results to the host
     // if we use LU, the data will be on the host and we should not move the
     // device to the host

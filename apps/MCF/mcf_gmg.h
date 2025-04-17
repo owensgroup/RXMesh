@@ -77,6 +77,9 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     solver.solve(X_mat, B_mat);
     timer.stop();
     gtimer.stop();
+
+    RXMESH_INFO("start_residual {}", solver.start_residual());
+
     RXMESH_INFO("solver {} took {} (ms), {} (ms)",
                 solver.name(),
                 timer.elapsed_millis(),

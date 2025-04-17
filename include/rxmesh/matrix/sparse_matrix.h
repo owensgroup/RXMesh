@@ -809,8 +809,9 @@ struct SparseMatrix
      * @brief allocate the temp buffer needed for sparse matrix multiplication
      * by a dense matrix
      */
-    __host__ void alloc_multiply_buffer(const DenseMatrix<T>& B_mat,
-                                        DenseMatrix<T>&       C_mat,
+    template <int Order>
+    __host__ void alloc_multiply_buffer(const DenseMatrix<T, Order>& B_mat,
+                                        DenseMatrix<T, Order>&       C_mat,
                                         bool         is_a_transpose = false,
                                         bool         is_b_transpose = false,
                                         cudaStream_t stream         = 0)
@@ -875,13 +876,14 @@ struct SparseMatrix
      * alloce_multiply_buffer() if it is not called before. Note that this
      * allocation happens only once and we then reuse it
      */
-    __host__ void multiply(const DenseMatrix<T>& B_mat,
-                           DenseMatrix<T>&       C_mat,
-                           bool                  is_a_transpose = false,
-                           bool                  is_b_transpose = false,
-                           T                     alpha          = 1.,
-                           T                     beta           = 0.,
-                           cudaStream_t          stream         = 0)
+    template <int Order>
+    __host__ void multiply(const DenseMatrix<T, Order>& B_mat,
+                           DenseMatrix<T, Order>&       C_mat,
+                           bool                         is_a_transpose = false,
+                           bool                         is_b_transpose = false,
+                           T                            alpha          = 1.,
+                           T                            beta           = 0.,
+                           cudaStream_t                 stream         = 0)
     {
         if (!is_a_transpose && !is_b_transpose) {
             assert(cols() == B_mat.rows());

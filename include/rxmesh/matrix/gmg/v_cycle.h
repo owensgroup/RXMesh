@@ -65,14 +65,13 @@ struct VCycle
 
     VCycle(GMG<T>&               gmg,
            RXMeshStatic&         rx,
-           SparseMatrix<T>&     A,
+           SparseMatrix<T>&      A,
            const DenseMatrix<T>& rhs,
            CoarseSolver          coarse_solver  = CoarseSolver::Jacobi,
            int                   num_pre_relax  = 2,
            int                   num_post_relax = 2)
         : m_num_pre_relax(num_pre_relax), m_num_post_relax(num_post_relax)
     {
-        constexpr int numCols = 3;
         // allocate memory for coarsened LHS and RHS
         m_smoother.emplace_back(gmg.m_num_samples[0], gmg.m_num_samples[0]);
 
@@ -101,16 +100,11 @@ struct VCycle
         for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
             pt_A_p(gmg.m_prolong_op[l], m_a[l - 1].a, m_a[l]);
         }
-
-        DenseMatrix<T> v(rhs.rows(), numCols);
-
-        calc_residual<numCols>(m_a[0].a, v, rhs, m_r[0]);
-
     }
 
 
     void pt_A_p(SparseMatrixConstantNNZRow<T, 3>& P,
-                SparseMatrix<T>&                 A,
+                SparseMatrix<T>&                  A,
                 CoarseA<T>&                       C)
     {
         // S = transpose(P) * A
@@ -211,14 +205,14 @@ struct VCycle
 
         // Create C SparseMatrix
         C.a = SparseMatrix<T>(c_rows,
-                               c_cols,
-                               c_nnz,
-                               C.d_row_ptr,
-                               C.d_col_idx,
-                               C.d_val,
-                               C.h_row_ptr,
-                               C.h_col_idx,
-                               C.h_val);
+                              c_cols,
+                              c_nnz,
+                              C.d_row_ptr,
+                              C.d_col_idx,
+                              C.d_val,
+                              C.h_row_ptr,
+                              C.h_col_idx,
+                              C.h_val);
 
         // clean up
         Pt.release();
@@ -234,12 +228,13 @@ struct VCycle
     /**
      * @brief run the solver.
      */
-    void solve(GMG<T>&           gmg,
+    void solve(GMG<T>&          gmg,
                SparseMatrix<T>& A,
-               DenseMatrix<T>&   rhs,
-               DenseMatrix<T>&   result,
-               int               num_iter)
+               DenseMatrix<T>&  rhs,
+               DenseMatrix<T>&  result,
+               int              num_iter)
     {
+
         for (int i = 0; i < num_iter; ++i) {
             cycle(0, gmg, A, rhs, result);
         }
@@ -251,11 +246,12 @@ struct VCycle
      */
     void cycle(int                   level,
                GMG<T>&               gmg,
-               SparseMatrix<T>&     A,
+               SparseMatrix<T>&      A,
                const DenseMatrix<T>& f,  // rhs
                DenseMatrix<T>&       v)        // x
     {
         constexpr int numCols = 3;
+        assert(numCols == f.cols());
 
         if (level < gmg.m_num_levels - 1) {
             // pre-smoothing
@@ -291,12 +287,14 @@ struct VCycle
     /**
      * @brief compute r = f - A.v
      */
-    template <int numCol>
+    template <int numCols>
     void calc_residual(const SparseMatrix<T>& A,
-                       const DenseMatrix<T>&   v,
-                       const DenseMatrix<T>&   f,
-                       DenseMatrix<T>&         r)
+                       const DenseMatrix<T>&  v,
+                       const DenseMatrix<T>&  f,
+                       DenseMatrix<T>&        r)
     {
+        assert(numCols == f.cols());
+
         constexpr uint32_t blockThreads = 256;
 
         uint32_t blocks = DIVIDE_UP(A.rows(), blockThreads);
@@ -304,9 +302,9 @@ struct VCycle
 
         for_each_item<<<blocks, blockThreads>>>(
             A.rows(), [=] __device__(int row) mutable {
-                T av[numCol];
+                T av[numCols];
 
-                for (int c = 0; c < numCol; ++c) {
+                for (int c = 0; c < numCols; ++c) {
                     av[c] = 0;
                 }
 
@@ -319,12 +317,12 @@ struct VCycle
 
                     const T val = A.get_val_at(j);
 
-                    for (int c = 0; c < numCol; ++c) {
+                    for (int c = 0; c < numCols; ++c) {
                         av[c] += val * v(col, c);
                     }
                 }
 
-                for (int c = 0; c < numCol; ++c) {
+                for (int c = 0; c < numCols; ++c) {
                     r(row, c) = f(row, c) - av[c];
                 }
             });
