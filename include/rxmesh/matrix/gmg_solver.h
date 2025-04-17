@@ -49,6 +49,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                               m_num_post_relax);
 
         // TODO calculate initial residual and store it in m_start_residual
+        m_start_residual = m_v_cycle.m_r[0].norm2();
     }
 
     virtual void solve(DenseMatrix<T>&       X,
