@@ -15,7 +15,7 @@ struct arg
     uint32_t    device_id           = 0;
     float       time_step           = 10;
     float       cg_tolerance        = 1e-6;
-    uint32_t    max_num_iter        = 1;
+    uint32_t    max_num_iter        = 10;
     bool        use_uniform_laplace = true;
     char**      argv;
     int         argc;

@@ -48,7 +48,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                               m_num_pre_relax,
                               m_num_post_relax);
 
-        // TODO calculate initial residual and store it in m_start_residual
+        m_start_residual = m_v_cycle.m_r[0].norm2();
     }
 
     virtual void solve(DenseMatrix<T>&       X,
@@ -58,14 +58,14 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         m_iter_taken = 0;
         while (m_iter_taken < m_max_iter) {
             m_v_cycle.cycle(0, m_gmg, *m_A, B, X);
+            T current_res;
+            current_res = m_v_cycle.m_r[0].norm2();
 
-            // TODO calculate current residual and store it in current_res
-            // T current_res;
-            // TODO check convergence
-            // if (is_converged(m_start_residual, current_res)) {
-            //    m_final_residual = current_res;
-            //    return;
-            //}
+
+            if (is_converged(m_start_residual, current_res)) {
+                m_final_residual = current_res;
+                return;
+            }
 
             m_iter_taken++;
         }

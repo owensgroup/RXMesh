@@ -72,6 +72,7 @@ struct VCycle
            int                   num_post_relax = 2)
         : m_num_pre_relax(num_pre_relax), m_num_post_relax(num_post_relax)
     {
+        constexpr int numCols = 3;
         // allocate memory for coarsened LHS and RHS
         m_smoother.emplace_back(gmg.m_num_samples[0], gmg.m_num_samples[0]);
 
@@ -94,14 +95,17 @@ struct VCycle
                     JacobiSolver<T>(gmg.m_num_samples[l], gmg.m_num_samples[l]);
             }
         }
-
-        // m_a.push_back();
         m_a.resize(gmg.m_num_levels - 1);
         // construct m_a for all levels
         pt_A_p(gmg.m_prolong_op[0], A, m_a[0]);
         for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
             pt_A_p(gmg.m_prolong_op[l], m_a[l - 1].a, m_a[l]);
         }
+
+        DenseMatrix<T> v(rhs.rows(), numCols);
+
+        calc_residual<numCols>(m_a[0].a, v, rhs, m_r[0]);
+
     }
 
 
