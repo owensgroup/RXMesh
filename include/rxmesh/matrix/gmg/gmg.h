@@ -429,7 +429,8 @@ struct GMG
         // populate m_vertex_cluster with random values for each vertex, with
         // associated vertex position
         //  m_vertex_cluster
-        for (int i = 0; i < 2 /*m_num_levels-1*/; i++) {
+        m_vertex_pos.move(DEVICE, HOST);
+        for (int i = 0; i < 1 /*m_num_levels-1*/; i++) {
             std::cout << std::endl << std::endl;
             std::random_device         rd;
             std::default_random_engine generator(rd());
@@ -440,7 +441,6 @@ struct GMG
             samples.resize(m_num_samples[i + 1]);
             int j = 0;
             for (auto& a : samples) {
-                std::cout << "\nsample " << a - 1 << " is sample " << j;
                 current_vertex_cluster(a - 1, 0) = j;
 
                 m_samples_pos[i](j, 0) = m_vertex_pos(a - 1, 0);
@@ -449,46 +449,66 @@ struct GMG
 
                 j++;
             }
-            /*if (i == 0) {
-                auto at =
-                    *rx.add_vertex_attribute<int>("C" + std::to_string(i), 1);
-                at.from_matrix(&m_vertex_cluster[i]);
-                rx.get_polyscope_mesh()->addVertexScalarQuantity(
-                    "C" + std::to_string(i), at);
-                polyscope::show();
-            } */ // current_vertex_cluster.move(HOST, DEVICE);
         }
 
-        for (int l = 1; l < m_num_levels; ++l) {
-            // m_vertex_cluster[l - 1].move(DEVICE, HOST);
-            // m_distance.move(DEVICE, HOST);
+        m_samples_pos[0].move(HOST, DEVICE);
+        m_vertex_cluster[0].move(HOST, DEVICE);
 
-            if (l == 1) {
-                auto at =
-                    *rx.add_vertex_attribute<int>("C" + std::to_string(l), 1);
-                at.from_matrix(&m_vertex_cluster[l - 1]);
-                rx.get_polyscope_mesh()->addVertexScalarQuantity(
-                    "C" + std::to_string(l), at);
+        constexpr uint32_t blockThreads = 256;
 
-                /*rx.get_polyscope_mesh()->addVertexScalarQuantity(
-                    "dist" + std::to_string(l), m_distance);*/
-            } else {
-                std::vector<glm::vec3> points(m_num_samples[l]);
-                m_samples_pos[l - 1].move(DEVICE, HOST);
-                for (int i = 0; i < m_samples_pos[l - 1].rows(); i++) {
-                    points[i][0] = m_samples_pos[l - 1](i, 0);
-                    points[i][1] = m_samples_pos[l - 1](i, 1);
-                    points[i][2] = m_samples_pos[l - 1](i, 2);
+        // re-init m_distance because it is used in clustering
+        auto& distance = m_distance;
+
+        const auto& vc = m_vertex_cluster[0];
+
+        rx.for_each_vertex(
+            DEVICE, [distance, vc] __device__(const VertexHandle vh) mutable {
+                if (vc(vh) == -1) {
+                    distance(vh, 0) = std::numeric_limits<float>::max();
                 }
-                std::vector<int> xC(points.size());
-                for (int i = 0; i < points.size(); i++) {
-                    xC[i] = m_vertex_cluster[l - 1](i);
-                }
-                polyscope::PointCloud* psCloud = polyscope::registerPointCloud(
-                    "L" + std::to_string(l), points);
-                psCloud->addScalarQuantity("C" + std::to_string(l), xC);
-            }
-            polyscope::show();
+            });
+
+        for (int level = 2; level < m_num_levels; ++level) {
+            uint32_t blocks = DIVIDE_UP(m_num_samples[level], blockThreads);
+
+            auto& current_samples_pos = m_samples_pos[level - 1];
+
+            const auto& prv_samples_pos = m_samples_pos[level - 2];
+
+            auto& current_v_cluster = m_vertex_cluster[level - 1];
+
+            const auto& prv_v_cluster = m_vertex_cluster[level - 2];
+
+            const auto& pos = m_vertex_pos;
+
+            // set sample position of this level
+            for_each_item<<<blocks, blockThreads>>>(
+                m_num_samples[level],
+                [current_samples_pos,
+                 prv_samples_pos] __device__(int i) mutable {
+                    current_samples_pos(i, 0) = prv_samples_pos(i, 0);
+                    current_samples_pos(i, 1) = prv_samples_pos(i, 1);
+                    current_samples_pos(i, 2) = prv_samples_pos(i, 2);
+                });
+
+            // set vertex cluster of the previous level
+            blocks = DIVIDE_UP(m_num_samples[level - 1], blockThreads);
+
+            auto& prv_level_distance = m_distance_mat[level - 2];
+            for_each_item<<<blocks, blockThreads>>>(
+                m_num_samples[level - 1],
+                [current_v_cluster,
+                 prv_level_distance,
+                 n = m_num_samples[level]] __device__(int i) mutable {
+                    if (i < n) {
+                        current_v_cluster(i, 0)  = i;
+                        prv_level_distance(i, 0) = 0;
+                    } else {
+                        current_v_cluster(i, 0) = -1;
+                        prv_level_distance(i, 0) =
+                            std::numeric_limits<float>::max();
+                    }
+                });
         }
     }
 
