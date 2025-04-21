@@ -20,6 +20,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     GMGSolver(RXMeshStatic&    rx,
               SparseMatrix<T>& A,
               int              max_iter,
+              int              num_levels=0,
               int              num_pre_relax  = 2,
               int              num_post_relax = 2,
               CoarseSolver     coarse_solver  = CoarseSolver::Jacobi,
@@ -30,7 +31,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
           m_A(&A),
           m_coarse_solver(coarse_solver),
           m_num_pre_relax(num_pre_relax),
-          m_num_post_relax(num_post_relax)
+          m_num_post_relax(num_post_relax),
+          m_num_levels(num_levels)
     {
     }
 
@@ -38,7 +40,10 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                            const DenseMatrix<T>& B,
                            cudaStream_t          stream = NULL) override
     {
-        m_gmg = GMG<T>(*m_rx);
+        if (m_num_levels!=0)
+            m_gmg = GMG<T>(*m_rx, m_num_levels);
+        else
+            m_gmg = GMG<T>(*m_rx);
 
         m_v_cycle = VCycle<T>(m_gmg,
                               *m_rx,
@@ -93,6 +98,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     CoarseSolver     m_coarse_solver;
     int              m_num_pre_relax;
     int              m_num_post_relax;
+    int              m_num_levels;
 };
 
 }  // namespace rxmesh
