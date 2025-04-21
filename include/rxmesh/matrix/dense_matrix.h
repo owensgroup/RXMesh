@@ -555,6 +555,73 @@ struct DenseMatrix
 
 
     /**
+     * @brief return the max value in the matrix
+     */
+    __host__ T max(cudaStream_t stream = NULL)
+    {
+        CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
+        if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double>) {
+            RXMESH_ERROR(
+                "DenseMatrix::max() only float and double are supported for "
+                "this function!");
+            return T(0);
+        }
+
+        IndexT index;
+        if constexpr (std::is_same_v<T, float>) {
+            CUBLAS_ERROR(cublasIsamax(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &index));
+        }
+
+        if constexpr (std::is_same_v<T, double>) {
+            CUBLAS_ERROR(cublasIdamax(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &index));
+        }
+
+        index -= 1;
+
+        T ret = 0;
+
+        CUDA_ERROR(cudaMemcpyAsync(
+            &ret, m_d_val + index, sizeof(T), cudaMemcpyDeviceToHost));
+
+        return ret;
+    }
+
+    /**
+     * @brief return the min value in the matrix
+     */
+    __host__ T min(cudaStream_t stream = NULL)
+    {
+        CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
+        if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double>) {
+            RXMESH_ERROR(
+                "DenseMatrix::min() only float and double are supported for "
+                "this function!");
+            return T(0);
+        }
+
+        IndexT index;
+        if constexpr (std::is_same_v<T, float>) {
+            CUBLAS_ERROR(cublasIsamin(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &index));
+        }
+
+        if constexpr (std::is_same_v<T, double>) {
+            CUBLAS_ERROR(cublasIdamin(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &index));
+        }
+
+        T ret = 0;
+
+        CUDA_ERROR(cudaMemcpyAsync(
+            &ret, m_d_val + index, sizeof(T), cudaMemcpyDeviceToHost));
+
+        return ret;
+    }
+
+
+    /**
      * @brief multiply all entries in the dense matrix by a scalar (i.e.,
      * scaling). For complex number, the scalar could be either a complex or
      * real number. The results are computed for the data on the device. Only
