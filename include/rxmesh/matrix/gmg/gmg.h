@@ -66,6 +66,29 @@ struct GMG
     void*  m_d_cub_temp_storage;
     size_t m_cub_temp_bytes;
 
+    GMG(RXMeshStatic& rx,
+        int           numberOfLevels,
+        int threshold = 1000,
+        Sampling      sam       = Sampling::FPS
+        )
+        : GMG(rx,
+              sam,
+              compute_ratio(rx.get_num_vertices(), numberOfLevels, threshold),
+              threshold)
+    {
+    }
+
+    static int compute_ratio(int n, int numberOfLevels, int threshold)
+    {
+        for (int j = 2; j < 1000; j++) {
+            int a = DIVIDE_UP(n, std::pow(j, numberOfLevels - 1));
+            if (a <= threshold)
+                return j - 1;
+        }
+        return 999;
+    }
+
+
 
     GMG(RXMeshStatic& rx,
         Sampling      sam                   = Sampling::FPS,
