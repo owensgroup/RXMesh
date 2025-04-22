@@ -70,6 +70,77 @@ __device__ __inline__ void compute_barycentric(const Eigen::Vector3f& v0,
     c = lambda2;
 }
 
+// Compute barycentric coordinates for closest point on triangle
+__device__ __inline__ void compute_positive_barycentric_coords(
+    const Eigen::Vector3f& p,
+    const Eigen::Vector3f& a,
+    const Eigen::Vector3f& b,
+    const Eigen::Vector3f& c,
+    Eigen::Vector3f&       barycentricCoords)
+{
+    // Edge vectors
+    Eigen::Vector3f ab = b - a;
+    Eigen::Vector3f ac = c - a;
+    Eigen::Vector3f ap = p - a;
+
+    float d1 = ab.dot(ap);
+    float d2 = ac.dot(ap);
+    if (d1 <= 0.0f && d2 <= 0.0f) {
+        barycentricCoords = Eigen::Vector3f(1, 0, 0);  // a
+        return;
+    }
+
+    // Check if P in vertex region outside B
+    Eigen::Vector3f bp = p - b;
+    float           d3 = ab.dot(bp);
+    float           d4 = ac.dot(bp);
+    if (d3 >= 0.0f && d4 <= d3) {
+        barycentricCoords = Eigen::Vector3f(0, 1, 0);  // b
+        return;
+    }
+
+    // Check if P in edge region of AB
+    float vc = d1 * d4 - d3 * d2;
+    if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f) {
+        float v           = d1 / (d1 - d3);
+        barycentricCoords = Eigen::Vector3f(1 - v, v, 0);
+        return;
+    }
+
+    // Check if P in vertex region outside C
+    Eigen::Vector3f cp = p - c;
+    float           d5 = ab.dot(cp);
+    float           d6 = ac.dot(cp);
+    if (d6 >= 0.0f && d5 <= d6) {
+        barycentricCoords = Eigen::Vector3f(0, 0, 1);  // c
+        return;
+    }
+
+    // Check if P in edge region of AC
+    float vb = d5 * d2 - d1 * d6;
+    if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f) {
+        float w           = d2 / (d2 - d6);
+        barycentricCoords = Eigen::Vector3f(1 - w, 0, w);
+        return;
+    }
+
+    // Check if P in edge region of BC
+    float va = d3 * d6 - d5 * d4;
+    if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f) {
+        float w           = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+        barycentricCoords = Eigen::Vector3f(0, 1 - w, w);
+        return;
+    }
+
+    // P inside face region � compute barycentrics via projection
+    float denom = ab.dot(ab) * ac.dot(ac) - ab.dot(ac) * ab.dot(ac);
+    float v     = (ap.dot(ab) * ac.dot(ac) - ap.dot(ac) * ab.dot(ac)) / denom;
+    float w     = (ap.dot(ac) * ab.dot(ab) - ap.dot(ab) * ab.dot(ac)) / denom;
+    float u     = 1.0f - v - w;
+    barycentricCoords = Eigen::Vector3f(u, v, w);
+}
+
+
 __device__ __inline__ float projected_distance(const Eigen::Vector3f& v0,
                                                const Eigen::Vector3f& v1,
                                                const Eigen::Vector3f& v2,
