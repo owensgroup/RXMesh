@@ -555,9 +555,9 @@ struct DenseMatrix
 
 
     /**
-     * @brief return the max value in the matrix
+     * @brief return the absolute max value in the matrix
      */
-    __host__ T max(cudaStream_t stream = NULL)
+    __host__ T abs_max(cudaStream_t stream = NULL)
     {
         CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
         if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double>) {
@@ -585,13 +585,13 @@ struct DenseMatrix
         CUDA_ERROR(cudaMemcpyAsync(
             &ret, m_d_val + index, sizeof(T), cudaMemcpyDeviceToHost));
 
-        return ret;
+        return std::abs(ret);
     }
 
     /**
-     * @brief return the min value in the matrix
+     * @brief return the absolute min value in the matrix
      */
-    __host__ T min(cudaStream_t stream = NULL)
+    __host__ T abs_min(cudaStream_t stream = NULL)
     {
         CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
         if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double>) {
@@ -617,7 +617,7 @@ struct DenseMatrix
         CUDA_ERROR(cudaMemcpyAsync(
             &ret, m_d_val + index, sizeof(T), cudaMemcpyDeviceToHost));
 
-        return ret;
+        return std::abs(ret);
     }
 
 
