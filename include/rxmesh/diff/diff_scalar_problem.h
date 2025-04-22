@@ -72,7 +72,8 @@ struct DiffScalarProblem
 
         using ScalarT = Scalar<T, NElements, WithHessian>;
 
-        if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
+        if constexpr (op == Op::VV || op == Op::VE || op == Op::VF ||
+                      op == Op::V) {
             auto new_term = std::make_shared<TemplatedTerm<VertexHandle,
                                                            ObjHandleT,
                                                            blockThreads,
@@ -86,7 +87,8 @@ struct DiffScalarProblem
                 std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
         }
 
-        if constexpr (op == Op::EV || op == Op::EE || op == Op::EF) {
+        if constexpr (op == Op::EV || op == Op::EE || op == Op::EF ||
+                      op == Op::E) {
             auto new_term = std::make_shared<TemplatedTerm<EdgeHandle,
                                                            ObjHandleT,
                                                            blockThreads,
@@ -100,7 +102,8 @@ struct DiffScalarProblem
                 std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
         }
 
-        if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
+        if constexpr (op == Op::FV || op == Op::FE || op == Op::FF ||
+                      op == Op::F) {
             auto new_term = std::make_shared<TemplatedTerm<FaceHandle,
                                                            ObjHandleT,
                                                            blockThreads,

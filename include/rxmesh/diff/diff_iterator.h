@@ -7,19 +7,6 @@
 
 namespace rxmesh {
 
-/**
- * @brief 
- * @tparam T 
- * @tparam DiffHandleT 
- * @tparam IteratorT 
- * @tparam PassiveT 
- * @tparam VariableDim 
- * @param handle 
- * @param iter 
- * @param attr 
- * @param index 
- * @return 
- */
 template <typename T,
           int VariableDim,
           typename DiffHandleT,
@@ -51,6 +38,36 @@ __device__ __inline__ Eigen::Vector<T, VariableDim> iter_val(
     if constexpr (DiffHandleT::IsActive) {
         for (int j = 0; j < VariableDim; ++j) {
             ret[j].grad[index * VariableDim + j] = 1;
+        }
+    }
+
+    return ret;
+}
+
+
+template <typename T, int VariableDim, typename DiffHandleT, typename PassiveT>
+__device__ __inline__ Eigen::Vector<T, VariableDim> iter_val(
+    const DiffHandleT&                                       handle,
+    const Attribute<PassiveT, typename DiffHandleT::Handle>& attr)
+{
+    Eigen::Vector<T, VariableDim> ret;
+
+    assert(VariableDim == attr.get_num_attributes());
+
+
+    // val
+    for (int j = 0; j < VariableDim; ++j) {
+        if constexpr (DiffHandleT::IsActive) {
+            ret[j].val = attr(handle, j);
+        } else {
+            ret[j] = attr(handle, j);
+        }
+    }
+
+    // init grad
+    if constexpr (DiffHandleT::IsActive) {
+        for (int j = 0; j < VariableDim; ++j) {
+            ret[j].grad[j] = 1;
         }
     }
 
