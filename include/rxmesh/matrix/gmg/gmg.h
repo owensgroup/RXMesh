@@ -30,12 +30,12 @@ struct GMG
     // In indexing, we always using L=0 to refer to the fine mesh.
     // The index of the first coarse level is L=1.
 
-    GMG(const GMG&)            = delete;
-    GMG()                      = default;
-    GMG(GMG&&)                 = default;
+    GMG(const GMG&) = delete;
+    GMG()           = default;
+    GMG(GMG&&)      = default;
     GMG& operator=(const GMG&) = default;
-    GMG& operator=(GMG&&)      = default;
-    ~GMG()                     = default;
+    GMG& operator=(GMG&&) = default;
+    ~GMG()                = default;
 
     float m_ratio;
     int   m_num_levels;  // numberOfLevels
@@ -65,6 +65,29 @@ struct GMG
     // storage) and only re-allocate if we have to
     void*  m_d_cub_temp_storage;
     size_t m_cub_temp_bytes;
+
+    GMG(RXMeshStatic& rx,
+        int           numberOfLevels,
+        int threshold = 1000,
+        Sampling      sam       = Sampling::FPS
+        )
+        : GMG(rx,
+              sam,
+              compute_ratio(rx.get_num_vertices(), numberOfLevels, threshold),
+              threshold)
+    {
+    }
+
+    static int compute_ratio(int n, int numberOfLevels, int threshold)
+    {
+        for (int j = 2; j < 1000; j++) {
+            int a = DIVIDE_UP(n, std::pow(j, numberOfLevels - 1));
+            if (a <= threshold)
+                return j - 1;
+        }
+        return 999;
+    }
+
 
 
     GMG(RXMeshStatic& rx,
@@ -736,6 +759,7 @@ struct GMG
                 bool tri_chosen = false;
 
                 // assert(sample_id < num_samples);
+                assert(sample_id < num_samples);
 
                 // go through every triangle of the cluster
                 const int cluster_point = vertex_cluster(sample_id);
@@ -848,14 +872,19 @@ struct GMG
                 float b1 = 0, b2 = 0, b3 = 0;
                 /*if (selected_neighbor == selected_neighbor_of_neighbor &&
                     selected_neighbor == 0) {
-                    b1 = 1.0f;
-                } else*/
-                detail::compute_barycentric(
-                    selectedv1, selectedv2, selectedv3, q, b1, b2, b3);
+                float           b1 = 0, b2 = 0, b3 = 0;
+                Eigen::Vector3f bcoords;
+                detail::compute_positive_barycentric_coords(
+                    q, selectedv1, selectedv2, selectedv3, bcoords);
 
+                b2 = bcoords[1];
+                b3 = bcoords[2];
 
                 assert(tri_chosen);
 
+                assert(b1 >= 0);
+                assert(b2 >= 0);
+                assert(b3 >= 0);
                 assert(!isnan(b1));
                 assert(!isnan(b2));
                 assert(!isnan(b3));

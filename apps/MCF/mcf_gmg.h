@@ -51,7 +51,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     report.add_member("blockThreads", blockThreads);
 
 
-    GMGSolver solver(rx, A_mat, Arg.max_num_iter);
+    //GMGSolver solver(rx, A_mat, Arg.max_num_iter);
+    GMGSolver solver(rx, A_mat, Arg.max_num_iter,3);
 
 
     float    total_time = 0;
