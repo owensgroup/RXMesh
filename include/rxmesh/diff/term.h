@@ -1,5 +1,7 @@
 #pragma once
 
+#include <sstream>
+
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/attribute.h"
@@ -51,7 +53,13 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
         : term(t), rx(rx), grad(grad), hess(hess), oreinted(oreinted)
     {
         // TODO is it always 1
-        loss = rx.add_attribute<T, LossHandleT>("Loss", 1);
+
+        // To avoid the clash that happens from adding many losses.
+        std::ostringstream address;
+        address << (void const*)this;
+        std::string name = address.str();
+
+        loss = rx.add_attribute<T, LossHandleT>("Loss" + name, 1);
 
         reducer = std::make_shared<ReduceHandle<T, LossHandleT>>(*loss);
 

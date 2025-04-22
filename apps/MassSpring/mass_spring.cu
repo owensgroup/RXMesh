@@ -116,13 +116,13 @@ void mass_spring(RXMeshStatic& rx)
 
     int time_step = 0;
 
-    // GPUTimer timer;
-    // timer.start();
-    //
-    // timer.stop();
+    Timers<GPUTimer> timer;
+    timer.add("Step");
 
-    auto ps_callback = [&]() mutable {
+
+    auto step_forward = [&]() {
         // update x_tilde
+        timer.start("Step");
         rx.for_each_vertex(
             DEVICE,
             [x, x_tilde, velocity, h] __device__(VertexHandle vh) mutable {
@@ -175,28 +175,50 @@ void mass_spring(RXMeshStatic& rx)
                 }
             });
 
-#if USE_POLYSCOPE
-        x_tilde.move(DEVICE, HOST);
-        rx.get_polyscope_mesh()->updateVertexPositions(x_tilde);
-#endif
-
         time_step++;
+        timer.stop("Step");
     };
 
 #if USE_POLYSCOPE
+    bool is_running = false;
+
+    auto ps_callback = [&]() mutable {
+        auto step_and_update = [&]() {
+            step_forward();
+            x_tilde.move(DEVICE, HOST);
+            rx.get_polyscope_mesh()->updateVertexPositions(x_tilde);
+        };
+        if (ImGui::Button("Step")) {
+            step_and_update();
+        }
+
+
+        ImGui::SameLine();
+        if (ImGui::Button("Start")) {
+            is_running = true;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Pause")) {
+            is_running = false;
+        }
+
+        if (is_running) {
+            step_and_update();
+        }
+    };
+
     polyscope::state::userCallback = ps_callback;
     polyscope::show();
 #endif
 
-    RXMESH_INFO(
-        "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
 
-    // RXMESH_INFO(
-    //     "Mass-spring: iterations ={}, time= {} (ms), "
-    //     "timer/iteration= {} ms/iter",
-    //     iter,
-    //     timer.elapsed_millis(),
-    //     timer.elapsed_millis() / float(num_iterations));
+    RXMESH_INFO(
+        "Mass-spring: #time_step ={}, time= {} (ms), "
+        "timer/iteration= {} ms/iter",
+        time_step,
+        timer.elapsed_millis("Step"),
+        timer.elapsed_millis("Step") / float(time_step));
 }
 
 int main(int argc, char** argv)
@@ -208,7 +230,7 @@ int main(int argc, char** argv)
     std::vector<std::vector<float>>    verts;
     std::vector<std::vector<uint32_t>> fv;
 
-    int n = 160;
+    int n = 16;
 
     if (argc == 2) {
         n = atoi(argv[1]);
@@ -221,6 +243,8 @@ int main(int argc, char** argv)
     RXMeshStatic rx(fv);
     rx.add_vertex_coordinates(verts, "Coords");
 
+    RXMESH_INFO(
+        "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
 
     mass_spring<T>(rx);
 }
