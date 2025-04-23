@@ -39,9 +39,6 @@ struct NetwtonSolver
           solver(s),
           solve_time(0)
     {
-        // TODO
-        // solver->pre_solve();
-
         dir.reset(0, LOCATION_ALL);
     }
 

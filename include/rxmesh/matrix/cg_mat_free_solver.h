@@ -39,8 +39,8 @@ struct CGMatFreeSolver : public IterativeSolver<T, Attribute<T, HandleT>>
     {
     }
 
-    virtual void pre_solve(AttributeT&       X,
-                           const AttributeT& B,
+    virtual void pre_solve(const AttributeT& B,
+                           AttributeT&       X,
                            cudaStream_t      stream = NULL) override
     {
         S.reset(0.0, rxmesh::DEVICE, stream);
@@ -56,8 +56,8 @@ struct CGMatFreeSolver : public IterativeSolver<T, Attribute<T, HandleT>>
         delta_new *= delta_new;
     }
 
-    virtual void solve(AttributeT&       X,
-                       const AttributeT& B,
+    virtual void solve(const AttributeT& B,
+                       AttributeT&       X,
                        cudaStream_t      stream = NULL) override
     {
         m_start_residual = delta_new;

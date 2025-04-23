@@ -8,8 +8,10 @@
 #include "rxmesh/query.cuh"
 
 
+#include "rxmesh/matrix/cg_solver.h"
 #include "rxmesh/matrix/cholesky_solver.h"
 #include "rxmesh/matrix/lu_solver.h"
+#include "rxmesh/matrix/pcg_solver.h"
 #include "rxmesh/matrix/qr_solver.h"
 
 #include <Eigen/Sparse>
@@ -60,16 +62,16 @@ __global__ static void setup(const Context      context,
 }
 
 template <typename T, typename SolverT>
-void test_solver(RXMeshStatic&    rx,
-                 SolverT&         solver,
-                 SparseMatrix<T>& A,
-                 DenseMatrix<T>&  B,
-                 DenseMatrix<T>&  X,
-                 bool             sol_on_device,
-                 T                factor1 = 7.4f,
-                 T                factor2 = 2.6f,
-                 T                factor3 = 10.3f,
-                 T                factor4 = 100.f)
+void test_direct_solver(RXMeshStatic&    rx,
+                        SolverT&         solver,
+                        SparseMatrix<T>& A,
+                        DenseMatrix<T>&  B,
+                        DenseMatrix<T>&  X,
+                        bool             sol_on_device,
+                        T                factor1 = 7.4f,
+                        T                factor2 = 2.6f,
+                        T                factor3 = 10.3f,
+                        T                factor4 = 100.f)
 {
     rx.run_kernel<256>({Op::VV},
                        setup<T, 256>,
@@ -125,10 +127,11 @@ TEST(Solver, Cholesky)
 
     CholeskySolver solver(&A);
 
-    test_solver(rx, solver, A, B, X, true);
+    test_direct_solver(rx, solver, A, B, X, true);
 
     // testing resolving
-    test_solver(rx, solver, A, B, X, true, 2.888f, 55.109f, 3.464f, 70.f);
+    test_direct_solver(
+        rx, solver, A, B, X, true, 2.888f, 55.109f, 3.464f, 70.f);
 
 
     A.release();
@@ -150,16 +153,16 @@ TEST(Solver, QR)
 
     QRSolver solver(&A);
 
-    test_solver(rx, solver, A, B, X, true);
+    test_direct_solver(rx, solver, A, B, X, true);
 
     // testing resolving
-    // test_solver(rx, solver, A, B, X, true, 2.888f, 55.109f, 3.464f, 70.f);
+    // test_direct_solver(rx, solver, A, B, X,
+    // true, 2.888f, 55.109f, 3.464f, 70.f);
 
     A.release();
     X.release();
     B.release();
 }
-
 
 TEST(Solver, LU)
 {
@@ -173,7 +176,7 @@ TEST(Solver, LU)
 
     LUSolver solver(&A);
 
-    test_solver(rx, solver, A, B, X, false);
+    test_direct_solver(rx, solver, A, B, X, false);
 
     A.release();
     X.release();
@@ -193,7 +196,7 @@ TEST(Solver, CompareEigen)
 
     CholeskySolver solver(&A);
 
-    test_solver(rx, solver, A, B, X, true);
+    test_direct_solver(rx, solver, A, B, X, true);
 
     DenseMatrix<float> X_copy(rx, num_vertices, 3);
     X_copy.copy_from(X, DEVICE, HOST);
@@ -223,4 +226,93 @@ TEST(Solver, CompareEigen)
     X.release();
     B.release();
     X_copy.release();
+}
+
+template <typename T, typename SolverT>
+void test_iterative_solver(RXMeshStatic&    rx,
+                           SolverT&         solver,
+                           SparseMatrix<T>& A,
+                           DenseMatrix<T>&  B,
+                           DenseMatrix<T>&  X)
+{
+    rx.run_kernel<256>({Op::VV},
+                       setup<T, 256>,
+                       *rx.get_input_vertex_coordinates(),
+                       A,
+                       X,
+                       B,
+                       7.4f,
+                       2.6f,
+                       10.3f,
+                       100.f);
+
+    solver.pre_solve(B, X);
+
+    solver.solve(B, X);
+
+    RXMESH_INFO(" iter taken = {}, final_res = {}",
+                solver.iter_taken(),
+                solver.final_residual());
+
+    X.move(DEVICE, HOST);
+
+    DenseMatrix<T> Ax(rx, A.rows(), X.cols());
+
+    A.multiply(X, Ax);
+
+    Ax.move(DEVICE, HOST);
+    B.move(DEVICE, HOST);
+
+    for (int i = 0; i < Ax.rows(); ++i) {
+        for (int j = 0; j < Ax.cols(); ++j) {
+            EXPECT_NEAR(Ax(i, j), B(i, j), 1e-3);
+        }
+    }
+
+    Ax.release();
+}
+
+TEST(Solver, CG)
+{
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    using T = float;
+
+    SparseMatrix<T> A(rx, Op::VV);
+    DenseMatrix<T>  X(rx, num_vertices, 3);
+    DenseMatrix<T>  B(rx, num_vertices, 3);
+
+    CGSolver solver(A, 3, 5000, T(1e-7));
+
+    test_iterative_solver(rx, solver, A, B, X);
+
+    A.release();
+    X.release();
+    B.release();
+}
+
+
+TEST(Solver, PCG)
+{
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    using T = float;
+
+    SparseMatrix<T> A(rx, Op::VV);
+    DenseMatrix<T>  X(rx, num_vertices, 3);
+    DenseMatrix<T>  B(rx, num_vertices, 3);
+
+    PCGSolver solver(A, 3, 5000, T(1e-7));
+
+    test_iterative_solver(rx, solver, A, B, X);
+
+    A.release();
+    X.release();
+    B.release();
 }

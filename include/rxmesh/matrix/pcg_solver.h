@@ -9,28 +9,28 @@ namespace rxmesh {
 /**
  * @brief Jacobi-preconditioned CG
  */
-template <typename T>
-struct PCGSolver : public CGSolver<T>
+template <typename T, int DenseMatOrder = Eigen::ColMajor>
+struct PCGSolver : public CGSolver<T, DenseMatOrder>
 {
-    using DenseMatT = DenseMatrix<T, Eigen::ColMajor>;
+    using DenseMatT = DenseMatrix<T, DenseMatOrder>;
 
     PCGSolver(SparseMatrix<T>& sys,
               int              unknown_dim,  // num rhs vectors
               int              max_iter,
               T                abs_tol = 1e-6,
-              T                rel_tol = 1e-6,
+              T                rel_tol = 0.0,
               int reset_residual_freq  = std::numeric_limits<int>::max())
-        : CGSolver<T>(sys,
-                      unknown_dim,
-                      max_iter,
-                      abs_tol,
-                      rel_tol,
-                      reset_residual_freq)
+        : CGSolver<T, DenseMatOrder>(sys,
+                                     unknown_dim,
+                                     max_iter,
+                                     abs_tol,
+                                     rel_tol,
+                                     reset_residual_freq)
     {
     }
 
-    virtual void pre_solve(DenseMatT&       X,
-                           const DenseMatT& B,
+    virtual void pre_solve(const DenseMatT& B,
+                           DenseMatT&       X,
                            cudaStream_t     stream = NULL) override
     {
         S.reset(0.0, rxmesh::DEVICE, stream);
@@ -52,8 +52,8 @@ struct PCGSolver : public CGSolver<T>
         delta_new = R.dot(P, false, stream);
     }
 
-    virtual void solve(DenseMatT&       X,
-                       const DenseMatT& B,
+    virtual void solve(const DenseMatT& B,
+                       DenseMatT&       X,
                        cudaStream_t     stream = NULL) override
     {
         m_start_residual = delta_new;

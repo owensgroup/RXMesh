@@ -22,12 +22,12 @@ struct IterativeSolver
     {
     }
 
-    virtual void pre_solve(StructureT&       X,
-                           const StructureT& B,
+    virtual void pre_solve(const StructureT& B,
+                           StructureT&       X,
                            cudaStream_t      stream) = 0;
 
-    virtual void solve(StructureT&       X,
-                       const StructureT& B,
+    virtual void solve(const StructureT& B,
+                       StructureT&       X,
                        cudaStream_t      stream) = 0;
 
     virtual std::string name() = 0;

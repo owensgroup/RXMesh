@@ -9,16 +9,16 @@ namespace rxmesh {
 /**
  * @brief (Un-preconditioned) CG
  */
-template <typename T>
-struct CGSolver : public IterativeSolver<T, DenseMatrix<T, Eigen::ColMajor>>
+template <typename T, int DenseMatOrder = Eigen::ColMajor>
+struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
 {
-    using DenseMatT = DenseMatrix<T, Eigen::ColMajor>;
+    using DenseMatT = DenseMatrix<T, DenseMatOrder>;
 
     CGSolver(SparseMatrix<T>& sys,
              int              unknown_dim,  // num rhs vectors
              int              max_iter,
              T                abs_tol = 1e-6,
-             T                rel_tol = 1e-6,
+             T                rel_tol = 0.0,
              int reset_residual_freq  = std::numeric_limits<int>::max())
         : IterativeSolver<T, DenseMatT>(max_iter, abs_tol, rel_tol),
           A(&sys),
@@ -34,8 +34,8 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, Eigen::ColMajor>>
         A->alloc_multiply_buffer(S, P);
     }
 
-    virtual void pre_solve(DenseMatT&       X,
-                           const DenseMatT& B,
+    virtual void pre_solve(const DenseMatT& B,
+                           DenseMatT&       X,
                            cudaStream_t     stream = NULL) override
     {
         S.reset(0.0, rxmesh::DEVICE, stream);
@@ -44,6 +44,7 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, Eigen::ColMajor>>
 
         // init S
         A->multiply(X, S, false, false, 1, 0, stream);
+        // A->multiply(X.data(), S.data(), stream);
 
         init_PR(B, S, R, P, stream);
 
@@ -51,8 +52,8 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, Eigen::ColMajor>>
         delta_new *= delta_new;
     }
 
-    virtual void solve(DenseMatT&       X,
-                       const DenseMatT& B,
+    virtual void solve(const DenseMatT& B,
+                       DenseMatT&       X,
                        cudaStream_t     stream = NULL) override
     {
         m_start_residual = delta_new;
@@ -62,6 +63,7 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, Eigen::ColMajor>>
         while (m_iter_taken < m_max_iter) {
             // s = Ap
             A->multiply(P, S, false, false, 1, 0, stream);
+            // A->multiply(P.data(), S.data(), stream);
 
             // alpha = delta_new / <S,P>
             alpha = S.dot(P, false, stream);
@@ -74,6 +76,7 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, Eigen::ColMajor>>
             if (m_iter_taken > 0 && m_iter_taken % m_reset_residual_freq == 0) {
                 // s= Ax
                 A->multiply(X, S, false, false, 1, 0, stream);
+                // A->multiply(X.data(), S.data(), stream);
 
                 // r = b-s
                 subtract(R, B, S, stream);

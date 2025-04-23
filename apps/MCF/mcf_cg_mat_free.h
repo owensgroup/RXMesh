@@ -56,12 +56,12 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx, SolverT& solver)
                           !Arg.use_uniform_laplace);
 
 
-    solver.pre_solve(*X, *B);
+    solver.pre_solve(*B, *X);
 
     GPUTimer timer;
     timer.start();
 
-    solver.solve(*X, *B);
+    solver.solve(*B, *X);
 
     timer.stop();
     CUDA_ERROR(cudaDeviceSynchronize());
