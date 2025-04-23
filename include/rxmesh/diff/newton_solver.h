@@ -5,8 +5,10 @@
 #include "rxmesh/diff/armijo_condition.h"
 
 #include "rxmesh/matrix/cg_mat_free_solver.h"
+#include "rxmesh/matrix/cg_solver.h"
 #include "rxmesh/matrix/cholesky_solver.h"
 #include "rxmesh/matrix/lu_solver.h"
+#include "rxmesh/matrix/pcg_solver.h"
 #include "rxmesh/matrix/qr_solver.h"
 
 namespace rxmesh {
@@ -99,11 +101,12 @@ struct NetwtonSolver
             solve_time += timer.elapsed_millis();
         }
 
-        // Iterative (CG)
-        // if constexpr (std::is_base_of<IterativeSolverBase, SolverT>) {
-        //    solver->pre_solve(problem.rx);
-        //    solver->solve(&problem.grad, &dir);
-        //}
+        // Iterative (CG/PCG)
+        if constexpr (std::is_base_of_v<CGSolver<T, DenseMatT::OrderT>,
+                                        SolverT>) {
+            solver->pre_solve(problem.grad, dir);
+            solver->solve(problem.grad, dir);
+        }
     }
 
 
@@ -181,6 +184,66 @@ struct NetwtonSolver
                     }
                 });
         }
+    }
+
+
+    /**
+     * @brief apply boundary condition on the system by doing the following to
+     *  the elements corresponding to the boundary
+     * 1) zeroing out off-diagonal elements in the Hessian
+     * 2) setting the diagonal elements to 1
+     * 3) zeroing out the gradient
+     * @param bc is an attribute storing 1/true for boundary condition and
+     * 0/false otherwise.
+     */
+    template <typename bcT>
+    inline void apply_bc(Attribute<bcT, ObjHandleT>& bc)
+    {
+        auto g   = problem.grad;
+        auto H   = problem.hess;
+        int  dim = VariableDim;
+
+        auto& ctx = problem.rx.get_context();
+
+        problem.rx.template for_each<ObjHandleT>(
+            DEVICE,
+            [bc, g, H, dim, ctx] __device__(const ObjHandleT& h) mutable {
+                if (int(bc(h)) == 1) {
+
+                    int h_row_id = ctx.linear_id(h) * dim;
+
+                    // for each row that belongs to this handle
+                    for (int i = 0; i < dim; ++i) {
+                        // TODO the stride here is 1 which might differ
+                        // if we change the stride in the sparse matrix
+                        int row_id = h_row_id + i;
+
+                        int start = H.row_ptr()[row_id];
+                        int stop  = H.row_ptr()[row_id + 1];
+
+                        for (int j = start; j < stop; ++j) {
+                            int col_id = H.col_idx()[j];
+
+                            if (row_id == col_id) {
+                                H.get_val_at(j) = T(1);
+                            } else {
+                                H.get_val_at(j) = T(0);
+
+                                // maintain symmetry
+                                // this may create race condition if col_id
+                                // is also a boundary condition but here all
+                                // threads write 0 so it should be fine
+                                H(col_id, row_id) = T(0);
+                            }
+                        }
+                    }
+
+
+                    for (int i = 0; i < dim; ++i) {
+                        g(h, i) = 0;
+                    }
+                }
+            });
     }
 };
 

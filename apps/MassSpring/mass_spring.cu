@@ -21,10 +21,10 @@ void mass_spring(RXMeshStatic& rx)
     using HessMatT = typename ProblemT::HessMatT;
 
     const T rho             = 1000;  // density
-    const T k               = 1e5;   // stiffness
+    const T k               = 1e3;   // stiffness
     const T initial_stretch = 1.3;
     const T tol             = 0.01;
-    const T h               = 0.004;  // time step
+    const T h               = 0.02;  // time step
     const T inv_h           = T(1) / h;
 
     glm::vec3 bb_lower(0), bb_upper(0);
@@ -36,19 +36,48 @@ void mass_spring(RXMeshStatic& rx)
 
     ProblemT problem(rx);
 
-    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+    LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
 
     NetwtonSolver newton_solver(problem, &solver);
 
     auto rest_l = *rx.add_edge_attribute<T>("RestLen", 1);
 
     auto velocity = *rx.add_vertex_attribute<T>("Velocity", 3);
-    velocity.reset(DEVICE, 0);
+    velocity.reset(0, DEVICE);
+
+    auto is_bc = *rx.add_vertex_attribute<int8_t>("isBC", 1);
+    is_bc.reset(0, DEVICE);
 
     auto x = *rx.get_input_vertex_coordinates();
 
     auto& x_tilde = *problem.objective;
 
+    // set boundary conditions
+    rx.for_each_vertex(
+        DEVICE,
+        [bb_upper, bb_lower, is_bc, x] __device__(const VertexHandle& vh) {
+            // top right
+            T d0 = x(vh, 0) - bb_upper[0];
+            T d1 = x(vh, 1) - bb_upper[1];
+            T d2 = x(vh, 2) - bb_upper[2];
+
+            if (d0 * d0 + d1 * d1 < std::numeric_limits<T>::min()) {
+                is_bc(vh) = 1;
+            }
+
+            // top left
+            d0 = x(vh, 0) - bb_lower[0];
+
+            if (d0 * d0 + d1 * d1 < std::numeric_limits<T>::min()) {
+                is_bc(vh) = 1;
+            }
+        });
+
+#if USE_POLYSCOPE
+    // add BC to polyscope
+    is_bc.move(DEVICE, HOST);
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("BC", is_bc);
+#endif
 
     // calc rest length
     rx.run_query_kernel<Op::EV, blockThreads>(
@@ -60,11 +89,11 @@ void mass_spring(RXMeshStatic& rx)
         });
 
     // apply initial stretch along the y direction
-    rx.for_each_vertex(
-        DEVICE,
-        [initial_stretch, x, x_tilde] __device__(const VertexHandle& vh) {
-            x(vh, 1) = x(vh, 1) * initial_stretch;
-        });
+    // rx.for_each_vertex(
+    //    DEVICE,
+    //    [initial_stretch, x, x_tilde] __device__(const VertexHandle& vh) {
+    //        x(vh, 1) = x(vh, 1) * initial_stretch;
+    //    });
 
 
     // add inertial energy term
@@ -114,6 +143,21 @@ void mass_spring(RXMeshStatic& rx)
         });
 
 
+    // add gravity energy
+    Eigen::Vector3<T> g(0.0, -9.81, 0.0);
+    const T           neg_mass_times_h_sq = -mass * h * h;
+    problem.template add_term<Op::V, true>(
+        [x, neg_mass_times_h_sq, g] __device__(const auto& vh,
+                                               auto&       obj) mutable {
+            using ActiveT = ACTIVE_TYPE(vh);
+
+            Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, obj);
+
+            ActiveT E = neg_mass_times_h_sq * x_tilda.dot(g);
+
+            return E;
+        });
+
     int time_step = 0;
 
     Timers<GPUTimer> timer;
@@ -131,38 +175,41 @@ void mass_spring(RXMeshStatic& rx)
                 }
             });
 
+        // evaluate energy
         problem.eval_terms();
 
         T f = problem.get_current_loss();
 
-        RXMESH_INFO("### Time step {} ###", time_step);
+        RXMESH_INFO("Time step: {}, Energy: {}", time_step, f);
 
-        RXMESH_INFO("*** E_last {}", f);
+        // apply bc
+        newton_solver.apply_bc(is_bc);
 
+        // get newton direction
         newton_solver.newton_direction();
 
-        T residual = newton_solver.dir.abs_max() / h;
 
-        newton_solver.line_search();
+        // residual is abs_max(newton_dir)/ h
+        T residual = newton_solver.dir.abs_max() / h;
 
         int iter = 0;
         if (residual > tol) {
-            RXMESH_INFO("iter= {}:", iter);
-            RXMESH_INFO("residual = {}", residual);
-
             newton_solver.line_search();
 
+            // evaluate energy
             problem.eval_terms();
 
+            // apply bc
+            newton_solver.apply_bc(is_bc);
+
+            // get newton direction
             newton_solver.newton_direction();
 
+            // residual is abs_max(newton_dir)/ h
             residual = newton_solver.dir.abs_max() / h;
 
             iter++;
         }
-
-        RXMESH_INFO("iter= {}:", iter);
-        RXMESH_INFO("residual = {}", residual);
 
         //  update velocity
         rx.for_each_vertex(
@@ -186,6 +233,9 @@ void mass_spring(RXMeshStatic& rx)
         auto step_and_update = [&]() {
             step_forward();
             x_tilde.move(DEVICE, HOST);
+            velocity.move(DEVICE, HOST);
+            auto vel = rx.get_polyscope_mesh()->addVertexVectorQuantity(
+                "Velocity", velocity);
             rx.get_polyscope_mesh()->updateVertexPositions(x_tilde);
         };
         if (ImGui::Button("Step")) {
@@ -227,7 +277,7 @@ int main(int argc, char** argv)
 
     using T = float;
 
-    std::vector<std::vector<float>>    verts;
+    std::vector<std::vector<T>>        verts;
     std::vector<std::vector<uint32_t>> fv;
 
     int n = 16;
@@ -240,11 +290,19 @@ int main(int argc, char** argv)
 
     create_plane(verts, fv, n, n, 2, dx);
 
+    for (int i = 0; i < verts.size(); ++i) {
+        verts[i][2] += (1 - verts[i][1]);
+    }
+
     RXMeshStatic rx(fv);
     rx.add_vertex_coordinates(verts, "Coords");
 
     RXMESH_INFO(
         "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
+
+    polyscope::options::groundPlaneHeightFactor = 0.8;
+    polyscope::options::groundPlaneMode =
+        polyscope::GroundPlaneMode::ShadowOnly;
 
     mass_spring<T>(rx);
 }
