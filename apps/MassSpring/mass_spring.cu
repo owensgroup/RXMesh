@@ -36,7 +36,7 @@ void mass_spring(RXMeshStatic& rx)
 
     ProblemT problem(rx);
 
-    LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
 
     NetwtonSolver newton_solver(problem, &solver);
 
