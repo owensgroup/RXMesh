@@ -31,6 +31,7 @@ set( SOURCE_LIST
 	test_diff_attribute.cu	
 	test_grad.h	
 	test_solver.cu
+	test_hess.cu
 )
 
 target_sources( RXMesh_test 
