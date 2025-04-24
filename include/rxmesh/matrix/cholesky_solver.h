@@ -223,6 +223,7 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
      */
     virtual void factorize()
     {
+        m_first_pre_solve = false;
 
         if constexpr (std::is_same_v<T, float>) {
             CUSOLVER_ERROR(cusolverSpScsrcholFactor(m_cusolver_sphandle,

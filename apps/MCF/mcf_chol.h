@@ -92,6 +92,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     timer.start();
     gtimer.start();
     solver.permute(rx);
+    solver.premute_value_ptr();
     timer.stop();
     gtimer.stop();
     RXMESH_INFO("permute took {} (ms), {} (ms)",

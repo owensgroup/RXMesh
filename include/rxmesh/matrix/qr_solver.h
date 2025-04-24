@@ -275,6 +275,7 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
      */
     virtual void factorize()
     {
+        m_first_pre_solve = false;
 
         if constexpr (std::is_same_v<T, float>) {
             CUSOLVER_ERROR(cusolverSpScsrqrFactor(m_cusolver_sphandle,
