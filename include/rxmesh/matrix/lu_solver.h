@@ -37,6 +37,8 @@ struct LUSolver : public DirectSolver<SpMatT, DenseMatOrder>
     {
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
 
+        // TODO this could be handled more cleanly using reshape operator on the
+        // user side
         if (m_mat->cols() == X_mat.rows() && m_mat->rows() == B_mat.rows() &&
             X_mat.cols() == B_mat.cols()) {
             for (int i = 0; i < B_mat.cols(); ++i) {

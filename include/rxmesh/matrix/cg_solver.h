@@ -29,7 +29,8 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
           m_reset_residual_freq(reset_residual_freq),
           S(DenseMatT(sys.rows(), unknown_dim, DEVICE)),
           P(DenseMatT(sys.rows(), unknown_dim, DEVICE)),
-          R(DenseMatT(sys.rows(), unknown_dim, DEVICE))
+          R(DenseMatT(sys.rows(), unknown_dim, DEVICE)),
+          m_first_pre_solve(true)
     {
         A->alloc_multiply_buffer(S, P);
     }
@@ -38,9 +39,12 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
                            DenseMatT&       X,
                            cudaStream_t     stream = NULL) override
     {
-        S.reset(0.0, rxmesh::DEVICE, stream);
-        P.reset(0.0, rxmesh::DEVICE, stream);
-        R.reset(0.0, rxmesh::DEVICE, stream);
+        if (m_first_pre_solve) {
+            m_first_pre_solve = false;
+            S.reset(0.0, rxmesh::DEVICE, stream);
+            P.reset(0.0, rxmesh::DEVICE, stream);
+            R.reset(0.0, rxmesh::DEVICE, stream);
+        }
 
         // init S
         A->multiply(X, S, false, false, 1, 0, stream);
@@ -56,6 +60,14 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
                        DenseMatT&       X,
                        cudaStream_t     stream = NULL) override
     {
+        if (m_first_pre_solve) {
+            RXMESH_ERROR(
+                "CGSolver::solver pre_solve() method should be called "
+                "before calling the solve() method. Returning without solving "
+                "anything.");
+            return;
+        }
+
         m_start_residual = delta_new;
 
         m_iter_taken = 0;
@@ -63,7 +75,6 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
         while (m_iter_taken < m_max_iter) {
             // s = Ap
             A->multiply(P, S, false, false, 1, 0, stream);
-            // A->multiply(P.data(), S.data(), stream);
 
             // alpha = delta_new / <S,P>
             alpha = S.dot(P, false, stream);
@@ -75,8 +86,7 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
             // reset residual
             if (m_iter_taken > 0 && m_iter_taken % m_reset_residual_freq == 0) {
                 // s= Ax
-                A->multiply(X, S, false, false, 1, 0, stream);
-                // A->multiply(X.data(), S.data(), stream);
+                A->multiply(X, S, false, false, 1, 0, stream);            
 
                 // r = b-s
                 subtract(R, B, S, stream);
@@ -207,6 +217,7 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
     DenseMatT        S, P, R;
     T                alpha, beta, delta_new, delta_old;
     int              m_reset_residual_freq;
+    bool             m_first_pre_solve;
 };
 
 }  // namespace rxmesh

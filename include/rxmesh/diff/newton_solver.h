@@ -56,7 +56,6 @@ struct NetwtonSolver
      */
     inline void newton_direction(cudaStream_t stream = NULL)
     {
-        // TODO we should refactor (or at least analyze_pattern) once
         problem.grad.multiply(T(-1.f), stream);
 
 
@@ -101,8 +100,24 @@ struct NetwtonSolver
         // Iterative (CG/PCG)
         if constexpr (std::is_base_of_v<CGSolver<T, DenseMatT::OrderT>,
                                         SolverT>) {
+
+            int r = problem.grad.rows();
+            int c = problem.grad.cols();
+
+            GPUTimer timer;
+            timer.start();
+
+            problem.grad.reshape(r * c, 1);
+            dir.reshape(r * c, 1);
+
             solver->pre_solve(problem.grad, dir);
             solver->solve(problem.grad, dir);
+
+            timer.stop();
+            solve_time += timer.elapsed_millis();
+
+            problem.grad.reshape(r, c);
+            dir.reshape(r, c);
         }
     }
 

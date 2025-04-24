@@ -33,9 +33,12 @@ struct PCGSolver : public CGSolver<T, DenseMatOrder>
                            DenseMatT&       X,
                            cudaStream_t     stream = NULL) override
     {
-        S.reset(0.0, rxmesh::DEVICE, stream);
-        P.reset(0.0, rxmesh::DEVICE, stream);
-        R.reset(0.0, rxmesh::DEVICE, stream);
+        if (m_first_pre_solve) {
+            m_first_pre_solve = false;
+            S.reset(0.0, rxmesh::DEVICE, stream);
+            P.reset(0.0, rxmesh::DEVICE, stream);
+            R.reset(0.0, rxmesh::DEVICE, stream);
+        }
 
         // init S
         // S = Ax
@@ -56,6 +59,14 @@ struct PCGSolver : public CGSolver<T, DenseMatOrder>
                        DenseMatT&       X,
                        cudaStream_t     stream = NULL) override
     {
+        if (m_first_pre_solve) {
+            RXMESH_ERROR(
+                "PCGSolver::solver pre_solve() method should be called "
+                "before calling the solve() method. Returning without solving "
+                "anything.");
+            return;
+        }
+
         m_start_residual = delta_new;
 
         m_iter_taken = 0;
