@@ -14,9 +14,10 @@ void create_plane(std::vector<std::vector<T>>&        verts,
                   std::vector<std::vector<uint32_t>>& tris,
                   uint32_t                            nx,
                   uint32_t                            ny,
-                  int                                 plane      = 1,
-                  T                                   dx         = 1.0,
-                  const vec3<T>                       low_corner = {0, 0, 0})
+                  int                                 plane = 1,
+                  T                                   dx    = 1.0,
+                  bool          with_cross_diagonal         = false,
+                  const vec3<T> low_corner                  = {0, 0, 0})
 {
     verts.clear();
     tris.clear();
@@ -52,12 +53,23 @@ void create_plane(std::vector<std::vector<T>>&        verts,
         for (uint32_t j = 0; j < nx - 1; j++) {
             uint32_t idx = i * (nx) + j;
 
-            std::vector<uint32_t> t0({idx, idx + nx, idx + 1});
+            uint32_t a = idx;
+            uint32_t b = idx + nx;
+            uint32_t c = idx + 1;
+            uint32_t d = idx + nx + 1;
 
-            std::vector<uint32_t> t1({idx + 1, idx + nx, idx + nx + 1});
+            std::vector<uint32_t> t0({a, b, c});
+
+            std::vector<uint32_t> t1({c, b, d});
+
 
             tris.push_back(t0);
             tris.push_back(t1);
+
+            if (with_cross_diagonal) {
+                std::vector<uint32_t> t2({a, d, c});
+                tris.push_back(t2);
+            }
         }
     }
 }

@@ -54,7 +54,7 @@ TEST(Apps, SurfaceTracking)
     //
     // float spacing = 6.f / float(Arg.n);
     //
-    // create_plane(verts, fv, Arg.n, Arg.n, 1, spacing, lower_corner);
+    // create_plane(verts, fv, Arg.n, Arg.n, 1, spacing, false, lower_corner);
     //
     //  RXMeshDynamic rx(fv, "", 256, 5.0, 3);
     // rx.add_vertex_coordinates(verts, "plane");

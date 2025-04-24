@@ -289,7 +289,7 @@ int main(int argc, char** argv)
 
     T dx = 1 / T(n - 1);
 
-    create_plane(verts, fv, n, n, 2, dx);
+    create_plane(verts, fv, n, n, 2, dx, true);
 
     for (int i = 0; i < verts.size(); ++i) {
         verts[i][2] += (1 - verts[i][1]);
