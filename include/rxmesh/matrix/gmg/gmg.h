@@ -535,6 +535,7 @@ struct GMG
         }
     }
 
+
     /**
      * @brief Samples for all levels using k-means
      * TODO implement this
@@ -758,7 +759,6 @@ struct GMG
             num_samples, [=] __device__(int sample_id) mutable {
                 bool tri_chosen = false;
 
-                // assert(sample_id < num_samples);
                 assert(sample_id < num_samples);
 
                 // go through every triangle of the cluster
@@ -869,19 +869,17 @@ struct GMG
                            selectedv3 != selectedv1);
                 }
                 // Compute barycentric coordinates for the closest triangle
-                float b1 = 0, b2 = 0, b3 = 0;
-                /*if (selected_neighbor == selected_neighbor_of_neighbor &&
-                    selected_neighbor == 0) {
                 float           b1 = 0, b2 = 0, b3 = 0;
                 Eigen::Vector3f bcoords;
                 detail::compute_positive_barycentric_coords(
                     q, selectedv1, selectedv2, selectedv3, bcoords);
 
+                b1 = bcoords[0];
                 b2 = bcoords[1];
                 b3 = bcoords[2];
 
-                assert(tri_chosen);
 
+                assert(tri_chosen);
                 assert(b1 >= 0);
                 assert(b2 >= 0);
                 assert(b3 >= 0);
