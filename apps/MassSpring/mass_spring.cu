@@ -265,10 +265,11 @@ void mass_spring(RXMeshStatic& rx)
 
     RXMESH_INFO(
         "Mass-spring: #time_step ={}, time= {} (ms), "
-        "timer/iteration= {} ms/iter",
+        "timer/iteration= {} ms/iter, solve time = {} (ms)",
         time_step,
         timer.elapsed_millis("Step"),
-        timer.elapsed_millis("Step") / float(time_step));
+        timer.elapsed_millis("Step") / float(time_step),
+        newton_solver.solve_time);
 }
 
 int main(int argc, char** argv)
