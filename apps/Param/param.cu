@@ -46,9 +46,12 @@ void parameterize(RXMeshStatic& rx)
 
     using HessMatT = typename ProblemT::HessMatT;
 
-    // LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+
     CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
 
+    // int cg_max_iter = 1000;
+    //  CGSolver<T, ProblemT::DenseMatT::OrderT> solver(
+    //      problem.hess, 1, cg_max_iter);
 
     NetwtonSolver newton_solver(problem, &solver);
 
