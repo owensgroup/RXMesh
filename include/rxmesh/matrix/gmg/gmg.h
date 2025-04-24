@@ -869,9 +869,6 @@ struct GMG
                            selectedv3 != selectedv1);
                 }
                 // Compute barycentric coordinates for the closest triangle
-                float b1 = 0, b2 = 0, b3 = 0;
-                /*if (selected_neighbor == selected_neighbor_of_neighbor &&
-                    selected_neighbor == 0) {
                 float           b1 = 0, b2 = 0, b3 = 0;
                 Eigen::Vector3f bcoords;
                 detail::compute_positive_barycentric_coords(
