@@ -116,6 +116,12 @@ struct NetwtonSolver
             timer.stop();
             solve_time += timer.elapsed_millis();
 
+            RXMESH_TRACE(
+                "Init residual = {}, final residual {}, #Iter taken= {}",
+                solver->start_residual(),
+                solver->final_residual(),
+                solver->iter_taken());
+
             problem.grad.reshape(r, c);
             dir.reshape(r, c);
         }
