@@ -67,6 +67,20 @@ struct PCGSolver : public CGSolver<T, DenseMatOrder>
             return;
         }
 
+        if (A->cols() != X.rows() || A->rows() != B.rows() ||
+            X.cols() != B.cols()) {
+            RXMESH_ERROR(
+                "CGSolver::solver mismatch in the input/output size. A ({}, "
+                "{}), X ({}, {}), B ({}, {})",
+                A->rows(),
+                A->cols(),
+                X.rows(),
+                X.cols(),
+                B.rows(),
+                B.cols());
+            return;
+        }
+        
         m_start_residual = delta_new;
 
         m_iter_taken = 0;

@@ -68,6 +68,21 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
             return;
         }
 
+        if (A->cols() != X.rows() || A->rows() != B.rows() ||
+            X.cols() != B.cols()) {
+            RXMESH_ERROR(
+                "CGSolver::solver mismatch in the input/output size. A ({}, "
+                "{}), X ({}, {}), B ({}, {})",
+                A->rows(),
+                A->cols(),
+                X.rows(),
+                X.cols(),
+                B.rows(),
+                B.cols());
+            return;
+        }
+
+
         m_start_residual = delta_new;
 
         m_iter_taken = 0;
@@ -86,7 +101,7 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
             // reset residual
             if (m_iter_taken > 0 && m_iter_taken % m_reset_residual_freq == 0) {
                 // s= Ax
-                A->multiply(X, S, false, false, 1, 0, stream);            
+                A->multiply(X, S, false, false, 1, 0, stream);
 
                 // r = b-s
                 subtract(R, B, S, stream);
