@@ -91,7 +91,7 @@ struct GMG
 
 
     GMG(RXMeshStatic& rx,
-        Sampling      sam                   = Sampling::FPS,
+        Sampling      sam                   = Sampling::Rand,
         int           reduction_ratio       = 4,
         int           num_samples_threshold = 20)
         : m_ratio(reduction_ratio),
@@ -447,14 +447,25 @@ struct GMG
      */
     void random_sampling(RXMeshStatic& rx)
     {
-
-
-        // populate m_vertex_cluster with random values for each vertex, with
-        // associated vertex position
-        //  m_vertex_cluster
+        constexpr uint32_t blockThreads = 256;
+        bool nested = true;
+        int  max    = 1;
+        if (!nested) {
+            max = m_num_levels - 1;
+        }
         m_vertex_pos.move(DEVICE, HOST);
-        for (int i = 0; i < 1 /*m_num_levels-1*/; i++) {
-            std::cout << std::endl << std::endl;
+        for (int i = 0; i < max; i++) {
+            // re-init m_distance because it is used in clustering
+            auto& distance = m_distance;
+            const auto& vc = m_vertex_cluster[i];
+            if (i==0)
+            rx.for_each_vertex(
+                DEVICE,
+                [distance, vc] __device__(const VertexHandle vh) mutable {
+                    //vc(vh,0) = -1;
+                    distance(vh, 0) = std::numeric_limits<float>::max();
+                });
+            distance.move(DEVICE, HOST);
             std::random_device         rd;
             std::default_random_engine generator(rd());
             auto&            current_vertex_cluster = m_vertex_cluster[i];
@@ -463,75 +474,57 @@ struct GMG
             std::shuffle(samples.begin(), samples.end(), generator);
             samples.resize(m_num_samples[i + 1]);
             int j = 0;
+            // TODO parallelise
             for (auto& a : samples) {
                 current_vertex_cluster(a - 1, 0) = j;
-
+                if(i==0) distance(a - 1, 0)               = 0;
+                else m_distance_mat[i](a - 1, 0)       = 0;
+                
                 m_samples_pos[i](j, 0) = m_vertex_pos(a - 1, 0);
                 m_samples_pos[i](j, 1) = m_vertex_pos(a - 1, 1);
                 m_samples_pos[i](j, 2) = m_vertex_pos(a - 1, 2);
-
                 j++;
             }
+            m_samples_pos[i].move(HOST, DEVICE);
+            m_vertex_cluster[i].move(HOST, DEVICE);
+            m_distance_mat[i].move(HOST, DEVICE);
+            distance.move(HOST, DEVICE);
         }
-
-        m_samples_pos[0].move(HOST, DEVICE);
-        m_vertex_cluster[0].move(HOST, DEVICE);
-
-        constexpr uint32_t blockThreads = 256;
-
-        // re-init m_distance because it is used in clustering
-        auto& distance = m_distance;
-
-        const auto& vc = m_vertex_cluster[0];
-
-        rx.for_each_vertex(
-            DEVICE, [distance, vc] __device__(const VertexHandle vh) mutable {
-                if (vc(vh) == -1) {
-                    distance(vh, 0) = std::numeric_limits<float>::max();
-                }
-            });
-
-        for (int level = 2; level < m_num_levels; ++level) {
-            uint32_t blocks = DIVIDE_UP(m_num_samples[level], blockThreads);
-
-            auto& current_samples_pos = m_samples_pos[level - 1];
-
-            const auto& prv_samples_pos = m_samples_pos[level - 2];
-
-            auto& current_v_cluster = m_vertex_cluster[level - 1];
-
-            const auto& prv_v_cluster = m_vertex_cluster[level - 2];
-
-            const auto& pos = m_vertex_pos;
-
-            // set sample position of this level
-            for_each_item<<<blocks, blockThreads>>>(
-                m_num_samples[level],
-                [current_samples_pos,
-                 prv_samples_pos] __device__(int i) mutable {
-                    current_samples_pos(i, 0) = prv_samples_pos(i, 0);
-                    current_samples_pos(i, 1) = prv_samples_pos(i, 1);
-                    current_samples_pos(i, 2) = prv_samples_pos(i, 2);
-                });
-
-            // set vertex cluster of the previous level
-            blocks = DIVIDE_UP(m_num_samples[level - 1], blockThreads);
-
-            auto& prv_level_distance = m_distance_mat[level - 2];
-            for_each_item<<<blocks, blockThreads>>>(
-                m_num_samples[level - 1],
-                [current_v_cluster,
-                 prv_level_distance,
-                 n = m_num_samples[level]] __device__(int i) mutable {
-                    if (i < n) {
-                        current_v_cluster(i, 0)  = i;
-                        prv_level_distance(i, 0) = 0;
-                    } else {
-                        current_v_cluster(i, 0) = -1;
-                        prv_level_distance(i, 0) =
-                            std::numeric_limits<float>::max();
-                    }
-                });
+        if (nested) {
+            for (int level = 2; level < m_num_levels; ++level) {
+                uint32_t blocks = DIVIDE_UP(m_num_samples[level], blockThreads);
+                auto& current_samples_pos = m_samples_pos[level - 1];
+                const auto& prv_samples_pos = m_samples_pos[level - 2];
+                auto& current_v_cluster = m_vertex_cluster[level - 1];
+                const auto& prv_v_cluster = m_vertex_cluster[level - 2];
+                const auto& pos = m_vertex_pos;
+                // set sample position of this level
+                for_each_item<<<blocks, blockThreads>>>(
+                    m_num_samples[level],
+                    [current_samples_pos,
+                     prv_samples_pos] __device__(int i) mutable {
+                        current_samples_pos(i, 0) = prv_samples_pos(i, 0);
+                        current_samples_pos(i, 1) = prv_samples_pos(i, 1);
+                        current_samples_pos(i, 2) = prv_samples_pos(i, 2);
+                    });
+                // set vertex cluster of the previous level
+                blocks = DIVIDE_UP(m_num_samples[level - 1], blockThreads);
+                auto& prv_level_distance = m_distance_mat[level - 2];
+                for_each_item<<<blocks, blockThreads>>>(
+                    m_num_samples[level - 1],
+                    [current_v_cluster,
+                     prv_level_distance,
+                     n = m_num_samples[level]] __device__(int i) mutable {
+                        if (i < n) {
+                            current_v_cluster(i, 0)  = i;
+                            prv_level_distance(i, 0) = 0;
+                        } else {
+                            current_v_cluster(i, 0) = -1;
+                            prv_level_distance(i, 0) =
+                                std::numeric_limits<float>::max();
+                        }
+                    });
+            }
         }
     }
 
