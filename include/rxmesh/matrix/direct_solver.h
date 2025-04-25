@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 #include "rxmesh/matrix/solver_base.h"
 
 #include "rxmesh/matrix/permute_method.h"
@@ -188,13 +188,23 @@ struct DirectSolver : public SolverBase<SpMatT, DenseMatOrder>
                                    m_h_permute_map,
                                    m_mat->non_zeros() * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
+
+        free(perm_buffer_cpu);
+    }
+
+    /**
+     * @brief In permute, we permute the row_id and col_id. here we permute
+     * the value pointer. We separate the logic here since we usually want to
+     * to permute the rows/cols id once but we might want to permute the
+     * value pointer many times.
+     */
+    void premute_value_ptr()
+    {
+
         permute_gather(m_d_permute_map,
                        m_mat->val_ptr(DEVICE),
                        m_d_solver_val,
                        m_mat->non_zeros());
-
-
-        free(perm_buffer_cpu);
     }
 
 

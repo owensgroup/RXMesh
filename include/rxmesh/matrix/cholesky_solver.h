@@ -15,7 +15,8 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
         : DirectSolver<SpMatT, DenseMatOrder>(mat, perm),
           m_internalDataInBytes(0),
           m_workspaceInBytes(0),
-          m_solver_buffer(nullptr)
+          m_solver_buffer(nullptr),
+          m_first_pre_solve(true)
     {
         CUSOLVER_ERROR(cusolverSpCreateCsrcholInfo(&m_chol_info));
     }
@@ -26,13 +27,24 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
         CUSOLVER_ERROR(cusolverSpDestroyCsrcholInfo(m_chol_info));
     }
 
+    /**
+     * @brief pre_solve should be called before calling the solve() method.
+     * and it should be called every time the matrix is updated
+     */
     virtual void pre_solve(RXMeshStatic& rx) override
     {
-        this->permute_alloc();
-        this->permute(rx);
-        analyze_pattern();
-        post_analyze_alloc();
-        factorize();
+        if (m_first_pre_solve) {
+            m_first_pre_solve = false;
+            this->permute_alloc();
+            this->permute(rx);
+            this->premute_value_ptr();
+            analyze_pattern();
+            post_analyze_alloc();
+            factorize();
+        } else {
+            this->premute_value_ptr();
+            factorize();
+        }
     }
 
 
@@ -40,9 +52,20 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                        DenseMatrix<Type, DenseMatOrder>& X_mat,
                        cudaStream_t                      stream = NULL) override
     {
+        if (m_first_pre_solve) {
+            RXMESH_ERROR(
+                "CholeskySolver::solver pre_solve() method should be called "
+                "before calling the solve() method. Returning without solving "
+                "anything.");
+            return;
+        }
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
 
-        // the case where we solve for multiple rhs
+
+        // TODO this could be handled more cleanly using reshape operator on the
+        // user side
+
+        //  the case where we solve for multiple rhs
         if (m_mat->cols() == X_mat.rows() && m_mat->rows() == B_mat.rows() &&
             X_mat.cols() == B_mat.cols()) {
             for (int i = 0; i < B_mat.cols(); ++i) {
@@ -200,6 +223,7 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
      */
     virtual void factorize()
     {
+        m_first_pre_solve = false;
 
         if constexpr (std::is_same_v<T, float>) {
             CUSOLVER_ERROR(cusolverSpScsrcholFactor(m_cusolver_sphandle,
@@ -343,6 +367,7 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
 
         if (this->m_use_permute) {
             permute_scatter(m_d_permute, d_solver_x, d_x, m_mat->rows());
+            permute_scatter(m_d_permute, d_solver_b, d_b, m_mat->rows());
         }
     }
 
@@ -440,6 +465,8 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
     size_t m_workspaceInBytes;
 
     void* m_solver_buffer;
+
+    bool m_first_pre_solve;
 };
 
 }  // namespace rxmesh

@@ -8,8 +8,10 @@
 #include "rxmesh/query.cuh"
 
 
+#include "rxmesh/matrix/cg_solver.h"
 #include "rxmesh/matrix/cholesky_solver.h"
 #include "rxmesh/matrix/lu_solver.h"
+#include "rxmesh/matrix/pcg_solver.h"
 #include "rxmesh/matrix/qr_solver.h"
 
 #include <Eigen/Sparse>
@@ -20,9 +22,13 @@ using namespace rxmesh;
 template <typename T, uint32_t blockThreads>
 __global__ static void setup(const Context      context,
                              VertexAttribute<T> coords,
-                             SparseMatrix<T>   A,
+                             SparseMatrix<T>    A,
                              DenseMatrix<T>     X,
-                             DenseMatrix<T>     B)
+                             DenseMatrix<T>     B,
+                             T                  factor1,
+                             T                  factor2,
+                             T                  factor3,
+                             T                  factor4)
 {
     using namespace rxmesh;
     auto set = [&](VertexHandle& v_id, const VertexIterator& iter) {
@@ -30,9 +36,9 @@ __global__ static void setup(const Context      context,
 
         T v_weight = iter.size();
 
-        B(v_id, 0) = iter.size() * 7.4f;
-        B(v_id, 1) = iter.size() * 2.6f;
-        B(v_id, 2) = iter.size() * 10.3f;
+        B(v_id, 0) = iter.size() * factor1;
+        B(v_id, 1) = iter.size() * factor2;
+        B(v_id, 2) = iter.size() * factor3;
 
         X(v_id, 0) = coords(v_id, 0) * v_weight;
         X(v_id, 1) = coords(v_id, 1) * v_weight;
@@ -45,7 +51,7 @@ __global__ static void setup(const Context      context,
             sum_e_weight += 1;
         }
 
-        A(v_id, v_id) = v_weight + sum_e_weight + 1000000.f;
+        A(v_id, v_id) = v_weight + sum_e_weight + factor4;
     };
 
     auto block = cooperative_groups::this_thread_block();
@@ -55,29 +61,28 @@ __global__ static void setup(const Context      context,
     query.dispatch<Op::VV>(block, shrd_alloc, set);
 }
 
-template <typename T>
-void setup_matrix(RXMeshStatic&     rx,
-                  SparseMatrix<T>& A,
-                  DenseMatrix<T>&   B,
-                  DenseMatrix<T>&   X)
-{
-    constexpr uint32_t blockThreads = 256;
-
-    auto coords = rx.get_input_vertex_coordinates();
-
-    rx.run_kernel<blockThreads>(
-        {Op::VV}, setup<T, blockThreads>, *coords, A, X, B);
-}
-
 template <typename T, typename SolverT>
-void test_solver(RXMeshStatic&     rx,
-                 SolverT&          solver,
-                 SparseMatrix<T>& A,
-                 DenseMatrix<T>&   B,
-                 DenseMatrix<T>&   X,
-                 bool              sol_on_device)
+void test_direct_solver(RXMeshStatic&    rx,
+                        SolverT&         solver,
+                        SparseMatrix<T>& A,
+                        DenseMatrix<T>&  B,
+                        DenseMatrix<T>&  X,
+                        bool             sol_on_device,
+                        T                factor1 = 7.4f,
+                        T                factor2 = 2.6f,
+                        T                factor3 = 10.3f,
+                        T                factor4 = 100.f)
 {
-    setup_matrix(rx, A, B, X);
+    rx.run_kernel<256>({Op::VV},
+                       setup<T, 256>,
+                       *rx.get_input_vertex_coordinates(),
+                       A,
+                       X,
+                       B,
+                       factor1,
+                       factor2,
+                       factor3,
+                       factor4);
 
     // Needed for LU but does not hurt other solvers
     A.move(DEVICE, HOST);
@@ -117,12 +122,17 @@ TEST(Solver, Cholesky)
     uint32_t num_vertices = rx.get_num_vertices();
 
     SparseMatrix<float> A(rx, Op::VV);
-    DenseMatrix<float>   X(rx, num_vertices, 3);
-    DenseMatrix<float>   B(rx, num_vertices, 3);
+    DenseMatrix<float>  X(rx, num_vertices, 3);
+    DenseMatrix<float>  B(rx, num_vertices, 3);
 
     CholeskySolver solver(&A);
 
-    test_solver(rx, solver, A, B, X, true);
+    test_direct_solver(rx, solver, A, B, X, true);
+
+    // testing resolving
+    test_direct_solver(
+        rx, solver, A, B, X, true, 2.888f, 55.109f, 3.464f, 70.f);
+
 
     A.release();
     X.release();
@@ -138,18 +148,21 @@ TEST(Solver, QR)
     uint32_t num_vertices = rx.get_num_vertices();
 
     SparseMatrix<float> A(rx, Op::VV);
-    DenseMatrix<float>   X(rx, num_vertices, 3);
-    DenseMatrix<float>   B(rx, num_vertices, 3);
+    DenseMatrix<float>  X(rx, num_vertices, 3);
+    DenseMatrix<float>  B(rx, num_vertices, 3);
 
     QRSolver solver(&A);
 
-    test_solver(rx, solver, A, B, X, true);
+    test_direct_solver(rx, solver, A, B, X, true);
+
+    // testing resolving
+    // test_direct_solver(rx, solver, A, B, X,
+    // true, 2.888f, 55.109f, 3.464f, 70.f);
 
     A.release();
     X.release();
     B.release();
 }
-
 
 TEST(Solver, LU)
 {
@@ -158,12 +171,12 @@ TEST(Solver, LU)
     uint32_t num_vertices = rx.get_num_vertices();
 
     SparseMatrix<float> A(rx, Op::VV);
-    DenseMatrix<float>   X(rx, num_vertices, 3);
-    DenseMatrix<float>   B(rx, num_vertices, 3);
+    DenseMatrix<float>  X(rx, num_vertices, 3);
+    DenseMatrix<float>  B(rx, num_vertices, 3);
 
     LUSolver solver(&A);
 
-    test_solver(rx, solver, A, B, X, false);
+    test_direct_solver(rx, solver, A, B, X, false);
 
     A.release();
     X.release();
@@ -178,12 +191,12 @@ TEST(Solver, CompareEigen)
     uint32_t num_vertices = rx.get_num_vertices();
 
     SparseMatrix<float> A(rx, Op::VV);
-    DenseMatrix<float>   X(rx, num_vertices, 3);
-    DenseMatrix<float>   B(rx, num_vertices, 3);
+    DenseMatrix<float>  X(rx, num_vertices, 3);
+    DenseMatrix<float>  B(rx, num_vertices, 3);
 
     CholeskySolver solver(&A);
 
-    test_solver(rx, solver, A, B, X, true);
+    test_direct_solver(rx, solver, A, B, X, true);
 
     DenseMatrix<float> X_copy(rx, num_vertices, 3);
     X_copy.copy_from(X, DEVICE, HOST);
@@ -213,4 +226,93 @@ TEST(Solver, CompareEigen)
     X.release();
     B.release();
     X_copy.release();
+}
+
+template <typename T, typename SolverT>
+void test_iterative_solver(RXMeshStatic&    rx,
+                           SolverT&         solver,
+                           SparseMatrix<T>& A,
+                           DenseMatrix<T>&  B,
+                           DenseMatrix<T>&  X)
+{
+    rx.run_kernel<256>({Op::VV},
+                       setup<T, 256>,
+                       *rx.get_input_vertex_coordinates(),
+                       A,
+                       X,
+                       B,
+                       7.4f,
+                       2.6f,
+                       10.3f,
+                       100.f);
+
+    solver.pre_solve(B, X);
+
+    solver.solve(B, X);
+
+    RXMESH_INFO(" iter taken = {}, final_res = {}",
+                solver.iter_taken(),
+                solver.final_residual());
+
+    X.move(DEVICE, HOST);
+
+    DenseMatrix<T> Ax(rx, A.rows(), X.cols());
+
+    A.multiply(X, Ax);
+
+    Ax.move(DEVICE, HOST);
+    B.move(DEVICE, HOST);
+
+    for (int i = 0; i < Ax.rows(); ++i) {
+        for (int j = 0; j < Ax.cols(); ++j) {
+            EXPECT_NEAR(Ax(i, j), B(i, j), 1e-3);
+        }
+    }
+
+    Ax.release();
+}
+
+TEST(Solver, CG)
+{
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    using T = float;
+
+    SparseMatrix<T> A(rx, Op::VV);
+    DenseMatrix<T>  X(rx, num_vertices, 3);
+    DenseMatrix<T>  B(rx, num_vertices, 3);
+
+    CGSolver solver(A, 3, 5000, T(1e-7));
+
+    test_iterative_solver(rx, solver, A, B, X);
+
+    A.release();
+    X.release();
+    B.release();
+}
+
+
+TEST(Solver, PCG)
+{
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    using T = float;
+
+    SparseMatrix<T> A(rx, Op::VV);
+    DenseMatrix<T>  X(rx, num_vertices, 3);
+    DenseMatrix<T>  B(rx, num_vertices, 3);
+
+    PCGSolver solver(A, 3, 5000, T(1e-7));
+
+    test_iterative_solver(rx, solver, A, B, X);
+
+    A.release();
+    X.release();
+    B.release();
 }

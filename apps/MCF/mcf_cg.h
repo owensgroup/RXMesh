@@ -61,13 +61,13 @@ void run_cg(rxmesh::RXMeshStatic& rx)
                    Arg.cg_tolerance * Arg.cg_tolerance);
 
 
-    solver.pre_solve(X_mat, B_mat);
+    solver.pre_solve(B_mat, X_mat);
 
     GPUTimer timer;
     timer.start();
 
 
-    solver.solve(X_mat, B_mat);
+    solver.solve(B_mat, X_mat);
 
     timer.stop();
     CUDA_ERROR(cudaDeviceSynchronize());

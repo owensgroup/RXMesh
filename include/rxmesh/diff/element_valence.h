@@ -11,8 +11,13 @@ namespace rxmesh {
 template <Op op>
 constexpr int element_valence()
 {
+    // dynamic
     if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
         return 0;
+    }
+
+    if constexpr (op == Op::V || op == Op::E || op == Op::F) {
+        return 1;
     }
 
     if constexpr (op == Op::EV || op == Op::EF) {

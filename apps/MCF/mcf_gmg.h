@@ -50,9 +50,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     report.add_member("method", std::string("RXMesh"));
     report.add_member("blockThreads", blockThreads);
 
-
-    //GMGSolver solver(rx, A_mat, Arg.max_num_iter);
-    GMGSolver solver(rx, A_mat, Arg.max_num_iter,3);
+        
+    GMGSolver solver(rx, A_mat, Arg.max_num_iter, 3);
 
 
     float    total_time = 0;
@@ -62,7 +61,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
 
     timer.start();
     gtimer.start();
-    solver.pre_solve(X_mat, B_mat);
+    solver.pre_solve(B_mat, X_mat);
     timer.stop();
     gtimer.stop();
     RXMESH_INFO("GMG pre-solve took {} (ms), {} (ms)",
@@ -75,7 +74,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
 
     timer.start();
     gtimer.start();
-    solver.solve(X_mat, B_mat);
+    solver.solve(B_mat, X_mat);
     timer.stop();
     gtimer.stop();
 

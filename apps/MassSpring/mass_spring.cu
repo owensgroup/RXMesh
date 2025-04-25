@@ -14,34 +14,109 @@ void mass_spring(RXMeshStatic& rx)
 {
     constexpr int VariableDim = 3;
 
-    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
+    constexpr uint32_t blockThreads = 256;
 
-    ProblemT problem(rx);
+    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
 
     using HessMatT = typename ProblemT::HessMatT;
 
-    LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+    const T rho             = 1000;  // density
+    const T k               = 1e3;   // stiffness
+    const T initial_stretch = 1.3;
+    const T tol             = 0.01;
+    const T h               = 0.02;  // time step
+    const T inv_h           = T(1) / h;
+
+    glm::vec3 bb_lower(0), bb_upper(0);
+    rx.bounding_box(bb_lower, bb_upper);
+    glm::vec3 bb = bb_upper - bb_lower;
+
+    // mass per vertex = rho * volume /num_vertices
+    T mass = rho * bb[0] * bb[1] / rx.get_num_vertices();
+
+    ProblemT problem(rx);
+
+    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
 
     NetwtonSolver newton_solver(problem, &solver);
 
-    auto rest_l = *rx.add_edge_attribute<T>("Rest Len", 1);
+    auto rest_l = *rx.add_edge_attribute<T>("RestLen", 1);
 
-    auto coordinates = *rx.get_input_vertex_coordinates();
+    auto velocity = *rx.add_vertex_attribute<T>("Velocity", 3);
+    velocity.reset(0, DEVICE);
 
-    constexpr uint32_t blockThreads = 256;
+    auto is_bc = *rx.add_vertex_attribute<int8_t>("isBC", 1);
+    is_bc.reset(0, DEVICE);
 
-    rx.run_query_kernel<Op::EV, blockThreads>(
-        [=] __device__(const EdgeHandle& eh, const VertexIterator& iter) {
-            Eigen::Vector3<T> a = coordinates.to_eigen<3>(iter[0]);
-            Eigen::Vector3<T> b = coordinates.to_eigen<3>(iter[1]);
+    auto x = *rx.get_input_vertex_coordinates();
 
-            rest_l(eh) = T(0.5) * (a - b).norm();
+    auto& x_tilde = *problem.objective;
+
+    // set boundary conditions
+    rx.for_each_vertex(
+        DEVICE,
+        [bb_upper, bb_lower, is_bc, x] __device__(const VertexHandle& vh) {
+            // top right
+            T d0 = x(vh, 0) - bb_upper[0];
+            T d1 = x(vh, 1) - bb_upper[1];
+            T d2 = x(vh, 2) - bb_upper[2];
+
+            if (d0 * d0 + d1 * d1 < std::numeric_limits<T>::min()) {
+                is_bc(vh) = 1;
+            }
+
+            // top left
+            d0 = x(vh, 0) - bb_lower[0];
+
+            if (d0 * d0 + d1 * d1 < std::numeric_limits<T>::min()) {
+                is_bc(vh) = 1;
+            }
         });
 
+#if USE_POLYSCOPE
+    // add BC to polyscope
+    is_bc.move(DEVICE, HOST);
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("BC", is_bc);
+#endif
 
-    // add energy term
+    // calc rest length
+    rx.run_query_kernel<Op::EV, blockThreads>(
+        [=] __device__(const EdgeHandle& eh, const VertexIterator& iter) {
+            Eigen::Vector3<T> a = x.to_eigen<3>(iter[0]);
+            Eigen::Vector3<T> b = x.to_eigen<3>(iter[1]);
+
+            rest_l(eh) = (a - b).squaredNorm();
+        });
+
+    // apply initial stretch along the y direction
+    // rx.for_each_vertex(
+    //    DEVICE,
+    //    [initial_stretch, x, x_tilde] __device__(const VertexHandle& vh) {
+    //        x(vh, 1) = x(vh, 1) * initial_stretch;
+    //    });
+
+
+    // add inertial energy term
+    T half_mass = T(0.5) * mass;
+    problem.template add_term<Op::V, true>(
+        [x, half_mass] __device__(const auto& vh, auto& obj) mutable {
+            using ActiveT = ACTIVE_TYPE(vh);
+
+            Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, obj);
+
+            Eigen::Vector3<T> xx = x.to_eigen<3>(vh);
+
+            Eigen::Vector3<ActiveT> l = xx - x_tilda;
+
+            ActiveT E = half_mass * l.squaredNorm();
+
+            return E;
+        });
+
+    // add elastic potential energy term
+    T half_k_times_h_sq = T(0.5) * k * h * h;
     problem.template add_term<Op::EV, true>(
-        [rest_l] __device__(
+        [rest_l, half_k_times_h_sq] __device__(
             const auto& eh, const auto& iter, auto& obj) mutable {
             assert(iter[0].is_valid() && iter[1].is_valid());
 
@@ -49,62 +124,152 @@ void mass_spring(RXMeshStatic& rx)
 
             using ActiveT = ACTIVE_TYPE(eh);
 
-            // tangent vectors at the triangle three vertices (a,b,c)
-            Eigen::Vector3<ActiveT> a = iter_val<ActiveT, 3>(eh, iter, obj, 0);
-            Eigen::Vector3<ActiveT> b = iter_val<ActiveT, 3>(eh, iter, obj, 1);
+            const Eigen::Vector3<ActiveT> a =
+                iter_val<ActiveT, 3>(eh, iter, obj, 0);
+            const Eigen::Vector3<ActiveT> b =
+                iter_val<ActiveT, 3>(eh, iter, obj, 1);
 
-            ActiveT l = (a - b).norm();
+            const T r = rest_l(eh);
 
-            T r = rest_l(eh);
+            const Eigen::Vector3<ActiveT> diff = a - b;
 
-            ActiveT E = T(0.5) * (l - r) * (l - r);
+            const ActiveT ratio = diff.squaredNorm() / r;
+
+            const ActiveT s = (ratio - T(1.0));
+
+            const ActiveT E = half_k_times_h_sq * r * s * s;
 
             return E;
         });
 
-    T convergence_eps = 1e-1;
 
-    int num_iterations = 1000;
-    int iter;
+    // add gravity energy
+    Eigen::Vector3<T> g(0.0, -9.81, 0.0);
+    const T           neg_mass_times_h_sq = -mass * h * h;
+    problem.template add_term<Op::V, true>(
+        [x, neg_mass_times_h_sq, g] __device__(const auto& vh,
+                                               auto&       obj) mutable {
+            using ActiveT = ACTIVE_TYPE(vh);
 
-    GPUTimer timer;
-    timer.start();
+            Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, obj);
 
-    for (iter = 0; iter < num_iterations; ++iter) {
+            ActiveT E = neg_mass_times_h_sq * x_tilda.dot(g);
 
-        problem.objective->reset(0, DEVICE);
+            return E;
+        });
 
+    int time_step = 0;
+
+    Timers<GPUTimer> timer;
+    timer.add("Step");
+
+
+    auto step_forward = [&]() {
+        // update x_tilde
+        timer.start("Step");
+        rx.for_each_vertex(
+            DEVICE,
+            [x, x_tilde, velocity, h] __device__(VertexHandle vh) mutable {
+                for (int i = 0; i < 3; ++i) {
+                    x_tilde(vh, i) = x(vh, i) + h * velocity(vh, i);
+                }
+            });
+
+        // evaluate energy
         problem.eval_terms();
 
         T f = problem.get_current_loss();
 
-        // RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
-        //
-        // newton_solver.newton_direction();
-        //
-        //
-        // if (0.5f * problem.grad.dot(newton_solver.dir) < convergence_eps) {
-        //     break;
-        // }
-        //
-        //
-        // newton_solver.line_search();
-    }
+        RXMESH_INFO("Time step: {}, Energy: {}", time_step, f);
 
-    timer.stop();
+        // apply bc
+        newton_solver.apply_bc(is_bc);
+
+        // get newton direction
+        newton_solver.newton_direction();
 
 
-    RXMESH_INFO("#Faces: {}, #Vertices: {}",
-                rx.get_num_faces(),
-                rx.get_num_vertices());
+        // residual is abs_max(newton_dir)/ h
+        T residual = newton_solver.dir.abs_max() / h;
+
+        int iter = 0;
+        if (residual > tol) {
+            newton_solver.line_search();
+
+            // evaluate energy
+            problem.eval_terms();
+
+            // apply bc
+            newton_solver.apply_bc(is_bc);
+
+            // get newton direction
+            newton_solver.newton_direction();
+
+            // residual is abs_max(newton_dir)/ h
+            residual = newton_solver.dir.abs_max() / h;
+
+            iter++;
+        }
+
+        //  update velocity
+        rx.for_each_vertex(
+            DEVICE,
+            [x, x_tilde, velocity, inv_h] __device__(VertexHandle vh) mutable {
+                for (int i = 0; i < 3; ++i) {
+                    velocity(vh, i) = inv_h * (x_tilde(vh, i) - x(vh, i));
+
+                    x(vh, i) = x_tilde(vh, i);
+                }
+            });
+
+        time_step++;
+        timer.stop("Step");
+    };
+
+#if USE_POLYSCOPE
+    bool is_running = false;
+
+    auto ps_callback = [&]() mutable {
+        auto step_and_update = [&]() {
+            step_forward();
+            x_tilde.move(DEVICE, HOST);
+            velocity.move(DEVICE, HOST);
+            auto vel = rx.get_polyscope_mesh()->addVertexVectorQuantity(
+                "Velocity", velocity);
+            rx.get_polyscope_mesh()->updateVertexPositions(x_tilde);
+        };
+        if (ImGui::Button("Step")) {
+            step_and_update();
+        }
+
+
+        ImGui::SameLine();
+        if (ImGui::Button("Start")) {
+            is_running = true;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Pause")) {
+            is_running = false;
+        }
+
+        if (is_running) {
+            step_and_update();
+        }
+    };
+
+    polyscope::state::userCallback = ps_callback;
+    polyscope::show();
+#endif
+
+
     RXMESH_INFO(
-        "Mass-spring: iterations ={}, time= {} (ms), "
-        "timer/iteration= {} ms/iter",
-        iter,
-        timer.elapsed_millis(),
-        timer.elapsed_millis() / float(num_iterations));
-
-    // polyscope::show();
+        "Mass-spring: #time_step ={}, time= {} (ms), "
+        "timer/iteration= {} ms/iter, solve time = {} (ms)",
+        time_step,
+        timer.elapsed_millis("Step"),
+        timer.elapsed_millis("Step") / float(time_step),
+        newton_solver.solve_time);
 }
 
 int main(int argc, char** argv)
@@ -113,16 +278,32 @@ int main(int argc, char** argv)
 
     using T = float;
 
-    std::vector<std::vector<float>>    verts;
+    std::vector<std::vector<T>>        verts;
     std::vector<std::vector<uint32_t>> fv;
-    if (argc == 3) {
-        create_plane(verts, fv, atoi(argv[1]), atoi(argv[2]));
-    } else {
-        create_plane(verts, fv, 100, 30);
+
+    int n = 16;
+
+    if (argc == 2) {
+        n = atoi(argv[1]);
     }
+
+    T dx = 1 / T(n - 1);
+
+    create_plane(verts, fv, n, n, 2, dx, true);
+
+    for (int i = 0; i < verts.size(); ++i) {
+        verts[i][2] += (1 - verts[i][1]);
+    }
+
     RXMeshStatic rx(fv);
     rx.add_vertex_coordinates(verts, "Coords");
 
+    RXMESH_INFO(
+        "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
+
+    polyscope::options::groundPlaneHeightFactor = 0.8;
+    polyscope::options::groundPlaneMode =
+        polyscope::GroundPlaneMode::ShadowOnly;
 
     mass_spring<T>(rx);
 }

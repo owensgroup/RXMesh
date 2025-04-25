@@ -69,6 +69,17 @@ struct HessianSparseMatrix : public SparseMatrix<T>
         return SparseMatrix<T>::operator()(r_id, c_id);
     }
 
+    __device__ __host__ const T& operator()(const IndexT& row_id,
+                                            const IndexT& col_id) const
+    {
+        return SparseMatrix<T>::operator()(row_id, col_id);
+    }
+
+    __device__ __host__ T& operator()(const IndexT& row_id,
+                                      const IndexT& col_id)
+    {
+        return SparseMatrix<T>::operator()(row_id, col_id);
+    }
 
     // delete the functions that access the matrix using only the VertexHandle
     // since with the Hessian, we should also have the local index (the index

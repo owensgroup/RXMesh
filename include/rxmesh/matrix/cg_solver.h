@@ -9,16 +9,16 @@ namespace rxmesh {
 /**
  * @brief (Un-preconditioned) CG
  */
-template <typename T>
-struct CGSolver : public IterativeSolver<T, DenseMatrix<T, Eigen::ColMajor>>
+template <typename T, int DenseMatOrder = Eigen::ColMajor>
+struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
 {
-    using DenseMatT = DenseMatrix<T, Eigen::ColMajor>;
+    using DenseMatT = DenseMatrix<T, DenseMatOrder>;
 
     CGSolver(SparseMatrix<T>& sys,
              int              unknown_dim,  // num rhs vectors
              int              max_iter,
              T                abs_tol = 1e-6,
-             T                rel_tol = 1e-6,
+             T                rel_tol = 0.0,
              int reset_residual_freq  = std::numeric_limits<int>::max())
         : IterativeSolver<T, DenseMatT>(max_iter, abs_tol, rel_tol),
           A(&sys),
@@ -29,21 +29,26 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, Eigen::ColMajor>>
           m_reset_residual_freq(reset_residual_freq),
           S(DenseMatT(sys.rows(), unknown_dim, DEVICE)),
           P(DenseMatT(sys.rows(), unknown_dim, DEVICE)),
-          R(DenseMatT(sys.rows(), unknown_dim, DEVICE))
+          R(DenseMatT(sys.rows(), unknown_dim, DEVICE)),
+          m_first_pre_solve(true)
     {
         A->alloc_multiply_buffer(S, P);
     }
 
-    virtual void pre_solve(DenseMatT&       X,
-                           const DenseMatT& B,
+    virtual void pre_solve(const DenseMatT& B,
+                           DenseMatT&       X,
                            cudaStream_t     stream = NULL) override
     {
-        S.reset(0.0, rxmesh::DEVICE, stream);
-        P.reset(0.0, rxmesh::DEVICE, stream);
-        R.reset(0.0, rxmesh::DEVICE, stream);
+        if (m_first_pre_solve) {
+            m_first_pre_solve = false;
+            S.reset(0.0, rxmesh::DEVICE, stream);
+            P.reset(0.0, rxmesh::DEVICE, stream);
+            R.reset(0.0, rxmesh::DEVICE, stream);
+        }
 
         // init S
         A->multiply(X, S, false, false, 1, 0, stream);
+        // A->multiply(X.data(), S.data(), stream);
 
         init_PR(B, S, R, P, stream);
 
@@ -51,10 +56,33 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, Eigen::ColMajor>>
         delta_new *= delta_new;
     }
 
-    virtual void solve(DenseMatT&       X,
-                       const DenseMatT& B,
+    virtual void solve(const DenseMatT& B,
+                       DenseMatT&       X,
                        cudaStream_t     stream = NULL) override
     {
+        if (m_first_pre_solve) {
+            RXMESH_ERROR(
+                "CGSolver::solver pre_solve() method should be called "
+                "before calling the solve() method. Returning without solving "
+                "anything.");
+            return;
+        }
+
+        if (A->cols() != X.rows() || A->rows() != B.rows() ||
+            X.cols() != B.cols()) {
+            RXMESH_ERROR(
+                "CGSolver::solver mismatch in the input/output size. A ({}, "
+                "{}), X ({}, {}), B ({}, {})",
+                A->rows(),
+                A->cols(),
+                X.rows(),
+                X.cols(),
+                B.rows(),
+                B.cols());
+            return;
+        }
+
+
         m_start_residual = delta_new;
 
         m_iter_taken = 0;
@@ -204,6 +232,7 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, Eigen::ColMajor>>
     DenseMatT        S, P, R;
     T                alpha, beta, delta_new, delta_old;
     int              m_reset_residual_freq;
+    bool             m_first_pre_solve;
 };
 
 }  // namespace rxmesh

@@ -9,33 +9,36 @@ namespace rxmesh {
 /**
  * @brief Jacobi-preconditioned CG
  */
-template <typename T>
-struct PCGSolver : public CGSolver<T>
+template <typename T, int DenseMatOrder = Eigen::ColMajor>
+struct PCGSolver : public CGSolver<T, DenseMatOrder>
 {
-    using DenseMatT = DenseMatrix<T, Eigen::ColMajor>;
+    using DenseMatT = DenseMatrix<T, DenseMatOrder>;
 
     PCGSolver(SparseMatrix<T>& sys,
               int              unknown_dim,  // num rhs vectors
               int              max_iter,
               T                abs_tol = 1e-6,
-              T                rel_tol = 1e-6,
+              T                rel_tol = 0.0,
               int reset_residual_freq  = std::numeric_limits<int>::max())
-        : CGSolver<T>(sys,
-                      unknown_dim,
-                      max_iter,
-                      abs_tol,
-                      rel_tol,
-                      reset_residual_freq)
+        : CGSolver<T, DenseMatOrder>(sys,
+                                     unknown_dim,
+                                     max_iter,
+                                     abs_tol,
+                                     rel_tol,
+                                     reset_residual_freq)
     {
     }
 
-    virtual void pre_solve(DenseMatT&       X,
-                           const DenseMatT& B,
+    virtual void pre_solve(const DenseMatT& B,
+                           DenseMatT&       X,
                            cudaStream_t     stream = NULL) override
     {
-        S.reset(0.0, rxmesh::DEVICE, stream);
-        P.reset(0.0, rxmesh::DEVICE, stream);
-        R.reset(0.0, rxmesh::DEVICE, stream);
+        if (m_first_pre_solve) {
+            m_first_pre_solve = false;
+            S.reset(0.0, rxmesh::DEVICE, stream);
+            P.reset(0.0, rxmesh::DEVICE, stream);
+            R.reset(0.0, rxmesh::DEVICE, stream);
+        }
 
         // init S
         // S = Ax
@@ -52,10 +55,32 @@ struct PCGSolver : public CGSolver<T>
         delta_new = R.dot(P, false, stream);
     }
 
-    virtual void solve(DenseMatT&       X,
-                       const DenseMatT& B,
+    virtual void solve(const DenseMatT& B,
+                       DenseMatT&       X,
                        cudaStream_t     stream = NULL) override
     {
+        if (m_first_pre_solve) {
+            RXMESH_ERROR(
+                "PCGSolver::solver pre_solve() method should be called "
+                "before calling the solve() method. Returning without solving "
+                "anything.");
+            return;
+        }
+
+        if (A->cols() != X.rows() || A->rows() != B.rows() ||
+            X.cols() != B.cols()) {
+            RXMESH_ERROR(
+                "CGSolver::solver mismatch in the input/output size. A ({}, "
+                "{}), X ({}, {}), B ({}, {})",
+                A->rows(),
+                A->cols(),
+                X.rows(),
+                X.cols(),
+                B.rows(),
+                B.cols());
+            return;
+        }
+        
         m_start_residual = delta_new;
 
         m_iter_taken = 0;

@@ -302,6 +302,41 @@ struct DenseMatrix
         return this->operator()(get_row_id(handle), col);
     }
 
+
+    /**
+     * @brief reinterprets the underlying flat storage with a new shape without
+     * copying or modifying the data. The matrix remains in the same memory
+     * layout (row-major or column-major), and element ordering is preserved.
+     * The product of the new_num_rows*new_num_cols should match the product
+     * of the current num_rows*num_cols
+     * @param new_num_rows The new number of rows
+     * @param new_num_cols The new number of columns
+     * @return
+     */
+    __host__ __device__ void reshape(IndexT new_num_rows, IndexT new_num_cols)
+    {
+        assert(m_num_rows * m_num_cols == new_num_rows * new_num_cols &&
+               "Reshape must preserve total number of elements.");
+
+        m_num_rows = new_num_rows;
+        m_num_cols = new_num_cols;
+
+        // make sure that cuSparse knows about these changes
+        // just in case we used this matrix to multiply with a sparse matrix
+        if (std::is_floating_point_v<T> || std::is_same_v<T, int> ||
+            std::is_same_v<T, cuComplex> ||
+            std::is_same_v<T, cuDoubleComplex>) {
+            CUSPARSE_ERROR(cusparseCreateDnMat(&m_dendescr,
+                                               m_num_rows,
+                                               m_num_cols,
+                                               m_num_rows,  // leading dim
+                                               m_d_val,
+                                               cuda_type<T>(),
+                                               CUSPARSE_ORDER_COL));
+        }
+    }
+
+
     /**
      * @brief compute the sum of the absolute value of all elements in the
      * matrix. For complex types (cuComples and cuDoubleComplex), we sum the
@@ -311,6 +346,7 @@ struct DenseMatrix
      * @param stream
      * @return
      */
+
     __host__ BaseTypeT<T> abs_sum(cudaStream_t stream = NULL)
     {
         CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
@@ -551,6 +587,73 @@ struct DenseMatrix
         }
 
         return result;
+    }
+
+
+    /**
+     * @brief return the absolute max value in the matrix
+     */
+    __host__ T abs_max(cudaStream_t stream = NULL)
+    {
+        CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
+        if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double>) {
+            RXMESH_ERROR(
+                "DenseMatrix::max() only float and double are supported for "
+                "this function!");
+            return T(0);
+        }
+
+        IndexT index;
+        if constexpr (std::is_same_v<T, float>) {
+            CUBLAS_ERROR(cublasIsamax(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &index));
+        }
+
+        if constexpr (std::is_same_v<T, double>) {
+            CUBLAS_ERROR(cublasIdamax(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &index));
+        }
+
+        index -= 1;
+
+        T ret = 0;
+
+        CUDA_ERROR(cudaMemcpyAsync(
+            &ret, m_d_val + index, sizeof(T), cudaMemcpyDeviceToHost));
+
+        return std::abs(ret);
+    }
+
+    /**
+     * @brief return the absolute min value in the matrix
+     */
+    __host__ T abs_min(cudaStream_t stream = NULL)
+    {
+        CUBLAS_ERROR(cublasSetStream(m_cublas_handle, stream));
+        if constexpr (!std::is_same_v<T, float> && !std::is_same_v<T, double>) {
+            RXMESH_ERROR(
+                "DenseMatrix::min() only float and double are supported for "
+                "this function!");
+            return T(0);
+        }
+
+        IndexT index;
+        if constexpr (std::is_same_v<T, float>) {
+            CUBLAS_ERROR(cublasIsamin(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &index));
+        }
+
+        if constexpr (std::is_same_v<T, double>) {
+            CUBLAS_ERROR(cublasIdamin(
+                m_cublas_handle, rows() * cols(), m_d_val, 1, &index));
+        }
+
+        T ret = 0;
+
+        CUDA_ERROR(cudaMemcpyAsync(
+            &ret, m_d_val + index, sizeof(T), cudaMemcpyDeviceToHost));
+
+        return std::abs(ret);
     }
 
 

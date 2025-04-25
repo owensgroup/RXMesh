@@ -34,7 +34,7 @@ inline void add_term(ProblemT& problem)
         });
 }
 
-TEST(DiffAttribute, SmoothingGD)
+TEST(Diff, SmoothingGD)
 {
     using namespace rxmesh;
 
@@ -93,7 +93,7 @@ TEST(DiffAttribute, SmoothingGD)
     // #endif
 }
 
-TEST(DiffAttribute, SmoothingNewton)
+TEST(Diff, SmoothingNewton)
 {
     using namespace rxmesh;
 

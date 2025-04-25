@@ -7,6 +7,21 @@
 #include "rxmesh/diff/diff_scalar_problem.h"
 #include "rxmesh/diff/newton_solver.h"
 
+
+struct arg
+{
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
+    std::string output_folder = STRINGIFY(OUTPUT_DIR);
+    std::string solver        = "chol";
+    uint32_t    device_id     = 0;
+    float       cg_abs_tol    = 1e-6;
+    float       cg_rel_tol    = 0.0;
+    uint32_t    cg_max_iter   = 10;
+    char**      argv;
+    int         argc;
+} Arg;
+
+
 using namespace rxmesh;
 
 
@@ -33,24 +48,12 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
     }
 }
 
-template <typename T>
-void parameterize(RXMeshStatic& rx)
+template <typename T, typename ProblemT, typename SolverT>
+void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 {
-    constexpr int VariableDim = 2;
-
-    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
+    NetwtonSolver newton_solver(problem, &solver);
 
     auto coordinates = *rx.get_input_vertex_coordinates();
-
-    ProblemT problem(rx);
-
-    using HessMatT = typename ProblemT::HessMatT;
-
-    // LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
-    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
-
-
-    NetwtonSolver newton_solver(problem, &solver);
 
     // TODO this is a AoS and should be converted into SoA
     auto rest_shape =
@@ -208,12 +211,74 @@ int main(int argc, char** argv)
 {
     Log::init(spdlog::level::trace);
 
-    const uint32_t device_id = 0;
-    cuda_query(device_id);
-
     using T = float;
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
+    if (argc > 1) {
+        if (cmd_option_exists(argv, argc + argv, "-h")) {
+            // clang-format off
+            RXMESH_INFO("\nUsage: Param.exe < -option X>\n"
+                        " -h:                 Display this massage and exit\n"
+                        " -input:             Input file. Input file should be under the input/ subdirectory\n"
+                        "                     Default is {} \n"
+                        "                     Hint: Only accept OBJ files\n"
+                        " -o:                 JSON file output folder. Default is {} \n"
+                        " -solver:            Solver to use. Options are cg, pcg, chol, or lu. Default is {}\n"
+                        " -abs_eps:           Iterative solvers absolute tolerance. Default is {}\n"
+                        " -rel_eps:           Iterative solvers relative tolerance. Default is {}\n"
+                        " -cg_max_iter:       Maximum number of iterations for iterative solvers. Default is {}\n"
+                        " -device_id:         GPU device ID. Default is {}",
+            Arg.obj_file_name, Arg.output_folder,  Arg.solver, Arg.cg_abs_tol, Arg.cg_rel_tol, Arg.cg_max_iter, Arg.device_id);
+            // clang-format on
+            exit(EXIT_SUCCESS);
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-input")) {
+            Arg.obj_file_name =
+                std::string(get_cmd_option(argv, argv + argc, "-input"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-o")) {
+            Arg.output_folder =
+                std::string(get_cmd_option(argv, argv + argc, "-o"));
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-cg_max_iter")) {
+            Arg.cg_max_iter =
+                std::atoi(get_cmd_option(argv, argv + argc, "-cg_max_iter"));
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-abs_eps")) {
+            Arg.cg_abs_tol =
+                std::atof(get_cmd_option(argv, argv + argc, "-abs_eps"));
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-rel_eps")) {
+            Arg.cg_rel_tol =
+                std::atof(get_cmd_option(argv, argv + argc, "-rel_eps"));
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
+            Arg.device_id =
+                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-solver")) {
+            Arg.solver =
+                std::string(get_cmd_option(argv, argv + argc, "-solver"));
+        }
+    }
+
+    RXMESH_INFO("input= {}", Arg.obj_file_name);
+    RXMESH_INFO("output_folder= {}", Arg.output_folder);
+    RXMESH_INFO("solver= {}", Arg.solver);
+    RXMESH_INFO("cg_max_iter= {}", Arg.cg_max_iter);
+    RXMESH_INFO("abs_eps= {0:f}", Arg.cg_abs_tol);
+    RXMESH_INFO("rel_eps= {0:f}", Arg.cg_rel_tol);
+    RXMESH_INFO("device_id= {}", Arg.device_id);
+
+
+    cuda_query(Arg.device_id);
+
+    RXMeshStatic rx(Arg.obj_file_name);
 
     if (rx.is_closed()) {
         RXMESH_ERROR(
@@ -221,5 +286,28 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
 
-    parameterize<T>(rx);
+    constexpr int VariableDim = 2;
+
+    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
+
+    ProblemT problem(rx);
+
+    using HessMatT      = typename ProblemT::HessMatT;
+    constexpr int Order = ProblemT::DenseMatT::OrderT;
+
+    if (Arg.solver == "chol") {
+        CholeskySolver<HessMatT, Order> solver(&problem.hess);
+        parameterize<T>(rx, problem, solver);
+    } else if (Arg.solver == "lu") {
+        CholeskySolver<HessMatT, Order> solver(&problem.hess);
+        parameterize<T>(rx, problem, solver);
+    } else if (Arg.solver == "cg") {
+        CGSolver<T, Order> solver(
+            problem.hess, 1, Arg.cg_max_iter, Arg.cg_abs_tol, Arg.cg_rel_tol);
+        parameterize<T>(rx, problem, solver);
+    } else if (Arg.solver == "pcg") {
+        PCGSolver<T, Order> solver(
+            problem.hess, 1, Arg.cg_max_iter, Arg.cg_abs_tol, Arg.cg_rel_tol);
+        parameterize<T>(rx, problem, solver);
+    }
 }

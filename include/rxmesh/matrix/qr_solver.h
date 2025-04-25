@@ -14,7 +14,8 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
         : DirectSolver<SpMatT, DenseMatOrder>(mat, perm),
           m_internalDataInBytes(0),
           m_workspaceInBytes(0),
-          m_solver_buffer(nullptr)
+          m_solver_buffer(nullptr),
+          m_first_pre_solve(true)
     {
         CUSOLVER_ERROR(cusolverSpCreateCsrqrInfo(&m_qr_info));
     }
@@ -27,11 +28,19 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
 
     virtual void pre_solve(RXMeshStatic& rx) override
     {
-        this->permute_alloc();
-        this->permute(rx);
-        analyze_pattern();
-        post_analyze_alloc();
-        factorize();
+        if (m_first_pre_solve) {
+            m_first_pre_solve = false;
+            this->permute_alloc();
+            this->permute(rx);
+            this->premute_value_ptr();
+            analyze_pattern();
+            post_analyze_alloc();
+            factorize();
+        } else {
+            RXMESH_WARN("QRSolver::pre_solve calling pre_solve twice in QR!");
+            this->premute_value_ptr();
+            factorize();
+        }
     }
 
 
@@ -39,7 +48,18 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
                        DenseMatrix<Type, DenseMatOrder>& X_mat,
                        cudaStream_t                      stream = NULL) override
     {
+        if (m_first_pre_solve) {
+            RXMESH_ERROR(
+                "QRSolver::solver pre_solve() method should be called "
+                "before calling the solve() method. Returning without solving "
+                "anything.");
+            return;
+        }
+
         CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
+
+        // TODO this could be handled more cleanly using reshape operator on the
+        // user side
 
         // the case where we solve for multiple rhs
         if (m_mat->cols() == X_mat.rows() && m_mat->rows() == B_mat.rows() &&
@@ -255,6 +275,7 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
      */
     virtual void factorize()
     {
+        m_first_pre_solve = false;
 
         if constexpr (std::is_same_v<T, float>) {
             CUSOLVER_ERROR(cusolverSpScsrqrFactor(m_cusolver_sphandle,
@@ -490,6 +511,8 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
     size_t m_workspaceInBytes;
 
     void* m_solver_buffer;
+
+    bool m_first_pre_solve;
 };
 
 }  // namespace rxmesh

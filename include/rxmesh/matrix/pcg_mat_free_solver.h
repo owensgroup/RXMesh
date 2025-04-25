@@ -36,8 +36,8 @@ struct PCGMatFreeSolver : public CGMatFreeSolver<T, HandleT>
     {
     }
 
-    virtual void pre_solve(AttributeT&       X,
-                           const AttributeT& B,
+    virtual void pre_solve(const AttributeT& B,
+                           AttributeT&       X,
                            cudaStream_t      stream = NULL) override
     {
         S.reset(0.0, rxmesh::DEVICE, stream);
@@ -54,14 +54,14 @@ struct PCGMatFreeSolver : public CGMatFreeSolver<T, HandleT>
 
         // init P
         // P = inv(M) * R
-        m_precond_mat_vec(R, P, stream);  
+        m_precond_mat_vec(R, P, stream);
 
 
         delta_new = std::abs(reduce_handle.dot(R, P, INVALID32, stream));
     }
 
-    virtual void solve(AttributeT&       X,
-                       const AttributeT& B,
+    virtual void solve(const AttributeT& B,
+                       AttributeT&       X,
                        cudaStream_t      stream = NULL) override
     {
         m_start_residual = delta_new;
@@ -91,7 +91,7 @@ struct PCGMatFreeSolver : public CGMatFreeSolver<T, HandleT>
             }
 
             // S = inv(M) *R
-            m_precond_mat_vec(R, S, stream);  
+            m_precond_mat_vec(R, S, stream);
 
             // delta_old = delta_new
             CUDA_ERROR(cudaStreamSynchronize(stream));
