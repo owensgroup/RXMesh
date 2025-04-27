@@ -29,8 +29,7 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
           m_reset_residual_freq(reset_residual_freq),
           S(DenseMatT(sys.rows(), unknown_dim, DEVICE)),
           P(DenseMatT(sys.rows(), unknown_dim, DEVICE)),
-          R(DenseMatT(sys.rows(), unknown_dim, DEVICE)),
-          m_first_pre_solve(true)
+          R(DenseMatT(sys.rows(), unknown_dim, DEVICE))
     {
         A->alloc_multiply_buffer(S, P);
     }
@@ -39,17 +38,15 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
                            DenseMatT&       X,
                            cudaStream_t     stream = NULL) override
     {
-        if (m_first_pre_solve) {
-            m_first_pre_solve = false;
-            S.reset(0.0, rxmesh::DEVICE, stream);
-            P.reset(0.0, rxmesh::DEVICE, stream);
-            R.reset(0.0, rxmesh::DEVICE, stream);
-        }
+
+        S.reset(0.0, rxmesh::DEVICE, stream);
+        P.reset(0.0, rxmesh::DEVICE, stream);
+        R.reset(0.0, rxmesh::DEVICE, stream);
+
 
         // init S
         A->multiply(X, S, false, false, 1, 0, stream);
-        // A->multiply(X.data(), S.data(), stream);
-
+        
         init_PR(B, S, R, P, stream);
 
         delta_new = R.norm2(stream);
@@ -60,14 +57,6 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
                        DenseMatT&       X,
                        cudaStream_t     stream = NULL) override
     {
-        if (m_first_pre_solve) {
-            RXMESH_ERROR(
-                "CGSolver::solver pre_solve() method should be called "
-                "before calling the solve() method. Returning without solving "
-                "anything.");
-            return;
-        }
-
         if (A->cols() != X.rows() || A->rows() != B.rows() ||
             X.cols() != B.cols()) {
             RXMESH_ERROR(
@@ -232,7 +221,6 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
     DenseMatT        S, P, R;
     T                alpha, beta, delta_new, delta_old;
     int              m_reset_residual_freq;
-    bool             m_first_pre_solve;
 };
 
 }  // namespace rxmesh

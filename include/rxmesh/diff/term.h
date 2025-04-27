@@ -15,7 +15,9 @@
 namespace rxmesh {
 
 /**
- * @brief
+ * @brief pure virtual class used as interface for all energy terms (without
+ * specifying the which type of mesh elements it is specified on, number of
+ * variables). This is used to store the all energies inside DiffScalarProblem
  */
 template <typename T, typename ObjHandleT>
 struct Term
@@ -28,7 +30,8 @@ struct Term
 };
 
 /**
- * @brief
+ * @brief concrete class that defines energy terms for specific mesh type,
+ * specific number of variable, etc.
  */
 template <typename LossHandleT,
           typename ObjHandleT,
@@ -42,9 +45,7 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
 {
     using T = typename ScalarT::PassiveType;
 
-    /**
-     * @brief
-     */
+
     TemplatedTerm(RXMeshStatic&                        rx,
                   LambdaT                              t,
                   bool                                 oreinted,
@@ -65,46 +66,54 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
 
         rx.prepare_launch_box({op},
                               lb_active,
-                              (void*)detail::diff_kernel<blockThreads,
-                                                         LossHandleT,
-                                                         ObjHandleT,
-                                                         op,
-                                                         ScalarT,
-                                                         true,
-                                                         ProjectHess,
-                                                         VariableDim,
-                                                         LambdaT>,
+                              (void*)detail::diff_kernel_active<blockThreads,
+                                                                LossHandleT,
+                                                                ObjHandleT,
+                                                                op,
+                                                                ScalarT,
+                                                                ProjectHess,
+                                                                VariableDim,
+                                                                LambdaT>,
                               oreinted);
 
         rx.prepare_launch_box({op},
                               lb_passive,
-                              (void*)detail::diff_kernel<blockThreads,
-                                                         LossHandleT,
-                                                         ObjHandleT,
-                                                         op,
-                                                         ScalarT,
-                                                         false,
-                                                         ProjectHess,
-                                                         VariableDim,
-                                                         LambdaT>,
+                              (void*)detail::diff_kernel_passive<blockThreads,
+                                                                 LossHandleT,
+                                                                 ObjHandleT,
+                                                                 op,
+                                                                 ScalarT,
+                                                                 LambdaT>,
+                              oreinted);
+
+
+        rx.prepare_launch_box({op},
+                              lb_active_matvec,
+                              (void*)detail::hess_matvec_kernel<blockThreads,
+                                                                LossHandleT,
+                                                                ObjHandleT,
+                                                                op,
+                                                                ScalarT,
+                                                                ProjectHess,
+                                                                VariableDim,
+                                                                LambdaT>,
                               oreinted);
     }
 
     /**
-     * @brief
+     * @brief Evaluate the energy term using active/differentiable type
      */
     void eval_active(Attribute<T, ObjHandleT>& obj, cudaStream_t stream)
     {
         rx.run_kernel(lb_active,
-                      detail::diff_kernel<blockThreads,
-                                          LossHandleT,
-                                          ObjHandleT,
-                                          op,
-                                          ScalarT,
-                                          true,
-                                          ProjectHess,
-                                          VariableDim,
-                                          LambdaT>,
+                      detail::diff_kernel_active<blockThreads,
+                                                 LossHandleT,
+                                                 ObjHandleT,
+                                                 op,
+                                                 ScalarT,
+                                                 ProjectHess,
+                                                 VariableDim,
+                                                 LambdaT>,
                       stream,
                       grad,
                       hess,
@@ -114,24 +123,50 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                       term);
     }
 
+
     /**
-     * @brief
+     * @brief Evaluate the energy term using active/differentiable type but
+     * without constructing the Hessian. Instead, we do matvec with the Hessian
+     */
+    void eval_active_matvec(Attribute<T, ObjHandleT>&              obj,
+                            bool                                   store_grad,
+                            const DenseMatrix<T, Eigen::RowMajor>& input,
+                            DenseMatrix<T, Eigen::RowMajor>&       output,
+                            cudaStream_t                           stream)
+    {
+        rx.run_kernel(lb_active,
+                      detail::hess_matvec_kernel<blockThreads,
+                                                 LossHandleT,
+                                                 ObjHandleT,
+                                                 op,
+                                                 ScalarT,
+                                                 ProjectHess,
+                                                 VariableDim,
+                                                 LambdaT>,
+                      stream,
+                      grad,
+                      input,
+                      output,
+                      *loss,
+                      obj,
+                      store_grad,
+                      oreinted,
+                      term);
+    }
+
+    /**
+     * @brief Evaluate the energy term using non-active/non-differentiable type
      */
     void eval_passive(Attribute<T, ObjHandleT>& obj, cudaStream_t stream)
     {
         rx.run_kernel(lb_passive,
-                      detail::diff_kernel<blockThreads,
-                                          LossHandleT,
-                                          ObjHandleT,
-                                          op,
-                                          ScalarT,
-                                          false,
-                                          ProjectHess,
-                                          VariableDim,
-                                          LambdaT>,
+                      detail::diff_kernel_passive<blockThreads,
+                                                  LossHandleT,
+                                                  ObjHandleT,
+                                                  op,
+                                                  ScalarT,
+                                                  LambdaT>,
                       stream,
-                      grad,
-                      hess,
                       *loss,
                       obj,
                       oreinted,
@@ -139,7 +174,8 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
     }
 
     /**
-     * @brief
+     * @brief get the current loss of the energy. Should be called evaluating
+     * the term using active type
      */
     T get_loss(cudaStream_t stream = NULL)
     {
@@ -152,6 +188,8 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
     std::shared_ptr<ReduceHandle<T, LossHandleT>> reducer;
     LaunchBox<blockThreads>                       lb_active;
     LaunchBox<blockThreads>                       lb_passive;
+    LaunchBox<blockThreads>                       lb_active_matvec;
+
 
     bool oreinted;
 

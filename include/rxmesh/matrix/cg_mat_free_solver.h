@@ -2,6 +2,7 @@
 #include "rxmesh/matrix/iterative_solver.h"
 
 #include "rxmesh/attribute.h"
+#include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/reduce_handle.h"
 
 namespace rxmesh {

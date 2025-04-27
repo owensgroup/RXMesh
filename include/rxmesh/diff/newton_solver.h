@@ -125,6 +125,48 @@ struct NetwtonSolver
             problem.grad.reshape(r, c);
             dir.reshape(r, c);
         }
+
+        // Iterative (CG/PCG)
+        if constexpr (std::is_base_of_v<CGSolver<T, DenseMatT::OrderT>,
+                                        SolverT>) {
+
+            int r = problem.grad.rows();
+            int c = problem.grad.cols();
+
+
+            auto mat_vec = [&](const VertexAttribute<T>& in,
+                               VertexAttribute<T>&       out,
+                               cudaStream_t              stream) {
+                //rx.run_kernel(lb,
+                //              matvec<T, blockThreads>,
+                //              stream,
+                //              *input_coord,
+                //              in,
+                //              out,
+                //              Arg.use_uniform_laplace,
+                //              Arg.time_step);
+            };
+
+            GPUTimer timer;
+            timer.start();
+
+            problem.grad.reshape(r * c, 1);
+            dir.reshape(r * c, 1);
+
+            // TODO
+
+            timer.stop();
+            solve_time += timer.elapsed_millis();
+
+            RXMESH_TRACE(
+                "Init residual = {}, final residual {}, #Iter taken= {}",
+                solver->start_residual(),
+                solver->final_residual(),
+                solver->iter_taken());
+
+            problem.grad.reshape(r, c);
+            dir.reshape(r, c);
+        }
     }
 
 
