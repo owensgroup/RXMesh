@@ -45,8 +45,8 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
 
 
         // init S
-        A->multiply(X, S, false, false, 1, 0, stream);
-        
+        mat_vec(X, S, stream);
+
         init_PR(B, S, R, P, stream);
 
         delta_new = R.norm2(stream);
@@ -57,28 +57,13 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
                        DenseMatT&       X,
                        cudaStream_t     stream = NULL) override
     {
-        if (A->cols() != X.rows() || A->rows() != B.rows() ||
-            X.cols() != B.cols()) {
-            RXMESH_ERROR(
-                "CGSolver::solver mismatch in the input/output size. A ({}, "
-                "{}), X ({}, {}), B ({}, {})",
-                A->rows(),
-                A->cols(),
-                X.rows(),
-                X.cols(),
-                B.rows(),
-                B.cols());
-            return;
-        }
-
-
         m_start_residual = delta_new;
 
         m_iter_taken = 0;
 
         while (m_iter_taken < m_max_iter) {
             // s = Ap
-            A->multiply(P, S, false, false, 1, 0, stream);
+            mat_vec(P, S, stream);
 
             // alpha = delta_new / <S,P>
             alpha = S.dot(P, false, stream);
@@ -90,7 +75,7 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
             // reset residual
             if (m_iter_taken > 0 && m_iter_taken % m_reset_residual_freq == 0) {
                 // s= Ax
-                A->multiply(X, S, false, false, 1, 0, stream);
+                mat_vec(X, S, stream);
 
                 // r = b-s
                 subtract(R, B, S, stream);
@@ -217,6 +202,47 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
     };
 
    protected:
+    virtual void mat_vec(const DenseMatT& in,
+                         DenseMatT&       out,
+                         cudaStream_t     stream)
+    {
+        if (A->cols() != in.rows() || A->rows() != out.rows() ||
+            in.cols() != out.cols()) {
+            RXMESH_ERROR(
+                "CGSolver::mat_vec mismatch in the input/output size. A ({}, "
+                "{}), In ({}, {}), Out ({}, {})",
+                A->rows(),
+                A->cols(),
+                in.rows(),
+                in.cols(),
+                out.rows(),
+                out.cols());
+            return;
+        }
+
+
+        A->multiply(in, out, false, false, 1, 0, stream);
+    }
+
+    CGSolver(int num_rows,
+             int unknown_dim,
+             int max_iter,
+             T   abs_tol,
+             T   rel_tol,
+             int reset_residual_freq)
+        : IterativeSolver<T, DenseMatT>(max_iter, abs_tol, rel_tol),
+          A(nullptr),
+          alpha(0),
+          beta(0),
+          delta_new(0),
+          delta_old(0),
+          m_reset_residual_freq(reset_residual_freq),
+          S(DenseMatT(num_rows, unknown_dim, DEVICE)),
+          P(DenseMatT(num_rows, unknown_dim, DEVICE)),
+          R(DenseMatT(num_rows, unknown_dim, DEVICE))
+    {
+    }
+
     SparseMatrix<T>* A;
     DenseMatT        S, P, R;
     T                alpha, beta, delta_new, delta_old;

@@ -26,7 +26,15 @@ struct Term
                              cudaStream_t              stream)  = 0;
     virtual void eval_passive(Attribute<T, ObjHandleT>& obj,
                               cudaStream_t              stream) = 0;
-    virtual T    get_loss(cudaStream_t stream)     = 0;
+
+    virtual void eval_active_matvec(
+        Attribute<T, ObjHandleT>&              obj,
+        bool                                   store_grad,
+        const DenseMatrix<T, Eigen::RowMajor>& input,
+        DenseMatrix<T, Eigen::RowMajor>&       output,
+        cudaStream_t                           stream) = 0;
+
+    virtual T get_loss(cudaStream_t stream) = 0;
 };
 
 /**

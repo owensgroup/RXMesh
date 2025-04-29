@@ -32,7 +32,7 @@ __global__ static void hess_matvec_kernel(
     DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor> grad,
     const DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>
                                                                 input_vector,
-    DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor> output_vlector,
+    DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor> output_vector,
     Attribute<typename ScalarT::PassiveType, LossHandleT>       loss,
     Attribute<typename ScalarT::PassiveType, ObjHandleT>        objective,
     const bool                                                  store_grad,
@@ -81,10 +81,17 @@ __global__ static void hess_matvec_kernel(
 
             // gradient
             if (store_grad) {
+                int linear_id = context.prefix<LossHandleT>()[fh.patch_id()] +
+                                fh.local_id();
+
                 for (int local = 0; local < VariableDim; ++local) {
                     // we don't need atomics here since each thread update
                     // the gradient of one element so there is no data race
-                    grad(fh, local) += res.grad[local];
+
+
+                    // TODO this index depends on the row major order
+                    // we chose for the dense matrices
+                    grad(linear_id * VariableDim + local, 0) += res.grad[local];
                 }
             }
 
@@ -103,10 +110,10 @@ __global__ static void hess_matvec_kernel(
                             get_indices(fh, fh, local_i, local_j);
 
                         // TODO we now assume solving single col vector
-                        ScalarT p = res.Hess(local_i, local_j) *
-                                    input_vector(ids.col, 0);
+                        PassiveT p = res.Hess(local_i, local_j) *
+                                     input_vector(ids.second, 0);
 
-                        ::atomicAdd(&output_vector(ids.row, 0), p);
+                        ::atomicAdd(&output_vector(ids.first, 0), p);
                     }
                 }
             }
@@ -124,11 +131,18 @@ __global__ static void hess_matvec_kernel(
 
             // gradient
             if (store_grad) {
+
                 for (uint16_t i = 0; i < iter.size(); ++i) {
+                    int linear_id =
+                        context.prefix<IterHandleT>()[iter[i].patch_id()] +
+                        iter[i].local_id();
+
                     for (int local = 0; local < VariableDim; ++local) {
 
+                        // TODO this index depends on the row major order
+                        // we chose for the dense matrices
                         ::atomicAdd(
-                            &grad(iter[i], local),
+                            &grad(linear_id * VariableDim + local, 0),
                             res.grad[index_mapping<VariableDim>(i, local)]);
                     }
                 }
@@ -144,8 +158,10 @@ __global__ static void hess_matvec_kernel(
                 for (int i = 0; i < iter.size(); ++i) {
                     const IterHandleT vi = iter[i];
 
+
                     for (int j = 0; j < iter.size(); ++j) {
                         const IterHandleT vj = iter[j];
+
 
                         for (int local_i = 0; local_i < VariableDim;
                              ++local_i) {
@@ -158,13 +174,14 @@ __global__ static void hess_matvec_kernel(
 
                                 // TODO we now assume solving single col
                                 // vector
-                                ScalarT p = res.Hess(index_mapping<VariableDim>(
-                                                         i, local_i),
-                                                     index_mapping<VariableDim>(
-                                                         j, local_j)) *
-                                            input_vector(ids.col, 0);
+                                PassiveT p =
+                                    res.Hess(
+                                        index_mapping<VariableDim>(i, local_i),
+                                        index_mapping<VariableDim>(j,
+                                                                   local_j)) *
+                                    input_vector(ids.second, 0);
 
-                                ::atomicAdd(&output_vector(ids.row, 0), p);
+                                ::atomicAdd(&output_vector(ids.first, 0), p);
                             }
                         }
                     }

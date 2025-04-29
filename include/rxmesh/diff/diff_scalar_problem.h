@@ -134,6 +134,25 @@ struct DiffScalarProblem
         }
     }
 
+    /**
+     * @brief Hessian-vector product
+     */
+    void eval_matvec(bool                                   store_grad,
+                     const DenseMatrix<T, Eigen::RowMajor>& input,
+                     DenseMatrix<T, Eigen::RowMajor>&       output,
+                     cudaStream_t                           stream = NULL)
+    {
+        if (store_grad) {
+            grad.reset(0, DEVICE, stream);
+        }
+
+        output.reset(0, DEVICE, stream);
+
+        for (size_t i = 0; i < terms.size(); ++i) {
+            terms[i]->eval_active_matvec(
+                *objective, store_grad, input, output, stream);
+        }
+    }
 
     /**
      * @brief return the current loss/energy

@@ -222,7 +222,7 @@ int main(int argc, char** argv)
                         "                     Default is {} \n"
                         "                     Hint: Only accept OBJ files\n"
                         " -o:                 JSON file output folder. Default is {} \n"
-                        " -solver:            Solver to use. Options are cg, pcg, chol, or lu. Default is {}\n"
+                        " -solver:            Solver to use. Options are cg_mat_free, cg, pcg, chol, or lu. Default is {}\n"
                         " -abs_eps:           Iterative solvers absolute tolerance. Default is {}\n"
                         " -rel_eps:           Iterative solvers relative tolerance. Default is {}\n"
                         " -cg_max_iter:       Maximum number of iterations for iterative solvers. Default is {}\n"
@@ -308,6 +308,12 @@ int main(int argc, char** argv)
     } else if (Arg.solver == "pcg") {
         PCGSolver<T, Order> solver(
             problem.hess, 1, Arg.cg_max_iter, Arg.cg_abs_tol, Arg.cg_rel_tol);
+        parameterize<T>(rx, problem, solver);
+    } else if (Arg.solver == "cg_mat_free") {
+        int num_rows = VariableDim * rx.get_num_vertices();
+
+        CGMatFreeSolver<T, Order> solver(
+            num_rows, 1, Arg.cg_max_iter, Arg.cg_abs_tol, Arg.cg_rel_tol);
         parameterize<T>(rx, problem, solver);
     }
 }
