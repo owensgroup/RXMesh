@@ -28,14 +28,11 @@ template <uint32_t blockThreads,
           int  VariableDim,
           typename LambdaT>
 __global__ static void hess_matvec_kernel(
-    const Context                                               context,
-    DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor> grad,
+    const Context context,
     const DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>
                                                                 input_vector,
     DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor> output_vector,
-    Attribute<typename ScalarT::PassiveType, LossHandleT>       loss,
-    Attribute<typename ScalarT::PassiveType, ObjHandleT>        objective,
-    const bool                                                  store_grad,
+    const Attribute<typename ScalarT::PassiveType, ObjHandleT>  objective,
     const bool                                                  oriented,
     LambdaT                                                     user_func)
 {
@@ -46,23 +43,18 @@ __global__ static void hess_matvec_kernel(
 
     using PassiveT = typename ScalarT::PassiveType;
 
-    constexpr bool WithHessian = ScalarT::WithHessian_;
+    static_assert(ScalarT::WithHessian_, "Scalar type should be with Hessian");
 
     auto block = cooperative_groups::this_thread_block();
-
-    auto linear_id = [&](const ObjHandleT& handle) {
-        auto id = handle.unpack();
-        return context.template prefix<ObjHandleT>()[id.first] + id.second;
-    };
 
     auto get_indices = [&](const ObjHandleT& row,
                            const ObjHandleT& col,
                            const int         local_i,
                            const int         local_j) {
         // this mimics how we calculate the strides in the sparse matrix
-        const int r_id = linear_id(row) * VariableDim + local_i;
+        const int r_id = context.linear_id(row) * VariableDim + local_i;
 
-        const int c_id = linear_id(col) * VariableDim + local_j;
+        const int c_id = context.linear_id(col) * VariableDim + local_j;
 
         return std::pair<int, int>(r_id, c_id);
     };
@@ -76,45 +68,23 @@ __global__ static void hess_matvec_kernel(
 
             ScalarT res = user_func(diff_handle, objective);
 
-            // function
-            loss(fh) = res.val;
-
-            // gradient
-            if (store_grad) {
-                int linear_id = context.prefix<LossHandleT>()[fh.patch_id()] +
-                                fh.local_id();
-
-                for (int local = 0; local < VariableDim; ++local) {
-                    // we don't need atomics here since each thread update
-                    // the gradient of one element so there is no data race
-
-
-                    // TODO this index depends on the row major order
-                    // we chose for the dense matrices
-                    grad(linear_id * VariableDim + local, 0) += res.grad[local];
-                }
+            // project Hessian to PD matrix
+            if constexpr (ProjectHess) {
+                project_positive_definite(res.Hess);
             }
 
-            // Hessian
-            if constexpr (WithHessian) {
-                // project Hessian to PD matrix
-                if constexpr (ProjectHess) {
-                    project_positive_definite(res.Hess);
-                }
+            for (int local_i = 0; local_i < VariableDim; ++local_i) {
 
-                for (int local_i = 0; local_i < VariableDim; ++local_i) {
+                for (int local_j = 0; local_j < VariableDim; ++local_j) {
 
-                    for (int local_j = 0; local_j < VariableDim; ++local_j) {
+                    std::pair<int, int> ids =
+                        get_indices(fh, fh, local_i, local_j);
 
-                        std::pair<int, int> ids =
-                            get_indices(fh, fh, local_i, local_j);
+                    // TODO we now assume solving single col vector
+                    PassiveT p = res.Hess(local_i, local_j) *
+                                 input_vector(ids.second, 0);
 
-                        // TODO we now assume solving single col vector
-                        PassiveT p = res.Hess(local_i, local_j) *
-                                     input_vector(ids.second, 0);
-
-                        ::atomicAdd(&output_vector(ids.first, 0), p);
-                    }
+                    ::atomicAdd(&output_vector(ids.first, 0), p);
                 }
             }
         });
@@ -126,63 +96,38 @@ __global__ static void hess_matvec_kernel(
 
             ScalarT res = user_func(diff_handle, iter, objective);
 
-            // function
-            loss(fh) = res.val;
 
-            // gradient
-            if (store_grad) {
-
-                for (uint16_t i = 0; i < iter.size(); ++i) {
-                    int linear_id =
-                        context.prefix<IterHandleT>()[iter[i].patch_id()] +
-                        iter[i].local_id();
-
-                    for (int local = 0; local < VariableDim; ++local) {
-
-                        // TODO this index depends on the row major order
-                        // we chose for the dense matrices
-                        ::atomicAdd(
-                            &grad(linear_id * VariableDim + local, 0),
-                            res.grad[index_mapping<VariableDim>(i, local)]);
-                    }
-                }
+            // project Hessian to PD matrix
+            if constexpr (ProjectHess) {
+                project_positive_definite(res.Hess);
             }
 
-            if constexpr (WithHessian) {
-                // project Hessian to PD matrix
-                if constexpr (ProjectHess) {
-                    project_positive_definite(res.Hess);
-                }
-
-                // Hessian
-                for (int i = 0; i < iter.size(); ++i) {
-                    const IterHandleT vi = iter[i];
+            // Hessian
+            for (int i = 0; i < iter.size(); ++i) {
+                const IterHandleT vi = iter[i];
 
 
-                    for (int j = 0; j < iter.size(); ++j) {
-                        const IterHandleT vj = iter[j];
+                for (int j = 0; j < iter.size(); ++j) {
+                    const IterHandleT vj = iter[j];
 
 
-                        for (int local_i = 0; local_i < VariableDim;
-                             ++local_i) {
+                    for (int local_i = 0; local_i < VariableDim; ++local_i) {
 
-                            for (int local_j = 0; local_j < VariableDim;
-                                 ++local_j) {
+                        for (int local_j = 0; local_j < VariableDim;
+                             ++local_j) {
 
-                                std::pair<int, int> ids =
-                                    get_indices(vi, vj, local_i, local_j);
+                            std::pair<int, int> ids =
+                                get_indices(vi, vj, local_i, local_j);
 
-                                // TODO we now assume solving single col
-                                // vector
-                                PassiveT p =
-                                    res.Hess(
-                                        index_mapping<VariableDim>(i, local_i),
-                                        index_mapping<VariableDim>(j,
-                                                                   local_j)) *
-                                    input_vector(ids.second, 0);
+                            // TODO we now assume solving single col
+                            // vector
+                            PassiveT p =
+                                res.Hess(
+                                    index_mapping<VariableDim>(i, local_i),
+                                    index_mapping<VariableDim>(j, local_j)) *
+                                input_vector(ids.second, 0);
 
-                                ::atomicAdd(&output_vector(ids.first, 0), p);
-                            }
+                            ::atomicAdd(&output_vector(ids.first, 0), p);
                         }
                     }
                 }

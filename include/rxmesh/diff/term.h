@@ -23,13 +23,16 @@ template <typename T, typename ObjHandleT>
 struct Term
 {
     virtual void eval_active(Attribute<T, ObjHandleT>& obj,
-                             cudaStream_t              stream)  = 0;
+                             cudaStream_t              stream) = 0;
+
+    virtual void eval_active_grad_only(Attribute<T, ObjHandleT>& obj,
+                                       cudaStream_t              stream) = 0;
+
     virtual void eval_passive(Attribute<T, ObjHandleT>& obj,
                               cudaStream_t              stream) = 0;
 
     virtual void eval_active_matvec(
         Attribute<T, ObjHandleT>&              obj,
-        bool                                   store_grad,
         const DenseMatrix<T, Eigen::RowMajor>& input,
         DenseMatrix<T, Eigen::RowMajor>&       output,
         cudaStream_t                           stream) = 0;
@@ -52,6 +55,10 @@ template <typename LossHandleT,
 struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
 {
     using T = typename ScalarT::PassiveType;
+
+    // Scalar type that only store the 1st derivative
+    // This will be the same as ScalarT if ScalarT has WithHessian=false
+    using ScalarGradOnlyT = Scalar<T, ScalarT::k_, false>;
 
 
     TemplatedTerm(RXMeshStatic&                        rx,
@@ -106,6 +113,18 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                                                                 VariableDim,
                                                                 LambdaT>,
                               oreinted);
+
+        rx.prepare_launch_box({op},
+                              lb_active_grad_only,
+                              (void*)detail::diff_kernel_active<blockThreads,
+                                                                LossHandleT,
+                                                                ObjHandleT,
+                                                                op,
+                                                                ScalarGradOnlyT,
+                                                                ProjectHess,
+                                                                VariableDim,
+                                                                LambdaT>,
+                              oreinted);
     }
 
     /**
@@ -133,11 +152,36 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
 
 
     /**
+     * @brief Evaluate the energy term using active/differentiable type for the
+     * 1st derivative only
+     */
+    void eval_active_grad_only(Attribute<T, ObjHandleT>& obj,
+                               cudaStream_t              stream)
+    {
+        rx.run_kernel(lb_active_grad_only,
+                      detail::diff_kernel_active<blockThreads,
+                                                 LossHandleT,
+                                                 ObjHandleT,
+                                                 op,
+                                                 ScalarGradOnlyT,
+                                                 ProjectHess,
+                                                 VariableDim,
+                                                 LambdaT>,
+                      stream,
+                      grad,
+                      hess,
+                      *loss,
+                      obj,
+                      oreinted,
+                      term);
+    }
+
+
+    /**
      * @brief Evaluate the energy term using active/differentiable type but
      * without constructing the Hessian. Instead, we do matvec with the Hessian
      */
     void eval_active_matvec(Attribute<T, ObjHandleT>&              obj,
-                            bool                                   store_grad,
                             const DenseMatrix<T, Eigen::RowMajor>& input,
                             DenseMatrix<T, Eigen::RowMajor>&       output,
                             cudaStream_t                           stream)
@@ -152,12 +196,9 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                                                  VariableDim,
                                                  LambdaT>,
                       stream,
-                      grad,
                       input,
                       output,
-                      *loss,
                       obj,
-                      store_grad,
                       oreinted,
                       term);
     }
@@ -197,6 +238,7 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
     LaunchBox<blockThreads>                       lb_active;
     LaunchBox<blockThreads>                       lb_passive;
     LaunchBox<blockThreads>                       lb_active_matvec;
+    LaunchBox<blockThreads>                       lb_active_grad_only;
 
 
     bool oreinted;

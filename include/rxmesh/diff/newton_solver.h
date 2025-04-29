@@ -46,7 +46,7 @@ struct NetwtonSolver
 
             solver->m_mat_vec =
                 [&](const DenseMatT& in, DenseMatT& out, cudaStream_t stream) {
-                    problem.eval_matvec(true, in, out, stream);
+                    problem.eval_matvec(in, out, stream);
                 };
         }
     }
