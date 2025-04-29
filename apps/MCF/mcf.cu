@@ -8,7 +8,7 @@
 
 struct arg
 {
-    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "rocker-arm.obj";
     std::string output_folder       = STRINGIFY(OUTPUT_DIR);
     std::string perm_method         = "nstdis";
     std::string solver              = "gmg";
