@@ -8,15 +8,18 @@
 
 struct arg
 {
-    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "rocker-arm.obj";
     std::string output_folder       = STRINGIFY(OUTPUT_DIR);
     std::string perm_method         = "nstdis";
     std::string solver              = "gmg";
     uint32_t    device_id           = 0;
     float       time_step           = 10;
     float       cg_tolerance        = 1e-6;
-    uint32_t    max_num_iter        = 10;
+    float       gmg_tolerance_abs   = 1e-6;
+    float       gmg_tolerance_rel   = 1e-6;
+    uint32_t    max_num_iter        = 100;
     bool        use_uniform_laplace = true;
+    int         levels              = 3;
     char**      argv;
     int         argc;
 } Arg;
@@ -79,8 +82,11 @@ int main(int argc, char** argv)
                         " -eps:               Conjugate gradient tolerance. Default is {}\n"
                         " -perm:              Permutation method for Cholesky factorization. Default is {}\n"
                         " -max_iter:          Maximum number of iterations for iterative solvers. Default is {}\n"                                            
+                        " -levels:            Number of levels in the hierarchy, inlcudes the finest level(only for GMG): {} ",
+                        " -tol_abs:           Absolute tolerance for GMG solver: {}",
+                        " -tol_rel:           Relative tolerance for GMG solver: {}",
                         " -device_id:         GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.output_folder,  (Arg.use_uniform_laplace? "true" : "false"), Arg.time_step, Arg.solver, Arg.cg_tolerance, Arg.perm_method, Arg.max_num_iter, Arg.device_id);
+            Arg.obj_file_name, Arg.output_folder,  (Arg.use_uniform_laplace? "true" : "false"), Arg.time_step, Arg.solver, Arg.cg_tolerance, Arg.perm_method, Arg.max_num_iter,Arg.gmg_tolerance_abs,Arg.gmg_tolerance_rel, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
@@ -120,6 +126,18 @@ int main(int argc, char** argv)
             Arg.solver =
                 std::string(get_cmd_option(argv, argv + argc, "-solver"));
         }
+        if (cmd_option_exists(argv, argc + argv, "-levels")) {
+            Arg.levels =
+                std::atoi(get_cmd_option(argv, argv + argc, "-levels"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-tol_abs")) {
+            Arg.gmg_tolerance_abs =
+                std::atof(get_cmd_option(argv, argv + argc, "-tol_abs"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-tol_rel")) {
+            Arg.gmg_tolerance_rel =
+                std::atof(get_cmd_option(argv, argv + argc, "-tol_rel"));
+        }
     }
 
     RXMESH_INFO("input= {}", Arg.obj_file_name);
@@ -130,6 +148,9 @@ int main(int argc, char** argv)
     RXMESH_INFO("cg_tolerance= {0:f}", Arg.cg_tolerance);
     RXMESH_INFO("use_uniform_laplace= {}", Arg.use_uniform_laplace);
     RXMESH_INFO("time_step= {0:f}", Arg.time_step);
+    RXMESH_INFO("levels= {}", Arg.levels);
+    RXMESH_INFO("gmg_tolerance_rel= {}", Arg.gmg_tolerance_rel);
+    RXMESH_INFO("gmg_tolerance_abs= {}", Arg.gmg_tolerance_abs);
     RXMESH_INFO("device_id= {}", Arg.device_id);
 
     return RUN_ALL_TESTS();

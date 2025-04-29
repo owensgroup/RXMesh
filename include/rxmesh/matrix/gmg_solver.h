@@ -40,11 +40,12 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                            DenseMatrix<T>&       X,
                            cudaStream_t          stream = NULL) override
     {
+
         if (m_num_levels != 0)
             m_gmg = GMG<T>(*m_rx, m_num_levels);
         else
             m_gmg = GMG<T>(*m_rx);
-
+        //exit(1);
         m_v_cycle = VCycle<T>(m_gmg,
                               *m_rx,
                               *m_A,
@@ -64,20 +65,32 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                        DenseMatrix<T>&       X,
                        cudaStream_t          stream = NULL) override
     {
+        T current_res;
+
         m_iter_taken = 0;
         while (m_iter_taken < m_max_iter) {
             m_v_cycle.cycle(0, m_gmg, *m_A, B, X);
-            T current_res;
             current_res = m_v_cycle.m_r[0].norm2();
-
+            //std::cout << "\ncurrent residual: " << current_res;
 
             if (is_converged(m_start_residual, current_res)) {
                 m_final_residual = current_res;
+                /*std::cout << "\nconverged! at " << m_final_residual
+                          << " from residual of " << m_start_residual;*/
+                RXMESH_TRACE("GMG: #number of iterations to solve: {}", m_iter_taken);
+                RXMESH_TRACE("GMG: final residual: {}", m_final_residual);
+
+
                 return;
             }
 
             m_iter_taken++;
         }
+        RXMESH_TRACE(
+            "GMG: Solver did not reach convergence criteria. Residual: {}",
+            current_res);
+        RXMESH_TRACE("GMG: #number of iterations to solve: {}", m_iter_taken);
+
     }
 
     virtual std::string name() override

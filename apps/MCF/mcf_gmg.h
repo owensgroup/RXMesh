@@ -50,8 +50,9 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     report.add_member("method", std::string("RXMesh"));
     report.add_member("blockThreads", blockThreads);
 
-        
-    GMGSolver solver(rx, A_mat, Arg.max_num_iter, 3);
+    GMGSolver solver(
+        rx, A_mat, Arg.max_num_iter, Arg.levels, 2, 2, CoarseSolver::Jacobi, Arg.gmg_tolerance_abs, Arg.gmg_tolerance_rel);
+
 
 
     float    total_time = 0;
