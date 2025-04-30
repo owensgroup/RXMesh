@@ -8,6 +8,7 @@
 #include "rxmesh/query.cuh"
 
 
+#include "rxmesh/matrix/cg_mat_free_solver.h"
 #include "rxmesh/matrix/cg_solver.h"
 #include "rxmesh/matrix/cholesky_solver.h"
 #include "rxmesh/matrix/lu_solver.h"
@@ -18,6 +19,61 @@
 #include <Eigen/SparseCholesky>
 
 using namespace rxmesh;
+
+template <typename T, uint32_t blockThreads>
+__global__ static void matvec(const Context            context,
+                              const VertexAttribute<T> coords,
+                              const SparseMatrix<T>    A,
+                              const DenseMatrix<T>     in,
+                              DenseMatrix<T>           out,
+                              const T                  factor1,
+                              const T                  factor2,
+                              const T                  factor3,
+                              const T                  factor4)
+{
+    using namespace rxmesh;
+
+    int num_cols = out.cols();
+
+    auto set = [&](VertexHandle& v_row, const VertexIterator& iter) {
+        T sum_e_weight(0);
+
+        int row_id = context.linear_id(v_row);
+
+        T v_weight = iter.size();
+
+
+        for (int i = 0; i < num_cols; ++i) {
+            out(row_id, i) = 0;         
+        }
+
+
+        for (uint32_t v = 0; v < iter.size(); ++v) {
+
+            VertexHandle v_col = iter[v];
+
+            int col_id = context.linear_id(v_col);
+
+            T val = A(v_row, v_col);
+            for (int i = 0; i < num_cols; ++i) {
+                out(row_id, i) += in(col_id, i) * val;
+            }
+            sum_e_weight += 1;
+        }
+
+        T diag = v_weight + sum_e_weight + factor4;
+
+        for (int i = 0; i < num_cols; ++i) {
+            out(row_id, i) += diag * in(row_id, i);
+        }
+    };
+
+    auto block = cooperative_groups::this_thread_block();
+
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, set);
+}
 
 template <typename T, uint32_t blockThreads>
 __global__ static void setup(const Context      context,
@@ -309,6 +365,43 @@ TEST(Solver, PCG)
     DenseMatrix<T>  B(rx, num_vertices, 3);
 
     PCGSolver solver(A, 3, 5000, T(1e-7));
+
+    test_iterative_solver(rx, solver, A, B, X);
+
+    A.release();
+    X.release();
+    B.release();
+}
+
+TEST(Solver, CGMatFree)
+{
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    using T = float;
+
+    SparseMatrix<T> A(rx, Op::VV);
+    DenseMatrix<T>  X(rx, num_vertices, 3);
+    DenseMatrix<T>  B(rx, num_vertices, 3);
+
+    CGMatFreeSolver solver(num_vertices, 3, 5000, T(1e-7));
+
+    solver.m_mat_vec = [&](const DenseMatrix<T>& in,
+                           DenseMatrix<T>&       out,
+                           cudaStream_t          stream) {
+        rx.run_kernel<256>({Op::VV},
+                           matvec<T, 256>,
+                           *rx.get_input_vertex_coordinates(),
+                           A,
+                           in,
+                           out,
+                           7.4f,
+                           2.6f,
+                           10.3f,
+                           100.f);        
+    };    
 
     test_iterative_solver(rx, solver, A, B, X);
 

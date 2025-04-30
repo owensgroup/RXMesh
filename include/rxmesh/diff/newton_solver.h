@@ -40,6 +40,15 @@ struct NetwtonSolver
           solve_time(0)
     {
         dir.reset(0, LOCATION_ALL);
+
+        if constexpr (std::is_base_of_v<CGMatFreeSolver<T, DenseMatT::OrderT>,
+                                        SolverT>) {
+
+            solver->m_mat_vec =
+                [&](const DenseMatT& in, DenseMatT& out, cudaStream_t stream) {
+                    problem.eval_matvec(in, out, stream);
+                };
+        }
     }
 
     /**
@@ -97,7 +106,7 @@ struct NetwtonSolver
             solve_time += timer.elapsed_millis();
         }
 
-        // Iterative (CG/PCG)
+        //  Iterative Solver (CG/PCG) either matrix-based or matrix-free
         if constexpr (std::is_base_of_v<CGSolver<T, DenseMatT::OrderT>,
                                         SolverT>) {
 

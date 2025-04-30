@@ -10,13 +10,14 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
-    std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    std::string solver        = "chol";
-    uint32_t    device_id     = 0;
-    float       cg_abs_tol    = 1e-6;
-    float       cg_rel_tol    = 0.0;
-    uint32_t    cg_max_iter   = 10;
+    std::string obj_file_name   = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
+    std::string output_folder   = STRINGIFY(OUTPUT_DIR);
+    std::string solver          = "chol";
+    uint32_t    device_id       = 0;
+    float       cg_abs_tol      = 1e-6;
+    float       cg_rel_tol      = 0.0;
+    uint32_t    cg_max_iter     = 10;
+    uint32_t    newton_max_iter = 100;
     char**      argv;
     int         argc;
 } Arg;
@@ -148,7 +149,6 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
     T convergence_eps = 1e-2;
 
-    int num_iterations = 10000;
     int iter;
 
     GPUTimer timer;
@@ -164,24 +164,30 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
     // }
 
 
-    for (iter = 0; iter < num_iterations; ++iter) {
+    for (iter = 0; iter < Arg.newton_max_iter; ++iter) {
 
-        // 2) calc loss function
-        problem.eval_terms();
+        if (Arg.solver == "cg_mat_free") {
+            // calc gradient only if we are using matrix free solver
+            problem.eval_terms_grad_only();
+        } else {
+            // calc loss function
+            problem.eval_terms();
+        }
 
-        // 3) get the current value of the loss function
+
+        // get the current value of the loss function
         T f = problem.get_current_loss();
         RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
 
-        // 3) direction newton
+        // direction newton
         newton_solver.newton_direction();
 
-        // 4) newton decrement
+        // newton decrement
         if (0.5f * problem.grad.dot(newton_solver.dir) < convergence_eps) {
             break;
         }
 
-        // 5) line search
+        // line search
         newton_solver.line_search();
     }
 
@@ -193,7 +199,7 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
         "timer/iteration= {} ms/iter, solver_time = {} (ms)",
         iter,
         timer.elapsed_millis(),
-        timer.elapsed_millis() / float(num_iterations),
+        timer.elapsed_millis() / float(iter),
         newton_solver.solve_time);
 
 
@@ -222,12 +228,13 @@ int main(int argc, char** argv)
                         "                     Default is {} \n"
                         "                     Hint: Only accept OBJ files\n"
                         " -o:                 JSON file output folder. Default is {} \n"
-                        " -solver:            Solver to use. Options are cg, pcg, chol, or lu. Default is {}\n"
+                        " -solver:            Solver to use. Options are cg_mat_free, cg, pcg, chol, or lu. Default is {}\n"
                         " -abs_eps:           Iterative solvers absolute tolerance. Default is {}\n"
                         " -rel_eps:           Iterative solvers relative tolerance. Default is {}\n"
                         " -cg_max_iter:       Maximum number of iterations for iterative solvers. Default is {}\n"
+                        " -newton_max_iter:   Maximum number of iterations for Newton solver. Default is {}\n"
                         " -device_id:         GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.output_folder,  Arg.solver, Arg.cg_abs_tol, Arg.cg_rel_tol, Arg.cg_max_iter, Arg.device_id);
+            Arg.obj_file_name, Arg.output_folder,  Arg.solver, Arg.cg_abs_tol, Arg.cg_rel_tol, Arg.cg_max_iter, Arg.newton_max_iter, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
@@ -244,6 +251,11 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-cg_max_iter")) {
             Arg.cg_max_iter =
                 std::atoi(get_cmd_option(argv, argv + argc, "-cg_max_iter"));
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-newton_max_iter")) {
+            Arg.newton_max_iter = std::atoi(
+                get_cmd_option(argv, argv + argc, "-newton_max_iter"));
         }
 
         if (cmd_option_exists(argv, argc + argv, "-abs_eps")) {
@@ -271,6 +283,7 @@ int main(int argc, char** argv)
     RXMESH_INFO("output_folder= {}", Arg.output_folder);
     RXMESH_INFO("solver= {}", Arg.solver);
     RXMESH_INFO("cg_max_iter= {}", Arg.cg_max_iter);
+    RXMESH_INFO("newton_max_iter= {}", Arg.newton_max_iter);
     RXMESH_INFO("abs_eps= {0:f}", Arg.cg_abs_tol);
     RXMESH_INFO("rel_eps= {0:f}", Arg.cg_rel_tol);
     RXMESH_INFO("device_id= {}", Arg.device_id);
@@ -290,7 +303,9 @@ int main(int argc, char** argv)
 
     using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
 
-    ProblemT problem(rx);
+    bool assmble_hessian = Arg.solver != "cg_mat_free";
+
+    ProblemT problem(rx, assmble_hessian);
 
     using HessMatT      = typename ProblemT::HessMatT;
     constexpr int Order = ProblemT::DenseMatT::OrderT;
@@ -308,6 +323,12 @@ int main(int argc, char** argv)
     } else if (Arg.solver == "pcg") {
         PCGSolver<T, Order> solver(
             problem.hess, 1, Arg.cg_max_iter, Arg.cg_abs_tol, Arg.cg_rel_tol);
+        parameterize<T>(rx, problem, solver);
+    } else if (Arg.solver == "cg_mat_free") {
+        int num_rows = VariableDim * rx.get_num_vertices();
+
+        CGMatFreeSolver<T, Order> solver(
+            num_rows, 1, Arg.cg_max_iter, Arg.cg_abs_tol, Arg.cg_rel_tol);
         parameterize<T>(rx, problem, solver);
     }
 }

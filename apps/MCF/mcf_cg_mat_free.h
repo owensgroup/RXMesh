@@ -7,8 +7,8 @@
 
 #include "mcf_kernels.cuh"
 
-#include "rxmesh/matrix/cg_mat_free_solver.h"
-#include "rxmesh/matrix/pcg_mat_free_solver.h"
+#include "rxmesh/matrix/cg_mat_free_attr_solver.h"
+#include "rxmesh/matrix/pcg_mat_free_attr_solver.h"
 
 template <int blockThreads, typename T, typename SolverT>
 void run_cg_mat_free(rxmesh::RXMeshStatic& rx, SolverT& solver)
@@ -141,7 +141,7 @@ void mcf_cg_mat_free(rxmesh::RXMeshStatic& rx)
                       Arg.time_step);
     };
 
-    CGMatFreeSolver<T, VertexHandle> solver(
+    CGMatFreeAttrSolver<T, VertexHandle> solver(
         rx,
         mat_vec,
         input_coord->get_num_attributes(),
@@ -205,7 +205,7 @@ void mcf_pcg_mat_free(rxmesh::RXMeshStatic& rx)
                       Arg.time_step);
     };
 
-    PCGMatFreeSolver<T, VertexHandle> solver(
+    PCGMatFreeAttrSolver<T, VertexHandle> solver(
         rx,
         mat_vec,
         precond_mat_vec,

@@ -7,7 +7,7 @@ namespace rxmesh {
  * @brief Jacobi-preconditioned matrix-free CG
  */
 template <typename T, typename HandleT>
-struct PCGMatFreeSolver : public CGMatFreeSolver<T, HandleT>
+struct PCGMatFreeAttrSolver : public CGMatFreeAttrSolver<T, HandleT>
 {
     using AttributeT = Attribute<T, HandleT>;
 
@@ -17,21 +17,22 @@ struct PCGMatFreeSolver : public CGMatFreeSolver<T, HandleT>
     using PrecondMatVecT =
         std::function<void(const AttributeT&, AttributeT&, cudaStream_t)>;
 
-    PCGMatFreeSolver(RXMeshStatic&  rx,
-                     MatVecT        mat_vec,
-                     PrecondMatVecT precond_mat_vec,
-                     int            unkown_dim,  // 1D, 2D, 3D
-                     int            max_iter,
-                     T              abs_tol  = 1e-6,
-                     T              rel_tol  = 1e-6,
-                     int reset_residual_freq = std::numeric_limits<int>::max())
-        : CGMatFreeSolver<T, HandleT>(rx,
-                                      mat_vec,
-                                      unkown_dim,
-                                      max_iter,
-                                      abs_tol,
-                                      rel_tol,
-                                      reset_residual_freq),
+    PCGMatFreeAttrSolver(
+        RXMeshStatic&  rx,
+        MatVecT        mat_vec,
+        PrecondMatVecT precond_mat_vec,
+        int            unkown_dim,  // 1D, 2D, 3D
+        int            max_iter,
+        T              abs_tol             = 1e-6,
+        T              rel_tol             = 1e-6,
+        int            reset_residual_freq = std::numeric_limits<int>::max())
+        : CGMatFreeAttrSolver<T, HandleT>(rx,
+                                          mat_vec,
+                                          unkown_dim,
+                                          max_iter,
+                                          abs_tol,
+                                          rel_tol,
+                                          reset_residual_freq),
           m_precond_mat_vec(precond_mat_vec)
     {
     }
@@ -119,10 +120,10 @@ struct PCGMatFreeSolver : public CGMatFreeSolver<T, HandleT>
 
     virtual std::string name() override
     {
-        return std::string("PCG Matrix Free");
+        return std::string("PCG Matrix Free Attr");
     }
 
-    virtual ~PCGMatFreeSolver()
+    virtual ~PCGMatFreeAttrSolver()
     {
     }
 

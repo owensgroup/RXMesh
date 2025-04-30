@@ -39,10 +39,7 @@ struct DiffScalarProblem
     std::vector<std::shared_ptr<Term<T, ObjHandleT>>> terms;
 
 
-    /**
-     * @brief
-     */
-    DiffScalarProblem(RXMeshStatic& rx)
+    DiffScalarProblem(RXMeshStatic& rx, bool assmble_hessian = true)
         : rx(rx),
           grad(DenseMatT(rx, rx.get_num_elements<ObjHandleT>(), VariableDim)),
           objective(rx.add_vertex_attribute<T>("objective", VariableDim))
@@ -51,8 +48,10 @@ struct DiffScalarProblem
         grad.reset(0, LOCATION_ALL);
 
         if constexpr (WithHessian) {
-            hess = HessMatT(rx);
-            hess.reset(0, LOCATION_ALL);
+            if (assmble_hessian) {
+                hess = HessMatT(rx);
+                hess.reset(0, LOCATION_ALL);
+            }
         }
     }
 
@@ -134,6 +133,32 @@ struct DiffScalarProblem
         }
     }
 
+
+    /**
+     * @brief evaluate all terms
+     */
+    void eval_terms_grad_only(cudaStream_t stream = NULL)
+    {
+        grad.reset(0, DEVICE, stream);
+
+        for (size_t i = 0; i < terms.size(); ++i) {
+            terms[i]->eval_active_grad_only(*objective, stream);
+        }
+    }
+
+    /**
+     * @brief Hessian-vector product
+     */
+    void eval_matvec(const DenseMatrix<T, Eigen::RowMajor>& input,
+                     DenseMatrix<T, Eigen::RowMajor>&       output,
+                     cudaStream_t                           stream = NULL)
+    {
+        output.reset(0, DEVICE, stream);
+
+        for (size_t i = 0; i < terms.size(); ++i) {
+            terms[i]->eval_active_matvec(*objective, input, output, stream);
+        }
+    }
 
     /**
      * @brief return the current loss/energy

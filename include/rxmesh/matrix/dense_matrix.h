@@ -772,14 +772,17 @@ struct DenseMatrix
         IndexT row;
 
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            assert(m_context.vertex_prefix() != nullptr);
             row = m_context.vertex_prefix()[id.first] + id.second;
         }
 
         if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            assert(m_context.edge_prefix() != nullptr);
             row = m_context.edge_prefix()[id.first] + id.second;
         }
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            assert(m_context.face_prefix() != nullptr);
             row = m_context.face_prefix()[id.first] + id.second;
         }
 
