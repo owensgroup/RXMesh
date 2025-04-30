@@ -78,14 +78,72 @@ struct GMG
     {
     }
 
-    static int compute_ratio(int n, int numberOfLevels, int threshold)
+    static int compute_ratio(int n, int& numberOfLevels, int threshold)
     {
-        for (int j = 2; j < 1000; j++) {
-            int a = DIVIDE_UP(n, std::pow(j, numberOfLevels - 1));
-            if (a <= threshold)
-                return j - 1;
+        if (n <= threshold || numberOfLevels <= 1) {
+
+            printf("Not enough levels, not enough vertices for gmg to work");
+            exit(1);
+
+            numberOfLevels = 1;
+
+            return 1;
         }
-        return 999;
+
+        int maxLevels = 1;
+        int testRatio = 2;
+
+        while (true) {
+            int verticesAtHighestLevel = n;
+            for (int i = 0; i < maxLevels - 1; i++) {
+                verticesAtHighestLevel =
+                    DIVIDE_UP(verticesAtHighestLevel, testRatio);
+            }
+
+            if (verticesAtHighestLevel < threshold) {
+                // Step back one level
+                maxLevels--;
+                break;
+            }
+
+            if (maxLevels >= numberOfLevels) {
+                break;
+            }
+
+            maxLevels++;
+        }
+
+        numberOfLevels = std::min(numberOfLevels, maxLevels);
+
+        for (int ratio = 9; ratio >= 2; ratio--) {
+            // Check if this ratio works for the adjusted numberOfLevels
+            int verticesAtHighestLevel = n;
+            for (int i = 0; i < numberOfLevels - 1; i++) {
+                verticesAtHighestLevel =
+                    DIVIDE_UP(verticesAtHighestLevel, ratio);
+            }
+
+            if (verticesAtHighestLevel >= threshold) {
+                return ratio;
+            }
+        }
+
+        while (numberOfLevels > 1) {
+            numberOfLevels--;
+
+            // Try with ratio = 2
+            int verticesAtHighestLevel = n;
+            for (int i = 0; i < numberOfLevels - 1; i++) {
+                verticesAtHighestLevel = DIVIDE_UP(verticesAtHighestLevel, 2);
+            }
+
+            if (verticesAtHighestLevel >= threshold) {
+                return 2;
+            }
+        }
+
+        numberOfLevels = 1;
+        return 1;
     }
 
 
