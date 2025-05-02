@@ -16,27 +16,18 @@ struct FunctionTraits : public FunctionTraits<decltype(&T::operator())>
 {
 };
 
-/**
- * @brief specialization for pointers to member function
- */
-template <typename ClassType, typename ReturnType, typename... Args>
-struct FunctionTraits<ReturnType (ClassType::*)(Args...) const>
-{
-    /**
-     * @brief arity is the number of arguments.
-     */
-    enum
-    {
-        arity = sizeof...(Args)
-    };
 
-    typedef ReturnType result_type;
+template <typename ReturnType, typename... Args>
+struct FunctionTraitsBase
+{
+    static constexpr std::size_t arity = sizeof...(Args);
+    using result_type                  = ReturnType;
 
     /**
      * @brief the i-th argument is equivalent to the i-th tuple element of a
      * tuple composed of those arguments.
      */
-    template <size_t i>
+    template <std::size_t i>
     struct arg
     {
         using type_rc =
@@ -50,6 +41,20 @@ struct FunctionTraits<ReturnType (ClassType::*)(Args...) const>
     };
 };
 
+
+// const-qualified operator()
+template <typename ClassType, typename ReturnType, typename... Args>
+struct FunctionTraits<ReturnType (ClassType::*)(Args...) const>
+    : FunctionTraitsBase<ReturnType, Args...>
+{
+};
+
+// non-const operator() (for mutable lambdas)
+template <typename ClassType, typename ReturnType, typename... Args>
+struct FunctionTraits<ReturnType (ClassType::*)(Args...)>
+    : FunctionTraitsBase<ReturnType, Args...>
+{
+};
 }  // namespace detail
 
 
