@@ -186,6 +186,13 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                             DenseMatrix<T, Eigen::RowMajor>&       output,
                             cudaStream_t                           stream)
     {
+        if (!ScalarT::WithHessian_) {
+            RXMESH_ERROR(
+                "TemplatedTerm::eval_active_matvec() can not run with scalar "
+                "type that does not have Hessians. Returning without "
+                "evolution.");
+            return;
+        }
         rx.run_kernel(lb_active,
                       detail::hess_matvec_kernel<blockThreads,
                                                  LossHandleT,

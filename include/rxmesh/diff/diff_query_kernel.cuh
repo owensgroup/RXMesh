@@ -43,7 +43,7 @@ __global__ static void hess_matvec_kernel(
 
     using PassiveT = typename ScalarT::PassiveType;
 
-    static_assert(ScalarT::WithHessian_, "Scalar type should be with Hessian");
+    assert(ScalarT::WithHessian_);
 
     auto block = cooperative_groups::this_thread_block();
 

@@ -34,65 +34,6 @@ inline void add_term(ProblemT& problem)
         });
 }
 
-TEST(Diff, SmoothingGD)
-{
-    using namespace rxmesh;
-
-    // RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
-    RXMeshStatic rx(rxmesh_args.obj_file_name);
-
-    using T = float;
-
-    constexpr int VariableDim = 3;
-
-    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, false>;
-
-    ProblemT problem(rx);
-
-    auto v_input_pos = *rx.get_input_vertex_coordinates();
-
-    problem.objective->copy_from(v_input_pos, DEVICE, DEVICE);
-
-
-    add_term(problem);
-
-
-    double learning_rate = 0.01;
-
-    GradientDescent gd(problem, learning_rate);
-
-    int num_iterations = 100;
-
-    GPUTimer timer;
-    timer.start();
-
-    for (int iter = 0; iter < num_iterations; ++iter) {
-
-        problem.eval_terms();
-
-        // TODO comment out this part for benchmarking
-        float energy = problem.get_current_loss();
-        if (iter % 10 == 0) {
-            RXMESH_INFO("Iteration = {}: Energy = {}", iter, energy);
-        }
-
-        gd.take_step();
-    }
-    timer.stop();
-
-    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
-
-    std::cout << "\nSmoothing GD RXMesh: " << timer.elapsed_millis() << " (ms),"
-              << timer.elapsed_millis() / float(num_iterations)
-              << " ms per iteration\n";
-
-    // #if USE_POLYSCOPE
-    //     problem.objective->move(DEVICE, HOST);
-    //     rx.get_polyscope_mesh()->updateVertexPositions(*problem.objective);
-    //     polyscope::show();
-    // #endif
-}
-
 TEST(Diff, SmoothingNewton)
 {
     using namespace rxmesh;
@@ -169,8 +110,4 @@ TEST(Diff, SmoothingNewton)
             EXPECT_NEAR((*problem.objective)(vh, 0), f, 1e-3);
         }
     });
-    // #if USE_POLYSCOPE
-    //     rx.get_polyscope_mesh()->updateVertexPositions(*problem.objective);
-    //     polyscope::show();
-    // #endif
 }
