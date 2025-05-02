@@ -12,6 +12,7 @@ struct arg
     std::string output_folder       = STRINGIFY(OUTPUT_DIR);
     std::string perm_method         = "nstdis";
     std::string solver              = "gmg";
+    std::string coarse_solver       = "jacobi";
     uint32_t    device_id           = 0;
     float       time_step           = 10;
     float       cg_tolerance        = 1e-6;
@@ -20,6 +21,9 @@ struct arg
     uint32_t    max_num_iter        = 100;
     bool        use_uniform_laplace = true;
     int         levels              = 3;
+    int         threshold           = 100;
+    bool        render_hierarchy     = false;
+
     char**      argv;
     int         argc;
 } Arg;
@@ -138,6 +142,17 @@ int main(int argc, char** argv)
             Arg.gmg_tolerance_rel =
                 std::atof(get_cmd_option(argv, argv + argc, "-tol_rel"));
         }
+        if (cmd_option_exists(argv, argc + argv, "-threshold")) {
+            Arg.threshold =
+                std::atoi(get_cmd_option(argv, argv + argc, "-threshold"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-csolver")) {
+            Arg.coarse_solver =
+                std::string(get_cmd_option(argv, argv + argc, "-csolver"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-rh")) {
+            Arg.render_hierarchy = true;
+        }
     }
 
     RXMESH_INFO("input= {}", Arg.obj_file_name);
@@ -152,6 +167,8 @@ int main(int argc, char** argv)
     RXMESH_INFO("gmg_tolerance_rel= {}", Arg.gmg_tolerance_rel);
     RXMESH_INFO("gmg_tolerance_abs= {}", Arg.gmg_tolerance_abs);
     RXMESH_INFO("device_id= {}", Arg.device_id);
+    RXMESH_INFO("GMG Coarse solver= {}", Arg.coarse_solver);
+    RXMESH_INFO("Render GMG hierarchy= {}", Arg.render_hierarchy);
 
     return RUN_ALL_TESTS();
 }

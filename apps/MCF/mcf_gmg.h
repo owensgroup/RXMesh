@@ -51,7 +51,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     report.add_member("blockThreads", blockThreads);
 
     GMGSolver solver(
-        rx, A_mat, Arg.max_num_iter, Arg.levels, 2, 2, CoarseSolver::Jacobi, Arg.gmg_tolerance_abs, Arg.gmg_tolerance_rel);
+        rx, A_mat, Arg.max_num_iter, Arg.levels, 2, 2, CoarseSolver::Cholesky, Arg.gmg_tolerance_abs, Arg.gmg_tolerance_rel,Arg.threshold);
 
 
 
@@ -85,8 +85,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                 solver.name(),
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
-    report.add_member(
-        "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    report.add_member("levels", Arg.levels);
+    report.add_member("solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
     total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
     report.add_member("total_time", total_time);
@@ -100,6 +100,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     coords->from_matrix(&X_mat);
 
 #if USE_POLYSCOPE
+    if (Arg.render_hierarchy)
+        solver.render_hierarchy();
     polyscope::registerSurfaceMesh("old mesh",
                                    rx.get_polyscope_mesh()->vertices,
                                    rx.get_polyscope_mesh()->faces);
