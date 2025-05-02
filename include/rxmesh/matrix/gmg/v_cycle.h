@@ -3,6 +3,9 @@
 #include "rxmesh/matrix/gmg/gmg.h"
 
 #include "rxmesh/matrix/gmg/jacobi_solver.h"
+#include "rxmesh/matrix/cholesky_solver.h"
+
+
 
 namespace rxmesh {
 
@@ -11,6 +14,7 @@ enum class CoarseSolver
     Jacobi      = 0,
     GaussSeidel = 1,
     CG          = 2,
+    Cholesky    = 3,
 };
 
 /**
@@ -44,6 +48,7 @@ struct VCycle
     int m_num_pre_relax;
     int m_num_post_relax;
 
+
     // For index, the fine mesh is always indexed with 0
     // The first coarse level index is 1
     //
@@ -61,7 +66,9 @@ struct VCycle
     std::vector<JacobiSolver<T>> m_smoother;  // fine + levels
 
     JacobiSolver<T> m_coarse_solver;
+    std::unique_ptr<CholeskySolver<SparseMatrix<T>, 0>> m_coarse_solver_chol;
 
+    //just solve it using a separate cholesky solver instance
 
     VCycle(GMG<T>&               gmg,
            RXMeshStatic&         rx,
@@ -70,7 +77,8 @@ struct VCycle
            CoarseSolver          coarse_solver  = CoarseSolver::Jacobi,
            int                   num_pre_relax  = 2,
            int                   num_post_relax = 2)
-        : m_num_pre_relax(num_pre_relax), m_num_post_relax(num_post_relax)
+        : m_num_pre_relax(num_pre_relax),
+          m_num_post_relax(num_post_relax)
     {
         // allocate memory for coarsened LHS and RHS
         m_smoother.emplace_back(gmg.m_num_samples[0], gmg.m_num_samples[0]);
@@ -90,8 +98,17 @@ struct VCycle
                                         gmg.m_num_samples[l]);
             } else {
                 // coarsest level
-                m_coarse_solver =
-                    JacobiSolver<T>(gmg.m_num_samples[l], gmg.m_num_samples[l]);
+
+                if (coarse_solver == CoarseSolver::Jacobi)
+                    m_coarse_solver = JacobiSolver<T>(gmg.m_num_samples[l],
+                                                      gmg.m_num_samples[l]);
+                /*else*/ if (coarse_solver == CoarseSolver::Cholesky) {
+                    m_coarse_solver_chol =
+                        std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(
+                            &A);
+                    
+                    //m_coarse_solver_chol.permute_alloc();
+                }
             }
         }
         m_a.resize(gmg.m_num_levels - 1);
@@ -248,7 +265,8 @@ struct VCycle
                GMG<T>&               gmg,
                SparseMatrix<T>&      A,
                const DenseMatrix<T>& f,  // rhs
-               DenseMatrix<T>&       v)        // x
+               DenseMatrix<T>&       v,
+               RXMeshStatic&          rx)  // x
     {
         constexpr int numCols = 3;
         assert(numCols == f.cols());
@@ -259,12 +277,14 @@ struct VCycle
 
             // calc residual
             calc_residual<numCols>(A, v, f, m_r[level]);
+            /*std::cout << "\nResidual at intermediate level " << level << " : "
+                      << m_r[level].norm2();*/
 
             //// restrict residual
             gmg.m_prolong_op[level].multiply(
                 m_r[level], m_rhs[level + 1], true);
             //// recurse
-            cycle(level + 1, gmg, m_a[level].a, m_rhs[level + 1], m_x[level]);
+            cycle(level + 1, gmg, m_a[level].a, m_rhs[level + 1], m_x[level],rx);
 
             // prolong
             // x = x + P*u
@@ -279,7 +299,24 @@ struct VCycle
             // the coarsest level
             // m_coarse_solver.template solve<numCols>(A, f, v,
             // m_num_post_relax);
-            m_coarse_solver.template solve<numCols>(A, f, v, 5);
+            //m_coarse_solver.template solve<numCols>(A, f, v, 100);
+
+
+            
+            // for direct solve, use cholesky
+            //  do pre solve and then solve here
+
+            m_coarse_solver_chol =
+                std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&A);
+            m_coarse_solver_chol->pre_solve(rx);
+            DenseMatrix<T> f_copy = f;
+            m_coarse_solver_chol->solve(f_copy, v);
+
+
+
+
+
+
         }
     }
 
