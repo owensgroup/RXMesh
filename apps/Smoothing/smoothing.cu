@@ -17,6 +17,8 @@ struct arg
 
 using namespace rxmesh;
 
+#include "manual.h"
+
 template <typename T>
 void smoothing(RXMeshStatic& rx)
 {
@@ -79,13 +81,12 @@ void smoothing(RXMeshStatic& rx)
 #if USE_POLYSCOPE
     problem.objective->move(DEVICE, HOST);
     rx.get_polyscope_mesh()->updateVertexPositions(*problem.objective);
-    polyscope::show();
 #endif
 }
 
 int main(int argc, char** argv)
 {
-    Log::init();
+    Log::init(spdlog::level::info);
 
     using T = float;
 
@@ -138,4 +139,10 @@ int main(int argc, char** argv)
     RXMeshStatic rx(Arg.obj_file_name);
 
     smoothing<T>(rx);
+
+    manual<T>(rx);
+
+#if USE_POLYSCOPE
+    polyscope::show();
+#endif
 }

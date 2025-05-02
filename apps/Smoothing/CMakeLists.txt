@@ -1,7 +1,8 @@
 add_executable(Smoothing)
 
 set(SOURCE_LIST
-    smoothing.cu	
+    smoothing.cu
+	manual.h
 )
 
 target_sources(Smoothing 
