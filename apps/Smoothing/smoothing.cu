@@ -3,6 +3,8 @@
 #include "rxmesh/diff/diff_scalar_problem.h"
 #include "rxmesh/diff/gradient_descent.h"
 
+#include "rxmesh/util/report.h"
+
 struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
@@ -22,6 +24,13 @@ using namespace rxmesh;
 template <typename T>
 void smoothing(RXMeshStatic& rx)
 {
+    Report report("SmoothingRXMesh");
+    report.command_line(Arg.argc, Arg.argv);
+    report.device();
+    report.system();
+    report.model_data(Arg.obj_file_name, rx, "Input");
+    report.add_member("num_faces", rx.get_num_faces());
+
     constexpr int VariableDim = 3;
 
     using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, false>;
@@ -63,10 +72,10 @@ void smoothing(RXMeshStatic& rx)
         problem.eval_terms();
 
         // TODO comment out this part for benchmarking
-        float energy = problem.get_current_loss();
-        if (iter % 10 == 0) {
-            RXMESH_INFO("Iteration = {}: Energy = {}", iter, energy);
-        }
+        // float energy = problem.get_current_loss();
+        // if (iter % 10 == 0) {
+        //    RXMESH_INFO("Iteration = {}: Energy = {}", iter, energy);
+        //}
 
         gd.take_step();
     }
@@ -77,6 +86,13 @@ void smoothing(RXMeshStatic& rx)
     RXMESH_INFO("Smoothing GD took {} (ms), ms/iter = {} ",
                 timer.elapsed_millis(),
                 timer.elapsed_millis() / float(Arg.num_iter));
+
+    report.add_member("method", std::string("Ours"));
+    report.add_member("total_time_ms", timer.elapsed_millis());
+    report.add_member("num_iter", Arg.num_iter);
+
+    report.write(Arg.output_folder + "/rxmesh_smoothing",
+                 "Smoothing_RXMesh_" + extract_file_name(Arg.obj_file_name));
 
 #if USE_POLYSCOPE
     problem.objective->move(DEVICE, HOST);
@@ -89,6 +105,10 @@ int main(int argc, char** argv)
     Log::init(spdlog::level::info);
 
     using T = float;
+
+    Arg.argv = argv;
+    Arg.argc = argc;
+
 
     if (argc > 1) {
         if (cmd_option_exists(argv, argc + argv, "-h")) {
@@ -134,15 +154,17 @@ int main(int argc, char** argv)
     RXMESH_INFO("output_folder= {}", Arg.output_folder);
     RXMESH_INFO("device_id= {}", Arg.device_id);
 
+
     cuda_query(Arg.device_id);
 
     RXMeshStatic rx(Arg.obj_file_name);
+
 
     smoothing<T>(rx);
 
     manual<T>(rx);
 
-#if USE_POLYSCOPE
-    polyscope::show();
-#endif
+    // #if USE_POLYSCOPE
+    //     polyscope::show();
+    // #endif
 }

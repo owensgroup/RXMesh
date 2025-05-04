@@ -6,6 +6,14 @@
 template <typename T>
 void manual(RXMeshStatic& rx)
 {
+    Report report("SmoothingManual");
+    report.command_line(Arg.argc, Arg.argv);
+    report.device();
+    report.system();
+    report.model_data(Arg.obj_file_name, rx, "Input");
+    report.add_member("num_faces", rx.get_num_faces());
+
+
     constexpr int blockThreads = 256;
 
     auto input_pos = *rx.get_input_vertex_coordinates();
@@ -55,6 +63,13 @@ void manual(RXMeshStatic& rx)
     RXMESH_INFO("Manual Smoothing GD took {} (ms), ms/iter = {} ",
                 timer.elapsed_millis(),
                 timer.elapsed_millis() / float(Arg.num_iter));
+
+    report.add_member("method", std::string("manual"));
+    report.add_member("total_time_ms", timer.elapsed_millis());
+    report.add_member("num_iter", Arg.num_iter);
+
+    report.write(Arg.output_folder + "/manual_smoothing",
+                 "Manual_RXMesh_" + extract_file_name(Arg.obj_file_name));
 
 #if USE_POLYSCOPE
     pos.move(DEVICE, HOST);
