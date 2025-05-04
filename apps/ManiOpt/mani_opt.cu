@@ -182,8 +182,10 @@ void manifold_optimization(RXMeshStatic&                          rx,
         ActiveT volume =
             (1.0 / 6.0) * col_mat(a_mani, b_mani, c_mani).determinant();
 
-        // if (volume <= 0.0)
-        //     return (T)INFINITY;
+        if (volume <= 0.0) {
+            using PassiveT = PassiveType<ActiveT>;
+            return ActiveT(std::numeric_limits<PassiveT>::max());
+        }
 
         ActiveT E = -0.1 * log(volume);
         E += (a_mani - b_mani).squaredNorm() + (b_mani - c_mani).squaredNorm() +
