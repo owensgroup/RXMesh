@@ -162,6 +162,9 @@ void mass_spring(RXMeshStatic& rx)
 
     Timers<GPUTimer> timer;
     timer.add("Step");
+    timer.add("LineSearch");
+    timer.add("LinearSolver");
+    timer.add("Diff");
 
 
     auto step_forward = [&]() {
@@ -176,17 +179,20 @@ void mass_spring(RXMeshStatic& rx)
             });
 
         // evaluate energy
+        timer.start("Diff");
         problem.eval_terms();
+        timer.stop("Diff");
 
-        T f = problem.get_current_loss();
-
-        RXMESH_INFO("Time step: {}, Energy: {}", time_step, f);
+        // T f = problem.get_current_loss();
+        // RXMESH_INFO("Time step: {}, Energy: {}", time_step, f);
 
         // apply bc
         newton_solver.apply_bc(is_bc);
 
         // get newton direction
+        timer.start("LinearSolver");
         newton_solver.newton_direction();
+        timer.stop("LinearSolver");
 
 
         // residual is abs_max(newton_dir)/ h
@@ -194,16 +200,22 @@ void mass_spring(RXMeshStatic& rx)
 
         int iter = 0;
         if (residual > tol) {
+            timer.start("LineSearch");
             newton_solver.line_search();
+            timer.stop("LineSearch");
 
             // evaluate energy
+            timer.start("Diff");
             problem.eval_terms();
+            timer.stop("Diff");
 
             // apply bc
             newton_solver.apply_bc(is_bc);
 
             // get newton direction
+            timer.start("LinearSolver");
             newton_solver.newton_direction();
+            timer.stop("LinearSolver");
 
             // residual is abs_max(newton_dir)/ h
             residual = newton_solver.dir.abs_max() / h;
@@ -227,6 +239,10 @@ void mass_spring(RXMeshStatic& rx)
     };
 
 #if USE_POLYSCOPE
+    polyscope::options::groundPlaneHeightFactor = 0.8;
+    polyscope::options::groundPlaneMode =
+        polyscope::GroundPlaneMode::ShadowOnly;
+
     bool is_running = false;
 
     auto ps_callback = [&]() mutable {
@@ -260,16 +276,23 @@ void mass_spring(RXMeshStatic& rx)
 
     polyscope::state::userCallback = ps_callback;
     polyscope::show();
+#else
+    while (time_step < 5) {
+        step_forward();
+    }
 #endif
 
 
     RXMESH_INFO(
         "Mass-spring: #time_step ={}, time= {} (ms), "
-        "timer/iteration= {} ms/iter, solve time = {} (ms)",
+        "timer/iteration= {} ms/iter",
         time_step,
         timer.elapsed_millis("Step"),
-        timer.elapsed_millis("Step") / float(time_step),
-        newton_solver.solve_time);
+        timer.elapsed_millis("Step") / float(time_step));
+    RXMESH_INFO("LinearSolver {} (ms), Diff {} (ms), LineSearch {} (ms)",
+                timer.elapsed_millis("LinearSolver"),
+                timer.elapsed_millis("Diff"),
+                timer.elapsed_millis("LineSearch"));
 }
 
 int main(int argc, char** argv)
@@ -301,9 +324,6 @@ int main(int argc, char** argv)
     RXMESH_INFO(
         "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
 
-    polyscope::options::groundPlaneHeightFactor = 0.8;
-    polyscope::options::groundPlaneMode =
-        polyscope::GroundPlaneMode::ShadowOnly;
 
     mass_spring<T>(rx);
 }
