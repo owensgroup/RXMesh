@@ -293,6 +293,12 @@ void mass_spring(RXMeshStatic& rx)
                 timer.elapsed_millis("LinearSolver"),
                 timer.elapsed_millis("Diff"),
                 timer.elapsed_millis("LineSearch"));
+
+    RXMESH_INFO(
+        "LinearSolver/iter {} (ms), Diff/iter {} (ms), LineSearch/iter {} (ms)",
+        timer.elapsed_millis("LinearSolver") / float(time_step),
+        timer.elapsed_millis("Diff") / float(time_step),
+        timer.elapsed_millis("LineSearch") / float(time_step));
 }
 
 int main(int argc, char** argv)
