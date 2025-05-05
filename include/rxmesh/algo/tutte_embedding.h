@@ -7,6 +7,8 @@
 #include "rxmesh/matrix/lu_solver.h"
 #include "rxmesh/matrix/sparse_matrix.h"
 
+#include <glm/gtc/constants.hpp>
+
 namespace rxmesh {
 
 namespace detail {

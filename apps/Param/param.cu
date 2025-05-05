@@ -31,6 +31,7 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
                            VertexAttribute<T>& v,
                            std::string         name)
 {
+#if USE_POLYSCOPE
     if (v.get_num_attributes() == 3) {
         polyscope::registerSurfaceMesh(name, v, rx.get_polyscope_mesh()->faces);
     } else {
@@ -47,6 +48,7 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
 
         rx.remove_attribute(name);
     }
+#endif
 }
 
 template <typename T, typename ProblemT, typename SolverT>
@@ -62,10 +64,12 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
     tutte_embedding(rx, coordinates, *problem.objective);
 
+#if USE_POLYSCOPE
     rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
         "uv_tutte", *problem.objective);
 
     add_mesh_to_polyscope(rx, *problem.objective, "tutte_mesh");
+#endif
 
     constexpr uint32_t blockThreads = 256;
 
@@ -205,12 +209,14 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
     problem.objective->move(DEVICE, HOST);
 
+#if USE_POLYSCOPE
     rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
         "uv_opt", *problem.objective);
 
     add_mesh_to_polyscope(rx, *problem.objective, "opt_mesh");
 
     polyscope::show();
+#endif
 }
 
 int main(int argc, char** argv)
