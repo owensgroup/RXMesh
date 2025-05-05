@@ -91,6 +91,9 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
 
     report.add_member("total_time", total_time);
 
+    report.add_member("max_iterations", Arg.max_num_iter);
+    report.add_member("threshold", Arg.threshold);
+
     RXMESH_INFO("total_time {} (ms)", total_time);
 
 
@@ -107,7 +110,13 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                                    rx.get_polyscope_mesh()->faces);
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
     polyscope::show();
+
+    
+
 #endif
+
+    /*rx.export_obj("gmg_mcf_result.obj",  
+                  *coords);*/
 
     B_mat.release();
     X_mat.release();

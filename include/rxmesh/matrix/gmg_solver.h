@@ -10,7 +10,7 @@
 namespace rxmesh {
 
 /**
- * @brief Geometric Multi Gird Solver
+ * @brief Geometric Multi Grid Solver
  */
 template <typename T>
 struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
@@ -44,7 +44,20 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     {
 
         // if (m_num_levels > 1)
+
+        CPUTimer timer;
+        GPUTimer gtimer;
+
+        timer.start();
+        gtimer.start();
         m_gmg = GMG<T>(*m_rx, m_num_levels,m_threshold);
+        timer.stop();
+        gtimer.stop();
+        RXMESH_INFO("full gmg operator construction took {} (ms), {} (ms)",
+                    timer.elapsed_millis(),
+                    gtimer.elapsed_millis());
+
+
         if (m_num_levels == 1) 
         {
 
@@ -53,6 +66,9 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         }
         else 
         {
+
+            timer.start();
+            gtimer.start();
             m_v_cycle = VCycle<T>(m_gmg,
                                   *m_rx,
                                   *m_A,
@@ -60,6 +76,14 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                                   m_coarse_solver,
                                   m_num_pre_relax,
                                   m_num_post_relax);
+
+
+            timer.stop();
+            gtimer.stop();
+            RXMESH_INFO("v cycle prep took {} (ms), {} (ms)",
+                        timer.elapsed_millis(),
+                        gtimer.elapsed_millis());
+
             constexpr int numCols = 3;
             assert(numCols == B.cols());
             m_v_cycle.template calc_residual<numCols>(
@@ -82,10 +106,13 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         else {
             m_iter_taken = 0;
             while (m_iter_taken < m_max_iter) {
-                m_v_cycle.cycle(0, m_gmg, *m_A, B, X,*m_rx);
+                //m_v_cycle.cycle(0, m_gmg, *m_A, B, X,*m_rx);
+                m_v_cycle.cycle(0, m_gmg, *m_A, m_v_cycle.B, X, *m_rx);
                 current_res = m_v_cycle.m_r[0].norm2();
-                // std::cout << "\ncurrent residual: " << current_res;
-
+                RXMESH_TRACE(
+                    "GMG: current residual: "
+                    "{}",
+                    current_res);
                 if (is_converged(m_start_residual, current_res)) {
                     m_final_residual = current_res;
                     /*std::cout << "\nconverged! at " << m_final_residual
