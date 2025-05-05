@@ -155,6 +155,11 @@ struct GMG
         : m_ratio(reduction_ratio),
           m_edge_storage(GPUStorage<Edge>(rx.get_num_edges()))
     {
+
+        CPUTimer timer;
+        GPUTimer gtimer;
+
+        
         m_num_rows = rx.get_num_vertices();
         // m_num_samples.push_back(m_num_rows);
         for (int i = 0; i < 16; i++) {
@@ -166,6 +171,9 @@ struct GMG
         }
         m_num_levels = m_num_samples.size();
 
+
+        timer.start();
+        gtimer.start();
         //============
         // 1) init variables and alloc memory
         //============
@@ -222,20 +230,57 @@ struct GMG
             m_num_samples[1] + 1);
         CUDA_ERROR(cudaMalloc((void**)&m_d_cub_temp_storage, m_cub_temp_bytes));
 
+
+        timer.stop();
+        gtimer.stop();
+        RXMESH_INFO("memory allocation took {} (ms), {} (ms)",
+                    timer.elapsed_millis(),
+                    gtimer.elapsed_millis());
+        /*report.add_member(
+            "memory_allocation",
+            std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));*/
+
+        timer.start();
         //============
         // 2) Sampling
         //============
         switch (sam) {
             case Sampling::Rand: {
                 random_sampling(rx);
+
+                timer.stop();
+                gtimer.stop();
+                RXMESH_INFO("random sampling took {} (ms), {} (ms)",
+                            timer.elapsed_millis(),
+                            gtimer.elapsed_millis());
+                /*report.add_member(
+                    "random_sampling",
+                    std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));*/
+
                 break;
             }
             case Sampling::FPS: {
                 fps_sampling(rx);
+                timer.stop();
+                gtimer.stop();
+                RXMESH_INFO("fps sampling took {} (ms), {} (ms)",
+                            timer.elapsed_millis(),
+                            gtimer.elapsed_millis());
+               /* report.add_member(
+                    "fps_sampling",
+                    std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));*/
                 break;
             }
             case Sampling::KMeans: {
                 kmeans_sampling(rx);
+                timer.stop();
+                gtimer.stop();
+                RXMESH_INFO("k means sampling took {} (ms), {} (ms)",
+                            timer.elapsed_millis(),
+                            gtimer.elapsed_millis());
+                /*report.add_member(
+                    "kmeans_sampling",
+                    std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));*/
                 break;
             }
             default: {
@@ -243,7 +288,8 @@ struct GMG
                 break;
             }
         }
-
+        timer.start();
+        gtimer.start();
 
         for (int l = 0; l < m_num_levels - 1; ++l) {
 
@@ -260,14 +306,32 @@ struct GMG
 
             create_compressed_representation(rx, l + 1);
         }
+        timer.stop();
+        gtimer.stop();
+        RXMESH_INFO("clustering+creating csr took {} (ms), {} (ms)",
+                    timer.elapsed_millis(),
+                    gtimer.elapsed_millis());
 
         // render_hierarchy();
         // render_point_clouds(rx);
 
+
+        timer.start();
+        gtimer.start();
         //============
         // 5) Create prolongation operator
         //============
         create_all_prolongation();
+
+        timer.stop();
+        gtimer.stop();
+        RXMESH_INFO("constructing operators took {} (ms), {} (ms)",
+                    timer.elapsed_millis(),
+                    gtimer.elapsed_millis());
+        /*report.add_member(
+            "operator_construction",
+            std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));*/
+
         // move prolongation operator from device to host (for no obvious
         // reason)
         for (auto& prolong_op : m_prolong_op) {
