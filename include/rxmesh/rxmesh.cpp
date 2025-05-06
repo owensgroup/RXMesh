@@ -163,22 +163,22 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                 m_timers.elapsed_millis("context.init"));
 
 
-    RXMESH_TRACE("#Vertices = {}, #Faces= {}, #Edges= {}",
-                 m_num_vertices,
-                 m_num_faces,
-                 m_num_edges);
-    RXMESH_TRACE("Input is{} edge manifold",
-                 ((m_is_input_edge_manifold) ? "" : " Not"));
-    RXMESH_TRACE("Input is{} closed", ((m_is_input_closed) ? "" : " Not"));
-    RXMESH_TRACE("Input max valence = {}", m_input_max_valence);
-    RXMESH_TRACE("max edge incident faces = {}",
-                 m_input_max_edge_incident_faces);
-    RXMESH_TRACE("max face adjacent faces = {}",
-                 m_input_max_face_adjacent_faces);
-    RXMESH_TRACE("per-patch maximum face count = {}", m_max_faces_per_patch);
-    RXMESH_TRACE("per-patch maximum edge count = {}", m_max_edges_per_patch);
-    RXMESH_TRACE("per-patch maximum vertex count = {}",
-                 m_max_vertices_per_patch);
+    RXMESH_INFO("#Vertices = {}, #Faces= {}, #Edges= {}",
+                m_num_vertices,
+                m_num_faces,
+                m_num_edges);
+    RXMESH_INFO("Input is{} edge manifold",
+                ((m_is_input_edge_manifold) ? "" : " Not"));
+    RXMESH_INFO("Input is{} closed", ((m_is_input_closed) ? "" : " Not"));
+    RXMESH_INFO("Input max valence = {}", m_input_max_valence);
+    RXMESH_INFO("max edge incident faces = {}",
+                m_input_max_edge_incident_faces);
+    RXMESH_INFO("max face adjacent faces = {}",
+                m_input_max_face_adjacent_faces);
+    RXMESH_INFO("per-patch maximum face count = {}", m_max_faces_per_patch);
+    RXMESH_INFO("per-patch maximum edge count = {}", m_max_edges_per_patch);
+    RXMESH_INFO("per-patch maximum vertex count = {}",
+                m_max_vertices_per_patch);
 
     RXMESH_INFO("cudaMalloc time = {} (ms)",
                 m_timers.elapsed_millis("cudaMalloc"));

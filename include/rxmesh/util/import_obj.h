@@ -32,7 +32,7 @@ bool import_obj(const std::string                 file_name,
         RXMESH_ERROR("importOBJ() can not open {}", file_name);
         return false;
     } else {
-        RXMESH_TRACE("Reading {}", file_name);
+        RXMESH_INFO("Reading {}", file_name);
     }
 
 
@@ -180,12 +180,12 @@ bool import_obj(const std::string                 file_name,
     fclose(Objfile);
 
 
-    RXMESH_TRACE("import_obj() #vertices= {} ", vertices.size());
-    RXMESH_TRACE("import_obj() #faces= {} ", faces.size());
-    RXMESH_TRACE("import_obj() #tex= {} ", tex.size());
-    RXMESH_TRACE("import_obj() #face_tex= {} ", face_tex.size());
-    RXMESH_TRACE("import_obj() #normals = {} ", normals.size());
-    RXMESH_TRACE("import_obj() #face_normal= {} ", face_normal.size());
+    RXMESH_INFO("import_obj() #vertices= {} ", vertices.size());
+    RXMESH_INFO("import_obj() #faces= {} ", faces.size());
+    RXMESH_INFO("import_obj() #tex= {} ", tex.size());
+    RXMESH_INFO("import_obj() #face_tex= {} ", face_tex.size());
+    RXMESH_INFO("import_obj() #normals = {} ", normals.size());
+    RXMESH_INFO("import_obj() #face_normal= {} ", face_normal.size());
 
     return true;
 }
@@ -196,7 +196,7 @@ bool import_obj(const std::string                 file_name,
  * @tparam IndexT indices type
  * @param file_name path to the obj file
  * @param vertices 3d vertices (3*#vertices)
- * @param faces face index to the Vert array (3*#faces) 
+ * @param faces face index to the Vert array (3*#faces)
  * @return true if reading the file is successful
  */
 template <typename DataT, typename IndexT>

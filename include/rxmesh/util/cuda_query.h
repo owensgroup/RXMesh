@@ -76,61 +76,61 @@ inline cudaDeviceProp cuda_query(const int dev)
     CUDA_ERROR(cudaGetDeviceProperties(&dev_prop, dev));
 
 
-    RXMESH_TRACE("Total number of device: {}", deviceCount);
-    RXMESH_TRACE("Using device Number: {}", dev);
+    RXMESH_INFO("Total number of device: {}", deviceCount);
+    RXMESH_INFO("Using device Number: {}", dev);
 
-    RXMESH_TRACE("Device name: {}", dev_prop.name);
-    RXMESH_TRACE(
+    RXMESH_INFO("Device name: {}", dev_prop.name);
+    RXMESH_INFO(
         "Compute Capability: {}.{}", (int)dev_prop.major, (int)dev_prop.minor);
-    RXMESH_TRACE("Total amount of global memory (MB): {0:.1f}",
-                 (float)dev_prop.totalGlobalMem / 1048576.0f);
-    RXMESH_TRACE("{} Multiprocessors, {} CUDA Cores/MP: {} CUDA Cores",
-                 dev_prop.multiProcessorCount,
-                 convert_SMV_to_cores(dev_prop.major, dev_prop.minor),
-                 convert_SMV_to_cores(dev_prop.major, dev_prop.minor) *
-                     dev_prop.multiProcessorCount);
-    RXMESH_TRACE("Maximum # blocks per SM: {}",
-                 dev_prop.maxBlocksPerMultiProcessor);
-    RXMESH_TRACE("ECC support: {}",
-                 (dev_prop.ECCEnabled ? "Enabled" : "Disabled"));
-    RXMESH_TRACE("GPU Max Clock rate: {0:.1f} MHz ({1:.2f} GHz)",
-                 dev_prop.clockRate * 1e-3f,
-                 dev_prop.clockRate * 1e-6f);
-    RXMESH_TRACE("Memory Clock rate: {0:.1f} Mhz",
-                 dev_prop.memoryClockRate * 1e-3f);
-    RXMESH_TRACE("Memory Bus Width:  {}-bit", dev_prop.memoryBusWidth);
+    RXMESH_INFO("Total amount of global memory (MB): {0:.1f}",
+                (float)dev_prop.totalGlobalMem / 1048576.0f);
+    RXMESH_INFO("{} Multiprocessors, {} CUDA Cores/MP: {} CUDA Cores",
+                dev_prop.multiProcessorCount,
+                convert_SMV_to_cores(dev_prop.major, dev_prop.minor),
+                convert_SMV_to_cores(dev_prop.major, dev_prop.minor) *
+                    dev_prop.multiProcessorCount);
+    RXMESH_INFO("Maximum # blocks per SM: {}",
+                dev_prop.maxBlocksPerMultiProcessor);
+    RXMESH_INFO("ECC support: {}",
+                (dev_prop.ECCEnabled ? "Enabled" : "Disabled"));
+    RXMESH_INFO("GPU Max Clock rate: {0:.1f} MHz ({1:.2f} GHz)",
+                dev_prop.clockRate * 1e-3f,
+                dev_prop.clockRate * 1e-6f);
+    RXMESH_INFO("Memory Clock rate: {0:.1f} Mhz",
+                dev_prop.memoryClockRate * 1e-3f);
+    RXMESH_INFO("Memory Bus Width:  {}-bit", dev_prop.memoryBusWidth);
     const double maxBW = 2.0 * dev_prop.memoryClockRate *
                          (dev_prop.memoryBusWidth / 8.0) / 1.0E6;
-    RXMESH_TRACE("Peak Memory Bandwidth: {0:f}(GB/s)", maxBW);
-    RXMESH_TRACE("Kernels compiled for compute capability: {}", cuda_arch());
+    RXMESH_INFO("Peak Memory Bandwidth: {0:f}(GB/s)", maxBW);
+    RXMESH_INFO("Kernels compiled for compute capability: {}", cuda_arch());
 
     int cusolver_major = -1, cusolver_minor = -1, cusolver_patch = -1;
     CUSOLVER_ERROR(cusolverGetProperty(MAJOR_VERSION, &cusolver_major));
     CUSOLVER_ERROR(cusolverGetProperty(MINOR_VERSION, &cusolver_minor));
     CUSOLVER_ERROR(cusolverGetProperty(PATCH_LEVEL, &cusolver_patch));
-    RXMESH_TRACE("Using cuSolver Version {}.{}.{}",
-                 cusolver_major,
-                 cusolver_minor,
-                 cusolver_patch);
+    RXMESH_INFO("Using cuSolver Version {}.{}.{}",
+                cusolver_major,
+                cusolver_minor,
+                cusolver_patch);
 
 
     int cusparse_major = -1, cusparse_minor = -1, cusparse_patch = -1;
     CUSPARSE_ERROR(cusparseGetProperty(MAJOR_VERSION, &cusparse_major));
     CUSPARSE_ERROR(cusparseGetProperty(MINOR_VERSION, &cusparse_minor));
     CUSPARSE_ERROR(cusparseGetProperty(PATCH_LEVEL, &cusparse_patch));
-    RXMESH_TRACE("Using cuSparse Version {}.{}.{}",
-                 cusparse_major,
-                 cusparse_minor,
-                 cusparse_patch);
+    RXMESH_INFO("Using cuSparse Version {}.{}.{}",
+                cusparse_major,
+                cusparse_minor,
+                cusparse_patch);
 
     int cublas_major = -1, cublas_minor = -1, cublas_patch = -1;
     CUBLAS_ERROR(cublasGetProperty(MAJOR_VERSION, &cublas_major));
     CUBLAS_ERROR(cublasGetProperty(MINOR_VERSION, &cublas_minor));
     CUBLAS_ERROR(cublasGetProperty(PATCH_LEVEL, &cublas_patch));
-    RXMESH_TRACE("Using cuBlas Version {}.{}.{}",
-                 cublas_major,
-                 cublas_minor,
-                 cublas_patch);
+    RXMESH_INFO("Using cuBlas Version {}.{}.{}",
+                cublas_major,
+                cublas_minor,
+                cublas_patch);
 
 
     if (!dev_prop.managedMemory) {
