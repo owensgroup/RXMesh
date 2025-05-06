@@ -21,7 +21,7 @@ void mass_spring(RXMeshStatic& rx)
     using HessMatT = typename ProblemT::HessMatT;
 
     const T rho             = 1000;  // density
-    const T k               = 1e3;   // stiffness
+    const T k               = 1e4;   // stiffness
     const T initial_stretch = 1.3;
     const T tol             = 0.01;
     const T h               = 0.02;  // time step
@@ -56,19 +56,7 @@ void mass_spring(RXMeshStatic& rx)
     rx.for_each_vertex(
         DEVICE,
         [bb_upper, bb_lower, is_bc, x] __device__(const VertexHandle& vh) {
-            // top right
-            T d0 = x(vh, 0) - bb_upper[0];
-            T d1 = x(vh, 1) - bb_upper[1];
-            T d2 = x(vh, 2) - bb_upper[2];
-
-            if (d0 * d0 + d1 * d1 < std::numeric_limits<T>::min()) {
-                is_bc(vh) = 1;
-            }
-
-            // top left
-            d0 = x(vh, 0) - bb_lower[0];
-
-            if (d0 * d0 + d1 * d1 < std::numeric_limits<T>::min()) {
+            if (x(vh, 0) < std::numeric_limits<T>::min()) {
                 is_bc(vh) = 1;
             }
         });
@@ -240,8 +228,8 @@ void mass_spring(RXMeshStatic& rx)
 
 #if USE_POLYSCOPE
     polyscope::options::groundPlaneHeightFactor = 0.8;
-    polyscope::options::groundPlaneMode =
-        polyscope::GroundPlaneMode::ShadowOnly;
+    // polyscope::options::groundPlaneMode =
+    //     polyscope::GroundPlaneMode::ShadowOnly;
 
     bool is_running = false;
 
@@ -267,6 +255,11 @@ void mass_spring(RXMeshStatic& rx)
         ImGui::SameLine();
         if (ImGui::Button("Pause")) {
             is_running = false;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Export")) {
+            rx.export_obj("MS_" + std::to_string(time_step) + ".obj", x_tilde);
         }
 
         if (is_running) {
@@ -318,11 +311,7 @@ int main(int argc, char** argv)
 
     T dx = 1 / T(n - 1);
 
-    create_plane(verts, fv, n, n, 2, dx, true);
-
-    for (int i = 0; i < verts.size(); ++i) {
-        verts[i][2] += (1 - verts[i][1]);
-    }
+    create_plane(verts, fv, n, n, 2, dx, true); 
 
     RXMeshStatic rx(fv);
     rx.add_vertex_coordinates(verts, "Coords");
