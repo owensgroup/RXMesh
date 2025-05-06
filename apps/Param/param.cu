@@ -155,20 +155,16 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
     int iter;
 
-    GPUTimer timer;
-    timer.start();
+    Timers<GPUTimer> timer;
+    timer.add("Total");
+    timer.add("DiffCG");
 
-
-    // GradientDescent gd(problem, 1e-9);
-    // for (iter = 0; iter < num_iterations; ++iter) {
-    //     problem.eval_terms();
-    //     T f = problem.get_current_loss();
-    //     RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
-    //     gd.take_step();
-    // }
+    timer.start("Total");
 
 
     for (iter = 0; iter < Arg.newton_max_iter; ++iter) {
+
+        timer.start("DiffCG");
 
         if (Arg.solver == "cg_mat_free") {
             // calc gradient only if we are using matrix free solver
@@ -185,6 +181,7 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
         // direction newton
         newton_solver.newton_direction();
+        timer.stop("DiffCG");
 
         // newton decrement
         if (0.5f * problem.grad.dot(newton_solver.dir) < convergence_eps) {
@@ -195,15 +192,17 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
         newton_solver.line_search();
     }
 
-    timer.stop();
+    timer.stop("Total");
 
 
     RXMESH_INFO(
         "Parametrization: iterations ={}, time= {} (ms), "
-        "timer/iteration= {} ms/iter, solver_time = {} (ms)",
+        "timer/iteration= {} ms/iter, diff_cg_time/iter = {} solver_time = {} "
+        "(ms)",
         iter,
-        timer.elapsed_millis(),
-        timer.elapsed_millis() / float(iter),
+        timer.elapsed_millis("Total"),
+        timer.elapsed_millis("Total") / float(iter),
+        timer.elapsed_millis("DiffCG") / float(iter),
         newton_solver.solve_time);
 
 
