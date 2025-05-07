@@ -60,9 +60,7 @@ int main(int argc, char** argv)
             // clang-format off
             RXMESH_INFO("\nUsage: ShortestEdgeCollapse.exe < -option X>\n"
                         " -h:          Display this massage and exit\n"
-                        " -input:      Input file. Input file should be under the input/ subdirectory\n"
-                        "              Default is {} \n"
-                        "              Hint: Only accept OBJ files\n"
+                        " -input:      Input OBJ mesh file. Default is {} \n"
                         " -target:     The fraction of output #vertices from the input. Default is {}\n"
                         " -r:          Reduction ratio. Default is {}\n"
                         " -o:          JSON file output folder. Default is {} \n"

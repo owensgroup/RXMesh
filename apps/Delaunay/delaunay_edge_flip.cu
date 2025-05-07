@@ -58,9 +58,7 @@ int main(int argc, char** argv)
             // clang-format off
             RXMESH_INFO("\nUsage: DelaunayEdgeFlip.exe < -option X>\n"
                         " -h:          Display this massage and exit\n"
-                        " -input:      Input file. Input file should be under the input/ subdirectory\n"
-                        "              Default is {} \n"
-                        "              Hint: Only accept OBJ files\n"
+                        " -input:      Input OBJ mesh file. Default is {} \n"
                         " -no_verify:  Do not verify the output using OpenMesh. By default the results are verified\n"
                         " -skip_mcf:   Skip running MCF before and after Delaunay edge flip. Default is false.\n"
                         " -o:          JSON file output folder. Default is {} \n"
