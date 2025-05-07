@@ -12,6 +12,7 @@ struct arg
 {
     std::string obj_file_name   = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
     std::string output_folder   = STRINGIFY(OUTPUT_DIR);
+    std::string uv_file_name    = "";
     std::string solver          = "chol";
     uint32_t    device_id       = 0;
     float       cg_abs_tol      = 1e-6;
@@ -62,7 +63,28 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
     auto rest_shape =
         *rx.add_face_attribute<Eigen::Matrix<T, 2, 2>>("fRestShape", 1);
 
-    tutte_embedding(rx, coordinates, *problem.objective);
+    if (Arg.uv_file_name.empty()) {
+        tutte_embedding(rx, coordinates, *problem.objective);
+    } else {
+        std::vector<std::vector<uint32_t>> fv;
+        std::vector<std::vector<float>>    uv;
+        import_obj(Arg.uv_file_name, uv, fv);
+        if (uv.size() != rx.get_num_vertices()) {
+            RXMESH_ERROR(
+                "Number of vertices in the the input UV file {} does not match "
+                "the number of vertices in the mesh {}.",
+                uv.size(),
+                rx.get_num_vertices());
+        }
+        rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
+            uint32_t id = rx.map_to_global(vh);
+
+            (*problem.objective)(vh, 0) = uv[id][0];
+            (*problem.objective)(vh, 1) = uv[id][1];
+        });
+
+        problem.objective->move(HOST, DEVICE);
+    }
 
 #if USE_POLYSCOPE
     rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
@@ -176,17 +198,17 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
 
         // get the current value of the loss function
-        T f = problem.get_current_loss();
-        RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
+        /*T f = problem.get_current_loss();
+        RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);*/
 
         // direction newton
         newton_solver.newton_direction();
         timer.stop("DiffCG");
 
         // newton decrement
-        if (0.5f * problem.grad.dot(newton_solver.dir) < convergence_eps) {
+        /*if (0.5f * problem.grad.dot(newton_solver.dir) < convergence_eps) {
             break;
-        }
+        }*/
 
         // line search
         newton_solver.line_search();
@@ -230,7 +252,7 @@ int main(int argc, char** argv)
             RXMESH_INFO("\nUsage: Param.exe < -option X>\n"
                         " -h:                 Display this massage and exit\n"
                         " -input:             Input OBJ mesh file. Default is {} \n"                  
-                        " -uv:                Input UV OBJ file. Default is {} \n"                        
+                        " -uv:                Input UV OBJ file. If empty, will compyte tutte embedding. Default is {} \n"                        
                         " -o:                 JSON file output folder. Default is {} \n"
                         " -solver:            Solver to use. Options are cg_mat_free, cg, pcg, chol, or lu. Default is {}\n"
                         " -abs_eps:           Iterative solvers absolute tolerance. Default is {}\n"
@@ -238,7 +260,7 @@ int main(int argc, char** argv)
                         " -cg_max_iter:       Maximum number of iterations for iterative solvers. Default is {}\n"
                         " -newton_max_iter:   Maximum number of iterations for Newton solver. Default is {}\n"
                         " -device_id:         GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.output_folder,  Arg.solver, Arg.cg_abs_tol, Arg.cg_rel_tol, Arg.cg_max_iter, Arg.newton_max_iter, Arg.device_id);
+            Arg.obj_file_name,Arg.uv_file_name, Arg.output_folder,  Arg.solver, Arg.cg_abs_tol, Arg.cg_rel_tol, Arg.cg_max_iter, Arg.newton_max_iter, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
@@ -246,6 +268,10 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-input")) {
             Arg.obj_file_name =
                 std::string(get_cmd_option(argv, argv + argc, "-input"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-uv")) {
+            Arg.uv_file_name =
+                std::string(get_cmd_option(argv, argv + argc, "-uv"));
         }
         if (cmd_option_exists(argv, argc + argv, "-o")) {
             Arg.output_folder =
