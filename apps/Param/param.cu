@@ -90,6 +90,10 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
     rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
         "uv_tutte", *problem.objective);
 
+    auto bnd = *rx.add_vertex_attribute<bool>("Bnd", 1);
+    rx.get_boundary_vertices(bnd);
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("Boundary", bnd);
+
     add_mesh_to_polyscope(rx, *problem.objective, "tutte_mesh");
 #endif
 
