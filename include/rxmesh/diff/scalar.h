@@ -12,6 +12,8 @@
 #include <Eigen/Dense>
 #include <cmath>
 
+#include "rxmesh/kernels/shmem_allocator.cuh"
+
 #include "rxmesh/diff/util.h"
 
 namespace rxmesh {
@@ -27,8 +29,10 @@ template <typename PassiveT, int k, bool WithHessian = true>
 struct Scalar
 {
     // Make template arguments available as members
-    static_assert(k >= 1,
-                  "We don't support Eigen:Dynamic. Thus, k should be >= 1");
+
+    // static_assert(k >= 1,
+    //               "We don't support Eigen:Dynamic. Thus, k should be >= 1");
+
     static constexpr int  k_           = k;
     static constexpr bool WithHessian_ = WithHessian;
 
@@ -36,34 +40,189 @@ struct Scalar
     // required.
     using PassiveType = PassiveT;
     using GradType    = Eigen::Matrix<PassiveT, k, 1>;
+    using GradMapType = Eigen::Map<GradType>;
+
     using HessType    = typename std::conditional_t<WithHessian,
-                                                 Eigen::Matrix<PassiveT, k, k>,
-                                                 Eigen::Matrix<PassiveT, 0, 0>>;
+                                                    Eigen::Matrix<PassiveT, k, k>,
+                                                    Eigen::Matrix<PassiveT, 0, 0>>;
+    using HessMapType = Eigen::Map<HessType>;
+
+
+    int dk;  // k in case of dynamic size
+
+    // ///////////////////////////////////////////////////////////////////////////
+    // Data
+    // ///////////////////////////////////////////////////////////////////////////
+    PassiveT m_val = 0.0;  // Scalar value of this (intermediate) variable.
+
+    // Gradient (first derivative) of val w.r.t. the active variable vector.
+    GradType m_grad;
+    // GradMapType m_map_grad = GradMapType(nullptr, 0);
+
+    // Hessian (second derivative) of val w.r.t. the active variable vector.
+    HessType m_hess;
+    // HessMapType m_map_hess = HessMapType(nullptr, 0, 0);
+
+    // ///////////////////////////////////////////////////////////////////////////
+    // Accessors
+    // ///////////////////////////////////////////////////////////////////////////
+
+    /**
+     * Return constant reference to the value
+     */
+    __device__ __host__ constexpr const PassiveT& val() const
+    {
+        return m_val;
+    }
+
+    /**
+     * Return a non-constant reference to the value
+     */
+    __device__ __host__ constexpr PassiveT& val()
+    {
+        return m_val;
+    }
+
+
+    /**
+     * Return constant reference to the gradient
+     */
+    __device__ __host__ constexpr const GradType& grad() const
+    {
+        // if constexpr (k == Eigen::Dynamic) {
+        //     return m_map_grad;
+        // } else {
+        //     return m_grad;
+        // }
+        return m_grad;
+    }
+
+    /**
+     * Return a non-constant reference to the gradient
+     */
+    __device__ __host__ constexpr GradType& grad()
+    {
+        // if constexpr (k == Eigen::Dynamic) {
+        //     return m_map_grad;
+        // } else {
+        //     return m_grad;
+        // }
+        return m_grad;
+    }
+
+    /**
+     * Return constant reference to the hessian
+     */
+    __device__ __host__ constexpr const HessType& hess() const
+    {
+        // if constexpr (k == Eigen::Dynamic) {
+        //     return m_map_hess;
+        // } else {
+        //     return m_hess;
+        // }
+        return m_hess;
+    }
+
+    /**
+     * Return a non-constant reference to the hessian
+     */
+    __device__ __host__ constexpr HessType& hess()
+    {
+        // if constexpr (k == Eigen::Dynamic) {
+        //     return m_map_hess;
+        // } else {
+        //     return m_hess;
+        // }
+        return m_hess;
+    }
 
     // ///////////////////////////////////////////////////////////////////////////
     // Scalar constructors
     // ///////////////////////////////////////////////////////////////////////////
 
     /// Default constructor, copy, move, assignment
-    __host__ __device__         Scalar()                      = default;
+    __host__ __device__ Scalar()
+        : dk(-1) /*, m_map_grad(nullptr, 0), m_map_hess(nullptr, 0, 0)*/
+    {
+        if constexpr (k != Eigen::Dynamic) {
+            m_grad = GradType::Zero(k);
+            m_hess =
+                HessType::Zero((WithHessian ? k : 0), (WithHessian ? k : 0));
+        }
+    }
     __host__ __device__         Scalar(const Scalar& _rhs)    = default;
     __host__ __device__         Scalar(Scalar&& _rhs)         = default;
     __host__ __device__ Scalar& operator=(const Scalar& _rhs) = default;
     __host__ __device__ Scalar& operator=(Scalar&& _rhs)      = default;
 
+
+    __host__ __device__ Scalar(int dim, ShmemAllocator& shrd_alloc)
+        : dk(dim) /*, m_map_grad(nullptr, dim), m_map_hess(nullptr, dim, dim)*/
+    {
+        // We assume that *all* threads in the block will call this function.
+        // Therefore, we allocate shared memory for `grad` and `hess` for *each*
+        // thread. Note: `shrd_alloc` is a register-local variable, meaning each
+        // thread has its own copy, so it cannot track allocations made by other
+        // threads. However, since all threads execute this allocation in
+        // lockstep, we can safely update and use `shrd_alloc` within each
+        // thread independently while being aware of other threads allocation.
+        assert(k == Eigen::Dynamic);
+
+        if constexpr (k == Eigen::Dynamic) {
+
+            // grad allocation
+            PassiveT* shmem_g = shrd_alloc.alloc<PassiveT>(dk * blockDim.x);
+
+            // https://eigen.tuxfamily.org/dox/group__TutorialMapClass.html#TutorialMapPlacementNew
+            // new (&m_map_grad) GradMapType(shmem_g + dk * threadIdx.x, dk);
+            //
+            // if constexpr (WithHessian) {
+            //    // hess allocation
+            //    PassiveT* shmem_h =
+            //        shrd_alloc.alloc<PassiveT>(dk * dk * blockDim.x);
+            //
+            //    new (&m_map_hess)
+            //        HessMapType(shmem_h + dk * dk * threadIdx.x, dk, dk);
+            //}
+        }
+    }
+
     /// Passive variable a.k.a. constant.
     /// Gradient and Hessian are zero.
-    __host__ __device__ Scalar(PassiveT _val) : val(_val)
+    __host__ __device__ Scalar(PassiveT _val)
+        : m_val(_val),
+          dk(-1) /*, m_map_grad(nullptr, 0), m_map_hess(nullptr, 0, 0)*/
     {
+        if constexpr (k != Eigen::Dynamic) {
+            m_grad = GradType::Zero(k);
+            m_hess =
+                HessType::Zero((WithHessian ? k : 0), (WithHessian ? k : 0));
+        }
+
+        if constexpr (k == Eigen::Dynamic) {
+            // TODO
+        }
     }
 
     /// Active variable.
     ///     _idx: index in variable vector
-    __host__ __device__ Scalar(PassiveT _val, Eigen::Index _idx) : val(_val)
+    __host__ __device__ Scalar(PassiveT _val, Eigen::Index _idx)
+        : m_val(_val),
+          dk(-1) /*, m_map_grad(nullptr, 0), m_map_hess(nullptr, 0, 0)*/
     {
+        if constexpr (k != Eigen::Dynamic) {
+            m_grad = GradType::Zero(k);
+            m_hess =
+                HessType::Zero((WithHessian ? k : 0), (WithHessian ? k : 0));
+        }
+
+        if constexpr (k == Eigen::Dynamic) {
+            // TODO
+        }
+
         assert(_idx >= 0);
         assert(_idx < k);
-        grad(_idx) = 1.0;
+        grad()(_idx) = 1.0;
     }
 
     /// Initialize scalar with known derivatives
@@ -71,12 +230,16 @@ struct Scalar
                                                         const GradType& _grad,
                                                         const HessType& _Hess)
     {
+        if constexpr (k == Eigen::Dynamic) {
+            // TODO
+        }
+
         Scalar res;
-        res.val  = _val;
-        res.grad = _grad;
+        res.val()  = _val;
+        res.m_grad = _grad;
 
         if constexpr (WithHessian)
-            res.Hess = _Hess;
+            res.hess() = _Hess;
 
         return res;
     }
@@ -86,16 +249,20 @@ struct Scalar
                                                         PassiveT _grad,
                                                         PassiveT _Hess)
     {
+        if constexpr (k == Eigen::Dynamic) {
+            // TODO
+        }
+
         static_assert(k == 1,
                       "Constructor only available for univariate case. Call "
                       "overload with vector-valued arguments.");
 
         Scalar res;
-        res.val  = _val;
-        res.grad = GradType::Constant(1, _grad);
+        res.val()  = _val;
+        res.m_grad = GradType::Constant(1, _grad);
 
         if constexpr (WithHessian)
-            res.Hess = HessType::Constant(1, 1, _Hess);
+            res.m_hess = HessType::Constant(1, 1, _Hess);
 
         return res;
     }
@@ -144,17 +311,18 @@ struct Scalar
     // ///////////////////////////////////////////////////////////////////////////
 
     /// Apply chain rule to compute f(a(x)) and its derivatives.
-    __host__ __device__ static Scalar chain(const PassiveT& val,   // f
-                                            const PassiveT& grad,  // df/da
-                                            const PassiveT& Hess,  // ddf/daa
+    __host__ __device__ static Scalar chain(const PassiveT& val,    // f
+                                            const PassiveT& grad_,  // df/da
+                                            const PassiveT& hess_,  // ddf/daa
                                             const Scalar&   a)
     {
         Scalar res;
-        res.val  = val;
-        res.grad = grad * a.grad;
+        res.val()  = val;
+        res.grad() = grad_ * a.grad();
 
         if constexpr (WithHessian)
-            res.Hess = Hess * a.grad * a.grad.transpose() + grad * a.Hess;
+            res.hess() =
+                hess_ * a.grad() * a.grad().transpose() + grad_ * a.hess();
 
         assert(is_finite_scalar(res));
         return res;
@@ -165,11 +333,11 @@ struct Scalar
         assert(is_finite_scalar(a));
 
         Scalar res;
-        res.val  = -a.val;
-        res.grad = -a.grad;
+        res.val()  = -a.val();
+        res.grad() = -a.grad();
 
         if constexpr (WithHessian)
-            res.Hess = -a.Hess;
+            res.hess() = -a.hess();
 
         return res;
     }
@@ -177,8 +345,8 @@ struct Scalar
     __host__ __device__ friend Scalar sqrt(const Scalar& a)
     {
         assert(is_finite_scalar(a));
-        const PassiveT f = std::sqrt(a.val);
-        return chain(f, (PassiveT)0.5 / f, (PassiveT)-0.25 / (f * a.val), a);
+        const PassiveT f = std::sqrt(a.val());
+        return chain(f, (PassiveT)0.5 / f, (PassiveT)-0.25 / (f * a.val()), a);
     }
 
     __host__ __device__ friend Scalar sqr(const Scalar& a)
@@ -186,11 +354,12 @@ struct Scalar
         assert(is_finite_scalar(a));
 
         Scalar res;
-        res.val  = a.val * a.val;
-        res.grad = 2.0 * a.val * a.grad;
+        res.val()  = a.val() * a.val();
+        res.grad() = 2.0 * a.val() * a.grad();
 
         if constexpr (WithHessian)
-            res.Hess = 2.0 * (a.val * a.Hess + a.grad * a.grad.transpose());
+            res.hess() =
+                2.0 * (a.val() * a.hess() + a.grad() * a.grad().transpose());
 
         assert(is_finite_scalar(res));
         return res;
@@ -200,9 +369,9 @@ struct Scalar
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT f2 = (PassiveT)std::pow(a.val, e - 2);
-        const PassiveT f1 = f2 * a.val;
-        const PassiveT f  = f1 * a.val;
+        const PassiveT f2 = (PassiveT)std::pow(a.val(), e - 2);
+        const PassiveT f1 = f2 * a.val();
+        const PassiveT f  = f1 * a.val();
 
         return chain(f, e * f1, e * (e - 1) * f2, a);
     }
@@ -211,9 +380,9 @@ struct Scalar
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT f2 = std::pow(a.val, e - (PassiveT)2.0);
-        const PassiveT f1 = f2 * a.val;
-        const PassiveT f  = f1 * a.val;
+        const PassiveT f2 = std::pow(a.val(), e - (PassiveT)2.0);
+        const PassiveT f1 = f2 * a.val();
+        const PassiveT f  = f1 * a.val();
 
         return chain(f, e * f1, e * (e - (PassiveT)1.0) * f2, a);
     }
@@ -221,10 +390,10 @@ struct Scalar
     __host__ __device__ friend Scalar fabs(const Scalar& a)
     {
         assert(is_finite_scalar(a));
-        if (a.val >= 0.0)
-            return chain(a.val, 1.0, 0.0, a);
+        if (a.val() >= 0.0)
+            return chain(a.val(), 1.0, 0.0, a);
         else
-            return chain(-a.val, -1.0, 0.0, a);
+            return chain(-a.val(), -1.0, 0.0, a);
     }
 
     __host__ __device__ friend Scalar abs(const Scalar& a)
@@ -236,7 +405,7 @@ struct Scalar
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT exp_a = std::exp(a.val);
+        const PassiveT exp_a = std::exp(a.val());
         return chain(exp_a, exp_a, exp_a, a);
     }
 
@@ -244,52 +413,54 @@ struct Scalar
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT a_inv = (PassiveT)1.0 / a.val;
-        return chain(std::log(a.val), a_inv, -a_inv / a.val, a);
+        const PassiveT a_inv = (PassiveT)1.0 / a.val();
+        return chain(std::log(a.val()), a_inv, -a_inv / a.val(), a);
     }
 
     __host__ __device__ friend Scalar log2(const Scalar& a)
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT a_inv = (PassiveT)1.0 / a.val / (PassiveT)std::log(2.0);
-        return chain(std::log2(a.val), a_inv, -a_inv / a.val, a);
+        const PassiveT a_inv =
+            (PassiveT)1.0 / a.val() / (PassiveT)std::log(2.0);
+        return chain(std::log2(a.val()), a_inv, -a_inv / a.val(), a);
     }
 
     __host__ __device__ friend Scalar log10(const Scalar& a)
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT a_inv = (PassiveT)1.0 / a.val / (PassiveT)std::log(10.0);
-        return chain(std::log10(a.val), a_inv, -a_inv / a.val, a);
+        const PassiveT a_inv =
+            (PassiveT)1.0 / a.val() / (PassiveT)std::log(10.0);
+        return chain(std::log10(a.val()), a_inv, -a_inv / a.val(), a);
     }
 
     __host__ __device__ friend Scalar sin(const Scalar& a)
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT sin_a = std::sin(a.val);
-        return chain(sin_a, std::cos(a.val), -sin_a, a);
+        const PassiveT sin_a = std::sin(a.val());
+        return chain(sin_a, std::cos(a.val()), -sin_a, a);
     }
 
     __host__ __device__ friend Scalar cos(const Scalar& a)
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT cos_a = std::cos(a.val);
-        return chain(cos_a, -std::sin(a.val), -cos_a, a);
+        const PassiveT cos_a = std::cos(a.val());
+        return chain(cos_a, -std::sin(a.val()), -cos_a, a);
     }
 
     __host__ __device__ friend Scalar tan(const Scalar& a)
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT cos   = std::cos(a.val);
+        const PassiveT cos   = std::cos(a.val());
         const PassiveT cos_2 = cos * cos;
         const PassiveT cos_3 = cos_2 * cos;
-        return chain(std::tan(a.val),
+        return chain(std::tan(a.val()),
                      (PassiveT)1.0 / cos_2,
-                     (PassiveT)2.0 * std::sin(a.val) / cos_3,
+                     (PassiveT)2.0 * std::sin(a.val()) / cos_3,
                      a);
     }
 
@@ -297,36 +468,40 @@ struct Scalar
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT s      = (PassiveT)1.0 - a.val * a.val;
+        const PassiveT s      = (PassiveT)1.0 - a.val() * a.val();
         const PassiveT s_sqrt = std::sqrt(s);
-        return chain(
-            std::asin(a.val), (PassiveT)1.0 / s_sqrt, a.val / s_sqrt / s, a);
+        return chain(std::asin(a.val()),
+                     (PassiveT)1.0 / s_sqrt,
+                     a.val() / s_sqrt / s,
+                     a);
     }
 
     __host__ __device__ friend Scalar acos(const Scalar& a)
     {
         assert(is_finite_scalar(a));
-        assert(a.val > -1.0);
-        assert(a.val < 1.0);
+        assert(a.val() > -1.0);
+        assert(a.val() < 1.0);
 
-        const PassiveT s      = (PassiveT)1.0 - a.val * a.val;
+        const PassiveT s      = (PassiveT)1.0 - a.val() * a.val();
         const PassiveT s_sqrt = std::sqrt(s);
         assert(is_finite(s));
         assert(is_finite(s_sqrt));
         assert(s > 0.0);
 
-        return chain(
-            std::acos(a.val), (PassiveT)-1.0 / s_sqrt, -a.val / s_sqrt / s, a);
+        return chain(std::acos(a.val()),
+                     (PassiveT)-1.0 / s_sqrt,
+                     -a.val() / s_sqrt / s,
+                     a);
     }
 
     __host__ __device__ friend Scalar atan(const Scalar& a)
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT s = a.val * a.val + (PassiveT)1.0;
-        return chain(std::atan(a.val),
+        const PassiveT s = a.val() * a.val() + (PassiveT)1.0;
+        return chain(std::atan(a.val()),
                      (PassiveT)1.0 / s,
-                     (PassiveT)-2.0 * a.val / s / s,
+                     (PassiveT)-2.0 * a.val() / s / s,
                      a);
     }
 
@@ -334,28 +509,28 @@ struct Scalar
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT sinh_a = std::sinh(a.val);
-        return chain(sinh_a, std::cosh(a.val), sinh_a, a);
+        const PassiveT sinh_a = std::sinh(a.val());
+        return chain(sinh_a, std::cosh(a.val()), sinh_a, a);
     }
 
     __host__ __device__ friend Scalar cosh(const Scalar& a)
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT cosh_a = std::cosh(a.val);
-        return chain(cosh_a, std::sinh(a.val), cosh_a, a);
+        const PassiveT cosh_a = std::cosh(a.val());
+        return chain(cosh_a, std::sinh(a.val()), cosh_a, a);
     }
 
     __host__ __device__ friend Scalar tanh(const Scalar& a)
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT cosh   = std::cosh(a.val);
+        const PassiveT cosh   = std::cosh(a.val());
         const PassiveT cosh_2 = cosh * cosh;
         const PassiveT cosh_3 = cosh_2 * cosh;
-        return chain(std::tanh(a.val),
+        return chain(std::tanh(a.val()),
                      (PassiveT)1.0 / cosh_2,
-                     (PassiveT)-2.0 * std::sinh(a.val) / cosh_3,
+                     (PassiveT)-2.0 * std::sinh(a.val()) / cosh_3,
                      a);
     }
 
@@ -363,30 +538,32 @@ struct Scalar
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT s      = a.val * a.val + (PassiveT)1.0;
+        const PassiveT s      = a.val() * a.val() + (PassiveT)1.0;
         const PassiveT s_sqrt = std::sqrt(s);
         assert(is_finite(s));
         assert(is_finite(s_sqrt));
 
-        return chain(
-            std::asinh(a.val), (PassiveT)1.0 / s_sqrt, -a.val / s_sqrt / s, a);
+        return chain(std::asinh(a.val()),
+                     (PassiveT)1.0 / s_sqrt,
+                     -a.val() / s_sqrt / s,
+                     a);
     }
 
     __host__ __device__ friend Scalar acosh(const Scalar& a)
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT sm      = a.val - (PassiveT)1.0;
-        const PassiveT sp      = a.val + (PassiveT)1.0;
+        const PassiveT sm      = a.val() - (PassiveT)1.0;
+        const PassiveT sp      = a.val() + (PassiveT)1.0;
         const PassiveT sm_sqrt = std::sqrt(sm);
         const PassiveT sp_sqrt = std::sqrt(sp);
         const PassiveT prod    = sm_sqrt * sp_sqrt;
         assert(is_finite(sm_sqrt));
         assert(is_finite(sp_sqrt));
 
-        return chain(std::acosh(a.val),
+        return chain(std::acosh(a.val()),
                      (PassiveT)1.0 / prod,
-                     -a.val / prod / sm / sp,
+                     -a.val() / prod / sm / sp,
                      a);
     }
 
@@ -394,27 +571,27 @@ struct Scalar
     {
         assert(is_finite_scalar(a));
 
-        const PassiveT s = (PassiveT)1.0 - a.val * a.val;
-        return chain(std::atanh(a.val),
+        const PassiveT s = (PassiveT)1.0 - a.val() * a.val();
+        return chain(std::atanh(a.val()),
                      (PassiveT)1.0 / s,
-                     (PassiveT)2.0 * a.val / s / s,
+                     (PassiveT)2.0 * a.val() / s / s,
                      a);
     }
 
     __host__ __device__ friend bool isnan(const Scalar& a)
     {
-        return is_nan(a.val);
+        return is_nan(a.val());
     }
 
     __host__ __device__ friend bool isinf(const Scalar& a)
     {
-        return is_inf(a.val);
+        return is_inf(a.val());
     }
 
     __host__ __device__ friend bool isfinite(const Scalar& a)
     {
 
-        return is_finite(a.val);
+        return is_finite(a.val());
     }
 
     // ///////////////////////////////////////////////////////////////////////////
@@ -428,11 +605,11 @@ struct Scalar
         assert(is_finite_scalar(b));
 
         Scalar res;
-        res.val  = a.val + b.val;
-        res.grad = a.grad + b.grad;
+        res.val()  = a.val() + b.val();
+        res.grad() = a.grad() + b.grad();
 
         if constexpr (WithHessian)
-            res.Hess = a.Hess + b.Hess;
+            res.hess() = a.hess() + b.hess();
 
         assert(is_finite_scalar(res));
         return res;
@@ -445,7 +622,7 @@ struct Scalar
         assert(is_finite(b));
 
         Scalar res = a;
-        res.val += b;
+        res.val() += b;
 
         assert(is_finite_scalar(res));
         return res;
@@ -458,7 +635,7 @@ struct Scalar
         assert(is_finite_scalar(b));
 
         Scalar res = b;
-        res.val += a;
+        res.val() += a;
 
         assert(is_finite_scalar(res));
         return res;
@@ -469,12 +646,12 @@ struct Scalar
         assert(is_finite_scalar(*this));
         assert(is_finite_scalar(b));
 
-        assert(this->grad.size() == b.grad.size());
+        assert(this->grad().size() == b.grad().size());
 
-        this->val += b.val;
-        this->grad += b.grad;
+        this->val() += b.val();
+        this->grad() += b.grad();
         if constexpr (WithHessian)
-            this->Hess += b.Hess;
+            this->hess() += b.hess();
 
         assert(is_finite_scalar(*this));
         return *this;
@@ -485,7 +662,7 @@ struct Scalar
         assert(is_finite(b));
         assert(is_finite_scalar(*this));
 
-        this->val += b;
+        this->val() += b;
 
         assert(is_finite_scalar(*this));
         return *this;
@@ -497,15 +674,15 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite_scalar(b));
 
-        assert(a.grad.size() == b.grad.size());
+        assert(a.grad().size() == b.grad().size());
 
 
         Scalar res;
-        res.val  = a.val - b.val;
-        res.grad = a.grad - b.grad;
+        res.val()  = a.val() - b.val();
+        res.grad() = a.grad() - b.grad();
 
         if constexpr (WithHessian)
-            res.Hess = a.Hess - b.Hess;
+            res.hess() = a.hess() - b.hess();
 
         assert(is_finite_scalar(res));
         return res;
@@ -518,7 +695,7 @@ struct Scalar
         assert(is_finite(b));
 
         Scalar res = a;
-        res.val -= b;
+        res.val() -= b;
 
         assert(is_finite_scalar(res));
         return res;
@@ -531,11 +708,11 @@ struct Scalar
         assert(is_finite_scalar(b));
 
         Scalar res;
-        res.val  = a - b.val;
-        res.grad = -b.grad;
+        res.val()  = a - b.val();
+        res.grad() = -b.grad();
 
         if constexpr (WithHessian)
-            res.Hess = -b.Hess;
+            res.hess() = -b.hess();
 
         assert(is_finite_scalar(res));
         return res;
@@ -547,13 +724,13 @@ struct Scalar
         assert(is_finite_scalar(b));
 
 
-        assert(this->grad.size() == b.grad.size());
+        assert(this->grad().size() == b.grad().size());
 
-        this->val -= b.val;
-        this->grad -= b.grad;
+        this->val() -= b.val();
+        this->grad() -= b.grad();
 
         if constexpr (WithHessian)
-            this->Hess -= b.Hess;
+            this->hess() -= b.hess();
 
         assert(is_finite_scalar(*this));
         return *this;
@@ -564,7 +741,7 @@ struct Scalar
         assert(is_finite(b));
         assert(is_finite_scalar(*this));
 
-        this->val -= b;
+        this->val() -= b;
 
         assert(is_finite_scalar(*this));
         return *this;
@@ -576,11 +753,11 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite_scalar(b));
 
-        assert(a.grad.size() == b.grad.size());
+        assert(a.grad().size() == b.grad().size());
 
         Scalar res;
-        res.val  = a.val * b.val;
-        res.grad = b.val * a.grad + a.val * b.grad;
+        res.val()  = a.val() * b.val();
+        res.grad() = b.val() * a.grad() + a.val() * b.grad();
 
         // Exploiting symmetry did not yield speedup in some tests
         //        if constexpr (WithHessian)
@@ -599,8 +776,8 @@ struct Scalar
         //        }
 
         if constexpr (WithHessian)
-            res.Hess = b.val * a.Hess + a.grad * b.grad.transpose() +
-                       b.grad * a.grad.transpose() + a.val * b.Hess;
+            res.hess() = b.val() * a.hess() + a.grad() * b.grad().transpose() +
+                         b.grad() * a.grad().transpose() + a.val() * b.hess();
 
         assert(is_finite_scalar(res));
         return res;
@@ -613,11 +790,11 @@ struct Scalar
         assert(is_finite(b));
 
         Scalar res = a;
-        res.val *= b;
-        res.grad *= b;
+        res.val() *= b;
+        res.grad() *= b;
 
         if constexpr (WithHessian)
-            res.Hess *= b;
+            res.hess() *= b;
 
         assert(is_finite_scalar(res));
         return res;
@@ -630,11 +807,11 @@ struct Scalar
         assert(is_finite_scalar(b));
 
         Scalar res = b;
-        res.val *= a;
-        res.grad *= a;
+        res.val() *= a;
+        res.grad() *= a;
 
         if constexpr (WithHessian)
-            res.Hess *= a;
+            res.hess() *= a;
 
         assert(is_finite_scalar(res));
         return res;
@@ -659,16 +836,18 @@ struct Scalar
         assert(is_finite_scalar(b));
 
 
-        assert(a.grad.size() == b.grad.size());
+        assert(a.grad().size() == b.grad().size());
 
         Scalar res;
-        res.val  = a.val / b.val;
-        res.grad = (b.val * a.grad - a.val * b.grad) / (b.val * b.val);
+        res.val() = a.val() / b.val();
+        res.grad() =
+            (b.val() * a.grad() - a.val() * b.grad()) / (b.val() * b.val());
 
         if constexpr (WithHessian)
-            res.Hess = (a.Hess - res.grad * b.grad.transpose() -
-                        b.grad * res.grad.transpose() - res.val * b.Hess) /
-                       b.val;
+            res.hess() =
+                (a.hess() - res.grad() * b.grad().transpose() -
+                 b.grad() * res.grad().transpose() - res.val() * b.hess()) /
+                b.val();
 
         assert(is_finite_scalar(res));
         return res;
@@ -681,11 +860,11 @@ struct Scalar
         assert(is_finite(b));
 
         Scalar res = a;
-        res.val /= b;
-        res.grad /= b;
+        res.val() /= b;
+        res.grad() /= b;
 
         if constexpr (WithHessian)
-            res.Hess /= b;
+            res.hess() /= b;
 
         assert(is_finite_scalar(res));
         return res;
@@ -698,13 +877,14 @@ struct Scalar
         assert(is_finite_scalar(b));
 
         Scalar res;
-        res.val  = a / b.val;
-        res.grad = (-a / (b.val * b.val)) * b.grad;
+        res.val()  = a / b.val();
+        res.grad() = (-a / (b.val() * b.val())) * b.grad();
 
         if constexpr (WithHessian)
-            res.Hess = (-res.grad * b.grad.transpose() -
-                        b.grad * res.grad.transpose() - res.val * b.Hess) /
-                       b.val;
+            res.hess() =
+                (-res.grad() * b.grad().transpose() -
+                 b.grad() * res.grad().transpose() - res.val() * b.hess()) /
+                b.val();
 
         assert(is_finite_scalar(res));
         return res;
@@ -727,22 +907,22 @@ struct Scalar
         assert(is_finite_scalar(y));
         assert(is_finite_scalar(x));
 
-        assert(y.grad.size() == x.grad.size());
+        assert(y.grad().size() == x.grad().size());
 
         Scalar res;
-        res.val = std::atan2(y.val, x.val);
+        res.val() = std::atan2(y.val(), x.val());
 
-        const GradType u = x.val * y.grad - y.val * x.grad;
-        const PassiveT v = x.val * x.val + y.val * y.val;
-        res.grad         = u / v;
+        const GradType u = x.val() * y.grad() - y.val() * x.grad();
+        const PassiveT v = x.val() * x.val() + y.val() * y.val();
+        res.grad()       = u / v;
 
         if constexpr (WithHessian) {
-            const HessType du = x.val * y.Hess - y.val * x.Hess +
-                                y.grad * x.grad.transpose() -
-                                x.grad * y.grad.transpose();
+            const HessType du = x.val() * y.hess() - y.val() * x.hess() +
+                                y.grad() * x.grad().transpose() -
+                                x.grad() * y.grad().transpose();
             const GradType dv =
-                (PassiveT)2.0 * (x.val * x.grad + y.val * y.grad);
-            res.Hess = (du - res.grad * dv.transpose()) / v;
+                (PassiveT)2.0 * (x.val() * x.grad() + y.val() * y.grad());
+            res.hess() = (du - res.grad() * dv.transpose()) / v;
         }
 
         assert(is_finite_scalar(res));
@@ -754,7 +934,7 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite_scalar(b));
 
-        assert(a.grad.size() == b.grad.size());
+        assert(a.grad().size() == b.grad().size());
 
         return sqrt(a * a + b * b);
     }
@@ -764,7 +944,7 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite_scalar(b));
 
-        return a.val == b.val;
+        return a.val() == b.val();
     }
 
     __host__ __device__ friend bool operator==(const Scalar&   a,
@@ -773,7 +953,7 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite(b));
 
-        return a.val == b;
+        return a.val() == b;
     }
 
     __host__ __device__ friend bool operator==(const PassiveT& a,
@@ -782,27 +962,27 @@ struct Scalar
         assert(is_finite(a));
         assert(is_finite_scalar(b));
 
-        return a == b.val;
+        return a == b.val();
     }
 
     __host__ __device__ friend bool operator!=(const Scalar& a, const Scalar& b)
     {
 
-        return a.val != b.val;
+        return a.val() != b.val();
     }
 
     __host__ __device__ friend bool operator!=(const Scalar&   a,
                                                const PassiveT& b)
     {
 
-        return a.val != b;
+        return a.val() != b;
     }
 
     __host__ __device__ friend bool operator!=(const PassiveT& a,
                                                const Scalar&   b)
     {
 
-        return a != b.val;
+        return a != b.val();
     }
 
     __host__ __device__ friend bool operator<(const Scalar& a, const Scalar& b)
@@ -810,7 +990,7 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite_scalar(b));
 
-        return a.val < b.val;
+        return a.val() < b.val();
     }
 
     __host__ __device__ friend bool operator<(const Scalar&   a,
@@ -819,7 +999,7 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite(b));
 
-        return a.val < b;
+        return a.val() < b;
     }
 
     __host__ __device__ friend bool operator<(const PassiveT& a,
@@ -828,7 +1008,7 @@ struct Scalar
         assert(is_finite(a));
         assert(is_finite_scalar(b));
 
-        return a < b.val;
+        return a < b.val();
     }
 
     __host__ __device__ friend bool operator<=(const Scalar& a, const Scalar& b)
@@ -836,7 +1016,7 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite_scalar(b));
 
-        return a.val <= b.val;
+        return a.val() <= b.val();
     }
 
     __host__ __device__ friend bool operator<=(const Scalar&   a,
@@ -845,7 +1025,7 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite(b));
 
-        return a.val <= b;
+        return a.val() <= b;
     }
 
     __host__ __device__ friend bool operator<=(const PassiveT& a,
@@ -854,14 +1034,14 @@ struct Scalar
         assert(is_finite(a));
         assert(is_finite_scalar(b));
 
-        return a <= b.val;
+        return a <= b.val();
     }
 
     __host__ __device__ friend bool operator>(const Scalar& a, const Scalar& b)
     {
         assert(is_finite_scalar(a));
         assert(is_finite_scalar(b));
-        return a.val > b.val;
+        return a.val() > b.val();
     }
 
     __host__ __device__ friend bool operator>(const Scalar&   a,
@@ -870,7 +1050,7 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite(b));
 
-        return a.val > b;
+        return a.val() > b;
     }
 
     __host__ __device__ friend bool operator>(const PassiveT& a,
@@ -879,7 +1059,7 @@ struct Scalar
         assert(is_finite(a));
         assert(is_finite_scalar(b));
 
-        return a > b.val;
+        return a > b.val();
     }
 
     __host__ __device__ friend bool operator>=(const Scalar& a, const Scalar& b)
@@ -887,7 +1067,7 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite_scalar(b));
 
-        return a.val >= b.val;
+        return a.val() >= b.val();
     }
 
     __host__ __device__ friend bool operator>=(const Scalar&   a,
@@ -896,7 +1076,7 @@ struct Scalar
         assert(is_finite_scalar(a));
         assert(is_finite(b));
 
-        return a.val >= b;
+        return a.val() >= b;
     }
 
     __host__ __device__ friend bool operator>=(const PassiveT& a,
@@ -905,7 +1085,7 @@ struct Scalar
         assert(is_finite(a));
         assert(is_finite_scalar(b));
 
-        return a >= b.val;
+        return a >= b.val();
     }
 
     __host__ __device__ friend Scalar min(const Scalar& a, const Scalar& b)
@@ -1106,43 +1286,30 @@ struct Scalar
 
     __host__ friend std::ostream& operator<<(std::ostream& s, const Scalar& a)
     {
-        s << a.val << std::endl;
-        s << "grad: \n" << a.grad << std::endl;
+        s << a.val() << std::endl;
+        s << "grad: \n" << a.grad() << std::endl;
         if constexpr (WithHessian)
-            s << "Hess: \n" << a.Hess;
+            s << "Hess: \n" << a.hess();
         return s;
     }
 
     __host__ __device__ void print() const
     {
-        printf("\n val: %.9g", val);
+        printf("\n val: %.9g", val());
         printf("\n grad: ");
         for (int i = 0; i < k; ++i) {
-            printf("\n %.9g", grad(i));
+            printf("\n %.9g", grad()(i));
         }
         if constexpr (WithHessian) {
             printf("\n Hess: ");
             for (int i = 0; i < k; ++i) {
                 printf("\n");
                 for (int j = 0; j < k; ++j) {
-                    printf("%.9g ", Hess(i, j));
+                    printf("%.9g ", hess()(i, j));
                 }
             }
         }
     }
-
-    // ///////////////////////////////////////////////////////////////////////////
-    // Data
-    // ///////////////////////////////////////////////////////////////////////////
-
-    PassiveT val  = 0.0;  // Scalar value of this (intermediate) variable.
-    GradType grad = GradType::Zero(k);  // Gradient (first derivative) of val
-                                        // w.r.t. the active variable vector.
-
-    // Hessian (second derivative) of val
-    // w.r.t. the active variable vector.
-    HessType Hess =
-        HessType::Zero((WithHessian ? k : 0), (WithHessian ? k : 0));
 };
 
 // ///////////////////////////////////////////////////////////////////////////
@@ -1168,7 +1335,7 @@ template <int k, typename PassiveT, bool WithHessian>
 __host__ __device__ PassiveT
 to_passive(const Scalar<PassiveT, k, WithHessian>& a)
 {
-    return a.val;
+    return a.val();
 }
 
 template <int k, int rows, int cols, typename PassiveT, bool WithHessian>
@@ -1178,23 +1345,11 @@ __host__ __device__ Eigen::Matrix<PassiveT, rows, cols> to_passive(
     Eigen::Matrix<PassiveT, rows, cols> A_passive(A.rows(), A.cols());
     for (Eigen::Index i = 0; i < A.rows(); ++i) {
         for (Eigen::Index j = 0; j < A.cols(); ++j)
-            A_passive(i, j) = A(i, j).val;
+            A_passive(i, j) = A(i, j).val();
     }
 
     return A_passive;
 }
-
-// ///////////////////////////////////////////////////////////////////////////
-// Scalar typedefs
-// ///////////////////////////////////////////////////////////////////////////
-
-template <int k, bool WithHessian = true>
-using Float = Scalar<float, k, WithHessian>;
-template <int k, bool WithHessian = true>
-using Double = Scalar<double, k, WithHessian>;
-template <int k, bool WithHessian = true>
-using LongDouble = Scalar<long double, k, WithHessian>;
-
 }  // namespace rxmesh
 
 // ///////////////////////////////////////////////////////////////////////////

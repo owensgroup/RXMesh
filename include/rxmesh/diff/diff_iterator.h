@@ -28,7 +28,7 @@ __device__ __inline__ Eigen::Vector<T, VariableDim> iter_val(
     // val
     for (int j = 0; j < VariableDim; ++j) {
         if constexpr (DiffHandleT::IsActive) {
-            ret[j].val = attr(iter[index], j);
+            ret[j].val() = attr(iter[index], j);
         } else {
             ret[j] = attr(iter[index], j);
         }
@@ -37,7 +37,7 @@ __device__ __inline__ Eigen::Vector<T, VariableDim> iter_val(
     // init grad
     if constexpr (DiffHandleT::IsActive) {
         for (int j = 0; j < VariableDim; ++j) {
-            ret[j].grad[index * VariableDim + j] = 1;
+            ret[j].grad()[index * VariableDim + j] = 1;
         }
     }
 
@@ -58,7 +58,7 @@ __device__ __inline__ Eigen::Vector<T, VariableDim> iter_val(
     // val
     for (int j = 0; j < VariableDim; ++j) {
         if constexpr (DiffHandleT::IsActive) {
-            ret[j].val = attr(handle, j);
+            ret[j].val() = attr(handle, j);
         } else {
             ret[j] = attr(handle, j);
         }
@@ -67,7 +67,7 @@ __device__ __inline__ Eigen::Vector<T, VariableDim> iter_val(
     // init grad
     if constexpr (DiffHandleT::IsActive) {
         for (int j = 0; j < VariableDim; ++j) {
-            ret[j].grad[j] = 1;
+            ret[j].grad()[j] = 1;
         }
     }
 

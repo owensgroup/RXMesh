@@ -1,7 +1,6 @@
 #pragma once
 
 
-
 #include "rxmesh/attribute.h"
 #include "rxmesh/diff/scalar.h"
 
@@ -45,7 +44,7 @@ class DiffAttribute : public Attribute<Scalar<T, Size, WithHessian>, HandleT>
         auto ret = this->m_rxmesh->template add_vertex_attribute<T>(
             std::string("rx:") + std::string(this->m_name), 1, HOST);
         this->m_rxmesh->for_each_vertex(HOST, [&](VertexHandle vh) {
-            (*ret)(vh) = this->operator()(vh).val;
+            (*ret)(vh) = this->operator()(vh).val();
         });
 
         return ret;

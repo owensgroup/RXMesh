@@ -70,7 +70,7 @@ __global__ static void hess_matvec_kernel(
 
             // project Hessian to PD matrix
             if constexpr (ProjectHess) {
-                project_positive_definite(res.Hess);
+                project_positive_definite(res.hess());
             }
 
             for (int local_i = 0; local_i < VariableDim; ++local_i) {
@@ -81,7 +81,7 @@ __global__ static void hess_matvec_kernel(
                         get_indices(fh, fh, local_i, local_j);
 
                     // TODO we now assume solving single col vector
-                    PassiveT p = res.Hess(local_i, local_j) *
+                    PassiveT p = res.hess()(local_i, local_j) *
                                  input_vector(ids.second, 0);
 
                     ::atomicAdd(&output_vector(ids.first, 0), p);
@@ -99,7 +99,7 @@ __global__ static void hess_matvec_kernel(
 
             // project Hessian to PD matrix
             if constexpr (ProjectHess) {
-                project_positive_definite(res.Hess);
+                project_positive_definite(res.hess());
             }
 
             // Hessian
@@ -122,7 +122,7 @@ __global__ static void hess_matvec_kernel(
                             // TODO we now assume solving single col
                             // vector
                             PassiveT p =
-                                res.Hess(
+                                res.hess()(
                                     index_mapping<VariableDim>(i, local_i),
                                     index_mapping<VariableDim>(j, local_j)) *
                                 input_vector(ids.second, 0);
@@ -230,20 +230,20 @@ __global__ static void diff_kernel_active(
             ScalarT res = user_func(diff_handle, objective);
 
             // function
-            loss(fh) = res.val;
+            loss(fh) = res.val();
 
             // gradient
             for (int local = 0; local < VariableDim; ++local) {
                 // we don't need atomics here since each thread update
                 // the gradient of one element so there is no data race
-                grad(fh, local) += res.grad[local];
+                grad(fh, local) += res.grad()[local];
             }
 
             // Hessian
             if constexpr (WithHessian) {
                 // project Hessian to PD matrix
                 if constexpr (ProjectHess) {
-                    project_positive_definite(res.Hess);
+                    project_positive_definite(res.hess());
                 }
 
                 for (int local_i = 0; local_i < VariableDim; ++local_i) {
@@ -251,7 +251,7 @@ __global__ static void diff_kernel_active(
                     for (int local_j = 0; local_j < VariableDim; ++local_j) {
 
                         hess(fh, fh, local_i, local_j) +=
-                            res.Hess(local_i, local_j);
+                            res.hess()(local_i, local_j);
                     }
                 }
             }
@@ -265,21 +265,22 @@ __global__ static void diff_kernel_active(
             ScalarT res = user_func(diff_handle, iter, objective);
 
             // function
-            loss(fh) = res.val;
+            loss(fh) = res.val();
 
             // gradient
             for (uint16_t i = 0; i < iter.size(); ++i) {
                 for (int local = 0; local < VariableDim; ++local) {
 
-                    ::atomicAdd(&grad(iter[i], local),
-                                res.grad[index_mapping<VariableDim>(i, local)]);
+                    ::atomicAdd(
+                        &grad(iter[i], local),
+                        res.grad()[index_mapping<VariableDim>(i, local)]);
                 }
             }
 
             if constexpr (WithHessian) {
                 // project Hessian to PD matrix
                 if constexpr (ProjectHess) {
-                    project_positive_definite(res.Hess);
+                    project_positive_definite(res.hess());
                 }
 
                 // Hessian
@@ -295,11 +296,12 @@ __global__ static void diff_kernel_active(
                             for (int local_j = 0; local_j < VariableDim;
                                  ++local_j) {
 
-                                ::atomicAdd(&hess(vi, vj, local_i, local_j),
-                                            res.Hess(index_mapping<VariableDim>(
-                                                         i, local_i),
-                                                     index_mapping<VariableDim>(
-                                                         j, local_j)));
+                                ::atomicAdd(
+                                    &hess(vi, vj, local_i, local_j),
+                                    res.hess()(
+                                        index_mapping<VariableDim>(i, local_i),
+                                        index_mapping<VariableDim>(j,
+                                                                   local_j)));
                             }
                         }
                     }

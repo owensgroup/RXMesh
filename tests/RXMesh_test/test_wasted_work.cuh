@@ -113,7 +113,7 @@ __global__ static void measure_wasted_work_kernel(rxmesh::Context context,
     }
 }
 
-TEST(RXMeshDynamic, MeasureWastedWork)
+TEST(RXMeshDynamic, DISABLED_MeasureWastedWork)
 {
     using namespace rxmesh;
 

@@ -182,7 +182,8 @@ template <int k, typename PassiveT, bool WithHessian>
 __device__ __host__ __inline__ bool is_finite_scalar(
     const Scalar<PassiveT, k, WithHessian>& s)
 {
-    if (!is_finite(s.val) || !is_finite_mat(s.grad) || !is_finite_mat(s.Hess)) {
+    if (!is_finite(s.val()) || !is_finite_mat(s.grad()) ||
+        !is_finite_mat(s.hess())) {
         return false;
     }
     return true;

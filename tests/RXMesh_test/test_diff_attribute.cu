@@ -40,8 +40,9 @@ TEST(DiffAttribute, CopyFromDevice)
     rx.for_each_vertex(
         HOST,
         [&](const VertexHandle& vh) {
-            if (v_attr(vh).val != val.val || v_attr(vh).grad != val.grad ||
-                v_attr(vh).Hess != val.Hess) {
+            if (v_attr(vh).val() != val.val() ||
+                v_attr(vh).grad() != val.grad() ||
+                v_attr(vh).hess() != val.hess()) {
                 is_okay = false;
             }
         },
