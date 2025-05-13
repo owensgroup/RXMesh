@@ -28,16 +28,11 @@ namespace rxmesh {
 template <typename PassiveT, int k, bool WithHessian = true>
 struct Scalar
 {
-    // Make template arguments available as members
-
-    // static_assert(k >= 1,
-    //               "We don't support Eigen:Dynamic. Thus, k should be >= 1");
-
     static constexpr int  k_           = k;
     static constexpr bool WithHessian_ = WithHessian;
 
-    // Determine derivative data types at compile time. Use 0-by-0 if no Hessian
-    // required.
+    // Determine derivative data types at compile time.
+    // Use 0-by-0 if no Hessian required.
     using PassiveType = PassiveT;
     using GradType    = Eigen::Matrix<PassiveT, k, 1>;
     using GradMapType = Eigen::Map<GradType>;
@@ -48,24 +43,28 @@ struct Scalar
     using HessMapType = Eigen::Map<HessType>;
 
 
+   private:
     int dk;  // k in case of dynamic size
 
-    // ///////////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////
     // Data
-    // ///////////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////
     PassiveT m_val = 0.0;  // Scalar value of this (intermediate) variable.
 
     // Gradient (first derivative) of val w.r.t. the active variable vector.
     GradType m_grad;
-    // GradMapType m_map_grad = GradMapType(nullptr, 0);
+
+    // Avoid calling the default constructor of Eigen::Map
+    alignas(16) std::byte m_map_grad[sizeof(GradMapType)];
 
     // Hessian (second derivative) of val w.r.t. the active variable vector.
     HessType m_hess;
-    // HessMapType m_map_hess = HessMapType(nullptr, 0, 0);
+    alignas(16) std::byte m_map_hess[sizeof(HessMapType)];
 
-    // ///////////////////////////////////////////////////////////////////////////
+   public:
+    // ///////////////////////////////////////////////////////////////////////
     // Accessors
-    // ///////////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////
 
     /**
      * Return constant reference to the value
@@ -87,62 +86,57 @@ struct Scalar
     /**
      * Return constant reference to the gradient
      */
-    __device__ __host__ constexpr const GradType& grad() const
+    __device__ __host__ constexpr const auto& grad() const
     {
-        // if constexpr (k == Eigen::Dynamic) {
-        //     return m_map_grad;
-        // } else {
-        //     return m_grad;
-        // }
-        return m_grad;
+        if constexpr (k == Eigen::Dynamic) {
+            return *reinterpret_cast<GradMapType*>(&m_map_grad);
+        } else {
+            return m_grad;
+        }
     }
 
     /**
      * Return a non-constant reference to the gradient
      */
-    __device__ __host__ constexpr GradType& grad()
+    __device__ __host__ constexpr auto& grad()
     {
-        // if constexpr (k == Eigen::Dynamic) {
-        //     return m_map_grad;
-        // } else {
-        //     return m_grad;
-        // }
-        return m_grad;
+        if constexpr (k == Eigen::Dynamic) {
+            return *reinterpret_cast<GradMapType*>(&m_map_grad);
+        } else {
+            return m_grad;
+        }
     }
 
     /**
      * Return constant reference to the hessian
      */
-    __device__ __host__ constexpr const HessType& hess() const
+    __device__ __host__ constexpr const auto& hess() const
     {
-        // if constexpr (k == Eigen::Dynamic) {
-        //     return m_map_hess;
-        // } else {
-        //     return m_hess;
-        // }
-        return m_hess;
+        if constexpr (k == Eigen::Dynamic) {
+            return *reinterpret_cast<HessMapType*>(&m_map_hess);
+        } else {
+            return m_hess;
+        }
     }
 
     /**
      * Return a non-constant reference to the hessian
      */
-    __device__ __host__ constexpr HessType& hess()
+    __device__ __host__ constexpr auto& hess()
     {
-        // if constexpr (k == Eigen::Dynamic) {
-        //     return m_map_hess;
-        // } else {
-        //     return m_hess;
-        // }
-        return m_hess;
+        if constexpr (k == Eigen::Dynamic) {
+            return *reinterpret_cast<HessMapType*>(&m_map_hess);
+        } else {
+            return m_hess;
+        }
     }
 
-    // ///////////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////
     // Scalar constructors
-    // ///////////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////
 
     /// Default constructor, copy, move, assignment
-    __host__ __device__ Scalar()
-        : dk(-1) /*, m_map_grad(nullptr, 0), m_map_hess(nullptr, 0, 0)*/
+    __host__ __device__ Scalar() : dk(-1)
     {
         if constexpr (k != Eigen::Dynamic) {
             m_grad = GradType::Zero(k);
@@ -156,8 +150,7 @@ struct Scalar
     __host__ __device__ Scalar& operator=(Scalar&& _rhs)      = default;
 
 
-    __host__ __device__ Scalar(int dim, ShmemAllocator& shrd_alloc)
-        : dk(dim) /*, m_map_grad(nullptr, dim), m_map_hess(nullptr, dim, dim)*/
+    __host__ __device__ Scalar(int dim, ShmemAllocator& shrd_alloc) : dk(dim)
     {
         // We assume that *all* threads in the block will call this function.
         // Therefore, we allocate shared memory for `grad` and `hess` for *each*
@@ -174,24 +167,22 @@ struct Scalar
             PassiveT* shmem_g = shrd_alloc.alloc<PassiveT>(dk * blockDim.x);
 
             // https://eigen.tuxfamily.org/dox/group__TutorialMapClass.html#TutorialMapPlacementNew
-            // new (&m_map_grad) GradMapType(shmem_g + dk * threadIdx.x, dk);
-            //
-            // if constexpr (WithHessian) {
-            //    // hess allocation
-            //    PassiveT* shmem_h =
-            //        shrd_alloc.alloc<PassiveT>(dk * dk * blockDim.x);
-            //
-            //    new (&m_map_hess)
-            //        HessMapType(shmem_h + dk * dk * threadIdx.x, dk, dk);
-            //}
+            new (&m_map_grad) GradMapType(shmem_g + dk * threadIdx.x, dk);
+
+            if constexpr (WithHessian) {
+                // hess allocation
+                PassiveT* shmem_h =
+                    shrd_alloc.alloc<PassiveT>(dk * dk * blockDim.x);
+
+                new (&m_map_hess)
+                    HessMapType(shmem_h + dk * dk * threadIdx.x, dk, dk);
+            }
         }
     }
 
     /// Passive variable a.k.a. constant.
     /// Gradient and Hessian are zero.
-    __host__ __device__ Scalar(PassiveT _val)
-        : m_val(_val),
-          dk(-1) /*, m_map_grad(nullptr, 0), m_map_hess(nullptr, 0, 0)*/
+    __host__ __device__ Scalar(PassiveT _val) : m_val(_val), dk(-1)
     {
         if constexpr (k != Eigen::Dynamic) {
             m_grad = GradType::Zero(k);
@@ -207,8 +198,7 @@ struct Scalar
     /// Active variable.
     ///     _idx: index in variable vector
     __host__ __device__ Scalar(PassiveT _val, Eigen::Index _idx)
-        : m_val(_val),
-          dk(-1) /*, m_map_grad(nullptr, 0), m_map_hess(nullptr, 0, 0)*/
+        : m_val(_val), dk(-1)
     {
         if constexpr (k != Eigen::Dynamic) {
             m_grad = GradType::Zero(k);
@@ -306,9 +296,9 @@ struct Scalar
     //            _passive.begin(), _passive.size()));
     //}
 
-    // ///////////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////
     // Unary operators
-    // ///////////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////
 
     /// Apply chain rule to compute f(a(x)) and its derivatives.
     __host__ __device__ static Scalar chain(const PassiveT& val,    // f
@@ -594,9 +584,9 @@ struct Scalar
         return is_finite(a.val());
     }
 
-    // ///////////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////
     // Binary operators
-    // ///////////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////
 
     __host__ __device__ friend Scalar operator+(const Scalar& a,
                                                 const Scalar& b)
@@ -1280,9 +1270,9 @@ struct Scalar
         return atan2(a.imag(), a.real());
     }*/
 
-    // ///////////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////
     // Stream Operators
-    // ///////////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////
 
     __host__ friend std::ostream& operator<<(std::ostream& s, const Scalar& a)
     {
