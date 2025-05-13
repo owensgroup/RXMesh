@@ -196,7 +196,7 @@ struct Scalar
     }
 
     /// Active variable.
-    ///     _idx: index in variable vector
+    /// _idx: index in variable vector
     __host__ __device__ Scalar(PassiveT _val, Eigen::Index _idx)
         : m_val(_val), dk(-1)
     {
