@@ -2,6 +2,7 @@
 
 #include "rxmesh/diff/diff_handle.h"
 
+#include "rxmesh/diff/util.h"
 #include "rxmesh/iterator.cuh"
 #include "rxmesh/types.h"
 
@@ -37,7 +38,7 @@ __device__ __inline__ Eigen::Vector<T, VariableDim> iter_val(
     // init grad
     if constexpr (DiffHandleT::IsActive) {
         for (int j = 0; j < VariableDim; ++j) {
-            ret[j].grad()[index * VariableDim + j] = 1;
+            ret[j].grad()[index_mapping(VariableDim, index, j)] = 1;
         }
     }
 

@@ -144,7 +144,7 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                 [&](uint32_t v, uint32_t e, uint32_t f) {
                     int g = rx.get_input_max_valence() + 1;
                     int h = g * g;
-                    return (g + h) * v;
+                    return (g + h) * VariableDim * v;
                 });
 
             rx.prepare_launch_box(
@@ -164,7 +164,7 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                 [&](uint32_t v, uint32_t e, uint32_t f) {
                     int g = rx.get_input_max_valence() + 1;
                     int h = g * g;
-                    return (g + h) * v;
+                    return (g + h) * VariableDim * v;
                 });
 
             rx.prepare_launch_box(
@@ -183,7 +183,7 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                 false,
                 [&](uint32_t v, uint32_t e, uint32_t f) {
                     int g = rx.get_input_max_valence() + 1;
-                    return g * v;
+                    return g * VariableDim * v;
                 });
         }
     }

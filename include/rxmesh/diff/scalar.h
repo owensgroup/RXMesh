@@ -67,6 +67,18 @@ struct Scalar
     // ///////////////////////////////////////////////////////////////////////
 
     /**
+     * @brief return the dimension
+     */
+    __device__ __host__ constexpr int dim() const
+    {
+        if constexpr (k == Eigen::Dynamic) {
+            return dk;
+        } else {
+            return k_;
+        }
+    }
+
+    /**
      * Return constant reference to the value
      */
     __device__ __host__ constexpr const PassiveT& val() const
@@ -150,7 +162,8 @@ struct Scalar
     __host__ __device__ Scalar& operator=(Scalar&& _rhs)      = default;
 
 
-    __host__ __device__ Scalar(int dim, ShmemAllocator& shrd_alloc) : dk(dim)
+    __host__ __device__ Scalar(int dimension, ShmemAllocator& shrd_alloc)
+        : dk(dimension)
     {
         // We assume that *all* threads in the block will call this function.
         // Therefore, we allocate shared memory for `grad` and `hess` for *each*
