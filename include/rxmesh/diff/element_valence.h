@@ -13,9 +13,10 @@ constexpr int element_valence()
 {
     // dynamic
     if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
-        return 0;
+        return -1;
     }
 
+    // compile-time constant
     if constexpr (op == Op::V || op == Op::E || op == Op::F) {
         return 1;
     }
@@ -28,10 +29,14 @@ constexpr int element_valence()
         return 3;
     }
 
+    if constexpr (op == Op::EVDiamond) {
+        return 4;
+    }
+
 
     //??
     if constexpr (op == Op::EE) {
-        return -1;
+        return 0;
     }
 }
 

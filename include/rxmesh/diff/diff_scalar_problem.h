@@ -67,7 +67,8 @@ struct DiffScalarProblem
 
         constexpr int ElementValence = element_valence<op>();
 
-        constexpr int NElements = VariableDim * ElementValence;
+        constexpr int NElements =
+            std::max(VariableDim * ElementValence, Eigen::Dynamic);
 
         using ScalarT = Scalar<T, NElements, WithHessian>;
 

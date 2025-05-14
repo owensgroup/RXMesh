@@ -89,7 +89,7 @@ struct Scalar
     __device__ __host__ constexpr const auto& grad() const
     {
         if constexpr (k == Eigen::Dynamic) {
-            return *reinterpret_cast<GradMapType*>(&m_map_grad);
+            return *reinterpret_cast<const GradMapType*>(&m_map_grad);
         } else {
             return m_grad;
         }
@@ -113,7 +113,7 @@ struct Scalar
     __device__ __host__ constexpr const auto& hess() const
     {
         if constexpr (k == Eigen::Dynamic) {
-            return *reinterpret_cast<HessMapType*>(&m_map_hess);
+            return *reinterpret_cast<const HessMapType*>(&m_map_hess);
         } else {
             return m_hess;
         }

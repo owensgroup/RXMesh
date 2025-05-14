@@ -123,8 +123,8 @@ __global__ static void hess_matvec_kernel(
                             // vector
                             PassiveT p =
                                 res.hess()(
-                                    index_mapping<VariableDim>(i, local_i),
-                                    index_mapping<VariableDim>(j, local_j)) *
+                                    index_mapping(VariableDim, i, local_i),
+                                    index_mapping(VariableDim, j, local_j)) *
                                 input_vector(ids.second, 0);
 
                             ::atomicAdd(&output_vector(ids.first, 0), p);
@@ -273,7 +273,7 @@ __global__ static void diff_kernel_active(
 
                     ::atomicAdd(
                         &grad(iter[i], local),
-                        res.grad()[index_mapping<VariableDim>(i, local)]);
+                        res.grad()[index_mapping(VariableDim, i, local)]);
                 }
             }
 
@@ -299,9 +299,9 @@ __global__ static void diff_kernel_active(
                                 ::atomicAdd(
                                     &hess(vi, vj, local_i, local_j),
                                     res.hess()(
-                                        index_mapping<VariableDim>(i, local_i),
-                                        index_mapping<VariableDim>(j,
-                                                                   local_j)));
+                                        index_mapping(VariableDim, i, local_i),
+                                        index_mapping(
+                                            VariableDim, j, local_j)));
                             }
                         }
                     }

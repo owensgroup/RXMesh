@@ -16,10 +16,10 @@ __global__ static void calc_edge_weights_mat(
 
     auto calc_weights = [&](EdgeHandle edge_id, VertexIterator& vv) {
         // the edge goes from p-r while the q and s are the opposite vertices
-        const rxmesh::VertexHandle p_id = vv[0];
-        const rxmesh::VertexHandle r_id = vv[2];
-        const rxmesh::VertexHandle q_id = vv[1];
-        const rxmesh::VertexHandle s_id = vv[3];
+        const VertexHandle p_id = vv[0];
+        const VertexHandle r_id = vv[2];
+        const VertexHandle q_id = vv[1];
+        const VertexHandle s_id = vv[3];
 
         if (!p_id.is_valid() || !r_id.is_valid() || !q_id.is_valid() ||
             !s_id.is_valid()) {

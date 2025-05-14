@@ -25,12 +25,13 @@ struct Scalar;
  * index for an array (e.g., gradient) or matrix (e.g., hessian) that holds all
  * the optimization variables as 1D indexed variables.
  */
-template <int VariableDim>
-__device__ __inline__ int index_mapping(uint16_t index_in_iter,
+
+__device__ __inline__ int index_mapping(int      variable_dim,
+                                        uint16_t index_in_iter,
                                         int      variable_local_id)
 {
-    assert(variable_local_id < VariableDim);
-    return index_in_iter * VariableDim + variable_local_id;
+    assert(variable_local_id < variable_dim);
+    return index_in_iter * variable_dim + variable_local_id;
 }
 
 

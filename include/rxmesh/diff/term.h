@@ -125,6 +125,67 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                                                                 VariableDim,
                                                                 LambdaT>,
                               oreinted);
+
+        if (op == Op::VV || op == Op::VE || op == Op::VF) {
+            rx.prepare_launch_box(
+                {op},
+                lb_active,
+                (void*)detail::diff_kernel_active<blockThreads,
+                                                  LossHandleT,
+                                                  ObjHandleT,
+                                                  op,
+                                                  ScalarT,
+                                                  ProjectHess,
+                                                  VariableDim,
+                                                  LambdaT>,
+                oreinted,
+                true,
+                false,
+                [&](uint32_t v, uint32_t e, uint32_t f) {
+                    int g = rx.get_input_max_valence() + 1;
+                    int h = g * g;
+                    return (g + h) * v;
+                });
+
+            rx.prepare_launch_box(
+                {op},
+                lb_active_matvec,
+                (void*)detail::hess_matvec_kernel<blockThreads,
+                                                  LossHandleT,
+                                                  ObjHandleT,
+                                                  op,
+                                                  ScalarT,
+                                                  ProjectHess,
+                                                  VariableDim,
+                                                  LambdaT>,
+                oreinted,
+                true,
+                false,
+                [&](uint32_t v, uint32_t e, uint32_t f) {
+                    int g = rx.get_input_max_valence() + 1;
+                    int h = g * g;
+                    return (g + h) * v;
+                });
+
+            rx.prepare_launch_box(
+                {op},
+                lb_active_grad_only,
+                (void*)detail::diff_kernel_active<blockThreads,
+                                                  LossHandleT,
+                                                  ObjHandleT,
+                                                  op,
+                                                  ScalarGradOnlyT,
+                                                  ProjectHess,
+                                                  VariableDim,
+                                                  LambdaT>,
+                oreinted,
+                true,
+                false,
+                [&](uint32_t v, uint32_t e, uint32_t f) {
+                    int g = rx.get_input_max_valence() + 1;
+                    return g * v;
+                });
+        }
     }
 
     /**

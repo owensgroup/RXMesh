@@ -80,30 +80,44 @@ void arap(RXMeshStatic& rx)
 
 
     // energy term
-    //   add energy term
-    problem.template add_term<Op::VV, true>(
-        [=] __device__(const auto& vh, const auto& iter, auto& objective) {
-            using ActiveT = ACTIVE_TYPE(vh);
+    problem.template add_term<Op::VV, false>([=] __device__(const auto& vh,
+                                                            const auto& iter,
+                                                            auto& objective) {
+        using ActiveT = ACTIVE_TYPE(vh);
 
-            // p_prime
-            Eigen::Vector3<ActiveT> pi_prime =
-                iter_val<ActiveT, 3>(vh, objective);
+        ActiveT E;
 
-            // p
-            Eigen::Vector3<T> pi = P.to_eigen<3>(vh);
+        // pi_prime
+        Eigen::Vector3<ActiveT> pi_prime = iter_val<ActiveT, 3>(vh, objective);
 
-            // r
-            Eigen::Matrix3f ri = Eigen::Matrix3f::Zero(3, 3);
-            for (int i = 0; i < 3; i++) {
-                for (int j = 0; j < 3; j++) {
-                    ri(i, j) = rotations(vh, i * 3 + j);
-                }
+        // pi
+        Eigen::Vector3<T> pi = P.to_eigen<3>(vh);
+
+        // r
+        Eigen::Matrix<T, 3, 3> ri;
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                ri(i, j) = rotations(vh, i * 3 + j);
             }
+        }
+
+        for (int j = 0; j < iter.size(); j++) {
+
+            // pi
+            Eigen::Vector3<T> pj = P.to_eigen<3>(iter[j]);
+
+            // pj_prime
+            Eigen::Vector3<ActiveT> pj_prime =
+                iter_val<ActiveT, 3>(vh, iter, objective, j);
+
+            Eigen::Vector3<ActiveT> e = (pi_prime - pj_prime) - ri * (pi - pj);
+
+            E += weight_matrix(vh, iter[j]) * e.squaredNorm();
+        }
 
 
-            ActiveT res;
-            return res;
-        });
+        return E;
+    });
 
 
     T   convergence_eps = 1e-2;
@@ -146,7 +160,6 @@ void arap(RXMeshStatic& rx)
                 weight_matrix);
 
             // solve for position via Newton
-
             for (int iter = 0; iter < newton_max_iter; ++iter) {
                 // evaluate energy terms
                 problem.eval_terms();
@@ -155,6 +168,9 @@ void arap(RXMeshStatic& rx)
                 T f = problem.get_current_loss();
                 RXMESH_INFO(
                     "Iter {} =, Newton Iter= {}: Energy = {}", i, iter, f);
+
+                // apply bc
+                newton_solver.apply_bc(constraints);
 
                 // direction newton
                 newton_solver.newton_direction();
@@ -196,7 +212,7 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj", "", 128);
 
     if (!rx.is_closed()) {
         RXMESH_ERROR("Input mesh should be closed without boundaries");
