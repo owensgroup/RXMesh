@@ -3,6 +3,7 @@
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/diff/diff_scalar_problem.h"
+#include "rxmesh/diff/lbfgs_solver.h"
 #include "rxmesh/diff/newton_solver.h"
 
 struct arg
@@ -11,7 +12,9 @@ struct arg
     std::string embed_file_name = STRINGIFY(INPUT_DIR) "giraffe_embedding.obj";
     std::string output_folder   = STRINGIFY(OUTPUT_DIR);
     uint32_t    device_id       = 0;
-    uint32_t    newton_max_iter = 100;
+    std::string solver          = "Newton";
+    int         history         = 5;
+    uint32_t    max_iter        = 100;
     char**      argv;
     int         argc;
 } Arg;
@@ -140,23 +143,14 @@ __host__ __device__ Eigen::Vector3<U> retract(Eigen::Vector2<U>&        v_tang,
     return ret;
 }
 
-template <typename T>
+template <typename T, typename ProblemT, typename SolverT>
 void manifold_optimization(RXMeshStatic&                          rx,
+                           ProblemT&                              problem,
+                           SolverT&                               solver,
                            const std::vector<std::vector<float>>& init_s,
                            const Direction                        dir)
 {
-    constexpr int VariableDim = 2;
 
-    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
-
-
-    ProblemT problem(rx);
-
-    using HessMatT = typename ProblemT::HessMatT;
-
-    LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
-
-    NetwtonSolver newton_solver(problem, &solver);
 
     auto S  = *rx.add_vertex_attribute<T>(init_s, "S");
     auto B1 = *rx.add_vertex_attribute<T>("B1", 3);
@@ -231,7 +225,7 @@ void manifold_optimization(RXMeshStatic&                          rx,
 
     timer.start("Total");
 
-    for (iter = 0; iter < Arg.newton_max_iter; ++iter) {
+    for (iter = 0; iter < Arg.max_iter; ++iter) {
 
         timer.start("Diff");
         problem.objective->reset(0, DEVICE);
@@ -244,17 +238,17 @@ void manifold_optimization(RXMeshStatic&                          rx,
         // RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
 
 
-        newton_solver.newton_direction();
+        solver.newton_direction();
 
         // RXMESH_INFO(
         //     "   grad.norm2()= {}, dir.norm2() = {},"
         //     " grad.dot(dir)={} ",
         //     problem.grad.norm2(),
-        //     newton_solver.dir.norm2(),
-        //     problem.grad.dot(newton_solver.dir));
+        //     solver.dir.norm2(),
+        //     problem.grad.dot(solver.dir));
 
 
-        if (0.5f * problem.grad.dot(newton_solver.dir) < convergence_eps) {
+        if (0.5f * problem.grad.dot(solver.dir) < convergence_eps) {
             break;
         }
 
@@ -263,7 +257,7 @@ void manifold_optimization(RXMeshStatic&                          rx,
         // }
 
 
-        newton_solver.line_search();
+        solver.line_search();
 
 
         // Re-center local bases
@@ -282,11 +276,10 @@ void manifold_optimization(RXMeshStatic&                          rx,
 
     RXMESH_INFO(
         "Manifold Optimization: iterations ={}, time= {} (ms), diff_time= {} "
-        "(ms), solver_time= {} (ms)",
+        "(ms)",
         iter,
         timer.elapsed_millis("Total"),
-        timer.elapsed_millis("Diff"),
-        newton_solver.solve_time);
+        timer.elapsed_millis("Diff"));
 
 #ifdef USE_POLYSCOPE
     S.move(DEVICE, HOST);
@@ -325,9 +318,11 @@ int main(int argc, char** argv)
                         " -input:             Input OBJ mesh file. Default is {} \n"
                         " -embed:             Input initial embedding mesh (OBJ file). Default is {} \n"
                         " -o:                 JSON file output folder. Default is {} \n"
-                        " -newton_max_iter:   Maximum number of iterations for Newton solver. Default is {}\n"
-                        " -device_id:         GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.embed_file_name, Arg.output_folder, Arg.newton_max_iter, Arg.device_id);
+                        " -solver:            Solver to use. Options are Newton and lbfgs. Default is {}\n",
+                        " -max_iter:          Maximum number of iterations for Newton solver. Default is {}\n"
+                        " -history:           History size in LBFGS. Default is {}\n"
+                        " -device_id:         GPU device ID. Default is {}",                        
+            Arg.obj_file_name, Arg.embed_file_name, Arg.output_folder, Arg.solver, Arg.max_iter, Arg.history, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
@@ -340,14 +335,25 @@ int main(int argc, char** argv)
             Arg.embed_file_name =
                 std::string(get_cmd_option(argv, argv + argc, "-embed"));
         }
+
+        if (cmd_option_exists(argv, argc + argv, "-solver")) {
+            Arg.solver =
+                std::string(get_cmd_option(argv, argv + argc, "-solver"));
+        }
+
         if (cmd_option_exists(argv, argc + argv, "-o")) {
             Arg.output_folder =
                 std::string(get_cmd_option(argv, argv + argc, "-o"));
         }
 
-        if (cmd_option_exists(argv, argc + argv, "-newton_max_iter")) {
-            Arg.newton_max_iter = std::atoi(
-                get_cmd_option(argv, argv + argc, "-newton_max_iter"));
+        if (cmd_option_exists(argv, argc + argv, "-max_iter")) {
+            Arg.max_iter =
+                std::atoi(get_cmd_option(argv, argv + argc, "-max_iter"));
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-history")) {
+            Arg.history =
+                std::atoi(get_cmd_option(argv, argv + argc, "-history"));
         }
 
         if (cmd_option_exists(argv, argc + argv, "-device_id")) {
@@ -359,7 +365,8 @@ int main(int argc, char** argv)
     RXMESH_INFO("input= {}", Arg.obj_file_name);
     RXMESH_INFO("embed= {}", Arg.embed_file_name);
     RXMESH_INFO("output_folder= {}", Arg.output_folder);
-    RXMESH_INFO("newton_max_iter= {}", Arg.newton_max_iter);
+    RXMESH_INFO("solver= {}", Arg.solver);
+    RXMESH_INFO("max_iter= {}", Arg.max_iter);
     RXMESH_INFO("device_id= {}", Arg.device_id);
 
 
@@ -381,5 +388,21 @@ int main(int argc, char** argv)
             "vertices");
     }
 
-    manifold_optimization<T>(rx, init_s, Direction::Default);
+    if (Arg.solver == "Newton") {
+
+        using ProblemT = DiffScalarProblem<T, 2, VertexHandle, true>;
+        ProblemT problem(rx);
+        using HessMatT = typename ProblemT::HessMatT;
+        LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+        NetwtonSolver newton_solver(problem, &solver);
+
+        manifold_optimization<T>(
+            rx, problem, newton_solver, init_s, Direction::Default);
+    } else if (Arg.solver == "lbfgs") {
+        using ProblemT = DiffScalarProblem<T, 2, VertexHandle, false>;
+        ProblemT problem(rx);
+
+        LBFGSSolver lbfgs_solver(problem, Arg.history);
+        // manifold_optimization<T>(rx, init_s, Direction::Default);
+    }
 }
