@@ -5,6 +5,18 @@
 #include "rxmesh/diff/diff_scalar_problem.h"
 #include "rxmesh/diff/newton_solver.h"
 
+struct arg
+{
+    std::string obj_file_name   = STRINGIFY(INPUT_DIR) "giraffe.obj";
+    std::string embed_file_name = STRINGIFY(INPUT_DIR) "giraffe_embedding.obj";
+    std::string output_folder   = STRINGIFY(OUTPUT_DIR);
+    uint32_t    device_id       = 0;
+    uint32_t    newton_max_iter = 100;
+    char**      argv;
+    int         argc;
+} Arg;
+
+
 using namespace rxmesh;
 
 enum class Direction
@@ -37,6 +49,7 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
                            VertexAttribute<T>& v,
                            std::string         name)
 {
+#ifdef USE_POLYSCOPE
     if (v.get_num_attributes() == 3) {
         polyscope::registerSurfaceMesh(name, v, rx.get_polyscope_mesh()->faces);
     } else {
@@ -53,6 +66,7 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
 
         rx.remove_attribute(name);
     }
+#endif
 }
 
 template <typename T>
@@ -148,6 +162,7 @@ void manifold_optimization(RXMeshStatic&                          rx,
     auto B1 = *rx.add_vertex_attribute<T>("B1", 3);
     auto B2 = *rx.add_vertex_attribute<T>("B2", 3);
 
+    // auto fcolor = *rx.add_face_attribute<T>("fColor", 1);
 
     compute_local_bases(rx, S, B1, B2);
 
@@ -198,35 +213,54 @@ void manifold_optimization(RXMeshStatic&                          rx,
                  sqr(1.0 - c_mani.y());
         }
 
+        //(void)fcolor;
+        // if constexpr (is_scalar_v<ActiveT>) {
+        //    fcolor(fh) = E.val();
+        //}
         return E;
     });
 
 
     T convergence_eps = 1e-1;
 
-    int num_iterations = 1000;
     int iter;
 
-    GPUTimer timer;
-    timer.start();
+    Timers<GPUTimer> timer;
+    timer.add("Total");
+    timer.add("Diff");
 
-    for (iter = 0; iter < num_iterations; ++iter) {
+    timer.start("Total");
 
+    for (iter = 0; iter < Arg.newton_max_iter; ++iter) {
+
+        timer.start("Diff");
         problem.objective->reset(0, DEVICE);
 
         problem.eval_terms();
 
+        timer.stop("Diff");
 
-        T f = problem.get_current_loss();
-        RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
+        // T f = problem.get_current_loss();
+        // RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
 
 
         newton_solver.newton_direction();
+
+        // RXMESH_INFO(
+        //     "   grad.norm2()= {}, dir.norm2() = {},"
+        //     " grad.dot(dir)={} ",
+        //     problem.grad.norm2(),
+        //     newton_solver.dir.norm2(),
+        //     problem.grad.dot(newton_solver.dir));
 
 
         if (0.5f * problem.grad.dot(newton_solver.dir) < convergence_eps) {
             break;
         }
+
+        // if (problem.grad.norm2() < convergence_eps) {
+        //     break;
+        // }
 
 
         newton_solver.line_search();
@@ -244,26 +278,37 @@ void manifold_optimization(RXMeshStatic&                          rx,
 
         compute_local_bases(rx, S, B1, B2);
     }
-
-    timer.stop();
-
+    timer.stop("Total");
 
     RXMESH_INFO(
-        "Manifold Optimization: iterations ={}, time= {} (ms), "
-        "timer/iteration= {} ms/iter",
+        "Manifold Optimization: iterations ={}, time= {} (ms), diff_time= {} "
+        "(ms), solver_time= {} (ms)",
         iter,
-        timer.elapsed_millis(),
-        timer.elapsed_millis() / float(num_iterations));
+        timer.elapsed_millis("Total"),
+        timer.elapsed_millis("Diff"),
+        newton_solver.solve_time);
 
-
+#ifdef USE_POLYSCOPE
     S.move(DEVICE, HOST);
-
-    rx.get_polyscope_mesh()->addVertexParameterizationQuantity(
-        direction_name(dir), S);
 
     add_mesh_to_polyscope(rx, S, direction_name(dir));
 
+    // auto ps = polyscope::registerSurfaceMesh(
+    //     direction_name(dir) + std::to_string(iter),
+    //     S,
+    //     rx.get_polyscope_mesh()->faces);
+    //
+    // fcolor.move(DEVICE, HOST);
+    // auto ps_q = ps->addFaceScalarQuantity("Energy", fcolor);
+    // ps_q->setEnabled(true);
+    //  ps_q->setMapRange({6.466e-01, 5.621e+00});
+
+    // ps->setEnabled(false);
+    // rx.export_obj("mani_" + std::to_string(iter) + ".obj", S);
+
+
     polyscope::show();
+#endif
 }
 
 int main(int argc, char** argv)
@@ -272,11 +317,57 @@ int main(int argc, char** argv)
 
     using T = float;
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "giraffe.obj");
+    if (argc > 1) {
+        if (cmd_option_exists(argv, argc + argv, "-h")) {
+            // clang-format off
+            RXMESH_INFO("\nUsage: Param.exe < -option X>\n"
+                        " -h:                 Display this massage and exit\n"
+                        " -input:             Input OBJ mesh file. Default is {} \n"
+                        " -embed:             Input initial embedding mesh (OBJ file). Default is {} \n"
+                        " -o:                 JSON file output folder. Default is {} \n"
+                        " -newton_max_iter:   Maximum number of iterations for Newton solver. Default is {}\n"
+                        " -device_id:         GPU device ID. Default is {}",
+            Arg.obj_file_name, Arg.embed_file_name, Arg.output_folder, Arg.newton_max_iter, Arg.device_id);
+            // clang-format on
+            exit(EXIT_SUCCESS);
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-input")) {
+            Arg.obj_file_name =
+                std::string(get_cmd_option(argv, argv + argc, "-input"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-embed")) {
+            Arg.embed_file_name =
+                std::string(get_cmd_option(argv, argv + argc, "-embed"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-o")) {
+            Arg.output_folder =
+                std::string(get_cmd_option(argv, argv + argc, "-o"));
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-newton_max_iter")) {
+            Arg.newton_max_iter = std::atoi(
+                get_cmd_option(argv, argv + argc, "-newton_max_iter"));
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
+            Arg.device_id =
+                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
+        }
+    }
+
+    RXMESH_INFO("input= {}", Arg.obj_file_name);
+    RXMESH_INFO("embed= {}", Arg.embed_file_name);
+    RXMESH_INFO("output_folder= {}", Arg.output_folder);
+    RXMESH_INFO("newton_max_iter= {}", Arg.newton_max_iter);
+    RXMESH_INFO("device_id= {}", Arg.device_id);
+
+
+    RXMeshStatic rx(Arg.obj_file_name);
 
     std::vector<std::vector<uint32_t>> fv;
     std::vector<std::vector<float>>    init_s;
-    import_obj(STRINGIFY(INPUT_DIR) "giraffe_embedding.obj", init_s, fv);
+    import_obj(Arg.embed_file_name, init_s, fv);
 
     if (rx.get_num_faces() != fv.size()) {
         RXMESH_ERROR(
