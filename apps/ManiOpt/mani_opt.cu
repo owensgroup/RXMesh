@@ -226,22 +226,26 @@ void manifold_optimization(RXMeshStatic&                          rx,
     timer.start("Total");
 
     if (Arg.solver == "lbfgs") {
+        timer.start("Diff");
         problem.eval_terms();
+        timer.stop("Diff");
     }
 
     for (iter = 0; iter < Arg.max_iter; ++iter) {
 
-        timer.start("Diff");
+
         problem.objective->reset(0, DEVICE);
+
+        timer.start("Diff");
 
         if (Arg.solver == "newton") {
             problem.eval_terms();
+            timer.stop("Diff");
         }
 
-        timer.stop("Diff");
 
-        // T f = problem.get_current_loss();
-        // RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
+        /*T f = problem.get_current_loss();
+        RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);*/
 
 
         solver.compute_direction();
@@ -266,6 +270,7 @@ void manifold_optimization(RXMeshStatic&                          rx,
             solver.line_search();
         } else {
             solver.line_search(1.0, 0.8, 200);
+            timer.stop("Diff");
         }
 
 
@@ -285,10 +290,11 @@ void manifold_optimization(RXMeshStatic&                          rx,
 
     RXMESH_INFO(
         "Manifold Optimization: iterations ={}, time= {} (ms), diff_time= {} "
-        "(ms)",
+        "(ms), final objective= {}",
         iter,
         timer.elapsed_millis("Total"),
-        timer.elapsed_millis("Diff"));
+        timer.elapsed_millis("Diff"),
+        problem.get_current_loss());
 
 #ifdef USE_POLYSCOPE
     S.move(DEVICE, HOST);
