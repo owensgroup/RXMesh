@@ -56,14 +56,14 @@ struct NetwtonSolver
      */
     inline void solve(cudaStream_t stream = NULL)
     {
-        newton_direction(stream);
+        compute_direction(stream);
         line_search(stream);
     }
 
     /**
      * @brief solve to get Newton direction
      */
-    inline void newton_direction(cudaStream_t stream = NULL)
+    inline void compute_direction(cudaStream_t stream = NULL)
     {
         problem.grad.multiply(T(-1.f), stream);
 

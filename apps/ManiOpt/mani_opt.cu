@@ -12,7 +12,7 @@ struct arg
     std::string embed_file_name = STRINGIFY(INPUT_DIR) "giraffe_embedding.obj";
     std::string output_folder   = STRINGIFY(OUTPUT_DIR);
     uint32_t    device_id       = 0;
-    std::string solver          = "Newton";
+    std::string solver          = "newton";
     int         history         = 5;
     uint32_t    max_iter        = 100;
     char**      argv;
@@ -225,12 +225,18 @@ void manifold_optimization(RXMeshStatic&                          rx,
 
     timer.start("Total");
 
+    if (Arg.solver == "lbfgs") {
+        problem.eval_terms();
+    }
+
     for (iter = 0; iter < Arg.max_iter; ++iter) {
 
         timer.start("Diff");
         problem.objective->reset(0, DEVICE);
 
-        problem.eval_terms();
+        if (Arg.solver == "newton") {
+            problem.eval_terms();
+        }
 
         timer.stop("Diff");
 
@@ -238,7 +244,7 @@ void manifold_optimization(RXMeshStatic&                          rx,
         // RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
 
 
-        solver.newton_direction();
+        solver.compute_direction();
 
         // RXMESH_INFO(
         //     "   grad.norm2()= {}, dir.norm2() = {},"
@@ -248,16 +254,19 @@ void manifold_optimization(RXMeshStatic&                          rx,
         //     problem.grad.dot(solver.dir));
 
 
-        if (0.5f * problem.grad.dot(solver.dir) < convergence_eps) {
-            break;
-        }
-
-        // if (problem.grad.norm2() < convergence_eps) {
+        // if (0.5f * problem.grad.dot(solver.dir) < convergence_eps) {
         //     break;
         // }
 
+        if (problem.grad.norm2() < convergence_eps) {
+            break;
+        }
 
-        solver.line_search();
+        if (Arg.solver == "newton") {
+            solver.line_search();
+        } else {
+            solver.line_search(1.0, 0.8, 200);
+        }
 
 
         // Re-center local bases
@@ -318,7 +327,7 @@ int main(int argc, char** argv)
                         " -input:             Input OBJ mesh file. Default is {} \n"
                         " -embed:             Input initial embedding mesh (OBJ file). Default is {} \n"
                         " -o:                 JSON file output folder. Default is {} \n"
-                        " -solver:            Solver to use. Options are Newton and lbfgs. Default is {}\n",
+                        " -solver:            Solver to use. Options are newton and lbfgs. Default is {}\n",
                         " -max_iter:          Maximum number of iterations for Newton solver. Default is {}\n"
                         " -history:           History size in LBFGS. Default is {}\n"
                         " -device_id:         GPU device ID. Default is {}",                        
@@ -388,7 +397,7 @@ int main(int argc, char** argv)
             "vertices");
     }
 
-    if (Arg.solver == "Newton") {
+    if (Arg.solver == "newton") {
 
         using ProblemT = DiffScalarProblem<T, 2, VertexHandle, true>;
         ProblemT problem(rx);
@@ -403,6 +412,7 @@ int main(int argc, char** argv)
         ProblemT problem(rx);
 
         LBFGSSolver lbfgs_solver(problem, Arg.history);
-        // manifold_optimization<T>(rx, init_s, Direction::Default);
+        manifold_optimization<T>(
+            rx, problem, lbfgs_solver, init_s, Direction::Default);
     }
 }

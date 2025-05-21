@@ -189,6 +189,19 @@ struct DiffScalarProblem
             }
         }
     }
+
+    /**
+     * @brief evaluate all terms
+     */
+    void eval_terms_grad_only(Attribute<T, ObjHandleT>* obj,
+                              cudaStream_t              stream = NULL)
+    {
+        grad.reset(0, DEVICE, stream);
+
+        for (size_t i = 0; i < terms.size(); ++i) {
+            terms[i]->eval_active_grad_only(*obj, stream);
+        }
+    }
 };
 
 }  // namespace rxmesh

@@ -70,32 +70,65 @@ struct LBFGSSolver
             q.axpy(y_list[idx], -alpha[idx], stream);  // q = -alpha * y + q
         }
 
-        // Initial H0 = identity
-        r.copy_from(q, DEVICE, DEVICE, stream);
+        if (k == 0) {
+            // Initial H0 = identity
+            r.copy_from(q, DEVICE, DEVICE, stream);
+        } else {
+            // scaled identity matrix
+            int last = (k - 1) % m;
+
+            T sy    = (rho_list[last] > 0) ? (1.0 / rho_list[last]) : T(1.0);
+            T yy    = y_list[last].dot(y_list[last], false, stream);
+            T gamma = (yy > 1e-10) ? sy / yy : 1.0;
+
+            r.copy_from(q, DEVICE, DEVICE, stream);
+            r.multiply(gamma, stream);  // r = gamma * q
+        }
 
         for (int i = 1; i <= std::min(k, m); ++i) {
-            int idx  = (k - std::min(k, m) + i - 1) % m;
-            T   beta = rho_list[idx] * y_list[idx].dot(r, false, stream);
+            int idx = (k - std::min(k, m) + i - 1) % m;
+            // beta = rho*y^T.r
+            T beta = rho_list[idx] * y_list[idx].dot(r, false, stream);
+            // r = (alpha-beta) * s + r
             r.axpy(s_list[idx], alpha[idx] - beta, stream);
         }
 
         dir.copy_from(r, DEVICE, DEVICE, stream);
+        // dir.multiply(T(-1.f), stream);
     }
 
     inline void update_history(cudaStream_t stream = NULL)
     {
+        // update history is called after temp_objective (x_{k+1}) is being
+        // updated in line_search and before updating problem.objective (x_k)
+
         int idx = k % m;
 
         // s_k = x_{k+1} - x_k
-        // s_list[idx].copy(*problem.objective);??
-        // s_list[idx].axpy(-1.0, *temp_objective, stream);??
+        // s_k = temp_objective - problem.objective
+        s_list[idx].reset(0, DEVICE);
+        problem.rx.template for_each<ObjHandleT>(
+            DEVICE,
+            [s    = s_list[idx],
+             temp = *temp_objective,
+             prev =
+                 *problem.objective] __device__(const ObjHandleT& h) mutable {
+                for (int j = 0; j < s.cols(); ++j) {
+                    s(h, j) = temp(h, j) - prev(h, j);
+                }
+            });
 
-        // y_k = grad_{k+1} - grad_k
+        // y_k = grad_k
         y_list[idx].copy_from(problem.grad, DEVICE, DEVICE, stream);
 
-        // problem.eval_gradient(temp_objective.get(), stream);??
+        // y_k = -grad_k
+        y_list[idx].multiply(T(-1.f), stream);
 
-        y_list[idx].axpy(problem.grad, T(-1.0), stream);
+        // update grad_{k+1}
+        problem.eval_terms_grad_only(temp_objective.get(), stream);
+
+        // y_k = grad_{k+1} - grad_k
+        y_list[idx].axpy(problem.grad, T(1.0), stream);
 
         T sy = s_list[idx].dot(y_list[idx], false, stream);
         if (sy > 1e-10) {
@@ -111,10 +144,20 @@ struct LBFGSSolver
                             const T      armijo_const = 1e-4,
                             cudaStream_t stream       = NULL)
     {
+        assert(dir.rows() == problem.grad.rows());
+        assert(dir.cols() == problem.grad.cols());
+        assert(problem.objective->rows() == problem.grad.rows());
+        assert(problem.objective->cols() == problem.grad.cols());
+        assert(problem.objective->rows() == temp_objective->rows());
+        assert(problem.objective->cols() == temp_objective->cols());
+        assert(s_max > 0.0);
+
+        T s = s_max;
+
+        bool update = false;
 
         const T current_f = problem.get_current_loss(stream);
-        T       s         = s_max;
-        bool    update    = false;
+
 
         for (int i = 0; i < max_iters; ++i) {
             problem.rx.template for_each<ObjHandleT>(
@@ -150,8 +193,6 @@ struct LBFGSSolver
                         obj(h, j) = t_obj(h, j);
                     }
                 });
-
-            problem.eval_gradient(problem.objective.get(), stream);
             ++k;
         }
     }
