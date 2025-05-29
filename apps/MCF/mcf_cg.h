@@ -10,7 +10,7 @@
 
 
 template <typename T, typename SolverT>
-void run_cg(rxmesh::RXMeshStatic& rx)
+void run_cg(rxmesh::RXMeshStatic& rx, bool pcg=false)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -48,7 +48,10 @@ void run_cg(rxmesh::RXMeshStatic& rx)
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rx);
-    report.add_member("method", std::string("CG"));
+    if (pcg)
+        report.add_member("method", std::string("PCG"));
+    else
+        report.add_member("method", std::string("CG"));
     report.add_member("application", std::string("MCF"));
     report.add_member("blockThreads", blockThreads);
 
@@ -144,5 +147,5 @@ void mcf_pcg(rxmesh::RXMeshStatic& rx)
 {
     using namespace rxmesh;
 
-    run_cg<T, PCGSolver<T>>(rx);
+    run_cg<T, PCGSolver<T>>(rx,true);
 }
