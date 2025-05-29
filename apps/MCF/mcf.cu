@@ -33,6 +33,7 @@ struct arg
 #include "mcf_cg_mat_free.h"
 #include "mcf_chol.h"
 #include "mcf_gmg.h"
+#include "mcf_eigen.h"
 
 
 TEST(App, MCF)
@@ -58,6 +59,8 @@ TEST(App, MCF)
         mcf_gmg<dataT>(rx);
     } else if (Arg.solver == "chol") {
         mcf_cusolver_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
+    } else if (Arg.solver == "eigen") {
+        mcf_eigen_solver<dataT>(rx, string_to_permute_method(Arg.perm_method));
     } else {
         RXMESH_ERROR("Unrecognized input solver type: {}", Arg.solver);
     }
