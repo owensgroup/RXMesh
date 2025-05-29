@@ -10,6 +10,9 @@
 #include "mcf_kernels.cuh"
 
 
+#include <Eigen/Sparse>
+#include <unsupported/Eigen/SparseExtra>
+
 template <typename T>
 void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                        rxmesh::PermuteMethod permute_method)
@@ -37,6 +40,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                                 B_mat,
                                 Arg.use_uniform_laplace);
 
+
     // A set up
     rx.run_kernel<blockThreads>({Op::VV},
                                 mcf_A_setup<float, blockThreads>,
@@ -45,12 +49,39 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                                 Arg.use_uniform_laplace,
                                 Arg.time_step);
 
+
+    if (Arg.create_AB) {
+        A_mat.move(DEVICE, HOST);
+        B_mat.move(DEVICE, HOST);
+        std::string output_dir = Arg.output_folder + "systems";
+        auto        A_mat_copy = A_mat.to_eigen();
+        auto        B_mat_copy = B_mat.to_eigen();
+        std::filesystem::create_directories(output_dir);
+        Eigen::saveMarketDense(
+            B_mat_copy,
+            output_dir + "/" + extract_file_name(Arg.obj_file_name) + "_B.mtx");
+        Eigen::saveMarket(
+            A_mat_copy,
+            output_dir + "/" + extract_file_name(Arg.obj_file_name) + "_A.mtx");
+
+        std::cout << "\nWrote A and b .mtx files to " << output_dir + "/";
+        exit(1);
+    }
+
+
+    //// eigen solve
+
+
+    ///
+    ///
+
     Report report("MCF_Chol");
     report.command_line(Arg.argc, Arg.argv);
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rx);
-    report.add_member("method", std::string("RXMesh"));
+    report.add_member("method", std::string("Cholesky"));
+    report.add_member("application", std::string("MCF"));
     report.add_member("blockThreads", blockThreads);
     report.add_member("PermuteMethod",
                       permute_method_to_string(permute_method));
@@ -72,6 +103,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     // solver.pre_solve(rx);
     // Solve
     // solver.solve(B_mat, X_mat);
+
 
     CPUTimer timer;
     GPUTimer gtimer;
@@ -142,6 +174,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
         "factorize", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
     total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
+    report.add_member("pre-solve", total_time);
 
     timer.start();
     gtimer.start();
@@ -163,22 +196,25 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     // move the results to the host
     // if we use LU, the data will be on the host and we should not move the
     // device to the host
-    X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
+     X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
 
     // copy the results to attributes
-    coords->from_matrix(&X_mat);
+     coords->from_matrix(&X_mat);
 
 #if USE_POLYSCOPE
     polyscope::registerSurfaceMesh("old mesh",
                                    rx.get_polyscope_mesh()->vertices,
                                    rx.get_polyscope_mesh()->faces);
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-    polyscope::show();
+
+    //polyscope::show();
 #endif
 
     B_mat.release();
     X_mat.release();
     A_mat.release();
+
+    // rx.export_obj("cholesky_mcf_result.obj", *coords);
 
     report.write(Arg.output_folder + "/rxmesh",
                  "MCF_" + solver.name() + extract_file_name(Arg.obj_file_name));

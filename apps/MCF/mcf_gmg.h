@@ -47,7 +47,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rx);
-    report.add_member("method", std::string("RXMesh"));
+    report.add_member("method", std::string("GPUGMG"));
+    report.add_member("application", std::string("MCF"));
     report.add_member("blockThreads", blockThreads);
 
     GMGSolver solver(
@@ -85,7 +86,10 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                 solver.name(),
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
+
+    Arg.levels = solver.get_num_levels();
     report.add_member("levels", Arg.levels);
+    report.add_member("iterations", solver.iter_taken());
     report.add_member("solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
     total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
@@ -109,7 +113,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                                    rx.get_polyscope_mesh()->vertices,
                                    rx.get_polyscope_mesh()->faces);
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-    polyscope::show();
+    //polyscope::show();
 
     
 
