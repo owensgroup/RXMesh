@@ -17,12 +17,13 @@ struct arg
     float       time_step           = 10;
     float       cg_tolerance        = 1e-6;
     float       gmg_tolerance_abs   = 1e-6;
-    float       gmg_tolerance_rel   = 1e-6;
+    float       gmg_tolerance_rel   = 0.0;
     uint32_t    max_num_iter        = 100;
     bool        use_uniform_laplace = true;
     int         levels              = 3;
-    int         threshold           = 100;
+    int         threshold           = 1000;
     bool        render_hierarchy     = false;
+    bool        create_AB     = false;
 
     char**      argv;
     int         argc;
@@ -152,6 +153,10 @@ int main(int argc, char** argv)
         }
         if (cmd_option_exists(argv, argc + argv, "-rh")) {
             Arg.render_hierarchy = true;
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-ab")) {
+            Arg.create_AB = true;
         }
     }
 
