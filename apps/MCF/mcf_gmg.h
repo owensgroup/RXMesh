@@ -47,11 +47,12 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rx);
-    report.add_member("method", std::string("RXMesh"));
+    report.add_member("method", std::string("GPUGMG"));
+    report.add_member("application", std::string("MCF"));
     report.add_member("blockThreads", blockThreads);
 
     GMGSolver solver(
-        rx, A_mat, Arg.max_num_iter, Arg.levels, 2, 2, CoarseSolver::Jacobi, Arg.gmg_tolerance_abs, Arg.gmg_tolerance_rel);
+        rx, A_mat, Arg.max_num_iter, Arg.levels, 2, 2, CoarseSolver::Cholesky, Arg.gmg_tolerance_abs, Arg.gmg_tolerance_rel,Arg.threshold);
 
 
 
@@ -85,11 +86,17 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                 solver.name(),
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
-    report.add_member(
-        "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+
+    Arg.levels = solver.get_num_levels();
+    report.add_member("levels", Arg.levels);
+    report.add_member("iterations", solver.iter_taken());
+    report.add_member("solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
     total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
     report.add_member("total_time", total_time);
+
+    report.add_member("max_iterations", Arg.max_num_iter);
+    report.add_member("threshold", Arg.threshold);
 
     RXMESH_INFO("total_time {} (ms)", total_time);
 
@@ -100,12 +107,20 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     coords->from_matrix(&X_mat);
 
 #if USE_POLYSCOPE
+    if (Arg.render_hierarchy)
+        solver.render_hierarchy();
     polyscope::registerSurfaceMesh("old mesh",
                                    rx.get_polyscope_mesh()->vertices,
                                    rx.get_polyscope_mesh()->faces);
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-    polyscope::show();
+    //polyscope::show();
+
+    
+
 #endif
+
+    /*rx.export_obj("gmg_mcf_result.obj",  
+                  *coords);*/
 
     B_mat.release();
     X_mat.release();

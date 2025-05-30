@@ -10,7 +10,7 @@
 
 
 template <typename T, typename SolverT>
-void run_cg(rxmesh::RXMeshStatic& rx)
+void run_cg(rxmesh::RXMeshStatic& rx, bool pcg=false)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -48,7 +48,11 @@ void run_cg(rxmesh::RXMeshStatic& rx)
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rx);
-    report.add_member("method", std::string("RXMesh"));
+    if (pcg)
+        report.add_member("method", std::string("PCG"));
+    else
+        report.add_member("method", std::string("CG"));
+    report.add_member("application", std::string("MCF"));
     report.add_member("blockThreads", blockThreads);
 
 
@@ -61,15 +65,37 @@ void run_cg(rxmesh::RXMeshStatic& rx)
                    Arg.cg_tolerance * Arg.cg_tolerance);
 
 
-    solver.pre_solve(B_mat, X_mat);
+    GPUTimer gtimer;
+    CPUTimer timer;
 
-    GPUTimer timer;
+    gtimer.start();
     timer.start();
 
+    solver.pre_solve(B_mat, X_mat);
+
+    gtimer.stop();
+    timer.stop();
+
+    report.add_member(
+        "pre-solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+
+    timer.start();
+    gtimer.start();
 
     solver.solve(B_mat, X_mat);
 
     timer.stop();
+    gtimer.stop();
+
+    report.add_member(
+        "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+
+     report.add_member(
+        "total_time", total_time);
+
+
     CUDA_ERROR(cudaDeviceSynchronize());
     CUDA_ERROR(cudaProfilerStop());
 
@@ -81,6 +107,11 @@ void run_cg(rxmesh::RXMeshStatic& rx)
                 solver.iter_taken(),
                 timer.elapsed_millis() / float(solver.iter_taken()));
 
+    report.add_member("start residual", solver.start_residual());
+    report.add_member("final residual", solver.final_residual());
+    report.add_member("num_iterations", solver.iter_taken());
+    report.add_member("avg iteration time",
+                      timer.elapsed_millis() / float(solver.iter_taken()));
 
     X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
 
@@ -92,7 +123,7 @@ void run_cg(rxmesh::RXMeshStatic& rx)
                                    rx.get_polyscope_mesh()->vertices,
                                    rx.get_polyscope_mesh()->faces);
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-    polyscope::show();
+    //polyscope::show();
 #endif
 
     B_mat.release();
@@ -116,5 +147,5 @@ void mcf_pcg(rxmesh::RXMeshStatic& rx)
 {
     using namespace rxmesh;
 
-    run_cg<T, PCGSolver<T>>(rx);
+    run_cg<T, PCGSolver<T>>(rx,true);
 }

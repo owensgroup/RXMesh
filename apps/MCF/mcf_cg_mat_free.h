@@ -11,7 +11,7 @@
 #include "rxmesh/matrix/pcg_mat_free_attr_solver.h"
 
 template <int blockThreads, typename T, typename SolverT>
-void run_cg_mat_free(rxmesh::RXMeshStatic& rx, SolverT& solver)
+void run_cg_mat_free(rxmesh::RXMeshStatic& rx, SolverT& solver, bool pcg=false)
 {
     using namespace rxmesh;
 
@@ -21,7 +21,11 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx, SolverT& solver)
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rx);
-    report.add_member("method", std::string("RXMesh"));
+    if (pcg)
+        report.add_member("method", std::string("PCG_MAT_FREE"));
+    else
+        report.add_member("method", std::string("CG_MAT_FREE"));
+    report.add_member("application", std::string("MCF"));
     report.add_member("time_step", Arg.time_step);
     report.add_member("cg_tolerance", Arg.cg_tolerance);
     report.add_member("use_uniform_laplace", Arg.use_uniform_laplace);
@@ -55,13 +59,35 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx, SolverT& solver)
                           (void*)matvec<T, blockThreads>,
                           !Arg.use_uniform_laplace);
 
+    float    total_time = 0;
+    GPUTimer gtimer;
+    GPUTimer timer;
+    timer.start();
+    gtimer.start();
 
     solver.pre_solve(*B, *X);
 
-    GPUTimer timer;
+    timer.stop();
+    gtimer.stop();
+
+     report.add_member(
+        "pre-solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+
     timer.start();
+    gtimer.start();
 
     solver.solve(*B, *X);
+
+    timer.stop();
+    gtimer.stop();
+
+    report.add_member(
+        "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+
+    report.add_member("total_time", total_time);
+
 
     timer.stop();
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -215,5 +241,5 @@ void mcf_pcg_mat_free(rxmesh::RXMeshStatic& rx)
         Arg.cg_tolerance * Arg.cg_tolerance);
 
 
-    run_cg_mat_free<blockThreads, T>(rx, solver);
+    run_cg_mat_free<blockThreads, T>(rx, solver,true);
 }

@@ -12,14 +12,19 @@ struct arg
     std::string output_folder       = STRINGIFY(OUTPUT_DIR);
     std::string perm_method         = "nstdis";
     std::string solver              = "gmg";
+    std::string coarse_solver       = "jacobi";
     uint32_t    device_id           = 0;
     float       time_step           = 10;
     float       cg_tolerance        = 1e-6;
     float       gmg_tolerance_abs   = 1e-6;
-    float       gmg_tolerance_rel   = 1e-6;
+    float       gmg_tolerance_rel   = 0.0;
     uint32_t    max_num_iter        = 100;
     bool        use_uniform_laplace = true;
     int         levels              = 3;
+    int         threshold           = 1000;
+    bool        render_hierarchy     = false;
+    bool        create_AB     = false;
+
     char**      argv;
     int         argc;
 } Arg;
@@ -28,6 +33,7 @@ struct arg
 #include "mcf_cg_mat_free.h"
 #include "mcf_chol.h"
 #include "mcf_gmg.h"
+#include "mcf_eigen.h"
 
 
 TEST(App, MCF)
@@ -53,6 +59,8 @@ TEST(App, MCF)
         mcf_gmg<dataT>(rx);
     } else if (Arg.solver == "chol") {
         mcf_cusolver_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
+    } else if (Arg.solver == "eigen") {
+        mcf_eigen_solver<dataT>(rx, string_to_permute_method(Arg.perm_method));
     } else {
         RXMESH_ERROR("Unrecognized input solver type: {}", Arg.solver);
     }
@@ -138,6 +146,21 @@ int main(int argc, char** argv)
             Arg.gmg_tolerance_rel =
                 std::atof(get_cmd_option(argv, argv + argc, "-tol_rel"));
         }
+        if (cmd_option_exists(argv, argc + argv, "-threshold")) {
+            Arg.threshold =
+                std::atoi(get_cmd_option(argv, argv + argc, "-threshold"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-csolver")) {
+            Arg.coarse_solver =
+                std::string(get_cmd_option(argv, argv + argc, "-csolver"));
+        }
+        if (cmd_option_exists(argv, argc + argv, "-rh")) {
+            Arg.render_hierarchy = true;
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "-ab")) {
+            Arg.create_AB = true;
+        }
     }
 
     RXMESH_INFO("input= {}", Arg.obj_file_name);
@@ -152,6 +175,8 @@ int main(int argc, char** argv)
     RXMESH_INFO("gmg_tolerance_rel= {}", Arg.gmg_tolerance_rel);
     RXMESH_INFO("gmg_tolerance_abs= {}", Arg.gmg_tolerance_abs);
     RXMESH_INFO("device_id= {}", Arg.device_id);
+    RXMESH_INFO("GMG Coarse solver= {}", Arg.coarse_solver);
+    RXMESH_INFO("Render GMG hierarchy= {}", Arg.render_hierarchy);
 
     return RUN_ALL_TESTS();
 }
