@@ -807,6 +807,25 @@ struct DenseMatrix
         return nullptr;
     }
 
+
+    /**
+     * @brief return a DenseMatrix that hold a specific column (i.e., slicing)
+     */
+    __host__ const DenseMatrix<T, Order> col(const IndexT col_id) const
+    {
+        return DenseMatrix<T, Order>(
+            rows(), 1, col_data(col_id, DEVICE), col_data(col_id, HOST));
+    }
+
+    /**
+     * @brief return a DenseMatrix that hold a specific column (i.e., slicing)
+     */
+    __host__ DenseMatrix<T, Order> col(const IndexT col_id)
+    {
+        return DenseMatrix<T, Order>(
+            rows(), 1, col_data(col_id, DEVICE), col_data(col_id, HOST));
+    }
+
     /**
      * @brief return the raw pointer pf a column.
      */

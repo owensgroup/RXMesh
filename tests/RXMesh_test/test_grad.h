@@ -79,7 +79,7 @@ TEST(Diff, SmoothingNewton)
         RXMESH_INFO("Iteration = {}: Energy = {}", iter, energy);
 
 
-        newton.newton_direction();
+        newton.compute_direction();
 
         RXMESH_INFO("newton.dir.norm2() = {}", newton.dir.norm2());
         RXMESH_INFO("problem.grad.norm2() = {}", problem.grad.norm2());

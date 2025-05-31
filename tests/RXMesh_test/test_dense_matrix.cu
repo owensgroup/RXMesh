@@ -36,6 +36,9 @@ TEST(RXMeshStatic, DenseMatrixToEigen)
             EXPECT_NEAR(rx_mat_copy(i, j), rx_mat(i, j) / scalar, 0.0000001);
         }
     }
+
+    rx_mat.release();
+    rx_mat_copy.release();
 }
 
 TEST(RXMeshStatic, DenseMatrixASum)
@@ -285,4 +288,28 @@ TEST(RXMeshStatic, DenseMatrixUserManaged)
     GPU_FREE(d_ptr);
 
     EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+}
+
+TEST(RXMeshStatic, DenseMatrixSlice)
+{
+    using namespace rxmesh;
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    DenseMatrix<float> mat(rx, 10, 3);
+
+    mat.fill_random();
+
+    for (int j = 0; j < mat.cols(); ++j) {
+
+        auto col = mat.col(j);
+
+        for (int i = 0; i < mat.rows(); ++i) {
+
+            EXPECT_NEAR(mat(i, j), col(i), 0.0000001);
+        }
+        col.release();
+    }
+
+    mat.release();
 }
