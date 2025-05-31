@@ -1508,6 +1508,10 @@ class RXMeshStatic : public RXMesh
         });
 
         coord.move(HOST, DEVICE);
+
+#if USE_POLYSCOPE
+        get_polyscope_mesh()->updateVertexPositions(coord);
+#endif
     }
 
     /**
@@ -2214,6 +2218,13 @@ class RXMeshStatic : public RXMesh
                              const void*    kernel,
                              bool           print = true) const
     {
+        // TODO this has to be customized for different GPU arch
+        // int max_shmem_bytes = 89 * 1024;
+        // CUDA_ERROR(
+        //    cudaFuncSetAttribute(kernel,
+        //                         cudaFuncAttributeMaxDynamicSharedMemorySize,
+        //                         max_shmem_bytes));
+
         // check if total shared memory (static + dynamic) consumed by
         // k_base_query are less than the max shared per block
         cudaFuncAttributes func_attr = cudaFuncAttributes();
