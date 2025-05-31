@@ -202,17 +202,17 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
 
         // get the current value of the loss function
-        /*T f = problem.get_current_loss();
-        RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);*/
+        T f = problem.get_current_loss();
+        RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
 
         // direction newton
-        newton_solver.newton_direction();
+        newton_solver.compute_direction();
         timer.stop("DiffCG");
 
         // newton decrement
-        /*if (0.5f * problem.grad.dot(newton_solver.dir) < convergence_eps) {
+        if (0.5f * problem.grad.dot(newton_solver.dir) < convergence_eps) {
             break;
-        }*/
+        }
 
         // line search
         newton_solver.line_search();
