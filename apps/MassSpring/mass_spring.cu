@@ -179,7 +179,7 @@ void mass_spring(RXMeshStatic& rx)
 
         // get newton direction
         timer.start("LinearSolver");
-        newton_solver.newton_direction();
+        newton_solver.compute_direction();
         timer.stop("LinearSolver");
 
 
@@ -202,7 +202,7 @@ void mass_spring(RXMeshStatic& rx)
 
             // get newton direction
             timer.start("LinearSolver");
-            newton_solver.newton_direction();
+            newton_solver.compute_direction();
             timer.stop("LinearSolver");
 
             // residual is abs_max(newton_dir)/ h
@@ -227,9 +227,9 @@ void mass_spring(RXMeshStatic& rx)
     };
 
 #if USE_POLYSCOPE
-    polyscope::options::groundPlaneHeightFactor = 0.8;
-    // polyscope::options::groundPlaneMode =
-    //     polyscope::GroundPlaneMode::ShadowOnly;
+    polyscope::options::groundPlaneHeightFactor = 0.45;
+    polyscope::options::groundPlaneMode =
+        polyscope::GroundPlaneMode::ShadowOnly;
 
     bool is_running = false;
 
@@ -311,7 +311,7 @@ int main(int argc, char** argv)
 
     T dx = 1 / T(n - 1);
 
-    create_plane(verts, fv, n, n, 2, dx, true); 
+    create_plane(verts, fv, n, n, 2, dx, true);
 
     RXMeshStatic rx(fv);
     rx.add_vertex_coordinates(verts, "Coords");
