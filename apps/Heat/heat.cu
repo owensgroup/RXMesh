@@ -9,10 +9,7 @@ using namespace rxmesh;
 
 int main(int argc, char** argv)
 {
-    Log::init();
-
-    const uint32_t device_id = 0;
-    cuda_query(device_id);
+    rx_init(0);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 

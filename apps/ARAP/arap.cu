@@ -244,11 +244,8 @@ __global__ static void calculate_system_matrix(
 
 int main(int argc, char** argv)
 {
-    Log::init();
-
-    const uint32_t device_id = 0;
-    cuda_query(device_id);
-
+    rx_init(0);
+    
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cube.obj");
 
     if (!rx.is_closed()) {

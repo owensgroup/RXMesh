@@ -17,7 +17,9 @@ inline int cuda_arch()
 {
     int* d_arch = 0;
     CUDA_ERROR(cudaMalloc((void**)&d_arch, sizeof(int)));
+#ifdef __NVCC__
     get_cude_arch_k<<<1, 1>>>(d_arch);
+#endif
     int h_arch = 0;
     CUDA_ERROR(
         cudaMemcpy(&h_arch, d_arch, sizeof(int), cudaMemcpyDeviceToHost));

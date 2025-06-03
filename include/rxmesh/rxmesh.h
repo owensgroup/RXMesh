@@ -7,6 +7,7 @@
 #include "rxmesh/patch_info.h"
 #include "rxmesh/patcher/patcher.h"
 #include "rxmesh/types.h"
+#include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
@@ -15,7 +16,17 @@
 
 class RXMeshTest;
 
+
 namespace rxmesh {
+
+inline void rx_init(int                       device_id,
+                    spdlog::level::level_enum level = spdlog::level::info)
+{
+    Log::init(level);
+    if (device_id >= 0) {
+        cuda_query(device_id);
+    }
+}
 
 /**
  * @brief The main class for creating RXMesh data structure. It takes an input
