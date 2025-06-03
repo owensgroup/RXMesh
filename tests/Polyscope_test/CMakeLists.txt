@@ -1,4 +1,4 @@
-if (USE_POLYSCOPE)
+if(${RX_USE_POLYSCOPE})
 	add_executable( Polyscope_test )
 
 	set( SOURCE_LIST   
