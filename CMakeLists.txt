@@ -5,9 +5,11 @@ project(RXMesh
         LANGUAGES C CXX CUDA)
 
 
-set(USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
+set(RX_USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
+set(RX_BUILD_TESTS "ON" CACHE BOOL "Build RXMesh unit test")
+set(RX_BUILD_APPS "ON" CACHE BOOL "Build RXMesh applications")
 
-if(${USE_POLYSCOPE})
+if(${RX_USE_POLYSCOPE})
 	message(STATUS "Polyscope is enabled")
 else()
 	message(STATUS "Polyscope is disabled")
@@ -64,7 +66,7 @@ FetchContent_Populate(glm)
 add_subdirectory(${glm_SOURCE_DIR})
 
 # polyscope
-if(USE_POLYSCOPE)
+if(${RX_USE_POLYSCOPE})
 FetchContent_Declare(polyscope
     GIT_REPOSITORY https://github.com/Ahdhn/polyscope.git
     GIT_TAG        6ec777513d802654801fe77e6c3a54fb9dbb6b1f
@@ -118,7 +120,7 @@ target_compile_definitions(RXMesh
     INTERFACE INPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/input/
     INTERFACE OUTPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/output/
 )
-if (USE_POLYSCOPE)
+if(${RX_USE_POLYSCOPE})
 	target_compile_definitions(RXMesh INTERFACE USE_POLYSCOPE)
 endif()
 target_include_directories(RXMesh 
@@ -167,7 +169,7 @@ include("cmake/metis.cmake")
 target_link_libraries(RXMesh INTERFACE metis)	
 
 target_link_libraries(RXMesh INTERFACE glm::glm)
-if (USE_POLYSCOPE)
+if(${RX_USE_POLYSCOPE})
 	target_link_libraries(RXMesh INTERFACE polyscope)	
 endif()
 
@@ -187,6 +189,13 @@ target_link_libraries(RXMesh INTERFACE Eigen3::Eigen)
 # https://eigen.tuxfamily.org/dox/TopicCUDA.html
 target_compile_definitions(RXMesh INTERFACE "EIGEN_DEFAULT_DENSE_INDEX_TYPE=int")
 
-include(GoogleTest)
-add_subdirectory(apps)
-add_subdirectory(tests)
+include(GoogleTest)	
+
+if(${RX_BUILD_TESTS})	
+	add_subdirectory(tests)
+endif()
+
+if(${RX_BUILD_APPS})
+	add_subdirectory(apps)
+endif()
+
