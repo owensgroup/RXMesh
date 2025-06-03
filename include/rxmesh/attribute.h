@@ -672,6 +672,20 @@ class Attribute : public AttributeBase
         return ret;
     }
 
+    /**
+     * @brief store an glm vector in this attribute. The size of glm vector
+     * should match the number of attributes in this attribute
+     */
+    template <int N>
+    __host__ __device__ __inline__ void from_glm(const HandleT&   handle,
+                                                 const vec<T, N>& in)
+    {
+        assert(N == get_num_attributes());
+
+        for (int i = 0; i < N; ++i) {
+            this->operator()(handle, i) = in[i];
+        }
+    }
 
     /**
      * @brief Accessing the attribute a Eigen matrix. This is used for read only
