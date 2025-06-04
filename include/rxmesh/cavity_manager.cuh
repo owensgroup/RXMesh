@@ -18,12 +18,12 @@
 namespace rxmesh {
 
 template <uint32_t blockThreads, CavityOp cop>
-struct CavityManager2
+struct CavityManager
 {
     /**
      * @brief default constructor
      */
-    __device__ __forceinline__ CavityManager2()
+    __device__ __forceinline__ CavityManager()
         : m_write_to_gmem(true),
           m_s_num_cavities(nullptr),
           m_s_cavity_size_prefix(nullptr),
@@ -58,7 +58,7 @@ struct CavityManager2
      * @return
      */
     __device__ __forceinline__
-    CavityManager2(cooperative_groups::thread_block& block,
+    CavityManager(cooperative_groups::thread_block& block,
                    Context&                          context,
                    ShmemAllocator&                   shrd_alloc,
                    bool                              preserve_cavity,
@@ -94,7 +94,7 @@ struct CavityManager2
 
 
     /**
-     * @brief check if all cavities created in this CavityManager2 will be
+     * @brief check if all cavities created in this CavityManager will be
      * written to global memory
      */
     __device__ __forceinline__ bool is_successful()
@@ -1090,4 +1090,4 @@ struct CavityManager2
 
 }  // namespace rxmesh
 
-#include "rxmesh/cavity_manager_impl2.cuh"
+#include "rxmesh/cavity_manager_impl.cuh"

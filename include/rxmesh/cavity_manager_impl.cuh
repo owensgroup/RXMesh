@@ -1,7 +1,7 @@
 namespace rxmesh {
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ CavityManager2<blockThreads, cop>::CavityManager2(
+__device__ __forceinline__ CavityManager<blockThreads, cop>::CavityManager(
     cooperative_groups::thread_block& block,
     Context&                          context,
     ShmemAllocator&                   shrd_alloc,
@@ -145,7 +145,7 @@ __device__ __forceinline__ CavityManager2<blockThreads, cop>::CavityManager2(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::alloc_shared_memory(
+CavityManager<blockThreads, cop>::alloc_shared_memory(
     cooperative_groups::thread_block& block,
     ShmemAllocator&                   shrd_alloc)
 {
@@ -422,7 +422,7 @@ CavityManager2<blockThreads, cop>::alloc_shared_memory(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::verify_reading_from_global_memory(
+CavityManager<blockThreads, cop>::verify_reading_from_global_memory(
     cooperative_groups::thread_block& block) const
 {
     assert(m_s_num_vertices[0] == m_patch_info.num_vertices[0]);
@@ -480,12 +480,12 @@ CavityManager2<blockThreads, cop>::verify_reading_from_global_memory(
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
 __device__ __forceinline__ uint32_t
-CavityManager2<blockThreads, cop>::create(HandleT seed)
+CavityManager<blockThreads, cop>::create(HandleT seed)
 {
     if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                   cop == CavityOp::VE || cop == CavityOp::VF) {
         static_assert(std::is_same_v<HandleT, VertexHandle>,
-                      "CavityManager2::create() since CavityManager2's "
+                      "CavityManager::create() since CavityManager's "
                       "template parameter operation is "
                       "CavityOp::V/CavityOp::VV/CavityOp::VE/CavityOp::VF, "
                       "create() should take VertexHandle as an input");
@@ -494,7 +494,7 @@ CavityManager2<blockThreads, cop>::create(HandleT seed)
     if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
                   cop == CavityOp::EE || cop == CavityOp::EF) {
         static_assert(std::is_same_v<HandleT, EdgeHandle>,
-                      "CavityManager2::create() since CavityManager2's "
+                      "CavityManager::create() since CavityManager's "
                       "template parameter operation is "
                       "CavityOp::E/CavityOp::EV/CavityOp::EE/CavityOp::EF, "
                       "create() should take EdgeHandle as an input");
@@ -503,7 +503,7 @@ CavityManager2<blockThreads, cop>::create(HandleT seed)
     if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
                   cop == CavityOp::FE || cop == CavityOp::FF) {
         static_assert(std::is_same_v<HandleT, FaceHandle>,
-                      "CavityManager2::create() since CavityManager2's "
+                      "CavityManager::create() since CavityManager's "
                       "template parameter operation is "
                       "CavityOp::F/CavityOp::FV/CavityOp::FE/CavityOp::FF, "
                       "create() should take FaceHandle as an input");
@@ -563,13 +563,13 @@ CavityManager2<blockThreads, cop>::create(HandleT seed)
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
-__device__ __forceinline__ void CavityManager2<blockThreads, cop>::recover(
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::recover(
     HandleT seed)
 {
     if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                   cop == CavityOp::VE || cop == CavityOp::VF) {
         static_assert(std::is_same_v<HandleT, VertexHandle>,
-                      "CavityManager2::recover() since CavityManager2's "
+                      "CavityManager::recover() since CavityManager's "
                       "template parameter operation is "
                       "CavityOp::V/CavityOp::VV/CavityOp::VE/CavityOp::VF, "
                       "recover() should take VertexHandle as an input");
@@ -578,7 +578,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::recover(
     if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
                   cop == CavityOp::EE || cop == CavityOp::EF) {
         static_assert(std::is_same_v<HandleT, EdgeHandle>,
-                      "CavityManager2::recover() since CavityManager2's "
+                      "CavityManager::recover() since CavityManager's "
                       "template parameter operation is "
                       "CavityOp::E/CavityOp::EV/CavityOp::EE/CavityOp::EF, "
                       "recover() should take EdgeHandle as an input");
@@ -587,7 +587,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::recover(
     if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
                   cop == CavityOp::FE || cop == CavityOp::FF) {
         static_assert(std::is_same_v<HandleT, FaceHandle>,
-                      "CavityManager2::recover() since CavityManager2's "
+                      "CavityManager::recover() since CavityManager's "
                       "template parameter operation is "
                       "CavityOp::F/CavityOp::FV/CavityOp::FE/CavityOp::FF, "
                       "recover() should take FaceHandle as an input");
@@ -635,12 +635,12 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::recover(
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
 __device__ __forceinline__ HandleT
-CavityManager2<blockThreads, cop>::get_creator(const uint16_t cavity_id)
+CavityManager<blockThreads, cop>::get_creator(const uint16_t cavity_id)
 {
     if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                   cop == CavityOp::VE || cop == CavityOp::VF) {
         static_assert(std::is_same_v<HandleT, VertexHandle>,
-                      "CavityManager2::get_creator() since CavityManager2's "
+                      "CavityManager::get_creator() since CavityManager's "
                       "template parameter operation is "
                       "CavityOp::V/CavityOp::VV/CavityOp::VE/CavityOp::VF, "
                       "get_creator() should return a VertexHandle");
@@ -649,7 +649,7 @@ CavityManager2<blockThreads, cop>::get_creator(const uint16_t cavity_id)
     if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
                   cop == CavityOp::EE || cop == CavityOp::EF) {
         static_assert(std::is_same_v<HandleT, EdgeHandle>,
-                      "CavityManager2::get_creator() since CavityManager2's "
+                      "CavityManager::get_creator() since CavityManager's "
                       "template parameter operation is "
                       "CavityOp::E/CavityOp::EV/CavityOp::EE/CavityOp::EF, "
                       "get_creator() should return an EdgeHandle");
@@ -658,7 +658,7 @@ CavityManager2<blockThreads, cop>::get_creator(const uint16_t cavity_id)
     if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
                   cop == CavityOp::FE || cop == CavityOp::FF) {
         static_assert(std::is_same_v<HandleT, FaceHandle>,
-                      "CavityManager2::get_creator() since CavityManager2's "
+                      "CavityManager::get_creator() since CavityManager's "
                       "template parameter operation is "
                       "CavityOp::F/CavityOp::FV/CavityOp::FE/CavityOp::FF, "
                       "get_creator() should return a FaceHandle");
@@ -673,12 +673,12 @@ CavityManager2<blockThreads, cop>::get_creator(const uint16_t cavity_id)
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
 __device__ __forceinline__ bool
-CavityManager2<blockThreads, cop>::is_successful(HandleT seed)
+CavityManager<blockThreads, cop>::is_successful(HandleT seed)
 {
     if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                   cop == CavityOp::VE || cop == CavityOp::VF) {
         static_assert(std::is_same_v<HandleT, VertexHandle>,
-                      "CavityManager2::is_successful() since CavityManager2's "
+                      "CavityManager::is_successful() since CavityManager's "
                       "template parameter operation is "
                       "CavityOp::V/CavityOp::VV/CavityOp::VE/CavityOp::VF, "
                       "create() should take VertexHandle as an input");
@@ -687,7 +687,7 @@ CavityManager2<blockThreads, cop>::is_successful(HandleT seed)
     if constexpr (cop == CavityOp::E || cop == CavityOp::EV ||
                   cop == CavityOp::EE || cop == CavityOp::EF) {
         static_assert(std::is_same_v<HandleT, EdgeHandle>,
-                      "CavityManager2::is_successful() since CavityManager2's "
+                      "CavityManager::is_successful() since CavityManager's "
                       "template parameter operation is "
                       "CavityOp::E/CavityOp::EV/CavityOp::EE/CavityOp::EF, "
                       "create() should take EdgeHandle as an input");
@@ -696,7 +696,7 @@ CavityManager2<blockThreads, cop>::is_successful(HandleT seed)
     if constexpr (cop == CavityOp::F || cop == CavityOp::FV ||
                   cop == CavityOp::FE || cop == CavityOp::FF) {
         static_assert(std::is_same_v<HandleT, FaceHandle>,
-                      "CavityManager2::is_successful() since CavityManager2's "
+                      "CavityManager::is_successful() since CavityManager's "
                       "template parameter operation is "
                       "CavityOp::F/CavityOp::FV/CavityOp::FE/CavityOp::FF, "
                       "create() should take FaceHandle as an input");
@@ -725,7 +725,7 @@ CavityManager2<blockThreads, cop>::is_successful(HandleT seed)
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename... AttributesT>
-__device__ __forceinline__ bool CavityManager2<blockThreads, cop>::prologue(
+__device__ __forceinline__ bool CavityManager<blockThreads, cop>::prologue(
     cooperative_groups::thread_block& block,
     ShmemAllocator&                   shrd_alloc,
     AttributesT&&... attributes)
@@ -820,7 +820,7 @@ __device__ __forceinline__ bool CavityManager2<blockThreads, cop>::prologue(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::construct_cavity_graph(
+CavityManager<blockThreads, cop>::construct_cavity_graph(
     cooperative_groups::thread_block& block)
 {
 
@@ -998,7 +998,7 @@ CavityManager2<blockThreads, cop>::construct_cavity_graph(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::calc_cavity_maximal_independent_set(
+CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
     cooperative_groups::thread_block& block)
 {
     int num_cavities = get_num_cavities();
@@ -1141,7 +1141,7 @@ CavityManager2<blockThreads, cop>::calc_cavity_maximal_independent_set(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::add_edge_to_cavity_graph(const uint16_t c0,
+CavityManager<blockThreads, cop>::add_edge_to_cavity_graph(const uint16_t c0,
                                                             const uint16_t c1)
 {
     auto add_edge = [&](const uint16_t from_c,
@@ -1205,7 +1205,7 @@ CavityManager2<blockThreads, cop>::add_edge_to_cavity_graph(const uint16_t c0,
 
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ void CavityManager2<blockThreads, cop>::propagate(
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::propagate(
     cooperative_groups::thread_block& block)
 {
     // Expand cavities by marking incident elements
@@ -1230,7 +1230,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::propagate(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::mark_vertices_through_edges()
+CavityManager<blockThreads, cop>::mark_vertices_through_edges()
 {
     for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         assert(e < m_s_active_mask_e.size());
@@ -1256,7 +1256,7 @@ CavityManager2<blockThreads, cop>::mark_vertices_through_edges()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::mark_edges_through_faces()
+CavityManager<blockThreads, cop>::mark_edges_through_faces()
 {
     for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
         assert(f < m_s_active_mask_f.size());
@@ -1282,7 +1282,7 @@ CavityManager2<blockThreads, cop>::mark_edges_through_faces()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::mark_edges_through_vertices()
+CavityManager<blockThreads, cop>::mark_edges_through_vertices()
 {
     for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         assert(e < m_s_active_mask_e.size());
@@ -1310,7 +1310,7 @@ CavityManager2<blockThreads, cop>::mark_edges_through_vertices()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::mark_faces_through_edges()
+CavityManager<blockThreads, cop>::mark_faces_through_edges()
 {
     for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
         assert(f < m_s_active_mask_f.size());
@@ -1345,7 +1345,7 @@ CavityManager2<blockThreads, cop>::mark_faces_through_edges()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::mark_element_scatter(
+CavityManager<blockThreads, cop>::mark_element_scatter(
     uint16_t*      element_cavity_id,
     const uint16_t element_id,
     const uint16_t cavity_id)
@@ -1376,7 +1376,7 @@ CavityManager2<blockThreads, cop>::mark_element_scatter(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::mark_element_gather(
+CavityManager<blockThreads, cop>::mark_element_gather(
     uint16_t*      element_cavity_id,
     const uint16_t element_id,
     const uint16_t cavity_id)
@@ -1423,7 +1423,7 @@ CavityManager2<blockThreads, cop>::mark_element_gather(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::deactivate_cavity(uint16_t c)
+CavityManager<blockThreads, cop>::deactivate_cavity(uint16_t c)
 {
     assert(c < m_s_num_cavities[0]);
     m_s_active_cavity_bitmask.reset(c, true);
@@ -1432,7 +1432,7 @@ CavityManager2<blockThreads, cop>::deactivate_cavity(uint16_t c)
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::deactivate_conflicting_cavities()
+CavityManager<blockThreads, cop>::deactivate_conflicting_cavities()
 {
     deactivate_conflicting_cavities(
         m_s_num_vertices[0], m_s_cavity_id_v, m_s_active_mask_v);
@@ -1447,7 +1447,7 @@ CavityManager2<blockThreads, cop>::deactivate_conflicting_cavities()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::deactivate_conflicting_cavities(
+CavityManager<blockThreads, cop>::deactivate_conflicting_cavities(
     const uint16_t num_elements,
     uint16_t*      element_cavity_id,
     const Bitmask& active_bitmask)
@@ -1468,7 +1468,7 @@ CavityManager2<blockThreads, cop>::deactivate_conflicting_cavities(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::reactivate_elements()
+CavityManager<blockThreads, cop>::reactivate_elements()
 {
     reactivate_elements(m_s_active_mask_v,
                         m_s_in_cavity_v,
@@ -1482,7 +1482,7 @@ CavityManager2<blockThreads, cop>::reactivate_elements()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::reactivate_elements(
+CavityManager<blockThreads, cop>::reactivate_elements(
     Bitmask&       active_bitmask,
     Bitmask&       in_cavity,
     uint16_t*      element_cavity_id,
@@ -1505,7 +1505,7 @@ CavityManager2<blockThreads, cop>::reactivate_elements(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::deactivate_boundary_cavities(
+CavityManager<blockThreads, cop>::deactivate_boundary_cavities(
     cooperative_groups::thread_block& block)
 {
     m_s_owned_cavity_bdry_v.reset(block);
@@ -1602,7 +1602,7 @@ CavityManager2<blockThreads, cop>::deactivate_boundary_cavities(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::clear_bitmask_if_in_cavity()
+CavityManager<blockThreads, cop>::clear_bitmask_if_in_cavity()
 {
     clear_bitmask_if_in_cavity(m_s_active_mask_v,
                                m_s_in_cavity_v,
@@ -1617,7 +1617,7 @@ CavityManager2<blockThreads, cop>::clear_bitmask_if_in_cavity()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::clear_bitmask_if_in_cavity(
+CavityManager<blockThreads, cop>::clear_bitmask_if_in_cavity(
     Bitmask&        active_bitmask,
     Bitmask&        in_cavity,
     const uint16_t* element_cavity_id,
@@ -1638,7 +1638,7 @@ CavityManager2<blockThreads, cop>::clear_bitmask_if_in_cavity(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::construct_cavities_edge_loop(
+CavityManager<blockThreads, cop>::construct_cavities_edge_loop(
     cooperative_groups::thread_block& block)
 {
     const uint16_t num_faces = int(m_s_num_faces[0]);
@@ -1803,7 +1803,7 @@ CavityManager2<blockThreads, cop>::construct_cavities_edge_loop(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::sort_cavities_edge_loop()
+CavityManager<blockThreads, cop>::sort_cavities_edge_loop()
 {
 
     // TODO need to increase the parallelism in this part. It should be at
@@ -1885,7 +1885,7 @@ CavityManager2<blockThreads, cop>::sort_cavities_edge_loop()
 template <uint32_t blockThreads, CavityOp cop>
 template <typename FillInT>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::for_each_cavity(
+CavityManager<blockThreads, cop>::for_each_cavity(
     cooperative_groups::thread_block& block,
     FillInT                           FillInFunc)
 {
@@ -1905,7 +1905,7 @@ CavityManager2<blockThreads, cop>::for_each_cavity(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ DEdgeHandle
-CavityManager2<blockThreads, cop>::get_cavity_edge(uint16_t c, uint16_t i) const
+CavityManager<blockThreads, cop>::get_cavity_edge(uint16_t c, uint16_t i) const
 {
     assert(c < m_s_num_cavities[0]);
     assert(i < get_cavity_size(c));
@@ -1919,7 +1919,7 @@ CavityManager2<blockThreads, cop>::get_cavity_edge(uint16_t c, uint16_t i) const
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ VertexHandle
-CavityManager2<blockThreads, cop>::get_cavity_vertex(uint16_t c,
+CavityManager<blockThreads, cop>::get_cavity_vertex(uint16_t c,
                                                      uint16_t i) const
 {
     assert(c < m_s_num_cavities[0]);
@@ -1946,7 +1946,7 @@ CavityManager2<blockThreads, cop>::get_cavity_vertex(uint16_t c,
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ VertexHandle
-CavityManager2<blockThreads, cop>::add_vertex()
+CavityManager<blockThreads, cop>::add_vertex()
 {
 
     uint16_t v_id = add_element(m_s_active_mask_v,
@@ -1977,7 +1977,7 @@ CavityManager2<blockThreads, cop>::add_vertex()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ DEdgeHandle
-CavityManager2<blockThreads, cop>::add_edge(const VertexHandle src,
+CavityManager<blockThreads, cop>::add_edge(const VertexHandle src,
                                             const VertexHandle dest)
 {
     assert(src.patch_id() == m_patch_info.patch_id);
@@ -2020,7 +2020,7 @@ CavityManager2<blockThreads, cop>::add_edge(const VertexHandle src,
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ FaceHandle
-CavityManager2<blockThreads, cop>::add_face(const DEdgeHandle e0,
+CavityManager<blockThreads, cop>::add_face(const DEdgeHandle e0,
                                             const DEdgeHandle e1,
                                             const DEdgeHandle e2)
 {
@@ -2068,7 +2068,7 @@ CavityManager2<blockThreads, cop>::add_face(const DEdgeHandle e0,
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ uint16_t
-CavityManager2<blockThreads, cop>::add_element(Bitmask&       active_bitmask,
+CavityManager<blockThreads, cop>::add_element(Bitmask&       active_bitmask,
                                                uint32_t*      num_elements,
                                                const uint16_t capacity,
                                                const Bitmask& in_cavity,
@@ -2134,7 +2134,7 @@ CavityManager2<blockThreads, cop>::add_element(Bitmask&       active_bitmask,
 
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ void CavityManager2<blockThreads, cop>::get_vertices(
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::get_vertices(
     const EdgeHandle eh,
     VertexHandle&    v0,
     VertexHandle&    v1)
@@ -2158,7 +2158,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::get_vertices(
 }
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ void CavityManager2<blockThreads, cop>::get_edges(
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::get_edges(
     const FaceHandle fh,
     EdgeHandle&      e0,
     EdgeHandle&      e1,
@@ -2189,7 +2189,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::get_edges(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::invert_hashtable(
+CavityManager<blockThreads, cop>::invert_hashtable(
     cooperative_groups::thread_block& block)
 {
     m_inv_lp_v.clear<blockThreads>();
@@ -2230,7 +2230,7 @@ CavityManager2<blockThreads, cop>::invert_hashtable(
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::invert_hashtable(
+CavityManager<blockThreads, cop>::invert_hashtable(
     cooperative_groups::thread_block& block,
     const LPHashTable&                lp_table,
     const Bitmask&                    active_mask,
@@ -2302,7 +2302,7 @@ CavityManager2<blockThreads, cop>::invert_hashtable(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::store_inverted_hashtable(
+CavityManager<blockThreads, cop>::store_inverted_hashtable(
     cooperative_groups::thread_block& block)
 {
     store_inverted_hashtable<VertexHandle>(block,
@@ -2332,7 +2332,7 @@ CavityManager2<blockThreads, cop>::store_inverted_hashtable(
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::store_inverted_hashtable(
+CavityManager<blockThreads, cop>::store_inverted_hashtable(
     cooperative_groups::thread_block& block,
     LPHashTable&                      lp_table,
     const Bitmask&                    active_mask,
@@ -2375,7 +2375,7 @@ CavityManager2<blockThreads, cop>::store_inverted_hashtable(
 }
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ void CavityManager2<blockThreads, cop>::push()
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::push()
 {
     if (threadIdx.x == 0) {
         bool ret = m_context.m_patch_scheduler.push(m_patch_info.patch_id);
@@ -2384,7 +2384,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::push()
 }
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ void CavityManager2<blockThreads, cop>::push(
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::push(
     const uint32_t pid)
 {
     if (threadIdx.x == 0) {
@@ -2395,7 +2395,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::push(
 
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ bool CavityManager2<blockThreads, cop>::lock(
+__device__ __forceinline__ bool CavityManager<blockThreads, cop>::lock(
     cooperative_groups::thread_block& block,
     const uint8_t                     stash_id,
     const uint32_t                    q)
@@ -2419,7 +2419,7 @@ __device__ __forceinline__ bool CavityManager2<blockThreads, cop>::lock(
 
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ void CavityManager2<blockThreads, cop>::unlock()
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::unlock()
 {
     if (threadIdx.x == 0) {
         m_patch_info.lock.release_lock();
@@ -2428,7 +2428,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::unlock()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::set_dirty_for_locked_patches()
+CavityManager<blockThreads, cop>::set_dirty_for_locked_patches()
 {
     if (threadIdx.x == 0) {
         for (int st = 0; st < PatchStash::stash_size; ++st) {
@@ -2444,7 +2444,7 @@ CavityManager2<blockThreads, cop>::set_dirty_for_locked_patches()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::unlock_locked_patches()
+CavityManager<blockThreads, cop>::unlock_locked_patches()
 {
     if (threadIdx.x == 0) {
         for (int st = 0; st < m_s_locked_patches_mask.size(); ++st) {
@@ -2459,7 +2459,7 @@ CavityManager2<blockThreads, cop>::unlock_locked_patches()
 
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ void CavityManager2<blockThreads, cop>::unlock(
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::unlock(
     const uint8_t  stash_id,
     const uint32_t q)
 {
@@ -2472,7 +2472,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::unlock(
 }
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ void CavityManager2<blockThreads, cop>::pre_migrate(
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::pre_migrate(
     cooperative_groups::thread_block& block)
 {
     // Some vertices on the boundary of the cavity are owned and other are
@@ -2518,7 +2518,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::pre_migrate(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::pre_ribbonize(
+CavityManager<blockThreads, cop>::pre_ribbonize(
     cooperative_groups::thread_block& block)
 {
     for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
@@ -2574,7 +2574,7 @@ CavityManager2<blockThreads, cop>::pre_ribbonize(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::set_ownership_change_bitmask(
+CavityManager<blockThreads, cop>::set_ownership_change_bitmask(
     cooperative_groups::thread_block& block)
 {
 
@@ -2675,7 +2675,7 @@ CavityManager2<blockThreads, cop>::set_ownership_change_bitmask(
 }
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ bool CavityManager2<blockThreads, cop>::migrate(
+__device__ __forceinline__ bool CavityManager<blockThreads, cop>::migrate(
     cooperative_groups::thread_block& block)
 {
     pre_migrate(block);
@@ -2749,7 +2749,7 @@ __device__ __forceinline__ bool CavityManager2<blockThreads, cop>::migrate(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ bool
-CavityManager2<blockThreads, cop>::lock_neighbour_patches(
+CavityManager<blockThreads, cop>::lock_neighbour_patches(
     cooperative_groups::thread_block& block)
 {
     // since the whole block locks the whole thing, then we can use
@@ -2803,7 +2803,7 @@ CavityManager2<blockThreads, cop>::lock_neighbour_patches(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ bool
-CavityManager2<blockThreads, cop>::lock_new_added_patches(
+CavityManager<blockThreads, cop>::lock_new_added_patches(
     cooperative_groups::thread_block& block)
 {
     // block.sync();
@@ -2864,7 +2864,7 @@ CavityManager2<blockThreads, cop>::lock_new_added_patches(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ bool
-CavityManager2<blockThreads, cop>::soft_migrate_from_patch(
+CavityManager<blockThreads, cop>::soft_migrate_from_patch(
     cooperative_groups::thread_block& block,
     const uint8_t                     q_stash_id,
     const uint32_t                    q)
@@ -3006,7 +3006,7 @@ CavityManager2<blockThreads, cop>::soft_migrate_from_patch(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ bool
-CavityManager2<blockThreads, cop>::migrate_from_patch(
+CavityManager<blockThreads, cop>::migrate_from_patch(
     cooperative_groups::thread_block& block,
     const uint8_t                     q_stash_id,
     const uint32_t                    q)
@@ -3324,7 +3324,7 @@ CavityManager2<blockThreads, cop>::migrate_from_patch(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::insert_inv_lp(const LPHashTable&  table,
+CavityManager<blockThreads, cop>::insert_inv_lp(const LPHashTable&  table,
                                                  InverseLPHashTable& inv_lp)
 {
     int sz = m_s_temp_inv_lp_size[0];
@@ -3340,7 +3340,7 @@ CavityManager2<blockThreads, cop>::insert_inv_lp(const LPHashTable&  table,
 template <uint32_t blockThreads, CavityOp cop>
 template <typename FuncT>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::migrate_vertex(
+CavityManager<blockThreads, cop>::migrate_vertex(
     const uint32_t q,
     const uint8_t  q_stash_id,
     const uint16_t q_num_vertices,
@@ -3410,7 +3410,7 @@ CavityManager2<blockThreads, cop>::migrate_vertex(
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename FuncT>
-__device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_edge(
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::migrate_edge(
     const uint32_t q,
     const uint8_t  q_stash_id,
     const uint16_t q_num_edges,
@@ -3507,7 +3507,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_edge(
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename FuncT>
-__device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_face(
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::migrate_face(
     const uint32_t q,
     const uint8_t  q_stash_id,
     const uint16_t q_num_faces,
@@ -3608,7 +3608,7 @@ __device__ __forceinline__ void CavityManager2<blockThreads, cop>::migrate_face(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ uint16_t
-CavityManager2<blockThreads, cop>::find_copy_vertex(uint16_t& local_id,
+CavityManager<blockThreads, cop>::find_copy_vertex(uint16_t& local_id,
                                                     uint32_t& patch,
                                                     uint8_t&  patch_stash_id)
 {
@@ -3617,7 +3617,7 @@ CavityManager2<blockThreads, cop>::find_copy_vertex(uint16_t& local_id,
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ uint16_t
-CavityManager2<blockThreads, cop>::find_copy_edge(uint16_t& local_id,
+CavityManager<blockThreads, cop>::find_copy_edge(uint16_t& local_id,
                                                   uint32_t& patch,
                                                   uint8_t&  patch_stash_id)
 {
@@ -3626,7 +3626,7 @@ CavityManager2<blockThreads, cop>::find_copy_edge(uint16_t& local_id,
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ uint16_t
-CavityManager2<blockThreads, cop>::find_copy_face(uint16_t& local_id,
+CavityManager<blockThreads, cop>::find_copy_face(uint16_t& local_id,
                                                   uint32_t& patch,
                                                   uint8_t&  patch_stash_id)
 {
@@ -3636,7 +3636,7 @@ CavityManager2<blockThreads, cop>::find_copy_face(uint16_t& local_id,
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ uint8_t
-CavityManager2<blockThreads, cop>::add_new_patch_to_patch_stash(
+CavityManager<blockThreads, cop>::add_new_patch_to_patch_stash(
     const uint32_t new_patch)
 {
     // first check if the patch is in the stash already,
@@ -3658,7 +3658,7 @@ CavityManager2<blockThreads, cop>::add_new_patch_to_patch_stash(
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
 __device__ __forceinline__ uint16_t
-CavityManager2<blockThreads, cop>::find_copy(uint16_t&     q_local_id,
+CavityManager<blockThreads, cop>::find_copy(uint16_t&     q_local_id,
                                              uint32_t&     q_patch,
                                              uint8_t&      q_stash_id_in_p,
                                              const LPPair* q_table)
@@ -3712,7 +3712,7 @@ CavityManager2<blockThreads, cop>::find_copy(uint16_t&     q_local_id,
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
 __device__ __forceinline__ bool
-CavityManager2<blockThreads, cop>::ensure_ownership(
+CavityManager<blockThreads, cop>::ensure_ownership(
     cooperative_groups::thread_block& block,
     const Bitmask&                    s_ownership_change,
     const InverseLPHashTable&         s_inv_table)
@@ -3752,7 +3752,7 @@ CavityManager2<blockThreads, cop>::ensure_ownership(
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ bool
-CavityManager2<blockThreads, cop>::ensure_locked_patches_are_not_dirty()
+CavityManager<blockThreads, cop>::ensure_locked_patches_are_not_dirty()
 {
     for (int st = 0; st < PatchStash::stash_size; ++st) {
         assert(st < m_s_locked_patches_mask.size());
@@ -3768,7 +3768,7 @@ CavityManager2<blockThreads, cop>::ensure_locked_patches_are_not_dirty()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::change_ownership(
+CavityManager<blockThreads, cop>::change_ownership(
     cooperative_groups::thread_block& block)
 {
     change_ownership<VertexHandle>(block,
@@ -3794,7 +3794,7 @@ CavityManager2<blockThreads, cop>::change_ownership(
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::change_ownership(
+CavityManager<blockThreads, cop>::change_ownership(
     cooperative_groups::thread_block& block,
     const uint16_t                    num_elements,
     const Bitmask&                    s_ownership_change,
@@ -3877,7 +3877,7 @@ CavityManager2<blockThreads, cop>::change_ownership(
 template <uint32_t blockThreads, CavityOp cop>
 template <typename AttributeT>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::update_attribute(AttributeT& attribute)
+CavityManager<blockThreads, cop>::update_attribute(AttributeT& attribute)
 {
     using HandleT = typename AttributeT::HandleType;
     using Type    = typename AttributeT::Type;
@@ -3950,7 +3950,7 @@ CavityManager2<blockThreads, cop>::update_attribute(AttributeT& attribute)
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::recover_faces()
+CavityManager<blockThreads, cop>::recover_faces()
 {
     for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
         if (m_s_recover_f(f)) {
@@ -3970,7 +3970,7 @@ CavityManager2<blockThreads, cop>::recover_faces()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::recover_edges()
+CavityManager<blockThreads, cop>::recover_edges()
 {
     for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         if (m_s_recover_e(e)) {
@@ -3990,7 +3990,7 @@ CavityManager2<blockThreads, cop>::recover_edges()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::recover_vertices()
+CavityManager<blockThreads, cop>::recover_vertices()
 {
     for (int v = threadIdx.x; v < int(m_s_num_vertices[0]); v += blockThreads) {
         if (m_s_recover_v(v)) {
@@ -4004,7 +4004,7 @@ CavityManager2<blockThreads, cop>::recover_vertices()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::recover_vertices_through_edges()
+CavityManager<blockThreads, cop>::recover_vertices_through_edges()
 {
     // scatter
     for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
@@ -4023,7 +4023,7 @@ CavityManager2<blockThreads, cop>::recover_vertices_through_edges()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::recover_edges_through_faces()
+CavityManager<blockThreads, cop>::recover_edges_through_faces()
 {
     // scatter
     for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
@@ -4043,7 +4043,7 @@ CavityManager2<blockThreads, cop>::recover_edges_through_faces()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::recover_edges_through_vertices()
+CavityManager<blockThreads, cop>::recover_edges_through_vertices()
 {
     // gather
     for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
@@ -4070,7 +4070,7 @@ CavityManager2<blockThreads, cop>::recover_edges_through_vertices()
 
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
-CavityManager2<blockThreads, cop>::recover_faces_through_edges()
+CavityManager<blockThreads, cop>::recover_faces_through_edges()
 {
     // gather
     for (int f = threadIdx.x; f < int(m_s_num_faces[0]); f += blockThreads) {
@@ -4099,7 +4099,7 @@ CavityManager2<blockThreads, cop>::recover_faces_through_edges()
 }
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ void CavityManager2<blockThreads, cop>::epilogue(
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::epilogue(
     cooperative_groups::thread_block& block)
 {
     // make sure all writes are done
