@@ -113,8 +113,9 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         T max_residual = 0.0;
 
         // Temporary device-side vectors
-        DenseMatrix<T> AX(n, 1, DEVICE);
-        DenseMatrix<T> R(n, 1, DEVICE);
+        /*DenseMatrix<T> AX(n, 1, DEVICE);
+        DenseMatrix<T> R(n, 1, DEVICE);*/
+
         //AX.reset(0,DEVICE);
         //R.reset(0,DEVICE);
 
@@ -140,7 +141,6 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         bool rel_ok = max_residual < this->m_rel_tol;
 
         if (abs_ok || rel_ok) {
-            RXMESH_TRACE("GMG: convergence reached with residual: {}",
             RXMESH_TRACE("GMG: convergence reached with residual ON GPU: {}",
                          max_residual);
         }
