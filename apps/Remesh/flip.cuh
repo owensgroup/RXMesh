@@ -1,7 +1,6 @@
 #pragma once
 #include <cuda_profiler_api.h>
 
-#include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
