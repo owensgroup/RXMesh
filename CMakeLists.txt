@@ -63,7 +63,7 @@ FetchContent_Declare(glm
     GIT_TAG        master
 )
 FetchContent_Populate(glm)
-add_subdirectory(${glm_SOURCE_DIR})
+add_subdirectory(${glm_SOURCE_DIR} ${glm_BINARY_DIR})
 
 # polyscope
 if(${RX_USE_POLYSCOPE})
