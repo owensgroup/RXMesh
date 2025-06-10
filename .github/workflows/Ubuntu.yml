@@ -2,12 +2,12 @@ name: Ubuntu
 on: [push, pull_request, workflow_dispatch]
 jobs:
   UbuntuRun:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: Jimver/cuda-toolkit@v0.2.23
+      - uses: Jimver/cuda-toolkit@v0.2.25
         id: cuda-toolkit
         with:
-          cuda: '12.8.0'
+          cuda: '12.5.0'
           linux-local-args: '["--toolkit"]'   
           use-github-cache: false
       - run: sudo apt-get update 
@@ -26,3 +26,4 @@ jobs:
       #- name: Run Test
       #  working-directory: ${{github.workspace}}/build
       #  run: ctest --no-compress-output -T Test -C Release --output-on-failure
+      - run: echo "This job's status is ${{ job.status }}."
