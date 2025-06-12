@@ -117,7 +117,7 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx, SolverT& solver, bool pcg=false)
     // Finalize report
     report.add_member("solver_name", solver.name());
     report.add_member("start_residual", solver.start_residual());
-    report.add_member("end_residual", solver.final_residual());
+    report.add_member("final_residual", solver.final_residual());
     report.add_member("num_iter_taken", solver.iter_taken());
     report.add_member("total_time (ms)", timer.elapsed_millis());
     TestData td;
