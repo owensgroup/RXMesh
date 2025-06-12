@@ -51,9 +51,16 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     report.add_member("application", std::string("MCF"));
     report.add_member("blockThreads", blockThreads);
 
-    GMGSolver solver(
-        rx, A_mat, Arg.max_num_iter, Arg.levels, 2, 2, CoarseSolver::Cholesky, Arg.gmg_tolerance_abs, Arg.gmg_tolerance_rel,Arg.threshold);
-
+    GMGSolver solver(rx,
+                     A_mat,
+                     Arg.max_num_iter,
+                     Arg.levels,
+                     2,
+                     2,
+                     CoarseSolver::Cholesky,
+                     Arg.gmg_tolerance_abs,
+                     Arg.gmg_tolerance_rel,
+                     Arg.threshold);
 
 
     float    total_time = 0;
@@ -90,7 +97,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     Arg.levels = solver.get_num_levels();
     report.add_member("levels", Arg.levels);
     report.add_member("iterations", solver.iter_taken());
-    report.add_member("solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
+    report.add_member(
+        "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
     total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
     report.add_member("total_time", total_time);
@@ -113,14 +121,13 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                                    rx.get_polyscope_mesh()->vertices,
                                    rx.get_polyscope_mesh()->faces);
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-    //polyscope::show();
+    // polyscope::show();
 
-    
 
 #endif
 
-    /*rx.export_obj("gmg_mcf_result.obj",  
-                  *coords);*/
+    /*rx.export_obj("gmg_mcf_result.obj",
+     *coords);*/
 
     B_mat.release();
     X_mat.release();

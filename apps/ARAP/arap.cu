@@ -1,4 +1,5 @@
 #include "rxmesh/matrix/cholesky_solver.h"
+#include "rxmesh/matrix/gmg_solver.h"
 #include "rxmesh/matrix/sparse_matrix.h"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
@@ -262,8 +263,8 @@ int main(int argc, char** argv)
     deformed_vertex_pos.copy_from(ref_vertex_pos, DEVICE, DEVICE);
 
     // deformed vertex position as a matrix (used in the solver)
-    std::shared_ptr<DenseMatrix<float>> deformed_vertex_pos_mat =
-        deformed_vertex_pos.to_matrix();
+    DenseMatrix<float> deformed_vertex_pos_mat =
+        *deformed_vertex_pos.to_matrix();
 
 
     // vertex constraints where
@@ -292,10 +293,11 @@ int main(int argc, char** argv)
     // set constraints
     set_contraints(rx, deformed_vertex_pos, constraints);
 
+
+#if USE_POLYSCOPE
     // move constraints to the host and add it to Polyscope
     constraints.move(DEVICE, HOST);
 
-#if USE_POLYSCOPE
     rx.get_polyscope_mesh()->addVertexScalarQuantity("constraintsV",
                                                      constraints);
 #endif
@@ -305,6 +307,17 @@ int main(int argc, char** argv)
 
 
     // pre_solve laplace_mat
+    // GMGSolver solver(rx,
+    //                 laplace_mat,
+    //                 1000,
+    //                 2,
+    //                 2,
+    //                 2,
+    //                 CoarseSolver::Cholesky,
+    //                 float(1e-6),
+    //                 0.f);
+    // solver.pre_solve(b_mat, deformed_vertex_pos_mat);
+
     CholeskySolver solver(&laplace_mat);
     solver.pre_solve(rx);
 
@@ -358,12 +371,12 @@ int main(int argc, char** argv)
                         constraints,
                         b_mat);
 
-            solver.solve(b_mat, *deformed_vertex_pos_mat);
+            solver.solve(b_mat, deformed_vertex_pos_mat);
         }
 
         // move mat to the host
-        deformed_vertex_pos_mat->move(DEVICE, HOST);
-        deformed_vertex_pos.from_matrix(deformed_vertex_pos_mat.get());
+        deformed_vertex_pos_mat.move(DEVICE, HOST);
+        deformed_vertex_pos.from_matrix(&deformed_vertex_pos_mat);
 
 #if USE_POLYSCOPE
         rx.get_polyscope_mesh()->updateVertexPositions(deformed_vertex_pos);
@@ -396,7 +409,7 @@ int main(int argc, char** argv)
     polyscope::show();
 #endif
 
-    deformed_vertex_pos_mat->release();
+    deformed_vertex_pos_mat.release();
     weight_matrix.release();
     laplace_mat.release();
     b_mat.release();
