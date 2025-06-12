@@ -1,33 +1,33 @@
+#include "rxmesh/matrix/cholesky_solver.h"
+#include "rxmesh/matrix/sparse_matrix.h"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
-
-#include "rxmesh/matrix/sparse_matrix.h"
-
-#include "rxmesh/matrix/qr_solver.h"
-
-#include "Eigen/Dense"
-
 #include "rxmesh/util/svd3_cuda.h"
 
-#include "polyscope/polyscope.h"
-
-#include "rxmesh/matrix/gmg_solver.h"
 
 using namespace rxmesh;
 
+using ConstraintsT = int;
+enum : ConstraintsT
+{
+    Free   = 0,
+    Handle = 1,
+    Fixed  = 2,
+
+};
+
 template <typename T, uint32_t blockThreads>
-__global__ static void calc_edge_weights_mat(
-    const rxmesh::Context      context,
-    rxmesh::VertexAttribute<T> coords,
-    rxmesh::SparseMatrix<T>   edge_weights)
+__global__ static void calc_edge_weights_mat(const Context      context,
+                                             VertexAttribute<T> coords,
+                                             SparseMatrix<T>    edge_weights)
 {
 
     auto calc_weights = [&](EdgeHandle edge_id, VertexIterator& vv) {
         // the edge goes from p-r while the q and s are the opposite vertices
-        const rxmesh::VertexHandle p_id = vv[0];
-        const rxmesh::VertexHandle r_id = vv[2];
-        const rxmesh::VertexHandle q_id = vv[1];
-        const rxmesh::VertexHandle s_id = vv[3];
+        const VertexHandle p_id = vv[0];
+        const VertexHandle r_id = vv[2];
+        const VertexHandle q_id = vv[1];
+        const VertexHandle s_id = vv[3];
 
         if (!p_id.is_valid() || !r_id.is_valid() || !q_id.is_valid() ||
             !s_id.is_valid()) {
@@ -64,11 +64,11 @@ __global__ static void calc_edge_weights_mat(
 
 template <typename T, uint32_t blockThreads>
 __global__ static void calculate_rotation_matrix(
-    const rxmesh::Context      context,
-    rxmesh::VertexAttribute<T> ref_vertex_pos,
-    rxmesh::VertexAttribute<T> deformed_vertex_pos,
-    rxmesh::VertexAttribute<T> rotations,
-    rxmesh::SparseMatrix<T>   weight_matrix)
+    const Context      context,
+    VertexAttribute<T> ref_vertex_pos,
+    VertexAttribute<T> deformed_vertex_pos,
+    VertexAttribute<T> rotations,
+    SparseMatrix<T>    weight_matrix)
 {
     auto cal_rot = [&](VertexHandle v_id, VertexIterator& vv) {
         Eigen::Matrix3f S = Eigen::Matrix3f::Zero();
@@ -123,64 +123,65 @@ __global__ static void calculate_rotation_matrix(
 
 
 template <typename T, uint32_t blockThreads>
-__global__ static void calculate_b(
-    const rxmesh::Context      context,
-    rxmesh::VertexAttribute<T> ref_vertex_pos,
-    rxmesh::VertexAttribute<T> deformed_vertex_pos,
-    rxmesh::VertexAttribute<T> rotations,
-    rxmesh::SparseMatrix<T>   weight_mat,
-    rxmesh::DenseMatrix<T>     b_mat,
-    rxmesh::VertexAttribute<T> constraints)
+__global__ static void calculate_b(const Context      context,
+                                   VertexAttribute<T> ref_vertex_pos,
+                                   VertexAttribute<T> deformed_vertex_pos,
+                                   VertexAttribute<T> rotations,
+                                   SparseMatrix<T>    weight_mat,
+                                   DenseMatrix<T>     b_mat,
+                                   VertexAttribute<ConstraintsT> constraints)
 {
     auto init_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
-        // variable to store ith entry of b_mat
-        Eigen::Vector3f bi(0.0f, 0.0f, 0.0f);
+        if (constraints(v_id) == Free) {
+            // variable to store ith entry of b_mat
+            Eigen::Vector3f bi(0.0f, 0.0f, 0.0f);
 
-        // get rotation matrix for ith vertex
-        Eigen::Matrix3f Ri = Eigen::Matrix3f::Zero(3, 3);
+            // get rotation matrix for ith vertex
+            Eigen::Matrix3f Ri = Eigen::Matrix3f::Zero(3, 3);
 
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++)
-                Ri(i, j) = rotations(v_id, i * 3 + j);
-        }
-
-        for (int nei_index = 0; nei_index < vv.size(); nei_index++) {
-            // get rotation matrix for neightbor j
-            Eigen::Matrix3f Rj = Eigen::Matrix3f::Zero(3, 3);
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 3; i++) {
                 for (int j = 0; j < 3; j++)
-                    Rj(i, j) = rotations(vv[nei_index], i * 3 + j);
+                    Ri(i, j) = rotations(v_id, i * 3 + j);
+            }
 
-            // find rotation addition
-            Eigen::Matrix3f rot_add = Ri + Rj;
-            // find coord difference
-            Eigen::Vector3f vert_diff = {
-                ref_vertex_pos(v_id, 0) - ref_vertex_pos(vv[nei_index], 0),
-                ref_vertex_pos(v_id, 1) - ref_vertex_pos(vv[nei_index], 1),
-                ref_vertex_pos(v_id, 2) - ref_vertex_pos(vv[nei_index], 2)};
+            for (int i = 0; i < vv.size(); i++) {
+                // get rotation matrix for neightbor j
+                Eigen::Matrix3f Rj = Eigen::Matrix3f::Zero(3, 3);
+                for (int i = 0; i < 3; i++)
+                    for (int j = 0; j < 3; j++)
+                        Rj(i, j) = rotations(vv[i], i * 3 + j);
 
-            // update bi
-            bi = bi +
-                 0.5 * weight_mat(v_id, vv[nei_index]) * rot_add * vert_diff;
-        }
+                // find rotation addition
+                Eigen::Matrix3f rot_add = Ri + Rj;
+                // find coord difference
+                Eigen::Vector3f vert_diff = {
+                    ref_vertex_pos(v_id, 0) - ref_vertex_pos(vv[i], 0),
+                    ref_vertex_pos(v_id, 1) - ref_vertex_pos(vv[i], 1),
+                    ref_vertex_pos(v_id, 2) - ref_vertex_pos(vv[i], 2)};
 
-        if (constraints(v_id, 0) == 0) {
-            b_mat(v_id, 0) = bi[0];
-            b_mat(v_id, 1) = bi[1];
-            b_mat(v_id, 2) = bi[2];
-        } else if (constraints(v_id,0)==1) {
-            b_mat(v_id, 0) = deformed_vertex_pos(v_id, 0);
-            b_mat(v_id, 1) = deformed_vertex_pos(v_id, 1);
-            b_mat(v_id, 2) = deformed_vertex_pos(v_id, 2);
+                // update bi
+                bi = bi + 0.5 * weight_mat(v_id, vv[i]) * rot_add * vert_diff;
+            }
 
-        }
-        else {
-            b_mat(v_id, 0) = //0;
-            deformed_vertex_pos(v_id, 0);
-            b_mat(v_id, 1) = //0;
-            deformed_vertex_pos(v_id, 1);
-            b_mat(v_id, 2) = //0;
-            deformed_vertex_pos(v_id, 2);
+
+            // fix the b due to eliminating the constrained vertices
+            for (int i = 0; i < vv.size(); i++) {
+                if (constraints(vv[i]) != Free) {
+                    T w = -weight_mat(v_id, vv[i]);
+                    for (int j = 0; j < 3; ++j) {
+                        bi[j] -= w * deformed_vertex_pos(vv[i], j);
+                    }
+                }
+            }
+
+            for (int j = 0; j < 3; ++j) {
+                b_mat(v_id, j) = bi[j];
+            }
+
+        } else {
+            for (int j = 0; j < 3; ++j) {
+                b_mat(v_id, j) = deformed_vertex_pos(v_id, j);
+            }
         }
     };
 
@@ -193,43 +194,23 @@ __global__ static void calculate_b(
 
 template <typename T, uint32_t blockThreads>
 __global__ static void calculate_system_matrix(
-    const rxmesh::Context      context,
-    rxmesh::SparseMatrix<T>   weight_matrix,
-    rxmesh::SparseMatrix<T>   laplace_mat,
-    rxmesh::VertexAttribute<T> constraints)
+    const Context                 context,
+    SparseMatrix<T>               weight_matrix,
+    SparseMatrix<T>               laplace_mat,
+    VertexAttribute<ConstraintsT> constraints)
 
 {
     auto calc_mat = [&](VertexHandle v_id, VertexIterator& vv) {
-        if (constraints(v_id, 0) == 0) {
+        if (constraints(v_id) == Free) {
             for (int i = 0; i < vv.size(); i++) {
                 laplace_mat(v_id, v_id) += weight_matrix(v_id, vv[i]);
-
-                if (constraints(vv[i]) == 0)
+                if (constraints(vv[i]) == Free) {
                     laplace_mat(v_id, vv[i]) -= weight_matrix(v_id, vv[i]);
-                else
-                    laplace_mat(v_id, vv[i]) = 0;
+                }
             }
-        }
-        else {
-            for (int i = 0; i < vv.size(); i++) {
-                laplace_mat(v_id, vv[i]) = 0;
-
-                ///addition for cosntraint handling
-                //laplace_mat(vv[i], v_id) = 0;
-            }
-            laplace_mat(v_id, v_id) = 1;
-        }
-    };
-
-   auto calc_mat2 = [&](VertexHandle v_id, VertexIterator& vv) {
-        if (constraints(v_id, 0) == 0) {
-           
         } else {
             for (int i = 0; i < vv.size(); i++) {
                 laplace_mat(v_id, vv[i]) = 0;
-
-                /// addition for cosntraint handling
-                laplace_mat(vv[i], v_id) = 0;
             }
             laplace_mat(v_id, v_id) = 1;
         }
@@ -239,14 +220,14 @@ __global__ static void calculate_system_matrix(
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
     query.dispatch<Op::VV>(block, shrd_alloc, calc_mat);
-    //query.dispatch<Op::VV>(block, shrd_alloc, calc_mat2);
 }
+
 
 int main(int argc, char** argv)
 {
     rx_init(0);
-    
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cube.obj");
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
     if (!rx.is_closed()) {
         RXMESH_ERROR("Input mesh should be closed without boundaries");
@@ -264,21 +245,13 @@ int main(int argc, char** argv)
     auto deformed_vertex_pos = *rx.add_vertex_attribute<float>("deformedV", 3);
     deformed_vertex_pos.copy_from(ref_vertex_pos, DEVICE, DEVICE);
 
-
-    auto solved_vertex_pos = *rx.add_vertex_attribute<float>("solvedV", 3);
-    solved_vertex_pos.copy_from(ref_vertex_pos, DEVICE, DEVICE);
-
-
     // deformed vertex position as a matrix (used in the solver)
     std::shared_ptr<DenseMatrix<float>> deformed_vertex_pos_mat =
-        solved_vertex_pos.to_matrix();
+        deformed_vertex_pos.to_matrix();
 
 
     // vertex constraints where
-    //  0 means free
-    //  1 means user-displaced
-    //  2 means fixed
-    auto constraints = *rx.add_vertex_attribute<float>("FixedVertices", 1);
+    auto constraints = *rx.add_vertex_attribute<ConstraintsT>("Constraints", 1);
 
     // compute weights
     auto weights = rx.add_edge_attribute<float>("edgeWeights", 1);
@@ -308,26 +281,25 @@ int main(int argc, char** argv)
         const vec3<float> p(deformed_vertex_pos(vh, 0),
                             deformed_vertex_pos(vh, 1),
                             deformed_vertex_pos(vh, 2));
-
-        //dragon
+        // dragon
         // fix the bottom
-        //if (p[2] < -0.63) {
-        //    constraints(vh) = 2;
-        //}
-
-        //// move the jaw
-        //if (glm::distance(p, sphere_center) < 0.1) {
-        //    constraints(vh) = 1;
-        //}
-
-        //cube
-        if (p[2] > 0 && p[1] > 0 && p[0] > 0) {
-            constraints(vh) = 1;
-        }
-        if (p[2] < 0 && p[1] < 0 && p[0] < 0) {
-            constraints(vh) = 2;
+        if (p[2] < -0.63) {
+            constraints(vh) = Fixed;
+        } else if (glm::distance(p, sphere_center) < 0.1) {
+            // move the jaw
+            constraints(vh) = Handle;
+        } else {
+            constraints(vh) = Free;
         }
 
+        // cube
+        // if (p[2] > 0 && p[1] > 0 && p[0] > 0) {
+        //    constraints(vh) = Handle;
+        //} else if (p[2] < 0 && p[1] < 0 && p[0] < 0) {
+        //    constraints(vh) = Fixed;
+        //} else {
+        //    constraints(vh) = Free;
+        //}
     });
 
     // move constraints to the host and add it to Polyscope
@@ -345,63 +317,50 @@ int main(int argc, char** argv)
                                 laplace_mat,
                                 constraints);
 
-
-
     // pre_solve laplace_mat
-    QRSolver solver(&laplace_mat);
+    CholeskySolver solver(&laplace_mat);
     solver.pre_solve(rx);
 
-    CholeskySolver solver_chol(&laplace_mat);
-    solver_chol.pre_solve(rx);
-
-
-
     // launch box for rotation matrix calculation
-    rxmesh::LaunchBox<blockThreads> lb_rot;
+    LaunchBox<blockThreads> lb_rot;
     rx.prepare_launch_box(
-        {rxmesh::Op::VV},
+        {Op::VV},
         lb_rot,
         (void*)calculate_rotation_matrix<float, blockThreads>);
 
 
     // launch box for b matrix calculation
-    rxmesh::LaunchBox<blockThreads> lb_b_mat;
+    LaunchBox<blockThreads> lb_b_mat;
     rx.prepare_launch_box(
-        {rxmesh::Op::VV}, lb_b_mat, (void*)calculate_b<float, blockThreads>);
+        {Op::VV}, lb_b_mat, (void*)calculate_b<float, blockThreads>);
 
 
     // how many times will arap algorithm run?
     int iterations = 1;
 
-    float       t    = 0;
-    bool        flag = false;
-    vec3<float> start(-0.5f, -0.1f, -0.1f);
-    //vec3<float> start(0.0f, 0.2f, 0.0f);
-    vec3<float> end(0.5f, 0.1f, 0.1f);
-    //vec3<float> end(0.0f, -0.2f, 0.0f);
+    float t    = 0;
+    bool  flag = false;
+
+    vec3<float> start(0.0f, 0.2f, 0.0f);
+    vec3<float> end(0.0f, -0.2f, 0.0f);
+
     vec3<float> displacement(0.0f, 0.0f, 0.0f);
-    float       scale = 0.1;
 
-    //GMGSolver solver(rx, laplace_mat, 10, 2);
+    bool is_running = false;
 
-    //solver.pre_solve(*deformed_vertex_pos_mat, b_mat);
-
-
-    auto polyscope_callback = [&]() mutable {
+    auto take_step = [&]() mutable {
         t += flag ? -0.5f : 0.5f;
+
         flag = (t < 0 || t > 1.0f) ? !flag : flag;
+
         displacement = (1 - t) * start + (t)*end;
-        displacement = displacement * scale;
+
         // apply user deformation
         rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
-            if (constraints(vh) == 1) {
+            if (constraints(vh) == Handle) {
                 deformed_vertex_pos(vh, 0) += displacement[0];
                 deformed_vertex_pos(vh, 1) += displacement[1];
                 deformed_vertex_pos(vh, 2) += displacement[2];
-
-                /*deformed_vertex_pos(vh, 0) = 0;
-                deformed_vertex_pos(vh, 1) = 0;
-                deformed_vertex_pos(vh, 2) = 0;*/
             }
         });
 
@@ -413,8 +372,7 @@ int main(int argc, char** argv)
                 lb_rot,
                 calculate_rotation_matrix<float, blockThreads>,
                 ref_vertex_pos,
-                //deformed_vertex_pos,
-                solved_vertex_pos,
+                deformed_vertex_pos,
                 rotations,
                 weight_matrix);
 
@@ -422,56 +380,47 @@ int main(int argc, char** argv)
             rx.run_kernel<blockThreads>(lb_b_mat,
                                         calculate_b<float, blockThreads>,
                                         ref_vertex_pos,
-                                        solved_vertex_pos,
-                                        //deformed_vertex_pos,
+                                        deformed_vertex_pos,
                                         rotations,
                                         weight_matrix,
                                         b_mat,
                                         constraints);
 
-            //solver.solve(b_mat, *deformed_vertex_pos_mat);
-            solver_chol.solve(b_mat, *deformed_vertex_pos_mat);
-
-            
+            solver.solve(b_mat, *deformed_vertex_pos_mat);
         }
 
         // move mat to the host
         deformed_vertex_pos_mat->move(DEVICE, HOST);
-        //deformed_vertex_pos.from_matrix(deformed_vertex_pos_mat.get());
-        solved_vertex_pos.from_matrix(deformed_vertex_pos_mat.get());
-        solved_vertex_pos.move(HOST, DEVICE);
-
-
-        
-        printf("\n-----------------\n");
-        rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
-
-            printf("\n %d : %f %f %f",
-                   constraints(vh),
-                   solved_vertex_pos(vh, 0),
-                   solved_vertex_pos(vh, 1),
-                   solved_vertex_pos(vh, 2));
-
-            if (constraints(vh) == 0) {
-                // plug the solution back in where the constraints were earlier
-                // set
-                deformed_vertex_pos(vh, 0) = solved_vertex_pos(vh, 0);
-                deformed_vertex_pos(vh, 1) = solved_vertex_pos(vh, 1);
-                deformed_vertex_pos(vh, 2) = solved_vertex_pos(vh, 2);
-            }
-        });
-        deformed_vertex_pos.move(DEVICE, HOST);
-
+        deformed_vertex_pos.from_matrix(deformed_vertex_pos_mat.get());
 
 #if USE_POLYSCOPE
         rx.get_polyscope_mesh()->updateVertexPositions(deformed_vertex_pos);
-
 #endif
+    };
+
+    auto ps_callback = [&]() {
+        ImGui::SameLine();
+        if (ImGui::Button("Step")) {
+            take_step();
+        }
+
+        if (ImGui::Button("Start")) {
+            is_running = true;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Pause")) {
+            is_running = false;
+        }
+
+        if (is_running) {
+            take_step();
+        }
     };
 
 
 #if USE_POLYSCOPE
-    polyscope::state::userCallback = polyscope_callback;
+    polyscope::state::userCallback = ps_callback;
     polyscope::show();
 #endif
 
