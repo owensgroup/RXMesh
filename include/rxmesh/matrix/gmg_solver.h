@@ -16,6 +16,8 @@ template <typename T>
 struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 {
     using Type = T;
+    float gmg_memory_alloc_time;
+    float v_cycle_memory_alloc_time;
 
     GMGSolver(RXMeshStatic&    rx,
               SparseMatrix<T>& A,
@@ -34,7 +36,9 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
           m_num_pre_relax(num_pre_relax),
           m_num_post_relax(num_post_relax),
           m_num_levels(num_levels),
-          m_threshold(threshold)
+          m_threshold(threshold),
+          AX(DenseMatrix<T>(A.rows(), 1, DEVICE)),
+          R(DenseMatrix<T>(A.rows(), 1, DEVICE))
     {
     }
 
@@ -56,7 +60,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         RXMESH_INFO("full gmg operator construction took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
-
+        gmg_memory_alloc_time = m_gmg.memory_alloc_time;
         m_num_levels = m_gmg.m_num_levels;
         if (m_num_levels == 1) {
 
@@ -73,7 +77,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                                   m_coarse_solver,
                                   m_num_pre_relax,
                                   m_num_post_relax);
-
+            v_cycle_memory_alloc_time = m_v_cycle.memory_alloc_time;
 
             timer.stop();
             gtimer.stop();
@@ -109,8 +113,11 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         T max_residual = 0.0;
 
         // Temporary device-side vectors
-        DenseMatrix<T> AX(n, 1, DEVICE);
-        DenseMatrix<T> R(n, 1, DEVICE);
+        /*DenseMatrix<T> AX(n, 1, DEVICE);
+        DenseMatrix<T> R(n, 1, DEVICE);*/
+
+        //AX.reset(0,DEVICE);
+        //R.reset(0,DEVICE);
 
         for (IndexT i = 0; i < num_rhs; ++i) {
             // AX = A * X_i
@@ -120,12 +127,11 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
             R.copy_from(AX, DEVICE, DEVICE);
 
 
-            R.axpy(B.col_data(i), T(-1));  // R = AX - B_i
+            R.axpy(B.col(i), T(-1));  // R = AX - B_i
 
             // Compute norm of R and B
             T r_norm = R.norm2();
-            T b_norm =
-                B.sub_column_norm2(i);  // You'll need to add this utility
+            T b_norm = B.col(i).norm2();  // You'll need to add this utility
 
             T residual   = r_norm / (b_norm + 1e-20);
             max_residual = std::max(max_residual, residual);
@@ -135,7 +141,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         bool rel_ok = max_residual < this->m_rel_tol;
 
         if (abs_ok || rel_ok) {
-            RXMESH_TRACE("GMG: convergence reached with residual: {}",
+            RXMESH_TRACE("GMG: convergence reached with residual ON GPU: {}",
                          max_residual);
         }
 
@@ -201,8 +207,12 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                 timer.start();
                 gtimer.start();
 
-                if (is_converged(m_start_residual, current_res) ||
-                    is_converged_special(*m_A, X, m_v_cycle.B)) {
+                if (
+                    //is_converged(m_start_residual, current_res) ||
+                    //is_converged_special(*m_A, X, m_v_cycle.B) ||
+                    is_converged_special_gpu(*m_A, X, m_v_cycle.B)) {
+                   
+
                     m_final_residual = current_res;
                     /*std::cout << "\nconverged! at " << m_final_residual
                               << " from residual of " << m_start_residual;*/
@@ -265,6 +275,12 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     int              m_num_post_relax;
     int              m_num_levels;
     int              m_threshold;
+
+    DenseMatrix<T> AX;
+    //(n, 1, DEVICE);
+    DenseMatrix<T> R;
+    //(n, 1, DEVICE);
+    
     // Eigen::Map<const Eigen::SparseMatrix<T, Eigen::RowMajor, int>>
     // A_mat_copy; Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic,
     // 3>> B_mat_copy;
