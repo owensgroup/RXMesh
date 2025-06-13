@@ -89,12 +89,12 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
             assert(numCols == B.cols());
             m_v_cycle.template calc_residual<numCols>(
                 m_v_cycle.m_a[0].a, X, B, m_v_cycle.m_r[0]);
-            m_start_residual = m_v_cycle.m_r[0].norm2();
+            this->m_start_residual = m_v_cycle.m_r[0].norm2();
         }
     }
 
 
-    template <typename T>
+    
     bool is_converged_special_gpu(rxmesh::SparseMatrix<T>& A,
                                   rxmesh::DenseMatrix<T>&  X,
                                   rxmesh::DenseMatrix<T>&  B)
@@ -194,8 +194,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
             // m_coarse_solver.template solve<numCols>(m_A, B, X, 1000);
             return;
         } else {
-            m_iter_taken = 0;
-            while (m_iter_taken < m_max_iter) {
+            this->m_iter_taken = 0;
+            while (this->m_iter_taken < this->m_max_iter) {
                 // m_v_cycle.cycle(0, m_gmg, *m_A, B, X,*m_rx);
                 m_v_cycle.cycle(0, m_gmg, *m_A, m_v_cycle.B, X, *m_rx);
                 current_res = m_v_cycle.m_r[0].norm2();
@@ -213,11 +213,11 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                     is_converged_special_gpu(*m_A, X, m_v_cycle.B)) {
                    
 
-                    m_final_residual = current_res;
+                    this->m_final_residual = current_res;
                     /*std::cout << "\nconverged! at " << m_final_residual
                               << " from residual of " << m_start_residual;*/
                     RXMESH_TRACE("GMG: #number of iterations to solve: {}",
-                                 m_iter_taken);
+                                 this->m_iter_taken);
                     // RXMESH_TRACE("GMG: final residual: {}",
                     // m_final_residual);
                     timer.stop();
@@ -235,13 +235,13 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                 /*RXMESH_TRACE("GMG: convergence criteria reached? {}",
                              is_converged_special(*m_A, X, m_v_cycle.B));*/
 
-                m_iter_taken++;
+                this->m_iter_taken++;
             }
             RXMESH_TRACE(
                 "GMG: Solver did not reach convergence criteria. Residual: {}",
                 current_res);
             RXMESH_TRACE("GMG: #number of iterations to solve: {}",
-                         m_iter_taken);
+                         this->m_iter_taken);
             RXMESH_TRACE("GMG: #time taken to test for convergence: {}", time);
         }
     }

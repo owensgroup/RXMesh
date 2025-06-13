@@ -173,6 +173,8 @@ static Op transpose_op(Op op)
     if (op == Op::EVDiamond) {
         return Op::INVALID;
     }
+
+    return Op::INVALID;
 }
 
 /**
