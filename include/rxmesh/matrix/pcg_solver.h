@@ -33,24 +33,24 @@ struct PCGSolver : public CGSolver<T, DenseMatOrder>
                            DenseMatT&       X,
                            cudaStream_t     stream = NULL) override
     {
-        S.reset(0.0, rxmesh::DEVICE, stream);
-        P.reset(0.0, rxmesh::DEVICE, stream);
-        R.reset(0.0, rxmesh::DEVICE, stream);
+        this->S.reset(0.0, rxmesh::DEVICE, stream);
+        this->P.reset(0.0, rxmesh::DEVICE, stream);
+        this->R.reset(0.0, rxmesh::DEVICE, stream);
 
 
         // init S
         // S = Ax
-        A->multiply(X, S, false, false, 1, 0, stream);
+        this->A->multiply(X, this->S, false, false, 1, 0, stream);
 
         // init R
         // R = B - S
-        init_R(B, S, R, stream);
+        init_R(B, this->S, this->R, stream);
 
         // init P
         // P = inv(M) * R
-        precond(R, P, stream);
+        precond(this->R, this->P, stream);
 
-        delta_new = R.dot(P, false, stream);
+        this->delta_new = this->R.dot(this->P, false, stream);
     }
 
     virtual void solve(const DenseMatT& B,
@@ -58,13 +58,13 @@ struct PCGSolver : public CGSolver<T, DenseMatOrder>
                        cudaStream_t     stream = NULL) override
     {
 
-        if (A->cols() != X.rows() || A->rows() != B.rows() ||
+        if (this->A->cols() != X.rows() || this->A->rows() != B.rows() ||
             X.cols() != B.cols()) {
             RXMESH_ERROR(
                 "CGSolver::solver mismatch in the input/output size. A ({}, "
                 "{}), X ({}, {}), B ({}, {})",
-                A->rows(),
-                A->cols(),
+                this->A->rows(),
+                this->A->cols(),
                 X.rows(),
                 X.cols(),
                 B.rows(),
@@ -72,59 +72,60 @@ struct PCGSolver : public CGSolver<T, DenseMatOrder>
             return;
         }
 
-        m_start_residual = delta_new;
+        this->m_start_residual = this->delta_new;
 
-        m_iter_taken = 0;
+        this->m_iter_taken = 0;
 
-        while (m_iter_taken < m_max_iter) {
+        while (this->m_iter_taken < this->m_max_iter) {
             // s = Ap
-            A->multiply(P, S, false, false, 1, 0, stream);
+            this->A->multiply(this->P, this->S, false, false, 1, 0, stream);
 
-            // alpha = delta_new / <S,P>
-            alpha = S.dot(P, false, stream);
-            alpha = delta_new / alpha;
+            // alpha = this->delta_new / <S,P>
+            this->alpha = this->S.dot(this->P, false, stream);
+            this->alpha = this->delta_new / this->alpha;
 
             // X =  alpha*P + X
-            axpy(X, P, alpha, T(1.), stream);
+            this->axpy(X, this->P, this->alpha, T(1.), stream);
 
             // reset residual
-            if (m_iter_taken > 0 && m_iter_taken % m_reset_residual_freq == 0) {
+            if (this->m_iter_taken > 0 &&
+                this->m_iter_taken % this->m_reset_residual_freq == 0) {
                 // s= Ax
-                A->multiply(X, S, false, false, 1, 0, stream);
+                this->A->multiply(X, this->S, false, false, 1, 0, stream);
 
                 // r = b-s
-                subtract(R, B, S, stream);
+                this->subtract(this->R, B, this->S, stream);
             } else {
                 // r = - alpha*s + r
-                axpy(R, S, -alpha, T(1.), stream);
+                this->axpy(this->R, this->S, -this->alpha, T(1.), stream);
             }
 
             // S = inv(M) *R
-            precond(R, S, stream);
+            precond(this->R, this->S, stream);
 
-            // delta_old = delta_new
+            // delta_old = this->delta_new
             CUDA_ERROR(cudaStreamSynchronize(stream));
-            delta_old = delta_new;
+            this->delta_old = this->delta_new;
 
-            // delta_new = <r,s>
-            delta_new = R.dot(S, stream);
+            // this->delta_new = <r,s>
+            this->delta_new = this->R.dot(this->S, stream);
 
 
             // exit if error is getting too low across three coordinates
-            if (is_converged(m_start_residual, delta_new)) {
-                m_final_residual = delta_new;
+            if (this->is_converged(this->m_start_residual, this->delta_new)) {
+                this->m_final_residual = this->delta_new;
                 return;
             }
 
-            // beta = delta_new/delta_old
-            beta = delta_new / delta_old;
+            // beta = this->delta_new/delta_old
+            this->beta = this->delta_new / this->delta_old;
 
             // p = beta*p + s
-            axpy(P, S, T(1.), beta, stream);
+            this->axpy(this->P, this->S, T(1.), this->beta, stream);
 
-            m_iter_taken++;
+            this->m_iter_taken++;
         }
-        m_final_residual = delta_new;
+        this->m_final_residual = this->delta_new;
     }
 
     virtual std::string name() override
@@ -149,7 +150,7 @@ struct PCGSolver : public CGSolver<T, DenseMatOrder>
         const int rows = in.rows();
         const int cols = in.cols();
 
-        SparseMatrix<T> Amat = *A;
+        SparseMatrix<T> Amat = *(this->A);
 
         const int blockThreads = 512;
 

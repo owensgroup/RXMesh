@@ -57,11 +57,11 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
                        DenseMatT&       X,
                        cudaStream_t     stream = NULL) override
     {
-        m_start_residual = delta_new;
+        this->m_start_residual = delta_new;
 
-        m_iter_taken = 0;
+        this->m_iter_taken = 0;
 
-        while (m_iter_taken < m_max_iter) {
+        while (this->m_iter_taken < this->m_max_iter) {
             // s = Ap
             mat_vec(P, S, stream);
 
@@ -73,7 +73,8 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
             axpy(X, P, alpha, T(1.), stream);
 
             // reset residual
-            if (m_iter_taken > 0 && m_iter_taken % m_reset_residual_freq == 0) {
+            if (this->m_iter_taken > 0 &&
+                this->m_iter_taken % m_reset_residual_freq == 0) {
                 // s= Ax
                 mat_vec(X, S, stream);
 
@@ -93,8 +94,8 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
             delta_new *= delta_new;
 
             // exit if error is getting too low across three coordinates
-            if (is_converged(m_start_residual, delta_new)) {
-                m_final_residual = delta_new;
+            if (this->is_converged(this->m_start_residual, delta_new)) {
+                this->m_final_residual = delta_new;
                 return;
             }
 
@@ -104,9 +105,9 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
             // p = beta*p + r
             axpy(P, R, T(1.), beta, stream);
 
-            m_iter_taken++;
+            this->m_iter_taken++;
         }
-        m_final_residual = delta_new;
+        this->m_final_residual = delta_new;
     }
 
     virtual std::string name() override

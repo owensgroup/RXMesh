@@ -81,9 +81,9 @@ struct DirectSolver : public SolverBase<SpMatT, DenseMatOrder>
             m_use_permute = false;
 
 
-            m_d_solver_row_ptr = m_mat->row_ptr(DEVICE);
-            m_d_solver_col_idx = m_mat->col_idx(DEVICE);
-            m_d_solver_val     = m_mat->val_ptr(DEVICE);
+            m_d_solver_row_ptr = this->m_mat->row_ptr(DEVICE);
+            m_d_solver_col_idx = this->m_mat->col_idx(DEVICE);
+            m_d_solver_val     = this->m_mat->val_ptr(DEVICE);
 
             return;
         }
@@ -93,24 +93,24 @@ struct DirectSolver : public SolverBase<SpMatT, DenseMatOrder>
 
         if (m_perm == PermuteMethod::SYMRCM) {
             CUSOLVER_ERROR(cusolverSpXcsrsymrcmHost(m_cusolver_sphandle,
-                                                    m_mat->rows(),
-                                                    m_mat->non_zeros(),
+                                                    this->m_mat->rows(),
+                                                    this->m_mat->non_zeros(),
                                                     m_descr,
                                                     m_h_solver_row_ptr,
                                                     m_h_solver_col_idx,
                                                     m_h_permute));
         } else if (m_perm == PermuteMethod::SYMAMD) {
             CUSOLVER_ERROR(cusolverSpXcsrsymamdHost(m_cusolver_sphandle,
-                                                    m_mat->rows(),
-                                                    m_mat->non_zeros(),
+                                                    this->m_mat->rows(),
+                                                    this->m_mat->non_zeros(),
                                                     m_descr,
                                                     m_h_solver_row_ptr,
                                                     m_h_solver_col_idx,
                                                     m_h_permute));
         } else if (m_perm == PermuteMethod::NSTDIS) {
             CUSOLVER_ERROR(cusolverSpXcsrmetisndHost(m_cusolver_sphandle,
-                                                     m_mat->rows(),
-                                                     m_mat->non_zeros(),
+                                                     this->m_mat->rows(),
+                                                     this->m_mat->non_zeros(),
                                                      m_descr,
                                                      m_h_solver_row_ptr,
                                                      m_h_solver_col_idx,
@@ -126,12 +126,12 @@ struct DirectSolver : public SolverBase<SpMatT, DenseMatOrder>
         }
 
 
-        assert(is_unique_permutation(m_mat->rows(), m_h_permute));
+        assert(is_unique_permutation(this->m_mat->rows(), m_h_permute));
 
         // copy permutation to the device
         CUDA_ERROR(cudaMemcpyAsync(m_d_permute,
                                    m_h_permute,
-                                   m_mat->rows() * sizeof(IndexT),
+                                   this->m_mat->rows() * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
 
         // working space for permutation: B = A*Q*A^T
@@ -140,31 +140,32 @@ struct DirectSolver : public SolverBase<SpMatT, DenseMatOrder>
         // only on the device since we don't need to access the permuted val on
         // the host at all
 #pragma omp parallel for
-        for (int j = 0; j < m_mat->non_zeros(); j++) {
+        for (int j = 0; j < this->m_mat->non_zeros(); j++) {
             m_h_permute_map[j] = j;
         }
 
         size_t size_perm       = 0;
         void*  perm_buffer_cpu = NULL;
 
-        CUSOLVER_ERROR(cusolverSpXcsrperm_bufferSizeHost(m_cusolver_sphandle,
-                                                         m_mat->rows(),
-                                                         m_mat->cols(),
-                                                         m_mat->non_zeros(),
-                                                         m_descr,
-                                                         m_h_solver_row_ptr,
-                                                         m_h_solver_col_idx,
-                                                         m_h_permute,
-                                                         m_h_permute,
-                                                         &size_perm));
+        CUSOLVER_ERROR(
+            cusolverSpXcsrperm_bufferSizeHost(m_cusolver_sphandle,
+                                              this->m_mat->rows(),
+                                              this->m_mat->cols(),
+                                              this->m_mat->non_zeros(),
+                                              m_descr,
+                                              m_h_solver_row_ptr,
+                                              m_h_solver_col_idx,
+                                              m_h_permute,
+                                              m_h_permute,
+                                              &size_perm));
 
         perm_buffer_cpu = (void*)malloc(sizeof(char) * size_perm);
 
         // permute the matrix
         CUSOLVER_ERROR(cusolverSpXcsrpermHost(m_cusolver_sphandle,
-                                              m_mat->rows(),
-                                              m_mat->cols(),
-                                              m_mat->non_zeros(),
+                                              this->m_mat->rows(),
+                                              this->m_mat->cols(),
+                                              this->m_mat->non_zeros(),
                                               m_descr,
                                               m_h_solver_row_ptr,
                                               m_h_solver_col_idx,
@@ -176,17 +177,17 @@ struct DirectSolver : public SolverBase<SpMatT, DenseMatOrder>
         // copy the permute csr from the device
         CUDA_ERROR(cudaMemcpyAsync(m_d_solver_row_ptr,
                                    m_h_solver_row_ptr,
-                                   (m_mat->rows() + 1) * sizeof(IndexT),
+                                   (this->m_mat->rows() + 1) * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
         CUDA_ERROR(cudaMemcpyAsync(m_d_solver_col_idx,
                                    m_h_solver_col_idx,
-                                   m_mat->non_zeros() * sizeof(IndexT),
+                                   this->m_mat->non_zeros() * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
 
         // do the permutation for val on device
         CUDA_ERROR(cudaMemcpyAsync(m_d_permute_map,
                                    m_h_permute_map,
-                                   m_mat->non_zeros() * sizeof(IndexT),
+                                   this->m_mat->non_zeros() * sizeof(IndexT),
                                    cudaMemcpyHostToDevice));
 
         free(perm_buffer_cpu);
@@ -202,9 +203,9 @@ struct DirectSolver : public SolverBase<SpMatT, DenseMatOrder>
     {
 
         permute_gather(m_d_permute_map,
-                       m_mat->val_ptr(DEVICE),
+                       this->m_mat->val_ptr(DEVICE),
                        m_d_solver_val,
-                       m_mat->non_zeros());
+                       this->m_mat->non_zeros());
     }
 
 
@@ -228,38 +229,38 @@ struct DirectSolver : public SolverBase<SpMatT, DenseMatOrder>
         if (!m_perm_allocated) {
             m_perm_allocated = true;
             CUDA_ERROR(cudaMalloc((void**)&m_d_solver_val,
-                                  m_mat->non_zeros() * sizeof(Type)));
+                                  this->m_mat->non_zeros() * sizeof(Type)));
             CUDA_ERROR(cudaMalloc((void**)&m_d_solver_row_ptr,
-                                  (m_mat->rows() + 1) * sizeof(IndexT)));
+                                  (this->m_mat->rows() + 1) * sizeof(IndexT)));
             CUDA_ERROR(cudaMalloc((void**)&m_d_solver_col_idx,
-                                  m_mat->non_zeros() * sizeof(IndexT)));
+                                  this->m_mat->non_zeros() * sizeof(IndexT)));
 
             m_h_solver_row_ptr =
-                (IndexT*)malloc((m_mat->rows() + 1) * sizeof(IndexT));
+                (IndexT*)malloc((this->m_mat->rows() + 1) * sizeof(IndexT));
             m_h_solver_col_idx =
-                (IndexT*)malloc(m_mat->non_zeros() * sizeof(IndexT));
+                (IndexT*)malloc(this->m_mat->non_zeros() * sizeof(IndexT));
 
-            m_h_permute = (IndexT*)malloc(m_mat->rows() * sizeof(IndexT));
+            m_h_permute = (IndexT*)malloc(this->m_mat->rows() * sizeof(IndexT));
             CUDA_ERROR(cudaMalloc((void**)&m_d_permute,
-                                  m_mat->rows() * sizeof(IndexT)));
+                                  this->m_mat->rows() * sizeof(IndexT)));
 
             m_h_permute_map = static_cast<IndexT*>(
-                malloc(m_mat->non_zeros() * sizeof(IndexT)));
+                malloc(this->m_mat->non_zeros() * sizeof(IndexT)));
 
             CUDA_ERROR(cudaMalloc((void**)&m_d_permute_map,
-                                  m_mat->non_zeros() * sizeof(IndexT)));
+                                  this->m_mat->non_zeros() * sizeof(IndexT)));
 
             CUDA_ERROR(cudaMalloc((void**)&m_d_solver_x,
-                                  m_mat->cols() * sizeof(Type)));
+                                  this->m_mat->cols() * sizeof(Type)));
             CUDA_ERROR(cudaMalloc((void**)&m_d_solver_b,
-                                  m_mat->rows() * sizeof(Type)));
+                                  this->m_mat->rows() * sizeof(Type)));
         }
         std::memcpy(m_h_solver_row_ptr,
-                    m_mat->row_ptr(),
-                    (m_mat->rows() + 1) * sizeof(IndexT));
+                    this->m_mat->row_ptr(),
+                    (this->m_mat->rows() + 1) * sizeof(IndexT));
         std::memcpy(m_h_solver_col_idx,
-                    m_mat->col_idx(),
-                    m_mat->non_zeros() * sizeof(IndexT));
+                    this->m_mat->col_idx(),
+                    this->m_mat->non_zeros() * sizeof(IndexT));
     }
 
 

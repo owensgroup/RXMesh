@@ -48,9 +48,9 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
     }
 
 
-    virtual void solve(DenseMatrix<Type, DenseMatOrder>& B_mat,
-                       DenseMatrix<Type, DenseMatOrder>& X_mat,
-                       cudaStream_t                      stream = NULL) override
+    virtual void solve(DenseMatrix<T, DenseMatOrder>& B_mat,
+                       DenseMatrix<T, DenseMatOrder>& X_mat,
+                       cudaStream_t                   stream = NULL) override
     {
         if (m_first_pre_solve) {
             RXMESH_ERROR(
@@ -59,20 +59,21 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                 "anything.");
             return;
         }
-        CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
+        CUSOLVER_ERROR(cusolverSpSetStream(this->m_cusolver_sphandle, stream));
 
 
         // TODO this could be handled more cleanly using reshape operator on the
         // user side
 
         //  the case where we solve for multiple rhs
-        if (m_mat->cols() == X_mat.rows() && m_mat->rows() == B_mat.rows() &&
+        if (this->m_mat->cols() == X_mat.rows() &&
+            this->m_mat->rows() == B_mat.rows() &&
             X_mat.cols() == B_mat.cols()) {
             for (int i = 0; i < B_mat.cols(); ++i) {
                 solve(B_mat.col_data(i, DEVICE), X_mat.col_data(i, DEVICE));
             }
-        } else if (m_mat->cols() == X_mat.rows() * X_mat.cols() &&
-                   m_mat->rows() == B_mat.rows() * B_mat.cols()) {
+        } else if (this->m_mat->cols() == X_mat.rows() * X_mat.cols() &&
+                   this->m_mat->rows() == B_mat.rows() * B_mat.cols()) {
             // the case where we flatten X and B and do one solve
             solve(B_mat.col_data(0, DEVICE), X_mat.col_data(0, DEVICE));
         } else {
@@ -80,8 +81,8 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                 "CholeskySolver::solve() The sparse matrix size ({}, {}) does "
                 "not match with the rhs size ({}, {}) and the unknown size "
                 "({}, {})",
-                m_mat->rows(),
-                m_mat->cols(),
+                this->m_mat->rows(),
+                this->m_mat->cols(),
                 B_mat.rows(),
                 B_mat.cols(),
                 X_mat.rows(),
@@ -99,17 +100,18 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                       DenseMatrix<T, DenseMatOrder>&       X_mat,
                       cudaStream_t                         stream = NULL)
     {
-        CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
+        CUSOLVER_ERROR(cusolverSpSetStream(this->m_cusolver_sphandle, stream));
 
         // the case where we solve for multiple rhs
-        if (m_mat->cols() == X_mat.rows() && m_mat->rows() == B_mat.rows() &&
+        if (this->m_mat->cols() == X_mat.rows() &&
+            this->m_mat->rows() == B_mat.rows() &&
             X_mat.cols() == B_mat.cols()) {
             for (int i = 0; i < B_mat.cols(); ++i) {
                 cusolver_cholesky(B_mat.col_data(i, DEVICE),
                                   X_mat.col_data(i, DEVICE));
             }
-        } else if (m_mat->cols() == X_mat.rows() * X_mat.cols() &&
-                   m_mat->rows() == B_mat.rows() * B_mat.cols()) {
+        } else if (this->m_mat->cols() == X_mat.rows() * X_mat.cols() &&
+                   this->m_mat->rows() == B_mat.rows() * B_mat.cols()) {
             // the case where we flatten X and B and do one solve
             cusolver_cholesky(B_mat.col_data(0, DEVICE),
                               X_mat.col_data(0, DEVICE));
@@ -118,8 +120,8 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                 "CholeskySolver::solve_hl_api() The sparse matrix size ({}, "
                 "{}) does not match with the rhs size ({}, {}) and the unknown "
                 "size ({}, {})",
-                m_mat->rows(),
-                m_mat->cols(),
+                this->m_mat->rows(),
+                this->m_mat->cols(),
                 B_mat.rows(),
                 B_mat.cols(),
                 X_mat.rows(),
@@ -134,10 +136,10 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
     virtual void analyze_pattern()
     {
 
-        CUSOLVER_ERROR(cusolverSpXcsrcholAnalysis(m_cusolver_sphandle,
-                                                  m_mat->rows(),
-                                                  m_mat->non_zeros(),
-                                                  m_descr,
+        CUSOLVER_ERROR(cusolverSpXcsrcholAnalysis(this->m_cusolver_sphandle,
+                                                  this->m_mat->rows(),
+                                                  this->m_mat->non_zeros(),
+                                                  this->m_descr,
                                                   this->m_d_solver_row_ptr,
                                                   this->m_d_solver_col_idx,
                                                   m_chol_info));
@@ -157,55 +159,59 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
 
 
         if constexpr (std::is_same_v<T, float>) {
-            CUSOLVER_ERROR(cusolverSpScsrcholBufferInfo(m_cusolver_sphandle,
-                                                        m_mat->rows(),
-                                                        m_mat->non_zeros(),
-                                                        m_descr,
-                                                        m_d_solver_val,
-                                                        m_d_solver_row_ptr,
-                                                        m_d_solver_col_idx,
-                                                        m_chol_info,
-                                                        &m_internalDataInBytes,
-                                                        &m_workspaceInBytes));
+            CUSOLVER_ERROR(
+                cusolverSpScsrcholBufferInfo(this->m_cusolver_sphandle,
+                                             this->m_mat->rows(),
+                                             this->m_mat->non_zeros(),
+                                             this->m_descr,
+                                             this->m_d_solver_val,
+                                             this->m_d_solver_row_ptr,
+                                             this->m_d_solver_col_idx,
+                                             m_chol_info,
+                                             &m_internalDataInBytes,
+                                             &m_workspaceInBytes));
         }
 
         if constexpr (std::is_same_v<T, cuComplex>) {
-            CUSOLVER_ERROR(cusolverSpCcsrcholBufferInfo(m_cusolver_sphandle,
-                                                        m_mat->rows(),
-                                                        m_mat->non_zeros(),
-                                                        m_descr,
-                                                        m_d_solver_val,
-                                                        m_d_solver_row_ptr,
-                                                        m_d_solver_col_idx,
-                                                        m_chol_info,
-                                                        &m_internalDataInBytes,
-                                                        &m_workspaceInBytes));
+            CUSOLVER_ERROR(
+                cusolverSpCcsrcholBufferInfo(this->m_cusolver_sphandle,
+                                             this->m_mat->rows(),
+                                             this->m_mat->non_zeros(),
+                                             this->m_descr,
+                                             this->m_d_solver_val,
+                                             this->m_d_solver_row_ptr,
+                                             this->m_d_solver_col_idx,
+                                             m_chol_info,
+                                             &m_internalDataInBytes,
+                                             &m_workspaceInBytes));
         }
 
         if constexpr (std::is_same_v<T, double>) {
-            CUSOLVER_ERROR(cusolverSpDcsrcholBufferInfo(m_cusolver_sphandle,
-                                                        m_mat->rows(),
-                                                        m_mat->non_zeros(),
-                                                        m_descr,
-                                                        m_d_solver_val,
-                                                        m_d_solver_row_ptr,
-                                                        m_d_solver_col_idx,
-                                                        m_chol_info,
-                                                        &m_internalDataInBytes,
-                                                        &m_workspaceInBytes));
+            CUSOLVER_ERROR(
+                cusolverSpDcsrcholBufferInfo(this->m_cusolver_sphandle,
+                                             this->m_mat->rows(),
+                                             this->m_mat->non_zeros(),
+                                             this->m_descr,
+                                             this->m_d_solver_val,
+                                             this->m_d_solver_row_ptr,
+                                             this->m_d_solver_col_idx,
+                                             m_chol_info,
+                                             &m_internalDataInBytes,
+                                             &m_workspaceInBytes));
         }
 
         if constexpr (std::is_same_v<T, cuDoubleComplex>) {
-            CUSOLVER_ERROR(cusolverSpZcsrcholBufferInfo(m_cusolver_sphandle,
-                                                        m_mat->rows(),
-                                                        m_mat->non_zeros(),
-                                                        m_descr,
-                                                        m_d_solver_val,
-                                                        m_d_solver_row_ptr,
-                                                        m_d_solver_col_idx,
-                                                        m_chol_info,
-                                                        &m_internalDataInBytes,
-                                                        &m_workspaceInBytes));
+            CUSOLVER_ERROR(
+                cusolverSpZcsrcholBufferInfo(this->m_cusolver_sphandle,
+                                             this->m_mat->rows(),
+                                             this->m_mat->non_zeros(),
+                                             this->m_descr,
+                                             this->m_d_solver_val,
+                                             this->m_d_solver_row_ptr,
+                                             this->m_d_solver_col_idx,
+                                             m_chol_info,
+                                             &m_internalDataInBytes,
+                                             &m_workspaceInBytes));
         }
 
 
@@ -226,47 +232,47 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
         m_first_pre_solve = false;
 
         if constexpr (std::is_same_v<T, float>) {
-            CUSOLVER_ERROR(cusolverSpScsrcholFactor(m_cusolver_sphandle,
-                                                    m_mat->rows(),
-                                                    m_mat->non_zeros(),
-                                                    m_descr,
-                                                    m_d_solver_val,
-                                                    m_d_solver_row_ptr,
-                                                    m_d_solver_col_idx,
+            CUSOLVER_ERROR(cusolverSpScsrcholFactor(this->m_cusolver_sphandle,
+                                                    this->m_mat->rows(),
+                                                    this->m_mat->non_zeros(),
+                                                    this->m_descr,
+                                                    this->m_d_solver_val,
+                                                    this->m_d_solver_row_ptr,
+                                                    this->m_d_solver_col_idx,
                                                     m_chol_info,
                                                     m_solver_buffer));
         }
 
         if constexpr (std::is_same_v<T, cuComplex>) {
-            CUSOLVER_ERROR(cusolverSpCcsrcholFactor(m_cusolver_sphandle,
-                                                    m_mat->rows(),
-                                                    m_mat->non_zeros(),
-                                                    m_descr,
-                                                    m_d_solver_val,
-                                                    m_d_solver_row_ptr,
-                                                    m_d_solver_col_idx,
+            CUSOLVER_ERROR(cusolverSpCcsrcholFactor(this->m_cusolver_sphandle,
+                                                    this->m_mat->rows(),
+                                                    this->m_mat->non_zeros(),
+                                                    this->m_descr,
+                                                    this->m_d_solver_val,
+                                                    this->m_d_solver_row_ptr,
+                                                    this->m_d_solver_col_idx,
                                                     m_chol_info,
                                                     m_solver_buffer));
         }
         if constexpr (std::is_same_v<T, double>) {
-            CUSOLVER_ERROR(cusolverSpDcsrcholFactor(m_cusolver_sphandle,
-                                                    m_mat->rows(),
-                                                    m_mat->non_zeros(),
-                                                    m_descr,
-                                                    m_d_solver_val,
-                                                    m_d_solver_row_ptr,
-                                                    m_d_solver_col_idx,
+            CUSOLVER_ERROR(cusolverSpDcsrcholFactor(this->m_cusolver_sphandle,
+                                                    this->m_mat->rows(),
+                                                    this->m_mat->non_zeros(),
+                                                    this->m_descr,
+                                                    this->m_d_solver_val,
+                                                    this->m_d_solver_row_ptr,
+                                                    this->m_d_solver_col_idx,
                                                     m_chol_info,
                                                     m_solver_buffer));
         }
         if constexpr (std::is_same_v<T, cuDoubleComplex>) {
-            CUSOLVER_ERROR(cusolverSpZcsrcholFactor(m_cusolver_sphandle,
-                                                    m_mat->rows(),
-                                                    m_mat->non_zeros(),
-                                                    m_descr,
-                                                    m_d_solver_val,
-                                                    m_d_solver_row_ptr,
-                                                    m_d_solver_col_idx,
+            CUSOLVER_ERROR(cusolverSpZcsrcholFactor(this->m_cusolver_sphandle,
+                                                    this->m_mat->rows(),
+                                                    this->m_mat->non_zeros(),
+                                                    this->m_descr,
+                                                    this->m_d_solver_val,
+                                                    this->m_d_solver_row_ptr,
+                                                    this->m_d_solver_col_idx,
                                                     m_chol_info,
                                                     m_solver_buffer));
         }
@@ -278,19 +284,19 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
 
         if constexpr (std::is_same_v<T, float>) {
             CUSOLVER_ERROR(cusolverSpScsrcholZeroPivot(
-                m_cusolver_sphandle, m_chol_info, tol, &singularity));
+                this->m_cusolver_sphandle, m_chol_info, tol, &singularity));
         }
         if constexpr (std::is_same_v<T, cuComplex>) {
             CUSOLVER_ERROR(cusolverSpCcsrcholZeroPivot(
-                m_cusolver_sphandle, m_chol_info, tol, &singularity));
+                this->m_cusolver_sphandle, m_chol_info, tol, &singularity));
         }
         if constexpr (std::is_same_v<T, double>) {
             CUSOLVER_ERROR(cusolverSpDcsrcholZeroPivot(
-                m_cusolver_sphandle, m_chol_info, tol, &singularity));
+                this->m_cusolver_sphandle, m_chol_info, tol, &singularity));
         }
         if constexpr (std::is_same_v<T, cuDoubleComplex>) {
             CUSOLVER_ERROR(cusolverSpZcsrcholZeroPivot(
-                m_cusolver_sphandle, m_chol_info, tol, &singularity));
+                this->m_cusolver_sphandle, m_chol_info, tol, &singularity));
         }
 
 
@@ -319,10 +325,12 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
 
         if (this->m_use_permute) {
             // permute b and x
-            d_solver_b = m_d_solver_b;
-            d_solver_x = m_d_solver_x;
-            permute_gather(m_d_permute, d_b, d_solver_b, m_mat->cols());
-            permute_gather(m_d_permute, d_x, d_solver_x, m_mat->cols());
+            d_solver_b = this->m_d_solver_b;
+            d_solver_x = this->m_d_solver_x;
+            this->permute_gather(
+                this->m_d_permute, d_b, d_solver_b, this->m_mat->cols());
+            this->permute_gather(
+                this->m_d_permute, d_x, d_solver_x, this->m_mat->cols());
         } else {
             d_solver_b = d_b;
             d_solver_x = d_x;
@@ -330,8 +338,8 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
 
 
         if constexpr (std::is_same_v<T, float>) {
-            CUSOLVER_ERROR(cusolverSpScsrcholSolve(m_cusolver_sphandle,
-                                                   m_mat->rows(),
+            CUSOLVER_ERROR(cusolverSpScsrcholSolve(this->m_cusolver_sphandle,
+                                                   this->m_mat->rows(),
                                                    d_solver_b,
                                                    d_solver_x,
                                                    m_chol_info,
@@ -339,8 +347,8 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
         }
 
         if constexpr (std::is_same_v<T, cuComplex>) {
-            CUSOLVER_ERROR(cusolverSpCcsrcholSolve(m_cusolver_sphandle,
-                                                   m_mat->rows(),
+            CUSOLVER_ERROR(cusolverSpCcsrcholSolve(this->m_cusolver_sphandle,
+                                                   this->m_mat->rows(),
                                                    d_solver_b,
                                                    d_solver_x,
                                                    m_chol_info,
@@ -348,16 +356,16 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
         }
 
         if constexpr (std::is_same_v<T, double>) {
-            CUSOLVER_ERROR(cusolverSpDcsrcholSolve(m_cusolver_sphandle,
-                                                   m_mat->rows(),
+            CUSOLVER_ERROR(cusolverSpDcsrcholSolve(this->m_cusolver_sphandle,
+                                                   this->m_mat->rows(),
                                                    d_solver_b,
                                                    d_solver_x,
                                                    m_chol_info,
                                                    m_solver_buffer));
         }
         if constexpr (std::is_same_v<T, cuDoubleComplex>) {
-            CUSOLVER_ERROR(cusolverSpZcsrcholSolve(m_cusolver_sphandle,
-                                                   m_mat->rows(),
+            CUSOLVER_ERROR(cusolverSpZcsrcholSolve(this->m_cusolver_sphandle,
+                                                   this->m_mat->rows(),
                                                    d_solver_b,
                                                    d_solver_x,
                                                    m_chol_info,
@@ -366,8 +374,10 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
 
 
         if (this->m_use_permute) {
-            permute_scatter(m_d_permute, d_solver_x, d_x, m_mat->rows());
-            permute_scatter(m_d_permute, d_solver_b, d_b, m_mat->rows());
+            this->permute_scatter(
+                this->m_d_permute, d_solver_x, d_x, this->m_mat->rows());
+            this->permute_scatter(
+                this->m_d_permute, d_solver_b, d_b, this->m_mat->rows());
         }
     }
 
@@ -391,60 +401,60 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
 
 
         if constexpr (std::is_same_v<T, float>) {
-            CUSOLVER_ERROR(cusolverSpScsrlsvchol(m_cusolver_sphandle,
-                                                 m_mat->rows(),
-                                                 m_mat->non_zeros(),
-                                                 m_descr,
-                                                 m_mat->val_ptr(DEVICE),
-                                                 m_mat->row_ptr(DEVICE),
-                                                 m_mat->col_idx(DEVICE),
+            CUSOLVER_ERROR(cusolverSpScsrlsvchol(this->m_cusolver_sphandle,
+                                                 this->m_mat->rows(),
+                                                 this->m_mat->non_zeros(),
+                                                 this->m_descr,
+                                                 this->m_mat->val_ptr(DEVICE),
+                                                 this->m_mat->row_ptr(DEVICE),
+                                                 this->m_mat->col_idx(DEVICE),
                                                  d_b,
                                                  tol,
-                                                 permute_to_int(),
+                                                 this->permute_to_int(),
                                                  d_x,
                                                  &singularity));
         }
 
         if constexpr (std::is_same_v<T, cuComplex>) {
-            CUSOLVER_ERROR(cusolverSpCcsrlsvchol(m_cusolver_sphandle,
-                                                 m_mat->rows(),
-                                                 m_mat->non_zeros(),
-                                                 m_descr,
-                                                 m_mat->val_ptr(DEVICE),
-                                                 m_mat->row_ptr(DEVICE),
-                                                 m_mat->col_idx(DEVICE),
+            CUSOLVER_ERROR(cusolverSpCcsrlsvchol(this->m_cusolver_sphandle,
+                                                 this->m_mat->rows(),
+                                                 this->m_mat->non_zeros(),
+                                                 this->m_descr,
+                                                 this->m_mat->val_ptr(DEVICE),
+                                                 this->m_mat->row_ptr(DEVICE),
+                                                 this->m_mat->col_idx(DEVICE),
                                                  d_b,
                                                  tol,
-                                                 permute_to_int(),
+                                                 this->permute_to_int(),
                                                  d_x,
                                                  &singularity));
         }
 
         if constexpr (std::is_same_v<T, double>) {
-            CUSOLVER_ERROR(cusolverSpDcsrlsvchol(m_cusolver_sphandle,
-                                                 m_mat->rows(),
-                                                 m_mat->non_zeros(),
-                                                 m_descr,
-                                                 m_mat->val_ptr(DEVICE),
-                                                 m_mat->row_ptr(DEVICE),
-                                                 m_mat->col_idx(DEVICE),
+            CUSOLVER_ERROR(cusolverSpDcsrlsvchol(this->m_cusolver_sphandle,
+                                                 this->m_mat->rows(),
+                                                 this->m_mat->non_zeros(),
+                                                 this->m_descr,
+                                                 this->m_mat->val_ptr(DEVICE),
+                                                 this->m_mat->row_ptr(DEVICE),
+                                                 this->m_mat->col_idx(DEVICE),
                                                  d_b,
                                                  tol,
-                                                 permute_to_int(),
+                                                 this->permute_to_int(),
                                                  d_x,
                                                  &singularity));
         }
         if constexpr (std::is_same_v<T, cuDoubleComplex>) {
-            CUSOLVER_ERROR(cusolverSpZcsrlsvchol(m_cusolver_sphandle,
-                                                 m_mat->rows(),
-                                                 m_mat->non_zeros(),
-                                                 m_descr,
-                                                 m_mat->val_ptr(DEVICE),
-                                                 m_mat->row_ptr(DEVICE),
-                                                 m_mat->col_idx(DEVICE),
+            CUSOLVER_ERROR(cusolverSpZcsrlsvchol(this->m_cusolver_sphandle,
+                                                 this->m_mat->rows(),
+                                                 this->m_mat->non_zeros(),
+                                                 this->m_descr,
+                                                 this->m_mat->val_ptr(DEVICE),
+                                                 this->m_mat->row_ptr(DEVICE),
+                                                 this->m_mat->col_idx(DEVICE),
                                                  d_b,
                                                  tol,
-                                                 permute_to_int(),
+                                                 this->permute_to_int(),
                                                  d_x,
                                                  &singularity));
         }

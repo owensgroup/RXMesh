@@ -44,9 +44,9 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
     }
 
 
-    virtual void solve(DenseMatrix<Type, DenseMatOrder>& B_mat,
-                       DenseMatrix<Type, DenseMatOrder>& X_mat,
-                       cudaStream_t                      stream = NULL) override
+    virtual void solve(DenseMatrix<T, DenseMatOrder>& B_mat,
+                       DenseMatrix<T, DenseMatOrder>& X_mat,
+                       cudaStream_t                   stream = NULL) override
     {
         if (m_first_pre_solve) {
             RXMESH_ERROR(
@@ -56,19 +56,20 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
             return;
         }
 
-        CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
+        CUSOLVER_ERROR(cusolverSpSetStream(this->m_cusolver_sphandle, stream));
 
         // TODO this could be handled more cleanly using reshape operator on the
         // user side
 
         // the case where we solve for multiple rhs
-        if (m_mat->cols() == X_mat.rows() && m_mat->rows() == B_mat.rows() &&
+        if (this->m_mat->cols() == X_mat.rows() &&
+            this->m_mat->rows() == B_mat.rows() &&
             X_mat.cols() == B_mat.cols()) {
             for (int i = 0; i < B_mat.cols(); ++i) {
                 solve(B_mat.col_data(i), X_mat.col_data(i));
             }
-        } else if (m_mat->cols() == X_mat.rows() * X_mat.cols() &&
-                   m_mat->rows() == B_mat.rows() * B_mat.cols()) {
+        } else if (this->m_mat->cols() == X_mat.rows() * X_mat.cols() &&
+                   this->m_mat->rows() == B_mat.rows() * B_mat.cols()) {
             // the case where we flatten X and B and do one solve
             solve(B_mat.col_data(0, DEVICE), X_mat.col_data(0, DEVICE));
         } else {
@@ -76,8 +77,8 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
                 "QRSolver::solve() The sparse matrix size ({}, {}) does not "
                 "match with the rhs size ({}, {}) and the unknown size ({}, "
                 "{})",
-                m_mat->rows(),
-                m_mat->cols(),
+                this->m_mat->rows(),
+                this->m_mat->cols(),
                 B_mat.rows(),
                 B_mat.cols(),
                 X_mat.rows(),
@@ -99,18 +100,19 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
                       DenseMatrix<T, DenseMatOrder>&       X_mat,
                       cudaStream_t                         stream = NULL)
     {
-        CUSOLVER_ERROR(cusolverSpSetStream(m_cusolver_sphandle, stream));
+        CUSOLVER_ERROR(cusolverSpSetStream(this->m_cusolver_sphandle, stream));
 
 
         // the case where we solve for multiple rhs
-        if (m_mat->cols() == X_mat.rows() && m_mat->rows() == B_mat.rows() &&
+        if (this->m_mat->cols() == X_mat.rows() &&
+            this->m_mat->rows() == B_mat.rows() &&
             X_mat.cols() == B_mat.cols()) {
             for (int i = 0; i < B_mat.cols(); ++i) {
                 cusolver_qr(B_mat.col_data(i, DEVICE),
                             X_mat.col_data(i, DEVICE));
             }
-        } else if (m_mat->cols() == X_mat.rows() * X_mat.cols() &&
-                   m_mat->rows() == B_mat.rows() * B_mat.cols()) {
+        } else if (this->m_mat->cols() == X_mat.rows() * X_mat.cols() &&
+                   this->m_mat->rows() == B_mat.rows() * B_mat.cols()) {
             // the case where we flatten X and B and do one solve
             cusolver_qr(B_mat.col_data(0, DEVICE), X_mat.col_data(0, DEVICE));
         } else {
@@ -118,8 +120,8 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
                 "QRSolver::solve_hl_api() The sparse matrix size ({}, {}) does "
                 "not match with the rhs size ({}, {}) and the unknown size "
                 "({}, {})",
-                m_mat->rows(),
-                m_mat->cols(),
+                this->m_mat->rows(),
+                this->m_mat->cols(),
                 B_mat.rows(),
                 B_mat.cols(),
                 X_mat.rows(),
@@ -133,11 +135,11 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
      */
     virtual void analyze_pattern()
     {
-        CUSOLVER_ERROR(cusolverSpXcsrqrAnalysis(m_cusolver_sphandle,
-                                                m_mat->rows(),
-                                                m_mat->cols(),
-                                                m_mat->non_zeros(),
-                                                m_descr,
+        CUSOLVER_ERROR(cusolverSpXcsrqrAnalysis(this->m_cusolver_sphandle,
+                                                this->m_mat->rows(),
+                                                this->m_mat->cols(),
+                                                this->m_mat->non_zeros(),
+                                                this->m_descr,
                                                 this->m_d_solver_row_ptr,
                                                 this->m_d_solver_col_idx,
                                                 m_qr_info));
@@ -158,104 +160,104 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
 
         if constexpr (std::is_same_v<T, float>) {
             float mu = 0.f;
-            CUSOLVER_ERROR(cusolverSpScsrqrBufferInfo(m_cusolver_sphandle,
-                                                      m_mat->rows(),
-                                                      m_mat->cols(),
-                                                      m_mat->non_zeros(),
-                                                      m_descr,
-                                                      m_d_solver_val,
-                                                      m_d_solver_row_ptr,
-                                                      m_d_solver_col_idx,
+            CUSOLVER_ERROR(cusolverSpScsrqrBufferInfo(this->m_cusolver_sphandle,
+                                                      this->m_mat->rows(),
+                                                      this->m_mat->cols(),
+                                                      this->m_mat->non_zeros(),
+                                                      this->m_descr,
+                                                      this->m_d_solver_val,
+                                                      this->m_d_solver_row_ptr,
+                                                      this->m_d_solver_col_idx,
                                                       m_qr_info,
                                                       &m_internalDataInBytes,
                                                       &m_workspaceInBytes));
 
-            CUSOLVER_ERROR(cusolverSpScsrqrSetup(m_cusolver_sphandle,
-                                                 m_mat->rows(),
-                                                 m_mat->cols(),
-                                                 m_mat->non_zeros(),
-                                                 m_descr,
-                                                 m_d_solver_val,
-                                                 m_d_solver_row_ptr,
-                                                 m_d_solver_col_idx,
+            CUSOLVER_ERROR(cusolverSpScsrqrSetup(this->m_cusolver_sphandle,
+                                                 this->m_mat->rows(),
+                                                 this->m_mat->cols(),
+                                                 this->m_mat->non_zeros(),
+                                                 this->m_descr,
+                                                 this->m_d_solver_val,
+                                                 this->m_d_solver_row_ptr,
+                                                 this->m_d_solver_col_idx,
                                                  mu,
                                                  m_qr_info));
         }
 
         if constexpr (std::is_same_v<T, cuComplex>) {
             cuComplex mu = make_cuComplex(0.f, 0.f);
-            CUSOLVER_ERROR(cusolverSpCcsrqrBufferInfo(m_cusolver_sphandle,
-                                                      m_mat->rows(),
-                                                      m_mat->cols(),
-                                                      m_mat->non_zeros(),
-                                                      m_descr,
-                                                      m_d_solver_val,
-                                                      m_d_solver_row_ptr,
-                                                      m_d_solver_col_idx,
+            CUSOLVER_ERROR(cusolverSpCcsrqrBufferInfo(this->m_cusolver_sphandle,
+                                                      this->m_mat->rows(),
+                                                      this->m_mat->cols(),
+                                                      this->m_mat->non_zeros(),
+                                                      this->m_descr,
+                                                      this->m_d_solver_val,
+                                                      this->m_d_solver_row_ptr,
+                                                      this->m_d_solver_col_idx,
                                                       m_qr_info,
                                                       &m_internalDataInBytes,
                                                       &m_workspaceInBytes));
 
-            CUSOLVER_ERROR(cusolverSpCcsrqrSetup(m_cusolver_sphandle,
-                                                 m_mat->rows(),
-                                                 m_mat->cols(),
-                                                 m_mat->non_zeros(),
-                                                 m_descr,
-                                                 m_d_solver_val,
-                                                 m_d_solver_row_ptr,
-                                                 m_d_solver_col_idx,
+            CUSOLVER_ERROR(cusolverSpCcsrqrSetup(this->m_cusolver_sphandle,
+                                                 this->m_mat->rows(),
+                                                 this->m_mat->cols(),
+                                                 this->m_mat->non_zeros(),
+                                                 this->m_descr,
+                                                 this->m_d_solver_val,
+                                                 this->m_d_solver_row_ptr,
+                                                 this->m_d_solver_col_idx,
                                                  mu,
                                                  m_qr_info));
         }
 
         if constexpr (std::is_same_v<T, double>) {
             double mu = 0.f;
-            CUSOLVER_ERROR(cusolverSpDcsrqrBufferInfo(m_cusolver_sphandle,
-                                                      m_mat->rows(),
-                                                      m_mat->cols(),
-                                                      m_mat->non_zeros(),
-                                                      m_descr,
-                                                      m_d_solver_val,
-                                                      m_d_solver_row_ptr,
-                                                      m_d_solver_col_idx,
+            CUSOLVER_ERROR(cusolverSpDcsrqrBufferInfo(this->m_cusolver_sphandle,
+                                                      this->m_mat->rows(),
+                                                      this->m_mat->cols(),
+                                                      this->m_mat->non_zeros(),
+                                                      this->m_descr,
+                                                      this->m_d_solver_val,
+                                                      this->m_d_solver_row_ptr,
+                                                      this->m_d_solver_col_idx,
                                                       m_qr_info,
                                                       &m_internalDataInBytes,
                                                       &m_workspaceInBytes));
 
-            CUSOLVER_ERROR(cusolverSpDcsrqrSetup(m_cusolver_sphandle,
-                                                 m_mat->rows(),
-                                                 m_mat->cols(),
-                                                 m_mat->non_zeros(),
-                                                 m_descr,
-                                                 m_d_solver_val,
-                                                 m_d_solver_row_ptr,
-                                                 m_d_solver_col_idx,
+            CUSOLVER_ERROR(cusolverSpDcsrqrSetup(this->m_cusolver_sphandle,
+                                                 this->m_mat->rows(),
+                                                 this->m_mat->cols(),
+                                                 this->m_mat->non_zeros(),
+                                                 this->m_descr,
+                                                 this->m_d_solver_val,
+                                                 this->m_d_solver_row_ptr,
+                                                 this->m_d_solver_col_idx,
                                                  mu,
                                                  m_qr_info));
         }
 
         if constexpr (std::is_same_v<T, cuDoubleComplex>) {
             cuDoubleComplex mu = make_cuDoubleComplex(0.0, 0.0);
-            CUSOLVER_ERROR(cusolverSpZcsrqrBufferInfo(m_cusolver_sphandle,
-                                                      m_mat->rows(),
-                                                      m_mat->cols(),
-                                                      m_mat->non_zeros(),
-                                                      m_descr,
-                                                      m_d_solver_val,
-                                                      m_d_solver_row_ptr,
-                                                      m_d_solver_col_idx,
+            CUSOLVER_ERROR(cusolverSpZcsrqrBufferInfo(this->m_cusolver_sphandle,
+                                                      this->m_mat->rows(),
+                                                      this->m_mat->cols(),
+                                                      this->m_mat->non_zeros(),
+                                                      this->m_descr,
+                                                      this->m_d_solver_val,
+                                                      this->m_d_solver_row_ptr,
+                                                      this->m_d_solver_col_idx,
                                                       m_qr_info,
                                                       &m_internalDataInBytes,
                                                       &m_workspaceInBytes));
 
-            CUSOLVER_ERROR(cusolverSpZcsrqrSetup(m_cusolver_sphandle,
-                                                 m_mat->rows(),
-                                                 m_mat->cols(),
-                                                 m_mat->non_zeros(),
-                                                 m_descr,
-                                                 m_d_solver_val,
-                                                 m_d_solver_row_ptr,
-                                                 m_d_solver_col_idx,
+            CUSOLVER_ERROR(cusolverSpZcsrqrSetup(this->m_cusolver_sphandle,
+                                                 this->m_mat->rows(),
+                                                 this->m_mat->cols(),
+                                                 this->m_mat->non_zeros(),
+                                                 this->m_descr,
+                                                 this->m_d_solver_val,
+                                                 this->m_d_solver_row_ptr,
+                                                 this->m_d_solver_col_idx,
                                                  mu,
                                                  m_qr_info));
         }
@@ -278,10 +280,10 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
         m_first_pre_solve = false;
 
         if constexpr (std::is_same_v<T, float>) {
-            CUSOLVER_ERROR(cusolverSpScsrqrFactor(m_cusolver_sphandle,
-                                                  m_mat->rows(),
-                                                  m_mat->cols(),
-                                                  m_mat->non_zeros(),
+            CUSOLVER_ERROR(cusolverSpScsrqrFactor(this->m_cusolver_sphandle,
+                                                  this->m_mat->rows(),
+                                                  this->m_mat->cols(),
+                                                  this->m_mat->non_zeros(),
                                                   nullptr,
                                                   nullptr,
                                                   m_qr_info,
@@ -289,30 +291,30 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
         }
 
         if constexpr (std::is_same_v<T, cuComplex>) {
-            CUSOLVER_ERROR(cusolverSpCcsrqrFactor(m_cusolver_sphandle,
-                                                  m_mat->rows(),
-                                                  m_mat->cols(),
-                                                  m_mat->non_zeros(),
+            CUSOLVER_ERROR(cusolverSpCcsrqrFactor(this->m_cusolver_sphandle,
+                                                  this->m_mat->rows(),
+                                                  this->m_mat->cols(),
+                                                  this->m_mat->non_zeros(),
                                                   nullptr,
                                                   nullptr,
                                                   m_qr_info,
                                                   m_solver_buffer));
         }
         if constexpr (std::is_same_v<T, double>) {
-            CUSOLVER_ERROR(cusolverSpDcsrqrFactor(m_cusolver_sphandle,
-                                                  m_mat->rows(),
-                                                  m_mat->cols(),
-                                                  m_mat->non_zeros(),
+            CUSOLVER_ERROR(cusolverSpDcsrqrFactor(this->m_cusolver_sphandle,
+                                                  this->m_mat->rows(),
+                                                  this->m_mat->cols(),
+                                                  this->m_mat->non_zeros(),
                                                   nullptr,
                                                   nullptr,
                                                   m_qr_info,
                                                   m_solver_buffer));
         }
         if constexpr (std::is_same_v<T, cuDoubleComplex>) {
-            CUSOLVER_ERROR(cusolverSpZcsrqrFactor(m_cusolver_sphandle,
-                                                  m_mat->rows(),
-                                                  m_mat->cols(),
-                                                  m_mat->non_zeros(),
+            CUSOLVER_ERROR(cusolverSpZcsrqrFactor(this->m_cusolver_sphandle,
+                                                  this->m_mat->rows(),
+                                                  this->m_mat->cols(),
+                                                  this->m_mat->non_zeros(),
                                                   nullptr,
                                                   nullptr,
                                                   m_qr_info,
@@ -326,19 +328,19 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
 
         if constexpr (std::is_same_v<T, float>) {
             CUSOLVER_ERROR(cusolverSpScsrqrZeroPivot(
-                m_cusolver_sphandle, m_qr_info, tol, &singularity));
+                this->m_cusolver_sphandle, m_qr_info, tol, &singularity));
         }
         if constexpr (std::is_same_v<T, cuComplex>) {
             CUSOLVER_ERROR(cusolverSpCcsrqrZeroPivot(
-                m_cusolver_sphandle, m_qr_info, tol, &singularity));
+                this->m_cusolver_sphandle, m_qr_info, tol, &singularity));
         }
         if constexpr (std::is_same_v<T, double>) {
             CUSOLVER_ERROR(cusolverSpDcsrqrZeroPivot(
-                m_cusolver_sphandle, m_qr_info, tol, &singularity));
+                this->m_cusolver_sphandle, m_qr_info, tol, &singularity));
         }
         if constexpr (std::is_same_v<T, cuDoubleComplex>) {
             CUSOLVER_ERROR(cusolverSpZcsrqrZeroPivot(
-                m_cusolver_sphandle, m_qr_info, tol, &singularity));
+                this->m_cusolver_sphandle, m_qr_info, tol, &singularity));
         }
 
 
@@ -367,10 +369,12 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
 
         if (this->m_use_permute) {
             // permute b and x
-            d_solver_b = m_d_solver_b;
-            d_solver_x = m_d_solver_x;
-            permute_gather(m_d_permute, d_b, d_solver_b, m_mat->cols());
-            permute_gather(m_d_permute, d_x, d_solver_x, m_mat->cols());
+            d_solver_b = this->m_d_solver_b;
+            d_solver_x = this->m_d_solver_x;
+            this->permute_gather(
+                this->m_d_permute, d_b, d_solver_b, this->m_mat->cols());
+            this->permute_gather(
+                this->m_d_permute, d_x, d_solver_x, this->m_mat->cols());
         } else {
             d_solver_b = d_b;
             d_solver_x = d_x;
@@ -378,9 +382,9 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
 
 
         if constexpr (std::is_same_v<T, float>) {
-            CUSOLVER_ERROR(cusolverSpScsrqrSolve(m_cusolver_sphandle,
-                                                 m_mat->rows(),
-                                                 m_mat->cols(),
+            CUSOLVER_ERROR(cusolverSpScsrqrSolve(this->m_cusolver_sphandle,
+                                                 this->m_mat->rows(),
+                                                 this->m_mat->cols(),
                                                  d_solver_b,
                                                  d_solver_x,
                                                  m_qr_info,
@@ -388,9 +392,9 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
         }
 
         if constexpr (std::is_same_v<T, cuComplex>) {
-            CUSOLVER_ERROR(cusolverSpCcsrqrSolve(m_cusolver_sphandle,
-                                                 m_mat->rows(),
-                                                 m_mat->cols(),
+            CUSOLVER_ERROR(cusolverSpCcsrqrSolve(this->m_cusolver_sphandle,
+                                                 this->m_mat->rows(),
+                                                 this->m_mat->cols(),
                                                  d_solver_b,
                                                  d_solver_x,
                                                  m_qr_info,
@@ -398,18 +402,18 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
         }
 
         if constexpr (std::is_same_v<T, double>) {
-            CUSOLVER_ERROR(cusolverSpDcsrqrSolve(m_cusolver_sphandle,
-                                                 m_mat->rows(),
-                                                 m_mat->cols(),
+            CUSOLVER_ERROR(cusolverSpDcsrqrSolve(this->m_cusolver_sphandle,
+                                                 this->m_mat->rows(),
+                                                 this->m_mat->cols(),
                                                  d_solver_b,
                                                  d_solver_x,
                                                  m_qr_info,
                                                  m_solver_buffer));
         }
         if constexpr (std::is_same_v<T, cuDoubleComplex>) {
-            CUSOLVER_ERROR(cusolverSpZcsrqrSolve(m_cusolver_sphandle,
-                                                 m_mat->rows(),
-                                                 m_mat->cols(),
+            CUSOLVER_ERROR(cusolverSpZcsrqrSolve(this->m_cusolver_sphandle,
+                                                 this->m_mat->rows(),
+                                                 this->m_mat->cols(),
                                                  d_solver_b,
                                                  d_solver_x,
                                                  m_qr_info,
@@ -417,7 +421,8 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
         }
 
         if (this->m_use_permute) {
-            permute_scatter(m_d_permute, d_solver_x, d_x, m_mat->cols());
+            this->permute_scatter(
+                this->m_d_permute, d_solver_x, d_x, this->m_mat->cols());
         }
     }
 
@@ -437,60 +442,60 @@ struct QRSolver : public DirectSolver<SpMatT, DenseMatOrder>
 
 
         if constexpr (std::is_same_v<T, float>) {
-            CUSOLVER_ERROR(cusolverSpScsrlsvqr(m_cusolver_sphandle,
-                                               m_mat->rows(),
-                                               m_mat->non_zeros(),
-                                               m_descr,
-                                               m_mat->val_ptr(DEVICE),
-                                               m_mat->row_ptr(DEVICE),
-                                               m_mat->col_idx(DEVICE),
+            CUSOLVER_ERROR(cusolverSpScsrlsvqr(this->m_cusolver_sphandle,
+                                               this->m_mat->rows(),
+                                               this->m_mat->non_zeros(),
+                                               this->m_descr,
+                                               this->m_mat->val_ptr(DEVICE),
+                                               this->m_mat->row_ptr(DEVICE),
+                                               this->m_mat->col_idx(DEVICE),
                                                d_b,
                                                tol,
-                                               permute_to_int(),
+                                               this->permute_to_int(),
                                                d_x,
                                                &singularity));
         }
 
         if constexpr (std::is_same_v<T, cuComplex>) {
-            CUSOLVER_ERROR(cusolverSpCcsrlsvqr(m_cusolver_sphandle,
-                                               m_mat->rows(),
-                                               m_mat->non_zeros(),
-                                               m_descr,
-                                               m_mat->val_ptr(DEVICE),
-                                               m_mat->row_ptr(DEVICE),
-                                               m_mat->col_idx(DEVICE),
+            CUSOLVER_ERROR(cusolverSpCcsrlsvqr(this->m_cusolver_sphandle,
+                                               this->m_mat->rows(),
+                                               this->m_mat->non_zeros(),
+                                               this->m_descr,
+                                               this->m_mat->val_ptr(DEVICE),
+                                               this->m_mat->row_ptr(DEVICE),
+                                               this->m_mat->col_idx(DEVICE),
                                                d_b,
                                                tol,
-                                               permute_to_int(),
+                                               this->permute_to_int(),
                                                d_x,
                                                &singularity));
         }
 
         if constexpr (std::is_same_v<T, double>) {
-            CUSOLVER_ERROR(cusolverSpDcsrlsvqr(m_cusolver_sphandle,
-                                               m_mat->rows(),
-                                               m_mat->non_zeros(),
-                                               m_descr,
-                                               m_mat->val_ptr(DEVICE),
-                                               m_mat->row_ptr(DEVICE),
-                                               m_mat->col_idx(DEVICE),
+            CUSOLVER_ERROR(cusolverSpDcsrlsvqr(this->m_cusolver_sphandle,
+                                               this->m_mat->rows(),
+                                               this->m_mat->non_zeros(),
+                                               this->m_descr,
+                                               this->m_mat->val_ptr(DEVICE),
+                                               this->m_mat->row_ptr(DEVICE),
+                                               this->m_mat->col_idx(DEVICE),
                                                d_b,
                                                tol,
-                                               permute_to_int(),
+                                               this->permute_to_int(),
                                                d_x,
                                                &singularity));
         }
         if constexpr (std::is_same_v<T, cuDoubleComplex>) {
-            CUSOLVER_ERROR(cusolverSpZcsrlsvqr(m_cusolver_sphandle,
-                                               m_mat->rows(),
-                                               m_mat->non_zeros(),
-                                               m_descr,
-                                               m_mat->val_ptr(DEVICE),
-                                               m_mat->row_ptr(DEVICE),
-                                               m_mat->col_idx(DEVICE),
+            CUSOLVER_ERROR(cusolverSpZcsrlsvqr(this->m_cusolver_sphandle,
+                                               this->m_mat->rows(),
+                                               this->m_mat->non_zeros(),
+                                               this->m_descr,
+                                               this->m_mat->val_ptr(DEVICE),
+                                               this->m_mat->row_ptr(DEVICE),
+                                               this->m_mat->col_idx(DEVICE),
                                                d_b,
                                                tol,
-                                               permute_to_int(),
+                                               this->permute_to_int(),
                                                d_x,
                                                &singularity));
         }

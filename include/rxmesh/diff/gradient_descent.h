@@ -27,7 +27,7 @@ struct GradientDescent
         auto&  obj  = *(problem.objective);
         double lr   = m_learning_rate;
 
-        problem.rx.for_each<ObjHandleT>(
+        problem.rx.template for_each<ObjHandleT>(
             DEVICE, [grad, obj, lr] __device__(const ObjHandleT& h) {
                 for (int i = 0; i < VariableDim; ++i) {
                     obj(h, i) -= lr * grad(h, i);
