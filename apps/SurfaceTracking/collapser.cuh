@@ -2,7 +2,7 @@
 
 #include <Eigen/Dense>
 
-#include "rxmesh/cavity_manager2.cuh"
+#include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/query.cuh"
 
 #include "rxmesh/geometry_util.cuh"
@@ -26,7 +26,7 @@ edge_collapse(rxmesh::Context                   context,
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CavityManager2<blockThreads, CavityOp::EV> cavity(
+    CavityManager<blockThreads, CavityOp::EV> cavity(
         block, context, shrd_alloc, true);
 
     const uint32_t pid = cavity.patch_id();

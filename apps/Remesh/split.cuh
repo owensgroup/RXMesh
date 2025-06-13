@@ -2,7 +2,6 @@
 #include <cuda_profiler_api.h>
 
 #include "rxmesh/cavity_manager.cuh"
-#include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
 #include "util.cuh"
@@ -24,7 +23,7 @@ __global__ static void edge_split(rxmesh::Context                   context,
 
     ShmemAllocator shrd_alloc;
 
-    CavityManager2<blockThreads, CavityOp::E> cavity(
+    CavityManager<blockThreads, CavityOp::E> cavity(
         block, context, shrd_alloc, true);
 
 

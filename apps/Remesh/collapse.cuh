@@ -2,7 +2,6 @@
 #include <cuda_profiler_api.h>
 
 #include "rxmesh/cavity_manager.cuh"
-#include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
 #include "util.cuh"
@@ -20,7 +19,7 @@ __global__ static void __launch_bounds__(blockThreads)
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CavityManager2<blockThreads, CavityOp::EV> cavity(
+    CavityManager<blockThreads, CavityOp::EV> cavity(
         block, context, shrd_alloc, true);
 
     const uint32_t pid = cavity.patch_id();
@@ -241,7 +240,7 @@ __global__ static void __launch_bounds__(blockThreads)
     using namespace rxmesh;
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
-    CavityManager2<blockThreads, CavityOp::EV> cavity(
+    CavityManager<blockThreads, CavityOp::EV> cavity(
         block, context, shrd_alloc, true);
 
     const uint32_t pid = cavity.patch_id();

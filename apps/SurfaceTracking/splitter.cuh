@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rxmesh/cavity_manager2.cuh"
+#include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/query.cuh"
 
 enum class EdgeSplitPredicate
@@ -29,7 +29,7 @@ split_edges(rxmesh::Context                   context,
 
     ShmemAllocator shrd_alloc;
 
-    CavityManager2<blockThreads, CavityOp::E> cavity(
+    CavityManager<blockThreads, CavityOp::E> cavity(
         block, context, shrd_alloc, true);
 
 

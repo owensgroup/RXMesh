@@ -1,5 +1,4 @@
 #pragma once
-#include "rxmesh/cavity_manager.cuh"
 
 /**
  * @brief Check for link condition (used for edge collapse and edge flip) or

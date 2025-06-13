@@ -60,7 +60,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         RXMESH_INFO("full gmg operator construction took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
-        gmg_memory_alloc_time = m_gmg.memory_alloc_time;
+        //gmg_memory_alloc_time = m_gmg.memory_alloc_time;
         m_num_levels = m_gmg.m_num_levels;
         if (m_num_levels == 1) {
 
@@ -77,7 +77,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                                   m_coarse_solver,
                                   m_num_pre_relax,
                                   m_num_post_relax);
-            v_cycle_memory_alloc_time = m_v_cycle.memory_alloc_time;
+            //v_cycle_memory_alloc_time = m_v_cycle.memory_alloc_time;
 
             timer.stop();
             gtimer.stop();

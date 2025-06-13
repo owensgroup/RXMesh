@@ -1,7 +1,7 @@
 #include <assert.h>
 #include "gtest/gtest.h"
 
-#include "rxmesh/cavity_manager2.cuh"
+#include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/kernels/for_each.cuh"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
@@ -34,7 +34,7 @@ __global__ static void random_flips(rxmesh::Context                context,
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
 
-    CavityManager2<blockThreads, CavityOp::E> cavity(
+    CavityManager<blockThreads, CavityOp::E> cavity(
         block, context, shrd_alloc, false);
 
 
@@ -104,7 +104,7 @@ __global__ static void random_collapses(rxmesh::Context                context,
     auto           block = cooperative_groups::this_thread_block();
     ShmemAllocator shrd_alloc;
 
-    CavityManager2<blockThreads, CavityOp::EV> cavity(
+    CavityManager<blockThreads, CavityOp::EV> cavity(
         block, context, shrd_alloc, true);
 
 

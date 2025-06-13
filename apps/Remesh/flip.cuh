@@ -2,7 +2,6 @@
 #include <cuda_profiler_api.h>
 
 #include "rxmesh/cavity_manager.cuh"
-#include "rxmesh/cavity_manager2.cuh"
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 
@@ -44,7 +43,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
     ShmemAllocator shrd_alloc;
 
-    CavityManager2<blockThreads, CavityOp::E> cavity(
+    CavityManager<blockThreads, CavityOp::E> cavity(
         block, context, shrd_alloc, false, false);
 
 
@@ -194,7 +193,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
     ShmemAllocator shrd_alloc;
 
-    CavityManager2<blockThreads, CavityOp::E> cavity(
+    CavityManager<blockThreads, CavityOp::E> cavity(
         block, context, shrd_alloc, false, false);
 
 

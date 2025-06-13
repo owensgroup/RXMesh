@@ -2,7 +2,7 @@
 
 #include <Eigen/Dense>
 
-#include "rxmesh/cavity_manager2.cuh"
+#include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/query.cuh"
 
 #include "link_condition.cuh"
@@ -121,7 +121,7 @@ edge_flip(rxmesh::Context                   context,
 
     ShmemAllocator shrd_alloc;
 
-    CavityManager2<blockThreads, CavityOp::E> cavity(
+    CavityManager<blockThreads, CavityOp::E> cavity(
         block, context, shrd_alloc, true, false);
 
 

@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 
 
-#include "rxmesh/cavity_manager2.cuh"
+#include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/rxmesh_dynamic.h"
 #include "rxmesh/util/report.h"
 
@@ -79,7 +79,7 @@ __global__ static void measure_wasted_work_kernel(rxmesh::Context context,
 
         ShmemAllocator shrd_alloc;
 
-        CavityManager2<blockThreads, CavityOp::E> cavity(
+        CavityManager<blockThreads, CavityOp::E> cavity(
             block, context, shrd_alloc, false);
 
         for_each_edge(cavity.patch_info(),
