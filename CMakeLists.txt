@@ -69,7 +69,7 @@ add_subdirectory(${glm_SOURCE_DIR} ${glm_BINARY_DIR})
 if(${RX_USE_POLYSCOPE})
 FetchContent_Declare(polyscope
     GIT_REPOSITORY https://github.com/Ahdhn/polyscope.git
-    GIT_TAG        6ec777513d802654801fe77e6c3a54fb9dbb6b1f
+    GIT_TAG        30f3995f51a895f0113d3580a889077bdb846e7a
 )
 FetchContent_MakeAvailable(polyscope)
 endif()
