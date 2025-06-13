@@ -126,8 +126,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
             // R = AX - B_i => using axpy: R = AX + (-1) * B_i
             R.copy_from(AX, DEVICE, DEVICE);
 
-
-            R.axpy(B.col(i), T(-1));  // R = AX - B_i
+            auto col_i = B.col(i);
+            R.axpy(col_i, T(-1));  // R = AX - B_i
 
             // Compute norm of R and B
             T r_norm = R.norm2();

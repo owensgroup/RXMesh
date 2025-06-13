@@ -41,81 +41,85 @@ struct PCGMatFreeAttrSolver : public CGMatFreeAttrSolver<T, HandleT>
                            AttributeT&       X,
                            cudaStream_t      stream = NULL) override
     {
-        S.reset(0.0, rxmesh::DEVICE, stream);
-        P.reset(0.0, rxmesh::DEVICE, stream);
-        R.reset(0.0, rxmesh::DEVICE, stream);
+        this->S.reset(0.0, rxmesh::DEVICE, stream);
+        this->P.reset(0.0, rxmesh::DEVICE, stream);
+        this->R.reset(0.0, rxmesh::DEVICE, stream);
 
         // init S
         // S = Ax
-        m_mat_vec(X, S, stream);
+        this->m_mat_vec(X, this->S, stream);
 
         // init R
         // R = B - S
-        init_R(B, S, R, stream);
+        init_R(B, this->S, this->R, stream);
 
         // init P
         // P = inv(M) * R
-        m_precond_mat_vec(R, P, stream);
+        m_precond_mat_vec(this->R, this->P, stream);
 
 
-        delta_new = std::abs(reduce_handle.dot(R, P, INVALID32, stream));
+        this->delta_new = std::abs(
+            this->reduce_handle.dot(this->R, this->P, INVALID32, stream));
     }
 
     virtual void solve(const AttributeT& B,
                        AttributeT&       X,
                        cudaStream_t      stream = NULL) override
     {
-        m_start_residual = delta_new;
+        this->m_start_residual = this->delta_new;
 
-        m_iter_taken = 0;
+        this->m_iter_taken = 0;
 
-        while (m_iter_taken < m_max_iter) {
+        while (this->m_iter_taken < this->m_max_iter) {
             // s = Ap
-            m_mat_vec(P, S, stream);
+            this->m_mat_vec(this->P, this->S, stream);
 
             // alpha = delta_new / <S,P>
-            alpha = reduce_handle.dot(S, P, INVALID32, stream);
-            alpha = delta_new / alpha;
+            this->alpha =
+                this->reduce_handle.dot(this->S, this->P, INVALID32, stream);
+            this->alpha = this->delta_new / this->alpha;
 
             // X =  alpha*P + X
-            axpy(X, P, alpha, T(1.), stream);
+            this->axpy(X, this->P, this->alpha, T(1.), stream);
 
             // reset residual
-            if (m_iter_taken > 0 && m_iter_taken % m_reset_residual_freq == 0) {
+            if (this->m_iter_taken > 0 &&
+                this->m_iter_taken % this->m_reset_residual_freq == 0) {
                 // s= Ax
-                m_mat_vec(X, S, stream);
+                this->m_mat_vec(X, this->S, stream);
                 // r = b-s
-                subtract(R, B, S, stream);
+                this->subtract(this->R, B, this->S, stream);
             } else {
                 // r = - alpha*s + r
-                axpy(R, S, -alpha, T(1.), stream);
+                this->axpy(this->R, this->S, -this->alpha, T(1.), stream);
             }
 
             // S = inv(M) *R
-            m_precond_mat_vec(R, S, stream);
+            m_precond_mat_vec(this->R, this->S, stream);
 
             // delta_old = delta_new
             CUDA_ERROR(cudaStreamSynchronize(stream));
-            delta_old = delta_new;
+            this->delta_old = this->delta_new;
 
             // delta_new = <r,s>
-            delta_new = reduce_handle.dot(R, S, INVALID32, stream);
+            this->delta_new =
+                this->reduce_handle.dot(this->R, this->S, INVALID32, stream);
 
             // exit if error is getting too low across three coordinates
-            if (is_converged(m_start_residual, delta_new)) {
-                m_final_residual = delta_new;
+            if (this->is_converged(this->m_start_residual, this->delta_new)) {
+                this->m_final_residual = this->delta_new;
                 return;
             }
 
             // beta = delta_new/delta_old
-            beta = delta_new / delta_old;
+            this->beta = this->delta_new / this->delta_old;
 
             // p = beta*p + s
-            axpy(P, S, T(1.), beta, stream);
+            this->axpy(this->P, this->S, T(1.), this->beta, stream);
 
-            m_iter_taken++;
+            this->m_iter_taken++;
         }
-        m_final_residual = delta_new;
+        this->m_final_residual = this->delta_new;
     }
 
     virtual std::string name() override
@@ -138,7 +142,7 @@ struct PCGMatFreeAttrSolver : public CGMatFreeAttrSolver<T, HandleT>
     {
         int num_attr = R.get_num_attributes();
 
-        m_rx->for_each<HandleT>(
+        this->m_rx->template for_each<HandleT>(
             DEVICE,
             [B, S, R, num_attr] __device__(const HandleT vh) mutable {
                 for (int i = 0; i < num_attr; ++i) {
