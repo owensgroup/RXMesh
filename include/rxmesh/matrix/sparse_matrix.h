@@ -14,7 +14,7 @@
 namespace rxmesh {
 
 /**
- * @brief Sparse matrix that represent the VV connectivity, i.e., it
+ * @brief Sparse matrix that represent the mesh connectivity, e.g., for VV, it
  * is a square matrix with number of rows/cols is equal to number of vertices
  * and there is non-zero values at entry (i,j) only if the vertex i is connected
  * to vertex j. The sparse matrix is stored as a CSR matrix. The matrix is
@@ -56,6 +56,9 @@ struct SparseMatrix
     {
     }
 
+    /**
+     * @brief Constructor using specific mesh query
+     */
     SparseMatrix(const RXMeshStatic& rx, Op op = Op::VV)
         : SparseMatrix(rx, op, 1) {};
 

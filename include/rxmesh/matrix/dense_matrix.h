@@ -47,6 +47,12 @@ struct DenseMatrix
     }
 
 
+    /**
+     * @brief Allocating a dense matrix with a size tied to the number of
+     * elements in the mesh, i.e., num_rows should be either the number
+     * of vertices, edges, or faces. With constructor, the user can access
+     * the matrix using mesh handles
+     */
     DenseMatrix(const RXMesh& rx,
                 IndexT        num_rows,
                 IndexT        num_cols,
@@ -64,6 +70,11 @@ struct DenseMatrix
         init_cublas();
     }
 
+    /**
+     * @brief Allocate a dense matrix that is not necessarily tied to the mesh.
+     * So the size (num_rows) can be anything. However, using this constructor
+     * means that you can not access the matrix using handles
+     */
     DenseMatrix(IndexT    num_rows,
                 IndexT    num_cols,
                 locationT location = LOCATION_ALL)
