@@ -42,9 +42,9 @@ void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
 
 template <typename T, typename EigeMatT>
-void with_metis(rxmesh::RXMeshStatic&           rx,
+void with_metis(rxmesh::RXMeshStatic&          rx,
                 const rxmesh::SparseMatrix<T>& rx_mat,
-                const EigeMatT&                 eigen_mat)
+                const EigeMatT&                eigen_mat)
 {
     EXPECT_TRUE(rx_mat.rows() == eigen_mat.rows());
     EXPECT_TRUE(rx_mat.cols() == eigen_mat.cols());
@@ -133,7 +133,7 @@ void with_metis(rxmesh::RXMeshStatic&           rx,
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
-    render_permutation(rx, h_permute, "METIS");
+    render_permutation(rx, h_iperm, "METIS");
 
     int nnz = count_nnz_fillin(eigen_mat, h_iperm, "metis");
 
@@ -183,9 +183,9 @@ void with_gpu_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 }
 
 template <typename T, typename EigeMatT>
-void with_amd(rxmesh::RXMeshStatic&     rx,
+void with_amd(rxmesh::RXMeshStatic&    rx,
               rxmesh::SparseMatrix<T>& rx_mat,
-              const EigeMatT&           eigen_mat)
+              const EigeMatT&          eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
@@ -216,9 +216,9 @@ void with_amd(rxmesh::RXMeshStatic&     rx,
 }
 
 template <typename T, typename EigeMatT>
-void with_symrcm(rxmesh::RXMeshStatic&     rx,
+void with_symrcm(rxmesh::RXMeshStatic&    rx,
                  rxmesh::SparseMatrix<T>& rx_mat,
-                 const EigeMatT&           eigen_mat)
+                 const EigeMatT&          eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
@@ -239,7 +239,7 @@ void with_symrcm(rxmesh::RXMeshStatic&     rx,
     rxmesh::inverse_permutation(
         rx.get_num_vertices(), h_permute.data(), helper.data());
 
-    // render_permutation(rx, h_permute, "symrcm");
+    render_permutation(rx, h_permute, "symrcm");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "symrcm");
 
@@ -280,9 +280,8 @@ TEST(Apps, NDReorder)
     // convert matrix to Eigen
     auto eigen_mat = rx_mat.to_eigen();
 
-    RXMESH_INFO(" Eigen Matrix NNZ = {}", eigen_mat.nonZeros());
 
-    no_permute(rx, eigen_mat);
+    // no_permute(rx, eigen_mat);
 
     with_amd(rx, rx_mat, eigen_mat);
 
@@ -290,7 +289,7 @@ TEST(Apps, NDReorder)
 
     with_metis(rx, rx_mat, eigen_mat);
 
-    with_gpumgnd(rx, eigen_mat);
+    // with_gpumgnd(rx, eigen_mat);
 
     with_gpu_nd(rx, eigen_mat);
 
