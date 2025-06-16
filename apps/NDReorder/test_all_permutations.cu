@@ -137,7 +137,7 @@ void with_metis(RXMeshStatic&          rx,
         RXMESH_ERROR("METIS Failed!");
     }
 
-    if (!is_unique_permutation(h_permute.size(), h_permute.data())) {
+    if (!is_unique_permutation(h_iperm.size(), h_iperm.data())) {
         RXMESH_ERROR("METIS Permutation is not unique.");
     }
 
@@ -267,10 +267,8 @@ void with_symrcm(RXMeshStatic&    rx,
 
 void all_perm(RXMeshStatic& rx)
 {
-
-
     // VV matrix
-    SparseMatrix<float> rx_mat(rx);
+    SparseMatrix<float> rx_mat(rx, Op::VV);
 
     // populate an SPD matrix
     rx_mat.for_each([](int r, int c, float& val) {
@@ -294,8 +292,7 @@ void all_perm(RXMeshStatic& rx)
 
     assert(eigen_mat.nonZeros() == rx_mat.non_zeros());
 
-
-    // no_permute(rx, eigen_mat);
+    //no_permute(rx, eigen_mat);
 
     with_amd(rx, rx_mat, eigen_mat);
 
@@ -303,7 +300,7 @@ void all_perm(RXMeshStatic& rx)
 
     with_metis(rx, rx_mat, eigen_mat);
 
-    // with_gpumgnd(rx, eigen_mat);
+    //with_gpumgnd(rx, eigen_mat);
 
     with_gpu_nd(rx, eigen_mat);
 
@@ -352,7 +349,7 @@ int main(int argc, char** argv)
         std::vector<std::vector<float>>    verts;
         std::vector<std::vector<uint32_t>> fv;
 
-        create_plane(verts, fv, Arg.n, Arg.n);
+        create_plane(verts, fv, Arg.n, Arg.n, 2);
         RXMeshStatic rx(fv);
         rx.add_vertex_coordinates(verts, "plane");
 
