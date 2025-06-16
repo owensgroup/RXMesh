@@ -50,7 +50,7 @@ struct PatchND
             reinterpret_cast<const char*>(m_patch_info.active_mask_v),
             m_s_active_v.num_bytes(),
             reinterpret_cast<char*>(m_s_active_v.m_bitmask),
-            false);
+            true);
 
 
         uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(

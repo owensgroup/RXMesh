@@ -1872,9 +1872,10 @@ void heavy_max_matching_with_partition(const RXMeshStatic&      rx,
 struct MinDegreeNode
 {
     int vertex;
-    int degree; // "degree" here = sum of adjacent edge weights
+    int degree;  // "degree" here = sum of adjacent edge weights
 
-    bool operator>(const MinDegreeNode &rhs) const {
+    bool operator>(const MinDegreeNode& rhs) const
+    {
         return degree > rhs.degree;
     }
 };
@@ -1887,8 +1888,8 @@ inline std::vector<int> minimum_degree_ordering_avg_weights(
     // Step 1: Compute initial weighted degree
     std::vector<int> weighted_degree(n, 0);
     for (int v = 0; v < n; ++v) {
-        int start = graph.xadj[v];
-        int end   = graph.xadj[v+1];
+        int start   = graph.xadj[v];
+        int end     = graph.xadj[v + 1];
         int deg_sum = 0;
         for (int idx = start; idx < end; ++idx) {
             deg_sum += graph.e_weights[idx];
@@ -1897,8 +1898,11 @@ inline std::vector<int> minimum_degree_ordering_avg_weights(
     }
 
     // Step 2: Create a single min-priority queue for all vertices
-    std::priority_queue<MinDegreeNode, std::vector<MinDegreeNode>, std::greater<MinDegreeNode>> pq;
-    pq = {}; // ensure empty
+    std::priority_queue<MinDegreeNode,
+                        std::vector<MinDegreeNode>,
+                        std::greater<MinDegreeNode>>
+        pq;
+    pq = {};  // ensure empty
     for (int v = 0; v < n; ++v) {
         pq.push({v, weighted_degree[v]});
     }
@@ -1914,28 +1918,28 @@ inline std::vector<int> minimum_degree_ordering_avg_weights(
     // For naive code, we just re-scan adjacency. For bigger graphs,
     // you might want a hash map or a separate structure.
 
-    // Helper to find weight of edge (u, v). 
+    // Helper to find weight of edge (u, v).
     // Returns 0 if no edge found. (We assume undirected or stored as needed.)
-    auto get_edge_weight = [&](int u, int v){
+    auto get_edge_weight = [&](int u, int v) {
         int start = graph.xadj[u];
-        int end   = graph.xadj[u+1];
-        for(int idx = start; idx < end; ++idx){
-            if(graph.adjncy[idx] == v){
+        int end   = graph.xadj[u + 1];
+        for (int idx = start; idx < end; ++idx) {
+            if (graph.adjncy[idx] == v) {
                 return graph.e_weights[idx];
             }
         }
-        return 0; // or -1 if you want to detect "no edge"
+        return 0;  // or -1 if you want to detect "no edge"
     };
 
     // Step 4: Main loop
     int eliminated_count = 0;
-    while (eliminated_count < n)
-    {
+    while (eliminated_count < n) {
         // Pop from PQ any vertex already eliminated
         while (!pq.empty() && eliminated[pq.top().vertex]) {
             pq.pop();
         }
-        if (pq.empty()) break; // no vertices left
+        if (pq.empty())
+            break;  // no vertices left
 
         // Extract the minimum-degree vertex
         MinDegreeNode mn = pq.top();
@@ -1952,43 +1956,46 @@ inline std::vector<int> minimum_degree_ordering_avg_weights(
 
         // Gather neighbors that are still active
         std::vector<int> neighbors;
-        int vstart = graph.xadj[chosen_vertex];
-        int vend   = graph.xadj[chosen_vertex+1];
+        int              vstart = graph.xadj[chosen_vertex];
+        int              vend   = graph.xadj[chosen_vertex + 1];
         neighbors.reserve(vend - vstart);
-        for(int idx = vstart; idx < vend; ++idx){
+        for (int idx = vstart; idx < vend; ++idx) {
             int nbr = graph.adjncy[idx];
-            if(!eliminated[nbr]){
+            if (!eliminated[nbr]) {
                 neighbors.push_back(nbr);
             }
         }
 
         // Step 5: Update degrees of neighbors in a quotient-graph sense
         // Each neighbor loses the edge to chosen_vertex,
-        // and gains edges to the other neighbors. 
-        // Instead of adding a fixed 1, let's compute the *average* of the edge weights to chosen_vertex.
+        // and gains edges to the other neighbors.
+        // Instead of adding a fixed 1, let's compute the *average* of the edge
+        // weights to chosen_vertex.
 
         // First, collect the weights from chosen_vertex to each neighbor.
         // We'll store them in a small map or array for quick reference:
         std::vector<int> neighbor_weights(neighbors.size(), 0);
-        for (size_t i = 0; i < neighbors.size(); ++i){
-            int nbr = neighbors[i];
+        for (size_t i = 0; i < neighbors.size(); ++i) {
+            int nbr             = neighbors[i];
             neighbor_weights[i] = get_edge_weight(chosen_vertex, nbr);
         }
 
-        // Subtract the weight to chosen_vertex from each neighbor's weighted_degree
+        // Subtract the weight to chosen_vertex from each neighbor's
+        // weighted_degree
         for (size_t i = 0; i < neighbors.size(); ++i) {
             int nbr = neighbors[i];
             weighted_degree[nbr] -= neighbor_weights[i];
         }
 
-        // Now form clique among neighbors. For every pair (n1, n2) of neighbors:
+        // Now form clique among neighbors. For every pair (n1, n2) of
+        // neighbors:
         //   If an edge does not exist, add a new edge whose weight is
         //   average( weight(chosen_vertex,n1), weight(chosen_vertex,n2) ).
         for (size_t i = 0; i < neighbors.size(); ++i) {
             int n1 = neighbors[i];
             int w1 = neighbor_weights[i];
 
-            for (size_t j = i+1; j < neighbors.size(); ++j) {
+            for (size_t j = i + 1; j < neighbors.size(); ++j) {
                 int n2 = neighbors[j];
                 int w2 = neighbor_weights[j];
 
@@ -1996,24 +2003,27 @@ inline std::vector<int> minimum_degree_ordering_avg_weights(
                 int existing_weight_n1n2 = get_edge_weight(n1, n2);
                 if (existing_weight_n1n2 == 0) {
                     // no edge => create a new edge in the quotient graph
-                    // Weighted MD heuristics might do something more sophisticated,
-                    // but let's do the naive approach:
-                    int new_edge_weight = (w1 + w2) / 2; // average
+                    // Weighted MD heuristics might do something more
+                    // sophisticated, but let's do the naive approach:
+                    int new_edge_weight = (w1 + w2) / 2;  // average
 
                     // We increment each neighbor’s degree by the new weight.
                     weighted_degree[n1] += new_edge_weight;
                     weighted_degree[n2] += new_edge_weight;
 
-                    // If you want to store this new edge in the actual adjacency (to maintain consistency),
-                    // you'd have to modify 'graph.adjncy' and 'graph.e_weights' to reflect the new edge (n1,n2).
-                    // That is more complicated; we'd have to expand the adjacency structure dynamically.
-                    // For demonstration, we're only updating the "weighted_degree" values.
-                }
-                else {
-                    // There's already an edge (n1,n2). 
-                    // Some Weighted MD variants might also update that existing weight (like merging).
-                    // For simplicity, we won't re-add it, but in a rigorous approach,
-                    // you might need to unify or update that weight.
+                    // If you want to store this new edge in the actual
+                    // adjacency (to maintain consistency), you'd have to modify
+                    // 'graph.adjncy' and 'graph.e_weights' to reflect the new
+                    // edge (n1,n2). That is more complicated; we'd have to
+                    // expand the adjacency structure dynamically. For
+                    // demonstration, we're only updating the "weighted_degree"
+                    // values.
+                } else {
+                    // There's already an edge (n1,n2).
+                    // Some Weighted MD variants might also update that existing
+                    // weight (like merging). For simplicity, we won't re-add
+                    // it, but in a rigorous approach, you might need to unify
+                    // or update that weight.
                 }
             }
         }
@@ -2410,8 +2420,11 @@ inline void single_patch_nd_permute(RXMeshStatic&              rx,
                                   // index
                                   v * sizeof(uint16_t) +
 
+                                  // memory used in v_v and v_e
+                                  //(2 * v + 1) * sizeof(uint16_t) +
+
                                   // padding
-                                  8 * ShmemAllocator::default_alignment;
+                                  11 * ShmemAllocator::default_alignment;
                           });
 #endif
 
@@ -2432,10 +2445,10 @@ inline void single_patch_nd_permute(RXMeshStatic&              rx,
 
 #if USE_POLYSCOPE
     // attr_v->move(DEVICE, HOST);
-    // attr_v1->move(DEVICE, HOST);
-    // attr_e->move(DEVICE, HOST);
+    //  attr_v1->move(DEVICE, HOST);
+    //  attr_e->move(DEVICE, HOST);
 
-    // v_local_permute.move(DEVICE, HOST);
+    v_local_permute.move(DEVICE, HOST);
     //  for (int p = 0; p < rx.get_num_patches(); ++p) {
     //      rx.render_patch(p)->setEnabled(false);
     //  }
@@ -2543,14 +2556,15 @@ inline void permute_separators(RXMeshStatic&              rx,
     v_render.reset(-1, LOCATION_ALL);
 
 #ifdef USE_POLYSCOPE
-    for (int l = depth - 1; l >= 0; --l) {
-        rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
-            int proj     = max_match_tree.levels[l].patch_proj[vh.patch_id()];
-            v_render(vh) = proj;
-        });
-        rx.get_polyscope_mesh()->addVertexScalarQuantity(
-            "Match " + std::to_string(l), v_render);
-    }
+    // for (int l = depth - 1; l >= 0; --l) {
+    //     rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
+    //         int proj     =
+    //         max_match_tree.levels[l].patch_proj[vh.patch_id()]; v_render(vh)
+    //         = proj;
+    //     });
+    //     rx.get_polyscope_mesh()->addVertexScalarQuantity(
+    //         "Match " + std::to_string(l), v_render);
+    // }
 #endif
 
     int sum_edge_cut = 0;
@@ -2726,7 +2740,7 @@ inline void nd_permute(RXMeshStatic& rx, int* h_permute)
 
     // create max match tree
     MaxMatchTree<int> max_match_tree;
-    // heavy_max_matching(rx, p_graph, max_match_tree);
+    heavy_max_matching(rx, p_graph, max_match_tree);
 
     // test the GGGP function
     // GGGP(rx, p_graph, max_match_tree);
@@ -2743,8 +2757,8 @@ inline void nd_permute(RXMeshStatic& rx, int* h_permute)
     // RXMESH_INFO("Max Match with Partition");
     // heavy_max_matching_with_partition(rx, p_graph, max_match_tree);
 
-    RXMESH_INFO("min_degree_reordering");
-    min_degree_reordering(rx, p_graph, max_match_tree);
+    // RXMESH_INFO("min_degree_reordering");
+    // min_degree_reordering(rx, p_graph, max_match_tree);
 
     permute_separators(rx,
                        v_index,
