@@ -1,8 +1,9 @@
-#include "gtest/gtest.h"
 
 #include <filesystem>
 
 #include "rxmesh/rxmesh_static.h"
+
+#include "rxmesh/geometry_factory.h"
 
 #include "rxmesh/matrix/mgnd_permute.cuh"
 #include "rxmesh/matrix/nd_permute.cuh"
@@ -17,18 +18,20 @@
 
 #include "metis.h"
 
+using namespace rxmesh;
+
 struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "cloth_uni_loop.obj";
-    uint16_t    nd_level      = 4;
-    uint32_t    device_id     = 0;
+
+    uint32_t device_id = 0;
+
+    int n = -1;
 } Arg;
 
 template <typename EigeMatT>
-void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
+void no_permute(RXMeshStatic& rx, const EigeMatT& eigen_mat)
 {
-    using namespace rxmesh;
-
     std::vector<int> h_permute(eigen_mat.rows());
 
     fill_with_sequential_numbers(h_permute.data(), h_permute.size());
@@ -37,18 +40,20 @@ void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "natural");
 
-    RXMESH_INFO(" No-permutation NNZ = {}", nnz);
+    RXMESH_INFO(" No-permutation NNZ = {}, sparsity = {} %",
+                nnz,
+                100 * float(nnz) / float(eigen_mat.rows() * eigen_mat.cols()));
 }
 
 
 template <typename T, typename EigeMatT>
-void with_metis(rxmesh::RXMeshStatic&          rx,
-                const rxmesh::SparseMatrix<T>& rx_mat,
-                const EigeMatT&                eigen_mat)
+void with_metis(RXMeshStatic&          rx,
+                const SparseMatrix<T>& rx_mat,
+                const EigeMatT&        eigen_mat)
 {
-    EXPECT_TRUE(rx_mat.rows() == eigen_mat.rows());
-    EXPECT_TRUE(rx_mat.cols() == eigen_mat.cols());
-    EXPECT_TRUE(rx_mat.non_zeros() == eigen_mat.nonZeros());
+    assert(rx_mat.rows() == eigen_mat.rows());
+    assert(rx_mat.cols() == eigen_mat.cols());
+    assert(rx_mat.non_zeros() == eigen_mat.nonZeros());
 
     idx_t n = eigen_mat.rows();
 
@@ -114,7 +119,7 @@ void with_metis(rxmesh::RXMeshStatic&          rx,
     // Specifies the amount of progress/debugging information will be printed
     options[METIS_OPTION_DBGLVL] = 0;*/
 
-    rxmesh::CPUTimer timer;
+    CPUTimer timer;
     timer.start();
 
     int metis_ret = METIS_NodeND(&n,
@@ -128,68 +133,78 @@ void with_metis(rxmesh::RXMeshStatic&          rx,
 
     RXMESH_INFO(" METIS took {} (ms)", timer.elapsed_millis());
 
-    EXPECT_TRUE(metis_ret == 1);
+    if (metis_ret != 1) {
+        RXMESH_ERROR("METIS Failed!");
+    }
 
-    EXPECT_TRUE(
-        rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
+    if (!is_unique_permutation(h_permute.size(), h_permute.data())) {
+        RXMESH_ERROR("METIS Permutation is not unique.");
+    }
 
     render_permutation(rx, h_iperm, "METIS");
 
     int nnz = count_nnz_fillin(eigen_mat, h_iperm, "metis");
 
-    RXMESH_INFO(" With METIS Nested Dissection NNZ = {}", nnz);
+    RXMESH_INFO(" With METIS Nested Dissection NNZ = {}, sparsity = {} %",
+                nnz,
+                100 * float(nnz) / float(eigen_mat.rows() * eigen_mat.cols()));
 }
 
 template <typename EigeMatT>
-void with_gpumgnd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
+void with_gpumgnd(RXMeshStatic& rx, const EigeMatT& eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
-    rxmesh::mgnd_permute(rx, h_permute.data());
+    mgnd_permute(rx, h_permute.data());
 
-    EXPECT_TRUE(
-        rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
+
+    if (!is_unique_permutation(h_permute.size(), h_permute.data())) {
+        RXMESH_ERROR("GPUMGND Permutation is not unique.");
+    }
 
     std::vector<int> helper(rx.get_num_vertices());
-    rxmesh::inverse_permutation(
-        rx.get_num_vertices(), h_permute.data(), helper.data());
+    inverse_permutation(rx.get_num_vertices(), h_permute.data(), helper.data());
 
     render_permutation(rx, h_permute, "GPUMGND");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "gpumgnd");
 
-    RXMESH_INFO(" With GPUMGND NNZ = {}", nnz);
+    RXMESH_INFO(" With GPUMGND NNZ = {}, sparsity = {} %",
+                nnz,
+                100 * float(nnz) / float(eigen_mat.rows() * eigen_mat.cols()));
 }
 
 template <typename EigeMatT>
-void with_gpu_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
+void with_gpu_nd(RXMeshStatic& rx, const EigeMatT& eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
-    rxmesh::nd_permute(rx, h_permute.data());
+    nd_permute(rx, h_permute.data());
 
-    EXPECT_TRUE(
-        rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
+    if (!is_unique_permutation(h_permute.size(), h_permute.data())) {
+        RXMESH_ERROR("GPUND Permutation is not unique.");
+    }
 
     std::vector<int> helper(rx.get_num_vertices());
-    rxmesh::inverse_permutation(
-        rx.get_num_vertices(), h_permute.data(), helper.data());
+    inverse_permutation(rx.get_num_vertices(), h_permute.data(), helper.data());
 
     render_permutation(rx, h_permute, "GPUND");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "gpund");
 
-    RXMESH_INFO(" With GPUND NNZ = {}", nnz);
+    RXMESH_INFO(" With GPUND NNZ = {}, sparsity = {} %",
+                nnz,
+                100 * float(nnz) / float(eigen_mat.rows() * eigen_mat.cols()));
 }
 
 template <typename T, typename EigeMatT>
-void with_amd(rxmesh::RXMeshStatic&    rx,
-              rxmesh::SparseMatrix<T>& rx_mat,
-              const EigeMatT&          eigen_mat)
+void with_amd(RXMeshStatic&    rx,
+              SparseMatrix<T>& rx_mat,
+              const EigeMatT&  eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
-    rxmesh::CholeskySolver solver(&rx_mat, rxmesh::PermuteMethod::SYMAMD);
+    CholeskySolver solver(&rx_mat, PermuteMethod::SYMAMD);
     solver.permute_alloc();
     solver.permute(rx);
 
@@ -201,28 +216,30 @@ void with_amd(rxmesh::RXMeshStatic&    rx,
 
 
     std::vector<int> helper(rx.get_num_vertices());
-    rxmesh::inverse_permutation(
-        rx.get_num_vertices(), h_permute.data(), helper.data());
+    inverse_permutation(rx.get_num_vertices(), h_permute.data(), helper.data());
 
 
-    EXPECT_TRUE(
-        rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
+    if (!is_unique_permutation(h_permute.size(), h_permute.data())) {
+        RXMESH_ERROR("AMD Permutation is not unique.");
+    }
 
     render_permutation(rx, h_permute, "AMD");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "amd");
 
-    RXMESH_INFO(" With AMD NNZ = {}", nnz);
+    RXMESH_INFO(" With AMD NNZ = {}, sparsity = {} %",
+                nnz,
+                100 * float(nnz) / float(eigen_mat.rows() * eigen_mat.cols()));
 }
 
 template <typename T, typename EigeMatT>
-void with_symrcm(rxmesh::RXMeshStatic&    rx,
-                 rxmesh::SparseMatrix<T>& rx_mat,
-                 const EigeMatT&          eigen_mat)
+void with_symrcm(RXMeshStatic&    rx,
+                 SparseMatrix<T>& rx_mat,
+                 const EigeMatT&  eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
-    rxmesh::CholeskySolver solver(&rx_mat, rxmesh::PermuteMethod::SYMRCM);
+    CholeskySolver solver(&rx_mat, PermuteMethod::SYMRCM);
     solver.permute_alloc();
     solver.permute(rx);
 
@@ -232,36 +249,28 @@ void with_symrcm(rxmesh::RXMeshStatic&    rx,
                 solver.get_h_permute(),
                 h_permute.size() * sizeof(int));
 
-    EXPECT_TRUE(
-        rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
+    if (!is_unique_permutation(h_permute.size(), h_permute.data())) {
+        RXMESH_ERROR("SYMRCM Permutation is not unique.");
+    }
 
     std::vector<int> helper(rx.get_num_vertices());
-    rxmesh::inverse_permutation(
-        rx.get_num_vertices(), h_permute.data(), helper.data());
+    inverse_permutation(rx.get_num_vertices(), h_permute.data(), helper.data());
 
     render_permutation(rx, h_permute, "symrcm");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "symrcm");
 
-    RXMESH_INFO(" With SYMRCM NNZ = {}", nnz);
+    RXMESH_INFO(" With SYMRCM NNZ = {}, sparsity = {} %",
+                nnz,
+                100 * float(nnz) / float(eigen_mat.rows() * eigen_mat.cols()));
 }
 
-TEST(Apps, NDReorder)
+void all_perm(RXMeshStatic& rx)
 {
-    using namespace rxmesh;
 
-    cuda_query(Arg.device_id);
-
-    // const std::string p_file = STRINGIFY(OUTPUT_DIR) +
-    //                            extract_file_name(Arg.obj_file_name) +
-    //                            "_patches";
-    RXMeshStatic rx(Arg.obj_file_name);
-    // if (!std::filesystem::exists(p_file)) {
-    //     rx.save(p_file);
-    // }
 
     // VV matrix
-    rxmesh::SparseMatrix<float> rx_mat(rx);
+    SparseMatrix<float> rx_mat(rx);
 
     // populate an SPD matrix
     rx_mat.for_each([](int r, int c, float& val) {
@@ -272,13 +281,18 @@ TEST(Apps, NDReorder)
         }
     });
 
-    RXMESH_INFO(" Input Matrix NNZ = {}", rx_mat.non_zeros());
+    RXMESH_INFO(
+        " Input Matrix NNZ = {}, sparsity = {} %",
+        rx_mat.non_zeros(),
+        100 * float(rx_mat.non_zeros()) / float(rx_mat.rows() * rx_mat.cols()));
 
     rx.render_face_patch();
     rx.render_vertex_patch();
 
     // convert matrix to Eigen
     auto eigen_mat = rx_mat.to_eigen();
+
+    assert(eigen_mat.nonZeros() == rx_mat.non_zeros());
 
 
     // no_permute(rx, eigen_mat);
@@ -298,21 +312,17 @@ TEST(Apps, NDReorder)
 
 int main(int argc, char** argv)
 {
-    using namespace rxmesh;
     Log::init(spdlog::level::info);
-
-    ::testing::InitGoogleTest(&argc, argv);
 
     if (argc > 1) {
         if (cmd_option_exists(argv, argc + argv, "-h")) {
             // clang-format off
             RXMESH_INFO("\nUsage: NDReorder.exe < -option X>\n"
                         " -h:          Display this massage and exits\n"
-                        " -input:      Input file. Input file should under the input/ subdirectory\n"
-                        "              Default is {} \n"
-                        "              Hint: Only accepts OBJ files\n"                                              
+                        " -input:      Input file. Only accepts OBJ files. Default is {}\n"
+                        " -n:          Number of grid points for a grid mesh. Default is {}\n"
                         " -device_id:  GPU device ID. Default is {}",
-            Arg.obj_file_name,  Arg.device_id);
+            Arg.obj_file_name,  Arg.n, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
@@ -327,13 +337,36 @@ int main(int argc, char** argv)
                 atoi(get_cmd_option(argv, argv + argc, "-device_id"));
         }
 
-        if (cmd_option_exists(argv, argc + argv, "-nd_level")) {
-            Arg.nd_level = atoi(get_cmd_option(argv, argv + argc, "-nd_level"));
+        if (cmd_option_exists(argv, argc + argv, "-n")) {
+            Arg.n = atoi(get_cmd_option(argv, argv + argc, "-n"));
         }
     }
 
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
+    RXMESH_TRACE("n= {}", Arg.n);
 
-    return RUN_ALL_TESTS();
+    cuda_query(Arg.device_id);
+
+    if (Arg.n > 0) {
+        std::vector<std::vector<float>>    verts;
+        std::vector<std::vector<uint32_t>> fv;
+
+        create_plane(verts, fv, Arg.n, Arg.n);
+        RXMeshStatic rx(fv);
+        rx.add_vertex_coordinates(verts, "plane");
+
+        all_perm(rx);
+
+    } else {
+        // const std::string p_file = STRINGIFY(OUTPUT_DIR) +
+        //                            extract_file_name(Arg.obj_file_name) +
+        //                            "_patches";
+        RXMeshStatic rx(Arg.obj_file_name);
+        // if (!std::filesystem::exists(p_file)) {
+        //     rx.save(p_file);
+        // }
+
+        all_perm(rx);
+    }
 }

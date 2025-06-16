@@ -18,8 +18,7 @@ set_property(TARGET NDReorder PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "NDReorder" FILES ${SOURCE_LIST})
 
 target_link_libraries( NDReorder 
-    PRIVATE RXMesh
-    PRIVATE gtest_main
+    PRIVATE RXMesh 
     PRIVATE metis
     PRIVATE Eigen3::Eigen
 )
