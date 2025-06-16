@@ -18,4 +18,6 @@ void inline render_permutation(rxmesh::RXMeshStatic& rx,
     });
 
     rx.get_polyscope_mesh()->addVertexScalarQuantity(name, v_perm);
+
+    rx.remove_attribute("Perm");
 }

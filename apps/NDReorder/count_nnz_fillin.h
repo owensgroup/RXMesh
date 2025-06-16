@@ -53,12 +53,9 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
         eigen_mat, permuted_mat, perm.indices().data());
 
 
-    // export_to_plain_text(permuted_mat,
-    //                      std::string("C:\\Github\\Matlab_Reordering_Trial\\")
-    //                      +
-    //                          st + std::string(".txt"));
-
-    return 0;
+    export_to_plain_text(permuted_mat,
+                         std::string("C:\\Github\\Matlab_Reordering_Trial\\") +
+                             st + std::string(".txt"));    
 
     // compute Cholesky factorization on the permuted matrix
 
@@ -79,17 +76,18 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
         return -1;
     }
 
-    // int nnz = lower_mat.nestedExpression().nonZeros();
+    int nnz = solver.matrixL().nestedExpression().nonZeros();
+    return nnz;
 
-    // extract nnz from lower matrix
-    Eigen::SparseMatrix<float> lower_mat = solver.matrixL();
-
-    // these are the nnz on (strictly) the lower part
-    int lower_nnz = lower_mat.nonZeros() - lower_mat.rows();
-
-    // multiply by two to account for lower and upper parts of the matrix
-    // add rows() to account for entries along the diagonal
-    return 2 * lower_nnz + lower_mat.rows();
+    //// extract nnz from lower matrix
+    // Eigen::SparseMatrix<float> lower_mat = solver.matrixL();
+    //
+    //// these are the nnz on (strictly) the lower part
+    // int lower_nnz = lower_mat.nonZeros() - lower_mat.rows();
+    //
+    //// multiply by two to account for lower and upper parts of the matrix
+    //// add rows() to account for entries along the diagonal
+    // return 2 * lower_nnz + lower_mat.rows();
 }
 
 /**

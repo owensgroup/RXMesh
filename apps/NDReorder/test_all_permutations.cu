@@ -31,13 +31,9 @@ void no_permute(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     std::vector<int> h_permute(eigen_mat.rows());
 
-    RXMESH_INFO(" No-permutation before fill.");
-
     fill_with_sequential_numbers(h_permute.data(), h_permute.size());
 
-    // render_permutation(rx, h_permute, "No_PERM");
-
-    RXMESH_INFO(" Before count_nnz_fillin");
+    render_permutation(rx, h_permute, "No_PERM");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "natural");
 
@@ -130,14 +126,14 @@ void with_metis(rxmesh::RXMeshStatic&           rx,
                                  h_iperm.data());
     timer.stop();
 
-    RXMESH_INFO("metis took {} (ms)", timer.elapsed_millis());
+    RXMESH_INFO(" METIS took {} (ms)", timer.elapsed_millis());
 
     EXPECT_TRUE(metis_ret == 1);
 
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
-    // render_permutation(rx, h_permute, "METIS");
+    render_permutation(rx, h_permute, "METIS");
 
     int nnz = count_nnz_fillin(eigen_mat, h_iperm, "metis");
 
@@ -158,7 +154,7 @@ void with_gpumgnd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
     rxmesh::inverse_permutation(
         rx.get_num_vertices(), h_permute.data(), helper.data());
 
-    // render_permutation(rx, h_permute, "GPUMGND");
+    render_permutation(rx, h_permute, "GPUMGND");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "gpumgnd");
 
@@ -179,7 +175,7 @@ void with_gpu_nd(rxmesh::RXMeshStatic& rx, const EigeMatT& eigen_mat)
     rxmesh::inverse_permutation(
         rx.get_num_vertices(), h_permute.data(), helper.data());
 
-    // render_permutation(rx, h_permute, "GPUND");
+    render_permutation(rx, h_permute, "GPUND");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "gpund");
 
@@ -212,7 +208,7 @@ void with_amd(rxmesh::RXMeshStatic&     rx,
     EXPECT_TRUE(
         rxmesh::is_unique_permutation(h_permute.size(), h_permute.data()));
 
-    // render_permutation(rx, h_permute, "AMD");
+    render_permutation(rx, h_permute, "AMD");
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "amd");
 
@@ -304,7 +300,7 @@ TEST(Apps, NDReorder)
 int main(int argc, char** argv)
 {
     using namespace rxmesh;
-    Log::init();
+    Log::init(spdlog::level::info);
 
     ::testing::InitGoogleTest(&argc, argv);
 

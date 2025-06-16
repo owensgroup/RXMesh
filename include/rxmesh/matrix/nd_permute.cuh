@@ -2421,7 +2421,7 @@ inline void single_patch_nd_permute(RXMeshStatic&              rx,
                                   v * sizeof(uint16_t) +
 
                                   // memory used in v_v and v_e
-                                  //(2 * v + 1) * sizeof(uint16_t) +
+                                  (2 * v + 1) * sizeof(uint16_t) +
 
                                   // padding
                                   11 * ShmemAllocator::default_alignment;
