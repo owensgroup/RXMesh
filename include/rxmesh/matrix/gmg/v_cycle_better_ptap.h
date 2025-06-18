@@ -13,10 +13,7 @@ struct VCycle_Better : public rxmesh::VCycle<T>
                   SparseMatrix<T> new_a,
                   SparseMatrix<T> old_a) 
     {
-        // Your custom implementation here
         printf("Custom ptap called!\n");
-
-        // Example: call base implementation if needed
         // rxmesh::VCycle<T>::new_ptap(p, new_a, old_a);
     }
 
