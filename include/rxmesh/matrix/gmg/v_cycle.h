@@ -44,9 +44,9 @@ struct VCycle
     VCycle& operator=(VCycle&&) = default;
     ~VCycle()                   = default;
 
-    int m_num_pre_relax;
-    int m_num_post_relax;
-
+    int   m_num_pre_relax;
+    int   m_num_post_relax;
+    float memory_alloc_time = 0;
 
     // For index, the fine mesh is always indexed with 0
     // The first coarse level index is 1
@@ -117,6 +117,8 @@ struct VCycle
 
         timer.stop();
         gtimer.stop();
+        memory_alloc_time =
+            std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
         RXMESH_INFO("v cycle memory allocation took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
