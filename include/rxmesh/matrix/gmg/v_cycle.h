@@ -122,6 +122,13 @@ struct VCycle
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
 
+        
+    }
+
+    void construct_hierarchy(GMG<T>& gmg, RXMeshStatic& rx, SparseMatrix<T>& A)
+    {
+        CPUTimer timer;
+        GPUTimer gtimer;
         timer.start();
         gtimer.start();
 
