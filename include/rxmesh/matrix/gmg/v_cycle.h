@@ -69,7 +69,6 @@ struct VCycle
 
     std::vector<std::unique_ptr<CholeskySolver<SparseMatrix<T>, 0>>>
         m_coarse_solver_chols;
-
     // just solve it using a separate cholesky solver instance
 
     VCycle(GMG<T>&               gmg,
@@ -126,9 +125,6 @@ struct VCycle
         timer.start();
         gtimer.start();
 
-        m_coarse_solver_chols.emplace_back(
-        m_coarse_solver_chols.emplace_back(
-
         get_intermediate_laplacians(gmg,A);
 
         timer.stop();
@@ -156,7 +152,6 @@ struct VCycle
         gtimer.stop();
         RXMESH_INFO("chol prep took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
-
                     gtimer.elapsed_millis());
     } 
 
@@ -328,36 +323,23 @@ struct VCycle
 
             // calc residual
             calc_residual<numCols>(A, v, f, m_r[level]);
-            std::cout << "\nResidual at intermediate level " << level << " : "
-                      << m_r[level].norm2();
+            /*std::cout << "\nResidual at intermediate level " << level << " : "
+                      << m_r[level].norm2();*/
 
             //// restrict residual
-            gmg.m_prolong_op[level].multiply(
-                m_r[level], m_rhs[level + 1], true);
+            gmg.m_prolong_op[level].multiply(m_r[level], m_rhs[level + 1], true);
+
             //// recurse
-            cycle(
-                level + 1, gmg, m_a[level].a, m_rhs[level + 1], m_x[level], rx);
+            cycle(level + 1, gmg, m_a[level].a, m_rhs[level + 1], m_x[level], rx);
 
             // prolong
-            // x = x + P*u
-
-            DenseMatrix<T> q = v;
-            
             gmg.m_prolong_op[level].multiply(
                 m_x[level], v, false, false, T(1.0), T(1.0));
-
-            //v.axpy(q,0.1);
 
 
             //// post-smoothing
             m_smoother[level].template solve<numCols>(
                 A, f, v, m_num_post_relax);
-
-
-            calc_residual<numCols>(A, v, f, m_r[level]);
-            std::cout << "\nResidual at intermediate level " << level << " after everything: "
-                      << m_r[level].norm2();
-
         } else {
             // the coarsest level
             // m_coarse_solver.template solve<numCols>(A, f, v,
@@ -366,9 +348,6 @@ struct VCycle
 
 
             // for direct solve, use cholesky
-            //  do pre solve and then solve here
-
-            //m_coarse_solver_chols[level]->pre_solve(rx);
             m_coarse_solver_chols[level]->solve(f, v);
         }
     }
