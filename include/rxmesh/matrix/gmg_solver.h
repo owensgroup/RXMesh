@@ -61,7 +61,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         RXMESH_INFO("full gmg operator construction took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
-        //gmg_memory_alloc_time = m_gmg.memory_alloc_time;
+        gmg_memory_alloc_time = m_gmg.memory_alloc_time;
         m_num_levels = m_gmg.m_num_levels;
         if (m_num_levels == 1) {
 
@@ -81,7 +81,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
 
 
-            //v_cycle_memory_alloc_time = m_v_cycle.memory_alloc_time;
+            v_cycle_memory_alloc_time = m_v_cycle.memory_alloc_time;
 
             timer.stop();
             gtimer.stop();
@@ -191,10 +191,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                 }
                 timer.stop();
                 gtimer.stop();
-                time +=
-                    std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
-                /*RXMESH_TRACE("GMG: convergence criteria reached? {}",
-                             is_converged_special(*m_A, X, m_v_cycle.B));*/
+                time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
                 m_iter_taken++;
             }
