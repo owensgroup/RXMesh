@@ -71,11 +71,13 @@ struct VCycle
         m_coarse_solver_chols;
     // just solve it using a separate cholesky solver instance
 
-                    SparseMatrix<T>&      A,
-                    const DenseMatrix<T>& rhs,
-                    CoarseSolver          coarse_solver  = CoarseSolver::Jacobi,
-                    int                   num_pre_relax  = 2,
-                    int                   num_post_relax = 2)
+    VCycle(GMG<T>&               gmg,
+           RXMeshStatic&         rx,
+           SparseMatrix<T>&      A,
+           const DenseMatrix<T>& rhs,
+           CoarseSolver          coarse_solver  = CoarseSolver::Jacobi,
+           int                   num_pre_relax  = 2,
+           int                   num_post_relax = 2)
         : m_num_pre_relax(num_pre_relax), m_num_post_relax(num_post_relax)
     {
         CPUTimer timer;
