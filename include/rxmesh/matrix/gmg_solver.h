@@ -47,9 +47,6 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                            DenseMatrix<T>&       X,
                            cudaStream_t          stream = NULL) override
     {
-
-        // if (m_num_levels > 1)
-
         CPUTimer timer;
         GPUTimer gtimer;
 
@@ -103,13 +100,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                                   rxmesh::DenseMatrix<T>&  X,
                                   rxmesh::DenseMatrix<T>&  B)
     {
-        // using namespace rxmesh;
         using IndexT = typename DenseMatrix<T>::IndexT;
-
-        // Move everything to device
-        /*A.move(HOST, DEVICE);
-        X.move(HOST, DEVICE);
-        B.move(HOST, DEVICE);*/
 
         const IndexT num_rhs = B.cols();
         const IndexT n       = A.rows();
@@ -122,8 +113,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
             R.axpy(B.col(i), T(-1));  // R = AX - B_i
             T r_norm = R.norm2();
-            T b_norm = B.col(i).norm2();  // You'll need to add this utility
-
+            T b_norm = B.col(i).norm2(); 
             T residual   = r_norm / (b_norm + 1e-20);
             max_residual = std::max(max_residual, residual);
         }
@@ -167,10 +157,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                 timer.start();
                 gtimer.start();
 
-                if (
-                    //is_converged(m_start_residual, current_res) ||
-                    //is_converged_special(*m_A, X, m_v_cycle.B) ||
-                    is_converged_special_gpu(*m_A, X, m_v_cycle.B)) {
+                if (is_converged_special_gpu(*m_A, X, m_v_cycle.B)) {
                     RXMESH_INFO("GMG: #number of iterations to solve: {}",
                                  m_iter_taken);
                     RXMESH_INFO("GMG: final residual: {}",m_final_residual);
