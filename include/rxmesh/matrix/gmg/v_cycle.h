@@ -164,6 +164,11 @@ struct VCycle
                                              SparseMatrix<T>& A)
     {
         m_a.resize(gmg.m_num_levels - 1);
+        // construct m_a for all levels
+        pt_A_p(gmg.m_prolong_op[0], A, m_a[0]);
+        for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
+            pt_A_p(gmg.m_prolong_op[l], m_a[l - 1].a, m_a[l]);
+        }
     }
 
     void pt_A_p(SparseMatrixConstantNNZRow<T, 3>& P,
