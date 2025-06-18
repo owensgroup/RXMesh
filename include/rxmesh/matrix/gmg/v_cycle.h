@@ -126,25 +126,11 @@ struct VCycle
         timer.start();
         gtimer.start();
 
-        m_a.resize(gmg.m_num_levels - 1);
-        // construct m_a for all levels
-        pt_A_p(gmg.m_prolong_op[0], A, m_a[0]);
-
         m_coarse_solver_chols.emplace_back(
-            std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&A));
         m_coarse_solver_chols.emplace_back(
-            std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&m_a[0].a));
 
-        m_coarse_solver_chols[0]->pre_solve(rx);
-        m_coarse_solver_chols[1]->pre_solve(rx);
+        get_intermediate_laplacians(gmg,A);
 
-
-        for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
-            pt_A_p(gmg.m_prolong_op[l], m_a[l - 1].a, m_a[l]);
-           /* m_coarse_solver_chols.emplace_back(
-                std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&m_a[l].a));
-            m_coarse_solver_chols[l+1]->pre_solve(rx);*/
-        }
         timer.stop();
         gtimer.stop();
         RXMESH_INFO("ptap took {} (ms), {} (ms)",
@@ -153,21 +139,32 @@ struct VCycle
 
         timer.start();
         gtimer.start();
+        m_coarse_solver_chols.emplace_back(
+            std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&A));
+        m_coarse_solver_chols.emplace_back(
+            std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&m_a[0].a));
 
+        m_coarse_solver_chols[0]->pre_solve(rx);
+        m_coarse_solver_chols[1]->pre_solve(rx);
         for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
-            m_coarse_solver_chols.emplace_back(std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&m_a[l].a));
+            m_coarse_solver_chols.emplace_back(
+                std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(
+                    &m_a[l].a));
             m_coarse_solver_chols[l + 1]->pre_solve(rx);
         }
         timer.stop();
         gtimer.stop();
         RXMESH_INFO("chol prep took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
-                    gtimer.elapsed_millis());        
 
+                    gtimer.elapsed_millis());
+    } 
 
-
+    virtual void get_intermediate_laplacians(GMG<T>&          gmg,
+                                             SparseMatrix<T>& A)
+    {
+        m_a.resize(gmg.m_num_levels - 1);
     }
-
 
     void pt_A_p(SparseMatrixConstantNNZRow<T, 3>& P,
                 SparseMatrix<T>&                  A,
