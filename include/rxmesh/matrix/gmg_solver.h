@@ -38,6 +38,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
           m_num_post_relax(num_post_relax),
           m_num_levels(num_levels),
           m_threshold(threshold),
+          m_use_new_ptap(use_new_ptap),
           AX(DenseMatrix<T>(A.rows(), 1, DEVICE)),
           R(DenseMatrix<T>(A.rows(), 1, DEVICE))
     {
@@ -45,7 +46,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
     virtual void pre_solve(const DenseMatrix<T>& B,
                            DenseMatrix<T>&       X,
-                           cudaStream_t          stream = NULL) override
+                           cudaStream_t          stream       = NULL) override
     {
         CPUTimer timer;
         GPUTimer gtimer;
@@ -68,16 +69,27 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
             timer.start();
             gtimer.start();
-            m_v_cycle = VCycle<T>(m_gmg,
-                                  *m_rx,
-                                  *m_A,
-                                  B,
-                                  m_coarse_solver,
-                                  m_num_pre_relax,
-                                  m_num_post_relax);
+            if (!m_use_new_ptap) {
+                m_v_cycle = std::make_unique<VCycle<T>>(m_gmg,
+                                                        *m_rx,
+                                                        *m_A,
+                                                        B,
+                                                        m_coarse_solver,
+                                                        m_num_pre_relax,
+                                                        m_num_post_relax);
+            } else {
+                m_v_cycle =
+                    std::make_unique<VCycle_Better<T>>(m_gmg,
+                                                       *m_rx,
+                                                       *m_A,
+                                                       B,
+                                                       m_coarse_solver,
+                                                       m_num_pre_relax,
+                                                       m_num_post_relax);
+            }
+            m_v_cycle->construct_hierarchy(m_gmg, *m_rx, *m_A);
 
-
-            v_cycle_memory_alloc_time = m_v_cycle.memory_alloc_time;
+            v_cycle_memory_alloc_time = m_v_cycle->memory_alloc_time;
 
             timer.stop();
             gtimer.stop();
@@ -87,9 +99,9 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
             constexpr int numCols = 3;
             assert(numCols == B.cols());
-            m_v_cycle.template calc_residual<numCols>(
-                m_v_cycle.m_a[0].a, X, B, m_v_cycle.m_r[0]);
-            m_start_residual = m_v_cycle.m_r[0].norm2();
+            m_v_cycle->template calc_residual<numCols>(
+                m_v_cycle->m_a[0].a, X, B, m_v_cycle->m_r[0]);
+            m_start_residual = m_v_cycle->m_r[0].norm2();
         }
     }
 
@@ -146,12 +158,12 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         } else {
             m_iter_taken = 0;
             while (m_iter_taken < m_max_iter) {
-                m_v_cycle.cycle(0, m_gmg, *m_A, m_v_cycle.B, X, *m_rx);
+                m_v_cycle->cycle(0, m_gmg, *m_A, m_v_cycle->B, X, *m_rx);
 
                 timer.start();
                 gtimer.start();
 
-                if (is_converged_special_gpu(*m_A, X, m_v_cycle.B)) {
+                if (is_converged_special_gpu(*m_A, X, m_v_cycle->B)) {
                     RXMESH_INFO("GMG: #number of iterations to solve: {}",
                                 m_iter_taken);
                     RXMESH_INFO("GMG: final residual: {}", m_final_residual);
@@ -204,16 +216,16 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     }
 
    protected:
-    RXMeshStatic*    m_rx;
-    SparseMatrix<T>* m_A;
-    GMG<T>           m_gmg;
-    VCycle<T>        m_v_cycle;
-    CoarseSolver     m_coarse_solver;
-    int              m_num_pre_relax;
-    int              m_num_post_relax;
-    int              m_num_levels;
-    int              m_threshold;
-
+    RXMeshStatic*              m_rx;
+    SparseMatrix<T>*           m_A;
+    GMG<T>                     m_gmg;
+    std::unique_ptr<VCycle<T>> m_v_cycle;
+    CoarseSolver               m_coarse_solver;
+    int                        m_num_pre_relax;
+    int                        m_num_post_relax;
+    int                        m_num_levels;
+    int                        m_threshold;
+    bool                       m_use_new_ptap;
     DenseMatrix<T> AX;
     DenseMatrix<T> R;
 };

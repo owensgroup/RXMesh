@@ -11,7 +11,7 @@ struct VCycle_Better : public rxmesh::VCycle<T>
     // Override the new_ptap method
     void new_ptap(SparseMatrix<T> p,
                   SparseMatrix<T> new_a,
-                  SparseMatrix<T> old_a) override
+                  SparseMatrix<T> old_a) 
     {
         // Your custom implementation here
         printf("Custom ptap called!\n");
@@ -153,6 +153,8 @@ struct VCycle_Better : public rxmesh::VCycle<T>
 
     void get_intermediate_laplacians(GMG<T>& gmg, SparseMatrix<T>& A) override
     {
+        std::cout << "\nCUSTOM FUNCTION CALLED\n";
+        exit(1);
         SparseMatrix<T> p_t = gmg.m_prolong_op[0].transpose();
         new_ptap(p_t,m_a[0].a, A);
     }

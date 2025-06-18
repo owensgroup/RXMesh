@@ -8,7 +8,7 @@
 
 struct arg
 {
-    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "rocker-arm.obj";
+    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "dragon.obj";
     std::string output_folder       = STRINGIFY(OUTPUT_DIR);
     std::string perm_method         = "nstdis";
     std::string solver              = "gmg";
@@ -24,6 +24,7 @@ struct arg
     int         threshold           = 1000;
     bool        render_hierarchy     = false;
     bool        create_AB     = false;
+    bool        use_new_ptap         = false;
 
     char**      argv;
     int         argc;
@@ -156,6 +157,10 @@ int main(int argc, char** argv)
         }
         if (cmd_option_exists(argv, argc + argv, "-rh")) {
             Arg.render_hierarchy = true;
+        }
+
+        if (cmd_option_exists(argv, argc + argv, "new_ptap")) {
+            Arg.use_new_ptap = true;
         }
 
         if (cmd_option_exists(argv, argc + argv, "-ab")) {

@@ -61,7 +61,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                      CoarseSolver::Cholesky,
                      Arg.gmg_tolerance_abs,
                      Arg.gmg_tolerance_rel,
-                     Arg.threshold);
+                     Arg.threshold,
+                     Arg.use_new_ptap);
 
     float    solve_time = 0;
     float    total_time = 0;
