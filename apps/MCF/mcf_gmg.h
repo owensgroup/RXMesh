@@ -62,7 +62,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                      Arg.gmg_tolerance_rel,
                      Arg.threshold);
 
-
+    float    solve_time = 0;
     float    total_time = 0;
     CPUTimer timer;
     GPUTimer gtimer;
@@ -76,9 +76,20 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     RXMESH_INFO("GMG pre-solve took {} (ms), {} (ms)",
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
+    RXMESH_INFO("GMG memory allocation took {} (ms)",
+        solver.gmg_memory_alloc_time + solver.v_cycle_memory_alloc_time);
+
+
+
     report.add_member(
-        "pre-solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
-    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+        "pre-solve", std::max(timer.elapsed_millis()-solver.gmg_memory_alloc_time-solver.v_cycle_memory_alloc_time, 
+            gtimer.elapsed_millis() - solver.gmg_memory_alloc_time -
+                     solver.v_cycle_memory_alloc_time));
+    total_time +=
+        std::max(timer.elapsed_millis() - solver.gmg_memory_alloc_time -
+                     solver.v_cycle_memory_alloc_time,
+                 gtimer.elapsed_millis() - solver.gmg_memory_alloc_time -
+                     solver.v_cycle_memory_alloc_time);
 
 
     timer.start();
@@ -86,6 +97,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     solver.solve(B_mat, X_mat);
     timer.stop();
     gtimer.stop();
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+    solve_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
     RXMESH_INFO("start_residual {}", solver.start_residual());
 
@@ -100,6 +113,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     report.add_member(
         "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
     total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+    report.add_member("solve", solve_time);
+    report.add_member("avg iteration time", solve_time/solver.iter_taken());
 
     report.add_member("total_time", total_time);
 
