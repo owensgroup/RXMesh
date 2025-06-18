@@ -29,7 +29,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
               CoarseSolver     coarse_solver  = CoarseSolver::Jacobi,
               T                abs_tol        = 1e-6,
               T                rel_tol        = 1e-6,
-              int              threshold      = 1000)
+              int              threshold      = 1000,
               bool             use_new_ptap   = false)
         : IterativeSolver<T, DenseMatrix<T>>(max_iter, abs_tol, rel_tol),
           m_rx(&rx),
