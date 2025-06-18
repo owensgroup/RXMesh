@@ -17,6 +17,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     uint32_t num_vertices = rx.get_num_vertices();
 
     auto coords = rx.get_input_vertex_coordinates();
+    rx.export_obj("mcf_initial.obj", *rx.get_input_vertex_coordinates());
 
     SparseMatrix<float> A_mat(rx);
     DenseMatrix<float>  B_mat(rx, num_vertices, 3);
@@ -120,7 +121,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
 
     report.add_member("max_iterations", Arg.max_num_iter);
     report.add_member("threshold", Arg.threshold);
-
+    report.add_member("final_residual", solver.get_final_residual());
     RXMESH_INFO("total_time {} (ms)", total_time);
 
 
