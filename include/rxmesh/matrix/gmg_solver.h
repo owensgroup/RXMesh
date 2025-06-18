@@ -4,6 +4,7 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/matrix/gmg/gmg.h"
 #include "rxmesh/matrix/gmg/v_cycle.h"
+#include "rxmesh/matrix/gmg/v_cycle_better_ptap.h"
 #include "rxmesh/matrix/sparse_matrix.h"
 #include "rxmesh/reduce_handle.h"
 
@@ -77,6 +78,9 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                                   m_coarse_solver,
                                   m_num_pre_relax,
                                   m_num_post_relax);
+
+
+
             //v_cycle_memory_alloc_time = m_v_cycle.memory_alloc_time;
 
             timer.stop();
@@ -111,25 +115,12 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         const IndexT n       = A.rows();
 
         T max_residual = 0.0;
-
-        // Temporary device-side vectors
-        /*DenseMatrix<T> AX(n, 1, DEVICE);
-        DenseMatrix<T> R(n, 1, DEVICE);*/
-
-        //AX.reset(0,DEVICE);
-        //R.reset(0,DEVICE);
-
         for (IndexT i = 0; i < num_rhs; ++i) {
-            // AX = A * X_i
             A.multiply(X.col_data(i, DEVICE), AX.col_data(0, DEVICE));
-
-            // R = AX - B_i => using axpy: R = AX + (-1) * B_i
             R.copy_from(AX, DEVICE, DEVICE);
 
 
             R.axpy(B.col(i), T(-1));  // R = AX - B_i
-
-            // Compute norm of R and B
             T r_norm = R.norm2();
             T b_norm = B.col(i).norm2();  // You'll need to add this utility
 
@@ -143,37 +134,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         if (abs_ok || rel_ok) {
             RXMESH_TRACE("GMG: convergence reached with residual ON GPU: {}",
                          max_residual);
-        }
-
-        return abs_ok || rel_ok;
-    }
-
-
-    bool is_converged_special(SparseMatrix<T>& A,
-                              DenseMatrix<T>&  X,
-                              DenseMatrix<T>&  B)
-    {
-        A.move(DEVICE, HOST);
-        B.move(DEVICE, HOST);
-        X.move(DEVICE, HOST);
-        auto A_mat_copy = A.to_eigen();
-        auto B_mat_copy = B.to_eigen();
-        auto X_mat_copy = X.to_eigen();
-        using Vec       = Eigen::Matrix<T, Eigen::Dynamic, 1>;
-        Eigen::Matrix<T, Eigen::Dynamic, 1> absResidue(B_mat_copy.cols());
-        for (int i = 0; i < B_mat_copy.cols(); ++i) {
-            Vec residual  = A_mat_copy * X_mat_copy.col(i) - B_mat_copy.col(i);
-            absResidue(i) = residual.norm() / B_mat_copy.col(i).norm();
-        }
-
-        T max_residual = absResidue.maxCoeff();
-
-        bool abs_ok = max_residual < this->m_abs_tol;
-        bool rel_ok = max_residual < this->m_rel_tol;
-
-        if (abs_ok || rel_ok) {
-            RXMESH_TRACE("GMG: convergence reached with residual: {}",
-                         max_residual);
+            m_final_residual = max_residual;
         }
 
         return abs_ok || rel_ok;
@@ -277,13 +238,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     int              m_threshold;
 
     DenseMatrix<T> AX;
-    //(n, 1, DEVICE);
     DenseMatrix<T> R;
-    //(n, 1, DEVICE);
-    
-    // Eigen::Map<const Eigen::SparseMatrix<T, Eigen::RowMajor, int>>
-    // A_mat_copy; Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic,
-    // 3>> B_mat_copy;
 };
 
 }  // namespace rxmesh
