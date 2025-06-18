@@ -71,7 +71,6 @@ struct VCycle
         m_coarse_solver_chols;
     // just solve it using a separate cholesky solver instance
 
-                    RXMeshStatic&         rx,
                     SparseMatrix<T>&      A,
                     const DenseMatrix<T>& rhs,
                     CoarseSolver          coarse_solver  = CoarseSolver::Jacobi,

@@ -16,9 +16,9 @@ namespace rxmesh {
 template <typename T>
 struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 {
-    using Type = T;
-    float gmg_memory_alloc_time=0;
-    float v_cycle_memory_alloc_time=0;
+    using Type                      = T;
+    float gmg_memory_alloc_time     = 0;
+    float v_cycle_memory_alloc_time = 0;
 
     GMGSolver(RXMeshStatic&    rx,
               SparseMatrix<T>& A,
@@ -59,7 +59,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
         gmg_memory_alloc_time = m_gmg.memory_alloc_time;
-        m_num_levels = m_gmg.m_num_levels;
+        m_num_levels          = m_gmg.m_num_levels;
         if (m_num_levels == 1) {
 
             exit(1);
@@ -75,7 +75,6 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                                   m_coarse_solver,
                                   m_num_pre_relax,
                                   m_num_post_relax);
-
 
 
             v_cycle_memory_alloc_time = m_v_cycle.memory_alloc_time;
@@ -112,8 +111,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
 
             R.axpy(B.col(i), T(-1));  // R = AX - B_i
-            T r_norm = R.norm2();
-            T b_norm = B.col(i).norm2(); 
+            T r_norm     = R.norm2();
+            T b_norm     = B.col(i).norm2();
             T residual   = r_norm / (b_norm + 1e-20);
             max_residual = std::max(max_residual, residual);
         }
@@ -121,8 +120,9 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         bool abs_ok = max_residual < this->m_abs_tol;
         bool rel_ok = max_residual < this->m_rel_tol;
 
-        if (abs_ok || rel_ok) 
-        {
+        // RXMESH_TRACE("GMG: current residual: {}", max_residual);
+
+        if (abs_ok || rel_ok) {
             m_final_residual = max_residual;
         }
 
@@ -146,32 +146,27 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         } else {
             m_iter_taken = 0;
             while (m_iter_taken < m_max_iter) {
-                // m_v_cycle.cycle(0, m_gmg, *m_A, B, X,*m_rx);
                 m_v_cycle.cycle(0, m_gmg, *m_A, m_v_cycle.B, X, *m_rx);
-                current_res = m_v_cycle.m_r[0].norm2();
-                /*RXMESH_TRACE(
-                    "GMG: current residual: "
-                    "{}",
-                    current_res);*/
 
                 timer.start();
                 gtimer.start();
 
                 if (is_converged_special_gpu(*m_A, X, m_v_cycle.B)) {
                     RXMESH_INFO("GMG: #number of iterations to solve: {}",
-                                 m_iter_taken);
-                    RXMESH_INFO("GMG: final residual: {}",m_final_residual);
+                                m_iter_taken);
+                    RXMESH_INFO("GMG: final residual: {}", m_final_residual);
                     timer.stop();
                     gtimer.stop();
                     time += std::max(timer.elapsed_millis(),
                                      gtimer.elapsed_millis());
                     RXMESH_INFO("GMG: #time taken to test for convergence: {}",
-                                 time);
+                                time);
                     return;
                 }
                 timer.stop();
                 gtimer.stop();
-                time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+                time +=
+                    std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
                 m_iter_taken++;
             }
@@ -179,7 +174,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                 "GMG: Solver did not reach convergence criteria. Residual: {}",
                 current_res);
             RXMESH_INFO("GMG: #number of iterations to solve: {}",
-                         m_iter_taken);
+                        m_iter_taken);
             RXMESH_INFO("GMG: #time taken to test for convergence: {}", time);
         }
     }
