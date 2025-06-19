@@ -130,6 +130,10 @@ template <typename integer_t>
 class Node
 {
    public:
+    Node() : lch(-1), rch(-1), pa(integer_t(-1))
+    {
+    }
+
     Node(integer_t left_child, integer_t right_child)
         : lch(left_child), rch(right_child), pa(integer_t(-1))
     {
@@ -291,12 +295,6 @@ void heavy_max_matching(const RXMeshStatic&      rx,
                     max_match_tree.levels.back().nodes[matched_neighbour].pa =
                         node_id;
                 }
-
-                // store the grand parent of level -1
-                if (max_match_tree.levels.empty()) {
-                    l.patch_proj[v]                 = node_id;
-                    l.patch_proj[matched_neighbour] = node_id;
-                }
             }
         }
     }
@@ -312,22 +310,8 @@ void heavy_max_matching(const RXMeshStatic&      rx,
             if (!max_match_tree.levels.empty()) {
                 max_match_tree.levels.back().nodes[v].pa = node_id;
             }
-
-            // store the parent of level -1
-            if (max_match_tree.levels.empty()) {
-                l.patch_proj[v] = node_id;
-            }
         }
     }
-
-    // update the projection if we are not on level 0
-    if (!max_match_tree.levels.empty() && l.nodes.size() > 1) {
-        for (uint32_t p = 0; p < l.patch_proj.size(); ++p) {
-            l.patch_proj[p] =
-                parents[max_match_tree.levels.back().patch_proj[p]];
-        }
-    }
-
 
     // create a coarse graph and update the nodes parent
     // since we incrementally (and serially) build the graph, we can build the
@@ -415,6 +399,39 @@ void heavy_max_matching(const RXMeshStatic&      rx,
 
     // recurse to the next level
     heavy_max_matching(rx, c_graph, max_match_tree);
+}
+
+template <typename integer_t>
+void recurse_compute_projection(int                      root,
+                                int                      root_level,
+                                int                      parent,
+                                int                      parent_l,
+                                MaxMatchTree<integer_t>& max_match_tree)
+{
+    int lch = max_match_tree.levels[parent_l].nodes[parent].lch;
+    int rch = max_match_tree.levels[parent_l].nodes[parent].rch;
+    if (parent_l == 0) {
+        max_match_tree.levels[root_level].patch_proj[lch] = root;
+        max_match_tree.levels[root_level].patch_proj[rch] = root;
+    } else {
+        recurse_compute_projection(
+            root, root_level, lch, parent_l - 1, max_match_tree);
+        recurse_compute_projection(
+            root, root_level, rch, parent_l - 1, max_match_tree);
+    }
+}
+
+
+template <typename integer_t>
+void compute_projection(MaxMatchTree<integer_t>& max_match_tree)
+{
+    int num_levels = max_match_tree.levels.size();
+    for (int l = 0; l < num_levels; ++l) {
+        auto& level = max_match_tree.levels[l];
+        for (int n = 0; n < level.nodes.size(); ++n) {
+            recurse_compute_projection(n, l, n, l, max_match_tree);
+        }
+    }
 }
 
 namespace detail {
@@ -1054,6 +1071,78 @@ inline void nd_permute(RXMeshStatic& rx, int* h_permute)
     // create max match tree
     MaxMatchTree<int> max_match_tree;
     heavy_max_matching(rx, p_graph, max_match_tree);
+
+    {
+        // works only with meshes from create_plane with number of patches
+        // that is 2^n (i.e., -n 64 or -n 128)
+
+        // int num_levels = int(std::log2(double(rx.get_num_patches())));
+        //
+        // for (int l = 0; l < num_levels; ++l) {
+        //     Level<int> level;
+        //
+        //     int num_nodes = std::pow(2.0, double(num_levels - l - 1));
+        //
+        //     level.nodes.resize(num_nodes);
+        //     level.patch_proj.resize(rx.get_num_patches());
+        //
+        //     for (int n = 0; n < num_nodes; ++n) {
+        //         level.nodes[n] = Node(n / 2, n * 2, n * 2 + 1);
+        //     }
+        //
+        //     max_match_tree.levels.push_back(level);
+        // }
+
+
+        // Level<int> l0;
+        // l0.nodes.resize(8);
+        // l0.patch_proj.resize(rx.get_num_patches());
+        //
+        // l0.nodes[0] = Node(0, 0, 1);
+        // l0.nodes[1] = Node(1, 2, 3);
+        // l0.nodes[2] = Node(0, 4, 5);
+        // l0.nodes[3] = Node(1, 6, 7);
+        // l0.nodes[4] = Node(2, 8, 9);
+        // l0.nodes[5] = Node(3, 10, 11);
+        // l0.nodes[6] = Node(2, 12, 13);
+        // l0.nodes[7] = Node(3, 14, 15);
+        //
+        // max_match_tree.levels.push_back(l0);
+        //
+        //
+        // Level<int> l1;
+        // l1.nodes.resize(4);
+        // l1.patch_proj.resize(rx.get_num_patches());
+        //
+        // l1.nodes[0] = Node(0, 0, 2);
+        // l1.nodes[1] = Node(0, 1, 3);
+        // l1.nodes[2] = Node(1, 4, 6);
+        // l1.nodes[3] = Node(1, 5, 7);
+        //
+        // max_match_tree.levels.push_back(l1);
+        //
+        //
+        // Level<int> l2;
+        // l2.nodes.resize(2);
+        // l2.patch_proj.resize(rx.get_num_patches());
+        //
+        // l2.nodes[0] = Node(0, 0, 1);
+        // l2.nodes[1] = Node(0, 2, 3);
+        //
+        // max_match_tree.levels.push_back(l2);
+        //
+        //
+        // Level<int> l3;
+        // l3.nodes.resize(1);
+        // l3.patch_proj.resize(rx.get_num_patches());
+        // l3.nodes[0] = Node(-1, 0, 1);
+        //
+        // max_match_tree.levels.push_back(l3);
+    }
+
+    // max_match_tree.print();
+
+    compute_projection(max_match_tree);
 
     // test the GGGP function
     // GGGP(rx, p_graph, max_match_tree);

@@ -163,10 +163,11 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                 m_timers.elapsed_millis("context.init"));
 
 
-    RXMESH_INFO("#Vertices = {}, #Faces= {}, #Edges= {}",
+    RXMESH_INFO("#Vertices = {}, #Faces= {}, #Edges= {}, #Patches = {}",
                 m_num_vertices,
                 m_num_faces,
-                m_num_edges);
+                m_num_edges,
+                m_num_patches);
     RXMESH_INFO("Input is{} edge manifold",
                 ((m_is_input_edge_manifold) ? "" : " Not"));
     RXMESH_INFO("Input is{} closed", ((m_is_input_closed) ? "" : " Not"));

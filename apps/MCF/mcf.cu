@@ -69,7 +69,7 @@ TEST(App, MCF)
 int main(int argc, char** argv)
 {
     using namespace rxmesh;
-    Log::init();
+    Log::init(spdlog::level::info);
 
     ::testing::InitGoogleTest(&argc, argv);
     Arg.argv = argv;
@@ -79,22 +79,30 @@ int main(int argc, char** argv)
             // clang-format off
             RXMESH_INFO("\nUsage: MCF.exe < -option X>\n"
                         " -h:                 Display this massage and exit\n"
-                        " -input:             Input file. Input file should be under the input/ subdirectory\n"
-                        "                     Default is {} \n"
-                        "                     Hint: Only accept OBJ files\n"
+                        " -input:             Input file. Input file should be under the input/ subdirectory. Default is {}\n"                        
                         " -o:                 JSON file output folder. Default is {} \n"
                         " -uniform_laplace:   Use uniform Laplace weights. Default is {} \n"
                         " -dt:                Time step (delta t). Default is {} \n"
                         "                     Hint: should be between (0.001, 1) for cotan Laplace or between (1, 100) for uniform Laplace\n"
                         " -solver:            Solver to use. Options are cg_mat_free, pcg_mat_free, cg, pcg, chol, or gmg. Default is {}\n" 
                         " -eps:               Conjugate gradient tolerance. Default is {}\n"
-                        " -perm:              Permutation method for Cholesky factorization. Default is {}\n"
+                        " -perm:              Permutation method for Cholesky factorization (symrcm, symamd, nstdis, gpumgnd, gpund). Default is {}\n"
                         " -max_iter:          Maximum number of iterations for iterative solvers. Default is {}\n"                                            
-                        " -levels:            Number of levels in the hierarchy, inlcudes the finest level(only for GMG): {} ",
-                        " -tol_abs:           Absolute tolerance for GMG solver: {}",
-                        " -tol_rel:           Relative tolerance for GMG solver: {}",
-                        " -device_id:         GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.output_folder,  (Arg.use_uniform_laplace? "true" : "false"), Arg.time_step, Arg.solver, Arg.cg_tolerance, Arg.perm_method, Arg.max_num_iter,Arg.gmg_tolerance_abs,Arg.gmg_tolerance_rel, Arg.device_id);
+                        " -levels:            Number of levels in the hierarchy, inlcudes the finest level(only for GMG): Default is {}\n"
+                        " -tol_abs:           Absolute tolerance for GMG solver: Default is {}\n"
+                        " -tol_rel:           Relative tolerance for GMG solver: Default is {}\n"
+                        " -device_id:         GPU device ID. Default is {}\n",
+            Arg.obj_file_name, Arg.output_folder,  
+            (Arg.use_uniform_laplace? "true" : "false"), 
+            Arg.time_step, 
+            Arg.solver, 
+            Arg.cg_tolerance, 
+            Arg.perm_method, 
+            Arg.max_num_iter,
+            Arg.levels,
+            Arg.gmg_tolerance_abs,
+            Arg.gmg_tolerance_rel, 
+            Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
