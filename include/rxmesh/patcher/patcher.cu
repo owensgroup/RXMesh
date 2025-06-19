@@ -401,13 +401,13 @@ void Patcher::calc_edge_cut(const std::vector<std::vector<uint32_t>>& fv,
 }
 void Patcher::print_statistics()
 {
-    RXMESH_TRACE("Patcher: num_patches = {}", m_num_patches);
-    RXMESH_TRACE("Patcher: patches_size = {}", m_patch_size);
-    RXMESH_TRACE("Patcher: num_components = {}", m_num_components);
+    RXMESH_INFO("Patcher: num_patches = {}", m_num_patches);
+    RXMESH_INFO("Patcher: patches_size = {}", m_patch_size);
+    RXMESH_INFO("Patcher: num_components = {}", m_num_components);
 
     // patching time
-    RXMESH_TRACE("Patcher: Num lloyd run = {}", m_num_lloyd_run);
-    RXMESH_TRACE(
+    RXMESH_INFO("Patcher: Num lloyd run = {}", m_num_lloyd_run);
+    RXMESH_INFO(
         "Patcher: Parallel patches construction time = {} (ms) and {} "
         "(ms/lloyd_run)",
         m_patching_time_ms,
@@ -418,15 +418,15 @@ void Patcher::print_statistics()
     // max-min patch size
     uint32_t max_patch_size(0), min_patch_size(m_num_faces), avg_patch_size(0);
     get_max_min_avg_patch_size(min_patch_size, max_patch_size, avg_patch_size);
-    RXMESH_TRACE(
+    RXMESH_INFO(
         "Patcher: max_patch_size= {}, min_patch_size= {}, avg_patch_size= {}",
         max_patch_size,
         min_patch_size,
         avg_patch_size);
 
-    RXMESH_TRACE("Patcher: number external ribbon faces = {} ({:02.2f}%)",
-                 get_num_ext_ribbon_faces(),
-                 get_ribbon_overhead());
+    RXMESH_INFO("Patcher: number external ribbon faces = {} ({:02.2f}%)",
+                get_num_ext_ribbon_faces(),
+                get_ribbon_overhead());
 }
 
 void Patcher::initialize_random_seeds(std::vector<uint32_t>&       seeds,
