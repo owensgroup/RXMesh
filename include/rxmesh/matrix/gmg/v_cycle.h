@@ -121,6 +121,7 @@ struct VCycle
         RXMESH_INFO("v cycle memory allocation took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
+        m_a.resize(gmg.m_num_levels - 1);
 
         
     }

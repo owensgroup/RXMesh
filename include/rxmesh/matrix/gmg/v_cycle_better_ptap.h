@@ -10,149 +10,68 @@ struct VCycle_Better : public rxmesh::VCycle<T>
 
     // Override the new_ptap method
     void new_ptap(SparseMatrix<T> p,
+                  SparseMatrix<T> p_t,
                   SparseMatrix<T> new_a,
-                  SparseMatrix<T> old_a) 
+                  SparseMatrix<T> old_a)
     {
-        printf("Custom ptap called!\n");
-        // rxmesh::VCycle<T>::new_ptap(p, new_a, old_a);
-    }
-
-    /*__host__ void new_ptap(SparseMatrix<T> p,
-                           SparseMatrix<T> new_a,
-                           SparseMatrix<T> old_a)
-    {*/
-        /*
         constexpr uint32_t blockThreads = 256;
-        uint32_t           blocks_new   = DIVIDE_UP(new_a.rows(), blockThreads);
+        uint32_t           blocks_new   = DIVIDE_UP(p.cols(), blockThreads);
         uint32_t           blocks_old   = DIVIDE_UP(old_a.rows(), blockThreads);
+        for_each_item<<<blocks_new, blockThreads>>>(
+            p.cols(), [old_a, p_t, p, new_a] __device__(int i) mutable {
 
+                printf("%d", i);
 
-        // first make sets per row
-        for_each_item<<<blocks_old, blockThreads>>>(
-            old_a.rows(), [old_a, p,match_store] __device__(int i) mutable {
-                //if (i == 0) {
-                    for (int q = old_a.row_ptr()[i]; q < old_a.row_ptr()[i + 1];
-        ++q) { int a_col = old_a.col_id(i, q - old_a.row_ptr()[i]); int a_index
-        = q - old_a.row_ptr()[i];
-                        //printf("\n%d is connected to %d", i, a_col);
+                const int MAX_UNIQUE = 64;
+                int       vals[MAX_UNIQUE];  // register
+                int       count = 0;
 
-                        // go through each coarse vertex, and all the things
-                        // they influence
-                        for (int x = 0; x < p.rows(); x += 1)
-                            for (int p_iter = p.row_ptr()[x];
-                                 p_iter < p.row_ptr()[x + 1];
-                                 ++p_iter)
-                            {
+                for (int p_iter = p_t.row_ptr()[i];
+                     p_iter < p_t.row_ptr()[i + 1];
+                     ++p_iter) {
+                    int p_t_col = p_t.col_idx()[p_iter];
 
-                                int p_index = p_iter - p.row_ptr()[x];
-                                int p_col = p.col_id(x,p_index);
-                                /*printf(
-                                    "\nComparing: p(%d, %d) = %d vs a(%d, %d) "
-                                    "= "
-                                    "%d",
-                                    x,
-                                    p_index,
-                                    p_col,
-                                    i,
-                                    a_index,
-                                    a_col);
-                                if (p_col == a_col)
-                                {
-                                    /*printf(
-                                        "\ncoarse vertex i=%d influences fine "
-                                        "vertex j=%d hence (%d,%d) is non zero "
-                                        "on PtA",
-                                        x,
-                                        a_col,
-                                        x,
-                                        i);
-                                    Edge pair(x, i);
-                                    match_store.insert(pair);  // Thread-safe
-        atomic insert
+                    for (int q = old_a.row_ptr()[p_t_col];
+                         q < old_a.row_ptr()[p_t_col + 1];
+                         ++q) {
+
+                        int a_col = old_a.col_idx()[q];
+
+                        for (int k = p.row_ptr()[a_col];
+                             k < p.row_ptr()[a_col + 1];
+                             ++k) {
+                            int p_col = p.col_idx()[k];
+
+                            bool already_seen = false;
+                            for (int j = 0; j < count; ++j) {
+                                if (vals[j] == p_col) {
+                                    already_seen = true;
+                                    break;
                                 }
-                                break;
                             }
+                            // Add if unique
+                            if (!already_seen && count < MAX_UNIQUE) 
+                            {
+                                vals[count++] = p_col;
+                                printf("\n%d is a non-sparse entry in row %d",
+                                       p_col,
+                                       i);
+                            }
+                        }
                     }
-                //}
-
+                }
+                printf("\nThread %d found %d unique entries: ", i, count);
             });
 
-        match_store.uniquify();
 
-        match_store.for_each(
-            [new_a,p] __device__(Edge e) mutable
-        {
-            std::pair<int, int> q = e.unpack();
-            int                 a = q.first;
-            int                 b = q.second;
-            //printf("\n(%d,%d)", a, b);
-
-            for (int x = 0; x < p.rows(); x += 1)
-                for (int p_iter = p.row_ptr()[x]; p_iter < p.row_ptr()[x +
-        1];++p_iter)
-                {
-                    int p_index = p_iter - p.row_ptr()[x];
-                    int p_col   = p.col_id(x, p_index);
-                    if (b==p_col) {
-                        if (x==5)
-                        printf("\n(%d,%d) is non zero in the next laplacian,
-        sets were (%d,%d) and (%d,%d)", x, a,a,b,x,p_col);
-                    }
-
-                }
-        });
-
-         for_each_item<<<blocks_new, blockThreads>>>(
-            n, [old_a, new_a, p,match_store] __device__(int i) mutable
-         {
-
-             //go through each coarse row
-
-             //check if anything in the set matches with what is influencing
-
-
-
-         });
-
-        /*
-        for_each_item<<<blocks, blockThreads>>>(n,
-            [old_a,new_a,p] __device__(int i) mutable
-            {
-                //printf("\n%d is influenced by triangle made of %d %d
-        %d",i,p.col_id(i,0),p.col_id(i,1),p.col_id(i,2));
-
-            //printf("\n%d influences")
-
-            //for an entry in new A to be non zero-> the
-            if (i==0)
-            for (int q = p.row_ptr()[i]; q < p.row_ptr()[i + 1]; q++) {
-                    printf("\n%d is influenced by %d",
-                       p.col_id(i, q - p.row_ptr()[i]),
-                           i);
-
-                    //in those influenced, gather the 1 ring
-
-                }
-                //use A for connectivity determinations
-                for (int j = 0; j < new_a.rows();j++) {
-
-                    //go through
-
-                    //printf("\nPtA non zeros:");
-
-                }
-            });
-            */
-    //}
-
-
-
+    }
 
     void get_intermediate_laplacians(GMG<T>& gmg, SparseMatrix<T>& A) override
     {
-        std::cout << "\nCUSTOM FUNCTION CALLED\n";
-        exit(1);
         SparseMatrix<T> p_t = gmg.m_prolong_op[0].transpose();
-        new_ptap(p_t,m_a[0].a, A);
+        new_ptap(gmg.m_prolong_op[0], p_t, m_a[0].a, A);
+
+        //base class function call so that everything functions temporarily
+        rxmesh::VCycle<T>::get_intermediate_laplacians(gmg,A);
     }
 };
