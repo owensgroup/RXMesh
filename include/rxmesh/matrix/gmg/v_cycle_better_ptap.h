@@ -20,8 +20,6 @@ struct VCycle_Better : public rxmesh::VCycle<T>
         for_each_item<<<blocks_new, blockThreads>>>(
             p.cols(), [old_a, p_t, p, new_a] __device__(int i) mutable {
 
-                printf("%d", i);
-
                 const int MAX_UNIQUE = 64;
                 int       vals[MAX_UNIQUE];  // register
                 int       count = 0;
@@ -53,9 +51,6 @@ struct VCycle_Better : public rxmesh::VCycle<T>
                             if (!already_seen && count < MAX_UNIQUE) 
                             {
                                 vals[count++] = p_col;
-                                printf("\n%d is a non-sparse entry in row %d",
-                                       p_col,
-                                       i);
                             }
                         }
                     }
