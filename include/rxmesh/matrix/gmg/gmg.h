@@ -30,12 +30,12 @@ struct GMG
     // In indexing, we always using L=0 to refer to the fine mesh.
     // The index of the first coarse level is L=1.
 
-    GMG(const GMG&) = delete;
-    GMG()           = default;
-    GMG(GMG&&)      = default;
+    GMG(const GMG&)            = delete;
+    GMG()                      = default;
+    GMG(GMG&&)                 = default;
     GMG& operator=(const GMG&) = default;
-    GMG& operator=(GMG&&) = default;
-    ~GMG()                = default;
+    GMG& operator=(GMG&&)      = default;
+    ~GMG()                     = default;
 
     float m_ratio;
     int   m_num_levels;  // numberOfLevels
@@ -68,9 +68,8 @@ struct GMG
 
     GMG(RXMeshStatic& rx,
         int           numberOfLevels,
-        int threshold = 1000,
-        Sampling      sam       = Sampling::FPS
-        )
+        int           threshold = 1000,
+        Sampling      sam       = Sampling::FPS)
         : GMG(rx,
               sam,
               compute_ratio(rx.get_num_vertices(), numberOfLevels, threshold),
@@ -147,7 +146,6 @@ struct GMG
     }
 
 
-
     GMG(RXMeshStatic& rx,
         Sampling      sam                   = Sampling::Rand,
         int           reduction_ratio       = 4,
@@ -159,14 +157,14 @@ struct GMG
         CPUTimer timer;
         GPUTimer gtimer;
 
-        
+
         m_num_rows = rx.get_num_vertices();
         // m_num_samples.push_back(m_num_rows);
         for (int i = 0; i < 16; i++) {
             int s = DIVIDE_UP(m_num_rows, std::pow(m_ratio, i));
             if (s > num_samples_threshold) {
                 m_num_samples.push_back(s);
-                RXMESH_TRACE("GMG: #samples at level {}: {}", i, s);
+                RXMESH_INFO("GMG: #samples at level {}: {}", i, s);
             }
         }
         m_num_levels = m_num_samples.size();
@@ -259,7 +257,8 @@ struct GMG
                             gtimer.elapsed_millis());
                 /*report.add_member(
                     "random_sampling",
-                    std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));*/
+                    std::max(timer.elapsed_millis(),
+                   gtimer.elapsed_millis()));*/
 
                 break;
             }
@@ -270,9 +269,10 @@ struct GMG
                 RXMESH_INFO("fps sampling took {} (ms), {} (ms)",
                             timer.elapsed_millis(),
                             gtimer.elapsed_millis());
-               /* report.add_member(
-                    "fps_sampling",
-                    std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));*/
+                /* report.add_member(
+                     "fps_sampling",
+                     std::max(timer.elapsed_millis(),
+                   gtimer.elapsed_millis()));*/
                 break;
             }
             case Sampling::KMeans: {
@@ -284,7 +284,8 @@ struct GMG
                             gtimer.elapsed_millis());
                 /*report.add_member(
                     "kmeans_sampling",
-                    std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));*/
+                    std::max(timer.elapsed_millis(),
+                   gtimer.elapsed_millis()));*/
                 break;
             }
             default: {
@@ -574,31 +575,30 @@ struct GMG
     void random_sampling(RXMeshStatic& rx)
     {
         constexpr uint32_t blockThreads = 256;
-        bool nested = true;
-        int  max    = 1;
+        bool               nested       = true;
+        int                max          = 1;
         if (!nested) {
             max = m_num_levels - 1;
         }
         m_vertex_pos.move(DEVICE, HOST);
         for (int i = 0; i < max; i++) {
             // re-init m_distance because it is used in clustering
-            auto& distance = m_distance;
-            const auto& vc = m_vertex_cluster[i];
-            if (i==0)
-            rx.for_each_vertex(
-                DEVICE,
-                [distance, vc] __device__(const VertexHandle vh) mutable {
-                    //vc(vh,0) = -1;
-                    distance(vh, 0) = std::numeric_limits<float>::max();
-                });
+            auto&       distance = m_distance;
+            const auto& vc       = m_vertex_cluster[i];
+            if (i == 0)
+                rx.for_each_vertex(
+                    DEVICE,
+                    [distance, vc] __device__(const VertexHandle vh) mutable {
+                        // vc(vh,0) = -1;
+                        distance(vh, 0) = std::numeric_limits<float>::max();
+                    });
             distance.move(DEVICE, HOST);
             auto& current_vertex_cluster = m_vertex_cluster[i];
 
 
-
             std::random_device         rd;
             std::default_random_engine generator(rd());
-            std::vector<int> samples(m_num_samples[i]);
+            std::vector<int>           samples(m_num_samples[i]);
             std::iota(samples.begin(), samples.end(), 1);
             std::shuffle(samples.begin(), samples.end(), generator);
             samples.resize(m_num_samples[i + 1]);
@@ -606,9 +606,11 @@ struct GMG
             // TODO parallelise
             for (auto& a : samples) {
                 current_vertex_cluster(a - 1, 0) = j;
-                if(i==0) distance(a - 1, 0)               = 0;
-                else m_distance_mat[i](a - 1, 0)       = 0;
-                
+                if (i == 0)
+                    distance(a - 1, 0) = 0;
+                else
+                    m_distance_mat[i](a - 1, 0) = 0;
+
                 m_samples_pos[i](j, 0) = m_vertex_pos(a - 1, 0);
                 m_samples_pos[i](j, 1) = m_vertex_pos(a - 1, 1);
                 m_samples_pos[i](j, 2) = m_vertex_pos(a - 1, 2);
@@ -622,11 +624,11 @@ struct GMG
         if (nested) {
             for (int level = 2; level < m_num_levels; ++level) {
                 uint32_t blocks = DIVIDE_UP(m_num_samples[level], blockThreads);
-                auto& current_samples_pos = m_samples_pos[level - 1];
-                const auto& prv_samples_pos = m_samples_pos[level - 2];
-                auto& current_v_cluster = m_vertex_cluster[level - 1];
-                const auto& prv_v_cluster = m_vertex_cluster[level - 2];
-                const auto& pos = m_vertex_pos;
+                auto&    current_samples_pos  = m_samples_pos[level - 1];
+                const auto& prv_samples_pos   = m_samples_pos[level - 2];
+                auto&       current_v_cluster = m_vertex_cluster[level - 1];
+                const auto& prv_v_cluster     = m_vertex_cluster[level - 2];
+                const auto& pos               = m_vertex_pos;
                 // set sample position of this level
                 for_each_item<<<blocks, blockThreads>>>(
                     m_num_samples[level],
@@ -877,7 +879,7 @@ struct GMG
 
         uint32_t threads = 256;
         uint32_t blocks  = DIVIDE_UP(num_samples, threads);
-        //printf("\n\n\n");
+        // printf("\n\n\n");
         for_each_item<<<blocks, threads>>>(
             num_samples, [=] __device__(int sample_id) mutable {
                 bool tri_chosen = false;

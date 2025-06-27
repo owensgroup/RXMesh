@@ -47,7 +47,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
     virtual void pre_solve(const DenseMatrix<T>& B,
                            DenseMatrix<T>&       X,
-                           cudaStream_t          stream       = NULL) override
+                           cudaStream_t          stream = NULL) override
     {
         CPUTimer timer;
         GPUTimer gtimer;
@@ -108,7 +108,6 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     }
 
 
-    
     bool is_converged_special_gpu(rxmesh::SparseMatrix<T>& A,
                                   rxmesh::DenseMatrix<T>&  X,
                                   rxmesh::DenseMatrix<T>&  B)
@@ -162,9 +161,9 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
             return;
         } else {
             this->m_iter_taken = 0;
-            while (this->m_iter_taken < this->m_max_iter) {                
-                m_v_cycle->cycle(0, m_gmg, *m_A, m_v_cycle.B, X, *m_rx);
-                //current_res = m_v_cycle.m_r[0].norm2();                
+            while (this->m_iter_taken < this->m_max_iter) {
+                m_v_cycle->cycle(0, m_gmg, *m_A, m_v_cycle->B, X, *m_rx);
+                // current_res = m_v_cycle.m_r[0].norm2();
 
                 timer.start();
                 gtimer.start();
@@ -192,7 +191,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                 "GMG: Solver did not reach convergence criteria. Residual: {}",
                 current_res);
 
-            RXMESH_INFO("GMG: #number of iterations to solve: {}", this->m_iter_taken);
+            RXMESH_INFO("GMG: #number of iterations to solve: {}",
+                        this->m_iter_taken);
             RXMESH_INFO("GMG: #time taken to test for convergence: {}", time);
         }
     }
@@ -232,8 +232,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     int                        m_num_levels;
     int                        m_threshold;
     bool                       m_use_new_ptap;
-    DenseMatrix<T> AX;
-    DenseMatrix<T> R;
+    DenseMatrix<T>             AX;
+    DenseMatrix<T>             R;
 };
 
 }  // namespace rxmesh

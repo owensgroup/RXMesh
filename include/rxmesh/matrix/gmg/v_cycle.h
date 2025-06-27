@@ -88,7 +88,7 @@ struct VCycle
         B = rhs;
 
         // allocate memory for coarsened LHS and RHS
-        m_smoother.emplace_back(gmg.m_num_samples[0], gmg.m_num_samples[0]);
+        m_smoother.emplace_back(gmg.m_num_samples[0], rhs.cols());
 
         m_r.emplace_back(rx, gmg.m_num_samples[0], rhs.cols());
         m_rhs.emplace_back(rx, gmg.m_num_samples[0], rhs.cols());
@@ -106,10 +106,10 @@ struct VCycle
             } else {
                 // coarsest level
 
-                if (coarse_solver == CoarseSolver::Jacobi)
-                    m_coarse_solver = JacobiSolver<T>(gmg.m_num_samples[l],
-                                                      gmg.m_num_samples[l]);
-                /*else*/ if (coarse_solver == CoarseSolver::Cholesky) {
+                if (coarse_solver == CoarseSolver::Jacobi) {
+                    m_coarse_solver =
+                        JacobiSolver<T>(gmg.m_num_samples[l], rhs.cols());
+                } else if (coarse_solver == CoarseSolver::Cholesky) {
                 }
             }
         }
