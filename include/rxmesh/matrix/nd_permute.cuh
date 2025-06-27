@@ -1,5 +1,5 @@
 #pragma once
-
+#include <stdint.h>
 #include <functional>
 #include <queue>
 #include <set>
@@ -11,8 +11,9 @@
 #include "rxmesh/matrix/patch_permute.cuh"
 #include "rxmesh/matrix/permute_util.h"
 
+#include "metis.h"
 // if we should calc and use vertex weight in max match
-// #define USE_V_WEIGHTS
+#define USE_V_WEIGHTS
 
 namespace rxmesh {
 
@@ -213,10 +214,308 @@ struct MaxMatchTree
 };
 
 template <typename integer_t>
+void metis_bipartition(Graph<integer_t>& graph, std::vector<int32_t>& part)
+{
+    idx_t options[METIS_NOPTIONS];
+    METIS_SetDefaultOptions(options);
+    options[METIS_OPTION_PTYPE] = METIS_PTYPE_KWAY;
+    options[METIS_OPTION_OBJTYPE] =
+        METIS_OBJTYPE_VOL;  // Total communication volume minimization.
+    options[METIS_OPTION_NUMBERING] = 0;
+    options[METIS_OPTION_CONTIG]    = 0;
+    options[METIS_OPTION_COMPRESS]  = 0;
+    options[METIS_OPTION_DBGLVL]    = 0;
+
+    idx_t   nvtxs  = graph.n;
+    idx_t   ncon   = 1;
+    idx_t*  vwgt   = NULL;
+    idx_t*  vsize  = NULL;
+    idx_t   nparts = 2;
+    real_t* tpwgts = NULL;
+    real_t* ubvec  = NULL;
+    idx_t   objval = 0;
+
+    part.resize(graph.n, 0);
+
+    int metis_status = METIS_PartGraphKway(&nvtxs,
+                                           &ncon,
+                                           graph.xadj.data(),
+                                           graph.adjncy.data(),
+                                           graph.v_weights.data(),
+                                           vsize,
+                                           graph.e_weights.data(),
+                                           &nparts,
+                                           tpwgts,
+                                           ubvec,
+                                           options,
+                                           &objval,
+                                           part.data());
+
+    if (metis_status == METIS_ERROR_INPUT) {
+        RXMESH_ERROR("METIS ERROR INPUT");
+        exit(EXIT_FAILURE);
+    } else if (metis_status == METIS_ERROR_MEMORY) {
+        RXMESH_ERROR("\n METIS ERROR MEMORY \n");
+        exit(EXIT_FAILURE);
+    } else if (metis_status == METIS_ERROR) {
+        RXMESH_ERROR("\n METIS ERROR\n");
+        exit(EXIT_FAILURE);
+    }
+
+    std::vector<int> part_size(nparts, 0);
+    for (int i = 0; i < part.size(); ++i) {
+        part_size[part[i]]++;
+    }
+
+    // RXMESH_INFO(" Metis parts size: ");
+    // for (int i = 0; i < part_size.size(); ++i) {
+    //     RXMESH_INFO("   Parts {}= {}", i, part_size[i]);
+    // }
+}
+
+
+template <typename integer_t>
+void hierarchical_patch_graph_partitioning_recurse(
+    const int                level_id,
+    const int                parent_id,
+    Graph<integer_t>&        graph,
+    std::vector<int>         patch_node_mapping,
+    std::vector<int32_t>&    part,
+    MaxMatchTree<integer_t>& max_match_tree)
+{
+    assert(graph.n > 0);
+
+    if (graph.n <= 2) {
+        if (max_match_tree.levels.size() <= level_id) {
+            Level<integer_t> l;
+            max_match_tree.levels.push_back(l);
+        }
+        if (graph.n == 1) {
+            int ch = std::max(patch_node_mapping[0], patch_node_mapping[1]);
+            max_match_tree.levels[level_id].nodes.push_back(
+                Node(parent_id, ch, ch));
+        } else {
+            max_match_tree.levels[level_id].nodes.push_back(
+                Node(parent_id, patch_node_mapping[0], patch_node_mapping[1]));
+        }
+        return;
+    }
+
+    //*** Partition
+    metis_bipartition(graph, part);
+
+    //*** Create subgraphs
+    // map nodes in the new graph to their index in the input graph
+    std::vector<integer_t> nodes_left, nodes_right;
+    nodes_left.reserve(graph.n);
+    nodes_right.reserve(graph.n);
+    for (integer_t i = 0; i < graph.n; ++i) {
+        if (part[i] == 0) {
+            nodes_left.push_back(i);
+        } else {
+            nodes_right.push_back(i);
+        }
+    }
+
+    std::unordered_map<integer_t, integer_t> old_to_new;
+
+    auto build_subgraph = [&](std::vector<integer_t>& nodes_map,
+                              Graph<integer_t>&       subgraph) {
+        // TODO fix the weights
+
+        old_to_new.clear();
+        for (size_t i = 0; i < nodes_map.size(); ++i) {
+            old_to_new[nodes_map[i]] = static_cast<integer_t>(i);
+        }
+
+        subgraph.n = static_cast<integer_t>(nodes_map.size());
+        subgraph.xadj.push_back(0);
+
+        for (auto u : nodes_map) {
+            integer_t deg = 0;
+            for (integer_t j = graph.xadj[u]; j < graph.xadj[u + 1]; ++j) {
+                integer_t v = graph.adjncy[j];
+                if (old_to_new.count(v)) {
+                    subgraph.adjncy.push_back(old_to_new[v]);
+                    subgraph.e_weights.push_back(graph.e_weights[j]);
+                    ++deg;
+                }
+            }
+            subgraph.xadj.push_back(subgraph.xadj.back() + deg);
+            subgraph.v_weights.push_back(graph.v_weights[u]);
+        }
+    };
+
+    Graph<integer_t> left_subgraph, right_subgraph;
+
+    build_subgraph(nodes_left, left_subgraph);
+    build_subgraph(nodes_right, right_subgraph);
+
+    //*** Update max match tree levels
+    if (max_match_tree.levels.size() <= level_id) {
+        Level<integer_t> l;
+        max_match_tree.levels.push_back(l);
+    }
+
+    int left_child_id, right_child_id;
+    if (max_match_tree.levels.size() <= level_id + 1) {
+        // we have not created this level yet,
+        left_child_id = 0;
+    } else {
+        // we are appending new nodes to this next level
+        left_child_id = max_match_tree.levels[level_id + 1].nodes.size();
+    }
+    right_child_id = left_child_id + 1;
+
+    max_match_tree.levels[level_id].nodes.push_back(
+        Node(parent_id, left_child_id, right_child_id));
+
+    //*** Recurse subgraphs
+    int id = max_match_tree.levels[level_id].nodes.size() - 1;
+
+    std::vector<int> leaf_patch_node_mapping(
+        std::max(left_subgraph.n, right_subgraph.n));
+
+    auto gen_patch_node_map = [&](std::vector<integer_t>& nodes_map,
+                                  Graph<integer_t>&       subgraph) {
+        std::fill(
+            leaf_patch_node_mapping.begin(), leaf_patch_node_mapping.end(), -1);
+
+        for (int i = 0; i < subgraph.n; ++i) {
+            leaf_patch_node_mapping[i] = patch_node_mapping[nodes_map[i]];
+        }
+    };
+
+    gen_patch_node_map(nodes_left, left_subgraph);
+    hierarchical_patch_graph_partitioning_recurse(level_id + 1,
+                                                  id,
+                                                  left_subgraph,
+                                                  leaf_patch_node_mapping,
+                                                  part,
+                                                  max_match_tree);
+
+    gen_patch_node_map(nodes_right, right_subgraph);
+    hierarchical_patch_graph_partitioning_recurse(level_id + 1,
+                                                  id,
+                                                  right_subgraph,
+                                                  leaf_patch_node_mapping,
+                                                  part,
+                                                  max_match_tree);
+}
+
+template <typename integer_t>
+void pad_shallow_leaves(MaxMatchTree<integer_t>& tree)
+{
+    const int tree_depth = tree.levels.size();
+
+    auto is_leaf = [&](const Node<integer_t>& node, int level) {
+        if (level == 0) {
+            return true;
+        }
+        const auto& child_level = tree.levels[level - 1].nodes;
+        return node.lch >= static_cast<integer_t>(child_level.size()) &&
+               node.rch >= static_cast<integer_t>(child_level.size());
+    };
+
+    for (int level = 1; level < tree_depth; ++level) {
+
+        auto& nodes = tree.levels[level].nodes;
+
+        for (integer_t node_id = 0; node_id < nodes.size(); ++node_id) {
+            Node<integer_t>& node = nodes[node_id];
+
+            if (!is_leaf(node, level)) {
+                continue;
+            }
+
+            Node<integer_t> dummy_r(node_id, node.rch, node.rch);
+            Node<integer_t> dummy_l(node_id, node.lch, node.lch);
+
+            integer_t dummy_r_id = tree.levels[level - 1].nodes.size();
+            integer_t dummy_l_id = dummy_r_id + 1;
+
+            tree.levels[level - 1].nodes.push_back(dummy_r);
+            tree.levels[level - 1].nodes.push_back(dummy_l);
+
+            node.rch = dummy_r_id;
+            node.lch = dummy_l_id;
+
+
+            // tree.levels[level - 1].nodes[node.rch].rch = dummy_r_id;
+            // tree.levels[level - 1].nodes[node.rch].lch = dummy_r_id;
+            //
+            // tree.levels[level - 1].nodes[node.lch].rch = dummy_l_id;
+            // tree.levels[level - 1].nodes[node.lch].lch = dummy_l_id;
+
+            ///
+            // integer_t curr_node_id = node_id;
+            //
+            // int curr_level = level;
+            //
+            // while (curr_level >= 0) {
+            //     --curr_level;
+            //
+            //     auto& new_child_level = tree.levels[curr_level].nodes;
+            //
+            //     integer_t new_node_id =
+            //         static_cast<integer_t>(new_child_level.size());
+            //
+            //     Node<integer_t> dummy;
+            //     dummy.lch = curr_node_id;
+            //     dummy.rch = curr_node_id;
+            //     dummy.pa  = node_id;
+            //
+            //     new_child_level.push_back(dummy);
+            //
+            //     tree.levels[curr_level - 1].nodes[curr_node_id].pa =
+            //         new_node_id;
+            //
+            //     curr_node_id = new_node_id;
+            // }
+            // break;
+        }
+        break;
+    }
+}
+
+
+template <typename integer_t>
+void hierarchical_patch_graph_partitioning(
+    RXMeshStatic&            rx,
+    Graph<integer_t>&        graph,
+    MaxMatchTree<integer_t>& max_match_tree)
+{
+    std::vector<int32_t> part(graph.n);
+    std::vector<int>     patch_node_mapping(graph.n);
+
+    fill_with_sequential_numbers(patch_node_mapping.data(),
+                                 patch_node_mapping.size());
+
+    hierarchical_patch_graph_partitioning_recurse(
+        0, -1, graph, patch_node_mapping, part, max_match_tree);
+
+    // since we are building the tree top down, we have to reverse the order of
+    // the levels
+    std::reverse(max_match_tree.levels.begin(), max_match_tree.levels.end());
+
+    // add a fix up so that all leaves nodes are at the same level
+    pad_shallow_leaves(max_match_tree);
+
+    max_match_tree.print();
+
+    for (auto& l : max_match_tree.levels) {
+        l.patch_proj.resize(rx.get_num_patches());
+    }
+}
+
+
+template <typename integer_t>
 void heavy_max_matching(const RXMeshStatic&      rx,
                         const Graph<integer_t>&  graph,
-                        MaxMatchTree<integer_t>& max_match_tree)
+                        MaxMatchTree<integer_t>& max_match_tree,
+                        std::vector<int>&        sizes)
 {
+    // Kuhn's algorithm
 
 #ifdef USE_V_WEIGHTS
 #ifndef NDEBUG
@@ -260,22 +559,71 @@ void heavy_max_matching(const RXMeshStatic&      rx,
     // fill_with_sequential_numbers(rands.data(), rands.size());
 
 
+    // for (int k = 0; k < graph.n; ++k) {
+    //     int v = rands[k];
+    //     if (!matched[v]) {
+    //
+    //         // the neighbor with which we will match v
+    //         integer_t matched_neighbour = integer_t(-1);
+    //         integer_t max_w             = 0;
+    //
+    //         for (int i = graph.xadj[v]; i < graph.xadj[v + 1]; ++i) {
+    //             integer_t n = graph.adjncy[i];
+    //             integer_t w = graph.e_weights[i];
+    //
+    //             if (!matched[n]) {
+    //                 if (w > max_w) {
+    //                     matched_neighbour = n;
+    //                     max_w             = w;
+    //                 }
+    //             }
+    //         }
+    //         if (matched_neighbour != integer_t(-1)) {
+    //             int node_id = l.nodes.size();
+    //
+    //             l.nodes.push_back(Node(v, matched_neighbour));
+    //             matched[v]                 = true;
+    //             matched[matched_neighbour] = true;
+    //
+    //             parents[v]                 = node_id;
+    //             parents[matched_neighbour] = node_id;
+    //
+    //             // update the parent of the previous level
+    //             if (!max_match_tree.levels.empty()) {
+    //                 max_match_tree.levels.back().nodes[v].pa = node_id;
+    //                 max_match_tree.levels.back().nodes[matched_neighbour].pa
+    //                 =
+    //                     node_id;
+    //             }
+    //         }
+    //     }
+    // }
+
+
     for (int k = 0; k < graph.n; ++k) {
         int v = rands[k];
         if (!matched[v]) {
 
             // the neighbor with which we will match v
             integer_t matched_neighbour = integer_t(-1);
-            integer_t max_w             = 0;
+
+            double max_score = -1.0;
+
 
             for (int i = graph.xadj[v]; i < graph.xadj[v + 1]; ++i) {
                 integer_t n = graph.adjncy[i];
                 integer_t w = graph.e_weights[i];
 
                 if (!matched[n]) {
-                    if (w > max_w) {
+
+                    // Balanced score
+                    int    s1    = sizes[v];
+                    int    s2    = sizes[n];
+                    double score = double(w) / (1.0 + std::abs(s1 - s2));
+
+                    if (score > max_score) {
                         matched_neighbour = n;
-                        max_w             = w;
+                        max_score         = score;
                     }
                 }
             }
@@ -295,6 +643,9 @@ void heavy_max_matching(const RXMeshStatic&      rx,
                     max_match_tree.levels.back().nodes[matched_neighbour].pa =
                         node_id;
                 }
+
+                // New node size is the sum of its children
+                sizes[node_id] = sizes[v] + sizes[matched_neighbour];
             }
         }
     }
@@ -310,6 +661,8 @@ void heavy_max_matching(const RXMeshStatic&      rx,
             if (!max_match_tree.levels.empty()) {
                 max_match_tree.levels.back().nodes[v].pa = node_id;
             }
+
+            sizes[node_id] = sizes[v];  // preserve size
         }
     }
 
@@ -397,8 +750,18 @@ void heavy_max_matching(const RXMeshStatic&      rx,
     // Now that we have this level finished, we can insert in the tree
     max_match_tree.levels.push_back(l);
 
+
+    std::vector<int> coarse_sizes(l.nodes.size(), 0);
+    for (int i = 0; i < l.nodes.size(); ++i) {
+        auto& node      = l.nodes[i];
+        coarse_sizes[i] = sizes[node.lch];
+        if (node.lch != node.rch)
+            coarse_sizes[i] += sizes[node.rch];
+    }
+
+
     // recurse to the next level
-    heavy_max_matching(rx, c_graph, max_match_tree);
+    heavy_max_matching(rx, c_graph, max_match_tree, coarse_sizes);
 }
 
 template <typename integer_t>
@@ -437,10 +800,9 @@ void compute_projection(MaxMatchTree<integer_t>& max_match_tree)
 namespace detail {
 
 template <uint32_t blockThreads>
-__global__ static void compute_patch_graph_edge_weight(
-    const rxmesh::Context context,
-    int*                  d_edge_weight,
-    int*                  d_vertex_weight)
+__global__ static void compute_patch_graph_edge_weight(const Context context,
+                                                       int* d_edge_weight,
+                                                       int* d_vertex_weight)
 {
     __shared__ int s_owned_vertex_sum;
     if (threadIdx.x == 0) {
@@ -693,6 +1055,11 @@ inline void create_dfs_indexing(const int                level,
 inline void single_patch_nd_permute(RXMeshStatic&              rx,
                                     VertexAttribute<uint16_t>& v_local_permute)
 {
+    CPUTimer timer;
+    GPUTimer gtimer;
+
+    timer.start();
+    gtimer.start();
 
     constexpr uint32_t blockThreads = 256;
 
@@ -793,6 +1160,13 @@ inline void single_patch_nd_permute(RXMeshStatic&              rx,
     // render
     // polyscope::show();
 #endif
+
+    timer.stop();
+    gtimer.stop();
+
+    RXMESH_INFO("single_patch_nd_permute took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
 }
 
 inline void permute_separators(RXMeshStatic&              rx,
@@ -803,24 +1177,6 @@ inline void permute_separators(RXMeshStatic&              rx,
                                int*                       d_patch_proj_l,
                                int*                       d_patch_proj_l1)
 {
-
-
-    CPUTimer timer;
-    GPUTimer gtimer;
-
-    timer.start();
-    gtimer.start();
-
-    single_patch_nd_permute(rx, v_local_permute);
-
-
-    timer.stop();
-    gtimer.stop();
-
-    RXMESH_INFO("single_patch_nd_permute took {} (ms), {} (ms)",
-                timer.elapsed_millis(),
-                gtimer.elapsed_millis());
-
     v_index.reset(-1, DEVICE);
 
     constexpr uint32_t blockThreads = 256;
@@ -841,15 +1197,13 @@ inline void permute_separators(RXMeshStatic&              rx,
     const int      depth     = max_match_tree.levels.size();
     const uint32_t num_nodes = 1 << depth;
 
-    // std::vector<int> h_sibling(rx.get_num_patches());
-
-    //@brief every node in the max match tree will contains three pieces of
+    // Every node in the max match tree will contains three pieces of
     // information:
     // 1) the size of its separator
     // 2) the number of nodes on the right
     // 3) the number of nodes on the left
     // the count here refers to the number of mesh vertices on separator,
-    // left, or right We identify the left and right nodes of a (parent)
+    // left, or right. We identify the left and right nodes of a (parent)
     // node using less (<) between the left and right node ID.
 
 
@@ -882,8 +1236,8 @@ inline void permute_separators(RXMeshStatic&              rx,
                           count_size * sizeof(int),
                           cudaMemcpyHostToDevice));
 
-    auto v_render = *rx.add_vertex_attribute<int>("Render", 1);
-    v_render.reset(-1, LOCATION_ALL);
+    // auto v_render = *rx.add_vertex_attribute<int>("Render", 1);
+    // v_render.reset(-1, LOCATION_ALL);
 
 #ifdef USE_POLYSCOPE
     // for (int l = depth - 1; l >= 0; --l) {
@@ -899,14 +1253,12 @@ inline void permute_separators(RXMeshStatic&              rx,
 
     int sum_edge_cut = 0;
 
-    for (int l = depth - 1; l >= 0; --l) {
+    CUDA_ERROR(cudaMemcpy(d_patch_proj_l,
+                          max_match_tree.levels.back().patch_proj.data(),
+                          sizeof(int) * rx.get_num_patches(),
+                          cudaMemcpyHostToDevice));
 
-        // TODO use swap at the end of the loop rather copying twice with
-        // every iteration
-        CUDA_ERROR(cudaMemcpy(d_patch_proj_l,
-                              max_match_tree.levels[l].patch_proj.data(),
-                              sizeof(int) * rx.get_num_patches(),
-                              cudaMemcpyHostToDevice));
+    for (int l = depth - 1; l >= 0; --l) {
 
         if (l != 0) {
             CUDA_ERROR(
@@ -932,20 +1284,26 @@ inline void permute_separators(RXMeshStatic&              rx,
                 d_cut_size);
         // int h_cut_size = 0;
         // CUDA_ERROR(cudaMemcpy(
-        //     &h_cut_size, d_cut_size, sizeof(int),
-        //     cudaMemcpyDeviceToHost));
+        //     &h_cut_size, d_cut_size, sizeof(int), cudaMemcpyDeviceToHost));
         // CUDA_ERROR(cudaMemset(d_cut_size, 0, sizeof(int)));
         // sum_edge_cut += h_cut_size;
         // RXMESH_INFO("Level = {},Cut Size = {}", l, h_cut_size);
-        //  if (l >= depth - 3) {
-        //      v_render.move(DEVICE, HOST);
-        //      rx.get_polyscope_mesh()->addVertexScalarQuantity(
-        //          "Render " + std::to_string(l), v_render);
         //
-        //      // v_index.move(DEVICE, HOST);
-        //      // rx.get_polyscope_mesh()->addVertexScalarQuantity(
-        //      //     "Index " + std::to_string(l), v_index);
-        //  }
+        // v_render.move(DEVICE, HOST);
+        // rx.get_polyscope_mesh()->addVertexScalarQuantity(
+        //     "Render " + std::to_string(l), v_render);
+
+        // if (l >= depth - 3) {
+        //     v_render.move(DEVICE, HOST);
+        //     rx.get_polyscope_mesh()->addVertexScalarQuantity(
+        //         "Render " + std::to_string(l), v_render);
+        //
+        //     // v_index.move(DEVICE, HOST);
+        //     // rx.get_polyscope_mesh()->addVertexScalarQuantity(
+        //     //     "Index " + std::to_string(l), v_index);
+        // }
+
+        std::swap(d_patch_proj_l, d_patch_proj_l1);
     }
 
     // RXMESH_INFO("Sum Edge Cut Size = {}", sum_edge_cut);
@@ -1044,18 +1402,10 @@ inline void nd_permute(RXMeshStatic& rx, int* h_permute)
     gtimer.start();
 
     // compute edge weight
-    constexpr uint32_t      blockThreads = 512;
-    LaunchBox<blockThreads> lb;
-    rx.prepare_launch_box(
-        {Op::EV},
-        lb,
-        (void*)detail::compute_patch_graph_edge_weight<blockThreads>);
-
-    detail::compute_patch_graph_edge_weight<blockThreads>
-        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
-            rx.get_context(),
-            d_patch_graph_edge_weight,
-            d_patch_graph_vertex_weight);
+    rx.run_kernel<512>({Op::EV},
+                       detail::compute_patch_graph_edge_weight<512>,
+                       d_patch_graph_edge_weight,
+                       d_patch_graph_vertex_weight);
 
     CUDA_ERROR(cudaMemcpy(h_patch_graph_edge_weight.data(),
                           d_patch_graph_edge_weight,
@@ -1070,7 +1420,16 @@ inline void nd_permute(RXMeshStatic& rx, int* h_permute)
 
     // create max match tree
     MaxMatchTree<int> max_match_tree;
-    heavy_max_matching(rx, p_graph, max_match_tree);
+
+
+    // std::vector<int> sizes(p_graph.n, 0);
+    // for (int p = 0; p < rx.get_num_patches(); ++p) {
+    //     sizes[p] = rx.get_num_vertices(p);
+    // }
+    // heavy_max_matching(rx, p_graph, max_match_tree, sizes);
+
+    hierarchical_patch_graph_partitioning(rx, p_graph, max_match_tree);
+
 
     {
         // works only with meshes from create_plane with number of patches
@@ -1140,27 +1499,11 @@ inline void nd_permute(RXMeshStatic& rx, int* h_permute)
         // max_match_tree.levels.push_back(l3);
     }
 
-    // max_match_tree.print();
+    max_match_tree.print();
 
     compute_projection(max_match_tree);
 
-    // test the GGGP function
-    // GGGP(rx, p_graph, max_match_tree);
-
-    // test the GGGP with vweight but not vertex count
-    // GGGP_vweight(rx, p_graph, max_match_tree);
-
-    // RXMESH_INFO("Max Match Tree");
-    // max_match_tree.print();
-
-    // RXMESH_INFO("GGGP Max Match Tree");
-    // ggp_max_match_tree.print();
-
-    // RXMESH_INFO("Max Match with Partition");
-    // heavy_max_matching_with_partition(rx, p_graph, max_match_tree);
-
-    // RXMESH_INFO("min_degree_reordering");
-    // min_degree_reordering(rx, p_graph, max_match_tree);
+    single_patch_nd_permute(rx, v_local_permute);
 
     permute_separators(rx,
                        v_index,

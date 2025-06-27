@@ -5,20 +5,41 @@
 #include <Eigen/Sparse>
 
 template <typename SparseMatrixType>
-void export_to_plain_text(const SparseMatrixType& mat,
-                          const std::string&      filename)
+void save_sparse_mat(const SparseMatrixType& mat,
+                     const std::string&      filename,
+                     int                     base = 0)
 {
+    // base = 1: 1-based indexing for MATLAB
+    //  base = 0: 0-based indexing for MATLAB
+
     std::ofstream file(filename);
     if (!file.is_open()) {
-        std::cerr << "Error opening file: " << filename << std::endl;
+        RXMESH_ERROR("Error opening file: {}", filename);
         return;
     }
 
     for (int k = 0; k < mat.outerSize(); ++k) {
         for (typename SparseMatrixType::InnerIterator it(mat, k); it; ++it) {
-            file << (it.row() + 1) << " " << (it.col() + 1) << " " << it.value()
-                 << std::endl;  // 1-based indexing for MATLAB
+            file << (it.row() + base) << " " << (it.col() + base) << " "
+                 << it.value() << std::endl;
         }
+    }
+
+    file.close();
+}
+
+void save_permutation(const std::vector<int>& h_permute,
+                      const std::string&      filename)
+{
+
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        RXMESH_ERROR("Error opening file: {}", filename);
+        return;
+    }
+
+    for (int k = 0; k < h_permute.size(); ++k) {
+        file << h_permute[k] << "\n";
     }
 
     file.close();
@@ -53,9 +74,9 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
         eigen_mat, permuted_mat, perm.indices().data());
 
 
-    export_to_plain_text(permuted_mat,
-                         std::string("C:\\Github\\Matlab_Reordering_Trial\\") +
-                             st + std::string(".txt"));    
+    // save_sparse_mat(permuted_mat,
+    //                 std::string("C:\\Github\\Matlab_Reordering_Trial\\") +
+    //     st + std::string(".txt"),1);
 
     // compute Cholesky factorization on the permuted matrix
 

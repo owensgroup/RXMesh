@@ -30,7 +30,7 @@ struct SparseMatrix
     using Type = T;
 
     using EigenSparseMatrix =
-        Eigen::Map<const Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT>>;
+        Eigen::Map<Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT>>;
 
     SparseMatrix()
         : m_d_row_ptr(nullptr),

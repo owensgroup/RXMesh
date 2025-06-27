@@ -411,7 +411,7 @@ void Patcher::print_statistics()
         "Patcher: Parallel patches construction time = {} (ms) and {} "
         "(ms/lloyd_run)",
         m_patching_time_ms,
-        ((m_patching_time_ms == 0) ?
+        ((m_num_lloyd_run == 0) ?
              0 :
              m_patching_time_ms / float(m_num_lloyd_run)));
 

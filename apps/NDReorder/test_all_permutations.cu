@@ -30,6 +30,29 @@ struct arg
 } Arg;
 
 template <typename EigeMatT>
+void save_matrix_and_permutation(RXMeshStatic&           rx,
+                                 EigeMatT&               eigen_mat,
+                                 const std::vector<int>& h_permute,
+                                 const std::string       name)
+{
+    auto* values = eigen_mat.valuePtr();       // pointer to non-zero values
+    auto* outer  = eigen_mat.outerIndexPtr();  // row offsets
+    // auto* inner  = eigen_mat.innerIndexPtr();  // column indices
+
+    rx.for_each_vertex(HOST, [&](const VertexHandle vh) mutable {
+        int row = rx.linear_id(vh);
+
+        for (int i = outer[row]; i < outer[row + 1]; ++i) {
+            values[i] = vh.patch_id();
+        }
+    });
+
+    save_sparse_mat(eigen_mat, "C:\\Github\\VizEigenSparseMat\\" + name);
+    save_permutation(h_permute,
+                     "C:\\Github\\VizEigenSparseMat\\permute_" + name);
+}
+
+template <typename EigeMatT>
 void no_permute(RXMeshStatic& rx, const EigeMatT& eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
@@ -49,7 +72,7 @@ void no_permute(RXMeshStatic& rx, const EigeMatT& eigen_mat)
 template <typename T, typename EigeMatT>
 void with_metis(RXMeshStatic&          rx,
                 const SparseMatrix<T>& rx_mat,
-                const EigeMatT&        eigen_mat)
+                EigeMatT               eigen_mat)
 {
     assert(rx_mat.rows() == eigen_mat.rows());
     assert(rx_mat.cols() == eigen_mat.cols());
@@ -145,6 +168,7 @@ void with_metis(RXMeshStatic&          rx,
 
     int nnz = count_nnz_fillin(eigen_mat, h_iperm, "metis");
 
+    // save_matrix_and_permutation(rx, eigen_mat, h_iperm, "metis.txt");
     RXMESH_INFO(" With METIS Nested Dissection NNZ = {}, sparsity = {} %",
                 nnz,
                 100 * float(nnz) / float(eigen_mat.rows() * eigen_mat.cols()));
@@ -175,7 +199,7 @@ void with_gpumgnd(RXMeshStatic& rx, const EigeMatT& eigen_mat)
 }
 
 template <typename EigeMatT>
-void with_gpu_nd(RXMeshStatic& rx, const EigeMatT& eigen_mat)
+void with_gpu_nd(RXMeshStatic& rx, EigeMatT eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
@@ -192,6 +216,7 @@ void with_gpu_nd(RXMeshStatic& rx, const EigeMatT& eigen_mat)
 
     int nnz = count_nnz_fillin(eigen_mat, h_permute, "gpund");
 
+    // save_matrix_and_permutation(rx, eigen_mat, h_permute, "gpu_nd.txt");
     RXMESH_INFO(" With GPUND NNZ = {}, sparsity = {} %",
                 nnz,
                 100 * float(nnz) / float(eigen_mat.rows() * eigen_mat.cols()));
@@ -288,7 +313,7 @@ void all_perm(RXMeshStatic& rx)
     rx.render_vertex_patch();
 
     // convert matrix to Eigen
-    auto eigen_mat = rx_mat.to_eigen();
+    auto eigen_mat = rx_mat.to_eigen_copy();
 
     assert(eigen_mat.nonZeros() == rx_mat.non_zeros());
 
@@ -359,7 +384,7 @@ int main(int argc, char** argv)
         // const std::string p_file = STRINGIFY(OUTPUT_DIR) +
         //                            extract_file_name(Arg.obj_file_name) +
         //                            "_patches";
-        RXMeshStatic rx(Arg.obj_file_name);
+        RXMeshStatic rx(Arg.obj_file_name, "", 128);
         // if (!std::filesystem::exists(p_file)) {
         //     rx.save(p_file);
         // }

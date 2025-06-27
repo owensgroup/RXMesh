@@ -62,8 +62,12 @@ template <uint32_t blockThreads>
 __global__ static void patch_permute_kmeans(Context                   context,
                                             VertexAttribute<uint16_t> v_permute,
                                             int threshold = 100)
-{
-    auto block = cooperative_groups::this_thread_block();
+{    
+    if (blockIdx.x >= context.get_num_patches()) {
+        return;
+    }
+
+    auto block = cooperative_groups::this_thread_block();    
 
     ShmemAllocator shrd_alloc;
 
@@ -72,9 +76,9 @@ __global__ static void patch_permute_kmeans(Context                   context,
 
     int num_v = pkm.num_active_vertices(block);
 
-    if (num_v < threshold) {
-        return;
-    }
+    //if (num_v < threshold) {
+    //    return;
+    //}
 
     pkm.partition(block);
 
