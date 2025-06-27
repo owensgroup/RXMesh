@@ -4,6 +4,7 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/matrix/gmg/gmg.h"
 #include "rxmesh/matrix/gmg/v_cycle.h"
+#include "rxmesh/matrix/gmg/v_cycle_better_ptap.h"
 #include "rxmesh/matrix/sparse_matrix.h"
 #include "rxmesh/reduce_handle.h"
 
@@ -15,9 +16,9 @@ namespace rxmesh {
 template <typename T>
 struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 {
-    using Type = T;
-    float gmg_memory_alloc_time;
-    float v_cycle_memory_alloc_time;
+    using Type                      = T;
+    float gmg_memory_alloc_time     = 0;
+    float v_cycle_memory_alloc_time = 0;
 
     GMGSolver(RXMeshStatic&    rx,
               SparseMatrix<T>& A,
@@ -28,7 +29,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
               CoarseSolver     coarse_solver  = CoarseSolver::Jacobi,
               T                abs_tol        = 1e-6,
               T                rel_tol        = 1e-6,
-              int              threshold      = 1000)
+              int              threshold      = 1000,
+              bool             use_new_ptap   = false)
         : IterativeSolver<T, DenseMatrix<T>>(max_iter, abs_tol, rel_tol),
           m_rx(&rx),
           m_A(&A),
@@ -37,6 +39,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
           m_num_post_relax(num_post_relax),
           m_num_levels(num_levels),
           m_threshold(threshold),
+          m_use_new_ptap(use_new_ptap),
           AX(DenseMatrix<T>(A.rows(), 1, DEVICE)),
           R(DenseMatrix<T>(A.rows(), 1, DEVICE))
     {
@@ -44,11 +47,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
     virtual void pre_solve(const DenseMatrix<T>& B,
                            DenseMatrix<T>&       X,
-                           cudaStream_t          stream = NULL) override
+                           cudaStream_t          stream       = NULL) override
     {
-
-        // if (m_num_levels > 1)
-
         CPUTimer timer;
         GPUTimer gtimer;
 
@@ -60,8 +60,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         RXMESH_INFO("full gmg operator construction took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
-        //gmg_memory_alloc_time = m_gmg.memory_alloc_time;
-        m_num_levels = m_gmg.m_num_levels;
+        gmg_memory_alloc_time = m_gmg.memory_alloc_time;
+        m_num_levels          = m_gmg.m_num_levels;
         if (m_num_levels == 1) {
 
             exit(1);
@@ -70,14 +70,27 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
             timer.start();
             gtimer.start();
-            m_v_cycle = VCycle<T>(m_gmg,
-                                  *m_rx,
-                                  *m_A,
-                                  B,
-                                  m_coarse_solver,
-                                  m_num_pre_relax,
-                                  m_num_post_relax);
-            //v_cycle_memory_alloc_time = m_v_cycle.memory_alloc_time;
+            if (!m_use_new_ptap) {
+                m_v_cycle = std::make_unique<VCycle<T>>(m_gmg,
+                                                        *m_rx,
+                                                        *m_A,
+                                                        B,
+                                                        m_coarse_solver,
+                                                        m_num_pre_relax,
+                                                        m_num_post_relax);
+            } else {
+                m_v_cycle =
+                    std::make_unique<VCycle_Better<T>>(m_gmg,
+                                                       *m_rx,
+                                                       *m_A,
+                                                       B,
+                                                       m_coarse_solver,
+                                                       m_num_pre_relax,
+                                                       m_num_post_relax);
+            }
+            m_v_cycle->construct_hierarchy(m_gmg, *m_rx, *m_A);
+
+            v_cycle_memory_alloc_time = m_v_cycle->memory_alloc_time;
 
             timer.stop();
             gtimer.stop();
@@ -87,9 +100,10 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
             constexpr int numCols = 3;
             assert(numCols == B.cols());
-            m_v_cycle.template calc_residual<numCols>(
-                m_v_cycle.m_a[0].a, X, B, m_v_cycle.m_r[0]);
-            this->m_start_residual = m_v_cycle.m_r[0].norm2();
+
+            m_v_cycle->template calc_residual<numCols>(
+                m_v_cycle->m_a[0].a, X, B, m_v_cycle->m_r[0]);
+            this->m_start_residual = m_v_cycle->m_r[0].norm2();
         }
     }
 
@@ -99,31 +113,14 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                                   rxmesh::DenseMatrix<T>&  X,
                                   rxmesh::DenseMatrix<T>&  B)
     {
-        // using namespace rxmesh;
         using IndexT = typename DenseMatrix<T>::IndexT;
-
-        // Move everything to device
-        /*A.move(HOST, DEVICE);
-        X.move(HOST, DEVICE);
-        B.move(HOST, DEVICE);*/
 
         const IndexT num_rhs = B.cols();
         const IndexT n       = A.rows();
 
         T max_residual = 0.0;
-
-        // Temporary device-side vectors
-        /*DenseMatrix<T> AX(n, 1, DEVICE);
-        DenseMatrix<T> R(n, 1, DEVICE);*/
-
-        //AX.reset(0,DEVICE);
-        //R.reset(0,DEVICE);
-
         for (IndexT i = 0; i < num_rhs; ++i) {
-            // AX = A * X_i
             A.multiply(X.col_data(i, DEVICE), AX.col_data(0, DEVICE));
-
-            // R = AX - B_i => using axpy: R = AX + (-1) * B_i
             R.copy_from(AX, DEVICE, DEVICE);
 
             auto col_i = B.col(i);
@@ -140,40 +137,10 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         bool abs_ok = max_residual < this->m_abs_tol;
         bool rel_ok = max_residual < this->m_rel_tol;
 
-        if (abs_ok || rel_ok) {
-            RXMESH_TRACE("GMG: convergence reached with residual ON GPU: {}",
-                         max_residual);
-        }
-
-        return abs_ok || rel_ok;
-    }
-
-
-    bool is_converged_special(SparseMatrix<T>& A,
-                              DenseMatrix<T>&  X,
-                              DenseMatrix<T>&  B)
-    {
-        A.move(DEVICE, HOST);
-        B.move(DEVICE, HOST);
-        X.move(DEVICE, HOST);
-        auto A_mat_copy = A.to_eigen();
-        auto B_mat_copy = B.to_eigen();
-        auto X_mat_copy = X.to_eigen();
-        using Vec       = Eigen::Matrix<T, Eigen::Dynamic, 1>;
-        Eigen::Matrix<T, Eigen::Dynamic, 1> absResidue(B_mat_copy.cols());
-        for (int i = 0; i < B_mat_copy.cols(); ++i) {
-            Vec residual  = A_mat_copy * X_mat_copy.col(i) - B_mat_copy.col(i);
-            absResidue(i) = residual.norm() / B_mat_copy.col(i).norm();
-        }
-
-        T max_residual = absResidue.maxCoeff();
-
-        bool abs_ok = max_residual < this->m_abs_tol;
-        bool rel_ok = max_residual < this->m_rel_tol;
+        // RXMESH_TRACE("GMG: current residual: {}", max_residual);
 
         if (abs_ok || rel_ok) {
-            RXMESH_TRACE("GMG: convergence reached with residual: {}",
-                         max_residual);
+            m_final_residual = max_residual;
         }
 
         return abs_ok || rel_ok;
@@ -190,59 +157,43 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         T        current_res;
 
         if (m_num_levels == 1) {
-            RXMESH_TRACE("GMG:Direct solve used");
+            RXMESH_INFO("GMG:Direct solve used");
             // m_coarse_solver.template solve<numCols>(m_A, B, X, 1000);
             return;
         } else {
             this->m_iter_taken = 0;
-            while (this->m_iter_taken < this->m_max_iter) {
-                // m_v_cycle.cycle(0, m_gmg, *m_A, B, X,*m_rx);
-                m_v_cycle.cycle(0, m_gmg, *m_A, m_v_cycle.B, X, *m_rx);
-                current_res = m_v_cycle.m_r[0].norm2();
-                /*RXMESH_TRACE(
-                    "GMG: current residual: "
-                    "{}",
-                    current_res);*/
+            while (this->m_iter_taken < this->m_max_iter) {                
+                m_v_cycle->cycle(0, m_gmg, *m_A, m_v_cycle.B, X, *m_rx);
+                //current_res = m_v_cycle.m_r[0].norm2();                
 
                 timer.start();
                 gtimer.start();
 
-                if (
-                    //is_converged(m_start_residual, current_res) ||
-                    //is_converged_special(*m_A, X, m_v_cycle.B) ||
-                    is_converged_special_gpu(*m_A, X, m_v_cycle.B)) {
-                   
-
-                    this->m_final_residual = current_res;
-                    /*std::cout << "\nconverged! at " << m_final_residual
-                              << " from residual of " << m_start_residual;*/
-                    RXMESH_TRACE("GMG: #number of iterations to solve: {}",
-                                 this->m_iter_taken);
-                    // RXMESH_TRACE("GMG: final residual: {}",
-                    // m_final_residual);
+                if (is_converged_special_gpu(*m_A, X, m_v_cycle->B)) {
+                    RXMESH_INFO("GMG: #number of iterations to solve: {}",
+                                m_iter_taken);
+                    RXMESH_INFO("GMG: final residual: {}", m_final_residual);
                     timer.stop();
                     gtimer.stop();
                     time += std::max(timer.elapsed_millis(),
                                      gtimer.elapsed_millis());
-                    RXMESH_TRACE("GMG: #time taken to test for convergence: {}",
-                                 time);
+                    RXMESH_INFO("GMG: #time taken to test for convergence: {}",
+                                time);
                     return;
                 }
                 timer.stop();
                 gtimer.stop();
                 time +=
                     std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
-                /*RXMESH_TRACE("GMG: convergence criteria reached? {}",
-                             is_converged_special(*m_A, X, m_v_cycle.B));*/
 
                 this->m_iter_taken++;
             }
-            RXMESH_TRACE(
+            RXMESH_INFO(
                 "GMG: Solver did not reach convergence criteria. Residual: {}",
                 current_res);
-            RXMESH_TRACE("GMG: #number of iterations to solve: {}",
-                         this->m_iter_taken);
-            RXMESH_TRACE("GMG: #time taken to test for convergence: {}", time);
+
+            RXMESH_INFO("GMG: #number of iterations to solve: {}", this->m_iter_taken);
+            RXMESH_INFO("GMG: #time taken to test for convergence: {}", time);
         }
     }
 
@@ -261,29 +212,28 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         return m_num_levels;
     }
 
+    T get_final_residual()
+    {
+        return m_final_residual;
+    }
+
     virtual ~GMGSolver()
     {
     }
 
    protected:
-    RXMeshStatic*    m_rx;
-    SparseMatrix<T>* m_A;
-    GMG<T>           m_gmg;
-    VCycle<T>        m_v_cycle;
-    CoarseSolver     m_coarse_solver;
-    int              m_num_pre_relax;
-    int              m_num_post_relax;
-    int              m_num_levels;
-    int              m_threshold;
-
+    RXMeshStatic*              m_rx;
+    SparseMatrix<T>*           m_A;
+    GMG<T>                     m_gmg;
+    std::unique_ptr<VCycle<T>> m_v_cycle;
+    CoarseSolver               m_coarse_solver;
+    int                        m_num_pre_relax;
+    int                        m_num_post_relax;
+    int                        m_num_levels;
+    int                        m_threshold;
+    bool                       m_use_new_ptap;
     DenseMatrix<T> AX;
-    //(n, 1, DEVICE);
     DenseMatrix<T> R;
-    //(n, 1, DEVICE);
-    
-    // Eigen::Map<const Eigen::SparseMatrix<T, Eigen::RowMajor, int>>
-    // A_mat_copy; Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic,
-    // 3>> B_mat_copy;
 };
 
 }  // namespace rxmesh

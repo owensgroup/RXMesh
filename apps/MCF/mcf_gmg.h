@@ -17,6 +17,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     uint32_t num_vertices = rx.get_num_vertices();
 
     auto coords = rx.get_input_vertex_coordinates();
+    rx.export_obj("mcf_initial.obj", *rx.get_input_vertex_coordinates());
 
     SparseMatrix<float> A_mat(rx);
     DenseMatrix<float>  B_mat(rx, num_vertices, 3);
@@ -60,9 +61,10 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                      CoarseSolver::Cholesky,
                      Arg.gmg_tolerance_abs,
                      Arg.gmg_tolerance_rel,
-                     Arg.threshold);
+                     Arg.threshold,
+                     Arg.use_new_ptap);
 
-
+    float    solve_time = 0;
     float    total_time = 0;
     CPUTimer timer;
     GPUTimer gtimer;
@@ -76,9 +78,20 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     RXMESH_INFO("GMG pre-solve took {} (ms), {} (ms)",
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
+    RXMESH_INFO("GMG memory allocation took {} (ms)",
+        solver.gmg_memory_alloc_time + solver.v_cycle_memory_alloc_time);
+
+
+
     report.add_member(
-        "pre-solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
-    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+        "pre-solve", std::max(timer.elapsed_millis()-solver.gmg_memory_alloc_time-solver.v_cycle_memory_alloc_time, 
+            gtimer.elapsed_millis() - solver.gmg_memory_alloc_time -
+                     solver.v_cycle_memory_alloc_time));
+    total_time +=
+        std::max(timer.elapsed_millis() - solver.gmg_memory_alloc_time -
+                     solver.v_cycle_memory_alloc_time,
+                 gtimer.elapsed_millis() - solver.gmg_memory_alloc_time -
+                     solver.v_cycle_memory_alloc_time);
 
 
     timer.start();
@@ -86,6 +99,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     solver.solve(B_mat, X_mat);
     timer.stop();
     gtimer.stop();
+    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+    solve_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
     RXMESH_INFO("start_residual {}", solver.start_residual());
 
@@ -100,12 +115,14 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     report.add_member(
         "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
     total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+    report.add_member("solve", solve_time);
+    report.add_member("avg iteration time", solve_time/solver.iter_taken());
 
     report.add_member("total_time", total_time);
 
     report.add_member("max_iterations", Arg.max_num_iter);
     report.add_member("threshold", Arg.threshold);
-
+    report.add_member("final_residual", solver.get_final_residual());
     RXMESH_INFO("total_time {} (ms)", total_time);
 
 

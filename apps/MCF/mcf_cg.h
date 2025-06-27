@@ -107,8 +107,8 @@ void run_cg(rxmesh::RXMeshStatic& rx, bool pcg=false)
                 solver.iter_taken(),
                 timer.elapsed_millis() / float(solver.iter_taken()));
 
-    report.add_member("start residual", solver.start_residual());
-    report.add_member("final residual", solver.final_residual());
+    report.add_member("start_residual", solver.start_residual());
+    report.add_member("final_residual", solver.final_residual());
     report.add_member("num_iterations", solver.iter_taken());
     report.add_member("avg iteration time",
                       timer.elapsed_millis() / float(solver.iter_taken()));

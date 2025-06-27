@@ -41,7 +41,7 @@ struct GMG
     int   m_num_levels;  // numberOfLevels
     int   m_num_rows;
     int*  m_d_flag;
-
+    float memory_alloc_time = 0;
 
     std::vector<int>                m_num_samples;  // fine+levels
     std::vector<DenseMatrix<float>> m_samples_pos;  // levels
@@ -233,6 +233,10 @@ struct GMG
 
         timer.stop();
         gtimer.stop();
+
+        memory_alloc_time =
+            std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+
         RXMESH_INFO("memory allocation took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
@@ -588,9 +592,12 @@ struct GMG
                     distance(vh, 0) = std::numeric_limits<float>::max();
                 });
             distance.move(DEVICE, HOST);
+            auto& current_vertex_cluster = m_vertex_cluster[i];
+
+
+
             std::random_device         rd;
             std::default_random_engine generator(rd());
-            auto&            current_vertex_cluster = m_vertex_cluster[i];
             std::vector<int> samples(m_num_samples[i]);
             std::iota(samples.begin(), samples.end(), 1);
             std::shuffle(samples.begin(), samples.end(), generator);
@@ -870,6 +877,7 @@ struct GMG
 
         uint32_t threads = 256;
         uint32_t blocks  = DIVIDE_UP(num_samples, threads);
+        //printf("\n\n\n");
         for_each_item<<<blocks, threads>>>(
             num_samples, [=] __device__(int sample_id) mutable {
                 bool tri_chosen = false;

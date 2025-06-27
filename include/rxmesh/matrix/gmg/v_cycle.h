@@ -44,9 +44,9 @@ struct VCycle
     VCycle& operator=(VCycle&&) = default;
     ~VCycle()                   = default;
 
-    int m_num_pre_relax;
-    int m_num_post_relax;
-
+    int   m_num_pre_relax;
+    int   m_num_post_relax;
+    float memory_alloc_time = 0;
 
     // For index, the fine mesh is always indexed with 0
     // The first coarse level index is 1
@@ -69,7 +69,6 @@ struct VCycle
 
     std::vector<std::unique_ptr<CholeskySolver<SparseMatrix<T>, 0>>>
         m_coarse_solver_chols;
-
     // just solve it using a separate cholesky solver instance
 
     VCycle(GMG<T>&               gmg,
@@ -117,32 +116,25 @@ struct VCycle
 
         timer.stop();
         gtimer.stop();
+        memory_alloc_time =
+            std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
         RXMESH_INFO("v cycle memory allocation took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
+        m_a.resize(gmg.m_num_levels - 1);
 
+        
+    }
+
+    void construct_hierarchy(GMG<T>& gmg, RXMeshStatic& rx, SparseMatrix<T>& A)
+    {
+        CPUTimer timer;
+        GPUTimer gtimer;
         timer.start();
         gtimer.start();
 
-        m_a.resize(gmg.m_num_levels - 1);
-        // construct m_a for all levels
-        pt_A_p(gmg.m_prolong_op[0], A, m_a[0]);
+        get_intermediate_laplacians(gmg, A);
 
-        m_coarse_solver_chols.emplace_back(
-            std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&A));
-        m_coarse_solver_chols.emplace_back(
-            std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&m_a[0].a));
-
-        m_coarse_solver_chols[0]->pre_solve(rx);
-        m_coarse_solver_chols[1]->pre_solve(rx);
-
-
-        for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
-            pt_A_p(gmg.m_prolong_op[l], m_a[l - 1].a, m_a[l]);
-           /* m_coarse_solver_chols.emplace_back(
-                std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&m_a[l].a));
-            m_coarse_solver_chols[l+1]->pre_solve(rx);*/
-        }
         timer.stop();
         gtimer.stop();
         RXMESH_INFO("ptap took {} (ms), {} (ms)",
@@ -151,21 +143,35 @@ struct VCycle
 
         timer.start();
         gtimer.start();
+        m_coarse_solver_chols.emplace_back(
+            std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&A));
+        m_coarse_solver_chols.emplace_back(
+            std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&m_a[0].a));
 
+        m_coarse_solver_chols[0]->pre_solve(rx);
+        m_coarse_solver_chols[1]->pre_solve(rx);
         for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
-            m_coarse_solver_chols.emplace_back(std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&m_a[l].a));
+            m_coarse_solver_chols.emplace_back(
+                std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(
+                    &m_a[l].a));
             m_coarse_solver_chols[l + 1]->pre_solve(rx);
         }
         timer.stop();
         gtimer.stop();
         RXMESH_INFO("chol prep took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
-                    gtimer.elapsed_millis());        
-
-
-
+                    gtimer.elapsed_millis());
     }
 
+    virtual void get_intermediate_laplacians(GMG<T>& gmg, SparseMatrix<T>& A)
+    {
+        m_a.resize(gmg.m_num_levels - 1);
+        // construct m_a for all levels
+        pt_A_p(gmg.m_prolong_op[0], A, m_a[0]);
+        for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
+            pt_A_p(gmg.m_prolong_op[l], m_a[l - 1].a, m_a[l]);
+        }
+    }
 
     void pt_A_p(SparseMatrixConstantNNZRow<T, 3>& P,
                 SparseMatrix<T>&                  A,
@@ -324,36 +330,23 @@ struct VCycle
 
             // calc residual
             calc_residual<numCols>(A, v, f, m_r[level]);
-            std::cout << "\nResidual at intermediate level " << level << " : "
-                      << m_r[level].norm2();
 
-            //// restrict residual
+            // restrict residual
             gmg.m_prolong_op[level].multiply(
                 m_r[level], m_rhs[level + 1], true);
-            //// recurse
+
+            // recurse
             cycle(
                 level + 1, gmg, m_a[level].a, m_rhs[level + 1], m_x[level], rx);
 
             // prolong
-            // x = x + P*u
-
-            DenseMatrix<T> q = v;
-            
             gmg.m_prolong_op[level].multiply(
                 m_x[level], v, false, false, T(1.0), T(1.0));
 
-            //v.axpy(q,0.1);
 
-
-            //// post-smoothing
+            // post-smoothing
             m_smoother[level].template solve<numCols>(
                 A, f, v, m_num_post_relax);
-
-
-            calc_residual<numCols>(A, v, f, m_r[level]);
-            std::cout << "\nResidual at intermediate level " << level << " after everything: "
-                      << m_r[level].norm2();
-
         } else {
             // the coarsest level
             // m_coarse_solver.template solve<numCols>(A, f, v,
@@ -362,9 +355,6 @@ struct VCycle
 
 
             // for direct solve, use cholesky
-            //  do pre solve and then solve here
-
-            //m_coarse_solver_chols[level]->pre_solve(rx);
             m_coarse_solver_chols[level]->solve(f, v);
         }
     }
