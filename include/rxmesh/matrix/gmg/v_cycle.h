@@ -23,7 +23,7 @@ template <typename T>
 struct CoarseA
 {
 
-    CoarseA(){};
+    CoarseA() {};
     SparseMatrix<T> a;
 
     T*   d_val;
@@ -37,12 +37,12 @@ struct CoarseA
 template <typename T>
 struct VCycle
 {
-    VCycle(const VCycle&) = delete;
-    VCycle()              = default;
-    VCycle(VCycle&&)      = default;
+    VCycle(const VCycle&)            = delete;
+    VCycle()                         = default;
+    VCycle(VCycle&&)                 = default;
     VCycle& operator=(const VCycle&) = default;
-    VCycle& operator=(VCycle&&) = default;
-    ~VCycle()                   = default;
+    VCycle& operator=(VCycle&&)      = default;
+    ~VCycle()                        = default;
 
     int   m_num_pre_relax;
     int   m_num_post_relax;
@@ -122,8 +122,6 @@ struct VCycle
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
         m_a.resize(gmg.m_num_levels - 1);
-
-        
     }
 
     void construct_hierarchy(GMG<T>& gmg, RXMeshStatic& rx, SparseMatrix<T>& A)
