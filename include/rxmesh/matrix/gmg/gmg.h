@@ -68,8 +68,9 @@ struct GMG
 
     GMG(RXMeshStatic& rx,
         int           numberOfLevels,
-        int           threshold = 1000,
-        Sampling      sam       = Sampling::FPS)
+        int threshold = 1000,
+        Sampling      sam       = Sampling::Rand
+        )
         : GMG(rx,
               sam,
               compute_ratio(rx.get_num_vertices(), numberOfLevels, threshold),
