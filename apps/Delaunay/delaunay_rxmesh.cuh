@@ -63,6 +63,11 @@ __global__ static void __launch_bounds__(blockThreads)
                 return;
             }
 
+            if (coords(v0, 2) < 40 && coords(v1, 2) < 40 &&
+                coords(v2, 2) < 40 && coords(v3, 2) < 40) {
+                return;
+            }
+
             constexpr T PII = 3.14159265358979323f;
 
             const vec3 V0 = coords.to_glm<3>(v0);
@@ -245,6 +250,7 @@ inline uint32_t count_non_delaunay_edges(TriMesh& mesh)
     return num_non_delaunay;
 }
 
+
 inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
                             bool                   with_verify,
                             bool                   skip_mcf)
@@ -316,6 +322,30 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
                           });
 
     timers.start("Total");
+
+    int id = 1;
+
+    auto render = [&]() {
+        polyscope::removeAllStructures();
+        rx.update_host();
+        coords->move(DEVICE, HOST);
+
+        rx.update_polyscope();
+        rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+        rx.get_polyscope_mesh()->setEdgeWidth(0.2);
+        rx.get_polyscope_mesh()->setSurfaceColor(glm::vec3(1.0, 1.0, 1.0));
+        // if (id == 1) {
+        polyscope::show();
+        //}
+
+        std::ostringstream oss;
+        oss << std::setw(3) << std::setfill('0') << id;
+
+        id++;
+        polyscope::screenshot("flip_" + oss.str() + ".png");
+    };
+
+
     while (h_flipped != 0) {
         CUDA_ERROR(cudaMemset(d_flipped, 0, sizeof(int)));
 
@@ -340,6 +370,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
             rx.cleanup();
             timers.stop("Cleanup");
         }
+        render();
         CUDA_ERROR(cudaMemcpy(
             &h_flipped, d_flipped, sizeof(int), cudaMemcpyDeviceToHost));
         // break;
@@ -424,7 +455,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
     }
 
 #if USE_POLYSCOPE
-    //polyscope::show();
+    // polyscope::show();
 #endif
 
     CUDA_ERROR(cudaFree(d_flipped));

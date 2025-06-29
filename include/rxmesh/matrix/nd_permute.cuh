@@ -131,19 +131,28 @@ template <typename integer_t>
 class Node
 {
    public:
-    Node() : lch(-1), rch(-1), pa(integer_t(-1))
+    Node() : lch(-1), rch(-1), pa(integer_t(-1)), is_leaf(false)
     {
     }
 
     Node(integer_t left_child, integer_t right_child)
-        : lch(left_child), rch(right_child), pa(integer_t(-1))
+        : lch(left_child), rch(right_child), pa(integer_t(-1)), is_leaf(false)
     {
     }
     Node(integer_t parent, integer_t left_child, integer_t right_child)
-        : pa(parent), lch(left_child), rch(right_child)
+        : pa(parent), lch(left_child), rch(right_child), is_leaf(false)
+    {
+    }
+
+    Node(integer_t parent,
+         integer_t left_child,
+         integer_t right_child,
+         bool      leaf)
+        : pa(parent), lch(left_child), rch(right_child), is_leaf(leaf)
     {
     }
     integer_t pa, lch, rch;
+    bool      is_leaf;
 };
 
 template <typename integer_t>
@@ -167,6 +176,7 @@ struct MaxMatchTree
 
     void print() const
     {
+        std::cout << "\n ==== Max Match Tree === \n";
         for (int l = levels.size() - 1; l >= 0; --l) {
             const auto& level = levels[l];
             for (int n = 0; n < level.nodes.size(); ++n) {
@@ -186,6 +196,7 @@ struct MaxMatchTree
                 }
             }
         }
+        std::cout << "\n ======================= \n";
     }
 
     template <typename FuncT>
@@ -293,10 +304,10 @@ void hierarchical_patch_graph_partitioning_recurse(
         if (graph.n == 1) {
             int ch = std::max(patch_node_mapping[0], patch_node_mapping[1]);
             max_match_tree.levels[level_id].nodes.push_back(
-                Node(parent_id, ch, ch));
+                Node(parent_id, ch, ch, true));
         } else {
-            max_match_tree.levels[level_id].nodes.push_back(
-                Node(parent_id, patch_node_mapping[0], patch_node_mapping[1]));
+            max_match_tree.levels[level_id].nodes.push_back(Node(
+                parent_id, patch_node_mapping[0], patch_node_mapping[1], true));
         }
         return;
     }
@@ -424,55 +435,26 @@ void pad_shallow_leaves(MaxMatchTree<integer_t>& tree)
         for (integer_t node_id = 0; node_id < nodes.size(); ++node_id) {
             Node<integer_t>& node = nodes[node_id];
 
-            if (!is_leaf(node, level)) {
+            if (!node.is_leaf) {
                 continue;
             }
 
             Node<integer_t> dummy_r(node_id, node.rch, node.rch);
-            Node<integer_t> dummy_l(node_id, node.lch, node.lch);
-
-            integer_t dummy_r_id = tree.levels[level - 1].nodes.size();
-            integer_t dummy_l_id = dummy_r_id + 1;
-
+            integer_t       dummy_r_id = tree.levels[level - 1].nodes.size();
             tree.levels[level - 1].nodes.push_back(dummy_r);
-            tree.levels[level - 1].nodes.push_back(dummy_l);
 
-            node.rch = dummy_r_id;
-            node.lch = dummy_l_id;
+            if (node.rch == node.lch) {
+                node.rch = dummy_r_id;
+                node.lch = dummy_r_id;
+            } else {
 
+                Node<integer_t> dummy_l(node_id, node.lch, node.lch);
+                integer_t       dummy_l_id = dummy_r_id + 1;
+                tree.levels[level - 1].nodes.push_back(dummy_l);
 
-            // tree.levels[level - 1].nodes[node.rch].rch = dummy_r_id;
-            // tree.levels[level - 1].nodes[node.rch].lch = dummy_r_id;
-            //
-            // tree.levels[level - 1].nodes[node.lch].rch = dummy_l_id;
-            // tree.levels[level - 1].nodes[node.lch].lch = dummy_l_id;
-
-            ///
-            // integer_t curr_node_id = node_id;
-            //
-            // int curr_level = level;
-            //
-            // while (curr_level >= 0) {
-            //     --curr_level;
-            //
-            //     auto& new_child_level = tree.levels[curr_level].nodes;
-            //
-            //     integer_t new_node_id =
-            //         static_cast<integer_t>(new_child_level.size());
-            //
-            //     Node<integer_t> dummy;
-            //     dummy.lch = curr_node_id;
-            //     dummy.rch = curr_node_id;
-            //     dummy.pa  = node_id;
-            //
-            //     new_child_level.push_back(dummy);
-            //
-            //     tree.levels[curr_level - 1].nodes[curr_node_id].pa =
-            //         new_node_id;
-            //
-            //     curr_node_id = new_node_id;
-            // }
-            // break;
+                node.rch = dummy_r_id;
+                node.lch = dummy_l_id;
+            }
         }
         break;
     }
@@ -498,10 +480,12 @@ void hierarchical_patch_graph_partitioning(
     // the levels
     std::reverse(max_match_tree.levels.begin(), max_match_tree.levels.end());
 
+    // max_match_tree.print();
+
     // add a fix up so that all leaves nodes are at the same level
     pad_shallow_leaves(max_match_tree);
 
-    max_match_tree.print();
+    // max_match_tree.print();
 
     for (auto& l : max_match_tree.levels) {
         l.patch_proj.resize(rx.get_num_patches());
@@ -1499,7 +1483,7 @@ inline void nd_permute(RXMeshStatic& rx, int* h_permute)
         // max_match_tree.levels.push_back(l3);
     }
 
-    max_match_tree.print();
+    // max_match_tree.print();
 
     compute_projection(max_match_tree);
 
