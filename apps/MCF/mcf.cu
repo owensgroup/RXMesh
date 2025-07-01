@@ -20,14 +20,14 @@ struct arg
     float       gmg_tolerance_rel   = 0.0;
     uint32_t    max_num_iter        = 100;
     bool        use_uniform_laplace = true;
-    int         levels              = 3;
+    int         levels              = 5;
     int         threshold           = 1000;
-    bool        render_hierarchy     = false;
-    bool        create_AB     = false;
-    bool        use_new_ptap         = false;
-
-    char**      argv;
-    int         argc;
+    bool        render_hierarchy    = false;
+    bool        create_AB           = false;
+    bool        use_new_ptap        = true;
+    bool        ptap_verify         = true;
+    char** argv;
+    int    argc;
 } Arg;
 
 #include "mcf_cg.h"
@@ -173,6 +173,9 @@ int main(int argc, char** argv)
 
         if (cmd_option_exists(argv, argc + argv, "-ab")) {
             Arg.create_AB = true;
+        }
+        if (cmd_option_exists(argv, argc + argv, "-v")) {
+            Arg.ptap_verify = true;
         }
     }
 
