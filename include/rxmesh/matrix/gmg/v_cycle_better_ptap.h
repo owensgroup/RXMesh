@@ -216,16 +216,16 @@ struct VCycle_Better : public rxmesh::VCycle<T>
     {
         const double error_threshold = 1e-3;
         m_verification_a.resize(gmg.m_num_levels - 1);
-        pt_A_p(gmg.m_prolong_op[0], A, m_verification_a[0]);
+        this->pt_A_p(gmg.m_prolong_op[0], A, m_verification_a[0]);
         for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
-            pt_A_p(gmg.m_prolong_op[l],
+            this->pt_A_p(gmg.m_prolong_op[l],
                    m_verification_a[l - 1].a,
                    m_verification_a[l]);
         }
         constexpr uint32_t blockThreads = 256;
 
         for (int i = 0; i < gmg.m_num_levels - 1; ++i) {
-            auto our_a     = m_a[i].a;
+            auto our_a     = this->m_a[i].a;
             auto correct_a = m_verification_a[i].a;
             if (!our_a.non_zeros() == correct_a.non_zeros()) 
             {
@@ -281,9 +281,9 @@ struct VCycle_Better : public rxmesh::VCycle<T>
             SparseMatrixConstantNNZRow<float, 3> p_const = gmg.m_prolong_op[i];
             auto                                 p_t     = p_const.transpose();
             if (i == 0) {
-                new_ptap(p_const, p_t, m_a[i].a, A);
+                new_ptap(p_const, p_t, this->m_a[i].a, A);
             } else {
-                new_ptap(p_const, p_t, m_a[i].a, m_a[i - 1].a);
+                new_ptap(p_const, p_t, this->m_a[i].a, this->m_a[i - 1].a);
             }
         }
     }

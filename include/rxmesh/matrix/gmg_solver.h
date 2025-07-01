@@ -147,7 +147,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         // RXMESH_TRACE("GMG: current residual: {}", max_residual);
 
         if (abs_ok || rel_ok) {
-            m_final_residual = max_residual;
+            this->m_final_residual = max_residual;
         }
 
         return abs_ok || rel_ok;
@@ -178,8 +178,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
                 if (is_converged_special_gpu(*m_A, X, m_v_cycle->B)) {
                     RXMESH_INFO("GMG: #number of iterations to solve: {}",
-                                m_iter_taken);
-                    RXMESH_INFO("GMG: final residual: {}", m_final_residual);
+                                this->m_iter_taken);
+                    RXMESH_INFO("GMG: final residual: {}", this->m_final_residual);
                     timer.stop();
                     gtimer.stop();
                     time += std::max(timer.elapsed_millis(),
@@ -222,7 +222,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
     T get_final_residual()
     {
-        return m_final_residual;
+        return this->m_final_residual;
     }
 
     virtual ~GMGSolver()
