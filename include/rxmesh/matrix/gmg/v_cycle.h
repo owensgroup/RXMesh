@@ -161,9 +161,13 @@ struct VCycle
                     gtimer.elapsed_millis());
     }
 
+    virtual void verify_laplacians(GMG<T>& gmg, SparseMatrix<T>& A)
+    {
+        printf("\nVerify laplacian called from correct laplacian class, no verification will take place.");
+    }
+
     virtual void get_intermediate_laplacians(GMG<T>& gmg, SparseMatrix<T>& A)
     {
-        m_a.resize(gmg.m_num_levels - 1);
         // construct m_a for all levels
         pt_A_p(gmg.m_prolong_op[0], A, m_a[0]);
         for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
