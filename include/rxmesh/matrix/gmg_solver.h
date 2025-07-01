@@ -30,7 +30,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
               T                abs_tol        = 1e-6,
               T                rel_tol        = 1e-6,
               int              threshold      = 1000,
-              bool             use_new_ptap   = false)
+              bool             use_new_ptap   = false,
+              bool             verify_ptap    = false)
         : IterativeSolver<T, DenseMatrix<T>>(max_iter, abs_tol, rel_tol),
           m_rx(&rx),
           m_A(&A),
@@ -41,7 +42,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
           m_threshold(threshold),
           m_use_new_ptap(use_new_ptap),
           AX(DenseMatrix<T>(A.rows(), 1, DEVICE)),
-          R(DenseMatrix<T>(A.rows(), 1, DEVICE))
+          R(DenseMatrix<T>(A.rows(), 1, DEVICE)),
+          m_verify_ptap(verify_ptap)
     {
     }
 
@@ -78,6 +80,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                                                         m_coarse_solver,
                                                         m_num_pre_relax,
                                                         m_num_post_relax);
+
+
             } else {
                 m_v_cycle =
                     std::make_unique<VCycle_Better<T>>(m_gmg,
@@ -97,6 +101,10 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
             RXMESH_INFO("v cycle prep took {} (ms), {} (ms)",
                         timer.elapsed_millis(),
                         gtimer.elapsed_millis());
+
+            if (m_verify_ptap && m_use_new_ptap) {
+                m_v_cycle->verify_laplacians(m_gmg, *m_A);
+            }
 
             constexpr int numCols = 3;
             assert(numCols == B.cols());
@@ -234,6 +242,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     bool                       m_use_new_ptap;
     DenseMatrix<T>             AX;
     DenseMatrix<T>             R;
+    bool                       m_verify_ptap;
 };
 
 }  // namespace rxmesh
