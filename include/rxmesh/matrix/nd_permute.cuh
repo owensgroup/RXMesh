@@ -181,7 +181,7 @@ struct MaxMatchTree
             const auto& level = levels[l];
             for (int n = 0; n < level.nodes.size(); ++n) {
                 const auto& node = level.nodes[n];
-                if (l == 0) {
+                if (l == 0 || node.is_leaf) {
                     std::cout << "L" << l << "_" << n << " -> " << node.lch
                               << ";\n";
 
@@ -415,18 +415,53 @@ void hierarchical_patch_graph_partitioning_recurse(
 }
 
 template <typename integer_t>
+void create_dummy_node(Node<integer_t>&         parent_node,
+                       MaxMatchTree<integer_t>& tree,
+                       const int                parent_id,
+                       const bool               is_dummy_leaf,
+                       const int                dummy_level)
+{
+    Node<integer_t> dummy_r(
+        parent_id, parent_node.rch, parent_node.rch, is_dummy_leaf);
+
+    integer_t dummy_r_id = tree.levels[dummy_level].nodes.size();
+    integer_t dummy_l_id = dummy_r_id;
+    tree.levels[dummy_level].nodes.push_back(dummy_r);
+
+    if (parent_node.rch == parent_node.lch) {
+        parent_node.rch = dummy_r_id;
+        parent_node.lch = dummy_r_id;
+    } else {
+        Node<integer_t> dummy_l(
+            parent_id, parent_node.lch, parent_node.lch, is_dummy_leaf);
+        dummy_l_id = dummy_r_id + 1;
+        tree.levels[dummy_level].nodes.push_back(dummy_l);
+
+        parent_node.rch = dummy_r_id;
+        parent_node.lch = dummy_l_id;
+    }
+
+    if (dummy_level != 0) {
+        create_dummy_node(tree.levels[dummy_level].nodes[dummy_r_id],
+                          tree,
+                          dummy_r_id,
+                          dummy_level - 1 == 0,
+                          dummy_level - 1);
+
+        if (dummy_l_id != dummy_r_id) {
+            create_dummy_node(tree.levels[dummy_level].nodes[dummy_l_id],
+                              tree,
+                              dummy_l_id,
+                              dummy_level - 1 == 0,
+                              dummy_level - 1);
+        }
+    }
+}
+
+template <typename integer_t>
 void pad_shallow_leaves(MaxMatchTree<integer_t>& tree)
 {
     const int tree_depth = tree.levels.size();
-
-    auto is_leaf = [&](const Node<integer_t>& node, int level) {
-        if (level == 0) {
-            return true;
-        }
-        const auto& child_level = tree.levels[level - 1].nodes;
-        return node.lch >= static_cast<integer_t>(child_level.size()) &&
-               node.rch >= static_cast<integer_t>(child_level.size());
-    };
 
     for (int level = 1; level < tree_depth; ++level) {
 
@@ -439,24 +474,10 @@ void pad_shallow_leaves(MaxMatchTree<integer_t>& tree)
                 continue;
             }
 
-            Node<integer_t> dummy_r(node_id, node.rch, node.rch);
-            integer_t       dummy_r_id = tree.levels[level - 1].nodes.size();
-            tree.levels[level - 1].nodes.push_back(dummy_r);
+            create_dummy_node(node, tree, node_id, level - 1 == 0, level - 1);
 
-            if (node.rch == node.lch) {
-                node.rch = dummy_r_id;
-                node.lch = dummy_r_id;
-            } else {
-
-                Node<integer_t> dummy_l(node_id, node.lch, node.lch);
-                integer_t       dummy_l_id = dummy_r_id + 1;
-                tree.levels[level - 1].nodes.push_back(dummy_l);
-
-                node.rch = dummy_r_id;
-                node.lch = dummy_l_id;
-            }
+            node.is_leaf = false;
         }
-        break;
     }
 }
 
@@ -755,8 +776,11 @@ void recurse_compute_projection(int                      root,
                                 int                      parent_l,
                                 MaxMatchTree<integer_t>& max_match_tree)
 {
-    int lch = max_match_tree.levels[parent_l].nodes[parent].lch;
-    int rch = max_match_tree.levels[parent_l].nodes[parent].rch;
+    const auto& pnode = max_match_tree.levels[parent_l].nodes[parent];
+
+    int lch = pnode.lch;
+    int rch = pnode.rch;
+
     if (parent_l == 0) {
         max_match_tree.levels[root_level].patch_proj[lch] = root;
         max_match_tree.levels[root_level].patch_proj[rch] = root;
@@ -990,7 +1014,7 @@ __global__ static void extract_separators(const Context        context,
 }  // namespace detail
 
 inline void create_dfs_indexing(const int                level,
-                                const int                node,
+                                const int                node_id,
                                 int&                     current_id,
                                 const MaxMatchTree<int>& max_match_tree,
                                 std::vector<bool>&       visited,
@@ -998,15 +1022,17 @@ inline void create_dfs_indexing(const int                level,
 {
     const int S     = max_match_tree.levels.size() - level - 1;
     const int shift = (1 << S) - 1;
-    const int id    = shift + node;
+    const int id    = shift + node_id;
 
     visited[id]   = true;
     dfs_index[id] = current_id++;
 
     if (level >= 0) {
 
-        int lch = max_match_tree.levels[level].nodes[node].lch;
-        int rch = max_match_tree.levels[level].nodes[node].rch;
+        const auto& node = max_match_tree.levels[level].nodes[node_id];
+
+        int lch = node.lch;
+        int rch = node.rch;
 
         int next_level = level - 1;
 
@@ -1252,7 +1278,7 @@ inline void permute_separators(RXMeshStatic&              rx,
                            cudaMemcpyHostToDevice));
         }
 
-
+        // v_render.reset(-1, LOCATION_ALL);
         detail::extract_separators<blockThreads>
             <<<lbe.blocks, lbe.num_threads, lbe.smem_bytes_dyn>>>(
                 rx.get_context(),
@@ -1275,17 +1301,28 @@ inline void permute_separators(RXMeshStatic&              rx,
         //
         // v_render.move(DEVICE, HOST);
         // rx.get_polyscope_mesh()->addVertexScalarQuantity(
-        //     "Render " + std::to_string(l), v_render);
-
-        // if (l >= depth - 3) {
-        //     v_render.move(DEVICE, HOST);
-        //     rx.get_polyscope_mesh()->addVertexScalarQuantity(
-        //         "Render " + std::to_string(l), v_render);
+        //     "Sep  " + std::to_string(l), v_render);
         //
-        //     // v_index.move(DEVICE, HOST);
-        //     // rx.get_polyscope_mesh()->addVertexScalarQuantity(
-        //     //     "Index " + std::to_string(l), v_index);
-        // }
+        // rx.for_each_vertex(DEVICE, [=] __device__(VertexHandle vh) {
+        //     if (d_patch_proj_l1) {
+        //         v_render(vh) = d_patch_proj_l1[vh.patch_id()];
+        //     } else {
+        //         v_render(vh) = vh.patch_id();
+        //     }
+        // });
+        //
+        // v_render.move(DEVICE, HOST);
+        // rx.get_polyscope_mesh()->addVertexScalarQuantity(
+        //     "Proj  " + std::to_string(l), v_render);
+        //
+        //// v_index.move(DEVICE, HOST);
+        //// rx.get_polyscope_mesh()->addVertexScalarQuantity(
+        ////     "Index " + std::to_string(l), v_index);
+        //
+        // CUDA_ERROR(cudaDeviceSynchronize());
+        //
+        // polyscope::show();
+
 
         std::swap(d_patch_proj_l, d_patch_proj_l1);
     }
