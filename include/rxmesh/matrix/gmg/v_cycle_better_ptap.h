@@ -34,10 +34,10 @@ struct VCycle_Better : public rxmesh::VCycle<T>
                     num_post_relax)
     {
 
-        CUDA_ERROR(cudaMalloc(&m_d_entries,
-                             sizeof(int) * gmg.m_prolong_op[0].cols()));
+        CUDA_ERROR(
+            cudaMalloc(&m_d_entries, sizeof(int) * gmg.m_prolong_op[0].cols()));
         CUDA_ERROR(cudaMalloc(&m_d_row_ptr,
-                   sizeof(int) * (gmg.m_prolong_op[0].cols() + 1)));
+                              sizeof(int) * (gmg.m_prolong_op[0].cols() + 1)));
 
 
         cub::DeviceScan::ExclusiveSum(m_d_temp_storage,
@@ -57,7 +57,6 @@ struct VCycle_Better : public rxmesh::VCycle<T>
     {
         constexpr uint32_t blockThreads = 256;
         uint32_t           blocks_new   = DIVIDE_UP(p.cols(), blockThreads);
-        uint32_t           blocks_old   = DIVIDE_UP(old_a.rows(), blockThreads);
 
 
         int*   d_entries     = m_d_entries;
@@ -112,16 +111,16 @@ struct VCycle_Better : public rxmesh::VCycle<T>
 
         int h_nnz;
         CUDA_ERROR(cudaMemcpy(&h_nnz,
-                   d_row_ptr_tmp + num_rows,
-                   sizeof(int),
-                   cudaMemcpyDeviceToHost));
+                              d_row_ptr_tmp + num_rows,
+                              sizeof(int),
+                              cudaMemcpyDeviceToHost));
 
         int* d_row_ptr;
         CUDA_ERROR(cudaMalloc(&d_row_ptr, sizeof(int) * (num_rows + 1)));
         CUDA_ERROR(cudaMemcpy(d_row_ptr,
-                   d_row_ptr_tmp,
-                   sizeof(int) * (num_rows + 1),
-                   cudaMemcpyDeviceToDevice));
+                              d_row_ptr_tmp,
+                              sizeof(int) * (num_rows + 1),
+                              cudaMemcpyDeviceToDevice));
 
         int* d_col_idx;
         T*   d_val;
@@ -184,6 +183,12 @@ struct VCycle_Better : public rxmesh::VCycle<T>
                     }
                 }
 
+                /*for (int j = 0; j < local; ++j) {
+                    printf("A_c(%d, %d) = %.6f\n",
+                           i,
+                           d_col_idx[offset + j],
+                           d_val[offset + j]);
+                }*/
             });
 
 
@@ -192,9 +197,9 @@ struct VCycle_Better : public rxmesh::VCycle<T>
         T*   h_val     = new T[h_nnz];
 
         CUDA_ERROR(cudaMemcpy(h_row_ptr,
-                   d_row_ptr,
-                   sizeof(int) * (num_rows + 1),
-                   cudaMemcpyDeviceToHost));
+                              d_row_ptr,
+                              sizeof(int) * (num_rows + 1),
+                              cudaMemcpyDeviceToHost));
         CUDA_ERROR(cudaMemcpy(
             h_col_idx, d_col_idx, sizeof(int) * h_nnz, cudaMemcpyDeviceToHost));
         CUDA_ERROR(cudaMemcpy(
@@ -219,16 +224,15 @@ struct VCycle_Better : public rxmesh::VCycle<T>
         this->pt_A_p(gmg.m_prolong_op[0], A, m_verification_a[0]);
         for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
             this->pt_A_p(gmg.m_prolong_op[l],
-                   m_verification_a[l - 1].a,
-                   m_verification_a[l]);
+                         m_verification_a[l - 1].a,
+                         m_verification_a[l]);
         }
         constexpr uint32_t blockThreads = 256;
 
         for (int i = 0; i < gmg.m_num_levels - 1; ++i) {
             auto our_a     = this->m_a[i].a;
             auto correct_a = m_verification_a[i].a;
-            if (!our_a.non_zeros() == correct_a.non_zeros()) 
-            {
+            if (!our_a.non_zeros() == correct_a.non_zeros()) {
                 printf("\nERROR: NUMBER OF NONZERO VALUES ARE NOT MATCHING");
             }
 

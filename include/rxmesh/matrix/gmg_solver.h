@@ -119,22 +119,22 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                                  int               vertex = 0)
     {
         constexpr uint32_t blockThreads = 256;
-        uint32_t           blocks_new = DIVIDE_UP(m_v_cycle->m_a[l - 1].a.rows(), blockThreads);
+        uint32_t           blocks_new =
+            DIVIDE_UP(m_v_cycle->m_a[l - 1].a.rows(), blockThreads);
 
         int* d_c;
-        CUDA_ERROR(cudaMalloc(&d_c, m_v_cycle->m_a[l - 1].a.rows() * sizeof(int)));
+        CUDA_ERROR(
+            cudaMalloc(&d_c, m_v_cycle->m_a[l - 1].a.rows() * sizeof(int)));
         auto a = m_v_cycle->m_a[l - 1].a;
         for_each_item<<<blocks_new, blockThreads>>>(
             m_v_cycle->m_a[l - 1].a.rows(),
-            [a,vertex,d_c] __device__(int i) mutable {
-
+            [a, vertex, d_c] __device__(int i) mutable {
                 if (i != vertex) {
                     d_c[i] = 0;
                     return;
                 }
-                for (int q = a.row_ptr()[i];q < a.row_ptr()[i + 1];++q) 
-                {
-                    int a_col = a.col_idx()[q];
+                for (int q = a.row_ptr()[i]; q < a.row_ptr()[i + 1]; ++q) {
+                    int a_col  = a.col_idx()[q];
                     d_c[a_col] = 1;
                 }
             });
@@ -149,7 +149,6 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
             connector[i] = h_c[i];
         }
         connector[vertex] = 1;
-
     }
 
     void render_laplacian()
@@ -157,13 +156,14 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         std::vector<std::vector<int>> connections(m_num_levels);
         for (int l = 1; l < m_num_levels; l++) {
 
-            connections[l-1] = std ::vector<int>(m_v_cycle->m_a[l-1].a.rows());
+            connections[l - 1] =
+                std ::vector<int>(m_v_cycle->m_a[l - 1].a.rows());
 
-            make_connections_vector(connections[l-1], l);
+            make_connections_vector(connections[l - 1], l);
 
 
             polyscope::getSurfaceMesh("Level" + std::to_string(l))
-                ->addVertexScalarQuantity("connections", connections[l-1]);
+                ->addVertexScalarQuantity("connections", connections[l - 1]);
         }
     }
 
@@ -187,7 +187,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
             // Compute norm of R and B
             T r_norm = R.norm2();
-            T b_norm = B.col(i).norm2();  
+            T b_norm = B.col(i).norm2();
 
             T residual   = r_norm / (b_norm + 1e-20);
             max_residual = std::max(max_residual, residual);
@@ -231,7 +231,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                 if (is_converged_special_gpu(*m_A, X, m_v_cycle->B)) {
                     RXMESH_INFO("GMG: #number of iterations to solve: {}",
                                 this->m_iter_taken);
-                    RXMESH_INFO("GMG: final residual: {}", this->m_final_residual);
+                    RXMESH_INFO("GMG: final residual: {}",
+                                this->m_final_residual);
                     timer.stop();
                     gtimer.stop();
                     time += std::max(timer.elapsed_millis(),
