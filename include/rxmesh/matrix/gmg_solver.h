@@ -105,13 +105,65 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
             if (m_verify_ptap && m_use_new_ptap) {
                 m_v_cycle->verify_laplacians(m_gmg, *m_A);
             }
-
             constexpr int numCols = 3;
             assert(numCols == B.cols());
 
             m_v_cycle->template calc_residual<numCols>(
                 m_v_cycle->m_a[0].a, X, B, m_v_cycle->m_r[0]);
             this->m_start_residual = m_v_cycle->m_r[0].norm2();
+        }
+    }
+
+    void make_connections_vector(std::vector<int>& connector,
+                                 int               l,
+                                 int               vertex = 0)
+    {
+        constexpr uint32_t blockThreads = 256;
+        uint32_t           blocks_new = DIVIDE_UP(m_v_cycle->m_a[l - 1].a.rows(), blockThreads);
+
+        int* d_c;
+        CUDA_ERROR(cudaMalloc(&d_c, m_v_cycle->m_a[l - 1].a.rows() * sizeof(int)));
+        auto a = m_v_cycle->m_a[l - 1].a;
+        for_each_item<<<blocks_new, blockThreads>>>(
+            m_v_cycle->m_a[l - 1].a.rows(),
+            [a,vertex,d_c] __device__(int i) mutable {
+
+                if (i != vertex) {
+                    d_c[i] = 0;
+                    return;
+                }
+                for (int q = a.row_ptr()[i];q < a.row_ptr()[i + 1];++q) 
+                {
+                    int a_col = a.col_idx()[q];
+                    d_c[a_col] = 1;
+                }
+            });
+        int* h_c = new int[m_v_cycle->m_a[l - 1].a.rows() + 1];
+
+        CUDA_ERROR(cudaMemcpy(h_c,
+                              d_c,
+                              sizeof(int) * m_v_cycle->m_a[l - 1].a.rows(),
+                              cudaMemcpyDeviceToHost));
+
+        for (int i = 0; i < m_v_cycle->m_a[l - 1].a.rows(); i++) {
+            connector[i] = h_c[i];
+        }
+        connector[vertex] = 1;
+
+    }
+
+    void render_laplacian()
+    {
+        std::vector<std::vector<int>> connections(m_num_levels);
+        for (int l = 1; l < m_num_levels; l++) {
+
+            connections[l-1] = std ::vector<int>(m_v_cycle->m_a[l-1].a.rows());
+
+            make_connections_vector(connections[l-1], l);
+
+
+            polyscope::getSurfaceMesh("Level" + std::to_string(l))
+                ->addVertexScalarQuantity("connections", connections[l-1]);
         }
     }
 
@@ -135,7 +187,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
             // Compute norm of R and B
             T r_norm = R.norm2();
-            T b_norm = B.col(i).norm2();  // You'll need to add this utility
+            T b_norm = B.col(i).norm2();  
 
             T residual   = r_norm / (b_norm + 1e-20);
             max_residual = std::max(max_residual, residual);
