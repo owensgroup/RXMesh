@@ -183,12 +183,6 @@ struct VCycle_Better : public rxmesh::VCycle<T>
                     }
                 }
 
-                /*for (int j = 0; j < local; ++j) {
-                    printf("A_c(%d, %d) = %.6f\n",
-                           i,
-                           d_col_idx[offset + j],
-                           d_val[offset + j]);
-                }*/
             });
 
 
