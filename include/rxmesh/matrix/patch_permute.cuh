@@ -3,7 +3,7 @@
 #include "rxmesh/context.h"
 #include "rxmesh/query.cuh"
 
-
+#include "rxmesh/matrix/min_deg_patch.cuh"
 #include "rxmesh/matrix/nd_patch.cuh"
 
 #include "rxmesh/matrix/kmeans_patch.cuh"
@@ -61,13 +61,13 @@ __global__ static void patch_permute_nd(Context              context,
 template <uint32_t blockThreads>
 __global__ static void patch_permute_kmeans(Context                   context,
                                             VertexAttribute<uint16_t> v_permute,
-                                            int threshold = 100)
-{    
+                                            int                       threshold)
+{
     if (blockIdx.x >= context.get_num_patches()) {
         return;
     }
 
-    auto block = cooperative_groups::this_thread_block();    
+    auto block = cooperative_groups::this_thread_block();
 
     ShmemAllocator shrd_alloc;
 
@@ -76,9 +76,9 @@ __global__ static void patch_permute_kmeans(Context                   context,
 
     int num_v = pkm.num_active_vertices(block);
 
-    //if (num_v < threshold) {
-    //    return;
-    //}
+    // if (num_v < threshold) {
+    //     return;
+    // }
 
     pkm.partition(block);
 
@@ -86,4 +86,29 @@ __global__ static void patch_permute_kmeans(Context                   context,
 
     pkm.assign_permutation(block, v_permute);
 }
+
+template <uint32_t blockThreads>
+__global__ static void patch_permute_min_deg(
+    Context                   context,
+    VertexAttribute<uint16_t> v_permute)
+{
+    if (blockIdx.x != 1) {
+        return;
+    }
+
+    if (blockIdx.x >= context.get_num_patches()) {
+        return;
+    }
+
+    auto block = cooperative_groups::this_thread_block();
+
+    ShmemAllocator shrd_alloc;
+
+
+    PatchMinDeg<blockThreads> pmd(block, context, shrd_alloc);
+
+    pmd.permute(block, v_permute);
+}
+
+
 }  // namespace rxmesh

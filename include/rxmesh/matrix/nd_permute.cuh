@@ -1085,17 +1085,16 @@ inline void single_patch_nd_permute(RXMeshStatic&              rx,
     v_local_permute.reset(INVALID16, DEVICE);
 
     LaunchBox<blockThreads> lb;
-
 #if 0
     const int maxCoarsenLevels = 5;
-    rx.prepare_launch_box(
+
+     rx.run_kernel<blockThreads>(
+        patch_permute_nd<blockThreads, maxCoarsenLevels>,
         {Op::V},
-        lb,
-        (void*)patch_permute_nd<blockThreads, maxCoarsenLevels>,
         false,
         false,
         false,
-        [&](uint32_t v, uint32_t e, uint32_t f) {
+         [&](uint32_t v, uint32_t e, uint32_t f) {
             return
                 // active_v_mis, v_mis, candidate_v_mis
                 5 * detail::mask_num_bytes(v) +
@@ -1107,58 +1106,72 @@ inline void single_patch_nd_permute(RXMeshStatic&              rx,
 
                 // padding
                 7 * ShmemAllocator::default_alignment;
-        });
-#else
-    rx.prepare_launch_box({Op::V},
-                          lb,
-                          (void*)patch_permute_kmeans<blockThreads>,
-                          false,
-                          false,
-                          false,
-                          [&](uint32_t v, uint32_t e, uint32_t f) {
-                              return
-                                  // active_v_mis, v_mis, candidate_v_mis
-                                  7 * detail::mask_num_bytes(v) +
+        },
+        NULL,
+        v_local_permute, *attr_v, *attr_e, *attr_v1);
 
-                                  // EV for vv_cur
-                                  (2 * e + std::max(v + 1, 2 * e)) *
-                                      sizeof(uint16_t) +
-
-                                  // index
-                                  v * sizeof(uint16_t) +
-
-                                  // memory used in v_v and v_e
-                                  (2 * v + 1) * sizeof(uint16_t) +
-
-                                  // padding
-                                  11 * ShmemAllocator::default_alignment;
-                          });
 #endif
 
-    RXMESH_TRACE("single_patch_nd_permute shared memory= {} (bytes)",
-                 lb.smem_bytes_dyn);
+    rx.run_kernel<blockThreads>(
+        patch_permute_kmeans<blockThreads>,
+        {Op::V},
+        false,
+        false,
+        false,
+        [&](uint32_t v, uint32_t e, uint32_t f) {
+            return
+                // active_v_mis, v_mis, candidate_v_mis
+                7 * detail::mask_num_bytes(v) +
+    
+                // EV for vv_cur
+                (2 * e + std::max(v + 1, 2 * e)) * sizeof(uint16_t) +
+    
+                // index
+                v * sizeof(uint16_t) +
+    
+                // memory used in v_v and v_e
+                (2 * v + 1) * sizeof(uint16_t) +
+    
+                // padding
+                11 * ShmemAllocator::default_alignment;
+        },
+        NULL,
+        v_local_permute,
+        100);
+
+    //rx.run_kernel<blockThreads>(
+    //    patch_permute_min_deg<blockThreads>,
+    //    {Op::V},
+    //    false,
+    //    false,
+    //    false,
+    //    [&](uint32_t v, uint32_t e, uint32_t f) {
+    //        return
+    //            // m_s_active_v
+    //            detail::mask_num_bytes(v) +
+    //            // m_s_active_e
+    //            detail::mask_num_bytes(e) +
+    //            // 2*EV
+    //            (2 * 2 * e) * sizeof(uint16_t) +
+    //            // vertex valence
+    //            e * sizeof(uint8_t) +
+    //            // padding
+    //            5 * ShmemAllocator::default_alignment;
+    //    },
+    //    NULL,
+    //    v_local_permute);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
 
 #if 0
-    patch_permute_nd<blockThreads, maxCoarsenLevels>
-        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(
-            rx.get_context(), v_local_permute, *attr_v, *attr_e, *attr_v1);
-#else
-    patch_permute_kmeans<blockThreads>
-        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn>>>(rx.get_context(),
-                                                           v_local_permute);
-#endif
-
-    // CUDA_ERROR(cudaDeviceSynchronize());
-
-#if USE_POLYSCOPE
     // attr_v->move(DEVICE, HOST);
     //  attr_v1->move(DEVICE, HOST);
     //  attr_e->move(DEVICE, HOST);
 
-    v_local_permute.move(DEVICE, HOST);
-    //  for (int p = 0; p < rx.get_num_patches(); ++p) {
-    //      rx.render_patch(p)->setEnabled(false);
-    //  }
+    // v_local_permute.move(DEVICE, HOST);
+    //   for (int p = 0; p < rx.get_num_patches(); ++p) {
+    //       rx.render_patch(p)->setEnabled(false);
+    //   }
 
     // auto ps_mesh = rx.get_polyscope_mesh();
 

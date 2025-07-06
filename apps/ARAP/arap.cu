@@ -319,8 +319,21 @@ int main(int argc, char** argv)
     // solver.pre_solve(b_mat, deformed_vertex_pos_mat);
 
     CholeskySolver solver(&laplace_mat);
+
+    CPUTimer timer;
+    GPUTimer gtimer;
+
+    timer.start();
+    gtimer.start();
+
     solver.pre_solve(rx);
 
+    timer.stop();
+    gtimer.stop();
+
+    RXMESH_INFO("solver.pre_solve took {} (ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
 
     // how many times will arap algorithm run?
     int iterations = 1;
