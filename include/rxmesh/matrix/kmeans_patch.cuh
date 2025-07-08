@@ -40,8 +40,7 @@ struct PatchKMeans
         m_num_v = m_patch_info.num_vertices[0];
         m_num_e = m_patch_info.num_edges[0];
 
-        m_s_active_v     = Bitmask(m_num_v, shrd_alloc);
-        m_s_cur_active_v = Bitmask(m_num_v, shrd_alloc);
+        m_s_active_v = Bitmask(m_num_v, shrd_alloc);
 
         m_s_assigned_v      = Bitmask(m_num_v, shrd_alloc);
         m_s_cur_frontier_v  = Bitmask(m_num_v, shrd_alloc);
@@ -52,7 +51,7 @@ struct PatchKMeans
         m_s_separator = Bitmask(m_num_v, m_s_cur_frontier_v.m_bitmask);
 
         m_s_active_v.reset(block);
-        m_s_cur_active_v.reset(block);
+
 
         m_s_assigned_v.reset(block);
         m_s_cur_frontier_v.reset(block);
@@ -123,10 +122,6 @@ struct PatchKMeans
         }
 
         block.sync();
-
-        // copy active mask
-        m_s_cur_active_v.copy(block, m_s_active_v);
-        block.sync();
     }
 
     /**
@@ -139,9 +134,9 @@ struct PatchKMeans
 
         detail::bi_assignment_ggp<blockThreads>(block,
                                                 m_num_v,
-                                                m_s_cur_active_v,
+                                                m_s_active_v,
                                                 true,
-                                                m_s_cur_active_v,
+                                                m_s_active_v,
                                                 m_s_vv.offset,
                                                 m_s_vv.value,
                                                 m_s_assigned_v,
@@ -153,7 +148,7 @@ struct PatchKMeans
 
 #ifndef NDEBUG
         for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
-            if (m_s_cur_active_v(v)) {
+            if (m_s_active_v(v)) {
                 assert(m_s_partition_a_v(v) != m_s_partition_b_v(v));
                 assert(m_s_partition_a_v(v) || m_s_partition_b_v(v));
             }
@@ -176,6 +171,15 @@ struct PatchKMeans
     }
 
     /**
+     * @brief implement FM refinement to reduce the edge cut
+     */
+    __device__ __inline__ void fm_refinement(
+        cooperative_groups::thread_block& block)
+    {
+
+    }
+
+    /**
      * @brief extract the separator between the two partitions
      */
     __device__ __inline__ void extract_separator(
@@ -184,7 +188,7 @@ struct PatchKMeans
         m_s_separator.reset(block);
         block.sync();
         for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
-            if (m_s_cur_active_v(v)) {
+            if (m_s_active_v(v)) {
                 assert(m_s_partition_a_v(v) != m_s_partition_b_v(v));
                 assert(m_s_partition_a_v(v) || m_s_partition_b_v(v));
                 uint16_t start = m_s_vv.offset[v];
@@ -192,10 +196,9 @@ struct PatchKMeans
 
                 if (m_s_partition_a_v(v)) {
 
-
                     for (uint16_t i = start; i < stop; ++i) {
                         uint16_t n = m_s_vv.value[i];
-                        if (m_s_cur_active_v(n)) {
+                        if (m_s_active_v(n)) {
                             assert(m_s_partition_a_v(n) !=
                                    m_s_partition_b_v(n));
                             assert(m_s_partition_a_v(n) ||
@@ -235,7 +238,7 @@ struct PatchKMeans
 
 
         for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
-            if (m_s_cur_active_v(v)) {
+            if (m_s_active_v(v)) {
 
                 if (m_s_separator(v)) {
                     m_s_index[v] = ::atomicAdd(&s_num_sep, 1);
@@ -257,7 +260,7 @@ struct PatchKMeans
 
 
         for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
-            if (m_s_cur_active_v(v)) {
+            if (m_s_active_v(v)) {
                 VertexHandle vh(m_patch_info.patch_id, v);
 
                 assert(v_permute(vh) == INVALID16);
@@ -289,8 +292,7 @@ struct PatchKMeans
         }
         block.sync();
 
-        const uint16_t mask_num_elements =
-            DIVIDE_UP(m_s_cur_active_v.size(), 32);
+        const uint16_t mask_num_elements = DIVIDE_UP(m_s_active_v.size(), 32);
 
         const uint16_t rem_bits = m_s_active_v.size() & 31u;
 
@@ -301,7 +303,7 @@ struct PatchKMeans
         for (uint16_t i = threadIdx.x; i < mask_num_elements;
              i += blockThreads) {
 
-            unsigned int x = m_s_cur_active_v.m_bitmask[i];
+            unsigned int x = m_s_active_v.m_bitmask[i];
 
             if (rem_bits && i == mask_num_elements - 1) {
                 x &= last_word_mask;
@@ -330,7 +332,7 @@ struct PatchKMeans
         block.sync();
 
         for (uint16_t v = threadIdx.x; v < m_num_v; v += blockThreads) {
-            if (m_s_cur_active_v(v)) {
+            if (m_s_active_v(v)) {
                 s_active_v_id[::atomicAdd(s_count, 1)] = v;
             }
         }
@@ -396,11 +398,10 @@ struct PatchKMeans
         return ret;
     }
 
-    // private:
+   private:
     PatchInfo m_patch_info;
     VV        m_s_vv;
     Bitmask   m_s_active_v;  // active vertices in the patch (minus not-owned)
-    Bitmask   m_s_cur_active_v;
     Bitmask   m_s_separator;
     uint16_t* m_s_index;
 

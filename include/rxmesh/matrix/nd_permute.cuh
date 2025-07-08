@@ -1084,7 +1084,6 @@ inline void single_patch_nd_permute(RXMeshStatic&              rx,
 
     v_local_permute.reset(INVALID16, DEVICE);
 
-    LaunchBox<blockThreads> lb;
 #if 0
     const int maxCoarsenLevels = 5;
 
@@ -1121,7 +1120,7 @@ inline void single_patch_nd_permute(RXMeshStatic&              rx,
         [&](uint32_t v, uint32_t e, uint32_t f) {
             return
                 // active_v_mis, v_mis, candidate_v_mis
-                7 * detail::mask_num_bytes(v) +
+                6 * detail::mask_num_bytes(v) +
     
                 // EV for vv_cur
                 (2 * e + std::max(v + 1, 2 * e)) * sizeof(uint16_t) +

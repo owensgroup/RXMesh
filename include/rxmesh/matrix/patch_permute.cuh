@@ -82,6 +82,8 @@ __global__ static void patch_permute_kmeans(Context                   context,
 
     pkm.partition(block);
 
+    pkm.fm_refinement(block);
+
     pkm.extract_separator(block);
 
     pkm.assign_permutation(block, v_permute);
