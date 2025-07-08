@@ -898,9 +898,22 @@ struct PatchND
 
         const uint16_t mask_num_elements =
             DIVIDE_UP(m_s_cur_active_v.size(), 32);
+
+        const uint16_t rem_bits = m_s_active_v.size() & 31u;
+
+        const uint32_t last_word_mask =
+            (rem_bits == 0) ? 0xFFFFFFFFu : ((1u << rem_bits) - 1u);
+
         for (uint16_t i = threadIdx.x; i < mask_num_elements;
              i += blockThreads) {
-            int num_set_bits = __popc(m_s_cur_active_v.m_bitmask[i]);
+
+            unsigned int x = m_s_cur_active_v.m_bitmask[i];
+
+            if (rem_bits && i == mask_num_elements - 1) {
+                x &= last_word_mask;
+            }
+
+            int num_set_bits = __popc(x);
 
             ::atomicAdd(&s_count, num_set_bits);
         }

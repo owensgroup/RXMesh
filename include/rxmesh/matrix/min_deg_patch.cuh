@@ -142,15 +142,16 @@ struct PatchMinDeg
                 m_s_active_v.reset(v_min, true);
 
                 // now we know the permutation of this vertex
-                v_permute(VertexHandle(m_patch_info.patch_id, v_min)) =
+                v_permute(VertexHandle(m_patch_info.patch_id, v_min)) =  // i;
                     num_active_v - i - 1;
             }
 
-            // if this is the not the last vertex to be numbered
-            if (i < num_active_v - 1) {
-                // update graph
-                update_mesh(block, v_min);
-            }
+            // TODO
+            //  if this is the not the last vertex to be numbered
+            // if (i < num_active_v - 1) {
+            //     // update graph
+            //     update_mesh(block, v_min);
+            // }
 
             block.sync();
         }
@@ -275,9 +276,22 @@ struct PatchMinDeg
         block.sync();
 
         const uint16_t mask_num_elements = DIVIDE_UP(m_s_active_v.size(), 32);
+
+        const uint16_t rem_bits = m_s_active_v.size() & 31u;
+
+        const uint32_t last_word_mask =
+            (rem_bits == 0) ? 0xFFFFFFFFu : ((1u << rem_bits) - 1u);
+
         for (uint16_t i = threadIdx.x; i < mask_num_elements;
              i += blockThreads) {
-            int num_set_bits = __popc(m_s_active_v.m_bitmask[i]);
+
+            unsigned int x = m_s_active_v.m_bitmask[i];
+
+            if (rem_bits && i == mask_num_elements - 1) {
+                x &= last_word_mask;
+            }
+
+            int num_set_bits = __popc(x);
 
             ::atomicAdd(&s_count, num_set_bits);
         }
