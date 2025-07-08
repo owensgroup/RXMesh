@@ -74,7 +74,7 @@ __global__ static void patch_permute_kmeans(Context                   context,
 
     PatchKMeans<blockThreads> pkm(block, context, shrd_alloc);
 
-    int num_v = pkm.num_active_vertices(block);
+    // int num_v = pkm.num_active_vertices(block);
 
     // if (num_v < threshold) {
     //     return;

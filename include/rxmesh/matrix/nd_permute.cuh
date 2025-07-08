@@ -1119,46 +1119,54 @@ inline void single_patch_nd_permute(RXMeshStatic&              rx,
         false,
         [&](uint32_t v, uint32_t e, uint32_t f) {
             return
+                //TODO fix memory calculation
+                // 
                 // active_v_mis, v_mis, candidate_v_mis
-                6 * detail::mask_num_bytes(v) +
-    
-                // EV for vv_cur
+                2*(6 * detail::mask_num_bytes(v) +
+
+                // FM locked vertices
+                detail::mask_num_bytes(v) +
+
+                // FM gain and cumulative gain
+                2 * v * sizeof(int16_t) +
+
+                // EV for vv
                 (2 * e + std::max(v + 1, 2 * e)) * sizeof(uint16_t) +
-    
-                // index
+
+                // index (overlap with max gain vertex in FM)
                 v * sizeof(uint16_t) +
-    
+
                 // memory used in v_v and v_e
                 (2 * v + 1) * sizeof(uint16_t) +
-    
+
                 // padding
-                11 * ShmemAllocator::default_alignment;
+                15 * ShmemAllocator::default_alignment);
         },
         NULL,
         v_local_permute,
         100);
 
-    //rx.run_kernel<blockThreads>(
-    //    patch_permute_min_deg<blockThreads>,
-    //    {Op::V},
-    //    false,
-    //    false,
-    //    false,
-    //    [&](uint32_t v, uint32_t e, uint32_t f) {
-    //        return
-    //            // m_s_active_v
-    //            detail::mask_num_bytes(v) +
-    //            // m_s_active_e
-    //            detail::mask_num_bytes(e) +
-    //            // 2*EV
-    //            (2 * 2 * e) * sizeof(uint16_t) +
-    //            // vertex valence
-    //            e * sizeof(uint8_t) +
-    //            // padding
-    //            5 * ShmemAllocator::default_alignment;
-    //    },
-    //    NULL,
-    //    v_local_permute);
+    // rx.run_kernel<blockThreads>(
+    //     patch_permute_min_deg<blockThreads>,
+    //     {Op::V},
+    //     false,
+    //     false,
+    //     false,
+    //     [&](uint32_t v, uint32_t e, uint32_t f) {
+    //         return
+    //             // m_s_active_v
+    //             detail::mask_num_bytes(v) +
+    //             // m_s_active_e
+    //             detail::mask_num_bytes(e) +
+    //             // 2*EV
+    //             (2 * 2 * e) * sizeof(uint16_t) +
+    //             // vertex valence
+    //             e * sizeof(uint8_t) +
+    //             // padding
+    //             5 * ShmemAllocator::default_alignment;
+    //     },
+    //     NULL,
+    //     v_local_permute);
 
     CUDA_ERROR(cudaDeviceSynchronize());
 
