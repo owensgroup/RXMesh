@@ -32,7 +32,10 @@ struct DenseMatrix
     friend class SparseMatrix;
 
     using EigenDenseMatrix =
-        Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Order>>;
+        Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Order>;
+
+    using EigenDenseMatrixMap = Eigen::Map<EigenDenseMatrix>;
+
 
     DenseMatrix()
         : m_allocated(LOCATION_NONE),
@@ -1018,9 +1021,24 @@ struct DenseMatrix
      * zero-copy conversion so Eigen dense matrix will point to the same memory
      * as the host-side of this DenseMatrix
      */
-    __host__ EigenDenseMatrix to_eigen()
+    __host__ EigenDenseMatrixMap to_eigen()
     {
-        return EigenDenseMatrix(m_h_val, rows(), cols());
+        return EigenDenseMatrixMap(m_h_val, rows(), cols());
+    }
+
+
+    /**
+     * @brief copy the matrix into Eigen matrix
+     */
+    __host__ EigenDenseMatrix to_eigen_copy()
+    {
+        EigenDenseMatrix ret(rows(), cols());
+        for (int i = 0; i < rows(); ++i) {
+            for (int j = 0; j < cols(); ++j) {
+                ret(i, j) = this->operator()(i, j);
+            }
+        }
+        return ret;
     }
 
     /**

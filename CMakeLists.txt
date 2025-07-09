@@ -133,7 +133,7 @@ target_include_directories(RXMesh
 
 # CUDA and C++ compiler flags
 set(cxx_flags 
-	$<$<CXX_COMPILER_ID:MSVC>:-D_SCL_SECURE_NO_WARNINGS /openmp:experimental /MP /std:c++17>  #Add MSVC-specific compiler flags here
+	$<$<CXX_COMPILER_ID:MSVC>:-D_SCL_SECURE_NO_WARNINGS /openmp:experimental /MP /std:c++17 /bigobj>  #Add MSVC-specific compiler flags here
 	$<$<CXX_COMPILER_ID:GNU>:-Wall -m64 -fopenmp -O3 -std=c++17 -Wno-unused-function> #Add GCC/Clang-specific compiler flags here
 	)
 

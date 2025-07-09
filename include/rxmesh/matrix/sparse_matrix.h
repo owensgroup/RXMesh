@@ -1107,13 +1107,15 @@ struct SparseMatrix
 
         Eigen::SparseMatrix<T, Eigen::RowMajor, IndexT> ret(rows(), cols());
 
-        // std::sort(
-        //     triplets.begin(), triplets.end(), [](TripletT& a, TripletT& b) {
-        //         return (a.row() < b.row()) ||
-        //                (a.row() == b.row() && a.col() < b.col());
-        //     });
+        std::sort(
+            triplets.begin(), triplets.end(), [](TripletT& a, TripletT& b) {
+                return (a.row() < b.row()) ||
+                       (a.row() == b.row() && a.col() < b.col());
+            });
 
         ret.setFromTriplets(triplets.begin(), triplets.end());
+
+        ret.makeCompressed();
 
         return ret;
     }

@@ -11,7 +11,57 @@
 
 
 #include <Eigen/Sparse>
+
+#include <Eigen/src/SparseCholesky/SimplicialCholesky.h>
+
 #include <unsupported/Eigen/SparseExtra>
+
+/**
+ * @brief using Eigen to solve the same system
+ */
+template <typename SpMat, typename DMat>
+void simplicial_ldlt(const SpMat& A, const DMat& B)
+{
+    using namespace rxmesh;
+
+    Eigen::SimplicialLDLT<SpMat,
+                          Eigen::UpLoType::Lower,
+                          Eigen::AMDOrdering<typename SpMat::StorageIndex>>
+        solver;
+
+    CPUTimer timer;
+    timer.start();
+    solver.analyzePattern(A);
+    timer.stop();
+
+    if (solver.info() != Eigen::Success) {
+        RXMESH_ERROR("Eigen::SimplicialLDLT analyzePattern failed!");
+    }
+
+    RXMESH_INFO("simplicial_llt analyze_pattern took {} (ms)",
+                timer.elapsed_millis());
+
+    timer.start();
+    solver.factorize(A);
+    timer.stop();
+
+    RXMESH_INFO("simplicial_llt factorize took {} (ms)",
+                timer.elapsed_millis());
+
+    if (solver.info() != Eigen::Success) {
+        RXMESH_ERROR("Eigen::SimplicialLDLT factorization failed!");
+    }
+
+    timer.start();
+    DMat X = solver.solve(B);
+    timer.stop();
+
+    RXMESH_INFO("simplicial_llt solve took {} (ms)", timer.elapsed_millis());
+
+    if (solver.info() != Eigen::Success) {
+        RXMESH_ERROR("Eigen::SimplicialLDLT solve failed!");
+    }
+}
 
 template <typename T>
 void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
@@ -50,30 +100,26 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                                 Arg.time_step);
 
 
-    if (Arg.create_AB) {
-        A_mat.move(DEVICE, HOST);
-        B_mat.move(DEVICE, HOST);
-        std::string output_dir = Arg.output_folder + "systems";
-        auto        A_mat_copy = A_mat.to_eigen();
-        auto        B_mat_copy = B_mat.to_eigen();
-        std::filesystem::create_directories(output_dir);
-        Eigen::saveMarketDense(
-            B_mat_copy,
-            output_dir + "/" + extract_file_name(Arg.obj_file_name) + "_B.mtx");
-        Eigen::saveMarket(
-            A_mat_copy,
-            output_dir + "/" + extract_file_name(Arg.obj_file_name) + "_A.mtx");
+    // if (Arg.create_AB) {
+    //     A_mat.move(DEVICE, HOST);
+    //     B_mat.move(DEVICE, HOST);
+    //     std::string output_dir = Arg.output_folder + "systems";
+    //     auto        A_mat_copy = A_mat.to_eigen();
+    //     auto        B_mat_copy = B_mat.to_eigen();
+    //     std::filesystem::create_directories(output_dir);
+    //     Eigen::saveMarketDense(
+    //         B_mat_copy,
+    //         output_dir + "/" + extract_file_name(Arg.obj_file_name) +
+    //         "_B.mtx");
+    //     Eigen::saveMarket(
+    //         A_mat_copy,
+    //         output_dir + "/" + extract_file_name(Arg.obj_file_name) +
+    //         "_A.mtx");
+    //
+    //     std::cout << "\nWrote A and b .mtx files to " << output_dir + "/";
+    //     exit(1);
+    // }
 
-        std::cout << "\nWrote A and b .mtx files to " << output_dir + "/";
-        exit(1);
-    }
-
-
-    //// eigen solve
-
-
-    ///
-    ///
 
     Report report("MCF_Chol");
     report.command_line(Arg.argc, Arg.argv);
@@ -92,18 +138,6 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     float total_time = 0;
 
     CholeskySolver solver(&A_mat, permute_method);
-
-    // To Use LU, we have to move the data to the host
-    // LUSolver solver(&A_mat, permute_method);
-    // A_mat.move(DEVICE, HOST);
-    // B_mat.move(DEVICE, HOST);
-    // X_mat.move(DEVICE, HOST);
-
-    // pre-solve
-    // solver.pre_solve(rx);
-    // Solve
-    // solver.solve(B_mat, X_mat);
-
 
     CPUTimer timer;
     GPUTimer gtimer;
@@ -192,22 +226,25 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
 
     RXMESH_INFO("total_time {} (ms)", total_time);
 
+    auto A_cpu = A_mat.to_eigen_copy();
+    auto B_cpu = B_mat.to_eigen_copy();
+    simplicial_ldlt(A_cpu, B_cpu);
 
     // move the results to the host
     // if we use LU, the data will be on the host and we should not move the
     // device to the host
-     X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
+    // X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
 
     // copy the results to attributes
-     coords->from_matrix(&X_mat);
+    // coords->from_matrix(&X_mat);
 
 #if USE_POLYSCOPE
-    polyscope::registerSurfaceMesh("old mesh",
-                                   rx.get_polyscope_mesh()->vertices,
-                                   rx.get_polyscope_mesh()->faces);
-    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    // polyscope::registerSurfaceMesh("old mesh",
+    //                                rx.get_polyscope_mesh()->vertices,
+    //                                rx.get_polyscope_mesh()->faces);
+    // rx.get_polyscope_mesh()->updateVertexPositions(*coords);
 
-    //polyscope::show();
+    // polyscope::show();
 #endif
 
     B_mat.release();
