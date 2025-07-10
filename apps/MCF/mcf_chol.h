@@ -180,7 +180,7 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     B_mat.move(DEVICE, HOST);
     auto A_cpu = A_mat.to_eigen_copy();
     auto B_cpu = B_mat.to_eigen_copy();
-    simplicial_llt(rx, A_cpu, B_cpu);
+    run_eigen_all(rx, A_cpu, B_cpu);
 
     // move the results to the host
     // if we use LU, the data will be on the host and we should not move the

@@ -12,30 +12,26 @@
 
 #include <Eigen/src/SparseCholesky/SimplicialCholesky.h>
 
-/**
- * @brief using Eigen to solve the same system
- */
-template <typename SpMat, typename DMat>
-void simplicial_llt(const rxmesh::RXMeshStatic& rx,
-                    const SpMat&                A,
-                    const DMat&                 B)
+
+template <typename SolverT, typename SpMat, typename DMat>
+void run_eigen(const rxmesh::RXMeshStatic& rx,
+               const std::string           name,
+               const SpMat&                A,
+               const DMat&                 B)
 {
     using namespace rxmesh;
 
-    Report report("MCF_Eigen");
+    Report report("MCF_Eigen_" + name);
     report.command_line(Arg.argc, Arg.argv);
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rx);
-    report.add_member("method", std::string("SimplicialLLT"));
+    report.add_member("method", name);
     report.add_member("application", std::string("MCF"));
 
     float total_time = 0;
 
-    Eigen::SimplicialLLT<SpMat,
-                         Eigen::UpLoType::Lower,
-                         Eigen::AMDOrdering<typename SpMat::StorageIndex>>
-        solver;
+    SolverT solver;
 
     CPUTimer timer;
     timer.start();
@@ -43,13 +39,12 @@ void simplicial_llt(const rxmesh::RXMeshStatic& rx,
     timer.stop();
 
     if (solver.info() != Eigen::Success) {
-        std::cout << solver.info() << "\n";
-        RXMESH_ERROR("Eigen::SimplicialLLT analyzePattern failed!");
+        RXMESH_ERROR("{} analyzePattern failed!", name);
     }
 
     total_time += timer.elapsed_millis();
-    RXMESH_INFO("SimplicialLLT analyze_pattern took {} (ms)",
-                timer.elapsed_millis());
+    RXMESH_INFO(
+        "{} analyze_pattern took {} (ms)", name, timer.elapsed_millis());
     report.add_member("analyze_pattern", timer.elapsed_millis());
 
     timer.start();
@@ -57,12 +52,11 @@ void simplicial_llt(const rxmesh::RXMeshStatic& rx,
     timer.stop();
 
     total_time += timer.elapsed_millis();
-    RXMESH_INFO("SimplicialLLT factorize took {} (ms)", timer.elapsed_millis());
+    RXMESH_INFO("{} factorize took {} (ms)", name, timer.elapsed_millis());
     report.add_member("factorize", timer.elapsed_millis());
 
     if (solver.info() != Eigen::Success) {
-        std::cout << solver.info() << "\n";
-        RXMESH_ERROR("Eigen::SimplicialLLT factorization failed!");
+        RXMESH_ERROR("{} factorization failed!", name);
     }
 
     timer.start();
@@ -70,18 +64,38 @@ void simplicial_llt(const rxmesh::RXMeshStatic& rx,
     timer.stop();
 
     total_time += timer.elapsed_millis();
-    RXMESH_INFO("SimplicialLLT solve took {} (ms)", timer.elapsed_millis());
+    RXMESH_INFO("{} solve took {} (ms)", name, timer.elapsed_millis());
     report.add_member("solve", timer.elapsed_millis());
 
     if (solver.info() != Eigen::Success) {
-        std::cout << solver.info() << "\n";
-        RXMESH_ERROR("Eigen::SimplicialLLT solve failed!");
+        RXMESH_ERROR("{} solve failed!", name);
     }
 
-    RXMESH_INFO("SimplicialLLT total_time {} (ms)", total_time);
+    RXMESH_INFO("{} total_time {} (ms)", name, total_time);
     report.add_member("total_time", total_time);
 
 
     report.write(Arg.output_folder + "/rxmesh",
-                 "MCF_EIGEN_LDLT_" + extract_file_name(Arg.obj_file_name));
+                 "MCF_" + name + "_" + extract_file_name(Arg.obj_file_name));
+}
+
+
+template <typename SpMat, typename DMat>
+void run_eigen_all(const rxmesh::RXMeshStatic& rx,
+                   const SpMat&                A,
+                   const DMat&                 B)
+{
+    using LLT =
+        Eigen::SimplicialLLT<SpMat,
+                             Eigen::UpLoType::Lower,
+                             Eigen::AMDOrdering<typename SpMat::StorageIndex>>;
+
+    run_eigen<LLT>(rx, "SimplicialLLT", A, B);
+
+    using LDLT =
+        Eigen::SimplicialLDLT<SpMat,
+                              Eigen::UpLoType::Lower,
+                              Eigen::AMDOrdering<typename SpMat::StorageIndex>>;
+
+    run_eigen<LDLT>(rx, "SimplicialLDLT", A, B);
 }
