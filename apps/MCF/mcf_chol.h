@@ -5,63 +5,13 @@
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/matrix/cholesky_solver.h"
-#include "rxmesh/matrix/lu_solver.h"
 
 #include "mcf_kernels.cuh"
 
+#include "mcf_eigen.h"
 
 #include <Eigen/Sparse>
-
-#include <Eigen/src/SparseCholesky/SimplicialCholesky.h>
-
 #include <unsupported/Eigen/SparseExtra>
-
-/**
- * @brief using Eigen to solve the same system
- */
-template <typename SpMat, typename DMat>
-void simplicial_ldlt(const SpMat& A, const DMat& B)
-{
-    using namespace rxmesh;
-
-    Eigen::SimplicialLDLT<SpMat,
-                          Eigen::UpLoType::Lower,
-                          Eigen::AMDOrdering<typename SpMat::StorageIndex>>
-        solver;
-
-    CPUTimer timer;
-    timer.start();
-    solver.analyzePattern(A);
-    timer.stop();
-
-    if (solver.info() != Eigen::Success) {
-        RXMESH_ERROR("Eigen::SimplicialLDLT analyzePattern failed!");
-    }
-
-    RXMESH_INFO("simplicial_llt analyze_pattern took {} (ms)",
-                timer.elapsed_millis());
-
-    timer.start();
-    solver.factorize(A);
-    timer.stop();
-
-    RXMESH_INFO("simplicial_llt factorize took {} (ms)",
-                timer.elapsed_millis());
-
-    if (solver.info() != Eigen::Success) {
-        RXMESH_ERROR("Eigen::SimplicialLDLT factorization failed!");
-    }
-
-    timer.start();
-    DMat X = solver.solve(B);
-    timer.stop();
-
-    RXMESH_INFO("simplicial_llt solve took {} (ms)", timer.elapsed_millis());
-
-    if (solver.info() != Eigen::Success) {
-        RXMESH_ERROR("Eigen::SimplicialLDLT solve failed!");
-    }
-}
 
 template <typename T>
 void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
@@ -226,9 +176,11 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
 
     RXMESH_INFO("total_time {} (ms)", total_time);
 
+    A_mat.move(DEVICE, HOST);
+    B_mat.move(DEVICE, HOST);
     auto A_cpu = A_mat.to_eigen_copy();
     auto B_cpu = B_mat.to_eigen_copy();
-    simplicial_ldlt(A_cpu, B_cpu);
+    simplicial_llt(rx, A_cpu, B_cpu);
 
     // move the results to the host
     // if we use LU, the data will be on the host and we should not move the

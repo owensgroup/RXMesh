@@ -7,6 +7,7 @@ set(SOURCE_LIST
 	mcf_cg_mat_free.h	
 	mcf_chol.h	
 	mcf_gmg.h	
+	mcf_eigen.h
 )
 
 target_sources(MCF 
