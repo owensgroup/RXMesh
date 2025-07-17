@@ -87,37 +87,37 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     m_timers.add("buildHT");
     m_timers.add("cudaMalloc");
     m_timers.add("malloc");
+    m_timers.add("hashtable.move");
+    m_timers.add("cudaMemcpy");
+    m_timers.add("bitmask.cudaMemcpy");
 
+    // 1)
     m_timers.add("build");
     m_timers.start("build");
     build(fv, patcher_file);
     m_timers.stop("build");
-    RXMESH_INFO("build time = {} (ms)", m_timers.elapsed_millis("build"));
 
+    // 2)
     m_timers.add("populate_patch_stash");
     m_timers.start("populate_patch_stash");
     populate_patch_stash();
     m_timers.stop("populate_patch_stash");
-    RXMESH_INFO("populate_patch_stash time = {} (ms)",
-                m_timers.elapsed_millis("populate_patch_stash"));
 
+    // 3)
     m_timers.add("coloring");
     m_timers.start("coloring");
     patch_graph_coloring();
     m_timers.stop("coloring");
     RXMESH_INFO("Num colors = {}", m_num_colors);
-    RXMESH_INFO("patch graph coloring time = {} (ms)",
-                m_timers.elapsed_millis("coloring"));
 
-
+    // 4)
     m_timers.add("build_device");
     m_timers.start("build_device");
     build_device();
     m_timers.stop("build_device");
-    RXMESH_INFO("build_device time = {} (ms)",
-                m_timers.elapsed_millis("build_device"));
 
 
+    // 5)
     m_timers.add("PatchScheduler");
     m_timers.start("PatchScheduler");
     PatchScheduler sch;
@@ -126,18 +126,16 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
         BYTES_TO_MEGABYTES(sizeof(uint32_t) * get_max_num_patches());
     sch.refill(get_num_patches());
     m_timers.stop("PatchScheduler");
-    RXMESH_INFO("PatchScheduler time = {} (ms)",
-                m_timers.elapsed_millis("PatchScheduler"));
 
 
+    // 6)
     m_timers.add("allocate_extra_patches");
     m_timers.start("allocate_extra_patches");
     // Allocate  extra patches
     allocate_extra_patches();
     m_timers.stop("allocate_extra_patches");
-    RXMESH_INFO("allocate_extra_patches time = {} (ms)",
-                m_timers.elapsed_millis("allocate_extra_patches"));
 
+    // 7)
     m_timers.add("context.init");
     m_timers.start("context.init");
     // Allocate and copy the context to the gpu
@@ -159,8 +157,6 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                           m_d_patches_info,
                           sch);
     m_timers.stop("context.init");
-    RXMESH_INFO("context.init time = {} (ms)",
-                m_timers.elapsed_millis("context.init"));
 
 
     RXMESH_INFO("#Vertices = {}, #Faces= {}, #Edges= {}, #Patches = {}",
@@ -181,19 +177,39 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     RXMESH_INFO("per-patch maximum vertex count = {}",
                 m_max_vertices_per_patch);
 
+    ////
+    RXMESH_INFO("1) build time = {} (ms)", m_timers.elapsed_millis("build"));
+    RXMESH_INFO("2) populate_patch_stash time = {} (ms)",
+                m_timers.elapsed_millis("populate_patch_stash"));
+    RXMESH_INFO("3) patch graph coloring time = {} (ms)",
+                m_timers.elapsed_millis("coloring"));
+    RXMESH_INFO("4) build_device time = {} (ms)",
+                m_timers.elapsed_millis("build_device"));
+    RXMESH_INFO(" -buildHT time = {} (ms)", m_timers.elapsed_millis("buildHT"));
+    RXMESH_INFO("   --lower_bound time = {} (ms)",
+                m_timers.elapsed_millis("lower_bound"));
+    RXMESH_INFO("   --ht.insert time = {} (ms)",
+                m_timers.elapsed_millis("ht.insert"));
+    RXMESH_INFO("   --hashtable.move time = {} (ms)",
+                m_timers.elapsed_millis("hashtable.move"));
+    RXMESH_INFO("   --LPHashTable time = {} (ms)",
+                m_timers.elapsed_millis("LPHashTable"));
+    RXMESH_INFO(" -bitmask time = {} (ms)", m_timers.elapsed_millis("bitmask"));
+    RXMESH_INFO("   --bitmask.cudaMemcpy time = {} (ms)",
+                m_timers.elapsed_millis("bitmask.cudaMemcpy"));
+
+    RXMESH_INFO("5) PatchScheduler time = {} (ms)",
+                m_timers.elapsed_millis("PatchScheduler"));
+    RXMESH_INFO("6) allocate_extra_patches time = {} (ms)",
+                m_timers.elapsed_millis("allocate_extra_patches"));
+    RXMESH_INFO("7) context.init time = {} (ms)",
+                m_timers.elapsed_millis("context.init"));
+
+    RXMESH_INFO("cudaMemcpy time = {} (ms)",
+                m_timers.elapsed_millis("cudaMemcpy"));
     RXMESH_INFO("cudaMalloc time = {} (ms)",
                 m_timers.elapsed_millis("cudaMalloc"));
-
     RXMESH_INFO("malloc time = {} (ms)", m_timers.elapsed_millis("malloc"));
-
-    RXMESH_INFO("buildHT time = {} (ms)", m_timers.elapsed_millis("buildHT"));
-    RXMESH_INFO("bitmask time = {} (ms)", m_timers.elapsed_millis("bitmask"));
-    RXMESH_INFO("lower_bound time = {} (ms)",
-                m_timers.elapsed_millis("lower_bound"));
-    RXMESH_INFO("ht.insert time = {} (ms)",
-                m_timers.elapsed_millis("ht.insert"));
-    RXMESH_INFO("LPHashTable time = {} (ms)",
-                m_timers.elapsed_millis("LPHashTable"));
 }
 
 RXMesh::~RXMesh()
@@ -980,7 +996,7 @@ void RXMesh::build_device()
         BYTES_TO_MEGABYTES(get_max_num_patches() * sizeof(PatchInfo));
 
 
-#pragma omp parallel for
+    // #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
 
         const uint16_t p_num_vertices =
@@ -1094,6 +1110,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
         BYTES_TO_MEGABYTES(PatchStash::stash_size * sizeof(uint32_t));
 
     // copy count and capacities
+    m_timers.start("cudaMemcpy");
     CUDA_ERROR(cudaMemcpy(d_patch.num_faces,
                           h_patch_info.num_faces,
                           sizeof(uint16_t),
@@ -1106,6 +1123,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
                           h_patch_info.num_vertices,
                           sizeof(uint16_t),
                           cudaMemcpyHostToDevice));
+    m_timers.stop("cudaMemcpy");
 
     // allocate and copy patch topology to the device
     // we realloc the host h_patch_info EV and FE to ensure that both host and
@@ -1122,10 +1140,12 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
         h_patch_info.ev, p_edges_capacity * 2 * sizeof(LocalVertexT));
 
     if (p_num_edges > 0) {
+        m_timers.start("cudaMemcpy");
         CUDA_ERROR(cudaMemcpy(d_patch.ev,
                               h_patch_info.ev,
                               p_num_edges * 2 * sizeof(LocalVertexT),
                               cudaMemcpyHostToDevice));
+        m_timers.stop("cudaMemcpy");
     }
 
     m_timers.start("cudaMalloc");
@@ -1140,10 +1160,12 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
         h_patch_info.fe, p_faces_capacity * 3 * sizeof(LocalEdgeT));
 
     if (p_num_faces > 0) {
+        m_timers.start("cudaMemcpy");
         CUDA_ERROR(cudaMemcpy(d_patch.fe,
                               h_patch_info.fe,
                               p_num_faces * 3 * sizeof(LocalEdgeT),
                               cudaMemcpyHostToDevice));
+        m_timers.stop("cudaMemcpy");
     }
 
     m_timers.start("cudaMalloc");
@@ -1183,8 +1205,10 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
             }
         }
 
+        m_timers.start("bitmask.cudaMemcpy");
         CUDA_ERROR(
             cudaMemcpy(d_mask, h_mask, num_bytes, cudaMemcpyHostToDevice));
+        m_timers.stop("bitmask.cudaMemcpy");
 
         m_timers.stop("bitmask");
     };
@@ -1229,10 +1253,12 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
 
     // Copy PatchStash
     if (patch_id != INVALID32) {
+        m_timers.start("cudaMemcpy");
         CUDA_ERROR(cudaMemcpy(d_patch.patch_stash.m_stash,
                               h_patch_info.patch_stash.m_stash,
                               PatchStash::stash_size * sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
+        m_timers.stop("cudaMemcpy");
     }
 
 
@@ -1298,7 +1324,9 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
             }
         }
 
+        m_timers.start("hashtable.move");
         d_hashtable.move(h_hashtable);
+        m_timers.stop("hashtable.move");
 
         m_timers.stop("buildHT");
     };
@@ -1339,9 +1367,10 @@ void RXMesh::build_device_single_patch(const uint32_t patch_id,
              h_patch_info.lp_f,
              d_patch.lp_f);
 
-
+    m_timers.start("cudaMemcpy");
     CUDA_ERROR(cudaMemcpy(
         &d_patch_info, &d_patch, sizeof(PatchInfo), cudaMemcpyHostToDevice));
+    m_timers.stop("cudaMemcpy");
 }
 
 void RXMesh::allocate_extra_patches()
@@ -1351,7 +1380,7 @@ void RXMesh::allocate_extra_patches()
     const uint16_t p_edges_capacity    = get_per_patch_max_edge_capacity();
     const uint16_t p_faces_capacity    = get_per_patch_max_face_capacity();
 
-    // #pragma omp parallel for
+#pragma omp parallel for
     for (int p = get_num_patches(); p < static_cast<int>(get_max_num_patches());
          ++p) {
 
