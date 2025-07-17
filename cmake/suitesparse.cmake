@@ -19,6 +19,9 @@ if (${RX_USE_SUITESPARSE})
     set(BUILD_WITHOUT_LAPACK OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(openblas)
 	
+	get_target_property(OPENBLAS_RELEASE ${_blas_target} IMPORTED_LOCATION_RELEASE)
+	get_target_property(OPENBLAS_DEBUG   ${_blas_target} IMPORTED_LOCATION_DEBUG)
+
     # 1) Pick the real OpenBLAS target (may be an alias)
 	set(_blas_target "")
 	if(TARGET openblas)
