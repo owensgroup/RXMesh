@@ -8,12 +8,13 @@ project(RXMesh
 set(RX_USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
 set(RX_BUILD_TESTS "ON" CACHE BOOL "Build RXMesh unit test")
 set(RX_BUILD_APPS "ON" CACHE BOOL "Build RXMesh applications")
+set(RX_USE_SUITESPARSE "ON" CACHE BOOL "Use SuiteSparse for benchmark")
 
-if(${RX_USE_POLYSCOPE})
-	message(STATUS "Polyscope is enabled")
-else()
-	message(STATUS "Polyscope is disabled")
-endif()
+message(STATUS "Polyscope is ${RX_USE_POLYSCOPE}")
+message(STATUS "Build RXMesh unit test is ${RX_BUILD_TESTS}")
+message(STATUS "Build RXMesh applications is ${RX_BUILD_APPS}")
+message(STATUS "SuiteSparse is ${RX_USE_SUITESPARSE}")
+
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
@@ -168,6 +169,11 @@ target_compile_options(RXMesh INTERFACE
 include("cmake/metis.cmake")
 target_link_libraries(RXMesh INTERFACE metis)	
 
+#SuiteSparse
+if(${RX_USE_SUITESPARSE})
+	include("cmake/suitesparse.cmake")
+	target_compile_definitions(RXMesh INTERFACE USE_SUITESPARSE)
+endif()
 target_link_libraries(RXMesh INTERFACE glm::glm)
 if(${RX_USE_POLYSCOPE})
 	target_link_libraries(RXMesh INTERFACE polyscope)	

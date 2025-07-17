@@ -33,5 +33,7 @@ target_link_libraries( MCF
     PRIVATE RXMesh
     PRIVATE gtest_main
 )
-
+if (${RX_USE_SUITESPARSE})  
+  target_link_libraries(MCF PRIVATE SuiteSparse::CHOLMOD)
+endif()
 #gtest_discover_tests( MCF )
