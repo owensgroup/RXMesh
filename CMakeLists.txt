@@ -8,7 +8,7 @@ project(RXMesh
 set(RX_USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
 set(RX_BUILD_TESTS "ON" CACHE BOOL "Build RXMesh unit test")
 set(RX_BUILD_APPS "ON" CACHE BOOL "Build RXMesh applications")
-set(RX_USE_SUITESPARSE "ON" CACHE BOOL "Use SuiteSparse for benchmark")
+set(RX_USE_SUITESPARSE "OFF" CACHE BOOL "Use SuiteSparse for benchmark")
 
 message(STATUS "Polyscope is ${RX_USE_POLYSCOPE}")
 message(STATUS "Build RXMesh unit test is ${RX_BUILD_TESTS}")
