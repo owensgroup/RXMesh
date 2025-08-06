@@ -171,6 +171,209 @@ __device__ __inline__ float projected_distance(const Eigen::Vector3f& v0,
     return std::fabs(distance);
 }
 
+__global__ void build_next_ring_kernel(int               num_vertices,
+                                       const int*        csr_offsets,
+                                       const int*        csr_neighbors,
+                                       GPUStorage<Edge>& next_edge_storage)
+{
+    int v = blockIdx.x * blockDim.x + threadIdx.x;
+    if (v >= num_vertices)
+        return;
+
+    int start = csr_offsets[v];
+    int end   = csr_offsets[v + 1];
+
+    for (int j = start; j < end; ++j) {
+        int nbr     = csr_neighbors[j];
+        int n_start = csr_offsets[nbr];
+        int n_end   = csr_offsets[nbr + 1];
+        for (int k = n_start; k < n_end; ++k) {
+            int n2 = csr_neighbors[k];
+            printf("\n%d is a neighbor of %d", n2, nbr);
+            if (v != n2) {
+                next_edge_storage.insert(Edge(v, n2));
+            }
+        }
+    }
+}
+
+__global__ void expand_from_frontier_kernel(const int        num_vertices,
+                                            const int*       csr_offsets,
+                                            const int*       csr_neighbors,
+                                            const Edge*      frontier_edges,
+                                            int              frontier_size,
+                                            GPUStorage<Edge> next_frontier)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= frontier_size)
+        return;
+
+    Edge edge   = frontier_edges[idx];
+    auto [v, u] = edge.unpack();
+
+    // Expand from u: generate (v, w)
+    int start_u = csr_offsets[u];
+    int end_u   = csr_offsets[u + 1];
+    for (int i = start_u; i < end_u; ++i) {
+        int w = csr_neighbors[i];
+        if (w != v) {
+            next_frontier.insert(Edge(v, w));
+        }
+    }
+
+    // Expand from v: generate (u, w)
+    int start_v = csr_offsets[v];
+    int end_v   = csr_offsets[v + 1];
+    for (int i = start_v; i < end_v; ++i) {
+        int w = csr_neighbors[i];
+        if (w != u) {
+            next_frontier.insert(Edge(u, w));
+        }
+    }
+}
+
+void build_n_ring_on_gpu_compute(GPUStorage<Edge>  input_edges,
+                                 GPUStorage<Edge>& out_nring_edges,
+                                 int               num_vertices,
+                                 int               max_ring)
+{
+    constexpr int blockThreads = 256;
+    input_edges.uniquify();
+
+    // 1. Build CSR from input_edges
+    int* degrees;
+    cudaMalloc(&degrees, sizeof(int) * num_vertices);
+    cudaMemset(degrees, 0, sizeof(int) * num_vertices);
+
+    
+    input_edges.for_each([] __device__(const Edge& e) {
+        auto [a, b] = e.unpack();
+    });
+
+    input_edges.for_each([degrees] __device__(const Edge& e) {
+        auto [a, b] = e.unpack();
+        ::atomicAdd(&degrees[a], 1);
+        ::atomicAdd(&degrees[b], 1);
+    });
+
+    int* csr_offsets;
+    cudaMalloc(&csr_offsets, sizeof(int) * (num_vertices + 1));
+    cudaMemset(csr_offsets, 0, sizeof(int) * (num_vertices + 1));
+
+    thrust::exclusive_scan(thrust::device, degrees, degrees + num_vertices+1, csr_offsets);
+
+    int total_neighbors;
+    cudaMemcpy(&total_neighbors,
+               &csr_offsets[num_vertices],
+               sizeof(int),
+               cudaMemcpyDeviceToHost);
+
+
+    int* csr_neighbors;
+    int* csr_insert_ptrs;
+    cudaMalloc(&csr_neighbors, sizeof(int) * total_neighbors);
+    cudaMalloc(&csr_insert_ptrs, sizeof(int) * (num_vertices + 1));
+    cudaMemcpy(csr_insert_ptrs,
+               csr_offsets,
+               sizeof(int) * (num_vertices + 1),
+               cudaMemcpyDeviceToDevice);
+
+
+    input_edges.for_each(
+        [csr_insert_ptrs, csr_neighbors] __device__(const Edge& e) {
+            auto [a, b] = e.unpack();
+            int ia      = ::atomicAdd(&csr_insert_ptrs[a], 1);
+            int ib      = ::atomicAdd(&csr_insert_ptrs[b], 1);
+            csr_neighbors[ia] = b;
+            csr_neighbors[ib] = a;
+        });
+
+    cudaFree(degrees);
+    cudaFree(csr_insert_ptrs);
+    
+    
+
+    // 2. Initialize visited_edges and frontier
+    GPUStorage<Edge> visited_edges(input_edges.get_capacity() * max_ring);
+    GPUStorage<Edge> frontier_edges(input_edges.get_capacity() * 2);
+
+    {
+        int   init_count = input_edges.count();
+        Edge* init_data  = input_edges.m_storage;
+
+        int blocks = (init_count + blockThreads - 1) / blockThreads;
+
+        input_edges.for_each(
+            [visited_edges, frontier_edges] __device__(const Edge& e) mutable {
+                auto [a, b] = e.unpack();
+                if (a > b) {
+                    int tmp = a;
+                    a       = b;
+                    b       = tmp;
+                }
+                Edge canon_edge(a, b);
+                visited_edges.insert(canon_edge);
+                frontier_edges.insert(canon_edge);
+            });
+        cudaDeviceSynchronize();
+    }
+
+    GPUStorage<Edge> next_frontier(frontier_edges.get_capacity() * 2);
+
+    // 3. Ring Expansion
+    for (int ring = 2; ring <= max_ring; ++ring) {
+        int frontier_size = frontier_edges.count();
+
+
+        if (frontier_size == 0) 
+        {
+            break;
+        }
+
+        Edge* frontier_data = frontier_edges.m_storage;
+        int   blocks        = (frontier_size + blockThreads - 1) / blockThreads;
+
+        expand_from_frontier_kernel<<<blocks, blockThreads>>>(num_vertices,
+                                                              csr_offsets,
+                                                              csr_neighbors,
+                                                              frontier_data,
+                                                              frontier_size,
+                                                              next_frontier);
+        cudaDeviceSynchronize();
+        // Deduplicate before merging
+        next_frontier.uniquify();
+        // Merge into visited
+        next_frontier.for_each(
+            [visited_edges] __device__(const Edge& e) mutable {
+                auto [a, b] = e.unpack();
+                if (a > b) {
+                    int tmp = a;
+                    a       = b;
+                    b       = tmp;
+                }
+                visited_edges.insert(Edge(a, b));
+            });
+
+
+        cudaDeviceSynchronize();
+        frontier_edges.free();
+        frontier_edges = std::move(next_frontier);
+        next_frontier  = GPUStorage<Edge>(frontier_edges.get_capacity() * 2);
+    }
+
+    cudaFree(csr_offsets);
+    cudaFree(csr_neighbors);
+
+    // Final result
+    out_nring_edges = std::move(visited_edges);
+
+    int final_count = out_nring_edges.count();
+    out_nring_edges.for_each([] __device__(const Edge& e) {
+        auto [a, b] = e.unpack();
+    });
+    out_nring_edges.uniquify();
+}
+
 
 }  // namespace detail
 }  // namespace rxmesh

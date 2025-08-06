@@ -60,11 +60,21 @@ struct GMG
 
     GPUStorage<Edge> m_edge_storage;
 
+    //n-ring storage structures
+    GPUStorage<Edge> m_edge_storage_disk;
+    std::vector<DenseMatrix<int>> m_sample_neighbor_size_disk;         // levels
+    std::vector<DenseMatrix<int>> m_sample_neighbor_size_prefix_disk;  // levels
+    std::vector<DenseMatrix<int>> m_sample_neighbor_disk;    
+    void*                         m_d_cub_temp_storage_disk;
+    size_t                        m_cub_temp_bytes_disk;
+
 
     // we reuse cub temp storage for all level (since level has the largest
     // storage) and only re-allocate if we have to
     void*  m_d_cub_temp_storage;
     size_t m_cub_temp_bytes;
+
+
 
     GMG(RXMeshStatic& rx,
         int           numberOfLevels,
@@ -152,7 +162,8 @@ struct GMG
         int           reduction_ratio       = 4,
         int           num_samples_threshold = 20)
         : m_ratio(reduction_ratio),
-          m_edge_storage(GPUStorage<Edge>(rx.get_num_edges()))
+          m_edge_storage(GPUStorage<Edge>(rx.get_num_edges())),
+          m_edge_storage_disk(GPUStorage<Edge>(rx.get_num_edges()))
     {
 
         CPUTimer timer;
@@ -169,7 +180,6 @@ struct GMG
             }
         }
         m_num_levels = m_num_samples.size();
-
 
         timer.start();
         gtimer.start();
@@ -196,6 +206,13 @@ struct GMG
                 m_sample_neighbor_size_prefix.emplace_back(
                     rx, level_num_samples + 1, 1);
                 m_sample_neighbor_size_prefix.back().reset(0, DEVICE);
+
+                m_sample_neighbor_size_disk.emplace_back(
+                    rx, level_num_samples + 1, 1);
+                m_sample_neighbor_size_disk.back().reset(0, DEVICE);
+                m_sample_neighbor_size_prefix_disk.emplace_back(
+                    rx, level_num_samples + 1, 1);
+                m_sample_neighbor_size_prefix_disk.back().reset(0, DEVICE);
 
                 m_distance_mat.emplace_back(rx, level_num_samples, 1);
                 m_distance_mat.back().reset(std::numeric_limits<float>::max(),
@@ -229,6 +246,14 @@ struct GMG
             m_num_samples[1] + 1);
         CUDA_ERROR(cudaMalloc((void**)&m_d_cub_temp_storage, m_cub_temp_bytes));
 
+        m_cub_temp_bytes_disk = 0;
+        cub::DeviceScan::ExclusiveSum(
+            nullptr,
+            m_cub_temp_bytes_disk,
+            m_sample_neighbor_size_disk[0].data(DEVICE),
+            m_sample_neighbor_size_prefix_disk[0].data(DEVICE),
+            m_num_samples[1] + 1);
+        CUDA_ERROR(cudaMalloc((void**)&m_d_cub_temp_storage_disk, m_cub_temp_bytes_disk));
 
         timer.stop();
         gtimer.stop();
@@ -239,9 +264,6 @@ struct GMG
         RXMESH_INFO("memory allocation took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
-        /*report.add_member(
-            "memory_allocation",
-            std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));*/
 
         timer.start();
         //============
@@ -256,11 +278,6 @@ struct GMG
                 RXMESH_INFO("random sampling took {} (ms), {} (ms)",
                             timer.elapsed_millis(),
                             gtimer.elapsed_millis());
-                /*report.add_member(
-                    "random_sampling",
-                    std::max(timer.elapsed_millis(),
-                   gtimer.elapsed_millis()));*/
-
                 break;
             }
             case Sampling::FPS: {
@@ -270,10 +287,6 @@ struct GMG
                 RXMESH_INFO("fps sampling took {} (ms), {} (ms)",
                             timer.elapsed_millis(),
                             gtimer.elapsed_millis());
-                /* report.add_member(
-                     "fps_sampling",
-                     std::max(timer.elapsed_millis(),
-                   gtimer.elapsed_millis()));*/
                 break;
             }
             case Sampling::KMeans: {
@@ -283,10 +296,6 @@ struct GMG
                 RXMESH_INFO("k means sampling took {} (ms), {} (ms)",
                             timer.elapsed_millis(),
                             gtimer.elapsed_millis());
-                /*report.add_member(
-                    "kmeans_sampling",
-                    std::max(timer.elapsed_millis(),
-                   gtimer.elapsed_millis()));*/
                 break;
             }
             default: {
@@ -334,9 +343,6 @@ struct GMG
         RXMESH_INFO("constructing operators took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
-        /*report.add_member(
-            "operator_construction",
-            std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));*/
 
         // move prolongation operator from device to host (for no obvious
         // reason)
@@ -705,6 +711,8 @@ struct GMG
 
         m_edge_storage.clear();
 
+        m_edge_storage_disk.clear();
+
         auto edge_storage = m_edge_storage;
 
         // a) for each sample, count the number of neighbor samples
@@ -717,6 +725,11 @@ struct GMG
                 detail::populate_edge_hashtable_1st_level<blockThreads>,
                 m_vertex_cluster[0],
                 m_edge_storage);
+
+            int num_clusters = m_vertex_cluster[level].rows();            
+            detail::build_n_ring_on_gpu_compute(
+                m_edge_storage, m_edge_storage_disk, num_clusters, level + 1);
+
         } else {
             // if we are building the compressed format for any other level,
             // then we use level-1 to tell us how to get the neighbor of that
@@ -757,19 +770,23 @@ struct GMG
                         }
                     }
                 });
+
+            int num_clusters = m_num_samples[level];
+            detail::build_n_ring_on_gpu_compute(m_edge_storage, m_edge_storage_disk, num_clusters, level + 1);
         }
-
-
+        
         // a.2) uniquify the storage
         m_edge_storage.uniquify();
-
 
         // b) iterate over all entries in the edge hashtable, for non sentinel
         // entries, atomic add each vertex to one another
 
         auto& sample_neighbor_size = m_sample_neighbor_size[level - 1];
-        auto& sample_neighbor_size_prefix =
-            m_sample_neighbor_size_prefix[level - 1];
+        auto& sample_neighbor_size_prefix = m_sample_neighbor_size_prefix[level - 1];
+
+        auto& sample_neighbor_size_disk = m_sample_neighbor_size_disk[level - 1];
+        auto& sample_neighbor_size_prefix_disk = m_sample_neighbor_size_prefix_disk[level - 1];
+
 
         m_edge_storage.for_each(
             [sample_neighbor_size] __device__(Edge e) mutable {
@@ -782,6 +799,16 @@ struct GMG
                 }
             });
 
+        m_edge_storage_disk.for_each(
+            [sample_neighbor_size_disk] __device__(Edge e) mutable {
+                if (!e.is_sentinel()) {
+                    std::pair<int, int> p = e.unpack();
+                    assert(p.first < sample_neighbor_size_disk.rows());
+
+                    ::atomicAdd(&sample_neighbor_size_disk(p.first), 1);
+                    ::atomicAdd(&sample_neighbor_size_disk(p.second), 1);
+                }
+            });
 
         // c) compute the exclusive sum of the number of neighbor samples
         CUDA_ERROR(cub::DeviceScan::ExclusiveSum(
@@ -791,7 +818,16 @@ struct GMG
             sample_neighbor_size_prefix.data(DEVICE),
             m_num_samples[level] + 1));
 
-        // cudaDeviceSynchronize();  // Ensure execution completes
+        cudaDeviceSynchronize();  // Ensure execution completes
+
+        CUDA_ERROR(cub::DeviceScan::ExclusiveSum(
+            m_d_cub_temp_storage_disk,
+            m_cub_temp_bytes_disk,
+            sample_neighbor_size_disk.data(DEVICE),
+            sample_neighbor_size_prefix_disk.data(DEVICE),
+            m_num_samples[level] + 1));
+
+        cudaDeviceSynchronize();
 
         // d) allocate memory for sample_neighbour
         int s = 0;
@@ -806,6 +842,19 @@ struct GMG
         auto& sample_neighbor = m_sample_neighbor[level - 1];
 
         sample_neighbor_size.reset(0, DEVICE);
+
+        int s_disk = 0;
+        CUDA_ERROR(cudaMemcpy(
+            &s_disk,
+            sample_neighbor_size_prefix_disk.data() + m_num_samples[level],
+            sizeof(int),
+            cudaMemcpyDeviceToHost));
+
+
+        m_sample_neighbor_disk.emplace_back(DenseMatrix<int>(rx, s_disk, 1));
+        auto& sample_neighbor_disk = m_sample_neighbor_disk[level - 1];
+
+        sample_neighbor_size_disk.reset(0, DEVICE);
 
         // e) store the neighbor samples in the compressed format
         m_edge_storage.for_each([sample_neighbor_size,
@@ -829,6 +878,29 @@ struct GMG
                 sample_neighbor(b_pre + b_id) = a;
             }
         });
+
+        m_edge_storage_disk.for_each([sample_neighbor_size_disk,
+                                 sample_neighbor_size_prefix_disk,
+                                 sample_neighbor_disk] __device__(Edge e) mutable {
+            if (!e.is_sentinel()) {
+                std::pair<int, int> p = e.unpack();
+
+                // add a to b
+                // and add b to a
+                int a = p.first;
+                int b = p.second;
+
+                int a_id = ::atomicAdd(&sample_neighbor_size_disk(a), 1);
+                int b_id = ::atomicAdd(&sample_neighbor_size_disk(b), 1);
+
+                int a_pre = sample_neighbor_size_prefix_disk(a);
+                int b_pre = sample_neighbor_size_prefix_disk(b);
+
+                sample_neighbor_disk(a_pre + a_id) = b;
+                sample_neighbor_disk(b_pre + b_id) = a;
+            }
+        });
+        
     }
 
 
@@ -880,7 +952,6 @@ struct GMG
 
         uint32_t threads = 256;
         uint32_t blocks  = DIVIDE_UP(num_samples, threads);
-        // printf("\n\n\n");
         for_each_item<<<blocks, threads>>>(
             num_samples, [=] __device__(int sample_id) mutable {
                 bool tri_chosen = false;
