@@ -136,12 +136,16 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     coords->from_matrix(&X_mat);
 
 #if USE_POLYSCOPE
-    if (Arg.render_hierarchy)
+    if (Arg.render_hierarchy) {
         solver.render_hierarchy();
+        solver.render_laplacian();
+
+    }
     polyscope::registerSurfaceMesh("old mesh",
                                    rx.get_polyscope_mesh()->vertices,
                                    rx.get_polyscope_mesh()->faces);
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+
     polyscope::show();
 
 
