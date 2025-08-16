@@ -1,6 +1,7 @@
 output/*
 !output/.gitkeep
 input/*
+!input/car.msh
 !input/dragon.obj
 !input/diamond.obj
 !input/plane.obj

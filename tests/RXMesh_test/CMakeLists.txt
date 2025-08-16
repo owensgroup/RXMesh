@@ -32,6 +32,7 @@ set( SOURCE_LIST
 	test_grad.h	
 	test_solver.cu
 	test_hess.cu
+	test_tet.cu
 )
 
 target_sources( RXMesh_test 
