@@ -9,11 +9,13 @@ set(RX_USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
 set(RX_BUILD_TESTS "ON" CACHE BOOL "Build RXMesh unit test")
 set(RX_BUILD_APPS "ON" CACHE BOOL "Build RXMesh applications")
 set(RX_USE_SUITESPARSE "OFF" CACHE BOOL "Use SuiteSparse for benchmark")
+set(RX_USE_CUDSS "ON" CACHE BOOL "Use cuDSS - CUDA Library for Direct Sparse Solvers")
 
 message(STATUS "Polyscope is ${RX_USE_POLYSCOPE}")
 message(STATUS "Build RXMesh unit test is ${RX_BUILD_TESTS}")
 message(STATUS "Build RXMesh applications is ${RX_BUILD_APPS}")
 message(STATUS "SuiteSparse is ${RX_USE_SUITESPARSE}")
+message(STATUS "cuDSS is ${RX_USE_CUDSS}")
 
 
 set(CMAKE_CXX_STANDARD 17)
@@ -111,10 +113,6 @@ target_sources(RXMesh
     INTERFACE ${RXMESH_SOURCES}
 )
 
-# shows headers only once 
-#add_custom_target(RXMeshSrc 
-#	SOURCES ${RXMESH_SOURCES}
-#) 
 
 target_compile_features(RXMesh INTERFACE cxx_std_17)
 target_compile_definitions(RXMesh
@@ -183,6 +181,23 @@ endif()
 find_package(OpenMP)
 if (OpenMP_CXX_FOUND)
     target_link_libraries(RXMesh INTERFACE OpenMP::OpenMP_CXX)
+endif()
+
+#cuDSS
+if(${RX_USE_CUDSS})
+	find_package(cudss CONFIG QUIET)
+	if (cudss_FOUND)		
+		message(STATUS "Found cuDSS version ${cudss_VERSION}")		
+		
+		target_include_directories(RXMesh INTERFACE PUBLIC ${cudss_INCLUDE_DIR})		
+		target_link_directories(RXMesh INTERFACE ${cudss_LIBRARY_DIR})
+		target_link_libraries(RXMesh INTERFACE cudss)
+		
+		target_compile_definitions(RXMesh INTERFACE USE_CUDSS)
+	else (cudss_FOUND)
+		message(WARNING "Can not find cuDSS")	
+		set(RX_USE_CUDSS "OFF" CACHE BOOL "")		
+	endif()		
 endif()
 
 find_package(CUDAToolkit REQUIRED)
