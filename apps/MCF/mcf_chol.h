@@ -50,25 +50,33 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
                                 Arg.time_step);
 
 
-    // if (Arg.create_AB) {
-    //     A_mat.move(DEVICE, HOST);
-    //     B_mat.move(DEVICE, HOST);
-    //     std::string output_dir = Arg.output_folder + "systems";
-    //     auto        A_mat_copy = A_mat.to_eigen();
-    //     auto        B_mat_copy = B_mat.to_eigen();
-    //     std::filesystem::create_directories(output_dir);
-    //     Eigen::saveMarketDense(
-    //         B_mat_copy,
-    //         output_dir + "/" + extract_file_name(Arg.obj_file_name) +
-    //         "_B.mtx");
-    //     Eigen::saveMarket(
-    //         A_mat_copy,
-    //         output_dir + "/" + extract_file_name(Arg.obj_file_name) +
-    //         "_A.mtx");
-    //
-    //     std::cout << "\nWrote A and b .mtx files to " << output_dir + "/";
-    //     exit(1);
-    // }
+    if (Arg.create_AB) {
+        A_mat.move(DEVICE, HOST);
+        B_mat.move(DEVICE, HOST);
+        std::string output_dir = Arg.output_folder + "systems";
+
+        auto A_mat_copy = A_mat.to_eigen_copy();
+        auto B_mat_copy = B_mat.to_eigen();
+
+        //std::cout << B_mat_copy << "\n";
+        //std::cout << "\n*******\n*******\n";
+        //std::cout << A_mat_copy << "\n";
+
+        std::filesystem::create_directories(output_dir);
+        Eigen::saveMarketDense(
+            B_mat_copy,
+            output_dir + "/" + extract_file_name(Arg.obj_file_name) + "_B.mtx");
+        Eigen::saveMarket(
+            A_mat_copy,
+            output_dir + "/" + extract_file_name(Arg.obj_file_name) + "_A.mtx");
+
+        rx.export_obj(
+            output_dir + "/" + extract_file_name(Arg.obj_file_name) + ".obj",
+            *coords);
+
+        std::cout << "\nWrote A and b .mtx files to " << output_dir + "/";
+        exit(1);
+    }
 
 
     Report report("MCF_Chol");
@@ -180,6 +188,9 @@ void mcf_cusolver_chol(rxmesh::RXMeshStatic& rx,
     B_mat.move(DEVICE, HOST);
     auto A_cpu = A_mat.to_eigen_copy();
     auto B_cpu = B_mat.to_eigen_copy();
+    // std::cout << "\n" << A_cpu << "\n";
+    // std::cout << "\n*****\n";
+    // std::cout << "\n" << B_cpu << "\n";
     run_eigen_all(rx, A_cpu, B_cpu);
 
     // move the results to the host
