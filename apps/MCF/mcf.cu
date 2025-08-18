@@ -15,17 +15,16 @@ struct arg
     std::string coarse_solver       = "jacobi";
     uint32_t    device_id           = 0;
     float       time_step           = 10;
-    float       cg_tolerance        = 1e-6;
-    float       gmg_tolerance_abs   = 1e-6;
-    float       gmg_tolerance_rel   = 0.0;
+    float       tol_abs             = 1e-6;
+    float       tol_rel             = 0.0;
     uint32_t    max_num_iter        = 100;
     bool        use_uniform_laplace = true;
     int         levels              = 5;
     int         threshold           = 1000;
     bool        render_hierarchy    = false;
-    bool        create_AB           = false;
-    bool        use_new_ptap        = true;
-    bool        ptap_verify         = true;
+    bool        create_AB           = false;  //
+    bool        use_new_ptap        = true;   //
+    bool        ptap_verify         = true;   //
     char**      argv;
     int         argc;
 } Arg;
@@ -82,24 +81,28 @@ int main(int argc, char** argv)
                         " -uniform_laplace:   Use uniform Laplace weights. Default is {} \n"
                         " -dt:                Time step (delta t). Default is {} \n"
                         "                     Hint: should be between (0.001, 1) for cotan Laplace or between (1, 100) for uniform Laplace\n"
-                        " -solver:            Solver to use. Options are cg_mat_free, pcg_mat_free, cg, pcg, chol, or gmg. Default is {}\n" 
-                        " -eps:               Conjugate gradient tolerance. Default is {}\n"
+                        " -solver:            Solver to use. Options are cg_mat_free, pcg_mat_free, cg, pcg, chol, or gmg. Default is {}\n"                         
                         " -perm:              Permutation method for Cholesky factorization (symrcm, symamd, nstdis, gpumgnd, gpund). Default is {}\n"
                         " -max_iter:          Maximum number of iterations for iterative solvers. Default is {}\n"                                            
-                        " -levels:            Number of levels in the hierarchy, inlcudes the finest level(only for GMG): Default is {}\n"
-                        " -tol_abs:           Absolute tolerance for GMG solver: Default is {}\n"
-                        " -tol_rel:           Relative tolerance for GMG solver: Default is {}\n"
+                        " -tol_abs:           Iterative solver absolute tolerance. Default is {}\n"
+                        " -tol_rel:           Iterative solver relative tolerance. Default is {}\n"
+                        " -levels:            GMG number of levels in the hierarchy, includes the finest level. Default is {}\n"
+                        " -csolver:           GMG coarse solver. Default is {}\n"
+                        " -threshold:         GMG threshold for the coarsest level in the hierarchy, i.e., number of vertices in the coarsest level. Default is {}\n"
+                        " -rh:                GMG render hierarchy. Default is {}\n"
                         " -device_id:         GPU device ID. Default is {}\n",
             Arg.obj_file_name, Arg.output_folder,  
             (Arg.use_uniform_laplace? "true" : "false"), 
             Arg.time_step, 
-            Arg.solver, 
-            Arg.cg_tolerance, 
+            Arg.solver,             
             Arg.perm_method, 
-            Arg.max_num_iter,
+            Arg.max_num_iter,            
+            Arg.tol_abs,
+            Arg.tol_rel, 
             Arg.levels,
-            Arg.gmg_tolerance_abs,
-            Arg.gmg_tolerance_rel, 
+            Arg.coarse_solver,
+            Arg.threshold,
+            (Arg.render_hierarchy? "true" : "false"),
             Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
@@ -121,10 +124,6 @@ int main(int argc, char** argv)
                 std::atoi(get_cmd_option(argv, argv + argc, "-max_iter"));
         }
 
-        if (cmd_option_exists(argv, argc + argv, "-eps")) {
-            Arg.cg_tolerance =
-                std::atof(get_cmd_option(argv, argv + argc, "-eps"));
-        }
         if (cmd_option_exists(argv, argc + argv, "-uniform_laplace")) {
             Arg.use_uniform_laplace = true;
         }
@@ -145,11 +144,11 @@ int main(int argc, char** argv)
                 std::atoi(get_cmd_option(argv, argv + argc, "-levels"));
         }
         if (cmd_option_exists(argv, argc + argv, "-tol_abs")) {
-            Arg.gmg_tolerance_abs =
+            Arg.tol_abs =
                 std::atof(get_cmd_option(argv, argv + argc, "-tol_abs"));
         }
         if (cmd_option_exists(argv, argc + argv, "-tol_rel")) {
-            Arg.gmg_tolerance_rel =
+            Arg.tol_rel =
                 std::atof(get_cmd_option(argv, argv + argc, "-tol_rel"));
         }
         if (cmd_option_exists(argv, argc + argv, "-threshold")) {
@@ -181,12 +180,11 @@ int main(int argc, char** argv)
     RXMESH_INFO("solver= {}", Arg.solver);
     RXMESH_INFO("perm= {}", Arg.perm_method);
     RXMESH_INFO("max_num_iter= {}", Arg.max_num_iter);
-    RXMESH_INFO("cg_tolerance= {0:f}", Arg.cg_tolerance);
     RXMESH_INFO("use_uniform_laplace= {}", Arg.use_uniform_laplace);
     RXMESH_INFO("time_step= {0:f}", Arg.time_step);
     RXMESH_INFO("levels= {}", Arg.levels);
-    RXMESH_INFO("gmg_tolerance_rel= {}", Arg.gmg_tolerance_rel);
-    RXMESH_INFO("gmg_tolerance_abs= {}", Arg.gmg_tolerance_abs);
+    RXMESH_INFO("tol_abs= {}", Arg.tol_abs);
+    RXMESH_INFO("tol_rel= {}", Arg.tol_rel);
     RXMESH_INFO("device_id= {}", Arg.device_id);
     RXMESH_INFO("GMG Coarse solver= {}", Arg.coarse_solver);
     RXMESH_INFO("Render GMG hierarchy= {}", Arg.render_hierarchy);

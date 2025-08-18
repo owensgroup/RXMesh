@@ -9,7 +9,7 @@ set(RX_USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
 set(RX_BUILD_TESTS "ON" CACHE BOOL "Build RXMesh unit test")
 set(RX_BUILD_APPS "ON" CACHE BOOL "Build RXMesh applications")
 set(RX_USE_SUITESPARSE "OFF" CACHE BOOL "Use SuiteSparse for benchmark")
-set(RX_USE_CUDSS "ON" CACHE BOOL "Use cuDSS - CUDA Library for Direct Sparse Solvers")
+set(RX_USE_CUDSS "OFF" CACHE BOOL "Use cuDSS - CUDA Library for Direct Sparse Solvers")
 
 message(STATUS "Polyscope is ${RX_USE_POLYSCOPE}")
 message(STATUS "Build RXMesh unit test is ${RX_BUILD_TESTS}")

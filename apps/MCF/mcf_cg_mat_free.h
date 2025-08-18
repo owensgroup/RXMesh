@@ -11,7 +11,9 @@
 #include "rxmesh/matrix/pcg_mat_free_attr_solver.h"
 
 template <int blockThreads, typename T, typename SolverT>
-void run_cg_mat_free(rxmesh::RXMeshStatic& rx, SolverT& solver, bool pcg=false)
+void run_cg_mat_free(rxmesh::RXMeshStatic& rx,
+                     SolverT&              solver,
+                     bool                  pcg = false)
 {
     using namespace rxmesh;
 
@@ -27,7 +29,8 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx, SolverT& solver, bool pcg=false)
         report.add_member("method", std::string("CG_MAT_FREE"));
     report.add_member("application", std::string("MCF"));
     report.add_member("time_step", Arg.time_step);
-    report.add_member("cg_tolerance", Arg.cg_tolerance);
+    report.add_member("tol_abs", Arg.tol_abs);
+    report.add_member("tol_rel", Arg.tol_rel);
     report.add_member("use_uniform_laplace", Arg.use_uniform_laplace);
     report.add_member("max_num_iter", Arg.max_num_iter);
     report.add_member("blockThreads", blockThreads);
@@ -70,7 +73,7 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx, SolverT& solver, bool pcg=false)
     timer.stop();
     gtimer.stop();
 
-     report.add_member(
+    report.add_member(
         "pre-solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
     total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
@@ -94,6 +97,7 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx, SolverT& solver, bool pcg=false)
     CUDA_ERROR(cudaProfilerStop());
 
     RXMESH_INFO("start_residual {}", solver.start_residual());
+    RXMESH_INFO("final_residual {}", solver.final_residual());
     RXMESH_INFO("solver {} took {} (ms) and {} iterations (i.e., {} ms/iter)",
                 solver.name(),
                 timer.elapsed_millis(),
@@ -172,8 +176,8 @@ void mcf_cg_mat_free(rxmesh::RXMeshStatic& rx)
         mat_vec,
         input_coord->get_num_attributes(),
         Arg.max_num_iter,
-        0.0,
-        Arg.cg_tolerance * Arg.cg_tolerance);
+        Arg.tol_abs,
+        Arg.tol_rel);
 
 
     run_cg_mat_free<blockThreads, T>(rx, solver);
@@ -237,9 +241,9 @@ void mcf_pcg_mat_free(rxmesh::RXMeshStatic& rx)
         precond_mat_vec,
         input_coord->get_num_attributes(),
         Arg.max_num_iter,
-        0.0,
-        Arg.cg_tolerance * Arg.cg_tolerance);
+        Arg.tol_abs,
+        Arg.tol_rel);
 
 
-    run_cg_mat_free<blockThreads, T>(rx, solver,true);
+    run_cg_mat_free<blockThreads, T>(rx, solver, true);
 }

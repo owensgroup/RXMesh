@@ -24,7 +24,7 @@ struct PCGMatFreeAttrSolver : public CGMatFreeAttrSolver<T, HandleT>
         int            unkown_dim,  // 1D, 2D, 3D
         int            max_iter,
         T              abs_tol             = 1e-6,
-        T              rel_tol             = 1e-6,
+        T              rel_tol             = 0.0,
         int            reset_residual_freq = std::numeric_limits<int>::max())
         : CGMatFreeAttrSolver<T, HandleT>(rx,
                                           mat_vec,

@@ -10,7 +10,7 @@
 
 
 template <typename T, typename SolverT>
-void run_cg(rxmesh::RXMeshStatic& rx, bool pcg=false)
+void run_cg(rxmesh::RXMeshStatic& rx, bool pcg = false)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -58,11 +58,8 @@ void run_cg(rxmesh::RXMeshStatic& rx, bool pcg=false)
 
     float total_time = 0;
 
-    SolverT solver(A_mat,
-                   X_mat.cols(),
-                   Arg.max_num_iter,
-                   0.0,
-                   Arg.cg_tolerance * Arg.cg_tolerance);
+    SolverT solver(
+        A_mat, X_mat.cols(), Arg.max_num_iter, Arg.tol_abs, Arg.tol_rel);
 
 
     GPUTimer gtimer;
@@ -92,15 +89,14 @@ void run_cg(rxmesh::RXMeshStatic& rx, bool pcg=false)
         "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
     total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
-     report.add_member(
-        "total_time", total_time);
+    report.add_member("total_time", total_time);
 
 
     CUDA_ERROR(cudaDeviceSynchronize());
     CUDA_ERROR(cudaProfilerStop());
 
     RXMESH_INFO("start_residual {}", solver.start_residual());
-
+    RXMESH_INFO("final_residual {}", solver.final_residual());
     RXMESH_INFO("solver {} took {} (ms) and {} iterations (i.e., {} ms/iter)",
                 solver.name(),
                 timer.elapsed_millis(),
@@ -123,7 +119,7 @@ void run_cg(rxmesh::RXMeshStatic& rx, bool pcg=false)
                                    rx.get_polyscope_mesh()->vertices,
                                    rx.get_polyscope_mesh()->faces);
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
-    //polyscope::show();
+    polyscope::show();
 #endif
 
     B_mat.release();
@@ -147,5 +143,5 @@ void mcf_pcg(rxmesh::RXMeshStatic& rx)
 {
     using namespace rxmesh;
 
-    run_cg<T, PCGSolver<T>>(rx,true);
+    run_cg<T, PCGSolver<T>>(rx, true);
 }

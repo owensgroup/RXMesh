@@ -59,8 +59,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                      2,
                      2,
                      CoarseSolver::Cholesky,
-                     Arg.gmg_tolerance_abs,
-                     Arg.gmg_tolerance_rel,
+                     Arg.tol_abs,
+                     Arg.tol_rel,
                      Arg.threshold,
                      Arg.use_new_ptap,
                      Arg.ptap_verify);
@@ -105,7 +105,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     solve_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
     RXMESH_INFO("start_residual {}", solver.start_residual());
-
+    RXMESH_INFO("final_residual {}", solver.final_residual());
     RXMESH_INFO("solver {} took {} (ms), {} (ms)",
                 solver.name(),
                 timer.elapsed_millis(),
@@ -139,7 +139,6 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     if (Arg.render_hierarchy) {
         solver.render_hierarchy();
         solver.render_laplacian();
-
     }
     polyscope::registerSurfaceMesh("old mesh",
                                    rx.get_polyscope_mesh()->vertices,

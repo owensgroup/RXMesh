@@ -355,7 +355,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void mcf_A_setup(
     const rxmesh::Context            context,
     const rxmesh::VertexAttribute<T> coords,
-    rxmesh::SparseMatrix<T>         A_mat,
+    rxmesh::SparseMatrix<T>          A_mat,
     const bool                       use_uniform_laplace,  // for non-uniform
     const T                          time_step)
 {
