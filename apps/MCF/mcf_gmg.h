@@ -24,10 +24,6 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
 
     DenseMatrix<float> X_mat = *(coords->to_matrix());
 
-    RXMESH_INFO("use_uniform_laplace: {}, time_step: {}",
-                Arg.use_uniform_laplace,
-                Arg.time_step);
-
     // B set up
     rx.run_kernel<blockThreads>({Op::VV},
                                 mcf_B_setup<float, blockThreads>,
