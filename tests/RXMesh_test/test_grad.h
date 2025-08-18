@@ -94,9 +94,10 @@ TEST(Diff, SmoothingNewton)
 
     EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
-    std::cout << "\nSmoothing Newton RXMesh: " << timer.elapsed_millis()
-              << " (ms)," << timer.elapsed_millis() / float(num_iterations)
-              << " ms per iteration\n";
+    RXMESH_INFO("Smoothing Newton RXMesh took {} ms, {} ms/iteration",
+                timer.elapsed_millis(),
+                timer.elapsed_millis() / float(num_iterations));
+
 
     // so newton method on this function should lead to a vertex position that
     // is just zero since the function is quadratic

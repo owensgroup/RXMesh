@@ -22,9 +22,9 @@ struct arg
     int         levels              = 5;
     int         threshold           = 1000;
     bool        render_hierarchy    = false;
-    bool        create_AB           = false;  //
-    bool        use_new_ptap        = true;   //
-    bool        ptap_verify         = true;   //
+    bool        create_mat          = false;
+    bool        use_new_ptap        = true;  //
+    bool        ptap_verify         = true;  //
     char**      argv;
     int         argc;
 } Arg;
@@ -34,6 +34,57 @@ struct arg
 #include "mcf_chol.h"
 #include "mcf_gmg.h"
 
+void creat_matrices(rxmesh::RXMeshStatic& rx)
+{
+    using namespace rxmesh;
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    auto coords = rx.get_input_vertex_coordinates();
+
+    SparseMatrix<float> A_mat(rx);
+    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
+
+    rx.run_kernel<256>({Op::VV},
+                       mcf_B_setup<float, 256>,
+                       *coords,
+                       B_mat,
+                       Arg.use_uniform_laplace);
+
+    rx.run_kernel<256>({Op::VV},
+                       mcf_A_setup<float, 256>,
+                       *coords,
+                       A_mat,
+                       Arg.use_uniform_laplace,
+                       Arg.time_step);
+
+
+    A_mat.move(DEVICE, HOST);
+    B_mat.move(DEVICE, HOST);
+    std::string output_dir = Arg.output_folder + "MCF_matrices";
+
+    auto A_mat_copy = A_mat.to_eigen_copy();
+    auto B_mat_copy = B_mat.to_eigen();
+
+    // std::cout << B_mat_copy << "\n";
+    // std::cout << "\n*******\n*******\n";
+    // std::cout << A_mat_copy << "\n";
+
+    std::filesystem::create_directories(output_dir);
+
+    Eigen::saveMarketDense(
+        B_mat_copy,
+        output_dir + "/" + extract_file_name(Arg.obj_file_name) + "_B.mtx");
+    Eigen::saveMarket(
+        A_mat_copy,
+        output_dir + "/" + extract_file_name(Arg.obj_file_name) + "_A.mtx");
+
+    rx.export_obj(
+        output_dir + "/" + extract_file_name(Arg.obj_file_name) + ".obj",
+        *coords);
+
+    RXMESH_INFO("Wrote A and b .mtx files and mesh obj to {}/", output_dir);
+}
 
 TEST(App, MCF)
 {
@@ -46,7 +97,9 @@ TEST(App, MCF)
     RXMeshStatic rx(Arg.obj_file_name, "", 256);
 
     ASSERT_TRUE(rx.is_edge_manifold());
-    if (Arg.solver == "cg") {
+    if (Arg.create_mat) {
+        creat_matrices(rx);
+    } else if (Arg.solver == "cg") {
         mcf_cg<dataT>(rx);
     } else if (Arg.solver == "pcg") {
         mcf_pcg<dataT>(rx);
@@ -86,6 +139,7 @@ int main(int argc, char** argv)
                         " -max_iter:          Maximum number of iterations for iterative solvers. Default is {}\n"                                            
                         " -tol_abs:           Iterative solver absolute tolerance. Default is {}\n"
                         " -tol_rel:           Iterative solver relative tolerance. Default is {}\n"
+                        " -create_mat:        Export the linear system matrices (.mtx) and mesh obj to files and exit. Default is {}\n"
                         " -levels:            GMG number of levels in the hierarchy, includes the finest level. Default is {}\n"
                         " -csolver:           GMG coarse solver. Default is {}\n"
                         " -threshold:         GMG threshold for the coarsest level in the hierarchy, i.e., number of vertices in the coarsest level. Default is {}\n"
@@ -99,6 +153,7 @@ int main(int argc, char** argv)
             Arg.max_num_iter,            
             Arg.tol_abs,
             Arg.tol_rel, 
+            Arg.create_mat,
             Arg.levels,
             Arg.coarse_solver,
             Arg.threshold,
@@ -167,8 +222,8 @@ int main(int argc, char** argv)
             Arg.use_new_ptap = true;
         }
 
-        if (cmd_option_exists(argv, argc + argv, "-ab")) {
-            Arg.create_AB = true;
+        if (cmd_option_exists(argv, argc + argv, "-create_mat")) {
+            Arg.create_mat = true;
         }
         if (cmd_option_exists(argv, argc + argv, "-v")) {
             Arg.ptap_verify = true;
