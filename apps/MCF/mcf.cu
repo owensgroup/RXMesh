@@ -8,23 +8,23 @@
 
 struct arg
 {
-    std::string obj_file_name       = STRINGIFY(INPUT_DIR) "dragon.obj";
-    std::string output_folder       = STRINGIFY(OUTPUT_DIR);
-    std::string perm_method         = "nstdis";
-    std::string solver              = "gmg";
-    std::string coarse_solver       = "jacobi";
-    uint32_t    device_id           = 0;
-    float       time_step           = 10;
-    float       tol_abs             = 1e-6;
-    float       tol_rel             = 0.0;
-    uint32_t    max_num_iter        = 100;
-    bool        use_uniform_laplace = true;
-    int         levels              = 5;
-    int         threshold           = 1000;
-    bool        render_hierarchy    = false;
-    bool        create_mat          = false;
-    bool        use_new_ptap        = true;  //
-    bool        ptap_verify         = true;  //
+    std::string obj_file_name        = STRINGIFY(INPUT_DIR) "dragon.obj";
+    std::string output_folder        = STRINGIFY(OUTPUT_DIR);
+    std::string perm_method          = "nstdis";
+    std::string solver               = "gmg";
+    uint32_t    device_id            = 0;
+    float       time_step            = 10;
+    float       tol_abs              = 1e-6;
+    float       tol_rel              = 0.0;
+    uint32_t    max_num_iter         = 100;
+    bool        use_uniform_laplace  = true;
+    std::string gmg_csolver          = "jacobi";
+    int         gmg_levels           = 5;
+    int         gmg_threshold        = 1000;
+    bool        gmg_render_hierarchy = false;
+    bool        create_mat           = false;
+    bool        gmg_pruned_ptap      = false;
+    bool        gmg_verify_ptap      = false;
     char**      argv;
     int         argc;
 } Arg;
@@ -129,10 +129,10 @@ int main(int argc, char** argv)
             // clang-format off
             RXMESH_INFO("\nUsage: MCF.exe < -option X>\n"
                         " -h:                 Display this massage and exit\n"
-                        " -input:             Input file. Input file should be under the input/ subdirectory. Default is {}\n"                        
-                        " -o:                 JSON file output folder. Default is {} \n"
-                        " -uniform_laplace:   Use uniform Laplace weights. Default is {} \n"
-                        " -dt:                Time step (delta t). Default is {} \n"
+                        " -input:             Input file. Default is {}\n"                        
+                        " -o:                 JSON file output folder. Default is {}\n"
+                        " -uniform_laplace:   Toggle the use of uniform Laplace weights. Default is {}\n"
+                        " -dt:                Time step (delta t). Default is {}\n"
                         "                     Hint: should be between (0.001, 1) for cotan Laplace or between (1, 100) for uniform Laplace\n"
                         " -solver:            Solver to use. Options are cg_mat_free, pcg_mat_free, cg, pcg, chol, or gmg. Default is {}\n"                         
                         " -perm:              Permutation method for Cholesky factorization (symrcm, symamd, nstdis, gpumgnd, gpund). Default is {}\n"
@@ -140,10 +140,12 @@ int main(int argc, char** argv)
                         " -tol_abs:           Iterative solver absolute tolerance. Default is {}\n"
                         " -tol_rel:           Iterative solver relative tolerance. Default is {}\n"
                         " -create_mat:        Export the linear system matrices (.mtx) and mesh obj to files and exit. Default is {}\n"
-                        " -levels:            GMG number of levels in the hierarchy, includes the finest level. Default is {}\n"
-                        " -csolver:           GMG coarse solver. Default is {}\n"
-                        " -threshold:         GMG threshold for the coarsest level in the hierarchy, i.e., number of vertices in the coarsest level. Default is {}\n"
-                        " -rh:                GMG render hierarchy. Default is {}\n"
+                        " -gmg_levels:        GMG number of levels in the hierarchy, includes the finest level. Default is {}\n"
+                        " -gmg_csolver:       GMG coarse solver. Default is {}\n"
+                        " -gmg_threshold:     GMG threshold for the coarsest level in the hierarchy, i.e., number of vertices in the coarsest level. Default is {}\n"
+                        " -gmg_pruned_ptap:   GMG toggle using pruned PtAP for fast construction. Default is {}\n"
+                        " -gmg_verify_ptap:   GMG toggle verifying the construction of PtAP. Default is {}\n"
+                        " -gmg_rh:            GMG toggle rendering the hierarchy. Default is {}\n"
                         " -device_id:         GPU device ID. Default is {}\n",
             Arg.obj_file_name, Arg.output_folder,  
             (Arg.use_uniform_laplace? "true" : "false"), 
@@ -154,10 +156,12 @@ int main(int argc, char** argv)
             Arg.tol_abs,
             Arg.tol_rel, 
             Arg.create_mat,
-            Arg.levels,
-            Arg.coarse_solver,
-            Arg.threshold,
-            (Arg.render_hierarchy? "true" : "false"),
+            Arg.gmg_levels,
+            Arg.gmg_csolver,
+            Arg.gmg_threshold,
+            (Arg.gmg_pruned_ptap? "true" : "false"),
+            (Arg.gmg_verify_ptap? "true" : "false"),
+            (Arg.gmg_render_hierarchy? "true" : "false"),            
             Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
@@ -180,7 +184,7 @@ int main(int argc, char** argv)
         }
 
         if (cmd_option_exists(argv, argc + argv, "-uniform_laplace")) {
-            Arg.use_uniform_laplace = true;
+            Arg.use_uniform_laplace = !Arg.use_uniform_laplace;
         }
         if (cmd_option_exists(argv, argc + argv, "-device_id")) {
             Arg.device_id =
@@ -194,9 +198,9 @@ int main(int argc, char** argv)
             Arg.solver =
                 std::string(get_cmd_option(argv, argv + argc, "-solver"));
         }
-        if (cmd_option_exists(argv, argc + argv, "-levels")) {
-            Arg.levels =
-                std::atoi(get_cmd_option(argv, argv + argc, "-levels"));
+        if (cmd_option_exists(argv, argc + argv, "-gmg_levels")) {
+            Arg.gmg_levels =
+                std::atoi(get_cmd_option(argv, argv + argc, "-gmg_levels"));
         }
         if (cmd_option_exists(argv, argc + argv, "-tol_abs")) {
             Arg.tol_abs =
@@ -206,27 +210,26 @@ int main(int argc, char** argv)
             Arg.tol_rel =
                 std::atof(get_cmd_option(argv, argv + argc, "-tol_rel"));
         }
-        if (cmd_option_exists(argv, argc + argv, "-threshold")) {
-            Arg.threshold =
-                std::atoi(get_cmd_option(argv, argv + argc, "-threshold"));
+        if (cmd_option_exists(argv, argc + argv, "-gmg_threshold")) {
+            Arg.gmg_threshold =
+                std::atoi(get_cmd_option(argv, argv + argc, "-gmg_threshold"));
         }
-        if (cmd_option_exists(argv, argc + argv, "-csolver")) {
-            Arg.coarse_solver =
-                std::string(get_cmd_option(argv, argv + argc, "-csolver"));
+        if (cmd_option_exists(argv, argc + argv, "-gmg_csolver")) {
+            Arg.gmg_csolver =
+                std::string(get_cmd_option(argv, argv + argc, "-gmg_csolver"));
         }
-        if (cmd_option_exists(argv, argc + argv, "-rh")) {
-            Arg.render_hierarchy = true;
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "new_ptap")) {
-            Arg.use_new_ptap = true;
+        if (cmd_option_exists(argv, argc + argv, "-gmg_rh")) {
+            Arg.gmg_render_hierarchy = !Arg.gmg_render_hierarchy;
         }
 
         if (cmd_option_exists(argv, argc + argv, "-create_mat")) {
             Arg.create_mat = true;
         }
-        if (cmd_option_exists(argv, argc + argv, "-v")) {
-            Arg.ptap_verify = true;
+        if (cmd_option_exists(argv, argc + argv, "-gmg_pruned_ptap")) {
+            Arg.gmg_pruned_ptap = !Arg.gmg_pruned_ptap;
+        }
+        if (cmd_option_exists(argv, argc + argv, "-gmg_verify_ptap")) {
+            Arg.gmg_verify_ptap = !Arg.gmg_verify_ptap;
         }
     }
 
@@ -237,12 +240,12 @@ int main(int argc, char** argv)
     RXMESH_INFO("max_num_iter= {}", Arg.max_num_iter);
     RXMESH_INFO("use_uniform_laplace= {}", Arg.use_uniform_laplace);
     RXMESH_INFO("time_step= {0:f}", Arg.time_step);
-    RXMESH_INFO("levels= {}", Arg.levels);
+    RXMESH_INFO("gmg_levels= {}", Arg.gmg_levels);
     RXMESH_INFO("tol_abs= {}", Arg.tol_abs);
     RXMESH_INFO("tol_rel= {}", Arg.tol_rel);
     RXMESH_INFO("device_id= {}", Arg.device_id);
-    RXMESH_INFO("GMG Coarse solver= {}", Arg.coarse_solver);
-    RXMESH_INFO("Render GMG hierarchy= {}", Arg.render_hierarchy);
+    RXMESH_INFO("gmg_csolver= {}", Arg.gmg_csolver);
+    RXMESH_INFO("gmg_rh= {}", Arg.gmg_render_hierarchy);
 
     return RUN_ALL_TESTS();
 }

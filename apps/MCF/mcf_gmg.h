@@ -51,15 +51,15 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     GMGSolver solver(rx,
                      A_mat,
                      Arg.max_num_iter,
-                     Arg.levels,
+                     Arg.gmg_levels,
                      2,
                      2,
-                     CoarseSolver::Cholesky,
+                     CoarseSolver::Cholesky,//TODO
                      Arg.tol_abs,
                      Arg.tol_rel,
-                     Arg.threshold,
-                     Arg.use_new_ptap,
-                     Arg.ptap_verify);
+                     Arg.gmg_threshold,
+                     Arg.gmg_pruned_ptap,
+                     Arg.gmg_verify_ptap);
 
     float    solve_time = 0;
     float    total_time = 0;
@@ -107,8 +107,8 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
 
-    Arg.levels = solver.get_num_levels();
-    report.add_member("levels", Arg.levels);
+    Arg.gmg_levels = solver.get_num_levels();
+    report.add_member("levels", Arg.gmg_levels);
     report.add_member("iterations", solver.iter_taken());
     report.add_member(
         "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
@@ -119,10 +119,10 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     report.add_member("total_time", total_time);
 
     report.add_member("max_iterations", Arg.max_num_iter);
-    report.add_member("threshold", Arg.threshold);
+    report.add_member("threshold", Arg.gmg_threshold);
     report.add_member("final_residual", solver.get_final_residual());
-    report.add_member("using_new_ptap", Arg.use_new_ptap);
-    report.add_member("verification_on", Arg.ptap_verify);
+    report.add_member("using_new_ptap", Arg.gmg_pruned_ptap);
+    report.add_member("verification_on", Arg.gmg_verify_ptap);
     RXMESH_INFO("total_time {} (ms)", total_time);
 
 
@@ -132,7 +132,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     coords->from_matrix(&X_mat);
 
 #if USE_POLYSCOPE
-    if (Arg.render_hierarchy) {
+    if (Arg.gmg_render_hierarchy) {
         solver.render_hierarchy();
         solver.render_laplacian();
     }
