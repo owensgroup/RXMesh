@@ -10,15 +10,34 @@ namespace rxmesh {
 
 enum class CoarseSolver
 {
-    Jacobi      = 0,
-    GaussSeidel = 1,
-    CG          = 2,
-    Cholesky    = 3,
+    None        = 0,
+    Jacobi      = 1,
+    GaussSeidel = 2,
+    CG          = 3,
+    Cholesky    = 4,
 };
 
-/**
- * @brief the coarse A
- */
+inline CoarseSolver string_to_coarse_solver(std::string csolver)
+{
+    std::transform(
+        csolver.begin(), csolver.end(), csolver.begin(), [](unsigned char c) {
+            return std::tolower(c);
+        });
+
+    if (csolver == "jacobi") {
+        return CoarseSolver::Jacobi;
+    } else if (csolver == "gs") {
+        return CoarseSolver::GaussSeidel;
+    } else if (csolver == "cg") {
+        return CoarseSolver::CG;
+    } else if (csolver == "cholesky") {
+        return CoarseSolver::Cholesky;
+    } else {
+        return CoarseSolver::None;
+    }
+}
+
+
 template <typename T>
 struct CoarseA
 {
@@ -163,7 +182,9 @@ struct VCycle
 
     virtual void verify_laplacians(GMG<T>& gmg, SparseMatrix<T>& A)
     {
-        printf("\nVerify laplacian called from correct laplacian class, no verification will take place.");
+        printf(
+            "\nVerify laplacian called from correct laplacian class, no "
+            "verification will take place.");
     }
 
     virtual void get_intermediate_laplacians(GMG<T>& gmg, SparseMatrix<T>& A)

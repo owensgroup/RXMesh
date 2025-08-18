@@ -19,10 +19,28 @@ namespace rxmesh {
 
 enum class Sampling
 {
-    Rand   = 0,
-    FPS    = 1,
-    KMeans = 2,
+    None   = 0,
+    Rand   = 1,
+    FPS    = 2,
+    KMeans = 3,
 };
+
+inline Sampling string_to_sampling(std::string samp)
+{
+    std::transform(samp.begin(), samp.end(), samp.begin(), [](unsigned char c) {
+        return std::tolower(c);
+    });
+
+    if (samp == "random") {
+        return Sampling::Rand;
+    } else if (samp == "fps") {
+        return Sampling::FPS;
+    } else if (samp == "kmeans") {
+        return Sampling::KMeans;
+    } else {
+        return Sampling::None;
+    }
+}
 
 template <typename T>
 struct GMG
@@ -60,11 +78,11 @@ struct GMG
 
     GPUStorage<Edge> m_edge_storage;
 
-    //n-ring storage structures
-    GPUStorage<Edge> m_edge_storage_disk;
+    // n-ring storage structures
+    GPUStorage<Edge>              m_edge_storage_disk;
     std::vector<DenseMatrix<int>> m_sample_neighbor_size_disk;         // levels
     std::vector<DenseMatrix<int>> m_sample_neighbor_size_prefix_disk;  // levels
-    std::vector<DenseMatrix<int>> m_sample_neighbor_disk;    
+    std::vector<DenseMatrix<int>> m_sample_neighbor_disk;
     void*                         m_d_cub_temp_storage_disk;
     size_t                        m_cub_temp_bytes_disk;
 
@@ -75,12 +93,7 @@ struct GMG
     size_t m_cub_temp_bytes;
 
 
-
-    GMG(RXMeshStatic& rx,
-        int           numberOfLevels,
-        int threshold = 1000,
-        Sampling      sam       = Sampling::Rand
-        )
+    GMG(RXMeshStatic& rx, int numberOfLevels, int threshold, Sampling sam)
         : GMG(rx,
               sam,
               compute_ratio(rx.get_num_vertices(), numberOfLevels, threshold),
@@ -157,10 +170,7 @@ struct GMG
     }
 
 
-    GMG(RXMeshStatic& rx,
-        Sampling      sam                   = Sampling::Rand,
-        int           reduction_ratio       = 4,
-        int           num_samples_threshold = 20)
+    GMG(RXMeshStatic& rx, Sampling sam, int reduction_ratio, int threshold)
         : m_ratio(reduction_ratio),
           m_edge_storage(GPUStorage<Edge>(rx.get_num_edges())),
           m_edge_storage_disk(GPUStorage<Edge>(rx.get_num_edges()))
@@ -174,7 +184,7 @@ struct GMG
         // m_num_samples.push_back(m_num_rows);
         for (int i = 0; i < 16; i++) {
             int s = DIVIDE_UP(m_num_rows, std::pow(m_ratio, i));
-            if (s > num_samples_threshold) {
+            if (s > threshold) {
                 m_num_samples.push_back(s);
                 RXMESH_INFO("GMG: #samples at level {}: {}", i, s);
             }
@@ -253,7 +263,8 @@ struct GMG
             m_sample_neighbor_size_disk[0].data(DEVICE),
             m_sample_neighbor_size_prefix_disk[0].data(DEVICE),
             m_num_samples[1] + 1);
-        CUDA_ERROR(cudaMalloc((void**)&m_d_cub_temp_storage_disk, m_cub_temp_bytes_disk));
+        CUDA_ERROR(cudaMalloc((void**)&m_d_cub_temp_storage_disk,
+                              m_cub_temp_bytes_disk));
 
         timer.stop();
         gtimer.stop();
@@ -572,7 +583,7 @@ struct GMG
             polyscope::registerSurfaceMesh(
                 "Level" + std::to_string(l), pos, fv);
         }
-        polyscope::show();
+        // polyscope::show();
     }
 
     /**
@@ -726,7 +737,7 @@ struct GMG
                 m_vertex_cluster[0],
                 m_edge_storage);
 
-            int num_clusters = m_vertex_cluster[level].rows();            
+            int num_clusters = m_vertex_cluster[level].rows();
             detail::build_n_ring_on_gpu_compute(
                 m_edge_storage, m_edge_storage_disk, num_clusters, level + 1);
 
@@ -772,9 +783,10 @@ struct GMG
                 });
 
             int num_clusters = m_num_samples[level];
-            detail::build_n_ring_on_gpu_compute(m_edge_storage, m_edge_storage_disk, num_clusters, level + 1);
+            detail::build_n_ring_on_gpu_compute(
+                m_edge_storage, m_edge_storage_disk, num_clusters, level + 1);
         }
-        
+
         // a.2) uniquify the storage
         m_edge_storage.uniquify();
 
@@ -782,10 +794,13 @@ struct GMG
         // entries, atomic add each vertex to one another
 
         auto& sample_neighbor_size = m_sample_neighbor_size[level - 1];
-        auto& sample_neighbor_size_prefix = m_sample_neighbor_size_prefix[level - 1];
+        auto& sample_neighbor_size_prefix =
+            m_sample_neighbor_size_prefix[level - 1];
 
-        auto& sample_neighbor_size_disk = m_sample_neighbor_size_disk[level - 1];
-        auto& sample_neighbor_size_prefix_disk = m_sample_neighbor_size_prefix_disk[level - 1];
+        auto& sample_neighbor_size_disk =
+            m_sample_neighbor_size_disk[level - 1];
+        auto& sample_neighbor_size_prefix_disk =
+            m_sample_neighbor_size_prefix_disk[level - 1];
 
 
         m_edge_storage.for_each(
@@ -879,28 +894,28 @@ struct GMG
             }
         });
 
-        m_edge_storage_disk.for_each([sample_neighbor_size_disk,
-                                 sample_neighbor_size_prefix_disk,
-                                 sample_neighbor_disk] __device__(Edge e) mutable {
-            if (!e.is_sentinel()) {
-                std::pair<int, int> p = e.unpack();
+        m_edge_storage_disk.for_each(
+            [sample_neighbor_size_disk,
+             sample_neighbor_size_prefix_disk,
+             sample_neighbor_disk] __device__(Edge e) mutable {
+                if (!e.is_sentinel()) {
+                    std::pair<int, int> p = e.unpack();
 
-                // add a to b
-                // and add b to a
-                int a = p.first;
-                int b = p.second;
+                    // add a to b
+                    // and add b to a
+                    int a = p.first;
+                    int b = p.second;
 
-                int a_id = ::atomicAdd(&sample_neighbor_size_disk(a), 1);
-                int b_id = ::atomicAdd(&sample_neighbor_size_disk(b), 1);
+                    int a_id = ::atomicAdd(&sample_neighbor_size_disk(a), 1);
+                    int b_id = ::atomicAdd(&sample_neighbor_size_disk(b), 1);
 
-                int a_pre = sample_neighbor_size_prefix_disk(a);
-                int b_pre = sample_neighbor_size_prefix_disk(b);
+                    int a_pre = sample_neighbor_size_prefix_disk(a);
+                    int b_pre = sample_neighbor_size_prefix_disk(b);
 
-                sample_neighbor_disk(a_pre + a_id) = b;
-                sample_neighbor_disk(b_pre + b_id) = a;
-            }
-        });
-        
+                    sample_neighbor_disk(a_pre + a_id) = b;
+                    sample_neighbor_disk(b_pre + b_id) = a;
+                }
+            });
     }
 
 

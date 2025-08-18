@@ -9,7 +9,9 @@
 #include "mcf_kernels.cuh"
 
 template <typename T>
-void mcf_gmg(rxmesh::RXMeshStatic& rx)
+void mcf_gmg(rxmesh::RXMeshStatic& rx,
+             rxmesh::CoarseSolver  csolver,
+             rxmesh::Sampling      sampling)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -54,18 +56,18 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                      Arg.gmg_levels,
                      2,
                      2,
-                     CoarseSolver::Cholesky,//TODO
+                     csolver,
+                     sampling,
                      Arg.tol_abs,
                      Arg.tol_rel,
                      Arg.gmg_threshold,
                      Arg.gmg_pruned_ptap,
                      Arg.gmg_verify_ptap);
 
-    float    solve_time = 0;
-    float    total_time = 0;
+    float total_time = 0;
+
     CPUTimer timer;
     GPUTimer gtimer;
-
 
     timer.start();
     gtimer.start();
@@ -97,8 +99,11 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     solver.solve(B_mat, X_mat);
     timer.stop();
     gtimer.stop();
-    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
-    solve_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+
+    float solve_time =
+        std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
+
+    total_time += solve_time;
 
     RXMESH_INFO("start_residual {}", solver.start_residual());
     RXMESH_INFO("final_residual {}", solver.final_residual());
@@ -107,24 +112,19 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
 
-    Arg.gmg_levels = solver.get_num_levels();
-    report.add_member("levels", Arg.gmg_levels);
+    report.add_member("levels", solver.get_num_levels());
     report.add_member("iterations", solver.iter_taken());
-    report.add_member(
-        "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
-    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
     report.add_member("solve", solve_time);
     report.add_member("avg iteration time", solve_time / solver.iter_taken());
-
     report.add_member("total_time", total_time);
-
     report.add_member("max_iterations", Arg.max_num_iter);
     report.add_member("threshold", Arg.gmg_threshold);
     report.add_member("final_residual", solver.get_final_residual());
-    report.add_member("using_new_ptap", Arg.gmg_pruned_ptap);
-    report.add_member("verification_on", Arg.gmg_verify_ptap);
+    report.add_member("gmg_pruned_ptap", Arg.gmg_pruned_ptap);
+    report.add_member("gmg_verify_ptap", Arg.gmg_verify_ptap);
+    report.add_member("gmg_coarse_solver", Arg.gmg_csolver);
+    report.add_member("gmg_sampling", Arg.gmg_sampling);
     RXMESH_INFO("total_time {} (ms)", total_time);
-
 
     X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
 
@@ -142,8 +142,6 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx)
     rx.get_polyscope_mesh()->updateVertexPositions(*coords);
 
     polyscope::show();
-
-
 #endif
 
     /*rx.export_obj("gmg_mcf_result.obj",

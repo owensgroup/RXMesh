@@ -219,9 +219,9 @@ struct InverseLPHashTable
             }
             cuckoo_counter++;
 
-            if (cuckoo_counter > 1000) {
-                printf("\n cuckoo_counter= %u", cuckoo_counter);
-            }
+            //if (cuckoo_counter > 1000) {
+            //    printf("\n cuckoo_counter= %u", cuckoo_counter);
+            //}
 
         } while (cuckoo_counter < lp_table.m_max_cuckoo_chains);
 

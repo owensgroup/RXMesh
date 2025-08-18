@@ -27,24 +27,30 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
               int              num_pre_relax  = 2,
               int              num_post_relax = 2,
               CoarseSolver     coarse_solver  = CoarseSolver::Jacobi,
+              Sampling         sampling       = Sampling::Rand,
               T                abs_tol        = 1e-6,
               T                rel_tol        = 1e-6,
               int              threshold      = 1000,
-              bool             use_new_ptap   = false,
+              bool             pruned_ptap    = false,
               bool             verify_ptap    = false)
         : IterativeSolver<T, DenseMatrix<T>>(max_iter, abs_tol, rel_tol),
           m_rx(&rx),
           m_A(&A),
           m_coarse_solver(coarse_solver),
+          m_sampling(sampling),
           m_num_pre_relax(num_pre_relax),
           m_num_post_relax(num_post_relax),
           m_num_levels(num_levels),
           m_threshold(threshold),
-          m_use_new_ptap(use_new_ptap),
+          m_pruned_ptap(pruned_ptap),
           AX(DenseMatrix<T>(A.rows(), 1, DEVICE)),
           R(DenseMatrix<T>(A.rows(), 1, DEVICE)),
           m_verify_ptap(verify_ptap)
     {
+        if (m_coarse_solver == CoarseSolver::None) {
+            RXMESH_ERROR("GMGSolver::GMGSolver() invalid coarse solver {}",
+                         CoarseSolver::None);
+        }
     }
 
     virtual void pre_solve(const DenseMatrix<T>& B,
@@ -56,7 +62,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
         timer.start();
         gtimer.start();
-        m_gmg = GMG<T>(*m_rx, m_num_levels, m_threshold);
+        m_gmg = GMG<T>(*m_rx, m_num_levels, m_threshold, m_sampling);
         timer.stop();
         gtimer.stop();
         RXMESH_INFO("full gmg operator construction took {} (ms), {} (ms)",
@@ -65,14 +71,13 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         gmg_memory_alloc_time = m_gmg.memory_alloc_time;
         m_num_levels          = m_gmg.m_num_levels;
         if (m_num_levels == 1) {
-
+            // TODO
             exit(1);
 
         } else {
-
             timer.start();
             gtimer.start();
-            if (!m_use_new_ptap) {
+            if (!m_pruned_ptap) {
                 m_v_cycle = std::make_unique<VCycle<T>>(m_gmg,
                                                         *m_rx,
                                                         *m_A,
@@ -102,7 +107,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                         timer.elapsed_millis(),
                         gtimer.elapsed_millis());
 
-            if (m_verify_ptap && m_use_new_ptap) {
+            if (m_verify_ptap && m_pruned_ptap) {
                 m_v_cycle->verify_laplacians(m_gmg, *m_A);
             }
             constexpr int numCols = 3;
@@ -288,11 +293,12 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     GMG<T>                     m_gmg;
     std::unique_ptr<VCycle<T>> m_v_cycle;
     CoarseSolver               m_coarse_solver;
+    Sampling                   m_sampling;
     int                        m_num_pre_relax;
     int                        m_num_post_relax;
     int                        m_num_levels;
     int                        m_threshold;
-    bool                       m_use_new_ptap;
+    bool                       m_pruned_ptap;
     DenseMatrix<T>             AX;
     DenseMatrix<T>             R;
     bool                       m_verify_ptap;

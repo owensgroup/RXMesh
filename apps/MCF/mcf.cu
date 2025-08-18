@@ -18,13 +18,14 @@ struct arg
     float       tol_rel              = 0.0;
     uint32_t    max_num_iter         = 100;
     bool        use_uniform_laplace  = true;
-    std::string gmg_csolver          = "jacobi";
+    std::string gmg_csolver          = "cholesky";
+    std::string gmg_sampling         = "random";
     int         gmg_levels           = 5;
     int         gmg_threshold        = 1000;
     bool        gmg_render_hierarchy = false;
     bool        create_mat           = false;
-    bool        gmg_pruned_ptap      = false;
-    bool        gmg_verify_ptap      = false;
+    bool        gmg_pruned_ptap      = true;
+    bool        gmg_verify_ptap      = true;
     char**      argv;
     int         argc;
 } Arg;
@@ -108,7 +109,9 @@ TEST(App, MCF)
     } else if (Arg.solver == "pcg_mat_free") {
         mcf_pcg_mat_free<dataT>(rx);
     } else if (Arg.solver == "gmg") {
-        mcf_gmg<dataT>(rx);
+        mcf_gmg<dataT>(rx,
+                       string_to_coarse_solver(Arg.gmg_csolver),
+                       string_to_sampling(Arg.gmg_sampling));
     } else if (Arg.solver == "chol") {
         mcf_cusolver_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
     } else {
@@ -142,6 +145,7 @@ int main(int argc, char** argv)
                         " -create_mat:        Export the linear system matrices (.mtx) and mesh obj to files and exit. Default is {}\n"
                         " -gmg_levels:        GMG number of levels in the hierarchy, includes the finest level. Default is {}\n"
                         " -gmg_csolver:       GMG coarse solver. Default is {}\n"
+                        " -gmg_sampling:      GMG sampling method to create the hierarchy (random, fps, kmeans). Default is {}\n"
                         " -gmg_threshold:     GMG threshold for the coarsest level in the hierarchy, i.e., number of vertices in the coarsest level. Default is {}\n"
                         " -gmg_pruned_ptap:   GMG toggle using pruned PtAP for fast construction. Default is {}\n"
                         " -gmg_verify_ptap:   GMG toggle verifying the construction of PtAP. Default is {}\n"
@@ -158,6 +162,7 @@ int main(int argc, char** argv)
             Arg.create_mat,
             Arg.gmg_levels,
             Arg.gmg_csolver,
+            Arg.gmg_sampling,
             Arg.gmg_threshold,
             (Arg.gmg_pruned_ptap? "true" : "false"),
             (Arg.gmg_verify_ptap? "true" : "false"),
@@ -218,6 +223,11 @@ int main(int argc, char** argv)
             Arg.gmg_csolver =
                 std::string(get_cmd_option(argv, argv + argc, "-gmg_csolver"));
         }
+
+        if (cmd_option_exists(argv, argc + argv, "-gmg_sampling")) {
+            Arg.gmg_sampling =
+                std::string(get_cmd_option(argv, argv + argc, "-gmg_sampling"));
+        }
         if (cmd_option_exists(argv, argc + argv, "-gmg_rh")) {
             Arg.gmg_render_hierarchy = !Arg.gmg_render_hierarchy;
         }
@@ -235,17 +245,22 @@ int main(int argc, char** argv)
 
     RXMESH_INFO("input= {}", Arg.obj_file_name);
     RXMESH_INFO("output_folder= {}", Arg.output_folder);
+    RXMESH_INFO("use_uniform_laplace= {}", Arg.use_uniform_laplace);
+    RXMESH_INFO("time_step= {0:f}", Arg.time_step);
     RXMESH_INFO("solver= {}", Arg.solver);
     RXMESH_INFO("perm= {}", Arg.perm_method);
     RXMESH_INFO("max_num_iter= {}", Arg.max_num_iter);
-    RXMESH_INFO("use_uniform_laplace= {}", Arg.use_uniform_laplace);
-    RXMESH_INFO("time_step= {0:f}", Arg.time_step);
-    RXMESH_INFO("gmg_levels= {}", Arg.gmg_levels);
     RXMESH_INFO("tol_abs= {}", Arg.tol_abs);
     RXMESH_INFO("tol_rel= {}", Arg.tol_rel);
-    RXMESH_INFO("device_id= {}", Arg.device_id);
+    RXMESH_INFO("create_mat= {}", Arg.create_mat);
+    RXMESH_INFO("gmg_levels= {}", Arg.gmg_levels);
     RXMESH_INFO("gmg_csolver= {}", Arg.gmg_csolver);
-    RXMESH_INFO("gmg_rh= {}", Arg.gmg_render_hierarchy);
+    RXMESH_INFO("gmg_sampling= {}", Arg.gmg_sampling);
+    RXMESH_INFO("gmg_threshold= {}", Arg.gmg_threshold);
+    RXMESH_INFO("gmg_pruned_ptap= {}", Arg.gmg_pruned_ptap);
+    RXMESH_INFO("gmg_verify_ptap= {}", Arg.gmg_verify_ptap);
+    RXMESH_INFO("gmg_render_hierarchy= {}", Arg.gmg_render_hierarchy);
+    RXMESH_INFO("device_id= {}", Arg.device_id);
 
     return RUN_ALL_TESTS();
 }
