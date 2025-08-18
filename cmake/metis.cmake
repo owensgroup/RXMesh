@@ -7,8 +7,8 @@ endif()
 include(FetchContent)
 FetchContent_Declare(
     metis
-    GIT_REPOSITORY https://github.com/EricYJA/METIS-CMake.git
-    GIT_TAG f72497fcc8d634815209e993f19ba5be0c46d090
+    GIT_REPOSITORY https://github.com/scivision/METIS.git
+    GIT_TAG d4a3aac2a3a0efc18e1de24ae97302ed510f43c7
 )
 FetchContent_GetProperties(metis)
 if(NOT metis_POPULATED)
