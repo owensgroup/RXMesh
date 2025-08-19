@@ -56,7 +56,7 @@ struct GMG
     ~GMG()                     = default;
 
     float m_ratio;
-    int   m_num_levels;  // numberOfLevels
+    int   m_num_levels;  // num_levels
     int   m_num_rows;
     int*  m_d_flag;
     float memory_alloc_time = 0;
@@ -93,22 +93,24 @@ struct GMG
     size_t m_cub_temp_bytes;
 
 
-    GMG(RXMeshStatic& rx, int numberOfLevels, int threshold, Sampling sam)
+    GMG(RXMeshStatic& rx, int num_levels, int threshold, Sampling sam)
         : GMG(rx,
               sam,
-              compute_ratio(rx.get_num_vertices(), numberOfLevels, threshold),
+              compute_ratio(rx.get_num_vertices(), num_levels, threshold),
               threshold)
     {
     }
 
-    static int compute_ratio(int n, int& numberOfLevels, int threshold)
+    static int compute_ratio(int n, int num_levels, int threshold)
     {
-        if (n <= threshold || numberOfLevels <= 1) {
+        if (n <= threshold || num_levels <= 1) {
 
-            printf("Not enough levels, not enough vertices for gmg to work");
-            exit(1);
-
-            numberOfLevels = 1;
+            RXMESH_ERROR(
+                "GMG::compute_ratio() Not enough levels, not enough vertices "
+                "for GMG to work. n= {}, threshold= {}, num_levels= {}",
+                n,
+                threshold,
+                num_levels);
 
             return 1;
         }
@@ -129,19 +131,19 @@ struct GMG
                 break;
             }
 
-            if (maxLevels >= numberOfLevels) {
+            if (maxLevels >= num_levels) {
                 break;
             }
 
             maxLevels++;
         }
 
-        numberOfLevels = std::min(numberOfLevels, maxLevels);
+        num_levels = std::min(num_levels, maxLevels);
 
         for (int ratio = 9; ratio >= 2; ratio--) {
-            // Check if this ratio works for the adjusted numberOfLevels
+            // Check if this ratio works for the adjusted num_levels
             int verticesAtHighestLevel = n;
-            for (int i = 0; i < numberOfLevels - 1; i++) {
+            for (int i = 0; i < num_levels - 1; i++) {
                 verticesAtHighestLevel =
                     DIVIDE_UP(verticesAtHighestLevel, ratio);
             }
@@ -151,12 +153,12 @@ struct GMG
             }
         }
 
-        while (numberOfLevels > 1) {
-            numberOfLevels--;
+        while (num_levels > 1) {
+            num_levels--;
 
             // Try with ratio = 2
             int verticesAtHighestLevel = n;
-            for (int i = 0; i < numberOfLevels - 1; i++) {
+            for (int i = 0; i < num_levels - 1; i++) {
                 verticesAtHighestLevel = DIVIDE_UP(verticesAtHighestLevel, 2);
             }
 
@@ -165,7 +167,7 @@ struct GMG
             }
         }
 
-        numberOfLevels = 1;
+        num_levels = 1;
         return 1;
     }
 
@@ -179,14 +181,13 @@ struct GMG
         CPUTimer timer;
         GPUTimer gtimer;
 
-
         m_num_rows = rx.get_num_vertices();
-        // m_num_samples.push_back(m_num_rows);
+
         for (int i = 0; i < 16; i++) {
             int s = DIVIDE_UP(m_num_rows, std::pow(m_ratio, i));
             if (s > threshold) {
                 m_num_samples.push_back(s);
-                RXMESH_INFO("GMG: #samples at level {}: {}", i, s);
+                RXMESH_INFO("GMG::GMG() #Samples at level {}: {}", i, s);
             }
         }
         m_num_levels = m_num_samples.size();
@@ -272,11 +273,12 @@ struct GMG
         memory_alloc_time =
             std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
-        RXMESH_INFO("memory allocation took {} (ms), {} (ms)",
+        RXMESH_INFO("GMG::GMG() Memory allocation took {} (ms), {} (ms)",
                     timer.elapsed_millis(),
                     gtimer.elapsed_millis());
 
         timer.start();
+        gtimer.start();
         //============
         // 2) Sampling
         //============
@@ -286,7 +288,7 @@ struct GMG
 
                 timer.stop();
                 gtimer.stop();
-                RXMESH_INFO("random sampling took {} (ms), {} (ms)",
+                RXMESH_INFO("GMG::GMG() Random sampling took {} (ms), {} (ms)",
                             timer.elapsed_millis(),
                             gtimer.elapsed_millis());
                 break;
@@ -295,7 +297,7 @@ struct GMG
                 fps_sampling(rx);
                 timer.stop();
                 gtimer.stop();
-                RXMESH_INFO("fps sampling took {} (ms), {} (ms)",
+                RXMESH_INFO("GMG::GMG() FPS sampling took {} (ms), {} (ms)",
                             timer.elapsed_millis(),
                             gtimer.elapsed_millis());
                 break;
@@ -304,7 +306,7 @@ struct GMG
                 kmeans_sampling(rx);
                 timer.stop();
                 gtimer.stop();
-                RXMESH_INFO("k means sampling took {} (ms), {} (ms)",
+                RXMESH_INFO("GMG::GMG() K-means sampling took {} (ms), {} (ms)",
                             timer.elapsed_millis(),
                             gtimer.elapsed_millis());
                 break;
@@ -314,9 +316,9 @@ struct GMG
                 break;
             }
         }
+
         timer.start();
         gtimer.start();
-
         for (int l = 0; l < m_num_levels - 1; ++l) {
 
             //============
@@ -334,13 +336,13 @@ struct GMG
         }
         timer.stop();
         gtimer.stop();
-        RXMESH_INFO("clustering+creating csr took {} (ms), {} (ms)",
-                    timer.elapsed_millis(),
-                    gtimer.elapsed_millis());
+        RXMESH_INFO(
+            "GMG::GMG() Clustering & Creating CSR took {} (ms), {} (ms)",
+            timer.elapsed_millis(),
+            gtimer.elapsed_millis());
 
         // render_hierarchy();
         // render_point_clouds(rx);
-
 
         timer.start();
         gtimer.start();
@@ -351,9 +353,11 @@ struct GMG
 
         timer.stop();
         gtimer.stop();
-        RXMESH_INFO("constructing operators took {} (ms), {} (ms)",
-                    timer.elapsed_millis(),
-                    gtimer.elapsed_millis());
+        RXMESH_INFO(
+            "GMG::GMG() Constructing prolongation operators took {} (ms), {} "
+            "(ms)",
+            timer.elapsed_millis(),
+            gtimer.elapsed_millis());
 
         // move prolongation operator from device to host (for no obvious
         // reason)
@@ -506,7 +510,6 @@ struct GMG
         polyscope::show();
     }
 
-
     void render_hierarchy()
     {
         for (int l = 1; l < m_num_levels; ++l) {
@@ -588,7 +591,6 @@ struct GMG
 
     /**
      * @brief Samples for all levels using random sampling
-     * TODO implement this
      */
     void random_sampling(RXMeshStatic& rx)
     {
@@ -621,7 +623,8 @@ struct GMG
             std::shuffle(samples.begin(), samples.end(), generator);
             samples.resize(m_num_samples[i + 1]);
             int j = 0;
-            // TODO parallelise
+
+            // TODO parallelize
             for (auto& a : samples) {
                 current_vertex_cluster(a - 1, 0) = j;
                 if (i == 0)
@@ -684,6 +687,10 @@ struct GMG
      */
     void kmeans_sampling(RXMeshStatic& rx)
     {
+        RXMESH_ERROR(
+            "GMG::kmeans_sampling() K-means sampling is not implemented yet! "
+            "Falling back to random sampling.");
+        random_sampling(rx);
     }
 
 

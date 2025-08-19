@@ -13,6 +13,10 @@ struct SolverBase
 {
     using Type = typename SpMatT::Type;
 
+    SolverBase() : m_mat(nullptr)
+    {
+    }
+
     SolverBase(SpMatT* mat) : m_mat(mat)
     {
     }

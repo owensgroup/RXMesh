@@ -77,8 +77,6 @@ struct VCycle
     std::vector<DenseMatrix<T>> m_x;    // levels
     std::vector<DenseMatrix<T>> m_r;    // fine + levels
 
-    DenseMatrix<T> B;
-
     std::vector<CoarseA<T>> m_a;  // levels
 
     // TODO abstract away the solver type
@@ -86,61 +84,65 @@ struct VCycle
 
     JacobiSolver<T> m_coarse_solver;
 
-    std::vector<std::unique_ptr<CholeskySolver<SparseMatrix<T>, 0>>>
+    std::unique_ptr<CholeskySolver<SparseMatrix<T>, Eigen::ColMajor>>
         m_coarse_solver_chols;
-    // just solve it using a separate cholesky solver instance
 
-    VCycle(GMG<T>&               gmg,
-           RXMeshStatic&         rx,
-           SparseMatrix<T>&      A,
-           const DenseMatrix<T>& rhs,
-           CoarseSolver          coarse_solver  = CoarseSolver::Jacobi,
-           int                   num_pre_relax  = 2,
-           int                   num_post_relax = 2)
-        : m_num_pre_relax(num_pre_relax), m_num_post_relax(num_post_relax)
+    VCycle(GMG<T>&          gmg,
+           RXMeshStatic&    rx,
+           SparseMatrix<T>& A,
+           int              num_cols,
+           CoarseSolver     coarse_solver  = CoarseSolver::Jacobi,
+           int              num_pre_relax  = 2,
+           int              num_post_relax = 2)
+        : m_num_pre_relax(num_pre_relax),
+          m_num_post_relax(num_post_relax),
+          m_coarse_solver_chols(
+              std::unique_ptr<
+                  CholeskySolver<SparseMatrix<T>, Eigen::ColMajor>>()),
+          m_coarse_solver(JacobiSolver<T>())
     {
         CPUTimer timer;
-        GPUTimer gtimer;
-
         timer.start();
-        gtimer.start();
-        B = rhs;
 
         // allocate memory for coarsened LHS and RHS
-        m_smoother.emplace_back(gmg.m_num_samples[0], rhs.cols());
+        m_smoother.emplace_back(gmg.m_num_samples[0], num_cols);
 
-        m_r.emplace_back(rx, gmg.m_num_samples[0], rhs.cols());
-        m_rhs.emplace_back(rx, gmg.m_num_samples[0], rhs.cols());
+        m_r.emplace_back(rx, gmg.m_num_samples[0], num_cols);
+
+        m_rhs.emplace_back(rx, gmg.m_num_samples[0], num_cols);
+
+
         for (int l = 1; l < gmg.m_num_levels; ++l) {
-            m_rhs.emplace_back(rx, gmg.m_num_samples[l], rhs.cols());
-            m_x.emplace_back(rx, gmg.m_num_samples[l], rhs.cols());
+            m_rhs.emplace_back(rx, gmg.m_num_samples[l], num_cols);
 
-            m_r.emplace_back(rx, gmg.m_num_samples[l], rhs.cols());
+            m_x.emplace_back(rx, gmg.m_num_samples[l], num_cols);
+
+            m_r.emplace_back(rx, gmg.m_num_samples[l], num_cols);
+
             gmg.m_prolong_op[l - 1].alloc_multiply_buffer(m_r.back(),
                                                           m_rhs[l - 1]);
 
             if (l < gmg.m_num_levels - 1) {
-                m_smoother.emplace_back(gmg.m_num_samples[l],
-                                        gmg.m_num_samples[l]);
+                m_smoother.emplace_back(gmg.m_num_samples[l], num_cols);
             } else {
                 // coarsest level
 
                 if (coarse_solver == CoarseSolver::Jacobi) {
                     m_coarse_solver =
-                        JacobiSolver<T>(gmg.m_num_samples[l], rhs.cols());
+                        JacobiSolver<T>(gmg.m_num_samples[l], num_cols);
                 } else if (coarse_solver == CoarseSolver::Cholesky) {
                 }
             }
         }
 
-        timer.stop();
-        gtimer.stop();
-        memory_alloc_time =
-            std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
-        RXMESH_INFO("v cycle memory allocation took {} (ms), {} (ms)",
-                    timer.elapsed_millis(),
-                    gtimer.elapsed_millis());
         m_a.resize(gmg.m_num_levels - 1);
+
+        timer.stop();
+
+        memory_alloc_time = timer.elapsed_millis();
+
+        RXMESH_INFO("VCycle::VCycle() V-cycle memory allocation took {} (ms)",
+                    memory_alloc_time);
     }
 
     void construct_hierarchy(GMG<T>& gmg, RXMeshStatic& rx, SparseMatrix<T>& A)
@@ -160,7 +162,9 @@ struct VCycle
 
         timer.start();
         gtimer.start();
-        m_coarse_solver_chols.emplace_back(
+
+
+        /*m_coarse_solver_chols.emplace_back(
             std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&A));
         m_coarse_solver_chols.emplace_back(
             std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&m_a[0].a));
@@ -172,7 +176,14 @@ struct VCycle
                 std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(
                     &m_a[l].a));
             m_coarse_solver_chols[l + 1]->pre_solve(rx);
-        }
+        }*/
+
+        m_coarse_solver_chols =
+            std::make_unique<CholeskySolver<SparseMatrix<T>, Eigen::ColMajor>>(
+                &m_a.back().a);
+        m_coarse_solver_chols->pre_solve(rx);
+
+
         timer.stop();
         gtimer.stop();
         RXMESH_INFO("chol prep took {} (ms), {} (ms)",
@@ -378,7 +389,7 @@ struct VCycle
 
 
             // for direct solve, use cholesky
-            m_coarse_solver_chols[level]->solve(f, v);
+            m_coarse_solver_chols->solve(f, v);
         }
     }
 

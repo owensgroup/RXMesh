@@ -1,16 +1,12 @@
 #pragma once
 #include "v_cycle.h"
 
-using namespace rxmesh;
-
+namespace rxmesh {
 
 template <typename T>
-struct VCycle_Better : public rxmesh::VCycle<T>
+struct VCyclePruned : public VCycle<T>
 {
-    using rxmesh::VCycle<T>::VCycle;  // Inherit constructors
-
-    std::vector<CoarseA<T>> m_verification_a;  // levels
-
+    using VCycle<T>::VCycle;
 
     int*   m_d_entries;
     int*   m_d_row_ptr;
@@ -18,21 +14,23 @@ struct VCycle_Better : public rxmesh::VCycle<T>
     size_t m_temp_storage_bytes = 0;
 
 
-    VCycle_Better(GMG<T>&               gmg,
-                  RXMeshStatic&         rx,
-                  SparseMatrix<T>&      A,
-                  const DenseMatrix<T>& rhs,
-                  CoarseSolver          coarse_solver  = CoarseSolver::Jacobi,
-                  int                   num_pre_relax  = 2,
-                  int                   num_post_relax = 2)
+    VCyclePruned(GMG<T>&          gmg,
+                 RXMeshStatic&    rx,
+                 SparseMatrix<T>& A,
+                 int              num_cols,
+                 CoarseSolver     coarse_solver  = CoarseSolver::Jacobi,
+                 int              num_pre_relax  = 2,
+                 int              num_post_relax = 2)
         : VCycle<T>(gmg,
                     rx,
                     A,
-                    rhs,
+                    num_cols,
                     coarse_solver,
                     num_pre_relax,
                     num_post_relax)
     {
+        CPUTimer timer;
+        timer.start();
 
         CUDA_ERROR(
             cudaMalloc(&m_d_entries, sizeof(int) * gmg.m_prolong_op[0].cols()));
@@ -47,13 +45,16 @@ struct VCycle_Better : public rxmesh::VCycle<T>
                                       gmg.m_prolong_op[0].cols() + 1);
 
         CUDA_ERROR(cudaMalloc(&m_d_temp_storage, m_temp_storage_bytes));
+
+        timer.stop();
+        this->memory_alloc_time += timer.elapsed_millis();
     }
 
     template <int MAX_UNIQUE = 2500>
-    void new_ptap(SparseMatrix<T>  p,
-                  SparseMatrix<T>  p_t,
+    void new_ptap(SparseMatrix<T>& p,
+                  SparseMatrix<T>& p_t,
                   SparseMatrix<T>& new_a,
-                  SparseMatrix<T>  old_a)
+                  SparseMatrix<T>& old_a)
     {
         constexpr uint32_t blockThreads = 256;
         uint32_t           blocks_new   = DIVIDE_UP(p.cols(), blockThreads);
@@ -182,7 +183,6 @@ struct VCycle_Better : public rxmesh::VCycle<T>
                         }
                     }
                 }
-
             });
 
 
@@ -199,21 +199,22 @@ struct VCycle_Better : public rxmesh::VCycle<T>
         CUDA_ERROR(cudaMemcpy(
             h_val, d_val, sizeof(T) * h_nnz, cudaMemcpyDeviceToHost));
 
-        SparseMatrix<T> a(num_rows,
-                          num_rows,
-                          h_nnz,
-                          d_row_ptr,
-                          d_col_idx,
-                          d_val,
-                          h_row_ptr,
-                          h_col_idx,
-                          h_val);
-        new_a = a;
+        new_a = SparseMatrix<T>(num_rows,
+                                num_rows,
+                                h_nnz,
+                                d_row_ptr,
+                                d_col_idx,
+                                d_val,
+                                h_row_ptr,
+                                h_col_idx,
+                                h_val);
     }
 
     void verify_laplacians(GMG<T>& gmg, SparseMatrix<T>& A) override
     {
-        const double error_threshold = 1e-3;
+        const double            error_threshold = 1e-3;
+        std::vector<CoarseA<T>> m_verification_a;
+
         m_verification_a.resize(gmg.m_num_levels - 1);
         this->pt_A_p(gmg.m_prolong_op[0], A, m_verification_a[0]);
         for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
@@ -255,7 +256,7 @@ struct VCycle_Better : public rxmesh::VCycle<T>
                             if (col2 == col1) {
                                 T val2 = our_a.get_val_at(iter2);
 
-                                if (abs(val1 - val2) < error_threshold) {
+                                if (abs(val1 - val2) / val1 < error_threshold) {
                                     // good case
                                 } else {
                                     printf(
@@ -286,3 +287,5 @@ struct VCycle_Better : public rxmesh::VCycle<T>
         }
     }
 };
+
+}  // namespace rxmesh

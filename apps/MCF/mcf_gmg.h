@@ -26,14 +26,12 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx,
 
     DenseMatrix<float> X_mat = *(coords->to_matrix());
 
-    // B set up
     rx.run_kernel<blockThreads>({Op::VV},
                                 mcf_B_setup<float, blockThreads>,
                                 *coords,
                                 B_mat,
                                 Arg.use_uniform_laplace);
 
-    // A set up
     rx.run_kernel<blockThreads>({Op::VV},
                                 mcf_A_setup<float, blockThreads>,
                                 *coords,
@@ -46,9 +44,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx,
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rx);
-    report.add_member("method", std::string("GPUGMG"));
-    report.add_member("application", std::string("MCF"));
-    report.add_member("blockThreads", blockThreads);
+
 
     GMGSolver solver(rx,
                      A_mat,
@@ -64,7 +60,6 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx,
                      Arg.gmg_pruned_ptap,
                      Arg.gmg_verify_ptap);
 
-    float total_time = 0;
 
     CPUTimer timer;
     GPUTimer gtimer;
@@ -79,20 +74,11 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx,
                 gtimer.elapsed_millis());
     RXMESH_INFO(
         "GMG memory allocation took {} (ms)",
-        solver.gmg_memory_alloc_time + solver.v_cycle_memory_alloc_time);
+        solver.gmg_memory_alloc_time() + solver.v_cycle_memory_alloc_time());
 
+    float pre_solve_time =
+        std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
-    report.add_member(
-        "pre-solve",
-        std::max(timer.elapsed_millis() - solver.gmg_memory_alloc_time -
-                     solver.v_cycle_memory_alloc_time,
-                 gtimer.elapsed_millis() - solver.gmg_memory_alloc_time -
-                     solver.v_cycle_memory_alloc_time));
-    total_time +=
-        std::max(timer.elapsed_millis() - solver.gmg_memory_alloc_time -
-                     solver.v_cycle_memory_alloc_time,
-                 gtimer.elapsed_millis() - solver.gmg_memory_alloc_time -
-                     solver.v_cycle_memory_alloc_time);
 
     timer.start();
     gtimer.start();
@@ -103,7 +89,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx,
     float solve_time =
         std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
-    total_time += solve_time;
+    float total_time = pre_solve_time + solve_time;
 
     RXMESH_INFO("start_residual {}", solver.start_residual());
     RXMESH_INFO("final_residual {}", solver.final_residual());
@@ -111,20 +97,31 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx,
                 solver.name(),
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
+    RXMESH_INFO("total_time {} (ms)", total_time);
 
+
+    report.add_member("solver", solver.name());
+    report.add_member("application", std::string("MCF"));
+    report.add_member("blockThreads", blockThreads);
     report.add_member("levels", solver.get_num_levels());
     report.add_member("iterations", solver.iter_taken());
-    report.add_member("solve", solve_time);
-    report.add_member("avg iteration time", solve_time / solver.iter_taken());
-    report.add_member("total_time", total_time);
+    report.add_member("pre_solve_time(ms)", pre_solve_time);
+    report.add_member("gmg_memory_alloc_time(ms)",
+                      solver.gmg_memory_alloc_time());
+    report.add_member("v_cycle_memory_alloc_time(ms)",
+                      solver.v_cycle_memory_alloc_time());
+    report.add_member("solve_time(ms)", solve_time);
+    report.add_member("total_time(ms)", total_time);
+    report.add_member("avg_iteration_time(ms)",
+                      solve_time / solver.iter_taken());
     report.add_member("max_iterations", Arg.max_num_iter);
     report.add_member("threshold", Arg.gmg_threshold);
-    report.add_member("final_residual", solver.get_final_residual());
+    report.add_member("final_residual", solver.final_residual());
     report.add_member("gmg_pruned_ptap", Arg.gmg_pruned_ptap);
     report.add_member("gmg_verify_ptap", Arg.gmg_verify_ptap);
     report.add_member("gmg_coarse_solver", Arg.gmg_csolver);
     report.add_member("gmg_sampling", Arg.gmg_sampling);
-    RXMESH_INFO("total_time {} (ms)", total_time);
+
 
     X_mat.move(rxmesh::DEVICE, rxmesh::HOST);
 

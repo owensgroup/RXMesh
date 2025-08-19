@@ -11,6 +11,15 @@ struct CholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
 {
     using T = typename SpMatT::Type;
 
+    CholeskySolver()
+        : DirectSolver<SpMatT, DenseMatOrder>(),
+          m_internalDataInBytes(0),
+          m_workspaceInBytes(0),
+          m_solver_buffer(nullptr),
+          m_first_pre_solve(true)
+    {
+    }
+
     CholeskySolver(SpMatT* mat, PermuteMethod perm = PermuteMethod::NSTDIS)
         : DirectSolver<SpMatT, DenseMatOrder>(mat, perm),
           m_internalDataInBytes(0),

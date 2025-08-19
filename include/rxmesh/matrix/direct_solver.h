@@ -24,6 +24,23 @@ struct DirectSolver : public SolverBase<SpMatT, DenseMatOrder>
     using IndexT = typename SpMatT::IndexT;
     using Type   = typename SpMatT::Type;
 
+    DirectSolver()
+        : SolverBase<SpMatT, DenseMatOrder>(),
+          m_perm(PermuteMethod::NONE),
+          m_h_permute(nullptr),
+          m_d_permute(nullptr),
+          m_h_permute_map(nullptr),
+          m_d_permute_map(nullptr),
+          m_d_solver_row_ptr(nullptr),
+          m_d_solver_col_idx(nullptr),
+          m_d_solver_val(nullptr),
+          m_h_solver_row_ptr(nullptr),
+          m_h_solver_col_idx(nullptr),
+          m_d_solver_b(nullptr),
+          m_d_solver_x(nullptr)
+    {
+    }
+
     DirectSolver(SpMatT* mat, PermuteMethod perm)
         : SolverBase<SpMatT, DenseMatOrder>(mat),
           m_perm(perm),

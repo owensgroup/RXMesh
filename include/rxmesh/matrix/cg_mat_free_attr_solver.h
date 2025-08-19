@@ -59,9 +59,9 @@ struct CGMatFreeAttrSolver : public IterativeSolver<T, Attribute<T, HandleT>>
         delta_new *= delta_new;
     }
 
-    virtual void solve(const AttributeT& B,
-                       AttributeT&       X,
-                       cudaStream_t      stream = NULL) override
+    virtual void solve(AttributeT&  B,
+                       AttributeT&  X,
+                       cudaStream_t stream = NULL) override
     {
         this->m_start_residual = delta_new;
 

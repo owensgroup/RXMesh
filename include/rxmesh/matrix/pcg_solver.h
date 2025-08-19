@@ -53,9 +53,9 @@ struct PCGSolver : public CGSolver<T, DenseMatOrder>
         this->delta_new = this->R.dot(this->P, false, stream);
     }
 
-    virtual void solve(const DenseMatT& B,
-                       DenseMatT&       X,
-                       cudaStream_t     stream = NULL) override
+    virtual void solve(DenseMatT&   B,
+                       DenseMatT&   X,
+                       cudaStream_t stream = NULL) override
     {
 
         if (this->A->cols() != X.rows() || this->A->rows() != B.rows() ||

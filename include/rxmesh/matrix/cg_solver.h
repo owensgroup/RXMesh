@@ -53,9 +53,9 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
         delta_new *= delta_new;
     }
 
-    virtual void solve(const DenseMatT& B,
-                       DenseMatT&       X,
-                       cudaStream_t     stream = NULL) override
+    virtual void solve(DenseMatT&   B,
+                       DenseMatT&   X,
+                       cudaStream_t stream = NULL) override
     {
         this->m_start_residual = delta_new;
 

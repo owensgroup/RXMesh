@@ -4,7 +4,7 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/matrix/gmg/gmg.h"
 #include "rxmesh/matrix/gmg/v_cycle.h"
-#include "rxmesh/matrix/gmg/v_cycle_better_ptap.h"
+#include "rxmesh/matrix/gmg/v_cycle_pruned.h"
 #include "rxmesh/matrix/sparse_matrix.h"
 #include "rxmesh/reduce_handle.h"
 
@@ -16,9 +16,7 @@ namespace rxmesh {
 template <typename T>
 struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 {
-    using Type                      = T;
-    float gmg_memory_alloc_time     = 0;
-    float v_cycle_memory_alloc_time = 0;
+    using Type = T;
 
     GMGSolver(RXMeshStatic&    rx,
               SparseMatrix<T>& A,
@@ -60,104 +58,108 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         CPUTimer timer;
         GPUTimer gtimer;
 
+        // Construct GMG operator
         timer.start();
         gtimer.start();
         m_gmg = GMG<T>(*m_rx, m_num_levels, m_threshold, m_sampling);
         timer.stop();
         gtimer.stop();
-        RXMESH_INFO("full gmg operator construction took {} (ms), {} (ms)",
-                    timer.elapsed_millis(),
-                    gtimer.elapsed_millis());
-        gmg_memory_alloc_time = m_gmg.memory_alloc_time;
-        m_num_levels          = m_gmg.m_num_levels;
-        if (m_num_levels == 1) {
-            // TODO
-            exit(1);
+
+        RXMESH_INFO(
+            "GMGSolver::pre_solve() GMG construction took {} (ms), {} (ms)",
+            timer.elapsed_millis(),
+            gtimer.elapsed_millis());
+
+        m_num_levels = m_gmg.m_num_levels;
+
+
+        timer.start();
+        gtimer.start();
+
+        // Construct V-cycle
+        if (!m_pruned_ptap) {
+            m_v_cycle = std::make_unique<VCycle<T>>(m_gmg,
+                                                    *m_rx,
+                                                    *m_A,
+                                                    B.cols(),
+                                                    m_coarse_solver,
+                                                    m_num_pre_relax,
+                                                    m_num_post_relax);
+
 
         } else {
-            timer.start();
-            gtimer.start();
-            if (!m_pruned_ptap) {
-                m_v_cycle = std::make_unique<VCycle<T>>(m_gmg,
-                                                        *m_rx,
-                                                        *m_A,
-                                                        B,
-                                                        m_coarse_solver,
-                                                        m_num_pre_relax,
-                                                        m_num_post_relax);
-
-
-            } else {
-                m_v_cycle =
-                    std::make_unique<VCycle_Better<T>>(m_gmg,
-                                                       *m_rx,
-                                                       *m_A,
-                                                       B,
-                                                       m_coarse_solver,
-                                                       m_num_pre_relax,
-                                                       m_num_post_relax);
-            }
-            m_v_cycle->construct_hierarchy(m_gmg, *m_rx, *m_A);
-
-            v_cycle_memory_alloc_time = m_v_cycle->memory_alloc_time;
-
-            timer.stop();
-            gtimer.stop();
-            RXMESH_INFO("v cycle prep took {} (ms), {} (ms)",
-                        timer.elapsed_millis(),
-                        gtimer.elapsed_millis());
-
-            if (m_verify_ptap && m_pruned_ptap) {
-                m_v_cycle->verify_laplacians(m_gmg, *m_A);
-            }
-            constexpr int numCols = 3;
-            assert(numCols == B.cols());
-
-            m_v_cycle->template calc_residual<numCols>(
-                m_v_cycle->m_a[0].a, X, B, m_v_cycle->m_r[0]);
-            this->m_start_residual = m_v_cycle->m_r[0].norm2();
+            m_v_cycle = std::make_unique<VCyclePruned<T>>(m_gmg,
+                                                          *m_rx,
+                                                          *m_A,
+                                                          B.cols(),
+                                                          m_coarse_solver,
+                                                          m_num_pre_relax,
+                                                          m_num_post_relax);
         }
-    }
+        m_v_cycle->construct_hierarchy(m_gmg, *m_rx, *m_A);
 
-    void make_connections_vector(std::vector<int>& connector,
-                                 int               l,
-                                 int               vertex = 0)
-    {
-        constexpr uint32_t blockThreads = 256;
-        uint32_t           blocks_new =
-            DIVIDE_UP(m_v_cycle->m_a[l - 1].a.rows(), blockThreads);
 
-        int* d_c;
-        CUDA_ERROR(
-            cudaMalloc(&d_c, m_v_cycle->m_a[l - 1].a.rows() * sizeof(int)));
-        auto a = m_v_cycle->m_a[l - 1].a;
-        for_each_item<<<blocks_new, blockThreads>>>(
-            m_v_cycle->m_a[l - 1].a.rows(),
-            [a, vertex, d_c] __device__(int i) mutable {
-                if (i != vertex) {
-                    d_c[i] = 0;
-                    return;
-                }
-                for (int q = a.row_ptr()[i]; q < a.row_ptr()[i + 1]; ++q) {
-                    int a_col  = a.col_idx()[q];
-                    d_c[a_col] = 1;
-                }
-            });
-        int* h_c = new int[m_v_cycle->m_a[l - 1].a.rows() + 1];
+        timer.stop();
+        gtimer.stop();
 
-        CUDA_ERROR(cudaMemcpy(h_c,
-                              d_c,
-                              sizeof(int) * m_v_cycle->m_a[l - 1].a.rows(),
-                              cudaMemcpyDeviceToHost));
+        RXMESH_INFO(
+            "GMGSolver::pre_solve(): V-cycle construction took {} (ms), {} "
+            "(ms)",
+            timer.elapsed_millis(),
+            gtimer.elapsed_millis());
 
-        for (int i = 0; i < m_v_cycle->m_a[l - 1].a.rows(); i++) {
-            connector[i] = h_c[i];
+        if (m_verify_ptap && m_pruned_ptap) {
+            m_v_cycle->verify_laplacians(m_gmg, *m_A);
         }
-        connector[vertex] = 1;
+
+        constexpr int numCols = 3;
+        assert(numCols == B.cols());
+
+        m_v_cycle->template calc_residual<numCols>(
+            m_v_cycle->m_a[0].a, X, B, m_v_cycle->m_r[0]);
+
+        this->m_start_residual = m_v_cycle->m_r[0].norm2();
     }
 
     void render_laplacian()
     {
+
+        auto make_connections_vector = [&](std::vector<int>& connector,
+                                           int               l,
+                                           int               vertex = 0) {
+            constexpr uint32_t blockThreads = 256;
+            uint32_t           blocks_new =
+                DIVIDE_UP(m_v_cycle->m_a[l - 1].a.rows(), blockThreads);
+
+            int* d_c;
+            CUDA_ERROR(
+                cudaMalloc(&d_c, m_v_cycle->m_a[l - 1].a.rows() * sizeof(int)));
+            auto a = m_v_cycle->m_a[l - 1].a;
+            for_each_item<<<blocks_new, blockThreads>>>(
+                m_v_cycle->m_a[l - 1].a.rows(),
+                [a, vertex, d_c] __device__(int i) mutable {
+                    if (i != vertex) {
+                        d_c[i] = 0;
+                        return;
+                    }
+                    for (int q = a.row_ptr()[i]; q < a.row_ptr()[i + 1]; ++q) {
+                        int a_col  = a.col_idx()[q];
+                        d_c[a_col] = 1;
+                    }
+                });
+            int* h_c = new int[m_v_cycle->m_a[l - 1].a.rows() + 1];
+
+            CUDA_ERROR(cudaMemcpy(h_c,
+                                  d_c,
+                                  sizeof(int) * m_v_cycle->m_a[l - 1].a.rows(),
+                                  cudaMemcpyDeviceToHost));
+
+            for (int i = 0; i < m_v_cycle->m_a[l - 1].a.rows(); i++) {
+                connector[i] = h_c[i];
+            }
+            connector[vertex] = 1;
+        };
+
         std::vector<std::vector<int>> connections(m_num_levels);
         for (int l = 1; l < m_num_levels; l++) {
 
@@ -173,9 +175,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
     }
 
 
-    bool is_converged_special_gpu(rxmesh::SparseMatrix<T>& A,
-                                  rxmesh::DenseMatrix<T>&  X,
-                                  rxmesh::DenseMatrix<T>&  B)
+    bool is_converged(SparseMatrix<T>& A, DenseMatrix<T>& X, DenseMatrix<T>& B)
     {
         using IndexT = typename DenseMatrix<T>::IndexT;
 
@@ -201,7 +201,6 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         bool abs_ok = max_residual < this->m_abs_tol;
         bool rel_ok = max_residual < this->m_rel_tol;
 
-        // RXMESH_TRACE("GMG: current residual: {}", max_residual);
 
         if (abs_ok || rel_ok) {
             this->m_final_residual = max_residual;
@@ -210,9 +209,9 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         return abs_ok || rel_ok;
     }
 
-    virtual void solve(const DenseMatrix<T>& B,
-                       DenseMatrix<T>&       X,
-                       cudaStream_t          stream = NULL) override
+    virtual void solve(DenseMatrix<T>& B,
+                       DenseMatrix<T>& X,
+                       cudaStream_t    stream = NULL) override
     {
 
         float    time = 0;
@@ -227,13 +226,13 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         } else {
             this->m_iter_taken = 0;
             while (this->m_iter_taken < this->m_max_iter) {
-                m_v_cycle->cycle(0, m_gmg, *m_A, m_v_cycle->B, X, *m_rx);
+                m_v_cycle->cycle(0, m_gmg, *m_A, B, X, *m_rx);
                 // current_res = m_v_cycle.m_r[0].norm2();
 
                 timer.start();
                 gtimer.start();
 
-                if (is_converged_special_gpu(*m_A, X, m_v_cycle->B)) {
+                if (is_converged(*m_A, X, B)) {
                     RXMESH_INFO("GMG: #number of iterations to solve: {}",
                                 this->m_iter_taken);
                     RXMESH_INFO("GMG: final residual: {}",
@@ -278,9 +277,15 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         return m_num_levels;
     }
 
-    T get_final_residual()
+
+    float gmg_memory_alloc_time() const
     {
-        return this->m_final_residual;
+        return m_gmg.memory_alloc_time;
+    }
+
+    float v_cycle_memory_alloc_time() const
+    {
+        return m_v_cycle->memory_alloc_time;
     }
 
     virtual ~GMGSolver()

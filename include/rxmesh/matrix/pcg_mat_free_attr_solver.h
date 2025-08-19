@@ -41,9 +41,9 @@ struct PCGMatFreeAttrSolver : public CGMatFreeAttrSolver<T, HandleT>
                            AttributeT&       X,
                            cudaStream_t      stream = NULL) override
     {
-        this->S.reset(0.0, rxmesh::DEVICE, stream);
-        this->P.reset(0.0, rxmesh::DEVICE, stream);
-        this->R.reset(0.0, rxmesh::DEVICE, stream);
+        this->S.reset(0.0, DEVICE, stream);
+        this->P.reset(0.0, DEVICE, stream);
+        this->R.reset(0.0, DEVICE, stream);
 
         // init S
         // S = Ax
@@ -62,9 +62,9 @@ struct PCGMatFreeAttrSolver : public CGMatFreeAttrSolver<T, HandleT>
             this->reduce_handle.dot(this->R, this->P, INVALID32, stream));
     }
 
-    virtual void solve(const AttributeT& B,
-                       AttributeT&       X,
-                       cudaStream_t      stream = NULL) override
+    virtual void solve(AttributeT&  B,
+                       AttributeT&  X,
+                       cudaStream_t stream = NULL) override
     {
         this->m_start_residual = this->delta_new;
 
