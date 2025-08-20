@@ -373,6 +373,7 @@ struct GMG
     }
 
     /**
+     * @brief return number of levels in the GMG solver
      */
     int get_num_levels() const
     {
