@@ -175,7 +175,9 @@ struct GMG
     GMG(RXMeshStatic& rx, Sampling sam, int reduction_ratio, int threshold)
         : m_ratio(reduction_ratio),
           m_edge_storage(GPUStorage<Edge>(rx.get_num_edges())),
-          m_edge_storage_disk(GPUStorage<Edge>(rx.get_num_edges()))
+          m_edge_storage_disk(GPUStorage<Edge>(rx.get_num_edges())),
+          m_d_cub_temp_storage(nullptr),
+          m_d_flag(nullptr)
     {
 
         CPUTimer timer;
@@ -368,6 +370,13 @@ struct GMG
         // release temp memory
         GPU_FREE(m_d_flag);
         GPU_FREE(m_d_cub_temp_storage);
+    }
+
+    /**
+     */
+    int get_num_levels() const
+    {
+        return m_num_levels;
     }
 
     /**

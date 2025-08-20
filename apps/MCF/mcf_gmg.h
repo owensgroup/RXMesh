@@ -93,10 +93,10 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx,
 
     RXMESH_INFO("start_residual {}", solver.start_residual());
     RXMESH_INFO("final_residual {}", solver.final_residual());
-    RXMESH_INFO("solver {} took {} (ms), {} (ms)",
-                solver.name(),
+    RXMESH_INFO("GMG solve took {} (ms), {} (ms). #iter= {}",
                 timer.elapsed_millis(),
-                gtimer.elapsed_millis());
+                gtimer.elapsed_millis(),
+                solver.iter_taken());
     RXMESH_INFO("total_time {} (ms)", total_time);
 
 

@@ -214,51 +214,19 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                        cudaStream_t    stream = NULL) override
     {
 
-        float    time = 0;
-        CPUTimer timer;
-        GPUTimer gtimer;
-        T        current_res;
+        float time = 0;
 
-        if (m_num_levels == 1) {
-            RXMESH_INFO("GMG:Direct solve used");
-            // m_coarse_solver.template solve<numCols>(m_A, B, X, 1000);
-            return;
-        } else {
-            this->m_iter_taken = 0;
-            while (this->m_iter_taken < this->m_max_iter) {
-                m_v_cycle->cycle(0, m_gmg, *m_A, B, X, *m_rx);
-                // current_res = m_v_cycle.m_r[0].norm2();
+        T current_res;
 
-                timer.start();
-                gtimer.start();
+        this->m_iter_taken = 0;
+        while (this->m_iter_taken < this->m_max_iter) {
+            m_v_cycle->cycle(0, m_gmg, *m_A, B, X, *m_rx);
+            // current_res = m_v_cycle.m_r[0].norm2();
 
-                if (is_converged(*m_A, X, B)) {
-                    RXMESH_INFO("GMG: #number of iterations to solve: {}",
-                                this->m_iter_taken);
-                    RXMESH_INFO("GMG: final residual: {}",
-                                this->m_final_residual);
-                    timer.stop();
-                    gtimer.stop();
-                    time += std::max(timer.elapsed_millis(),
-                                     gtimer.elapsed_millis());
-                    RXMESH_INFO("GMG: #time taken to test for convergence: {}",
-                                time);
-                    return;
-                }
-                timer.stop();
-                gtimer.stop();
-                time +=
-                    std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
-
-                this->m_iter_taken++;
+            if (is_converged(*m_A, X, B)) {
+                return;
             }
-            RXMESH_INFO(
-                "GMG: Solver did not reach convergence criteria. Residual: {}",
-                current_res);
-
-            RXMESH_INFO("GMG: #number of iterations to solve: {}",
-                        this->m_iter_taken);
-            RXMESH_INFO("GMG: #time taken to test for convergence: {}", time);
+            this->m_iter_taken++;
         }
     }
 
