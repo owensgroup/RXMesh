@@ -96,7 +96,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
                                                           m_num_pre_relax,
                                                           m_num_post_relax);
         }
-        m_v_cycle->construct_hierarchy(m_gmg, *m_rx, *m_A);
+        m_v_cycle->coarser_systems(m_gmg, *m_rx, *m_A);
 
 
         timer.stop();
@@ -109,7 +109,7 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
             gtimer.elapsed_millis());
 
         if (m_verify_ptap && m_pruned_ptap) {
-            m_v_cycle->verify_laplacians(m_gmg, *m_A);
+            m_v_cycle->verify_coarse_system(m_gmg, *m_A);
         }
 
         constexpr int numCols = 3;

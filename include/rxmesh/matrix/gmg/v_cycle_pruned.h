@@ -51,10 +51,10 @@ struct VCyclePruned : public VCycle<T>
     }
 
     template <int MAX_UNIQUE = 2500>
-    void new_ptap(SparseMatrix<T>& p,
-                  SparseMatrix<T>& p_t,
-                  SparseMatrix<T>& new_a,
-                  SparseMatrix<T>& old_a)
+    void Pt_A_P(SparseMatrix<T>& p,
+                SparseMatrix<T>& p_t,
+                SparseMatrix<T>& new_a,
+                SparseMatrix<T>& old_a)
     {
         constexpr uint32_t blockThreads = 256;
         uint32_t           blocks_new   = DIVIDE_UP(p.cols(), blockThreads);
@@ -210,15 +210,15 @@ struct VCyclePruned : public VCycle<T>
                                 h_val);
     }
 
-    void verify_laplacians(GMG<T>& gmg, SparseMatrix<T>& A) override
+    void verify_coarse_system(GMG<T>& gmg, SparseMatrix<T>& A) override
     {
         const double            error_threshold = 1e-3;
         std::vector<CoarseA<T>> m_verification_a;
 
         m_verification_a.resize(gmg.m_num_levels - 1);
-        this->pt_A_p(gmg.m_prolong_op[0], A, m_verification_a[0]);
+        VCycle<T>::Pt_A_P(gmg.m_prolong_op[0], A, m_verification_a[0]);
         for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
-            this->pt_A_p(gmg.m_prolong_op[l],
+            VCycle<T>::Pt_A_P(gmg.m_prolong_op[l],
                          m_verification_a[l - 1].a,
                          m_verification_a[l]);
         }
@@ -274,15 +274,15 @@ struct VCyclePruned : public VCycle<T>
         }
     }
 
-    void get_intermediate_laplacians(GMG<T>& gmg, SparseMatrix<T>& A) override
+    void all_Pt_A_P(GMG<T>& gmg, SparseMatrix<T>& A) override
     {
         for (int i = 0; i < gmg.m_num_levels - 1; i++) {
             SparseMatrixConstantNNZRow<float, 3> p_const = gmg.m_prolong_op[i];
             auto                                 p_t     = p_const.transpose();
             if (i == 0) {
-                new_ptap(p_const, p_t, this->m_a[i].a, A);
+                Pt_A_P(p_const, p_t, this->m_a[i].a, A);
             } else {
-                new_ptap(p_const, p_t, this->m_a[i].a, this->m_a[i - 1].a);
+                Pt_A_P(p_const, p_t, this->m_a[i].a, this->m_a[i - 1].a);
             }
         }
     }

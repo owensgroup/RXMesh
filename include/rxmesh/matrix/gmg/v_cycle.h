@@ -82,8 +82,9 @@ struct VCycle
     // TODO abstract away the solver type
     std::vector<JacobiSolver<T>> m_smoother;  // fine + levels
 
-    JacobiSolver<T> m_coarse_solver;
+    CoarseSolver m_coarse_solver_type;
 
+    JacobiSolver<T> m_coarse_solver_jacobi;
     std::unique_ptr<CholeskySolver<SparseMatrix<T>, Eigen::ColMajor>>
         m_coarse_solver_chols;
 
@@ -94,12 +95,13 @@ struct VCycle
            CoarseSolver     coarse_solver  = CoarseSolver::Jacobi,
            int              num_pre_relax  = 2,
            int              num_post_relax = 2)
-        : m_num_pre_relax(num_pre_relax),
+        : m_coarse_solver_type(coarse_solver),
+          m_num_pre_relax(num_pre_relax),
           m_num_post_relax(num_post_relax),
           m_coarse_solver_chols(
               std::unique_ptr<
                   CholeskySolver<SparseMatrix<T>, Eigen::ColMajor>>()),
-          m_coarse_solver(JacobiSolver<T>())
+          m_coarse_solver_jacobi(JacobiSolver<T>())
     {
         CPUTimer timer;
         timer.start();
@@ -127,10 +129,17 @@ struct VCycle
             } else {
                 // coarsest level
 
-                if (coarse_solver == CoarseSolver::Jacobi) {
-                    m_coarse_solver =
+                if (m_coarse_solver_type == CoarseSolver::Jacobi) {
+                    m_coarse_solver_jacobi =
                         JacobiSolver<T>(gmg.m_num_samples[l], num_cols);
-                } else if (coarse_solver == CoarseSolver::Cholesky) {
+                } else if (m_coarse_solver_type == CoarseSolver::Cholesky) {
+                    // Cholesky requires access to the coarsest A matrix, so
+                    // we initialize it during coarser_systems()
+                } else {
+                    RXMESH_ERROR(
+                        "VCycle::VCycle() coarsest solver {} is not "
+                        "implemented or invalid!",
+                        m_coarse_solver_type);
                 }
             }
         }
@@ -145,69 +154,57 @@ struct VCycle
                     memory_alloc_time);
     }
 
-    void construct_hierarchy(GMG<T>& gmg, RXMeshStatic& rx, SparseMatrix<T>& A)
+    void coarser_systems(GMG<T>& gmg, RXMeshStatic& rx, SparseMatrix<T>& A)
     {
         CPUTimer timer;
         GPUTimer gtimer;
         timer.start();
         gtimer.start();
 
-        get_intermediate_laplacians(gmg, A);
+        all_Pt_A_P(gmg, A);
 
         timer.stop();
         gtimer.stop();
-        RXMESH_INFO("ptap took {} (ms), {} (ms)",
-                    timer.elapsed_millis(),
-                    gtimer.elapsed_millis());
+        RXMESH_INFO(
+            "VCycle::coarser_systems() all_Pt_A_P took {} (ms), {} (ms)",
+            timer.elapsed_millis(),
+            gtimer.elapsed_millis());
 
-        timer.start();
-        gtimer.start();
+        if (m_coarse_solver_type == CoarseSolver::Cholesky) {
 
-
-        /*m_coarse_solver_chols.emplace_back(
-            std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&A));
-        m_coarse_solver_chols.emplace_back(
-            std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(&m_a[0].a));
-
-        m_coarse_solver_chols[0]->pre_solve(rx);
-        m_coarse_solver_chols[1]->pre_solve(rx);
-        for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
-            m_coarse_solver_chols.emplace_back(
-                std::make_unique<CholeskySolver<SparseMatrix<T>, 0>>(
-                    &m_a[l].a));
-            m_coarse_solver_chols[l + 1]->pre_solve(rx);
-        }*/
-
-        m_coarse_solver_chols =
-            std::make_unique<CholeskySolver<SparseMatrix<T>, Eigen::ColMajor>>(
+            timer.start();
+            gtimer.start();
+            m_coarse_solver_chols = std::make_unique<
+                CholeskySolver<SparseMatrix<T>, Eigen::ColMajor>>(
                 &m_a.back().a);
-        m_coarse_solver_chols->pre_solve(rx);
+            m_coarse_solver_chols->pre_solve(rx);
 
 
-        timer.stop();
-        gtimer.stop();
-        RXMESH_INFO("chol prep took {} (ms), {} (ms)",
-                    timer.elapsed_millis(),
-                    gtimer.elapsed_millis());
-    }
-
-    virtual void verify_laplacians(GMG<T>& gmg, SparseMatrix<T>& A)
-    {
-        printf(
-            "\nVerify laplacian called from correct laplacian class, no "
-            "verification will take place.");
-    }
-
-    virtual void get_intermediate_laplacians(GMG<T>& gmg, SparseMatrix<T>& A)
-    {
-        // construct m_a for all levels
-        pt_A_p(gmg.m_prolong_op[0], A, m_a[0]);
-        for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
-            pt_A_p(gmg.m_prolong_op[l], m_a[l - 1].a, m_a[l]);
+            timer.stop();
+            gtimer.stop();
+            RXMESH_INFO(
+                "VCycle::coarser_systems() Cholesky pre_solver took {} (ms), "
+                "{} "
+                "(ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
         }
     }
 
-    void pt_A_p(SparseMatrixConstantNNZRow<T, 3>& P,
+    virtual void verify_coarse_system(GMG<T>& gmg, SparseMatrix<T>& A)
+    {
+    }
+
+    virtual void all_Pt_A_P(GMG<T>& gmg, SparseMatrix<T>& A)
+    {
+        // construct m_a for all levels
+        Pt_A_P(gmg.m_prolong_op[0], A, m_a[0]);
+        for (int l = 1; l < gmg.m_num_levels - 1; ++l) {
+            Pt_A_P(gmg.m_prolong_op[l], m_a[l - 1].a, m_a[l]);
+        }
+    }
+
+    void Pt_A_P(SparseMatrixConstantNNZRow<T, 3>& P,
                 SparseMatrix<T>&                  A,
                 CoarseA<T>&                       C)
     {
@@ -383,13 +380,12 @@ struct VCycle
                 A, f, v, m_num_post_relax);
         } else {
             // the coarsest level
-            // m_coarse_solver.template solve<numCols>(A, f, v,
-            // m_num_post_relax);
-            // m_coarse_solver.template solve<numCols>(A, f, v, 100);
-
-
-            // for direct solve, use cholesky
-            m_coarse_solver_chols->solve(f, v);
+            if (m_coarse_solver_type == CoarseSolver::Jacobi) {
+                m_coarse_solver_jacobi.template solve<numCols>(
+                    A, f, v, m_num_post_relax);
+            } else if (m_coarse_solver_type == CoarseSolver::Cholesky) {
+                m_coarse_solver_chols->solve(f, v);
+            }
         }
     }
 
