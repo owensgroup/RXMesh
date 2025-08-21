@@ -2,6 +2,11 @@ add_executable(MassSpring)
 
 set(SOURCE_LIST
     mass_spring.cu	
+	boundary_condition.h
+	inertial_energy.h
+	mass_spring_energy.h
+	gravity_energy.h
+	draw.h
 )
 
 target_sources(MassSpring 

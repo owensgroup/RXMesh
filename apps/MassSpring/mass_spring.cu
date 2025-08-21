@@ -6,11 +6,23 @@
 #include "rxmesh/diff/diff_scalar_problem.h"
 #include "rxmesh/diff/newton_solver.h"
 
+#include "boundary_condition.h"
+#include "draw.h"
+#include "gravity_energy.h"
+#include "inertial_energy.h"
+#include "mass_spring_energy.h"
+
 using namespace rxmesh;
 
+enum class Scenario
+{
+    Flag    = 0,
+    DropBox = 1,
+
+};
 
 template <typename T>
-void mass_spring(RXMeshStatic& rx)
+void mass_spring(RXMeshStatic& rx, Scenario scenario)
 {
     constexpr int VariableDim = 3;
 
@@ -53,13 +65,19 @@ void mass_spring(RXMeshStatic& rx)
     auto& x_tilde = *problem.objective;
 
     // set boundary conditions
-    rx.for_each_vertex(
-        DEVICE,
-        [bb_upper, bb_lower, is_bc, x] __device__(const VertexHandle& vh) {
-            if (x(vh, 0) < std::numeric_limits<T>::min()) {
-                is_bc(vh) = 1;
-            }
-        });
+    switch (scenario) {
+        case Scenario::Flag:
+            flag_bc(rx, is_bc, x, bb_lower, bb_upper);
+            break;
+        case Scenario::DropBox:
+            break;
+        default:
+            break;
+    };
+
+
+    // apply initial stretch along the y direction
+    // apply_init_stretch(rx, x, initial_stretch);
 
 #if USE_POLYSCOPE
     // add BC to polyscope
@@ -76,75 +94,16 @@ void mass_spring(RXMeshStatic& rx)
             rest_l(eh) = (a - b).squaredNorm();
         });
 
-    // apply initial stretch along the y direction
-    // rx.for_each_vertex(
-    //    DEVICE,
-    //    [initial_stretch, x, x_tilde] __device__(const VertexHandle& vh) {
-    //        x(vh, 1) = x(vh, 1) * initial_stretch;
-    //    });
-
 
     // add inertial energy term
-    T half_mass = T(0.5) * mass;
-    problem.template add_term<Op::V, true>(
-        [x, half_mass] __device__(const auto& vh, auto& obj) mutable {
-            using ActiveT = ACTIVE_TYPE(vh);
+    inertial_energy(problem, x, mass);
 
-            Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, obj);
-
-            Eigen::Vector3<T> xx = x.to_eigen<3>(vh);
-
-            Eigen::Vector3<ActiveT> l = xx - x_tilda;
-
-            ActiveT E = half_mass * l.squaredNorm();
-
-            return E;
-        });
 
     // add elastic potential energy term
-    T half_k_times_h_sq = T(0.5) * k * h * h;
-    problem.template add_term<Op::EV, true>(
-        [rest_l, half_k_times_h_sq] __device__(
-            const auto& eh, const auto& iter, auto& obj) mutable {
-            assert(iter[0].is_valid() && iter[1].is_valid());
-
-            assert(iter.size() == 2);
-
-            using ActiveT = ACTIVE_TYPE(eh);
-
-            const Eigen::Vector3<ActiveT> a =
-                iter_val<ActiveT, 3>(eh, iter, obj, 0);
-            const Eigen::Vector3<ActiveT> b =
-                iter_val<ActiveT, 3>(eh, iter, obj, 1);
-
-            const T r = rest_l(eh);
-
-            const Eigen::Vector3<ActiveT> diff = a - b;
-
-            const ActiveT ratio = diff.squaredNorm() / r;
-
-            const ActiveT s = (ratio - T(1.0));
-
-            const ActiveT E = half_k_times_h_sq * r * s * s;
-
-            return E;
-        });
-
+    mass_spring_energy(problem, rest_l, h, k);
 
     // add gravity energy
-    Eigen::Vector3<T> g(0.0, -9.81, 0.0);
-    const T           neg_mass_times_h_sq = -mass * h * h;
-    problem.template add_term<Op::V, true>(
-        [x, neg_mass_times_h_sq, g] __device__(const auto& vh,
-                                               auto&       obj) mutable {
-            using ActiveT = ACTIVE_TYPE(vh);
-
-            Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, obj);
-
-            ActiveT E = neg_mass_times_h_sq * x_tilda.dot(g);
-
-            return E;
-        });
+    gravity_energy(problem, x, h, mass);
 
     int time_step = 0;
 
@@ -227,48 +186,7 @@ void mass_spring(RXMeshStatic& rx)
     };
 
 #if USE_POLYSCOPE
-    polyscope::options::groundPlaneHeightFactor = 0.45;
-    polyscope::options::groundPlaneMode =
-        polyscope::GroundPlaneMode::ShadowOnly;
-
-    bool is_running = false;
-
-    auto ps_callback = [&]() mutable {
-        auto step_and_update = [&]() {
-            step_forward();
-            x_tilde.move(DEVICE, HOST);
-            velocity.move(DEVICE, HOST);
-            auto vel = rx.get_polyscope_mesh()->addVertexVectorQuantity(
-                "Velocity", velocity);
-            rx.get_polyscope_mesh()->updateVertexPositions(x_tilde);
-        };
-        if (ImGui::Button("Step")) {
-            step_and_update();
-        }
-
-
-        ImGui::SameLine();
-        if (ImGui::Button("Start")) {
-            is_running = true;
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Pause")) {
-            is_running = false;
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Export")) {
-            rx.export_obj("MS_" + std::to_string(time_step) + ".obj", x_tilde);
-        }
-
-        if (is_running) {
-            step_and_update();
-        }
-    };
-
-    polyscope::state::userCallback = ps_callback;
-    polyscope::show();
+    draw(rx, x_tilde, velocity, step_forward, time_step);
 #else
     while (time_step < 5) {
         step_forward();
@@ -320,5 +238,5 @@ int main(int argc, char** argv)
         "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
 
 
-    mass_spring<T>(rx);
+    mass_spring<T>(rx, Scenario::Flag);
 }
