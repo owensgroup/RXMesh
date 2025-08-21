@@ -24,8 +24,8 @@ struct arg
     int         gmg_threshold        = 1000;
     bool        gmg_render_hierarchy = false;
     bool        create_mat           = false;
-    bool        gmg_pruned_ptap      = true;
-    bool        gmg_verify_ptap      = true;
+    bool        gmg_pruned_ptap      = false;
+    bool        gmg_verify_ptap      = false;
     char**      argv;
     int         argc;
 } Arg;
