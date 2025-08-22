@@ -6,6 +6,7 @@ set(SOURCE_LIST
 	inertial_energy.h
 	mass_spring_energy.h
 	gravity_energy.h
+	barrier_energy.h
 	draw.h
 )
 

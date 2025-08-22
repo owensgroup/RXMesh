@@ -6,6 +6,7 @@
 #include "rxmesh/diff/diff_scalar_problem.h"
 #include "rxmesh/diff/newton_solver.h"
 
+#include "barrier_energy.h"
 #include "boundary_condition.h"
 #include "draw.h"
 #include "gravity_energy.h"
@@ -22,7 +23,7 @@ enum class Scenario
 };
 
 template <typename T>
-void mass_spring(RXMeshStatic& rx, Scenario scenario)
+void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
 {
     constexpr int VariableDim = 3;
 
@@ -33,11 +34,12 @@ void mass_spring(RXMeshStatic& rx, Scenario scenario)
     using HessMatT = typename ProblemT::HessMatT;
 
     const T rho             = 1000;  // density
-    const T k               = 1e4;   // stiffness
+    const T k               = 4e4;   // stiffness
     const T initial_stretch = 1.3;
     const T tol             = 0.01;
-    const T h               = 0.02;  // time step
+    const T h               = 0.01;  // time step
     const T inv_h           = T(1) / h;
+    const T y_ground        = T(-0.5);
 
     glm::vec3 bb_lower(0), bb_upper(0);
     rx.bounding_box(bb_lower, bb_upper);
@@ -60,16 +62,22 @@ void mass_spring(RXMeshStatic& rx, Scenario scenario)
     auto is_bc = *rx.add_vertex_attribute<int8_t>("isBC", 1);
     is_bc.reset(0, DEVICE);
 
+    auto contact_area = *rx.add_vertex_attribute<T>("ContactArea", 1);
+    contact_area.reset(dx, DEVICE);
+
     auto x = *rx.get_input_vertex_coordinates();
 
     auto& x_tilde = *problem.objective;
 
-    // set boundary conditions
+    typename ProblemT::DenseMatT alpha(rx, rx.get_num_vertices(), DEVICE);
+
+    // set boundary conditions and scenario specific energies
     switch (scenario) {
         case Scenario::Flag:
             flag_bc(rx, is_bc, x, bb_lower, bb_upper);
             break;
         case Scenario::DropBox:
+            barrier_energy(problem, x, contact_area, h, y_ground);
             break;
         default:
             break;
@@ -141,6 +149,12 @@ void mass_spring(RXMeshStatic& rx, Scenario scenario)
         newton_solver.compute_direction();
         timer.stop("LinearSolver");
 
+        int line_search_init_step = 1;
+
+        if (scenario == Scenario::DropBox) {
+            line_search_init_step =
+                init_step_size(rx, newton_solver.dir, alpha, x, y_ground);
+        }
 
         // residual is abs_max(newton_dir)/ h
         T residual = newton_solver.dir.abs_max() / h;
@@ -148,7 +162,7 @@ void mass_spring(RXMeshStatic& rx, Scenario scenario)
         int iter = 0;
         if (residual > tol) {
             timer.start("LineSearch");
-            newton_solver.line_search();
+            newton_solver.line_search(line_search_init_step);
             timer.stop("LineSearch");
 
             // evaluate energy
@@ -163,6 +177,11 @@ void mass_spring(RXMeshStatic& rx, Scenario scenario)
             timer.start("LinearSolver");
             newton_solver.compute_direction();
             timer.stop("LinearSolver");
+
+            if (scenario == Scenario::DropBox) {
+                line_search_init_step =
+                    init_step_size(rx, newton_solver.dir, alpha, x, y_ground);
+            }
 
             // residual is abs_max(newton_dir)/ h
             residual = newton_solver.dir.abs_max() / h;
@@ -238,5 +257,5 @@ int main(int argc, char** argv)
         "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
 
 
-    mass_spring<T>(rx, Scenario::Flag);
+    mass_spring<T>(rx, dx, Scenario::DropBox);
 }

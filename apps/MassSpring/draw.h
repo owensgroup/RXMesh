@@ -11,9 +11,8 @@ void draw(RXMeshStatic& rx,
           FunT&         step_forward,
           int&           time_step)
 {
-    polyscope::options::groundPlaneHeightFactor = 0.45;
-    polyscope::options::groundPlaneMode =
-        polyscope::GroundPlaneMode::ShadowOnly;
+    polyscope::options::groundPlaneHeightFactor = 0.8;
+    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::Tile;
 
     bool is_running = false;
 
