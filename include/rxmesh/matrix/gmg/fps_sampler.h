@@ -10,10 +10,10 @@ namespace rxmesh {
 
 namespace detail {
 template <uint32_t blockThreads>
-__global__ static void sample_points(const Context          context,
-                                     DenseMatrix<float>     vertex_pos,
-                                     VertexAttribute<float> distance,
-                                     int*                   flag)
+__global__ static void sample_points(const Context            context,
+                                     const DenseMatrix<float> vertex_pos,
+                                     VertexAttribute<float>   distance,
+                                     int*                     flag)
 {
 
     auto sampler = [&](VertexHandle v_id, VertexIterator& vv) {
@@ -43,17 +43,16 @@ __global__ static void sample_points(const Context          context,
  * \brief FPS Sampling in parallel
  */
 
-void FPSSampler(RXMeshStatic&           rx,
-                VertexAttribute<float>& distance,
-                DenseMatrix<float>&     vertex_pos,
-                DenseMatrix<int>&       vertex_cluster,
-                DenseMatrix<uint16_t>&  sample_level_bitmask,
-                DenseMatrix<float>&     samples_pos,
-                float                   ratio,
-                int                     N,
-                int                     numberOfLevels,
-                int                     numberOfSamplesForFirstLevel,
-                int*                    d_flag)
+void FPSSampler(RXMeshStatic&             rx,
+                VertexAttribute<float>&   distance,
+                const DenseMatrix<float>& vertex_pos,
+                DenseMatrix<int>&         vertex_cluster,
+                DenseMatrix<float>&       samples_pos,
+                float                     ratio,
+                int                       N,
+                int                       numberOfLevels,
+                int                       numberOfSamplesForFirstLevel,
+                int*                      d_flag)
 {
 
     std::random_device              rd;
@@ -73,17 +72,11 @@ void FPSSampler(RXMeshStatic&           rx,
         {Op::VV}, lb, (void*)detail::sample_points<blockThreads>);
 
 
-    int currentSampleLevel = numberOfLevels;
-
     cub::KeyValuePair<VertexHandle, float> farthestPoint;
 
     int h_flag;
 
     for (int i = 0; i < numberOfSamplesForFirstLevel; i++) {
-
-        if (i > N / (int)powf(ratio, currentSampleLevel)) {
-            currentSampleLevel--;
-        }
 
         rx.for_each_vertex(
             DEVICE, [=] __device__(const VertexHandle vh) mutable {
@@ -96,9 +89,6 @@ void FPSSampler(RXMeshStatic&           rx,
                     samples_pos(i, 1) = vertex_pos(vh, 1);
                     samples_pos(i, 2) = vertex_pos(vh, 2);
 
-                    for (int k = 0; k < currentSampleLevel; k++) {
-                        sample_level_bitmask(vh, 0) |= (1 << k);
-                    }
                 } else {
                     if (i == 0) {
                         distance(vh, 0) = std::numeric_limits<float>::max();

@@ -15,6 +15,10 @@
 
 #include "polyscope/point_cloud.h"
 
+#include <thrust/device_vector.h>
+#include <thrust/random.h>
+#include <thrust/shuffle.h>
+
 namespace rxmesh {
 
 enum class Sampling
@@ -69,12 +73,11 @@ struct GMG
     std::vector<DenseMatrix<int>> m_sample_neighbor;                 // levels
     std::vector<SparseMatrixConstantNNZRow<float, 3>> m_prolong_op;  // levels
 
-    std::vector<DenseMatrix<float>> m_distance_mat;    // fine+levels
+    std::vector<DenseMatrix<float>> m_distance_mat;    // levels
     std::vector<DenseMatrix<int>>   m_vertex_cluster;  // levels
 
-    DenseMatrix<float>     m_vertex_pos;            // fine
-    VertexAttribute<float> m_distance;              // fine
-    DenseMatrix<uint16_t>  m_sample_level_bitmask;  // fine
+    DenseMatrix<float>     m_vertex_pos;  // fine
+    VertexAttribute<float> m_distance;    // fine
 
     GPUStorage<Edge> m_edge_storage;
 
@@ -242,10 +245,10 @@ struct GMG
 
 
         m_vertex_pos = *rx.get_input_vertex_coordinates()->to_matrix();
-        m_distance   = *rx.add_vertex_attribute<float>("d", 1);
+        m_vertex_pos.move(DEVICE, HOST);
 
+        m_distance = *rx.add_vertex_attribute<float>("d", 1);
 
-        m_sample_level_bitmask = DenseMatrix<uint16_t>(rx, m_num_rows, 1);
 
         CUDA_ERROR(cudaMalloc((void**)&m_d_flag, sizeof(int)));
 
@@ -389,7 +392,6 @@ struct GMG
                    m_distance,
                    m_vertex_pos,
                    m_vertex_cluster[0],
-                   m_sample_level_bitmask,
                    m_samples_pos[0],
                    m_ratio,
                    m_num_rows,
@@ -604,62 +606,106 @@ struct GMG
      */
     void random_sampling(RXMeshStatic& rx)
     {
-        constexpr uint32_t blockThreads = 256;
-        bool               nested       = true;
-        int                max          = 1;
-        if (!nested) {
-            max = m_num_levels - 1;
-        }
-        m_vertex_pos.move(DEVICE, HOST);
-        for (int i = 0; i < max; i++) {
-            // re-init m_distance because it is used in clustering
-            auto&       distance = m_distance;
-            const auto& vc       = m_vertex_cluster[i];
-            if (i == 0)
-                rx.for_each_vertex(
-                    DEVICE,
-                    [distance, vc] __device__(const VertexHandle vh) mutable {
-                        // vc(vh,0) = -1;
-                        distance(vh, 0) = std::numeric_limits<float>::max();
-                    });
-            distance.move(DEVICE, HOST);
-            auto& current_vertex_cluster = m_vertex_cluster[i];
 
+        bool nested = true;
 
-            std::random_device         rd;
-            std::default_random_engine generator(rd());
-            std::vector<int>           samples(m_num_samples[i]);
-            std::iota(samples.begin(), samples.end(), 1);
-            std::shuffle(samples.begin(), samples.end(), generator);
-            samples.resize(m_num_samples[i + 1]);
-            int j = 0;
+        auto& level_0_distance = m_distance;
+        level_0_distance.reset(std::numeric_limits<float>::max(), DEVICE);
 
-            // TODO parallelize
-            for (auto& a : samples) {
-                current_vertex_cluster(a - 1, 0) = j;
-                if (i == 0)
-                    distance(a - 1, 0) = 0;
-                else
-                    m_distance_mat[i](a - 1, 0) = 0;
+        auto& vertex_pos = m_vertex_pos;
+        auto& context    = rx.get_context();
 
-                m_samples_pos[i](j, 0) = m_vertex_pos(a - 1, 0);
-                m_samples_pos[i](j, 1) = m_vertex_pos(a - 1, 1);
-                m_samples_pos[i](j, 2) = m_vertex_pos(a - 1, 2);
-                j++;
+        // allocate the vector device once with largest possible size (i.e.,
+        // number of vertices on the finest level)
+        thrust::device_vector<int> d_samples(m_num_rows);
+        int* d_samples_ptr = thrust::raw_pointer_cast(d_samples.data());
+        thrust::default_random_engine g;
+
+        for (int level = 1; level < m_num_levels; level++) {
+
+            const int level_num_samples = m_num_samples[level];
+
+            auto& vc = m_vertex_cluster[level - 1];
+            // auto& distance_mat = m_distance_mat[level - 1];
+            auto& samples_pos = m_samples_pos[level - 1];
+
+            vc.reset(-1, DEVICE);
+            // distance_mat.reset(std::numeric_limits<float>::max(), DEVICE);
+
+            // generate the device vector with sequential numbers
+            // and the rest is -1
+            thrust::fill_n(
+                thrust::device, d_samples.begin(), d_samples.size(), -1);
+
+            thrust::sequence(thrust::device,
+                             d_samples.begin(),
+                             d_samples.begin() + level_num_samples);
+
+            // shuffle the sequential numbers part
+            thrust::shuffle(
+                thrust::device, d_samples.begin(), d_samples.end(), g);
+
+            // copy the sample position from the fine mesh
+            rx.for_each_vertex(
+                DEVICE,
+                [level_0_distance,
+                 d_samples_ptr,
+                 context,
+                 samples_pos,
+                 vertex_pos,
+                 vc,
+                 level] __device__(const VertexHandle vh) mutable {
+                    int sample = d_samples_ptr[context.linear_id(vh)];
+
+                    if (sample != -1) {
+                        vc(vh) = sample;
+                        if (level == 1) {
+                            level_0_distance(vh) = 0;
+                        }
+                        samples_pos(sample, 0) = vertex_pos(vh, 0);
+                        samples_pos(sample, 1) = vertex_pos(vh, 1);
+                        samples_pos(sample, 2) = vertex_pos(vh, 2);
+                    }
+                });
+
+            if (nested) {
+                // if nested, we sub-samples from the samples we get on the
+                // first coarse level
+                break;
             }
-            m_samples_pos[i].move(HOST, DEVICE);
-            m_vertex_cluster[i].move(HOST, DEVICE);
-            m_distance_mat[i].move(HOST, DEVICE);
-            distance.move(HOST, DEVICE);
         }
+
         if (nested) {
+            //TODO this part is copy/paste from fps_sampling 
+            
+            constexpr uint32_t blockThreads = 256;
+
+            // re-init m_distance because it is used in clustering
+            auto& distance = m_distance;
+
+            const auto& vc = m_vertex_cluster[0];
+
+            rx.for_each_vertex(
+                DEVICE,
+                [distance, vc] __device__(const VertexHandle vh) mutable {
+                    if (vc(vh) == -1) {
+                        distance(vh, 0) = std::numeric_limits<float>::max();
+                    }
+                });
+
             for (int level = 2; level < m_num_levels; ++level) {
                 uint32_t blocks = DIVIDE_UP(m_num_samples[level], blockThreads);
-                auto&    current_samples_pos  = m_samples_pos[level - 1];
-                const auto& prv_samples_pos   = m_samples_pos[level - 2];
-                auto&       current_v_cluster = m_vertex_cluster[level - 1];
-                const auto& prv_v_cluster     = m_vertex_cluster[level - 2];
-                const auto& pos               = m_vertex_pos;
+
+                auto& current_samples_pos = m_samples_pos[level - 1];
+
+                const auto& prv_samples_pos = m_samples_pos[level - 2];
+
+                auto& current_v_cluster = m_vertex_cluster[level - 1];
+
+                const auto& prv_v_cluster = m_vertex_cluster[level - 2];
+
+                const auto& pos = m_vertex_pos;
+
                 // set sample position of this level
                 for_each_item<<<blocks, blockThreads>>>(
                     m_num_samples[level],
@@ -713,7 +759,6 @@ struct GMG
             clustering_1st_level(rx,
                                  1,  // first coarse level
                                  m_vertex_pos,
-                                 m_sample_level_bitmask,
                                  m_distance,
                                  m_vertex_cluster[l],  // 0
                                  m_d_flag);
@@ -724,7 +769,6 @@ struct GMG
                                  m_sample_neighbor[l - 1],
                                  m_vertex_cluster[l],
                                  m_distance_mat[l - 1],
-                                 m_sample_level_bitmask,
                                  m_samples_pos[l - 1],
                                  m_d_flag);
         }
@@ -754,7 +798,7 @@ struct GMG
                 m_vertex_cluster[0],
                 m_edge_storage);
 
-            int num_clusters = m_vertex_cluster[level].rows();
+            int num_clusters = m_vertex_cluster[level - 1].rows();
             detail::build_n_ring_on_gpu_compute(
                 m_edge_storage, m_edge_storage_disk, num_clusters, level + 1);
 

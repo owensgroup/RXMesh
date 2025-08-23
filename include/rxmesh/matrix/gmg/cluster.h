@@ -44,8 +44,7 @@ __global__ static void cluster_points(const Context        context,
  */
 void clustering_1st_level(RXMeshStatic&                rx,
                           int                          current_level,
-                          const DenseMatrix<float>&    vertex_pos,
-                          const DenseMatrix<uint16_t>& sample_level_bitmask,
+                          const DenseMatrix<float>&    vertex_pos,                          
                           VertexAttribute<float>&      distance,
                           DenseMatrix<int>&            vertex_cluster,
                           int*                         d_flag)
@@ -83,8 +82,7 @@ inline void clustering_nth_level(
     const DenseMatrix<int>&      sample_neighbor_size_prefix,
     const DenseMatrix<int>&      sample_neighbor,
     DenseMatrix<int>&            vertex_cluster,
-    DenseMatrix<float>&          distance,
-    const DenseMatrix<uint16_t>& sample_level_bitmask,
+    DenseMatrix<float>&          distance,    
     const DenseMatrix<float>&    prev_samples_pos,
     int*                         d_flag)
 {
