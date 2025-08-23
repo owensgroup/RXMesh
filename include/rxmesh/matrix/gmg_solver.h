@@ -61,7 +61,8 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
         // Construct GMG operator
         timer.start();
         gtimer.start();
-        m_gmg = GMG<T>(*m_rx, m_num_levels, m_threshold, m_sampling);
+        m_gmg =
+            GMG<T>(*m_rx, m_num_levels, m_threshold, m_sampling, m_pruned_ptap);
         timer.stop();
         gtimer.stop();
 
