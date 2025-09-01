@@ -1,4 +1,4 @@
-if (${RX_USE_SUITESPARSE})
+if (${PROJECT_NAME}_WITH_SUITESPARSE)
   include(FetchContent)
 
   # ===========================================================
@@ -19,9 +19,6 @@ if (${RX_USE_SUITESPARSE})
     set(BUILD_WITHOUT_LAPACK OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(openblas)
 	
-	get_target_property(OPENBLAS_RELEASE ${_blas_target} IMPORTED_LOCATION_RELEASE)
-	get_target_property(OPENBLAS_DEBUG   ${_blas_target} IMPORTED_LOCATION_DEBUG)
-
     # 1) Pick the real OpenBLAS target (may be an alias)
 	set(_blas_target "")
 	if(TARGET openblas)
@@ -37,6 +34,9 @@ if (${RX_USE_SUITESPARSE})
 	else()
 		message(FATAL_ERROR "OpenBLAS was built but exported no usable target")
 	endif()
+
+	get_target_property(OPENBLAS_RELEASE ${_blas_target} IMPORTED_LOCATION_RELEASE)
+	get_target_property(OPENBLAS_DEBUG   ${_blas_target} IMPORTED_LOCATION_DEBUG)
 
 	# 2)  Provide a canonical BLAS::BLAS, but only once
 	if(NOT TARGET BLAS::BLAS)
@@ -73,4 +73,34 @@ if (${RX_USE_SUITESPARSE})
     GIT_TAG        cmake
   )
   FetchContent_MakeAvailable(suitesparse)
+  
+  # Create suitesparse_umbrella alias if it doesn't exist
+  # The SuiteSparse build provides individual component targets like SuiteSparse::cholmod
+  # We'll create an umbrella target that links to the main components
+  if(NOT TARGET suitesparse_umbrella)
+    add_library(suitesparse_umbrella INTERFACE)
+    
+    # Link to the main SuiteSparse components
+    if(TARGET SuiteSparse::cholmod)
+      target_link_libraries(suitesparse_umbrella INTERFACE SuiteSparse::cholmod)
+    endif()
+    if(TARGET SuiteSparse::spqr)
+      target_link_libraries(suitesparse_umbrella INTERFACE SuiteSparse::spqr)
+    endif()
+    if(TARGET SuiteSparse::amd)
+      target_link_libraries(suitesparse_umbrella INTERFACE SuiteSparse::amd)
+    endif()
+    if(TARGET SuiteSparse::colamd)
+      target_link_libraries(suitesparse_umbrella INTERFACE SuiteSparse::colamd)
+    endif()
+    if(TARGET SuiteSparse::camd)
+      target_link_libraries(suitesparse_umbrella INTERFACE SuiteSparse::camd)
+    endif()
+    if(TARGET SuiteSparse::ccolamd)
+      target_link_libraries(suitesparse_umbrella INTERFACE SuiteSparse::ccolamd)
+    endif()
+    if(TARGET SuiteSparse::config)
+      target_link_libraries(suitesparse_umbrella INTERFACE SuiteSparse::config)
+    endif()
+  endif()
 endif()
