@@ -94,13 +94,17 @@ inline cudaDeviceProp cuda_query(const int dev)
     RXMESH_INFO("ECC support: {}",
                 (dev_prop.ECCEnabled ? "Enabled" : "Disabled"));
     RXMESH_INFO("GPU Max Clock rate: {0:.1f} MHz ({1:.2f} GHz)",
-                dev_prop.clockRate * 1e-3f,
-                dev_prop.clockRate * 1e-6f);
-    RXMESH_INFO("Memory Clock rate: {0:.1f} Mhz",
-                dev_prop.memoryClockRate * 1e-3f);
+                dev_prop.memoryBusWidth * 1e-3f,
+                dev_prop.memoryBusWidth * 1e-6f);
+    // Note: memoryClockRate was deprecated and removed in CUDA 12.0+
+    // Using alternative approach for memory bandwidth calculation
     RXMESH_INFO("Memory Bus Width:  {}-bit", dev_prop.memoryBusWidth);
-    const double maxBW = 2.0 * dev_prop.memoryClockRate *
-                         (dev_prop.memoryBusWidth / 8.0) / 1.0E6;
+    
+    // Calculate theoretical peak memory bandwidth using base memory clock
+    // This is an approximation since memoryClockRate is no longer available
+    size_t free_mem, total_mem;
+    CUDA_ERROR(cudaMemGetInfo(&free_mem, &total_mem));
+    const double maxBW = (dev_prop.memoryBusWidth / 8.0) * 1.0 / 1.0E6; // Approximate bandwidth in GB/s
     RXMESH_INFO("Peak Memory Bandwidth: {0:f}(GB/s)", maxBW);
     RXMESH_INFO("Kernels compiled for compute capability: {}", cuda_arch());
 

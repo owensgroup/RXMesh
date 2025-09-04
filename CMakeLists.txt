@@ -20,7 +20,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 # Project options
 ################################################################################
 
-option(${PROJECT_NAME}_WITH_DEMO "Add demo applications" ON)
+option(${PROJECT_NAME}_WITH_APPS "Add demo applications" ON)
 option(${PROJECT_NAME}_WITH_TESTS "Add unit tests" ON)
 option(${PROJECT_NAME}_WITH_POLYSCOPE "Enable Polyscope for visualization" ON)
 option(${PROJECT_NAME}_WITH_SUITESPARSE "Use SuiteSparse for benchmark" ON)
@@ -62,14 +62,16 @@ get_git_head_revision(GIT_REFSPEC GIT_SHA1)
 # Core library source files
 file(GLOB_RECURSE RXMESH_SRC_FILES
     "include/*.cpp"
+    "include/*/*.cpp"
     "include/*.cu"
-    "include/*.h"
-    "include/*.hpp"
-    "include/*.cuh"
+    "include/*/*.cu"
 )
 
 message(STATUS "Adding RXMesh source files...")
 add_library(${PROJECT_NAME}_lib ${RXMESH_SRC_FILES})
+
+# Enable CUDA separable compilation for the library
+set_property(TARGET ${PROJECT_NAME}_lib PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 message(STATUS "Adding include directories...")
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
@@ -148,7 +150,7 @@ elseif(GPU_ARCHITECTURE STREQUAL "ADA")
 endif()
 
 # CUDA compiler flags
-target_compile_options(${PROJECT_NAME}_lib PRIVATE
+target_compile_options(${PROJECT_NAME}_lib PUBLIC
     $<$<COMPILE_LANGUAGE:CUDA>: 
         -lineinfo
         -O3
@@ -162,7 +164,7 @@ target_compile_options(${PROJECT_NAME}_lib PRIVATE
 
 # Debug mode CUDA flags
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(${PROJECT_NAME}_lib PRIVATE
+    target_compile_options(${PROJECT_NAME}_lib PUBLIC
         $<$<COMPILE_LANGUAGE:CUDA>: -G -src-in-ptx>
     )
 endif()
@@ -211,13 +213,17 @@ include(cmake/recipes/cereal.cmake)
 # Link core libraries
 target_link_libraries(${PROJECT_NAME}_lib PUBLIC 
     glm::glm
-    openmesh
+        OpenMeshCore
+    OpenMeshTools
 )
 
+# Enable GLM experimental extensions globally
+target_compile_definitions(${PROJECT_NAME}_lib PUBLIC GLM_ENABLE_EXPERIMENTAL)
+
 # Add additional include directories for header-only libraries
-target_include_directories(${PROJECT_NAME}_lib PRIVATE "${rapidjson_SOURCE_DIR}/include")
-target_include_directories(${PROJECT_NAME}_lib PRIVATE "${spdlog_SOURCE_DIR}/include") 
-target_include_directories(${PROJECT_NAME}_lib PRIVATE "${cereal_SOURCE_DIR}/include")
+target_include_directories(${PROJECT_NAME}_lib PUBLIC "${rapidjson_SOURCE_DIR}/include")
+target_include_directories(${PROJECT_NAME}_lib PUBLIC "${spdlog_SOURCE_DIR}/include") 
+target_include_directories(${PROJECT_NAME}_lib PUBLIC "${cereal_SOURCE_DIR}/include")
 
 # Polyscope (optional)
 if(${PROJECT_NAME}_WITH_POLYSCOPE)
@@ -227,22 +233,32 @@ if(${PROJECT_NAME}_WITH_POLYSCOPE)
 endif()
 
 # METIS
-if(${PROJECT_NAME}_WITH_METIS)
-    include(cmake/recipes/metis.cmake)
-    target_link_libraries(${PROJECT_NAME}_lib PUBLIC metis::metis)
-    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_WITH_METIS)
-endif()
+if (${PROJECT_NAME}_WITH_METIS)
+    find_package(METIS REQUIRED)
+    if (EXISTS "${METIS_INCLUDES}")
+        target_link_libraries(${PROJECT_NAME}_lib PUBLIC
+                ${METIS_LIBRARIES}
+        )
+        target_include_directories(${PROJECT_NAME}_lib PUBLIC "${METIS_INCLUDES}")
+    else ()
+        message(STATUS "The METIS is not found")
+    endif ()
+endif ()
 
-# SuiteSparse (optional)
-if(${PROJECT_NAME}_WITH_SUITESPARSE)
-    include(cmake/recipes/suitesparse.cmake)
-    target_link_libraries(${PROJECT_NAME}_lib PUBLIC suitesparse::suitesparse)
-    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_WITH_SUITESPARSE)
-endif()
+
+# SuiteSparse
+if (${PROJECT_NAME}_WITH_SUITESPARSE)
+    set(SUITESPARSE_INCLUDE_DIR_HINTS $ENV{SUITESPARSE_INC})
+    set(SUITESPARSE_LIBRARY_DIR_HINTS $ENV{SUITESPARSE_LIB})
+    find_package(SuiteSparse REQUIRED)
+    target_link_libraries(${PROJECT_NAME}_lib PUBLIC ${SUITESPARSE_LIBRARIES})
+    target_include_directories(${PROJECT_NAME}_lib PUBLIC ${SUITESPARSE_INCLUDE_DIRS})
+    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC PARTH_WITH_SUITESPARSE)
+endif ()
 
 # cuDSS (optional)
 if(${PROJECT_NAME}_WITH_CUDSS)
-    find_package(cudss CONFIG QUIET)
+    find_package(cudss REQUIRED)
     if(cudss_FOUND)
         message(STATUS "Found cuDSS version ${cudss_VERSION}")
         target_link_libraries(${PROJECT_NAME}_lib PUBLIC cudss::cudss)
@@ -277,11 +293,11 @@ target_compile_definitions(${PROJECT_NAME}_lib PUBLIC
 )
 
 # Build tests and apps based on options
-if(${PROJECT_NAME}_WITH_TESTS)	
-	add_subdirectory(tests)
+if(${PROJECT_NAME}_WITH_ANALYSIS)	
+	add_subdirectory(analysis)
 endif()
 
-if(${PROJECT_NAME}_WITH_DEMO)
+if(${PROJECT_NAME}_WITH_APPS)
 	add_subdirectory(apps)
 endif()
 

@@ -119,7 +119,8 @@ int main(int argc, char** argv)
 
     // calc number of boundary vertices
     ReduceHandle rh(v_bd);
-    int          num_bd_vertices = rh.reduce(v_bd, cub::Sum(), 0);
+    // int          num_bd_vertices = rh.reduce(v_bd, cub::Sum(), 0);
+    int          num_bd_vertices = rh.reduce(v_bd, [] __device__ (int a, int b) { return a + b; }, 0);
 
     // compute conformal energy matrix Lc
     SparseMatrix<cuComplex> Lc(rx);
@@ -208,13 +209,19 @@ int main(int argc, char** argv)
 
     ReduceHandle rrh(uv);
 
-    lower[0] = rrh.reduce(uv, cub::Min(), std::numeric_limits<float>::max(), 0);
-    lower[1] = rrh.reduce(uv, cub::Min(), std::numeric_limits<float>::max(), 1);
-    lower[2] = rrh.reduce(uv, cub::Min(), std::numeric_limits<float>::max(), 2);
+    // lower[0] = rrh.reduce(uv, cub::Min(), std::numeric_limits<float>::max(), 0);
+    // lower[1] = rrh.reduce(uv, cub::Min(), std::numeric_limits<float>::max(), 1);
+    // lower[2] = rrh.reduce(uv, cub::Min(), std::numeric_limits<float>::max(), 2);
+    lower[0] = rrh.reduce(uv, [] __device__ (float a, float b) { return a < b ? a : b; }, std::numeric_limits<float>::max(), 0);
+    lower[1] = rrh.reduce(uv, [] __device__ (float a, float b) { return a < b ? a : b; }, std::numeric_limits<float>::max(), 1);
+    lower[2] = rrh.reduce(uv, [] __device__ (float a, float b) { return a < b ? a : b; }, std::numeric_limits<float>::max(), 2);
 
-    upper[0] = rrh.reduce(uv, cub::Max(), std::numeric_limits<float>::min(), 0);
-    upper[1] = rrh.reduce(uv, cub::Max(), std::numeric_limits<float>::min(), 1);
-    upper[2] = rrh.reduce(uv, cub::Max(), std::numeric_limits<float>::min(), 2);
+    // upper[0] = rrh.reduce(uv, cub::Max(), std::numeric_limits<float>::min(), 0);
+    // upper[1] = rrh.reduce(uv, cub::Max(), std::numeric_limits<float>::min(), 1);
+    // upper[2] = rrh.reduce(uv, cub::Max(), std::numeric_limits<float>::min(), 2);
+    upper[0] = rrh.reduce(uv, [] __device__ (float a, float b) { return a > b ? a : b; }, std::numeric_limits<float>::min(), 0);
+    upper[1] = rrh.reduce(uv, [] __device__ (float a, float b) { return a > b ? a : b; }, std::numeric_limits<float>::min(), 1);
+    upper[2] = rrh.reduce(uv, [] __device__ (float a, float b) { return a > b ? a : b; }, std::numeric_limits<float>::min(), 2);
 
     upper -= lower;
     float s = std::max(upper[0], upper[1]);

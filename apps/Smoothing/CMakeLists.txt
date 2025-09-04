@@ -17,7 +17,7 @@ set_property(TARGET Smoothing PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "Smoothing" FILES ${SOURCE_LIST})
 
 target_link_libraries(Smoothing     
-    PRIVATE RXMesh
+    PRIVATE RXMesh_lib
 )
 
 #gtest_discover_tests( Smoothing )

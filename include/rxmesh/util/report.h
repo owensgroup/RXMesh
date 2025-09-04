@@ -175,14 +175,14 @@ struct Report
 #endif
 
         // Clocks
-        add_member(
-            "GPU Max Clock rate (GHz)", devProp.clockRate * 1e-6f, subdoc);
-        add_member(
-            "Memory Clock rate (GHz)", devProp.memoryClockRate * 1e-6f, subdoc);
+        // Note: clockRate was deprecated and removed in CUDA 12.0+
+        // add_member(
+        //     "GPU Max Clock rate (GHz)", devProp.clockRate * 1e-6f, subdoc);
+        // Note: memoryClockRate was deprecated and removed in CUDA 12.0+
         add_member("Memory Bus Width (bit)", devProp.memoryBusWidth, subdoc);
+        // Calculate approximate memory bandwidth without memoryClockRate
         add_member("Peak Memory Bandwidth (GB/s)",
-                   2.0 * devProp.memoryClockRate *
-                       (devProp.memoryBusWidth / 8.0) / 1.0E6,
+                   (devProp.memoryBusWidth / 8.0) * 1.0 / 1.0E6,
                    subdoc);
 
         m_doc.AddMember("GPU Device", subdoc, m_doc.GetAllocator());

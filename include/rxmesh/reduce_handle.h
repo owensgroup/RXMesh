@@ -130,7 +130,8 @@ class ReduceHandle
                 m_d_reduce_1st_stage,
                 attribute_id);
 
-        return reduce_2nd_stage<T>(stream, cub::Sum(), 0);
+        // return reduce_2nd_stage<T>(stream, cub::Sum(), 0);
+        return reduce_2nd_stage<T>(stream, [] __device__ (T a, T b) { return a + b; }, 0);
     }
 
     /**
@@ -161,7 +162,8 @@ class ReduceHandle
                 m_d_reduce_1st_stage,
                 attribute_id);
 
-        return std::sqrt(reduce_2nd_stage<T>(stream, cub::Sum(), 0));
+        // return std::sqrt(reduce_2nd_stage<T>(stream, cub::Sum(), 0));
+        return std::sqrt(reduce_2nd_stage<T>(stream, [] __device__ (T a, T b) { return a + b; }, 0));
     }
 
     /**

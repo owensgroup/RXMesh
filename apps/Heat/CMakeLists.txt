@@ -16,7 +16,7 @@ set_property(TARGET Heat PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "Heat" FILES ${SOURCE_LIST})
 
 target_link_libraries(Heat     
-    PRIVATE RXMesh
+    PRIVATE RXMesh_lib
 )
 
 #gtest_discover_tests( Heat )

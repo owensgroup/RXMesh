@@ -30,7 +30,7 @@ source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "MCF" FILES ${SOURCE_LIST})
 
 
 target_link_libraries( MCF     
-    PRIVATE RXMesh
+    PRIVATE RXMesh_lib
     PRIVATE gtest_main
 )
 if (${RX_USE_SUITESPARSE})  

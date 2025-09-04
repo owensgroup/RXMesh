@@ -22,7 +22,7 @@
 #include "rxmesh/kernels/boundary.cuh"
 #include "rxmesh/kernels/query_kernel.cuh"
 
-#if USE_POLYSCOPE
+#if RXMESH_WITH_POLYSCOPE
 #include "polyscope/surface_mesh.h"
 #endif
 
@@ -70,7 +70,7 @@ class RXMeshStatic : public RXMesh
         m_attr_container = std::make_shared<AttributeContainer>();
 
         std::string name = extract_file_name(file_path);
-#if USE_POLYSCOPE
+#if RXMESH_WITH_POLYSCOPE
         name = polyscope::guessNiceNameFromPath(file_path);
 #endif
         add_vertex_coordinates(vertices, name);
@@ -112,7 +112,7 @@ class RXMeshStatic : public RXMesh
             m_input_vertex_coordinates =
                 this->add_vertex_attribute<float>(vertices, "rx:vertices");
 
-#if USE_POLYSCOPE
+#if RXMESH_WITH_POLYSCOPE
             // polyscope::options::autocenterStructures = true;
             // polyscope::options::autoscaleStructures  = true;
             // polyscope::options::automaticallyComputeSceneExtents = true;
@@ -131,7 +131,7 @@ class RXMeshStatic : public RXMesh
     {
     }
 
-#if USE_POLYSCOPE
+#if RXMESH_WITH_POLYSCOPE
     /**
      * @brief return a pointer to polyscope surface which has been registered
      * with this instance
@@ -165,8 +165,7 @@ class RXMeshStatic : public RXMesh
         auto ps = polyscope::registerSurfaceMesh(
             m_polyscope_mesh_name + "_patch_" + std::to_string(p),
             *m_input_vertex_coordinates,
-            fv,
-            m_polyscope_edges_map);
+            fv);
 
         if (with_vertex_patch) {
             render_vertex_patch_and_local_id(p, ps);
@@ -1509,7 +1508,7 @@ class RXMeshStatic : public RXMesh
 
         coord.move(HOST, DEVICE);
 
-#if USE_POLYSCOPE
+#if RXMESH_WITH_POLYSCOPE
         get_polyscope_mesh()->updateVertexPositions(coord);
 #endif
     }
@@ -2308,7 +2307,7 @@ class RXMeshStatic : public RXMesh
         }
     }
 
-#if USE_POLYSCOPE
+#if RXMESH_WITH_POLYSCOPE
     void add_patch_to_polyscope(const uint32_t                        p,
                                 std::vector<std::array<uint32_t, 3>>& fv,
                                 bool with_ribbon)
@@ -2389,8 +2388,7 @@ class RXMeshStatic : public RXMesh
         m_polyscope_mesh =
             polyscope::registerSurfaceMesh(m_polyscope_mesh_name,
                                            *m_input_vertex_coordinates,
-                                           fv,
-                                           m_polyscope_edges_map);
+                                           fv);
     }
 
     std::string             m_polyscope_mesh_name;

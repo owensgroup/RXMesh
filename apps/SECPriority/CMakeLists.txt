@@ -37,7 +37,7 @@ CPMAddPackage(
        "BUILD_EXAMPLES OFF"
 )
 target_link_libraries(SECPriority     
-    PRIVATE RXMesh
+    PRIVATE RXMesh_lib
     PRIVATE gtest_main	
     PRIVATE cuco
 )

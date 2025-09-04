@@ -35,7 +35,7 @@ set_property(TARGET SurfaceTracking PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "SurfaceTracking" FILES ${SOURCE_LIST})
 
 target_link_libraries(SurfaceTracking     
-    PRIVATE RXMesh
+    PRIVATE RXMesh_lib
     PRIVATE gtest_main
 )
 
