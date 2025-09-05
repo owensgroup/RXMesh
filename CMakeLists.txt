@@ -1,3 +1,5 @@
+#To run with cuDSS:
+#>> cmake -DRX_USE_CUDSS=ON -DCMAKE_PREFIX_PATH="C:\Program Files\NVIDIA cuDSS\v0.6\lib\12\cmake" ..
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 
 project(RXMesh 
@@ -189,7 +191,7 @@ if(${RX_USE_CUDSS})
 	if (cudss_FOUND)		
 		message(STATUS "Found cuDSS version ${cudss_VERSION}")		
 		
-		target_include_directories(RXMesh INTERFACE PUBLIC ${cudss_INCLUDE_DIR})		
+		target_include_directories(RXMesh INTERFACE ${cudss_INCLUDE_DIR})		
 		target_link_directories(RXMesh INTERFACE ${cudss_LIBRARY_DIR})
 		target_link_libraries(RXMesh INTERFACE cudss)
 		
