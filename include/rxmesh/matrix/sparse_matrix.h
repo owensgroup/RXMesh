@@ -111,6 +111,7 @@ struct SparseMatrix
 #ifndef NDEBUG
         check_repeated_indices();
 #endif
+        init_cudss();
     }
 
    protected:
@@ -363,6 +364,7 @@ struct SparseMatrix
 #ifndef NDEBUG
         check_repeated_indices();
 #endif
+        init_cudss();
     }
 
    public:
@@ -563,6 +565,16 @@ struct SparseMatrix
         return T(0);
     }
 
+#ifdef USE_CUDSS
+    /**
+     * @brief Return cuDSS matrix
+     */
+    __host__ cudssMatrix_t& get_cudss_matrix()
+    {
+        return m_cudss_matrix;
+    }
+#endif
+
     /**
      * @brief return the row pointer of the CSR matrix
      * @return
@@ -670,6 +682,9 @@ struct SparseMatrix
 
         GPU_FREE(m_d_cusparse_spmm_buffer);
         GPU_FREE(m_d_cusparse_spmv_buffer);
+#ifdef USE_CUDSS
+        CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
+#endif
     }
 
 
@@ -1218,6 +1233,31 @@ struct SparseMatrix
         }
     }
 
+    /**
+     * @brief initialize cuDSS
+     */
+    __host__ void init_cudss()
+    {
+#ifdef USE_CUDSS
+
+        CUDSS_ERROR(
+            cudssMatrixCreateCsr(&m_cudss_matrix,
+                                 m_num_rows,
+                                 m_num_cols,
+                                 m_nnz,
+                                 m_d_row_ptr,
+                                 nullptr,
+                                 m_d_col_idx,
+                                 m_d_val,
+                                 CUDA_R_32I,
+                                 cuda_type<T>(),
+                                 CUDSS_MTYPE_SYMMETRIC,  // CUDSS_MTYPE_SPD
+                                 CUDSS_MVIEW_FULL,
+                                 CUDSS_BASE_ZERO));
+
+#endif
+    }
+
    public:
     Context              m_context;
     cusparseHandle_t     m_cusparse_handle;
@@ -1254,6 +1294,10 @@ struct SparseMatrix
     bool m_is_user_managed;
 
     Op m_op;
+
+#ifdef USE_CUDSS
+    cudssMatrix_t m_cudss_matrix;
+#endif
 };
 
 }  // namespace rxmesh

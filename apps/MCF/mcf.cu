@@ -35,6 +35,10 @@ struct arg
 #include "mcf_chol.h"
 #include "mcf_gmg.h"
 
+#ifdef USE_CUDSS
+#include "mcf_cudss.h"
+#endif
+
 void creat_matrices(rxmesh::RXMeshStatic& rx)
 {
     using namespace rxmesh;
@@ -114,6 +118,8 @@ TEST(App, MCF)
                        string_to_sampling(Arg.gmg_sampling));
     } else if (Arg.solver == "chol") {
         mcf_cusolver_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
+    } else if (Arg.solver == "cudss_chol") {
+        mcf_cudss_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
     } else {
         RXMESH_ERROR("Unrecognized input solver type: {}", Arg.solver);
     }
@@ -137,7 +143,7 @@ int main(int argc, char** argv)
                         " -uniform_laplace:   Toggle the use of uniform Laplace weights. Default is {}\n"
                         " -dt:                Time step (delta t). Default is {}\n"
                         "                     Hint: should be between (0.001, 1) for cotan Laplace or between (1, 100) for uniform Laplace\n"
-                        " -solver:            Solver to use. Options are cg_mat_free, pcg_mat_free, cg, pcg, chol, or gmg. Default is {}\n"                         
+                        " -solver:            Solver to use. Options are cg_mat_free, pcg_mat_free, cg, pcg, chol, cudss_chol, or gmg. Default is {}\n"                         
                         " -perm:              Permutation method for Cholesky factorization (symrcm, symamd, nstdis, gpumgnd, gpund). Default is {}\n"
                         " -max_iter:          Maximum number of iterations for iterative solvers. Default is {}\n"                                            
                         " -tol_abs:           Iterative solver absolute tolerance. Default is {}\n"

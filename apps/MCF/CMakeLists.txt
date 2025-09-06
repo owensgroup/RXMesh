@@ -8,6 +8,7 @@ set(SOURCE_LIST
 	mcf_chol.h	
 	mcf_gmg.h	
 	mcf_eigen.h
+	mcf_cudss.h
 )
 
 target_sources(MCF 

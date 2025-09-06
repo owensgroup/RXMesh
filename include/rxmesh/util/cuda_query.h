@@ -132,6 +132,14 @@ inline cudaDeviceProp cuda_query(const int dev)
                 cublas_minor,
                 cublas_patch);
 
+#ifdef USE_CUDSS
+    int cudss_major(0), cudss_minor(0), cudss_patch(0);
+    CUDSS_ERROR(cudssGetProperty(MAJOR_VERSION, &cudss_major));
+    CUDSS_ERROR(cudssGetProperty(MINOR_VERSION, &cudss_minor));
+    CUDSS_ERROR(cudssGetProperty(PATCH_LEVEL, &cudss_patch));
+    RXMESH_INFO(
+        "Using cuDSS Version {}.{}.{}", cudss_major, cudss_minor, cudss_patch);
+#endif
 
     if (!dev_prop.managedMemory) {
         RXMESH_ERROR(
