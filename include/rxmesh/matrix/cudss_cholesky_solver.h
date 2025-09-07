@@ -20,7 +20,7 @@ struct cuDSSCholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
     cuDSSCholeskySolver(SpMatT* mat, PermuteMethod perm = PermuteMethod::NSTDIS)
         : DirectSolver<SpMatT, DenseMatOrder>(mat, perm),
           m_A(mat->get_cudss_matrix()),
-          m_first_pre_solve(false)
+          m_first_pre_solve(true)
     {
         CUDSS_ERROR(cudssCreate(&m_cudss_handle));
         CUDSS_ERROR(cudssConfigCreate(&m_cudss_config));

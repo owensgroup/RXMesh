@@ -1076,6 +1076,10 @@ struct DenseMatrix
                 GPU_FREE(m_d_val);
                 m_allocated = m_allocated & (~DEVICE);
             }
+
+#ifdef USE_CUDSS
+            CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
+#endif
         }
 
         if ((location & LOCATION_ALL) == LOCATION_ALL) {
@@ -1083,9 +1087,6 @@ struct DenseMatrix
                 CUSPARSE_ERROR(cusparseDestroyDnMat(m_dendescr));
             }
         }
-#ifdef USE_CUDSS
-        CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
-#endif
     }
 
    private:
@@ -1095,7 +1096,7 @@ struct DenseMatrix
     void allocate(locationT location)
     {
         if ((location & HOST) == HOST) {
-            release(HOST);
+            // release(HOST);
 
             m_h_val = static_cast<T*>(malloc(bytes()));
 
@@ -1103,7 +1104,7 @@ struct DenseMatrix
         }
 
         if ((location & DEVICE) == DEVICE) {
-            release(DEVICE);
+            // release(DEVICE);
 
             CUDA_ERROR(cudaMalloc((void**)&m_d_val, bytes()));
 
