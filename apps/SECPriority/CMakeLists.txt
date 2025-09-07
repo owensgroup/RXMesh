@@ -42,4 +42,8 @@ target_link_libraries(SECPriority
     PRIVATE cuco
 )
 
+if(WIN32 AND ${RX_USE_CUDSS})
+	add_dependencies(SECPriority CopyCUDSSDLL)
+endif()
+
 #gtest_discover_tests( SECPriority )

@@ -37,4 +37,8 @@ target_link_libraries( MCF
 if (${RX_USE_SUITESPARSE})  
   target_link_libraries(MCF PRIVATE SuiteSparse::CHOLMOD)
 endif()
+
+if(WIN32 AND ${RX_USE_CUDSS})
+	add_dependencies(MCF CopyCUDSSDLL)
+endif()
 #gtest_discover_tests( MCF )

@@ -22,5 +22,10 @@ if(${RX_USE_POLYSCOPE})
 		PRIVATE gtest_main
 	)
 
+	
+	if(WIN32 AND ${RX_USE_CUDSS})
+		add_dependencies(Polyscope_test CopyCUDSSDLL)
+	endif()
+	
 	#gtest_discover_tests( Polyscope_test )
 endif()

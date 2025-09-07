@@ -37,4 +37,8 @@ target_link_libraries(DelaunayEdgeFlip
     PRIVATE OpenMeshTools
 )
 
+if(WIN32 AND ${RX_USE_CUDSS})
+	add_dependencies(DelaunayEdgeFlip CopyCUDSSDLL)
+endif()
+
 #gtest_discover_tests( DelaunayEdgeFlip )

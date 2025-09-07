@@ -22,3 +22,7 @@ target_link_libraries( NDReorder
     PRIVATE metis
     PRIVATE Eigen3::Eigen
 )
+
+if(WIN32 AND ${RX_USE_CUDSS})
+	add_dependencies(NDReorder CopyCUDSSDLL)
+endif()

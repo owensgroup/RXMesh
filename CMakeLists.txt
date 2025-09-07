@@ -187,14 +187,37 @@ endif()
 
 #cuDSS
 if(${RX_USE_CUDSS})
-	find_package(cudss CONFIG QUIET)
+	find_package(cudss QUIET)
 	if (cudss_FOUND)		
 		message(STATUS "Found cuDSS version ${cudss_VERSION}")		
 		
-		target_include_directories(RXMesh INTERFACE ${cudss_INCLUDE_DIR})		
 		target_link_directories(RXMesh INTERFACE ${cudss_LIBRARY_DIR})
-		target_link_libraries(RXMesh INTERFACE cudss)
 		
+		if (WIN32)
+            target_include_directories(RXMesh INTERFACE ${cudss_INCLUDE_DIR})
+            target_link_libraries(RXMesh INTERFACE cudss)
+			
+			#Copying cuDSS DLL to the binary directory
+			add_custom_target(CopyCUDSSDLL)			
+			foreach(CONFIG ${CMAKE_CONFIGURATION_TYPES})
+				add_custom_command(
+					OUTPUT "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CONFIG}/cudss64_0.dll"
+					COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CONFIG}"
+					COMMAND ${CMAKE_COMMAND} -E copy_if_different
+						"${cudss_BINARY_DIR}/cudss64_0.dll"
+						"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CONFIG}/cudss64_0.dll"
+					DEPENDS "${cudss_BINARY_DIR}/cudss64_0.dll"
+					COMMENT "Copying cudss64_0.dll for ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CONFIG} configuration"
+					VERBATIM
+				)				
+				add_custom_target("CopyCUDSSDLL${CONFIG}"
+					DEPENDS "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CONFIG}/cudss64_0.dll")				
+				add_dependencies(CopyCUDSSDLL "CopyCUDSSDLL${CONFIG}")				
+			endforeach()
+			
+        else()
+            target_link_libraries(RXMesh INTERFACE cudss_static)
+        endif()		
 		target_compile_definitions(RXMesh INTERFACE USE_CUDSS)
 	else (cudss_FOUND)
 		message(WARNING "Can not find cuDSS")	

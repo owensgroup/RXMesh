@@ -39,4 +39,8 @@ target_link_libraries(SurfaceTracking
     PRIVATE gtest_main
 )
 
+if(WIN32 AND ${RX_USE_CUDSS})
+	add_dependencies(SurfaceTracking CopyCUDSSDLL)
+endif()
+
 #gtest_discover_tests( SurfaceTracking )

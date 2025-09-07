@@ -19,4 +19,9 @@ target_link_libraries(ManiOpt
     PRIVATE RXMesh
 )
 
+
+if(WIN32 AND ${RX_USE_CUDSS})
+	add_dependencies(ManiOpt CopyCUDSSDLL)
+endif()
+
 #gtest_discover_tests( ManiOpt )

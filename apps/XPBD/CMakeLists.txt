@@ -19,4 +19,8 @@ target_link_libraries(XPBD
     PRIVATE RXMesh
 )
 
+if(WIN32 AND ${RX_USE_CUDSS})
+	add_dependencies(XPBD CopyCUDSSDLL)
+endif()
+
 #gtest_discover_tests( XPBD )

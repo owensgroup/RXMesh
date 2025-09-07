@@ -25,4 +25,9 @@ target_link_libraries(MassSpring
     PRIVATE RXMesh
 )
 
+
+if(WIN32 AND ${RX_USE_CUDSS})
+	add_dependencies(MassSpring CopyCUDSSDLL)
+endif()
+
 #gtest_discover_tests( MassSpring )
