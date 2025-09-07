@@ -118,8 +118,10 @@ TEST(App, MCF)
                        string_to_sampling(Arg.gmg_sampling));
     } else if (Arg.solver == "chol") {
         mcf_cusolver_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
+#ifdef USE_CUDSS
     } else if (Arg.solver == "cudss_chol") {
         mcf_cudss_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
+#endif
     } else {
         RXMESH_ERROR("Unrecognized input solver type: {}", Arg.solver);
     }
