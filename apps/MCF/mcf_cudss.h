@@ -60,51 +60,7 @@ void mcf_cudss_chol(rxmesh::RXMeshStatic& rx,
 
     timer.start();
     gtimer.start();
-
-    solver.pre_solve(B_mat, X_mat);
-
-    timer.stop();
-    gtimer.stop();
-
-    RXMESH_INFO("pre_solver took {} (ms), {} (ms)",
-                timer.elapsed_millis(),
-                gtimer.elapsed_millis());
-
-    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
-    report.add_member("pre-solve", total_time);
-
-    timer.start();
-    gtimer.start();
-
-    solver.solve(B_mat, X_mat);
-
-    timer.stop();
-    gtimer.stop();
-
-    RXMESH_INFO("solve took {} (ms), {} (ms)",
-                timer.elapsed_millis(),
-                gtimer.elapsed_millis());
-    report.add_member(
-        "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
-    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
-
-    /*timer.start();
-    gtimer.start();
-    solver.permute_alloc();
-    timer.stop();
-    gtimer.stop();
-    RXMESH_INFO("permute_alloc took {} (ms), {} (ms)",
-                timer.elapsed_millis(),
-                gtimer.elapsed_millis());
-    report.add_member(
-        "permute_alloc",
-        std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
-    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
-
-    timer.start();
-    gtimer.start();
-    solver.permute(rx);
-    solver.premute_value_ptr();
+    solver.permute(B_mat, X_mat);
     timer.stop();
     gtimer.stop();
     RXMESH_INFO("permute took {} (ms), {} (ms)",
@@ -131,19 +87,6 @@ void mcf_cudss_chol(rxmesh::RXMeshStatic& rx,
 
     timer.start();
     gtimer.start();
-    solver.post_analyze_alloc();
-    timer.stop();
-    gtimer.stop();
-    RXMESH_INFO("post_analyze_alloc took {} (ms), {} (ms)",
-                timer.elapsed_millis(),
-                gtimer.elapsed_millis());
-    report.add_member(
-        "post_analyze_alloc",
-        std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
-    total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
-
-    timer.start();
-    gtimer.start();
     solver.factorize();
     timer.stop();
     gtimer.stop();
@@ -154,7 +97,7 @@ void mcf_cudss_chol(rxmesh::RXMeshStatic& rx,
         "factorize", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
     total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
-    report.add_member("pre-solve", total_time);
+    report.add_member("pre_solve", total_time);
 
     timer.start();
     gtimer.start();
@@ -168,7 +111,7 @@ void mcf_cudss_chol(rxmesh::RXMeshStatic& rx,
         "solve", std::max(timer.elapsed_millis(), gtimer.elapsed_millis()));
     total_time += std::max(timer.elapsed_millis(), gtimer.elapsed_millis());
 
-    report.add_member("total_time", total_time);*/
+    report.add_member("total_time", total_time);
 
     RXMESH_INFO("total_time {} (ms)", total_time);
 

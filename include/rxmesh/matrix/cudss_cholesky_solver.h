@@ -49,61 +49,87 @@ struct cuDSSCholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
     virtual void pre_solve(DenseMatrix<T, DenseMatOrder>& B_mat,
                            DenseMatrix<T, DenseMatOrder>& X_mat)
     {
-        m_B = B_mat.get_cudss_matrix();
-        m_X = X_mat.get_cudss_matrix();
-
         if (m_first_pre_solve) {
+            permute(B_mat, X_mat);
+            analyze_pattern();
+            factorize();
             m_first_pre_solve = false;
+        } else {
+            factorize();
+        }
+    }
 
-            // set reorder type
-            cudssAlgType_t reorder_alg;
-            switch (this->m_perm) {
-                case PermuteMethod::SYMAMD: {
-                    // an approximate minimum degree (AMD) reordering.
-                    reorder_alg = CUDSS_ALG_3;
-                    break;
-                }
-                case PermuteMethod::NSTDIS: {
-                    // a customized nested dissection algorithm based on METIS.
-                    reorder_alg = CUDSS_ALG_DEFAULT;
-                    break;
-                }
-                case PermuteMethod::SYMRCM: {
-                    // a custom combination of block triangular reordering and
-                    // COLAMD
-                    reorder_alg = CUDSS_ALG_1;
-                    break;
-                }
-                case PermuteMethod::GPUMGND:
-                case PermuteMethod::GPUND:
-                default:
-                    reorder_alg = CUDSS_ALG_DEFAULT;
+    /**
+     * @brief permute the matrix to reduce the non-zero fill-in
+     */
+    virtual void permute(DenseMatrix<T, DenseMatOrder>& B_mat,
+                         DenseMatrix<T, DenseMatOrder>& X_mat)
+    {
+        if (m_first_pre_solve) {
+            m_B = B_mat.get_cudss_matrix();
+            m_X = X_mat.get_cudss_matrix();
+        }
+        // set reorder type
+        cudssAlgType_t reorder_alg;
+        switch (this->m_perm) {
+            case PermuteMethod::SYMAMD: {
+                // an approximate minimum degree (AMD) reordering.
+                reorder_alg = CUDSS_ALG_3;
+                break;
             }
+            case PermuteMethod::NSTDIS: {
+                // a customized nested dissection algorithm based on METIS.
+                reorder_alg = CUDSS_ALG_DEFAULT;
+                break;
+            }
+            case PermuteMethod::SYMRCM: {
+                // a custom combination of block triangular reordering and
+                // COLAMD
+                reorder_alg = CUDSS_ALG_1;
+                break;
+            }
+            case PermuteMethod::GPUMGND:
+            case PermuteMethod::GPUND:
+            default:
+                reorder_alg = CUDSS_ALG_DEFAULT;
+        }
 
-            CUDSS_ERROR(cudssConfigSet(m_cudss_config,
-                                       CUDSS_CONFIG_REORDERING_ALG,
-                                       &reorder_alg,
-                                       sizeof(cudssAlgType_t)));
+        CUDSS_ERROR(cudssConfigSet(m_cudss_config,
+                                   CUDSS_CONFIG_REORDERING_ALG,
+                                   &reorder_alg,
+                                   sizeof(cudssAlgType_t)));
 
 
-            // Reordering
-            CUDSS_ERROR(cudssExecute(m_cudss_handle,
-                                     CUDSS_PHASE_REORDERING,
-                                     m_cudss_config,
-                                     m_cudss_data,
-                                     m_A,
-                                     m_X,
-                                     m_B));
+        CUDSS_ERROR(cudssExecute(m_cudss_handle,
+                                 CUDSS_PHASE_REORDERING,
+                                 m_cudss_config,
+                                 m_cudss_data,
+                                 m_A,
+                                 m_X,
+                                 m_B));
+    }
 
-            // Symbolic factorization
-            CUDSS_ERROR(cudssExecute(m_cudss_handle,
-                                     CUDSS_PHASE_SYMBOLIC_FACTORIZATION,
-                                     m_cudss_config,
-                                     m_cudss_data,
-                                     m_A,
-                                     m_X,
-                                     m_B));
+    /**
+     * @brief symbolic factorization
+     */
+    virtual void analyze_pattern()
+    {
+        // Symbolic factorization
+        CUDSS_ERROR(cudssExecute(m_cudss_handle,
+                                 CUDSS_PHASE_SYMBOLIC_FACTORIZATION,
+                                 m_cudss_config,
+                                 m_cudss_data,
+                                 m_A,
+                                 m_X,
+                                 m_B));
+    }
 
+    /**
+     * @brief numerical (re-)factorization
+     */
+    virtual void factorize()
+    {
+        if (m_first_pre_solve) {
             // Numerical factorization
             CUDSS_ERROR(cudssExecute(m_cudss_handle,
                                      CUDSS_PHASE_FACTORIZATION,
@@ -112,25 +138,8 @@ struct cuDSSCholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                                      m_A,
                                      m_X,
                                      m_B));
-
-            size_t sizeInBytes = sizeof(int);
-            size_t sizeWritten;
-            int    singularity = 0;
-            CUDSS_ERROR(cudssDataGet(m_cudss_handle,
-                                     m_cudss_data,
-                                     CUDSS_DATA_INFO,
-                                     &singularity,
-                                     sizeInBytes,
-                                     &sizeWritten));
-            if (0 <= singularity) {
-                RXMESH_WARN(
-                    "cuDSSCholeskySolver::pre_solve() The matrix is singular "
-                    "at row {}",
-                    singularity);
-            }
-
         } else {
-            // Refactoirze
+            // Re-factorize
             CUDSS_ERROR(cudssExecute(m_cudss_handle,
                                      CUDSS_PHASE_REFACTORIZATION,
                                      m_cudss_config,
@@ -139,9 +148,31 @@ struct cuDSSCholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                                      m_X,
                                      m_B));
         }
+
+
+        size_t sizeInBytes = sizeof(int);
+        size_t sizeWritten;
+        int    singularity = 0;
+        CUDSS_ERROR(cudssDataGet(m_cudss_handle,
+                                 m_cudss_data,
+                                 CUDSS_DATA_INFO,
+                                 &singularity,
+                                 sizeInBytes,
+                                 &sizeWritten));
+
+        if (0 < singularity) {
+            RXMESH_WARN(
+                "cuDSSCholeskySolver::factorize() The matrix is singular "
+                "at row {}",
+                singularity - 1);
+        }
     }
 
 
+    /**
+     * @brief solve the system (should be called only after factorization, i.e.,
+     * pre_solve())
+     */
     virtual void solve(DenseMatrix<T, DenseMatOrder>& B_mat,
                        DenseMatrix<T, DenseMatOrder>& X_mat,
                        cudaStream_t                   stream = NULL) override
