@@ -10,7 +10,8 @@ namespace rxmesh {
 template <typename SpMatT, int DenseMatOrder = Eigen::ColMajor>
 struct cuDSSCholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
 {
-    using T = typename SpMatT::Type;
+    using IndexT = typename SpMatT::IndexT;
+    using T      = typename SpMatT::Type;
 
     cuDSSCholeskySolver()
         : DirectSolver<SpMatT, DenseMatOrder>(), m_first_pre_solve(false)
@@ -46,11 +47,12 @@ struct cuDSSCholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
      * @brief pre_solve should be called before calling the solve() method.
      * and it should be called every time the matrix is updated
      */
-    virtual void pre_solve(DenseMatrix<T, DenseMatOrder>& B_mat,
+    virtual void pre_solve(RXMeshStatic&                  rx,
+                           DenseMatrix<T, DenseMatOrder>& B_mat,
                            DenseMatrix<T, DenseMatOrder>& X_mat)
     {
         if (m_first_pre_solve) {
-            permute(B_mat, X_mat);
+            permute(rx, B_mat, X_mat);
             analyze_pattern();
             factorize();
             m_first_pre_solve = false;
@@ -62,7 +64,8 @@ struct cuDSSCholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
     /**
      * @brief permute the matrix to reduce the non-zero fill-in
      */
-    virtual void permute(DenseMatrix<T, DenseMatOrder>& B_mat,
+    virtual void permute(RXMeshStatic&                  rx,
+                         DenseMatrix<T, DenseMatOrder>& B_mat,
                          DenseMatrix<T, DenseMatOrder>& X_mat)
     {
         if (m_first_pre_solve) {
@@ -88,8 +91,18 @@ struct cuDSSCholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                 reorder_alg = CUDSS_ALG_1;
                 break;
             }
+            case PermuteMethod::GPUND: {
+                reorder_alg = CUDSS_ALG_DEFAULT;
+                DirectSolver<SpMatT, DenseMatOrder>::permute(rx);
+                CUDSS_ERROR(
+                    cudssDataSet(m_cudss_handle,
+                                 m_cudss_data,
+                                 CUDSS_DATA_USER_PERM,
+                                 this->m_d_permute,
+                                 size_t(m_mat->rows() * sizeof(IndexT))));
+                break;
+            }
             case PermuteMethod::GPUMGND:
-            case PermuteMethod::GPUND:
             default:
                 reorder_alg = CUDSS_ALG_DEFAULT;
         }

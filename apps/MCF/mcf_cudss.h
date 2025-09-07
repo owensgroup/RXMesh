@@ -60,7 +60,7 @@ void mcf_cudss_chol(rxmesh::RXMeshStatic& rx,
 
     timer.start();
     gtimer.start();
-    solver.permute(B_mat, X_mat);
+    solver.permute(rx, B_mat, X_mat);
     timer.stop();
     gtimer.stop();
     RXMESH_INFO("permute took {} (ms), {} (ms)",
