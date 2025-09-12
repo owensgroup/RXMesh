@@ -1078,7 +1078,10 @@ struct DenseMatrix
             }
 
 #ifdef USE_CUDSS
-            CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
+            if (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
+                std::is_same_v<T, cuDoubleComplex>) {  // if it was allocated
+                CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
+            }
 #endif
         }
 
@@ -1158,13 +1161,16 @@ struct DenseMatrix
     __host__ void init_cudss()
     {
 #ifdef USE_CUDSS
-        CUDSS_ERROR(cudssMatrixCreateDn(&m_cudss_matrix,
-                                        m_num_rows,
-                                        m_num_cols,
-                                        m_num_rows,
-                                        m_d_val,
-                                        cuda_type<T>(),
-                                        CUDSS_LAYOUT_COL_MAJOR));
+        if (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
+            std::is_same_v<T, cuDoubleComplex>) {
+            CUDSS_ERROR(cudssMatrixCreateDn(&m_cudss_matrix,
+                                            m_num_rows,
+                                            m_num_cols,
+                                            m_num_rows,
+                                            m_d_val,
+                                            cuda_type<T>(),
+                                            CUDSS_LAYOUT_COL_MAJOR));
+        }
 
 #endif
     }

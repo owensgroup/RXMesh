@@ -152,7 +152,7 @@ int main(int argc, char** argv)
                         " -tol_rel:           Iterative solver relative tolerance. Default is {}\n"
                         " -create_mat:        Export the linear system matrices (.mtx) and mesh obj to files and exit. Default is {}\n"
                         " -gmg_levels:        GMG number of levels in the hierarchy, includes the finest level. Default is {}\n"
-                        " -gmg_csolver:       GMG coarse solver. Default is {}\n"
+                        " -gmg_csolver:       GMG coarse solver (jacobi, cholesky, cudsscholesky). Default is {}\n"
                         " -gmg_sampling:      GMG sampling method to create the hierarchy (random, fps, kmeans). Default is {}\n"
                         " -gmg_threshold:     GMG threshold for the coarsest level in the hierarchy, i.e., number of vertices in the coarsest level. Default is {}\n"
                         " -gmg_pruned_ptap:   GMG toggle using pruned PtAP for fast construction. Default is {}\n"

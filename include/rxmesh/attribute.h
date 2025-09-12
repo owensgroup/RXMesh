@@ -662,7 +662,7 @@ class Attribute : public AttributeBase
     template <int N>
     __host__ __device__ __inline__ vec<T, N> to_glm(const HandleT& handle) const
     {
-        assert(N == get_num_attributes());
+        assert(N <= get_num_attributes());
 
         vec<T, N> ret;
 
@@ -680,7 +680,7 @@ class Attribute : public AttributeBase
     __host__ __device__ __inline__ void from_glm(const HandleT&   handle,
                                                  const vec<T, N>& in)
     {
-        assert(N == get_num_attributes());
+        assert(N <= get_num_attributes());
 
         for (int i = 0; i < N; ++i) {
             this->operator()(handle, i) = in[i];
@@ -695,7 +695,7 @@ class Attribute : public AttributeBase
     __host__ __device__ __inline__ Eigen::Matrix<T, N, 1> to_eigen(
         const HandleT& handle) const
     {
-        assert(N == get_num_attributes());
+        assert(N <= get_num_attributes());
 
         Eigen::Matrix<T, N, 1> ret;
 
@@ -715,7 +715,7 @@ class Attribute : public AttributeBase
         const HandleT&                handle,
         const Eigen::Matrix<T, N, 1>& in)
     {
-        assert(N == get_num_attributes());
+        assert(N <= get_num_attributes());
 
         for (Eigen::Index i = 0; i < N; ++i) {
             this->operator()(handle, i) = in[i];

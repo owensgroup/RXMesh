@@ -111,7 +111,7 @@ struct SparseMatrix
 #ifndef NDEBUG
         check_repeated_indices();
 #endif
-        init_cudss();
+        init_cudss(*this);
     }
 
    protected:
@@ -364,7 +364,7 @@ struct SparseMatrix
 #ifndef NDEBUG
         check_repeated_indices();
 #endif
-        init_cudss();
+        init_cudss(*this);
     }
 
    public:
@@ -683,7 +683,10 @@ struct SparseMatrix
         GPU_FREE(m_d_cusparse_spmm_buffer);
         GPU_FREE(m_d_cusparse_spmv_buffer);
 #ifdef USE_CUDSS
-        CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
+        if (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
+            std::is_same_v<T, cuDoubleComplex>) {
+            CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
+        }
 #endif
     }
 
@@ -727,6 +730,7 @@ struct SparseMatrix
         ret.m_h_col_idx = static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
 
         init_cusparse(ret);
+        init_cudss(ret);
 
         size_t buffer_size(0);
 
@@ -1236,24 +1240,26 @@ struct SparseMatrix
     /**
      * @brief initialize cuDSS
      */
-    __host__ void init_cudss()
+    __host__ void init_cudss(SparseMatrix<T>& mat) const
     {
 #ifdef USE_CUDSS
-
-        CUDSS_ERROR(
-            cudssMatrixCreateCsr(&m_cudss_matrix,
-                                 m_num_rows,
-                                 m_num_cols,
-                                 m_nnz,
-                                 m_d_row_ptr,
-                                 nullptr,
-                                 m_d_col_idx,
-                                 m_d_val,
-                                 CUDA_R_32I,
-                                 cuda_type<T>(),
-                                 CUDSS_MTYPE_SYMMETRIC,  // CUDSS_MTYPE_SPD
-                                 CUDSS_MVIEW_FULL,
-                                 CUDSS_BASE_ZERO));
+        if (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
+            std::is_same_v<T, cuDoubleComplex>) {
+            CUDSS_ERROR(
+                cudssMatrixCreateCsr(&mat.m_cudss_matrix,
+                                     mat.m_num_rows,
+                                     mat.m_num_cols,
+                                     mat.m_nnz,
+                                     mat.m_d_row_ptr,
+                                     nullptr,
+                                     mat.m_d_col_idx,
+                                     mat.m_d_val,
+                                     CUDA_R_32I,
+                                     cuda_type<T>(),
+                                     CUDSS_MTYPE_SYMMETRIC,  // CUDSS_MTYPE_SPD
+                                     CUDSS_MVIEW_FULL,
+                                     CUDSS_BASE_ZERO));
+        }
 
 #endif
     }
