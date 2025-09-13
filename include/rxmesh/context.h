@@ -71,6 +71,25 @@ class Context
     }
 
     /**
+     * @brief Total number of vertices in mesh
+     */
+    template <typename HandleT>
+    __device__ __forceinline__ uint32_t get_num() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return m_num_vertices[0];
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return m_num_edges[0];
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return m_num_faces[0];
+        }
+    }
+
+    /**
      * @brief Total number of patches in mesh
      */
     __device__ __forceinline__ uint32_t get_num_patches() const
