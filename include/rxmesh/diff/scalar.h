@@ -55,11 +55,11 @@ struct Scalar
     GradType m_grad;
 
     // Avoid calling the default constructor of Eigen::Map
-    alignas(16) std::byte m_map_grad[sizeof(GradMapType)];
+    //alignas(16) std::byte m_map_grad[sizeof(GradMapType)];
 
     // Hessian (second derivative) of val w.r.t. the active variable vector.
     HessType m_hess;
-    alignas(16) std::byte m_map_hess[sizeof(HessMapType)];
+    //alignas(16) std::byte m_map_hess[sizeof(HessMapType)];
 
    public:
     // ///////////////////////////////////////////////////////////////////////
@@ -101,7 +101,7 @@ struct Scalar
     __device__ __host__ constexpr const auto& grad() const
     {
         if constexpr (k == Eigen::Dynamic) {
-            return *reinterpret_cast<const GradMapType*>(&m_map_grad);
+           // return *reinterpret_cast<const GradMapType*>(&m_map_grad);
         } else {
             return m_grad;
         }
@@ -113,7 +113,7 @@ struct Scalar
     __device__ __host__ constexpr auto& grad()
     {
         if constexpr (k == Eigen::Dynamic) {
-            return *reinterpret_cast<GradMapType*>(&m_map_grad);
+            //return *reinterpret_cast<GradMapType*>(&m_map_grad);
         } else {
             return m_grad;
         }
@@ -125,7 +125,7 @@ struct Scalar
     __device__ __host__ constexpr const auto& hess() const
     {
         if constexpr (k == Eigen::Dynamic) {
-            return *reinterpret_cast<const HessMapType*>(&m_map_hess);
+            //return *reinterpret_cast<const HessMapType*>(&m_map_hess);
         } else {
             return m_hess;
         }
@@ -137,7 +137,7 @@ struct Scalar
     __device__ __host__ constexpr auto& hess()
     {
         if constexpr (k == Eigen::Dynamic) {
-            return *reinterpret_cast<HessMapType*>(&m_map_hess);
+            //return *reinterpret_cast<HessMapType*>(&m_map_hess);
         } else {
             return m_hess;
         }
@@ -163,7 +163,6 @@ struct Scalar
 
 
     __host__ __device__ Scalar(int dimension, ShmemAllocator& shrd_alloc)
-        : dk(dimension)
     {
         // We assume that *all* threads in the block will call this function.
         // Therefore, we allocate shared memory for `grad` and `hess` for *each*
@@ -172,24 +171,39 @@ struct Scalar
         // threads. However, since all threads execute this allocation in
         // lockstep, we can safely update and use `shrd_alloc` within each
         // thread independently while being aware of other threads allocation.
+
+        dk = dimension;
+
         assert(k == Eigen::Dynamic);
 
+        // TODO: for now this only works for active variables on vertices. We
+        // should generalize this
         if constexpr (k == Eigen::Dynamic) {
 
             // grad allocation
-            PassiveT* shmem_g = shrd_alloc.alloc<PassiveT>(dk * blockDim.x);
 
-            // https://eigen.tuxfamily.org/dox/group__TutorialMapClass.html#TutorialMapPlacementNew
-            new (&m_map_grad) GradMapType(shmem_g + dk * threadIdx.x, dk);
+            PassiveT* shmem_g = shrd_alloc.alloc<PassiveT>(dk);
 
-            if constexpr (WithHessian) {
-                // hess allocation
-                PassiveT* shmem_h =
-                    shrd_alloc.alloc<PassiveT>(dk * dk * blockDim.x);
+            //new (&m_map_grad) GradMapType(shmem_g, dk);
 
-                new (&m_map_hess)
-                    HessMapType(shmem_h + dk * dk * threadIdx.x, dk, dk);
-            }
+
+            //// grad allocation
+            // PassiveT* shmem_g =
+            //     shrd_alloc.alloc<PassiveT>(dk * patch.num_vertices[0]);
+            //
+            ////
+            /// https://eigen.tuxfamily.org/dox/group__TutorialMapClass.html#TutorialMapPlacementNew
+            // new (&m_map_grad) GradMapType(shmem_g + dk * threadIdx.x, dk);
+            //
+            // if constexpr (WithHessian) {
+            //     // hess allocation
+            //     PassiveT* shmem_h =
+            //         shrd_alloc.alloc<PassiveT>(dk * dk *
+            //         patch.num_vertices[0]);
+            //
+            //     new (&m_map_hess)
+            //         HessMapType(shmem_h + dk * dk * threadIdx.x, dk, dk);
+            // }
         }
     }
 
