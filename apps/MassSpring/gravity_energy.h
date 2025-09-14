@@ -16,9 +16,9 @@ void gravity_energy(ProblemT& problem, VAttrT& x, T h, T mass)
                                                auto&       obj) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, obj);
+            Eigen::Vector3<ActiveT> xx = iter_val<ActiveT, 3>(vh, obj);
 
-            ActiveT E = neg_mass_times_h_sq * x_tilda.dot(g);
+            ActiveT E = neg_mass_times_h_sq * xx.dot(g);
 
             return E;
         });
