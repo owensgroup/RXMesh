@@ -58,7 +58,7 @@ TEST(Diff, SmoothingNewton)
 
     using HessMatT = typename ProblemT::HessMatT;
 
-    LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+    LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(problem.hess.get());
 
     NetwtonSolver newton(problem, &solver);
 

@@ -50,7 +50,8 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
 
     ProblemT problem(rx);
 
-    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
+        problem.hess.get());
 
     NetwtonSolver newton_solver(problem, &solver);
 

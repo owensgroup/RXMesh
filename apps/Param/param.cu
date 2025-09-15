@@ -345,18 +345,18 @@ int main(int argc, char** argv)
     constexpr int Order = ProblemT::DenseMatT::OrderT;
 
     if (Arg.solver == "chol") {
-        CholeskySolver<HessMatT, Order> solver(&problem.hess);
+        CholeskySolver<HessMatT, Order> solver(problem.hess.get());
         parameterize<T>(rx, problem, solver);
     } else if (Arg.solver == "lu") {
-        CholeskySolver<HessMatT, Order> solver(&problem.hess);
+        CholeskySolver<HessMatT, Order> solver(problem.hess.get());
         parameterize<T>(rx, problem, solver);
     } else if (Arg.solver == "cg") {
         CGSolver<T, Order> solver(
-            problem.hess, 1, Arg.cg_max_iter, Arg.cg_abs_tol, Arg.cg_rel_tol);
+            *problem.hess, 1, Arg.cg_max_iter, Arg.cg_abs_tol, Arg.cg_rel_tol);
         parameterize<T>(rx, problem, solver);
     } else if (Arg.solver == "pcg") {
         PCGSolver<T, Order> solver(
-            problem.hess, 1, Arg.cg_max_iter, Arg.cg_abs_tol, Arg.cg_rel_tol);
+            *problem.hess, 1, Arg.cg_max_iter, Arg.cg_abs_tol, Arg.cg_rel_tol);
         parameterize<T>(rx, problem, solver);
     } else if (Arg.solver == "cg_mat_free") {
         int num_rows = VariableDim * rx.get_num_vertices();
