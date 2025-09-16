@@ -144,7 +144,8 @@ struct SparseMatrix
           m_is_user_managed(false),
           m_op(op),
           m_d_cub_temp_storage(nullptr),
-          m_cub_temp_storage_bytes(0)
+          m_cub_temp_storage_bytes(0),
+          m_capacity_factor(capacity_factor)
     {
         constexpr uint32_t blockThreads = 256;
 
@@ -269,8 +270,7 @@ struct SparseMatrix
                               sizeof(IndexT),
                               cudaMemcpyDeviceToHost));
 
-        m_max_nnz =
-            static_cast<IndexT>(std::ceil(float(m_nnz) * capacity_factor));
+        update_max_nnz();
 
         // column index allocation and init
         CUDA_ERROR(
@@ -752,18 +752,6 @@ struct SparseMatrix
                 m_d_row_ptr[i] = in_d_row_ptr[i + 1] - in_d_row_ptr[i];
             });
 
-        {
-            printf("\n ========== \n");
-            for_each_item<<<DIVIDE_UP(rows() + 1, blockThreads),
-                            blockThreads>>>(
-                rows() + 1,
-                [m_d_row_ptr = m_d_row_ptr] __device__(int i) mutable {
-                    printf("\n m_d_row_ptr[%d] = %d", i, m_d_row_ptr[i]);
-                });
-            CUDA_ERROR(cudaDeviceSynchronize());
-            printf("\n ========== \n");
-        }
-
         // add contribution of the new entries in the row sum
         for_each_item<<<DIVIDE_UP(size, blockThreads), blockThreads>>>(
             size,
@@ -777,18 +765,6 @@ struct SparseMatrix
                 }
             });
 
-
-        {
-            printf("\n ========== \n");
-            for_each_item<<<DIVIDE_UP(rows() + 1, blockThreads),
-                            blockThreads>>>(
-                rows() + 1,
-                [m_d_row_ptr = m_d_row_ptr] __device__(int i) mutable {
-                    printf("\n m_d_row_ptr[%d] = %d", i, m_d_row_ptr[i]);
-                });
-            CUDA_ERROR(cudaDeviceSynchronize());
-            printf("\n ========== \n");
-        }
 
         // prefix sum using CUB.
         CUDA_ERROR(
@@ -806,9 +782,32 @@ struct SparseMatrix
                               sizeof(IndexT),
                               cudaMemcpyDeviceToHost));
 
+
         if (m_nnz > m_max_nnz) {
-            // TODO need to re-alloc
-            // m_d_col_idx, m_d_val, m_h_col_idx, m_h_val
+            // free memory
+            GPU_FREE(m_d_col_idx);
+            GPU_FREE(m_d_val);
+            free(m_h_val);
+            free(m_h_col_idx);
+
+            // update max size as a function of current nnz
+            update_max_nnz();
+
+            // if respecting the user capacity factor is not enough
+            // i.e., capacity factor is 1
+            while (m_nnz > m_max_nnz) {
+                m_capacity_factor *= 2.f;
+                update_max_nnz();
+            }
+
+            // allocate col idx and values
+            CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_max_nnz * sizeof(T)));
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_d_col_idx, m_max_nnz * sizeof(IndexT)));
+
+            m_h_val = static_cast<T*>(malloc(m_max_nnz * sizeof(T)));
+            m_h_col_idx =
+                static_cast<IndexT*>(malloc(m_max_nnz * sizeof(IndexT)));
         }
 
         // reset row accumulator so that we can keep track of the col_idx
@@ -839,8 +838,11 @@ struct SparseMatrix
                     ++i;
                 }
 
-                m_d_row_acc[r] = stop + start;
+                assert(stop >= start);
+
+                m_d_row_acc[r] = stop - start;
             });
+
 
         // fill in the col_idx with the new entries information
         for_each_item<<<DIVIDE_UP(size, blockThreads), blockThreads>>>(
@@ -868,13 +870,23 @@ struct SparseMatrix
                     IndexT row_st = ::atomicAdd(m_d_row_acc + rr, m_replicate);
                     row_st += m_d_row_ptr[rr];
 
-                    assert(row_st + m_replicate < m_d_row_ptr[rr + 1]);
+                    assert(row_st + m_replicate <= m_d_row_ptr[rr + 1]);
 
                     for (int j = 0; j < m_replicate; ++j) {
                         m_d_col_idx[row_st + j] = c + j;
                     }
                 }
             });
+
+        // finally update the host (could be optional)
+        CUDA_ERROR(cudaMemcpy(m_h_col_idx,
+                              m_d_col_idx,
+                              m_nnz * sizeof(IndexT),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(m_h_row_ptr,
+                              m_d_row_ptr,
+                              (m_num_rows + 1) * sizeof(IndexT),
+                              cudaMemcpyDeviceToHost));
     }
     /**
      * @brief return another SparseMatrix that is the transpose of this
@@ -1378,6 +1390,12 @@ struct SparseMatrix
 
 
    protected:
+    void update_max_nnz()
+    {
+        m_max_nnz =
+            static_cast<IndexT>(std::ceil(float(m_nnz) * m_capacity_factor));
+    }
+
     void init_cusparse(SparseMatrix<T>& mat) const
     {
         // cuSparse CSR matrix
@@ -1463,6 +1481,7 @@ struct SparseMatrix
     IndexT m_num_cols;
     IndexT m_nnz;
     IndexT m_max_nnz;
+    float  m_capacity_factor;
 
     // device csr data
     IndexT* m_d_row_ptr;

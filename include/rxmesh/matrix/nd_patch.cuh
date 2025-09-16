@@ -128,8 +128,8 @@ struct PatchND
                       m_s_cur_active_v);
 
         // set the next VV to be the current for next iteration
-        swap(m_s_vv_cur.offset, m_s_vv_nxt.offset);
-        swap(m_s_vv_cur.value, m_s_vv_nxt.value);
+        device_swap(m_s_vv_cur.offset, m_s_vv_nxt.offset);
+        device_swap(m_s_vv_cur.value, m_s_vv_nxt.value);
     }
 
 

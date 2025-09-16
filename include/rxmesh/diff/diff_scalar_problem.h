@@ -139,7 +139,7 @@ struct DiffScalarProblem
                         const IndexT* d_new_cols)
     {
         hess_new->insert(rx, *hess, size, d_new_rows, d_new_cols);
-        std::swap(hess, hess_new);
+        hess_new.swap(hess);        
     }
 
     /**

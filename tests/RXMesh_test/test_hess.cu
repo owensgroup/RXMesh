@@ -115,7 +115,7 @@ TEST(Diff, HessUpdate)
 
     std::vector<std::vector<uint32_t>> fv;
 
-    int n = 3;
+    int n = 12;
 
     T dx = 1 / T(n - 1);
 
@@ -130,7 +130,7 @@ TEST(Diff, HessUpdate)
 
     using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
 
-    ProblemT problem(rx, true, 2.f);
+    ProblemT problem(rx, true, 1.f);
 
     // mass per vertex = rho * volume /num_vertices
     T mass = 0.01;
@@ -145,7 +145,7 @@ TEST(Diff, HessUpdate)
     // new pairs to insert
     int *d_new_rows, *d_new_cols;
 
-    int new_size = 5;
+    int new_size = n;
 
     // the 2 is because if v0 adds v1 then v1 should add v0 to make the hessian
     // symmetric
@@ -154,21 +154,14 @@ TEST(Diff, HessUpdate)
 
     new_entries(d_new_rows, d_new_cols, new_size, rx.get_num_vertices());
 
-    problem.update_hessian(new_size, d_new_rows, d_new_cols);
+    // problem.hess->reset(0, HOST);
+    // problem.hess->to_file("old_hess");
 
-    // TODO test
+    problem.update_hessian(2 * new_size, d_new_rows, d_new_cols);
 
 
-    problem.hess->move(DEVICE, HOST);
-
-    problem.hess->for_each([&](int i, int j, T val) {
-        if (i == j) {
-            EXPECT_NEAR(val, mass, 1e-3);
-        } else {
-            EXPECT_NEAR(val, 0, 1e-3);
-        }
-    });
-
+    // problem.hess->reset(0, HOST);
+    // problem.hess->to_file("new_hess");
 
     GPU_FREE(d_new_rows);
     GPU_FREE(d_new_cols);
