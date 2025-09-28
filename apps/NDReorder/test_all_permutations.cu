@@ -309,7 +309,7 @@ void all_perm(RXMeshStatic& rx)
         rx_mat.non_zeros(),
         100 * float(rx_mat.non_zeros()) / float(rx_mat.rows() * rx_mat.cols()));
 
-#if RXMESH_WITH_POLYSCOPE
+#if USE_POLYSCOPE
     rx.render_face_patch();
     rx.render_vertex_patch();
 #endif

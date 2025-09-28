@@ -22,7 +22,7 @@
 #include "rxmesh/kernels/boundary.cuh"
 #include "rxmesh/kernels/query_kernel.cuh"
 
-#if RXMESH_WITH_POLYSCOPE
+#if USE_POLYSCOPE
 #include "polyscope/surface_mesh.h"
 #endif
 
@@ -70,7 +70,7 @@ class RXMeshStatic : public RXMesh
         m_attr_container = std::make_shared<AttributeContainer>();
 
         std::string name = extract_file_name(file_path);
-#if RXMESH_WITH_POLYSCOPE
+#if USE_POLYSCOPE
         name = polyscope::guessNiceNameFromPath(file_path);
 #endif
         add_vertex_coordinates(vertices, name);
@@ -112,7 +112,7 @@ class RXMeshStatic : public RXMesh
             m_input_vertex_coordinates =
                 this->add_vertex_attribute<float>(vertices, "rx:vertices");
 
-#if RXMESH_WITH_POLYSCOPE
+#if USE_POLYSCOPE
             // polyscope::options::autocenterStructures = true;
             // polyscope::options::autoscaleStructures  = true;
             // polyscope::options::automaticallyComputeSceneExtents = true;
@@ -131,7 +131,7 @@ class RXMeshStatic : public RXMesh
     {
     }
 
-#if RXMESH_WITH_POLYSCOPE
+#if USE_POLYSCOPE
     /**
      * @brief return a pointer to polyscope surface which has been registered
      * with this instance
@@ -1508,7 +1508,7 @@ class RXMeshStatic : public RXMesh
 
         coord.move(HOST, DEVICE);
 
-#if RXMESH_WITH_POLYSCOPE
+#if USE_POLYSCOPE
         get_polyscope_mesh()->updateVertexPositions(coord);
 #endif
     }
@@ -2307,7 +2307,7 @@ class RXMeshStatic : public RXMesh
         }
     }
 
-#if RXMESH_WITH_POLYSCOPE
+#if USE_POLYSCOPE
     void add_patch_to_polyscope(const uint32_t                        p,
                                 std::vector<std::array<uint32_t, 3>>& fv,
                                 bool with_ribbon)

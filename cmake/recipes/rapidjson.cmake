@@ -1,9 +1,18 @@
-# RapidJSON recipe
+# cmake/recipes/rapidjson.cmake
+cmake_minimum_required(VERSION 3.20)
 include(FetchContent)
 
-FetchContent_Declare(rapidjson
-    GIT_REPOSITORY https://github.com/Tencent/rapidjson.git
-    GIT_TAG        8f4c021fa2f1e001d2376095928fc0532adf2ae6
-)
+# Ensure CMP0175 defaults to OLD for subprojects that don't set it
+set(CMAKE_POLICY_DEFAULT_CMP0175 OLD CACHE STRING "Work around RapidJSON add_custom_command policy" FORCE)
 
-FetchContent_Populate(rapidjson)
+# Disable RapidJSON extras
+set(RAPIDJSON_BUILD_DOC OFF CACHE BOOL "" FORCE)
+set(RAPIDJSON_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(RAPIDJSON_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(RAPIDJSON_BUILD_THIRDPARTY_GTEST OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(rapidjson
+        GIT_REPOSITORY https://github.com/Tencent/rapidjson.git
+        GIT_TAG        master
+)
+FetchContent_MakeAvailable(rapidjson)

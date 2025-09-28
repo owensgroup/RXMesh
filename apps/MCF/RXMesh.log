@@ -1,0 +1,40 @@
+[09:26:37] [info] RXMesh: input= /home/behrooz/Desktop/Last_Project/RXMesh-dev/input/sphere3.obj
+[09:26:37] [info] RXMesh: output_folder= /home/behrooz/Desktop/Last_Project/RXMesh-dev/output/
+[09:26:37] [info] RXMesh: use_uniform_laplace= true
+[09:26:37] [info] RXMesh: time_step= 10.000000
+[09:26:37] [info] RXMesh: solver= gmg
+[09:26:37] [info] RXMesh: perm= nstdis
+[09:26:37] [info] RXMesh: max_num_iter= 100
+[09:26:37] [info] RXMesh: tol_abs= 1e-06
+[09:26:37] [info] RXMesh: tol_rel= 0
+[09:26:37] [info] RXMesh: create_mat= false
+[09:26:37] [info] RXMesh: gmg_levels= 5
+[09:26:37] [info] RXMesh: gmg_csolver= cholesky
+[09:26:37] [info] RXMesh: gmg_sampling= random
+[09:26:37] [info] RXMesh: gmg_threshold= 1000
+[09:26:37] [info] RXMesh: gmg_pruned_ptap= false
+[09:26:37] [info] RXMesh: gmg_verify_ptap= false
+[09:26:37] [info] RXMesh: gmg_render_hierarchy= false
+[09:26:37] [info] RXMesh: device_id= 0
+[09:26:39] [info] RXMesh: Total number of device: 1
+[09:26:39] [info] RXMesh: Using device Number: 0
+[09:26:39] [info] RXMesh: Device name: NVIDIA GeForce RTX 3080 Ti
+[09:26:39] [info] RXMesh: Compute Capability: 8.6
+[09:26:39] [info] RXMesh: Total amount of global memory (MB): 11910.6
+[09:26:39] [info] RXMesh: 80 Multiprocessors, 128 CUDA Cores/MP: 10240 CUDA Cores
+[09:26:39] [info] RXMesh: Maximum # blocks per SM: 16
+[09:26:39] [info] RXMesh: ECC support: Disabled
+[09:26:39] [info] RXMesh: GPU Max Clock rate: 0.4 MHz (0.00 GHz)
+[09:26:39] [info] RXMesh: Memory Bus Width:  384-bit
+[09:26:39] [info] RXMesh: Peak Memory Bandwidth: 0.000048(GB/s)
+[09:26:39] [info] RXMesh: Kernels compiled for compute capability: 860
+[09:26:39] [info] RXMesh: Using cuSolver Version 12.0.3
+[09:26:39] [info] RXMesh: Using cuSparse Version 12.6.2
+[09:26:39] [info] RXMesh: Using cuBlas Version 13.0.0
+[09:26:39] [info] RXMesh: Reading /home/behrooz/Desktop/Last_Project/RXMesh-dev/input/sphere3.obj
+[09:26:39] [info] RXMesh: import_obj() #vertices= 386 
+[09:26:39] [info] RXMesh: import_obj() #faces= 768 
+[09:26:39] [info] RXMesh: import_obj() #tex= 0 
+[09:26:39] [info] RXMesh: import_obj() #face_tex= 768 
+[09:26:39] [info] RXMesh: import_obj() #normals = 0 
+[09:26:39] [info] RXMesh: import_obj() #face_normal= 768 

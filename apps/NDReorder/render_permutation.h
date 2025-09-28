@@ -17,7 +17,7 @@ void inline render_permutation(rxmesh::RXMeshStatic& rx,
         v_perm(vh) = h_permute[rx.linear_id(vh)];
     });
 
-#if RXMESH_WITH_POLYSCOPE
+#if USE_POLYSCOPE
     rx.get_polyscope_mesh()->addVertexScalarQuantity(name, v_perm);
 #endif
 

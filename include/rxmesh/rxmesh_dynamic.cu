@@ -2990,7 +2990,7 @@ void RXMeshDynamic::update_host()
 
 void RXMeshDynamic::update_polyscope(std::string new_name)
 {
-#if RXMESH_WITH_POLYSCOPE
+#if USE_POLYSCOPE
     // for polyscope, we just remove the mesh and re-add it since polyscope does
     // not support changing the mesh topology
     // if (this->m_polyscope_mesh_name.find("updated") != std::string::npos) {

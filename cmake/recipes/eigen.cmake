@@ -13,7 +13,7 @@ else()
     # Fallback to FetchContent if system Eigen3 is not available
     FetchContent_Declare(eigen
         GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-        GIT_TAG        3.4.0
+        GIT_TAG        5.0.0
     )
     
     FetchContent_MakeAvailable(eigen)

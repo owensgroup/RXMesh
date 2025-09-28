@@ -21,6 +21,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 ################################################################################
 
 option(${PROJECT_NAME}_WITH_APPS "Add demo applications" ON)
+#option(${PROJECT_NAME}_WITH_ANALYSIS "Use Parth for fill-reducing orderings" ON)
 option(${PROJECT_NAME}_WITH_TESTS "Add unit tests" ON)
 option(${PROJECT_NAME}_WITH_POLYSCOPE "Enable Polyscope for visualization" ON)
 option(${PROJECT_NAME}_WITH_SUITESPARSE "Use SuiteSparse for benchmark" ON)
@@ -54,6 +55,14 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 # Get and store git sha1
 include(GetGitRevisionDescription)
 get_git_head_revision(GIT_REFSPEC GIT_SHA1)
+git_local_changes(GIT_LOCAL_CHANGES_STATUS)
+
+# Generate git_sha1.cpp from template
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/git_sha1.cpp.in"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/rxmesh/util/git_sha1.cpp"
+    @ONLY
+)
 
 ################################################################################
 # Project source files
@@ -106,9 +115,9 @@ if(GPU_ARCHITECTURE STREQUAL "HOPPER")
     endif()
     set(CUDA_ARCHITECTURES "90a") # SM90a for Hopper
 elseif(GPU_ARCHITECTURE STREQUAL "AMPERE")
-    if(NOT (GPU_COMPUTE_CAPABILITY STREQUAL "80" OR 
-            GPU_COMPUTE_CAPABILITY STREQUAL "86" OR 
-            GPU_COMPUTE_CAPABILITY STREQUAL "87" OR 
+    if(NOT (GPU_COMPUTE_CAPABILITY STREQUAL "80" OR
+            GPU_COMPUTE_CAPABILITY STREQUAL "86" OR
+            GPU_COMPUTE_CAPABILITY STREQUAL "87" OR
             GPU_COMPUTE_CAPABILITY STREQUAL "89"))
         message(FATAL_ERROR "Ampere architecture requires compute capability 80, 86, 87, or 89. Current: ${GPU_COMPUTE_CAPABILITY}")
     endif()
@@ -126,7 +135,7 @@ endif()
 if(GPU_ARCHITECTURE STREQUAL "HOPPER")
     message(STATUS "Configuring for Hopper architecture with Tensor Memory Accelerator (TMA)")
     target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_GPU_ARCH_HOPPER)
-    
+
     set_target_properties(${PROJECT_NAME}_lib PROPERTIES
         CUDA_SEPARABLE_COMPILATION OFF
         CUDA_ARCHITECTURES ${CUDA_ARCHITECTURES}
@@ -134,7 +143,7 @@ if(GPU_ARCHITECTURE STREQUAL "HOPPER")
 elseif(GPU_ARCHITECTURE STREQUAL "AMPERE")
     message(STATUS "Configuring for Ampere architecture (CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES})")
     target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_GPU_ARCH_AMPERE)
-    
+
     set_target_properties(${PROJECT_NAME}_lib PROPERTIES
         CUDA_SEPARABLE_COMPILATION OFF
         CUDA_ARCHITECTURES ${CUDA_ARCHITECTURES}
@@ -142,7 +151,7 @@ elseif(GPU_ARCHITECTURE STREQUAL "AMPERE")
 elseif(GPU_ARCHITECTURE STREQUAL "ADA")
     message(STATUS "Configuring for Ada architecture (CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES})")
     target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_GPU_ARCH_ADA)
-    
+
     set_target_properties(${PROJECT_NAME}_lib PROPERTIES
         CUDA_SEPARABLE_COMPILATION OFF
         CUDA_ARCHITECTURES ${CUDA_ARCHITECTURES}
@@ -151,10 +160,10 @@ endif()
 
 # CUDA compiler flags
 target_compile_options(${PROJECT_NAME}_lib PUBLIC
-    $<$<COMPILE_LANGUAGE:CUDA>: 
+    $<$<COMPILE_LANGUAGE:CUDA>:
         -lineinfo
         -O3
-        --use_fast_math 
+        --use_fast_math
         --ptxas-options=-v,-warn-lmem-usage,--warn-on-spills
         -rdc=true
         --expt-extended-lambda
@@ -211,7 +220,7 @@ include(cmake/recipes/glm.cmake)
 include(cmake/recipes/cereal.cmake)
 
 # Link core libraries
-target_link_libraries(${PROJECT_NAME}_lib PUBLIC 
+target_link_libraries(${PROJECT_NAME}_lib PUBLIC
     glm::glm
         OpenMeshCore
     OpenMeshTools
@@ -222,14 +231,14 @@ target_compile_definitions(${PROJECT_NAME}_lib PUBLIC GLM_ENABLE_EXPERIMENTAL)
 
 # Add additional include directories for header-only libraries
 target_include_directories(${PROJECT_NAME}_lib PUBLIC "${rapidjson_SOURCE_DIR}/include")
-target_include_directories(${PROJECT_NAME}_lib PUBLIC "${spdlog_SOURCE_DIR}/include") 
+target_include_directories(${PROJECT_NAME}_lib PUBLIC "${spdlog_SOURCE_DIR}/include")
 target_include_directories(${PROJECT_NAME}_lib PUBLIC "${cereal_SOURCE_DIR}/include")
 
 # Polyscope (optional)
 if(${PROJECT_NAME}_WITH_POLYSCOPE)
     include(cmake/recipes/polyscope.cmake)
     target_link_libraries(${PROJECT_NAME}_lib PUBLIC polyscope::polyscope)
-    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_WITH_POLYSCOPE)
+    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC USE_POLYSCOPE)
 endif()
 
 # METIS
@@ -276,7 +285,7 @@ if(OpenMP_CXX_FOUND)
 endif()
 
 # CUDA libraries
-target_link_libraries(${PROJECT_NAME}_lib PUBLIC 
+target_link_libraries(${PROJECT_NAME}_lib PUBLIC
     CUDA::cusparse
     CUDA::cusolver
 )
@@ -293,7 +302,10 @@ target_compile_definitions(${PROJECT_NAME}_lib PUBLIC
 )
 
 # Build tests and apps based on options
-if(${PROJECT_NAME}_WITH_ANALYSIS)	
+if(${PROJECT_NAME}_WITH_ANALYSIS)
+    include(cmake/recipes/parth.cmake)
+    target_link_libraries(${PROJECT_NAME}_lib PUBLIC Parth::parth)
+    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_WITH_PARTH)
 	add_subdirectory(analysis)
 endif()
 

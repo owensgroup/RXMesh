@@ -5,6 +5,9 @@
 #include "gtest/gtest.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/cuda_query.h"
+#include <Eigen/Sparse>
+#include <unsupported/Eigen/SparseExtra>
+
 
 struct arg
 {
@@ -73,8 +76,10 @@ void creat_matrices(rxmesh::RXMeshStatic& rx)
 
     std::filesystem::create_directories(output_dir);
 
-    Eigen::saveMarketDense(
-        B_mat_copy,
+    // Convert to proper sparse matrix first
+    Eigen::SparseMatrix<float> B_sparse = B_mat_copy.sparseView();
+    Eigen::saveMarket(
+        B_sparse,
         output_dir + "/" + extract_file_name(Arg.obj_file_name) + "_B.mtx");
     Eigen::saveMarket(
         A_mat_copy,
