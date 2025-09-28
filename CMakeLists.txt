@@ -21,12 +21,13 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 ################################################################################
 
 option(${PROJECT_NAME}_WITH_APPS "Add demo applications" ON)
-#option(${PROJECT_NAME}_WITH_ANALYSIS "Use Parth for fill-reducing orderings" ON)
+option(${PROJECT_NAME}_WITH_PARTH "Use Parth for fill-reducing orderings" ON)
 option(${PROJECT_NAME}_WITH_TESTS "Add unit tests" ON)
 option(${PROJECT_NAME}_WITH_POLYSCOPE "Enable Polyscope for visualization" ON)
 option(${PROJECT_NAME}_WITH_SUITESPARSE "Use SuiteSparse for benchmark" ON)
 option(${PROJECT_NAME}_WITH_CUDSS "Use cuDSS - CUDA Library for Direct Sparse Solvers" ON)
 option(${PROJECT_NAME}_WITH_METIS "Use METIS for graph partitioning" ON)
+option(${PROJECT_NAME}_WITH_DEV "Add dev folder" ON)
 
 # GPU Architecture options - MANUAL CONFIGURATION REQUIRED
 set(GPU_ARCHITECTURE "AMPERE" CACHE STRING "Target GPU architecture (AMPERE, HOPPER, ADA)")
@@ -262,7 +263,7 @@ if (${PROJECT_NAME}_WITH_SUITESPARSE)
     find_package(SuiteSparse REQUIRED)
     target_link_libraries(${PROJECT_NAME}_lib PUBLIC ${SUITESPARSE_LIBRARIES})
     target_include_directories(${PROJECT_NAME}_lib PUBLIC ${SUITESPARSE_INCLUDE_DIRS})
-    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC PARTH_WITH_SUITESPARSE)
+    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_WITH_SUITESPARSE)
 endif ()
 
 # cuDSS (optional)
@@ -302,14 +303,17 @@ target_compile_definitions(${PROJECT_NAME}_lib PUBLIC
 )
 
 # Build tests and apps based on options
-if(${PROJECT_NAME}_WITH_ANALYSIS)
+if(${PROJECT_NAME}_WITH_PARTH)
     include(cmake/recipes/parth.cmake)
     target_link_libraries(${PROJECT_NAME}_lib PUBLIC Parth::parth)
     target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_WITH_PARTH)
-	add_subdirectory(analysis)
 endif()
 
 if(${PROJECT_NAME}_WITH_APPS)
 	add_subdirectory(apps)
+endif()
+
+if(${PROJECT_NAME}_WITH_DEV)
+    add_subdirectory(dev)
 endif()
 

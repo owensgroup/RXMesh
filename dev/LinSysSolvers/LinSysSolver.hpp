@@ -1,0 +1,92 @@
+//
+//  LinSysSolver.hpp
+//  IPC
+//
+//  Created by Minchen Li on 6/30/18.
+//
+#pragma once
+
+
+#include <Eigen/Core>
+#include <Eigen/Sparse>
+
+namespace RXMESH_SOLVER {
+
+enum class LinSysSolverType
+{
+    CPU_CHOLMOD,
+    GPU_CUDSS,
+};
+
+class LinSysSolver
+{
+   public:
+    std::vector<int> perm;
+
+    int    L_NNZ    = 0;
+    int    NNZ      = 0;
+    int    N        = 0;
+    double residual = 0;
+
+    Eigen::SparseMatrix<double> mtr;
+
+   public:
+    virtual ~LinSysSolver(void) {};
+
+    static LinSysSolver* create(const LinSysSolverType type);
+
+    virtual LinSysSolverType type() const = 0;
+
+   public:
+    virtual void setMatrix(int*              p,
+                           int*              i,
+                           double*           x,
+                           int               A_N,
+                           int               NNZ) = 0;
+
+    virtual void analyze_pattern(std::vector<int>& user_defined_perm)
+    {
+        innerAnalyze_pattern(user_defined_perm);
+    }
+
+    virtual void innerAnalyze_pattern(std::vector<int>& user_defined_perm) = 0;
+
+    virtual void factorize(void)
+    {
+        innerFactorize();
+    }
+
+    virtual void innerFactorize(void) = 0;
+
+    virtual void solve(Eigen::VectorXd& rhs, Eigen::VectorXd& result)
+    {
+        innerSolve(rhs, result);
+    }
+
+    virtual void computeResidual(Eigen::SparseMatrix<double> mtr, Eigen::VectorXd& sol, Eigen::VectorXd& rhs)
+    {
+        residual = (rhs - mtr.selfadjointView<Eigen::Lower>() * sol).norm();
+    }
+
+    virtual void innerSolve(Eigen::VectorXd& rhs, Eigen::VectorXd& result) = 0;
+
+    virtual void resetSolver() = 0;
+
+   public:
+    double getResidual(void)
+    {
+        return residual;
+    }
+
+    virtual void initVariables()
+    {
+        perm.clear();
+
+        L_NNZ    = 0;
+        NNZ      = 0;
+        N        = 0;
+        residual = 0;
+    }
+};
+
+}  // namespace PARTH_SOLVER
