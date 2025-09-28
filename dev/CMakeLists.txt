@@ -10,6 +10,7 @@ include(libigl)
 # Create utils library
 add_library(rxmesh_dev_solvers
         LinSysSolvers/LinSysSolver.cpp
+        LinSysSolvers/CUDSSSolver.cu
         LinSysSolvers/CHOLMODSolver.cpp
 )
 
