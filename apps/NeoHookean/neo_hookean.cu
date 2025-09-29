@@ -1,0 +1,361 @@
+#include "rxmesh/rxmesh_static.h"
+
+#include "rxmesh/geometry_factory.h"
+
+#include "rxmesh/diff/diff_scalar_problem.h"
+#include "rxmesh/diff/newton_solver.h"
+
+#include "barrier_energy.h"
+#include "draw.h"
+#include "friction_energy.h"
+#include "gravity_energy.h"
+#include "inertial_energy.h"
+#include "init.h"
+#include "neo_hookean_energy.h"
+#include "spring_energy.h"
+
+#include <Eigen/Core>
+
+using namespace rxmesh;
+
+using T = float;
+
+constexpr uint32_t num_dbc_vertices = 3;
+VertexHandle       v_dbc[num_dbc_vertices];  // Dirichlet node index
+
+void neo_hookean(RXMeshStatic& rx, T dx)
+{
+    constexpr int VariableDim = 3;
+
+    constexpr uint32_t blockThreads = 256;
+
+    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
+
+    using HessMatT = typename ProblemT::HessMatT;
+
+    // Problem parameters
+    const T density        = 1000;  // rho
+    const T young_mod      = 1e5;   // E
+    const T poisson_ratio  = 0.4;   // nu
+    const T time_step      = 0.01;  // h
+    const T fricition_coef = 0.11;  // mu
+    const T stiffness_coef = 4e4;
+    const T tol            = 0.01;
+    const T inv_time_step  = T(1) / time_step;
+    const T dbc_stiff      = 1000;
+    const T dhat           = 0.01;
+    const T kappa          = 1e5;
+
+    const vec3<T> v_dbc_vel(0, -0.5, 0);        // Dirichlet node velocity
+    const vec3<T> v_dbc_limit(0, -0.7, 0);      // Dirichlet node limit position
+    const vec3<T> ground_o(0.0f, -1.0f, 0.0f);  // a point on the slope
+    const vec3<T> ground_n =
+        glm::normalize(vec3<T>(0.0f, 1.0f, 0.0f));  // normal of the slope
+
+
+    // Derived parameters
+    const T mu_lame = 0.5 * young_mod / (1 + poisson_ratio);
+    const T lam     = young_mod * poisson_ratio /
+                  ((1.0 + poisson_ratio) * (1.0 - 2.0 * poisson_ratio));
+
+    glm::vec3 bb_lower(0), bb_upper(0);
+    rx.bounding_box(bb_lower, bb_upper);
+    glm::vec3 bb = bb_upper - bb_lower;
+
+    // mass per vertex = rho * volume /num_vertices
+    T mass = density * bb[0] * bb[1] /
+             (rx.get_num_vertices() - num_dbc_vertices);  // m
+
+    // Attributes
+    auto velocity = *rx.add_vertex_attribute<T>("Velocity", 3);  // v
+    velocity.reset(0, DEVICE);
+
+    auto volume = *rx.add_face_attribute<T>("Volume", 1);  // vol
+    volume.reset(0, DEVICE);
+
+    auto mu_lambda = *rx.add_vertex_attribute<T>("mu_lambda", 1);  // mu_lambda
+    mu_lambda.reset(0, DEVICE);
+
+    auto inv_b =
+        *rx.add_face_attribute<Eigen::Matrix<T, 2, 3>>("InvB", 1);  // IB
+
+    auto is_dbc = *rx.add_vertex_attribute<int8_t>("isBC", 1);
+    is_dbc.reset(0, DEVICE);
+
+    auto dbc_target = *rx.add_vertex_attribute<T>("DBCTarget", 3);
+    dbc_target.reset(0, DEVICE);
+
+    auto contact_area = *rx.add_vertex_attribute<T>("ContactArea", 1);
+    contact_area.reset(dx, DEVICE);  // perimeter split to each vertex
+
+    // Diff problem and solvers
+    ProblemT problem(rx);
+
+    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
+        problem.hess.get());
+
+    NetwtonSolver newton_solver(problem, &solver);
+
+    auto x = *rx.get_input_vertex_coordinates();
+
+    auto x_n = *rx.add_vertex_attribute_like("x_n", x);
+
+    auto& x_tilde = *problem.objective;
+    x_tilde.copy_from(x, DEVICE, DEVICE);
+
+    // Initializations
+    init_volume_inverse_b(rx, x, volume, inv_b);
+
+    rx.for_each_vertex(HOST, [&](VertexHandle vh) mutable {
+        // doing it on the host since v_dbc is an array on the host
+        for (int i = 0; i < num_dbc_vertices; ++i) {
+            if (vh == v_dbc[i]) {
+                is_dbc(vh) = true;
+            }
+        }
+    });
+    is_dbc.move(HOST, DEVICE);
+
+
+    typename ProblemT::DenseMatT alpha(rx, rx.get_num_vertices(), DEVICE);
+
+#if USE_POLYSCOPE
+    // add BC to polyscope
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("DBC", is_dbc);
+#endif
+
+    // add inertial energy term
+    inertial_energy(problem, x, mass);
+
+    // add spring energy term
+    spring_energy(problem, dbc_target, is_dbc, mass, dbc_stiff);
+
+
+    // add gravity energy
+    gravity_energy(problem, x, time_step, mass);
+
+    // add barrier energy
+    barrier_energy(problem,
+                   contact_area,
+                   v_dbc[0],
+                   x,
+                   time_step,
+                   is_dbc,
+                   ground_n,
+                   ground_o,
+                   dhat,
+                   kappa);
+
+    T line_search_init_step = 0;
+
+    // add friction energy
+    friction_energy(problem,
+                    x,
+                    x_n,
+                    newton_solver.dir,
+                    line_search_init_step,
+                    mu_lambda,
+                    time_step,
+                    ground_n);
+
+    // add neo hooken energy
+    neo_hookean_energy(problem, x, volume, inv_b, mu_lame, time_step, lam);
+
+
+    int step = 0;
+
+    Timers<GPUTimer> timer;
+    timer.add("Step");
+    timer.add("LineSearch");
+    timer.add("LinearSolver");
+    timer.add("Diff");
+
+
+    auto step_forward = [&]() {
+        x_n.copy_from(x, DEVICE, DEVICE);
+
+        compute_mu_lambda(rx,
+                          fricition_coef,
+                          dhat,
+                          kappa,
+                          ground_n,
+                          ground_o,
+                          x,
+                          contact_area,
+                          mu_lambda);
+
+        // evaluate energy
+        timer.start("Diff");
+        problem.eval_terms();
+        timer.stop("Diff");
+
+
+        // update x_tilde
+        timer.start("Step");
+        rx.for_each_vertex(DEVICE,
+                           [x, x_tilde, velocity, time_step] __device__(
+                               VertexHandle vh) mutable {
+                               for (int i = 0; i < 3; ++i) {
+                                   x_tilde(vh, i) =
+                                       x(vh, i) + time_step * velocity(vh, i);
+                               }
+                           });
+
+        // apply bc
+        // newton_solver.apply_bc(is_bc);
+
+        // get newton direction
+        timer.start("LinearSolver");
+        newton_solver.compute_direction();
+        timer.stop("LinearSolver");
+
+        // residual is abs_max(newton_dir)/ h
+        T residual = newton_solver.dir.abs_max() / time_step;
+
+        T f = problem.get_current_loss();
+
+        int iter = 0;
+        while (residual > tol) {
+
+            RXMESH_INFO(
+                "Step: {}, Energy: {}, Residual: {}", step, f, residual);
+
+            timer.start("LineSearch");
+
+
+            line_search_init_step = init_step_size(rx,
+                                                   newton_solver.dir,
+                                                   alpha,
+                                                   v_dbc[0],
+                                                   x,
+                                                   is_dbc,
+                                                   ground_n,
+                                                   ground_o);
+
+            newton_solver.line_search(line_search_init_step, 0.5);
+            timer.stop("LineSearch");
+
+            // evaluate energy
+            timer.start("Diff");
+            problem.eval_terms();
+            timer.stop("Diff");
+
+            // apply bc
+            // newton_solver.apply_bc(is_bc);
+
+            // get newton direction
+            timer.start("LinearSolver");
+            newton_solver.compute_direction();
+            timer.stop("LinearSolver");
+
+            // residual is abs_max(newton_dir)/ h
+            residual = newton_solver.dir.abs_max() / time_step;
+
+            iter++;
+        }
+
+        //  update velocity
+        rx.for_each_vertex(
+            DEVICE,
+            [x, x_tilde, velocity, inv_time_step = 1.0 / time_step] __device__(
+                VertexHandle vh) mutable {
+                for (int i = 0; i < 3; ++i) {
+                    velocity(vh, i) =
+                        inv_time_step * (x_tilde(vh, i) - x(vh, i));
+
+                    x(vh, i) = x_tilde(vh, i);
+                }
+            });
+
+        step++;
+        timer.stop("Step");
+    };
+
+#if USE_POLYSCOPE
+    draw(rx, x_tilde, velocity, step_forward, step);
+#else
+    while (step < 5) {
+        step_forward();
+    }
+#endif
+
+
+    RXMESH_INFO(
+        "NeoHookean: #step ={}, time= {} (ms), "
+        "timer/iteration= {} ms/iter",
+        step,
+        timer.elapsed_millis("Step"),
+        timer.elapsed_millis("Step") / float(step));
+    RXMESH_INFO("LinearSolver {} (ms), Diff {} (ms), LineSearch {} (ms)",
+                timer.elapsed_millis("LinearSolver"),
+                timer.elapsed_millis("Diff"),
+                timer.elapsed_millis("LineSearch"));
+
+    RXMESH_INFO(
+        "LinearSolver/iter {} (ms), Diff/iter {} (ms), LineSearch/iter {}(ms) ",
+        timer.elapsed_millis(" LinearSolver ") / float(step),
+        timer.elapsed_millis("Diff") / float(step),
+        timer.elapsed_millis("LineSearch") / float(step));
+}
+
+int main(int argc, char** argv)
+{
+    Log::init(spdlog::level::info);
+
+
+    std::vector<std::vector<T>>        verts;
+    std::vector<std::vector<uint32_t>> fv;
+
+    int n = 5;
+
+    if (argc == 2) {
+        n = atoi(argv[1]);
+    }
+
+    T dx = 1 / T(n - 1);
+
+    create_plane(verts, fv, n, n, 2, dx, false, vec3<float>(-0.5, -0.5, 0));
+
+    uint32_t t = verts.size();
+
+    // dirichlet nodes
+    const vec3<T> dbc[3] = {
+        {0.5f, 0.6f, 0.0f}, {-0.5f, 0.6f, 0.1f}, {-0.5f, 0.6f, -0.1f}};
+
+    assert(sizeof(dbc) / sizeof(vec3<T>) == num_dbc_vertices);
+
+    verts.push_back({dbc[0][0], dbc[0][1], dbc[0][2]});
+    verts.push_back({dbc[1][0], dbc[1][1], dbc[1][2]});
+    verts.push_back({dbc[2][0], dbc[2][1], dbc[2][2]});
+
+    fv.push_back({t, t + 1, t + 2});
+
+    RXMeshStatic rx(fv);
+    rx.add_vertex_coordinates(verts, "Coords");
+
+    RXMESH_INFO(
+        "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
+
+    auto x = *rx.get_input_vertex_coordinates();
+
+    rx.for_each_vertex(
+        HOST,
+        [&](VertexHandle vh) {
+            const vec3<T> p = x.to_glm<3>(vh);
+            for (int i = 0; i < 3; ++i) {
+                if (glm::distance2(p, dbc[i]) < 0.0001) {
+                    for (int j = 0; j < 3; ++j) {
+                        if (!v_dbc[j].is_valid()) {
+                            v_dbc[j] = vh;
+                            break;
+                        }
+                    }
+                }
+            }
+        },
+        NULL,
+        false);
+
+
+    neo_hookean(rx, dx);
+}

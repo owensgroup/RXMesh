@@ -165,7 +165,7 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
                         residual);
 
             timer.start("LineSearch");
-            int line_search_init_step = 1;
+            T line_search_init_step = 1;
             if (scenario == Scenario::DropBox) {
                 line_search_init_step =
                     init_step_size(rx, newton_solver.dir, alpha, x, y_ground);
