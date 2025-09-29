@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
             RXMESH_SOLVER::LinSysSolverType::CPU_CHOLMOD);
     } else if (args.solver_type == "CUDSS") {
         solver = RXMESH_SOLVER::LinSysSolver::create(
-            RXMESH_SOLVER::LinSysSolverType::CPU_CHOLMOD);
+            RXMESH_SOLVER::LinSysSolverType::GPU_CUDSS);
     } else {
         spdlog::error("Unknown solver type.");
     }

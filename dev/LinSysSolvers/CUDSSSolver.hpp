@@ -1,7 +1,7 @@
 
 #pragma once
 
-#ifdef RXMESH_WITH_SUITESPARSE
+#ifdef RXMESH_WITH_CUDSS
 
 #include "LinSysSolver.hpp"
 #include <cuda.h>
