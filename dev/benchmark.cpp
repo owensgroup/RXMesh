@@ -16,10 +16,10 @@
 struct CLIArgs {
     std::string input_mesh;
     std::string output_address;
-
+    std::string solver_type = "CHOLMOD";
     CLIArgs(int argc, char *argv[]) {
         CLI::App app{"Separator analysis"};
-
+        app.add_option("-s,--solver", solver_type, "solver type");
         app.add_option("-o,--output", output_address, "output folder name");
         app.add_option("-i,--input", input_mesh, "input mesh name");
 
@@ -73,8 +73,18 @@ int main(int argc, char *argv[]) {
 
     //init Parth
     std::vector<int> perm;
-    RXMESH_SOLVER::LinSysSolver* solver = RXMESH_SOLVER::LinSysSolver::create(
-        RXMESH_SOLVER::LinSysSolverType::CPU_CHOLMOD);
+    RXMESH_SOLVER::LinSysSolver* solver = nullptr;
+    if (args.solver_type == "CHOLMOD") {
+        solver = RXMESH_SOLVER::LinSysSolver::create(
+            RXMESH_SOLVER::LinSysSolverType::CPU_CHOLMOD);
+    } else if (args.solver_type == "CUDSS") {
+        solver = RXMESH_SOLVER::LinSysSolver::create(
+            RXMESH_SOLVER::LinSysSolverType::CPU_CHOLMOD);
+    } else {
+        spdlog::error("Unknown solver type.");
+    }
+    assert(solver != nullptr);
+
     solver->setMatrix(OL.outerIndexPtr(), OL.innerIndexPtr(),
         OL.valuePtr(), OL.rows(), OL.nonZeros());
 

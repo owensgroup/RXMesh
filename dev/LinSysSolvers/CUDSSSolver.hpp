@@ -4,7 +4,7 @@
 #ifdef RXMESH_WITH_SUITESPARSE
 
 #include "LinSysSolver.hpp"
-
+#include <cuda.h>
 #include <cudss.h>
 #include <Eigen/Eigen>
 #include <vector>
@@ -19,8 +19,8 @@ public:                // Access specifier
     cudssConfig_t             config;
     cudssData_t               data;
     cudssMatrix_t             A;
-    cudssMatrix_t             b;
-    cudssMatrix_t             x;
+    cudssMatrix_t             b_mat;
+    cudssMatrix_t             x_mat;
 
     //Device pointers
     int*    rowOffsets_dev;
@@ -28,6 +28,10 @@ public:                // Access specifier
     double* values_dev;
     double* bvalues_dev;
     double* xvalues_dev;
+
+    bool is_allocated;
+
+
 
     ~CUDSSSolver();
     CUDSSSolver();
@@ -37,6 +41,8 @@ public:                // Access specifier
     void innerFactorize(void) override;
     void innerSolve(Eigen::VectorXd &rhs, Eigen::VectorXd &result) override;
     void resetSolver() override;
+    void clean_sparse_matrix_mem();
+    void clean_rhs_sol_mem();
     virtual LinSysSolverType type() const override;
 
 };

@@ -289,6 +289,7 @@ endif()
 target_link_libraries(${PROJECT_NAME}_lib PUBLIC
     CUDA::cusparse
     CUDA::cusolver
+    CUDA::cublas
 )
 
 # Eigen
