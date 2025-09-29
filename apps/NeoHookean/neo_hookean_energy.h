@@ -20,6 +20,8 @@ void neo_hookean_energy(ProblemT&      problem,
 
     constexpr int dim = 3;
 
+    const T h_sq = h * h;
+
     problem.template add_term<Op::FV, true>(
         [=] __device__(const auto& fh, const auto& iter, auto& obj) mutable {
             assert(iter.size() == 3);
@@ -49,7 +51,7 @@ void neo_hookean_energy(ProblemT&      problem,
             ActiveT psi = T(0.5) * mu_lame * (FtF.trace() - dim) -
                           mu_lame * lnJ + T(0.5) * lam * lnJ * lnJ;
 
-            ActiveT E = volume(fh) * psi * h * h;
+            ActiveT E = volume(fh) * psi * h_sq;
 
 
             return E;

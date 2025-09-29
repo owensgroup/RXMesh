@@ -19,6 +19,8 @@ void friction_energy(ProblemT&        problem,
     const Eigen::Matrix3<T> tangent =
         Eigen::Matrix3<T>::Identity() - n * n.transpose();
 
+    const T h_sq = h * h;
+
     problem.template add_term<Op::V, true>(
         [=] __device__(const auto& vh, auto& obj) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
@@ -62,7 +64,7 @@ void friction_energy(ProblemT&        problem,
 
                 constexpr T epsv = 1e-3;
 
-                E = ml * f0(vbar.norm(), epsv, h);
+                E = ml * h_sq * f0(vbar.norm(), epsv, h);
             }
 
             return E;
