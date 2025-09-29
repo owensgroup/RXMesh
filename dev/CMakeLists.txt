@@ -12,13 +12,26 @@ add_library(rxmesh_dev_solvers
         LinSysSolvers/LinSysSolver.cpp
         LinSysSolvers/CUDSSSolver.cu
         LinSysSolvers/CHOLMODSolver.cpp
+        utils/get_factor_nnz.cpp
+        utils/remove_diagonal.cpp
+        Ordering/ordering.cpp
+        Ordering/metis_ordering.cpp
 )
-
-target_include_directories(rxmesh_dev_solvers PUBLIC LinSysSolvers)
-target_include_directories(rxmesh_dev_solvers PUBLIC Reordering)
-
+#include libigl
+include(libigl)
+target_link_libraries(rxmesh_dev_solvers PUBLIC igl::core)
+# add spdlog logging
+target_link_libraries(rxmesh_dev_solvers PUBLIC spdlog::spdlog)
+# Add Eigen
 target_link_libraries(rxmesh_dev_solvers PUBLIC Eigen3::Eigen)
+# Add CLI11
+target_link_libraries(rxmesh_dev_solvers PUBLIC CLI11::CLI11)
+# Add base RXMESH
 target_link_libraries(rxmesh_dev_solvers PUBLIC ${PROJECT_NAME}_lib)
+# Add dev code base
+target_include_directories(rxmesh_dev_solvers PUBLIC LinSysSolvers)
+target_include_directories(rxmesh_dev_solvers PUBLIC Ordering)
+target_include_directories(rxmesh_dev_solvers PUBLIC utils)
 
 # Ensure CUDA separable compilation is properly configured for the solver library
 # Enable separable compilation but do NOT resolve device symbols in intermediate library
@@ -54,16 +67,3 @@ set_property(TARGET ${PROJECT_NAME}_benchmark PROPERTY CUDA_SEPARABLE_COMPILATIO
 set_property(TARGET ${PROJECT_NAME}_benchmark PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 
 target_link_libraries(${PROJECT_NAME}_benchmark PUBLIC rxmesh_dev_solvers)
-target_link_libraries(${PROJECT_NAME}_benchmark PUBLIC CLI11::CLI11)
-
-
-#include eigen
-include(eigen)
-target_link_libraries(${PROJECT_NAME}_benchmark PUBLIC Eigen3::Eigen)
-
-
-#include libigl
-include(libigl)
-target_link_libraries(${PROJECT_NAME}_benchmark PUBLIC igl::core)
-# add spdlog logging
-target_link_libraries(${PROJECT_NAME}_benchmark PUBLIC spdlog::spdlog)

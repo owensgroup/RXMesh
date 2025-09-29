@@ -28,6 +28,7 @@ public:                // Access specifier
     double* values_dev;
     double* bvalues_dev;
     double* xvalues_dev;
+    int*    user_perm_dev;  // Device pointer for user-defined permutation
 
     bool is_allocated;
 

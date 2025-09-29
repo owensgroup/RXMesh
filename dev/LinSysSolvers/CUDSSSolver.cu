@@ -46,6 +46,7 @@ CUDSSSolver::CUDSSSolver()
     values_dev     = nullptr;
     bvalues_dev    = nullptr;
     xvalues_dev    = nullptr;
+    user_perm_dev  = nullptr;
     x_mat          = nullptr;
     b_mat          = nullptr;
     data           = nullptr;
@@ -169,26 +170,61 @@ void CUDSSSolver::setMatrix(int* p, int* i, double* x, int A_N, int NNZ)
 void CUDSSSolver::innerAnalyze_pattern(std::vector<int>& user_defined_perm)
 {
     assert(is_allocated);
+    cudssStatus_t status;
+    
     if (user_defined_perm.size() == N) {
+        // When using user-defined permutation, provide it to CUDSS
+        spdlog::info("CUDSS: Using user-defined permutation (size={})", N);
+        
+        // Allocate device memory for permutation if not already allocated
+        if (user_perm_dev != nullptr) {
+            CUDA_ERROR(cudaFree(user_perm_dev));
+            user_perm_dev = nullptr;
+        }
+        CUDA_ERROR(cudaMalloc((void**)&user_perm_dev, N * sizeof(int)));
+        
+        // Copy host permutation to device
+        CUDA_ERROR(cudaMemcpy(user_perm_dev, 
+                              user_defined_perm.data(), 
+                              N * sizeof(int), 
+                              cudaMemcpyHostToDevice));
+
+        // Set CUDSS to use user-defined permutation
         cudssAlgType_t reorder_alg = CUDSS_ALG_DEFAULT;
-        cudssConfigSet(config,
-                       CUDSS_CONFIG_REORDERING_ALG,
-                       &reorder_alg,
-                       sizeof(cudssAlgType_t));
-        cudssDataSet(handle,
-                     data,
-                     CUDSS_DATA_USER_PERM,
-                     user_defined_perm.data(),
-                     sizeof(int));
+        status = cudssConfigSet(config,
+                                CUDSS_CONFIG_REORDERING_ALG,
+                                &reorder_alg,
+                                sizeof(cudssAlgType_t));
+        if (status != CUDSS_STATUS_SUCCESS) {
+            spdlog::error("CUDSSSolver::cudssConfigSet for reordering algorithm failed with status: {}", status);
+            exit(EXIT_FAILURE);
+        }
+        
+        // Provide device pointer to CUDSS
+        status = cudssDataSet(handle,
+                              data,
+                              CUDSS_DATA_USER_PERM,
+                              user_perm_dev,  // Device pointer!
+                              N * sizeof(int));
+        if (status != CUDSS_STATUS_SUCCESS) {
+            spdlog::error("CUDSSSolver::cudssDataSet for user permutation failed with status: {}", status);
+            exit(EXIT_FAILURE);
+        }
     } else {
+        // Use default CUDSS reordering
         spdlog::info("CUDSS: Using default reordering and analysis");
         cudssAlgType_t reorder_alg = CUDSS_ALG_DEFAULT;
-        cudssConfigSet(config,
-                       CUDSS_CONFIG_REORDERING_ALG,
-                       &reorder_alg,
-                       sizeof(cudssAlgType_t));
+        status = cudssConfigSet(config,
+                                CUDSS_CONFIG_REORDERING_ALG,
+                                &reorder_alg,
+                                sizeof(cudssAlgType_t));
+        if (status != CUDSS_STATUS_SUCCESS) {
+            spdlog::error("CUDSSSolver::cudssConfigSet for reordering algorithm failed with status: {}", status);
+            exit(EXIT_FAILURE);
+        }
     }
-    auto status = cudssExecute(
+    // Run both reordering and symbolic factorization
+    status = cudssExecute(
         handle,
         CUDSS_PHASE_REORDERING | CUDSS_PHASE_SYMBOLIC_FACTORIZATION,
         config,
@@ -197,7 +233,7 @@ void CUDSSSolver::innerAnalyze_pattern(std::vector<int>& user_defined_perm)
         nullptr,
         nullptr);
     if (status != CUDSS_STATUS_SUCCESS) {
-        spdlog::error("CUDSSSolver::symbolic analysis failed!");
+        spdlog::error("CUDSSSolver::symbolic analysis failed with status: {}", status);
         exit(EXIT_FAILURE);
     }
 }
