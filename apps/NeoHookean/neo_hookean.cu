@@ -6,6 +6,7 @@
 #include "rxmesh/diff/newton_solver.h"
 
 #include "barrier_energy.h"
+#include "boundary_condition.h"
 #include "draw.h"
 #include "friction_energy.h"
 #include "gravity_energy.h"
@@ -46,6 +47,8 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     const T dhat           = 0.01;
     const T kappa          = 1e5;
 
+    // TODO the limits and velocity should be different for different Dirichlet
+    // nodes
     const vec3<T> v_dbc_vel(0, -0.5, 0);        // Dirichlet node velocity
     const vec3<T> v_dbc_limit(0, -0.7, 0);      // Dirichlet node limit position
     const vec3<T> ground_o(0.0f, -1.0f, 0.0f);  // a point on the slope
@@ -72,6 +75,10 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
     auto volume = *rx.add_face_attribute<T>("Volume", 1);  // vol
     volume.reset(0, DEVICE);
+
+    auto is_dbc_satisfied = *rx.add_vertex_attribute<int>("DBCSatisfied", 1);
+
+    VertexReduceHandle<int> rh(is_dbc_satisfied);
 
     auto mu_lambda = *rx.add_vertex_attribute<T>("mu_lambda", 1);  // mu_lambda
     mu_lambda.reset(0, DEVICE);
@@ -162,7 +169,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     neo_hookean_energy(problem, x, volume, inv_b, mu_lame, time_step, lam);
 
 
-    int step = 0;
+    int steps = 0;
 
     Timers<GPUTimer> timer;
     timer.add("Step");
@@ -170,10 +177,19 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     timer.add("LinearSolver");
     timer.add("Diff");
 
-
     auto step_forward = [&]() {
+        // x_tilde = x + v*h
+        timer.start("Step");
+        rx.for_each_vertex(DEVICE, [=] __device__(VertexHandle vh) mutable {
+            for (int i = 0; i < 3; ++i) {
+                x_tilde(vh, i) = x(vh, i) + time_step * velocity(vh, i);
+            }
+        });
+
+        // copy current position
         x_n.copy_from(x, DEVICE, DEVICE);
 
+        // compute mu * lambda for each node using x_n
         compute_mu_lambda(rx,
                           fricition_coef,
                           dhat,
@@ -184,30 +200,28 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                           contact_area,
                           mu_lambda);
 
+        // target position for each DBC in the current time step
+        update_dbc(
+            rx, is_dbc, x, v_dbc_vel, v_dbc_limit, time_step, dbc_target);
+
         // evaluate energy
-        timer.start("Diff");
         problem.eval_terms();
-        timer.stop("Diff");
 
+        // DBC satisfied
+        check_dbc_satisfied(
+            rx, is_dbc_satisfied, x, is_dbc, dbc_target, time_step, tol);
 
-        // update x_tilde
-        timer.start("Step");
-        rx.for_each_vertex(DEVICE,
-                           [x, x_tilde, velocity, time_step] __device__(
-                               VertexHandle vh) mutable {
-                               for (int i = 0; i < 3; ++i) {
-                                   x_tilde(vh, i) =
-                                       x(vh, i) + time_step * velocity(vh, i);
-                               }
-                           });
+        // how many DBC are satisfied
+        int num_satisfied = rh.reduce(is_dbc_satisfied, cub::Sum(), 0);
 
-        // apply bc
-        // newton_solver.apply_bc(is_bc);
+        // satisfied DBC are eliminated from the system which is the same
+        // as adding boundary conditions where we zero out their gradients
+        // and hessian (except the diagonal entries)
+        newton_solver.apply_bc(is_dbc_satisfied);
 
         // get newton direction
-        timer.start("LinearSolver");
         newton_solver.compute_direction();
-        timer.stop("LinearSolver");
+
 
         // residual is abs_max(newton_dir)/ h
         T residual = newton_solver.dir.abs_max() / time_step;
@@ -215,13 +229,10 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         T f = problem.get_current_loss();
 
         int iter = 0;
-        while (residual > tol) {
+        while (residual > tol || num_satisfied != num_dbc_vertices) {
 
             RXMESH_INFO(
-                "Step: {}, Energy: {}, Residual: {}", step, f, residual);
-
-            timer.start("LineSearch");
-
+                "Step: {}, Energy: {}, Residual: {}", steps, f, residual);
 
             line_search_init_step = init_step_size(rx,
                                                    newton_solver.dir,
@@ -233,20 +244,16 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                                                    ground_o);
 
             newton_solver.line_search(line_search_init_step, 0.5);
-            timer.stop("LineSearch");
 
             // evaluate energy
-            timer.start("Diff");
             problem.eval_terms();
-            timer.stop("Diff");
+
 
             // apply bc
             // newton_solver.apply_bc(is_bc);
 
             // get newton direction
-            timer.start("LinearSolver");
             newton_solver.compute_direction();
-            timer.stop("LinearSolver");
 
             // residual is abs_max(newton_dir)/ h
             residual = newton_solver.dir.abs_max() / time_step;
@@ -267,35 +274,35 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                 }
             });
 
-        step++;
+        steps++;
         timer.stop("Step");
     };
 
 #if USE_POLYSCOPE
-    draw(rx, x_tilde, velocity, step_forward, step);
+    draw(rx, x_tilde, velocity, step_forward, steps);
 #else
-    while (step < 5) {
+    while (steps < 5) {
         step_forward();
     }
 #endif
 
 
     RXMESH_INFO(
-        "NeoHookean: #step ={}, time= {} (ms), "
-        "timer/iteration= {} ms/iter",
-        step,
+        "NeoHookean: #step ={}, time= {} (ms), timer/iteration= {} ms/iter",
+        steps,
         timer.elapsed_millis("Step"),
-        timer.elapsed_millis("Step") / float(step));
-    RXMESH_INFO("LinearSolver {} (ms), Diff {} (ms), LineSearch {} (ms)",
-                timer.elapsed_millis("LinearSolver"),
-                timer.elapsed_millis("Diff"),
-                timer.elapsed_millis("LineSearch"));
+        timer.elapsed_millis("Step") / float(steps));
 
-    RXMESH_INFO(
-        "LinearSolver/iter {} (ms), Diff/iter {} (ms), LineSearch/iter {}(ms) ",
-        timer.elapsed_millis(" LinearSolver ") / float(step),
-        timer.elapsed_millis("Diff") / float(step),
-        timer.elapsed_millis("LineSearch") / float(step));
+    // RXMESH_INFO("LinearSolver {} (ms), Diff {} (ms), LineSearch {} (ms)",
+    //             timer.elapsed_millis("LinearSolver"),
+    //             timer.elapsed_millis("Diff"),
+    //             timer.elapsed_millis("LineSearch"));
+    //
+    // RXMESH_INFO(
+    //     "LinearSolver/iter {} (ms), Diff/iter {} (ms), LineSearch/iter {}(ms)
+    //     ", timer.elapsed_millis(" LinearSolver ") / float(steps),
+    //     timer.elapsed_millis("Diff") / float(steps),
+    //     timer.elapsed_millis("LineSearch") / float(steps));
 }
 
 int main(int argc, char** argv)

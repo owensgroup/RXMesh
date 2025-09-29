@@ -41,7 +41,8 @@ void draw(RXMeshStatic& rx,
 
         ImGui::SameLine();
         if (ImGui::Button("Export")) {
-            rx.export_obj("MS_" + std::to_string(step) + ".obj", x_tilde);
+            rx.export_obj("NeoHookean_" + std::to_string(step) + ".obj",
+                          x_tilde);
         }
 
         if (is_running) {

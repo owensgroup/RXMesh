@@ -1,7 +1,8 @@
 add_executable(NeoHookean)
 
 set(SOURCE_LIST
-    neo_hookean.cu		
+    neo_hookean.cu	
+	boundary_condition.h
 	inertial_energy.h
 	spring_energy.h
 	gravity_energy.h
