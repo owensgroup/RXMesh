@@ -43,7 +43,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     const T stiffness_coef = 4e4;
     const T tol            = 0.01;
     const T inv_time_step  = T(1) / time_step;
-    const T dbc_stiff      = 1000;
+    T       dbc_stiff      = 1000;
     const T dhat           = 0.01;
     const T kappa          = 1e5;
 
@@ -124,7 +124,8 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     is_dbc.move(HOST, DEVICE);
 
 
-    typename ProblemT::DenseMatT alpha(rx, rx.get_num_vertices(), DEVICE);
+    typename ProblemT::DenseMatT alpha(
+        rx, std::max(rx.get_num_vertices(), rx.get_num_faces()), DEVICE);
 
 #if USE_POLYSCOPE
     // add BC to polyscope
@@ -152,6 +153,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                    ground_o,
                    dhat,
                    kappa);
+
 
     T line_search_init_step = 0;
 
@@ -227,30 +229,46 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         T residual = newton_solver.dir.abs_max() / time_step;
 
         T f = problem.get_current_loss();
+        RXMESH_INFO("Step: {}, Energy: {}, Residual: {}", steps, f, residual);
 
         int iter = 0;
         while (residual > tol || num_satisfied != num_dbc_vertices) {
 
-            RXMESH_INFO(
-                "Step: {}, Energy: {}, Residual: {}", steps, f, residual);
 
-            line_search_init_step = init_step_size(rx,
-                                                   newton_solver.dir,
-                                                   alpha,
-                                                   v_dbc[0],
-                                                   x,
-                                                   is_dbc,
-                                                   ground_n,
-                                                   ground_o);
+            if (residual <= tol && num_satisfied != num_dbc_vertices) {
+                // TODO: the updated values of dbc_stiff is not observed in the
+                // spring_energy kernel since it was copied by value
+                dbc_stiff *= 2;
+            }
 
+            T nh_step = neo_hookean_step_size(rx, x, newton_solver.dir, alpha);
+
+            T bar_step = barrier_step_size(rx,
+                                           newton_solver.dir,
+                                           alpha,
+                                           v_dbc[0],
+                                           x,
+                                           is_dbc,
+                                           ground_n,
+                                           ground_o);
+
+            line_search_init_step = std::min(nh_step, bar_step);
+
+            // TODO: line search should pass the step to the friction energy
             newton_solver.line_search(line_search_init_step, 0.5);
 
             // evaluate energy
             problem.eval_terms();
 
+            // DBC satisfied
+            check_dbc_satisfied(
+                rx, is_dbc_satisfied, x, is_dbc, dbc_target, time_step, tol);
+
+            // how many DBC are satisfied
+            num_satisfied = rh.reduce(is_dbc_satisfied, cub::Sum(), 0);
 
             // apply bc
-            // newton_solver.apply_bc(is_bc);
+            newton_solver.apply_bc(is_dbc_satisfied);
 
             // get newton direction
             newton_solver.compute_direction();

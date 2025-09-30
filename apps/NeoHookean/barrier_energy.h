@@ -70,14 +70,14 @@ template <typename VAttrT,
           typename VAttrI,
           typename DenseMatT,
           typename T = typename VAttrT::Type>
-T init_step_size(RXMeshStatic&      rx,
-                 const DenseMatT&   search_dir,
-                 DenseMatT&         alpha,
-                 const VertexHandle dbc_vertex,
-                 const VAttrT&      x,
-                 const VAttrI&      is_dbc,
-                 const vec3<T>&     ground_n,
-                 const vec3<T>&     ground_o)
+T barrier_step_size(RXMeshStatic&      rx,
+                    const DenseMatT&   search_dir,
+                    DenseMatT&         alpha,
+                    const VertexHandle dbc_vertex,
+                    const VAttrT&      x,
+                    const VAttrI&      is_dbc,
+                    const vec3<T>&     ground_n,
+                    const vec3<T>&     ground_o)
 {
     alpha.reset(T(1), DEVICE);
 

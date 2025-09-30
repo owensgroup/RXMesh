@@ -29,6 +29,7 @@ template <typename T, int Order = Eigen::ColMajor>
 struct DenseMatrix
 {
     using IndexT = int;
+    using Type   = T;
 
     static constexpr int OrderT = Order;
 
