@@ -203,7 +203,7 @@ void with_gpu_nd(RXMeshStatic& rx, EigeMatT eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
-    nd_permute(rx, h_permute.data());
+    nd_permute(  rx, h_permute.data());
 
     if (!is_unique_permutation(h_permute.size(), h_permute.data())) {
         RXMESH_ERROR("GPUND Permutation is not unique.");

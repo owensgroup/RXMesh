@@ -90,6 +90,10 @@ int main(int argc, char* argv[])
         spdlog::info("Using METIS ordering.");
         ordering = RXMESH_SOLVER::Ordering::create(
             RXMESH_SOLVER::RXMESH_Ordering_Type::METIS);
+    } else if (args.ordering_type == "RXMESH_ND") {
+        spdlog::info("Using RXMESH ordering.");
+        ordering = RXMESH_SOLVER::Ordering::create(
+            RXMESH_SOLVER::RXMESH_Ordering_Type::RXMESH_ND);
     } else {
         spdlog::error("Unknown Ordering type.");
     }
@@ -116,6 +120,10 @@ int main(int argc, char* argv[])
 
     // Init the permuter
     if (ordering != nullptr) {
+        // Provide mesh data if the ordering needs it (e.g., RXMesh ND)
+        if (ordering->needsMesh()) {
+            ordering->setMesh(OV, OF);
+        }
         ordering->setGraph(Gp.data(), Gi.data(), OL.rows(), Gi.size());
         auto ordering_start = std::chrono::high_resolution_clock::now();
         ordering->compute_permutation(perm);

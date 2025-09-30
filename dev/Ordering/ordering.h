@@ -43,6 +43,11 @@ public:
                            int               G_N,
                            int               NNZ) = 0;
 
+    // Optional: for orderings that need the original mesh (like RXMesh ND)
+    virtual void setMesh(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F) {}
+    
+    virtual bool needsMesh() const { return false; }
+
     virtual void compute_permutation(std::vector<int>& perm) = 0;
 };
 
