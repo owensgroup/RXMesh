@@ -219,7 +219,6 @@ include(cmake/recipes/openmesh.cmake)
 include(cmake/recipes/spdlog.cmake)
 include(cmake/recipes/glm.cmake)
 include(cmake/recipes/cereal.cmake)
-include(cmake/recipes/metis.cmake)
 
 # Link core libraries
 target_link_libraries(${PROJECT_NAME}_lib PUBLIC
@@ -245,26 +244,39 @@ endif()
 
 # METIS
 if (${PROJECT_NAME}_WITH_METIS)
-    target_link_libraries(${PROJECT_NAME}_lib PUBLIC metis)
-    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_WITH_METIS)
+    # Try to find system-installed METIS first
+    find_package(METIS QUIET)
+    
+    if(NOT METIS_FOUND)
+        # If system METIS not found, use FetchContent to build from source
+        message(STATUS "System METIS not found. Building from source...")
+        include(cmake/recipes/metis.cmake)
+        # Set variables for the built METIS
+        set(METIS_LIBRARIES metis)
+        set(METIS_INCLUDES ${metis_SOURCE_DIR}/include)
+    endif()
+    
+    if (EXISTS "${METIS_INCLUDES}")
+        target_link_libraries(${PROJECT_NAME}_lib PUBLIC
+                ${METIS_LIBRARIES}
+        )
+        target_include_directories(${PROJECT_NAME}_lib PUBLIC "${METIS_INCLUDES}")
+    else ()
+        message(STATUS "The METIS is not found")
+    endif ()
 endif ()
 
 
-# SuiteSparse
+# SuiteSparse - Must be configured before Parth since Parth depends on it
 if (${PROJECT_NAME}_WITH_SUITESPARSE)
-    # Option to force downloading SuiteSparse instead of using system version
-    option(SUITESPARSE_FORCE_DOWNLOAD "Force download and build SuiteSparse instead of using system version" OFF)
+    # Try to find system-installed SuiteSparse first
+    set(SUITESPARSE_INCLUDE_DIR_HINTS $ENV{SUITESPARSE_INC})
+    set(SUITESPARSE_LIBRARY_DIR_HINTS $ENV{SUITESPARSE_LIB})
+    find_package(SuiteSparse QUIET)
     
-    if(NOT SUITESPARSE_FORCE_DOWNLOAD)
-        # Try to find system-installed SuiteSparse first
-        set(SUITESPARSE_INCLUDE_DIR_HINTS $ENV{SUITESPARSE_INC})
-        set(SUITESPARSE_LIBRARY_DIR_HINTS $ENV{SUITESPARSE_LIB})
-        find_package(SuiteSparse QUIET)
-    endif()
-    
-    if(NOT SuiteSparse_FOUND OR SUITESPARSE_FORCE_DOWNLOAD)
-        # If system SuiteSparse not found or forced download, use FetchContent
-        message(STATUS "System SuiteSparse not found or download forced. Building from source...")
+    if(NOT SuiteSparse_FOUND)
+        # If system SuiteSparse not found, use FetchContent to build from source
+        message(STATUS "System SuiteSparse not found. Building from source...")
         include(cmake/recipes/suitesparse.cmake)
     endif()
     

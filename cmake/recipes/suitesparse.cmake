@@ -82,3 +82,23 @@ set(SUITESPARSE_INCLUDE_DIRS
 
 set(SUITESPARSE_LIBRARIES CHOLMOD AMD COLAMD CAMD CCOLAMD SuiteSparse_config CACHE STRING "SuiteSparse libraries")
 
+# Set variables that FindSuiteSparse.cmake expects
+set(SuiteSparse_FOUND TRUE CACHE BOOL "SuiteSparse found")
+set(SUITESPARSE_FOUND TRUE CACHE BOOL "SuiteSparse found")
+
+# Set individual component variables that FindSuiteSparse.cmake looks for
+set(AMD_INCLUDE_DIR ${suitesparse_SOURCE_DIR}/AMD/Include CACHE PATH "AMD include directory")
+set(CAMD_INCLUDE_DIR ${suitesparse_SOURCE_DIR}/CAMD/Include CACHE PATH "CAMD include directory")
+set(COLAMD_INCLUDE_DIR ${suitesparse_SOURCE_DIR}/COLAMD/Include CACHE PATH "COLAMD include directory")
+set(CCOLAMD_INCLUDE_DIR ${suitesparse_SOURCE_DIR}/CCOLAMD/Include CACHE PATH "CCOLAMD include directory")
+set(CHOLMOD_INCLUDE_DIR ${suitesparse_SOURCE_DIR}/CHOLMOD/Include CACHE PATH "CHOLMOD include directory")
+set(SUITESPARSE_CONFIG_INCLUDE_DIR ${suitesparse_SOURCE_DIR}/SuiteSparse_config CACHE PATH "SuiteSparse_config include directory")
+
+# Set library variables
+set(AMD_LIBRARY AMD CACHE STRING "AMD library")
+set(CAMD_LIBRARY CAMD CACHE STRING "CAMD library")
+set(COLAMD_LIBRARY COLAMD CACHE STRING "COLAMD library")
+set(CCOLAMD_LIBRARY CCOLAMD CACHE STRING "CCOLAMD library")
+set(CHOLMOD_LIBRARY CHOLMOD CACHE STRING "CHOLMOD library")
+set(SUITESPARSE_CONFIG_LIBRARY SuiteSparse_config CACHE STRING "SuiteSparse_config library")
+
