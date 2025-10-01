@@ -270,9 +270,9 @@ endif ()
 # SuiteSparse - Must be configured before Parth since Parth depends on it
 if (${PROJECT_NAME}_WITH_SUITESPARSE)
     # Try to find system-installed SuiteSparse first
-    set(SUITESPARSE_INCLUDE_DIR_HINTS $ENV{SUITESPARSE_INC})
-    set(SUITESPARSE_LIBRARY_DIR_HINTS $ENV{SUITESPARSE_LIB})
-    find_package(SuiteSparse QUIET)
+   set(SUITESPARSE_INCLUDE_DIR_HINTS $ENV{SUITESPARSE_INC})
+   set(SUITESPARSE_LIBRARY_DIR_HINTS $ENV{SUITESPARSE_LIB})
+   find_package(SuiteSparse QUIET)
     
     if(NOT SuiteSparse_FOUND)
         # If system SuiteSparse not found, use FetchContent to build from source
