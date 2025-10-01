@@ -41,6 +41,17 @@ struct CLIArgs
 };
 
 
+Eigen::SparseMatrix<double> computeSmootherMatrix(Eigen::MatrixXd& V, Eigen::MatrixXi& F)
+{
+    Eigen::SparseMatrix<double> L;
+    igl::cotmatrix(V, F, L);
+    // Make sure the matrix is semi-positive definite by adding values to the diagonal
+    L.diagonal().array() += 100;
+    return L;
+
+}
+
+
 int main(int argc, char* argv[])
 {
     // Load the mesh
@@ -103,6 +114,7 @@ int main(int argc, char* argv[])
         spdlog::error("Unknown Ordering type.");
     }
 
+    //Init solver
     RXMESH_SOLVER::LinSysSolver* solver = nullptr;
     if (args.solver_type == "CHOLMOD") {
         solver = RXMESH_SOLVER::LinSysSolver::create(

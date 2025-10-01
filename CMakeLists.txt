@@ -219,6 +219,7 @@ include(cmake/recipes/openmesh.cmake)
 include(cmake/recipes/spdlog.cmake)
 include(cmake/recipes/glm.cmake)
 include(cmake/recipes/cereal.cmake)
+include(cmake/recipes/metis.cmake)
 
 # Link core libraries
 target_link_libraries(${PROJECT_NAME}_lib PUBLIC
@@ -244,15 +245,8 @@ endif()
 
 # METIS
 if (${PROJECT_NAME}_WITH_METIS)
-    find_package(METIS REQUIRED)
-    if (EXISTS "${METIS_INCLUDES}")
-        target_link_libraries(${PROJECT_NAME}_lib PUBLIC
-                ${METIS_LIBRARIES}
-        )
-        target_include_directories(${PROJECT_NAME}_lib PUBLIC "${METIS_INCLUDES}")
-    else ()
-        message(STATUS "The METIS is not found")
-    endif ()
+    target_link_libraries(${PROJECT_NAME}_lib PUBLIC metis)
+    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_WITH_METIS)
 endif ()
 
 
