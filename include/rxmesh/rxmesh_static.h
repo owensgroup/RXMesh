@@ -165,7 +165,8 @@ class RXMeshStatic : public RXMesh
         auto ps = polyscope::registerSurfaceMesh(
             m_polyscope_mesh_name + "_patch_" + std::to_string(p),
             *m_input_vertex_coordinates,
-            fv);
+            fv,
+            m_polyscope_edges_map);
 
         if (with_vertex_patch) {
             render_vertex_patch_and_local_id(p, ps);
@@ -2388,7 +2389,8 @@ class RXMeshStatic : public RXMesh
         m_polyscope_mesh =
             polyscope::registerSurfaceMesh(m_polyscope_mesh_name,
                                            *m_input_vertex_coordinates,
-                                           fv);
+                                           fv,
+                                           m_polyscope_edges_map);
     }
 
     std::string             m_polyscope_mesh_name;

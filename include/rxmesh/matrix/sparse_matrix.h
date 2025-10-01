@@ -36,6 +36,7 @@ struct SparseMatrix
         : m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
           m_d_val(nullptr),
+          m_d_row_acc(nullptr),
           m_h_row_ptr(nullptr),
           m_h_col_idx(nullptr),
           m_h_val(nullptr),
@@ -52,7 +53,9 @@ struct SparseMatrix
           m_d_cusparse_spmv_buffer(nullptr),
           m_allocated(LOCATION_NONE),
           m_is_user_managed(false),
-          m_op(Op::INVALID)
+          m_op(Op::INVALID),
+          m_d_cub_temp_storage(nullptr),
+          m_cub_temp_storage_bytes(0)
     {
     }
 
@@ -60,7 +63,7 @@ struct SparseMatrix
      * @brief Constructor using specific mesh query
      */
     SparseMatrix(const RXMeshStatic& rx, Op op = Op::VV)
-        : SparseMatrix(rx, op, 1) {};
+        : SparseMatrix(rx, 1.f, op, 1) {};
 
 
     /**
@@ -111,13 +114,18 @@ struct SparseMatrix
 #ifndef NDEBUG
         check_repeated_indices();
 #endif
+        init_cudss(*this);
     }
 
    protected:
-    SparseMatrix(const RXMeshStatic& rx, Op op, IndexT replicate)
+    SparseMatrix(const RXMeshStatic& rx,
+                 const float         capacity_factor,
+                 Op                  op,
+                 IndexT              replicate)
         : m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
           m_d_val(nullptr),
+          m_d_row_acc(nullptr),
           m_h_row_ptr(nullptr),
           m_h_col_idx(nullptr),
           m_h_val(nullptr),
@@ -134,7 +142,10 @@ struct SparseMatrix
           m_d_cusparse_spmv_buffer(nullptr),
           m_allocated(LOCATION_NONE),
           m_is_user_managed(false),
-          m_op(op)
+          m_op(op),
+          m_d_cub_temp_storage(nullptr),
+          m_cub_temp_storage_bytes(0),
+          m_capacity_factor(capacity_factor)
     {
         constexpr uint32_t blockThreads = 256;
 
@@ -173,6 +184,8 @@ struct SparseMatrix
         // row pointer allocation and init with prefix sum for CSR
         CUDA_ERROR(cudaMalloc((void**)&m_d_row_ptr,
                               (m_num_rows + 1) * sizeof(IndexT)));
+        CUDA_ERROR(
+            cudaMalloc((void**)&m_d_row_acc, m_num_rows * sizeof(IndexT)));
 
         CUDA_ERROR(
             cudaMemset(m_d_row_ptr, 0, (m_num_rows + 1) * sizeof(IndexT)));
@@ -234,22 +247,22 @@ struct SparseMatrix
 
 
         // prefix sum using CUB.
-        void*  d_cub_temp_storage = nullptr;
-        size_t temp_storage_bytes = 0;
-        cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
-                                      temp_storage_bytes,
+        m_d_cub_temp_storage = nullptr;
+
+        cub::DeviceScan::ExclusiveSum(m_d_cub_temp_storage,
+                                      m_cub_temp_storage_bytes,
                                       m_d_row_ptr,
                                       m_d_row_ptr,
                                       m_num_rows + 1);
-        CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage, temp_storage_bytes));
+        CUDA_ERROR(cudaMalloc((void**)&m_d_cub_temp_storage,
+                              m_cub_temp_storage_bytes));
 
-        cub::DeviceScan::ExclusiveSum(d_cub_temp_storage,
-                                      temp_storage_bytes,
+        cub::DeviceScan::ExclusiveSum(m_d_cub_temp_storage,
+                                      m_cub_temp_storage_bytes,
                                       m_d_row_ptr,
                                       m_d_row_ptr,
                                       m_num_rows + 1);
 
-        CUDA_ERROR(cudaFree(d_cub_temp_storage));
 
         // get nnz
         CUDA_ERROR(cudaMemcpy(&m_nnz,
@@ -257,8 +270,11 @@ struct SparseMatrix
                               sizeof(IndexT),
                               cudaMemcpyDeviceToHost));
 
+        update_max_nnz();
+
         // column index allocation and init
-        CUDA_ERROR(cudaMalloc((void**)&m_d_col_idx, m_nnz * sizeof(IndexT)));
+        CUDA_ERROR(
+            cudaMalloc((void**)&m_d_col_idx, m_max_nnz * sizeof(IndexT)));
 
         if (m_op == Op::VV) {
             rx.run_kernel<blockThreads>(
@@ -332,16 +348,16 @@ struct SparseMatrix
 
 
         // allocate value ptr
-        CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_nnz * sizeof(T)));
+        CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_max_nnz * sizeof(T)));
         CUDA_ERROR(cudaMemset(m_d_val, 0, m_nnz * sizeof(T)));
         m_allocated = m_allocated | DEVICE;
 
 
         // allocate the host
-        m_h_val = static_cast<T*>(malloc(m_nnz * sizeof(T)));
+        m_h_val = static_cast<T*>(malloc(m_max_nnz * sizeof(T)));
         m_h_row_ptr =
             static_cast<IndexT*>(malloc((m_num_rows + 1) * sizeof(IndexT)));
-        m_h_col_idx = static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
+        m_h_col_idx = static_cast<IndexT*>(malloc(m_max_nnz * sizeof(IndexT)));
 
         CUDA_ERROR(cudaMemcpy(
             m_h_val, m_d_val, m_nnz * sizeof(T), cudaMemcpyDeviceToHost));
@@ -363,6 +379,7 @@ struct SparseMatrix
 #ifndef NDEBUG
         check_repeated_indices();
 #endif
+        init_cudss(*this);
     }
 
    public:
@@ -563,6 +580,16 @@ struct SparseMatrix
         return T(0);
     }
 
+#ifdef USE_CUDSS
+    /**
+     * @brief Return cuDSS matrix
+     */
+    __host__ cudssMatrix_t& get_cudss_matrix()
+    {
+        return m_cudss_matrix;
+    }
+#endif
+
     /**
      * @brief return the row pointer of the CSR matrix
      * @return
@@ -670,9 +697,197 @@ struct SparseMatrix
 
         GPU_FREE(m_d_cusparse_spmm_buffer);
         GPU_FREE(m_d_cusparse_spmv_buffer);
+        GPU_FREE(m_d_row_acc);
+        if (m_cub_temp_storage_bytes > 0) {
+            GPU_FREE(m_d_cub_temp_storage);
+        }
+#ifdef USE_CUDSS
+        if (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
+            std::is_same_v<T, cuDoubleComplex>) {
+            CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
+        }
+#endif
     }
 
+    /**
+     * @brief insert new entries to the sparse matrix. The insertion includes
+     * 1) copying the entires in the in_mat and 2) copying the entries in the
+     * new entires COO format (d_rows, d_cols).
+     * We only allow the sparsity to change, i.e., the number of nnz values.
+     * The size of the matrix should stay the same, i.e., #rows and #cols.
+     * Note: d_rows and d_cols should include only new unique entries that does
+     * not exist in the in_mat
+     *
+     * TODO add an overloaded function for inserting a pair of HandleT
+     */
+    __host__ void insert(RXMeshStatic&    rx,
+                         SparseMatrix<T>& in_mat,
+                         const IndexT     size,
+                         const IndexT*    d_new_rows,
+                         const IndexT*    d_new_cols)
+    {
+        if (in_mat.rows() != rows() || in_mat.cols() != cols()) {
+            RXMESH_ERROR(
+                "SparseMatrix::insert() insertion only works for matrices of "
+                "the same size. This matrix size: ({}x{}), in_mat size: "
+                "({}x{})",
+                rows(),
+                cols(),
+                in_mat.rows(),
+                in_mat.cols());
+        }
 
+        IndexT* in_d_row_ptr = in_mat.m_d_row_ptr;
+        IndexT* in_d_col_idx = in_mat.m_d_col_idx;
+
+        constexpr uint32_t blockThreads = 256;
+
+        uint32_t blocks = DIVIDE_UP(rows(), blockThreads);
+
+        // read in_mat row sum
+        for_each_item<<<DIVIDE_UP(rows(), blockThreads), blockThreads>>>(
+            rows(),
+            [in_d_row_ptr = in_d_row_ptr,
+             m_d_row_ptr  = m_d_row_ptr] __device__(int i) mutable {
+                m_d_row_ptr[i] = in_d_row_ptr[i + 1] - in_d_row_ptr[i];
+            });
+
+        // add contribution of the new entries in the row sum
+        for_each_item<<<DIVIDE_UP(size, blockThreads), blockThreads>>>(
+            size,
+            [m_d_row_ptr = m_d_row_ptr,
+             m_replicate = m_replicate,
+             d_new_rows  = d_new_rows] __device__(int i) mutable {
+                const int row = d_new_rows[i] * m_replicate;
+
+                for (IndexT j = 0; j < m_replicate; ++j) {
+                    ::atomicAdd(m_d_row_ptr + (row + j), m_replicate);
+                }
+            });
+
+
+        // prefix sum using CUB.
+        CUDA_ERROR(
+            cudaMemset(m_d_cub_temp_storage, 0, m_cub_temp_storage_bytes));
+        CUDA_ERROR(cudaMemset(m_d_row_ptr + m_num_rows, 0, sizeof(IndexT)));
+        cub::DeviceScan::ExclusiveSum(m_d_cub_temp_storage,
+                                      m_cub_temp_storage_bytes,
+                                      m_d_row_ptr,
+                                      m_d_row_ptr,
+                                      m_num_rows + 1);
+
+        // get nnz
+        CUDA_ERROR(cudaMemcpy(&m_nnz,
+                              (m_d_row_ptr + m_num_rows),
+                              sizeof(IndexT),
+                              cudaMemcpyDeviceToHost));
+
+
+        if (m_nnz > m_max_nnz) {
+            // free memory
+            GPU_FREE(m_d_col_idx);
+            GPU_FREE(m_d_val);
+            free(m_h_val);
+            free(m_h_col_idx);
+
+            // update max size as a function of current nnz
+            update_max_nnz();
+
+            // if respecting the user capacity factor is not enough
+            // i.e., capacity factor is 1
+            while (m_nnz > m_max_nnz) {
+                m_capacity_factor *= 2.f;
+                update_max_nnz();
+            }
+
+            // allocate col idx and values
+            CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_max_nnz * sizeof(T)));
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_d_col_idx, m_max_nnz * sizeof(IndexT)));
+
+            m_h_val = static_cast<T*>(malloc(m_max_nnz * sizeof(T)));
+            m_h_col_idx =
+                static_cast<IndexT*>(malloc(m_max_nnz * sizeof(IndexT)));
+        }
+
+        // reset row accumulator so that we can keep track of the col_idx
+        // of the new items
+        CUDA_ERROR(cudaMemset(m_d_row_acc, 0, m_num_rows * sizeof(IndexT)));
+
+        // fill in the col_idx with the col_idx data from in_mat
+        for_each_item<<<DIVIDE_UP(rows(), blockThreads), blockThreads>>>(
+            rows(),
+            [in_d_row_ptr = in_d_row_ptr,
+             in_d_col_idx = in_d_col_idx,
+             m_d_row_ptr  = m_d_row_ptr,
+             m_d_col_idx  = m_d_col_idx,
+             m_d_row_acc  = m_d_row_acc] __device__(int r) mutable {
+                // fill in the first stop=start chunk of this row's col_idx
+                const IndexT start = in_d_row_ptr[r];
+
+                const IndexT stop = in_d_row_ptr[r + 1];
+
+                const IndexT new_start = m_d_row_ptr[r];
+
+                IndexT i = 0;
+
+                for (IndexT j = start; j < stop; ++j) {
+                    IndexT col = in_d_col_idx[j];
+
+                    m_d_col_idx[new_start + i] = col;
+                    ++i;
+                }
+
+                assert(stop >= start);
+
+                m_d_row_acc[r] = stop - start;
+            });
+
+
+        // fill in the col_idx with the new entries information
+        for_each_item<<<DIVIDE_UP(size, blockThreads), blockThreads>>>(
+            size,
+            [d_new_rows  = d_new_rows,
+             d_new_cols  = d_new_cols,
+             m_d_row_acc = m_d_row_acc,
+             m_d_row_ptr = m_d_row_ptr,
+             m_d_col_idx = m_d_col_idx,
+             m_replicate = m_replicate] __device__(const int item) {
+                // each 'new' item is the (i,j) of an entry without replication
+                // so, when we add it, we have to replicate it m_replicate
+                // along the rows and the col, i.e., we are inserting a block
+                // of size m_replicatexm_replicate.
+                // However, other threads might be adding an item with similar
+                // row index and so there might be a race condition here. Thus,
+                // we use the m_d_row_acc
+
+                const IndexT r = d_new_rows[item] * m_replicate;
+                const IndexT c = d_new_cols[item] * m_replicate;
+
+                for (int i = 0; i < m_replicate; ++i) {
+                    const IndexT rr = r + i;
+
+                    IndexT row_st = ::atomicAdd(m_d_row_acc + rr, m_replicate);
+                    row_st += m_d_row_ptr[rr];
+
+                    assert(row_st + m_replicate <= m_d_row_ptr[rr + 1]);
+
+                    for (int j = 0; j < m_replicate; ++j) {
+                        m_d_col_idx[row_st + j] = c + j;
+                    }
+                }
+            });
+
+        // finally update the host (could be optional)
+        CUDA_ERROR(cudaMemcpy(m_h_col_idx,
+                              m_d_col_idx,
+                              m_nnz * sizeof(IndexT),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(m_h_row_ptr,
+                              m_d_row_ptr,
+                              (m_num_rows + 1) * sizeof(IndexT),
+                              cudaMemcpyDeviceToHost));
+    }
     /**
      * @brief return another SparseMatrix that is the transpose of this
      * SparseMatrix. This function allocate memory on both host and device.
@@ -712,6 +927,7 @@ struct SparseMatrix
         ret.m_h_col_idx = static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
 
         init_cusparse(ret);
+        init_cudss(ret);
 
         size_t buffer_size(0);
 
@@ -1174,6 +1390,12 @@ struct SparseMatrix
 
 
    protected:
+    void update_max_nnz()
+    {
+        m_max_nnz =
+            static_cast<IndexT>(std::ceil(float(m_nnz) * m_capacity_factor));
+    }
+
     void init_cusparse(SparseMatrix<T>& mat) const
     {
         // cuSparse CSR matrix
@@ -1218,22 +1440,56 @@ struct SparseMatrix
         }
     }
 
+    /**
+     * @brief initialize cuDSS
+     */
+    __host__ void init_cudss(SparseMatrix<T>& mat) const
+    {
+#ifdef USE_CUDSS
+        if (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
+            std::is_same_v<T, cuDoubleComplex>) {
+            CUDSS_ERROR(
+                cudssMatrixCreateCsr(&mat.m_cudss_matrix,
+                                     mat.m_num_rows,
+                                     mat.m_num_cols,
+                                     mat.m_nnz,
+                                     mat.m_d_row_ptr,
+                                     nullptr,
+                                     mat.m_d_col_idx,
+                                     mat.m_d_val,
+                                     CUDA_R_32I,
+                                     cuda_type<T>(),
+                                     CUDSS_MTYPE_SYMMETRIC,  // CUDSS_MTYPE_SPD
+                                     CUDSS_MVIEW_FULL,
+                                     CUDSS_BASE_ZERO));
+        }
+
+#endif
+    }
+
    public:
     Context              m_context;
     cusparseHandle_t     m_cusparse_handle;
     cusparseSpMatDescr_t m_spdescr;
 
+    void*  m_d_cub_temp_storage;
+    size_t m_cub_temp_storage_bytes;
 
     int m_replicate;
 
     IndexT m_num_rows;
     IndexT m_num_cols;
     IndexT m_nnz;
+    IndexT m_max_nnz;
+    float  m_capacity_factor;
 
     // device csr data
     IndexT* m_d_row_ptr;
     IndexT* m_d_col_idx;
     T*      m_d_val;
+
+    // accumleator for the row sum
+    IndexT* m_d_row_acc;
 
     // host csr data
     IndexT* m_h_row_ptr;
@@ -1254,6 +1510,10 @@ struct SparseMatrix
     bool m_is_user_managed;
 
     Op m_op;
+
+#ifdef USE_CUDSS
+    cudssMatrix_t m_cudss_matrix;
+#endif
 };
 
 }  // namespace rxmesh

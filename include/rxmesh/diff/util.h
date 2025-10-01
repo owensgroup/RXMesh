@@ -5,15 +5,34 @@
  * Author: Patrick Schmidt
  */
 
+#include <cuda_runtime.h>
 #include <Eigen/Dense>
 #include <iostream>
 #include <sstream>
+
+#include "rxmesh/kernels/shmem_allocator.cuh"
+#include "rxmesh/util/meta.h"
+
 
 namespace rxmesh {
 
 template <typename PassiveT, int k, bool WithHessian>
 struct Scalar;
 
+
+/**
+ * @brief allocate active variable on shared memory
+ */
+template <typename ActiveT>
+__device__ __host__ __inline__ ActiveT alloc_active(int             dim,
+                                                    ShmemAllocator& shrd_alloc)
+{
+    if constexpr (is_scalar_v<ActiveT>) {
+        return ActiveT(dim, shrd_alloc);
+    } else {
+        return ActiveT(0);
+    }
+}
 
 /**
  * @brief  Mapping local query index to global index in the gradient/hessian.

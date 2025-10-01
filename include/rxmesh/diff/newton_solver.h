@@ -72,7 +72,7 @@ struct NetwtonSolver
         if constexpr (std::is_base_of_v<LUSolver<HessMatT, DenseMatT::OrderT>,
                                         SolverT>) {
             problem.grad.move(DEVICE, HOST, stream);
-            problem.hess.move(DEVICE, HOST, stream);
+            problem.hess->move(DEVICE, HOST, stream);
 
             CPUTimer timer;
             timer.start();
@@ -227,7 +227,7 @@ struct NetwtonSolver
     inline void apply_bc(Attribute<bcT, ObjHandleT>& bc)
     {
         auto g   = problem.grad;
-        auto H   = problem.hess;
+        auto H   = *problem.hess;
         int  dim = VariableDim;
 
         auto& ctx = problem.rx.get_context();

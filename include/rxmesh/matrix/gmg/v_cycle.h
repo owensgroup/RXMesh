@@ -3,18 +3,19 @@
 #include "rxmesh/matrix/gmg/gmg.h"
 
 #include "rxmesh/matrix/cholesky_solver.h"
+#include "rxmesh/matrix/cudss_cholesky_solver.h"
 #include "rxmesh/matrix/gmg/jacobi_solver.h"
-
 
 namespace rxmesh {
 
 enum class CoarseSolver
 {
-    None        = 0,
-    Jacobi      = 1,
-    GaussSeidel = 2,
-    CG          = 3,
-    Cholesky    = 4,
+    None          = 0,
+    Jacobi        = 1,
+    GaussSeidel   = 2,
+    CG            = 3,
+    Cholesky      = 4,
+    cuDSSCholesky = 5,
 };
 
 inline CoarseSolver string_to_coarse_solver(std::string csolver)
@@ -32,6 +33,8 @@ inline CoarseSolver string_to_coarse_solver(std::string csolver)
         return CoarseSolver::CG;
     } else if (csolver == "cholesky") {
         return CoarseSolver::Cholesky;
+    } else if (csolver == "cudsscholesky") {
+        return CoarseSolver::cuDSSCholesky;
     } else {
         return CoarseSolver::None;
     }
@@ -85,6 +88,12 @@ struct VCycle
     CoarseSolver m_coarse_solver_type;
 
     JacobiSolver<T> m_coarse_solver_jacobi;
+
+#ifdef USE_CUDSS
+    std::unique_ptr<cuDSSCholeskySolver<SparseMatrix<T>, Eigen::ColMajor>>
+        m_coarse_solver_cudss_chols;
+#endif
+
     std::unique_ptr<CholeskySolver<SparseMatrix<T>, Eigen::ColMajor>>
         m_coarse_solver_chols;
 
@@ -101,6 +110,11 @@ struct VCycle
           m_coarse_solver_chols(
               std::unique_ptr<
                   CholeskySolver<SparseMatrix<T>, Eigen::ColMajor>>()),
+#ifdef USE_CUDSS
+          m_coarse_solver_cudss_chols(
+              std::unique_ptr<
+                  cuDSSCholeskySolver<SparseMatrix<T>, Eigen::ColMajor>>()),
+#endif
           m_coarse_solver_jacobi(JacobiSolver<T>())
     {
         CPUTimer timer;
@@ -132,7 +146,9 @@ struct VCycle
                 if (m_coarse_solver_type == CoarseSolver::Jacobi) {
                     m_coarse_solver_jacobi =
                         JacobiSolver<T>(gmg.m_num_samples[l], num_cols);
-                } else if (m_coarse_solver_type == CoarseSolver::Cholesky) {
+                } else if (m_coarse_solver_type == CoarseSolver::Cholesky ||
+                           m_coarse_solver_type ==
+                               CoarseSolver::cuDSSCholesky) {
                     // Cholesky requires access to the coarsest A matrix, so
                     // we initialize it during coarser_systems()
                 } else {
@@ -184,10 +200,28 @@ struct VCycle
             gtimer.stop();
             RXMESH_INFO(
                 "VCycle::coarser_systems() Cholesky pre_solver took {} (ms), "
-                "{} "
-                "(ms)",
+                "{} (ms)",
                 timer.elapsed_millis(),
                 gtimer.elapsed_millis());
+        } else if (m_coarse_solver_type == CoarseSolver::cuDSSCholesky) {
+#ifdef USE_CUDSS
+            timer.start();
+            gtimer.start();
+            m_coarse_solver_cudss_chols = std::make_unique<
+                cuDSSCholeskySolver<SparseMatrix<T>, Eigen::ColMajor>>(
+                &m_a.back().a);
+            m_coarse_solver_cudss_chols->pre_solve(
+                rx, m_rhs.back(), m_x.back());
+
+
+            timer.stop();
+            gtimer.stop();
+            RXMESH_INFO(
+                "VCycle::coarser_systems() cuDSS Cholesky pre_solver took {} "
+                "(ms), {} (ms)",
+                timer.elapsed_millis(),
+                gtimer.elapsed_millis());
+#endif
         }
     }
 
@@ -385,6 +419,10 @@ struct VCycle
                     A, f, v, m_num_post_relax);
             } else if (m_coarse_solver_type == CoarseSolver::Cholesky) {
                 m_coarse_solver_chols->solve(f, v);
+            } else if (m_coarse_solver_type == CoarseSolver::cuDSSCholesky) {
+#ifdef USE_CUDSS
+                m_coarse_solver_cudss_chols->solve(f, v);
+#endif
             }
         }
     }

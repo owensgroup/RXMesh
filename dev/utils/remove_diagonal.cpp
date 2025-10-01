@@ -2,7 +2,7 @@
 // Created by Behrooz on 2025-09-10.
 //
 
-#include "get_factor_nnz.h"
+#include "remove_diagonal.h"
 #include <cassert>
 #include <iostream>
 #include <tuple>

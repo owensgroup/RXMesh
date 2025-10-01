@@ -22,24 +22,37 @@ namespace rxmesh {
 template <typename T, int VariableDim, typename ObjHandleT, bool WithHess>
 struct DiffScalarProblem
 {
-
     // TODO use ObjHandleT to define the Hessian matrix sparsity
     // right now, we always assume VV sparsity pattern but we can derive
     // different sparsity, e.g., FF
     using HessMatT  = HessianSparseMatrix<T, VariableDim>;
     using DenseMatT = DenseMatrix<T, Eigen::RowMajor>;
 
+    using IndexT = typename HessMatT::IndexT;
+
     static constexpr bool WithHessian = WithHess;
 
 
     RXMeshStatic&                                     rx;
     DenseMatT                                         grad;
-    HessMatT                                          hess;
+    std::unique_ptr<HessMatT>                         hess;
+    std::unique_ptr<HessMatT>                         hess_new;
     std::shared_ptr<Attribute<T, ObjHandleT>>         objective;
     std::vector<std::shared_ptr<Term<T, ObjHandleT>>> terms;
 
 
-    DiffScalarProblem(RXMeshStatic& rx, bool assmble_hessian = true)
+    /**
+     * @brief Constructor
+     * @param rx is the instance of RXMeshStatic
+     * @param assmble_hessian should allocate the Hessian
+     * @param capacity_factor we allow the Hessian to change its sparsity which
+     * might increase the number of NNZ. We use the number of calculate the max
+     * nnz as capactiy_factor*nnz0 where nnz0 is the nnz of the hessian from the
+     * topology of the mesh
+     */
+    DiffScalarProblem(RXMeshStatic& rx,
+                      bool          assmble_hessian = true,
+                      const float   capacity_factor = 1.0f)
         : rx(rx),
           grad(DenseMatT(rx, rx.get_num_elements<ObjHandleT>(), VariableDim)),
           objective(rx.add_vertex_attribute<T>("objective", VariableDim))
@@ -49,8 +62,10 @@ struct DiffScalarProblem
 
         if constexpr (WithHessian) {
             if (assmble_hessian) {
-                hess = HessMatT(rx);
-                hess.reset(0, LOCATION_ALL);
+                hess = std::make_unique<HessMatT>(rx, capacity_factor);
+                hess->reset(0, LOCATION_ALL);
+
+                hess_new = std::make_unique<HessMatT>(rx, capacity_factor);
             }
         }
     }
@@ -82,7 +97,7 @@ struct DiffScalarProblem
                                                            ProjectHess,
                                                            VariableDim,
                                                            LambdaT>>(
-                rx, t, oreinted, grad, hess);
+                rx, t, oreinted, grad, *hess);
             terms.push_back(
                 std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
         }
@@ -97,7 +112,7 @@ struct DiffScalarProblem
                                                            ProjectHess,
                                                            VariableDim,
                                                            LambdaT>>(
-                rx, t, oreinted, grad, hess);
+                rx, t, oreinted, grad, *hess);
             terms.push_back(
                 std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
         }
@@ -112,10 +127,19 @@ struct DiffScalarProblem
                                                            ProjectHess,
                                                            VariableDim,
                                                            LambdaT>>(
-                rx, t, oreinted, grad, hess);
+                rx, t, oreinted, grad, *hess);
             terms.push_back(
                 std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
         }
+    }
+
+
+    void update_hessian(const IndexT  size,
+                        const IndexT* d_new_rows,
+                        const IndexT* d_new_cols)
+    {
+        hess_new->insert(rx, *hess, size, d_new_rows, d_new_cols);
+        hess_new.swap(hess);        
     }
 
     /**
@@ -126,7 +150,7 @@ struct DiffScalarProblem
         grad.reset(0, DEVICE, stream);
 
         if constexpr (WithHessian) {
-            hess.reset(0, DEVICE, stream);
+            hess->reset(0, DEVICE, stream);
         }
 
         for (size_t i = 0; i < terms.size(); ++i) {

@@ -30,26 +30,24 @@ void RXMeshOrdering::setGraph(int* Gp, int* Gi, int G_N, int NNZ)
 
 void RXMeshOrdering::setMesh(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F)
 {
-    m_V = V;
-    m_F = F;
     m_has_mesh = true;
 
     // RXMesh expects std::vector<std::vector<uint32_t>> for faces
     
-    fv.resize(m_F.rows());
-    for (int i = 0; i < m_F.rows(); ++i) {
-        fv[i].resize(m_F.cols());
-        for (int j = 0; j < m_F.cols(); ++j) {
-            fv[i][j] = static_cast<uint32_t>(m_F(i, j));
+    fv.resize(F.rows());
+    for (int i = 0; i < F.rows(); ++i) {
+        fv[i].resize(F.cols());
+        for (int j = 0; j < F.cols(); ++j) {
+            fv[i][j] = static_cast<uint32_t>(F(i, j));
         }
     }
 
     // Optionally add vertex coordinates (not strictly needed for ND ordering) 
-    vertices.resize(m_V.rows());
-    for (int i = 0; i < m_V.rows(); ++i) {
-        vertices[i].resize(m_V.cols());
-        for (int j = 0; j < m_V.cols(); ++j) {
-            vertices[i][j] = static_cast<float>(m_V(i, j));
+    vertices.resize(V.rows());
+    for (int i = 0; i < V.rows(); ++i) {
+        vertices[i].resize(V.cols());
+        for (int j = 0; j < V.cols(); ++j) {
+            vertices[i][j] = static_cast<float>(V(i, j));
         }
     }
 
@@ -62,6 +60,7 @@ bool RXMeshOrdering::needsMesh() const
 
 void RXMeshOrdering::compute_permutation(std::vector<int>& perm)
 {
+    rxmesh::rx_init(0);
     if (!m_has_mesh) {
         spdlog::error("RXMeshOrdering requires mesh data. Call setMesh() before compute_permutation()");
         // Fallback to identity permutation
@@ -87,7 +86,7 @@ void RXMeshOrdering::compute_permutation(std::vector<int>& perm)
                  total_mem / 1024.0 / 1024.0);
 
     // Create RXMeshStatic object
-    spdlog::info("Creating RXMesh with {} faces and {} vertices", m_F.rows(), m_V.rows());
+    spdlog::info("Creating RXMesh with {} faces and {} vertices", fv.size(), vertices.size());
     rxmesh::RXMeshStatic rx(fv);
 
     err = cudaGetLastError();

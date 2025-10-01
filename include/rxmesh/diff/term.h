@@ -125,67 +125,6 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                                                                 VariableDim,
                                                                 LambdaT>,
                               oreinted);
-
-        if (op == Op::VV || op == Op::VE || op == Op::VF) {
-            rx.prepare_launch_box(
-                {op},
-                lb_active,
-                (void*)detail::diff_kernel_active<blockThreads,
-                                                  LossHandleT,
-                                                  ObjHandleT,
-                                                  op,
-                                                  ScalarT,
-                                                  ProjectHess,
-                                                  VariableDim,
-                                                  LambdaT>,
-                oreinted,
-                true,
-                false,
-                [&](uint32_t v, uint32_t e, uint32_t f) {
-                    int g = rx.get_input_max_valence() + 1;
-                    int h = g * g;
-                    return (g + h) * VariableDim * v;
-                });
-
-            rx.prepare_launch_box(
-                {op},
-                lb_active_matvec,
-                (void*)detail::hess_matvec_kernel<blockThreads,
-                                                  LossHandleT,
-                                                  ObjHandleT,
-                                                  op,
-                                                  ScalarT,
-                                                  ProjectHess,
-                                                  VariableDim,
-                                                  LambdaT>,
-                oreinted,
-                true,
-                false,
-                [&](uint32_t v, uint32_t e, uint32_t f) {
-                    int g = rx.get_input_max_valence() + 1;
-                    int h = g * g;
-                    return (g + h) * VariableDim * v;
-                });
-
-            rx.prepare_launch_box(
-                {op},
-                lb_active_grad_only,
-                (void*)detail::diff_kernel_active<blockThreads,
-                                                  LossHandleT,
-                                                  ObjHandleT,
-                                                  op,
-                                                  ScalarGradOnlyT,
-                                                  ProjectHess,
-                                                  VariableDim,
-                                                  LambdaT>,
-                oreinted,
-                true,
-                false,
-                [&](uint32_t v, uint32_t e, uint32_t f) {
-                    int g = rx.get_input_max_valence() + 1;
-                    return g * VariableDim * v;
-                });
-        }
     }
 
     /**
@@ -193,6 +132,13 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
      */
     void eval_active(Attribute<T, ObjHandleT>& obj, cudaStream_t stream)
     {
+        if (ScalarT::k_ == -1) {
+            RXMESH_ERROR(
+                "TemplatedTerm::eval_active() Dynamic Scalar is not supported "
+                "for Hessians.");
+            return;
+        }
+
         rx.run_kernel(lb_active,
                       detail::diff_kernel_active<blockThreads,
                                                  LossHandleT,
@@ -254,6 +200,14 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                 "evolution.");
             return;
         }
+
+        if (ScalarT::k_ == -1) {
+            RXMESH_ERROR(
+                "TemplatedTerm::eval_active_matvec() Dynamic Scalar is not "
+                "supported for Hessians.");
+            return;
+        }
+
         rx.run_kernel(lb_active,
                       detail::hess_matvec_kernel<blockThreads,
                                                  LossHandleT,
@@ -296,8 +250,7 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
      */
     T get_loss(cudaStream_t stream = NULL)
     {
-        // return reducer->reduce(*loss, cub::Sum(), 0, INVALID32, stream);
-        return reducer->reduce(*loss, [] __device__ (T a, T b) { return a + b; }, 0, INVALID32, stream);
+        return reducer->reduce(*loss, cub::Sum(), 0, INVALID32, stream);
     }
 
     LambdaT term;

@@ -45,7 +45,7 @@ int get_factor_nnz(int* Ap, int* Ai, double* Ax, int N, int NNZ, std::vector<int
         assert(perm.size() == N);
         L = cholmod_analyze_p(A, perm.data(), NULL, 0, &cm);
         if (L == nullptr) {
-            std::cerr << "ERROR: CHOLMOD symbolic factorization failed" << std::endl;
+            std::cerr << "ERROR - factor-nnz: CHOLMOD symbolic factorization failed" << std::endl;
             factor_NNZ = -1;
         } else {
             factor_NNZ = cm.lnz * 2 - N;

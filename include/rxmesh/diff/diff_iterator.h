@@ -23,7 +23,7 @@ __device__ __inline__ Eigen::Vector<T, VariableDim> iter_val(
 
     assert(index < iter.size());
 
-    assert(VariableDim == attr.get_num_attributes());
+    assert(VariableDim <= attr.get_num_attributes());
 
 
     // val
@@ -53,7 +53,7 @@ __device__ __inline__ Eigen::Vector<T, VariableDim> iter_val(
 {
     Eigen::Vector<T, VariableDim> ret;
 
-    assert(VariableDim == attr.get_num_attributes());
+    assert(VariableDim <= attr.get_num_attributes());
 
 
     // val

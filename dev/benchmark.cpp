@@ -13,6 +13,7 @@
 
 #include "LinSysSolver.hpp"
 #include "get_factor_nnz.h"
+#include "check_valid_permutation.h"
 #include "ordering.h"
 #include "remove_diagonal.h"
 
@@ -128,11 +129,19 @@ int main(int argc, char* argv[])
         auto ordering_start = std::chrono::high_resolution_clock::now();
         ordering->compute_permutation(perm);
         auto ordering_end = std::chrono::high_resolution_clock::now();
+        //Check for correct perm
+        if (!RXMESH_SOLVER::check_valid_permutation(perm.data(), perm.size())) {
+            spdlog::error("Permutation is not valid!");
+        }
         spdlog::info("Ordering time: {} ms",
                      std::chrono::duration_cast<std::chrono::milliseconds>(
                          ordering_end - ordering_start)
                          .count());
         assert(perm.size() == OL.rows());
+        for (int i = 0; i < perm.size(); i++) {
+            perm[i] = i;
+        }
+
         int factor_nnz = RXMESH_SOLVER::get_factor_nnz(OL.outerIndexPtr(),
                                                        OL.innerIndexPtr(),
                                                        OL.valuePtr(),

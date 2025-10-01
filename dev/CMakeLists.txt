@@ -14,6 +14,7 @@ add_library(rxmesh_dev_solvers
         LinSysSolvers/CHOLMODSolver.cpp
         utils/get_factor_nnz.cpp
         utils/remove_diagonal.cpp
+        utils/check_valid_permutation.cpp
         Ordering/ordering.cpp
         Ordering/metis_ordering.cpp
         Ordering/rxmesh_ordering.cu

@@ -15,6 +15,8 @@ __global__ static void sparse_mat_prescan(const rxmesh::Context context,
                                           IndexT*               row_ptr,
                                           IndexT                replicate)
 {
+    bool is_aos = true;
+
     using namespace rxmesh;
 
     using HandleT = typename InputHandle<op>::type;
@@ -27,10 +29,17 @@ __global__ static void sparse_mat_prescan(const rxmesh::Context context,
         IndexT   size     = iter.size() + 1;
         size *= replicate;
         IndexT offset = context.prefix<HandleT>()[patch_id] + local_id;
-        offset *= replicate;
 
-        for (IndexT i = 0; i < replicate; ++i) {
-            row_ptr[offset + i] = size;
+        if (is_aos) {
+            offset *= replicate;
+            for (IndexT i = 0; i < replicate; ++i) {
+                row_ptr[offset + i] = size;
+            }
+        } else {
+            const uint32_t num_elements = context.get_num<HandleT>();
+            for (IndexT i = 0; i < replicate; ++i) {
+                row_ptr[num_elements * i + offset] = size;
+            }
         }
     };
 
@@ -38,6 +47,23 @@ __global__ static void sparse_mat_prescan(const rxmesh::Context context,
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
     query.dispatch<op>(block, shrd_alloc, init_lambda);
+}
+
+template <typename IndexT = int>
+__global__ static void sparse_mat_prescan(IndexT*       row_ptr,
+                                          const IndexT  size,
+                                          const IndexT* rows,
+                                          const IndexT* cols,
+                                          const IndexT  replicate)
+{
+    const uint32_t tid = threadIdx.x + blockIdx.x * blockDim.x;
+    if (tid < size) {
+        const int row = rows[tid] * replicate;
+
+        for (IndexT i = 0; i < replicate; ++i) {
+            ::atomicAdd(row_ptr + (row + i), replicate);
+        }
+    }
 }
 
 template <Op op, uint32_t blockThreads, typename IndexT = int>

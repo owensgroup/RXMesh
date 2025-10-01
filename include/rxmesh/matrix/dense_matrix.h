@@ -12,6 +12,10 @@
 
 #include <Eigen/Dense>
 
+#ifdef USE_CUDSS
+#include <cudss.h>
+#endif
+
 namespace rxmesh {
 /**
  * @brief dense matrix use for device and host, inside is a array.
@@ -25,6 +29,7 @@ template <typename T, int Order = Eigen::ColMajor>
 struct DenseMatrix
 {
     using IndexT = int;
+    using Type   = T;
 
     static constexpr int OrderT = Order;
 
@@ -71,6 +76,7 @@ struct DenseMatrix
     {
         allocate(location);
         init_cublas();
+        init_cudss();
     }
 
     /**
@@ -91,6 +97,7 @@ struct DenseMatrix
     {
         allocate(location);
         init_cublas();
+        init_cudss();
     }
 
     /**
@@ -118,6 +125,7 @@ struct DenseMatrix
         m_d_val = d_ptr;
 
         init_cublas();
+        init_cudss();
     }
 
     /**
@@ -350,6 +358,16 @@ struct DenseMatrix
         }
     }
 
+
+#ifdef USE_CUDSS
+    /**
+     * @brief Return cuDSS matrix
+     */
+    __host__ cudssMatrix_t& get_cudss_matrix()
+    {
+        return m_cudss_matrix;
+    }
+#endif
 
     /**
      * @brief compute the sum of the absolute value of all elements in the
@@ -1059,6 +1077,13 @@ struct DenseMatrix
                 GPU_FREE(m_d_val);
                 m_allocated = m_allocated & (~DEVICE);
             }
+
+#ifdef USE_CUDSS
+            if (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
+                std::is_same_v<T, cuDoubleComplex>) {  // if it was allocated
+                CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
+            }
+#endif
         }
 
         if ((location & LOCATION_ALL) == LOCATION_ALL) {
@@ -1075,7 +1100,7 @@ struct DenseMatrix
     void allocate(locationT location)
     {
         if ((location & HOST) == HOST) {
-            release(HOST);
+            // release(HOST);
 
             m_h_val = static_cast<T*>(malloc(bytes()));
 
@@ -1083,7 +1108,7 @@ struct DenseMatrix
         }
 
         if ((location & DEVICE) == DEVICE) {
-            release(DEVICE);
+            // release(DEVICE);
 
             CUDA_ERROR(cudaMalloc((void**)&m_d_val, bytes()));
 
@@ -1131,6 +1156,26 @@ struct DenseMatrix
     }
 
 
+    /**
+     * @brief initialize cuDSS
+     */
+    __host__ void init_cudss()
+    {
+#ifdef USE_CUDSS
+        if (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
+            std::is_same_v<T, cuDoubleComplex>) {
+            CUDSS_ERROR(cudssMatrixCreateDn(&m_cudss_matrix,
+                                            m_num_rows,
+                                            m_num_cols,
+                                            m_num_rows,
+                                            m_d_val,
+                                            cuda_type<T>(),
+                                            CUDSS_LAYOUT_COL_MAJOR));
+        }
+
+#endif
+    }
+
     Context              m_context;
     cusparseDnMatDescr_t m_dendescr;
     cublasHandle_t       m_cublas_handle;
@@ -1140,6 +1185,10 @@ struct DenseMatrix
     T*                   m_d_val;
     T*                   m_h_val;
     bool                 m_user_managed;
+
+#ifdef USE_CUDSS
+    cudssMatrix_t m_cudss_matrix;
+#endif
 };
 
 }  // namespace rxmesh

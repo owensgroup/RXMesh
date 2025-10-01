@@ -18,11 +18,10 @@ namespace RXMESH_SOLVER {
 class RXMeshOrdering: public Ordering
 {
 private:
-    Eigen::MatrixXd m_V;  // Vertices
-    Eigen::MatrixXi m_F;  // Faces
-    bool m_has_mesh = false;
     std::vector<std::vector<uint32_t>> fv;
     std::vector<std::vector<float>> vertices;
+    bool m_has_mesh = false;
+    
     
 public:
     virtual ~RXMeshOrdering(void);
