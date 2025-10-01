@@ -252,9 +252,22 @@ endif ()
 
 # SuiteSparse
 if (${PROJECT_NAME}_WITH_SUITESPARSE)
-    set(SUITESPARSE_INCLUDE_DIR_HINTS $ENV{SUITESPARSE_INC})
-    set(SUITESPARSE_LIBRARY_DIR_HINTS $ENV{SUITESPARSE_LIB})
-    find_package(SuiteSparse REQUIRED)
+    # Option to force downloading SuiteSparse instead of using system version
+    option(SUITESPARSE_FORCE_DOWNLOAD "Force download and build SuiteSparse instead of using system version" OFF)
+    
+    if(NOT SUITESPARSE_FORCE_DOWNLOAD)
+        # Try to find system-installed SuiteSparse first
+        set(SUITESPARSE_INCLUDE_DIR_HINTS $ENV{SUITESPARSE_INC})
+        set(SUITESPARSE_LIBRARY_DIR_HINTS $ENV{SUITESPARSE_LIB})
+        find_package(SuiteSparse QUIET)
+    endif()
+    
+    if(NOT SuiteSparse_FOUND OR SUITESPARSE_FORCE_DOWNLOAD)
+        # If system SuiteSparse not found or forced download, use FetchContent
+        message(STATUS "System SuiteSparse not found or download forced. Building from source...")
+        include(cmake/recipes/suitesparse.cmake)
+    endif()
+    
     target_link_libraries(${PROJECT_NAME}_lib PUBLIC ${SUITESPARSE_LIBRARIES})
     target_include_directories(${PROJECT_NAME}_lib PUBLIC ${SUITESPARSE_INCLUDE_DIRS})
     target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_WITH_SUITESPARSE)
