@@ -18,6 +18,7 @@ add_library(rxmesh_dev_solvers
         Ordering/ordering.cpp
         Ordering/metis_ordering.cpp
         Ordering/rxmesh_ordering.cu
+        Ordering/neutral_ordering.cpp
 )
 #include libigl
 include(libigl)

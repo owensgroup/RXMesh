@@ -95,6 +95,10 @@ int main(int argc, char* argv[])
         spdlog::info("Using RXMESH ordering.");
         ordering = RXMESH_SOLVER::Ordering::create(
             RXMESH_SOLVER::RXMESH_Ordering_Type::RXMESH_ND);
+    } else if (args.ordering_type == "NEUTRAL"){
+        spdlog::info("Using NEUTRAL ordering.");
+        ordering = RXMESH_SOLVER::Ordering::create(
+            RXMESH_SOLVER::RXMESH_Ordering_Type::NEUTRAL);
     } else {
         spdlog::error("Unknown Ordering type.");
     }
@@ -138,9 +142,6 @@ int main(int argc, char* argv[])
                          ordering_end - ordering_start)
                          .count());
         assert(perm.size() == OL.rows());
-        for (int i = 0; i < perm.size(); i++) {
-            perm[i] = i;
-        }
 
         int factor_nnz = RXMESH_SOLVER::get_factor_nnz(OL.outerIndexPtr(),
                                                        OL.innerIndexPtr(),

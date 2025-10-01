@@ -17,35 +17,51 @@ int get_factor_nnz(int* Ap, int* Ai, double* Ax, int N, int NNZ, std::vector<int
     cholmod_start(&cm);
     cholmod_sparse *A = nullptr;
     cholmod_factor *L = nullptr;
-    void *Ai_tmp, *Ap_tmp, *Ax_tmp;
-    
+
     try {
         A = cholmod_allocate_sparse(N, N, NNZ, true, true, -1, CHOLMOD_REAL, &cm);
         if (A == nullptr) {
             std::cerr << "ERROR: Failed to allocate CHOLMOD sparse matrix" << std::endl;
+            std::cerr << "       Matrix size: N=" << N << ", NNZ=" << NNZ << std::endl;
+            std::cerr << "       CHOLMOD status: " << cm.status << std::endl;
             cholmod_finish(&cm);
             return -1;
         }
         
         // Save original pointers for cleanup
-        Ap_tmp = A->p;
-        Ax_tmp = A->x;
-        Ai_tmp = A->i;
+        void* Ap_tmp = A->p;
+        void* Ax_tmp = A->x;
+        void* Ai_tmp = A->i;
 
         // Set matrix data
         A->p = Ap;
         A->i = Ai;
         A->x = Ax;
 
+        // Verify matrix structure
+        if (Ap[N] != NNZ) {
+            std::cerr << "ERROR: Matrix structure inconsistent. Ap[N]=" << Ap[N] << " but NNZ=" << NNZ << std::endl;
+            A->i = Ai_tmp;
+            A->p = Ap_tmp;
+            A->x = Ax_tmp;
+            cholmod_free_sparse(&A, &cm);
+            cholmod_finish(&cm);
+            return -1;
+        }
+
         // Configure CHOLMOD for analysis
         cm.nmethods = 1;
-        cm.supernodal = CHOLMOD_SUPERNODAL;
         cm.method[0].ordering = CHOLMOD_GIVEN;
+        cm.supernodal = CHOLMOD_SUPERNODAL;
         
         assert(perm.size() == N);
+
         L = cholmod_analyze_p(A, perm.data(), NULL, 0, &cm);
         if (L == nullptr) {
             std::cerr << "ERROR - factor-nnz: CHOLMOD symbolic factorization failed" << std::endl;
+            std::cerr << "        CHOLMOD status: " << cm.status << std::endl;
+            std::cerr << "        Matrix size: N=" << N << ", NNZ=" << NNZ << std::endl;
+            std::cerr << "        Permutation size: " << perm.size() << std::endl;
             factor_NNZ = -1;
         } else {
             factor_NNZ = cm.lnz * 2 - N;

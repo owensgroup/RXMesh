@@ -107,7 +107,7 @@ void CHOLMODSolver::innerAnalyze_pattern(std::vector<int>& user_defined_perm)
         spdlog::info("Using user provided permutation.");
         cm.nmethods           = 1;
         cm.method[0].ordering = CHOLMOD_GIVEN;
-        L                     = cholmod_analyze_p(A, perm.data(), NULL, 0, &cm);
+        L                     = cholmod_analyze_p(A, user_defined_perm.data(), NULL, 0, &cm);
     } else {
         spdlog::info("Using METIS permutation.");
         cm.nmethods           = 1;
@@ -115,11 +115,10 @@ void CHOLMODSolver::innerAnalyze_pattern(std::vector<int>& user_defined_perm)
         L                     = cholmod_analyze(A, &cm);
     }
     assert(L != nullptr);
-    L_NNZ = cm.lnz * 2 - N;
-
     if (L == nullptr) {
         std::cerr << "ERROR during symbolic factorization:" << std::endl;
     }
+    L_NNZ = cm.lnz * 2 - N;
 }
 
 void CHOLMODSolver::innerFactorize(void)

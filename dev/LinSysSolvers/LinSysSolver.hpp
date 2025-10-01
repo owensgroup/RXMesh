@@ -21,7 +21,6 @@ enum class LinSysSolverType
 class LinSysSolver
 {
    public:
-    std::vector<int> perm;
 
     int    L_NNZ    = 0;
     int    NNZ      = 0;
@@ -80,8 +79,6 @@ class LinSysSolver
 
     virtual void initVariables()
     {
-        perm.clear();
-
         L_NNZ    = 0;
         NNZ      = 0;
         N        = 0;

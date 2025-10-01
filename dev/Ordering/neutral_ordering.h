@@ -15,10 +15,10 @@
 namespace RXMESH_SOLVER {
 
 
-class MetisOrdering: public Ordering
+class NeutralOrdering: public Ordering
 {
 public:
-    virtual ~MetisOrdering(void);
+    virtual ~NeutralOrdering(void);
 
     virtual RXMESH_Ordering_Type type() const override;
 
