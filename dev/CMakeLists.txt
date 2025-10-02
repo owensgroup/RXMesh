@@ -33,7 +33,7 @@ if (${PROJECT_NAME}_WITH_SUITESPARSE)
     # Add SuiteSparse to the main RXMesh library
     target_link_libraries(${PROJECT_NAME} INTERFACE ${SUITESPARSE_LIBRARIES})
     target_include_directories(${PROJECT_NAME} INTERFACE ${SUITESPARSE_INCLUDE_DIRS})
-    target_compile_definitions(${PROJECT_NAME} INTERFACE RXMESH_WITH_SUITESPARSE)
+    target_compile_definitions(${PROJECT_NAME} INTERFACE USE_SUITESPARSE)
 endif ()
 
 # Parth for fill-reducing orderings
@@ -41,7 +41,7 @@ if(${PROJECT_NAME}_WITH_PARTH)
     include(${CMAKE_SOURCE_DIR}/cmake/recipes/parth.cmake)
     # Add Parth to the main RXMesh library
     target_link_libraries(${PROJECT_NAME} INTERFACE Parth::parth)
-    target_compile_definitions(${PROJECT_NAME} INTERFACE RXMESH_WITH_PARTH)
+    target_compile_definitions(${PROJECT_NAME} INTERFACE USE_PARTH)
 endif()
 
 ################################################################################
