@@ -38,19 +38,20 @@ int main() {
 }
 		]])
 		
-		execute_process(COMMAND "${CMAKE_CUDA_COMPILER}" "-ccbin" "${CMAKE_CXX_COMPILER}" "--run" "${cuda_arch_autodetect_file}"
-						WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"	
-						RESULT_VARIABLE CUDA_RETURN_CODE	
-						OUTPUT_VARIABLE dummy
-						ERROR_VARIABLE fprintf_output					
-						OUTPUT_STRIP_TRAILING_WHITESPACE)							
-		
-		if(CUDA_RETURN_CODE EQUAL 0)			
-			set(CMAKE_CUDA_ARCHITECTURES ${fprintf_output})
-		else()
-			message(STATUS "GPU architectures auto-detect failed. Will build for sm_70.")      
-			set(CMAKE_CUDA_ARCHITECTURES 70)		
-		endif()  
+	execute_process(COMMAND "${CMAKE_CUDA_COMPILER}" "-Wno-deprecated-gpu-targets" "-ccbin" "${CMAKE_CXX_COMPILER}" "--run" "${cuda_arch_autodetect_file}"
+				WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"	
+				RESULT_VARIABLE CUDA_RETURN_CODE	
+				OUTPUT_VARIABLE dummy
+				ERROR_VARIABLE fprintf_output					
+				OUTPUT_STRIP_TRAILING_WHITESPACE)
+	
+	if(CUDA_RETURN_CODE EQUAL 0)
+		string(STRIP "${fprintf_output}" fprintf_output)
+		set(CMAKE_CUDA_ARCHITECTURES "${fprintf_output}" CACHE STRING "CUDA architectures" FORCE)
+	else()
+		message(STATUS "GPU architectures auto-detect failed. Will build for sm_70.")      
+		set(CMAKE_CUDA_ARCHITECTURES "70" CACHE STRING "CUDA architectures" FORCE)		
+	endif()
 	endif()	
 	message(STATUS "CUDA architectures= " ${CMAKE_CUDA_ARCHITECTURES})	
 endif()

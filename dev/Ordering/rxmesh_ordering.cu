@@ -12,6 +12,7 @@
 // Include RXMesh headers
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/matrix/nd_permute.cuh"
+#include "compute_inverse_perm.h"
 
 
 namespace RXMESH_SOLVER {
@@ -78,13 +79,6 @@ void RXMeshOrdering::compute_permutation(std::vector<int>& perm)
         spdlog::error("CUDA error before RXMesh creation: {}", cudaGetErrorString(err));
     }
 
-    // Print GPU memory info
-    size_t free_mem, total_mem;
-    cudaMemGetInfo(&free_mem, &total_mem);
-    spdlog::info("GPU memory: {:.2f} MB free out of {:.2f} MB total", 
-                 free_mem / 1024.0 / 1024.0, 
-                 total_mem / 1024.0 / 1024.0);
-
     // Create RXMeshStatic object
     spdlog::info("Creating RXMesh with {} faces and {} vertices", fv.size(), vertices.size());
     rxmesh::RXMeshStatic rx(fv);
@@ -103,19 +97,34 @@ void RXMeshOrdering::compute_permutation(std::vector<int>& perm)
     }
 
     // Allocate permutation array
-    perm.resize(rx.get_num_vertices());
+    perm.clear();
+    perm.resize(rx.get_num_vertices(), 0);
 
     // Call RXMesh ND permutation
     spdlog::info("Computing ND permutation...");
-    rxmesh::nd_permute(rx, perm.data());
+    std::vector<int> rx_perm(rx.get_num_vertices(), 0);
+    rxmesh::nd_permute(rx, rx_perm.data());
+
+    //Converting rx permute into global permute
+    std::vector<int> linear_to_global(rx.get_num_vertices(), -1);
+    rx.for_each_vertex(
+        rxmesh::HOST,
+        [&](const rxmesh::VertexHandle vh) {
+            uint32_t vid   = rx.linear_id(vh);
+            uint32_t g_id  = rx.map_to_global(vh);
+            linear_to_global[vid] = g_id;
+        },
+        NULL,
+        false);
 
     err = cudaGetLastError();
     if (err != cudaSuccess) {
         spdlog::error("CUDA error after nd_permute: {}", cudaGetErrorString(err));
     }
 
-    // Ensure all GPU operations complete before returning
-    cudaDeviceSynchronize();
+    // std::vector<int> inv_perm;
+    // compute_inverse_perm(perm, inv_perm);
+    // perm = inv_perm;
 
     spdlog::info("RXMesh ND ordering computed for {} vertices", perm.size());
 }

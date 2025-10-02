@@ -32,12 +32,28 @@ void barrier_energy(ProblemT& problem,
             if (d < dhat) {
                 const ActiveT s = d / dhat;
 
-                E = h_sq * kappa * contact_area(vh) * dhat / 2 * (s - 1) *
-                    log(s);
+                E = h_sq * contact_area(vh) * dhat * T(0.5) * kappa *
+                    (s - T(1)) * log(s);
 
-                // if constexpr (std::is_base_of_v<ActiveT, Scalar<T, 3, true>>)
-                // {
-                //     // E.print();
+                // if constexpr (is_scalar_v<ActiveT>) {
+                //
+                //     T g = h_sq * contact_area(vh) * dhat *
+                //           (kappa / T(2.0) *
+                //            (log(s.val()) / dhat + (s.val() - 1) / d.val()));
+                //
+                //     T h = h_sq * contact_area(vh) * dhat * kappa /
+                //           (T(2.0) * d.val() * d.val() * dhat) *
+                //           (d.val() + dhat);
+                //
+                //     if (std::abs(g - E.grad()[1]) > 0.0001) {
+                //         printf("\n g= %f, E.grad[1]= %f", g, E.grad()[1]);
+                //     }
+                //
+                //     if (std::abs(h - E.hess()(1, 1)) > 0.0001) {
+                //         printf(
+                //             "\n h= %f, E.hess()(1, 1)= %f", h, E.hess()(1,
+                //             1));
+                //     }
                 // }
             }
 

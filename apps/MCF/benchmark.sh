@@ -3,7 +3,7 @@ echo "Please make sure to first compile the source code and then enter the input
 read -p "OBJ files directory (no trailing slash): " input_dir
 
 echo "Input directory= $input_dir"
-exe="../../cmake-build-release/bin/MCF"
+exe="../../build/bin/MCF"
 
 if [ ! -f $exe ]; then 
 	echo "The code has not been compiled. Please compile MCF and retry!"

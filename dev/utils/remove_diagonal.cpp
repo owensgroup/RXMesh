@@ -30,8 +30,8 @@ void remove_diagonal(int N,
     }
 
     //Remove duplicates
-    std::ranges::sort(coefficients);
-    coefficients.erase(std::ranges::unique(coefficients).begin(), coefficients.end());
+    std::sort(coefficients.begin(), coefficients.end());
+    coefficients.erase(std::unique(coefficients.begin(), coefficients.end()), coefficients.end());
     Gp.resize(N + 1);
     for (int i = 0; i < coefficients.size(); i++) {
         Gp[std::get<0>(coefficients[i]) + 1]++;

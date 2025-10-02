@@ -26,8 +26,12 @@ set_property(TARGET QSlim PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "QSlim" FILES ${SOURCE_LIST})
 
 target_link_libraries(QSlim     
-    PRIVATE RXMesh_lib
+    PRIVATE RXMesh
     PRIVATE gtest_main
 )
+
+if(WIN32 AND RX_USE_CUDSS)
+	add_dependencies(QSlim CopyCUDSSDLL)
+endif()
 
 #gtest_discover_tests( QSlim )

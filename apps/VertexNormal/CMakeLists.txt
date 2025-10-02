@@ -19,8 +19,12 @@ set_property(TARGET VertexNormal PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "VertexNormal" FILES ${SOURCE_LIST})
 
 target_link_libraries( VertexNormal     
-    PRIVATE RXMesh_lib
+    PRIVATE RXMesh
     PRIVATE gtest_main
 )
+
+if(WIN32 AND RX_USE_CUDSS)
+	add_dependencies(VertexNormal CopyCUDSSDLL)
+endif()
 
 #gtest_discover_tests( VertexNormal )

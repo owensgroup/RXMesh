@@ -203,7 +203,7 @@ void with_gpu_nd(RXMeshStatic& rx, EigeMatT eigen_mat)
 {
     std::vector<int> h_permute(eigen_mat.rows());
 
-    nd_permute(  rx, h_permute.data());
+    nd_permute(rx, h_permute.data());
 
     if (!is_unique_permutation(h_permute.size(), h_permute.data())) {
         RXMESH_ERROR("GPUND Permutation is not unique.");
@@ -309,10 +309,8 @@ void all_perm(RXMeshStatic& rx)
         rx_mat.non_zeros(),
         100 * float(rx_mat.non_zeros()) / float(rx_mat.rows() * rx_mat.cols()));
 
-#if USE_POLYSCOPE
     rx.render_face_patch();
     rx.render_vertex_patch();
-#endif
 
     // convert matrix to Eigen
     auto eigen_mat = rx_mat.to_eigen_copy();
@@ -331,9 +329,7 @@ void all_perm(RXMeshStatic& rx)
 
     with_gpu_nd(rx, eigen_mat);
 
-#if RXMESH_WITH_POLYSCOPE
     polyscope::show();
-#endif
 }
 
 int main(int argc, char** argv)

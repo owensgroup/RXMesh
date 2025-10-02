@@ -1,339 +1,257 @@
-# Check required CMake version
-set(REQUIRED_CMAKE_VERSION "3.20")
-set(CMAKE_POLICY_DEFAULT_CMP0127 NEW)
-cmake_minimum_required(VERSION ${REQUIRED_CMAKE_VERSION})
+# ==============================================================================
+# RXMesh - A GPU Mesh Data Structure
+# ==============================================================================
+#To run with cuDSS:
+#>> cmake -DRX_USE_CUDSS=ON -DCMAKE_PREFIX_PATH="C:\Program Files\NVIDIA cuDSS\v0.6\lib\12\cmake" ..
 
+# ==============================================================================
+# Project Configuration
+# ==============================================================================
+cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
+
+project(RXMesh
+        VERSION 0.2.1
+        LANGUAGES C CXX CUDA)
+
+# Build options
+set(RX_USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
+set(RX_BUILD_TESTS "ON" CACHE BOOL "Build RXMesh unit test")
+set(RX_BUILD_APPS "ON" CACHE BOOL "Build RXMesh applications")
+set(RX_USE_SUITESPARSE "OFF" CACHE BOOL "Use SuiteSparse for benchmark")
+set(RX_USE_CUDSS "ON" CACHE BOOL "Use cuDSS - CUDA Library for Direct Sparse Solvers")
+
+set(RX_WITH_DEV "ON" CACHE BOOL "Add DEV folder to build (for development purposes)")
+
+message(STATUS "Polyscope is ${RX_USE_POLYSCOPE}")
+message(STATUS "Build RXMesh unit test is ${RX_BUILD_TESTS}")
+message(STATUS "Build RXMesh applications is ${RX_BUILD_APPS}")
+message(STATUS "SuiteSparse is ${RX_USE_SUITESPARSE}")
+message(STATUS "cuDSS is ${RX_USE_CUDSS}")
+
+# Language standards
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED TRUE)
+set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
-set(CMAKE_CUDA_COMPILER "/usr/local/cuda/bin/nvcc")
-set(CMAKE_CUDA_ARCHITECTURES "native")
-set(CMAKE_CUDA_ROOT "/usr/local/cuda")
-project(RXMesh VERSION "0.2.1" DESCRIPTION "A CUDA-based mesh processing library" LANGUAGES CXX CUDA)
-
-# Enable CUDA language
-enable_language(CUDA)
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
-
-################################################################################
-# Project options
-################################################################################
-
-option(${PROJECT_NAME}_WITH_APPS "Add demo applications" ON)
-option(${PROJECT_NAME}_WITH_PARTH "Use Parth for fill-reducing orderings" ON)
-option(${PROJECT_NAME}_WITH_TESTS "Add unit tests" ON)
-option(${PROJECT_NAME}_WITH_POLYSCOPE "Enable Polyscope for visualization" ON)
-option(${PROJECT_NAME}_WITH_SUITESPARSE "Use SuiteSparse for benchmark" ON)
-option(${PROJECT_NAME}_WITH_CUDSS "Use cuDSS - CUDA Library for Direct Sparse Solvers" ON)
-option(${PROJECT_NAME}_WITH_METIS "Use METIS for graph partitioning" ON)
-option(${PROJECT_NAME}_WITH_DEV "Add dev folder" ON)
-
-# GPU Architecture options - MANUAL CONFIGURATION REQUIRED
-set(GPU_ARCHITECTURE "AMPERE" CACHE STRING "Target GPU architecture (AMPERE, HOPPER, ADA)")
-set_property(CACHE GPU_ARCHITECTURE PROPERTY STRINGS AMPERE HOPPER ADA)
-
-# GPU Compute Capability - MANUAL CONFIGURATION REQUIRED
-set(GPU_COMPUTE_CAPABILITY "80" CACHE STRING "Target GPU compute capability (80, 86, 87, 89, 90)")
-set_property(CACHE GPU_COMPUTE_CAPABILITY PROPERTY STRINGS 80 86 87 89 90)
-
-################################################################################
-# Configuration
-################################################################################
-
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/find)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/recipes)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
     set(CMAKE_BUILD_TYPE Release)
 endif ()
 
+# ==============================================================================
+# Build System Setup
+# ==============================================================================
+# Package Management
+# TODO: Consider using CPM for the various libraries above
+include(cmake/CPM.cmake)
+
+# Auto-detect GPU architecture
+include("cmake/AutoDetectCudaArch.cmake")
 
 # Direct all output to /bin directory
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 
-# Get and store git sha1
+# Get and store git sha1 https://stackoverflow.com/a/4318642/1608232
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 include(GetGitRevisionDescription)
 get_git_head_revision(GIT_REFSPEC GIT_SHA1)
 git_local_changes(GIT_LOCAL_CHANGES_STATUS)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/git_sha1.cpp.in" "${CMAKE_CURRENT_SOURCE_DIR}/include/rxmesh/util/git_sha1.cpp" @ONLY)
 
-# Generate git_sha1.cpp from template
-configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/git_sha1.cpp.in"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/rxmesh/util/git_sha1.cpp"
-    @ONLY
+# Enable IDE folder support
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+# ==============================================================================
+# RXMesh Library Target
+# ==============================================================================
+# RXMesh: could think of this as just the header library, so name RXMesh
+file(GLOB_RECURSE RXMESH_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/include/*.*")
+add_library(RXMesh INTERFACE)
+
+target_sources(RXMesh
+        INTERFACE ${RXMESH_SOURCES}
 )
 
-################################################################################
-# Project source files
-################################################################################
-
-# Core library source files
-file(GLOB_RECURSE RXMESH_SRC_FILES
-    "include/*.cpp"
-    "include/*/*.cpp"
-    "include/*.cu"
-    "include/*/*.cu"
-)
-
-message(STATUS "Adding RXMesh source files...")
-add_library(${PROJECT_NAME}_lib ${RXMESH_SRC_FILES})
-
-# Enable CUDA separable compilation for the library
-set_property(TARGET ${PROJECT_NAME}_lib PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-
-message(STATUS "Adding include directories...")
-target_include_directories(${PROJECT_NAME}_lib PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-)
-
-
-################################################################################
-# Compiler options
-################################################################################
-
-# CUDA setup
-message(STATUS "Configuring CUDA...")
-find_package(CUDAToolkit REQUIRED)
-
-# Check CUDA version
-message(STATUS "CUDA version: ${CUDAToolkit_VERSION}")
-if(CUDAToolkit_VERSION VERSION_LESS "11.0")
-    message(FATAL_ERROR "CUDA 11.0 or higher is required. Found: ${CUDAToolkit_VERSION}")
-endif()
-
-# Manual GPU Architecture Configuration
-message(STATUS "Manual GPU architecture configuration:")
-message(STATUS "  GPU_ARCHITECTURE: ${GPU_ARCHITECTURE}")
-message(STATUS "  GPU_COMPUTE_CAPABILITY: ${GPU_COMPUTE_CAPABILITY}")
-
-# Validate GPU architecture and compute capability combination
-if(GPU_ARCHITECTURE STREQUAL "HOPPER")
-    if(NOT GPU_COMPUTE_CAPABILITY STREQUAL "90")
-        message(FATAL_ERROR "Hopper architecture requires compute capability 90. Current: ${GPU_COMPUTE_CAPABILITY}")
-    endif()
-    set(CUDA_ARCHITECTURES "90a") # SM90a for Hopper
-elseif(GPU_ARCHITECTURE STREQUAL "AMPERE")
-    if(NOT (GPU_COMPUTE_CAPABILITY STREQUAL "80" OR
-            GPU_COMPUTE_CAPABILITY STREQUAL "86" OR
-            GPU_COMPUTE_CAPABILITY STREQUAL "87" OR
-            GPU_COMPUTE_CAPABILITY STREQUAL "89"))
-        message(FATAL_ERROR "Ampere architecture requires compute capability 80, 86, 87, or 89. Current: ${GPU_COMPUTE_CAPABILITY}")
-    endif()
-    set(CUDA_ARCHITECTURES "${GPU_COMPUTE_CAPABILITY}")
-elseif(GPU_ARCHITECTURE STREQUAL "ADA")
-    if(NOT (GPU_COMPUTE_CAPABILITY STREQUAL "89"))
-        message(FATAL_ERROR "Ada architecture requires compute capability 89. Current: ${GPU_COMPUTE_CAPABILITY}")
-    endif()
-    set(CUDA_ARCHITECTURES "${GPU_COMPUTE_CAPABILITY}")
-else()
-    message(FATAL_ERROR "Unsupported GPU architecture: ${GPU_ARCHITECTURE}. Supported: AMPERE, HOPPER, ADA")
-endif()
-
-# Set architecture specific compile definitions and properties
-if(GPU_ARCHITECTURE STREQUAL "HOPPER")
-    message(STATUS "Configuring for Hopper architecture with Tensor Memory Accelerator (TMA)")
-    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_GPU_ARCH_HOPPER)
-
-    set_target_properties(${PROJECT_NAME}_lib PROPERTIES
-        CUDA_SEPARABLE_COMPILATION OFF
-        CUDA_ARCHITECTURES ${CUDA_ARCHITECTURES}
-    )
-elseif(GPU_ARCHITECTURE STREQUAL "AMPERE")
-    message(STATUS "Configuring for Ampere architecture (CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES})")
-    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_GPU_ARCH_AMPERE)
-
-    set_target_properties(${PROJECT_NAME}_lib PROPERTIES
-        CUDA_SEPARABLE_COMPILATION OFF
-        CUDA_ARCHITECTURES ${CUDA_ARCHITECTURES}
-    )
-elseif(GPU_ARCHITECTURE STREQUAL "ADA")
-    message(STATUS "Configuring for Ada architecture (CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES})")
-    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_GPU_ARCH_ADA)
-
-    set_target_properties(${PROJECT_NAME}_lib PROPERTIES
-        CUDA_SEPARABLE_COMPILATION OFF
-        CUDA_ARCHITECTURES ${CUDA_ARCHITECTURES}
-    )
-endif()
-
-# CUDA compiler flags
-target_compile_options(${PROJECT_NAME}_lib PUBLIC
-    $<$<COMPILE_LANGUAGE:CUDA>:
-        -lineinfo
-        -O3
-        --use_fast_math
-        --ptxas-options=-v,-warn-lmem-usage,--warn-on-spills
-        -rdc=true
-        --expt-extended-lambda
-        --expt-relaxed-constexpr
-    >
-)
-
-# Debug mode CUDA flags
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_options(${PROJECT_NAME}_lib PUBLIC
-        $<$<COMPILE_LANGUAGE:CUDA>: -G -src-in-ptx>
-    )
-endif()
-
-# C++ compiler flags
-target_compile_options(${PROJECT_NAME}_lib PRIVATE
-    $<$<COMPILE_LANGUAGE:CXX>:
-        $<$<CXX_COMPILER_ID:GNU>:-Wall -Wextra -m64 -fopenmp -O3 -std=c++20>
-        $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra -m64 -fopenmp -O3 -std=c++20>
-        $<$<CXX_COMPILER_ID:MSVC>:-D_SCL_SECURE_NO_WARNINGS /openmp:experimental /MP /std:c++20 /bigobj>
-    >
-)
-
-# Use C++20 for CXX files
-set_target_properties(${PROJECT_NAME}_lib PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
-)
-
-# Add -pthread to compilation and linking
-find_package(Threads)
-target_link_libraries(${PROJECT_NAME}_lib PUBLIC ${CMAKE_THREAD_LIBS_INIT})
-
-# SIMD options
-message(STATUS "Searching for SIMD optimizations...")
-find_package(SSE)
-find_package(AVX)
-find_package(FMA)
-string(REPLACE " " ";" SIMD_FLAGS "${SSE_FLAGS} ${AVX_FLAGS} ${FMA_FLAGS}")
-target_compile_options(${PROJECT_NAME}_lib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${SIMD_FLAGS}>)
-
-
-################################################################################
-# Required Libraries
-################################################################################
-
-# Include recipe files for external dependencies
+# ==============================================================================
+# External Dependencies
+# ==============================================================================
+# GoogleTest
 include(cmake/recipes/googletest.cmake)
+include(GoogleTest)
+
+# RapidJSON
 include(cmake/recipes/rapidjson.cmake)
-include(cmake/recipes/openmesh.cmake)
+target_include_directories(${PROJECT_NAME} INTERFACE "${rapidjson_SOURCE_DIR}/include")
+
+# spdlog
 include(cmake/recipes/spdlog.cmake)
+target_include_directories(${PROJECT_NAME} INTERFACE "${spdlog_SOURCE_DIR}/include")
+
+# OpenMesh
+include(cmake/recipes/openmesh.cmake)
+target_compile_definitions(${PROJECT_NAME} INTERFACE -DNO_DECREMENT_DEPRECATED_WARNINGS)
+
+# GLM (note: changed from PRIVATE to PUBLIC based on your CMakeLists.txt)
 include(cmake/recipes/glm.cmake)
+target_link_libraries(${PROJECT_NAME} INTERFACE glm::glm)
+target_compile_definitions(${PROJECT_NAME} INTERFACE GLM_ENABLE_EXPERIMENTAL)
+
+# Cereal
 include(cmake/recipes/cereal.cmake)
-
-# Link core libraries
-target_link_libraries(${PROJECT_NAME}_lib PUBLIC
-    glm::glm
-        OpenMeshCore
-    OpenMeshTools
-)
-
-# Enable GLM experimental extensions globally
-target_compile_definitions(${PROJECT_NAME}_lib PUBLIC GLM_ENABLE_EXPERIMENTAL)
-
-# Add additional include directories for header-only libraries
-target_include_directories(${PROJECT_NAME}_lib PUBLIC "${rapidjson_SOURCE_DIR}/include")
-target_include_directories(${PROJECT_NAME}_lib PUBLIC "${spdlog_SOURCE_DIR}/include")
-target_include_directories(${PROJECT_NAME}_lib PUBLIC "${cereal_SOURCE_DIR}/include")
+target_include_directories(${PROJECT_NAME} INTERFACE "${cereal_SOURCE_DIR}/include")
 
 # Polyscope (optional)
-if(${PROJECT_NAME}_WITH_POLYSCOPE)
+if(${RX_USE_POLYSCOPE})
     include(cmake/recipes/polyscope.cmake)
-    target_link_libraries(${PROJECT_NAME}_lib PUBLIC polyscope::polyscope)
-    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC USE_POLYSCOPE)
+    target_include_directories(${PROJECT_NAME} INTERFACE "${cereal_SOURCE_DIR}/include")
+    target_link_libraries(RXMesh INTERFACE polyscope)
 endif()
 
+# Compile features and definitions
+target_compile_features(RXMesh INTERFACE cxx_std_17)
+target_compile_definitions(RXMesh
+        INTERFACE INPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/input/
+        INTERFACE OUTPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/output/
+)
+if(${RX_USE_POLYSCOPE})
+    target_compile_definitions(RXMesh INTERFACE USE_POLYSCOPE)
+endif()
+target_include_directories(RXMesh
+        INTERFACE "include"
+        INTERFACE "${rapidjson_SOURCE_DIR}/include"
+        INTERFACE "${spdlog_SOURCE_DIR}/include"
+        INTERFACE "${cereal_SOURCE_DIR}/include"
+        INTERFACE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
+
+# ==============================================================================
+# Compiler Configuration
+# ==============================================================================
+# C++ compiler flags
+set(cxx_flags
+        $<$<CXX_COMPILER_ID:MSVC>:-D_SCL_SECURE_NO_WARNINGS /openmp:experimental /MP /std:c++17 /bigobj>  #Add MSVC-specific compiler flags here
+        $<$<CXX_COMPILER_ID:GNU>:-Wall -m64 -fopenmp -O3 -std=c++17 -Wno-unused-function> #Add GCC/Clang-specific compiler flags here
+)
+
+# CUDA compiler flags
+set(MSVC_XCOMPILER_FLAGS "/openmp:experimental /MP /std:c++17 /Zi")
+set(cuda_flags
+        -Xcompiler=$<$<CXX_COMPILER_ID:GNU>:-rdynamic -Wall -fopenmp -O3 -Wno-unused-function>
+        -Xcompiler=$<$<CXX_COMPILER_ID:MSVC>:${MSVC_XCOMPILER_FLAGS}>
+        #Disables warning
+        #177-D "function XXX was declared but never referenced"
+        #174-D "expression has no effect"
+        #20054-D "dynamic initialization is not supported for a function-scope static __shared__ variable within a __device__/__global__ function"
+        -Xcudafe "--display_error_number --diag_suppress=177 --diag_suppress=174 --diag_suppress=20054"
+        -rdc=true
+        -lineinfo
+        --expt-extended-lambda
+        #-use_fast_math
+        $<$<CXX_COMPILER_ID:GNU>:-O3>
+        --expt-relaxed-constexpr
+        -Xptxas -warn-spills -res-usage
+        #-Xptxas -dlcm=cg -dscm=cg
+        --ptxas-options=-v
+)
+
+target_compile_options(RXMesh INTERFACE
+        $<$<COMPILE_LANGUAGE:CXX>:${cxx_flags}>
+        $<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>
+)
+
+# ==============================================================================
+# Required Libraries
+# ==============================================================================
 # METIS
-if (${PROJECT_NAME}_WITH_METIS)
-    # Try to find system-installed METIS first
-    find_package(METIS QUIET)
-    
-    if(NOT METIS_FOUND)
-        # If system METIS not found, use FetchContent to build from source
-        message(STATUS "System METIS not found. Building from source...")
-        include(cmake/recipes/metis.cmake)
-        # Set variables for the built METIS
-        set(METIS_LIBRARIES metis)
-        set(METIS_INCLUDES ${metis_SOURCE_DIR}/include)
-    endif()
-    
-    if (EXISTS "${METIS_INCLUDES}")
-        target_link_libraries(${PROJECT_NAME}_lib PUBLIC
-                ${METIS_LIBRARIES}
-        )
-        target_include_directories(${PROJECT_NAME}_lib PUBLIC "${METIS_INCLUDES}")
-    else ()
-        message(STATUS "The METIS is not found")
-    endif ()
-endif ()
-
-
-# SuiteSparse - Must be configured before Parth since Parth depends on it
-if (${PROJECT_NAME}_WITH_SUITESPARSE)
-    # Try to find system-installed SuiteSparse first
-   set(SUITESPARSE_INCLUDE_DIR_HINTS $ENV{SUITESPARSE_INC})
-   set(SUITESPARSE_LIBRARY_DIR_HINTS $ENV{SUITESPARSE_LIB})
-   find_package(SuiteSparse QUIET)
-    
-    if(NOT SuiteSparse_FOUND)
-        # If system SuiteSparse not found, use FetchContent to build from source
-        message(STATUS "System SuiteSparse not found. Building from source...")
-        include(cmake/recipes/suitesparse.cmake)
-    endif()
-    
-    target_link_libraries(${PROJECT_NAME}_lib PUBLIC ${SUITESPARSE_LIBRARIES})
-    target_include_directories(${PROJECT_NAME}_lib PUBLIC ${SUITESPARSE_INCLUDE_DIRS})
-    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_WITH_SUITESPARSE)
-endif ()
-
-# cuDSS (optional)
-if(${PROJECT_NAME}_WITH_CUDSS)
-    find_package(cudss REQUIRED)
-    if(cudss_FOUND)
-        message(STATUS "Found cuDSS version ${cudss_VERSION}")
-        target_link_libraries(${PROJECT_NAME}_lib PUBLIC cudss::cudss)
-        target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_WITH_CUDSS)
-    else()
-        message(WARNING "cuDSS not found, disabling cuDSS support")
-        set(${PROJECT_NAME}_WITH_CUDSS OFF CACHE BOOL "" FORCE)
-    endif()
-endif()
+include("cmake/recipes/metis.cmake")
+target_link_libraries(RXMesh INTERFACE metis)
 
 # OpenMP
 find_package(OpenMP)
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(${PROJECT_NAME}_lib PUBLIC OpenMP::OpenMP_CXX)
+if (OpenMP_CXX_FOUND)
+    target_link_libraries(RXMesh INTERFACE OpenMP::OpenMP_CXX)
 endif()
 
-# CUDA libraries
-target_link_libraries(${PROJECT_NAME}_lib PUBLIC
-    CUDA::cusparse
-    CUDA::cusolver
-    CUDA::cublas
-)
+# CUDA Toolkit
+find_package(CUDAToolkit REQUIRED)
+target_link_libraries(RXMesh INTERFACE CUDA::cusparse)
+target_link_libraries(RXMesh INTERFACE CUDA::cusolver)
 
 # Eigen
-include(cmake/recipes/eigen.cmake)
-target_link_libraries(${PROJECT_NAME}_lib PUBLIC Eigen3::Eigen)
-target_compile_definitions(${PROJECT_NAME}_lib PUBLIC "EIGEN_DEFAULT_DENSE_INDEX_TYPE=int")
+include("cmake/recipes/eigen.cmake")
+target_link_libraries(RXMesh INTERFACE Eigen3::Eigen)
+# https://eigen.tuxfamily.org/dox/TopicCUDA.html
+target_compile_definitions(RXMesh INTERFACE "EIGEN_DEFAULT_DENSE_INDEX_TYPE=int")
 
-# Additional compile definitions
-target_compile_definitions(${PROJECT_NAME}_lib PUBLIC
-    INPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/input/
-    OUTPUT_DIR=${CMAKE_CURRENT_SOURCE_DIR}/output/
-)
-
-# Build tests and apps based on options
-if(${PROJECT_NAME}_WITH_PARTH)
-    include(cmake/recipes/parth.cmake)
-    target_link_libraries(${PROJECT_NAME}_lib PUBLIC Parth::parth)
-    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC RXMESH_WITH_PARTH)
+# ==============================================================================
+# Optional Libraries
+# ==============================================================================
+# SuiteSparse
+if(${RX_USE_SUITESPARSE})
+    include("cmake/recipes/suitesparse.cmake")
+    target_compile_definitions(RXMesh INTERFACE USE_SUITESPARSE)
 endif()
 
-if(${PROJECT_NAME}_WITH_APPS)
-	add_subdirectory(apps)
+# cuDSS
+if(${RX_USE_CUDSS})
+    find_package(cudss QUIET)
+    if (cudss_FOUND)
+        message(STATUS "Found cuDSS version ${cudss_VERSION}")
+
+        # Try to use modern CMake target first, fallback to manual linking
+        if(TARGET cudss::cudss)
+            target_link_libraries(RXMesh INTERFACE cudss::cudss)
+        else()
+            # Manual linking for older cuDSS installations
+            target_link_directories(RXMesh INTERFACE ${cudss_LIBRARY_DIR})
+            
+            if (WIN32)
+                target_include_directories(RXMesh INTERFACE ${cudss_INCLUDE_DIR})
+                target_link_libraries(RXMesh INTERFACE cudss)
+            else()
+                target_link_libraries(RXMesh INTERFACE cudss_static)
+            endif()
+        endif()
+
+        # Handle Windows DLL copying for runtime
+        if (WIN32)
+            add_custom_target(CopyCUDSSDLL)
+            foreach(CONFIG ${CMAKE_CONFIGURATION_TYPES})
+                add_custom_command(
+                        OUTPUT "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CONFIG}/cudss64_0.dll"
+                        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CONFIG}"
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${cudss_BINARY_DIR}/cudss64_0.dll"
+                        "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CONFIG}/cudss64_0.dll"
+                        DEPENDS "${cudss_BINARY_DIR}/cudss64_0.dll"
+                        COMMENT "Copying cudss64_0.dll for ${CONFIG} configuration"
+                        VERBATIM
+                )
+                add_custom_target("CopyCUDSSDLL${CONFIG}"
+                        DEPENDS "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CONFIG}/cudss64_0.dll")
+                add_dependencies(CopyCUDSSDLL "CopyCUDSSDLL${CONFIG}")
+            endforeach()
+        endif()
+
+        target_compile_definitions(RXMesh INTERFACE USE_CUDSS)
+    else()
+        message(WARNING "cuDSS not found, disabling cuDSS support")
+        set(RX_USE_CUDSS "OFF" CACHE BOOL "" FORCE)
+    endif()
 endif()
 
-if(${PROJECT_NAME}_WITH_DEV)
+# ==============================================================================
+# Subdirectories
+# ==============================================================================
+if(${RX_BUILD_TESTS})
+    add_subdirectory(tests)
+endif()
+
+if(${RX_BUILD_APPS})
+    add_subdirectory(apps)
+endif()
+
+if(${RX_WITH_DEV})
     add_subdirectory(dev)
 endif()
-

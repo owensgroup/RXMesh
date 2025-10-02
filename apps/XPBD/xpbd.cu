@@ -434,6 +434,9 @@ int main(int argc, char** argv)
     float total_time = 0;
 
     auto polyscope_callback = [&]() mutable {
+        if (ImGui::Button("Pause")) {
+            started = false;
+        }
         if (ImGui::Button("Start Simulation") || started) {
             started = true;
 

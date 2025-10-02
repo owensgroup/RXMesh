@@ -5,7 +5,7 @@
 //  Created by Minchen Li on 6/22/18.
 //
 
-#ifdef RXMESH_WITH_SUITESPARSE
+#ifdef USE_SUITESPARSE
 
 #include "CHOLMODSolver.hpp"
 #include <cassert>

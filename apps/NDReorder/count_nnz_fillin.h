@@ -68,13 +68,10 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
         perm.indices()[i] = h_permute[i];
     }
 
-    
-    // Eigen::SparseMatrix<float> permuted_mat(eigen_mat.rows(), eigen_mat.rows());
+    Eigen::SparseMatrix<float> permuted_mat(eigen_mat.rows(), eigen_mat.rows());
 
-    // Eigen::internal::permute_symm_to_fullsymm<Eigen::Lower, false>(
-    //     eigen_mat, permuted_mat, perm.indices().data());
-    // Apply permutation using the standard Eigen permutation interface
-    Eigen::SparseMatrix<float> permuted_mat = perm * eigen_mat * perm.transpose();
+    Eigen::internal::permute_symm_to_fullsymm<Eigen::Lower, false>(
+        eigen_mat, permuted_mat, perm.indices().data());
 
 
     // save_sparse_mat(permuted_mat,

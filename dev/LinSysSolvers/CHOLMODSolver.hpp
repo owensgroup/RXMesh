@@ -1,7 +1,7 @@
 
 #pragma once
 
-#ifdef RXMESH_WITH_SUITESPARSE
+#ifdef USE_SUITESPARSE
 
 #include "LinSysSolver.hpp"
 

@@ -11,6 +11,7 @@
 #include "rxmesh/matrix/cg_mat_free_solver.h"
 #include "rxmesh/matrix/cg_solver.h"
 #include "rxmesh/matrix/cholesky_solver.h"
+#include "rxmesh/matrix/cudss_cholesky_solver.h"
 #include "rxmesh/matrix/lu_solver.h"
 #include "rxmesh/matrix/pcg_solver.h"
 #include "rxmesh/matrix/qr_solver.h"
@@ -44,7 +45,7 @@ __global__ static void matvec(const Context            context,
 
 
         for (int i = 0; i < num_cols; ++i) {
-            out(row_id, i) = 0;         
+            out(row_id, i) = 0;
         }
 
 
@@ -117,13 +118,14 @@ __global__ static void setup(const Context      context,
     query.dispatch<Op::VV>(block, shrd_alloc, set);
 }
 
-template <typename T, typename SolverT>
+template <typename T, typename SolverT, typename PreSolveFunc>
 void test_direct_solver(RXMeshStatic&    rx,
                         SolverT&         solver,
                         SparseMatrix<T>& A,
                         DenseMatrix<T>&  B,
                         DenseMatrix<T>&  X,
                         bool             sol_on_device,
+                        PreSolveFunc     pre_solve_callback,
                         T                factor1 = 7.4f,
                         T                factor2 = 2.6f,
                         T                factor3 = 10.3f,
@@ -144,7 +146,8 @@ void test_direct_solver(RXMeshStatic&    rx,
     A.move(DEVICE, HOST);
     B.move(DEVICE, HOST);
 
-    solver.pre_solve(rx);
+    // solver.pre_solve(rx);
+    pre_solve_callback();
 
     solver.solve(B, X);
 
@@ -183,11 +186,22 @@ TEST(Solver, Cholesky)
 
     CholeskySolver solver(&A);
 
-    test_direct_solver(rx, solver, A, B, X, true);
+    test_direct_solver(
+        rx, solver, A, B, X, true, [&]() { solver.pre_solve(rx); });
 
     // testing resolving
     test_direct_solver(
-        rx, solver, A, B, X, true, 2.888f, 55.109f, 3.464f, 70.f);
+        rx,
+        solver,
+        A,
+        B,
+        X,
+        true,
+        [&]() { solver.pre_solve(rx); },
+        2.888f,
+        55.109f,
+        3.464f,
+        70.f);
 
 
     A.release();
@@ -195,10 +209,45 @@ TEST(Solver, Cholesky)
     B.release();
 }
 
+#ifdef USE_CUDSS
+TEST(Solver, cuDSSCholesky)
+{
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    SparseMatrix<float> A(rx, Op::VV);
+    DenseMatrix<float>  X(rx, num_vertices, 3);
+    DenseMatrix<float>  B(rx, num_vertices, 3);
+
+    cuDSSCholeskySolver solver(&A);
+
+    test_direct_solver(
+        rx, solver, A, B, X, true, [&]() { solver.pre_solve(rx, B, X); });
+
+    // testing resolving
+    test_direct_solver(
+        rx,
+        solver,
+        A,
+        B,
+        X,
+        true,
+        [&]() { solver.pre_solve(rx, B, X); },
+        2.888f,
+        55.109f,
+        3.464f,
+        70.f);
+
+
+    A.release();
+    X.release();
+    B.release();
+}
+#endif
 
 TEST(Solver, QR)
 {
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
@@ -209,7 +258,8 @@ TEST(Solver, QR)
 
     QRSolver solver(&A);
 
-    test_direct_solver(rx, solver, A, B, X, true);
+    test_direct_solver(
+        rx, solver, A, B, X, true, [&]() { solver.pre_solve(rx); });
 
     // testing resolving
     // test_direct_solver(rx, solver, A, B, X,
@@ -232,7 +282,8 @@ TEST(Solver, LU)
 
     LUSolver solver(&A);
 
-    test_direct_solver(rx, solver, A, B, X, false);
+    test_direct_solver(
+        rx, solver, A, B, X, false, [&]() { solver.pre_solve(rx); });
 
     A.release();
     X.release();
@@ -252,7 +303,8 @@ TEST(Solver, CompareEigen)
 
     CholeskySolver solver(&A);
 
-    test_direct_solver(rx, solver, A, B, X, true);
+    test_direct_solver(
+        rx, solver, A, B, X, true, [&]() { solver.pre_solve(rx); });
 
     DenseMatrix<float> X_copy(rx, num_vertices, 3);
     X_copy.copy_from(X, DEVICE, HOST);
@@ -261,8 +313,8 @@ TEST(Solver, CompareEigen)
     auto X_eigen = X.to_eigen();
     auto B_eigen = B.to_eigen();
 
-    // Note: there is a bug with Eigen if we use the default reordering
-    // which is Eigen::AMDOrdering<int>
+    // Note: there is a bug with Eigen if we use the default
+    // reordering which is Eigen::AMDOrdering<int>
     // (https://gitlab.com/libeigen/eigen/-/issues/2839)
     Eigen::SimplicialLDLT<Eigen::SparseMatrix<float>,
                           Eigen::UpLoType::Lower,
@@ -330,7 +382,6 @@ void test_iterative_solver(RXMeshStatic&    rx,
 
 TEST(Solver, CG)
 {
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
@@ -353,7 +404,6 @@ TEST(Solver, CG)
 
 TEST(Solver, PCG)
 {
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
@@ -375,7 +425,6 @@ TEST(Solver, PCG)
 
 TEST(Solver, CGMatFree)
 {
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
     uint32_t num_vertices = rx.get_num_vertices();
@@ -400,8 +449,8 @@ TEST(Solver, CGMatFree)
                            7.4f,
                            2.6f,
                            10.3f,
-                           100.f);        
-    };    
+                           100.f);
+    };
 
     test_iterative_solver(rx, solver, A, B, X);
 

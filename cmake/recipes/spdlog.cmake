@@ -7,6 +7,3 @@ FetchContent_Declare(spdlog
 )
 
 FetchContent_MakeAvailable(spdlog)
-
-# Add spdlog to the main library
-target_include_directories(${PROJECT_NAME}_lib PUBLIC "${spdlog_SOURCE_DIR}/include")

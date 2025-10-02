@@ -31,10 +31,14 @@ set_property(TARGET DelaunayEdgeFlip PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "DelaunayEdgeFlip" FILES ${SOURCE_LIST})
 
 target_link_libraries(DelaunayEdgeFlip     
-    PRIVATE RXMesh_lib
+    PRIVATE RXMesh
     PRIVATE gtest_main
 	PRIVATE OpenMeshCore
     PRIVATE OpenMeshTools
 )
+
+if(WIN32 AND RX_USE_CUDSS)
+	add_dependencies(DelaunayEdgeFlip CopyCUDSSDLL)
+endif()
 
 #gtest_discover_tests( DelaunayEdgeFlip )

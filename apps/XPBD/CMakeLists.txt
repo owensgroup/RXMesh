@@ -16,7 +16,11 @@ set_property(TARGET XPBD PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "XPBD" FILES ${SOURCE_LIST})
 
 target_link_libraries(XPBD     
-    PRIVATE RXMesh_lib
+    PRIVATE RXMesh
 )
+
+if(WIN32 AND RX_USE_CUDSS)
+	add_dependencies(XPBD CopyCUDSSDLL)
+endif()
 
 #gtest_discover_tests( XPBD )

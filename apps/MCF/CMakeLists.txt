@@ -8,6 +8,7 @@ set(SOURCE_LIST
 	mcf_chol.h	
 	mcf_gmg.h	
 	mcf_eigen.h
+	mcf_cudss.h
 )
 
 target_sources(MCF 
@@ -30,10 +31,14 @@ source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "MCF" FILES ${SOURCE_LIST})
 
 
 target_link_libraries( MCF     
-    PRIVATE RXMesh_lib
+    PRIVATE RXMesh
     PRIVATE gtest_main
 )
 if (${RX_USE_SUITESPARSE})  
   target_link_libraries(MCF PRIVATE SuiteSparse::CHOLMOD)
+endif()
+
+if(WIN32 AND RX_USE_CUDSS)
+	add_dependencies(MCF CopyCUDSSDLL)
 endif()
 #gtest_discover_tests( MCF )

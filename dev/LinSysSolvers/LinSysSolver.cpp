@@ -1,11 +1,11 @@
 #include "LinSysSolver.hpp"
 #include <iostream>
 
-#ifdef RXMESH_WITH_SUITESPARSE
+#ifdef USE_SUITESPARSE
 #include "CHOLMODSolver.hpp"
 #endif
 
-#ifdef RXMESH_WITH_CUDSS
+#ifdef USE_CUDSS
 #include "CUDSSSolver.hpp"
 #endif
 
@@ -15,14 +15,14 @@ namespace RXMESH_SOLVER {
         switch (type) {
 
 
-#ifdef RXMESH_WITH_SUITESPARSE
+#ifdef USE_SUITESPARSE
             case LinSysSolverType::CPU_CHOLMOD:
                 return new CHOLMODSolver();
 #endif
+
+#ifdef USE_CUDSS
             case LinSysSolverType::GPU_CUDSS:
                 return new CUDSSSolver();
-#ifdef RXMESH_WITH_CUDSS
-
 #endif
             default:
                 std::cerr << "Uknown linear system solver type" << std::endl;

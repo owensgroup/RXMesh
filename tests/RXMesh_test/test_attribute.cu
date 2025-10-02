@@ -120,8 +120,7 @@ TEST(Attribute, Reduce)
 
     ReduceHandle reduce_handle(*attr);
 
-    // uint32_t output = reduce_handle.reduce(*attr, cub::Max(), 0);
-    uint32_t output = reduce_handle.reduce(*attr, [] __device__ (uint32_t a, uint32_t b) -> uint32_t { return a > b ? a : b; }, 0);
+    uint32_t output = reduce_handle.reduce(*attr, cub::Max(), 0);
 
     ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 

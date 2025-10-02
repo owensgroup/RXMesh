@@ -408,7 +408,8 @@ int main(int argc, char** argv)
         using ProblemT = DiffScalarProblem<T, 2, VertexHandle, true>;
         ProblemT problem(rx);
         using HessMatT = typename ProblemT::HessMatT;
-        LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+        LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
+            problem.hess.get());
         NetwtonSolver newton_solver(problem, &solver);
 
         manifold_optimization<T>(

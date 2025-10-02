@@ -5,9 +5,6 @@
 #include "gtest/gtest.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/cuda_query.h"
-#include <Eigen/Sparse>
-#include <unsupported/Eigen/SparseExtra>
-
 
 struct arg
 {
@@ -37,6 +34,10 @@ struct arg
 #include "mcf_cg_mat_free.h"
 #include "mcf_chol.h"
 #include "mcf_gmg.h"
+
+#ifdef USE_CUDSS
+#include "mcf_cudss.h"
+#endif
 
 void creat_matrices(rxmesh::RXMeshStatic& rx)
 {
@@ -76,10 +77,8 @@ void creat_matrices(rxmesh::RXMeshStatic& rx)
 
     std::filesystem::create_directories(output_dir);
 
-    // Convert to proper sparse matrix first
-    Eigen::SparseMatrix<float> B_sparse = B_mat_copy.sparseView();
-    Eigen::saveMarket(
-        B_sparse,
+    Eigen::saveMarketDense(
+        B_mat_copy,
         output_dir + "/" + extract_file_name(Arg.obj_file_name) + "_B.mtx");
     Eigen::saveMarket(
         A_mat_copy,
@@ -119,6 +118,10 @@ TEST(App, MCF)
                        string_to_sampling(Arg.gmg_sampling));
     } else if (Arg.solver == "chol") {
         mcf_cusolver_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
+#ifdef USE_CUDSS
+    } else if (Arg.solver == "cudss_chol") {
+        mcf_cudss_chol<dataT>(rx, string_to_permute_method(Arg.perm_method));
+#endif
     } else {
         RXMESH_ERROR("Unrecognized input solver type: {}", Arg.solver);
     }
@@ -142,14 +145,14 @@ int main(int argc, char** argv)
                         " -uniform_laplace:   Toggle the use of uniform Laplace weights. Default is {}\n"
                         " -dt:                Time step (delta t). Default is {}\n"
                         "                     Hint: should be between (0.001, 1) for cotan Laplace or between (1, 100) for uniform Laplace\n"
-                        " -solver:            Solver to use. Options are cg_mat_free, pcg_mat_free, cg, pcg, chol, or gmg. Default is {}\n"                         
+                        " -solver:            Solver to use. Options are cg_mat_free, pcg_mat_free, cg, pcg, chol, cudss_chol, or gmg. Default is {}\n"                         
                         " -perm:              Permutation method for Cholesky factorization (symrcm, symamd, nstdis, gpumgnd, gpund). Default is {}\n"
                         " -max_iter:          Maximum number of iterations for iterative solvers. Default is {}\n"                                            
                         " -tol_abs:           Iterative solver absolute tolerance. Default is {}\n"
                         " -tol_rel:           Iterative solver relative tolerance. Default is {}\n"
                         " -create_mat:        Export the linear system matrices (.mtx) and mesh obj to files and exit. Default is {}\n"
                         " -gmg_levels:        GMG number of levels in the hierarchy, includes the finest level. Default is {}\n"
-                        " -gmg_csolver:       GMG coarse solver. Default is {}\n"
+                        " -gmg_csolver:       GMG coarse solver (jacobi, cholesky, cudsscholesky). Default is {}\n"
                         " -gmg_sampling:      GMG sampling method to create the hierarchy (random, fps, kmeans). Default is {}\n"
                         " -gmg_threshold:     GMG threshold for the coarsest level in the hierarchy, i.e., number of vertices in the coarsest level. Default is {}\n"
                         " -gmg_pruned_ptap:   GMG toggle using pruned PtAP for fast construction. Default is {}\n"

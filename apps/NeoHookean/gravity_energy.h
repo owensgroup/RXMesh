@@ -12,13 +12,12 @@ void gravity_energy(ProblemT& problem, VAttrT& x, T h, T mass)
     const T neg_mass_times_h_sq = -mass * h * h;
 
     problem.template add_term<Op::V, true>(
-        [x, neg_mass_times_h_sq, g] __device__(const auto& vh,
-                                               auto&       obj) mutable {
+        [=] __device__(const auto& vh, auto& obj) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            Eigen::Vector3<ActiveT> xx = iter_val<ActiveT, 3>(vh, obj);
+            Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, obj);
 
-            ActiveT E = neg_mass_times_h_sq * xx.dot(g);
+            ActiveT E = neg_mass_times_h_sq * xi.dot(g);
 
             return E;
         });

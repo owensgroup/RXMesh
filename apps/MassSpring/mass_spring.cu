@@ -33,13 +33,13 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
 
     using HessMatT = typename ProblemT::HessMatT;
 
-    const T rho             = 1000;  // density
-    const T k               = 4e4;   // stiffness
+    const T rho             = 100;  // density
+    const T k               = 4e4;  // stiffness
     const T initial_stretch = 1.3;
     const T tol             = 0.01;
     const T h               = 0.01;  // time step
     const T inv_h           = T(1) / h;
-    const T y_ground        = T(-0.5);
+    const T y_ground        = T(-1.0);
 
     glm::vec3 bb_lower(0), bb_upper(0);
     rx.bounding_box(bb_lower, bb_upper);
@@ -50,7 +50,8 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
 
     ProblemT problem(rx);
 
-    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
+        problem.hess.get());
 
     NetwtonSolver newton_solver(problem, &solver);
 
@@ -68,6 +69,7 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
     auto x = *rx.get_input_vertex_coordinates();
 
     auto& x_tilde = *problem.objective;
+    x_tilde.copy_from(x, DEVICE, DEVICE);
 
     typename ProblemT::DenseMatT alpha(rx, rx.get_num_vertices(), DEVICE);
 
@@ -123,6 +125,12 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
 
 
     auto step_forward = [&]() {
+        // evaluate energy
+        timer.start("Diff");
+        problem.eval_terms();
+        timer.stop("Diff");
+
+
         // update x_tilde
         timer.start("Step");
         rx.for_each_vertex(
@@ -133,14 +141,6 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
                 }
             });
 
-        // evaluate energy
-        timer.start("Diff");
-        problem.eval_terms();
-        timer.stop("Diff");
-
-        // T f = problem.get_current_loss();
-        // RXMESH_INFO("Time step: {}, Energy: {}", time_step, f);
-
         // apply bc
         newton_solver.apply_bc(is_bc);
 
@@ -149,20 +149,28 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
         newton_solver.compute_direction();
         timer.stop("LinearSolver");
 
-        int line_search_init_step = 1;
-
-        if (scenario == Scenario::DropBox) {
-            line_search_init_step =
-                init_step_size(rx, newton_solver.dir, alpha, x, y_ground);
-        }
-
         // residual is abs_max(newton_dir)/ h
         T residual = newton_solver.dir.abs_max() / h;
 
+
+        T f = problem.get_current_loss();
+
+
         int iter = 0;
-        if (residual > tol) {
+        while (residual > tol) {
+
+            RXMESH_INFO("Time step: {}, Energy: {}, Residual: {}",
+                        time_step,
+                        f,
+                        residual);
+
             timer.start("LineSearch");
-            newton_solver.line_search(line_search_init_step);
+            T line_search_init_step = 1;
+            if (scenario == Scenario::DropBox) {
+                line_search_init_step =
+                    init_step_size(rx, newton_solver.dir, alpha, x, y_ground);
+            }
+            newton_solver.line_search(line_search_init_step, 0.5);
             timer.stop("LineSearch");
 
             // evaluate energy
@@ -177,11 +185,6 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
             timer.start("LinearSolver");
             newton_solver.compute_direction();
             timer.stop("LinearSolver");
-
-            if (scenario == Scenario::DropBox) {
-                line_search_init_step =
-                    init_step_size(rx, newton_solver.dir, alpha, x, y_ground);
-            }
 
             // residual is abs_max(newton_dir)/ h
             residual = newton_solver.dir.abs_max() / h;
@@ -248,7 +251,7 @@ int main(int argc, char** argv)
 
     T dx = 1 / T(n - 1);
 
-    create_plane(verts, fv, n, n, 2, dx, true);
+    create_plane(verts, fv, n, n, 2, dx, false, vec3<float>(-0.5, -0.5, 0));
 
     RXMeshStatic rx(fv);
     rx.add_vertex_coordinates(verts, "Coords");

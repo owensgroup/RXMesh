@@ -9,7 +9,7 @@ void draw(RXMeshStatic& rx,
           VAttrT&       x_tilde,
           VAttrT&       velocity,
           FunT&         step_forward,
-          int&           time_step)
+          int&          step)
 {
     polyscope::options::groundPlaneHeightFactor = 0.37;
     polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::Tile;
@@ -41,7 +41,8 @@ void draw(RXMeshStatic& rx,
 
         ImGui::SameLine();
         if (ImGui::Button("Export")) {
-            rx.export_obj("MS_" + std::to_string(time_step) + ".obj", x_tilde);
+            rx.export_obj("NeoHookean_" + std::to_string(step) + ".obj",
+                          x_tilde);
         }
 
         if (is_running) {

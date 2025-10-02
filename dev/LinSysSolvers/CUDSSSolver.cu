@@ -5,7 +5,7 @@
 //  Created by Minchen Li on 6/22/18.
 //
 
-#ifdef RXMESH_WITH_CUDSS
+#ifdef USE_CUDSS
 
 #include <spdlog/spdlog.h>
 #include <cassert>

@@ -10,8 +10,4 @@ FetchContent_Declare(openmesh
 
 FetchContent_MakeAvailable(openmesh)
 
-# Add OpenMesh to the main library
-# Note: OpenMesh targets are linked in the main CMakeLists.txt
 
-# Add definitions
-target_compile_definitions(${PROJECT_NAME}_lib PUBLIC -DNO_DECREMENT_DEPRECATED_WARNINGS)
