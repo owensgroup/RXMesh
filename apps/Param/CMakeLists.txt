@@ -19,7 +19,7 @@ target_link_libraries(Param
     PRIVATE RXMesh
 )
 
-if(WIN32 AND RX_USE_CUDSS)
+if(WIN32 AND ${RX_USE_CUDSS})
 	add_dependencies(Param CopyCUDSSDLL)
 endif()
 

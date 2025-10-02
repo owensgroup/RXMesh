@@ -41,7 +41,7 @@ target_link_libraries(Remesh
     PRIVATE OpenMeshTools
 )
 
-if(WIN32 AND RX_USE_CUDSS)
+if(WIN32 AND ${RX_USE_CUDSS})
 	add_dependencies(Remesh CopyCUDSSDLL)
 endif()
 

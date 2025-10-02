@@ -38,7 +38,7 @@ target_link_libraries(Filtering
     PRIVATE OpenMeshTools
 )
 
-if(WIN32 AND RX_USE_CUDSS)
+if(WIN32 AND ${RX_USE_CUDSS})
 	add_dependencies(Filtering CopyCUDSSDLL)
 endif()
 

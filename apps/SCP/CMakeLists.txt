@@ -19,7 +19,7 @@ target_link_libraries(SCP
     PRIVATE RXMesh
 )
 
-if(WIN32 AND RX_USE_CUDSS)
+if(WIN32 AND ${RX_USE_CUDSS})
 	add_dependencies(SCP CopyCUDSSDLL)
 endif()
 

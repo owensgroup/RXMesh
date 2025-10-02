@@ -20,7 +20,7 @@ target_link_libraries(Smoothing
     PRIVATE RXMesh
 )
 
-if(WIN32 AND RX_USE_CUDSS)
+if(WIN32 AND ${RX_USE_CUDSS})
 	add_dependencies(Smoothing CopyCUDSSDLL)
 endif()
 

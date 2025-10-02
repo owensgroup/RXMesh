@@ -22,7 +22,7 @@ target_link_libraries( GaussianCurvature
     PRIVATE gtest_main
 )
 
-if(WIN32 AND RX_USE_CUDSS)
+if(WIN32 AND ${RX_USE_CUDSS})
 	add_dependencies(GaussianCurvature CopyCUDSSDLL)
 endif()
 

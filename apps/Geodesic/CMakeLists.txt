@@ -37,7 +37,7 @@ target_link_libraries( Geodesic
     PRIVATE OpenMeshTools
 )
 
-if(WIN32 AND RX_USE_CUDSS)
+if(WIN32 AND ${RX_USE_CUDSS})
 	add_dependencies(Geodesic CopyCUDSSDLL)
 endif()
 

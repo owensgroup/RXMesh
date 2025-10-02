@@ -19,7 +19,7 @@ target_link_libraries(Heat
     PRIVATE RXMesh
 )
 
-if(WIN32 AND RX_USE_CUDSS)
+if(WIN32 AND ${RX_USE_CUDSS})
 	add_dependencies(Heat CopyCUDSSDLL)
 endif()
 

@@ -37,7 +37,7 @@ target_link_libraries(DelaunayEdgeFlip
     PRIVATE OpenMeshTools
 )
 
-if(WIN32 AND RX_USE_CUDSS)
+if(WIN32 AND ${RX_USE_CUDSS})
 	add_dependencies(DelaunayEdgeFlip CopyCUDSSDLL)
 endif()
 

@@ -37,7 +37,7 @@ target_link_libraries(SECHistogram
     PRIVATE OpenMeshTools
 )
 
-if(WIN32 AND RX_USE_CUDSS)
+if(WIN32 AND ${RX_USE_CUDSS})
 	add_dependencies(SECHistogram CopyCUDSSDLL)
 endif()
 
