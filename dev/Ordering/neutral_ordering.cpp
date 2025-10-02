@@ -37,6 +37,10 @@ RXMESH_Ordering_Type NeutralOrdering::type() const
 {
     return  RXMESH_Ordering_Type::NEUTRAL;
 }
+std::string NeutralOrdering::typeStr() const
+{
+    return "NEUTRAL";
+}
 
 
 }

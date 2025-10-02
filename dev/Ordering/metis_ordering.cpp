@@ -51,6 +51,9 @@ RXMESH_Ordering_Type MetisOrdering::type() const
 {
     return  RXMESH_Ordering_Type::METIS;
 }
-
+std::string MetisOrdering::typeStr() const
+{
+    return "METIS";
+}
 
 }

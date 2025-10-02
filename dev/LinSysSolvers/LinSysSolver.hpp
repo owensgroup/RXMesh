@@ -26,6 +26,7 @@ class LinSysSolver
     int    NNZ      = 0;
     int    N        = 0;
     double residual = 0;
+    std::string ordering_name = "DEFAULT";
 
     Eigen::SparseMatrix<double> mtr;
 

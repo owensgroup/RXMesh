@@ -138,15 +138,10 @@ void RXMeshOrdering::compute_permutation(std::vector<int>& perm)
     }
 
 
-
     err = cudaGetLastError();
     if (err != cudaSuccess) {
         spdlog::error("CUDA error after nd_permute: {}", cudaGetErrorString(err));
     }
-
-    // std::vector<int> inv_perm;
-    // compute_inverse_perm(perm, inv_perm);
-    // perm = inv_perm;
 
     spdlog::info("RXMesh ND ordering computed for {} vertices", perm.size());
 }
@@ -157,5 +152,9 @@ RXMESH_Ordering_Type RXMeshOrdering::type() const
     return RXMESH_Ordering_Type::RXMESH_ND;
 }
 
+std::string RXMeshOrdering::typeStr() const
+{
+    return "RXMesh_ND";
+}
 
 }

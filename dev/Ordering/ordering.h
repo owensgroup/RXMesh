@@ -38,6 +38,7 @@ public:
     static Ordering* create(const RXMESH_Ordering_Type type);
 
     virtual RXMESH_Ordering_Type type() const = 0;
+    virtual std::string typeStr() const = 0;
 
     virtual void setGraph(int*               Gp,
                            int*              Gi,

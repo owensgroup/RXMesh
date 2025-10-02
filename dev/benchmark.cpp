@@ -164,6 +164,7 @@ int main(int argc, char* argv[])
         spdlog::info(
             "The ratio of factor non-zeros to matrix non-zeros given custom reordering: {}",
             (factor_nnz * 1.0 /OL.nonZeros()));
+        solver->ordering_name = ordering->typeStr();
     }
 
     solver->setMatrix(OL.outerIndexPtr(),

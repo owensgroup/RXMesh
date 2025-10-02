@@ -123,6 +123,7 @@ void CHOLMODSolver::innerAnalyze_pattern(std::vector<int>& user_defined_perm)
 
 void CHOLMODSolver::innerFactorize(void)
 {
+
     cholmod_factorize(A, L, &cm);
     if (cm.status == CHOLMOD_NOT_POSDEF) {
         std::cerr << "ERROR during numerical factorization - code: "
@@ -143,9 +144,9 @@ void CHOLMODSolver::innerSolve(Eigen::VectorXd& rhs, Eigen::VectorXd& result)
     }
 
     x_solve = cholmod_solve(CHOLMOD_A, L, b, &cm);
-
     result.conservativeResize(rhs.size());
     memcpy(result.data(), x_solve->x, result.rows() * sizeof(result[0]));
+    save_factor("/home/behrooz/Desktop/Last_Project/RXMesh-dev/output/factor_" + ordering_name + ".mtx");
 }
 
 
@@ -159,6 +160,18 @@ void CHOLMODSolver::resetSolver()
     x_solve = NULL;
     Ai = Ap = Ax = NULL;
     bx           = NULL;
+}
+
+void CHOLMODSolver::save_factor(
+    const std::string &filePath) {
+    cholmod_sparse *spm = cholmod_factor_to_sparse(L, &cm);
+
+    FILE *out = fopen(filePath.c_str(), "w");
+    assert(out);
+
+    cholmod_write_sparse(out, spm, NULL, "", &cm);
+
+    fclose(out);
 }
 
 LinSysSolverType CHOLMODSolver::type() const

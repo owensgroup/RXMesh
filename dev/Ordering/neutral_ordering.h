@@ -21,6 +21,7 @@ public:
     virtual ~NeutralOrdering(void);
 
     virtual RXMESH_Ordering_Type type() const override;
+    virtual std::string typeStr() const override;
 
     virtual void setGraph(int*              Gp,
                            int*              Gi,

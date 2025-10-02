@@ -32,7 +32,7 @@ public:                // Access specifier
     void innerFactorize(void) override;
     void innerSolve(Eigen::VectorXd &rhs, Eigen::VectorXd &result) override;
     void resetSolver() override;
-    void save_factor(const std::string &file_name);
+    void save_factor(const std::string &filePath);
     virtual LinSysSolverType type() const override;
 
     void cholmod_clean_memory();
