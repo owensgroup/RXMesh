@@ -106,16 +106,38 @@ void RXMeshOrdering::compute_permutation(std::vector<int>& perm)
     rxmesh::nd_permute(rx, rx_perm.data());
 
     //Converting rx permute into global permute
-    std::vector<int> linear_to_global(rx.get_num_vertices(), -1);
+    std::vector<uint32_t> linear_to_global(rx.get_num_vertices(), -1);
     rx.for_each_vertex(
         rxmesh::HOST,
         [&](const rxmesh::VertexHandle vh) {
-            uint32_t vid   = rx.linear_id(vh);
+            uint32_t rx_id   = rx.linear_id(vh);
             uint32_t g_id  = rx.map_to_global(vh);
-            linear_to_global[vid] = g_id;
+            linear_to_global[rx_id] = g_id;
         },
         NULL,
         false);
+
+    //Finding rx mesh linear ids to permuted name
+    std::vector<int> rx_mesh_new_labels(rx_perm.size(), 0);
+    compute_inverse_perm(rx_perm, rx_mesh_new_labels);
+
+    //Mapping global ids to permuted new labels
+    std::vector<int> global_new_labels(rx_perm.size(), -1);
+    for (int i = 0; i < linear_to_global.size(); ++i) {
+        int global_id = linear_to_global[i];
+        int permute_new_label = rx_mesh_new_labels[i];
+        global_new_labels[global_id] = permute_new_label;
+    }
+
+
+    //Finally computing the global permutation
+    perm.resize(global_new_labels.size(), 0);
+    for (int i = 0; i < global_new_labels.size(); ++i) {
+        int new_label = global_new_labels[i];
+        perm[new_label] = i;
+    }
+
+
 
     err = cudaGetLastError();
     if (err != cudaSuccess) {
