@@ -1,0 +1,17 @@
+@PACKAGE_INIT@
+
+# Include the targets file
+include("${CMAKE_CURRENT_LIST_DIR}/RXMeshTargets.cmake")
+
+# Check if all required dependencies are available
+check_required_components(RXMesh)
+
+# Set variables for find_package compatibility
+set(RXMESH_FOUND TRUE)
+set(RXMESH_VERSION @PROJECT_VERSION@)
+set(RXMESH_INCLUDE_DIRS "@PACKAGE_INCLUDE_DIR@")
+set(RXMESH_LIBRARIES "@PACKAGE_LIBRARY_DIR@")
+
+# Export variables for other projects
+set(RXMESH_INCLUDE_DIR "${RXMESH_INCLUDE_DIRS}")
+set(RXMESH_LIBRARY_DIR "${RXMESH_LIBRARIES}")
