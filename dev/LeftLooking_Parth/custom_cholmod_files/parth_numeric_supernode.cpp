@@ -53,9 +53,9 @@
  * must match.
  */
 
-#include "LeftLooking_Parth.h"
 #include "cholmod_internal.h"
 #include "cholmod_supernodal.h"
+#include "parth_solver.h"
 
 #ifdef GPU_BLAS
 #include "cholmod_gpu.h"
@@ -78,24 +78,12 @@
 
 #define REAL
 #include "parth_parallel_t_super_numeric.h"
-#define REAL
-#include "parth_reuse_t_super_numeric.h"
-#define REAL
-#include "parth_reuse_parallel_t_super_numeric.h"
 
 #define COMPLEX
 #include "parth_parallel_t_super_numeric.h"
-#define COMPLEX
-#include "parth_reuse_t_super_numeric.h"
-#define COMPLEX
-#include "parth_reuse_parallel_t_super_numeric.h"
 
 #define ZOMPLEX
 #include "parth_parallel_t_super_numeric.h"
-#define ZOMPLEX
-#include "parth_reuse_t_super_numeric.h"
-#define ZOMPLEX
-#include "parth_reuse_parallel_t_super_numeric.h"
 
 namespace PARTH {
 /* ========================================================================== */
@@ -107,7 +95,7 @@ namespace PARTH {
  * occurs.
  */
 
-int ParthSolver::cholmod_super_numeric_custom(
+int ParthSolverAPI::cholmod_super_numeric_custom(
     /* ---- input ---- */
     cholmod_sparse* A, /* matrix to factorize */
     cholmod_sparse* F, /* F = A' or A(:,f)' */
@@ -269,8 +257,7 @@ int ParthSolver::cholmod_super_numeric_custom(
     /* supernodal numerical factorization, using template routine */
     /* ---------------------------------------------------------------------- */
 
-    if (Options().getNumericReuseType() == NumericReuseType::NUMERIC_NO_REUSE_PARALLEL) {
-        switch (A->xtype) {
+    switch (A->xtype) {
         case CHOLMOD_REAL:
             ok = r_parth_super_numeric_parallel(A, F, beta, L, C, Common, *this);
             break;
@@ -283,40 +270,38 @@ int ParthSolver::cholmod_super_numeric_custom(
             /* This operates on complex L, not zomplex */
             ok = z_parth_super_numeric_parallel(A, F, beta, L, C, Common, *this);
             break;
-        }
     }
-    else if (Options().getNumericReuseType() == NumericReuseType::NUMERIC_REUSE_BASE) {
-        switch (A->xtype) {
-        case CHOLMOD_REAL:
-            ok = r_parth_super_numeric_reuse(A, F, beta, L, C, Common, *this);
-            break;
-
-        case CHOLMOD_COMPLEX:
-            ok = c_parth_super_numeric_reuse(A, F, beta, L, C, Common, *this);
-            break;
-
-        case CHOLMOD_ZOMPLEX:
-            /* This operates on complex L, not zomplex */
-            ok = z_parth_super_numeric_reuse(A, F, beta, L, C, Common, *this);
-            break;
-        }
-    }
-    else if (Options().getNumericReuseType() == NumericReuseType::NUMERIC_REUSE_PARALLEL) {
-        switch (A->xtype) {
-        case CHOLMOD_REAL:
-            ok = r_parth_super_reuse_numeric_parallel(A, F, beta, L, C, Common, *this);
-            break;
-
-        case CHOLMOD_COMPLEX:
-            ok = c_parth_super_reuse_numeric_parallel(A, F, beta, L, C, Common, *this);
-            break;
-
-        case CHOLMOD_ZOMPLEX:
-            /* This operates on complex L, not zomplex */
-            ok = z_parth_super_reuse_numeric_parallel(A, F, beta, L, C, Common, *this);
-            break;
-        }
-    }
+    // else if (Options().getNumericReuseType() == NumericReuseType::NUMERIC_REUSE_BASE) {
+    //     switch (A->xtype) {
+    //     case CHOLMOD_REAL:
+    //         ok = r_parth_super_numeric_reuse(A, F, beta, L, C, Common, *this);
+    //         break;
+    //
+    //     case CHOLMOD_COMPLEX:
+    //         ok = c_parth_super_numeric_reuse(A, F, beta, L, C, Common, *this);
+    //         break;
+    //
+    //     case CHOLMOD_ZOMPLEX:
+    //         /* This operates on complex L, not zomplex */
+    //         ok = z_parth_super_numeric_reuse(A, F, beta, L, C, Common, *this);
+    //         break;
+    //     }
+    // }
+    // else if (Options().getNumericReuseType() == NumericReuseType::NUMERIC_REUSE_PARALLEL) {
+    //     switch (A->xtype) {
+    //     case CHOLMOD_REAL:
+    //         ok = r_parth_super_reuse_numeric_parallel(A, F, beta, L, C, Common, *this);
+    //         break;
+    //
+    //     case CHOLMOD_COMPLEX:
+    //         ok = c_parth_super_reuse_numeric_parallel(A, F, beta, L, C, Common, *this);
+    //         break;
+    //
+    //     case CHOLMOD_ZOMPLEX:
+    //         /* This operates on complex L, not zomplex */
+    //         ok = z_parth_super_reuse_numeric_parallel(A, F, beta, L, C, Common, *this);
+    //         break;
+    //     }
 
     /* ---------------------------------------------------------------------- */
     /* clear Common workspace, free temp workspace C, and return */

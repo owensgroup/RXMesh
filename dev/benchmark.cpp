@@ -16,7 +16,7 @@
 #include "check_valid_permutation.h"
 #include "ordering.h"
 #include "remove_diagonal.h"
-
+#include "parth/parth.h"
 
 struct CLIArgs
 {

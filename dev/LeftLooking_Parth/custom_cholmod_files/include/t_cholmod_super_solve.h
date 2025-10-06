@@ -9,9 +9,9 @@
 
 /* Template routine for cholmod_super_solve.  Supports real or complex L. */
 
-#include "LeftLooking_Parth.h"
-#include "cholmod_template.h"
 #include <iostream>
+#include "cholmod_template.h"
+#include "parth_solver.h"
 
 static void TEMPLATE(cholmod_super_lsolve_custom)(
     /* ---- input ---- */
@@ -21,7 +21,7 @@ static void TEMPLATE(cholmod_super_lsolve_custom)(
     /* ---- workspace ---- */
     cholmod_dense *E, /* workspace of size nrhs*(L->maxesize) */
     /* --------------- */
-    cholmod_common *Common, PARTH::ParthSolver &solver) {
+    cholmod_common *Common, PARTH::ParthSolverAPI &solver) {
   double *Lx, *Xx, *Ex;
   double minus_one[2], one[2];
   Int *Lpi, *Lpx, *Ls, *Super;
@@ -54,7 +54,7 @@ static void TEMPLATE(cholmod_super_lsolve_custom)(
   /* ---------------------------------------------------------------------- */
 
   if (nrhs == 1) {
-    int num_cores = solver.Options().getNumberOfCores();
+    int num_cores = 10
     //        num_cores = 1;
     std::vector<std::vector<double>> E_Vec(num_cores, std::vector<double>(n));
 
@@ -319,7 +319,7 @@ static void TEMPLATE(cholmod_super_ltsolve_custom)(
     /* ---- workspace ---- */
     cholmod_dense *E, /* workspace of size nrhs*(L->maxesize) */
     /* --------------- */
-    cholmod_common *Common, PARTH::ParthSolver &solver) {
+    cholmod_common *Common, PARTH::ParthSolverAPI &solver) {
   double *Lx, *Xx, *Ex;
   double minus_one[2], one[2];
   Int *Lpi, *Lpx, *Ls, *Super;
@@ -353,7 +353,7 @@ static void TEMPLATE(cholmod_super_ltsolve_custom)(
 
   if (nrhs == 1) {
 
-    int num_cores = solver.Options().getNumberOfCores();
+    int num_cores = 10;
     //    num_cores = 1;
     std::vector<std::vector<double>> E_Vec(num_cores, std::vector<double>(n));
 

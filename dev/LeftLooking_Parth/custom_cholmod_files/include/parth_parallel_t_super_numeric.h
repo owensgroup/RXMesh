@@ -16,11 +16,12 @@
 /* === complex arithmetic =================================================== */
 /* ========================================================================== */
 
-#include "LeftLooking_Parth.h"
+#include <algorithm>
+#include <iostream>
 #include "cholmod_template.h"
 #include "csv_utils.h"
 #include "omp.h"
-#include <algorithm>
+#include "parth_solver.h"
 
 #undef L_ENTRY
 #undef L_CLEAR
@@ -107,7 +108,7 @@ static int TEMPLATE(parth_super_numeric_parallel)(
     /* -- workspace -- */
     cholmod_dense *Cwork, /* size (L->maxcsize)-by-1 */
     /* --------------- */
-    cholmod_common *Common, PARTH::ParthSolver &solver) {
+    cholmod_common *Common, PARTH::ParthSolverAPI &solver) {
 
   double one[2], zero[2];
   double *Lx, *Ax, *Fx, *Az, *Fz;
@@ -259,9 +260,9 @@ static int TEMPLATE(parth_super_numeric_parallel)(
   Az = (double *)A->z;
   Anz = (int *)A->nz;
   Apacked = A->packed;
-
+  int cholmod_num_threads = 10;
   /* clear the Map so that changes in the pattern of A can be detected */
-#pragma omp parallel for num_threads(CHOLMOD_OMP_NUM_THREADS) if (n > 128)     \
+#pragma omp parallel for num_threads(cholmod_num_threads) if (n > 128)     \
     schedule(static)
   for (i = 0; i < n; i++) {
     Map[i] = EMPTY;
@@ -302,7 +303,7 @@ static int TEMPLATE(parth_super_numeric_parallel)(
   //  std::vector<std::vector<int>> Lpos_save_list(num_cores,
   //  std::vector<int>(L->nsuper, 0)); std::vector<std::vector<int>>
   //  Next_save_list(num_cores, std::vector<int>(L->nsuper, 0));
-  int num_cores = solver.Options().getNumberOfCores();
+  int num_cores = 10;
   omp_set_num_threads(num_cores);
   std::vector<std::vector<int>> map_list(num_cores, std::vector<int>(n, EMPTY));
   std::vector<std::vector<double>> C_list(num_cores,
@@ -1174,7 +1175,7 @@ static int TEMPLATE(parth_super_numeric_parallel)(
           {
             /* Case of no GPU, zero individual supernodes */
 
-#pragma omp parallel for num_threads(CHOLMOD_OMP_NUM_THREADS)                  \
+#pragma omp parallel for num_threads(cholmod_num_threads)                  \
     schedule(static) if (pend - psx > 1024)
 
             for (p = psx; p < pend; p++) {
@@ -1191,7 +1192,7 @@ static int TEMPLATE(parth_super_numeric_parallel)(
           /* If row i is the kth row in s, then Map [i] = k.  Similarly, if
            * column j is the kth column in s, then  Map [j] = k. */
 
-#pragma omp parallel for num_threads(CHOLMOD_OMP_NUM_THREADS) if (nsrow > 128)
+#pragma omp parallel for num_threads(cholmod_num_threads) if (nsrow > 128)
 
           for (k = 0; k < nsrow; k++) {
             PRINT1(("  " ID " map " ID "\n", Ls[psi + k], k));
@@ -1222,7 +1223,7 @@ static int TEMPLATE(parth_super_numeric_parallel)(
           pk = psx;
 
 #pragma omp parallel for private(p, pend, pfend, pf, i, j, imap, q)            \
-    num_threads(CHOLMOD_OMP_NUM_THREADS) if (k2 - k1 > 64)
+    num_threads(cholmod_num_threads) if (k2 - k1 > 64)
 
           for (k = k1; k < k2; k++) {
             if (stype != 0) {

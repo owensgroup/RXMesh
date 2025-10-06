@@ -64,8 +64,31 @@ add_library(rxmesh_dev_helpers
         Ordering/neutral_ordering.cpp
 )
 
+
+add_library(parallel_cholmod
+        LeftLooking_Parth/common.cpp
+        LeftLooking_Parth/executor.cpp
+        LeftLooking_Parth/inspector.cpp
+        LeftLooking_Parth/solve.cpp
+        LeftLooking_Parth/custom_cholmod_files/parth_analyze.cpp
+        LeftLooking_Parth/custom_cholmod_files/parth_factorize.cpp
+        LeftLooking_Parth/custom_cholmod_files/parth_numeric_supernode.cpp
+        LeftLooking_Parth/custom_cholmod_files/parth_solve.cpp
+        LeftLooking_Parth/custom_cholmod_files/parth_solve.cpp
+        LeftLooking_Parth/custom_cholmod_files/parth_solve_supernode.cpp
+        LeftLooking_Parth/custom_cholmod_files/parth_super_symbolic.cpp
+)
+target_link_libraries(parallel_cholmod PUBLIC ${PROJECT_NAME})
+target_include_directories(parallel_cholmod PUBLIC
+        LeftLooking_Parth/include
+        LeftLooking_Parth/custom_cholmod_files/include
+        LeftLooking_Parth/custom_cholmod_files/include/Cholmod_Include
+)
+
+
 # Link the base RXMesh library
 target_link_libraries(rxmesh_dev_helpers PUBLIC ${PROJECT_NAME})
+
 
 # Link additional dependencies required by dev helpers
 target_link_libraries(rxmesh_dev_helpers PUBLIC 
@@ -121,4 +144,4 @@ set_property(TARGET ${PROJECT_NAME}_benchmark PROPERTY CUDA_SEPARABLE_COMPILATIO
 set_property(TARGET ${PROJECT_NAME}_benchmark PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS OFF)
 
 # Link both RXMesh library (inherited via rxmesh_dev_helpers) and dev helpers
-target_link_libraries(${PROJECT_NAME}_benchmark PUBLIC rxmesh_dev_helpers)
+target_link_libraries(${PROJECT_NAME}_benchmark PUBLIC rxmesh_dev_helpers parallel_cholmod)

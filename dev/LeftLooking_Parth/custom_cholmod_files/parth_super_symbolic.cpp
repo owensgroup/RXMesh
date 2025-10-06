@@ -40,9 +40,9 @@
 // #ifndef NGPL
 // #ifndef NSUPERNODAL
 
-#include "LeftLooking_Parth.h"
 #include "cholmod_internal.h"
 #include "cholmod_supernodal.h"
+#include "parth_solver.h"
 
 /* ========================================================================== */
 /* === subtree ============================================================== */
@@ -133,7 +133,7 @@ static void subtree(
 
 /* Analyze for supernodal Cholesky or multifrontal QR. */
 
-int ParthSolver::cholmod_super_symbolic2_custom(
+int ParthSolverAPI::cholmod_super_symbolic2_custom(
     /* ---- input ---- */
     int for_whom, /* FOR_SPQR     (0): for SPQR but not GPU-accelerated
                      FOR_CHOLESKY (1): for Cholesky (GPU or not)
@@ -377,20 +377,20 @@ int ParthSolver::cholmod_super_symbolic2_custom(
 
     // PARTH FORCING SUPERNODES TO BE WITHIN REGIONS
     std::vector<int> col_to_region(n, 0);
-    if (Options().getNumericReuseType() == NumericReuseType::NUMERIC_REUSE_PARALLEL || Options().getNumericReuseType() == NumericReuseType::NUMERIC_NO_REUSE_PARALLEL) {
-        assert(!regions.tree_nodes.empty());
-        for (auto& node : regions.tree_nodes) {
-            int start_elem = node.offset;
-            int end_elem = start_elem + node.assigned_nodes.size();
-            assert(start_elem * 3 <= n);
-            assert(end_elem * 3 <= n);
-            for (int e = start_elem; e < end_elem; e++) {
-                col_to_region[e * 3] = node.node_id;
-                col_to_region[e * 3 + 1] = node.node_id;
-                col_to_region[e * 3 + 2] = node.node_id;
-            }
+
+    assert(!regions.tree_nodes.empty());
+    for (auto& node : parth.hmd.HMD_tree) {
+        int start_elem = node.offset;
+        int end_elem = start_elem + node.DOFs.size();
+        assert(start_elem * 3 <= n);
+        assert(end_elem * 3 <= n);
+        for (int e = start_elem; e < end_elem; e++) {
+            col_to_region[e * 3] = node.node_id;
+            col_to_region[e * 3 + 1] = node.node_id;
+            col_to_region[e * 3 + 2] = node.node_id;
         }
     }
+
 
     for (j = 1; j < n; j++) {
         /* PARTH: columns are from different regions */
@@ -555,11 +555,11 @@ int ParthSolver::cholmod_super_symbolic2_custom(
         }
 #endif
         // PARTH Region forces
-        if (Options().getNumericReuseType() == NumericReuseType::NUMERIC_REUSE_PARALLEL || Options().getNumericReuseType() == NumericReuseType::NUMERIC_NO_REUSE_PARALLEL) {
-            if (col_to_region[Super[s]] != col_to_region[Super[s + 1]]) {
-                merge = FALSE;
-            }
+
+        if (col_to_region[Super[s]] != col_to_region[Super[s + 1]]) {
+            merge = FALSE;
         }
+
 
         if (merge) {
             PRINT1(("Merge node s (" ID ") and s+1 (" ID ")\n", s, s + 1));
@@ -942,7 +942,7 @@ int ParthSolver::cholmod_super_symbolic2_custom(
  * is the number of fundamental supernodes.
  */
 
-int ParthSolver::cholmod_super_symbolic_custom(
+int ParthSolverAPI::cholmod_super_symbolic_custom(
     /* ---- input ---- */
     cholmod_sparse* A, /* matrix to analyze */
     cholmod_sparse* F, /* F = A' or A(:,f)' */

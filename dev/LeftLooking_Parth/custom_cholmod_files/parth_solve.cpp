@@ -47,10 +47,10 @@
 
 #ifndef NCHOLESKY
 
-#include "LeftLooking_Parth.h"
 #include "cholmod_cholesky.h"
 #include "cholmod_internal.h"
 #include "cholmod_partition.h"
+#include "parth_solver.h"
 
 #ifndef NSUPERNODAL
 #include "cholmod_supernodal.h"
@@ -840,7 +840,7 @@ static void iptrans(
  * identity).
  */
 
-cholmod_dense* ParthSolver::cholmod_solve_custom(
+cholmod_dense* ParthSolverAPI::cholmod_solve_custom(
     /* ---- input ---- */
     int sys, /* system to solve */
     cholmod_factor* L, /* factorization to use */
@@ -925,7 +925,7 @@ cholmod_dense* ParthSolver::cholmod_solve_custom(
  * on output.
  */
 
-int ParthSolver::cholmod_solve2_custom /* returns TRUE on success, FALSE on
+int ParthSolverAPI::cholmod_solve2_custom /* returns TRUE on success, FALSE on
                                           failure */
     (
         /* ---- input ---- */

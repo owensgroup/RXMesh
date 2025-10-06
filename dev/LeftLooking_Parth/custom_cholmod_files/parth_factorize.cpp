@@ -1,9 +1,9 @@
 #include <unsupported/Eigen/SparseExtra>
 
-#include "LeftLooking_Parth.h"
 #include "cholmod_cholesky.h"
 #include "cholmod_core.h"
 #include "cholmod_internal.h"
+#include "parth_solver.h"
 
 /* ========================================================================== */
 /* === cholmod_factorize ==================================================== */

@@ -15,9 +15,9 @@
 #ifndef NGPL
 #ifndef NSUPERNODAL
 
-#include "LeftLooking_Parth.h"
 #include "cholmod_internal.h"
 #include "cholmod_supernodal.h"
+#include "parth_solver.h"
 
 /* ========================================================================== */
 /* === TEMPLATE ============================================================= */

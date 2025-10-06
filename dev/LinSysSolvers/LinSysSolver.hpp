@@ -14,8 +14,10 @@ namespace RXMESH_SOLVER {
 
 enum class LinSysSolverType
 {
+    PARTH_SOLVER,
     CPU_CHOLMOD,
     GPU_CUDSS,
+
 };
 
 class LinSysSolver

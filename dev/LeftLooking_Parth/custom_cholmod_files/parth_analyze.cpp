@@ -106,12 +106,12 @@
  * Supports any xtype (pattern, real, complex, or zomplex)
  */
 
-#include "LeftLooking_Parth.h"
+#include <iostream>
 #include "cholmod_cholesky.h"
 #include "cholmod_internal.h"
 #include "cholmod_partition.h"
 #include "cholmod_supernodal.h"
-#include <iostream>
+#include "parth_solver.h"
 
 namespace PARTH {
 
