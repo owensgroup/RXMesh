@@ -11,22 +11,24 @@
 #include <Eigen/Sparse>
 #include <cholmod.h>
 #include "ordering.h"
+#include "gpu_ordering.h"
 
 namespace RXMESH_SOLVER {
 
 
-class RXMeshOrdering: public Ordering
+class POCOrdering: public Ordering
 {
 private:
     std::vector<std::vector<uint32_t>> fv;
     std::vector<std::vector<float>> vertices;
     bool m_has_mesh = false;
+    GPUOrdering gpu_order;
     
     
 public:
-    virtual ~RXMeshOrdering(void);
+    virtual ~POCOrdering(void);
 
-    static RXMeshOrdering* create(const RXMESH_Ordering_Type type);
+    static POCOrdering* create(const RXMESH_Ordering_Type type);
 
     virtual RXMESH_Ordering_Type type() const override;
     virtual std::string typeStr() const override;

@@ -29,26 +29,31 @@ void RXMeshOrdering::setGraph(int* Gp, int* Gi, int G_N, int NNZ)
     this->G_NNZ = NNZ;
 }
 
-void RXMeshOrdering::setMesh(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F)
+void RXMeshOrdering::setMesh(const double* V_data, int V_rows, int V_cols,
+                             const int* F_data, int F_rows, int F_cols)
 {
     m_has_mesh = true;
 
     // RXMesh expects std::vector<std::vector<uint32_t>> for faces
+    spdlog::info("setMesh: F_rows = {}, F_cols = {}, V_rows = {}, V_cols = {}", 
+                 F_rows, F_cols, V_rows, V_cols);
     
-    fv.resize(F.rows());
-    for (int i = 0; i < F.rows(); ++i) {
-        fv[i].resize(F.cols());
-        for (int j = 0; j < F.cols(); ++j) {
-            fv[i][j] = static_cast<uint32_t>(F(i, j));
+    fv.resize(F_rows);
+    for (int i = 0; i < F_rows; ++i) {
+        fv[i].resize(F_cols);
+        for (int j = 0; j < F_cols; ++j) {
+            // Eigen stores data in column-major order by default
+            fv[i][j] = static_cast<uint32_t>(F_data[i + j * F_rows]);
         }
     }
 
     // Optionally add vertex coordinates (not strictly needed for ND ordering) 
-    vertices.resize(V.rows());
-    for (int i = 0; i < V.rows(); ++i) {
-        vertices[i].resize(V.cols());
-        for (int j = 0; j < V.cols(); ++j) {
-            vertices[i][j] = static_cast<float>(V(i, j));
+    vertices.resize(V_rows);
+    for (int i = 0; i < V_rows; ++i) {
+        vertices[i].resize(V_cols);
+        for (int j = 0; j < V_cols; ++j) {
+            // Eigen stores data in column-major order by default
+            vertices[i][j] = static_cast<float>(V_data[i + j * V_rows]);
         }
     }
 

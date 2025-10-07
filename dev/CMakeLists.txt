@@ -131,10 +131,12 @@ add_library(rxmesh_dev_helpers
         utils/remove_diagonal.cpp
         utils/check_valid_permutation.cpp
         utils/compute_inverse_perm.cpp
-        Ordering/ordering.cpp
+        GPUOrdering/gpu_ordering.cu
+        Ordering/ordering.cu
         Ordering/metis_ordering.cpp
         Ordering/rxmesh_ordering.cu
         Ordering/neutral_ordering.cpp
+        Ordering/poc_ordering.cu
 )
 
 # Link additional dependencies required by dev helpers
@@ -157,6 +159,7 @@ target_include_directories(rxmesh_dev_helpers PUBLIC
     LeftLooking_Parth/custom_cholmod_files/include
     LeftLooking_Parth/custom_cholmod_files/include/Cholmod_Include
     LeftLooking_Parth/custom_cholmod_files/util
+    GPUOrdering
 )
 
 # Configure CUDA compilation for the dev helper library

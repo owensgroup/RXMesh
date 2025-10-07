@@ -21,6 +21,7 @@ enum class RXMESH_Ordering_Type
     PARTH_METIS,
     PARTH_AMD,
     RXMESH_ND,
+    POC_ND
 };
 
 class Ordering
@@ -46,7 +47,9 @@ public:
                            int               NNZ) = 0;
 
     // Optional: for orderings that need the original mesh (like RXMesh ND)
-    virtual void setMesh(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F) {}
+    // Pass raw pointers to avoid ABI issues between C++ and CUDA compilation
+    virtual void setMesh(const double* V_data, int V_rows, int V_cols,
+                        const int* F_data, int F_rows, int F_cols) {}
     
     virtual bool needsMesh() const { return false; }
 

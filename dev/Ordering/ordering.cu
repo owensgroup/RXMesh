@@ -8,6 +8,7 @@
 #include "metis_ordering.h"
 #include "neutral_ordering.h"
 #include "rxmesh_ordering.h"
+#include "poc_ordering.h"
 
 namespace RXMESH_SOLVER {
 
@@ -18,10 +19,12 @@ Ordering *Ordering::create(const RXMESH_Ordering_Type type) {
             return new MetisOrdering();
         case RXMESH_Ordering_Type::RXMESH_ND:
             return new RXMeshOrdering();
+        case RXMESH_Ordering_Type::POC_ND:
+            return new POCOrdering();
         case RXMESH_Ordering_Type::NEUTRAL:
             return new NeutralOrdering();
         default:
-            std::cerr << "Uknown linear system solver type" << std::endl;
+            std::cerr << "Unknown Ordering type" << std::endl;
             return nullptr;
     }
 }

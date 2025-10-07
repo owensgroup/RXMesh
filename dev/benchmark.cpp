@@ -106,6 +106,10 @@ int main(int argc, char* argv[])
         spdlog::info("Using RXMESH ordering.");
         ordering = RXMESH_SOLVER::Ordering::create(
             RXMESH_SOLVER::RXMESH_Ordering_Type::RXMESH_ND);
+    } else if (args.ordering_type == "POC_ND") {
+        spdlog::info("Using POC_ND ordering.");
+        ordering = RXMESH_SOLVER::Ordering::create(
+            RXMESH_SOLVER::RXMESH_Ordering_Type::POC_ND);
     } else if (args.ordering_type == "NEUTRAL"){
         spdlog::info("Using NEUTRAL ordering.");
         ordering = RXMESH_SOLVER::Ordering::create(
@@ -143,7 +147,9 @@ int main(int argc, char* argv[])
     if (ordering != nullptr) {
         // Provide mesh data if the ordering needs it (e.g., RXMesh ND)
         if (ordering->needsMesh()) {
-            ordering->setMesh(OV, OF);
+            // Pass raw pointers to avoid ABI issues between C++ and CUDA compilation
+            ordering->setMesh(OV.data(), OV.rows(), OV.cols(),
+                            OF.data(), OF.rows(), OF.cols());
         }
         ordering->setGraph(Gp.data(), Gi.data(), OL.rows(), Gi.size());
         auto ordering_start = std::chrono::high_resolution_clock::now();
