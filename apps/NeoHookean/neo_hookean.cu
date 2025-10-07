@@ -218,6 +218,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
         // DBC satisfied
         check_dbc_satisfied(
+            rx, is_dbc_satisfied, x_tilde, is_dbc, dbc_target, time_step, tol);
 
         // how many DBC are satisfied
         int num_satisfied = rh.reduce(is_dbc_satisfied, cub::Sum(), 0);
