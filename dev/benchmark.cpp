@@ -124,6 +124,10 @@ int main(int argc, char* argv[])
         solver = RXMESH_SOLVER::LinSysSolver::create(
             RXMESH_SOLVER::LinSysSolverType::GPU_CUDSS);
         spdlog::info("Using CUDSS direct solver.");
+    } else if (args.solver_type == "PARTH_SOLVER") {
+        solver = RXMESH_SOLVER::LinSysSolver::create(
+            RXMESH_SOLVER::LinSysSolverType::PARTH_SOLVER);
+        spdlog::info("Using PARTH direct solver.");
     } else {
         spdlog::error("Unknown solver type.");
     }
@@ -201,8 +205,11 @@ int main(int argc, char* argv[])
             .count());
 
     // Compute residual
-    solver->computeResidual(OL, result, rhs);
-    spdlog::info("Residual: {}", solver->residual);
+    assert(OL.rows() == OL.cols());
+    double residual = (rhs - OL * result).norm();
+    spdlog::info("Residual: {}", residual);
+    spdlog::info("Final factor/matrix NNZ ratio: {}",
+                 solver->getFactorNNZ() * 1.0 / OL.nonZeros());
     delete solver;
     delete ordering;
     return 0;

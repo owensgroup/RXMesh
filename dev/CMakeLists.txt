@@ -50,10 +50,65 @@ endif()
 # This library contains development utilities for solvers, orderings, and utils
 # that extend the base RXMesh library for development and benchmarking purposes
 
+# Create parallel_cholmod library first (needed by rxmesh_dev_helpers)
+add_library(parallel_cholmod
+        LeftLooking_Parth/common.cpp
+        LeftLooking_Parth/executor.cpp
+        LeftLooking_Parth/inspector.cpp
+        LeftLooking_Parth/solve.cpp
+        LeftLooking_Parth/custom_cholmod_files/analysis/parth_analyze.cpp
+        LeftLooking_Parth/custom_cholmod_files/analysis/parth_super_symbolic.cpp
+
+#        LeftLooking_Parth/custom_cholmod_files/parth_factorize.cpp
+#        LeftLooking_Parth/custom_cholmod_files/parth_numeric_supernode.cpp
+#        LeftLooking_Parth/custom_cholmod_files/parth_solve.cpp
+#        LeftLooking_Parth/custom_cholmod_files/parth_solve.cpp
+#        LeftLooking_Parth/custom_cholmod_files/parth_solve_supernode.cpp
+#        LeftLooking_Parth/custom_cholmod_files/parth_super_symbolic.cpp
+)
+
+if(${PROJECT_NAME}_WITH_SUITESPARSE)
+    # Link SuiteSparse libraries - order matters for static linking!
+    target_include_directories(parallel_cholmod PUBLIC ${SUITESPARSE_INCLUDE_DIRS})
+    
+    # For static library linking with CHOLMOD, we need to use --whole-archive to ensure
+    # all symbols (especially utility functions like cholmod_mult_size_t) are extracted
+    if(TARGET CHOLMOD_static)
+        # Use generator expression to properly wrap the library with linker flags
+        target_link_libraries(parallel_cholmod PUBLIC 
+            "-Wl,--whole-archive"
+            "$<TARGET_FILE:CHOLMOD_static>"
+            "-Wl,--no-whole-archive"
+        )
+        # Link other SuiteSparse dependencies normally
+        target_link_libraries(parallel_cholmod PUBLIC 
+            AMD_static COLAMD_static CAMD_static CCOLAMD_static SuiteSparseConfig_static
+        )
+    else()
+        # Fallback to regular linking if static targets not available
+        target_link_libraries(parallel_cholmod PUBLIC ${SUITESPARSE_LIBRARIES})
+        if(TARGET SuiteSparse::CHOLMOD)
+            target_link_libraries(parallel_cholmod PUBLIC SuiteSparse::CHOLMOD)
+        endif()
+    endif()
+endif()
+
+if(${PROJECT_NAME}_WITH_PARTH)
+    target_link_libraries(parallel_cholmod PUBLIC Parth::parth)
+endif()
+
+# Add include directories for parallel_cholmod
+target_include_directories(parallel_cholmod PUBLIC
+        ${CMAKE_SOURCE_DIR}/include
+        LeftLooking_Parth/include
+)
+
+# Create rxmesh_dev_helpers library
 add_library(rxmesh_dev_helpers
         LinSysSolvers/LinSysSolver.cpp
         LinSysSolvers/CUDSSSolver.cu
         LinSysSolvers/CHOLMODSolver.cpp
+        LinSysSolvers/ParthSolver.cpp
         utils/get_factor_nnz.cpp
         utils/remove_diagonal.cpp
         utils/check_valid_permutation.cpp
@@ -64,52 +119,33 @@ add_library(rxmesh_dev_helpers
         Ordering/neutral_ordering.cpp
 )
 
-
-add_library(parallel_cholmod
-        LeftLooking_Parth/common.cpp
-        LeftLooking_Parth/executor.cpp
-        LeftLooking_Parth/inspector.cpp
-        LeftLooking_Parth/solve.cpp
-        LeftLooking_Parth/custom_cholmod_files/parth_analyze.cpp
-        LeftLooking_Parth/custom_cholmod_files/parth_factorize.cpp
-        LeftLooking_Parth/custom_cholmod_files/parth_numeric_supernode.cpp
-        LeftLooking_Parth/custom_cholmod_files/parth_solve.cpp
-        LeftLooking_Parth/custom_cholmod_files/parth_solve.cpp
-        LeftLooking_Parth/custom_cholmod_files/parth_solve_supernode.cpp
-        LeftLooking_Parth/custom_cholmod_files/parth_super_symbolic.cpp
-)
-target_link_libraries(parallel_cholmod PUBLIC ${PROJECT_NAME})
-target_include_directories(parallel_cholmod PUBLIC
-        LeftLooking_Parth/include
-        LeftLooking_Parth/custom_cholmod_files/include
-        LeftLooking_Parth/custom_cholmod_files/include/Cholmod_Include
-)
-
-
-# Link the base RXMesh library
-target_link_libraries(rxmesh_dev_helpers PUBLIC ${PROJECT_NAME})
-
-
 # Link additional dependencies required by dev helpers
-target_link_libraries(rxmesh_dev_helpers PUBLIC 
+target_link_libraries(rxmesh_dev_helpers PUBLIC
     igl::core
     spdlog::spdlog
     Eigen3::Eigen
     CLI11::CLI11
+    parallel_cholmod
 )
+target_link_libraries(rxmesh_dev_helpers PRIVATE ${PROJECT_NAME})
+
 
 # Add dev code include directories
 target_include_directories(rxmesh_dev_helpers PUBLIC 
     LinSysSolvers
     Ordering
     utils
+    LeftLooking_Parth/include
+    LeftLooking_Parth/custom_cholmod_files/include
+    LeftLooking_Parth/custom_cholmod_files/include/Cholmod_Include
+    LeftLooking_Parth/custom_cholmod_files/util
 )
 
 # Configure CUDA compilation for the dev helper library
-# Enable separable compilation AND resolve device symbols in the library to prevent
-# duplicate symbol definitions when linking executables
+# Enable separable compilation but DON'T resolve device symbols yet
+# Device symbols will be resolved in the final executable
 set_property(TARGET rxmesh_dev_helpers PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-set_property(TARGET rxmesh_dev_helpers PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+set_property(TARGET rxmesh_dev_helpers PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS OFF)
 
 # Inherit CUDA architecture from the main library
 get_target_property(MAIN_CUDA_ARCHITECTURES ${PROJECT_NAME} CUDA_ARCHITECTURES)
@@ -139,9 +175,11 @@ target_compile_options(rxmesh_dev_helpers PUBLIC
 add_executable(${PROJECT_NAME}_benchmark benchmark.cpp)
 
 # Configure CUDA device linking for the benchmark executable
-# Device symbols are already resolved in rxmesh_dev_helpers, so don't resolve again
+# Enable separable compilation and resolve device symbols at the executable level
 set_property(TARGET ${PROJECT_NAME}_benchmark PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-set_property(TARGET ${PROJECT_NAME}_benchmark PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS OFF)
+set_property(TARGET ${PROJECT_NAME}_benchmark PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 
-# Link both RXMesh library (inherited via rxmesh_dev_helpers) and dev helpers
-target_link_libraries(${PROJECT_NAME}_benchmark PUBLIC rxmesh_dev_helpers parallel_cholmod)
+# Link only rxmesh_dev_helpers (which already includes RXMesh)
+# DO NOT link RXMesh directly to avoid compiling the same .cu files twice
+# This prevents multiple definition errors for patcher.cu, rxmesh_dynamic.cu, etc.
+target_link_libraries(${PROJECT_NAME}_benchmark PUBLIC rxmesh_dev_helpers)

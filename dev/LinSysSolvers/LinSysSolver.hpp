@@ -9,6 +9,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>
+#include <cassert>
 
 namespace RXMESH_SOLVER {
 
@@ -29,8 +30,6 @@ class LinSysSolver
     int    N        = 0;
     double residual = 0;
     std::string ordering_name = "DEFAULT";
-
-    Eigen::SparseMatrix<double> mtr;
 
    public:
     virtual ~LinSysSolver(void) {};
@@ -59,15 +58,22 @@ class LinSysSolver
     }
 
     virtual void innerFactorize(void) = 0;
+    virtual int getFactorNNZ(void)
+    {
+        return L_NNZ;
+    }
 
     virtual void solve(Eigen::VectorXd& rhs, Eigen::VectorXd& result)
     {
         innerSolve(rhs, result);
     }
 
-    virtual void computeResidual(Eigen::SparseMatrix<double> mtr, Eigen::VectorXd& sol, Eigen::VectorXd& rhs)
+    virtual void computeResidual(Eigen::SparseMatrix<double>& mtr, Eigen::VectorXd& sol, Eigen::VectorXd& rhs)
     {
-        residual = (rhs - mtr.selfadjointView<Eigen::Lower>() * sol).norm();
+        assert(mtr.rows() == mtr.cols());
+        assert(rhs.rows() == mtr.rows());
+        assert(sol.rows() == mtr.rows());
+        residual = (rhs - mtr * sol).norm();
     }
 
     virtual void innerSolve(Eigen::VectorXd& rhs, Eigen::VectorXd& result) = 0;

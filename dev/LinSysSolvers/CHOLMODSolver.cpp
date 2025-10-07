@@ -129,6 +129,12 @@ void CHOLMODSolver::innerFactorize(void)
         std::cerr << "ERROR during numerical factorization - code: "
                   << std::endl;
     }
+    //A bit of debugging flags
+    if (L->is_super) {
+        spdlog::info("CHOLMOD Choose Supernodal computation");
+    } else {
+        spdlog::info("CHOLMOD Choose simplicial computation");
+    }
 }
 
 void CHOLMODSolver::innerSolve(Eigen::VectorXd& rhs, Eigen::VectorXd& result)
@@ -146,7 +152,7 @@ void CHOLMODSolver::innerSolve(Eigen::VectorXd& rhs, Eigen::VectorXd& result)
     x_solve = cholmod_solve(CHOLMOD_A, L, b, &cm);
     result.conservativeResize(rhs.size());
     memcpy(result.data(), x_solve->x, result.rows() * sizeof(result[0]));
-    save_factor("/home/behrooz/Desktop/Last_Project/RXMesh-dev/output/factor_" + ordering_name + ".mtx");
+    // save_factor("/home/behrooz/Desktop/Last_Project/RXMesh-dev/output/factor_" + ordering_name + ".mtx");
 }
 
 
@@ -178,6 +184,7 @@ LinSysSolverType CHOLMODSolver::type() const
 {
     return LinSysSolverType::CPU_CHOLMOD;
 };
+
 }  // namespace RXMESH_SOLVER
 
 #endif

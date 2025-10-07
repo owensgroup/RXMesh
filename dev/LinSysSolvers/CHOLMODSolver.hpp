@@ -22,8 +22,6 @@ public:                // Access specifier
     cholmod_dense *x_solve;
 
     void *Ai, *Ap, *Ax, *bx;
-
-
     ~CHOLMODSolver();
     CHOLMODSolver();
 

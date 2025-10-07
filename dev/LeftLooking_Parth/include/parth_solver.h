@@ -5,11 +5,9 @@
 
 #pragma once
 
-#include <Eigen/SparseCore>
 
 #include "parth/parth.h"
 #include "cholmod.h"
-#include "cholmod_core.h"
 
 #include <string>
 #include <vector>
@@ -28,7 +26,6 @@ public:
     std::vector<int> perm_vector;
 
     ///@brief Basic Storages for A
-    Eigen::SparseMatrix<double> A;
     int *Ap, *Ai;
     double *Ax;
     int A_nnz, A_n;
@@ -173,16 +170,16 @@ public:
         cholmod_common *Common);
 
     void computeFirstchild(int n, int *Ap, int *Ai);
-
-    void createParallelSchedule();
-
-    void createSpTRSVParallelSchedule();
-
-    void createReuseParallelSchedule();
-
-    int computeETreeCost(int *super, int *tree_ptr, int *tree_set,
-                         int current_node);
-
+    //
+    // void createParallelSchedule();
+    //
+    // void createSpTRSVParallelSchedule();
+    //
+    // void createReuseParallelSchedule();
+    //
+    // int computeETreeCost(int *super, int *tree_ptr, int *tree_set,
+    //                      int current_node);
+    //
     //===========================================================================
     //======================= Factorization Functions  ==========================
     //===========================================================================
@@ -190,104 +187,95 @@ public:
     /// factorize - the entry point for matrix factorization
     ///--------------------------------------------------------------------------
     bool factorize();
-
-    ///---------------------------------------------------------------------
-    /// These are main supernodal functions adapted from cholmod
-    ///---------------------------------------------------------------------
-    int cholmod_factorize_custom(
-        cholmod_sparse *A,     ///<[in] matrix to factorize
-        cholmod_factor *L,     ///<[out] resulting factorization
-        cholmod_common *Common ///<[in/out]
-    );
-
-    ///---------------------------------------------------------------------
-    /// These are main supernodal functions adapted from cholmod
-    ///---------------------------------------------------------------------
-    int cholmod_factorize_p_custom(
-        cholmod_sparse *A,     ///<[in] matrix to factorize */
-        double beta[2],        ///<[in] factorize beta*I+A or beta*I+A'*A */
-        int *fset,             ///<[in] subset of 0:(A->ncol)-1 */
-        size_t fsize,          ///<[in] size of fset */
-        cholmod_factor *L,     ///<[in/out] resulting factorization */
-        cholmod_common *Common ///<[in/out]
-    );
-
-    int cholmod_super_numeric_custom(
-        cholmod_sparse *A, ///<[in] matrix to factorize */
-        cholmod_sparse *F, ///<[in] F = A' or A(:,f)' */
-        double
-            beta[2], ///<[in] beta*I is added to diagonal of matrix to factorize
-        cholmod_factor *L,     ///<[in/out]factorization */
-        cholmod_common *Common ///<[in/out]
-    );
-
-
-
-    //===========================================================================
-    //============================ Solve Functions  =============================
-    //===========================================================================
-
-    cholmod_dense *cholmod_solve_custom(
-        /* ---- input ---- */
-        int sys,           /* system to solve */
-        cholmod_factor *L, /* factorization to use */
-        cholmod_dense *B,  /* right-hand-side */
-        /* --------------- */
-        cholmod_common *Common);
-
-    int cholmod_solve2_custom /* returns TRUE on success, FALSE on failure */
-        (
-            /* ---- input ---- */
-            int sys,           /* system to solve */
-            cholmod_factor *L, /* factorization to use */
-            cholmod_dense *B,  /* right-hand-side */
-            cholmod_sparse *Bset,
-            /* ---- output --- */
-            cholmod_dense **X_Handle, /* solution, allocated if need be */
-            cholmod_sparse **Xset_Handle,
-            /* ---- workspace  */
-            cholmod_dense **Y_Handle, /* workspace, or NULL */
-            cholmod_dense **E_Handle, /* workspace, or NULL */
-            /* --------------- */
-            cholmod_common *Common);
-
-    int cholmod_super_ltsolve_custom /* TRUE if OK, FALSE if BLAS overflow occured
-                                      */
-        (
-            /* ---- input ---- */
-            cholmod_factor *L, /* factor to use for the backsolve */
-            /* ---- output ---- */
-            cholmod_dense *X, /* b on input, solution to L'x=b on output */
-            /* ---- workspace ---- */
-            cholmod_dense *E, /* workspace of size nrhs*(L->maxesize) */
-            /* --------------- */
-            cholmod_common *Common);
-
-    int cholmod_super_lsolve_custom /* TRUE if OK, FALSE if BLAS overflow occured
-                                     */
-        (
-            /* ---- input ---- */
-            cholmod_factor *L, /* factor to use for the forward solve */
-            /* ---- output ---- */
-            cholmod_dense *X, /* b on input, solution to Lx=b on output */
-            /* ---- workspace ---- */
-            cholmod_dense *E, /* workspace of size nrhs*(L->maxesize) */
-            /* --------------- */
-            cholmod_common *Common);
-
+    //
+    // ///---------------------------------------------------------------------
+    // /// These are main supernodal functions adapted from cholmod
+    // ///---------------------------------------------------------------------
+    // int cholmod_factorize_custom(
+    //     cholmod_sparse *A,     ///<[in] matrix to factorize
+    //     cholmod_factor *L,     ///<[out] resulting factorization
+    //     cholmod_common *Common ///<[in/out]
+    // );
+    //
+    // ///---------------------------------------------------------------------
+    // /// These are main supernodal functions adapted from cholmod
+    // ///---------------------------------------------------------------------
+    // int cholmod_factorize_p_custom(
+    //     cholmod_sparse *A,     ///<[in] matrix to factorize */
+    //     double beta[2],        ///<[in] factorize beta*I+A or beta*I+A'*A */
+    //     int *fset,             ///<[in] subset of 0:(A->ncol)-1 */
+    //     size_t fsize,          ///<[in] size of fset */
+    //     cholmod_factor *L,     ///<[in/out] resulting factorization */
+    //     cholmod_common *Common ///<[in/out]
+    // );
+    //
+    // int cholmod_super_numeric_custom(
+    //     cholmod_sparse *A, ///<[in] matrix to factorize */
+    //     cholmod_sparse *F, ///<[in] F = A' or A(:,f)' */
+    //     double
+    //         beta[2], ///<[in] beta*I is added to diagonal of matrix to factorize
+    //     cholmod_factor *L,     ///<[in/out]factorization */
+    //     cholmod_common *Common ///<[in/out]
+    // );
+    //
+    //
+    //
+    // //===========================================================================
+    // //============================ Solve Functions  =============================
+    // //===========================================================================
+    //
+    // cholmod_dense *cholmod_solve_custom(
+    //     /* ---- input ---- */
+    //     int sys,           /* system to solve */
+    //     cholmod_factor *L, /* factorization to use */
+    //     cholmod_dense *B,  /* right-hand-side */
+    //     /* --------------- */
+    //     cholmod_common *Common);
+    //
+    // int cholmod_solve2_custom /* returns TRUE on success, FALSE on failure */
+    //     (
+    //         /* ---- input ---- */
+    //         int sys,           /* system to solve */
+    //         cholmod_factor *L, /* factorization to use */
+    //         cholmod_dense *B,  /* right-hand-side */
+    //         cholmod_sparse *Bset,
+    //         /* ---- output --- */
+    //         cholmod_dense **X_Handle, /* solution, allocated if need be */
+    //         cholmod_sparse **Xset_Handle,
+    //         /* ---- workspace  */
+    //         cholmod_dense **Y_Handle, /* workspace, or NULL */
+    //         cholmod_dense **E_Handle, /* workspace, or NULL */
+    //         /* --------------- */
+    //         cholmod_common *Common);
+    //
+    // int cholmod_super_ltsolve_custom /* TRUE if OK, FALSE if BLAS overflow occured
+    //                                   */
+    //     (
+    //         /* ---- input ---- */
+    //         cholmod_factor *L, /* factor to use for the backsolve */
+    //         /* ---- output ---- */
+    //         cholmod_dense *X, /* b on input, solution to L'x=b on output */
+    //         /* ---- workspace ---- */
+    //         cholmod_dense *E, /* workspace of size nrhs*(L->maxesize) */
+    //         /* --------------- */
+    //         cholmod_common *Common);
+    //
+    // int cholmod_super_lsolve_custom /* TRUE if OK, FALSE if BLAS overflow occured
+    //                                  */
+    //     (
+    //         /* ---- input ---- */
+    //         cholmod_factor *L, /* factor to use for the forward solve */
+    //         /* ---- output ---- */
+    //         cholmod_dense *X, /* b on input, solution to Lx=b on output */
+    //         /* ---- workspace ---- */
+    //         cholmod_dense *E, /* workspace of size nrhs*(L->maxesize) */
+    //         /* --------------- */
+    //         cholmod_common *Common);
+    //
     ///--------------------------------------------------------------------------
     /// solve - Entry point for solve function
     ///--------------------------------------------------------------------------
-    void solve(Eigen::VectorXd &rhs,   ///<[in] right hand side of Ax=b
-               Eigen::VectorXd &result ///<[out] the unknown x in Ax=b
-    );
-
-    ///--------------------------------------------------------------------------
-    /// cholmodSolve - basic cholmod solve
-    ///--------------------------------------------------------------------------
-    void cholmodSolve(Eigen::VectorXd &rhs,   ///<[in] right hand side of Ax=b
-                      Eigen::VectorXd &result ///<[out] the unknown x in Ax=b
-    );
+    void solve(std::vector<double>& rhs, std::vector<double>& result);
 
     void parth_solver_clean_memory();
     void setMatrix(int* p, int* i, double* x, int A_N, int NNZ);

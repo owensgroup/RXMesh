@@ -42,6 +42,7 @@ public:                // Access specifier
     void innerFactorize(void) override;
     void innerSolve(Eigen::VectorXd &rhs, Eigen::VectorXd &result) override;
     void resetSolver() override;
+    int getFactorNNZ() override;
     void clean_sparse_matrix_mem();
     void clean_rhs_sol_mem();
     virtual LinSysSolverType type() const override;

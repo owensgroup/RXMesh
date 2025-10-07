@@ -311,6 +311,12 @@ LinSysSolverType CUDSSSolver::type() const
 {
     return LinSysSolverType::GPU_CUDSS;
 };
+
+int CUDSSSolver::getFactorNNZ()
+{
+    return 0;
+}
+
 }  // namespace RXMESH_SOLVER
 
 #endif

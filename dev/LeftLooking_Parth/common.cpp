@@ -1,7 +1,6 @@
 //
 // Created by behrooz on 25/10/22.
 //
-#include <unsupported/Eigen/SparseExtra>
 #include "parth_solver.h"
 
 

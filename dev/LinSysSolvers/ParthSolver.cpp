@@ -32,6 +32,7 @@ void ParthSolver::setMatrix(int*              p,
 void ParthSolver::innerAnalyze_pattern(std::vector<int>& user_defined_perm)
 {
   solver.analyze(user_defined_perm);
+    L_NNZ = solver.A_cm.lnz * 2 - N;
 }
 
 void ParthSolver::innerFactorize(void)
@@ -41,20 +42,15 @@ void ParthSolver::innerFactorize(void)
 
 void ParthSolver::innerSolve(Eigen::VectorXd& rhs, Eigen::VectorXd& result)
 {
-    solver.solve(rhs, result);
+    std::vector<double> rhs_std(rhs.data(), rhs.data() + rhs.size());
+    std::vector<double> result_std;
+    solver.solve(rhs_std, result_std);
+    result = Eigen::Map<Eigen::VectorXd>(result_std.data(), result_std.size());
 }
 
 
 void ParthSolver::resetSolver()
 {
-    cholmod_clean_memory();
-
-    A       = NULL;
-    L       = NULL;
-    b       = NULL;
-    x_solve = NULL;
-    Ai = Ap = Ax = NULL;
-    bx           = NULL;
 }
 
 void ParthSolver::save_factor(
@@ -64,7 +60,7 @@ void ParthSolver::save_factor(
     FILE *out = fopen(filePath.c_str(), "w");
     assert(out);
 
-    cholmod_write_sparse(out, spm, NULL, "", &cm);
+    cholmod_write_sparse(out, spm, NULL, "", &solver.A_cm);
 
     fclose(out);
 }

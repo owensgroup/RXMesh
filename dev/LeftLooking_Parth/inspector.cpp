@@ -3,25 +3,26 @@
 //
 
 #include <iostream>
-#include <unsupported/Eigen/SparseExtra>
 #include "parth_solver.h"
 namespace PARTH {
 
-void ParthSolverAPI::analyze(std::vector<int>& user_defined_perm) {
+void ParthSolverAPI::analyze(std::vector<int>& user_defined_perm)
+{
     if (!user_defined_perm.empty()) {
         A_cm.nmethods = 1;
         A_cm.method[0].ordering = CHOLMOD_GIVEN;
         chol_L =
             cholmod_analyze_p(chol_A, user_defined_perm.data(), NULL, 0, &A_cm);
     } else {
+        parth.setReorderingType(PARTH::ReorderingType::AMD);
         parth.computePermutation(perm_vector);
         A_cm.nmethods = 1;
         A_cm.method[0].ordering = CHOLMOD_GIVEN;
         chol_L =
             cholmod_analyze_p_custom(chol_A, perm_vector.data(), NULL, 0, &A_cm);
     }
-
 }
+
 
 
 // void ParthSolverAPI::createParallelSchedule() {

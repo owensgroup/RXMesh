@@ -24,11 +24,14 @@ if(NOT suitesparse_POPULATED)
     # Build only minimal required packages for CHOLMOD
     set(SUITESPARSE_ENABLE_PROJECTS "suitesparse_config;amd;camd;colamd;ccolamd;cholmod" CACHE STRING "SuiteSparse projects to build")
     
-    # Disable unnecessary CHOLMOD modules
+    # Configure CHOLMOD modules
+    # Note: Utility module (containing cholmod_mult_size_t, cholmod_add_size_t, etc.)
+    # must be explicitly enabled
     set(CHOLMOD_GPL ON CACHE BOOL "Enable GPL modules (required for supernodal)")
     set(CHOLMOD_SUPERNODAL ON CACHE BOOL "Enable supernodal factorization")
     set(CHOLMOD_CHOLESKY ON CACHE BOOL "Enable Cholesky module")
     set(CHOLMOD_CAMD ON CACHE BOOL "Enable CAMD support")
+    set(CHOLMOD_UTILITY ON CACHE BOOL "Enable Utility module")
     set(CHOLMOD_PARTITION OFF CACHE BOOL "Disable Partition module")
     set(CHOLMOD_MATRIXOPS OFF CACHE BOOL "Disable MatrixOps module")
     set(CHOLMOD_MODIFY OFF CACHE BOOL "Disable Modify module")

@@ -9,6 +9,10 @@
 #include "CUDSSSolver.hpp"
 #endif
 
+#ifdef USE_PARTH
+#include "ParthSolver.hpp"
+#endif
+
 namespace RXMESH_SOLVER {
 
     LinSysSolver *LinSysSolver::create(const LinSysSolverType type) {
@@ -24,6 +28,12 @@ namespace RXMESH_SOLVER {
             case LinSysSolverType::GPU_CUDSS:
                 return new CUDSSSolver();
 #endif
+
+#ifdef USE_PARTH
+            case LinSysSolverType::PARTH_SOLVER:
+                return new ParthSolver();
+#endif
+
             default:
                 std::cerr << "Uknown linear system solver type" << std::endl;
                 return nullptr;
