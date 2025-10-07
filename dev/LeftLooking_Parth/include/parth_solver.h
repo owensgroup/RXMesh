@@ -12,17 +12,23 @@
 #include <string>
 #include <vector>
 
-namespace PARTH {
+namespace PARTH_SOLVER {
 
 class ParthSolverAPI
 {
 public:
+    enum class ScheduleType
+    {
+        SERIAL,
+        SUPERNODAL_BASED,
+        PATCH_TREE_BASED,
+    };
+
     ///@brief Solver configs
-    int num_cores = 10;
-    int num_sockets = 2;
     bool verbose = true;
-    std::vector<bool> symbolic_region_catch;
-    ParthAPI parth;
+
+    ///@brief Parth object
+    PARTH::ParthAPI parth;
     std::vector<int> perm_vector;
 
     ///@brief Basic Storages for A
@@ -50,7 +56,9 @@ public:
     std::vector<int> Gi;
 
     ///@breif Parallelization variables
-    int parallel_levels = 0;
+    ScheduleType schedule_type = ScheduleType::SUPERNODAL_BASED;
+    int serial_supernode_th = 256;
+    int num_cores = 10;
     std::vector<int> level_ptr;
     std::vector<int> part_ptr;
     std::vector<int> supernode_idx;
@@ -169,9 +177,13 @@ public:
         /* --------------- */
         cholmod_common *Common);
 
-    void computeFirstchild(int n, int *Ap, int *Ai);
-    //
-    // void createParallelSchedule();
+    // void computeFirstchild(int n, int *Ap, int *Ai);
+    //This schedule performs on the supernodal etree
+    void createSupernodalSchedule();
+
+    //This schedule performs on the patch tree (binary tree from Parth)
+    void createPatchTreeSchedule();
+
     //
     // void createSpTRSVParallelSchedule();
     //
@@ -188,36 +200,36 @@ public:
     ///--------------------------------------------------------------------------
     bool factorize();
     //
-    // ///---------------------------------------------------------------------
-    // /// These are main supernodal functions adapted from cholmod
-    // ///---------------------------------------------------------------------
-    // int cholmod_factorize_custom(
-    //     cholmod_sparse *A,     ///<[in] matrix to factorize
-    //     cholmod_factor *L,     ///<[out] resulting factorization
-    //     cholmod_common *Common ///<[in/out]
-    // );
-    //
-    // ///---------------------------------------------------------------------
-    // /// These are main supernodal functions adapted from cholmod
-    // ///---------------------------------------------------------------------
-    // int cholmod_factorize_p_custom(
-    //     cholmod_sparse *A,     ///<[in] matrix to factorize */
-    //     double beta[2],        ///<[in] factorize beta*I+A or beta*I+A'*A */
-    //     int *fset,             ///<[in] subset of 0:(A->ncol)-1 */
-    //     size_t fsize,          ///<[in] size of fset */
-    //     cholmod_factor *L,     ///<[in/out] resulting factorization */
-    //     cholmod_common *Common ///<[in/out]
-    // );
-    //
-    // int cholmod_super_numeric_custom(
-    //     cholmod_sparse *A, ///<[in] matrix to factorize */
-    //     cholmod_sparse *F, ///<[in] F = A' or A(:,f)' */
-    //     double
-    //         beta[2], ///<[in] beta*I is added to diagonal of matrix to factorize
-    //     cholmod_factor *L,     ///<[in/out]factorization */
-    //     cholmod_common *Common ///<[in/out]
-    // );
-    //
+    ///---------------------------------------------------------------------
+    /// These are main supernodal functions adapted from cholmod
+    ///---------------------------------------------------------------------
+    int cholmod_factorize_custom(
+        cholmod_sparse *A,     ///<[in] matrix to factorize
+        cholmod_factor *L,     ///<[out] resulting factorization
+        cholmod_common *Common ///<[in/out]
+    );
+
+    ///---------------------------------------------------------------------
+    /// These are main supernodal functions adapted from cholmod
+    ///---------------------------------------------------------------------
+    int cholmod_factorize_p_custom(
+        cholmod_sparse *A,     ///<[in] matrix to factorize */
+        double beta[2],        ///<[in] factorize beta*I+A or beta*I+A'*A */
+        int *fset,             ///<[in] subset of 0:(A->ncol)-1 */
+        size_t fsize,          ///<[in] size of fset */
+        cholmod_factor *L,     ///<[in/out] resulting factorization */
+        cholmod_common *Common ///<[in/out]
+    );
+
+    int cholmod_super_numeric_custom(
+        cholmod_sparse *A, ///<[in] matrix to factorize */
+        cholmod_sparse *F, ///<[in] F = A' or A(:,f)' */
+        double
+            beta[2], ///<[in] beta*I is added to diagonal of matrix to factorize
+        cholmod_factor *L,     ///<[in/out]factorization */
+        cholmod_common *Common ///<[in/out]
+    );
+
     //
     //
     // //===========================================================================

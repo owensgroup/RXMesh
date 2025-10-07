@@ -17,7 +17,8 @@ public:                // Access specifier
     ~ParthSolver();
     ParthSolver();
 
-    PARTH::ParthSolverAPI solver;
+    PARTH_SOLVER::ParthSolverAPI solver;
+
     void setMatrix(int *p, int *i, double *x, int A_N, int NNZ) override;
     void innerAnalyze_pattern(std::vector<int>& user_defined_perm) override;
     void innerFactorize(void) override;

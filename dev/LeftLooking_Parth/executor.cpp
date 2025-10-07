@@ -8,10 +8,10 @@
 #include "csv_utils.h"
 #include "parth_solver.h"
 
-namespace PARTH {
+namespace PARTH_SOLVER {
 
 bool ParthSolverAPI::factorize(void) {
-    cholmod_factorize(chol_A, chol_L, &A_cm);
+    cholmod_factorize_custom(chol_A, chol_L, &A_cm);
     return A_cm.status != CHOLMOD_NOT_POSDEF;
 }
 

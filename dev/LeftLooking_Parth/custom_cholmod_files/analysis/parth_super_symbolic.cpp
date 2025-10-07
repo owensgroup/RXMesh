@@ -77,7 +77,7 @@ extern "C" {
 // Only adds column indices corresponding to the leading columns of each
 // relaxed supernode.
 
-namespace PARTH {
+namespace PARTH_SOLVER {
 static void subtree
 (
     // inputs, not modified:

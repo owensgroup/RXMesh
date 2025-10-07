@@ -7,11 +7,15 @@ endif()
 
 include(FetchContent)
 
+# Find BLAS and LAPACK (required by SuiteSparse)
+find_package(BLAS REQUIRED)
+find_package(LAPACK REQUIRED)
+
 # Download SuiteSparse
 FetchContent_Declare(
     suitesparse
     GIT_REPOSITORY https://github.com/DrTimothyAldenDavis/SuiteSparse.git
-    GIT_TAG v7.11.0  # Latest stable version as of the search
+    GIT_TAG v7.11.0  # Using latest stable version with BLAS/LAPACK compatibility header
     GIT_SHALLOW TRUE
 )
 
@@ -48,6 +52,18 @@ if(NOT suitesparse_POPULATED)
     # Enable building static libraries (required for targets to be created)
     set(BUILD_STATIC_LIBS ON CACHE BOOL "Build static libraries")
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "Don't build shared libraries")
+    
+    # Configure BLAS/LAPACK settings for SuiteSparse
+    # This ensures the lowercase BLAS/LAPACK wrapper macros are defined
+    set(SUITESPARSE_USE_SYSTEM_BLAS ON CACHE BOOL "Use system BLAS")
+    set(SUITESPARSE_USE_SYSTEM_LAPACK ON CACHE BOOL "Use system LAPACK")
+    set(BLA_VENDOR "Generic" CACHE STRING "BLAS vendor")
+    
+    # Configure BLAS naming convention - critical for wrapper macro definitions
+    # SuiteSparse uses these to define SUITESPARSE_BLAS_dsyrk, etc.
+    # Most modern BLAS libraries use lowercase names with underscores (Fortran convention)
+    set(BLAS_UNDERSCORE ON CACHE BOOL "BLAS names have trailing underscore")
+    set(BLAS_NO_UNDERSCORE OFF CACHE BOOL "BLAS names have no trailing underscore")
     
     # Populate the content
     FetchContent_Populate(suitesparse)

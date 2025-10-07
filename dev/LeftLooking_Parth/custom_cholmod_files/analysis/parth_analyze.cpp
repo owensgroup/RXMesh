@@ -121,7 +121,7 @@ extern "C" {
 
 // Orders and analyzes A, AA', PAP', or PAA'P' and returns a symbolic factor
 // that can later be passed to cholmod_factorize.
-namespace PARTH {
+namespace PARTH_SOLVER {
 cholmod_factor *ParthSolverAPI::cholmod_analyze_custom   // returns symbolic factor L
 (
     // input:
@@ -152,7 +152,6 @@ cholmod_factor *ParthSolverAPI::cholmod_analyze_p_custom // returns symbolic fac
     cholmod_common *Common
 )
 {
-    std::cout << "HELLO" << std::endl;
     return cholmod_analyze_p2_custom (TRUE, A, UserPerm, fset, fsize, Common);
 }
 

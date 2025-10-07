@@ -5,7 +5,7 @@
 #include <iostream>
 #include "parth_solver.h"
 
-namespace PARTH {
+namespace PARTH_SOLVER {
 
 void ParthSolverAPI::solve(std::vector<double>& rhs, std::vector<double>& result){
   if (!chol_b) {

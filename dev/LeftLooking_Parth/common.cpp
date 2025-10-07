@@ -4,7 +4,7 @@
 #include "parth_solver.h"
 
 
-namespace PARTH {
+namespace PARTH_SOLVER {
 
 ParthSolverAPI::ParthSolverAPI(void)
 {

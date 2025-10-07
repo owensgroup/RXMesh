@@ -56,8 +56,13 @@ add_library(parallel_cholmod
         LeftLooking_Parth/executor.cpp
         LeftLooking_Parth/inspector.cpp
         LeftLooking_Parth/solve.cpp
+        LeftLooking_Parth/utils/compute_etree_inv.cpp
         LeftLooking_Parth/custom_cholmod_files/analysis/parth_analyze.cpp
         LeftLooking_Parth/custom_cholmod_files/analysis/parth_super_symbolic.cpp
+        LeftLooking_Parth/custom_cholmod_files/factorize/parth_factorize.cpp
+        LeftLooking_Parth/custom_cholmod_files/factorize/parth_super_numeric.cpp
+
+
 
 #        LeftLooking_Parth/custom_cholmod_files/parth_factorize.cpp
 #        LeftLooking_Parth/custom_cholmod_files/parth_numeric_supernode.cpp
@@ -70,6 +75,11 @@ add_library(parallel_cholmod
 if(${PROJECT_NAME}_WITH_SUITESPARSE)
     # Link SuiteSparse libraries - order matters for static linking!
     target_include_directories(parallel_cholmod PUBLIC ${SUITESPARSE_INCLUDE_DIRS})
+    
+    # Ensure that SuiteSparse BLAS wrapper macros are available
+    # This is needed for the lowercase BLAS wrapper definitions (SUITESPARSE_BLAS_dsyrk, etc.)
+    # which are defined in SuiteSparse_config.h at line ~1814
+    target_compile_definitions(parallel_cholmod PUBLIC SUITESPARSE_BLAS_DEFINITIONS)
     
     # For static library linking with CHOLMOD, we need to use --whole-archive to ensure
     # all symbols (especially utility functions like cholmod_mult_size_t) are extracted
@@ -84,6 +94,10 @@ if(${PROJECT_NAME}_WITH_SUITESPARSE)
         target_link_libraries(parallel_cholmod PUBLIC 
             AMD_static COLAMD_static CAMD_static CCOLAMD_static SuiteSparseConfig_static
         )
+        # Link BLAS and LAPACK libraries
+        find_package(BLAS REQUIRED)
+        find_package(LAPACK REQUIRED)
+        target_link_libraries(parallel_cholmod PUBLIC ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
     else()
         # Fallback to regular linking if static targets not available
         target_link_libraries(parallel_cholmod PUBLIC ${SUITESPARSE_LIBRARIES})
@@ -101,7 +115,11 @@ endif()
 target_include_directories(parallel_cholmod PUBLIC
         ${CMAKE_SOURCE_DIR}/include
         LeftLooking_Parth/include
+        LeftLooking_Parth/utils
+        LeftLooking_Parth/custom_cholmod_files/factorize
 )
+
+target_link_libraries(parallel_cholmod PRIVATE  spdlog::spdlog)
 
 # Create rxmesh_dev_helpers library
 add_library(rxmesh_dev_helpers
