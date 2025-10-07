@@ -66,7 +66,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     glm::vec3 bb = bb_upper - bb_lower;
 
     // mass per vertex = rho * volume /num_vertices
-    T mass = density * bb[0] * bb[1] /
+    T mass = density * bb[0] * bb[0] /
              (rx.get_num_vertices() - num_dbc_vertices);  // m
 
     // Attributes
@@ -84,10 +84,10 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     mu_lambda.reset(0, DEVICE);
 
     auto inv_b =
-        *rx.add_face_attribute<Eigen::Matrix<T, 2, 3>>("InvB", 1);  // IB
+        *rx.add_face_attribute<Eigen::Matrix<T, 3, 3>>("InvB", 1);  // IB
 
     auto is_dbc = *rx.add_vertex_attribute<int8_t>("isBC", 1);
-    is_dbc.reset(0, DEVICE);
+
 
     auto dbc_target = *rx.add_vertex_attribute<T>("DBCTarget", 3);
     dbc_target.reset(0, DEVICE);
@@ -115,9 +115,10 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
     rx.for_each_vertex(HOST, [&](VertexHandle vh) mutable {
         // doing it on the host since v_dbc is an array on the host
+        is_dbc(vh) = 0;
         for (int i = 0; i < num_dbc_vertices; ++i) {
             if (vh == v_dbc[i]) {
-                is_dbc(vh) = true;
+                is_dbc(vh) = 1;
             }
         }
     });
@@ -130,17 +131,21 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 #if USE_POLYSCOPE
     // add BC to polyscope
     rx.get_polyscope_mesh()->addVertexScalarQuantity("DBC", is_dbc);
+
+    // add volume to polyscope
+    volume.move(DEVICE, HOST);
+    rx.get_polyscope_mesh()->addFaceScalarQuantity("Volume", volume);
 #endif
 
-    // add inertial energy term
-    inertial_energy(problem, x, mass);
+    // add inertial energy term OK
+    inertial_energy(problem, x, is_dbc, mass);
 
     // add spring energy term
     spring_energy(problem, dbc_target, is_dbc, mass, dbc_stiff);
 
 
-    // add gravity energy
-    gravity_energy(problem, x, time_step, mass);
+    // add gravity energy OK
+    gravity_energy(problem, x, is_dbc, time_step, mass);
 
     // add barrier energy
     barrier_energy(problem,
@@ -158,17 +163,19 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     T line_search_init_step = 0;
 
     // add friction energy
-    friction_energy(problem,
-                    x,
-                    x_n,
-                    newton_solver.dir,
-                    line_search_init_step,
-                    mu_lambda,
-                    time_step,
-                    ground_n);
+    // TODO alpha should change during different runs (e.g., in the line search)
+    // friction_energy(problem,
+    //                x,
+    //                x_n,
+    //                newton_solver.dir,
+    //                line_search_init_step,
+    //                mu_lambda,
+    //                time_step,
+    //                ground_n);
 
     // add neo hooken energy
-    neo_hookean_energy(problem, x, volume, inv_b, mu_lame, time_step, lam);
+    neo_hookean_energy(
+        problem, x, is_dbc, volume, inv_b, mu_lame, time_step, lam);
 
 
     int steps = 0;
@@ -211,7 +218,6 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
         // DBC satisfied
         check_dbc_satisfied(
-            rx, is_dbc_satisfied, x, is_dbc, dbc_target, time_step, tol);
 
         // how many DBC are satisfied
         int num_satisfied = rh.reduce(is_dbc_satisfied, cub::Sum(), 0);
@@ -261,8 +267,13 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             problem.eval_terms();
 
             // DBC satisfied
-            check_dbc_satisfied(
-                rx, is_dbc_satisfied, x, is_dbc, dbc_target, time_step, tol);
+            check_dbc_satisfied(rx,
+                                is_dbc_satisfied,
+                                x_tilde,
+                                is_dbc,
+                                dbc_target,
+                                time_step,
+                                tol);
 
             // how many DBC are satisfied
             num_satisfied = rh.reduce(is_dbc_satisfied, cub::Sum(), 0);

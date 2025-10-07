@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "rxmesh/diff/util.h"
 #include "rxmesh/rxmesh_static.h"
@@ -20,14 +20,23 @@ void init_volume_inverse_b(RXMeshStatic& rx,
             Eigen::Vector3<T> x1 = x.template to_eigen<3>(vv[1]);
             Eigen::Vector3<T> x2 = x.template to_eigen<3>(vv[2]);
 
-            Eigen::Matrix<T, 3, 2> tb = col_mat(x1 - x0, x2 - x0);
+            Eigen::Vector3<T> e0 = x2 - x0;
+            Eigen::Vector3<T> e1 = x1 - x0;
+
+            Eigen::Vector3<T> n = (e0).cross(e1);
+            n.normalize();
+
+            Eigen::Matrix<T, 3, 3> tb = col_mat(e0, e1, n);
 
             volume(f) = T(0.5) * tb.col(0).cross(tb.col(1)).norm();
 
-            // inv_b(f) = tb.transpose().inverse();
 
-            Eigen::Matrix2<T> tb_T_tb = tb.transpose() * tb;
+            // pseudo-inverse
+            // inv_b(f) = (((tb.transpose()) * (tb)).inverse()) *
+            // (tb.transpose());
 
-            inv_b(f) = tb_T_tb.inverse() * tb.transpose();
+            inv_b(f) = tb.inverse();
+
+            
         });
 }

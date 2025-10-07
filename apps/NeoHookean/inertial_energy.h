@@ -4,21 +4,29 @@
 
 using namespace rxmesh;
 
-template <typename ProblemT, typename VAttrT, typename T>
-void inertial_energy(ProblemT& problem, VAttrT& x, T mass)
+template <typename ProblemT, typename VAttrT, typename VAttrI, typename T>
+void inertial_energy(ProblemT&     problem,
+                     const VAttrT& x,
+                     const VAttrI& is_dbc,
+                     const T       mass)
 {
     T half_mass = T(0.5) * mass;
     problem.template add_term<Op::V, true>(
-        [x, half_mass] __device__(const auto& vh, auto& obj) mutable {
+        [=] __device__(const auto& vh, auto& obj) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, obj);
+            ActiveT E;
 
-            Eigen::Vector3<T> xx = x.to_eigen<3>(vh);
+            if (is_dbc(vh) == 0) {
 
-            Eigen::Vector3<ActiveT> l = xx - x_tilda;
+                Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, obj);
 
-            ActiveT E = half_mass * l.squaredNorm();
+                Eigen::Vector3<T> xx = x.to_eigen<3>(vh);
+
+                Eigen::Vector3<ActiveT> l = xx - x_tilda;
+
+                E = half_mass * l.squaredNorm();
+            }
 
             return E;
         });

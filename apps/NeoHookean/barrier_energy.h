@@ -37,20 +37,19 @@ void barrier_energy(ProblemT&          problem,
 
             ActiveT E;
 
-            // floor
-            ActiveT d = (xi - o).dot(n);
-            if (d < dhat) {
-                ActiveT s = d / dhat;
 
-                E = h_sq * contact_area(vh) * dhat * T(0.5) * kappa * (s - 1) *
-                    log(s);
-
-                // if constexpr (is_scalar_v<ActiveT>) {
-                // }
-            }
-
-            // ceiling
             if (!is_dbc(vh)) {
+                // floor
+                ActiveT d = (xi - o).dot(n);
+                if (d < dhat) {
+                    ActiveT s = d / dhat;
+
+                    E = h_sq * contact_area(vh) * dhat * T(0.5) * kappa *
+                        (s - 1) * log(s);
+                }
+
+
+                // ceiling
                 d = (xi - x_dbc).dot(normal);
 
                 if (d < dhat) {

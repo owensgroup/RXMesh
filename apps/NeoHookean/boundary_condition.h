@@ -74,7 +74,7 @@ void check_dbc_satisfied(RXMeshStatic& rx,
             const vec3<T> x_target = dbc_target.to_glm<3>(vh);
 
             if (glm::distance(xi, x_target) / h < tol) {
-                is_dbc_satisfied(vh) = true;
+                is_dbc_satisfied(vh) = 1;
             }
         }
     });
