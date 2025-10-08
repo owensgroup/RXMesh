@@ -35,17 +35,19 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     using HessMatT = typename ProblemT::HessMatT;
 
     // Problem parameters
-    const T density        = 1000;  // rho
-    const T young_mod      = 1e5;   // E
-    const T poisson_ratio  = 0.4;   // nu
-    const T time_step      = 0.01;  // h
-    const T fricition_coef = 0.11;  // mu
-    const T stiffness_coef = 4e4;
-    const T tol            = 0.01;
-    const T inv_time_step  = T(1) / time_step;
-    T       dbc_stiff      = 1000;
-    const T dhat           = 0.01;
-    const T kappa          = 1e5;
+    const T        density        = 1000;  // rho
+    const T        young_mod      = 1e5;   // E
+    const T        poisson_ratio  = 0.4;   // nu
+    const T        time_step      = 0.01;  // h
+    const T        fricition_coef = 0.11;  // mu
+    const T        stiffness_coef = 4e4;
+    const T        tol            = 0.01;
+    const T        inv_time_step  = T(1) / time_step;
+    DenseMatrix<T> dbc_stiff(1, 1);
+    dbc_stiff(0) = 1000;
+    dbc_stiff.move(HOST, DEVICE);
+    const T dhat  = 0.01;
+    const T kappa = 1e5;
 
     // TODO the limits and velocity should be different for different Dirichlet
     // nodes
@@ -243,9 +245,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
 
             if (residual <= tol && num_satisfied != num_dbc_vertices) {
-                // TODO: the updated values of dbc_stiff is not observed in the
-                // spring_energy kernel since it was copied by value
-                dbc_stiff *= 2;
+                dbc_stiff.multiply(T(2));
             }
 
             T nh_step = neo_hookean_step_size(rx, x, newton_solver.dir, alpha);
