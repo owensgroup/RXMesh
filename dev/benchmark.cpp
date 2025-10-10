@@ -110,6 +110,9 @@ int main(int argc, char* argv[])
         spdlog::info("Using POC_ND ordering.");
         ordering = RXMESH_SOLVER::Ordering::create(
             RXMESH_SOLVER::RXMESH_Ordering_Type::POC_ND);
+    } else if (args.ordering_type == "PARTH") {
+        ordering = RXMESH_SOLVER::Ordering::create(
+            RXMESH_SOLVER::RXMESH_Ordering_Type::PARTH);
     } else if (args.ordering_type == "NEUTRAL"){
         spdlog::info("Using NEUTRAL ordering.");
         ordering = RXMESH_SOLVER::Ordering::create(

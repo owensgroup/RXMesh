@@ -18,8 +18,7 @@ enum class RXMESH_Ordering_Type
     METIS,
     AMD,
     NEUTRAL,
-    PARTH_METIS,
-    PARTH_AMD,
+    PARTH,
     RXMESH_ND,
     POC_ND
 };

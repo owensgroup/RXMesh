@@ -9,6 +9,7 @@
 #include "neutral_ordering.h"
 #include "rxmesh_ordering.h"
 #include "poc_ordering.h"
+#include "parth_ordering.h"
 
 namespace RXMESH_SOLVER {
 
@@ -23,6 +24,8 @@ Ordering *Ordering::create(const RXMESH_Ordering_Type type) {
             return new POCOrdering();
         case RXMESH_Ordering_Type::NEUTRAL:
             return new NeutralOrdering();
+        case RXMESH_Ordering_Type::PARTH:
+            return new ParthOrdering();
         default:
             std::cerr << "Unknown Ordering type" << std::endl;
             return nullptr;

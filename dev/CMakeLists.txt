@@ -137,6 +137,7 @@ add_library(rxmesh_dev_helpers
         Ordering/rxmesh_ordering.cu
         Ordering/neutral_ordering.cpp
         Ordering/poc_ordering.cu
+        Ordering/parth_ordering.cpp
 )
 
 # Link additional dependencies required by dev helpers
