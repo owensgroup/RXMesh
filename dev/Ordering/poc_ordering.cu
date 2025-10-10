@@ -27,6 +27,7 @@ void POCOrdering::setMesh(const double* V_data, int V_rows, int V_cols,
 {
     m_has_mesh = true;
     gpu_order.setMesh(V_data, V_rows, V_cols, F_data, F_rows, F_cols);
+    gpu_order.init_patches();
 }
 
 bool POCOrdering::needsMesh() const
@@ -37,7 +38,6 @@ bool POCOrdering::needsMesh() const
 void POCOrdering::compute_permutation(std::vector<int>& perm)
 {
     assert(m_has_mesh);
-    gpu_order.init_patches();
     gpu_order.compute_permutation(perm);
 }
 

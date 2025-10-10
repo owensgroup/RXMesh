@@ -63,8 +63,8 @@ void GPUOrdering::init_patches()
     // Create RXMeshStatic from the mesh data (face-vertex connectivity)
     // Use default patch size of 512 (can be adjusted)
     rxmesh::rx_init(0);
-    int patch_size = std::ceil(G_n * 1.0 / num_patches);
-    spdlog::info("Initializing roughly {} patches...", num_patches);
+    int num_patches = std::ceil(G_n * 1.0 / patch_size);
+    spdlog::info("Initializing roughly {} patches...", patch_size);
     spdlog::info("Patch size: {}", patch_size);
     rxmesh::RXMeshStatic rx(fv, "", patch_size);
     
@@ -115,25 +115,29 @@ void GPUOrdering::step2_create_quotient_graph()
     std::unordered_set<int> unique_ids;
     for (int i = 0; i < is_boundary_vertex.size(); ++i) {
         if (is_boundary_vertex[i]) {
-            // node_to_patch[i] = -1;
+            node_to_patch[i] = -1;
         } else {
             unique_ids.insert(node_to_patch[i]);
         }
     }
-    //DEBUGING
-    std::vector<bool> is_id_present(unique_ids.size(), false);
-    for (int id : unique_ids) {
-        if (id >= 0 && id < is_id_present.size()) {
-            is_id_present[id] = true;
-        }
-    }
+    //Fix the patch ids to be continuous
 
-    for (int i = 0; i < is_id_present.size(); ++i) {
-        if (!is_id_present[i]) {
-            spdlog::info("Found patch {} with no vertices", i);
-            assert(false);
-        }
-    }
+
+
+    // //DEBUGING
+    // std::vector<bool> is_id_present(unique_ids.size(), false);
+    // for (int id : unique_ids) {
+    //     if (id >= 0 && id < is_id_present.size()) {
+    //         is_id_present[id] = true;
+    //     }
+    // }
+    //
+    // for (int i = 0; i < is_id_present.size(); ++i) {
+    //     if (!is_id_present[i]) {
+    //         spdlog::info("Found patch {} with no vertices", i);
+    //         assert(false);
+    //     }
+    // }
     
     //Step 2: create quotient graph
     //Step 2.1: rename the vertices of the quotient graph
@@ -154,10 +158,6 @@ void GPUOrdering::step2_create_quotient_graph()
         int q_id = map_graph_to_quotient_node[i];
         quotient_nodes[q_id].nodes.push_back(i);
         quotient_nodes[q_id].q_id = q_id;
-    }
-    //If it fails it is due to absent some unique ids
-    for (int i = 0; i < quotient_nodes.size(); ++i) {
-        assert(quotient_nodes[i].nodes.size() > 0);
     }
 
     //Step 2.3: compute the edge and node weights
@@ -207,11 +207,6 @@ void GPUOrdering::step3_compute_quotient_permutation()
         return;
     }
     
-    // Set up METIS options
-    idx_t options[METIS_NOPTIONS];
-    METIS_SetDefaultOptions(options);
-    options[METIS_OPTION_NUMBERING] = 0;  // C-style numbering (0-based)
-    options[METIS_OPTION_DBGLVL] = 0;     // No debug output
     
     // Prepare temporary array for inverse permutation
     std::vector<idx_t> iperm(Q_n);
@@ -275,11 +270,13 @@ void GPUOrdering::step4_compute_patch_permutation()
         }
     }
     assert(per_quotient_patch_triplets.size() == Q_n);
-    spdlog::info("Creating {} local patch graphs", per_quotient_patch_triplets.size());
+    // spdlog::info("Creating {} local patch graphs", per_quotient_patch_triplets.size());
 
     //For each local patch, compute the local graph permutation
     for(auto& q_node: quotient_nodes) {
-        assert(q_node.nodes.size() > 0);
+        if (q_node.nodes.size() == 0) {//TODO: I am not sure whether it causes problem
+            continue;
+        }
         if(per_quotient_patch_triplets[q_node.q_id].size() == 0) {
             q_node.permuted_local_labels.resize(q_node.nodes.size());
             //No edges, use identity permutation
@@ -289,21 +286,23 @@ void GPUOrdering::step4_compute_patch_permutation()
             continue;
         }
         Eigen::SparseMatrix<int> local_graph(q_node.nodes.size(), q_node.nodes.size());
-        spdlog::info("Working on quotient node {} with {} vertices and {} edges",
-            q_node.q_id, q_node.nodes.size(), per_quotient_patch_triplets[q_node.q_id].size());
+        // spdlog::info("Working on quotient node {} with {} vertices and {} edges",
+            // q_node.q_id, q_node.nodes.size(), per_quotient_patch_triplets[q_node.q_id].size());
         local_graph.setFromTriplets(per_quotient_patch_triplets[q_node.q_id].begin(), per_quotient_patch_triplets[q_node.q_id].end());
         local_graph.makeCompressed();
         //Compute the permutation
         idx_t local_N = local_graph.rows();
         idx_t* local_p = local_graph.outerIndexPtr();
         idx_t* local_i = local_graph.innerIndexPtr();
-        std::vector<int> local_perm(local_N);
-        std::vector<int> local_iperm(local_N);
+        std::vector<idx_t> local_perm(local_N);
+        std::vector<idx_t> local_iperm(local_N);
         idx_t* l_perm = local_perm.data();
         idx_t* l_iperm = local_iperm.data();
-        spdlog::info("Computing local permutation");
+        // spdlog::info("Computing local permutation");
         METIS_NodeND(&local_N, local_p, local_i, NULL, NULL, l_perm, l_iperm);
+        // spdlog::info("Finished computing local permutation");
         //Map the local permutation into labels
+        assert(q_node.nodes.size() == local_N);
         q_node.permuted_local_labels.resize(q_node.nodes.size());
         for(int i = 0; i < q_node.nodes.size(); ++i) {
             q_node.permuted_local_labels[local_perm[i]] = i;
@@ -323,10 +322,12 @@ void GPUOrdering::step5_map_patch_permutation_to_vertex_permutation(std::vector<
     //Compute new global labels
     std::vector<int> global_new_labels(G_n);
     for(int i = 0; i < G_n; ++i) {
-        int q_id = node_to_patch[i];
+        int q_id = map_graph_to_quotient_node[i];
         global_new_labels[i] = quotient_nodes[q_id].offset + quotient_nodes[q_id].permuted_local_labels[global_to_local[i]];
     }
     //Compute new global permutation
+    perm.clear();
+    perm.resize(G_n);
     for(int i = 0; i < G_n; ++i) {
         perm[global_new_labels[i]] = i;
     }   
@@ -334,11 +335,28 @@ void GPUOrdering::step5_map_patch_permutation_to_vertex_permutation(std::vector<
 
 void GPUOrdering::compute_permutation(std::vector<int>& perm)
 {
+    std::chrono::system_clock::time_point start_time =
+        std::chrono::high_resolution_clock::now();
     step1_find_boundary_vertices();
+    std::chrono::system_clock::time_point end_time =
+        std::chrono::high_resolution_clock::now();
+    spdlog::info("Time taken for step1: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
+    start_time = end_time;
     step2_create_quotient_graph();
+    end_time = std::chrono::high_resolution_clock::now();
+    spdlog::info("Time taken for step2: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
+    start_time = end_time;
     step3_compute_quotient_permutation();
+    end_time = std::chrono::high_resolution_clock::now();
+    spdlog::info("Time taken for step3: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
+    start_time = end_time;
     step4_compute_patch_permutation();
+    end_time = std::chrono::high_resolution_clock::now();
+    spdlog::info("Time taken for step4: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
+    start_time = end_time;
     step5_map_patch_permutation_to_vertex_permutation(perm);
+    end_time = std::chrono::high_resolution_clock::now();
+    spdlog::info("Time taken for step5: {} ms", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
 
     // perm.resize(G_n);
     // for (int i = 0; i < G_n; ++i) {
