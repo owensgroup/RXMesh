@@ -20,6 +20,8 @@ public:
     PARTH::ParthAPI parth;
     virtual ~ParthOrdering(void);
 
+    int patch_size = 512;
+
     virtual RXMESH_Ordering_Type type() const override;
     virtual std::string typeStr() const override;
 

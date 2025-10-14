@@ -15,6 +15,11 @@ ParthOrdering::~ParthOrdering()
 
 void ParthOrdering::setGraph(int* Gp, int* Gi, int G_N, int NNZ)
 {
+    int nd_level = std::ceil(std::log2(G_N / patch_size));
+    if (nd_level <= 0) {
+        nd_level = 1;
+    }
+    spdlog::info("Setting Parth ordering with {} levels of nested dissection", nd_level);
     parth.setNDLevels(9);
     parth.setMesh(G_N, Gp, Gi);
 }

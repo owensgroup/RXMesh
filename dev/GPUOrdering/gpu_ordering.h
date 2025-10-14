@@ -25,7 +25,7 @@ public:
     std::vector<int> map_graph_to_quotient_node;
     std::vector<int> global_to_local;
 
-    int patch_size = 1024;
+    int patch_size = 512;
     std::vector<int> node_to_patch;
     std::vector<bool> is_boundary_vertex;
     int G_n, G_nnz;
