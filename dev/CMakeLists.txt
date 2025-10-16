@@ -132,6 +132,7 @@ add_library(rxmesh_dev_helpers
         utils/check_valid_permutation.cpp
         utils/compute_inverse_perm.cpp
         GPUOrdering/gpu_ordering.cu
+        GPUOrdering/gpu_ordering_v2.cu
         Ordering/ordering.cu
         Ordering/metis_ordering.cpp
         Ordering/rxmesh_ordering.cu

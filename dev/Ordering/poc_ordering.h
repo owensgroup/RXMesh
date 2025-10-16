@@ -11,7 +11,7 @@
 #include <Eigen/Sparse>
 #include <cholmod.h>
 #include "ordering.h"
-#include "gpu_ordering.h"
+#include "gpu_ordering_v2.h"
 
 namespace RXMESH_SOLVER {
 
@@ -22,7 +22,7 @@ private:
     std::vector<std::vector<uint32_t>> fv;
     std::vector<std::vector<float>> vertices;
     bool m_has_mesh = false;
-    GPUOrdering gpu_order;
+    GPUOrdering_V2 gpu_order;
     
     
 public:

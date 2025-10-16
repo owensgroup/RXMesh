@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <boost/integer_fwd.hpp>
 #include <functional>
 #include <queue>
 #include <set>
@@ -152,6 +153,9 @@ class Node
     {
     }
     integer_t pa, lch, rch;
+    std::vector<int> patches;  // the patches that project to this node
+    std::vector<int> assigned_dofs;
+    integer_t level;
     bool      is_leaf;
 };
 
@@ -219,6 +223,34 @@ struct MaxMatchTree
                     std::cout << "L" << label(l, n) << " -> "
                               << "L" << label(l - 1, node.rch) << ";\n";
                 }
+            }
+        }
+    }
+};
+
+template <typename integer_t>
+struct MaxMatchTree_V2
+{
+    // The tree contain many levels. Level 0 is the finest level and nodes in
+    // this level have children corresponds to the vertices in the graph.
+    // The root of this tree is the last level at levels.size() -1
+    int total_patch_num = 0;
+    std::vector<Node<integer_t>> nodes;
+    static void get_node_level_range(integer_t level, integer_t &start, integer_t &end){
+        start = (1 << level) - 1;
+        end = (1 << (level + 1)) - 2;
+    }
+    void get_patch_to_node_in_level_map(std::vector<integer_t>& patch_to_node,
+        integer_t level){
+        patch_to_node.clear();
+        patch_to_node.resize(total_patch_num, -1);
+        int start, end;
+        get_node_level_range(level, start, end);
+        for (int n = start; n < end; ++n) {
+            auto& node = nodes[n];
+            assert(node.level == level);
+            for (auto p : node.patches) {
+                patch_to_node[p] = n;
             }
         }
     }
