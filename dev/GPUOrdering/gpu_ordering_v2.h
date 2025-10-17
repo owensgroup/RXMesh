@@ -19,11 +19,12 @@ public:
         int node_id = -1;
         int parent_idx = -1;
         int level = -1;
+        int offset = -1;
 
         std::vector<int> dofs;
         std::vector<int> local_new_labels;
         bool is_initialized = false;
-        int patch_id = -1; //Only the leaves have a single patch or empty patch assigned to them
+        std::vector<int> patches;
 
         bool isLeaf() const
         {
@@ -34,7 +35,7 @@ public:
 
         void init_node(int left_node_idx, int right_node_idx,
             int node_id, int parent_idx, int level,
-            std::vector<int> & dofs, std::vector<int> & local_permutation, int patch_id)
+            std::vector<int> & dofs, std::vector<int> & local_permutation, std::vector<int> & patches, int offset)
         {
             this->left_node_idx = left_node_idx;
             this->right_node_idx = right_node_idx;
@@ -48,7 +49,8 @@ public:
                 this->local_new_labels[local_permutation[i]] = i;
             }
             this->is_initialized = true;
-            this->patch_id = patch_id;
+            this->patches = patches;
+            this->offset = offset;
         }
     };
 
@@ -64,21 +66,17 @@ public:
         std::vector<int> decomposition_node_offset; // The offset of the nodes in the tree for permutation
         std::vector<bool> is_separator; // The separator of the nodes in the tree
 
-        void init_max_match_tree(int num_tree_nodes) {
+        void init_max_match_tree(int G_n, int num_tree_nodes) {
+            is_separator.resize(G_n, false);
             decomposition_nodes.resize(num_tree_nodes);
         }
-
-        void get_graph_node_to_tree_node_map_per_level(std::vector<int>& graph_node_to_tree_node_map, int level) {
-        }
-
-        void get_patch_node_to_tree_node_map_per_level(std::vector<int>& patch_node_to_tree_node_map, int level) {
+        int get_number_of_decomposition_nodes() {
+            return decomposition_nodes.size();
         }
     };
 
-    int num_patches;
     std::string local_permute_method = "metis";
     std::vector<PatchNode> patch_nodes;
-    std::vector<bool> is_separator;
     MaxMatchTree max_match_tree;
     int decomposition_max_level;
     int patch_size = 512;
@@ -86,7 +84,6 @@ public:
     int G_n, G_nnz;
     int* Gp, *Gi;
 
-    int Q_n;
     Eigen::SparseMatrix<int> Q;
     std::vector<int> Q_node_weights;
     std::vector<int> Q_perm;
@@ -104,22 +101,17 @@ public:
     void refine_separator(std::vector<int>& part1_nodes,
         std::vector<int>& part2_nodes);
 
-    void find_separator_basic(std::vector<int>& part1_nodes,
-        std::vector<int>& part2_nodes,
+    void find_separator_basic(std::vector<int>& graph_to_partition_map,
         std::vector<int>& separator_nodes);
 
-    void decompose(int decomposition_node_id,   ///[in] decomposition node id
-        int decomposition_node_parent_id, /// <[in] decomposition node's parent id
-        int decomposition_level,     ///<[in] The current level that we are dissecting
-        std::vector<int> & decomposition_node_patches
-    );
+    void decompose();
 
-    void GPUOrdering_V2::compute_sub_graph(Eigen::SparseMatrix<int>& graph,
-        std::vector<int>& graph_node_weights,
-        Eigen::SparseMatrix<int>& sub_graph,
-        std::vector<int>& local_node_weights,
-        std::vector<int>& nodes) const;
-    Eigen::SparseMatrix<int> compute_sub_graph(int* Gp, int* Gi, int G_N, int NNZ, std::vector<int>& nodes) const;
+    void compute_sub_graph(Eigen::SparseMatrix<int>& graph,
+                                       std::vector<int>& graph_node_weights,
+                                       Eigen::SparseMatrix<int>& sub_graph,
+                                       std::vector<int>& local_node_weights,
+                                       std::vector<int>& nodes) const;
+    Eigen::SparseMatrix<int> compute_sub_graph(int* Gp, int* Gi, int G_N, std::vector<int>& nodes) const;
 
     void local_permute_metis(Eigen::SparseMatrix<int>& local_graph,
         std::vector<int> & local_permutation);
