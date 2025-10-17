@@ -2,6 +2,7 @@
 
 #include "rxmesh/rxmesh_static.h"
 
+#include "rxmesh/diff/candidate_pairs.h"
 #include "rxmesh/diff/element_valence.h"
 #include "rxmesh/diff/hessian_sparse_matrix.h"
 #include "rxmesh/diff/term.h"
@@ -40,38 +41,48 @@ struct DiffScalarProblem
     std::shared_ptr<Attribute<T, ObjHandleT>>         objective;
     std::vector<std::shared_ptr<Term<T, ObjHandleT>>> terms;
 
+    // TODO we might need other types of candidate pairs
+    CandidatePairsVV vv_pairs;
+
 
     /**
      * @brief Constructor
      * @param rx is the instance of RXMeshStatic
      * @param assmble_hessian should allocate the Hessian
-     * @param capacity_factor we allow the Hessian to change its sparsity which
-     * might increase the number of NNZ. We use the number of calculate the max
-     * nnz as capactiy_factor*nnz0 where nnz0 is the nnz of the hessian from the
-     * topology of the mesh
      */
     DiffScalarProblem(RXMeshStatic& rx,
-                      bool          assmble_hessian = true,
-                      const float   capacity_factor = 1.0f)
+                      bool          assmble_hessian,
+                      int           expected_vv_candidate_pairs = 0)
         : rx(rx),
           grad(DenseMatT(rx, rx.get_num_elements<ObjHandleT>(), VariableDim)),
-          objective(rx.add_vertex_attribute<T>("objective", VariableDim))
-
+          objective(rx.add_vertex_attribute<T>("objective", VariableDim)),
+          vv_pairs(CandidatePairsVV(expected_vv_candidate_pairs,
+                                    VariableDim,
+                                    rx.get_context()))
     {
         grad.reset(0, LOCATION_ALL);
 
         if constexpr (WithHessian) {
             if (assmble_hessian) {
-                hess = std::make_unique<HessMatT>(rx, capacity_factor);
+
+                // every contact candidate pairs will add a 2 (because of
+                // symmetry) blocks of (VariableDim x VariableDim) into the
+                // Hessian
+                expected_vv_candidate_pairs *= VariableDim * VariableDim * 2;
+
+                hess =
+                    std::make_unique<HessMatT>(rx, expected_vv_candidate_pairs);
                 hess->reset(0, LOCATION_ALL);
 
-                hess_new = std::make_unique<HessMatT>(rx, capacity_factor);
+                hess_new =
+                    std::make_unique<HessMatT>(rx, expected_vv_candidate_pairs);
             }
         }
     }
 
     /**
-     * @brief add an term to the loss function
+     * @brief add a (energy) term to the loss function that depends on local
+     * query operation (e.g., FV)
      */
     template <Op       op,
               bool     ProjectHess  = false,
@@ -134,12 +145,49 @@ struct DiffScalarProblem
     }
 
 
-    void update_hessian(const IndexT  size,
-                        const IndexT* d_new_rows,
-                        const IndexT* d_new_cols)
+    /**
+     * @brief add a (energy) term to the loss function that acts on candidate
+     * pairs
+     * TODO generalize this to other type of candidate pairs. For now, we assume
+     * only VV pairs
+     */
+    template <bool     ProjectHess  = false,
+              uint32_t blockThreads = 256,
+              typename LambdaT      = void>
+    void add_term(LambdaT t)
     {
-        hess_new->insert(rx, *hess, size, d_new_rows, d_new_cols);
-        hess_new.swap(hess);        
+        constexpr int ElementValence = 2;  // TODO
+
+        constexpr int NElements = VariableDim * ElementValence;
+
+        using ScalarT = Scalar<T, NElements, WithHessian>;
+
+
+        auto new_term =
+            std::make_shared<TemplatedTermPairs<VertexHandle,  // TODO
+                                                ObjHandleT,
+                                                blockThreads,
+                                                VertexHandle,  // TODO
+                                                VertexHandle,  // TODO
+                                                ScalarT,
+                                                ProjectHess,
+                                                VariableDim,
+                                                LambdaT>>(
+                rx, t, grad, *hess, vv_pairs);
+
+        terms.push_back(
+            std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
+    }
+
+
+    void update_hessian()
+    {
+        hess_new->insert(rx,
+                         *hess,
+                         vv_pairs.size(),
+                         vv_pairs.m_pairs_id.col(0),
+                         vv_pairs.m_pairs_id.col(1));
+        hess_new.swap(hess);
     }
 
     /**

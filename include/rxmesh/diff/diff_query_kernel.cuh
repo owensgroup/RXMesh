@@ -14,6 +14,7 @@
 #include "rxmesh/diff/scalar.h"
 #include "rxmesh/matrix/dense_matrix.h"
 
+#include "rxmesh/diff/candidate_pairs.h"
 #include "rxmesh/diff/diff_handle.h"
 #include "rxmesh/diff/diff_iterator.h"
 
@@ -314,6 +315,132 @@ __global__ static void diff_kernel_active(
         ShmemAllocator shrd_alloc;
 
         query.dispatch<op>(block, shrd_alloc, eval, oriented);
+    }
+}
+
+
+template <uint32_t blockThreads,
+          typename LossHandleT,
+          typename ObjHandleT,
+          typename HandleT0,
+          typename HandleT1,
+          typename ScalarT,
+          typename LambdaT>
+__global__ static void diff_kernel_passive_pair(
+    CandidatePairs<HandleT0, HandleT1, int>               pairs,
+    Attribute<typename ScalarT::PassiveType, LossHandleT> loss,
+    Attribute<typename ScalarT::PassiveType, ObjHandleT>  objective,
+    LambdaT                                               user_func)
+{
+    static_assert(std::is_same_v<HandleT0, HandleT1>);
+
+    using PassiveT = typename ScalarT::PassiveType;
+
+    const uint32_t stride = blockThreads * gridDim.x;
+
+    const int size = pairs.size();
+
+    for (int id = threadIdx.x + blockThreads * blockIdx.x; id < size;
+         id += stride) {
+
+        uint64_t id64(id);
+
+        DiffHandle<PassiveT, LossHandleT> diff_handle(id64);
+
+        std::pair<HandleT0, HandleT1> pair = pairs.get_pair(id);
+
+        PairIterator<HandleT0> iter(pair.first, pair.second);
+
+        PassiveT res = user_func(diff_handle, iter, objective);
+
+        //???? not sure which vertex should take the loss
+        loss(pair.first) = res;
+    }
+}
+
+template <uint32_t blockThreads,
+          typename LossHandleT,
+          typename ObjHandleT,
+          typename HandleT0,
+          typename HandleT1,
+          typename ScalarT,
+          bool ProjectHess,
+          int  VariableDim,
+          typename LambdaT>
+__global__ static void diff_kernel_active_pair(
+    CandidatePairs<HandleT0, HandleT1, int>                         pairs,
+    DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>     grad,
+    HessianSparseMatrix<typename ScalarT::PassiveType, VariableDim> hess,
+    Attribute<typename ScalarT::PassiveType, LossHandleT>           loss,
+    Attribute<typename ScalarT::PassiveType, ObjHandleT>            objective,
+    LambdaT                                                         user_func)
+{
+    static_assert(std::is_same_v<HandleT0, HandleT1>);
+
+    using PassiveT = typename ScalarT::PassiveType;
+
+    constexpr bool WithHessian = ScalarT::WithHessian_;
+
+    const uint32_t stride = blockThreads * gridDim.x;
+
+    const int size = pairs.size();
+
+    for (int id = threadIdx.x + blockThreads * blockIdx.x; id < size;
+         id += stride) {
+
+        // hijacking DiffHandle to 1) pass the pair index to the user, 2)
+        // allow the user to extract the type of the ScalarT (using
+        // ACTIVE_TYPE(id))
+        uint64_t id64(id);
+
+        DiffHandle<ScalarT, LossHandleT> diff_handle(id64);
+
+        std::pair<HandleT0, HandleT1> pair = pairs.get_pair(id);
+
+        PairIterator<HandleT0> iter(pair.first, pair.second);
+
+        ScalarT res = user_func(diff_handle, iter, objective);
+
+        //???? not sure which vertex should take the loss
+        loss(pair.first) = res.val();
+
+        // gradient
+        for (int i = 0; i < iter.size(); ++i) {
+            for (int local = 0; local < VariableDim; ++local) {
+                ::atomicAdd(&grad(iter[i], local),
+                            res.grad()[index_mapping(VariableDim, i, local)]);
+            }
+        }
+
+
+        if constexpr (WithHessian) {
+            // project Hessian to PD matrix
+            if constexpr (ProjectHess) {
+                project_positive_definite(res.hess());
+            }
+
+            // Hessian
+            for (int i = 0; i < iter.size(); ++i) {
+                const HandleT0 vi = iter[i];
+
+                for (int j = 0; j < iter.size(); ++j) {
+                    const HandleT0 vj = iter[j];
+
+                    for (int local_i = 0; local_i < VariableDim; ++local_i) {
+
+                        for (int local_j = 0; local_j < VariableDim;
+                             ++local_j) {
+
+                            ::atomicAdd(
+                                &hess(vi, vj, local_i, local_j),
+                                res.hess()(
+                                    index_mapping(VariableDim, i, local_i),
+                                    index_mapping(VariableDim, j, local_j)));
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

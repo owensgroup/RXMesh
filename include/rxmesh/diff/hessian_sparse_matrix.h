@@ -30,9 +30,9 @@ struct HessianSparseMatrix : public SparseMatrix<T>
     }
 
     HessianSparseMatrix(const RXMeshStatic& rx,
-                        const float         capacity_factor = 1.0f,
-                        Op                  op              = Op::VV)
-        : SparseMatrix<T>(rx, capacity_factor, op, K)
+                        const int           extra_nnz_entries,
+                        Op                  op = Op::VV)
+        : SparseMatrix<T>(rx, 1.0f, extra_nnz_entries, op, K)
     {
     }
 

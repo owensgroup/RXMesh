@@ -120,6 +120,7 @@ struct SparseMatrix
    protected:
     SparseMatrix(const RXMeshStatic& rx,
                  const float         capacity_factor,
+                 const int           extra_nnz_entries,
                  Op                  op,
                  IndexT              replicate)
         : m_d_row_ptr(nullptr),
@@ -145,7 +146,8 @@ struct SparseMatrix
           m_op(op),
           m_d_cub_temp_storage(nullptr),
           m_cub_temp_storage_bytes(0),
-          m_capacity_factor(capacity_factor)
+          m_capacity_factor(capacity_factor),
+          m_extra_nnz_entires(extra_nnz_entries)
     {
         constexpr uint32_t blockThreads = 256;
 
@@ -785,6 +787,7 @@ struct SparseMatrix
 
         if (m_nnz > m_max_nnz) {
             // free memory
+            RXMESH_TRACE("SparseMatrxi::insert() allocating more memory!");
             GPU_FREE(m_d_col_idx);
             GPU_FREE(m_d_val);
             free(m_h_val);
@@ -1392,8 +1395,8 @@ struct SparseMatrix
    protected:
     void update_max_nnz()
     {
-        m_max_nnz =
-            static_cast<IndexT>(std::ceil(float(m_nnz) * m_capacity_factor));
+        m_max_nnz = static_cast<IndexT>(
+            std::ceil(float(m_nnz + m_extra_nnz_entires) * m_capacity_factor));
     }
 
     void init_cusparse(SparseMatrix<T>& mat) const
@@ -1482,6 +1485,7 @@ struct SparseMatrix
     IndexT m_nnz;
     IndexT m_max_nnz;
     float  m_capacity_factor;
+    int    m_extra_nnz_entires;
 
     // device csr data
     IndexT* m_d_row_ptr;

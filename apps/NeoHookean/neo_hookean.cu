@@ -35,6 +35,8 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     using HessMatT = typename ProblemT::HessMatT;
 
     // Problem parameters
+    const int max_vv_candidate_pairs = 50;
+
     const T        density        = 1000;  // rho
     const T        young_mod      = 1e5;   // E
     const T        poisson_ratio  = 0.4;   // nu
@@ -98,7 +100,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     contact_area.reset(dx, DEVICE);  // perimeter split to each vertex
 
     // Diff problem and solvers
-    ProblemT problem(rx);
+    ProblemT problem(rx, true, max_vv_candidate_pairs);
 
     CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
         problem.hess.get());
@@ -150,16 +152,19 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     gravity_energy(problem, x, is_dbc, time_step, mass);
 
     // add barrier energy
-    barrier_energy(problem,
-                   contact_area,
-                   v_dbc[0],
-                   x,
-                   time_step,
-                   is_dbc,
-                   ground_n,
-                   ground_o,
-                   dhat,
-                   kappa);
+    floor_barrier_energy(problem,
+                         contact_area,
+                         v_dbc[0],
+                         x,
+                         time_step,
+                         is_dbc,
+                         ground_n,
+                         ground_o,
+                         dhat,
+                         kappa);
+
+    ceiling_barrier_energy(
+        problem, contact_area, x, time_step, ground_n, ground_o, dhat, kappa);
 
 
     T line_search_init_step = 0;
@@ -216,6 +221,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             rx, is_dbc, x, v_dbc_vel, v_dbc_limit, time_step, dbc_target);
 
         // evaluate energy
+        add_contact(rx, problem.vv_pairs, v_dbc[0], x_tilde, dhat);
         problem.eval_terms();
 
         // DBC satisfied
@@ -265,6 +271,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             newton_solver.line_search(line_search_init_step, 0.5);
 
             // evaluate energy
+            add_contact(rx, problem.vv_pairs, v_dbc[0], x_tilde, dhat);
             problem.eval_terms();
 
             // DBC satisfied
