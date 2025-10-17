@@ -46,6 +46,7 @@ struct CandidatePairs
           m_current_size(DenseMatrix<int>(1, 1)),
           m_context(ctx)
     {
+        reset();
     }
 
 
@@ -145,6 +146,11 @@ struct CandidatePairs
     __device__ __host__ void reset()
     {
         m_current_size(0) = 0;
+
+#ifndef __CUDA_ARCH__
+
+        m_current_size.move(HOST, DEVICE);
+#endif
     }
 
     /**

@@ -185,8 +185,8 @@ struct DiffScalarProblem
         hess_new->insert(rx,
                          *hess,
                          vv_pairs.size(),
-                         vv_pairs.m_pairs_id.col(0),
-                         vv_pairs.m_pairs_id.col(1));
+                         vv_pairs.m_pairs_id.col_data(0),
+                         vv_pairs.m_pairs_id.col_data(1));
         hess_new.swap(hess);
     }
 

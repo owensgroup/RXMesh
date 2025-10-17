@@ -728,6 +728,10 @@ struct SparseMatrix
                          const IndexT*    d_new_rows,
                          const IndexT*    d_new_cols)
     {
+        if (size == 0) {
+            return;
+        }
+
         if (in_mat.rows() != rows() || in_mat.cols() != cols()) {
             RXMESH_ERROR(
                 "SparseMatrix::insert() insertion only works for matrices of "
