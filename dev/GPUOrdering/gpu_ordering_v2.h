@@ -75,7 +75,9 @@ public:
         }
     };
 
-    std::string local_permute_method = "metis";
+    std::string local_permute_method = "amd";
+    std::string separator_finding_method = "max_degree"; //Options are "max_degree" and "basic"
+    std::string separator_refinement_method = "nothing"; //Options are "patch_refinement" and "redundancy_removal", "patch_redundancy_refinement", "nothing
     std::vector<PatchNode> patch_nodes;
     MaxMatchTree max_match_tree;
     int decomposition_max_level;
@@ -91,6 +93,8 @@ public:
     std::vector<std::vector<uint32_t>> fv;
     std::vector<std::vector<float>> vertices;
 
+    double separator_ratio = 0.0;
+
     void setGraph(int* Gp, int* Gi, int G_N, int NNZ);
     void setMesh(const double* V_data, int V_rows, int V_cols,
                  const int* F_data, int F_rows, int F_cols);
@@ -102,6 +106,21 @@ public:
         std::vector<int>& part2_nodes);
 
     void find_separator_basic(std::vector<int>& graph_to_partition_map,
+        std::vector<int>& separator_nodes);
+
+    void find_separator_max_degree(std::vector<int>& graph_to_partition_map,
+        std::vector<int>& separator_nodes);
+
+    void find_separator_metis(std::vector<int>& graph_to_partition_map,
+        std::vector<int>& separator_nodes);
+
+    void separator_redundancy_removal(std::vector<int>& graph_to_partition_map,
+        std::vector<int>& separator_nodes);
+
+    void separator_patch_refinement(std::vector<int>& graph_to_partition_map,
+        std::vector<int>& separator_nodes);
+
+    void find_separator(std::vector<int>& graph_to_partition_map,
         std::vector<int>& separator_nodes);
 
     void decompose();
@@ -119,15 +138,21 @@ public:
     void local_permute_amd(Eigen::SparseMatrix<int>& local_graph,
         std::vector<int> & local_permutation);
 
+    void local_permute_unity(Eigen::SparseMatrix<int>& local_graph,
+        std::vector<int>& local_permutation);
+
     void local_permute(Eigen::SparseMatrix<int>& local_graph,
         std::vector<int> & local_permutation);
 
     void compute_bipartition(Eigen::SparseMatrix<int>& quotient_graph, std::vector<int>& quotient_graph_node_weights,
         std::vector<int>& node_to_partition);
 
+    void assemble_permutation(int decomposition_node_id, std::vector<int>& perm);
+    int post_order_offset_computation(int offset, int decomposition_node_id);
+
 
     void step1_create_quotient_graph();
     void step2_create_hierarchical_partitioning_and_permute();
-    void step3_assemble_permutation();
+    void step3_assemble_permutation(std::vector<int>& perm);
 };
 }

@@ -206,3 +206,18 @@ set_property(TARGET ${PROJECT_NAME}_benchmark PROPERTY CUDA_RESOLVE_DEVICE_SYMBO
 # DO NOT link RXMesh directly to avoid compiling the same .cu files twice
 # This prevents multiple definition errors for patcher.cu, rxmesh_dynamic.cu, etc.
 target_link_libraries(${PROJECT_NAME}_benchmark PUBLIC rxmesh_dev_helpers)
+
+
+
+# Benchmark executable
+add_executable(${PROJECT_NAME}_detailed_ordering_benchmark detailed_ordering_benchmark.cpp)
+
+# Configure CUDA device linking for the benchmark executable
+# Enable separable compilation and resolve device symbols at the executable level
+set_property(TARGET ${PROJECT_NAME}_detailed_ordering_benchmark PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+set_property(TARGET ${PROJECT_NAME}_detailed_ordering_benchmark PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+
+# Link only rxmesh_dev_helpers (which already includes RXMesh)
+# DO NOT link RXMesh directly to avoid compiling the same .cu files twice
+# This prevents multiple definition errors for patcher.cu, rxmesh_dynamic.cu, etc.
+target_link_libraries(${PROJECT_NAME}_detailed_ordering_benchmark PUBLIC rxmesh_dev_helpers)

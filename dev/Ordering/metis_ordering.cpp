@@ -9,6 +9,7 @@
 #include <iostream>
 #include <metis.h>
 #include "ordering.h"
+#include "csv_utils.h"
 
 namespace RXMESH_SOLVER {
 
@@ -54,6 +55,34 @@ RXMESH_Ordering_Type MetisOrdering::type() const
 std::string MetisOrdering::typeStr() const
 {
     return "METIS";
+}
+void MetisOrdering::add_record(std::string save_address, std::map<std::string, double> extra_info, std::string mesh_name)
+{
+    std::string csv_name = save_address + "/sep_runtime_analysis";
+    std::vector<std::string> header;
+    header.emplace_back("mesh_name");
+    header.emplace_back("G_N");
+    header.emplace_back("G_NNZ");
+
+    header.emplace_back("ordering_type");
+    header.emplace_back("local_permute_method");
+    header.emplace_back("separator_finding_method");
+    header.emplace_back("separator_refinement_method");
+    header.emplace_back("separator_ratio");
+    header.emplace_back("fill-ratio");
+
+    PARTH::CSVManager runtime_csv(csv_name, "some address", header,
+                                  false);
+    runtime_csv.addElementToRecord(mesh_name, "mesh_name");
+    runtime_csv.addElementToRecord(G_N, "G_N");
+    runtime_csv.addElementToRecord(G_NNZ, "G_NNZ");
+    runtime_csv.addElementToRecord(typeStr(), "ordering_type");
+    runtime_csv.addElementToRecord("", "local_permute_method");
+    runtime_csv.addElementToRecord("", "separator_finding_method");
+    runtime_csv.addElementToRecord("", "separator_refinement_method");
+    runtime_csv.addElementToRecord("", "separator_ratio");
+    runtime_csv.addElementToRecord(extra_info.at("fill-ratio"), "fill-ratio");
+    runtime_csv.addRecord();
 }
 
 }

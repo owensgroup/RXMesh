@@ -52,7 +52,11 @@ public:
     
     virtual bool needsMesh() const { return false; }
 
+    virtual void setOptions(const std::map<std::string, std::string>& options) {}
+
     virtual void compute_permutation(std::vector<int>& perm) = 0;
+
+    virtual void add_record(std::string save_address, std::map<std::string, double> extra_info, std::string mesh_name) {};
 };
 
 }  // namespace PARTH_SOLVER
