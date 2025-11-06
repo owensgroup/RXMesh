@@ -11,6 +11,7 @@
 #include <Eigen/Sparse>
 #include <cassert>
 
+
 namespace RXMESH_SOLVER {
 
 enum class LinSysSolverType
@@ -18,6 +19,7 @@ enum class LinSysSolverType
     PARTH_SOLVER,
     CPU_CHOLMOD,
     GPU_CUDSS,
+    GPU_STRUMPACK
 
 };
 

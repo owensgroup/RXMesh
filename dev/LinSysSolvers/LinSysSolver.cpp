@@ -13,6 +13,9 @@
 #include "ParthSolver.hpp"
 #endif
 
+#include <STRUMPACKSolver.hpp>
+
+
 namespace RXMESH_SOLVER {
 
     LinSysSolver *LinSysSolver::create(const LinSysSolverType type) {
@@ -34,6 +37,8 @@ namespace RXMESH_SOLVER {
                 return new ParthSolver();
 #endif
 
+            case LinSysSolverType::GPU_STRUMPACK:
+                return new STRUMPACKSolver();
             default:
                 std::cerr << "Uknown linear system solver type" << std::endl;
                 return nullptr;

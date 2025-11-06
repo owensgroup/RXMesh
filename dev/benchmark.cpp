@@ -9,6 +9,7 @@
 #include <CLI/CLI.hpp>
 #include <Eigen/Core>
 #include <chrono>
+#include <unsupported/Eigen/SparseExtra>
 #include <iostream>
 
 #include "LinSysSolver.hpp"
@@ -17,6 +18,7 @@
 #include "ordering.h"
 #include "remove_diagonal.h"
 #include "parth/parth.h"
+
 
 struct CLIArgs
 {
@@ -91,7 +93,7 @@ int main(int argc, char* argv[])
     // The cotangent Laplacian is negative semi-definite, so we add a constant
     // to shift all eigenvalues to be positive
     for (int i = 0; i < OL.rows(); ++i) {
-        OL.coeffRef(i, i) += 100.0;
+        OL.coeffRef(i, i) += 300.0;
     }
     Eigen::VectorXd rhs = Eigen::VectorXd::Random(OL.rows());
     Eigen::VectorXd result;
@@ -139,6 +141,9 @@ int main(int argc, char* argv[])
         solver = RXMESH_SOLVER::LinSysSolver::create(
             RXMESH_SOLVER::LinSysSolverType::PARTH_SOLVER);
         spdlog::info("Using PARTH direct solver.");
+    } else if (args.solver_type == "STRUMPACK"){
+        solver = RXMESH_SOLVER::LinSysSolver::create(
+            RXMESH_SOLVER::LinSysSolverType::GPU_STRUMPACK);
     } else {
         spdlog::error("Unknown solver type.");
     }
@@ -184,6 +189,8 @@ int main(int argc, char* argv[])
         solver->ordering_name = ordering->typeStr();
     }
 
+    //Save the matrix
+    Eigen::saveMarket(OL, "/home/behrooz/Desktop/Last_Project/RXMesh-dev/output/nefertiti.mtx");
     solver->setMatrix(OL.outerIndexPtr(),
                       OL.innerIndexPtr(),
                       OL.valuePtr(),

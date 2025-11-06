@@ -7,11 +7,21 @@ include(${CMAKE_SOURCE_DIR}/cmake/recipes/cli11.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/recipes/eigen.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/recipes/libigl.cmake)
 
+# Find MPI (required for parallel features, especially STRUMPACK)
+find_package(MPI REQUIRED COMPONENTS CXX)
+if(MPI_FOUND)
+    message(STATUS "Found MPI:")
+    message(STATUS "  MPI C++ Compiler: ${MPI_CXX_COMPILER}")
+    message(STATUS "  MPI Include Path: ${MPI_CXX_INCLUDE_DIRS}")
+    message(STATUS "  MPI Libraries: ${MPI_CXX_LIBRARIES}")
+endif()
+
 ################################################################################
 # SECTION 2: Development Build Options
 ################################################################################
 option(${PROJECT_NAME}_WITH_PARTH "Use Parth for fill-reducing orderings" ON)
 option(${PROJECT_NAME}_WITH_SUITESPARSE "Use SuiteSparse for benchmark" ON)
+option(${PROJECT_NAME}_WITH_STRUMPACK "Use Strumpack for benchmark" ON)
 
 ################################################################################
 # SECTION 3: Configure RXMesh Library with Optional Development Dependencies
@@ -34,6 +44,16 @@ if (${PROJECT_NAME}_WITH_SUITESPARSE)
     target_link_libraries(${PROJECT_NAME} INTERFACE ${SUITESPARSE_LIBRARIES})
     target_include_directories(${PROJECT_NAME} INTERFACE ${SUITESPARSE_INCLUDE_DIRS})
     target_compile_definitions(${PROJECT_NAME} INTERFACE USE_SUITESPARSE)
+    
+    # Add CHOLMOD_HAS_CUDA compile definition if GPU library is available
+    if(CHOLMOD_CUDA_FOUND OR CHOLMOD_CUDA_LIBRARY)
+        target_compile_definitions(${PROJECT_NAME} INTERFACE CHOLMOD_HAS_CUDA)
+        message(STATUS "CHOLMOD GPU support enabled with CHOLMOD_HAS_CUDA compile definition")
+        message(STATUS "CHOLMOD can be used in GPU mode at runtime")
+    else()
+        message(STATUS "CHOLMOD GPU library not found - CPU-only support available")
+        message(STATUS "CHOLMOD will only support CPU mode at runtime")
+    endif()
 endif ()
 
 # Parth for fill-reducing orderings
@@ -43,6 +63,16 @@ if(${PROJECT_NAME}_WITH_PARTH)
     target_link_libraries(${PROJECT_NAME} INTERFACE Parth::parth)
     target_compile_definitions(${PROJECT_NAME} INTERFACE USE_PARTH)
 endif()
+
+
+# STRUMPACK - Sparse direct solver with CUDA support
+if(${PROJECT_NAME}_WITH_STRUMPACK)
+    include(${CMAKE_SOURCE_DIR}/cmake/recipes/strumpack.cmake)
+    target_link_libraries(${PROJECT_NAME} INTERFACE STRUMPACK::strumpack_full)
+    target_compile_definitions(${PROJECT_NAME} INTERFACE USE_STRUMPACK)
+endif()
+
+
 
 ################################################################################
 # SECTION 4: Create Development Helper Library
@@ -121,16 +151,27 @@ target_include_directories(parallel_cholmod PUBLIC
 
 target_link_libraries(parallel_cholmod PRIVATE  spdlog::spdlog)
 
+# Add debug information for parallel_cholmod
+target_compile_options(parallel_cholmod PUBLIC
+    $<$<COMPILE_LANGUAGE:CXX>:
+        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
+        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
+        -g                               # Add debug information for C++ code
+    >
+)
+
 # Create rxmesh_dev_helpers library
 add_library(rxmesh_dev_helpers
         LinSysSolvers/LinSysSolver.cpp
         LinSysSolvers/CUDSSSolver.cu
         LinSysSolvers/CHOLMODSolver.cpp
         LinSysSolvers/ParthSolver.cpp
+        LinSysSolvers/STRUMPACKSolver.cpp
         utils/get_factor_nnz.cpp
         utils/remove_diagonal.cpp
         utils/check_valid_permutation.cpp
         utils/compute_inverse_perm.cpp
+        utils/min_vertex_cover_bipartite.cpp
         GPUOrdering/gpu_ordering.cu
         GPUOrdering/gpu_ordering_v2.cu
         Ordering/ordering.cu
@@ -180,13 +221,29 @@ endif()
 target_compile_options(rxmesh_dev_helpers PUBLIC
     $<$<COMPILE_LANGUAGE:CUDA>:
         -lineinfo
-        -O3
+        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
+        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
         --use_fast_math
         --ptxas-options=-v,-warn-lmem-usage,--warn-on-spills
         -rdc=true
         --expt-extended-lambda
         --expt-relaxed-constexpr
+        $<$<CONFIG:Debug>:-G>           # Enable device debug in Debug mode
+        -g                               # Add debug information for CUDA code
     >
+    $<$<COMPILE_LANGUAGE:CXX>:
+        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
+        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
+        -g                               # Add debug information for C++ code
+    >
+)
+
+# Add debug definitions based on build type
+# In Debug builds: DEBUG is defined, NDEBUG is NOT defined
+# In Release builds: NDEBUG is defined, DEBUG is NOT defined
+target_compile_definitions(rxmesh_dev_helpers PUBLIC
+    $<$<CONFIG:Debug>:DEBUG>
+    $<$<CONFIG:Release>:NDEBUG>
 )
 
 ################################################################################
@@ -207,6 +264,33 @@ set_property(TARGET ${PROJECT_NAME}_benchmark PROPERTY CUDA_RESOLVE_DEVICE_SYMBO
 # This prevents multiple definition errors for patcher.cu, rxmesh_dynamic.cu, etc.
 target_link_libraries(${PROJECT_NAME}_benchmark PUBLIC rxmesh_dev_helpers)
 
+# Configure RPATH for STRUMPACK dependencies if enabled
+if(${PROJECT_NAME}_WITH_STRUMPACK)
+    message(STATUS "Setting RPATH for ${PROJECT_NAME}_benchmark")
+    set_target_properties(${PROJECT_NAME}_benchmark PROPERTIES
+        BUILD_RPATH "${STRUMPACK_RPATH_DIRS}"
+        INSTALL_RPATH "${STRUMPACK_RPATH_DIRS}"
+        INSTALL_RPATH_USE_LINK_PATH TRUE
+        # Use RPATH instead of RUNPATH to propagate to transitive dependencies
+        LINK_FLAGS "-Wl,--disable-new-dtags"
+    )
+    message(STATUS "  BUILD_RPATH: ${STRUMPACK_RPATH_DIRS}")
+endif()
+
+# Add debug information for benchmark executable
+target_compile_options(${PROJECT_NAME}_benchmark PUBLIC
+    $<$<COMPILE_LANGUAGE:CUDA>:
+        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
+        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
+        $<$<CONFIG:Debug>:-G>           # Enable device debug in Debug mode
+        -g                               # Add debug information for CUDA code
+    >
+    $<$<COMPILE_LANGUAGE:CXX>:
+        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
+        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
+        -g                               # Add debug information for C++ code
+    >
+)
 
 
 # Benchmark executable
@@ -221,3 +305,53 @@ set_property(TARGET ${PROJECT_NAME}_detailed_ordering_benchmark PROPERTY CUDA_RE
 # DO NOT link RXMesh directly to avoid compiling the same .cu files twice
 # This prevents multiple definition errors for patcher.cu, rxmesh_dynamic.cu, etc.
 target_link_libraries(${PROJECT_NAME}_detailed_ordering_benchmark PUBLIC rxmesh_dev_helpers)
+
+# Configure RPATH for STRUMPACK dependencies if enabled
+if(${PROJECT_NAME}_WITH_STRUMPACK)
+    message(STATUS "Setting RPATH for ${PROJECT_NAME}_detailed_ordering_benchmark")
+    set_target_properties(${PROJECT_NAME}_detailed_ordering_benchmark PROPERTIES
+        BUILD_RPATH "${STRUMPACK_RPATH_DIRS}"
+        INSTALL_RPATH "${STRUMPACK_RPATH_DIRS}"
+        INSTALL_RPATH_USE_LINK_PATH TRUE
+        # Use RPATH instead of RUNPATH to propagate to transitive dependencies
+        LINK_FLAGS "-Wl,--disable-new-dtags"
+    )
+    message(STATUS "  BUILD_RPATH: ${STRUMPACK_RPATH_DIRS}")
+endif()
+
+# Add debug information for detailed_ordering_benchmark executable
+target_compile_options(${PROJECT_NAME}_detailed_ordering_benchmark PUBLIC
+    $<$<COMPILE_LANGUAGE:CUDA>:
+        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
+        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
+        $<$<CONFIG:Debug>:-G>           # Enable device debug in Debug mode
+        -g                               # Add debug information for CUDA code
+    >
+    $<$<COMPILE_LANGUAGE:CXX>:
+        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
+        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
+        -g                               # Add debug information for C++ code
+    >
+)
+
+
+# Debug test for MinVertexCoverBipartite
+add_executable(debug_min_vertex_cover
+        debug_min_vertex_cover.cpp
+        utils/min_vertex_cover_bipartite.cpp
+)
+
+# Link Eigen for sparse matrix support
+target_link_libraries(debug_min_vertex_cover PUBLIC Eigen3::Eigen spdlog::spdlog)
+
+# Add utils directory for headers
+target_include_directories(debug_min_vertex_cover PUBLIC utils)
+
+# Add debug information for debug_min_vertex_cover executable
+target_compile_options(debug_min_vertex_cover PUBLIC
+    $<$<COMPILE_LANGUAGE:CXX>:
+        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
+        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
+        -g                               # Add debug information for C++ code
+    >
+)

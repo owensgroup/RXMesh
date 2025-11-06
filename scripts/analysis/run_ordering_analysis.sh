@@ -21,13 +21,15 @@ BINARY="./cmake-build-release/bin/RXMesh_detailed_ordering_benchmark"
 
 # Test each mesh with METIS, then POC_ND, then RXMESH_ND
 for mesh in "${MESHES[@]}"; do
-    echo "Testing $mesh with METIS..."
-    $BINARY -i "$MESH_DIR/$mesh" -a METIS
+    # echo "Testing $mesh with METIS..."
+    # $BINARY -i "$MESH_DIR/$mesh" -a METIS
     
     # Run POC_ND with different parameter combinations
     for l in metis amd; do
-        for t in max_degree basic; do
-            for r in patch_refinement redundancy_removal patch_redundancy_refinement nothing; do
+        #for t in max_degree basic; do
+        for t in basic; do  
+            #for r in patch_refinement redundancy_removal patch_redundancy_refinement nothing; do
+            for r in bipartite_graph_refinement; do
                 echo "Testing $mesh with POC_ND (l=$l, t=$t, r=$r)..."
                 $BINARY -i "$MESH_DIR/$mesh" -a POC_ND -t $t -r $r -l $l
             done

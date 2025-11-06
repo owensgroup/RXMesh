@@ -86,10 +86,18 @@
 # CHOLMOD_INCLUDE_DIR
 # CHOLMOD_LIBRARY
 #
+# == CHOLMOD GPU Support (Optional, requires CUDAToolkit)
+# CHOLMOD_CUDA_FOUND
+# CHOLMOD_CUDA_LIBRARY
+#
 # == Multifrontal Sparse QR (SuiteSparseQR)
 # SUITESPARSEQR_FOUND
 # SUITESPARSEQR_INCLUDE_DIR
 # SUITESPARSEQR_LIBRARY
+#
+# == SuiteSparseQR GPU Support (Optional, requires CUDAToolkit)
+# SUITESPARSEQR_CUDA_FOUND
+# SUITESPARSEQR_CUDA_LIBRARY
 #
 # == Common configuration for all but CSparse (SuiteSparse version >= 4).
 # SUITESPARSE_CONFIG_FOUND
@@ -206,6 +214,15 @@ list(APPEND SUITESPARSE_CHECK_LIBRARY_DIRS
 # Additional suffixes to try appending to each search path.
 list(APPEND SUITESPARSE_CHECK_PATH_SUFFIXES
         suitesparse) # Windows/Ubuntu
+
+# Check if CUDA is available for GPU-accelerated components
+set(SUITESPARSE_USE_CUDA FALSE)
+if (CUDAToolkit_FOUND)
+    set(SUITESPARSE_USE_CUDA TRUE)
+    message(STATUS "CUDA detected, will search for GPU-enabled SuiteSparse components")
+else()
+    message(STATUS "CUDA not detected, skipping GPU-enabled SuiteSparse components")
+endif()
 
 # Wrappers to find_path/library that pass the SuiteSparse search hints/paths.
 #
@@ -328,6 +345,12 @@ suitesparse_find_component(
 #       "not compiled with TBB.")
 #   endif()
 # endif(SUITESPARSEQR_FOUND)
+
+# GPU-accelerated components (optional)
+if (SUITESPARSE_USE_CUDA)
+    suitesparse_find_component(CHOLMOD_CUDA LIBRARIES cholmod_cuda)
+    suitesparse_find_component(SUITESPARSEQR_CUDA LIBRARIES spqr_cuda)
+endif()
 
 # UFconfig / SuiteSparse_config.
 #
@@ -486,6 +509,14 @@ if (SUITESPARSE_FOUND)
             ${AMD_LIBRARY}
             ${LAPACK_LIBRARIES}
             ${BLAS_LIBRARIES})
+    if (CHOLMOD_CUDA_FOUND OR SUITESPARSEQR_CUDA_FOUND)
+        if (CHOLMOD_CUDA_FOUND)
+            list(APPEND SUITESPARSE_LIBRARIES ${CHOLMOD_CUDA_LIBRARY})
+        endif()
+        if (SUITESPARSEQR_CUDA_FOUND)
+            list(APPEND SUITESPARSE_LIBRARIES ${SUITESPARSEQR_CUDA_LIBRARY})
+        endif()
+    endif()
     if (SUITESPARSE_CONFIG_FOUND)
         list(APPEND SUITESPARSE_LIBRARIES
                 ${SUITESPARSE_CONFIG_LIBRARY})

@@ -21,9 +21,18 @@ public:                // Access specifier
 
     cholmod_dense *x_solve;
 
+    bool use_gpu = true;         // User-configured: whether to use GPU
+    bool gpu_available = false;  // Runtime check: whether GPU is actually available
+    std::vector<long int> p_long;
+    std::vector<long int> i_long;
+
     void *Ai, *Ap, *Ax, *bx;
     ~CHOLMODSolver();
-    CHOLMODSolver();
+    CHOLMODSolver();  // Allow runtime choice
+    
+    // GPU initialization methods
+    void initializeGPU();
+    bool probeGPU();  // Returns true if GPU is available
 
     void setMatrix(int *p, int *i, double *x, int A_N, int NNZ) override;
     void innerAnalyze_pattern(std::vector<int>& user_defined_perm) override;
