@@ -153,6 +153,8 @@ __global__ static void interior(const uint32_t  num_patches,
             s_queue_size = 0;
         }
 
+        __syncthreads();
+
 
         const uint32_t patch_id = blockIdx.x;
         const uint32_t p_start =
