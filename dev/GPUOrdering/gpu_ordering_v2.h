@@ -57,7 +57,6 @@ public:
         }
     };
 
-
     struct DecompositionTree {
         int decomposition_level = -1;
         std::vector<DecompositionNode> decomposition_nodes; // All the nodes of the tree
@@ -83,6 +82,22 @@ public:
             this->is_sep[node_id] = 1;
         }
     };
+
+    struct QuotientGraph {
+        int _Q_n;
+        std::vector<int> _Q_edge_weights;
+        std::vector<int> _Q_node_weights;
+        std::vector<int> _Qp;
+        std::vector<int> _Qi;
+    };    
+
+    struct SubGraph {
+        int _num_nodes;
+        std::vector<int> _Gp;
+        std::vector<int> _Gi;
+    };
+
+    QuotientGraph _quotient_graph;
 
     std::string local_permute_method = "amd";
     // std::string separator_refinement_method = "nothing";
@@ -145,7 +160,6 @@ public:
 
     void compute_local_quotient_graph(
         int tree_node_idx,///<[in] The index of the current decomposition node
-        std::vector<int>& assigned_g_nodes,///<[in] Assigned G nodes for current decomposition
         Eigen::SparseMatrix<int>& Q,///<[out] The local quotient graph
         std::vector<int>& Q_node_weights,///<[out] The node weights of the local quotient graph
         std::vector<int>& Q_node_to_global_Q_node///<[out] The local Q node to global Q node map
@@ -169,7 +183,9 @@ public:
         std::vector<int>&         nodes,
         Eigen::SparseMatrix<int>& local_graph) const;
 
-    void step1_compute_node_to_patch();
+    void compute_sub_graphs(std::vector<SubGraph>& sub_graphs);
+
+    void step1_compute_quotient_graph();
     void step2_create_decomposition_tree();
     void step3_CPU_compute_local_permutations();
     void step3_GPU_compute_local_permutations();
