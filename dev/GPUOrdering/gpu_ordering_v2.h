@@ -1,9 +1,10 @@
 //
 // Created by behrooz on 2025-10-07.
 //
-#include "rxmesh/rxmesh_static.h"
+#pragma once
 #include "Eigen/Core"
 #include "Eigen/Sparse"
+#include "rxmesh/rxmesh_static.h"
 
 namespace RXMESH_SOLVER {
 class GPUOrdering_V2
@@ -165,16 +166,16 @@ public:
         std::vector<int>& Q_node_to_global_Q_node///<[out] The local Q node to global Q node map
     );
 
-    void local_permute_metis(Eigen::SparseMatrix<int>& local_graph,
+    void local_permute_metis(int G_n, int* Gp, int* Gi,
         std::vector<int> & local_permutation);
 
-    void local_permute_amd(Eigen::SparseMatrix<int>& local_graph,
+    void local_permute_amd(int G_n, int* Gp, int* Gi,
         std::vector<int> & local_permutation);
 
-    void local_permute_unity(Eigen::SparseMatrix<int>& local_graph,
+    void local_permute_unity(int G_n, int* Gp, int* Gi,
         std::vector<int>& local_permutation);
 
-    void local_permute(Eigen::SparseMatrix<int>& local_graph,
+    void local_permute(int G_n, int* Gp, int* Gi,
         std::vector<int> & local_permutation);
 
     void assemble_permutation(int decomposition_node_id, std::vector<int>& perm);

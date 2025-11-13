@@ -221,12 +221,12 @@ target_compile_definitions(rxmesh_dev_helpers PUBLIC
 
 # CUDA: real debug: disable device optimizations and keep line info
 target_compile_options(rxmesh_dev_helpers PUBLIC
-  $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-G;-O0;-Xptxas=-O0;-lineinfo;-Xcompiler=-O0,-g3>
+  $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-G;-O0;-Xptxas=-O0;-lineinfo;-Xcompiler=-O0,-g>
 )
 
 # Host C++ files in the same target
 target_compile_options(rxmesh_dev_helpers PUBLIC
-  $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:-O0;-g3;-fno-inline>
+  $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:-O0;-g;-fno-inline>
 )
 
 ################################################################################

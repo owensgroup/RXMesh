@@ -9,8 +9,6 @@
 #include <unordered_set>
 #include "gpu_ordering_v2.h"
 
-#include <boost/format/group.hpp>
-
 #include "min_vertex_cover_bipartite.h"
 #include "rxmesh/rxmesh_static.h"
 #include "spdlog/spdlog.h"
@@ -66,11 +64,11 @@ void GPUOrdering_V2::setMesh(const double* V_data,
     }
 }
 
-void GPUOrdering_V2::local_permute_metis(Eigen::SparseMatrix<int>& local_graph,
+void GPUOrdering_V2::local_permute_metis(int G_n, int* Gp, int* Gi,
                                          std::vector<int>& local_permutation)
 {
-    idx_t N   = local_graph.rows();
-    idx_t NNZ = local_graph.nonZeros();
+    idx_t N   = G_n;
+    idx_t NNZ = Gp[G_n];
     local_permutation.resize(N);
     if (NNZ == 0) {
         assert(N != 0);
@@ -82,19 +80,19 @@ void GPUOrdering_V2::local_permute_metis(Eigen::SparseMatrix<int>& local_graph,
 
     std::vector<int> tmp(N);
     METIS_NodeND(&N,
-                 local_graph.outerIndexPtr(),
-                 local_graph.innerIndexPtr(),
+                 Gp,
+                 Gi,
                  NULL,
                  NULL,
                  local_permutation.data(),
                  tmp.data());
 }
 
-void GPUOrdering_V2::local_permute_amd(Eigen::SparseMatrix<int>& local_graph,
+void GPUOrdering_V2::local_permute_amd(int G_n, int* Gp, int* Gi,
                                        std::vector<int>& local_permutation)
 {
-    idx_t N   = local_graph.rows();
-    idx_t NNZ = local_graph.nonZeros();
+    idx_t N   = G_n;
+    idx_t NNZ = Gp[G_n];
     local_permutation.resize(N);
     if (NNZ == 0) {
         assert(N != 0);
@@ -105,31 +103,31 @@ void GPUOrdering_V2::local_permute_amd(Eigen::SparseMatrix<int>& local_graph,
     }
     std::vector<int> tmp(N);
     amd_order(N,
-              local_graph.outerIndexPtr(),
-              local_graph.innerIndexPtr(),
+              Gp,
+              Gi,
               local_permutation.data(),
               nullptr,
               nullptr);
 }
 
-void GPUOrdering_V2::local_permute_unity(Eigen::SparseMatrix<int>& local_graph,
+void GPUOrdering_V2::local_permute_unity(int G_n, int* Gp, int* Gi,
                                          std::vector<int>& local_permutation)
 {
-    local_permutation.resize(local_graph.rows());
-    for (int i = 0; i < local_graph.rows(); i++) {
+    local_permutation.resize(G_n);
+    for (int i = 0; i < G_n; i++) {
         local_permutation[i] = i;
     }
 }
 
-void GPUOrdering_V2::local_permute(Eigen::SparseMatrix<int>& local_graph,
+void GPUOrdering_V2::local_permute(int G_n, int* Gp, int* Gi,
                                    std::vector<int>&         local_permutation)
 {
     if (this->local_permute_method == "metis") {
-        local_permute_metis(local_graph, local_permutation);
+        local_permute_metis(G_n, Gp, Gi, local_permutation);
     } else if (this->local_permute_method == "amd") {
-        local_permute_amd(local_graph, local_permutation);
+        local_permute_amd(G_n, Gp, Gi, local_permutation);
     } else if (this->local_permute_method == "unity") {
-        local_permute_unity(local_graph, local_permutation);
+        local_permute_unity(G_n, Gp, Gi, local_permutation);
     } else {
         spdlog::error("Invalid local permutation method: {}",
                       this->local_permute_method);
@@ -500,6 +498,10 @@ void GPUOrdering_V2::decompose()
                         decomposition_node_parent_id,
                         l,
                         assigned_g_nodes);
+                    //Assign nodes to tree array
+                    for (const auto& node: assigned_g_nodes) {
+                        this->_decomposition_tree.g_node_to_tree_node[node] = node_idx;
+                    }
                     continue;
                 }
 
@@ -521,10 +523,10 @@ void GPUOrdering_V2::decompose()
                 left_assigned_g_nodes.clear();
                 right_assigned_g_nodes.clear();
                 //flag the separator nodes in the decomposition tree
-                for(int i = 0; i < separator_g_nodes.size(); i++) {
-                    assert(this->_decomposition_tree.is_separator(separator_g_nodes[i]) == false);
-                    this->_decomposition_tree.set_separator(separator_g_nodes[i]);
-                    this->_decomposition_tree.g_node_to_tree_node[separator_g_nodes[i]] = node_idx;
+                for(int separator_g_node : separator_g_nodes) {
+                    assert(this->_decomposition_tree.is_separator(separator_g_node) == false);
+                    this->_decomposition_tree.set_separator(separator_g_node);
+                    this->_decomposition_tree.g_node_to_tree_node[separator_g_node] = node_idx;
                 }
 
                 //Assign the nodes to the left and right assigned dofs
@@ -889,17 +891,17 @@ void GPUOrdering_V2::compute_sub_graphs(std::vector<SubGraph>& sub_graphs){
 
 void GPUOrdering_V2::step3_CPU_compute_local_permutations()
 {
-    spdlog::info("Computing local permutations .. ");
+    spdlog::info("Computing local subgraphs .. ");
+    std::vector<SubGraph> sub_graphs;
+    this->compute_sub_graphs(sub_graphs);
+
+    //Compute the local permutations
     #pragma omp parallel for
     for (int i = 0; i < this->_decomposition_tree.decomposition_nodes.size(); i++) {
-        auto& node = this->_decomposition_tree.decomposition_nodes[i];
-        if (node.assigned_g_nodes.empty())
-            continue;
-        Eigen::SparseMatrix<int> graph;
-        this->compute_sub_graph(node.assigned_g_nodes, graph);
         std::vector<int> local_permutation;
-        local_permute(graph, local_permutation);
-        node.set_local_permutation(local_permutation);
+        if (sub_graphs[i]._num_nodes == 0) continue;
+        local_permute(sub_graphs[i]._num_nodes, sub_graphs[i]._Gp.data(), sub_graphs[i]._Gi.data(), local_permutation);
+        this->_decomposition_tree.decomposition_nodes[i].set_local_permutation(local_permutation);
     }
     spdlog::info("Local permutations are computed.");
 }
